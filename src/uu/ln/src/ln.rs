@@ -269,26 +269,21 @@ fn exec(files: &[PathBuf], settings: &Settings) -> LnResult<()> {
         // 4th form: a directory is specified by -t.
         return link_files_in_dir(files, target_path, settings);
     }
-    if !settings.no_target_dir {
-        if files.len() == 1 {
-            // 2nd form: the target directory is the current directory.
-            return link_files_in_dir(files, &PathBuf::from("."), settings);
-        }
-        let last_file = &PathBuf::from(files.last().unwrap());
-        if files.len() > 2 || last_file.is_dir() {
-            // 3rd form: create links in the last argument.
-            return link_files_in_dir(&files[0..files.len() - 1], last_file, settings);
-        }
-    }
 
-    // 1st form. Now there should be only two operands, but if -T is
-    // specified we may have a wrong number of operands.
-    match files {
-        [] => unreachable!("clap excluded it"),
-        [f0] => Err(LnError::MissingDestination(f0.clone())),
-        [f0, f1] => link(f0, f1, settings),
-        [_, _, f2, ..] => Err(LnError::ExtraOperand(
-            f2.clone().into(),
+    // if -T is specified we may have a wrong number of operands.
+    match files.split_last().expect("clap rejects empty") {
+        // the target directory is the current directory
+        (_, []) if !settings.no_target_dir => {
+            link_files_in_dir(files, &PathBuf::from("."), settings)
+        }
+        // create links in the last argument
+        (last, rest) if !settings.no_target_dir && (rest.len() > 1 || last.is_dir()) => {
+            link_files_in_dir(rest, last, settings)
+        }
+        (f0, []) => Err(LnError::MissingDestination(f0.clone())),
+        (last, [f]) => link(f, last, settings),
+        (extra, [_, _]) | (_, [_, _, extra, ..]) => Err(LnError::ExtraOperand(
+            extra.into(),
             uucore::execution_phrase().to_string(),
         )),
     }
