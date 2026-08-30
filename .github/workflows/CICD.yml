@@ -396,7 +396,12 @@ jobs:
           # msvc and gnu works on the same target. So publishing msvc is enough.
           - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows, skip-publish: true }
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows, pgo: PGO }
-          - { os: windows-11-arm , target: aarch64-pc-windows-msvc     , features: feat_os_windows, pgo: PGO }
+          # No `pgo` here: on aarch64-pc-windows-msvc the instrumented binary
+          # writes .profraw files whose name table llvm-profdata rejects with
+          # "symbol name is empty", so every profile is unusable. Upstream bugs:
+          # https://github.com/rust-lang/rust/issues/150123 (same message with
+          # `-C instrument-coverage`) and https://github.com/rust-lang/rust/issues/156675.
+          - { os: windows-11-arm , target: aarch64-pc-windows-msvc     , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
