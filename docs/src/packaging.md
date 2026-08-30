@@ -144,12 +144,27 @@ Things to know before wiring it into a package build:
   input to the final build, so re-training on another machine can change the
   resulting code layout. Generate it once, ship it as a source artifact, and
   build with `-Cprofile-use=<that file>` instead of re-running the training.
+- **Train with the same `lto` and `codegen-units` as the final build.** This is
+  the easy way to get a profile that makes things *slower*. Inlining happens
+  before instrumentation, so a training build with different settings records
+  counters for a call graph the final build no longer has. Our `[profile.release]`
+  uses `lto = "fat"` and `codegen-units = 1`, and the script trains with them; if
+  you use `--train-only` and then run your own `cargo build`, keep those two
+  values identical. When they did not match, `wc -w` came out **57% slower** than
+  a plain non-PGO release build, while the profile itself looked perfectly
+  healthy.
 - **A bad profile fails the build rather than silently degrading it**: the
   script refuses to continue if the merged profile covers fewer than 500
   functions, which is what an environment where the training workloads did not
-  actually run looks like.
+  actually run looks like. Note that this only catches a profile that is
+  *missing*, not one that is *mismatched*: the mismatch above produced a profile
+  covering more functions (4098) than the correct one (1883), since a non-LTO
+  build still has all the symbols that whole-program codegen later merges away.
+  If you change the training or build settings, measure the result.
 - It costs a second full build plus the training run, so expect the package
-  build to take noticeably longer.
+  build to take noticeably longer. On a 24-core x86_64 machine the full script
+  takes about 3 minutes for the `unix` feature set, and the resulting binary is
+  ~0.8% larger.
 
 ## Additional artifacts
 
