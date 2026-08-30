@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore memfd_create prefixcat rsplit testcat
+// spell-checker:ignore memfd_create prefixcat rsplit testcat atexit profraw Cprofile
 
 use std::ffi::{OsStr, OsString};
 use std::io::{Write, stderr};
@@ -13,6 +13,31 @@ use std::process;
 use uucore::Args;
 use uucore::display::Quotable;
 use uucore::locale;
+
+// The instrumented binary built by `util/build-pgo.sh` (`--cfg pgo_training`)
+// has to flush its own profile counters on Windows. Every exit below goes
+// through `std::process::exit`, which is `libc::exit` on Unix but
+// `ExitProcess` on Windows; the latter skips the `atexit` handler the LLVM
+// profiling runtime writes the counters from, so the training runs would
+// leave nothing but empty `.profraw` files behind.
+#[cfg(all(pgo_training, windows))]
+unsafe extern "C" {
+    fn __llvm_profile_write_file() -> i32;
+}
+
+/// Terminates the process with `code`, flushing the PGO counters when the
+/// binary was built for profile training on Windows.
+pub fn exit(code: i32) -> ! {
+    #[cfg(all(pgo_training, windows))]
+    // SAFETY: `__llvm_profile_write_file` is provided by the LLVM profiling
+    // runtime, which is linked in whenever this cfg is set (the same build
+    // passes `-Cprofile-generate`). It takes no arguments and only writes the
+    // counter file named by `LLVM_PROFILE_FILE`.
+    unsafe {
+        __llvm_profile_write_file();
+    }
+    process::exit(code)
+}
 
 /// Gets all available utilities including "coreutils"
 #[allow(clippy::type_complexity)]
@@ -31,7 +56,7 @@ pub fn not_found(util: &OsStr) -> ! {
         "coreutils: unknown program '{}'",
         util.maybe_quote()
     );
-    process::exit(1);
+    exit(1);
 }
 
 /// Prints an "unrecognized option" error and exits
@@ -41,7 +66,7 @@ pub fn unrecognized_option(binary_name: &str, option: &OsStr) -> ! {
         "{binary_name}: unrecognized option '{}'",
         option.to_string_lossy()
     );
-    process::exit(1);
+    exit(1);
 }
 
 /// Sets up localization for a utility with proper error handling
@@ -55,7 +80,7 @@ pub fn setup_localization_or_exit(util_name: &str) {
             } => eprintln!("Localization parse error at {snippet}: {err_msg}"),
             other => eprintln!("Could not init the localization system: {other}"),
         }
-        process::exit(99)
+        exit(99)
     });
 }
 
