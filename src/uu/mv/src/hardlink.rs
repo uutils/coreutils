@@ -215,18 +215,16 @@ impl HardlinkGroupScanner {
     fn scan_single_path(&mut self, path: &Path) -> io::Result<()> {
         use std::os::unix::fs::MetadataExt;
 
-        if path.is_dir() {
+        let metadata = path.symlink_metadata()?;
+        if metadata.is_dir() {
             // Recursively scan directory contents
             self.scan_directory_recursive(path)?;
-        } else {
-            let metadata = path.symlink_metadata()?;
-            if metadata.is_file() && metadata.nlink() > 1 {
-                let key = (metadata.dev(), metadata.ino());
-                self.hardlink_groups
-                    .entry(key)
-                    .or_default()
-                    .push(path.to_path_buf());
-            }
+        } else if metadata.is_file() && metadata.nlink() > 1 {
+            let key = (metadata.dev(), metadata.ino());
+            self.hardlink_groups
+                .entry(key)
+                .or_default()
+                .push(path.to_path_buf());
         }
         Ok(())
     }
@@ -240,14 +238,13 @@ impl HardlinkGroupScanner {
             let entry = entry?;
             let path = entry.path();
 
-            if path.is_dir() {
+            // never descend through a symlink.
+            let metadata = path.symlink_metadata()?;
+            if metadata.is_dir() {
                 self.scan_directory_recursive(&path)?;
-            } else {
-                let metadata = path.symlink_metadata()?;
-                if metadata.is_file() && metadata.nlink() > 1 {
-                    let key = (metadata.dev(), metadata.ino());
-                    self.hardlink_groups.entry(key).or_default().push(path);
-                }
+            } else if metadata.is_file() && metadata.nlink() > 1 {
+                let key = (metadata.dev(), metadata.ino());
+                self.hardlink_groups.entry(key).or_default().push(path);
             }
         }
         Ok(())
