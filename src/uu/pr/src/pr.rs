@@ -428,23 +428,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 /// Rewrite arguments before clap parsing, preserving legacy numeric operands.
 fn recreate_arguments(args: &[String]) -> Vec<String> {
-    let num_regex = Regex::new(r"^[^-]\d*$").unwrap();
-    let n_regex = Regex::new(r"^-n\s*$").unwrap();
     // `-e` ends a cluster of short flags that take no value of their own, as in `-tre`.
-    // Options that do take a value are excluded so that `-se` keeps meaning `-s e`.
     let e_regex = Regex::new(r"^-[dtTrFfabmJ]*e$").unwrap();
     let mut arguments = args.to_owned();
-    let num_option = args
-        .iter()
-        .take_while(|arg| arg.as_str() != "--")
-        .find_position(|x| n_regex.is_match(x.trim()));
-    if let Some((pos, _value)) = num_option
-        && let Some(num_val_opt) = args.get(pos + 1)
-        && !num_regex.is_match(num_val_opt)
-    {
-        let could_be_file = arguments.remove(pos + 1);
-        arguments.insert(pos + 1, format!("{}", NumberingMode::default().width));
-        arguments.insert(pos + 2, could_be_file);
+
+    // GNU takes the value of these attached only (`-n3`, `-s,`); the argument
+    // after them is always an operand. clap would swallow that operand as the
+    // value instead, and the two cannot be told apart by shape: in
+    // `pr -n FILE`, a file called `f1` reads exactly like the SEP[DIGITS] pair
+    // `f` and `1`. So the default is filled in here, which leaves clap nothing
+    // to take.
+    let optional_value_defaults = [
+        ("-n", NumberingMode::default().width.to_string()),
+        ("-s", "\t".to_string()),
+        ("-S", " ".to_string()),
+    ];
+    let mut pos = 0;
+    while pos < arguments.len() && arguments[pos] != "--" {
+        if let Some((_, default)) = optional_value_defaults
+            .iter()
+            .find(|(flag, _)| arguments[pos].trim() == *flag)
+        {
+            arguments.insert(pos + 1, default.clone());
+            pos += 1;
+        }
+        pos += 1;
     }
 
     // `-e` takes an optional attached argument, which clap cannot express, so it is filled in

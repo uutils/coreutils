@@ -112,7 +112,7 @@ fn test_with_numbering_option_with_number_width() {
     let mut scenario = new_ucmd!();
     let value = file_last_modified_time(&scenario, test_file_path);
     scenario
-        .args(&["-n", "2", test_file_path])
+        .args(&["-n2", test_file_path])
         .succeeds()
         .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
 }
@@ -485,7 +485,7 @@ fn test_page_length_too_large() {
 fn test_number_width_too_large() {
     let arg = "18446744073709551615";
     new_ucmd!()
-        .args(&["-n", arg])
+        .args(&[format!("-n{arg}")])
         .fails_with_code(1)
         .stderr_is(format!(
             "pr: '-n' extra characters or invalid number in the argument: '{arg}': Value too large for defined data type\nTry 'pr --help' for more information.\n"
@@ -540,7 +540,7 @@ fn test_large_number_width_does_not_panic() {
     // With -t (no page headers/footers) GNU emits no page padding, so the
     // output is exactly the numbered line.
     new_ucmd!()
-        .args(&["-t", "-n", "70000"])
+        .args(&["-t", "-n70000"])
         .pipe_in("x\n")
         .succeeds()
         .stdout_is(format!("{}1\tx\n", " ".repeat(69999)));
@@ -682,15 +682,19 @@ fn test_with_join_lines_option() {
 
 #[test]
 fn test_value_for_number_lines() {
-    // *5 is of the form [SEP[NUMBER]] so is accepted and succeeds
-    new_ucmd!().args(&["-n", "*5", "test.log"]).succeeds();
+    // GNU takes the value of -n attached only, so the argument after a bare
+    // -n is always an operand, never SEP[NUMBER]. `pr -n a f` reports
+    // "pr: a: No such file or directory" and still numbers f.
+    for operand in ["*5", "a", "foo5.txt"] {
+        new_ucmd!()
+            .args(&["-n", operand, "test.log"])
+            .fails()
+            .stderr_contains(format!("{operand}: No such file or directory"));
+    }
 
-    // a is of the form [SEP[NUMBER]] so is accepted and succeeds
-    new_ucmd!().args(&["-n", "a", "test.log"]).succeeds();
-
-    // foo5.txt is of not the form [SEP[NUMBER]] so is not used as value.
-    // Therefore, pr tries to access the file, which does not exist.
-    new_ucmd!().args(&["-n", "foo5.txt", "test.log"]).fails();
+    // Attached, the same values are read as SEP[NUMBER].
+    new_ucmd!().args(&["-n*5", "test.log"]).succeeds();
+    new_ucmd!().args(&["-na", "test.log"]).succeeds();
 }
 
 #[test]
@@ -1321,4 +1325,19 @@ fn test_missing_file_error_message() {
         .fails_with_code(1)
         .stderr_contains("pr: nonexistent_file: ")
         .stderr_does_not_contain("(os error");
+}
+
+#[test]
+fn test_optional_value_is_not_taken_from_the_next_argument() {
+    // `-n`, `-s` and `-S` take their value attached only. A file whose name
+    // happens to look like SEP[DIGITS] used to be swallowed as the value,
+    // leaving no operand, so pr silently numbered stdin instead of the file.
+    for flag in ["-n", "-s", "-S"] {
+        new_ucmd!()
+            .args(&["-t", flag, "f1"])
+            .pipe_in("FROM_STDIN\n")
+            .succeeds()
+            .stdout_contains("from_file")
+            .stdout_does_not_contain("FROM_STDIN");
+    }
 }
