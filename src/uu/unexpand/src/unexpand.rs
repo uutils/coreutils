@@ -195,14 +195,44 @@ fn is_digit_or_comma(c: char) -> bool {
 /// Preprocess command line arguments and expand shortcuts. For example, "-7" is expanded to
 /// "--tabs=7 --first-only" and "-1,3" to "--tabs=1 --tabs=3 --first-only". However, if "-a" or
 /// "--all" is provided, "--first-only" is omitted.
+/// Whether `arg` is a `-t`/`--tabs` spelling that takes the *next* argument as
+/// its value, so that argument is a tab list rather than an obsolete `-N`.
+fn takes_tabs_value(arg: &str) -> bool {
+    if let Some(long) = arg.strip_prefix("--") {
+        !long.is_empty() && !long.contains('=') && options::TABS.starts_with(long)
+    } else if let Some(short) = arg.strip_prefix('-') {
+        // Only a trailing `t` takes the next argument; in `-t8` the value is
+        // attached. A bare `-` is stdin and leaves nothing to index.
+        !short.is_empty() && short.find('t') == Some(short.len() - 1)
+    } else {
+        false
+    }
+}
+
 fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
     let mut processed_args = Vec::with_capacity(args.len());
     let mut is_all_arg_provided = false;
     let mut has_shortcuts = false;
 
+    let mut expecting_tabs = false;
+    let mut end_of_options = false;
+
     for arg in args {
+        // `-1` is the obsolete spelling of `--tabs=1`, but only where an
+        // option is expected. As the value of `-t` it is a (bad) tab list that
+        // has to reach the tab-list check, and past `--` it is a file name.
+        let is_operand = end_of_options || expecting_tabs;
+        if let Some(text) = arg.to_str() {
+            if is_operand {
+                expecting_tabs = false;
+            } else if text == "--" {
+                end_of_options = true;
+            } else {
+                expecting_tabs = takes_tabs_value(text);
+            }
+        }
         if let Some(arg) = arg.to_str() {
-            if arg.starts_with('-') && arg[1..].chars().all(is_digit_or_comma) {
+            if !is_operand && arg.starts_with('-') && arg[1..].chars().all(is_digit_or_comma) {
                 arg[1..]
                     .split(',')
                     .filter(|s| !s.is_empty())
@@ -268,6 +298,10 @@ pub fn uu_app() -> Command {
             Arg::new(options::TABS)
                 .short('t')
                 .long(options::TABS)
+                // A tab list may start with a hyphen. It is not valid, but the
+                // check below reports it far better than clap does, so it has
+                // to reach that check rather than be taken for an option.
+                .allow_hyphen_values(true)
                 .help(translate!("unexpand-help-tabs"))
                 .action(ArgAction::Append)
                 .value_name("N, LIST"),

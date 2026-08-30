@@ -500,3 +500,19 @@ fn test_buffered_reads_new_line_no_tabs_in_first_chunk() {
         .succeeds()
         .stdout_is_fixture("new_line_in_chunk_expected.txt");
 }
+
+#[test]
+fn test_tab_list_starting_with_hyphen() {
+    // `-1` is the obsolete spelling of `--tabs=1`, but as the value of -t it
+    // is a tab list. It used to be rewritten to `--tabs=1` before the check,
+    // which then complained about `'--tabs=1'` rather than what was typed.
+    for arg in ["-1", "-0"] {
+        new_ucmd!()
+            .args(&["-t", arg])
+            .fails()
+            .stderr_contains(format!("tab size contains invalid character(s): '{arg}'"));
+    }
+
+    // The obsolete spelling still works where an option is expected.
+    new_ucmd!().arg("-4").pipe_in("\tx\n").succeeds();
+}
