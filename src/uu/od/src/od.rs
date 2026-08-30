@@ -338,14 +338,16 @@ pub fn uu_app() -> Command {
                 .short('j')
                 .long(options::SKIP_BYTES)
                 .help(translate!("od-help-skip-bytes"))
-                .value_name("BYTES"),
+                .value_name("BYTES")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(options::READ_BYTES)
                 .short('N')
                 .long(options::READ_BYTES)
                 .help(translate!("od-help-read-bytes"))
-                .value_name("BYTES"),
+                .value_name("BYTES")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(options::ENDIAN)

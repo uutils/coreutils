@@ -931,6 +931,7 @@ pub fn uu_app() -> Command {
             Arg::new("j")
                 .short('j')
                 .value_name("FIELD")
+                .allow_hyphen_values(true)
                 .help(translate!("join-help-j")),
         )
         .arg(
@@ -952,12 +953,14 @@ pub fn uu_app() -> Command {
             Arg::new("1")
                 .short('1')
                 .value_name("FIELD")
+                .allow_hyphen_values(true)
                 .help(translate!("join-help-1")),
         )
         .arg(
             Arg::new("2")
                 .short('2')
                 .value_name("FIELD")
+                .allow_hyphen_values(true)
                 .help(translate!("join-help-2")),
         )
         .arg(

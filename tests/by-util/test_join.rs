@@ -805,3 +805,16 @@ join: invalid field number: 'x'
             .stderr_is("join: invalid field number: 'x'\n");
     }
 }
+
+#[test]
+fn test_hyphen_leading_field_number_is_reported_as_invalid() {
+    // GNU hands the argument after the option to that option even when it
+    // starts with a hyphen, so it is reported as an invalid field number
+    // rather than as an unknown option.
+    for opt in ["-1", "-2", "-j"] {
+        new_ucmd!()
+            .args(&[opt, "-1", "empty.txt", "empty.txt"])
+            .fails()
+            .stderr_contains("invalid field number: '-1'");
+    }
+}

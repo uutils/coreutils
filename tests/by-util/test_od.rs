@@ -1498,3 +1498,17 @@ od: invalid suffix in -N argument '3zz'
             .stderr_is("od: invalid suffix in -N argument '3zz'\n");
     }
 }
+
+#[test]
+fn test_hyphen_leading_byte_count_is_reported_as_invalid() {
+    // GNU hands the argument after the option to that option even when it
+    // starts with a hyphen, so it is reported as an invalid argument rather
+    // than as an unknown option.
+    for opt in ["-N", "-j"] {
+        new_ucmd!()
+            .args(&[opt, "-1"])
+            .pipe_in("")
+            .fails()
+            .stderr_contains(format!("invalid {opt} argument '-1'"));
+    }
+}
