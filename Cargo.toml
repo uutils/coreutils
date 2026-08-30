@@ -710,3 +710,7 @@ strip = true
 inherits = "release"
 panic = "unwind"
 debug = true
+
+[patch.crates-io]
+nix = { git = "https://github.com/xtqqczze/nix-rust-nix", branch = "horizon" }
+terminal_size = { git = "https://github.com/eminence/terminal-size", branch = "master" }
