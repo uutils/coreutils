@@ -1246,6 +1246,38 @@ fn test_invalid_num() {
 }
 
 #[test]
+fn test_lowercase_multiplier_suffixes_rejected() {
+    // GNU accepts a lowercase suffix only for "k" and "m"; every other
+    // multiplier must be uppercase. "b" is bare-only (no B/iB/D form).
+    for suffix in ["g", "t", "p", "e", "z", "y", "r", "q"] {
+        new_ucmd!()
+            .args(&["-c", &format!("2{suffix}")])
+            .fails()
+            .stderr_str()
+            .starts_with(&format!("tail: invalid number of bytes: '2{suffix}'"));
+        new_ucmd!()
+            .args(&["-n", &format!("2{suffix}")])
+            .fails()
+            .stderr_str()
+            .starts_with(&format!("tail: invalid number of lines: '2{suffix}'"));
+    }
+}
+
+#[test]
+fn test_accepted_multiplier_suffixes() {
+    for suffix in [
+        "b", "k", "m", "K", "M", "G", "T", "P", "E", "Z", "Y", "R", "Q", "kB", "KiB", "kD", "MiB",
+        "GB",
+    ] {
+        new_ucmd!()
+            .args(&["-c", &format!("1{suffix}")])
+            .pipe_in("x")
+            .ignore_stdin_write_error()
+            .succeeds();
+    }
+}
+
+#[test]
 fn test_oversized_num() {
     const BIG: &str = "99999999999999999999999999999";
     const DATA: &str = "abcd";

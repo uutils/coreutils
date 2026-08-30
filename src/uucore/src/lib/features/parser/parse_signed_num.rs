@@ -8,8 +8,32 @@
 //! These utilities accept arguments like `-5`, `+10`, `-100K` where the leading
 //! sign indicates different behavior (e.g., "first N" vs "last N" vs "starting from N").
 
-use super::parse_size::{ParseSizeError, parse_size_u64, parse_size_u64_max, size_offset};
+use super::parse_size::{
+    ParseSizeError, Parser, allow_list_with_all_suffixes, parse_size_u64, size_offset,
+};
 use crate::display::Quotable;
+
+/// The multiplier suffixes accepted on a count argument.
+///
+/// Each of these is also valid followed by `B`, `iB` or `D`. A lowercase
+/// letter is only accepted for `k` and `m`; the remaining multipliers must be
+/// uppercase. `b` (512-byte blocks) is handled separately because it is the
+/// one suffix that has no `B`/`iB`/`D` form.
+const MULTIPLIER_SUFFIXES: &str = "kmKMGTPEZYRQ";
+
+/// Parse the numeric part of a count argument, rejecting any suffix that is
+/// not one of [`MULTIPLIER_SUFFIXES`] or a bare `b`.
+///
+/// The generic size parser accepts a lowercase form of every multiplier, which
+/// is more than these utilities allow.
+fn parse_count(size: &str) -> Result<u64, ParseSizeError> {
+    let mut allow_list = allow_list_with_all_suffixes(MULTIPLIER_SUFFIXES);
+    allow_list.push("b".to_string());
+    let allow_list: Vec<&str> = allow_list.iter().map(AsRef::as_ref).collect();
+    Parser::default()
+        .with_allow_list(&allow_list)
+        .parse_u64_max(size)
+}
 
 /// The sign prefix found on a numeric argument.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,10 +120,10 @@ pub fn parse_signed_num_max(src: &str) -> Result<SignedNum, ParseSizeError> {
         // Otherwise "0K" would parse as 1KiB (bare suffix means 1).
         // A genuinely bare suffix with no digits at all (e.g. "kiB")
         // still parses as 1 of that unit.
-        parse_size_u64_max(trimmed).map_err(|e| as_typed(e, size_string))?;
+        parse_count(trimmed).map_err(|e| as_typed(e, size_string))?;
         0
     } else {
-        parse_size_u64_max(trimmed).map_err(|e| as_typed(e, size_string))?
+        parse_count(trimmed).map_err(|e| as_typed(e, size_string))?
     };
 
     Ok(SignedNum { value, sign })
