@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) filefrag rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile subvolume uufs xattrs ELOOP
-// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx dstlink
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx dstlink mcstransd
 #[cfg(unix)]
 use rstest::rstest;
 use uucore::display::Quotable;
@@ -5591,6 +5591,34 @@ fn test_cp_debug_sparse_never_zero_sized_virtual_file() {
         .arg("b")
         .succeeds()
         .stdout_contains("copy offload: avoided, reflink: no, sparse detection: no");
+}
+
+// A file that stats as zero-sized but still returns data (/proc entries)
+// is probed for content by reading from it. The copy reuses that same
+// descriptor, so it has to start over at offset 0 -- otherwise everything
+// the probe consumed is dropped and the destination ends up empty. The
+// --debug tests above only look at the reported strategy, not the bytes.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_zero_sized_virtual_file_contents() {
+    let expected = std::fs::read_to_string("/proc/version").unwrap();
+    assert!(!expected.is_empty());
+
+    for extra in [
+        &[][..],
+        &["--sparse=never"],
+        &["--sparse=always"],
+        &["--sparse=auto"],
+        &["--reflink=never"],
+        &["--reflink=never", "--sparse=always"],
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(extra)
+            .args(&["/proc/version", "copied"])
+            .succeeds()
+            .no_output();
+        assert_eq!(at.read("copied"), expected, "with {extra:?}");
+    }
 }
 
 #[test]
