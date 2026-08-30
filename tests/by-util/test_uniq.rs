@@ -1230,3 +1230,11 @@ fn test_repeated_skip_fields_takes_the_last() {
         .succeeds()
         .stdout_is("x y a\n");
 }
+
+#[test]
+fn test_nonexistent_input_file_error_matches_gnu() {
+    new_ucmd!()
+        .arg("nosuchfile.txt")
+        .fails_with_code(1)
+        .stderr_only("uniq: nosuchfile.txt: No such file or directory\n");
+}
