@@ -83,14 +83,11 @@ begin_step "Step 1: instrumented build"
 INSTR_DIR="${TARGET_DIR}/instrumented"
 rm -rf "$PROFILE_DIR"
 mkdir -p "$PROFILE_DIR"
-# The instrumented binary is only ever run for training, so skip the expensive
-# whole-program codegen. Profiles are keyed by function, not by LTO/CGU layout,
-# so this does not affect the profile the final build consumes.
-(
-    export CARGO_PROFILE_RELEASE_LTO=false
-    export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
-    cargo_build "$INSTR_DIR" "-Cprofile-generate=${PROFILE_DIR}"
-)
+# The instrumented build must use the same LTO and codegen-unit settings as the
+# final one. Inlining happens before instrumentation, so building it with LTO
+# off yields counters for functions that no longer exist once the final build
+# runs whole-program codegen, and the profile is then largely wasted on it.
+cargo_build "$INSTR_DIR" "-Cprofile-generate=${PROFILE_DIR}"
 
 BIN="${INSTR_DIR}/release/coreutils"
 [ -x "$BIN" ] || { echo "instrumented binary not found: ${BIN}" >&2; exit 1; }
