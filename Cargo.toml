@@ -538,6 +538,7 @@ renamed_and_removed_lints = { level = "allow", priority = -1 }
 # https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html
 unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(fuzzing)',
+  'cfg(pgo_training)',
   'cfg(target_os, values("cygwin"))',
   'cfg(wasi_runner)',
 ] }
