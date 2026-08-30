@@ -236,15 +236,17 @@ impl HardlinkGroupScanner {
         let entries = std::fs::read_dir(dir)?;
         for entry in entries {
             let entry = entry?;
-            let path = entry.path();
 
             if entry.file_type()?.is_dir() {
-                self.scan_directory_recursive(&path)?;
+                self.scan_directory_recursive(&entry.path())?;
             } else {
-                let metadata = path.symlink_metadata()?;
+                let metadata = entry.metadata()?;
                 if metadata.is_file() && metadata.nlink() > 1 {
                     let key = (metadata.dev(), metadata.ino());
-                    self.hardlink_groups.entry(key).or_default().push(path);
+                    self.hardlink_groups
+                        .entry(key)
+                        .or_default()
+                        .push(entry.path());
                 }
             }
         }
