@@ -164,7 +164,7 @@ fn takes_width_value(arg: &str) -> bool {
     } else if let Some(short) = arg.strip_prefix('-') {
         // Only a trailing `w` takes the next argument: in `-sw` it does, but
         // in `-w3` and `-wb` the value is attached to the flag instead.
-        short.find('w') == Some(short.len() - 1)
+        short.find('w') == Some(short.len().checked_sub(1))
     } else {
         false
     }
