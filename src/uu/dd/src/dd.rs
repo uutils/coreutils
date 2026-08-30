@@ -88,7 +88,6 @@ struct Settings {
 ///
 /// When all instances are dropped the background thread will exit on the next interval.
 pub struct Alarm {
-    interval: Duration,
     trigger: Arc<AtomicU8>,
 }
 
@@ -109,7 +108,7 @@ impl Alarm {
             }
         });
 
-        Self { interval, trigger }
+        Self { trigger }
     }
 
     /// Manually trigger the alarm as a signal event
@@ -125,11 +124,6 @@ impl Alarm {
     /// by the closure returned from `manual_trigger_fn`
     pub fn get_trigger(&self) -> u8 {
         self.trigger.swap(ALARM_TRIGGER_NONE, Relaxed)
-    }
-
-    // Getter function for the configured interval duration
-    pub fn get_interval(&self) -> Duration {
-        self.interval
     }
 }
 
