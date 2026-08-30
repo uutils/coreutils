@@ -149,3 +149,18 @@ samply record -r 10000 target/profiling/ls -lR /var .git .git .git > /dev/null
    ```bash
    hyperfine --export-markdown file.md [...]
    ```
+
+## Profile-Guided Optimization
+
+Our released binaries are built with PGO, driven by `util/build-pgo.sh` (Linux,
+macOS and Windows alike). When comparing against a release build, keep in mind
+that a plain `cargo build --release` is *not* what we ship. To reproduce it:
+
+```bash
+rustup component add llvm-tools
+./util/build-pgo.sh --features unix
+# -> target/coreutils-pgo/<target>/release/coreutils
+```
+
+See [packaging](packaging.md#profile-guided-optimization-pgo) for the details
+and the options.
