@@ -22,7 +22,6 @@ use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::i18n::decimal::locale_grouping_separator;
 use uucore::parser::parse_size::{IEC_BASES, SI_BASES};
-use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::ranges::Range;
 use uucore::{format_usage, os_str_as_bytes, show, translate};
 
@@ -225,6 +224,31 @@ fn handle_buffer_to<R: BufRead>(
     Ok(saw_invalid)
 }
 
+/// Resolve `value` against `choices`, accepting any unambiguous abbreviation,
+/// which is what GNU does: `--round=f` is `from-zero`.
+/// The values `--round` accepts, in the order GNU lists them.
+const ROUND_CHOICES: &[&str] = &["up", "down", "from-zero", "towards-zero", "nearest"];
+
+/// The values `--invalid` accepts.
+const INVALID_CHOICES: &[&str] = &["abort", "fail", "warn", "ignore"];
+
+fn resolve_choice<'a>(value: &str, choices: &[&'a str]) -> Option<&'a str> {
+    if let Some(exact) = choices.iter().find(|c| **c == value) {
+        return Some(exact);
+    }
+    let mut matches = choices.iter().filter(|c| c.starts_with(value));
+    match (matches.next(), matches.next()) {
+        (Some(only), None) if !value.is_empty() => Some(only),
+        _ => None,
+    }
+}
+
+/// Whether `value` fails because it names more than one of `choices` rather
+/// than none of them; GNU calls that ambiguous rather than invalid.
+fn is_ambiguous(value: &str, choices: &[&str]) -> bool {
+    choices.iter().filter(|c| c.starts_with(value)).count() > 1
+}
+
 fn parse_unit(s: &str, opt: &'static str) -> std::result::Result<Unit, ParseError> {
     match s {
         "auto" if opt != TO => Ok(Unit::Auto),
@@ -402,13 +426,34 @@ fn parse_options(args: &ArgMatches) -> std::result::Result<NumfmtOptions, ParseE
         .transpose()?;
 
     // unwrap is fine because the argument has a default value
-    let round = match args.get_one::<String>(ROUND).unwrap().as_str() {
-        "up" => RoundMethod::Up,
-        "down" => RoundMethod::Down,
-        "from-zero" => RoundMethod::FromZero,
-        "towards-zero" => RoundMethod::TowardsZero,
-        "nearest" => RoundMethod::Nearest,
-        _ => unreachable!("Should be restricted by clap"),
+    let round_value = args.get_one::<String>(ROUND).unwrap();
+    // GNU accepts any unambiguous abbreviation, so `--round=f` is from-zero.
+    let round = match resolve_choice(round_value, ROUND_CHOICES) {
+        Some("up") => RoundMethod::Up,
+        Some("down") => RoundMethod::Down,
+        Some("from-zero") => RoundMethod::FromZero,
+        Some("towards-zero") => RoundMethod::TowardsZero,
+        Some("nearest") => RoundMethod::Nearest,
+        Some(_) => unreachable!("resolve_choice only returns one of the choices"),
+        // Reported here rather than by clap so the wording matches --from and
+        // --to, which already say "invalid argument 'x' for '--from'".
+        None => {
+            return Err(OptionValueError {
+                message: translate!(
+                    if is_ambiguous(round_value, ROUND_CHOICES) {
+                        "numfmt-error-ambiguous-argument"
+                    } else {
+                        "numfmt-error-invalid-unit-argument"
+                    },
+                    "arg" => round_value.clone(), "opt" => format!("--{ROUND}")
+                ),
+                option: ROUND,
+                label: None,
+                help: "numfmt-diag-help-round",
+                value: round_value.clone(),
+            }
+            .into());
+        }
     };
 
     let suffix = args.get_one::<String>(SUFFIX).cloned();
@@ -421,7 +466,23 @@ fn parse_options(args: &ArgMatches) -> std::result::Result<NumfmtOptions, ParseE
     let explicit_unit_separator = args.contains_id(UNIT_SEPARATOR)
         && args.value_source(UNIT_SEPARATOR) == Some(ValueSource::CommandLine);
 
-    let invalid = InvalidModes::from_str(args.get_one::<String>(INVALID).unwrap()).unwrap();
+    let invalid_value = args.get_one::<String>(INVALID).unwrap();
+    let invalid_resolved =
+        resolve_choice(invalid_value, INVALID_CHOICES).unwrap_or(invalid_value.as_str());
+    let invalid = InvalidModes::from_str(invalid_resolved).map_err(|_| OptionValueError {
+        message: translate!(
+            if is_ambiguous(invalid_value, INVALID_CHOICES) {
+                "numfmt-error-ambiguous-argument"
+            } else {
+                "numfmt-error-invalid-unit-argument"
+            },
+            "arg" => invalid_value.clone(), "opt" => format!("--{INVALID}")
+        ),
+        option: INVALID,
+        label: None,
+        help: "numfmt-diag-help-invalid",
+        value: invalid_value.clone(),
+    })?;
 
     let zero_terminated = args.get_flag(ZERO_TERMINATED);
 
@@ -644,13 +705,9 @@ pub fn uu_app() -> Command {
                 .help(translate!("numfmt-help-round"))
                 .value_name("METHOD")
                 .default_value("from-zero")
-                .value_parser(ShortcutValueParser::new([
-                    "up",
-                    "down",
-                    "from-zero",
-                    "towards-zero",
-                    "nearest",
-                ])),
+                // Checked in code rather than by clap, so the message matches
+                // --from and --to.
+                .value_parser(clap::value_parser!(String)),
         )
         .arg(
             Arg::new(SUFFIX)
@@ -669,7 +726,8 @@ pub fn uu_app() -> Command {
                 .long(INVALID)
                 .help(translate!("numfmt-help-invalid"))
                 .default_value("abort")
-                .value_parser(["abort", "fail", "warn", "ignore"])
+                // Checked in code rather than by clap, as with --round.
+                .value_parser(clap::value_parser!(String))
                 .value_name("INVALID"),
         )
         .arg(

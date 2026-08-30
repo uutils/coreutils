@@ -2291,3 +2291,27 @@ mod field_diagnostics {
             .stderr_contains("range '0' was invalid: fields and positions are numbered from 1");
     }
 }
+
+#[test]
+fn test_invalid_round_and_invalid_arguments() {
+    // These were checked by clap, so they reported clap's wording rather than
+    // the one --from and --to already use.
+    for (opt, value) in [("--round", "bogus"), ("--invalid", "bogus")] {
+        new_ucmd!()
+            .args(&[&format!("{opt}={value}"), "1"])
+            .fails()
+            .stderr_contains(format!("invalid argument '{value}' for '{opt}'"));
+    }
+
+    // An empty value names every choice at once, which GNU calls ambiguous.
+    for opt in ["--round", "--invalid"] {
+        new_ucmd!()
+            .args(&[&format!("{opt}="), "1"])
+            .fails()
+            .stderr_contains(format!("ambiguous argument '' for '{opt}'"));
+    }
+
+    // Unambiguous abbreviations keep working, as they do in GNU.
+    new_ucmd!().args(&["--round=f", "1.5"]).succeeds();
+    new_ucmd!().args(&["--invalid=ig", "1"]).succeeds();
+}
