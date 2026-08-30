@@ -5,10 +5,17 @@
 
 // spell-checker:ignore (flags) runlevel mesg
 
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+use crate::utmp::{LinuxGlibcUtmpRecord, write_linux_glibc_utmp};
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+use uucore::utmpx;
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
 use uutests::util::{TestScenario, expected_result, gnu_cmd_result};
 use uutests::util_name;
+
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
@@ -274,6 +281,78 @@ fn test_locale() {
         .env("LC_ALL", "en_US.UTF-8")
         .succeeds()
         .stdout_is(&expected_stdout);
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[test]
+#[cfg_attr(
+    target_arch = "aarch64",
+    ignore = "Issue #7174 - Test not supported on ARM64 Linux"
+)]
+fn test_records_from_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let path = at.plus("who.utmp");
+    let runlevel_pid = i32::from(b'N') * 256 + i32::from(b'3');
+    let records = [
+        LinuxGlibcUtmpRecord::new(utmpx::RUN_LVL, runlevel_pid, "~", "~~", "runlevel", ""),
+        LinuxGlibcUtmpRecord::new(utmpx::BOOT_TIME, 0, "~", "~~", "reboot", "kernel"),
+        LinuxGlibcUtmpRecord::new(utmpx::NEW_TIME, 0, "}", "", "", ""),
+        LinuxGlibcUtmpRecord::new(utmpx::OLD_TIME, 0, "|", "", "", ""),
+        LinuxGlibcUtmpRecord::new(utmpx::INIT_PROCESS, 105, "ttyI", "i1", "", ""),
+        LinuxGlibcUtmpRecord::new(utmpx::LOGIN_PROCESS, 106, "ttyL", "l1", "", ""),
+        LinuxGlibcUtmpRecord::new(
+            utmpx::USER_PROCESS,
+            107,
+            "missing-tty",
+            "u1",
+            "alice",
+            "localhost",
+        ),
+        LinuxGlibcUtmpRecord::new(utmpx::USER_PROCESS, 108, "null", "u2", "bob", ""),
+        LinuxGlibcUtmpRecord::new(utmpx::DEAD_PROCESS, 109, "ttyD", "d1", "", "")
+            .with_exit_status(9, 4),
+        LinuxGlibcUtmpRecord::new(utmpx::ACCOUNTING, 110, "ignored", "x1", "ignored", ""),
+    ];
+    write_linux_glibc_utmp(&path, &records);
+
+    ucmd.args(&["--all", "--heading"])
+        .arg(&path)
+        .env("LC_ALL", "C")
+        .succeeds()
+        .stdout_contains("NAME")
+        .stdout_contains("run-level 3")
+        .stdout_contains("last=S")
+        .stdout_contains("system boot")
+        .stdout_contains("clock change")
+        .stdout_contains("ttyI")
+        .stdout_contains("LOGIN")
+        .stdout_contains("alice")
+        .stdout_contains("(localhost)")
+        .stdout_contains("bob")
+        .stdout_contains("term=9 exit=4")
+        .stdout_does_not_contain("ignored");
+
+    new_ucmd!()
+        .args(&["--count"])
+        .arg(&path)
+        .env("LC_ALL", "C")
+        .succeeds()
+        .stdout_is("alice bob\n# users=2\n");
+
+    new_ucmd!()
+        .arg("--lookup")
+        .arg(&path)
+        .env("LC_ALL", "C")
+        .succeeds()
+        .stdout_contains("alice")
+        .stdout_contains("localhost");
+
+    new_ucmd!()
+        .arg(&path)
+        .env("LC_ALL", "C.UTF-8")
+        .succeeds()
+        .stdout_contains("alice")
+        .stdout_does_not_contain("system boot");
 }
 
 #[cfg(target_os = "linux")]

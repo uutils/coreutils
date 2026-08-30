@@ -4,7 +4,9 @@
 // file that was distributed with this source code.
 //
 // spell-checker:ignore utmp runlevel testusr testx boottime
-#![allow(clippy::cast_possible_wrap, clippy::unreadable_literal)]
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+use crate::utmp::{LinuxGlibcUtmpRecord, write_linux_glibc_utmp};
 
 #[cfg(unix)]
 use uutests::at_and_ucmd;
@@ -112,172 +114,44 @@ fn test_uptime_with_non_existent_file() {
         .stdout_contains("up ???? days ??:??");
 }
 
-// TODO create a similar test for macos
-// This will pass
 #[test]
-#[cfg(unix)]
-#[cfg(not(any(target_vendor = "apple", target_os = "openbsd", target_os = "android")))]
-#[cfg(not(target_env = "musl"))]
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
 #[cfg_attr(
-    all(target_arch = "aarch64", target_os = "linux"),
+    target_arch = "aarch64",
     ignore = "Issue #7159 - Test not supported on ARM64 Linux"
 )]
-#[allow(clippy::too_many_lines, clippy::items_after_statements)]
 fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
-    use std::fs::File;
-    use std::{io::Write, path::PathBuf};
-
-    // This test will pass for freebsd but we currently don't support changing the utmpx file for
-    // freebsd.
     let (at, mut ucmd) = at_and_ucmd!();
     // Regex matches for "up   00::00" ,"up 12 days  00::00", the time can be any valid time and
     // the days can be more than 1 digit or not there. This will match even if the amount of whitespace is
     // wrong between the days and the time.
 
     let re = Regex::new(r"up [(\d){1,} days]*\d{1,2}:\d\d").unwrap();
-    utmp(&at.plus("testx"));
+    let records = [
+        LinuxGlibcUtmpRecord::new(uucore::utmpx::BOOT_TIME, 0, "~", "~~", "reboot", ""),
+        LinuxGlibcUtmpRecord::new(
+            uucore::utmpx::RUN_LVL,
+            i32::try_from(std::process::id()).unwrap(),
+            "~",
+            "~~",
+            "runlevel",
+            "",
+        ),
+        LinuxGlibcUtmpRecord::new(
+            uucore::utmpx::USER_PROCESS,
+            i32::try_from(std::process::id()).unwrap(),
+            ":1",
+            "~~",
+            "testusr",
+            "",
+        ),
+    ];
+    write_linux_glibc_utmp(&at.plus("testx"), &records);
 
     ucmd.arg("testx")
         .succeeds()
         .stdout_matches(&re)
         .stdout_contains("load average");
-
-    // Helper function to create byte sequences
-    fn slice_32(slice: &[u8]) -> [i8; 32] {
-        let mut arr: [i8; 32] = [0; 32];
-
-        for (i, val) in slice.iter().enumerate() {
-            arr[i] = *val as i8;
-        }
-        arr
-    }
-
-    // Creates a file utmp records of three different types including a valid BOOT_TIME entry
-    fn utmp(path: &PathBuf) {
-        // Definitions of our utmpx structs
-        const BOOT_TIME: i32 = 2;
-        const RUN_LVL: i32 = 1;
-        const USER_PROCESS: i32 = 7;
-
-        #[repr(C)]
-        pub struct TimeVal {
-            pub tv_sec: i32,
-            pub tv_usec: i32,
-        }
-
-        #[repr(C)]
-        pub struct ExitStatus {
-            e_termination: i16,
-            e_exit: i16,
-        }
-
-        #[repr(C, align(4))]
-        pub struct Utmp {
-            pub ut_type: i32,
-            pub ut_pid: i32,
-            pub ut_line: [i8; 32],
-            pub ut_id: [i8; 4],
-
-            pub ut_user: [i8; 32],
-            pub ut_host: [i8; 256],
-            pub ut_exit: ExitStatus,
-            pub ut_session: i32,
-            pub ut_tv: TimeVal,
-
-            pub ut_addr_v6: [i32; 4],
-            glibc_reserved: [i8; 20],
-        }
-
-        let utmp = Utmp {
-            ut_type: BOOT_TIME,
-            ut_pid: 0,
-            ut_line: slice_32("~".as_bytes()),
-            ut_id: [126, 126, 0, 0],
-            ut_user: slice_32("reboot".as_bytes()),
-            ut_host: [0; 256],
-            ut_exit: ExitStatus {
-                e_termination: 0,
-                e_exit: 0,
-            },
-            ut_session: 0,
-            ut_tv: TimeVal {
-                tv_sec: 1716371201,
-                tv_usec: 290913,
-            },
-            ut_addr_v6: [127, 0, 0, 1],
-            glibc_reserved: [0; 20],
-        };
-        let utmp1 = Utmp {
-            ut_type: RUN_LVL,
-            ut_pid: std::process::id() as i32,
-            ut_line: slice_32("~".as_bytes()),
-            ut_id: [126, 126, 0, 0],
-            ut_user: slice_32("runlevel".as_bytes()),
-            ut_host: [0; 256],
-            ut_exit: ExitStatus {
-                e_termination: 0,
-                e_exit: 0,
-            },
-            ut_session: 0,
-            ut_tv: TimeVal {
-                tv_sec: 1716371209,
-                tv_usec: 162250,
-            },
-            ut_addr_v6: [0, 0, 0, 0],
-            glibc_reserved: [0; 20],
-        };
-        let utmp2 = Utmp {
-            ut_type: USER_PROCESS,
-            ut_pid: std::process::id() as i32,
-            ut_line: slice_32(":1".as_bytes()),
-            ut_id: [126, 126, 0, 0],
-            ut_user: slice_32("testusr".as_bytes()),
-            ut_host: [0; 256],
-            ut_exit: ExitStatus {
-                e_termination: 0,
-                e_exit: 0,
-            },
-            ut_session: 0,
-            ut_tv: TimeVal {
-                tv_sec: 1716371283,
-                tv_usec: 858764,
-            },
-            ut_addr_v6: [0, 0, 0, 0],
-            glibc_reserved: [0; 20],
-        };
-
-        fn serialize_i8_arr(buf: &mut Vec<u8>, arr: &[i8]) {
-            for b in arr {
-                buf.push(*b as u8);
-            }
-        }
-
-        fn serialize(utmp: &Utmp) -> Vec<u8> {
-            let mut buf = Vec::new();
-            buf.extend_from_slice(&utmp.ut_type.to_ne_bytes());
-            buf.extend_from_slice(&utmp.ut_pid.to_ne_bytes());
-            serialize_i8_arr(&mut buf, &utmp.ut_line);
-            serialize_i8_arr(&mut buf, &utmp.ut_id);
-            serialize_i8_arr(&mut buf, &utmp.ut_user);
-            serialize_i8_arr(&mut buf, &utmp.ut_host);
-            buf.extend_from_slice(&utmp.ut_exit.e_termination.to_ne_bytes());
-            buf.extend_from_slice(&utmp.ut_exit.e_exit.to_ne_bytes());
-            buf.extend_from_slice(&utmp.ut_session.to_ne_bytes());
-            buf.extend_from_slice(&utmp.ut_tv.tv_sec.to_ne_bytes());
-            buf.extend_from_slice(&utmp.ut_tv.tv_usec.to_ne_bytes());
-            for v in &utmp.ut_addr_v6 {
-                buf.extend_from_slice(&v.to_ne_bytes());
-            }
-            serialize_i8_arr(&mut buf, &utmp.glibc_reserved);
-            buf
-        }
-
-        let mut buf = serialize(&utmp);
-        buf.append(&mut serialize(&utmp1));
-        buf.append(&mut serialize(&utmp2));
-        let mut f = File::create(path).unwrap();
-        f.write_all(&buf).unwrap();
-    }
 }
 
 #[test]

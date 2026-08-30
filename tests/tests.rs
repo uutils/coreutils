@@ -18,6 +18,14 @@ fn init() {
     }
 }
 
+#[cfg(all(
+    any(feature = "uptime", feature = "who"),
+    target_os = "linux",
+    target_env = "gnu"
+))]
+#[path = "common/utmp.rs"]
+mod utmp;
+
 #[cfg(feature = "arch")]
 #[path = "by-util/test_arch.rs"]
 mod test_arch;
