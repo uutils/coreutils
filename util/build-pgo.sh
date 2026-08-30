@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# spell-checker:ignore (jargon) profdata profraw sysroot rustlib nullglob aeiou nocheck CGU Cprofile cygpath
+# spell-checker:ignore (jargon) profdata profraw sysroot rustlib nullglob aeiou nocheck CGU Cprofile cygpath atexit
 #
 # Build uutils coreutils with Profile-Guided Optimization.
 #
@@ -108,7 +108,12 @@ mkdir -p "$PROFILE_DIR"
 # final one. Inlining happens before instrumentation, so building it with LTO
 # off yields counters for functions that no longer exist once the final build
 # runs whole-program codegen, and the profile is then largely wasted on it.
-cargo_build "$INSTR_DIR" "-Cprofile-generate=${PROFILE_DIR}"
+#
+# `--cfg pgo_training` makes the binary flush its own counters before exiting:
+# it always leaves through `std::process::exit`, which on Windows is
+# `ExitProcess` and skips the `atexit` handler the profiling runtime would
+# otherwise write the profile from.
+cargo_build "$INSTR_DIR" "-Cprofile-generate=${PROFILE_DIR} --cfg pgo_training"
 
 BIN="${INSTR_DIR}/${TARGET}/release/coreutils${EXE}"
 [ -x "$BIN" ] || { echo "instrumented binary not found: ${BIN}" >&2; exit 1; }
