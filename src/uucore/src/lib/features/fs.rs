@@ -887,7 +887,7 @@ pub fn is_stdin_directory(stdin: &Stdin) -> bool {
     #[cfg(any(unix, all(target_os = "wasi", target_env = "p2")))]
     {
         use mode::{S_IFDIR, S_IFMT};
-        if let Ok(stat) = rustix::fs::fstat(stdin.as_fd()) {
+        if let Ok(stat) = rustix::fs::fstat(stdin) {
             #[allow(clippy::unnecessary_cast)]
             let mode = stat.st_mode as u32;
             // We use the S_IFMT mask ala S_ISDIR() to avoid mistaking

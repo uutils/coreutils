@@ -10,8 +10,6 @@ use crate::{Quotable, parse, platform};
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use std::ffi::OsString;
 use std::io::{IsTerminal, Write};
-#[cfg(unix)]
-use std::os::fd::AsFd;
 use std::time::Duration;
 use uucore::diagnostics::OptionValue;
 use uucore::error::{UResult, USimpleError, UUsageError};
@@ -347,7 +345,7 @@ impl Settings {
         // cannot be applied under these circumstances and is therefore ineffective.
         if self.follow.is_some() && self.has_stdin() {
             #[cfg(unix)]
-            let stdin_is_regular = rustix::fs::fstat(std::io::stdin().as_fd())
+            let stdin_is_regular = rustix::fs::fstat(std::io::stdin())
                 .is_ok_and(|stat| stat.st_mode & libc::S_IFMT == libc::S_IFREG);
             #[cfg(not(unix))]
             let stdin_is_regular = true;
