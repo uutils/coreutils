@@ -540,3 +540,12 @@ mod diagnostics {
             .stderr_contains("Invalid number: '10fb'");
     }
 }
+
+#[test]
+fn test_repeated_size_takes_the_last() {
+    // GNU lets a later -s override an earlier one rather than erroring.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.make_file("repeated");
+    ucmd.args(&["-s", "1", "-s", "2", "repeated"]).succeeds();
+    assert_eq!(at.metadata("repeated").len(), 2);
+}

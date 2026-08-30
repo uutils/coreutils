@@ -712,6 +712,8 @@ pub fn uu_app() -> Command {
         .about(translate!("uniq-about"))
         .override_usage(format_usage(&translate!("uniq-usage")))
         .infer_long_args(true)
+        // GNU lets a later -f/-s/-w override an earlier one.
+        .args_override_self(true)
         .after_help(translate!("uniq-after-help"));
     uucore::clap_localization::configure_localized_command(cmd)
         .arg(
