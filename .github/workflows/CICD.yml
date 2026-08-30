@@ -1102,7 +1102,7 @@ jobs:
     - name: Install strace
       run: sudo apt-get update && sudo apt-get install -y strace
     - name: Build utilities for redundant open checks
-      run: cargo build --profile=release-small -p uu_cp
+      run: cargo build --profile=release-small -p uu_cp -p uu_mv
     - name: Run redundant open verification
       run: ./util/check-open-once.sh
 
