@@ -44,6 +44,12 @@ uucore = { workspace = true, features = ["parser", "i18n-datetime"] }
 libc = { workspace = true }
 rustix = { workspace = true, features = ["time"] }
 
+[target.'cfg(target_env = "ohos")'.dependencies]
+# OHOS has no /usr/share/zoneinfo or /etc/localtime: embed IANA tzdata so
+# ohos_system_zone() can resolve the TimeService timezone ID directly (pass-through,
+# no environment injection).
+jiff-tzdb = "0.1"
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
   "Win32_Foundation",

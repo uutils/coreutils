@@ -799,7 +799,7 @@ impl FsMeta for StatFs {
     ))]
     fn fs_type(&self) -> i64 {
         #[cfg(all(
-            not(target_env = "musl"),
+            not(any(target_env = "musl", target_env = "ohos")),
             not(target_vendor = "apple"),
             not(target_os = "android"),
             not(target_os = "freebsd"),
@@ -808,7 +808,7 @@ impl FsMeta for StatFs {
         ))]
         return self.f_type;
         #[cfg(all(
-            not(target_env = "musl"),
+            not(any(target_env = "musl", target_env = "ohos")),
             any(
                 target_vendor = "apple",
                 all(target_os = "android", target_pointer_width = "32"),
@@ -820,6 +820,7 @@ impl FsMeta for StatFs {
         return self.f_type.into();
         #[cfg(any(
             target_env = "musl",
+            target_env = "ohos",
             all(target_os = "android", target_pointer_width = "64"),
         ))]
         return self.f_type.try_into().unwrap();
