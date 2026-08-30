@@ -804,7 +804,7 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
                     continue;
                 }
                 // `-o` has no long form.
-                let option = OptionValue::with_names(format.clone(), Some('o'), None);
+                let option = OptionValue::with_names(format, Some('o'), None);
                 // Each field carries its place in the value, so that the caret can
                 // take the one that is at fault out of a long list.
                 for (part, span) in uucore::diagnostics::list_items(format, &[' ', ',', '\t']) {

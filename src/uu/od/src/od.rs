@@ -94,7 +94,7 @@ fn parse_bytes_option(
             Err(e) => {
                 let message =
                     format_error_message(&e, s, &option_display_name(args, option_name, short));
-                let option = OptionValue::with_names(s.clone(), short, Some(option_name));
+                let option = OptionValue::with_names(s, short, Some(option_name));
                 Err(e.size_value_error(
                     diag_args,
                     &option,
