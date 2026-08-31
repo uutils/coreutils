@@ -2249,10 +2249,42 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // WASI doesn't support threads, so we ignore the corresponding option
     #[cfg(not(target_os = "wasi"))]
     {
-        let threads = matches
-            .get_one::<u64>(options::PARALLEL)
-            .copied()
-            .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get() as u64));
+        let threads = if let Some(threads_str) = matches.get_one::<String>(options::PARALLEL) {
+            // GNU accepts a suffix syntactically -- it goes through the same
+            // number-with-suffix parser as `-S` -- but none is ever valid for
+            // a thread count, so the allow list is empty rather than absent.
+            //
+            // `parse_u64` errors on overflow instead of clamping: GNU itself
+            // accepts an arbitrarily large count without erroring, but
+            // `rayon::ThreadPoolBuilder` builds its pool eagerly, so asking
+            // it for anywhere near that many threads hangs rather than
+            // completing quickly. That is a pre-existing limitation already
+            // reachable with an ordinary large-but-in-range count (10000
+            // already hangs); erroring here at least avoids making it
+            // reachable from *more* inputs than it already was.
+            let count = Parser::default()
+                .with_allow_list(&[])
+                .parse_u64(threads_str)
+                .map_err(|error| {
+                    let message = format_error_message(&error, threads_str, options::PARALLEL);
+                    error.size_value_error(
+                        key_args.as_deref(),
+                        &OptionValue::with_names(threads_str, None, Some(options::PARALLEL)),
+                        0,
+                        &message,
+                        USimpleError::new(2, message.clone()),
+                    )
+                })?;
+            if count == 0 {
+                return Err(USimpleError::new(
+                    2,
+                    translate!("sort-error-parallel-nonzero"),
+                ));
+            }
+            count
+        } else {
+            std::thread::available_parallelism().map_or(1, |n| n.get() as u64)
+        };
         let _ = rayon::ThreadPoolBuilder::new()
             .num_threads(threads as usize)
             .build_global();
@@ -2667,7 +2699,7 @@ pub fn uu_app() -> Command {
         Arg::new(options::PARALLEL)
             .long(options::PARALLEL)
             .help(translate!("sort-help-parallel"))
-            .value_parser(clap::value_parser!(u64).range(1..))
+            .allow_hyphen_values(true)
             .value_name("NUM_THREADS"),
     )
     .arg(

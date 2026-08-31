@@ -58,6 +58,7 @@ sort-invalid-suffix-in-option-arg = invalid suffix in --{$option} argument {$arg
 sort-invalid-option-arg = invalid --{$option} argument {$arg}
 sort-option-arg-too-large = --{$option} argument {$arg} too large
 sort-error-disorder = {$file}:{$line_number}: disorder: {$line}
+sort-error-parallel-nonzero = number in parallel must be nonzero
 sort-error-buffer-size-too-big = Buffer size {$size} does not fit in address space
 sort-error-no-match-for-key = ^ no match for key
 sort-error-write-failed = write failed: {$output}

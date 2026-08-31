@@ -197,9 +197,34 @@ fn test_version_empty_lines() {
 
 #[test]
 fn test_parallel_invalid() {
-    // clap provided stderr
-    new_ucmd!().arg("--parallel=0").fails().code_is(2);
-    new_ucmd!().arg("--parallel=NaN").fails().code_is(2);
+    new_ucmd!()
+        .arg("--parallel=0")
+        .fails_with_code(2)
+        .stderr_only("sort: number in parallel must be nonzero\n");
+    new_ucmd!()
+        .arg("--parallel=NaN")
+        .fails_with_code(2)
+        .stderr_only("sort: invalid --parallel argument 'NaN'\n");
+    new_ucmd!()
+        .arg("--parallel=-1")
+        .fails_with_code(2)
+        .stderr_only("sort: invalid --parallel argument '-1'\n");
+    new_ucmd!()
+        .arg("--parallel=")
+        .fails_with_code(2)
+        .stderr_only("sort: invalid --parallel argument ''\n");
+    // No unit is ever valid for a thread count, unlike `-S`/`--buffer-size`,
+    // which this shares its parser with.
+    new_ucmd!()
+        .arg("--parallel=2K")
+        .fails_with_code(2)
+        .stderr_only("sort: invalid suffix in --parallel argument '2K'\n");
+    // A separate (not `=`-attached) value starting with `-` is still this
+    // option's value, not a new flag -- as GNU accepts it.
+    new_ucmd!()
+        .args(&["--parallel", "-1"])
+        .fails_with_code(2)
+        .stderr_only("sort: invalid --parallel argument '-1'\n");
 }
 
 #[test]

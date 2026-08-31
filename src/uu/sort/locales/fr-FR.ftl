@@ -57,6 +57,7 @@ sort-invalid-suffix-in-option-arg = suffixe invalide dans l'argument --{$option}
 sort-invalid-option-arg = argument --{$option} invalide {$arg}
 sort-option-arg-too-large = argument --{$option} {$arg} trop grand
 sort-error-disorder = {$file}:{$line_number}: désordre : {$line}
+sort-error-parallel-nonzero = le nombre en parallèle doit être non nul
 sort-error-buffer-size-too-big = La taille du tampon {$size} ne rentre pas dans l'espace d'adressage
 sort-error-no-match-for-key = ^ aucune correspondance pour la clé
 sort-error-write-failed = échec d'écriture : {$output}
