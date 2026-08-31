@@ -16,7 +16,7 @@ path = "src/hostid.rs"
 test = false
 doctest = false
 
-[dependencies]
+[target.'cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))'.dependencies]
 clap = { workspace = true }
 libc = { workspace = true }
 uucore = { workspace = true }
@@ -28,3 +28,4 @@ workspace = true
 [[bin]]
 name = "hostid"
 path = "src/main.rs"
+required-features = ["uucore/default"]

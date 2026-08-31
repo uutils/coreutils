@@ -14,7 +14,7 @@ readme.workspace = true
 [lib]
 path = "src/install.rs"
 
-[dependencies]
+[target.'cfg(all(unix, not(target_os = "redox")))'.dependencies]
 clap = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, default-features = true, features = [
@@ -42,3 +42,4 @@ workspace = true
 [[bin]]
 name = "install"
 path = "src/main.rs"
+required-features = ["uucore/default"]

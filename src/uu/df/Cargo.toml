@@ -15,19 +15,19 @@ readme.workspace = true
 path = "src/df.rs"
 doctest = false
 
-[dependencies]
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[target.'cfg(any(windows, all(unix, not(target_os = "fuchsia"))))'.dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["libc", "fsext", "parser-size", "fs"] }
 unicode-width = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 
-[dev-dependencies]
-divan = { workspace = true }
-tempfile = { workspace = true }
-uucore = { workspace = true, features = ["benchmark"] }
-
-[target.'cfg(unix)'.dependencies]
+[target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
 rustix = { workspace = true, features = ["fs"] }
 
 [features]
@@ -43,3 +43,4 @@ path = "src/main.rs"
 [[bench]]
 name = "df_bench"
 harness = false
+required-features = ["uucore/default"]

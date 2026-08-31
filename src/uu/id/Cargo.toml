@@ -16,7 +16,7 @@ path = "src/id.rs"
 test = false
 doctest = false
 
-[dependencies]
+[target.'cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))'.dependencies]
 clap = { workspace = true }
 rustix = { workspace = true }
 uucore = { workspace = true, features = ["entries", "process"] }
@@ -28,6 +28,7 @@ selinux = { workspace = true, optional = true }
 [[bin]]
 name = "id"
 path = "src/main.rs"
+required-features = ["uucore/default"]
 
 [features]
 selinux = ["dep:selinux"]

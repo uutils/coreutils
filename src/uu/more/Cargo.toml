@@ -15,7 +15,7 @@ readme.workspace = true
 path = "src/more.rs"
 doctest = false
 
-[dependencies]
+[target.'cfg(any(unix, windows))'.dependencies]
 clap = { workspace = true }
 crossterm = { workspace = true, features = ["events"] }
 uucore = { workspace = true }
@@ -30,6 +30,7 @@ crossterm = { workspace = true, features = ["use-dev-tty"] }
 [[bin]]
 name = "more"
 path = "src/main.rs"
+required-features = ["uucore/default"]
 
 [dev-dependencies]
 tempfile = { workspace = true }

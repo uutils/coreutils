@@ -2,7 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore itotal iused iavail ipcent pcent tmpfs squashfs lofs sysfs
+
+#![cfg(any(windows, all(unix, not(target_os = "fuchsia"))))]
+
 mod blocks;
 mod columns;
 mod filesystem;

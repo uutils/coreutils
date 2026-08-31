@@ -21,7 +21,7 @@ path = "src/users.rs"
 test = false
 doctest = false
 
-[dependencies]
+[target.'cfg(all(unix, not(any(target_os = "android", target_os = "fuchsia", target_os = "redox"))))'.dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["utmpx"] }
 fluent = { workspace = true }
@@ -35,3 +35,4 @@ workspace = true
 [[bin]]
 name = "users"
 path = "src/main.rs"
+required-features = ["uucore/default"]

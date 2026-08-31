@@ -15,7 +15,7 @@ readme.workspace = true
 path = "src/chmod.rs"
 doctest = false
 
-[dependencies]
+[target.'cfg(unix)'.dependencies]
 clap = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["entries", "fs", "mode", "perms"] }
@@ -33,3 +33,4 @@ workspace = true
 [[bin]]
 name = "chmod"
 path = "src/main.rs"
+required-features = ["uucore/default"]

@@ -16,7 +16,7 @@ path = "src/timeout.rs"
 test = false
 doctest = false
 
-[target.'cfg(not(target_os = "fuchsia"))'.dependencies]
+[target.'cfg(any(windows, all(unix, not(target_os = "fuchsia"))))'.dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["parser", "process", "signals"] }
 fluent = { workspace = true }

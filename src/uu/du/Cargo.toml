@@ -15,7 +15,7 @@ readme.workspace = true
 path = "src/du.rs"
 doctest = false
 
-[dependencies]
+[target.'cfg(any(unix, windows))'.dependencies]
 # For the --exclude & --exclude-from options
 glob = { workspace = true }
 clap = { workspace = true }
@@ -43,6 +43,7 @@ windows-sys = { workspace = true, features = [
 [[bin]]
 name = "du"
 path = "src/main.rs"
+required-features = ["uucore/default"]
 
 [dev-dependencies]
 divan = { workspace = true }

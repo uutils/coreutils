@@ -16,14 +16,14 @@
 use core::str;
 #[cfg(unix)]
 use libc::mode_t;
-#[cfg(unix)]
+#[cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))]
 use nix::pty::OpenptyResult;
 #[cfg(unix)]
 use nix::sys;
-#[cfg(not(windows))]
+#[cfg(unix)]
 use nix::sys::stat::{self, SFlag};
 use pretty_assertions::assert_eq;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 use rlimit::setrlimit;
 use std::borrow::Cow;
 use std::collections::VecDeque;
@@ -340,8 +340,11 @@ impl CmdResult {
     ///
     /// # Platform specific behavior
     ///
-    /// This assertion method is only available on unix systems, except for fuchsia.
-    #[cfg(all(unix, not(target_os = "fuchsia")))]
+    /// This assertion method is only available on unix systems
+    #[cfg(all(
+        unix,
+        not(any(target_os = "fuchsia", target_os = "haiku", target_os = "hurd"))
+    ))]
     #[track_caller]
     pub fn signal_name_is(&self, name: &str) -> &Self {
         use uucore::signals::signal_by_name_or_value;
@@ -1197,7 +1200,7 @@ impl AtPath {
         File::create(self.plus(file)).unwrap();
     }
 
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     pub fn mkfifo(&self, fifo: &str) {
         // rustix::fs::mkfifoat is linux only
         use nix::sys::stat::Mode;
@@ -1215,13 +1218,13 @@ impl AtPath {
         UnixListener::bind(full_path).expect("Socket file creation failed.");
     }
 
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     pub fn is_fifo(&self, fifo: &str) -> bool {
         stat::stat(&self.plus(fifo))
             .is_ok_and(|s| SFlag::from_bits_truncate(s.st_mode).contains(SFlag::S_IFIFO))
     }
 
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     pub fn is_char_device(&self, char_dev: &str) -> bool {
         stat::stat(&self.plus(char_dev))
             .is_ok_and(|s| SFlag::from_bits_truncate(s.st_mode).contains(SFlag::S_IFCHR))
@@ -1239,6 +1242,7 @@ impl AtPath {
         hard_link(self.plus(original), self.plus(link)).unwrap();
     }
 
+    #[cfg(any(unix, windows))]
     pub fn symlink_file(&self, original: &str, link: &str) {
         log_info(
             "symlink",
@@ -1251,6 +1255,7 @@ impl AtPath {
         symlink_file(self.plus(original), self.plus(link)).unwrap();
     }
 
+    #[cfg(any(unix, windows))]
     pub fn relative_symlink_file(&self, original: &str, link: &str) {
         #[cfg(windows)]
         let original = original.replace('/', MAIN_SEPARATOR_STR);
@@ -1261,6 +1266,7 @@ impl AtPath {
         symlink_file(original, self.plus(link)).unwrap();
     }
 
+    #[cfg(any(unix, windows))]
     pub fn symlink_dir(&self, original: &str, link: &str) {
         log_info(
             "symlink",
@@ -1273,6 +1279,7 @@ impl AtPath {
         symlink_dir(self.plus(original), self.plus(link)).unwrap();
     }
 
+    #[cfg(any(unix, windows))]
     pub fn relative_symlink_dir(&self, original: &str, link: &str) {
         #[cfg(windows)]
         let original = original.replace('/', MAIN_SEPARATOR_STR);
@@ -1376,7 +1383,7 @@ impl AtPath {
     ///
     /// This function panics if there is an error loading the metadata
     /// or setting the permissions of the file.
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     pub fn set_mode(&self, filename: &str, mode: u32) {
         let path = self.plus(filename);
         let mut perms = fs::metadata(&path).unwrap().permissions();
@@ -1535,7 +1542,7 @@ pub struct UCommand {
     stdout: Option<Stdio>,
     stderr: Option<Stdio>,
     bytes_into_stdin: Option<Vec<u8>>,
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     limits: Vec<(rlimit::Resource, u64, u64)>,
     stderr_to_stdout: bool,
     timeout: Option<Duration>,
@@ -1698,7 +1705,7 @@ impl UCommand {
         self
     }
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     pub fn limit(
         &mut self,
         resource: rlimit::Resource,
@@ -1956,9 +1963,9 @@ impl UCommand {
 
         let mut captured_stdout = None;
         let mut captured_stderr = None;
-        #[cfg(unix)]
+        #[cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))]
         let mut stdin_pty: Option<File> = None;
-        #[cfg(not(unix))]
+        #[cfg(not(all(unix, not(any(target_os = "fuchsia", target_os = "redox")))))]
         let stdin_pty: Option<File> = None;
         if self.stderr_to_stdout {
             let mut output = CapturedOutput::default();
@@ -1993,7 +2000,7 @@ impl UCommand {
                 .stderr(stderr);
         }
 
-        #[cfg(unix)]
+        #[cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))]
         if let Some(simulated_terminal) = &self.terminal_simulation {
             let terminal_size = simulated_terminal.size.unwrap_or(libc::winsize {
                 ws_col: 80,
@@ -2038,7 +2045,7 @@ impl UCommand {
             }
         }
 
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "fuchsia")))]
         if !self.limits.is_empty() {
             // just to be safe: move a copy of the limits list into the closure.
             // this way the closure is fully self-contained.
@@ -2994,7 +3001,7 @@ pub fn whoami() -> String {
 /// - path: The filesystem path to the PTY replica device
 /// - controller: The controller file
 /// - replica: The replica file
-#[cfg(unix)]
+#[cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))]
 pub fn pty_path() -> (String, File, File) {
     use nix::pty::openpty;
     use nix::unistd::ttyname;
@@ -3646,7 +3653,7 @@ mod tests {
             .stdout_is("unlimited\nunlimited\n");
     }
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     #[test]
     fn test_application_of_process_resource_limits_limited_file_size() {
         let unit_size_bytes = if cfg!(target_vendor = "apple") {

@@ -16,7 +16,7 @@ path = "src/chroot.rs"
 test = false
 doctest = false
 
-[dependencies]
+[target.'cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))'.dependencies]
 clap = { workspace = true }
 rustix = { workspace = true }
 thiserror = { workspace = true }
@@ -29,3 +29,4 @@ workspace = true
 [[bin]]
 name = "chroot"
 path = "src/main.rs"
+required-features = ["uucore/default"]

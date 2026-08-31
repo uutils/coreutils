@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (ToDO) gethostid
 
+#![cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))]
+
 use clap::Command;
 use core::ffi::c_long;
 use libc::gethostid;
