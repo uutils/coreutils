@@ -577,6 +577,7 @@ pub fn uu_app() -> Command {
                 .long(DELIMITER)
                 .value_name("X")
                 .value_parser(ValueParser::os_string())
+                .allow_hyphen_values(true)
                 .help(translate!("numfmt-help-delimiter")),
         )
         .arg(
@@ -626,7 +627,8 @@ pub fn uu_app() -> Command {
             Arg::new(PADDING)
                 .long(PADDING)
                 .help(translate!("numfmt-help-padding"))
-                .value_name("N"),
+                .value_name("N")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(HEADER)
@@ -656,7 +658,8 @@ pub fn uu_app() -> Command {
             Arg::new(SUFFIX)
                 .long(SUFFIX)
                 .help(translate!("numfmt-help-suffix"))
-                .value_name("SUFFIX"),
+                .value_name("SUFFIX")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(UNIT_SEPARATOR)
