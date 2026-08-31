@@ -25,6 +25,25 @@ fn test_invalid_option() {
     new_ucmd!().arg("-w").arg("-q").arg("/").fails();
 }
 
+#[test]
+fn test_format_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading format string passed as its own argument (not
+    // attached with `=`) must not be mistaken for a new, unrecognized
+    // flag.
+    new_ucmd!()
+        .args(&["--format", "-%n", "/"])
+        .succeeds()
+        .stdout_is("-/\n");
+    new_ucmd!()
+        .args(&["--printf", "-%n", "/"])
+        .succeeds()
+        .stdout_is("-/");
+    new_ucmd!()
+        .args(&["-c", "-%n", "/"])
+        .succeeds()
+        .stdout_is("-/\n");
+}
+
 #[cfg(unix)]
 const NORMAL_FORMAT_STR: &str =
     "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s %u %U %x %X %y %Y %z %Z"; // avoid "%w %W" (birth/creation) due to `stat` limitations and linux kernel & rust version capability variations
