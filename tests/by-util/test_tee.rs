@@ -727,6 +727,40 @@ fn test_output_error_flag_without_value_defaults_warn_nopipe() {
     assert!(at.file_exists(file_out));
     assert_eq!(at.read(file_out), content);
 }
+
+#[test]
+fn test_output_error_invalid_arg_message() {
+    new_ucmd!()
+        .arg("--output-error=bogus")
+        .pipe_in("")
+        .fails_with_code(1)
+        .stderr_is(concat!(
+            "tee: invalid argument 'bogus' for '--output-error'\n",
+            "Valid arguments are:\n",
+            "  - 'warn'\n",
+            "  - 'warn-nopipe'\n",
+            "  - 'exit'\n",
+            "  - 'exit-nopipe'\n",
+            "Try 'tee --help' for more information.\n",
+        ));
+}
+
+#[test]
+fn test_output_error_ambiguous_arg_message() {
+    new_ucmd!()
+        .arg("--output-error=wa")
+        .pipe_in("")
+        .fails_with_code(1)
+        .stderr_is(concat!(
+            "tee: ambiguous argument 'wa' for '--output-error'\n",
+            "Valid arguments are:\n",
+            "  - 'warn'\n",
+            "  - 'warn-nopipe'\n",
+            "  - 'exit'\n",
+            "  - 'exit-nopipe'\n",
+            "Try 'tee --help' for more information.\n",
+        ));
+}
 // Unix-only: presence-only --output-error should not crash on broken pipe.
 // Current implementation may exit zero; we only assert the process exits to avoid flakiness.
 // TODO: When semantics are aligned with GNU warn-nopipe, strengthen assertions here.

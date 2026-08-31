@@ -15,6 +15,14 @@ tee-help-output-error-exit-nopipe = exit on write errors to any output that are 
 
 # Error messages
 tee-error-stdin = read error: { $error }
+tee-error-invalid-output-error-choice = invalid argument '{ $arg }' for '--output-error'
+  Valid arguments are:
+  { $choices }
+  Try 'tee --help' for more information.
+tee-error-ambiguous-output-error-choice = ambiguous argument '{ $arg }' for '--output-error'
+  Valid arguments are:
+  { $choices }
+  Try 'tee --help' for more information.
 
 # Other messages
 tee-standard-output = 'standard output'

@@ -10,7 +10,7 @@ use std::fs::OpenOptions;
 use std::io::{self, Error, ErrorKind, Write};
 use std::path::PathBuf;
 use uucore::display::Quotable;
-use uucore::error::{UResult, strip_errno};
+use uucore::error::{UResult, USimpleError, strip_errno};
 use uucore::{show_error, translate};
 
 mod cli;
@@ -22,9 +22,72 @@ use uucore::signals::ensure_stdout_not_broken;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::signals::{disable_pipe_errors, ignore_interrupts};
 
+/// The choices `--output-error`'s value accepts, in the order GNU lists them.
+const OUTPUT_ERROR_CHOICES: &[&str] = &["warn", "warn-nopipe", "exit", "exit-nopipe"];
+
+/// The choice `value` names among `OUTPUT_ERROR_CHOICES`, accepting any
+/// unambiguous abbreviation the way GNU does. Checks for an exact match
+/// first since e.g. 'warn' is itself a prefix of 'warn-nopipe'.
+fn resolve_output_error_choice(value: &str) -> UResult<&'static str> {
+    let list = || {
+        OUTPUT_ERROR_CHOICES
+            .iter()
+            .map(|name| format!("  - '{name}'"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    if !value.is_empty()
+        && let Some(&exact) = OUTPUT_ERROR_CHOICES.iter().find(|name| **name == value)
+    {
+        return Ok(exact);
+    }
+    let mut named = OUTPUT_ERROR_CHOICES
+        .iter()
+        .filter(|name| name.starts_with(value));
+    match (named.next(), named.next()) {
+        (Some(name), None) if !value.is_empty() => Ok(*name),
+        (Some(_), Some(_)) => Err(USimpleError::new(
+            1,
+            translate!("tee-error-ambiguous-output-error-choice", "arg" => value.to_string(), "choices" => list()),
+        )),
+        _ => Err(USimpleError::new(
+            1,
+            translate!("tee-error-invalid-output-error-choice", "arg" => value.to_string(), "choices" => list()),
+        )),
+    }
+}
+
+/// `--output-error`'s value keeps its `ShortcutValueParser` (rather than
+/// being resolved by hand like the other options in this series) so that
+/// `--help` keeps rendering each choice's own description. Clap's own
+/// wording for a value it rejects doesn't match GNU's, though, so a
+/// rejection specifically on that argument is intercepted and reported with
+/// `resolve_output_error_choice`'s message instead; everything else still
+/// goes through the shared formatter.
+fn get_matches(args: impl uucore::Args) -> UResult<clap::ArgMatches> {
+    match uu_app().try_get_matches_from(args) {
+        Ok(matches) => Ok(matches),
+        Err(clap_error) => {
+            if clap_error.exit_code() == 0 {
+                return Err(clap_error.into());
+            }
+            if clap_error.kind() == clap::error::ErrorKind::InvalidValue
+                && clap_error
+                    .get(clap::error::ContextKind::InvalidArg)
+                    .is_some_and(|arg| arg.to_string().contains(options::OUTPUT_ERROR))
+                && let Some(value) = clap_error.get(clap::error::ContextKind::InvalidValue)
+            {
+                return Err(resolve_output_error_choice(&value.to_string()).unwrap_err());
+            }
+            let formatter = uucore::clap_localization::ErrorFormatter::new(uucore::util_name());
+            formatter.print_error_and_exit_with_callback(&clap_error, 1, || {});
+        }
+    }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let matches = get_matches(args)?;
 
     let append = matches.get_flag(options::APPEND);
     let ignore_interrupts = matches.get_flag(options::IGNORE_INTERRUPTS);
@@ -36,7 +99,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             "warn-nopipe" => OutputErrorMode::WarnNoPipe,
             "exit" => OutputErrorMode::Exit,
             "exit-nopipe" => OutputErrorMode::ExitNoPipe,
-            _ => unreachable!("clap excluded it"),
+            _ => unreachable!("ShortcutValueParser already restricted it"),
         })
         .or_else(|| ignore_pipe_errors.then_some(OutputErrorMode::WarnNoPipe));
 

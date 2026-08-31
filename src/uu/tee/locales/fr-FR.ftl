@@ -15,6 +15,14 @@ tee-help-output-error-exit-nopipe = quitter en cas d'erreurs d'écriture vers to
 
 # Messages d'erreur
 tee-error-stdin = erreur de lecture: { $error }
+tee-error-invalid-output-error-choice = argument '{ $arg }' invalide pour '--output-error'
+  Les arguments valides sont :
+  { $choices }
+  Essayez 'tee --help' pour plus d'informations.
+tee-error-ambiguous-output-error-choice = argument '{ $arg }' ambigu pour '--output-error'
+  Les arguments valides sont :
+  { $choices }
+  Essayez 'tee --help' pour plus d'informations.
 
 # Autres messages
 tee-standard-output = 'sortie standard'
