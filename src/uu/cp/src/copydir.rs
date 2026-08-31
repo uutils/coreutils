@@ -119,7 +119,11 @@ struct Context<'a> {
 
 impl<'a> Context<'a> {
     fn new(root: &'a Path, target: &'a Path) -> io::Result<Self> {
-        let current_dir = env::current_dir()?;
+        let current_dir = if root.is_absolute() {
+            PathBuf::new()
+        } else {
+            env::current_dir()?
+        };
         let root_path = current_dir.join(root);
         let target_is_file = target.is_file();
         let root_parent =
