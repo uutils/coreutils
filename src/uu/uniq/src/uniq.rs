@@ -2,10 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore badoption CTYPE
+// spell-checker:ignore CTYPE
 use clap::{
-    Arg, ArgAction, ArgMatches, Command, builder::ValueParser, error::ContextKind, error::Error,
-    error::ErrorKind,
+    Arg, ArgAction, ArgMatches, Command, builder::ValueParser, error::Error, error::ErrorKind,
 };
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -14,7 +13,6 @@ use std::num::IntErrorKind;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::format_usage;
-use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::posix::{OBSOLETE, posix_version};
 use uucore::translate;
 
@@ -339,7 +337,17 @@ impl Uniq {
     }
 }
 
-fn opt_parsed(opt_name: &str, matches: &ArgMatches) -> UResult<Option<usize>> {
+/// Parse the value of a numeric option, reporting an error the way GNU does:
+/// unquoted, and naming what the number counts rather than the option that
+/// took it (`3.5: invalid number of fields to skip`, not `invalid argument
+/// for skip-fields: 3.5`).
+///
+/// # Arguments
+///
+/// * `opt_name` - The option to read the value of.
+/// * `kind` - What GNU calls the number in its error, e.g. `"fields to
+///   skip"`, `"bytes to skip"`, `"bytes to compare"`.
+fn opt_parsed(opt_name: &str, kind: &str, matches: &ArgMatches) -> UResult<Option<usize>> {
     match matches.get_one::<String>(opt_name) {
         Some(arg_str) => match arg_str.parse::<usize>() {
             Ok(v) => Ok(Some(v)),
@@ -347,7 +355,7 @@ fn opt_parsed(opt_name: &str, matches: &ArgMatches) -> UResult<Option<usize>> {
                 IntErrorKind::PosOverflow => Ok(Some(usize::MAX)),
                 _ => Err(USimpleError::new(
                     1,
-                    translate!("uniq-error-invalid-argument", "opt_name" => opt_name, "arg" => arg_str.maybe_quote()),
+                    translate!("uniq-error-invalid-argument", "arg" => arg_str.clone(), "kind" => kind),
                 )),
             },
         },
@@ -617,34 +625,15 @@ fn handle_extract_obs_skip_chars(
 /// for `uniq` hardcode and require the exact wording of the error message
 /// and it is not compatible with how Clap formats and displays those error messages.
 fn map_clap_errors(clap_error: Error) -> Box<dyn UError> {
+    // `--group`/`--all-repeated`'s own choice is no longer a clap
+    // `value_parser`, validated instead in `resolve_delimiter_choice` (which
+    // reports every bad value, not one hardcoded example) -- so the only
+    // clap-level error these two options can still raise is this one.
     let footer = translate!("uniq-error-try-help");
     let override_arg_conflict = translate!("uniq-error-group-mutually-exclusive") + "\n" + &footer;
-    let override_group_badoption = translate!("uniq-error-group-badoption") + "\n" + &footer;
-    let override_all_repeated_badoption =
-        translate!("uniq-error-all-repeated-badoption") + "\n" + &footer;
 
     let error_message = match clap_error.kind() {
         ErrorKind::ArgumentConflict => override_arg_conflict,
-        ErrorKind::InvalidValue
-            if clap_error
-                .get(ContextKind::InvalidValue)
-                .is_some_and(|v| v.to_string() == "badoption")
-                && clap_error
-                    .get(ContextKind::InvalidArg)
-                    .is_some_and(|v| v.to_string().starts_with("--group")) =>
-        {
-            override_group_badoption
-        }
-        ErrorKind::InvalidValue
-            if clap_error
-                .get(ContextKind::InvalidValue)
-                .is_some_and(|v| v.to_string() == "badoption")
-                && clap_error
-                    .get(ContextKind::InvalidArg)
-                    .is_some_and(|v| v.to_string().starts_with("--all-repeated")) =>
-        {
-            override_all_repeated_badoption
-        }
         _ => return clap_error.into(),
     };
     USimpleError::new(1, error_message)
@@ -674,8 +663,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|mut fi| (fi.next(), fi.next()))
         .unwrap_or_default();
 
-    let skip_fields_modern: Option<usize> = opt_parsed(options::SKIP_FIELDS, &matches)?;
-    let skip_chars_modern: Option<usize> = opt_parsed(options::SKIP_CHARS, &matches)?;
+    let skip_fields_modern: Option<usize> =
+        opt_parsed(options::SKIP_FIELDS, "fields to skip", &matches)?;
+    let skip_chars_modern: Option<usize> =
+        opt_parsed(options::SKIP_CHARS, "bytes to skip", &matches)?;
 
     let uniq = Uniq {
         repeats_only: matches.get_flag(options::REPEATED)
@@ -683,11 +674,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         uniques_only: matches.get_flag(options::UNIQUE),
         all_repeated: matches.contains_id(options::ALL_REPEATED)
             || matches.contains_id(options::GROUP),
-        delimiters: get_delimiter(&matches),
+        delimiters: get_delimiter(&matches)?,
         show_counts: matches.get_flag(options::COUNT),
         skip_fields: skip_fields_modern.or(skip_fields_old),
         slice_start: skip_chars_modern.or(skip_chars_old),
-        slice_stop: opt_parsed(options::CHECK_CHARS, &matches)?,
+        slice_stop: opt_parsed(options::CHECK_CHARS, "bytes to compare", &matches)?,
         ignore_case: matches.get_flag(options::IGNORE_CASE),
         zero_terminated: matches.get_flag(options::ZERO_TERMINATED),
         is_c_locale: Uniq::is_c_locale(),
@@ -720,7 +711,6 @@ pub fn uu_app() -> Command {
             Arg::new(options::ALL_REPEATED)
                 .short('D')
                 .long(options::ALL_REPEATED)
-                .value_parser(ShortcutValueParser::new(["none", "prepend", "separate"]))
                 .help(translate!("uniq-help-all-repeated"))
                 .value_name("delimit-method")
                 .num_args(0..=1)
@@ -732,9 +722,6 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::GROUP)
                 .long(options::GROUP)
-                .value_parser(ShortcutValueParser::new([
-                    "separate", "prepend", "append", "both",
-                ]))
                 .help(translate!("uniq-help-group"))
                 .value_name("group-method")
                 .num_args(0..=1)
@@ -752,6 +739,7 @@ pub fn uu_app() -> Command {
                 .short('w')
                 .long(options::CHECK_CHARS)
                 .help(translate!("uniq-help-check-chars"))
+                .allow_hyphen_values(true)
                 .value_name("N"),
         )
         .arg(
@@ -780,6 +768,7 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(options::SKIP_CHARS)
                 .help(translate!("uniq-help-skip-chars"))
+                .allow_hyphen_values(true)
                 .value_name("N"),
         )
         .arg(
@@ -787,6 +776,7 @@ pub fn uu_app() -> Command {
                 .short('f')
                 .long(options::SKIP_FIELDS)
                 .help(translate!("uniq-help-skip-fields"))
+                .allow_hyphen_values(true)
                 .value_name("N"),
         )
         .arg(
@@ -813,23 +803,61 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn get_delimiter(matches: &ArgMatches) -> Delimiters {
-    let value = matches
-        .get_one::<String>(options::ALL_REPEATED)
-        .or_else(|| matches.get_one::<String>(options::GROUP));
-    if let Some(delimiter_arg) = value {
-        match delimiter_arg.as_ref() {
-            "append" => Delimiters::Append,
-            "prepend" => Delimiters::Prepend,
-            "separate" => Delimiters::Separate,
-            "both" => Delimiters::Both,
-            "none" => Delimiters::None,
-            _ => unreachable!("Should have been caught by possible values in clap"),
-        }
+/// The choices `--all-repeated`'s value accepts, in the order GNU lists them.
+const ALL_REPEATED_CHOICES: &[(&str, Delimiters)] = &[
+    ("none", Delimiters::None),
+    ("prepend", Delimiters::Prepend),
+    ("separate", Delimiters::Separate),
+];
+
+/// The choices `--group`'s value accepts, in the order GNU lists them.
+const GROUP_CHOICES: &[(&str, Delimiters)] = &[
+    ("prepend", Delimiters::Prepend),
+    ("append", Delimiters::Append),
+    ("separate", Delimiters::Separate),
+    ("both", Delimiters::Both),
+];
+
+/// The choice `value` names among `choices`, accepting any unambiguous
+/// abbreviation the way GNU does. `option` is the long name to report the
+/// error against if it names none, or more than one.
+fn resolve_delimiter_choice(
+    value: &str,
+    option: &'static str,
+    choices: &[(&str, Delimiters)],
+) -> UResult<Delimiters> {
+    let list = || {
+        choices
+            .iter()
+            .map(|(name, _)| format!("  - '{name}'"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let mut named = choices.iter().filter(|(name, _)| name.starts_with(value));
+    match (named.next(), named.next()) {
+        // No choice abbreviates another, so a single match is the answer
+        // whether or not it is the whole word.
+        (Some((_, delimiters)), None) if !value.is_empty() => Ok(*delimiters),
+        (Some(_), Some(_)) => Err(USimpleError::new(
+            1,
+            translate!("uniq-error-ambiguous-choice", "arg" => value.to_string(), "option" => option, "choices" => list()),
+        )),
+        _ => Err(USimpleError::new(
+            1,
+            translate!("uniq-error-invalid-choice", "arg" => value.to_string(), "option" => option, "choices" => list()),
+        )),
+    }
+}
+
+fn get_delimiter(matches: &ArgMatches) -> UResult<Delimiters> {
+    if let Some(value) = matches.get_one::<String>(options::ALL_REPEATED) {
+        resolve_delimiter_choice(value, options::ALL_REPEATED, ALL_REPEATED_CHOICES)
+    } else if let Some(value) = matches.get_one::<String>(options::GROUP) {
+        resolve_delimiter_choice(value, options::GROUP, GROUP_CHOICES)
     } else if matches.contains_id(options::GROUP) {
-        Delimiters::Separate
+        Ok(Delimiters::Separate)
     } else {
-        Delimiters::None
+        Ok(Delimiters::None)
     }
 }
 

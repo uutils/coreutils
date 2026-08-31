@@ -138,6 +138,93 @@ fn test_stdin_skip_invalid_fields_obsolete() {
         .stderr_contains("error: unexpected argument '-q' found\n");
 }
 
+/// GNU names the value, not the option, and never quotes it: `abc: invalid
+/// number of fields to skip`, not `invalid argument for skip-fields: 'abc'`.
+/// `-f`, `-s` and `-w` each describe what the number is for differently.
+#[test]
+fn test_invalid_numeric_option_names_the_value() {
+    for (opt, kind) in [
+        ("-f", "fields to skip"),
+        ("-s", "bytes to skip"),
+        ("-w", "bytes to compare"),
+    ] {
+        for value in ["abc", "1.5", ""] {
+            new_ucmd!()
+                .args(&[opt, value])
+                .pipe_in("a\n")
+                .fails_with_code(1)
+                .stderr_only(format!("uniq: {value}: invalid number of {kind}\n"));
+        }
+    }
+}
+
+/// A value starting with `-` is still `-f`/`-s`/`-w`'s value, not a new
+/// flag -- GNU does not reject `uniq -f -1` as an unknown option.
+#[test]
+fn test_numeric_option_accepts_a_hyphen_value() {
+    for opt in ["-f", "-s", "-w"] {
+        new_ucmd!()
+            .args(&[opt, "-1"])
+            .pipe_in("a\n")
+            .fails_with_code(1)
+            .stderr_only(format!(
+                "uniq: -1: invalid number of {}\n",
+                match opt {
+                    "-f" => "fields to skip",
+                    "-s" => "bytes to skip",
+                    _ => "bytes to compare",
+                }
+            ));
+    }
+}
+
+/// GNU's own choice list, in its own order, for whichever of `--group` or
+/// `--all-repeated` is given -- these are two different option value sets,
+/// not the one list uutils' old clap-generated message showed for both.
+#[test]
+fn test_invalid_delimiter_choice_lists_the_right_option() {
+    new_ucmd!()
+        .arg("--group=bogus")
+        .pipe_in("a\n")
+        .fails_with_code(1)
+        .stderr_only(concat!(
+            "uniq: invalid argument 'bogus' for '--group'\n",
+            "Valid arguments are:\n",
+            "  - 'prepend'\n",
+            "  - 'append'\n",
+            "  - 'separate'\n",
+            "  - 'both'\n",
+            "Try 'uniq --help' for more information.\n"
+        ));
+    new_ucmd!()
+        .arg("--all-repeated=bogus")
+        .pipe_in("a\n")
+        .fails_with_code(1)
+        .stderr_only(concat!(
+            "uniq: invalid argument 'bogus' for '--all-repeated'\n",
+            "Valid arguments are:\n",
+            "  - 'none'\n",
+            "  - 'prepend'\n",
+            "  - 'separate'\n",
+            "Try 'uniq --help' for more information.\n"
+        ));
+}
+
+/// Any unambiguous abbreviation still resolves, which is what GNU accepts.
+#[test]
+fn test_delimiter_choice_unambiguous_abbreviations() {
+    new_ucmd!()
+        .arg("--group=s")
+        .pipe_in("a\na\nb\nb\n")
+        .succeeds()
+        .stdout_is("a\na\n\nb\nb\n");
+    new_ucmd!()
+        .arg("--all-repeated=n")
+        .pipe_in("a\na\n")
+        .succeeds()
+        .stdout_is("a\na\n");
+}
+
 #[test]
 fn test_stdin_all_repeated() {
     new_ucmd!()
@@ -906,11 +993,12 @@ fn uniq_basic_dedup_cases() {
             input: "", // Note: Different from GNU test, but should not matter
             stdout: Some(""),
             stderr: Some(concat!(
-                "error: invalid value 'badoption' for '--all-repeated[=<delimit-method>]'\n",
-                "\n",
-                "  [possible values: none, prepend, separate]\n",
-                "\n",
-                "For more information, try '--help'.\n"
+                "uniq: invalid argument 'badoption' for '--all-repeated'\n",
+                "Valid arguments are:\n",
+                "  - 'none'\n",
+                "  - 'prepend'\n",
+                "  - 'separate'\n",
+                "Try 'uniq --help' for more information.\n"
             )),
             exit: Some(1),
         },
@@ -1131,11 +1219,13 @@ fn uniq_basic_dedup_cases() {
             input: "",
             stdout: Some(""),
             stderr: Some(concat!(
-                "error: invalid value 'badoption' for '--group[=<group-method>]'\n",
-                "\n",
-                "  [possible values: separate, prepend, append, both]\n",
-                "\n",
-                "For more information, try '--help'.\n"
+                "uniq: invalid argument 'badoption' for '--group'\n",
+                "Valid arguments are:\n",
+                "  - 'prepend'\n",
+                "  - 'append'\n",
+                "  - 'separate'\n",
+                "  - 'both'\n",
+                "Try 'uniq --help' for more information.\n"
             )),
             exit: Some(1),
         },

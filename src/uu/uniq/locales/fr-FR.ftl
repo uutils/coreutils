@@ -21,22 +21,17 @@ uniq-help-zero-terminated = terminer les lignes avec un octet 0, pas une nouvell
 uniq-error-write-line-terminator = Impossible d'écrire le terminateur de ligne
 uniq-error-write-error = erreur d'écriture
 uniq-error-read-error = erreur de lecture
-uniq-error-invalid-argument = Argument invalide pour { $opt_name } : { $arg }
+uniq-error-invalid-argument = { $arg } : nombre invalide de { $kind }
+uniq-error-invalid-choice = argument '{ $arg }' invalide pour '--{ $option }'
+  Les arguments valides sont :
+  { $choices }
+  Essayez 'uniq --help' pour plus d'informations.
+uniq-error-ambiguous-choice = argument '{ $arg }' ambigu pour '--{ $option }'
+  Les arguments valides sont :
+  { $choices }
+  Essayez 'uniq --help' pour plus d'informations.
 uniq-error-try-help = Essayez 'uniq --help' pour plus d'informations.
 uniq-error-group-mutually-exclusive = --group est mutuellement exclusif avec -c/-d/-D/-u
-uniq-error-group-badoption = argument invalide 'badoption' pour '--group'
-  Arguments valides :
-    - 'prepend'
-    - 'append'
-    - 'separate'
-    - 'both'
-
-uniq-error-all-repeated-badoption = argument invalide 'badoption' pour '--all-repeated'
-  Arguments valides :
-    - 'none'
-    - 'prepend'
-    - 'separate'
-
 uniq-error-counts-and-repeated-meaningless = afficher toutes les lignes dupliquées et les nombres de répétitions n'a pas de sens
   Essayez 'uniq --help' pour plus d'informations.
 uniq-error-could-not-open = Impossible d'ouvrir { $path }
