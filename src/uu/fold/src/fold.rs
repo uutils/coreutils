@@ -163,8 +163,11 @@ fn takes_width_value(arg: &str) -> bool {
         !long.is_empty() && !long.contains('=') && options::WIDTH.starts_with(long)
     } else if let Some(short) = arg.strip_prefix('-') {
         // Only a trailing `w` takes the next argument: in `-sw` it does, but
-        // in `-w3` and `-wb` the value is attached to the flag instead.
-        short.find('w') == short.len().checked_sub(1)
+        // in `-w3` and `-wb` the value is attached to the flag instead. A
+        // bare `-` has no trailing `w` either -- `ends_with` on an empty
+        // string is false, where comparing two `find`/`checked_sub` failures
+        // (both `None`) would wrongly call it a match.
+        short.ends_with('w')
     } else {
         false
     }

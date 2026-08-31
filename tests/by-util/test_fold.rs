@@ -1189,3 +1189,15 @@ fn test_dash_operand_reads_stdin() {
         .fails()
         .stderr_contains("invalid number of columns: '-'");
 }
+
+/// A bare `-` has no trailing `w`, so it must not be mistaken for one of the
+/// short spellings that consumes the next argument as its width -- that once
+/// swallowed whatever followed the `-` operand instead of scanning it.
+#[test]
+fn test_dash_operand_does_not_swallow_the_next_argument() {
+    new_ucmd!()
+        .args(&["-", "-5"])
+        .pipe_in("hello\n")
+        .succeeds()
+        .stdout_is("hello\n");
+}
