@@ -282,6 +282,20 @@ fn file_truncate(
             }
         })?;
 
+    // Reject a size above i64::MAX up front like GNU.
+    if truncate_size > i64::MAX as u64 {
+        let error = match size_argument {
+            None => translate!("truncate-error-value-too-large"),
+            Some(arg) => {
+                translate!("truncate-error-value-too-large-arg", "arg" => arg.quote())
+            }
+        };
+        return Err(USimpleError::new(
+            1,
+            translate!("truncate-error-invalid-number", "error" => error),
+        ));
+    }
+
     do_file_truncate(path, !no_create, truncate_size)
 }
 

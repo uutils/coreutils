@@ -39,6 +39,16 @@ fn test_increase_file_size_kb() {
 }
 
 #[test]
+fn test_size_above_i64_max_is_rejected_without_creating_file() {
+    // A size above i64::MAX is rejected up front and the file is not created.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-s", "9223372036854775808", "new-file"])
+        .fails_with_code(1)
+        .stderr_contains("Value too large for defined data type");
+    assert!(!at.file_exists("new-file"));
+}
+
+#[test]
 fn test_reference() {
     let expected = 5 * 1000;
     let scene = TestScenario::new(util_name!());
