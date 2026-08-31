@@ -565,13 +565,16 @@ fn test_chmod_preserve_root() {
 
 #[test]
 fn test_chmod_preserve_root_with_paths_that_resolve_to_root() {
+    // Only a bare "/" is reported as such; any other spelling of the root
+    // directory is named as the user wrote it, followed by "(same as '/')".
+    // "//" also checks we compare the raw operand, since Path("//") == Path("/").
     new_ucmd!()
         .arg("-R")
         .arg("--preserve-root")
         .arg("755")
-        .arg("/../")
+        .arg("//")
         .fails_with_code(1)
-        .stderr_contains("chmod: it is dangerous to operate recursively on '/'");
+        .stderr_contains("chmod: it is dangerous to operate recursively on '//' (same as '/')");
 }
 
 #[test]

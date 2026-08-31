@@ -16,7 +16,7 @@ use uucore::display::Quotable;
 use uucore::error::{
     ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code, strip_errno,
 };
-use uucore::fs::{FileInformation, display_permissions_unix};
+use uucore::fs::{FileInformation, display_permissions_unix, path_is_root_dir};
 use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
 
@@ -516,7 +516,14 @@ impl Chmoder {
                 }
             }
             if self.recursive && self.preserve_root && Self::is_root(file) {
-                return Err(ChmodError::PreserveRoot("/".into()).into());
+                // Name the operand the user gave: with a bind mount of "/" it is
+                // not spelled "/", so say which path it is the same as.
+                return Err(if file.as_os_str() == "/" {
+                    ChmodError::PreserveRoot("/".into())
+                } else {
+                    ChmodError::PreserveRootSameAs(file.into())
+                }
+                .into());
             }
             if self.recursive {
                 let mut ancestors = HashSet::new();
@@ -530,19 +537,17 @@ impl Chmoder {
         r
     }
 
+    /// Whether `file` is `/`, by `(st_dev, st_ino)` rather than by name, so a
+    /// bind mount of `/` cannot slip past `--preserve-root` (as GNU does).
     fn is_root(file: impl AsRef<Path>) -> bool {
-        matches!(fs::canonicalize(&file), Ok(p) if p == Path::new("/"))
+        path_is_root_dir(file, true)
     }
 
-    /// `--preserve-root` guard for the recursive descent.
-    ///
-    /// The operand loop in [`Self::chmod`] only checks the paths named on the
-    /// command line. With `-L`, a symlink met *inside* the tree can resolve to
-    /// `/`, so the failsafe has to be re-checked at every descent or the
-    /// recursion walks straight into the real root. Only symlinks are
-    /// canonicalized, so ordinary trees pay nothing for this.
+    /// `--preserve-root` guard re-checked at every descent: a symlink to `/`
+    /// (under `-L`) or a bind mount of `/` met inside the tree is still `/`, so
+    /// the operand-only check is not enough. GNU re-checks every entry too.
     fn descends_into_root(&self, path: &Path) -> bool {
-        self.preserve_root && path.is_symlink() && Self::is_root(path)
+        self.preserve_root && Self::is_root(path)
     }
 
     // Non-safe traversal implementation for platforms without safe_traversal support
@@ -553,7 +558,8 @@ impl Chmoder {
         is_command_line_arg: bool,
         ancestors: &mut HashSet<FileInformation>,
     ) -> UResult<()> {
-        // Skip (and diagnose) a symlink that resolves to '/' before touching it.
+        // Skip (and diagnose) an entry that is '/' (a symlink to it, or a bind
+        // mount) before touching it.
         if self.descends_into_root(file_path) {
             show!(ChmodError::PreserveRootSameAs(file_path.into()));
             return Ok(());
@@ -630,7 +636,8 @@ impl Chmoder {
         is_command_line_arg: bool,
         ancestors: &mut HashSet<FileInformation>,
     ) -> UResult<()> {
-        // Skip (and diagnose) a symlink that resolves to '/' before touching it.
+        // Skip (and diagnose) an entry that is '/' (a symlink to it, or a bind
+        // mount) before touching it.
         if self.descends_into_root(file_path) {
             show!(ChmodError::PreserveRootSameAs(file_path.into()));
             return Ok(());
