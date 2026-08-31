@@ -945,7 +945,13 @@ fn test_suffix_length_req() {
 /// The width the suffixes need is worked out from the start value plus the
 /// number of chunks, and either of those on its own can be the largest value
 /// there is, so the sum of them does not fit where they do.
+///
+/// `u64::MAX` only reaches `--numeric-suffixes`'s `start` at all on a target
+/// where `usize` is 64 bits -- on a 32-bit target the value is already
+/// rejected by the `usize` parse, before the overflow this guards against
+/// could occur.
 #[test]
+#[cfg(target_pointer_width = "64")]
 fn test_suffix_start_at_the_top_of_the_range() {
     new_ucmd!()
         .args(&["-n", "5", "--numeric-suffixes=18446744073709551615", "-"])
