@@ -153,8 +153,24 @@ fn sparse_copy_without_hole_fd(src_file: &File, dst_file: &File, context: &str) 
     let ctx_err = |e: io::Error| CpError::IoErrContext(e, context.to_owned());
 
     let size = src_file.metadata().map_err(&ctx_err)?.size();
-    if let Err(e) = ftruncate(dst_file, size) {
-        return fall_back_if_cannot_be_sparse(e, src_file, dst_file, context);
+    // A fifo, a socket, or a character device such as the `/dev/null` that
+    // `/dev/stdout` may resolve to all reject `ftruncate` with `EINVAL`
+    // since they support neither it nor the writes at explicit offsets the
+    // rest of this function makes; take the standard copy instead, which is
+    // what GNU does with them. Discovered here rather than checked in
+    // advance, since checking first would cost every ordinary destination
+    // -- overwhelmingly a regular file, for which this never fires -- a
+    // `metadata` call for no benefit. Nothing has been read from `src_file`
+    // or written to `dst_file` yet, so falling back here cannot duplicate
+    // or corrupt output.
+    match ftruncate(dst_file, size) {
+        Ok(()) => {}
+        Err(rustix::io::Errno::INVAL) => {
+            let mut src = src_file;
+            let mut dst = dst_file;
+            return buf_copy::copy_fast(&mut src, &mut dst).map_err(&ctx_err);
+        }
+        Err(e) => return Err(CpError::IoErrContext(e.into(), context.to_owned())),
     }
     let mut current_offset = 0;
     // Maximize the data read at once to 16 MiB to avoid memory hogging with large files
@@ -195,8 +211,15 @@ fn sparse_copy_fd(src_file: &mut File, dst_file: &File, context: &str) -> CopyRe
     // Keep the size as u64: on 32-bit targets a usize conversion would
     // panic for sources of 4 GiB and more.
     let size = src_file.metadata().map_err(&ctx_err)?.size();
-    if let Err(e) = ftruncate(dst_file, size) {
-        return fall_back_if_cannot_be_sparse(e, src_file, dst_file, context);
+    // See the matching comment in `sparse_copy_without_hole_fd` for why an
+    // `EINVAL` here falls back to a plain copy instead of erroring.
+    match ftruncate(dst_file, size) {
+        Ok(()) => {}
+        Err(rustix::io::Errno::INVAL) => {
+            let mut dst = dst_file;
+            return buf_copy::copy_fast(src_file, &mut dst).map_err(&ctx_err);
+        }
+        Err(e) => return Err(CpError::IoErrContext(e.into(), context.to_owned())),
     }
 
     let blksize = dst_file.metadata().map_err(&ctx_err)?.blksize();
@@ -225,37 +248,6 @@ fn sparse_copy_fd(src_file: &mut File, dst_file: &File, context: &str) -> CopyRe
         current_offset += this_read as u64;
     }
     Ok(())
-}
-
-/// Falls back to a plain copy when `error` -- from the `ftruncate` a sparse
-/// copy opens with -- shows the destination cannot be written to sparsely at
-/// all, or reports `error` as the reason the copy failed.
-///
-/// The sparse paths call `ftruncate` and write at explicit offsets, neither of
-/// which anything but a regular file supports. A fifo, a socket, or a
-/// character device such as the `/dev/null` that `/dev/stdout` may resolve to
-/// all reject `ftruncate` with `EINVAL`, so those take the standard copy
-/// instead, which is what GNU does with them.
-///
-/// This is discovered here rather than checked in advance, since checking
-/// first would cost every ordinary destination -- overwhelmingly a regular
-/// file, for which this never fires -- a `metadata` call for no benefit.
-/// Nothing has been read from `src_file` or written to `dst_file` yet at the
-/// point every caller reaches this, so falling back here cannot duplicate or
-/// corrupt output.
-fn fall_back_if_cannot_be_sparse(
-    error: rustix::io::Errno,
-    src_file: &File,
-    dst_file: &File,
-    context: &str,
-) -> CopyResult<()> {
-    if error != rustix::io::Errno::INVAL {
-        return Err(CpError::IoErrContext(error.into(), context.to_owned()));
-    }
-    let mut src = src_file;
-    let mut dst = dst_file;
-    buf_copy::copy_fast(&mut src, &mut dst)
-        .map_err(|e| CpError::IoErrContext(e, context.to_owned()))
 }
 
 /// Copy the contents of a stream from `source` to `dest`.
