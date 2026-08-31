@@ -14,7 +14,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::path::Path;
 
-use clap::{Arg, ArgAction, Command, value_parser};
+use clap::{Arg, ArgAction, Command};
 use regex::Regex;
 use rustc_hash::FxHashSet;
 use uucore::display::Quotable;
@@ -200,6 +200,19 @@ struct WordRef {
     char_start: usize,
 }
 
+/// Parses `--gap-size`/`--width`'s value the way GNU does: a plain positive
+/// integer, with any other string -- unparseable, zero, or overflowing --
+/// reported the same way as any other.
+fn parse_ptx_number(value: &str, kind: &'static str) -> UResult<u64> {
+    match value.parse::<u64>() {
+        Ok(n) if n > 0 => Ok(n),
+        _ => Err(USimpleError::new(
+            1,
+            translate!("ptx-error-invalid-number", "kind" => kind, "value" => value.to_owned()),
+        )),
+    }
+}
+
 fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
     let mut config = Config::default();
     let err_msg = "parsing options failed";
@@ -245,13 +258,13 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
             .expect(err_msg)
             .clone_into(&mut config.trunc_str);
     }
-    if matches.contains_id(options::WIDTH) {
-        config.line_width = *matches.get_one::<u64>(options::WIDTH).unwrap() as usize;
+    if let Some(value) = matches.get_one::<String>(options::WIDTH) {
+        config.line_width = parse_ptx_number(value, "line width")? as usize;
     } else if matches.get_flag(options::TYPESET_MODE) {
         config.line_width = 100;
     }
-    if matches.contains_id(options::GAP_SIZE) {
-        config.gap_size = *matches.get_one::<u64>(options::GAP_SIZE).unwrap() as usize;
+    if let Some(value) = matches.get_one::<String>(options::GAP_SIZE) {
+        config.gap_size = parse_ptx_number(value, "gap width")? as usize;
     }
     if let Some(format) = matches.get_one::<String>(options::FORMAT) {
         config.format = match format.as_str() {
@@ -1041,7 +1054,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::GAP_SIZE)
                 .short('g')
                 .long(options::GAP_SIZE)
-                .value_parser(value_parser!(u64).range(1..))
+                .allow_hyphen_values(true)
                 .help(translate!("ptx-help-gap-size"))
                 .value_name("NUMBER"),
         )
@@ -1082,7 +1095,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::WIDTH)
                 .short('w')
                 .long(options::WIDTH)
-                .value_parser(value_parser!(u64).range(1..))
+                .allow_hyphen_values(true)
                 .help(translate!("ptx-help-width"))
                 .value_name("NUMBER"),
         )

@@ -9,8 +9,31 @@ use uutests::new_ucmd;
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
-    new_ucmd!().arg("-g").arg("0").fails_with_code(1); // clap provided message
-    new_ucmd!().arg("-w").arg("0").fails_with_code(1); // clap provided message
+    new_ucmd!()
+        .arg("-g")
+        .arg("0")
+        .fails_with_code(1)
+        .stderr_is("ptx: invalid gap width: '0'\n");
+    new_ucmd!()
+        .arg("-w")
+        .arg("0")
+        .fails_with_code(1)
+        .stderr_is("ptx: invalid line width: '0'\n");
+}
+
+#[test]
+fn test_gap_size_negative_as_separate_arg() {
+    // A negative value passed as its own argument (not attached with
+    // `-g-5`/`=`) must not be mistaken for a new, unrecognized flag; GNU
+    // still rejects the negative value itself, just with its own wording.
+    new_ucmd!()
+        .args(&["-g", "-5"])
+        .fails_with_code(1)
+        .stderr_is("ptx: invalid gap width: '-5'\n");
+    new_ucmd!()
+        .args(&["--width", "-5"])
+        .fails_with_code(1)
+        .stderr_is("ptx: invalid line width: '-5'\n");
 }
 #[test]
 fn test_reference_format_for_stdin() {
