@@ -1615,6 +1615,28 @@ fn test_locale_fr_rejects_period() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+fn test_locale_multibyte_separator_does_not_panic_on_invalid_suffix() {
+    // Regression test for #13937: under a locale whose decimal separator is
+    // multi-byte (Arabic ٫, 2 bytes), an invalid multi-byte suffix character
+    // right after the numeric part used to abort the process instead of
+    // being cleanly rejected, since the suffix search skipped by the
+    // separator's *byte* length as though it were a *character* count.
+    for arg in ["1٫€K", "1٫€Kx"] {
+        new_ucmd!()
+            .env("LC_ALL", "ar_SA.UTF-8")
+            .args(&["--from=si", arg])
+            .fails()
+            .stderr_contains("invalid suffix");
+    }
+    new_ucmd!()
+        .env("LC_ALL", "ar_SA.UTF-8")
+        .args(&["--from=auto", "1٫€Ki"])
+        .fails()
+        .stderr_contains("invalid suffix");
+}
+
+#[test]
 fn test_locale_c_uses_period() {
     // C locale should still use '.' as usual
     new_ucmd!()
