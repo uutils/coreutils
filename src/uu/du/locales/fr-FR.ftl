@@ -50,12 +50,20 @@ du-error-invalid-max-depth = profondeur maximale invalide { $depth }
 du-error-summarize-depth-conflict = la synthèse entre en conflit avec --max-depth={ $depth }
 du-error-invalid-time-style = argument invalide { $style } pour 'style de temps'
   Les arguments valides sont :
-    - 'full-iso'
-    - 'long-iso'
-    - 'iso'
+    - full-iso
+    - long-iso
+    - iso
     - +FORMAT (e.g., +%H:%M) pour un format de type 'date'
-  Essayez '{ $help }' pour plus d'informations.
+  Essayez '{ $help } --help' pour plus d'informations.
 du-error-invalid-time-arg = les arguments 'birth' et 'creation' pour --time ne sont pas pris en charge sur cette plateforme.
+du-error-invalid-time-choice = argument '{ $arg }' invalide pour '--time'
+  Les arguments valides sont :
+  { $choices }
+  Essayez 'du --help' pour plus d'informations.
+du-error-ambiguous-time-choice = argument '{ $arg }' ambigu pour '--time'
+  Les arguments valides sont :
+  { $choices }
+  Essayez 'du --help' pour plus d'informations.
 du-error-invalid-glob = Syntaxe d'exclusion invalide : { $error }
 du-error-cannot-read-directory = impossible de lire le répertoire { $path }
 du-error-cannot-access = impossible d'accéder à { $path }

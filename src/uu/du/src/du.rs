@@ -5,7 +5,7 @@
 //
 // spell-checker:ignore fstatat openat dirfd
 
-use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use glob::{Pattern, PatternError};
 use rustc_hash::FxHashSet as HashSet;
 use std::env;
@@ -35,7 +35,6 @@ use uucore::translate;
 use uucore::parser::parse_block_size;
 use uucore::parser::parse_glob;
 use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
-use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
 use uucore::{format_usage, show, show_error, show_warning};
 #[cfg(windows)]
@@ -1095,11 +1094,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         vec![PathBuf::from(".")]
     };
 
-    let time = matches.contains_id(options::TIME).then(|| {
-        matches
-            .get_one::<String>(options::TIME)
-            .map_or(MetadataTimeField::Modification, |s| s.as_str().into())
-    });
+    let time = matches
+        .contains_id(options::TIME)
+        .then(|| match matches.get_one::<String>(options::TIME) {
+            Some(s) => resolve_time_choice(s).map(Into::into),
+            None => Ok(MetadataTimeField::Modification),
+        })
+        .transpose()?;
 
     let size_format = parse_size_format(&matches, diag_args.as_deref())?;
 
@@ -1274,6 +1275,63 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map_err(|_| USimpleError::new(1, translate!("du-error-printing-thread-panicked")))??;
 
     Ok(())
+}
+
+/// The choices `--time`'s value accepts. GNU groups each choice's aliases
+/// on a single line in its error message; `creation`/`birth` is this
+/// implementation's own extension, listed last since GNU's `--time` does
+/// not support it at all.
+const TIME_CHOICE_GROUPS: &[&[&str]] = &[
+    &["atime", "access", "use"],
+    &["ctime", "status"],
+    &["creation", "birth"],
+];
+
+/// The name `value` names among `TIME_CHOICE_GROUPS`, accepting any
+/// unambiguous abbreviation the way GNU does (including one that is
+/// ambiguous between aliases of the *same* choice).
+fn resolve_time_choice(value: &str) -> UResult<&'static str> {
+    let list = || {
+        TIME_CHOICE_GROUPS
+            .iter()
+            .map(|group| {
+                format!(
+                    "  - {}",
+                    group
+                        .iter()
+                        .map(|name| format!("'{name}'"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let matches: Vec<(usize, &'static str)> = TIME_CHOICE_GROUPS
+        .iter()
+        .enumerate()
+        .flat_map(|(i, group)| group.iter().map(move |name| (i, *name)))
+        .filter(|(_, name)| name.starts_with(value))
+        .collect();
+
+    if !value.is_empty()
+        && let Some(&(_, exact)) = matches.iter().find(|(_, name)| *name == value)
+    {
+        return Ok(exact);
+    }
+    match matches.first() {
+        Some(&(group, name)) if !value.is_empty() && matches.iter().all(|(g, _)| *g == group) => {
+            Ok(name)
+        }
+        Some(_) => Err(USimpleError::new(
+            1,
+            translate!("du-error-ambiguous-time-choice", "arg" => value.to_string(), "choices" => list()),
+        )),
+        None => Err(USimpleError::new(
+            1,
+            translate!("du-error-invalid-time-choice", "arg" => value.to_string(), "choices" => list()),
+        )),
+    }
 }
 
 // Parse --time-style argument, falling back to environment variable if necessary.
@@ -1540,11 +1598,6 @@ pub fn uu_app() -> Command {
                 .value_name("WORD")
                 .require_equals(true)
                 .num_args(0..)
-                .value_parser(ShortcutValueParser::new([
-                    PossibleValue::new("atime").alias("access").alias("use"),
-                    PossibleValue::new("ctime").alias("status"),
-                    PossibleValue::new("creation").alias("birth"),
-                ]))
                 .help(translate!("du-help-time"))
                 .overrides_with(options::TIME),
         )

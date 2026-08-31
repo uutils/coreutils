@@ -1137,6 +1137,40 @@ fn test_du_time() {
     }
 }
 
+#[test]
+fn test_du_time_invalid_arg_message() {
+    new_ucmd!()
+        .arg("--time=bogus")
+        .arg(".")
+        .fails()
+        .stderr_is(concat!(
+            "du: invalid argument 'bogus' for '--time'\n",
+            "Valid arguments are:\n",
+            "  - 'atime', 'access', 'use'\n",
+            "  - 'ctime', 'status'\n",
+            "  - 'creation', 'birth'\n",
+            "Try 'du --help' for more information.\n",
+        ));
+}
+
+#[test]
+fn test_du_time_ambiguous_arg_message() {
+    // 'c' is ambiguous between 'ctime' and this implementation's own
+    // 'creation' extension, which GNU's --time does not accept at all.
+    new_ucmd!()
+        .arg("--time=c")
+        .arg(".")
+        .fails()
+        .stderr_is(concat!(
+            "du: ambiguous argument 'c' for '--time'\n",
+            "Valid arguments are:\n",
+            "  - 'atime', 'access', 'use'\n",
+            "  - 'ctime', 'status'\n",
+            "  - 'creation', 'birth'\n",
+            "Try 'du --help' for more information.\n",
+        ));
+}
+
 #[cfg(feature = "touch")]
 fn birth_supported() -> bool {
     let ts = TestScenario::new(util_name!());
@@ -2001,6 +2035,26 @@ fn test_invalid_time_style() {
         .arg("--time-style=banana")
         .succeeds()
         .stdout_does_not_contain("du: invalid argument 'banana' for 'time style'");
+}
+
+#[test]
+fn test_invalid_time_style_with_time_message() {
+    let result = new_ucmd!()
+        .arg("--time")
+        .arg("--time-style=banana")
+        .arg(".")
+        .fails();
+    result.stderr_contains(concat!(
+        "du: invalid argument 'banana' for 'time style'\n",
+        "Valid arguments are:\n",
+        "  - full-iso\n",
+        "  - long-iso\n",
+        "  - iso\n",
+        "  - +FORMAT (e.g., +%H:%M) for a 'date'-style format\n",
+    ));
+    // The binary path `execution_phrase()` reports varies by how the test is
+    // invoked; only the "du --help" suffix is stable.
+    result.stderr_contains("du --help' for more information.\n");
 }
 
 #[test]
