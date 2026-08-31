@@ -947,6 +947,7 @@ pub fn uu_app() -> Command {
                 .short('t')
                 .value_name("CHAR")
                 .value_parser(ValueParser::os_string())
+                .allow_hyphen_values(true)
                 .help(translate!("join-help-t")),
         )
         .arg(

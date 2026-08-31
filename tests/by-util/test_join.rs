@@ -231,7 +231,21 @@ fn tab_multi_character() {
         .arg("-t")
         .arg("ab")
         .fails()
-        .stderr_is("join: multi-character tab ab\n");
+        .stderr_is("join: multi-character tab 'ab'\n");
+}
+
+#[test]
+fn tab_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading separator value passed as its own argument (not
+    // attached with `-t-x`/`=`) must not be mistaken for a new,
+    // unrecognized flag.
+    new_ucmd!()
+        .arg("semicolon_fields_1.txt")
+        .arg("semicolon_fields_2.txt")
+        .arg("-t")
+        .arg("-x")
+        .fails()
+        .stderr_is("join: multi-character tab '-x'\n");
 }
 
 #[test]
