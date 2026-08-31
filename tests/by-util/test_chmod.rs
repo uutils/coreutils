@@ -285,6 +285,26 @@ fn test_chmod_error_permissions() {
     );
 }
 
+/// GNU says the same thing, "invalid mode: 'WHOLE_MODE'", for every way a
+/// mode can be malformed -- a non-octal digit, a value too large, a missing
+/// operator, or an unrecognized one -- so uutils does too, rather than
+/// leaking the reason as a distinct message shaped like whatever failed to
+/// parse it internally (a raw `ParseIntError`, for one).
+#[test]
+fn test_invalid_mode_names_the_whole_operand() {
+    let scenario = TestScenario::new(util_name!());
+    let at = &scenario.fixtures;
+    at.touch("file");
+
+    for mode in ["999", "", "a", "u?rwx", "u+rwx,z+r", "12x"] {
+        scenario
+            .ucmd()
+            .args(&[mode, "file"])
+            .fails_with_code(1)
+            .usage_error(format!("invalid mode: '{mode}'"));
+    }
+}
+
 #[test]
 fn test_chmod_permissions_too_large() {
     let scenario = TestScenario::new(util_name!());
@@ -296,19 +316,13 @@ fn test_chmod_permissions_too_large() {
         .ucmd()
         .args(&["10777", "file"])
         .fails_with_code(1)
-        .stderr_is(
-            // spell-checker:disable-next-line
-            "chmod: mode is too large (10777 > 7777)\n",
-        );
+        .usage_error("invalid mode: '10777'");
     // test around the boundary of the acceptable octal mode
     scenario
         .ucmd()
         .args(&["10000", "file"])
         .fails_with_code(1)
-        .stderr_is(
-            // spell-checker:disable-next-line
-            "chmod: mode is too large (10000 > 7777)\n",
-        );
+        .usage_error("invalid mode: '10000'");
     at.mkdir("dir");
     scenario.ucmd().args(&["7777", "dir"]).succeeds();
 }
@@ -1820,7 +1834,7 @@ mod diagnostics {
         // The test harness pipes stderr, so the report must not appear.
         ucmd.args(&["g+rw?x", "probe"])
             .fails_with_code(1)
-            .stderr_only("chmod: invalid operator (expected +, -, or =, but found ?)\n");
+            .usage_error("invalid mode: 'g+rw?x'");
     }
 
     #[cfg(unix)]
