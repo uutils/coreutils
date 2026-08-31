@@ -3369,6 +3369,7 @@ version = "0.11.0"
 dependencies = [
  "clap",
  "fluent",
+ "thiserror 2.0.19",
  "uucore",
 ]
 

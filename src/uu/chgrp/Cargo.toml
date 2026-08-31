@@ -18,6 +18,7 @@ doctest = false
 
 [target.'cfg(unix)'.dependencies]
 clap = { workspace = true }
+thiserror = { workspace = true }
 uucore = { workspace = true, features = ["entries", "fs", "perms"] }
 fluent = { workspace = true }
 
