@@ -249,6 +249,55 @@ fn test_date_rfc_3339_invalid_arg() {
 }
 
 #[test]
+fn test_date_iso_8601_invalid_arg_message() {
+    new_ucmd!()
+        .arg("--iso-8601=foo")
+        .fails()
+        .stderr_is(concat!(
+            "date: invalid argument 'foo' for '--iso-8601'\n",
+            "Valid arguments are:\n",
+            "  - 'hours'\n",
+            "  - 'minutes'\n",
+            "  - 'date'\n",
+            "  - 'seconds'\n",
+            "  - 'ns'\n",
+            "Try 'date --help' for more information.\n",
+        ));
+}
+
+#[test]
+fn test_date_iso_8601_ambiguous_arg_message() {
+    new_ucmd!()
+        .arg("--iso-8601=")
+        .fails()
+        .stderr_is(concat!(
+            "date: ambiguous argument '' for '--iso-8601'\n",
+            "Valid arguments are:\n",
+            "  - 'hours'\n",
+            "  - 'minutes'\n",
+            "  - 'date'\n",
+            "  - 'seconds'\n",
+            "  - 'ns'\n",
+            "Try 'date --help' for more information.\n",
+        ));
+}
+
+#[test]
+fn test_date_rfc_3339_invalid_arg_message() {
+    new_ucmd!()
+        .arg("--rfc-3339=foo")
+        .fails()
+        .stderr_is(concat!(
+            "date: invalid argument 'foo' for '--rfc-3339'\n",
+            "Valid arguments are:\n",
+            "  - 'date'\n",
+            "  - 'seconds'\n",
+            "  - 'ns'\n",
+            "Try 'date --help' for more information.\n",
+        ));
+}
+
+#[test]
 fn test_date_rfc_8601_default() {
     let re = Regex::new(r"^\d{4}-\d{2}-\d{2}\n$").unwrap();
     for param in ["--iso-8601", "--i"] {

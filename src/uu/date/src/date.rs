@@ -30,8 +30,6 @@ use uucore::{format_usage, show};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
-use uucore::parser::shortcut_value_parser::ShortcutValueParser;
-
 // Options
 const DATE: &str = "date";
 const HOURS: &str = "hours";
@@ -125,7 +123,7 @@ impl From<&str> for Iso8601Format {
             SECONDS => Self::Seconds,
             NS => Self::Ns,
             DATE => Self::Date,
-            // Note: This is caught by clap via `possible_values`
+            // Note: only reached with a name `resolve_choice` already validated.
             _ => unreachable!(),
         }
     }
@@ -143,9 +141,42 @@ impl From<&str> for Rfc3339Format {
             DATE => Self::Date,
             SECONDS => Self::Seconds,
             NS => Self::Ns,
-            // Should be caught by clap
-            _ => panic!("Invalid format: {s}"),
+            // Note: only reached with a name `resolve_choice` already validated.
+            _ => unreachable!(),
         }
+    }
+}
+
+/// The choices `--iso-8601`'s value accepts, in the order GNU lists them.
+const ISO_8601_CHOICES: &[&str] = &[HOURS, MINUTES, DATE, SECONDS, NS];
+
+/// The choices `--rfc-3339`'s value accepts, in the order GNU lists them.
+const RFC_3339_CHOICES: &[&str] = &[DATE, SECONDS, NS];
+
+/// The choice `value` names among `choices`, accepting any unambiguous
+/// abbreviation the way GNU does. `option` is the long name to report the
+/// error against if it names none, or more than one.
+fn resolve_choice<'a>(value: &str, option: &'static str, choices: &[&'a str]) -> UResult<&'a str> {
+    let list = || {
+        choices
+            .iter()
+            .map(|name| format!("  - '{name}'"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let mut named = choices.iter().filter(|name| name.starts_with(value));
+    match (named.next(), named.next()) {
+        // No choice abbreviates another, so a single match is the answer
+        // whether or not it is the whole word.
+        (Some(name), None) if !value.is_empty() => Ok(*name),
+        (Some(_), Some(_)) => Err(USimpleError::new(
+            1,
+            translate!("date-error-ambiguous-choice", "arg" => value.to_string(), "option" => option, "choices" => list()),
+        )),
+        _ => Err(USimpleError::new(
+            1,
+            translate!("date-error-invalid-choice", "arg" => value.to_string(), "option" => option, "choices" => list()),
+        )),
     }
 }
 
@@ -348,16 +379,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Format::Custom(fmt)
     } else if let Some(fmt) = matches
         .get_many::<String>(OPT_ISO_8601)
-        .map(|mut iter| iter.next().unwrap_or(&DATE.to_string()).as_str().into())
+        .map(|mut iter| iter.next().map_or(DATE, String::as_str))
     {
-        Format::Iso8601(fmt)
+        Format::Iso8601(resolve_choice(fmt, OPT_ISO_8601, ISO_8601_CHOICES)?.into())
     } else if matches.get_flag(OPT_RFC_EMAIL) {
         Format::Rfc5322
-    } else if let Some(fmt) = matches
-        .get_one::<String>(OPT_RFC_3339)
-        .map(|s| s.as_str().into())
-    {
-        Format::Rfc3339(fmt)
+    } else if let Some(fmt) = matches.get_one::<String>(OPT_RFC_3339) {
+        Format::Rfc3339(resolve_choice(fmt, OPT_RFC_3339, RFC_3339_CHOICES)?.into())
     } else if matches.get_flag(OPT_RESOLUTION) {
         Format::Resolution
     } else {
@@ -657,9 +685,6 @@ pub fn uu_app() -> Command {
                 .short('I')
                 .long(OPT_ISO_8601)
                 .value_name("FMT")
-                .value_parser(ShortcutValueParser::new([
-                    DATE, HOURS, MINUTES, SECONDS, NS,
-                ]))
                 .num_args(0..=1)
                 .default_missing_value(OPT_DATE)
                 .help(translate!("date-help-iso-8601")),
@@ -686,7 +711,6 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_RFC_3339)
                 .long(OPT_RFC_3339)
                 .value_name("FMT")
-                .value_parser(ShortcutValueParser::new([DATE, SECONDS, NS]))
                 .help(translate!("date-help-rfc-3339")),
         )
         .arg(

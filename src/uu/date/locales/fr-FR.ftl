@@ -105,3 +105,11 @@ date-error-format-modifier-width-too-large = la largeur du modificateur de forma
 date-error-format-missing-plus = l'argument {$arg} ne commence pas par un signe '+';
  lorsqu'une option est utilisée pour spécifier une ou plusieurs dates, tout argument autre
   qu'une option doit être une chaîne de format commençant par un signe '+'.
+date-error-invalid-choice = argument '{$arg}' invalide pour '--{$option}'
+  Arguments valides :
+  {$choices}
+  Essayez 'date --help' pour plus d'informations.
+date-error-ambiguous-choice = argument '{$arg}' ambigu pour '--{$option}'
+  Arguments valides :
+  {$choices}
+  Essayez 'date --help' pour plus d'informations.
