@@ -2298,7 +2298,8 @@ fn test_invalid_round_and_invalid_arguments() {
     // the one --from and --to already use.
     for (opt, value) in [("--round", "bogus"), ("--invalid", "bogus")] {
         new_ucmd!()
-            .args(&[&format!("{opt}={value}"), "1"])
+            .arg(format!("{opt}={value}"))
+            .arg("1")
             .fails()
             .stderr_contains(format!("invalid argument '{value}' for '{opt}'"));
     }
@@ -2306,7 +2307,8 @@ fn test_invalid_round_and_invalid_arguments() {
     // An empty value names every choice at once, which GNU calls ambiguous.
     for opt in ["--round", "--invalid"] {
         new_ucmd!()
-            .args(&[&format!("{opt}="), "1"])
+            .arg(format!("{opt}="))
+            .arg("1")
             .fails()
             .stderr_contains(format!("ambiguous argument '' for '{opt}'"));
     }
