@@ -51,6 +51,14 @@ rm-error-cannot-remove = cannot remove {$file}
 rm-error-cannot-remove-changed = cannot remove {$file}: File changed while removing
 rm-error-may-not-abbreviate-no-preserve-root = you may not abbreviate the --no-preserve-root option
 rm-error-standard-output = standard output: {$error}
+rm-error-invalid-interactive-choice = invalid argument '{$arg}' for '--interactive'
+  Valid arguments are:
+  {$choices}
+  Try 'rm --help' for more information.
+rm-error-ambiguous-interactive-choice = ambiguous argument '{$arg}' for '--interactive'
+  Valid arguments are:
+  {$choices}
+  Try 'rm --help' for more information.
 
 # Verbose messages
 rm-verbose-removed = removed {$file}

@@ -543,6 +543,41 @@ fn test_interactive_never() {
 }
 
 #[test]
+fn test_interactive_invalid_arg_message() {
+    new_ucmd!()
+        .arg("--interactive=bogus")
+        .arg("a")
+        .fails_with_code(1)
+        .stderr_is(concat!(
+            "rm: invalid argument 'bogus' for '--interactive'\n",
+            "Valid arguments are:\n",
+            "  - 'never', 'no', 'none'\n",
+            "  - 'once'\n",
+            "  - 'always', 'yes'\n",
+            "Try 'rm --help' for more information.\n",
+        ));
+}
+
+#[test]
+fn test_interactive_abbreviation_same_meaning_accepted() {
+    // 'n' is ambiguous among 'never'/'no'/'none', but since they all mean
+    // the same choice, GNU (and this implementation) accepts it.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file = "a";
+
+    at.touch(file);
+    scene
+        .ucmd()
+        .arg("--interactive=n")
+        .arg(file)
+        .succeeds()
+        .no_output();
+
+    assert!(!at.file_exists(file));
+}
+
+#[test]
 fn test_interactive_always() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

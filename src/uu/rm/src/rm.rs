@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (path) eacces inacc rm-r4 unlinkat fstatat rootlink
 
-use clap::builder::{PossibleValue, ValueParser};
+use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command, parser::ValueSource};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::ffi::{OsStr, OsString};
@@ -22,7 +22,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
-use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
@@ -144,7 +143,8 @@ pub enum InteractiveMode {
     PromptProtected,
 }
 
-// We implement `From` instead of `TryFrom` because clap guarantees that we only receive valid values.
+// We implement `From` instead of `TryFrom` because `resolve_interactive_choice`
+// guarantees that we only receive valid, canonical values.
 //
 // The `PromptProtected` variant is not supposed to be created from a string.
 impl From<&str> for InteractiveMode {
@@ -153,8 +153,69 @@ impl From<&str> for InteractiveMode {
             "never" => Self::Never,
             "once" => Self::Once,
             "always" => Self::Always,
-            _ => unreachable!("should be prevented by clap"),
+            _ => unreachable!("should be prevented by resolve_interactive_choice"),
         }
+    }
+}
+
+/// The choices `--interactive`'s value accepts, in the order GNU lists
+/// them. Each choice's aliases are grouped on a single line in the error
+/// message the way GNU's rm does.
+const INTERACTIVE_CHOICE_GROUPS: &[(&str, &[&str])] = &[
+    ("never", &["no", "none"]),
+    ("once", &[]),
+    ("always", &["yes"]),
+];
+
+/// The canonical name (first element of its group) `value` names among
+/// `INTERACTIVE_CHOICE_GROUPS`, accepting any unambiguous abbreviation the
+/// way GNU does (including one ambiguous only between aliases of the
+/// *same* choice, e.g. 'n' among 'never'/'no'/'none').
+fn resolve_interactive_choice(value: &str) -> UResult<&'static str> {
+    let list = || {
+        INTERACTIVE_CHOICE_GROUPS
+            .iter()
+            .map(|(canonical, aliases)| {
+                let names = std::iter::once(*canonical).chain(aliases.iter().copied());
+                format!(
+                    "  - {}",
+                    names
+                        .map(|name| format!("'{name}'"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let matches: Vec<(usize, &'static str)> = INTERACTIVE_CHOICE_GROUPS
+        .iter()
+        .enumerate()
+        .flat_map(|(i, (canonical, aliases))| {
+            std::iter::once(*canonical)
+                .chain(aliases.iter().copied())
+                .map(move |name| (i, name))
+        })
+        .filter(|(_, name)| name.starts_with(value))
+        .collect();
+
+    if !value.is_empty()
+        && let Some(&(group, _)) = matches.iter().find(|(_, name)| *name == value)
+    {
+        return Ok(INTERACTIVE_CHOICE_GROUPS[group].0);
+    }
+    match matches.first() {
+        Some(&(group, _)) if !value.is_empty() && matches.iter().all(|(g, _)| *g == group) => {
+            Ok(INTERACTIVE_CHOICE_GROUPS[group].0)
+        }
+        Some(_) => Err(USimpleError::new(
+            1,
+            translate!("rm-error-ambiguous-interactive-choice", "arg" => value.to_string(), "choices" => list()),
+        )),
+        None => Err(USimpleError::new(
+            1,
+            translate!("rm-error-invalid-interactive-choice", "arg" => value.to_string(), "choices" => list()),
+        )),
     }
 }
 
@@ -278,8 +339,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 InteractiveMode::Always
             } else if matches.get_flag(OPT_PROMPT_ONCE) {
                 InteractiveMode::Once
-            } else if matches.contains_id(OPT_INTERACTIVE) {
-                InteractiveMode::from(matches.get_one::<String>(OPT_INTERACTIVE).unwrap().as_str())
+            } else if let Some(value) = matches.get_one::<String>(OPT_INTERACTIVE) {
+                InteractiveMode::from(resolve_interactive_choice(value)?)
             } else {
                 InteractiveMode::PromptProtected
             }
@@ -398,11 +459,6 @@ pub fn uu_app() -> Command {
                 .long(OPT_INTERACTIVE)
                 .help(translate!("rm-help-interactive"))
                 .value_name("WHEN")
-                .value_parser(ShortcutValueParser::new([
-                    PossibleValue::new("always").alias("yes"),
-                    PossibleValue::new("once"),
-                    PossibleValue::new("never").alias("no").alias("none"),
-                ]))
                 .num_args(0..=1)
                 .require_equals(true)
                 .default_missing_value("always")
