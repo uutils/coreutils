@@ -28,7 +28,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let mode = calculate_mode(matches.get_one::<String>(options::MODE)).map_err(|err| {
-        let message = translate!("mkfifo-error-invalid-mode", "error" => err.to_string());
+        // Unlike `chmod`/`mkdir`/`install`, GNU does not name the mode
+        // operand here at all, regardless of what went wrong with it.
+        let message = translate!("mkfifo-error-invalid-mode");
         if let Some(args) = &diag_args
             && let Some(mode) = matches.get_one::<String>(options::MODE)
             && err.render_mode_value(args, mode, 0, &message)
