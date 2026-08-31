@@ -220,6 +220,18 @@ fn test_wrap_bad_arg() {
 }
 
 #[test]
+fn test_wrap_negative_arg() {
+    // GNU treats the token after -w as the wrap size even if it starts with '-'.
+    for arg in ["-5", "-d"] {
+        new_ucmd!()
+            .arg("-w")
+            .arg(arg)
+            .fails()
+            .stderr_only(format!("base64: invalid wrap size: '{arg}'\n"));
+    }
+}
+
+#[test]
 fn test_base64_extra_operand() {
     // Expect a failure when multiple files are specified.
     new_ucmd!()
