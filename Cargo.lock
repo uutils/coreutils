@@ -4561,6 +4561,7 @@ dependencies = [
  "dns-lookup",
  "dunce",
  "fluent",
+ "fluent-langneg",
  "fluent-syntax",
  "glob",
  "hex",

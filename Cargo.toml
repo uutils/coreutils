@@ -519,6 +519,7 @@ openssl = { version = "0.10", features = ["vendored"] }
 fluent = "0.17.0"
 unic-langid = "0.9.6"
 fluent-syntax = "0.12.0"
+fluent-langneg = { version = "0.13.1", features = ["cldr"] }
 
 uucore = { version = "0.11.0", path = "src/uucore" }
 uucore_procs = { version = "0.11.0", path = "src/uucore_procs" }
