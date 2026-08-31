@@ -100,6 +100,26 @@ fn test_to_si() {
 }
 
 #[test]
+fn test_to_si_rounding_past_top_suffix_is_too_big() {
+    new_ucmd!()
+        .args(&["--to=si", "999500000000000000000000000000000"])
+        .fails_with_code(2)
+        .stderr_only("numfmt: Number is too big and unsupported\n");
+}
+
+#[test]
+fn test_to_si_top_suffix_value_still_renders() {
+    new_ucmd!()
+        .args(&[
+            "--to=si",
+            "--round=down",
+            "999500000000000000000000000000000",
+        ])
+        .succeeds()
+        .stdout_only("999Q\n");
+}
+
+#[test]
 fn test_to_iec() {
     new_ucmd!()
         .args(&["--to=iec"])
