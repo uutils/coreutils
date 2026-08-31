@@ -80,8 +80,19 @@ enum NumberingStyle {
     Regex(Box<regex::bytes::Regex>),
 }
 
+/// Which of the two ways a numbering style argument can fail: with an
+/// invalid style word, or -- for a `p`-prefixed one -- an invalid regular
+/// expression. The caller picks the message: GNU's wording for the first
+/// depends on which of the header/body/footer/format options it came
+/// from, and its "Try --help" hint depends on whether it's a style word
+/// at all, so this can't be a single, already-translated `String`.
+enum NumberingStyleError {
+    InvalidStyle,
+    InvalidRegex,
+}
+
 impl TryFrom<&str> for NumberingStyle {
-    type Error = String;
+    type Error = NumberingStyleError;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
@@ -90,9 +101,9 @@ impl TryFrom<&str> for NumberingStyle {
             "n" => Ok(Self::None),
             _ if s.starts_with('p') => match regex::bytes::Regex::new(&s[1..]) {
                 Ok(re) => Ok(Self::Regex(Box::new(re))),
-                Err(_) => Err(translate!("nl-error-invalid-regex")),
+                Err(_) => Err(NumberingStyleError::InvalidRegex),
             },
-            _ => Err(translate!("nl-error-invalid-numbering-style", "style" => s)),
+            _ => Err(NumberingStyleError::InvalidStyle),
         }
     }
 }
@@ -220,17 +231,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut settings = Settings::default();
 
     // Update the settings from the command line options, and terminate the
-    // program if some options could not successfully be parsed.
-    let parse_errors = helper::parse_options(&mut settings, &matches);
-    if !parse_errors.is_empty() {
-        return Err(USimpleError::new(
-            1,
-            format!(
-                "{}\n{}",
-                translate!("nl-error-invalid-arguments"),
-                parse_errors.join("\n")
-            ),
-        ));
+    // program if some options could not successfully be parsed. GNU stops
+    // immediately, with no "Try --help" hint, on the first option whose
+    // own value is invalid (an immediately-fatal `Err` here); it instead
+    // collects every bad numbering-style/format option and reports them
+    // all together with a single trailing hint at the end.
+    match helper::parse_options(&mut settings, &matches) {
+        Ok(errs) if errs.is_empty() => {}
+        Ok(errs) => {
+            // The eventual `show_error!` only prefixes the message's first
+            // line with "nl: "; every other error line needs its own.
+            let mut lines = errs.into_iter();
+            let mut message = lines.next().unwrap_or_default();
+            for err in lines {
+                message.push_str(&format!("\nnl: {err}"));
+            }
+            message.push('\n');
+            message.push_str(&translate!("nl-error-try-help"));
+            return Err(USimpleError::new(1, message));
+        }
+        Err(err) => return Err(USimpleError::new(1, err)),
     }
 
     let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILE) {
@@ -329,7 +349,7 @@ pub fn uu_app() -> Command {
                 .long(options::LINE_INCREMENT)
                 .help(translate!("nl-help-line-increment"))
                 .value_name("NUMBER")
-                .value_parser(clap::value_parser!(i64)),
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(options::JOIN_BLANK_LINES)
@@ -337,15 +357,14 @@ pub fn uu_app() -> Command {
                 .long(options::JOIN_BLANK_LINES)
                 .help(translate!("nl-help-join-blank-lines"))
                 .value_name("NUMBER")
-                .value_parser(clap::value_parser!(u64)),
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(options::NUMBER_FORMAT)
                 .short('n')
                 .long(options::NUMBER_FORMAT)
                 .help(translate!("nl-help-number-format"))
-                .value_name("FORMAT")
-                .value_parser(["ln", "rn", "rz"]),
+                .value_name("FORMAT"),
         )
         .arg(
             Arg::new(options::NO_RENUMBER)
@@ -368,7 +387,7 @@ pub fn uu_app() -> Command {
                 .long(options::STARTING_LINE_NUMBER)
                 .help(translate!("nl-help-starting-line-number"))
                 .value_name("NUMBER")
-                .value_parser(clap::value_parser!(i64)),
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(options::NUMBER_WIDTH)
@@ -376,7 +395,7 @@ pub fn uu_app() -> Command {
                 .long(options::NUMBER_WIDTH)
                 .help(translate!("nl-help-number-width"))
                 .value_name("NUMBER")
-                .value_parser(clap::value_parser!(u64).range(1..=(i32::MAX as u64))),
+                .allow_hyphen_values(true),
         )
 }
 

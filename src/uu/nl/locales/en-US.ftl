@@ -28,10 +28,14 @@ nl-help-starting-line-number = first line number on each logical page
 nl-help-number-width = use NUMBER columns for line numbers
 
 # Error messages
-nl-error-invalid-arguments = Invalid arguments supplied.
 nl-error-could-not-read-line = could not read line
 nl-error-could-not-write = could not write output
 nl-error-line-number-overflow = line number overflow
-nl-error-invalid-regex = invalid regular expression
-nl-error-invalid-numbering-style = invalid numbering style: '{ $style }'
+nl-error-invalid-regex = Invalid regular expression
+nl-error-invalid-numbering-style = invalid { $kind } numbering style: '{ $value }'
+nl-error-invalid-number-format = invalid line numbering format: '{ $value }'
+nl-error-invalid-number = invalid { $kind }: '{ $value }'
+nl-error-number-out-of-range = invalid { $kind }: '{ $value }': Numerical result out of range
+nl-error-number-too-large = invalid { $kind }: '{ $value }': Value too large for defined data type
+nl-error-try-help = Try 'nl --help' for more information.
 nl-error-is-directory = { $path }: Is a directory

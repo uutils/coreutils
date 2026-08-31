@@ -159,7 +159,7 @@ fn test_invalid_number_format() {
         new_ucmd!()
             .arg(arg)
             .fails()
-            .stderr_contains("invalid value 'invalid'");
+            .stderr_is("nl: invalid line numbering format: 'invalid'\nTry 'nl --help' for more information.\n");
     }
 }
 
@@ -180,10 +180,9 @@ fn test_number_width() {
 #[test]
 fn test_number_width_zero() {
     for arg in ["-w0", "--number-width=0"] {
-        new_ucmd!()
-            .arg(arg)
-            .fails()
-            .stderr_contains("is not in 1..=2147483647");
+        new_ucmd!().arg(arg).fails().stderr_is(
+            "nl: invalid line number field width: '0': Numerical result out of range\n",
+        );
     }
 }
 
@@ -196,7 +195,7 @@ fn test_number_width_too_large() {
             .arg(arg)
             .pipe_in("")
             .fails()
-            .stderr_contains("is not in 1..=2147483647");
+            .stderr_is("nl: invalid line number field width: '2147483648': Value too large for defined data type\n");
     }
 }
 
@@ -215,7 +214,7 @@ fn test_invalid_number_width() {
         new_ucmd!()
             .arg(arg)
             .fails()
-            .stderr_contains("invalid value 'invalid'");
+            .stderr_is("nl: invalid line number field width: 'invalid'\n");
     }
 }
 
@@ -277,12 +276,28 @@ fn test_negative_starting_line_number() {
 }
 
 #[test]
+fn test_negative_starting_line_number_as_separate_arg() {
+    // A negative value passed as its own argument (not attached with `-v-10`
+    // or `=`) must not be mistaken for a new, unrecognized flag.
+    new_ucmd!()
+        .args(&["-v", "-10"])
+        .pipe_in("test")
+        .succeeds()
+        .stdout_is("   -10\ttest\n");
+    new_ucmd!()
+        .args(&["--starting-line-number", "-10"])
+        .pipe_in("test")
+        .succeeds()
+        .stdout_is("   -10\ttest\n");
+}
+
+#[test]
 fn test_invalid_starting_line_number() {
     for arg in ["-vinvalid", "--starting-line-number=invalid"] {
         new_ucmd!()
             .arg(arg)
             .fails()
-            .stderr_contains("invalid value 'invalid'");
+            .stderr_is("nl: invalid starting line number: 'invalid'\n");
     }
 }
 
@@ -321,12 +336,28 @@ fn test_negative_line_increment() {
 }
 
 #[test]
+fn test_negative_line_increment_as_separate_arg() {
+    // A negative value passed as its own argument (not attached with `-i-10`
+    // or `=`) must not be mistaken for a new, unrecognized flag.
+    new_ucmd!()
+        .args(&["-i", "-10"])
+        .pipe_in("a\nb\nc")
+        .succeeds()
+        .stdout_is("     1\ta\n    -9\tb\n   -19\tc\n");
+    new_ucmd!()
+        .args(&["--line-increment", "-10"])
+        .pipe_in("a\nb\nc")
+        .succeeds()
+        .stdout_is("     1\ta\n    -9\tb\n   -19\tc\n");
+}
+
+#[test]
 fn test_invalid_line_increment() {
     for arg in ["-iinvalid", "--line-increment=invalid"] {
         new_ucmd!()
             .arg(arg)
             .fails()
-            .stderr_contains("invalid value 'invalid'");
+            .stderr_is("nl: invalid line number increment: 'invalid'\n");
     }
 }
 
@@ -399,7 +430,7 @@ fn test_invalid_join_blank_lines() {
         new_ucmd!()
             .arg(arg)
             .fails()
-            .stderr_contains("invalid value 'invalid'");
+            .stderr_is("nl: invalid line number of blank lines: 'invalid'\n");
     }
 }
 
@@ -573,19 +604,18 @@ fn test_numbering_matched_lines() {
 #[test]
 fn test_invalid_numbering() {
     let invalid_args = [
-        "-hinvalid",
-        "--header-numbering=invalid",
-        "-binvalid",
-        "--body-numbering=invalid",
-        "-finvalid",
-        "--footer-numbering=invalid",
+        ("-hinvalid", "header"),
+        ("--header-numbering=invalid", "header"),
+        ("-binvalid", "body"),
+        ("--body-numbering=invalid", "body"),
+        ("-finvalid", "footer"),
+        ("--footer-numbering=invalid", "footer"),
     ];
 
-    for invalid_arg in invalid_args {
-        new_ucmd!()
-            .arg(invalid_arg)
-            .fails()
-            .stderr_contains("invalid numbering style: 'invalid'");
+    for (invalid_arg, kind) in invalid_args {
+        new_ucmd!().arg(invalid_arg).fails().stderr_is(format!(
+            "nl: invalid {kind} numbering style: 'invalid'\nTry 'nl --help' for more information.\n"
+        ));
     }
 }
 
@@ -604,7 +634,7 @@ fn test_invalid_regex_numbering() {
         new_ucmd!()
             .arg(invalid_arg)
             .fails()
-            .stderr_contains("invalid regular expression");
+            .stderr_is("nl: Invalid regular expression\n");
     }
 }
 
