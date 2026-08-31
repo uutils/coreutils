@@ -138,6 +138,17 @@ fn mknod(file_name: &str, config: Config) -> i32 {
     errno
 }
 
+/// Parses a MAJOR/MINOR device number the way GNU does: a plain `u32`, with
+/// any other string -- unparseable or overflowing -- reported the same way.
+fn parse_device_number(value: &str, kind: &'static str) -> UResult<u32> {
+    value.parse::<u32>().map_err(|_| {
+        USimpleError::new(
+            1,
+            translate!("mknod-error-invalid-device-number", "kind" => kind, "value" => value.to_owned()),
+        )
+    })
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<OsString> = args.collect();
@@ -192,11 +203,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     ))]
     let context = matches.get_one::<String>(options::CONTEXT).cloned();
 
-    let dev = match (
-        file_type,
-        matches.get_one::<u32>(options::MAJOR),
-        matches.get_one::<u32>(options::MINOR),
-    ) {
+    let major = matches
+        .get_one::<String>(options::MAJOR)
+        .map(|value| parse_device_number(value, "major"))
+        .transpose()?;
+    let minor = matches
+        .get_one::<String>(options::MINOR)
+        .map(|value| parse_device_number(value, "minor"))
+        .transpose()?;
+
+    let dev = match (file_type, major, minor) {
         (FileType::Fifo, None, None) => 0,
         (FileType::Fifo, _, _) => {
             return Err(UUsageError::new(
@@ -204,7 +220,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 translate!("mknod-error-fifo-no-major-minor"),
             ));
         }
-        (_, Some(&major), Some(&minor)) => makedev(major as _, minor as _) as u64,
+        (_, Some(major), Some(minor)) => makedev(major as _, minor as _) as u64,
         _ => {
             return Err(UUsageError::new(
                 1,
@@ -267,14 +283,12 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::MAJOR)
                 .value_name(options::MAJOR)
-                .help(translate!("mknod-help-major"))
-                .value_parser(value_parser!(u32)),
+                .help(translate!("mknod-help-major")),
         )
         .arg(
             Arg::new(options::MINOR)
                 .value_name(options::MINOR)
-                .help(translate!("mknod-help-minor"))
-                .value_parser(value_parser!(u32)),
+                .help(translate!("mknod-help-minor")),
         )
         .arg(
             Arg::new(options::SECURITY_CONTEXT)

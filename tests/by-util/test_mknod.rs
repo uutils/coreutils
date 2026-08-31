@@ -24,7 +24,7 @@ fn test_mknod_overflow_major_minor() {
         .arg("1")
         .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("invalid value '4294967296'"); //clap generated message, thats fine.
+        .stderr_is("mknod: invalid major device number '4294967296'\n");
 }
 
 #[test]
@@ -115,14 +115,14 @@ fn test_mknod_character_device_requires_major_and_minor() {
         .arg("1")
         .arg("c")
         .fails()
-        .stderr_contains("invalid value 'c'");
+        .stderr_is("mknod: invalid minor device number 'c'\n");
     new_ucmd!()
         .arg("test_file")
         .arg("c")
         .arg("c")
         .arg("1")
         .fails()
-        .stderr_contains("invalid value 'c'");
+        .stderr_is("mknod: invalid major device number 'c'\n");
 }
 
 #[test]
