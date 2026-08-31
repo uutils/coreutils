@@ -50,6 +50,7 @@ rm-error-and-preserve-root-all-in-effect = and --preserve-root=all is in effect
 rm-error-cannot-remove = cannot remove {$file}
 rm-error-cannot-remove-changed = cannot remove {$file}: File changed while removing
 rm-error-may-not-abbreviate-no-preserve-root = you may not abbreviate the --no-preserve-root option
+rm-error-unrecognized-preserve-root-argument = unrecognized --preserve-root argument: '{$arg}'
 rm-error-standard-output = standard output: {$error}
 
 # Verbose messages

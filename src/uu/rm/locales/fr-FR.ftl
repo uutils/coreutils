@@ -48,6 +48,7 @@ rm-error-refusing-to-remove-directory = refus de supprimer le répertoire '.' ou
 rm-error-cannot-remove = impossible de supprimer {$file}
 rm-error-cannot-remove-changed = impossible de supprimer {$file} : Le fichier a changé pendant la suppression
 rm-error-may-not-abbreviate-no-preserve-root = Vous ne pouvez pas abréger l'option --no-preserve-root
+rm-error-unrecognized-preserve-root-argument = argument --preserve-root non reconnu : '{$arg}'
 rm-error-standard-output = sortie standard : {$error}
 
 # Messages verbeux

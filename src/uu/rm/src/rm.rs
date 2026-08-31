@@ -264,9 +264,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let preserve_root = !matches.get_flag(OPT_NO_PRESERVE_ROOT);
-    let preserve_root_all = matches
-        .get_one::<String>(OPT_PRESERVE_ROOT)
-        .is_some_and(|value| value == "all");
+    let preserve_root_all = match matches.get_one::<String>(OPT_PRESERVE_ROOT) {
+        Some(value) if value == "all" => true,
+        Some(value) => {
+            return Err(USimpleError::new(
+                1,
+                translate!("rm-error-unrecognized-preserve-root-argument", "arg" => value.clone()),
+            ));
+        }
+        None => false,
+    };
     let recursive = matches.get_flag(OPT_RECURSIVE);
 
     let options = Options {
@@ -428,8 +435,7 @@ pub fn uu_app() -> Command {
                 // additionally refuses to cross into another file system.
                 .num_args(0..=1)
                 .require_equals(true)
-                .value_name("all")
-                .value_parser(["all"]),
+                .value_name("all"),
         )
         .arg(
             Arg::new(OPT_RECURSIVE)

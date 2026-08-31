@@ -249,7 +249,19 @@ fn test_preserve_root_rejects_unknown_value() {
         .arg("-rf")
         .arg("anything")
         .fails()
-        .stderr_contains("invalid value 'bogus'");
+        .stderr_is("rm: unrecognized --preserve-root argument: 'bogus'\n");
+}
+
+#[test]
+fn test_preserve_root_rejects_abbreviation() {
+    // Unlike --interactive and friends, --preserve-root does not accept
+    // abbreviations of its one value at all: GNU rejects even 'a'.
+    new_ucmd!()
+        .arg("--preserve-root=a")
+        .arg("-rf")
+        .arg("anything")
+        .fails()
+        .stderr_is("rm: unrecognized --preserve-root argument: 'a'\n");
 }
 
 #[test]
