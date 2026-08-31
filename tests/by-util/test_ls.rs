@@ -104,15 +104,15 @@ fn test_localized_possible_values() {
         (
             "en_US.UTF-8",
             vec![
-                "error: invalid value 'invalid_test_value' for '--color",
-                "[possible values:",
+                "invalid argument 'invalid_test_value' for '--color'",
+                "Valid arguments are:",
             ],
         ),
         (
             "fr_FR.UTF-8",
             vec![
-                "erreur : valeur invalide 'invalid_test_value' pour '--color",
-                "[valeurs possibles:",
+                "argument 'invalid_test_value' invalide pour '--color'",
+                "Les arguments valides sont :",
             ],
         ),
     ];
@@ -132,6 +132,126 @@ fn test_localized_possible_values() {
     }
 }
 /* spellchecker: enable */
+
+#[test]
+fn test_format_invalid_arg_message() {
+    // `columns` is this implementation's own extra --format choice; GNU's
+    // --format does not accept it at all.
+    new_ucmd!()
+        .arg("--format=bogus")
+        .fails_with_code(1)
+        .stderr_is(concat!(
+            "ls: invalid argument 'bogus' for '--format'\n",
+            "Valid arguments are:\n",
+            "  - 'verbose', 'long'\n",
+            "  - 'commas'\n",
+            "  - 'horizontal', 'across'\n",
+            "  - 'vertical'\n",
+            "  - 'single-column'\n",
+            "  - 'columns'\n",
+            "Try 'ls --help' for more information.\n",
+        ));
+}
+
+#[test]
+fn test_time_ambiguous_arg_message() {
+    new_ucmd!()
+        .arg("--time=bogus")
+        .fails_with_code(1)
+        .stderr_is(concat!(
+            "ls: invalid argument 'bogus' for '--time'\n",
+            "Valid arguments are:\n",
+            "  - 'atime', 'access', 'use'\n",
+            "  - 'ctime', 'status'\n",
+            "  - 'mtime', 'modification'\n",
+            "  - 'birth', 'creation'\n",
+            "Try 'ls --help' for more information.\n",
+        ));
+}
+
+#[test]
+fn test_quoting_style_invalid_arg_message() {
+    // Unlike every other option here, GNU lists each of --quoting-style's
+    // choices on its own line, even 'c' and 'c-maybe', which are aliases
+    // for the same style.
+    new_ucmd!()
+        .arg("--quoting-style=bogus")
+        .fails_with_code(1)
+        .stderr_is(concat!(
+            "ls: invalid argument 'bogus' for '--quoting-style'\n",
+            "Valid arguments are:\n",
+            "  - 'literal'\n",
+            "  - 'shell'\n",
+            "  - 'shell-always'\n",
+            "  - 'shell-escape'\n",
+            "  - 'shell-escape-always'\n",
+            "  - 'c'\n",
+            "  - 'c-maybe'\n",
+            "  - 'escape'\n",
+            "  - 'locale'\n",
+            "  - 'clocale'\n",
+            "Try 'ls --help' for more information.\n",
+        ));
+}
+
+#[test]
+fn test_sort_invalid_arg_message() {
+    new_ucmd!()
+        .arg("--sort=bogus")
+        .fails_with_code(1)
+        .stderr_is(concat!(
+            "ls: invalid argument 'bogus' for '--sort'\n",
+            "Valid arguments are:\n",
+            "  - 'none'\n",
+            "  - 'size'\n",
+            "  - 'time'\n",
+            "  - 'version'\n",
+            "  - 'extension'\n",
+            "  - 'name'\n",
+            "  - 'width'\n",
+            "Try 'ls --help' for more information.\n",
+        ));
+}
+
+#[test]
+fn test_indicator_style_invalid_arg_message() {
+    new_ucmd!()
+        .arg("--indicator-style=bogus")
+        .fails_with_code(1)
+        .stderr_is(concat!(
+            "ls: invalid argument 'bogus' for '--indicator-style'\n",
+            "Valid arguments are:\n",
+            "  - 'none'\n",
+            "  - 'slash'\n",
+            "  - 'file-type'\n",
+            "  - 'classify'\n",
+            "Try 'ls --help' for more information.\n",
+        ));
+}
+
+#[test]
+fn test_hyperlink_ambiguous_arg_message() {
+    new_ucmd!()
+        .arg("--hyperlink=a")
+        .fails_with_code(1)
+        .stderr_is(concat!(
+            "ls: ambiguous argument 'a' for '--hyperlink'\n",
+            "Valid arguments are:\n",
+            "  - 'always', 'yes', 'force'\n",
+            "  - 'never', 'no', 'none'\n",
+            "  - 'auto', 'tty', 'if-tty'\n",
+            "Try 'ls --help' for more information.\n",
+        ));
+}
+
+#[test]
+fn test_classify_when_still_works() {
+    // The --classify=WHEN interception must not disturb normal parsing.
+    new_ucmd!()
+        .arg("--classify=never")
+        .arg("--classify=always")
+        .succeeds();
+}
 
 #[test]
 fn test_invalid_value_returns_2() {

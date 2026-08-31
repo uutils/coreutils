@@ -34,7 +34,7 @@ use thiserror::Error;
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::{
     display::Quotable,
-    error::{UError, UResult, set_exit_code, strip_errno},
+    error::{UError, UResult, USimpleError, set_exit_code, strip_errno},
     format_usage,
     fs::FileInformation,
     fsext::metadata_get_time,
@@ -115,15 +115,162 @@ impl UError for LsError {
     }
 }
 
+/// The choices each of `WHEN`-style option's value accepts, in the order
+/// GNU lists them. Each choice's aliases are grouped on a single line the
+/// way GNU does; `columns` on `--format` is this implementation's own
+/// extension, which GNU's `--format` does not support at all.
+const WHEN_CHOICES: &[&[&str]] = &[
+    &["always", "yes", "force"],
+    &["never", "no", "none"],
+    &["auto", "tty", "if-tty"],
+];
+
+/// The options in this file that validate an enumerated choice with a
+/// `ShortcutValueParser`. That parser reports an invalid or ambiguous
+/// value with clap's own generic wording, not GNU's; each entry here is
+/// the metadata this module's [`invalid_choice_error`] needs to
+/// reconstruct GNU's wording after clap has already rejected a value.
+struct ChoiceOption {
+    long: &'static str,
+    groups: &'static [&'static [&'static str]],
+}
+
+const CHOICE_OPTIONS: &[ChoiceOption] = &[
+    ChoiceOption {
+        long: options::FORMAT,
+        groups: &[
+            &["verbose", "long"],
+            &["commas"],
+            &["horizontal", "across"],
+            &["vertical"],
+            &["single-column"],
+            &["columns"],
+        ],
+    },
+    ChoiceOption {
+        long: options::HYPERLINK,
+        groups: WHEN_CHOICES,
+    },
+    ChoiceOption {
+        long: QUOTING_STYLE,
+        groups: &[
+            &["literal"],
+            &["shell"],
+            &["shell-always"],
+            &["shell-escape"],
+            &["shell-escape-always"],
+            &["c"],
+            &["c-maybe"],
+            &["escape"],
+            &["locale"],
+            &["clocale"],
+        ],
+    },
+    ChoiceOption {
+        long: options::TIME,
+        groups: &[
+            &["atime", "access", "use"],
+            &["ctime", "status"],
+            &["mtime", "modification"],
+            &["birth", "creation"],
+        ],
+    },
+    ChoiceOption {
+        long: options::SORT,
+        groups: &[
+            &["none"],
+            &["size"],
+            &["time"],
+            &["version"],
+            &["extension"],
+            &["name"],
+            &["width"],
+        ],
+    },
+    ChoiceOption {
+        long: options::COLOR,
+        groups: WHEN_CHOICES,
+    },
+    ChoiceOption {
+        long: options::INDICATOR_STYLE,
+        groups: &[&["none"], &["slash"], &["file-type"], &["classify"]],
+    },
+    ChoiceOption {
+        long: options::indicator_style::CLASSIFY,
+        groups: WHEN_CHOICES,
+    },
+];
+
+/// Rebuilds `clap_error` -- already known to be an `ErrorKind::InvalidValue`
+/// on one of `CHOICE_OPTIONS` -- as GNU's own wording instead of clap's,
+/// or returns `None` if it names none of them (letting the caller fall
+/// back to the shared formatter for everything else).
+fn invalid_choice_error(clap_error: &clap::Error) -> Option<Box<dyn UError>> {
+    let arg = clap_error
+        .get(clap::error::ContextKind::InvalidArg)?
+        .to_string();
+    let value = clap_error
+        .get(clap::error::ContextKind::InvalidValue)?
+        .to_string();
+    let option = CHOICE_OPTIONS
+        .iter()
+        .find(|opt| arg.contains(&format!("--{}", opt.long)))?;
+
+    let list = || {
+        option
+            .groups
+            .iter()
+            .map(|group| {
+                format!(
+                    "  - {}",
+                    group
+                        .iter()
+                        .map(|name| format!("'{name}'"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let matched_groups = option
+        .groups
+        .iter()
+        .filter(|group| group.iter().any(|name| name.starts_with(&value)))
+        .count();
+    let message = if matched_groups > 1 {
+        translate!("ls-error-ambiguous-choice", "option" => option.long, "arg" => value, "choices" => list())
+    } else {
+        translate!("ls-error-invalid-choice", "option" => option.long, "arg" => value, "choices" => list())
+    };
+    Some(USimpleError::new(1, message))
+}
+
+/// Parses the command line the way
+/// [`uucore::clap_localization::handle_clap_result_with_diagnostics`] does,
+/// except that an `ErrorKind::InvalidValue` naming one of `CHOICE_OPTIONS`
+/// is reported with GNU's wording via [`invalid_choice_error`] instead of
+/// the shared formatter's.
+fn get_matches(args: Vec<OsString>) -> UResult<(clap::ArgMatches, Option<Vec<OsString>>)> {
+    let diag_args = uucore::diagnostics::capture(&args);
+    match uu_app().try_get_matches_from(args) {
+        Ok(matches) => Ok((matches, diag_args)),
+        Err(clap_error) => {
+            if clap_error.kind() == clap::error::ErrorKind::InvalidValue
+                && let Some(err) = invalid_choice_error(&clap_error)
+            {
+                return Err(err);
+            }
+            uucore::clap_localization::handle_clap_error_with_exit_code(clap_error, 2);
+        }
+    }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // The arguments are kept for the caret in SIZE diagnostics, which echoes
     // the command line.
-    let (matches, diag_args) = uucore::clap_localization::handle_clap_result_with_diagnostics(
-        uu_app(),
-        args.collect(),
-        2,
-    )?;
+    let (matches, diag_args) = get_matches(args.collect())?;
 
     uucore::i18n::collator::init_locale_collation();
 

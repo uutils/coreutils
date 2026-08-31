@@ -32,6 +32,14 @@ ls-error-invalid-time-style = argument --time-style invalide {$style}
     - +FORMAT (e.g., +%H:%M) pour un format de type 'date'
 
   Pour plus d'informations, essayez --help
+ls-error-invalid-choice = argument '{$arg}' invalide pour '--{$option}'
+  Les arguments valides sont :
+  {$choices}
+  Essayez 'ls --help' pour plus d'informations.
+ls-error-ambiguous-choice = argument '{$arg}' ambigu pour '--{$option}'
+  Les arguments valides sont :
+  {$choices}
+  Essayez 'ls --help' pour plus d'informations.
 
 # Messages d'aide
 ls-help-print-help = Afficher les informations d'aide.
