@@ -58,9 +58,34 @@ const OPT_UNIVERSAL_2: &str = "utc";
 enum DateError {
     #[error("{}", translate!("date-error-write", "error" => strip_errno(.0)))]
     Write(std::io::Error),
+    #[error("{}", translate!("date-error-extra-operand", "operand" => .operand))]
+    ExtraOperand { operand: String },
+    #[error("{}", translate!("date-error-invalid-date", "date" => .date))]
+    InvalidDate { date: String },
+    #[error("{}", translate!("date-error-format-missing-plus", "arg" => .arg))]
+    FormatMissingPlus { arg: String },
+    #[error("{}", translate!("date-error-expected-file-got-directory", "path" => .path))]
+    ExpectedFileGotDirectory { path: String },
+    #[error("{}", translate!("date-error-cannot-set-date", "path" => .path, "error" => .error))]
+    CannotSetDate { path: String, error: String },
+    #[error("{}", translate!("date-error-invalid-format", "format" => .format, "error" => .error))]
+    InvalidFormat { format: String, error: String },
+    #[cfg(target_vendor = "apple")]
+    #[error("{}", translate!("date-error-setting-date-not-supported-macos"))]
+    SettingDateNotSupportedMacOs,
+    #[cfg(target_os = "redox")]
+    #[error("{}", translate!("date-error-setting-date-not-supported-redox"))]
+    SettingDateNotSupportedRedox,
 }
 
-impl UError for DateError {}
+impl UError for DateError {
+    fn code(&self) -> i32 {
+        match self {
+            Self::ExpectedFileGotDirectory { .. } => 2,
+            _ => 1,
+        }
+    }
+}
 
 /// Settings for this program, parsed from the command line
 struct Settings {
@@ -320,10 +345,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if let Some(formats) = matches.get_many::<String>(OPT_FORMAT) {
         let format_args: Vec<&String> = formats.collect();
         if format_args.len() > 1 {
-            return Err(USimpleError::new(
-                1,
-                translate!("date-error-extra-operand", "operand" => format_args[1]),
-            ));
+            return Err(Box::new(DateError::ExtraOperand {
+                operand: format_args[1].clone(),
+            }));
         }
     }
 
@@ -332,17 +356,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // if an optional Format String was found but the user has not provided an input date
             // GNU prints an invalid date Error
             if !matches!(date_source, DateSource::Human(_)) {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("date-error-invalid-date", "date" => fmt),
-                ));
+                return Err(Box::new(DateError::InvalidDate { date: fmt.clone() }));
             }
             // If the user did provide an input date with the --date flag and the Format String is
             // not starting with '+' GNU prints the missing '+' error message
-            return Err(USimpleError::new(
-                1,
-                translate!("date-error-format-missing-plus", "arg" => fmt),
-            ));
+
+            return Err(Box::new(DateError::FormatMissingPlus { arg: fmt.clone() }));
         }
         let fmt = fmt[1..].to_string();
         Format::Custom(fmt)
@@ -379,10 +398,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(input) => match parse_date(input, &now, DebugOptions::new(debug_mode, true), false) {
             Ok(ParsedDateTime::InRange(date)) => Some(date),
             Ok(ParsedDateTime::Extended(_)) | Err(_) => {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("date-error-invalid-date", "date" => input),
-                ));
+                return Err(Box::new(DateError::InvalidDate {
+                    date: input.clone(),
+                }));
             }
         },
     };
@@ -533,10 +551,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ),
         DateSource::File(ref path) => {
             if path.is_dir() {
-                return Err(USimpleError::new(
-                    2,
-                    translate!("date-error-expected-file-got-directory", "path" => path.quote()),
-                ));
+                return Err(Box::new(DateError::ExpectedFileGotDirectory {
+                    path: path.quote().to_string(),
+                }));
             }
             let file =
                 File::open(path).map_err_context(|| path.as_os_str().maybe_quote().to_string())?;
@@ -551,11 +568,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let metadata = std::fs::metadata(path)
                 .map_err_context(|| path.as_os_str().maybe_quote().to_string())?;
             let mtime = metadata.modified()?;
-            let ts = Timestamp::try_from(mtime).map_err(|e| {
-                USimpleError::new(
-                    1,
-                    translate!("date-error-cannot-set-date", "path" => path.quote(), "error" => e),
-                )
+            let ts = Timestamp::try_from(mtime).map_err(|e| DateError::CannotSetDate {
+                path: path.quote().to_string(),
+                error: e.to_string(),
             })?;
             let date = ts.to_zoned(TimeZone::try_system().unwrap_or(TimeZone::UTC));
             let iter = std::iter::once(Ok(ParsedDateTime::InRange(date)));
@@ -605,19 +620,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     Ok(s) => writeln!(stdout, "{s}").map_err(DateError::Write)?,
                     Err(e) => {
                         let _ = stdout.flush();
-                        return Err(USimpleError::new(
-                            1,
-                            translate!("date-error-invalid-format", "format" => format_string, "error" => e),
-                        ));
+                        return Err(Box::new(DateError::InvalidFormat {
+                            format: format_string.to_string(),
+                            error: e,
+                        }));
                     }
                 }
             }
             Err((input, _err)) => {
                 let _ = stdout.flush();
-                show!(USimpleError::new(
-                    1,
-                    translate!("date-error-invalid-date", "date" => input)
-                ));
+
+                show!(DateError::InvalidDate {
+                    date: input.clone()
+                });
             }
         }
     }
@@ -1248,18 +1263,12 @@ fn convert_for_set(date: Zoned, utc: bool) -> Zoned {
 
 #[cfg(target_vendor = "apple")]
 fn set_system_datetime(_date: Zoned) -> UResult<()> {
-    Err(USimpleError::new(
-        1,
-        translate!("date-error-setting-date-not-supported-macos"),
-    ))
+    Err(Box::new(DateError::SettingDateNotSupportedMacOs))
 }
 
 #[cfg(target_os = "redox")]
 fn set_system_datetime(_date: Zoned) -> UResult<()> {
-    Err(USimpleError::new(
-        1,
-        translate!("date-error-setting-date-not-supported-redox"),
-    ))
+    Err(Box::new(DateError::SettingDateNotSupportedRedox))
 }
 
 #[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "redox")))]
