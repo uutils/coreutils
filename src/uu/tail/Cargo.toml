@@ -20,7 +20,6 @@ doctest = false
 clap = { workspace = true }
 memchr = { workspace = true }
 uucore = { workspace = true, features = ["fs", "parser-size", "signals"] }
-same-file = { workspace = true }
 fluent = { workspace = true }
 
 [target.'cfg(not(target_os = "wasi"))'.dependencies]

@@ -4,8 +4,6 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) helloworld nodir objdump n'source nconfined testdir
 
-#[cfg(not(target_os = "openbsd"))]
-use filetime::FileTime;
 use std::env::current_exe;
 use std::fs;
 #[cfg(target_os = "linux")]
@@ -15,10 +13,7 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::thread::sleep;
 use uucore::error::strip_errno;
 use uucore::process::{getegid, geteuid};
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -31,7 +26,7 @@ fn test_invalid_arg() {
 }
 
 #[test]
-fn test_install_basic() {
+fn test_install_basic_try_reflink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "target_dir";
     let file1 = "source_file1";
@@ -40,7 +35,23 @@ fn test_install_basic() {
     at.touch(file1);
     at.touch(file2);
     at.mkdir(dir);
+    #[cfg(not(target_os = "linux"))]
     ucmd.arg(file1).arg(file2).arg(dir).succeeds().no_stderr();
+    // mkfs.btrfs needs root. use strace instead.
+    #[cfg(target_os = "linux")]
+    if std::process::Command::new("strace")
+        .args(["-qqq", "-o", "strace.out", "-e", "trace=ioctl"])
+        .arg(uutests::util::get_tests_binary())
+        .args(["install", file1, file2, dir])
+        .current_dir(at.as_string())
+        .output()
+        .is_ok()
+    {
+        assert!(at.read("strace.out").contains("FICLONE"));
+    } else {
+        // missing strace
+        ucmd.arg(file1).arg(file2).arg(dir).succeeds().no_stderr();
+    }
 
     assert!(at.file_exists(file1));
     assert!(at.file_exists(file2));
@@ -500,7 +511,12 @@ fn test_install_compare_preserve_timestamps() {
     at.write(source, "data");
     at.write(dest, "data");
     let old = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
-    filetime::set_file_mtime(at.plus(source), FileTime::from_system_time(old)).unwrap();
+    fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus(source))
+        .unwrap()
+        .set_modified(old)
+        .unwrap();
 
     // With --preserve-timestamps, the timestamp difference forces the copy so
     // the destination ends up with the source's modification time.
@@ -709,7 +725,7 @@ fn test_install_copy_then_compare_file() {
         .no_stderr();
 
     let mut file2_meta = at.metadata(file2);
-    let before = FileTime::from_last_modification_time(&file2_meta);
+    let before = file2_meta.modified().unwrap();
 
     scene
         .ucmd()
@@ -720,7 +736,7 @@ fn test_install_copy_then_compare_file() {
         .no_stderr();
 
     file2_meta = at.metadata(file2);
-    let after = FileTime::from_last_modification_time(&file2_meta);
+    let after = file2_meta.modified().unwrap();
 
     assert_eq!(before, after);
 }
@@ -744,7 +760,7 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
         .no_stderr();
 
     let mut file2_meta = at.metadata(file2);
-    let before = FileTime::from_last_modification_time(&file2_meta);
+    let before = file2_meta.modified().unwrap();
     sleep(std::time::Duration::from_millis(100));
 
     scene
@@ -760,7 +776,7 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
         );
 
     file2_meta = at.metadata(file2);
-    let after_install_sticky = FileTime::from_last_modification_time(&file2_meta);
+    let after_install_sticky = file2_meta.modified().unwrap();
 
     assert_ne!(before, after_install_sticky);
 
@@ -776,7 +792,7 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
         .no_stderr();
 
     file2_meta = at.metadata(file2);
-    let after_install_sticky_again = FileTime::from_last_modification_time(&file2_meta);
+    let after_install_sticky_again = file2_meta.modified().unwrap();
 
     assert_ne!(after_install_sticky, after_install_sticky_again);
 }
@@ -2445,10 +2461,7 @@ fn test_install_no_target_basic() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_selinux() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2497,10 +2510,7 @@ fn test_selinux() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_selinux_invalid_args() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2533,10 +2543,7 @@ fn test_selinux_invalid_args() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_selinux_default_context() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

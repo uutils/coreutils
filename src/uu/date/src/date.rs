@@ -19,9 +19,10 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stderr};
 use std::path::PathBuf;
 use std::sync::OnceLock;
+use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UError, UResult, USimpleError, strip_errno};
 #[cfg(feature = "i18n-datetime")]
 use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
 use uucore::translate;
@@ -52,6 +53,14 @@ const OPT_SET: &str = "set";
 const OPT_REFERENCE: &str = "reference";
 const OPT_UNIVERSAL: &str = "universal";
 const OPT_UNIVERSAL_2: &str = "utc";
+
+#[derive(Error, Debug)]
+enum DateError {
+    #[error("{}", translate!("date-error-write", "error" => strip_errno(.0)))]
+    Write(std::io::Error),
+}
+
+impl UError for DateError {}
 
 /// Settings for this program, parsed from the command line
 struct Settings {
@@ -593,9 +602,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     }
                 };
                 match formatted {
-                    Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
-                        USimpleError::new(1, translate!("date-error-write", "error" => e))
-                    })?,
+                    Ok(s) => writeln!(stdout, "{s}").map_err(DateError::Write)?,
                     Err(e) => {
                         let _ = stdout.flush();
                         return Err(USimpleError::new(
@@ -615,9 +622,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    stdout
-        .flush()
-        .map_err(|e| USimpleError::new(1, translate!("date-error-write", "error" => e)))?;
+    stdout.flush().map_err(DateError::Write)?;
     Ok(())
 }
 
@@ -706,11 +711,11 @@ pub fn uu_app() -> Command {
                 .value_name("STRING")
                 .allow_hyphen_values(true)
                 .help({
-                    #[cfg(not(any(target_os = "macos", target_os = "redox")))]
+                    #[cfg(not(any(target_vendor = "apple", target_os = "redox")))]
                     {
                         translate!("date-help-set")
                     }
-                    #[cfg(target_os = "macos")]
+                    #[cfg(target_vendor = "apple")]
                     {
                         translate!("date-help-set-macos")
                     }
@@ -1039,8 +1044,12 @@ fn resolve_tz_abbreviation(word: &str) -> Option<TimeZone> {
 /// (e.g. "10:30 EST").
 ///
 /// If a trailing abbreviation is found and the rest of the string is a parsable
-/// date, returns `Some(Zoned)`. Returns `None` if no abbreviation is detected or
-/// if parsing fails, indicating that standard parsing should be attempted.
+/// date that could still legally take a timezone, returns `Some(Zoned)`.
+///
+/// Returns `None` when no abbreviation is detected, when parsing fails, or when
+/// the remainder already carries zone information or cannot take a zone at all
+/// (GNU `date` rejects those). In every `None` case the caller should fall back
+/// to standard parsing, which reports the error.
 fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Option<Zoned> {
     let s = date_str.as_ref();
 
@@ -1050,21 +1059,32 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Optio
 
     let date_part = s.trim_end_matches(last_word).trim();
 
-    // Reject inputs that specify a timezone twice, e.g. "EST EST" or "EST PST":
-    // GNU `date` considers these invalid. If what remains after stripping the
-    // trailing abbreviation is itself a bare timezone abbreviation, don't rescue
-    // it here; let the standard parser reject the whole string.
-    if date_part
-        .split_whitespace()
-        .last()
-        .is_some_and(|w| resolve_tz_abbreviation(w).is_some())
-    {
+    // GNU rejects "@0 EST": a timestamp cannot take a timezone.
+    if date_part.starts_with('@') {
         return None;
     }
 
     // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT.
     let parsed = parse_datetime::parse_datetime_at_date(now.clone(), date_part).ok()?;
-    let zoned = parsed.into_zoned()?.datetime().to_zoned(tz).ok()?;
+    let zoned = parsed.into_zoned()?;
+
+    // `parse_datetime` returns the zone the input named, or `now`'s when it named
+    // none, so a mismatch means `date_part` carries one of its own.
+    if zoned.time_zone() != now.time_zone() {
+        return None;
+    }
+
+    // That check cannot see a zone whose offset equals `now`'s ("12:00 UTC EST"
+    // under `-u`). Gated so the common case stays at one parse: `-f` runs this
+    // once per line.
+    let names_zone = date_part.contains('+')
+        || date_part.contains(|c: char| c.is_ascii_alphabetic())
+        || date_part.split_whitespace().any(|w| w.starts_with('-'));
+    if names_zone {
+        parse_datetime::parse_datetime_at_date(now.clone(), format!("{date_part} EST")).ok()?;
+    }
+
+    let zoned = zoned.datetime().to_zoned(tz).ok()?;
 
     // The trailing abbreviation only describes the *input* timezone. For display,
     // re-zone to the system timezone (i.e. `now`'s zone, which is UTC under `-u`).
@@ -1226,7 +1246,7 @@ fn convert_for_set(date: Zoned, utc: bool) -> Zoned {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 fn set_system_datetime(_date: Zoned) -> UResult<()> {
     Err(USimpleError::new(
         1,
@@ -1242,7 +1262,7 @@ fn set_system_datetime(_date: Zoned) -> UResult<()> {
     ))
 }
 
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "redox")))]
 /// System call to set date (unix).
 /// See here for more:
 /// `<https://doc.rust-lang.org/libc/i686-unknown-linux-gnu/libc/fn.clock_settime.html>`

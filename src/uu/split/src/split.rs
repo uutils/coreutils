@@ -58,7 +58,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // When using --filter, we write to a child process's stdin which may
     // close early. Disable SIGPIPE so we get EPIPE errors instead of
     // being terminated, allowing graceful handling of broken pipes.
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     if settings.filter.is_some() {
         let _ = uucore::signals::disable_pipe_errors();
     }
@@ -1149,7 +1149,9 @@ fn n_chunks_by_line(
         let num_line_bytes = bytes.len() as u64;
         num_bytes_written += num_line_bytes;
         let mut skipped = -1;
-        while num_bytes_should_be_written <= num_bytes_written {
+        // Cap at the last chunk to avoid an infinite loop when trailing chunks are
+        // zero-sized, and keep excess input from indexing past out_files.
+        while chunk_number < num_chunks && num_bytes_should_be_written <= num_bytes_written {
             num_bytes_should_be_written +=
                 chunk_size_base + (chunk_size_reminder > chunk_number) as u64;
             chunk_number += 1;

@@ -7,10 +7,7 @@
 
 use std::os::unix::fs::PermissionsExt;
 
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -187,10 +184,7 @@ fn test_mknod_mode_comma_separated() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mknod_selinux() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -221,10 +215,7 @@ fn test_mknod_selinux() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mknod_selinux_invalid() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -251,10 +242,7 @@ fn test_mknod_selinux_invalid() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mknod_selinux_invalid_cleanup() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

@@ -162,7 +162,9 @@ pub fn uu_app() -> Command {
         .about(translate!("truncate-about"))
         .override_usage(format_usage(&translate!("truncate-usage")))
         .after_help(translate!("truncate-after-help"))
-        .infer_long_args(true);
+        .infer_long_args(true)
+        // GNU lets a later -s override an earlier one.
+        .args_override_self(true);
     uucore::clap_localization::configure_localized_command(cmd)
         .arg(
             Arg::new(options::IO_BLOCKS)

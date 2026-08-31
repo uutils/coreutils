@@ -464,7 +464,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c54e03a951783e8b327515db3f2a2fd0e3bed362a96b066f341ce66ed49b4ead"
 dependencies = [
  "data-encoding",
- "syn 2.0.119",
+ "syn 3.0.3",
 ]
 
 [[package]]
@@ -1353,9 +1353,9 @@ checksum = "1a80800c0488c3a21695ea981a54918fbb37abf04f4d0720c453632255e2ff0e"
 
 [[package]]
 name = "parse_datetime"
-version = "0.15.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f15dc0ed203652fed0fc0e2b4de76bca160565afe16507973df55e6407b84353"
+checksum = "503fd4c8b0685e5eb32a8276533611f63e3b44768e9e8724e73f6852c2542f82"
 dependencies = [
  "jiff",
  "num-traits",
@@ -1730,18 +1730,18 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.19"
+version = "2.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09a43598840e33d5b0331f38c5e30d13bb11c11210a4b58f0d9b18a5a5eefcd9"
+checksum = "ec86235f5fcc2a73650310756d2ac5b138a5780bbbdfae3eeccec992c435ba4f"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.19"
+version = "2.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43cbfe0cf76104d42a574802844187e84a305e531ed54455f11fbde0f10541cd"
+checksum = "bc04cd3e1236dd4a98afca4569f2deb3f120e5422a4023be2cb683f8486292af"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1839,7 +1839,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uu_checksum_common"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1848,7 +1848,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cksum"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1858,7 +1858,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cut"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "bstr",
  "clap",
@@ -1869,7 +1869,7 @@ dependencies = [
 
 [[package]]
 name = "uu_date"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1880,13 +1880,14 @@ dependencies = [
  "libc",
  "parse_datetime",
  "rustix",
+ "thiserror",
  "uucore",
  "windows-sys",
 ]
 
 [[package]]
 name = "uu_dirname"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1895,7 +1896,7 @@ dependencies = [
 
 [[package]]
 name = "uu_echo"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1904,7 +1905,7 @@ dependencies = [
 
 [[package]]
 name = "uu_env"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1916,7 +1917,7 @@ dependencies = [
 
 [[package]]
 name = "uu_expr"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1929,7 +1930,7 @@ dependencies = [
 
 [[package]]
 name = "uu_printf"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1938,7 +1939,7 @@ dependencies = [
 
 [[package]]
 name = "uu_seq"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "bigdecimal",
  "clap",
@@ -1951,7 +1952,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sort"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "bigdecimal",
  "clap",
@@ -1972,7 +1973,7 @@ dependencies = [
 
 [[package]]
 name = "uu_split"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1984,7 +1985,7 @@ dependencies = [
 
 [[package]]
 name = "uu_test"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1996,7 +1997,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tr"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "bytecount",
  "clap",
@@ -2007,7 +2008,7 @@ dependencies = [
 
 [[package]]
 name = "uu_wc"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "bytecount",
  "clap",
@@ -2021,7 +2022,7 @@ dependencies = [
 
 [[package]]
 name = "uucore"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "base64-simd",
  "bigdecimal",
@@ -2066,7 +2067,6 @@ dependencies = [
  "unit-prefix",
  "uucore_procs",
  "wild",
- "winapi-util",
  "windows-sys",
  "z85",
 ]
@@ -2097,7 +2097,7 @@ dependencies = [
 
 [[package]]
 name = "uucore_procs"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2105,7 +2105,7 @@ dependencies = [
 
 [[package]]
 name = "uufuzz"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "console",
  "rand",
@@ -2185,15 +2185,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3131afc8c575281e1e80f36ed6a092aa502c08b18ed7524e86fbbb12bb410e1"
 dependencies = [
  "glob",
-]
-
-[[package]]
-name = "winapi-util"
-version = "0.1.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
-dependencies = [
- "windows-sys",
 ]
 
 [[package]]

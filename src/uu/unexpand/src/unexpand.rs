@@ -10,11 +10,10 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Read, Stdin, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
-use std::path::Path;
 use thiserror::Error;
 use uucore::char_width::char_info_at;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::error::{FromIo, UError, UResult, set_exit_code};
 use uucore::translate;
 use uucore::{format_usage, show};
 
@@ -48,7 +47,8 @@ fn parse_tab_num(word: &str, allow_zero: bool) -> Result<usize, ParseError> {
 }
 
 fn parse_tabstops(s: &str) -> Result<TabConfig, ParseError> {
-    let words = s.split(',');
+    // GNU accepts a blank (space or tab) or a comma as tab-list separators.
+    let words = s.split([' ', '\t', ',']);
 
     let mut nums = Vec::new();
     let mut increment_size: Option<usize> = None;
@@ -296,20 +296,24 @@ impl Read for Input {
 }
 
 fn open(path: &OsString) -> UResult<BufReader<Input>> {
-    let filename = Path::new(path);
-    if filename.is_dir() {
-        Err(USimpleError::new(
-            1,
-            translate!("unexpand-error-is-directory", "path" => filename.maybe_quote()),
-        ))
-    } else if path == "-" {
-        Ok(BufReader::new(Input::Stdin(stdin())))
-    } else {
-        let f = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
-        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
-        let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
-        Ok(BufReader::new(Input::File(f)))
+    // some platforms show different read error
+    #[cfg(any(target_os = "wasi", windows))]
+    {
+        let filename = std::path::Path::new(path);
+        if filename.is_dir() {
+            return Err(uucore::error::USimpleError::new(
+                1,
+                translate!("unexpand-error-is-directory", "path" => filename.maybe_quote()),
+            ));
+        }
     }
+    if path == "-" {
+        return Ok(BufReader::new(Input::Stdin(stdin())));
+    }
+    let f = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+    let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
+    Ok(BufReader::new(Input::File(f)))
 }
 
 fn next_tabstop(tab_config: &TabConfig, col: usize) -> Option<usize> {

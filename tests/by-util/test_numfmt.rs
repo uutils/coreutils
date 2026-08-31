@@ -186,6 +186,26 @@ fn test_header_error_if_negative() {
 }
 
 #[test]
+fn test_reject_leading_plus_and_scientific_notation() {
+    // GNU numfmt rejects a leading '+' as an invalid number and rejects scientific
+    // notation as an invalid suffix; Rust's parsers accept both, so guard against it.
+    for input in ["+5", "+5K", "+1e-3"] {
+        new_ucmd!()
+            .arg("--from=auto")
+            .pipe_in(format!("{input}\n"))
+            .fails_with_code(2)
+            .stderr_is(format!("numfmt: invalid number: '{input}'\n"));
+    }
+    for input in ["1e-3", "1e+3", "5e-5", "1.0e-2", "-1e-5"] {
+        new_ucmd!()
+            .arg("--from=auto")
+            .pipe_in(format!("{input}\n"))
+            .fails_with_code(2)
+            .stderr_is(format!("numfmt: invalid suffix in input: '{input}'\n"));
+    }
+}
+
+#[test]
 fn test_negative() {
     new_ucmd!()
         .args(&["--from=si"])

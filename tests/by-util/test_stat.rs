@@ -52,6 +52,18 @@ fn test_fs_format() {
     ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
 }
 
+#[test]
+// `stat -f` is only implemented for these targets; elsewhere `fs_type` is
+// still `unimplemented!()`.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_fs_default_format_block_size_label() {
+    // GNU prints "Block size:", not "Block Size:".
+    new_ucmd!()
+        .args(&["-f", "/"])
+        .succeeds()
+        .stdout_contains("Block size:");
+}
+
 #[cfg(unix)]
 #[test]
 fn test_terse_normal_format() {
@@ -174,7 +186,7 @@ fn test_symlinks() {
     assert!(tested, "No symlink found to test in this environment");
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
 #[test]
 fn test_char() {
     // TODO: "(%t) (%x) (%w)" deviate from GNU stat for `character special file` on macOS
@@ -189,7 +201,7 @@ fn test_char() {
         "/dev/pts/ptmx",
         #[cfg(target_vendor = "apple")]
         "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s (/%T) %u %U %W %X %y %Y %z %Z",
-        #[cfg(any(target_os = "android", target_vendor = "apple"))]
+        #[cfg(any(target_vendor = "apple", target_os = "android"))]
         "/dev/ptmx",
     ];
     let ts = TestScenario::new(util_name!());
@@ -300,7 +312,7 @@ fn test_timestamp_format_before_epoch() {
         .stdout_is("-0.9 -0.877 -0.876543211 -0.9 -0.877 -0.876543211\n");
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
 #[test]
 fn test_date() {
     // Just test the date for the time 0.3 change
@@ -312,7 +324,7 @@ fn test_date() {
         "/bin/sh",
         #[cfg(target_vendor = "apple")]
         "%z",
-        #[cfg(any(target_os = "android", target_vendor = "apple"))]
+        #[cfg(any(target_vendor = "apple", target_os = "android"))]
         "/bin/sh",
     ];
     let ts = TestScenario::new(util_name!());
@@ -327,7 +339,7 @@ fn test_date() {
         "/dev/ptmx",
         #[cfg(target_vendor = "apple")]
         "%z",
-        #[cfg(any(target_os = "android", target_vendor = "apple"))]
+        #[cfg(any(target_vendor = "apple", target_os = "android"))]
         "/dev/ptmx",
     ];
     let ts = TestScenario::new(util_name!());
@@ -380,10 +392,10 @@ fn test_pipe_fifo() {
 #[cfg(all(
     unix,
     not(any(
+        target_vendor = "apple",
         target_os = "android",
         target_os = "freebsd",
-        target_os = "openbsd",
-        target_os = "macos"
+        target_os = "openbsd"
     ))
 ))]
 fn test_stdin_pipe_fifo1() {
@@ -408,7 +420,7 @@ fn test_stdin_pipe_fifo1() {
 
 // TODO(#7583): Re-enable on Mac OS X (and maybe Android)
 #[test]
-#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+#[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android"))))]
 fn test_stdin_pipe_fifo2() {
     // $ stat -
     // File: -
@@ -438,8 +450,8 @@ fn test_stdin_with_fs_option() {
 #[cfg(all(
     unix,
     not(any(
+        target_vendor = "apple",
         target_os = "android",
-        target_os = "macos",
         target_os = "freebsd",
         target_os = "openbsd"
     ))
@@ -464,7 +476,7 @@ fn test_stdin_redirect() {
 fn test_without_argument() {
     new_ucmd!()
         .fails()
-        .stderr_contains("missing operand\nTry 'stat --help' for more information.");
+        .stderr_contains("the following required arguments were not provided"); // clap provided message
 }
 
 #[test]
@@ -651,10 +663,7 @@ fn test_precision_splits_multibyte_char_in_value() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_stat_selinux() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;

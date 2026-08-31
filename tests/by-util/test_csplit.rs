@@ -670,8 +670,7 @@ fn test_skip_to_match_context_underflow() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%5%-10"])
         .fails()
-        .stdout_is("")
-        .stderr_is("csplit: '%5%-10': line number out of range\n");
+        .stderr_only("csplit: '%5%-10': line number out of range\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -681,8 +680,7 @@ fn test_skip_to_match_context_underflow() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%5%-10", "-k"])
         .fails()
-        .stdout_is("")
-        .stderr_is("csplit: '%5%-10': line number out of range\n");
+        .stderr_only("csplit: '%5%-10': line number out of range\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -1631,4 +1629,18 @@ fn test_create_error_reports_filename() {
     ucmd.args(&["input", "2"])
         .fails()
         .stderr_is("csplit: xx00: Permission denied\n");
+}
+
+#[test]
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
+fn test_csplit_dev_full_stdout() {
+    use std::fs::OpenOptions;
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    new_ucmd!()
+        .args(&["/etc/hosts", "1"])
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_is("csplit: No space left on device\n");
 }

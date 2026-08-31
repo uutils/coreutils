@@ -1158,6 +1158,20 @@ fn test_multiple_files() {
         .stdout_only_fixture("multiple_files.expected");
 }
 
+/// A file that does not end with a separator must not be fused onto the next file.
+#[test]
+fn test_unterminated_file_not_fused_across_chunk_boundary() {
+    // "a\nb\nc" is 5 bytes, so `-S 5b` puts the chunk boundary exactly at its EOF.
+    for buffer_size in ["1b", "2b", "3b", "4b", "5b", "6b", "7b", "8b", "16b"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("first.txt", "a\nb\nc");
+        at.write("second.txt", "z\n");
+        ucmd.args(&["-S", buffer_size, "first.txt", "second.txt"])
+            .succeeds()
+            .stdout_only("a\nb\nc\nz\n");
+    }
+}
+
 #[test]
 fn test_merge_interleaved() {
     new_ucmd!()
@@ -1232,6 +1246,25 @@ fn test_merge_write_error_does_not_panic() {
     }
 }
 
+// A read error must be reported with context and without the raw io::Error suffix.
+// It used to print `sort: Input/output error (os error 5)`.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_read_error_message() {
+    // Reading /proc/self/mem from offset 0 fails with EIO.
+    let result = new_ucmd!().arg("/proc/self/mem").fails_with_code(2);
+    result.no_stdout();
+    // The strerror text for EIO differs between C libraries: glibc says
+    // "Input/output error" while musl says "I/O error".
+    let stderr = result.stderr_str();
+    assert!(
+        stderr == "sort: read failed: Input/output error\n"
+            || stderr == "sort: read failed: I/O error\n",
+        "unexpected stderr: {stderr}"
+    );
+}
+
 #[test]
 fn test_merge_unique() {
     new_ucmd!()
@@ -1280,8 +1313,7 @@ fn test_pipe() {
     new_ucmd!()
         .pipe_in("one\ntwo\nfour")
         .succeeds()
-        .stdout_is("four\none\ntwo\n")
-        .stderr_is("");
+        .stdout_only("four\none\ntwo\n");
 }
 
 #[test]
@@ -1304,7 +1336,7 @@ fn test_check() {
             .arg(diagnose_arg)
             .arg("multiple_files.expected")
             .succeeds()
-            .stderr_is("");
+            .no_output();
     }
 }
 
@@ -1323,7 +1355,7 @@ fn test_check_silent() {
             .arg(silent_arg)
             .arg("check_fail.txt")
             .fails()
-            .stdout_is("");
+            .no_output();
         new_ucmd!()
             .arg(silent_arg)
             .arg("empty.txt")
@@ -1773,6 +1805,37 @@ fn test_separator_null() {
 }
 
 #[test]
+fn test_separator_attached_equals() {
+    // `-t=` must select `=` itself as the separator (clap strips a leading
+    // `=` from attached short-option values), matching GNU sort. #14120
+    new_ucmd!()
+        .args(&["-t=", "-k", "2"])
+        .pipe_in("a=b=c\nb=a=d\n")
+        .succeeds()
+        .stdout_only("b=a=d\na=b=c\n");
+}
+
+#[test]
+fn test_separator_attached_equals_double() {
+    // `-t==` selects the two-character separator `==`, which GNU rejects.
+    new_ucmd!()
+        .args(&["-t==", "-k", "2"])
+        .pipe_in("a=b=c\n")
+        .fails()
+        .stderr_contains("separator must be exactly one character long: '=='");
+}
+
+#[test]
+fn test_separator_attached_equals_multi_char() {
+    // `-t=a` selects the two-character separator `=a`, which GNU rejects.
+    new_ucmd!()
+        .args(&["-t=a", "-k", "2"])
+        .pipe_in("a=b=c\n")
+        .fails()
+        .stderr_contains("separator must be exactly one character long: '=a'");
+}
+
+#[test]
 fn test_output_is_input() {
     let input = "a\nb\nc\n";
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2112,7 +2175,7 @@ fn test_files0_from_two_entries_trailing_nul() {
 
 #[test]
 // Test files0-from with non-UTF-8 filenames
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_files0_from_non_utf8_content() {
     use std::os::unix::ffi::OsStringExt;
     let (at, mut ucmd) = at_and_ucmd!();

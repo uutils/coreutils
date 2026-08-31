@@ -5,18 +5,18 @@
 
 #[cfg(all(
     unix,
-    not(any(target_os = "macos", target_os = "linux", target_os = "android"))
+    not(any(target_vendor = "apple", target_os = "linux", target_os = "android"))
 ))]
 mod other_unix;
 #[cfg(all(
     unix,
-    not(any(target_os = "macos", target_os = "linux", target_os = "android"))
+    not(any(target_vendor = "apple", target_os = "linux", target_os = "android"))
 ))]
 pub(crate) use self::other_unix::copy_on_write;
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 mod macos;
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 pub(crate) use self::macos::copy_on_write;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -24,14 +24,14 @@ mod linux;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub(crate) use self::linux::copy_on_write;
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 mod windows;
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 pub(crate) use self::windows::copy_on_write;
 
-#[cfg(not(any(unix, target_os = "windows")))]
+#[cfg(not(any(unix, windows)))]
 mod other;
-#[cfg(not(any(unix, target_os = "windows")))]
+#[cfg(not(any(unix, windows)))]
 pub(crate) use self::other::copy_on_write;
 
 #[cfg(target_os = "wasi")]

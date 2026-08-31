@@ -40,7 +40,7 @@ enum ChmodError {
     PreserveRootSameAs(PathBuf),
     #[error("{}", translate!("chmod-error-permission-denied", "file" => _0.quote()))]
     PermissionDenied(PathBuf),
-    #[error("{}", translate!("chmod-error-new-permissions", "file" => _0.maybe_quote(), "actual" => _1.clone(), "expected" => _2.clone()))]
+    #[error("{}", translate!("chmod-error-new-permissions", "file" => _0.maybe_quote(), "actual" => _1, "expected" => _2))]
     NewPermissions(PathBuf, String, String),
     #[error("{}", translate!("chmod-error-changing-permissions", "file" => _0.quote(), "err" => strip_errno(_1)))]
     ChangingPermissions(PathBuf, std::io::Error),
@@ -146,12 +146,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let verbose = matches.get_flag(options::VERBOSE);
     let preserve_root = matches.get_flag(options::PRESERVE_ROOT);
     let fmode = match matches.get_one::<OsString>(options::REFERENCE) {
-        Some(fref) => match fs::metadata(fref) {
-            Ok(meta) => Some(meta.mode() & 0o7777),
-            Err(_) => {
-                return Err(ChmodError::CannotStat(fref.into()).into());
-            }
-        },
+        Some(fref) => Some(
+            fs::metadata(fref)
+                .map(|meta| meta.mode() & 0o7777)
+                .map_err(|_| ChmodError::CannotStat(fref.into()))?,
+        ),
         None => None,
     };
 
@@ -875,44 +874,34 @@ impl Chmoder {
         let (new_mode, naively_expected_new_mode) =
             self.calculate_new_mode(fperm, file.is_dir())?;
 
-        // Determine how to apply the permissions
-        if let Some(mode) = self.fmode {
-            // A symlink reached without dereferencing (for example one met while
-            // walking a `-R` tree) must be left alone: chmod(2) follows the link,
-            // so changing it would change the mode of the referent, which can live
-            // outside the tree. The symbolic/numeric path below already skips it.
-            if file.is_symlink() && !dereference {
-                if self.verbose {
-                    Self::print_neither_changed(file.into())?;
-                }
-            } else {
-                self.change_file(fperm, mode, file)?;
+        // A symlink reached without dereferencing (for example one met while
+        // walking a `-R` tree) must be left alone: chmod(2) follows the link,
+        // so changing it would change the mode of the referent, which can live
+        // outside the tree. On most Unix systems, symlink permissions are
+        // ignored by the kernel anyway, so changing them has no effect.
+        if file.is_symlink() && !dereference {
+            if self.verbose {
+                Self::print_neither_changed(file.into())?;
             }
         } else {
-            // Special handling for symlinks when not dereferencing
-            if file.is_symlink() && !dereference {
-                // TODO: On most Unix systems, symlink permissions are ignored by the kernel,
-                // so changing them has no effect. We skip this operation for compatibility.
-                // Note that "chmod without dereferencing" effectively does nothing on symlinks.
-                if self.verbose {
-                    Self::print_neither_changed(file.into())?;
-                }
-            } else {
-                self.change_file(fperm, new_mode, file)?;
-            }
-            // A bare mode such as `-w` is umask-relative, so the umask can keep permissions that
-            // the user asked to drop. GNU reports that as an error, but only when the mode was
-            // written in the option-like form (`chmod -w f`), where it doubles as a hint that the
-            // argument was consumed as a mode. After `--` the operand is unambiguous and GNU stays
-            // silent, so the diagnostic is suppressed here too.
-            if self.option_like_mode && (new_mode & !naively_expected_new_mode) != 0 {
-                return Err(ChmodError::NewPermissions(
-                    file.into(),
-                    display_permissions_unix(new_mode, false),
-                    display_permissions_unix(naively_expected_new_mode, false),
-                )
-                .into());
-            }
+            self.change_file(fperm, self.fmode.unwrap_or(new_mode), file)?;
+        }
+
+        // A bare mode such as `-w` is umask-relative, so the umask can keep permissions that
+        // the user asked to drop. GNU reports that as an error, but only when the mode was
+        // written in the option-like form (`chmod -w f`), where it doubles as a hint that the
+        // argument was consumed as a mode. After `--` the operand is unambiguous and GNU stays
+        // silent, so the diagnostic is suppressed here too.
+        if self.fmode.is_none()
+            && self.option_like_mode
+            && (new_mode & !naively_expected_new_mode) != 0
+        {
+            return Err(ChmodError::NewPermissions(
+                file.into(),
+                display_permissions_unix(new_mode, false),
+                display_permissions_unix(naively_expected_new_mode, false),
+            )
+            .into());
         }
 
         Ok(())

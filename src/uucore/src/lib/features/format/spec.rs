@@ -343,7 +343,8 @@ impl Spec {
         &self,
         mut writer: impl Write,
         args: &mut FormatArguments,
-    ) -> Result<(), FormatError> {
+    ) -> Result<ControlFlow<()>, FormatError> {
+        let mut control_flow = ControlFlow::Continue(());
         match self {
             Self::Char {
                 width,
@@ -391,7 +392,9 @@ impl Spec {
                     match c.write(&mut parsed)? {
                         ControlFlow::Continue(()) => {}
                         ControlFlow::Break(()) => {
-                            // TODO: This should break the _entire execution_ of printf
+                            // A `\c` inside the argument stops output for the
+                            // rest of the printf invocation, not just this spec.
+                            control_flow = ControlFlow::Break(());
                             break;
                         }
                     }
@@ -496,7 +499,8 @@ impl Spec {
                 .fmt(writer, &f)
                 .map_err(FormatError::IoError)
             }
-        }
+        }?;
+        Ok(control_flow)
     }
 }
 
@@ -551,12 +555,29 @@ fn write_padded(
 
     if left {
         writer.write_all(text)?;
-        write!(writer, "{: <padlen$}", "")
+        write_spaces(&mut writer, padlen)
     } else {
-        write!(writer, "{: >padlen$}", "")?;
+        write_spaces(&mut writer, padlen)?;
         writer.write_all(text)
     }
     .map_err(FormatError::IoError)
+}
+
+/// Write `n` space bytes directly to `writer`.
+///
+/// Unlike `write!(writer, "{: <n$}", "")`, this does not feed `n` into Rust's
+/// dynamic-width formatting, which panics with "Formatting argument out of
+/// range" once the width exceeds `u16::MAX`. A `%s`/`%c` field width above that
+/// bound is valid input for `printf`, so it must not panic (#12593, #12900).
+fn write_spaces(mut writer: impl Write, n: usize) -> std::io::Result<()> {
+    const SPACES: [u8; 64] = [b' '; 64];
+    let mut remaining = n;
+    while remaining > 0 {
+        let chunk = remaining.min(SPACES.len());
+        writer.write_all(&SPACES[..chunk])?;
+        remaining -= chunk;
+    }
+    Ok(())
 }
 
 /// Check for a number ending with a '$'

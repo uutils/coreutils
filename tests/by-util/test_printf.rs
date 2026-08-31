@@ -440,6 +440,19 @@ fn sub_min_width_negative() {
 }
 
 #[test]
+fn sub_string_char_width_above_u16_max_no_panic() {
+    // A %s/%c field width above u16::MAX must not panic (#12593, #12900).
+    new_ucmd!()
+        .args(&["%100000c", "A"])
+        .succeeds()
+        .stdout_only(format!("{}A", " ".repeat(99999)));
+    new_ucmd!()
+        .args(&["%-100000s", "hi"])
+        .succeeds()
+        .stdout_only(format!("hi{}", " ".repeat(99998)));
+}
+
+#[test]
 fn sub_str_max_chars_input() {
     new_ucmd!()
         .args(&["hello %7.2s", "world"])
@@ -658,6 +671,16 @@ fn stop_after_additional_escape() {
         .args(&["A%sC\\cD%sF", "B", "E"])
         .succeeds()
         .stdout_only("ABC");
+}
+
+#[test]
+fn stop_after_additional_escape_in_b_string() {
+    // A `\c` inside a %b argument must stop the entire invocation, not just
+    // that argument's own expansion.
+    new_ucmd!()
+        .args(&["A%bB\\n", "x\\cy"])
+        .succeeds()
+        .stdout_only("Ax");
 }
 
 #[test]
@@ -1536,8 +1559,20 @@ fn test_large_width_format() {
             .args(&[format, arg])
             .fails_with_code(1)
             .stderr_contains("write error")
-            .stdout_is("");
+            .no_stdout();
     }
+}
+
+#[test]
+fn test_numeric_field_width_above_u16_max() {
+    const WIDTH: usize = 65_536;
+
+    let result = new_ucmd!().args(&["%65536d", "5"]).succeeds();
+    let stdout = result.stdout();
+
+    assert_eq!(stdout.len(), WIDTH);
+    assert!(stdout[..WIDTH - 1].iter().all(|&byte| byte == b' '));
+    assert_eq!(stdout[WIDTH - 1], b'5');
 }
 
 #[test]

@@ -32,9 +32,7 @@ pub(crate) fn copy_on_write(
     nofollow: bool,
 ) -> CopyResult<CopyDebug> {
     if sparse_mode != SparseMode::Auto {
-        return Err(translate!("cp-error-sparse-not-supported")
-            .to_string()
-            .into());
+        return Err(translate!("cp-error-sparse-not-supported").into());
     }
     let mut copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unknown,
@@ -54,7 +52,11 @@ pub(crate) fn copy_on_write(
     let raw_pfn = unsafe { libc::dlsym(libc::RTLD_NEXT, clonefile.as_ptr()) };
 
     let mut error = 0;
-    if !raw_pfn.is_null() {
+    // `--reflink=never` must not clone: clonefile(2) COW-shares the source's blocks and copies
+    // its metadata (including mtime), so skip it here and fall through to a normal byte copy
+    // below, matching GNU/BSD `cp` (and the Linux path's ReflinkMode::Never handling).
+    let attempt_clone = !raw_pfn.is_null() && reflink_mode != ReflinkMode::Never;
+    if attempt_clone {
         // Call clonefile(2).
         // Safety: Casting a C function pointer to a rust function value is one of the few
         // blessed uses of `transmute()`.
@@ -95,7 +97,7 @@ pub(crate) fn copy_on_write(
         }
     }
 
-    if raw_pfn.is_null() || error != 0 {
+    if !attempt_clone || error != 0 {
         // clonefile(2) is either not supported or it errored out (possibly because the FS does not
         // support COW).
         if reflink_mode == ReflinkMode::Always {

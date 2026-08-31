@@ -251,7 +251,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if files.is_empty() {
             sync()?;
         } else {
-            #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
+            #[cfg(any(target_os = "linux", target_os = "android", windows))]
             syncfs(&files)?;
         }
     } else if matches.get_flag(options::DATA) {
@@ -297,7 +297,7 @@ fn sync() -> UResult<()> {
     platform::do_sync()
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "android", windows))]
 fn syncfs(files: &[String]) -> UResult<()> {
     platform::do_syncfs(files)
 }

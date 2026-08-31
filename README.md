@@ -45,7 +45,10 @@ are treated as bugs.
 
 Our key objectives include:
 - Matching GNU's output (stdout and error code) exactly
-- Better error messages
+- Better error messages: at a terminal, a parse error is shown as a
+  compiler-style report with a caret under the argument at fault, where GNU
+  prints a single line (see [error diagnostics](docs/src/extensions-errors.md));
+  scripts and pipes still get the plain GNU message
 - Providing comprehensive internationalization support (UTF-8)
 - Improved performances
 - [Extensions](docs/src/extensions.md) when relevant (example: --progress)

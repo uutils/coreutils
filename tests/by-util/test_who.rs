@@ -111,7 +111,7 @@ fn test_runlevel() {
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
 
         #[cfg(not(target_os = "linux"))]
-        ts.ucmd().arg(opt).succeeds().stdout_is("");
+        ts.ucmd().arg(opt).succeeds().no_output();
     }
 }
 
@@ -187,7 +187,7 @@ fn test_users() {
         // TODO: `--users` sometimes differs from GNU's output on macOS (race condition?)
         // actual: "runner   console      Jun 23 06:37 00:34         196\n"
         // expect: "runner   console      Jun 23 06:37  old          196\n"
-        if cfg!(target_os = "macos") {
+        if cfg!(target_vendor = "apple") {
             v_actual.remove(5);
             v_expect.remove(5);
         }
@@ -221,7 +221,7 @@ fn test_dead() {
 #[test]
 #[ignore = "issue #3219"]
 fn test_all_separately() {
-    if cfg!(target_os = "macos") {
+    if cfg!(target_vendor = "apple") {
         // TODO: fix `-u`, see: test_users
         return;
     }
@@ -239,7 +239,7 @@ fn test_all_separately() {
 #[test]
 #[ignore = "issue #3219"]
 fn test_all() {
-    if cfg!(target_os = "macos") {
+    if cfg!(target_vendor = "apple") {
         // TODO: fix `-u`, see: test_users
         return;
     }

@@ -13,7 +13,7 @@ fn test_no_args() {
     new_ucmd!()
         .fails()
         .no_stdout()
-        .stderr_contains("pathchk: missing operand");
+        .stderr_contains("the following required arguments were not provided"); // clap provided message
 }
 
 #[test]

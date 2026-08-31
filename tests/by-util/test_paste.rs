@@ -510,3 +510,13 @@ fn test_dev_zero_closed_pipe() {
         .run()
         .fails_silently();
 }
+
+#[test]
+fn test_repeated_delimiter_takes_the_last() {
+    // GNU lets a later -d override an earlier one rather than erroring.
+    new_ucmd!()
+        .args(&["-d", ",", "-d", ":", "-s", "-"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is("a:b\n");
+}
