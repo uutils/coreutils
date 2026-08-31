@@ -20,9 +20,7 @@ use self_cell::self_cell;
 use uucore::error::{UResult, USimpleError, strip_errno};
 use uucore::translate;
 
-use crate::{
-    GeneralBigDecimalParseResult, GlobalSettings, Line, SortMode, numeric_str_cmp::NumInfo,
-};
+use crate::{GeneralBigDecimalParseResult, GlobalSettings, Line, numeric_str_cmp::NumInfo};
 
 const ALLOC_CHUNK_SIZE: usize = 64 * 1024;
 const MAX_TOKEN_BUFFER_BYTES: usize = 4 * 1024 * 1024;
@@ -312,7 +310,7 @@ fn parse_lines<'a>(
             .parsed_floats
             .reserve(estimated.saturating_mul(settings.precomputed.floats_per_line));
     }
-    if settings.mode == SortMode::Numeric {
+    if settings.precomputed.whole_line_numeric {
         line_data.line_num_floats.reserve(estimated);
     }
     let mut start = 0usize;
