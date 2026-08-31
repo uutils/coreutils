@@ -471,11 +471,14 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_empty_string() {
-        // Empty string should return 0
-        assert_eq!(parse("", false, 0).unwrap(), 0);
-        assert_eq!(parse("   ", false, 0).unwrap(), 0);
-        assert_eq!(parse(",,", false, 0).unwrap(), 0);
+    fn test_parse_empty_string_is_invalid() {
+        // GNU rejects an empty, all-whitespace, or comma-only mode string
+        // (verified against chmod/install/mkdir 9.11: `chmod '' f`,
+        // `chmod '   ' f`, `chmod ',' f`, `install -m '' ...`,
+        // `mkdir -m '' ...` all fail with "invalid mode").
+        assert!(parse("", false, 0).is_err());
+        assert!(parse("   ", false, 0).is_err());
+        assert!(parse(",,", false, 0).is_err());
     }
 
     #[test]

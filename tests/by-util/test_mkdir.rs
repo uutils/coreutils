@@ -111,7 +111,11 @@ fn test_mkdir_mode() {
 /// GNU says the same thing for any way `-m`'s mode can be malformed, and it
 /// is not the message chmod uses for the same failure: mkdir's has no
 /// colon before the quoted mode, and no "Try --help" hint.
+///
+/// `-m` is a no-op on Windows (`get_mode` always returns `None` there), so
+/// there is nothing to validate and nothing to fail on that platform.
 #[test]
+#[cfg(not(windows))]
 fn test_mkdir_invalid_mode_names_the_operand() {
     for mode in ["999", "", "a", "u?rwx"] {
         new_ucmd!()
@@ -124,7 +128,11 @@ fn test_mkdir_invalid_mode_names_the_operand() {
 /// A comma-separated mode with an empty clause -- leading, trailing, or
 /// doubled -- is not tolerated as a no-op clause: GNU rejects the whole
 /// thing, the same as it rejects an empty mode outright.
+///
+/// `-m` is a no-op on Windows (`get_mode` always returns `None` there), so
+/// there is nothing to validate and nothing to fail on that platform.
 #[test]
+#[cfg(not(windows))]
 fn test_mkdir_rejects_an_empty_clause() {
     for mode in ["u+rwx,", ",u+rwx", "u+rwx,,g+r"] {
         new_ucmd!()
