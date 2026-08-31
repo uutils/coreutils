@@ -107,6 +107,16 @@ pub fn parse_signed_num_max(src: &str) -> Result<SignedNum, ParseSizeError> {
         return Err(ParseSizeError::ParseFailure(src.to_string()));
     }
 
+    // GNU keeps a `+` in the value it reports back, but drops a `-`: `-5Ki`
+    // is reported as `5Ki`, while `+5Ki` is reported as `+5Ki`. Only `+`
+    // needs the unstripped string; a `-` (or no sign at all) keeps using
+    // `size_string` as before.
+    let reported = if sign == Some(SignPrefix::Plus) {
+        src
+    } else {
+        size_string
+    };
+
     // Remove leading zeros so size is interpreted as decimal, not octal
     let trimmed = size_string.trim_start_matches('0');
     let had_leading_zeros = trimmed.len() != size_string.len();
@@ -120,10 +130,10 @@ pub fn parse_signed_num_max(src: &str) -> Result<SignedNum, ParseSizeError> {
         // Otherwise "0K" would parse as 1KiB (bare suffix means 1).
         // A genuinely bare suffix with no digits at all (e.g. "kiB")
         // still parses as 1 of that unit.
-        parse_count(trimmed).map_err(|e| as_typed(e, size_string))?;
+        parse_count(trimmed).map_err(|e| as_typed(e, reported))?;
         0
     } else {
-        parse_count(trimmed).map_err(|e| as_typed(e, size_string))?
+        parse_count(trimmed).map_err(|e| as_typed(e, reported))?
     };
 
     Ok(SignedNum { value, sign })
@@ -144,10 +154,18 @@ pub fn parse_signed_num(src: &str) -> Result<SignedNum, ParseSizeError> {
         return Err(ParseSizeError::ParseFailure(src.to_string()));
     }
 
+    // GNU keeps a `+` in the value it reports back, but drops a `-`; see
+    // `parse_signed_num_max` for why.
+    let reported = if sign == Some(SignPrefix::Plus) {
+        src
+    } else {
+        size_string
+    };
+
     // Use parse_size_u64 but on failure, create our own error with the raw string
     // (without quotes) so callers can format it as needed
     let value = parse_size_u64(size_string)
-        .map_err(|_| ParseSizeError::ParseFailure(size_string.to_string()))?;
+        .map_err(|_| ParseSizeError::ParseFailure(reported.to_string()))?;
 
     Ok(SignedNum { value, sign })
 }
@@ -171,10 +189,13 @@ pub fn number_offset(src: &str) -> usize {
 ///
 /// Zeros are only removed so the number is read as decimal rather than octal,
 /// which is an implementation detail the message should not leak: GNU reports
-/// `tail: invalid number of bytes: '007z'`, not `'7z'`. The sign is left off,
-/// also matching GNU, which reports `-c-0fb` as `'0fb'`.
-fn as_typed(error: ParseSizeError, size_string: &str) -> ParseSizeError {
-    let quoted = format!("{}", size_string.quote());
+/// `tail: invalid number of bytes: '007z'`, not `'7z'`. `reported` is the
+/// caller's choice of what else to put back: GNU reports `-c-0fb` as `'0fb'`
+/// (the sign left off) but `-c+0fb` as `'+0fb'` (the sign kept), so the
+/// caller passes `src` or the sign-stripped string depending on which sign,
+/// if any, was found.
+fn as_typed(error: ParseSizeError, reported: &str) -> ParseSizeError {
+    let quoted = format!("{}", reported.quote());
     match error {
         // These two carry the quoted operand and nothing else, so it can be
         // swapped for the one that was actually typed.
@@ -290,6 +311,23 @@ mod tests {
         let result = parse_signed_num_max("-2M").unwrap();
         assert_eq!(result.value, 2 * 1024 * 1024);
         assert!(result.has_minus());
+    }
+
+    /// GNU keeps a `+` in the value an error reports, but drops a `-`: the
+    /// same value, `5Ki`, is invalid either way, but the message reads back
+    /// what the user typed only when they typed a `+`.
+    #[test]
+    fn test_error_keeps_plus_but_not_minus() {
+        let plus = parse_signed_num_max("+5Ki").unwrap_err().to_string();
+        assert!(plus.contains("+5Ki"), "{plus}");
+
+        let minus = parse_signed_num_max("-5Ki").unwrap_err().to_string();
+        assert!(!minus.contains('-'), "{minus}");
+        assert!(minus.contains("5Ki"), "{minus}");
+
+        let unsigned = parse_signed_num_max("5Ki").unwrap_err().to_string();
+        assert_eq!(plus.replace('+', ""), unsigned);
+        assert_eq!(minus, unsigned);
     }
 
     #[test]

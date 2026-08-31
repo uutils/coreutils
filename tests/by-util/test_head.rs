@@ -400,6 +400,28 @@ fn test_head_invalid_num() {
         .stderr_is("head: invalid number of bytes: '³'\n");
 }
 
+/// A `-` sign is dropped from the value an error reports, but a `+` is kept,
+/// as GNU does.
+#[test]
+fn test_invalid_num_keeps_a_plus_sign_but_not_a_minus() {
+    new_ucmd!()
+        .args(&["-c", "+5Ki", "emptyfile.txt"])
+        .fails()
+        .stderr_is("head: invalid number of bytes: '+5Ki'\n");
+    new_ucmd!()
+        .args(&["-n", "+5Ki", "emptyfile.txt"])
+        .fails()
+        .stderr_is("head: invalid number of lines: '+5Ki'\n");
+    new_ucmd!()
+        .args(&["-c", "-5Ki", "emptyfile.txt"])
+        .fails()
+        .stderr_is("head: invalid number of bytes: '5Ki'\n");
+    new_ucmd!()
+        .args(&["-n", "-5Ki", "emptyfile.txt"])
+        .fails()
+        .stderr_is("head: invalid number of lines: '5Ki'\n");
+}
+
 #[test]
 fn test_head_num_with_undocumented_sign_bytes() {
     // tail: '-' is not documented (8.32 man pages)

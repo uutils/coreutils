@@ -5328,3 +5328,25 @@ fn test_invalid_count_keeps_its_leading_zeros() {
         .fails_with_code(1)
         .stderr_is("tail: invalid number of bytes: '0fb'\n");
 }
+
+/// A `-` sign is dropped from the value an error reports, but a `+` is kept,
+/// as GNU does; `-n` and `-c` must agree, since they share the same parser.
+#[test]
+fn test_invalid_count_keeps_a_plus_sign_but_not_a_minus() {
+    new_ucmd!()
+        .args(&["-c", "+5Ki", "/dev/null"])
+        .fails_with_code(1)
+        .stderr_is("tail: invalid number of bytes: '+5Ki'\n");
+    new_ucmd!()
+        .args(&["-n", "+5Ki", "/dev/null"])
+        .fails_with_code(1)
+        .stderr_is("tail: invalid number of lines: '+5Ki'\n");
+    new_ucmd!()
+        .args(&["-c", "-5Ki", "/dev/null"])
+        .fails_with_code(1)
+        .stderr_is("tail: invalid number of bytes: '5Ki'\n");
+    new_ucmd!()
+        .args(&["-n", "-5Ki", "/dev/null"])
+        .fails_with_code(1)
+        .stderr_is("tail: invalid number of lines: '5Ki'\n");
+}

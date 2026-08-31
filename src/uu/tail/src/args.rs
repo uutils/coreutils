@@ -102,7 +102,7 @@ impl FilterMode {
                 }
                 Err(e) => {
                     let message =
-                        translate!("tail-error-invalid-number-of-lines", "arg" => arg.quote());
+                        translate!("tail-error-invalid-number-of-lines", "arg" => e.to_string());
                     return Err(raise(message, arg, 'n', "lines", &e));
                 }
             }
