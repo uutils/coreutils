@@ -34,7 +34,7 @@ pub fn operands(_args: &[OsString]) -> Option<Vec<OsString>> {
 // of this module that is not a no-op, so it is shared with the real one rather
 // than restated here.
 pub use crate::features::diagnostics_boundary::{
-    OptionValue, char_span, floor_boundary, list_items,
+    OptionValue, ValueOptions, char_span, floor_boundary, list_items,
 };
 
 /// Always the error itself: nothing is ever drawn to replace it.
@@ -84,6 +84,10 @@ impl Snapshot {
     }
 
     pub fn index_of_positional(&self, _n: usize) -> Option<usize> {
+        None
+    }
+
+    pub fn index_of_operand(&self, _n: usize, _options: &ValueOptions) -> Option<usize> {
         None
     }
 

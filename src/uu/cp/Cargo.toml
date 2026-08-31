@@ -43,7 +43,7 @@ selinux = { workspace = true, optional = true }
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["fs"] }
 
-[target.'cfg(target_os = "windows")'.dependencies]
+[target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
   "Win32_Foundation",
   "Win32_Storage_FileSystem",
@@ -66,7 +66,7 @@ name = "cp_bench"
 harness = false
 
 [features]
-feat_selinux = ["selinux", "uucore/selinux"]
+selinux = ["dep:selinux", "uucore/selinux"]
 
 [lints]
 workspace = true

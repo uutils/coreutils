@@ -59,11 +59,10 @@ fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UR
         return Ok(());
     }
 
-    let handler_state = state.clone();
     if let Err(e) = ctrlc::set_handler(move || {
         // Load the latest lock/path snapshot so the handler cleans the active temp dir.
         let (lock, path) = {
-            let state = handler_state.lock().unwrap();
+            let state = state.lock().unwrap();
             (state.lock.clone(), state.path.clone())
         };
 

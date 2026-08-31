@@ -10,7 +10,7 @@
 
 use std::ffi::{OsStr, OsString};
 
-use uucore::diagnostics::Snapshot;
+use uucore::diagnostics::{Snapshot, ValueOptions};
 use uucore::ranges::RangeError;
 use uucore::translate;
 
@@ -47,79 +47,25 @@ pub fn render(args: &[OsString], format: &str, err: &FormatError) -> bool {
     )
 }
 
-/// Long options whose value can be a separate argument, and the short options
-/// that do the same. `--header` requires an `=`, so its value never is one.
-const VALUE_OPTIONS: &[&str] = &[
-    "delimiter",
-    "field",
-    "format",
-    "from",
-    "from-unit",
-    "invalid",
-    "padding",
-    "round",
-    "suffix",
-    "to",
-    "to-unit",
-    "unit-separator",
-];
-const VALUE_SHORTS: &[char] = &['d'];
-
-/// Whether `arg` is an option that takes the argument after it as its value.
-///
-/// `infer_long_args` is on, so an unambiguous abbreviation names an option just
-/// as its full spelling does; an ambiguous one never reaches here, clap having
-/// refused it first.
-fn takes_separate_value(arg: &str) -> bool {
-    if let Some(long) = arg.strip_prefix("--") {
-        if long.contains('=') {
-            return false;
-        }
-        return VALUE_OPTIONS.iter().any(|name| name.starts_with(long));
-    }
-    // In a run of short options, only the last one can carry the value.
-    arg.strip_prefix('-')
-        .and_then(|cluster| cluster.chars().next_back())
-        .is_some_and(|last| VALUE_SHORTS.contains(&last))
-}
-
-/// Index in `args` — program name included — of the `n`-th operand.
-///
-/// [`Snapshot::index_of`] would match the first argument with the operand's
-/// text, which may be the detached value of an earlier option rather than the
-/// operand itself, and [`Snapshot::index_of_positional`] would count that value
-/// as a positional. Options and the values they take are skipped here instead.
-fn index_of_operand(args: &[OsString], n: usize) -> Option<usize> {
-    let mut options_ended = false;
-    let mut skip_value = false;
-    let mut rank = 0;
-    for (index, arg) in args.iter().enumerate().skip(1) {
-        if skip_value {
-            skip_value = false;
-            continue;
-        }
-        if !options_ended {
-            if arg.as_encoded_bytes() == b"--" {
-                options_ended = true;
-                continue;
-            }
-            // A lone `-` is an operand, and so is an argument that is not
-            // UTF-8, which no option spelling can be.
-            if let Some(text) = arg.to_str()
-                && text.starts_with('-')
-                && text != "-"
-            {
-                skip_value = takes_separate_value(text);
-                continue;
-            }
-        }
-        if rank == n {
-            return Some(index);
-        }
-        rank += 1;
-    }
-    None
-}
+/// The options whose value can be a separate argument. `--header` requires an
+/// `=`, so its value never is one.
+const VALUE_OPTIONS: ValueOptions = ValueOptions {
+    shorts: &['d'],
+    longs: &[
+        "delimiter",
+        "field",
+        "format",
+        "from",
+        "from-unit",
+        "invalid",
+        "padding",
+        "round",
+        "suffix",
+        "to",
+        "to-unit",
+        "unit-separator",
+    ],
+};
 
 /// Render `message`, raised while converting `input` — the `n`-th number given
 /// on the command line — against `args`.
@@ -145,7 +91,9 @@ pub fn render_input(
     }
 
     let snapshot = Snapshot::with_program(args);
-    let Some(index) = index_of_operand(args, n).or_else(|| snapshot.index_of(OsStr::new(input)))
+    let Some(index) = snapshot
+        .index_of_operand(n, &VALUE_OPTIONS)
+        .or_else(|| snapshot.index_of(OsStr::new(input)))
     else {
         return false;
     };
@@ -204,11 +152,17 @@ pub fn render_field(args: &[OsString], fields: &str, err: &RangeError) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::index_of_operand;
+    use super::VALUE_OPTIONS;
     use std::ffi::OsString;
+    use uucore::diagnostics::Snapshot;
 
     fn args(args: &[&str]) -> Vec<OsString> {
         args.iter().map(OsString::from).collect()
+    }
+
+    /// The walk over `args` with numfmt's own option table.
+    fn index_of_operand(args: &[OsString], n: usize) -> Option<usize> {
+        Snapshot::with_program(args).index_of_operand(n, &VALUE_OPTIONS)
     }
 
     #[test]

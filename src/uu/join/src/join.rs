@@ -630,6 +630,13 @@ impl<'a> State<'a> {
                 return Ok(Some(line));
             }
 
+            // In Default mode the warning is only emitted when there are
+            // already unpaired lines, so skip the (potentially expensive)
+            // locale comparison on every line when no violation is possible yet.
+            if input.check_order == CheckOrder::Default && (!self.has_unpaired || self.has_failed) {
+                return Ok(Some(line));
+            }
+
             let diff = input.compare(self.get_current_key(), line.get_field(self.key));
 
             if diff == Ordering::Greater
@@ -797,7 +804,7 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
                     continue;
                 }
                 // `-o` has no long form.
-                let option = OptionValue::with_names(format.clone(), Some('o'), None);
+                let option = OptionValue::with_names(format, Some('o'), None);
                 // Each field carries its place in the value, so that the caret can
                 // take the one that is at fault out of a long list.
                 for (part, span) in uucore::diagnostics::list_items(format, &[' ', ',', '\t']) {
@@ -844,8 +851,11 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // The command line is kept for the caret in `-o` diagnostics, which needs
     // the list as typed.
-    let (matches, diag_args) =
-        uucore::clap_localization::handle_clap_result_with_diagnostics(uu_app(), args.collect())?;
+    let (matches, diag_args) = uucore::clap_localization::handle_clap_result_with_diagnostics(
+        uu_app(),
+        args.collect(),
+        1,
+    )?;
 
     let mut opts = CollatorOptions::default();
     opts.alternate_handling = Some(AlternateHandling::Shifted);
@@ -921,6 +931,7 @@ pub fn uu_app() -> Command {
             Arg::new("j")
                 .short('j')
                 .value_name("FIELD")
+                .allow_hyphen_values(true)
                 .help(translate!("join-help-j")),
         )
         .arg(
@@ -942,12 +953,14 @@ pub fn uu_app() -> Command {
             Arg::new("1")
                 .short('1')
                 .value_name("FIELD")
+                .allow_hyphen_values(true)
                 .help(translate!("join-help-1")),
         )
         .arg(
             Arg::new("2")
                 .short('2')
                 .value_name("FIELD")
+                .allow_hyphen_values(true)
                 .help(translate!("join-help-2")),
         )
         .arg(

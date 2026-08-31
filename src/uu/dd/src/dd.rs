@@ -88,7 +88,6 @@ struct Settings {
 ///
 /// When all instances are dropped the background thread will exit on the next interval.
 pub struct Alarm {
-    interval: Duration,
     trigger: Arc<AtomicU8>,
 }
 
@@ -109,7 +108,7 @@ impl Alarm {
             }
         });
 
-        Self { interval, trigger }
+        Self { trigger }
     }
 
     /// Manually trigger the alarm as a signal event
@@ -125,11 +124,6 @@ impl Alarm {
     /// by the closure returned from `manual_trigger_fn`
     pub fn get_trigger(&self) -> u8 {
         self.trigger.swap(ALARM_TRIGGER_NONE, Relaxed)
-    }
-
-    // Getter function for the configured interval duration
-    pub fn get_interval(&self) -> Duration {
-        self.interval
     }
 }
 
@@ -160,7 +154,7 @@ impl Num {
 
     fn to_bytes(self, block_size: u64) -> u64 {
         match self {
-            Self::Blocks(n) => n * block_size,
+            Self::Blocks(n) => n.saturating_mul(block_size),
             Self::Bytes(n) => n,
         }
     }
@@ -1572,8 +1566,11 @@ fn is_fifo(filename: &str) -> bool {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // The command line is kept for the caret in operand diagnostics.
-    let (matches, diag_args) =
-        uucore::clap_localization::handle_clap_result_with_diagnostics(uu_app(), args.collect())?;
+    let (matches, diag_args) = uucore::clap_localization::handle_clap_result_with_diagnostics(
+        uu_app(),
+        args.collect(),
+        1,
+    )?;
 
     let settings: Settings = Parser::new().parse_with_diagnostics(
         matches
@@ -1582,7 +1579,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         diag_args.as_deref(),
     )?;
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     if uucore::signals::stderr_was_closed() && settings.status != Some(StatusLevel::None) {
         return Err(USimpleError::new(1, "write error"));
     }

@@ -340,8 +340,8 @@ impl CmdResult {
     ///
     /// # Platform specific behavior
     ///
-    /// This assertion method is only available on unix systems.
-    #[cfg(unix)]
+    /// This assertion method is only available on unix systems, except for fuchsia.
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     #[track_caller]
     pub fn signal_name_is(&self, name: &str) -> &Self {
         use uucore::signals::signal_by_name_or_value;
@@ -997,7 +997,7 @@ pub fn get_root_path() -> &'static str {
 /// # Returns
 ///
 /// `true` if both paths have the same set of extended attributes, `false` otherwise.
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "openbsd"))))]
+#[cfg(all(unix, not(any(target_vendor = "apple", target_os = "openbsd"))))]
 pub fn compare_xattrs<P: AsRef<Path>>(path1: P, path2: P) -> bool {
     let get_sorted_xattrs = |path: P| {
         xattr::list(path)
@@ -3613,7 +3613,7 @@ mod tests {
         }
     }
 
-    #[cfg(all(unix, not(any(target_os = "macos", target_os = "openbsd"))))]
+    #[cfg(all(unix, not(any(target_vendor = "apple", target_os = "openbsd"))))]
     #[test]
     fn test_compare_xattrs() {
         use tempfile::tempdir;
@@ -3649,7 +3649,11 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn test_application_of_process_resource_limits_limited_file_size() {
-        let unit_size_bytes = if cfg!(target_os = "macos") { 1024 } else { 512 };
+        let unit_size_bytes = if cfg!(target_vendor = "apple") {
+            1024
+        } else {
+            512
+        };
 
         let ts = TestScenario::new("util");
         ts.cmd("sh")

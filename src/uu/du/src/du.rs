@@ -19,11 +19,11 @@ use std::os::windows::fs::OpenOptionsExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::sync::mpsc;
 use std::thread;
 use std::time::SystemTime;
 use thiserror::Error;
+use uucore::diagnostics::OptionValue;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
@@ -301,10 +301,29 @@ fn get_file_info(path: &Path, _metadata: &Metadata) -> Option<FileInfo> {
     result
 }
 
-fn read_block_size(s: Option<&str>) -> UResult<u64> {
+fn read_block_size(s: Option<&str>, diag_args: Option<&[OsString]>) -> UResult<u64> {
     if let Some(s) = s {
         parse_size_u64(s)
-            .map_err(|e| USimpleError::new(1, format_error_message(&e, s, options::BLOCK_SIZE)))
+            .and_then(|bytes| {
+                // A block size of zero is rejected here rather than by the
+                // caller, so that it goes through the caret path like every
+                // other bad SIZE.
+                if bytes == 0 {
+                    Err(ParseSizeError::ParseFailure(s.to_string()))
+                } else {
+                    Ok(bytes)
+                }
+            })
+            .map_err(|e| {
+                let message = format_error_message(&e, s, options::BLOCK_SIZE);
+                e.size_value_error(
+                    diag_args,
+                    &OptionValue::new(s, 'B', options::BLOCK_SIZE),
+                    0,
+                    &message,
+                    USimpleError::new(1, message.clone()),
+                )
+            })
     } else if let Some(bytes) =
         parse_block_size::block_size_from_env(&["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"]).found()
     {
@@ -813,7 +832,7 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
         if matches.get_flag(options::VERBOSE) {
             println!(
                 "{}",
-                translate!("du-verbose-adding-to-exclude-list", "pattern" => f.clone())
+                translate!("du-verbose-adding-to-exclude-list", "pattern" => f)
             );
         }
         let glob = parse_glob::from_str(&f).map_err(DuError::InvalidGlob)?;
@@ -987,18 +1006,15 @@ fn get_size_format_flag_arg_index_if_present(matches: &ArgMatches, arg: &str) ->
     }
 }
 
-fn parse_block_size_arg_or_default_fallback(matches: &ArgMatches) -> UResult<SizeFormat> {
-    let block_size_str = matches.get_one::<String>(options::BLOCK_SIZE);
-    let block_size = read_block_size(block_size_str.map(AsRef::as_ref))?;
-    if block_size == 0 {
-        return Err(io::Error::other(translate!("du-error-invalid-block-size-argument", "option" => options::BLOCK_SIZE, "value" => block_size_str.map_or("???BUG", |v| v).quote()))
-        .into());
-    }
-    Ok(SizeFormat::BlockSize(block_size))
-}
-
-fn parse_size_format(matches: &ArgMatches) -> UResult<SizeFormat> {
-    let block_size_value_or_default_fallback = parse_block_size_arg_or_default_fallback(matches)?;
+fn parse_size_format(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<SizeFormat> {
+    // `read_block_size` falls back to the environment and rejects a zero block
+    // size itself, so that the caret can point at the offending value.
+    let block_size_value_or_default_fallback = SizeFormat::BlockSize(read_block_size(
+        matches
+            .get_one::<String>(options::BLOCK_SIZE)
+            .map(AsRef::as_ref),
+        diag_args,
+    )?);
     let candidates = [
         (
             SizeFormat::BlockSize(1),
@@ -1037,7 +1053,13 @@ fn parse_size_format(matches: &ArgMatches) -> UResult<SizeFormat> {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    // The arguments are kept for the caret in SIZE diagnostics, which echoes
+    // the command line.
+    let (matches, diag_args) = uucore::clap_localization::handle_clap_result_with_diagnostics(
+        uu_app(),
+        args.collect(),
+        1,
+    )?;
 
     let summarize = matches.get_flag(options::SUMMARIZE);
 
@@ -1079,7 +1101,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .map_or(MetadataTimeField::Modification, |s| s.as_str().into())
     });
 
-    let size_format = parse_size_format(&matches)?;
+    let size_format = parse_size_format(&matches, diag_args.as_deref())?;
 
     let traversal_options = TraversalOptions {
         all: matches.get_flag(options::ALL),
@@ -1114,8 +1136,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         threshold: matches
             .get_one::<String>(options::THRESHOLD)
             .map(|s| {
-                Threshold::from_str(s).map_err(|e| {
-                    USimpleError::new(1, format_error_message(&e, s, options::THRESHOLD))
+                parse_threshold(s).map_err(|(e, size_at)| {
+                    let message = format_error_message(&e, s, options::THRESHOLD);
+                    e.size_value_error(
+                        diag_args.as_deref(),
+                        &OptionValue::new(s, 't', options::THRESHOLD),
+                        size_at,
+                        &message,
+                        USimpleError::new(1, message.clone()),
+                    )
                 })
             })
             .transpose()?,
@@ -1541,24 +1570,31 @@ enum Threshold {
     Upper(u64),
 }
 
-impl FromStr for Threshold {
-    type Err = ParseSizeError;
+/// Parse a `--threshold` value, and say where its caret should start.
+///
+/// The parser only ever sees the part after the sign, so on failure the
+/// offset of the size within `s` comes back with the error: the caret has to
+/// count the sign back in. The one exception is the `-0` rejection below,
+/// which is about the sign and the zero together and so starts at 0.
+///
+/// The sign is stripped here rather than with
+/// `uucore::parser::parse_signed_num::number_offset`, which head and tail use
+/// for the same purpose: that one skips leading whitespace as well, and GNU du
+/// rejects a padded `--threshold` such as `'  -1K'`.
+fn parse_threshold(s: &str) -> Result<Threshold, (ParseSizeError, usize)> {
+    let offset = usize::from(s.starts_with(['-', '+']));
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let offset = usize::from(s.starts_with(&['-', '+'][..]));
+    let size = parse_size_u64(&s[offset..]).map_err(|e| (e, offset))?;
 
-        let size = parse_size_u64(&s[offset..])?;
-
-        if s.starts_with('-') {
-            // Threshold of '-0' excludes everything besides 0 sized entries
-            // GNU's du treats '-0' as an invalid argument
-            if size == 0 {
-                return Err(ParseSizeError::ParseFailure(s.to_string()));
-            }
-            Ok(Self::Upper(size))
-        } else {
-            Ok(Self::Lower(size))
+    if s.starts_with('-') {
+        // Threshold of '-0' excludes everything besides 0 sized entries
+        // GNU's du treats '-0' as an invalid argument
+        if size == 0 {
+            return Err((ParseSizeError::ParseFailure(s.to_string()), 0));
         }
+        Ok(Threshold::Upper(size))
+    } else {
+        Ok(Threshold::Lower(size))
     }
 }
 
@@ -1596,7 +1632,7 @@ mod test_du {
     fn test_read_block_size() {
         let test_data = [Some("1024".to_string()), Some("K".to_string()), None];
         for it in &test_data {
-            assert!(matches!(read_block_size(it.as_deref()), Ok(1024)));
+            assert!(matches!(read_block_size(it.as_deref(), None), Ok(1024)));
         }
     }
 }

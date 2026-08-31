@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (ToDO) ttyname filedesc
 
+#![cfg(not(target_os = "fuchsia"))]
+
 use clap::{Arg, ArgAction, Command};
 use std::io::{IsTerminal, Write};
 use uucore::error::{UResult, set_exit_code};
@@ -57,7 +59,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         set_exit_code(1);
         writeln!(stdout, "{}", translate!("tty-not-a-tty"))
     };
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     let write_result = {
         use std::os::windows::io::AsHandle;
         let stdin = std::io::stdin();
@@ -83,7 +85,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn file_name(handle: std::os::windows::io::BorrowedHandle) -> Option<String> {
     // This code is adapted from rust's standard library
     // https://github.com/rust-lang/rust/blob/0424cc16731e6141a18077f8ccde77ba148d9649/library/std/src/sys/io/is_terminal/windows.rs#L25

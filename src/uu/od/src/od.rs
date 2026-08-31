@@ -94,7 +94,7 @@ fn parse_bytes_option(
             Err(e) => {
                 let message =
                     format_error_message(&e, s, &option_display_name(args, option_name, short));
-                let option = OptionValue::with_names(s.clone(), short, Some(option_name));
+                let option = OptionValue::with_names(s, short, Some(option_name));
                 Err(e.size_value_error(
                     diag_args,
                     &option,
@@ -162,7 +162,7 @@ impl OdOptions {
                     1,
                     translate!(
                         "od-error-invalid-argument",
-                        "option" => width_display.clone(),
+                        "option" => width_display,
                         "value" => s.quote()
                     ),
                 ));
@@ -338,14 +338,16 @@ pub fn uu_app() -> Command {
                 .short('j')
                 .long(options::SKIP_BYTES)
                 .help(translate!("od-help-skip-bytes"))
-                .value_name("BYTES"),
+                .value_name("BYTES")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(options::READ_BYTES)
                 .short('N')
                 .long(options::READ_BYTES)
                 .help(translate!("od-help-read-bytes"))
-                .value_name("BYTES"),
+                .value_name("BYTES")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(options::ENDIAN)
