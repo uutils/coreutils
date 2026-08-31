@@ -36,15 +36,6 @@ jobs:
     - uses: Swatinem/rust-cache@v2
       with:
         key: "${{ matrix.job.target }}"
-    - name: Install WASI sysroot
-      run: |
-        # expr depends on oniguruma, a C library, so cross-compiling needs a WASI sysroot
-        WASI_SDK=wasi-sdk-25.0-x86_64-linux
-        curl -sSfL "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-25/${WASI_SDK}.tar.gz" | tar -xz -C "$HOME"
-        for abi in wasip1 wasip2; do
-          echo "CC_wasm32_${abi}=$HOME/${WASI_SDK}/bin/clang" >> $GITHUB_ENV
-          echo "AR_wasm32_${abi}=$HOME/${WASI_SDK}/bin/llvm-ar" >> $GITHUB_ENV
-        done
     - name: Install wasmtime
       run: |
         curl https://wasmtime.dev/install.sh -sSf | bash

@@ -33,9 +33,8 @@ expensive_tests = []
 # Enable with: `cargo build --release --features openssl`
 #
 # By default OpenSSL is built from source and statically linked (via the
-# `vendored` feature of the `openssl` crate), mirroring how `expr` links
-# oniguruma. To link against the system libcrypto/libssl dynamically instead,
-# set `OPENSSL_NO_VENDOR=1` at build time.
+# `vendored` feature of the `openssl` crate). To link against the system
+# libcrypto/libssl dynamically instead, set `OPENSSL_NO_VENDOR=1` at build time.
 #
 # The `?/openssl` entries propagate the choice into each standalone checksum
 # crate only when that crate is itself enabled, so disabling this feature
@@ -464,7 +463,11 @@ notify = { version = "8.2.0", features = ["macos_kqueue"] }
 num-bigint = "0.4.4"
 num-prime = "0.5.0"
 num-traits = "0.2.19"
-onig = { version = "~6.5.1", default-features = false }
+# Pinned to fancy-regex#272 to drop regex-automata/dfa-build (avoids binary bloat).
+fancy-regex = { git = "https://github.com/fancy-regex/fancy-regex", rev = "415eaabad8f1050e5097900c73c19ab790e54778", default-features = false, features = [
+  "std",
+  "unicode",
+] }
 os_display = "0.1.3"
 parse_datetime = "0.16.0"
 phf = "0.14.0"
