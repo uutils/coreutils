@@ -27,6 +27,7 @@ use walkdir::WalkDir;
 
 #[cfg(target_os = "linux")]
 use crate::features::fs::FileInformation;
+use crate::features::fs::path_is_root_dir;
 #[cfg(target_os = "linux")]
 use crate::features::safe_traversal::{DirFd, SymlinkBehavior};
 
@@ -37,7 +38,7 @@ use std::io::Result as IOResult;
 use std::os::unix::fs::MetadataExt;
 
 use std::os::unix::ffi::OsStrExt;
-use std::path::{MAIN_SEPARATOR, Path};
+use std::path::Path;
 
 #[derive(Debug, Error)]
 enum PermsError {
@@ -224,56 +225,37 @@ pub fn check_root(path: &Path, would_recurse_symlink: bool) -> bool {
 
 /// In the context of chown and chgrp, check whether we are in a "preserve-root" scenario.
 ///
-/// In particular, we want to prohibit further traversal only if:
+/// Prohibit further traversal only if:
 ///     (--preserve-root and -R present) &&
-///     (path canonicalizes to "/") &&
+///     (path *is* "/" by (st_dev, st_ino), so a bind mount of "/" counts too) &&
 ///     (
 ///         (path is a symlink && would traverse/recurse this symlink) ||
 ///         (path is not a symlink)
 ///     )
-/// The first clause is checked by the caller, the second and third clause is checked here.
+/// The first clause is checked by the caller, the second and third here.
 /// The caller has to evaluate -P/-H/-L into 'would_recurse_symlink'.
-/// Recall that canonicalization resolves both relative paths (e.g. "..") and symlinks.
 fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
-    // The third clause can be evaluated without any syscalls, so we do that first.
-    // If we would_recurse_symlink, then the clause is true no matter whether the path is a symlink
-    // or not. Otherwise, we only need to check here if the path can syntactically be a symlink:
-    if !would_traverse_symlink {
-        // We cannot check path.is_dir() here, as this would resolve symlinks,
-        // which we need to avoid here.
-        // All directory-ish paths match "*/", except ".", "..", "*/.", and "*/..".
-        let path_bytes = path.as_os_str().as_encoded_bytes();
-        let looks_like_dir = path_bytes == *b"."
-            || path_bytes == *b".."
-            || path_bytes.ends_with(&[MAIN_SEPARATOR as u8])
-            || path_bytes.ends_with(&[MAIN_SEPARATOR as u8, b'.'])
-            || path_bytes.ends_with(&[MAIN_SEPARATOR as u8, b'.', b'.']);
-
-        if !looks_like_dir {
-            return false;
-        }
+    // Compare by (st_dev, st_ino), not name: a bind mount of "/" is an ordinary
+    // directory whose path never resolves to "/", so the old syntactic "looks
+    // like a directory?" pre-filter waved it through. `would_traverse_symlink`
+    // says whether a symlink to "/" here would be followed (only then is it root).
+    //
+    // FIXME: TOCTOU bug! This stat runs at a different time than the recursion
+    // decision it guards; GNU avoids the window by reusing fts's `struct stat`.
+    if !path_is_root_dir(path, would_traverse_symlink) {
+        return false;
     }
 
-    // FIXME: TOCTOU bug! canonicalize() runs at a different time than WalkDir's recursion decision.
-    // However, we're forced to make the decision whether to warn about --preserve-root
-    // *before* even attempting to chown the path, let alone doing the stat inside WalkDir.
-    if let Ok(p) = path.canonicalize() {
-        let path_buf = path.to_path_buf();
-        if p.parent().is_none() {
-            if path_buf.as_os_str() == "/" {
-                show_error!("it is dangerous to operate recursively on '/'");
-            } else {
-                show_error!(
-                    "it is dangerous to operate recursively on {} (same as '/')",
-                    path_buf.quote()
-                );
-            }
-            show_error!("use --no-preserve-root to override this failsafe");
-            return true;
-        }
+    if path.as_os_str() == "/" {
+        show_error!("it is dangerous to operate recursively on '/'");
+    } else {
+        show_error!(
+            "it is dangerous to operate recursively on {} (same as '/')",
+            path.quote()
+        );
     }
-
-    false
+    show_error!("use --no-preserve-root to override this failsafe");
+    true
 }
 
 pub fn get_metadata(file: &Path, follow: bool) -> std::io::Result<Metadata> {
