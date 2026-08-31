@@ -65,6 +65,7 @@ pub fn uu_app() -> Command {
                 .value_name("LIST")
                 .default_value("\t")
                 .hide_default_value(true)
+                .allow_hyphen_values(true)
                 .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
