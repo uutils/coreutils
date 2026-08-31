@@ -49,6 +49,24 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_time_invalid_arg_message() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_time_invalid_arg_message";
+    at.touch(file);
+
+    ucmd.arg("--time=bogus")
+        .arg(file)
+        .fails_with_code(1)
+        .stderr_is(concat!(
+            "touch: invalid argument 'bogus' for '--time'\n",
+            "Valid arguments are:\n",
+            "  - 'atime', 'access', 'use'\n",
+            "  - 'mtime', 'modify'\n",
+            "Try 'touch --help' for more information.\n",
+        ));
+}
+
+#[test]
 fn test_touch_default() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_default_file";

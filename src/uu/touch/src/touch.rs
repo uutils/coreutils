@@ -9,7 +9,7 @@
 pub mod error;
 mod platform;
 
-use clap::builder::{PossibleValue, ValueParser};
+use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
 use filetime::FileTime;
 #[cfg(all(any(not(unix), target_os = "redox"), not(target_os = "wasi")))]
@@ -39,7 +39,6 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 #[cfg(target_os = "linux")]
 use uucore::libc;
-use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
 use uucore::{format_usage, show};
 
@@ -258,7 +257,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         no_deref,
         source,
         date,
-        change_times: determine_atime_mtime_change(&matches),
+        change_times: determine_atime_mtime_change(&matches)?,
         strict: false,
     };
 
@@ -342,11 +341,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::TIME)
                 .long(options::TIME)
                 .help(translate!("touch-help-time"))
-                .value_name("WORD")
-                .value_parser(ShortcutValueParser::new([
-                    PossibleValue::new("atime").alias("access").alias("use"),
-                    PossibleValue::new("mtime").alias("modify"),
-                ])),
+                .value_name("WORD"),
         )
         .arg(
             Arg::new(ARG_FILES)
@@ -537,33 +532,89 @@ fn touch_file(
     update_times(path, is_stdout, opts, atime, mtime)
 }
 
+/// The choices `--time`'s value accepts, in the order GNU lists them. Each
+/// choice's aliases are grouped on a single line in the error message the
+/// way GNU's touch does.
+const TIME_CHOICE_GROUPS: &[(&str, &[&str])] =
+    &[("atime", &["access", "use"]), ("mtime", &["modify"])];
+
+/// The canonical name (first element of its group) `value` names among
+/// `TIME_CHOICE_GROUPS`, accepting any unambiguous abbreviation the way
+/// GNU does (including one ambiguous only between aliases of the *same*
+/// choice, e.g. 'a' among 'atime'/'access').
+fn resolve_time_choice(value: &str) -> UResult<&'static str> {
+    let list = || {
+        TIME_CHOICE_GROUPS
+            .iter()
+            .map(|(canonical, aliases)| {
+                let names = std::iter::once(*canonical).chain(aliases.iter().copied());
+                format!(
+                    "  - {}",
+                    names
+                        .map(|name| format!("'{name}'"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let matches: Vec<(usize, &'static str)> = TIME_CHOICE_GROUPS
+        .iter()
+        .enumerate()
+        .flat_map(|(i, (canonical, aliases))| {
+            std::iter::once(*canonical)
+                .chain(aliases.iter().copied())
+                .map(move |name| (i, name))
+        })
+        .filter(|(_, name)| name.starts_with(value))
+        .collect();
+
+    if !value.is_empty()
+        && let Some(&(group, _)) = matches.iter().find(|(_, name)| *name == value)
+    {
+        return Ok(TIME_CHOICE_GROUPS[group].0);
+    }
+    match matches.first() {
+        Some(&(group, _)) if !value.is_empty() && matches.iter().all(|(g, _)| *g == group) => {
+            Ok(TIME_CHOICE_GROUPS[group].0)
+        }
+        Some(_) => Err(USimpleError::new(
+            1,
+            translate!("touch-error-ambiguous-time-choice", "arg" => value.to_string(), "choices" => list()),
+        )),
+        None => Err(USimpleError::new(
+            1,
+            translate!("touch-error-invalid-time-choice", "arg" => value.to_string(), "choices" => list()),
+        )),
+    }
+}
+
 /// Returns which of the times (access, modification) are to be changed.
 ///
 /// Note that "-a" and "-m" may be passed together; this is not an xor.
 /// - If `-a` is passed but not `-m`, only access time is changed
 /// - If `-m` is passed but not `-a`, only modification time is changed
 /// - If neither or both are passed, both times are changed
-fn determine_atime_mtime_change(matches: &ArgMatches) -> ChangeTimes {
+fn determine_atime_mtime_change(matches: &ArgMatches) -> UResult<ChangeTimes> {
     // If `--time` is given, Some(true) if equivalent to `-a`, Some(false) if equivalent to `-m`
     // If `--time` not given, None
-    let time_access_only = if matches.contains_id(options::TIME) {
-        matches
-            .get_one::<String>(options::TIME)
-            .map(|time| time.contains("access") || time.contains("atime") || time.contains("use"))
-    } else {
-        None
-    };
+    let time_access_only = matches
+        .get_one::<String>(options::TIME)
+        .map(|time| resolve_time_choice(time))
+        .transpose()?
+        .map(|canonical| canonical == "atime");
 
     let atime_only = matches.get_flag(options::ACCESS) || time_access_only.unwrap_or_default();
     let mtime_only = matches.get_flag(options::MODIFICATION) || !time_access_only.unwrap_or(true);
 
-    if atime_only && !mtime_only {
+    Ok(if atime_only && !mtime_only {
         ChangeTimes::AtimeOnly
     } else if mtime_only && !atime_only {
         ChangeTimes::MtimeOnly
     } else {
         ChangeTimes::Both
-    }
+    })
 }
 
 /// Updating file access and modification times based on user-specified options
@@ -960,6 +1011,7 @@ mod tests {
         assert_eq!(
             ChangeTimes::Both,
             determine_atime_mtime_change(&uu_app().try_get_matches_from(vec!["touch"]).unwrap())
+                .unwrap()
         );
         assert_eq!(
             ChangeTimes::Both,
@@ -968,6 +1020,7 @@ mod tests {
                     .try_get_matches_from(vec!["touch", "-a", "-m", "--time", "modify"])
                     .unwrap()
             )
+            .unwrap()
         );
         assert_eq!(
             ChangeTimes::AtimeOnly,
@@ -976,12 +1029,14 @@ mod tests {
                     .try_get_matches_from(vec!["touch", "--time", "access"])
                     .unwrap()
             )
+            .unwrap()
         );
         assert_eq!(
             ChangeTimes::MtimeOnly,
             determine_atime_mtime_change(
                 &uu_app().try_get_matches_from(vec!["touch", "-m"]).unwrap()
             )
+            .unwrap()
         );
     }
 

@@ -27,3 +27,11 @@ touch-error-windows-stdout-path-failed = GetFinalPathNameByHandleW failed with c
 touch-error-invalid-filetime = Source has invalid access or modification time: { $time }
 touch-error-reference-file-inaccessible = failed to get attributes of { $path }: { $error }
 touch-error-stdout-unsupported = touch - (stdout) is not supported on WASI
+touch-error-invalid-time-choice = invalid argument '{$arg}' for '--time'
+  Valid arguments are:
+  {$choices}
+  Try 'touch --help' for more information.
+touch-error-ambiguous-time-choice = ambiguous argument '{$arg}' for '--time'
+  Valid arguments are:
+  {$choices}
+  Try 'touch --help' for more information.
