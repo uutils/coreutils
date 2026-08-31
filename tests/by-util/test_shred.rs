@@ -23,12 +23,32 @@ fn test_invalid_arg() {
 
 #[test]
 fn test_invalid_remove_arg() {
-    new_ucmd!().arg("--remove=unknown").fails_with_code(1);
+    new_ucmd!()
+        .arg("--remove=unknown")
+        .fails_with_code(1)
+        .stderr_is(concat!(
+            "shred: invalid argument 'unknown' for '--remove'\n",
+            "Valid arguments are:\n",
+            "  - 'unlink'\n",
+            "  - 'wipe'\n",
+            "  - 'wipesync'\n",
+            "Try 'shred --help' for more information.\n",
+        ));
 }
 
 #[test]
 fn test_ambiguous_remove_arg() {
-    new_ucmd!().arg("--remove=wip").fails_with_code(1);
+    new_ucmd!()
+        .arg("--remove=wip")
+        .fails_with_code(1)
+        .stderr_is(concat!(
+            "shred: ambiguous argument 'wip' for '--remove'\n",
+            "Valid arguments are:\n",
+            "  - 'unlink'\n",
+            "  - 'wipe'\n",
+            "  - 'wipesync'\n",
+            "Try 'shred --help' for more information.\n",
+        ));
 }
 
 #[test]

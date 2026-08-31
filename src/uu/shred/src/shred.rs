@@ -20,7 +20,6 @@ use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parser::parse_size::parse_size_u64;
-use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
 use uucore::{format_usage, show_error, show_if_err};
 
@@ -102,6 +101,42 @@ enum RemoveMethod {
     Unlink,   // The same as 'None' + unlink the file
     Wipe,     // The same as 'Unlink' + obfuscate the file name before unlink
     WipeSync, // The same as 'Wipe' sync the file name changes
+}
+
+/// The choices `--remove`'s value accepts, in the order GNU lists them.
+const REMOVE_CHOICES: &[&str] = &[
+    options::remove::UNLINK,
+    options::remove::WIPE,
+    options::remove::WIPESYNC,
+];
+
+/// The choice `value` names among `REMOVE_CHOICES`, accepting any
+/// unambiguous abbreviation the way GNU does.
+fn resolve_remove_choice(value: &str) -> UResult<&'static str> {
+    let list = || {
+        REMOVE_CHOICES
+            .iter()
+            .map(|name| format!("  - '{name}'"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    if !value.is_empty()
+        && let Some(&exact) = REMOVE_CHOICES.iter().find(|name| **name == value)
+    {
+        return Ok(exact);
+    }
+    let mut named = REMOVE_CHOICES.iter().filter(|name| name.starts_with(value));
+    match (named.next(), named.next()) {
+        (Some(name), None) if !value.is_empty() => Ok(*name),
+        (Some(_), Some(_)) => Err(USimpleError::new(
+            1,
+            translate!("shred-ambiguous-remove-choice", "arg" => value.to_string(), "choices" => list()),
+        )),
+        _ => Err(USimpleError::new(
+            1,
+            translate!("shred-invalid-remove-choice", "arg" => value.to_string(), "choices" => list()),
+        )),
+    }
 }
 
 /// Iterates over all possible filenames of a certain length using [`NAME_CHARSET`] as an alphabet
@@ -253,6 +288,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         1,
     )?;
 
+    // GNU validates an option's own value (e.g. a bad --remove argument)
+    // during option parsing, before it ever looks at the operands, so this
+    // must run before the missing-file-operand check below.
+    let remove_method = if matches.get_flag(options::WIPESYNC) {
+        RemoveMethod::WipeSync
+    } else if let Some(value) = matches.get_one::<String>(options::REMOVE) {
+        match resolve_remove_choice(value)? {
+            options::remove::UNLINK => RemoveMethod::Unlink,
+            options::remove::WIPE => RemoveMethod::Wipe,
+            options::remove::WIPESYNC => RemoveMethod::WipeSync,
+            _ => unreachable!("resolve_remove_choice only returns a valid choice"),
+        }
+    } else {
+        RemoveMethod::None
+    };
+
     if !matches.contains_id(options::FILE) {
         return Err(UUsageError::new(
             1,
@@ -275,22 +326,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             File::open(filepath).map_err_context(|| filepath.clone())?,
         )),
         None => None,
-    };
-
-    let remove_method = if matches.get_flag(options::WIPESYNC) {
-        RemoveMethod::WipeSync
-    } else if matches.contains_id(options::REMOVE) {
-        match matches
-            .get_one::<String>(options::REMOVE)
-            .map(AsRef::as_ref)
-        {
-            Some(options::remove::UNLINK) => RemoveMethod::Unlink,
-            Some(options::remove::WIPE) => RemoveMethod::Wipe,
-            Some(options::remove::WIPESYNC) => RemoveMethod::WipeSync,
-            _ => unreachable!("should be caught by clap"),
-        }
-    } else {
-        RemoveMethod::None
     };
 
     let force = matches.get_flag(options::FORCE);
@@ -358,11 +393,6 @@ pub fn uu_app() -> Command {
             Arg::new(options::REMOVE)
                 .long(options::REMOVE)
                 .value_name("HOW")
-                .value_parser(ShortcutValueParser::new([
-                    options::remove::UNLINK,
-                    options::remove::WIPE,
-                    options::remove::WIPESYNC,
-                ]))
                 .num_args(0..=1)
                 .require_equals(true)
                 .default_missing_value(options::remove::WIPESYNC)

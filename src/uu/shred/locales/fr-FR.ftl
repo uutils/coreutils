@@ -44,6 +44,14 @@ shred-no-such-file-or-directory = {$file} : Aucun fichier ou répertoire de ce t
 shred-failed-to-open-for-writing-not-a-directory = {$file} : impossible d'ouvrir en écriture : N'est pas un répertoire
 shred-failed-to-open-for-writing-is-a-directory = {$file} : impossible d'ouvrir en écriture : Est un répertoire
 shred-not-a-file = {$file} : N'est pas un fichier
+shred-invalid-remove-choice = argument '{$arg}' invalide pour '--remove'
+  Les arguments valides sont :
+  {$choices}
+  Essayez 'shred --help' pour plus d'informations.
+shred-ambiguous-remove-choice = argument '{$arg}' ambigu pour '--remove'
+  Les arguments valides sont :
+  {$choices}
+  Essayez 'shred --help' pour plus d'informations.
 
 # Texte d'aide des options
 shred-force-help = modifier les permissions pour permettre l'écriture si nécessaire
