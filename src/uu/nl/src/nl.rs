@@ -329,7 +329,9 @@ pub fn uu_app() -> Command {
                 .long(options::LINE_INCREMENT)
                 .help(translate!("nl-help-line-increment"))
                 .value_name("NUMBER")
-                .value_parser(clap::value_parser!(i64)),
+                // show range of allowed value when -NUM is passed
+                .allow_hyphen_values(true)
+                .value_parser(clap::value_parser!(i64).range(0..)),
         )
         .arg(
             Arg::new(options::JOIN_BLANK_LINES)
@@ -337,6 +339,8 @@ pub fn uu_app() -> Command {
                 .long(options::JOIN_BLANK_LINES)
                 .help(translate!("nl-help-join-blank-lines"))
                 .value_name("NUMBER")
+                // show range of allowed value when -NUM is passed
+                .allow_hyphen_values(true)
                 .value_parser(clap::value_parser!(u64)),
         )
         .arg(
