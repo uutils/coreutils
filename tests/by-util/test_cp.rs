@@ -7834,6 +7834,52 @@ fn test_cp_preserve_context_root() {
     }
 }
 
+// Regression test for https://github.com/uutils/coreutils/issues/9105.
+// Absolute operands must not require resolving the current working directory.
+#[cfg(unix)]
+#[rstest]
+#[case::existing_target(true)]
+#[case::new_target(false)]
+fn test_cp_absolute_paths_from_deleted_cwd(#[case] target_exists: bool) {
+    use std::process::Command;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir_all("src/sub");
+    at.write("src/sub/file", "contents");
+    at.mkdir("deleted-cwd");
+    if target_exists {
+        at.mkdir("dst");
+    }
+
+    let source = at.plus("src");
+    let target = at.plus("dst");
+    let deleted_cwd = at.plus("deleted-cwd");
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg("cd \"$1\" && rmdir \"$1\" && exec \"$2\" \"$3\" -Ra --no-preserve=ownership \"$4\" \"$5\"")
+        .arg("sh")
+        .arg(&deleted_cwd)
+        .arg(&ts.bin_path)
+        .arg(&ts.util_name)
+        .arg(&source)
+        .arg(&target)
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "cp failed from a deleted cwd: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let copied_file = if target_exists {
+        target.join("src/sub/file")
+    } else {
+        target.join("sub/file")
+    };
+    assert_eq!(std::fs::read_to_string(copied_file).unwrap(), "contents");
+}
+
 // Test copying current directory (.) to an existing directory.
 // This tests the special case where we copy the current directory
 // to an existing directory, ensuring the directory name is properly
