@@ -1759,3 +1759,13 @@ fn test_columns_env_wrapping() {
         );
     }
 }
+
+#[test]
+#[cfg(test)]
+fn test_flags_retain_unknown_bits() {
+    new_ucmd!()
+        .args(&["--set-flags", "0x80000000"])
+        .succeeds()
+        .stdout_contains("0x80000000")
+        .stderr_does_not_contain("truncate");
+}
