@@ -1540,12 +1540,14 @@ pub fn uu_app() -> Command {
                 .short('c')
                 .long(options::FORMAT)
                 .help(translate!("stat-help-format"))
-                .value_name("FORMAT"),
+                .value_name("FORMAT")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(options::PRINTF)
                 .long(options::PRINTF)
                 .value_name("FORMAT")
+                .allow_hyphen_values(true)
                 .help(translate!("stat-help-printf")),
         )
         .arg(
