@@ -1446,6 +1446,20 @@ fn precision_format() {
 }
 
 #[test]
+fn suffix_format_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading suffix format passed as its own argument (not
+    // attached with `-b-%02d`/`=`) must not be mistaken for a new,
+    // unrecognized flag.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "10", "--suffix-format", "-%02d"])
+        .succeeds()
+        .stdout_only("18\n123\n");
+
+    assert_eq!(at.read("xx-00"), generate(1, 10));
+    assert_eq!(at.read("xx-01"), generate(10, 51));
+}
+
+#[test]
 fn zero_precision_format() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "10", "--suffix-format", "%.0d"])
