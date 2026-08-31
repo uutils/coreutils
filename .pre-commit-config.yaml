@@ -29,7 +29,7 @@ repos:
         args: [--config, .github/fluent_linter_config.yml, src/uu/]
 
   - repo: https://github.com/streetsidesoftware/cspell-cli
-    rev: v10.0.1
+    rev: v10.1.0
     hooks:
       - id: cspell
         # Pinned so the check does not depend on the node version a contributor
