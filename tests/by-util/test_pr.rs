@@ -1349,8 +1349,9 @@ fn test_optional_value_is_not_taken_from_the_next_argument() {
         "--number-l",
         "--sep-s",
     ] {
-        new_ucmd!()
-            .args(&["-t", flag, "f1"])
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("f1", "from_file\n");
+        ucmd.args(&["-t", flag, "f1"])
             .pipe_in("FROM_STDIN\n")
             .succeeds()
             .stdout_contains("from_file")
@@ -1358,8 +1359,9 @@ fn test_optional_value_is_not_taken_from_the_next_argument() {
     }
 
     // The attached spellings still carry their own value.
-    new_ucmd!()
-        .args(&["-t", "-n,3", "f1"])
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f1", "from_file\n");
+    ucmd.args(&["-t", "-n,3", "f1"])
         .succeeds()
         .stdout_contains(",from_file");
 }
