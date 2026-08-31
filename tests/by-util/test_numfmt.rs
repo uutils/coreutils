@@ -144,6 +144,19 @@ fn test_negative_padding() {
 }
 
 #[test]
+fn test_padding_too_large_fails_cleanly() {
+    let padding = if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
+        i32::MIN.to_string()
+    } else {
+        isize::MIN.to_string()
+    };
+    new_ucmd!()
+        .arg(format!("--padding={padding}"))
+        .fails()
+        .stderr_only("numfmt: memory exhausted\n");
+}
+
+#[test]
 fn test_header() {
     new_ucmd!()
         .args(&["--from=si", "--header=2"])
