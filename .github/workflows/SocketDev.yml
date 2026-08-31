@@ -1,0 +1,14 @@
+on: push
+
+jobs:
+  safe-install:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7.0.0
+
+      - uses: SocketDev/action@v1.3.1
+        with:
+          mode: firewall-free
+      # rust
+      - run: sfw cargo fetch
