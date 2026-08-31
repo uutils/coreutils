@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore dont SIGBREAK
+// spell-checker:ignore dont SIGBREAK SIGTTIN ttin
 
 use rstest::rstest;
 use std::time::Duration;
@@ -442,4 +442,15 @@ fn test_windows_command_cannot_invoke() {
     ts.ucmd()
         .args(&["1", ".\\not_executable.txt"])
         .fails_with_code(126);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_continue_terminal_job_ctrl_sigs() {
+    let name = util_name!();
+    let (ts, bin) = scenario_with_bin();
+    ts.cmd("/bin/sh")
+        .arg("-c")
+        .arg(format!("trap 'echo' SIGTTIN; {bin:?} {name} 2 /bin/cat"))
+        .timeout(Duration::from_secs(4));
 }
