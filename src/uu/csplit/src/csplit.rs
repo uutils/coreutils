@@ -680,6 +680,7 @@ pub fn uu_app() -> Command {
                 .short('b')
                 .long(options::SUFFIX_FORMAT)
                 .value_name("FORMAT")
+                .allow_hyphen_values(true)
                 .help(translate!("csplit-help-suffix-format")),
         )
         .arg(
