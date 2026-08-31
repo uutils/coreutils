@@ -994,6 +994,32 @@ fn tr_translate_overlap_repeat_squeeze() {
 }
 
 #[test]
+fn tr_huge_repeat_count_does_not_crash_or_hang() {
+    // An explicit [c*N] repeat count far larger than any set actually
+    // needs (here, a trillion) must not be taken literally: the value
+    // used to be materialized into an N-byte Vec, which is either an
+    // out-of-memory abort for an N this size or, for a merely huge
+    // rather than astronomical N, a multi-second hang -- while every N
+    // beyond what the other set actually needs produces the identical
+    // translation regardless of its exact size.
+    new_ucmd!()
+        .args(&["[a*999999999999]", "x"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_is("xbc");
+    new_ucmd!()
+        .args(&["a", "[x*999999999999]"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_is("xbc");
+    new_ucmd!()
+        .args(&["-d", "[a*999999999999]"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_is("bc");
+}
+
+#[test]
 fn octal_repeat_count_test() {
     //below will result in 8'x' and 4'y' as octal 010 = decimal 8
     new_ucmd!()

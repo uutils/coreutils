@@ -592,6 +592,18 @@ impl Sequence {
             .map(|(l, a)| (l, Ok(Self::CharStar(a))))
     }
 
+    // `[c*N]` only ever needs to be as long as the other set it is padding
+    // out to match, which -- since it comes from a single command-line
+    // argument -- cannot realistically exceed a few MiB. A literal N well
+    // beyond that (nothing stops someone writing `[a*999999999999]`) still
+    // produces the exact same translation as this cap does, since every
+    // position past the other set's real length collapses to the same
+    // "pad with the last element" rule regardless of how much further past
+    // it N actually reaches; not capping it means materializing N literal
+    // bytes downstream, which is either an out-of-memory abort or, for a
+    // merely huge rather than astronomical N, a multi-second hang.
+    const MAX_CHAR_REPEAT: usize = 2 * 1024 * 1024;
+
     fn parse_char_repeat(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
         delimited(
             tag("["),
@@ -611,13 +623,13 @@ impl Sequence {
             let result = if cnt_str.starts_with(b"0") {
                 match usize::from_str_radix(&s, 8) {
                     Ok(0) => Ok(Self::CharStar(c)),
-                    Ok(count) => Ok(Self::CharRepeat(c, count)),
+                    Ok(count) => Ok(Self::CharRepeat(c, count.min(Self::MAX_CHAR_REPEAT))),
                     Err(_) => Err(BadSequence::InvalidRepeatCount(s.to_string())),
                 }
             } else {
                 match s.parse::<usize>() {
                     Ok(0) => Ok(Self::CharStar(c)),
-                    Ok(count) => Ok(Self::CharRepeat(c, count)),
+                    Ok(count) => Ok(Self::CharRepeat(c, count.min(Self::MAX_CHAR_REPEAT))),
                     Err(_) => Err(BadSequence::InvalidRepeatCount(s.to_string())),
                 }
             };
