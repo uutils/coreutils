@@ -43,7 +43,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest , features: feat_os_unix }
+          - { os: ubuntu-24.04 , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -370,7 +370,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest }
+          - { os: ubuntu-24.04 }
     steps:
     - name: Initialize workflow variables
       id: vars
@@ -454,7 +454,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest }
+          - { os: ubuntu-24.04 }
     steps:
     - name: Initialize workflow variables
       id: vars
