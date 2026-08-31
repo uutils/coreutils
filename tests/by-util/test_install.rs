@@ -3057,3 +3057,34 @@ fn test_install_backup_custom_suffix_refuses() {
         .stderr_contains("might destroy source");
     assert_eq!(at.read("a.bak"), "source content");
 }
+
+#[test]
+fn test_install_d_into_root_parent_as_root() {
+    // Regression test for #13232: `install -D src /file` failed because the
+    // leading-directory trim stripped the root `/` down to an empty path, so
+    // install decided the parent was missing and the copy never happened. The
+    // fix stops the trim with one separator left, so `/` stays `/` (which
+    // exists) and the copy proceeds — matching GNU `install -D`. The
+    // destination's parent has to be the real root to reproduce, so this runs
+    // as root and is skipped otherwise, the same way
+    // `test_install_root_combined` is.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("source", "root-parent regression content");
+    let dest = "/uutils_install_d_root_parent_test";
+    // Clear any leftover so the exists() check is meaningful.
+    let _ = fs::remove_file(dest);
+
+    let args = &["-D", "-m644", "source", dest];
+    if let Ok(result) = run_ucmd_as_root(&ts, args) {
+        result.success();
+        assert!(fs::metadata(dest).is_ok(), "expected {dest} to be created");
+        assert_eq!(
+            fs::read_to_string(dest).unwrap(),
+            "root-parent regression content"
+        );
+    } else {
+        print!("Test skipped; requires root user");
+    }
+    let _ = fs::remove_file(dest);
+}
