@@ -746,7 +746,13 @@ fn test_whitespace_delimited_long_and_trimmed() {
     // Only `trimmed` is a valid value.
     new_ucmd!()
         .args(&["--whitespace-delimited=middle", "-f1"])
-        .fails_with_code(1);
+        .fails_with_code(1)
+        .stderr_is(concat!(
+            "cut: invalid argument 'middle' for '--whitespace-delimited'\n",
+            "Valid arguments are:\n",
+            "  - 'trimmed'\n",
+            "Try 'cut --help' for more information.\n",
+        ));
 }
 
 #[test]

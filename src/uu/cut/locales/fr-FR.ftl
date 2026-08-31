@@ -123,6 +123,14 @@ cut-error-invalid-field-value = valeur de champ invalide { $value }
 cut-error-invalid-position-value = position d'octet/caractère invalide { $value }
 cut-error-field-number-too-large = le numéro de champ { $value } est trop grand
 cut-error-position-too-large = le décalage d'octet/caractère { $value } est trop grand
+cut-error-invalid-whitespace-delimited-choice = argument '{ $arg }' invalide pour '--whitespace-delimited'
+  Les arguments valides sont :
+  { $choices }
+  Essayez 'cut --help' pour plus d'informations.
+cut-error-ambiguous-whitespace-delimited-choice = argument '{ $arg }' ambigu pour '--whitespace-delimited'
+  Les arguments valides sont :
+  { $choices }
+  Essayez 'cut --help' pour plus d'informations.
 
 # Étiquettes de diagnostic : ce que le caret désigne dans une liste d'intervalles
 cut-diag-label-zero-bound = le décompte commence à 1

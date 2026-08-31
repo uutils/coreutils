@@ -48,6 +48,14 @@ cut-error-invalid-field-value = invalid field value { $value }
 cut-error-invalid-position-value = invalid byte/character position { $value }
 cut-error-field-number-too-large = field number { $value } is too large
 cut-error-position-too-large = byte/character offset { $value } is too large
+cut-error-invalid-whitespace-delimited-choice = invalid argument '{ $arg }' for '--whitespace-delimited'
+  Valid arguments are:
+  { $choices }
+  Try 'cut --help' for more information.
+cut-error-ambiguous-whitespace-delimited-choice = ambiguous argument '{ $arg }' for '--whitespace-delimited'
+  Valid arguments are:
+  { $choices }
+  Try 'cut --help' for more information.
 
 # Diagnostic labels: what the caret points at in a list of ranges
 cut-diag-label-zero-bound = counting starts at 1

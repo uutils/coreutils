@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) delim foxjumping sourcefiles undelimited xacfoxjumping
 
 use bstr::io::BufReadExt;
-use clap::builder::{PossibleValue, ValueParser};
+use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
@@ -17,7 +17,6 @@ use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code, s
 use uucore::i18n::charmap::{Encoding, locale_encoding, mb_char_len};
 use uucore::line_ending::LineEnding;
 use uucore::os_str_as_bytes;
-use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 
 use self::searcher::Searcher;
 use matcher::{ExactMatcher, Matcher, MbExactMatcher, WhitespaceMatcher};
@@ -968,6 +967,37 @@ where
     );
 }
 
+/// The choices `--whitespace-delimited`'s value accepts.
+const WHITESPACE_DELIMITED_CHOICES: &[&str] = &["trimmed"];
+
+/// The choice `value` names among `WHITESPACE_DELIMITED_CHOICES`, accepting
+/// any unambiguous abbreviation the way GNU does -- including the empty
+/// string, which (like everywhere else here) is a prefix of every choice
+/// but, with only one choice to begin with, names it unambiguously.
+fn resolve_whitespace_delimited_choice(value: &str) -> UResult<&'static str> {
+    let list = || {
+        WHITESPACE_DELIMITED_CHOICES
+            .iter()
+            .map(|name| format!("  - '{name}'"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let mut named = WHITESPACE_DELIMITED_CHOICES
+        .iter()
+        .filter(|name| name.starts_with(value));
+    match (named.next(), named.next()) {
+        (Some(name), None) => Ok(*name),
+        (Some(_), Some(_)) => Err(USimpleError::new(
+            1,
+            translate!("cut-error-ambiguous-whitespace-delimited-choice", "arg" => value.to_string(), "choices" => list()),
+        )),
+        _ => Err(USimpleError::new(
+            1,
+            translate!("cut-error-invalid-whitespace-delimited-choice", "arg" => value.to_string(), "choices" => list()),
+        )),
+    }
+}
+
 /// Get delimiter and output delimiter from `-d`/`--delimiter` and `--output-delimiter` options respectively
 /// Allow either delimiter to have a value that is neither UTF-8 nor ASCII to align with GNU behavior
 fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter<'_>, Option<&[u8]>)> {
@@ -1065,6 +1095,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // `--whitespace-delimited[=trimmed]` (`-w`): the optional value selects trimming.
     let whitespace_trimmed = matches
         .get_one::<String>(options::WHITESPACE_DELIMITED)
+        .map(|value| resolve_whitespace_delimited_choice(value))
+        .transpose()?
         .is_some();
 
     let mode_arg = get_mode_arg(&matches)?;
@@ -1276,7 +1308,6 @@ pub fn uu_app() -> Command {
                 .long(options::WHITESPACE_DELIMITED)
                 .help(translate!("cut-help-whitespace-delimited"))
                 .value_name("trimmed")
-                .value_parser(ShortcutValueParser::new([PossibleValue::new("trimmed")]))
                 .num_args(0..=1)
                 .require_equals(true)
                 .action(ArgAction::Set),
