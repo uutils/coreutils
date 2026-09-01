@@ -38,19 +38,33 @@ mod sync;
 use sync as runner;
 
 /// If the output file occurs in the input files as well, copy the contents of the output file
-/// and replace its occurrences in the inputs with that copy.
+/// and replace its occurrences in the inputs with that copy. Merge mode also snapshots the first
+/// standard-input operand because it may be redirected from the output file.
 pub(super) fn replace_output_file_in_input_files(
     files: &mut [OsString],
     output: Option<&OsStr>,
+    snapshot_stdin: bool,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
     let mut copy: Option<PathBuf> = None;
+    let mut stdin_copied = false;
     if let Some(Ok(output_path)) = output.map(|path| Path::new(path).canonicalize()) {
         for file in files {
-            if file != STDIN_FILE
-                && Path::new(file)
-                    .canonicalize()
-                    .is_ok_and(|file_path| file_path == output_path)
+            if file == STDIN_FILE {
+                if snapshot_stdin && !stdin_copied {
+                    let (mut copy_file, copy_path) = tmp_dir.next_file()?;
+                    io::copy(&mut io::stdin().lock(), &mut copy_file).map_err(|error| {
+                        SortError::ReadFailed {
+                            path: PathBuf::from(STDIN_FILE),
+                            error,
+                        }
+                    })?;
+                    *file = copy_path.into_os_string();
+                    stdin_copied = true;
+                }
+            } else if Path::new(file)
+                .canonicalize()
+                .is_ok_and(|file_path| file_path == output_path)
             {
                 if let Some(copy) = &copy {
                     *file = copy.clone().into_os_string();

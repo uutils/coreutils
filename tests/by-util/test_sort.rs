@@ -1952,6 +1952,29 @@ fn test_output_is_input_without_merge() {
 }
 
 #[test]
+fn test_output_is_input_via_stdin_in_merge_mode() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("file", "a\n");
+
+    ucmd.args(&["-m", "-o", "file", "-"])
+        .set_stdin(std::fs::File::open(at.plus("file")).unwrap())
+        .succeeds();
+
+    assert_eq!(at.read("file"), "a\n");
+}
+
+#[test]
+fn test_merge_with_output_reads_repeated_stdin_once() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.args(&["-m", "-o", "file", "-", "-"])
+        .pipe_in("a\n")
+        .succeeds();
+
+    assert_eq!(at.read("file"), "a\n");
+}
+
+#[test]
 fn test_output_named_stdin_marker_reads_stdin() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("-", "old contents\n");

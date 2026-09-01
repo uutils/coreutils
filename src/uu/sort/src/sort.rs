@@ -2466,6 +2466,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             matches
                 .get_one::<OsString>(options::OUTPUT)
                 .map(OsString::as_os_str),
+            settings.merge,
             &mut tmp_dir,
         )?;
     }
