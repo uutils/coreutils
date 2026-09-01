@@ -18,7 +18,7 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-rustix = { workspace = true }
+rustix = { workspace = true, features = ["process"] }
 uucore = { workspace = true, features = ["entries", "process"] }
 fluent = { workspace = true }
 

@@ -5,8 +5,6 @@
 
 //! Zero-copy-related functions.
 
-#![cfg(any(target_os = "linux", target_os = "android"))]
-
 use crate::io::{RawReader, RawWriter};
 use rustix::pipe::{SpliceFlags, fcntl_setpipe_size};
 use std::{

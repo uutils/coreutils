@@ -481,8 +481,7 @@ rstest = "0.26.0"
 rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"
 rust-ini = "0.21.0"
-# raw-backend's linux_execfn is not supported on linux < 6.4 if /proc is not mounted. So use-libc-auxv is needed
-rustix = { version = "1.1.4", features = ["param", "use-libc-auxv", "time"] }
+rustix = { version = "1.1.4", default-features = false }
 self_cell = "1.0.4"
 selinux = "0.6"
 string-interner = "0.20.0"
@@ -746,8 +745,11 @@ hex-literal = "1.0.0"
 rstest.workspace = true
 rstest_reuse.workspace = true
 
+[target.'cfg(all(any(target_os = "linux", all(target_os = "android", target_pointer_width = "64")), not(target_env = "musl")))'.dependencies]
+# raw-backend's linux_execfn is not supported on linux < 6.4 if /proc is not mounted. So use-libc-auxv is needed
+rustix = { workspace = true, features = ["param", "use-libc-auxv"] }
+
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-rustix.workspace = true
 selinux = { workspace = true, optional = true }
 
 # * pinned transitive dependencies
@@ -763,8 +765,7 @@ nix = { workspace = true, features = [
   "user",
 ] }
 rlimit = { workspace = true }
-rustix.workspace = true
-
+rustix = { workspace = true, features = ["net"] }
 
 [build-dependencies]
 phf_codegen.workspace = true

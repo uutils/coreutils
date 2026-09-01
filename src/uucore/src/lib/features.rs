@@ -77,10 +77,7 @@ pub mod mode;
 pub mod entries;
 #[cfg(all(unix, feature = "perms"))]
 pub mod perms;
-#[cfg(all(
-    any(target_os = "linux", target_os = "android"),
-    any(feature = "pipes", feature = "buf-copy")
-))]
+#[cfg(all(feature = "pipes", any(target_os = "linux", target_os = "android")))]
 pub mod pipes;
 #[cfg(all(target_os = "linux", feature = "proc-info"))]
 pub mod proc_info;
