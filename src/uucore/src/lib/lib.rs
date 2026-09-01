@@ -104,6 +104,7 @@ pub use crate::features::process;
 #[cfg(all(unix, feature = "safe-copy"))]
 pub use crate::features::safe_copy;
 #[cfg(all(
+    feature = "safe-traversal",
     unix,
     not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))
 ))]
