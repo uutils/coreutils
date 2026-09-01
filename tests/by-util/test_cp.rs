@@ -2426,6 +2426,40 @@ fn test_cp_preserve_links_case_7() {
 }
 
 #[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_cp_preserve_links_after_skipped_older_source() {
+    use filetime::FileTime;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("src");
+    at.touch("src/f");
+    at.hard_link("src/f", "src/g");
+
+    at.mkdir("dest");
+    at.touch("dest/f");
+    let source_time = FileTime::from_unix_time(1_000_000_000, 0);
+    let dest_time = FileTime::from_unix_time(1_000_003_600, 0);
+    filetime::set_file_times(at.plus("src/f"), source_time, source_time).unwrap();
+    filetime::set_file_times(at.plus("dest/f"), dest_time, dest_time).unwrap();
+
+    ucmd.arg("--update=older")
+        .arg("--preserve=links")
+        .arg("src/f")
+        .arg("src/g")
+        .arg("dest")
+        .succeeds();
+
+    let metadata_f = std::fs::metadata(at.plus("dest/f")).unwrap();
+    let metadata_g = std::fs::metadata(at.plus("dest/g")).unwrap();
+    assert_eq!(metadata_f.ino(), metadata_g.ino());
+    assert_eq!(
+        FileTime::from_last_modification_time(&metadata_f),
+        dest_time
+    );
+}
+
+#[test]
 #[cfg(unix)]
 fn test_cp_no_preserve_mode() {
     use uucore::fs as uufs;

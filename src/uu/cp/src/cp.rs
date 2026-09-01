@@ -2635,6 +2635,22 @@ fn handle_copy_mode(
     Ok(PerformedAction::Copied)
 }
 
+fn remember_copied_file(
+    source: &Path,
+    dest: &Path,
+    options: &Options,
+    source_in_command_line: bool,
+    copied_files: &mut HashMap<FileInformation, PathBuf>,
+) -> CopyResult<()> {
+    if options.preserve_hard_links() && options.copy_mode != CopyMode::Link {
+        copied_files.insert(
+            FileInformation::from_path(source, options.dereference(source_in_command_line))?,
+            dest.to_path_buf(),
+        );
+    }
+    Ok(())
+}
+
 /// Calculates the permissions for the destination file in a copy operation.
 ///
 /// If the destination file already exists, its current permissions are returned.
@@ -2782,7 +2798,14 @@ fn copy_file(
                 }
             }
         }
-        handle_existing_dest(source, dest, options, source_in_command_line, copied_files)?;
+        if let Err(error) =
+            handle_existing_dest(source, dest, options, source_in_command_line, copied_files)
+        {
+            if matches!(error, CpError::Skipped(false)) {
+                remember_copied_file(source, dest, options, source_in_command_line, copied_files)?;
+            }
+            return Err(error);
+        }
         if are_hardlinks_to_same_file(source, dest) {
             if options.copy_mode == CopyMode::Copy {
                 return Ok(());
@@ -2888,6 +2911,7 @@ fn copy_file(
     )?;
 
     if performed_action == PerformedAction::Skipped {
+        remember_copied_file(source, dest, options, source_in_command_line, copied_files)?;
         return Err(CpError::Skipped(false));
     }
 
@@ -2992,14 +3016,7 @@ fn copy_file(
         set_selinux_context(dest, options.context.as_ref())?;
     }
 
-    // Skip tracking copied files when using --link mode since hard link
-    // structure is automatically preserved
-    if options.copy_mode != CopyMode::Link {
-        copied_files.insert(
-            FileInformation::from_path(source, options.dereference(source_in_command_line))?,
-            dest.to_path_buf(),
-        );
-    }
+    remember_copied_file(source, dest, options, source_in_command_line, copied_files)?;
 
     if let Some(progress_bar) = progress_bar {
         progress_bar.inc(source_metadata.len());
