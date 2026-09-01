@@ -103,15 +103,7 @@ time = { workspace = true, optional = true, features = [
   "local-offset",
   "macros",
 ] }
-nix = { workspace = true, features = [
-  "dir",
-  "fs",
-  "poll",
-  "signal",
-  "uio",
-  "user",
-  "zerocopy",
-] }
+nix = { workspace = true, optional = true }
 walkdir = { workspace = true, optional = true }
 xattr = { workspace = true, optional = true }
 
@@ -177,23 +169,23 @@ i18n-datetime = [
   "jiff",
 ]
 mode = ["libc", "rustix/process"]
-perms = ["entries", "libc", "walkdir"]
+perms = ["entries", "libc", "safe-traversal", "walkdir"]
 buf-copy = ["pipes"]
 parser-num = ["extendedbigdecimal", "num-traits"]
 parser-size = ["parser-num", "procfs"]
 parser-glob = ["glob"]
 parser = ["parser-num", "parser-size", "parser-glob"]
 pipes = ["fs", "rustix/pipe"]
-process = ["libc", "rustix/process", "windows-sys"]
+process = ["libc", "nix/user", "rustix/process", "windows-sys"]
 proc-info = ["tty", "walkdir"]
 quoting-style = ["i18n-common"]
 ranges = []
 ringbuffer = []
 safe-copy = []
-safe-traversal = ["libc"]
+safe-traversal = ["libc", "nix/fs", "nix/dir", "nix/user"]
 selinux = ["dep:selinux"]
 smack = ["xattr"]
-signals = []
+signals = ["nix/fs", "nix/signal", "nix/poll"]
 sum = [
   "digest",
   "hex",
