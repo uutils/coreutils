@@ -1,4 +1,4 @@
-# Disable 'Line length'. Doesn't provide much values
+# Line length
 MD013: false
 # Headers should be surrounded by blank lines
 MD022: true
@@ -6,6 +6,5 @@ MD022: true
 MD031: true
 # Spaces inside emphasis markers
 MD037: true
-# Disable 'Fenced code blocks should have a language specified'
-# Doesn't provide much in src/ to enforce it
+# Fenced code blocks should have a language specified
 MD040: false
