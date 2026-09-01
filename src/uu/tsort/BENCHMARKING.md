@@ -52,6 +52,7 @@ for _ in range(num_cycles):
 ```
 
 ## Running Benchmarks
+
 The above scripts will output the generated graphs to the standard output. They can therefore be used directly as tests. In order to run a Benchmark, the output should be redirected to a file.
 Use [`hyperfine`](https://github.com/sharkdp/hyperfine) to compare the performance of different `tsort` versions. For example, you can compare the performance of GNU `tsort` and another implementation with the following command:
 
