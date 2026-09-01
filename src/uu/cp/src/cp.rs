@@ -5,6 +5,7 @@
 // spell-checker:ignore (ToDO) copydir fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
 // spell-checker:ignore RDONLY futimens utimensat
 
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
@@ -2956,12 +2957,14 @@ fn copy_file(
         // Try to canonicalize, but if it fails (e.g., due to inaccessible parent directories),
         // fall back to the original source path
         let source_for_attributes = if options.dereference(source_in_command_line) {
-            canonicalize(source, MissingHandling::Normal, ResolveMode::Physical)
-                .ok()
-                .filter(|path| path.exists())
-                .unwrap_or_else(|| source.to_path_buf())
+            Cow::Owned(
+                canonicalize(source, MissingHandling::Normal, ResolveMode::Physical)
+                    .ok()
+                    .filter(|path| path.exists())
+                    .unwrap_or_else(|| source.to_path_buf()),
+            )
         } else {
-            source.to_path_buf()
+            Cow::Borrowed(source)
         };
 
         #[cfg(target_os = "wasi")]
