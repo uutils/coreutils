@@ -33,6 +33,9 @@ fluent = { workspace = true }
 rustix = { workspace = true, features = ["fs"] }
 selinux = { workspace = true, optional = true }
 
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["process"] }
+
 [features]
 diagnostics = ["uucore/diagnostics"]
 selinux = ["dep:selinux", "uucore/selinux"]

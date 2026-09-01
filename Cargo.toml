@@ -754,7 +754,7 @@ runcon = { optional = true, version = "0.11.0", package = "uu_runcon", path = "s
 [target.'cfg(unix)'.dev-dependencies]
 nix = { workspace = true, features = ["fs", "signal"] }
 rlimit = { workspace = true }
-rustix = { workspace = true, features = ["net"] }
+rustix = { workspace = true, features = ["net", "process"] }
 
 [build-dependencies]
 phf_codegen.workspace = true
