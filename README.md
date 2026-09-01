@@ -63,6 +63,7 @@ uutils coreutils ships by default on Ubuntu since version 25.10.
 <div class="oranda-hide">
 
 ## Documentation
+
 uutils has both user and developer documentation available:
 
 - [User Manual](https://uutils.org/coreutils/docs/)
