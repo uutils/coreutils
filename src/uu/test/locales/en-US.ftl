@@ -164,13 +164,7 @@ test-error-invalid-integer = invalid integer { $value }
 test-error-unary-operator-expected = { $operator }: unary operator expected
 
 # Diagnostic labels, used when errors are rendered with a source snippet
-test-diag-label-expected = this is where the closing parenthesis was expected
-test-diag-label-missing-argument = nothing follows this
-test-diag-label-extra-argument = the expression was already complete here
-test-diag-label-unknown-operator = not a known operator
-test-diag-label-invalid-integer = expected an integer here
 test-diag-label-unary-operator-expected = this needs an expression on both sides
-test-diag-label-invalid-file-descriptor = expected a file descriptor here
 test-diag-help-integer-op = -eq, -ne, -lt, -le, -gt and -ge compare integers; use =, {"!"}=, {"<"} or {">"} to compare strings
 test-diag-help-integer-op-mnemonics = -eq equal, -ne not equal, -lt less than, -le less than or equal, -gt greater than, -ge greater than or equal
 test-diag-help-file-descriptor = -t takes a file descriptor number: 0 is standard input, 1 standard output, 2 standard error

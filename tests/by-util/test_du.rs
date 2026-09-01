@@ -9,10 +9,10 @@
 #[cfg(not(windows))]
 use regex::Regex;
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 use uutests::unwrap_or_return;
 use uutests::util::TestScenario;
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 use uutests::util::expected_result;
 use uutests::{at_and_ucmd, new_ucmd, util_name};
 
@@ -56,7 +56,7 @@ fn du_basics(s: &str) {
     assert_eq!(s, answer);
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn du_basics(s: &str) {
     let answer = concat!(
         "0\t.\\subdir\\deeper\\deeper_dir\n",
@@ -68,11 +68,7 @@ fn du_basics(s: &str) {
     assert_eq!(s, answer);
 }
 
-#[cfg(all(
-    not(target_vendor = "apple"),
-    not(target_os = "windows"),
-    not(target_os = "openbsd")
-))]
+#[cfg(all(not(target_vendor = "apple"), not(target_os = "openbsd"), not(windows)))]
 fn du_basics(s: &str) {
     let answer = concat!(
         "8\t./subdir/deeper/deeper_dir\n",
@@ -116,7 +112,7 @@ fn test_du_basics_subdir() {
 fn du_basics_subdir(s: &str) {
     assert_eq!(s, "4\tsubdir/deeper/deeper_dir\n8\tsubdir/deeper\n");
 }
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn du_basics_subdir(s: &str) {
     assert_eq!(s, "0\tsubdir/deeper\\deeper_dir\n0\tsubdir/deeper\n");
 }
@@ -126,9 +122,9 @@ fn du_basics_subdir(s: &str) {
 }
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 fn du_basics_subdir(s: &str) {
     // MS-WSL linux has altered expected output
@@ -522,7 +518,7 @@ fn test_du_soft_link() {
     println!("Output: {s}");
 
     // Helper closure to assert output matches one of the valid sizes
-    #[cfg(any(target_vendor = "apple", target_os = "windows", target_os = "freebsd"))]
+    #[cfg(any(target_vendor = "apple", windows, target_os = "freebsd"))]
     let assert_valid_size = |output: &str, valid_sizes: &[&str]| {
         assert!(
             valid_sizes.contains(&output),
@@ -541,7 +537,7 @@ fn test_du_soft_link() {
         assert_valid_size(s, &valid_sizes);
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
         let valid_sizes = ["4\tsubdir/links\n", "8\tsubdir/links\n"];
         assert_valid_size(s, &valid_sizes);
@@ -555,11 +551,7 @@ fn test_du_soft_link() {
         assert_valid_size(s, &valid_sizes);
     }
 
-    #[cfg(all(
-        not(target_vendor = "apple"),
-        not(target_os = "windows"),
-        not(target_os = "freebsd")
-    ))]
+    #[cfg(all(not(target_vendor = "apple"), not(target_os = "freebsd"), not(windows)))]
     {
         // MS-WSL linux has altered expected output
         if uucore::os::is_wsl_1() {
@@ -596,7 +588,7 @@ fn test_du_hard_link() {
 fn du_hard_link(s: &str) {
     assert_eq!(s, "12\tsubdir/links\n");
 }
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn du_hard_link(s: &str) {
     assert_eq!(s, "8\tsubdir/links\n");
 }
@@ -606,10 +598,10 @@ fn du_hard_link(s: &str) {
 }
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
-    not(target_os = "android")
+    not(target_os = "android"),
+    not(windows)
 ))]
 fn du_hard_link(s: &str) {
     // MS-WSL linux has altered expected output
@@ -642,7 +634,7 @@ fn test_du_d_flag() {
 fn du_d_flag(s: &str) {
     assert_eq!(s, "20\t./subdir\n24\t.\n");
 }
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn du_d_flag(s: &str) {
     assert_eq!(s, "8\t.\\subdir\n8\t.\n");
 }
@@ -652,9 +644,9 @@ fn du_d_flag(s: &str) {
 }
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 fn du_d_flag(s: &str) {
     // MS-WSL linux has altered expected output
@@ -716,7 +708,7 @@ fn test_du_dereference_args() {
 fn du_dereference(s: &str) {
     assert_eq!(s, "4\tsubdir/links/deeper_dir\n16\tsubdir/links\n");
 }
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn du_dereference(s: &str) {
     assert_eq!(s, "0\tsubdir/links\\deeper_dir\n8\tsubdir/links\n");
 }
@@ -726,9 +718,9 @@ fn du_dereference(s: &str) {
 }
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 fn du_dereference(s: &str) {
     // MS-WSL linux has altered expected output
@@ -740,10 +732,10 @@ fn du_dereference(s: &str) {
 }
 
 #[cfg(not(any(
-    target_os = "windows",
     target_os = "android",
     target_os = "freebsd",
-    target_os = "openbsd"
+    target_os = "openbsd",
+    windows
 )))]
 #[test]
 fn test_du_no_dereference() {
@@ -792,13 +784,13 @@ fn test_du_inodes_basic() {
     let ts = TestScenario::new(util_name!());
     let result = ts.ucmd().arg("--inodes").succeeds();
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &["--inodes"]));
         assert_eq!(result.stdout_str(), result_reference.stdout_str());
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     assert_eq!(
         result.stdout_str(),
         concat!(
@@ -823,9 +815,9 @@ fn test_du_inodes() {
 
     let result = ts.ucmd().arg("--separate-dirs").arg("--inodes").succeeds();
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     result.stdout_contains("3\t.\\subdir\\links\n");
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     result.stdout_contains("3\t./subdir/links\n");
     result.stdout_contains("3\t.\n");
 
@@ -1380,7 +1372,7 @@ fn test_du_time_unaffected_by_exclude() {
     assert!(stdout.contains("\td\n"), "missing dir entry: {stdout}");
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "openbsd")))]
+#[cfg(not(any(windows, target_os = "openbsd")))]
 #[cfg(feature = "chmod")]
 #[test]
 fn test_du_no_permission() {
@@ -1411,7 +1403,7 @@ fn test_du_no_permission() {
     assert_eq!(result.stdout_str(), "0\tsubdir/links\n");
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 #[cfg(feature = "chmod")]
 #[test]
 fn test_du_no_exec_permission() {
@@ -1510,9 +1502,19 @@ fn test_du_invalid_threshold() {
     ts.ucmd().arg(format!("--threshold={threshold}")).fails();
 }
 
+/// GNU du hands `--threshold` to `xstrtoumax` without trimming, so a padded
+/// value is rejected rather than read as the size it surrounds.
+#[test]
+fn test_du_threshold_with_leading_whitespace() {
+    new_ucmd!()
+        .arg("--threshold=  -1K")
+        .fails()
+        .stderr_only("du: invalid --threshold argument '  -1K'\n");
+}
+
 #[test]
 fn test_du_threshold_error_handling() {
-    // Test missing threshold value - the specific case from GNU test
+    // Test missing threshold value
     new_ucmd!()
         .arg("--threshold")
         .fails()
@@ -1533,7 +1535,7 @@ fn test_du_apparent_size() {
 
     let result = ucmd.args(&["--apparent-size", "--all", "a"]).succeeds();
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         result.stdout_contains_line("1\ta/b/file2");
         result.stdout_contains_line("1\ta/b/file1");
@@ -1541,7 +1543,7 @@ fn test_du_apparent_size() {
         result.stdout_contains_line("1\ta");
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
         result.stdout_contains_line("1\ta\\b\\file2");
         result.stdout_contains_line("1\ta\\b\\file1");
@@ -1561,7 +1563,7 @@ fn test_du_bytes() {
 
     let result = ucmd.args(&["--bytes", "--all", "a"]).succeeds();
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         result.stdout_contains_line("6\ta/b/file2");
         result.stdout_contains_line("3\ta/b/file1");
@@ -1569,7 +1571,7 @@ fn test_du_bytes() {
         result.stdout_contains_line("9\ta");
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
         result.stdout_contains_line("6\ta\\b\\file2");
         result.stdout_contains_line("3\ta\\b\\file1");
@@ -1595,7 +1597,7 @@ fn test_du_exclude() {
         .arg("--exclude=subdir")
         .arg("subdir")
         .succeeds()
-        .stdout_is("");
+        .no_output();
     ts.ucmd()
         .arg("--exclude=subdir")
         .arg("--verbose")
@@ -1607,7 +1609,7 @@ fn test_du_exclude() {
 #[test]
 // Disable on Windows because we are looking for /
 // And the tests would be more complex if we have to support \ too
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_du_exclude_2() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1658,7 +1660,7 @@ fn test_du_exclude_2() {
 #[test]
 // Disable on Windows because we are looking for /
 // And the tests would be more complex if we have to support \ too
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_du_exclude_mix() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1713,7 +1715,7 @@ fn test_du_exclude_mix() {
 #[test]
 // Disable on Windows because we are looking for /
 // And the tests would be more complex if we have to support \ too
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_du_complex_exclude_patterns() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1823,7 +1825,7 @@ fn test_du_symlink_multiple_fail() {
 
 #[test]
 // Disable on Windows because of different path separators and handling of null characters
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_du_files0_from() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1888,8 +1890,7 @@ fn test_du_files0_from_missing_file_listed_twice() {
     ts.ucmd()
         .arg("--files0-from=filelist")
         .fails_with_code(1)
-        .stdout_is("")
-        .stderr_is(
+        .stderr_only(
             "du: cannot access 'missing': No such file or directory\n\
              du: cannot access 'missing': No such file or directory\n",
         );
@@ -2289,7 +2290,7 @@ fn test_du_long_symlink_chain() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_du_bind_mount_simulation() {
     // Simulate bind mount scenario using hard links where possible
     // Note: This test simulates what bind mounts do - making the same directory
@@ -2333,7 +2334,7 @@ fn test_du_symlink_depth_tracking() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_du_long_path_from_unreadable() {
-    // Test the specific scenario from GNU's long-from-unreadable.sh test
+    // Test du behavior with unreadable directories
     // This verifies that du can handle very long paths when the current directory is unreadable
     use std::env;
     use std::fs;
@@ -2342,7 +2343,7 @@ fn test_du_long_path_from_unreadable() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    // Create a deep hierarchy similar to the GNU test
+    // Create a deep hierarchy
     // Use a more reasonable depth for unit tests
     let dir_name = "x".repeat(200);
     let mut current_path = String::new();
@@ -2805,4 +2806,111 @@ fn test_du_repeated_time_style() {
         .arg("date_test")
         .succeeds();
     result.stdout_only("0\t2016-06-16 00:00:00.000000000 +0000\tdate_test\n");
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit_of_block_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-B", "1fb"])
+            .fails_with_code(1);
+
+        // The number parsed; only the unit did not.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+du: invalid suffix in --block-size argument '1fb'
+   ╭─[ du:1:8 ]
+   │
+ 1 │ du -B 1fb
+   │        ─┬
+   │         ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_inside_an_attached_block_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .arg("--block-size=1fb")
+            .fails_with_code(1);
+
+        assert_eq!(result.caret_column(), Some(18));
+        assert!(
+            result.stderr_as_displayed().contains("not a known unit"),
+            "{}",
+            result.stderr_as_displayed()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_a_zero_block_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-B", "0"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // Zero parses as a number but is not a usable block size, so the
+        // whole value is underlined and nothing is said about the unit.
+        assert!(
+            stderr.starts_with("du: invalid --block-size argument '0'"),
+            "{stderr}"
+        );
+        assert_eq!(result.caret_column(), Some(7));
+        assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_the_sign_of_a_rejected_threshold() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-t", "-0"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // '-0' is rejected for the sign and the zero together, so the caret
+        // covers both.
+        assert!(
+            stderr.starts_with("du: invalid --threshold argument '-0'"),
+            "{stderr}"
+        );
+        assert_eq!(result.caret_column(), Some(7));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_skips_the_sign_of_a_threshold_with_an_unknown_unit() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-t", "-1fb"])
+            .fails_with_code(1);
+
+        // Here only the unit is at fault, so the sign is not underlined.
+        assert_eq!(result.caret_column(), Some(9));
+        assert!(
+            result.stderr_as_displayed().contains("not a known unit"),
+            "{}",
+            result.stderr_as_displayed()
+        );
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-B", "1fb"])
+            .fails_with_code(1)
+            .stderr_is("du: invalid suffix in --block-size argument '1fb'\n");
+    }
 }

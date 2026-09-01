@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore cmdline dyld dylib PDEATHSIG setvbuf
+// spell-checker:ignore cmdline dyld dylib PDEATHSIG setvbuf ppid
 
 #[cfg(target_os = "linux")]
 use uutests::at_and_ucmd;
@@ -48,8 +48,8 @@ fn test_permission() {
 #[cfg(all(
     feature = "feat_external_libstdbuf",
     unix,
+    not(target_vendor = "apple"),
     not(target_os = "openbsd"),
-    not(target_os = "macos"),
     not(target_os = "android"),
     not(target_env = "musl")
 ))]
@@ -274,8 +274,8 @@ fn test_stdbuf_invalid_mode_fails() {
 // musl libc dynamic loader does not support LD_DEBUG, so disable on musl targets as well.
 #[cfg(all(
     unix,
+    not(target_vendor = "apple"),
     not(target_os = "openbsd"),
-    not(target_os = "macos"),
     not(target_os = "android"),
     not(target_env = "musl")
 ))]
@@ -365,15 +365,14 @@ fn test_stdbuf_non_utf8_paths() {
         .stdout_is("test content for stdbuf\n");
 }
 
+// stdbuf uses spawn()+wait() (not exec()) so that the TempDir holding
+// libstdbuf.so is cleaned up after the child exits.  The stdbuf process
+// itself therefore stays in the process table as a thin waiter; the child
+// immediately execs the requested command.
+// See: https://github.com/uutils/coreutils/issues/13939
 #[test]
 #[cfg(target_os = "linux")]
-fn test_stdbuf_no_fork_regression() {
-    // Regression test for issue #9066: https://github.com/uutils/coreutils/issues/9066
-    // The original stdbuf implementation used fork+spawn which broke signal handling
-    // and PR_SET_PDEATHSIG. This test verifies that stdbuf uses exec() instead.
-    // With fork: stdbuf process would remain visible in process list
-    // With exec: stdbuf process is replaced by target command (GNU compatible)
-
+fn test_stdbuf_child_execs_command() {
     use std::process::{Command, Stdio};
     use std::thread;
     use std::time::Duration;
@@ -381,55 +380,237 @@ fn test_stdbuf_no_fork_regression() {
     let scene = TestScenario::new(util_name!());
 
     // Start stdbuf with a long-running command
-    let mut child = Command::new(&scene.bin_path)
-        .args(["stdbuf", "-o0", "sleep", "3"])
+    let mut parent = Command::new(&scene.bin_path)
+        .args(["stdbuf", "-o0", "sleep", "5"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
         .expect("Failed to start stdbuf");
 
-    let child_pid = child.id();
+    let parent_pid = parent.id();
 
-    // Poll until exec happens or timeout
-    let cmdline_path = format!("/proc/{child_pid}/cmdline");
-    let timeout = Duration::from_secs(2);
+    // Poll until the child process appears or timeout
+    let timeout = Duration::from_secs(3);
     let poll_interval = Duration::from_millis(10);
     let start_time = std::time::Instant::now();
 
-    let command_name = loop {
+    let child_comm = loop {
         if start_time.elapsed() > timeout {
-            child.kill().ok();
-            panic!("TIMEOUT: Process {child_pid} did not respond within {timeout:?}");
+            parent.kill().ok();
+            panic!("TIMEOUT: child of {parent_pid} did not appear within {timeout:?}");
         }
 
-        if let Ok(cmdline) = std::fs::read_to_string(&cmdline_path) {
-            let cmd_parts: Vec<&str> = cmdline.split('\0').collect();
-            let name = cmd_parts.first().map_or("", |v| v);
-
-            // Wait for exec to complete (process name changes from original binary to target)
-            // Handle both multicall binary (coreutils) and individual utilities (stdbuf)
-            if !name.contains("coreutils") && !name.contains("stdbuf") && !name.is_empty() {
-                break name.to_string();
-            }
+        // Find children of our stdbuf process
+        let found = std::fs::read_dir("/proc").ok().and_then(|entries| {
+            entries.flatten().find_map(|entry| {
+                let pid: u32 = entry.file_name().to_string_lossy().parse().ok()?;
+                let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+                let mut parts = stat.splitn(5, ' ');
+                let _pid = parts.next();
+                let comm = parts
+                    .next()
+                    .unwrap_or("")
+                    .trim_matches(|c| c == '(' || c == ')')
+                    .to_string();
+                let _state = parts.next();
+                let ppid: u32 = parts.next().unwrap_or("0").parse().unwrap_or(0);
+                if ppid == parent_pid && comm.contains("sleep") {
+                    Some(comm)
+                } else {
+                    None
+                }
+            })
+        });
+        if found.is_some() {
+            break found;
         }
-
         thread::sleep(poll_interval);
+
+        if start_time.elapsed() > timeout {
+            break None;
+        }
     };
 
-    // The loop already waited for exec (no longer original binary), so this should always pass
-    // But keep the assertion as a safety check and clear documentation
-    assert!(
-        !command_name.contains("coreutils") && !command_name.contains("stdbuf"),
-        "REGRESSION: Process {child_pid} is still original binary (coreutils or stdbuf) - fork() used instead of exec()"
-    );
+    parent.kill().ok();
+    parent.wait().ok();
 
-    // Ensure we're running the expected target command
     assert!(
-        command_name.contains("sleep"),
-        "Expected 'sleep' command at PID {child_pid}, got: {command_name}"
+        child_comm.is_some(),
+        "stdbuf should have spawned a child running 'sleep' (pid={parent_pid})"
     );
+    assert!(
+        child_comm.as_deref().unwrap_or("").contains("sleep"),
+        "Expected child to be 'sleep', got: {child_comm:?}"
+    );
+}
 
-    // Cleanup
+/// Verify that stdbuf does not leak temporary directories.
+/// Each invocation should clean up its own tmpdir.
+/// Regression test for https://github.com/uutils/coreutils/issues/13939
+#[test]
+#[cfg(all(target_os = "linux", not(feature = "feat_external_libstdbuf")))]
+fn test_stdbuf_no_tmpdir_leak() {
+    use std::process::Command;
+
+    // Use a dedicated TMPDIR so we only count stdbuf-created dirs,
+    // not dirs created by the test harness itself.
+    let dedicated_tmpdir = tempfile::tempdir().unwrap();
+    let scene = TestScenario::new(util_name!());
+
+    for _ in 0..5 {
+        Command::new(&scene.bin_path)
+            .args(["stdbuf", "-oL", "true"])
+            .env("TMPDIR", dedicated_tmpdir.path())
+            .status()
+            .expect("failed to run stdbuf");
+    }
+
+    let leaked: Vec<_> = std::fs::read_dir(dedicated_tmpdir.path())
+        .unwrap()
+        .flatten()
+        .filter(|e| e.metadata().is_ok_and(|m| m.is_dir()))
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .collect();
+
+    assert!(
+        leaked.is_empty(),
+        "stdbuf leaked {n} temporary director{pl}: {leaked:?}",
+        n = leaked.len(),
+        pl = if leaked.len() == 1 { "y" } else { "ies" },
+    );
+}
+
+/// Verify that the temporary directory created for libstdbuf.so is private (0700)
+/// and the embedded library file is owner read/write only (0600).
+/// Regression test for https://github.com/uutils/coreutils/issues/13939
+#[test]
+#[cfg(all(target_os = "linux", not(feature = "feat_external_libstdbuf")))]
+fn test_stdbuf_tmpdir_is_private() {
+    use std::os::unix::fs::PermissionsExt;
+
+    // Use a dedicated TMPDIR so we only observe stdbuf's directory.
+    let dedicated_tmpdir = tempfile::tempdir().unwrap();
+    let scene = TestScenario::new(util_name!());
+
+    // Use a long-running command so the tmpdir exists while we inspect it.
+    let mut child = std::process::Command::new(&scene.bin_path)
+        .args(["stdbuf", "-o0", "sleep", "5"])
+        .env("TMPDIR", dedicated_tmpdir.path())
+        .spawn()
+        .expect("failed to spawn stdbuf");
+
+    // Give it time to create the tmpdir
+    std::thread::sleep(std::time::Duration::from_millis(300));
+
+    let stdbuf_dirs: Vec<_> = std::fs::read_dir(dedicated_tmpdir.path())
+        .unwrap()
+        .flatten()
+        .filter(|e| e.metadata().is_ok_and(|m| m.is_dir()))
+        .map(|e| e.path())
+        .collect();
+
     child.kill().ok();
     child.wait().ok();
+
+    assert!(
+        !stdbuf_dirs.is_empty(),
+        "expected stdbuf to create a temporary directory in {dedicated_tmpdir:?}"
+    );
+
+    for dir in &stdbuf_dirs {
+        let mode = std::fs::metadata(dir)
+            .expect("metadata")
+            .permissions()
+            .mode();
+        assert_eq!(
+            mode & 0o777,
+            0o700,
+            "tmpdir {dir:?} has unsafe permissions {mode:#o}, expected 0o700"
+        );
+
+        for entry in std::fs::read_dir(dir).expect("read_dir").flatten() {
+            if !entry.file_type().is_ok_and(|t| t.is_file()) {
+                continue;
+            }
+            let file_mode = entry.metadata().expect("metadata").permissions().mode() & 0o777;
+            assert_eq!(
+                file_mode,
+                0o600,
+                "libstdbuf at {} has unsafe permissions {file_mode:#o}, expected 0o600",
+                entry.path().display(),
+            );
+        }
+    }
+}
+
+/// stdbuf waits on the command instead of exec'ing it, so it has to translate
+/// the child's fate back into its own exit status: a command killed by a
+/// signal must still be reported as `128 + signal`, not as a clean 0.
+#[test]
+#[cfg(unix)]
+fn test_stdbuf_reports_signalled_command() {
+    // SIGQUIT (3) rather than the usual SIGTERM, so the expected 131 cannot be
+    // confused with a status the shell would produce on its own.
+    new_ucmd!()
+        .args(&["-o0", "sh", "-c", "kill -QUIT $$"])
+        .fails_with_code(131);
+}
+
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-o", "6pq", "head"])
+            .fails_with_code(125);
+
+        // The number parsed; only the unit did not.
+        let stderr = result.stderr_as_displayed();
+        assert!(
+            stderr.starts_with(
+                "\
+stdbuf: invalid mode '6pq'
+   ╭─[ stdbuf:1:12 ]
+   │
+ 1 │ stdbuf -o 6pq head
+   │            ─┬
+   │             ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+            ),
+            "{stderr}"
+        );
+        // The caret replaces the message, not the usage hint: a pipe and a
+        // terminal must not disagree on whether one was printed.
+        assert!(
+            stderr.ends_with("stdbuf --help' for more information."),
+            "{stderr}"
+        );
+    }
+
+    #[test]
+    fn test_snippet_points_inside_a_long_option_value() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--error=pq", "head"])
+            .fails_with_code(125);
+        let stderr = result.stderr_as_displayed();
+
+        // Nothing usable was read, so the whole value is underlined.
+        assert!(stderr.contains("stdbuf:1:16"), "{stderr}");
+        assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-o", "6pq", "head"])
+            .fails_with_code(125)
+            .usage_error("invalid mode '6pq'");
+    }
 }

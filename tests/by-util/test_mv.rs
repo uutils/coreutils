@@ -3,17 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore mydir hardlinked tmpfs notty unwriteable myfolder SRCDATA DSTDATA
+// spell-checker:ignore mydir hardlinked tmpfs notty unwriteable myfolder SRCDATA DSTDATA REALDATA
+// spell-checker:ignore dirattr dirvalue setfattr getfattr
 
-use filetime::FileTime;
 use rstest::rstest;
 use std::io::Write;
 #[cfg(not(windows))]
 use std::path::Path;
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
 use uutests::new_ucmd;
 #[cfg(unix)]
@@ -1170,6 +1167,7 @@ fn test_mv_backup_conflicting_options() {
 
 #[test]
 fn test_mv_update_option() {
+    use std::fs::{File, FileTimes};
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let file_a = "test_mv_update_option_file_a";
@@ -1178,10 +1176,22 @@ fn test_mv_update_option() {
     at.touch(file_a);
     at.touch(file_b);
     let ts = time::OffsetDateTime::now_utc();
-    let now = FileTime::from_unix_time(ts.unix_timestamp(), ts.nanosecond());
-    let later = FileTime::from_unix_time(ts.unix_timestamp() + 3600, ts.nanosecond());
-    filetime::set_file_times(at.plus_as_string(file_a), now, now).unwrap();
-    filetime::set_file_times(at.plus_as_string(file_b), now, later).unwrap();
+    let now = ts.into();
+    let later = (ts + time::Duration::seconds(3600)).into();
+    let times_now = FileTimes::new().set_accessed(now).set_modified(now);
+    let times_later = FileTimes::new().set_accessed(now).set_modified(later);
+    File::options()
+        .write(true)
+        .open(at.plus_as_string(file_a))
+        .unwrap()
+        .set_times(times_now)
+        .unwrap();
+    File::options()
+        .write(true)
+        .open(at.plus_as_string(file_b))
+        .unwrap()
+        .set_times(times_later)
+        .unwrap();
 
     scene
         .ucmd()
@@ -1892,7 +1902,7 @@ fn test_mv_dir_into_path_slash() {
     assert!(at.dir_exists("f/b"));
 }
 
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "openbsd"))))]
+#[cfg(all(unix, not(any(target_vendor = "apple", target_os = "openbsd"))))]
 #[test]
 fn test_acl() {
     use std::process::Command;
@@ -2302,7 +2312,7 @@ mod inter_partition_copying {
         );
     }
 
-    // Test the exact GNU test scenario: hardlinks within directories being moved
+    // Test hardlinks within directories being moved
     #[test]
     #[cfg(unix)]
     pub(crate) fn test_mv_preserves_hardlinks_in_directories_across_partitions() {
@@ -2578,6 +2588,85 @@ mod inter_partition_copying {
         let moved_fifo = other_fs_tempdir.path().join("dir/fifo");
         assert!(moved_fifo.symlink_metadata().unwrap().file_type().is_fifo());
     }
+
+    // A symlink pointing at a hardlinked sibling must not be mistaken for a
+    // member of that hardlink group. Keying the inode map on metadata() (which
+    // follows symlinks) instead of symlink_metadata() made mv "preserve" the
+    // hardlink by linking the regular files to the copied *symlink*, leaving
+    // self-referential symlinks and destroying the content.
+    #[test]
+    #[cfg(unix)]
+    pub(crate) fn test_mv_symlink_to_hardlinked_sibling_across_partitions() {
+        use std::os::unix::fs::MetadataExt;
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.mkdir("dir");
+        at.write("dir/realfile", "important data");
+        at.hard_link("dir/realfile", "dir/realfile2");
+        // Two symlinks so the test does not depend on readdir order: one sorts
+        // before the hardlink group, one after.
+        at.relative_symlink_file("realfile", "dir/aaa_link");
+        at.relative_symlink_file("realfile", "dir/zzz_link");
+
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+
+        scene
+            .ucmd()
+            .arg("dir")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds()
+            .no_output();
+
+        let moved_dir = other_fs_tempdir.path().join("dir");
+        let moved_realfile = moved_dir.join("realfile");
+        let moved_realfile2 = moved_dir.join("realfile2");
+
+        for file in [&moved_realfile, &moved_realfile2] {
+            assert!(
+                file.symlink_metadata().unwrap().file_type().is_file(),
+                "{} should still be a regular file, not a symlink",
+                file.display()
+            );
+            assert_eq!(
+                fs::read_to_string(file).unwrap(),
+                "important data",
+                "{} lost its content",
+                file.display()
+            );
+        }
+
+        let realfile_metadata = fs::metadata(&moved_realfile).unwrap();
+        assert_eq!(
+            realfile_metadata.ino(),
+            fs::metadata(&moved_realfile2).unwrap().ino(),
+            "realfile and realfile2 should still be hardlinked"
+        );
+        assert_eq!(
+            realfile_metadata.nlink(),
+            2,
+            "the hardlink group should not have gained the symlinks"
+        );
+
+        for link in ["aaa_link", "zzz_link"] {
+            let moved_link = moved_dir.join(link);
+            assert!(
+                moved_link
+                    .symlink_metadata()
+                    .unwrap()
+                    .file_type()
+                    .is_symlink(),
+                "{link} should still be a symlink"
+            );
+            assert_eq!(
+                fs::read_link(&moved_link).unwrap(),
+                std::path::Path::new("realfile"),
+                "{link} should still point at realfile"
+            );
+        }
+    }
 }
 
 #[test]
@@ -2702,7 +2791,7 @@ fn test_special_file_different_filesystem() {
 }
 
 /// Test cross-device move with permission denied error
-/// This test mimics the scenario from the GNU part-fail test where
+/// Test partial failure handling where
 /// a cross-device move fails due to permission errors when removing the target file
 #[test]
 #[cfg(target_os = "linux")]
@@ -2827,10 +2916,7 @@ fn test_mv_cross_device_dir_refuses_symlink_at_recreated_dest() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mv_selinux_context() {
     let test_cases = [
         ("-Z", None),
@@ -3053,6 +3139,64 @@ fn test_mv_xattr_enotsup_silent() {
             .no_stderr();
         std::fs::remove_file("/dev/shm/mv_test").ok();
     }
+}
+
+/// Cross-device mv of a directory must preserve the directory's own xattrs.
+/// The fd-based xattr path has to open the destination read-only: a directory
+/// cannot be opened for writing, so a write-mode open would silently drop them.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_dir_xattr_preserved() {
+    use std::process::Command;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("src_dir");
+    at.write("src_dir/file.txt", "content");
+
+    if !Command::new("setfattr")
+        .args([
+            "-n",
+            "user.dirattr",
+            "-v",
+            "dirvalue",
+            &at.plus_as_string("src_dir"),
+        ])
+        .status()
+        .is_ok_and(|s| s.success())
+    {
+        println!("test skipped: setfattr failed");
+        return;
+    }
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let dst_path = other_fs_tempdir.path().join("dst_dir");
+
+    scene
+        .ucmd()
+        .arg(at.plus_as_string("src_dir"))
+        .arg(dst_path.to_str().unwrap())
+        .succeeds()
+        .no_stderr();
+
+    let out = Command::new("getfattr")
+        .args([
+            "-n",
+            "user.dirattr",
+            "--only-values",
+            dst_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run getfattr on the moved directory");
+    assert!(
+        out.status.success(),
+        "directory xattr was not preserved across devices: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(out.stdout, b"dirvalue");
 }
 
 /// Cross-device mv of a symlink onto an existing file must replace the

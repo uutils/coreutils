@@ -819,6 +819,36 @@ fn test_bytewise_fold_at_word_boundary_only_whitespace_preserve_final_newline() 
 }
 
 #[test]
+fn test_bytewise_fold_line_of_exactly_width_is_not_folded() {
+    // A line that is exactly `width` bytes long already fits, so -s must not
+    // break it at its last blank.
+    new_ucmd!()
+        .args(&["-w7", "-s", "-b"])
+        .pipe_in("aaa bbb\nccc ddd\n")
+        .succeeds()
+        .stdout_is("aaa bbb\nccc ddd\n");
+}
+
+#[test]
+fn test_bytewise_fold_remainder_of_exactly_width_is_not_folded() {
+    // Same, for what is left of a line after a width-driven fold.
+    new_ucmd!()
+        .args(&["-w7", "-s", "-b"])
+        .pipe_in("aaa bbb ccc\n")
+        .succeeds()
+        .stdout_is("aaa \nbbb ccc\n");
+}
+
+#[test]
+fn test_bytewise_fold_line_longer_than_width_still_folds() {
+    new_ucmd!()
+        .args(&["-w7", "-s", "-b"])
+        .pipe_in("aaa bbbb\n")
+        .succeeds()
+        .stdout_is("aaa \nbbbb\n");
+}
+
+#[test]
 fn test_bytewise_backspace_should_be_preserved() {
     new_ucmd!()
         .arg("-b")
@@ -1055,5 +1085,27 @@ fn test_width_zero() {
         .arg("-w")
         .arg("0")
         .fails_with_code(1)
-        .stderr_is("fold: illegal width value\n");
+        .stderr_is("fold: invalid number of columns: '0': Result too large\n");
+}
+
+#[test]
+fn test_width_invalid() {
+    for width in ["xyz", "12x", "12.5", "1 2"] {
+        new_ucmd!()
+            .arg("-w")
+            .arg(width)
+            .fails_with_code(1)
+            .stderr_is(format!("fold: invalid number of columns: '{width}'\n"));
+    }
+}
+
+#[test]
+fn test_width_overflow() {
+    new_ucmd!()
+        .arg("-w")
+        .arg("999999999999999999999")
+        .fails_with_code(1)
+        .stderr_is(
+            "fold: invalid number of columns: '999999999999999999999': Value too large to be stored in data type\n",
+        );
 }

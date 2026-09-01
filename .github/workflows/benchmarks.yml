@@ -5,9 +5,16 @@ name: Benchmarks
 
 on:
   pull_request:
+    paths: &bench_paths
+      - 'src/uu/**'
+      - 'src/uucore/**'
+      - 'src/uucore_procs/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
   push:
     branches:
       - main
+    paths: *bench_paths
 
 permissions:
   contents: read # to fetch code (actions/checkout)
@@ -18,7 +25,47 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  detects-benchmarks:
+    name: Detect changes on crates
+    runs-on: ubuntu-latest
+    outputs:
+      package: ${{ steps.detect.outputs.package }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - id: detect
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            # for push diff of the previous
+            base="${{ github.event.before }}"
+          fi
+
+          changed=$(git diff --name-only "$base" "${{ github.sha }}")
+
+          if echo "$changed" | grep -qE '^(Cargo\.(toml|lock)|src/(uucore|uucore_procs)/)'; then
+            candidates=$(ls src/uu)
+          else
+            candidates=$(echo "$changed" | awk -F'/' '/^src\/uu\// {print $3}' | sort -u)
+          fi
+
+          package=$(for pkg in $candidates;
+          do
+            if [ -d "src/uu/$pkg/benches" ]; then
+              echo "uu_$pkg"
+            fi
+          done | sort -u | jq -R . | jq -sc .)
+
+          echo "package=$package" >> "$GITHUB_OUTPUT"
+
   benchmarks:
+    needs: detects-benchmarks
+    if: needs.detects-benchmarks.outputs.package != '[]'
     name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package }} (CodSpeed)
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -30,50 +77,11 @@ jobs:
       max-parallel: 12
       matrix:
         type: [simulation, memory]
-        package: [
-          uu_base64,
-          uu_cksum,
-          uu_cp,
-          uu_cat,
-          uu_cut,
-          uu_dd,
-          uu_df,
-          uu_du,
-          uu_echo,
-          uu_expand,
-          uu_expr,
-          uu_fold,
-          uu_hostname,
-          uu_join,
-          uu_ls,
-          uu_mv,
-          uu_nl,
-          uu_numfmt,
-          uu_rm,
-          uu_seq,
-          uu_shuf,
-          uu_sort,
-          uu_split,
-          uu_tee,
-          uu_timeout,
-          uu_tr,
-          uu_tsort,
-          uu_unexpand,
-          uu_uniq,
-          uu_wc,
-          uu_factor,
-          uu_date,
-          uu_csplit,
-          uu_true,
-          uu_false,
-          uu_ptx
-        ]
+        package: ${{ fromJson(needs.detects-benchmarks.outputs.package) }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-
-      - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
 

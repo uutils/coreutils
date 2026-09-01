@@ -10,7 +10,7 @@
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
 pub extern crate libc;
-#[cfg(all(feature = "windows-sys", target_os = "windows"))]
+#[cfg(all(feature = "windows-sys", windows))]
 pub extern crate windows_sys;
 
 //## internal modules
@@ -45,7 +45,6 @@ pub use crate::features::char_width;
 pub use crate::features::checksum;
 #[cfg(feature = "colors")]
 pub use crate::features::colors;
-#[cfg(feature = "diagnostics")]
 pub use crate::features::diagnostics;
 #[cfg(feature = "encoding")]
 pub use crate::features::encoding;
@@ -55,7 +54,7 @@ pub use crate::features::extendedbigdecimal;
 pub use crate::features::fast_inc;
 #[cfg(feature = "format")]
 pub use crate::features::format;
-#[cfg(feature = "fs")]
+#[cfg(all(feature = "fs", not(target_os = "haiku")))]
 pub use crate::features::fs;
 #[cfg(feature = "hardware")]
 pub use crate::features::hardware;
@@ -107,11 +106,27 @@ pub use crate::features::pipes;
 pub use crate::features::process;
 #[cfg(all(unix, feature = "safe-copy"))]
 pub use crate::features::safe_copy;
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(all(
+    unix,
+    not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))
+))]
 pub use crate::features::safe_traversal;
 #[cfg(all(
-    any(windows, all(unix, not(target_os = "fuchsia"))),
-    feature = "signals"
+    feature = "signals",
+    any(
+        windows,
+        target_vendor = "apple",
+        target_os = "aix",
+        target_os = "android",
+        target_os = "cygwin",
+        target_os = "freebsd",
+        target_os = "illumos",
+        target_os = "linux",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "redox",
+        target_os = "solaris"
+    )
 ))]
 pub use crate::features::signals;
 #[cfg(all(

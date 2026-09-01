@@ -82,11 +82,7 @@ impl Uniq {
         let mut next_meta = LineMeta::default();
         let mut line_out = Vec::with_capacity(1024);
 
-        loop {
-            if !Self::read_line(&mut reader, &mut next_buf, line_terminator)? {
-                break;
-            }
-
+        while Self::read_line(&mut reader, &mut next_buf, line_terminator)? {
             self.build_meta(&next_buf, &mut next_meta);
 
             if self.keys_are_equal(&current_buf, &current_meta, &next_buf, &next_meta) {
@@ -716,6 +712,8 @@ pub fn uu_app() -> Command {
         .about(translate!("uniq-about"))
         .override_usage(format_usage(&translate!("uniq-usage")))
         .infer_long_args(true)
+        // GNU lets a later -f/-s/-w override an earlier one.
+        .args_override_self(true)
         .after_help(translate!("uniq-after-help"));
     uucore::clap_localization::configure_localized_command(cmd)
         .arg(
@@ -727,7 +725,9 @@ pub fn uu_app() -> Command {
                 .value_name("delimit-method")
                 .num_args(0..=1)
                 .default_missing_value("none")
-                .require_equals(true),
+                .require_equals(true)
+                // Let the final occurrence select the delimiter method.
+                .overrides_with(options::ALL_REPEATED),
         )
         .arg(
             Arg::new(options::GROUP)

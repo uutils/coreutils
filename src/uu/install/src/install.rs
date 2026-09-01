@@ -8,8 +8,6 @@
 mod mode;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use file_diff::diff;
-use filetime::{FileTime, set_file_times};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use selinux::SecurityContext;
 use std::ffi::OsString;
@@ -25,7 +23,7 @@ use uucore::buf_copy::copy_fast;
 use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
-use uucore::fs::dir_strip_dot_for_creation;
+use uucore::fs::{are_files_identical, dir_strip_dot_for_creation};
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 use uucore::process::{getegid, geteuid};
 #[cfg(unix)]
@@ -79,7 +77,7 @@ enum InstallError {
     #[error("{}", translate!("install-error-chmod-failed", "path" => .0.quote()))]
     ChmodFailed(PathBuf),
 
-    #[error("{}", translate!("install-error-chown-failed", "path" => .0.quote(), "error" => .1.clone()))]
+    #[error("{}", translate!("install-error-chown-failed", "path" => .0.quote(), "error" => .1))]
     ChownFailed(PathBuf, String),
 
     #[error("{}", translate!("install-error-invalid-target", "path" => .0.quote()))]
@@ -94,10 +92,10 @@ enum InstallError {
     #[error("{}", translate!("install-error-backing-up-destroy-source", "dest" => .0.quote(), "source" => .1.quote()))]
     BackupWouldDestroySource(PathBuf, PathBuf),
 
-    #[error("{}", translate!("install-error-install-failed", "from" => .0.quote(), "to" => .1.quote(), "error" => .2.clone()))]
+    #[error("{}", translate!("install-error-install-failed", "from" => .0.quote(), "to" => .1.quote(), "error" => .2))]
     InstallFailed(PathBuf, PathBuf, String),
 
-    #[error("{}", translate!("install-error-strip-failed", "error" => .0.clone()))]
+    #[error("{}", translate!("install-error-strip-failed", "error" => .0))]
     StripProgramFailed(String),
 
     #[error("{}", translate!("install-error-strip-terminated"))]
@@ -127,7 +125,7 @@ enum InstallError {
     #[error("{}", translate!("install-error-same-file", "file1" => .0.quote(), "file2" => .1.quote()))]
     SameFile(PathBuf, PathBuf),
 
-    #[error("{}", translate!("install-error-extra-operand", "operand" => .0.quote(), "usage" => .1.clone()))]
+    #[error("{}", translate!("install-error-extra-operand", "operand" => .0.quote(), "usage" => .1))]
     ExtraOperand(OsString, String),
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -378,7 +376,7 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
         Some(uucore::mode::parse(x, considering_dir, 0).map_err(|err| {
             let message = translate!("install-error-invalid-mode", "error" => err.to_string());
             // When the diagnostic is rendered it is already on stderr; exit quietly.
-            if !diag_args.is_some_and(|args| err.render(args, x, 0, &message)) {
+            if !diag_args.is_some_and(|args| err.render_mode_value(args, x, 0, &message)) {
                 show_error!("{message}");
             }
             1
@@ -433,26 +431,16 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
         }
     }
 
-    let owner = matches
-        .get_one::<String>(OPT_OWNER)
-        .map_or("", |s| s.as_str())
-        .to_string();
-
-    let owner_id = if owner.is_empty() {
-        None
+    let owner_id = if let Some(owner) = matches.get_one::<String>(OPT_OWNER) {
+        Some(resolve_id(owner, usr2uid).ok_or_else(|| InstallError::InvalidUser(owner.clone()))?)
     } else {
-        Some(resolve_id(&owner, usr2uid).ok_or_else(|| InstallError::InvalidUser(owner.clone()))?)
+        None
     };
 
-    let group = matches
-        .get_one::<String>(OPT_GROUP)
-        .map_or("", |s| s.as_str())
-        .to_string();
-
-    let group_id = if group.is_empty() {
-        None
+    let group_id = if let Some(group) = matches.get_one::<String>(OPT_GROUP) {
+        Some(resolve_id(group, grp2gid).ok_or_else(|| InstallError::InvalidGroup(group.clone()))?)
     } else {
-        Some(resolve_id(&group, grp2gid).ok_or_else(|| InstallError::InvalidGroup(group.clone()))?)
+        None
     };
 
     let context = matches.get_one::<String>(OPT_CONTEXT).cloned();
@@ -601,8 +589,10 @@ fn is_potential_directory_path(path: &Path) -> bool {
 
 #[cfg(not(unix))]
 fn is_potential_directory_path(path: &Path) -> bool {
-    let path_str = path.to_string_lossy();
-    path_str.ends_with(MAIN_SEPARATOR) || path_str.ends_with('/') || path.is_dir()
+    matches!(
+        path.as_os_str().as_encoded_bytes().last(),
+        Some(b'/') | Some(b'\\')
+    ) || path.is_dir()
 }
 
 /// Perform an install, given a list of paths and behavior.
@@ -665,7 +655,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
         // If -t is used, check if target exists as a file before trying to create directories
         if b.target_dir.is_some() && target.exists() && !target.is_dir() {
-            return Err(InstallError::NotADirectory(target.clone()).into());
+            return Err(InstallError::NotADirectory(target).into());
         }
 
         if let Some(to_create) = to_create {
@@ -775,9 +765,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         }
 
         if b.no_target_dir && target.is_dir() {
-            return Err(
-                InstallError::OverrideDirectoryFailed(target.clone(), source.clone()).into(),
-            );
+            return Err(InstallError::OverrideDirectoryFailed(target, source.clone()).into());
         }
 
         if is_potential_directory_path(&target) {
@@ -1003,11 +991,9 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     }
 
     if to.is_dir() && !from.is_dir() {
-        return Err(InstallError::OverrideDirectoryFailed(
-            to.to_path_buf().clone(),
-            from.to_path_buf().clone(),
-        )
-        .into());
+        return Err(
+            InstallError::OverrideDirectoryFailed(to.to_path_buf(), from.to_path_buf()).into(),
+        );
     }
 
     // Remove existing file (create_new below provides TOCTOU protection)
@@ -1084,7 +1070,7 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
         Err(e) => {
             // Follow GNU's behavior: if strip fails, removes the target
             let _ = fs::remove_file(to);
-            return Err(InstallError::StripProgramFailed(e.to_string()).into());
+            return Err(InstallError::StripProgramFailed(strip_errno(&e)).into());
         }
     }
     Ok(())
@@ -1126,10 +1112,14 @@ fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
 ///
 fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
     let meta = metadata(from).map_err(InstallError::MetadataFailed)?;
-    let modified_time = FileTime::from_last_modification_time(&meta);
-    let accessed_time = FileTime::from_last_access_time(&meta);
+    let modified_time = meta.modified()?;
+    let accessed_time = meta.accessed()?;
 
-    if let Err(e) = set_file_times(to, accessed_time, modified_time) {
+    let times = fs::FileTimes::new()
+        .set_accessed(accessed_time)
+        .set_modified(modified_time);
+    let file = File::options().write(true).open(to)?;
+    if let Err(e) = file.set_times(times) {
         show_error!("{e}");
         // ignore error
     }
@@ -1341,7 +1331,7 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     }
 
     // Check if the contents of the source and destination files differ.
-    if !diff(&from.to_string_lossy(), &to.to_string_lossy()) {
+    if !are_files_identical(from, to).unwrap_or(false) {
         return true;
     }
 

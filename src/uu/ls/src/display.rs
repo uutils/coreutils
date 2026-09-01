@@ -33,7 +33,7 @@ use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions};
 
 #[cfg(unix)]
 use uucore::entries;
-#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+#[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android"))))]
 use uucore::fsxattr::has_acl;
 #[cfg(unix)]
 use uucore::libc::{dev_t, major, minor};
@@ -964,10 +964,10 @@ fn display_item_long(
         state.display_buf.extend(b"  ");
     }
     if let Some(md) = item.metadata() {
-        #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
+        #[cfg(any(not(unix), target_vendor = "apple", target_os = "android"))]
         // TODO: See how Mac should work here
         let is_acl_set = false;
-        #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+        #[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android"))))]
         let is_acl_set = has_acl(item.path());
         state
             .display_buf
@@ -1258,9 +1258,9 @@ fn create_hyperlink(name: &OsStr, path: &PathData) -> OsString {
     ret.push(HOSTNAME.as_os_str());
 
     // a set of safe ASCII bytes that don't need encoding
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     let unencoded = |c| matches!(c, '_' | '-' | '.' | '~' | '/');
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     let unencoded = |c| matches!(c, '_' | '-' | '.' | '~' | '/' | '\\' | ':');
 
     for &b in absolute_path.as_os_str().as_encoded_bytes() {
@@ -1363,10 +1363,10 @@ fn calculate_padding_collection(
             // the permissions column by one to reserve space for the `+`/`.`
             // indicator.
             {
-                #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
+                #[cfg(any(not(unix), target_vendor = "apple", target_os = "android"))]
                 // TODO: See how Mac should work here
                 let is_acl_set = false;
-                #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+                #[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android"))))]
                 let is_acl_set = has_acl(item.path());
                 if context_len > 1 || is_acl_set {
                     padding_collections.permissions = PERMISSIONS_WIDTH + 1;

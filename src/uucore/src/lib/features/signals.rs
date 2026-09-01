@@ -410,7 +410,9 @@ pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
         return Some(value);
     }
 
-    let signal_name = signal_name_upcase.trim_start_matches("SIG");
+    let signal_name = signal_name_upcase
+        .strip_prefix("SIG")
+        .unwrap_or(&signal_name_upcase);
 
     if let Some(pos) = ALL_SIGNALS.iter().position(|&s| s == signal_name) {
         return Some(pos);
@@ -540,7 +542,7 @@ pub fn signal_list_value_by_name_or_number(spec: &str) -> Option<usize> {
         return Some(value);
     }
 
-    let signal_name = spec_upcase.trim_start_matches("SIG");
+    let signal_name = spec_upcase.strip_prefix("SIG").unwrap_or(&spec_upcase);
     realtime_signal_bounds().and_then(|(rtmin, rtmax)| match signal_name {
         "RTMIN" => Some(rtmin),
         "RTMAX" => Some(rtmax),
@@ -654,13 +656,13 @@ pub unsafe extern "C" fn capture_startup_state() {
 #[cfg(unix)]
 macro_rules! init_startup_state_capture {
     () => {
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(target_vendor = "apple"))]
         #[used]
         #[unsafe(link_section = ".init_array")]
         static CAPTURE_STARTUP_STATE: unsafe extern "C" fn() =
             $crate::signals::capture_startup_state;
 
-        #[cfg(target_os = "macos")]
+        #[cfg(target_vendor = "apple")]
         #[used]
         #[unsafe(link_section = "__DATA,__mod_init_func")]
         static CAPTURE_STARTUP_STATE: unsafe extern "C" fn() =
@@ -780,6 +782,14 @@ fn signal_by_long_name() {
             Some(value)
         );
     }
+}
+
+#[test]
+fn signal_by_doubled_sig_prefix_is_rejected() {
+    // A doubled "SIG" (e.g. a typo'd "SIGSIGTERM") must not resolve to a real
+    // signal: only one leading "SIG" is ever part of the canonical name.
+    assert_eq!(signal_by_name_or_value("SIGSIGTERM"), None);
+    assert_eq!(signal_list_value_by_name_or_number("SIGSIGKILL"), None);
 }
 
 #[test]

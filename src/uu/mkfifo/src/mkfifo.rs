@@ -31,7 +31,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let message = translate!("mkfifo-error-invalid-mode", "error" => err.to_string());
         if let Some(args) = &diag_args
             && let Some(mode) = matches.get_one::<String>(options::MODE)
-            && err.render(args, mode, 0, &message)
+            && err.render_mode_value(args, mode, 0, &message)
         {
             // The diagnostic is already on stderr; exit quietly.
             return ExitCode::new(1);
@@ -156,7 +156,7 @@ pub fn uu_app() -> Command {
 #[cfg(not(target_vendor = "apple"))]
 fn create_fifo(path: &str, mode: u32) -> std::io::Result<()> {
     use rustix::fs;
-    fs::mkfifoat(fs::CWD, path, Mode::from_bits_truncate(mode)).map_err(Into::into)
+    fs::mkfifoat(fs::CWD, path, Mode::from_bits_truncate(mode as fs::RawMode)).map_err(Into::into)
 }
 
 #[cfg(target_vendor = "apple")]

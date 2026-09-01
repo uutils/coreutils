@@ -12,7 +12,7 @@
 
 use std::collections::HashSet;
 
-#[cfg(not(any(target_os = "freebsd", target_os = "windows")))]
+#[cfg(not(any(target_os = "freebsd", windows)))]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 #[cfg(target_os = "linux")]
@@ -92,8 +92,20 @@ fn test_df_output_arg() {
 }
 
 #[test]
+#[cfg(windows)]
+fn test_inodes_not_supported_windows() {
+    // The notice goes to stdout with exit 0, before any other option is validated.
+    for args in [&["-i"][..], &["-i", "--block-size=bogus"][..]] {
+        new_ucmd!()
+            .args(args)
+            .succeeds()
+            .stdout_only("df: doesn't support -i option\n");
+    }
+}
+
+#[test]
 fn test_df_output() {
-    let expected = if cfg!(target_os = "macos") {
+    let expected = if cfg!(target_vendor = "apple") {
         vec![
             "Filesystem",
             "Size",
@@ -167,7 +179,7 @@ fn test_df_rounding() {
 
 #[test]
 fn test_df_output_overridden() {
-    let expected = if cfg!(target_os = "macos") {
+    let expected = if cfg!(target_vendor = "apple") {
         vec![
             "Filesystem",
             "Size",
@@ -201,7 +213,7 @@ fn test_df_output_overridden() {
 
 #[test]
 fn test_default_headers() {
-    let expected = if cfg!(target_os = "macos") {
+    let expected = if cfg!(target_vendor = "apple") {
         vec![
             "Filesystem",
             "1K-blocks",
@@ -328,8 +340,8 @@ fn test_type_option() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "freebsd", target_os = "openbsd", target_os = "windows")))] // FIXME: fix test for FreeBSD, OpenBSD & Win
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(any(target_os = "freebsd", target_os = "openbsd", windows)))] // FIXME: fix test for FreeBSD, OpenBSD & Win
+#[cfg(not(feature = "selinux"))]
 fn test_type_option_with_file() {
     let fs_type = new_ucmd!()
         .args(&["--output=fstype", "."])
@@ -994,7 +1006,7 @@ fn test_output_file_all_filesystems() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "freebsd", target_os = "windows")))] // FIXME: fix test for FreeBSD & Win
+#[cfg(not(any(target_os = "freebsd", windows)))] // FIXME: fix test for FreeBSD & Win
 fn test_output_file_specific_files() {
     // Create three files.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1013,7 +1025,7 @@ fn test_output_file_specific_files() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "freebsd", target_os = "windows")))] // FIXME: fix test for FreeBSD & Win
+#[cfg(not(any(target_os = "freebsd", windows)))] // FIXME: fix test for FreeBSD & Win
 fn test_file_column_width_if_filename_contains_unicode_chars() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("äöü.txt");
@@ -1036,7 +1048,7 @@ fn test_output_field_no_more_than_once() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "freebsd", target_os = "windows")))] // FIXME: fix test for FreeBSD & Win
+#[cfg(not(any(target_os = "freebsd", windows)))] // FIXME: fix test for FreeBSD & Win
 fn test_nonexistent_file() {
     new_ucmd!()
         .arg("does-not-exist")
@@ -1146,5 +1158,54 @@ fn test_df_masked_proc_fallback() {
         if let Some((ok, _, stderr)) = run_df_with_masked_proc(args) {
             assert!(ok, "df {args} should succeed: {stderr}");
         }
+    }
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit_of_block_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-B", "1fb"])
+            .fails_with_code(1);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+df: invalid suffix in --block-size argument '1fb'
+   ╭─[ df:1:8 ]
+   │
+ 1 │ df -B 1fb
+   │        ─┬
+   │         ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_a_zero_block_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .arg("--block-size=0")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert_eq!(result.caret_column(), Some(17));
+        assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-B", "1fb"])
+            .fails_with_code(1)
+            .stderr_is("df: invalid suffix in --block-size argument '1fb'\n");
     }
 }

@@ -70,7 +70,7 @@ fn get_mode(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Opt
     mode::parse_chmod(DEFAULT_PERM, m, true, mode::get_umask())
         .map(Some)
         .map_err(|err| {
-            if diag_args.is_some_and(|args| err.render(args, m, 0, &err.to_string())) {
+            if diag_args.is_some_and(|args| err.render_mode_value(args, m, 0, &err.to_string())) {
                 // The diagnostic is already on stderr; exit quietly.
                 ExitCode::new(1)
             } else {
@@ -353,7 +353,7 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             Ok(())
         }
 
-        Err(_) if path.is_dir() => {
+        Err(_) if config.recursive && path.is_dir() => {
             // Directory already exists - check if this is a logical directory creation
             // (i.e., not just a parent reference like "test_dir/..")
             let ends_with_parent_dir = matches!(

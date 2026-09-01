@@ -522,7 +522,7 @@ pub(crate) fn color_name(
     wrap: bool,
 ) -> OsString {
     // Check if the file has capabilities
-    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    #[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android"))))]
     {
         // Skip checking capabilities if LS_COLORS=ca=:
         let has_capabilities = style_manager
@@ -648,7 +648,7 @@ fn parse_funky_string(
 
     let mut state = State::Ground;
     loop {
-        let byte = if idx < bytes.len() { bytes[idx] } else { 0 };
+        let byte = bytes.get(idx).unwrap_or(&0);
         match state {
             State::Ground => match byte {
                 b':' | 0 => return Ok(idx),

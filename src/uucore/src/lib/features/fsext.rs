@@ -19,8 +19,8 @@ const MAX_PATH: usize = 266;
 static EXIT_ERR: i32 = 1;
 
 #[cfg(any(
-    target_os = "freebsd",
     target_vendor = "apple",
+    target_os = "freebsd",
     target_os = "netbsd",
     target_os = "openbsd"
 ))]
@@ -85,9 +85,9 @@ use std::os::unix::fs::MetadataExt;
 use std::time::Duration;
 
 #[cfg(any(
+    target_vendor = "apple",
     target_os = "linux",
     target_os = "android",
-    target_vendor = "apple",
     target_os = "freebsd",
     target_os = "openbsd"
 ))]
@@ -104,9 +104,9 @@ pub use libc::statfs as StatFs;
 pub use libc::statvfs as StatFs;
 
 #[cfg(any(
+    target_vendor = "apple",
     target_os = "linux",
     target_os = "android",
-    target_vendor = "apple",
     target_os = "freebsd",
     target_os = "openbsd",
 ))]
@@ -221,13 +221,7 @@ impl MountInfo {
         use std::os::unix::ffi::OsStrExt;
         use std::os::unix::ffi::OsStringExt;
 
-        let dev_name;
-        let fs_type;
-        let mount_root;
-        let mount_dir;
-        let mount_option;
-
-        match file_name {
+        let (dev_name, fs_type, mount_root, mount_dir, mount_option) = match file_name {
             // spell-checker:ignore (word) noatime
             // Format: 36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
             // "man proc" for more details
@@ -239,21 +233,23 @@ impl MountInfo {
                     .unwrap()
                     + FIELDS_OFFSET
                     + 1;
-                dev_name = String::from_utf8_lossy(raw[after_fields + 1]).to_string();
-                fs_type = String::from_utf8_lossy(raw[after_fields]).to_string();
-                mount_root = OsStr::from_bytes(raw[3]).to_owned();
-                mount_dir = OsString::from_vec(replace_special_chars(raw[4]));
-                mount_option = String::from_utf8_lossy(raw[5]).to_string();
+                (
+                    String::from_utf8_lossy(raw[after_fields + 1]).to_string(),
+                    String::from_utf8_lossy(raw[after_fields]).to_string(),
+                    OsStr::from_bytes(raw[3]).to_owned(),
+                    OsString::from_vec(replace_special_chars(raw[4])),
+                    String::from_utf8_lossy(raw[5]).to_string(),
+                )
             }
-            LINUX_MTAB => {
-                dev_name = String::from_utf8_lossy(raw[0]).to_string();
-                fs_type = String::from_utf8_lossy(raw[2]).to_string();
-                mount_root = OsString::new();
-                mount_dir = OsString::from_vec(replace_special_chars(raw[1]));
-                mount_option = String::from_utf8_lossy(raw[3]).to_string();
-            }
+            LINUX_MTAB => (
+                String::from_utf8_lossy(raw[0]).to_string(),
+                String::from_utf8_lossy(raw[2]).to_string(),
+                OsString::new(),
+                OsString::from_vec(replace_special_chars(raw[1])),
+                String::from_utf8_lossy(raw[3]).to_string(),
+            ),
             _ => return None,
-        }
+        };
 
         let dev_id = mount_dev_id(&mount_dir);
         let dummy = is_dummy_filesystem(&fs_type, &mount_option);
@@ -346,8 +342,8 @@ impl MountInfo {
 }
 
 #[cfg(any(
-    target_os = "freebsd",
     target_vendor = "apple",
+    target_os = "freebsd",
     target_os = "netbsd",
     target_os = "openbsd",
 ))]
@@ -432,11 +428,11 @@ fn mount_dev_id(mount_dir: &OsStr) -> String {
 
 use crate::error::UResult;
 #[cfg(any(
-    target_os = "freebsd",
     target_vendor = "apple",
+    target_os = "freebsd",
     target_os = "netbsd",
     target_os = "openbsd",
-    target_os = "windows"
+    windows
 ))]
 use crate::error::USimpleError;
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
@@ -446,9 +442,9 @@ use std::io::{BufRead, BufReader};
 #[cfg(any(
     target_vendor = "apple",
     target_os = "freebsd",
-    target_os = "windows",
     target_os = "netbsd",
-    target_os = "openbsd"
+    target_os = "openbsd",
+    windows
 ))]
 use std::ptr;
 #[cfg(any(
@@ -478,8 +474,8 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
             .collect::<Vec<_>>())
     }
     #[cfg(any(
-        target_os = "freebsd",
         target_vendor = "apple",
+        target_os = "freebsd",
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
@@ -570,7 +566,7 @@ impl FsUsage {
                 target_pointer_width = "64"
             ))]
             return Self {
-                blocksize: statvfs.f_bsize as u64, // or `statvfs.f_frsize` ?
+                blocksize: statvfs.block_size() as u64,
                 blocks: statvfs.f_blocks,
                 bfree: statvfs.f_bfree,
                 bavail: statvfs.f_bavail,
@@ -583,7 +579,7 @@ impl FsUsage {
                 not(target_pointer_width = "64")
             ))]
             return Self {
-                blocksize: statvfs.f_bsize as u64, // or `statvfs.f_frsize` ?
+                blocksize: statvfs.block_size() as u64,
                 blocks: statvfs.f_blocks.into(),
                 bfree: statvfs.f_bfree.into(),
                 bavail: statvfs.f_bavail.into(),
@@ -593,7 +589,9 @@ impl FsUsage {
             };
             #[cfg(target_os = "freebsd")]
             return Self {
-                blocksize: statvfs.f_bsize, // or `statvfs.f_frsize` ?
+                // FreeBSD's `struct statfs` has no fragment size; `f_bsize`
+                // is the block size the counts are expressed in.
+                blocksize: statvfs.f_bsize,
                 blocks: statvfs.f_blocks,
                 bfree: statvfs.f_bfree,
                 bavail: statvfs.f_bavail.try_into().unwrap(),
@@ -690,12 +688,30 @@ pub trait FsMeta {
 
 #[cfg(unix)]
 impl FsMeta for StatFs {
+    /// The block size the `f_blocks`, `f_bfree` and `f_bavail` counts are
+    /// expressed in.
+    ///
+    /// On Linux that is `f_frsize`, not `f_bsize`: the latter is the preferred
+    /// transfer size and may be far larger. virtiofs, for one, reports a 1 MiB
+    /// `f_bsize` next to a 4 KiB `f_frsize`, which scales every size derived
+    /// from the counts by 256. `f_frsize` is zero on pre-2.6 kernels, so fall
+    /// back to `f_bsize` there.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[allow(clippy::unnecessary_cast)]
+    fn block_size(&self) -> i64 {
+        if self.f_frsize == 0 {
+            self.f_bsize as i64
+        } else {
+            self.f_frsize as i64
+        }
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     fn block_size(&self) -> i64 {
         #[cfg(all(
             not(target_env = "musl"),
             not(target_vendor = "apple"),
             not(target_os = "aix"),
-            not(target_os = "android"),
             not(target_os = "freebsd"),
             not(target_os = "netbsd"),
             not(target_os = "openbsd"),
@@ -716,7 +732,6 @@ impl FsMeta for StatFs {
             any(
                 target_arch = "s390x",
                 target_vendor = "apple",
-                all(target_os = "android", target_pointer_width = "32"),
                 target_os = "openbsd",
                 not(target_pointer_width = "64")
             )
@@ -731,7 +746,6 @@ impl FsMeta for StatFs {
             target_os = "solaris",
             target_os = "redox",
             target_os = "cygwin",
-            all(target_os = "android", target_pointer_width = "64"),
         ))]
         return self.f_bsize.try_into().unwrap();
     }
@@ -778,9 +792,9 @@ impl FsMeta for StatFs {
         return self.f_ffree.try_into().unwrap();
     }
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "linux",
         target_os = "android",
-        target_vendor = "apple",
         target_os = "freebsd"
     ))]
     fn fs_type(&self) -> i64 {
@@ -811,9 +825,9 @@ impl FsMeta for StatFs {
         return self.f_type.try_into().unwrap();
     }
     #[cfg(not(any(
+        target_vendor = "apple",
         target_os = "linux",
         target_os = "android",
-        target_vendor = "apple",
         target_os = "freebsd"
     )))]
     fn fs_type(&self) -> i64 {
@@ -821,10 +835,11 @@ impl FsMeta for StatFs {
         unimplemented!()
     }
 
+    /// The preferred transfer size, which on Linux is `f_bsize`.
     #[cfg(any(target_os = "linux", target_os = "android"))]
     #[allow(clippy::unnecessary_cast)]
     fn io_size(&self) -> u64 {
-        self.f_frsize as u64
+        self.f_bsize as u64
     }
     #[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "netbsd"))]
     #[allow(clippy::unnecessary_cast)]
@@ -1198,6 +1213,48 @@ mod tests {
             info.mount_dir,
             crate::os_str_from_bytes(b"/mnt/some- -dir-\xf3").unwrap()
         );
+    }
+
+    /// A `statfs` as virtiofs fills it in: a 1 MiB preferred transfer size
+    /// next to a 4 KiB fragment size, with the counts in fragments.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn virtiofs_like_statfs() -> StatFs {
+        let mut statfs: StatFs = unsafe { mem::zeroed() };
+        statfs.f_bsize = 1024 * 1024;
+        statfs.f_frsize = 4096;
+        statfs.f_blocks = 120_699_413;
+        statfs.f_bfree = 30_801_013;
+        statfs.f_bavail = 30_801_013;
+        statfs
+    }
+
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_block_size_is_the_fragment_size() {
+        let statfs = virtiofs_like_statfs();
+        assert_eq!(statfs.block_size(), 4096);
+        assert_eq!(statfs.io_size(), 1024 * 1024);
+    }
+
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_fs_usage_scales_by_the_fragment_size() {
+        let usage = FsUsage::new(virtiofs_like_statfs());
+        assert_eq!(usage.blocksize, 4096);
+        assert_eq!(usage.blocks * usage.blocksize, 494_384_795_648);
+    }
+
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_block_size_falls_back_when_fragment_size_is_unset() {
+        // Pre-2.6 kernels leave `f_frsize` at zero.
+        let mut statfs: StatFs = unsafe { mem::zeroed() };
+        statfs.f_bsize = 4096;
+        statfs.f_frsize = 0;
+        statfs.f_blocks = 10;
+
+        assert_eq!(statfs.block_size(), 4096);
+        assert_eq!(FsUsage::new(statfs).blocksize, 4096);
     }
 
     #[test]

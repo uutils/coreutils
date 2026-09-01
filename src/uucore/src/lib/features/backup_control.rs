@@ -246,7 +246,7 @@ pub mod arguments {
 ///
 /// 1. From the '-S' or '--suffix' CLI argument, if present
 /// 2. From the "SIMPLE_BACKUP_SUFFIX" environment variable, if present
-/// 3. By using the default '~' if none of the others apply, or if they contained slashes
+/// 3. By using the default '~' if none of the others apply, or if they are empty or contain slashes
 ///
 /// This function directly takes [`ArgMatches`] as argument and looks for
 /// the '-S' and '--suffix' arguments itself.
@@ -257,7 +257,7 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
     } else {
         env::var("SIMPLE_BACKUP_SUFFIX").unwrap_or_else(|_| DEFAULT_BACKUP_SUFFIX.to_owned())
     };
-    if suffix.contains('/') {
+    if suffix.is_empty() || suffix.contains('/') {
         DEFAULT_BACKUP_SUFFIX.to_owned()
     } else {
         suffix

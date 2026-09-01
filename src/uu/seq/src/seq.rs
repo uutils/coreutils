@@ -17,6 +17,7 @@ use uucore::format::num_format::FloatVariant;
 use uucore::format::{Format, num_format};
 use uucore::{fast_inc::fast_inc, format_usage};
 
+mod diagnostics;
 mod error;
 
 // public to allow fuzzing
@@ -28,14 +29,14 @@ mod numberparse;
 use crate::error::SeqError;
 use crate::number::PreciseNumber;
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::signals;
 use uucore::translate;
 
 const OPT_SEPARATOR: &str = "separator";
 const OPT_TERMINATOR: &str = "terminator";
 const OPT_EQUAL_WIDTH: &str = "equal-width";
-const OPT_FORMAT: &str = "format";
+pub(crate) const OPT_FORMAT: &str = "format";
 
 const ARG_NUMBERS: &str = "numbers";
 
@@ -94,8 +95,14 @@ fn select_precision(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches =
-        uucore::clap_localization::handle_clap_result(uu_app(), split_short_args_with_value(args))?;
+    let raw_args: Vec<OsString> = args.collect();
+    // Captured before `-f%q` is split into two arguments, so that the caret
+    // echoes the command line as it was typed.
+    let diag_args = uucore::diagnostics::capture(&raw_args);
+    let matches = uucore::clap_localization::handle_clap_result(
+        uu_app(),
+        split_short_args_with_value(raw_args.into_iter()),
+    )?;
 
     let numbers_option = matches.get_many::<String>(ARG_NUMBERS);
 
@@ -152,11 +159,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // If a format was passed on the command line, use that.
     // If not, use some default format based on parameters precision.
     let (format, padding, fast_allowed) = if let Some(str) = options.format {
-        (
-            Format::<num_format::Float, &ExtendedBigDecimal>::parse(str)?,
-            0,
-            false,
-        )
+        let format =
+            Format::<num_format::Float, &ExtendedBigDecimal>::parse(str).map_err(|error| {
+                uucore::diagnostics::error_after_report(
+                    diag_args.as_deref(),
+                    error,
+                    |args, error| diagnostics::render(args, str, error),
+                )
+            })?;
+        (format, 0, false)
     } else {
         let precision = select_precision(&first, &increment, &last);
 
@@ -217,7 +228,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // unless SIGPIPE was explicitly ignored, in which case it should fail.
             let err = err.map_err_context(|| "write error".into());
             uucore::show_error!("{err}");
-            #[cfg(unix)]
+            #[cfg(all(unix, not(target_os = "fuchsia")))]
             if signals::sigpipe_was_ignored() {
                 uucore::error::set_exit_code(1);
             }

@@ -26,7 +26,5 @@ stdbuf-error-value-too-large = mode invalide '{$value}' : Valeur trop grande pou
 stdbuf-error-external-libstdbuf-not-found = libstdbuf externe introuvable au chemin configuré : {$path}
 stdbuf-error-preload-path-separator = le chemin de libstdbuf {$path} contient ':', ce qui ne peut pas être représenté dans {$var}
   stdbuf: définissez TMPDIR vers un répertoire dont le chemin ne contient pas ':'
-stdbuf-error-permission-denied = échec de l'exécution du processus : Permission refusée
-stdbuf-error-no-such-file = échec de l'exécution du processus : Aucun fichier ou répertoire de ce type
 stdbuf-error-failed-to-execute = échec de l'exécution du processus : {$error}
 stdbuf-error-killed-by-signal = processus tué par le signal {$signal}

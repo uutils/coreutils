@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized unwriteable
 // spell-checker:ignore renameat symlinkat unlinkat unguessability RDONLY CLOEXEC
+// spell-checker:ignore renamer fsetxattr
 
 mod error;
 #[cfg(unix)]
@@ -15,7 +16,7 @@ use clap::error::ErrorKind;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+#[cfg(all(unix, not(any(target_vendor = "apple", target_os = "redox"))))]
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
 use std::env;
@@ -44,7 +45,7 @@ use uucore::fs::{
     MissingHandling, ResolveMode, are_hardlinks_or_one_way_symlink_to_same_file,
     are_hardlinks_to_same_file, canonicalize, path_ends_with_terminator,
 };
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+#[cfg(all(unix, not(any(target_vendor = "apple", target_os = "redox"))))]
 use uucore::fsxattr;
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::set_selinux_security_context;
@@ -1039,7 +1040,7 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
         }
         Err(e) => return Err(e),
     }
-    #[cfg(not(any(target_os = "macos", target_os = "redox")))]
+    #[cfg(not(any(target_vendor = "apple", target_os = "redox")))]
     {
         let _ = fsxattr::copy_xattrs_ignore_unsupported(from, to);
     }
@@ -1166,8 +1167,15 @@ fn rename_dir_fallback(
         (_, _) => None,
     };
 
-    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    let xattrs = fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| FxHashMap::default());
+    // Retrieve xattrs through a file descriptor so a concurrent renamer cannot
+    // redirect the list/get calls to a different inode.
+    #[cfg(all(unix, not(any(target_vendor = "apple", target_os = "redox"))))]
+    let xattrs = {
+        use std::fs::File;
+        File::open(from)
+            .and_then(|f| fsxattr::retrieve_xattrs_fd(&f))
+            .unwrap_or_else(|_| FxHashMap::default())
+    };
 
     // Use directory copying (with or without hardlink support)
     let result = copy_dir_contents(
@@ -1182,8 +1190,18 @@ fn rename_dir_fallback(
         display_manager,
     );
 
-    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    fsxattr::apply_xattrs(to, xattrs)?;
+    // Apply xattrs using a file descriptor to avoid TOCTOU races, ignoring
+    // ENOTSUP/EOPNOTSUPP (filesystem without xattr support, which is expected
+    // for cross-device moves).
+    //
+    // The fd is opened read-only: a directory cannot be opened for writing, and
+    // fsetxattr checks write permission on the inode, not the open mode.
+    #[cfg(all(unix, not(any(target_vendor = "apple", target_os = "redox"))))]
+    {
+        use std::fs::File;
+        let dest = File::open(to)?;
+        fsxattr::apply_xattrs_fd_ignore_unsupported(&dest, xattrs)?;
+    }
 
     result?;
 
@@ -1385,7 +1403,7 @@ fn copy_file_with_hardlinks_helper(
         // Copy a regular file.
         fs::copy(from, to)?;
         // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
-        #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+        #[cfg(all(unix, not(any(target_vendor = "apple", target_os = "redox"))))]
         {
             let _ = fsxattr::copy_xattrs_ignore_unsupported(from, to);
         }
@@ -1450,7 +1468,7 @@ fn rename_file_fallback(
         uucore::buf_copy::copy_fast(&mut &src_file, &mut dst_file)
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
 
-        #[cfg(not(any(target_os = "macos", target_os = "redox")))]
+        #[cfg(not(any(target_vendor = "apple", target_os = "redox")))]
         {
             let _ = fsxattr::copy_xattrs_fd_ignore_unsupported(&src_file, &dst_file);
         }

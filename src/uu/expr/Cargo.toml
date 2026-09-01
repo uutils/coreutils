@@ -28,6 +28,9 @@ fluent = { workspace = true }
 divan = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
 
+[features]
+diagnostics = ["uucore/diagnostics"]
+
 [lints]
 workspace = true
 

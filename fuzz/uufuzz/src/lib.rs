@@ -140,10 +140,8 @@ fn read_from_fd(fd: impl std::os::fd::AsFd) -> String {
 
     loop {
         match read(&fd, &mut read_buffer) {
+            Ok(0) => break,
             Ok(bytes_read) => {
-                if bytes_read == 0 {
-                    break;
-                }
                 captured_output.extend_from_slice(&read_buffer[..bytes_read]);
             }
             Err(_) => {

@@ -27,7 +27,5 @@ stdbuf-error-value-too-large = invalid mode '{$value}': Value too large for defi
 stdbuf-error-external-libstdbuf-not-found = External libstdbuf not found at configured path: {$path}
 stdbuf-error-preload-path-separator = libstdbuf path {$path} contains ':', which cannot be represented in {$var}
   stdbuf: set TMPDIR to a directory whose path has no ':'
-stdbuf-error-permission-denied = failed to execute process: Permission denied
-stdbuf-error-no-such-file = failed to execute process: No such file or directory
 stdbuf-error-failed-to-execute = failed to execute process: {$error}
 stdbuf-error-killed-by-signal = process killed by signal {$signal}

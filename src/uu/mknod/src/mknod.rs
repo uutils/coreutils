@@ -158,7 +158,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     let message =
                         translate!("mknod-error-invalid-mode", "error" => err.to_string());
                     if let Some(args) = &diag_args
-                        && err.render(args, str_mode, 0, &message)
+                        && err.render_mode_value(args, str_mode, 0, &message)
                     {
                         // The diagnostic is already on stderr; exit quietly.
                         return ExitCode::new(1);

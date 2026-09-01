@@ -462,3 +462,26 @@ fn test_missing_file_error_contains_filename() {
         .fails()
         .stderr_is("ptx: 'zxc': No such file or directory\n");
 }
+
+#[test]
+fn test_sentence_regex_trailing_backslash() {
+    // GNU treats a trailing lone backslash as a literal one instead of erroring.
+    new_ucmd!()
+        .args(&["-S", "paris\\"])
+        .pipe_in("")
+        .succeeds()
+        .no_output();
+    new_ucmd!()
+        .args(&["-S", "london\\\\\\"])
+        .pipe_in("")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+fn test_invalid_utf8_input_is_not_an_error() {
+    new_ucmd!()
+        .pipe_in(b"ab\xFFcd\n".to_vec())
+        .succeeds()
+        .no_stderr();
+}

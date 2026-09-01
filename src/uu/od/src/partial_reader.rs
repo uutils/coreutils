@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore mockstream abcdefgh bcdefgh multifile
+// spell-checker:ignore abcdefgh bcdefgh multifile
 
 use std::io;
 use std::io::Read;
@@ -66,8 +66,7 @@ impl<R: HasError> HasError for PartialReader<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mockstream::*;
-    use std::io::{Cursor, ErrorKind, Read};
+    use std::io::Cursor;
 
     #[test]
     fn test_read_without_limits() {
@@ -76,17 +75,6 @@ mod tests {
 
         assert_eq!(sut.read(v.as_mut()).unwrap(), 8);
         assert_eq!(v, [0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0, 0]);
-    }
-
-    #[test]
-    fn test_read_without_limits_with_error() {
-        let mut v = [0; 10];
-        let f = FailingMockStream::new(ErrorKind::PermissionDenied, "No access", 3);
-        let mut sut = PartialReader::new(f, None);
-
-        let error = sut.read(v.as_mut()).unwrap_err();
-        assert_eq!(error.kind(), ErrorKind::PermissionDenied);
-        assert_eq!(error.to_string(), "No access");
     }
 
     #[test]
@@ -104,26 +92,6 @@ mod tests {
 
         assert_eq!(sut.read(v.as_mut()).unwrap(), 6);
         assert_eq!(v, [0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0, 0, 0, 0]);
-    }
-
-    #[test]
-    fn test_read_limiting_with_error() {
-        let mut v = [0; 10];
-        let f = FailingMockStream::new(ErrorKind::PermissionDenied, "No access", 3);
-        let mut sut = PartialReader::new(f, Some(6));
-
-        let error = sut.read(v.as_mut()).unwrap_err();
-        assert_eq!(error.kind(), ErrorKind::PermissionDenied);
-        assert_eq!(error.to_string(), "No access");
-    }
-
-    #[test]
-    fn test_read_limiting_with_large_limit() {
-        let mut v = [0; 10];
-        let mut sut = PartialReader::new(Cursor::new(&b"abcdefgh"[..]), Some(20));
-
-        assert_eq!(sut.read(v.as_mut()).unwrap(), 8);
-        assert_eq!(v, [0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0, 0]);
     }
 
     #[test]

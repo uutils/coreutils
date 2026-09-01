@@ -7,13 +7,16 @@
 
 use std::cmp::Ordering;
 use std::ffi::OsString;
-use std::fs::{File, metadata};
-use std::io::{self, BufRead, BufReader, BufWriter, Read, StdinLock, Write, stderr, stdin};
+use std::fs::File;
+use std::io::{self, BufRead, BufReader, BufWriter, StdinLock, Write, stderr, stdin};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
-use uucore::fs::paths_refer_to_same_file;
+use uucore::fs::{are_files_identical, paths_refer_to_same_file};
+use uucore::i18n::collator::{
+    AlternateHandling, CollatorOptions, locale_cmp, should_use_locale_collation, try_init_collator,
+};
 use uucore::line_ending::LineEnding;
 use uucore::translate;
 
@@ -53,6 +56,20 @@ struct OrderChecker {
     file_num: FileNumber,
     check_order: bool,
     has_error: bool,
+    use_locale: bool,
+}
+
+/// Compare two lines the way the input was ordered.
+///
+/// `sort` orders with the locale collation, and so do `join` and `ls`. Reading
+/// that order back with a byte comparison rejects input that is in order and
+/// puts lines in the wrong column, so `comm` has to measure it the same way.
+fn line_cmp(a: &[u8], b: &[u8], use_locale: bool) -> Ordering {
+    if use_locale {
+        locale_cmp(a, b)
+    } else {
+        a.cmp(b)
+    }
 }
 
 enum Input {
@@ -97,12 +114,13 @@ impl LineReader {
 }
 
 impl OrderChecker {
-    fn new(file_num: FileNumber, check_order: bool) -> Self {
+    fn new(file_num: FileNumber, check_order: bool, use_locale: bool) -> Self {
         Self {
             last_line: Vec::new(),
             file_num,
             check_order,
             has_error: false,
+            use_locale,
         }
     }
 
@@ -112,7 +130,7 @@ impl OrderChecker {
             return true;
         }
 
-        let is_ordered = *current_line >= *self.last_line;
+        let is_ordered = line_cmp(current_line, &self.last_line, self.use_locale) != Ordering::Less;
         if !is_ordered && !self.has_error {
             let _ = writeln!(
                 stderr(),
@@ -124,64 +142,6 @@ impl OrderChecker {
 
         self.last_line = current_line.to_vec();
         is_ordered || !self.check_order
-    }
-}
-
-// Check if two files are identical by comparing their contents
-pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
-    // First compare file sizes
-    let metadata1 = metadata(path1)?;
-    let metadata2 = metadata(path2)?;
-
-    if metadata1.len() != metadata2.len() {
-        return Ok(false);
-    }
-
-    // only proceed if both are regular files
-    if !metadata1.is_file() || !metadata2.is_file() {
-        return Ok(false);
-    }
-
-    let file1 = File::open(path1)?;
-    let file2 = File::open(path2)?;
-
-    let mut reader1 = BufReader::new(file1);
-    let mut reader2 = BufReader::new(file2);
-
-    let mut buffer1 = [0; 8192];
-    let mut buffer2 = [0; 8192];
-
-    loop {
-        // Read from first file with EINTR retry handling
-        // This loop retries the read operation if it's interrupted by signals (e.g., SIGUSR1)
-        // instead of failing, which is the POSIX-compliant way to handle interrupted I/O
-        let bytes1 = loop {
-            match reader1.read(&mut buffer1) {
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-                result => break result?,
-            }
-        };
-
-        // Read from second file with EINTR retry handling
-        // Same retry logic as above for the second file to ensure consistent behavior
-        let bytes2 = loop {
-            match reader2.read(&mut buffer2) {
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-                result => break result?,
-            }
-        };
-
-        if bytes1 != bytes2 {
-            return Ok(false);
-        }
-
-        if bytes1 == 0 {
-            return Ok(true);
-        }
-
-        if buffer1[..bytes1] != buffer2[..bytes2] {
-            return Ok(false);
-        }
     }
 }
 
@@ -234,15 +194,16 @@ fn comm(
                 || are_files_identical(Path::new(filename1), Path::new(filename2))
                     .unwrap_or(false)));
 
-    let mut checker1 = OrderChecker::new(FileNumber::One, check_order);
-    let mut checker2 = OrderChecker::new(FileNumber::Two, check_order);
+    let use_locale = should_use_locale_collation();
+    let mut checker1 = OrderChecker::new(FileNumber::One, check_order, use_locale);
+    let mut checker2 = OrderChecker::new(FileNumber::Two, check_order, use_locale);
     let mut input_error = false;
 
     while na != 0 || nb != 0 {
         let ord = match (na, nb) {
             (0, _) => Ordering::Greater,
             (_, 0) => Ordering::Less,
-            (_, _) => ra.as_slice().cmp(rb.as_slice()),
+            (_, _) => line_cmp(ra, rb, use_locale),
         };
 
         match ord {
@@ -331,8 +292,8 @@ fn open_file(name: &OsString, line_ending: LineEnding) -> io::Result<LineReader>
     } else {
         // some platforms shows different read error
         // try to override the error message, but failure of it is not serious
-        #[cfg(any(target_os = "wasi", target_os = "windows"))]
-        if metadata(name).is_ok_and(|m| m.is_dir()) {
+        #[cfg(any(target_os = "wasi", windows))]
+        if std::fs::metadata(name).is_ok_and(|m| m.is_dir()) {
             return Err(io::Error::other(translate!("comm-error-is-directory")));
         }
         let f = File::open(name)?;
@@ -343,6 +304,11 @@ fn open_file(name: &OsString, line_ending: LineEnding) -> io::Result<LineReader>
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+
+    let mut collator_opts = CollatorOptions::default();
+    collator_opts.alternate_handling = Some(AlternateHandling::Shifted);
+    let _ = try_init_collator(collator_opts);
+
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
     let filename1 = matches.get_one::<OsString>(options::FILE_1).unwrap();
     let filename2 = matches.get_one::<OsString>(options::FILE_2).unwrap();
