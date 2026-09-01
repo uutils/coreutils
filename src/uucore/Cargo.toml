@@ -37,7 +37,7 @@ libc = { workspace = true, optional = true }
 openssl = { workspace = true, optional = true }
 os_display = { workspace = true }
 rustc-hash = { workspace = true }
-rustix = { workspace = true, features = ["fs", "net", "pipe", "process"] }
+rustix = { workspace = true, optional = true }
 # Not optional: os_display already pulls unicode-width into every uucore build,
 # so making it a direct dependency here is free and keeps char_width available
 # on all targets (a feature-gated optional dep failed to activate on wasm).
@@ -144,12 +144,12 @@ default = ["signals"]
 backup-control = []
 colors = []
 diagnostics = ["dep:ariadne"]
-checksum = ["quoting-style", "sum", "base64-simd"]
+checksum = ["base64-simd", "quoting-style", "rustix/fs", "sum"]
 encoding = ["data-encoding", "data-encoding-macro", "z85", "base64-simd"]
-entries = ["libc"]
+entries = ["libc", "rustix/fs"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
 fast-inc = []
-fs = ["dunce", "libc", "windows-sys"]
+fs = ["dunce", "libc", "rustix/fs", "windows-sys"]
 fsext = ["libc", "windows-sys", "bstr"]
 fsxattr = ["xattr", "itertools", "libc"]
 hardware = []
@@ -176,15 +176,15 @@ i18n-datetime = [
   "jiff-icu",
   "jiff",
 ]
-mode = ["libc"]
+mode = ["libc", "rustix/process"]
 perms = ["entries", "libc", "walkdir"]
-buf-copy = []
+buf-copy = ["pipes"]
 parser-num = ["extendedbigdecimal", "num-traits"]
 parser-size = ["parser-num", "procfs"]
 parser-glob = ["glob"]
 parser = ["parser-num", "parser-size", "parser-glob"]
-pipes = ["fs"]
-process = ["libc", "windows-sys"]
+pipes = ["fs", "rustix/pipe"]
+process = ["libc", "rustix/process", "windows-sys"]
 proc-info = ["tty", "walkdir"]
 quoting-style = ["i18n-common"]
 ranges = []
@@ -220,7 +220,7 @@ version-cmp = []
 wide = []
 tty = []
 time = ["jiff"]
-uptime = ["jiff", "libc", "windows-sys", "utmpx", "utmp-classic"]
+uptime = ["jiff", "libc", "rustix/time", "utmp-classic", "utmpx", "windows-sys"]
 benchmark = ["divan", "itertools", "tempfile"]
 
 [lints]
