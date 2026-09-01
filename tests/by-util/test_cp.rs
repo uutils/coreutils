@@ -2428,6 +2428,37 @@ fn test_cp_preserve_links_case_7() {
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
 fn test_cp_preserve_links_does_not_reuse_no_clobber_destination() {
+    for update in [false, true] {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        at.mkdir("src");
+        at.write("src/f", "source\n");
+        at.hard_link("src/f", "src/g");
+
+        at.mkdir("dest");
+        at.write("dest/f", "destination\n");
+
+        ucmd.arg("--no-clobber");
+        if update {
+            ucmd.arg("--update=older");
+        }
+        ucmd.arg("--preserve=links")
+            .arg("src/f")
+            .arg("src/g")
+            .arg("dest")
+            .succeeds();
+
+        let metadata_f = std::fs::metadata(at.plus("dest/f")).unwrap();
+        let metadata_g = std::fs::metadata(at.plus("dest/g")).unwrap();
+        assert_ne!(metadata_f.ino(), metadata_g.ino());
+        assert_eq!(at.read("dest/f"), "destination\n");
+        assert_eq!(at.read("dest/g"), "source\n");
+    }
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_cp_preserve_links_respects_interactive_update() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.mkdir("src");
@@ -2435,20 +2466,23 @@ fn test_cp_preserve_links_does_not_reuse_no_clobber_destination() {
     at.hard_link("src/f", "src/g");
 
     at.mkdir("dest");
-    at.write("dest/f", "destination\n");
+    at.write("dest/g", "destination\n");
 
-    ucmd.arg("--no-clobber")
+    ucmd.arg("--interactive")
+        .arg("--update=older")
         .arg("--preserve=links")
         .arg("src/f")
         .arg("src/g")
         .arg("dest")
-        .succeeds();
+        .pipe_in("n\n")
+        .fails()
+        .stderr_contains("overwrite 'dest/g'?");
 
     let metadata_f = std::fs::metadata(at.plus("dest/f")).unwrap();
     let metadata_g = std::fs::metadata(at.plus("dest/g")).unwrap();
     assert_ne!(metadata_f.ino(), metadata_g.ino());
-    assert_eq!(at.read("dest/f"), "destination\n");
-    assert_eq!(at.read("dest/g"), "source\n");
+    assert_eq!(at.read("dest/f"), "source\n");
+    assert_eq!(at.read("dest/g"), "destination\n");
 }
 
 #[test]
@@ -2464,10 +2498,12 @@ fn test_cp_preserve_links_after_skipped_older_source() {
 
     at.mkdir("dest");
     at.touch("dest/f");
+    at.touch("dest/g");
     let source_time = FileTime::from_unix_time(1_000_000_000, 0);
     let dest_time = FileTime::from_unix_time(1_000_003_600, 0);
     filetime::set_file_times(at.plus("src/f"), source_time, source_time).unwrap();
     filetime::set_file_times(at.plus("dest/f"), dest_time, dest_time).unwrap();
+    filetime::set_file_times(at.plus("dest/g"), dest_time, dest_time).unwrap();
 
     ucmd.arg("--update=older")
         .arg("--preserve=links")
@@ -7730,6 +7766,33 @@ fn test_cp_update_older_interactive_prompt_no() {
         .stderr_to_stdout()
         .fails()
         .stdout_is("cp: overwrite 'old'? ");
+}
+
+#[test]
+fn test_cp_update_older_interactive_remove_destination_preserves_declined_target() {
+    use filetime::FileTime;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("source", "source\n");
+    at.write("destination", "destination\n");
+
+    let older = FileTime::from_unix_time(1_000_000_000, 0);
+    let newer = FileTime::from_unix_time(1_000_003_600, 0);
+    filetime::set_file_times(at.plus("destination"), older, older).unwrap();
+    filetime::set_file_times(at.plus("source"), newer, newer).unwrap();
+
+    ucmd.args(&[
+        "--update=older",
+        "--interactive",
+        "--remove-destination",
+        "source",
+        "destination",
+    ])
+    .pipe_in("N\n")
+    .fails()
+    .stderr_is("cp: overwrite 'destination'? ");
+
+    assert_eq!(at.read("destination"), "destination\n");
 }
 
 #[test]

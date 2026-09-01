@@ -59,7 +59,8 @@ mod platform;
 
 #[cfg(target_os = "wasi")]
 #[derive(Clone, Copy)]
-struct WasiTimestampContext {
+struct WasiAttributeContext<'a> {
+    diagnostic: &'a str,
     captured_source: Option<SourceTimes>,
     follow_destination: bool,
 }
@@ -1893,15 +1894,18 @@ pub(crate) fn copy_attributes(
     dest_is_freshly_created_dir: bool,
     skip_selinux_xattr: bool,
 ) -> CopyResult<()> {
-    let context = &*format!("{} -> {}", source.quote(), dest.quote());
+    let context = format!("{} -> {}", source.quote(), dest.quote());
     let source_metadata =
-        fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+        fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.clone()))?;
     copy_attributes_from_metadata(
         source,
         dest,
         &source_metadata,
+        #[cfg(not(target_os = "wasi"))]
+        &context,
         #[cfg(target_os = "wasi")]
-        WasiTimestampContext {
+        WasiAttributeContext {
+            diagnostic: &context,
             captured_source: None,
             follow_destination: !dest.is_symlink(),
         },
@@ -1920,14 +1924,15 @@ pub(crate) fn copy_attributes_with_source_times(
     dest_is_freshly_created_dir: bool,
     skip_selinux_xattr: bool,
 ) -> CopyResult<()> {
-    let context = &*format!("{} -> {}", source.quote(), dest.quote());
+    let context = format!("{} -> {}", source.quote(), dest.quote());
     let source_metadata =
-        fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+        fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.clone()))?;
     copy_attributes_from_metadata(
         source,
         dest,
         &source_metadata,
-        WasiTimestampContext {
+        WasiAttributeContext {
+            diagnostic: &context,
             captured_source: Some(source_times),
             follow_destination: true,
         },
@@ -1942,12 +1947,14 @@ fn copy_attributes_from_metadata(
     source: &Path,
     dest: &Path,
     source_metadata: &Metadata,
-    #[cfg(target_os = "wasi")] timestamp_context: WasiTimestampContext,
+    #[cfg(not(target_os = "wasi"))] diagnostic_context: &str,
+    #[cfg(target_os = "wasi")] wasi_context: WasiAttributeContext<'_>,
     attributes: &Attributes,
     dest_is_freshly_created_dir: bool,
     skip_selinux_xattr: bool,
 ) -> CopyResult<()> {
-    let context = &*format!("{} -> {}", source.quote(), dest.quote());
+    #[cfg(target_os = "wasi")]
+    let diagnostic_context = wasi_context.diagnostic;
 
     let mode_explicitly_disabled = matches!(attributes.mode, Preserve::No { explicit: true });
 
@@ -1978,7 +1985,7 @@ fn copy_attributes_from_metadata(
         let dest_gid = source_metadata.gid();
         let meta = &dest
             .symlink_metadata()
-            .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+            .map_err(|e| CpError::IoErrContext(e, diagnostic_context.to_owned()))?;
 
         let try_chown = {
             |uid| {
@@ -2028,7 +2035,7 @@ fn copy_attributes_from_metadata(
             let source_perms = source_metadata.permissions();
 
             fs::set_permissions(dest, source_perms)
-                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+                .map_err(|e| CpError::IoErrContext(e, diagnostic_context.to_owned()))?;
             // GNU `cp -p` preserves POSIX ACLs as part of mode. On Linux the
             // ACLs are stored as `system.posix_acl_*` xattrs; copy just those
             // so we keep ACL parity with GNU without preserving user xattrs
@@ -2073,11 +2080,10 @@ fn copy_attributes_from_metadata(
 
     #[cfg(target_os = "wasi")]
     handle_preserve(attributes.timestamps, || {
-        let source_times = timestamp_context
+        let source_times = wasi_context
             .captured_source
             .map_or_else(|| SourceTimes::from_metadata(source_metadata), Ok)?;
-        set_timestamps(source_times, dest, timestamp_context.follow_destination)
-            .map_err(CpError::from)
+        set_timestamps(source_times, dest, wasi_context.follow_destination).map_err(CpError::from)
     })?;
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -2282,13 +2288,25 @@ fn handle_existing_dest(
     }
 
     if options.update == UpdateMode::IfOlder {
-        let source_metadata = if options.dereference(source_in_command_line) {
-            fs::metadata(source)?
+        let source_was_already_copied = options.preserve_hard_links()
+            && copied_files.contains_key(
+                &FileInformation::from_path(source, options.dereference(source_in_command_line))
+                    .map_err(|e| {
+                        CpError::IoErrContext(e, format!("cannot stat {}", source.quote()))
+                    })?,
+            );
+        if source_was_already_copied {
+            options.overwrite.verify(dest, options.debug)?;
         } else {
-            fs::symlink_metadata(source)?
-        };
-        if source_metadata.modified()? <= fs::symlink_metadata(dest)?.modified()? {
-            return Err(CpError::Skipped(false));
+            let source_metadata = if options.dereference(source_in_command_line) {
+                fs::metadata(source)?
+            } else {
+                fs::symlink_metadata(source)?
+            };
+            if source_metadata.modified()? <= fs::symlink_metadata(dest)?.modified()? {
+                return Err(CpError::Skipped(false));
+            }
+            options.overwrite.verify(dest, options.debug)?;
         }
     }
 
@@ -2506,6 +2524,7 @@ fn handle_copy_mode(
     symlinked_files: &mut HashSet<FileInformation>,
     source_in_command_line: bool,
     created_parent_dirs: &mut HashSet<PathBuf>,
+    overwrite_verified: bool,
 ) -> CopyResult<PerformedAction> {
     match options.copy_mode {
         CopyMode::Link => {
@@ -2588,7 +2607,9 @@ fn handle_copy_mode(
                             return Ok(PerformedAction::Skipped);
                         }
 
-                        options.overwrite.verify(dest, options.debug)?;
+                        if !overwrite_verified {
+                            options.overwrite.verify(dest, options.debug)?;
+                        }
 
                         copy_helper(
                             source,
@@ -2650,6 +2671,10 @@ fn remember_copied_file(
         );
     }
     Ok(())
+}
+
+fn should_remember_skipped_file(options: &Options) -> bool {
+    options.update == UpdateMode::IfOlder && options.overwrite != OverwriteMode::NoClobber
 }
 
 /// Calculates the permissions for the destination file in a copy operation.
@@ -2774,6 +2799,7 @@ fn copy_file(
         fs::remove_file(dest)?;
     }
 
+    let mut overwrite_verified = false;
     if initial_dest_metadata.is_some()
         && (!options.attributes_only
             || matches!(
@@ -2799,13 +2825,21 @@ fn copy_file(
                 }
             }
         }
-        if let Err(error) =
-            handle_existing_dest(source, dest, options, source_in_command_line, copied_files)
-        {
-            if matches!(error, CpError::Skipped(false)) && options.update == UpdateMode::IfOlder {
-                remember_copied_file(source, dest, options, source_in_command_line, copied_files)?;
+        match handle_existing_dest(source, dest, options, source_in_command_line, copied_files) {
+            Ok(()) => overwrite_verified = true,
+            Err(error) => {
+                if matches!(error, CpError::Skipped(false)) && should_remember_skipped_file(options)
+                {
+                    remember_copied_file(
+                        source,
+                        dest,
+                        options,
+                        source_in_command_line,
+                        copied_files,
+                    )?;
+                }
+                return Err(error);
             }
-            return Err(error);
         }
         if are_hardlinks_to_same_file(source, dest) {
             if options.copy_mode == CopyMode::Copy {
@@ -2909,10 +2943,11 @@ fn copy_file(
         symlinked_files,
         source_in_command_line,
         created_parent_dirs,
+        overwrite_verified,
     )?;
 
     if performed_action == PerformedAction::Skipped {
-        if options.update == UpdateMode::IfOlder {
+        if should_remember_skipped_file(options) {
             remember_copied_file(source, dest, options, source_in_command_line, copied_files)?;
         }
         return Err(CpError::Skipped(false));
@@ -2920,11 +2955,6 @@ fn copy_file(
 
     let created_symlink_output =
         source_metadata.file_type().is_symlink() || options.copy_mode == CopyMode::SymLink;
-    #[cfg(target_os = "wasi")]
-    let timestamp_context = WasiTimestampContext {
-        captured_source: captured_source_times,
-        follow_destination: !created_symlink_output,
-    };
 
     if options.verbose {
         print_verbose_output(options.parents, progress_bar, source, dest)?;
@@ -2968,15 +2998,23 @@ fn copy_file(
         };
 
         #[cfg(target_os = "wasi")]
-        let result = copy_attributes_from_metadata(
-            &source_for_attributes,
-            dest,
-            &source_metadata,
-            timestamp_context,
-            &options.attributes,
-            false,
-            options.set_selinux_context,
-        );
+        let result = {
+            let attribute_context =
+                format!("{} -> {}", source_for_attributes.quote(), dest.quote());
+            copy_attributes_from_metadata(
+                &source_for_attributes,
+                dest,
+                &source_metadata,
+                WasiAttributeContext {
+                    diagnostic: &attribute_context,
+                    captured_source: captured_source_times,
+                    follow_destination: !created_symlink_output,
+                },
+                &options.attributes,
+                false,
+                options.set_selinux_context,
+            )
+        };
 
         #[cfg(not(target_os = "wasi"))]
         let result = copy_attributes(
