@@ -23,8 +23,8 @@ use uucore::error::{FromIo, UResult};
 use uucore::translate;
 
 use crate::{
-    GlobalSettings, Output, SortError, chunks::Chunk, current_open_fd_count, fd_soft_limit, open,
-    tmp_dir::TmpDirWrapper,
+    GlobalSettings, Output, STDIN_FILE, SortError, chunks::Chunk, current_open_fd_count,
+    fd_soft_limit, open, tmp_dir::TmpDirWrapper,
 };
 
 #[cfg(not(wasi_no_threads))]
@@ -39,7 +39,7 @@ use sync as runner;
 
 /// If the output file occurs in the input files as well, copy the contents of the output file
 /// and replace its occurrences in the inputs with that copy.
-fn replace_output_file_in_input_files(
+pub(super) fn replace_output_file_in_input_files(
     files: &mut [OsString],
     output: Option<&OsStr>,
     tmp_dir: &mut TmpDirWrapper,
@@ -47,9 +47,10 @@ fn replace_output_file_in_input_files(
     let mut copy: Option<PathBuf> = None;
     if let Some(Ok(output_path)) = output.map(|path| Path::new(path).canonicalize()) {
         for file in files {
-            if Path::new(file)
-                .canonicalize()
-                .is_ok_and(|file_path| file_path == output_path)
+            if file != STDIN_FILE
+                && Path::new(file)
+                    .canonicalize()
+                    .is_ok_and(|file_path| file_path == output_path)
             {
                 if let Some(copy) = &copy {
                     *file = copy.clone().into_os_string();
@@ -103,7 +104,6 @@ pub fn merge(
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
-    replace_output_file_in_input_files(files, output.as_output_name(), tmp_dir)?;
     let files = files
         .iter()
         .map(|file| open(file).map(|file| PlainMergeInput { inner: file }));

@@ -2460,6 +2460,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         });
     }
 
+    if !settings.check {
+        merge::replace_output_file_in_input_files(
+            &mut files,
+            matches
+                .get_one::<OsString>(options::OUTPUT)
+                .map(OsString::as_os_str),
+            &mut tmp_dir,
+        )?;
+    }
+
     let opened_inputs = if settings.merge || settings.check {
         Vec::new()
     } else {

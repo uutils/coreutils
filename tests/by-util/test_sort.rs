@@ -1941,6 +1941,27 @@ fn test_output_is_input() {
 }
 
 #[test]
+fn test_output_is_input_without_merge() {
+    let input = "a\nb\n";
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("file", input);
+
+    ucmd.args(&["-r", "-o", "file", "file"]).succeeds();
+    assert_eq!(at.read("file"), "b\na\n");
+}
+
+#[test]
+fn test_output_named_stdin_marker_reads_stdin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("-", "old contents\n");
+
+    ucmd.args(&["-o", "-", "-"]).pipe_in("b\na\n").succeeds();
+
+    assert_eq!(at.read("-"), "a\nb\n");
+}
+
+#[test]
 #[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_output_device() {
