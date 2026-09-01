@@ -50,7 +50,7 @@ Our key objectives include:
   prints a single line (see [error diagnostics](docs/src/extensions-errors.md));
   scripts and pipes still get the plain GNU message
 - Providing comprehensive internationalization support (UTF-8)
-- Improved performances
+- Continuously improving performance, with significant slowdowns compared with other implementations treated as bugs
 - [Extensions](docs/src/extensions.md) when relevant (example: --progress)
 
 uutils aims to work on as many platforms as possible, to be able to use the same
