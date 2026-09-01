@@ -366,20 +366,14 @@ impl<'a> Input<'a> {
         #[cfg(windows)]
         let mut src = {
             let f = File::from(io::stdin().as_handle().try_clone_to_owned()?);
-            let is_file = if let Ok(metadata) = f.metadata() {
-                // this hack is needed as there is no other way on windows
-                // to differentiate between the case where `seek` works
-                // on a file handle or not. i.e. when the handle is no real
-                // file but a pipe, `seek` is still successful, but following
-                // `read`s are not affected by the seek.
-                metadata.creation_time() != 0
-            } else {
-                false
-            };
-            if is_file {
-                Source::File(f)
-            } else {
-                Source::Stdin(io::stdin())
+            // this hack is needed as there is no other way on windows
+            // to differentiate between the case where `seek` works
+            // on a file handle or not. i.e. when the handle is no real
+            // file but a pipe, `seek` is still successful, but following
+            // `read`s are not affected by the seek.
+            match f.metadata() {
+                Ok(metadata) if metadata.creation_time() != 0 => Source::File(f),
+                _ => Source::Stdin(io::stdin()),
             }
         };
         #[cfg(all(not(unix), not(windows)))]
