@@ -1037,8 +1037,8 @@ fn test_chown_symlink_two_links_same_dir() {
 #[cfg(target_os = "linux")]
 #[test]
 fn verbose_missing_file_write_error_is_reported_not_panic() {
+    use rustix::process::geteuid;
     use std::fs::OpenOptions;
-    use uucore::process::geteuid;
 
     let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
     new_ucmd!()
