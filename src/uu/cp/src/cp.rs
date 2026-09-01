@@ -2801,7 +2801,7 @@ fn copy_file(
         if let Err(error) =
             handle_existing_dest(source, dest, options, source_in_command_line, copied_files)
         {
-            if matches!(error, CpError::Skipped(false)) {
+            if matches!(error, CpError::Skipped(false)) && options.update == UpdateMode::IfOlder {
                 remember_copied_file(source, dest, options, source_in_command_line, copied_files)?;
             }
             return Err(error);
@@ -2911,7 +2911,9 @@ fn copy_file(
     )?;
 
     if performed_action == PerformedAction::Skipped {
-        remember_copied_file(source, dest, options, source_in_command_line, copied_files)?;
+        if options.update == UpdateMode::IfOlder {
+            remember_copied_file(source, dest, options, source_in_command_line, copied_files)?;
+        }
         return Err(CpError::Skipped(false));
     }
 

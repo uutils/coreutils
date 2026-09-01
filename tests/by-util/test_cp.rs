@@ -2427,6 +2427,32 @@ fn test_cp_preserve_links_case_7() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
+fn test_cp_preserve_links_does_not_reuse_no_clobber_destination() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("src");
+    at.write("src/f", "source\n");
+    at.hard_link("src/f", "src/g");
+
+    at.mkdir("dest");
+    at.write("dest/f", "destination\n");
+
+    ucmd.arg("--no-clobber")
+        .arg("--preserve=links")
+        .arg("src/f")
+        .arg("src/g")
+        .arg("dest")
+        .succeeds();
+
+    let metadata_f = std::fs::metadata(at.plus("dest/f")).unwrap();
+    let metadata_g = std::fs::metadata(at.plus("dest/g")).unwrap();
+    assert_ne!(metadata_f.ino(), metadata_g.ino());
+    assert_eq!(at.read("dest/f"), "destination\n");
+    assert_eq!(at.read("dest/g"), "source\n");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_cp_preserve_links_after_skipped_older_source() {
     use filetime::FileTime;
 
