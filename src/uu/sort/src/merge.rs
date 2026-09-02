@@ -32,6 +32,7 @@ use crate::{
     chunks::{self, Chunk, RecycledChunk},
     compare_by, current_open_fd_count, fd_soft_limit, open,
     tmp_dir::TmpDirWrapper,
+    write_failed_context,
 };
 
 /// If the output file occurs in the input files as well, copy the contents of the output file
@@ -135,24 +136,22 @@ pub fn merge_with_file_limit<
             batch.push(file);
             if batch.len() >= batch_size {
                 assert_eq!(batch.len(), batch_size);
-                let merger = merge_without_limit(batch.into_iter(), settings)?;
+                temporary_files.push(merge_batch_to_tmp_file::<_, _, Tmp>(
+                    batch.into_iter(),
+                    settings,
+                    tmp_dir,
+                )?);
                 batch = Vec::with_capacity(batch_size);
-
-                let mut tmp_file =
-                    Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
-                merger.write_all_to(settings, tmp_file.as_write())?;
-                temporary_files.push(tmp_file.finished_writing()?);
             }
         }
         // Merge any remaining files that didn't get merged in a full batch above.
         if !batch.is_empty() {
             assert!(batch.len() < batch_size);
-            let merger = merge_without_limit(batch.into_iter(), settings)?;
-
-            let mut tmp_file =
-                Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
-            merger.write_all_to(settings, tmp_file.as_write())?;
-            temporary_files.push(tmp_file.finished_writing()?);
+            temporary_files.push(merge_batch_to_tmp_file::<_, _, Tmp>(
+                batch.into_iter(),
+                settings,
+                tmp_dir,
+            )?);
         }
         merge_with_file_limit::<_, _, Tmp>(
             temporary_files
@@ -166,6 +165,23 @@ pub fn merge_with_file_limit<
             tmp_dir,
         )
     }
+}
+
+/// Merge one batch of inputs into a fresh temporary file.
+fn merge_batch_to_tmp_file<
+    M: MergeInput + 'static,
+    F: ExactSizeIterator<Item = UResult<M>>,
+    Tmp: WriteableTmpFile,
+>(
+    files: F,
+    settings: &GlobalSettings,
+    tmp_dir: &mut TmpDirWrapper,
+) -> UResult<Tmp::Closed> {
+    let merger = merge_without_limit(files, settings)?;
+    let (file, path) = tmp_dir.next_file()?;
+    let mut tmp_file = Tmp::create((file, path.clone()), settings.compress_prog.as_deref())?;
+    merger.write_all_to(settings, tmp_file.as_write(), path.as_os_str())?;
+    tmp_file.finished_writing()
 }
 
 /// Merge files without limiting how many files are concurrently open.
@@ -336,15 +352,27 @@ struct FileMerger<'a> {
 impl FileMerger<'_> {
     /// Write the merged contents to the output file.
     fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
+        let output_name = output
+            .as_output_name()
+            .unwrap_or(OsStr::new("standard output"))
+            .to_owned();
         let mut out = output.into_write();
-        self.write_all_to(settings, &mut out)
+        self.write_all_to(settings, &mut out, &output_name)?;
+        out.flush()
+            .map_err_context(|| write_failed_context(&output_name))
     }
 
-    fn write_all_to(mut self, settings: &GlobalSettings, out: &mut impl Write) -> UResult<()> {
+    fn write_all_to(
+        mut self,
+        settings: &GlobalSettings,
+        out: &mut impl Write,
+        output_name: &OsStr,
+    ) -> UResult<()> {
+        let write_error_context = || write_failed_context(output_name);
         let write_result = loop {
             match self
                 .write_next(out, settings)
-                .map_err_context(|| "write failed".into())
+                .map_err_context(write_error_context)
             {
                 Ok(true) => (),
                 Ok(false) => break Ok(()),

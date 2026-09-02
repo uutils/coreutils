@@ -2079,6 +2079,29 @@ fn test_args_check_conflict() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn test_merge_reports_failed_write_of_buffered_output() {
+    // Output smaller than the write buffer is only written when merging
+    // finishes, so the failure must still be reported and not swallowed.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("small.txt", "kiwi\nlime\n");
+    ucmd.args(&["-m", "small.txt"])
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("sort: write failed: 'standard output': No space left on device\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_merge_names_output_file_on_failed_write() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("small.txt", "kiwi\nlime\n");
+    ucmd.args(&["-m", "-o", "/dev/full", "small.txt"])
+        .fails()
+        .stderr_is("sort: write failed: /dev/full: No space left on device\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn test_failed_write_is_reported() {
     new_ucmd!()
         .pipe_in("hello")
@@ -3686,3 +3709,33 @@ sort: invalid suffix in --buffer-size argument '8zz'
 }
 
 /* spell-checker: enable */
+
+#[test]
+fn test_stdout_larger_than_the_output_buffer() {
+    // The sorted result is written to stdout through a buffer; make sure nothing
+    // is lost or reordered when the output is several times that buffer's size.
+    let line_count = 60_000;
+    let mut input = String::new();
+    // Feed the keys in descending order so every line has to move.
+    for key in (0..line_count).rev() {
+        writeln!(input, "{key:07}:filler-padding-to-widen-the-line").unwrap();
+    }
+    let mut expected = String::new();
+    for key in 0..line_count {
+        writeln!(expected, "{key:07}:filler-padding-to-widen-the-line").unwrap();
+    }
+    assert!(expected.len() > 512 * 1024);
+
+    new_ucmd!().pipe_in(input).succeeds().stdout_is(expected);
+}
+
+#[test]
+fn test_single_line_without_any_line_ending() {
+    // A line far longer than the output buffer that contains no line ending at
+    // all: sort still has to emit it in full, terminated.
+    let line = "q".repeat(400_000);
+    new_ucmd!()
+        .pipe_in(line.clone())
+        .succeeds()
+        .stdout_is(format!("{line}\n"));
+}
