@@ -37,7 +37,7 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::ops::Range;
 use std::path::Path;
@@ -54,6 +54,7 @@ use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::i18n::collator::{compute_sort_key_utf8, locale_cmp};
 use uucore::i18n::datetime::get_locale_months;
 use uucore::i18n::decimal::locale_decimal_separator;
+use uucore::io::OwnedFileDescriptorOrHandle;
 use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
@@ -133,6 +134,8 @@ const POSITIVE: &u8 = &b'+';
 const MIN_AUTOMATIC_BUF_SIZE: usize = 512 * 1024; // 512 KiB
 const FALLBACK_AUTOMATIC_BUF_SIZE: usize = 32 * 1024 * 1024; // 32 MiB
 const MAX_AUTOMATIC_BUF_SIZE: usize = 1024 * 1024 * 1024; // 1 GiB
+/// Size of the buffer used to write the sorted output.
+const OUTPUT_BUF_SIZE: usize = 256 * 1024;
 
 #[derive(Debug, Error)]
 pub enum SortError {
@@ -262,7 +265,7 @@ impl Output {
     }
 
     fn into_write(self) -> UResult<BufWriter<Box<dyn Write>>> {
-        Ok(BufWriter::new(match self.file {
+        let writer: Box<dyn Write> = match self.file {
             Some((name, file)) => {
                 // Only regular files can be truncated; there a failure leaves stale bytes.
                 if file.metadata().is_ok_and(|meta| meta.is_file()) {
@@ -273,8 +276,18 @@ impl Output {
                 }
                 Box::new(file)
             }
-            None => Box::new(stdout()),
-        }))
+            // `stdout()` is line buffered, so every byte we write is scanned for a
+            // line ending on top of the buffering we already do here. Write to a
+            // duplicate of the descriptor instead, which is not. A terminal keeps
+            // `stdout()`: on Windows that is what converts the output for the
+            // console, and no terminal is fast enough for the buffering to matter.
+            None if stdout().is_terminal() => Box::new(stdout()),
+            None => OwnedFileDescriptorOrHandle::from(stdout()).map_or_else(
+                |_| Box::new(stdout()) as Box<dyn Write>,
+                |fd| Box::new(fd.into_file()),
+            ),
+        };
+        Ok(BufWriter::with_capacity(OUTPUT_BUF_SIZE, writer))
     }
 
     fn as_output_name(&self) -> Option<&OsStr> {
