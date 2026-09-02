@@ -348,7 +348,11 @@ struct Precomputed {
     floats_per_line: usize,
     selections_per_line: usize,
     fast_lexicographic: bool,
-    fast_locale_collation: bool,
+    /// The whole line is collated by the locale, with no key options in the way.
+    whole_line_collation: bool,
+    /// Store a collation key per line for [`whole_line_collation`] instead of
+    /// collating on demand.
+    precompute_collation_keys: bool,
     fast_ascii_insensitive: bool,
     whole_line_numeric: bool,
     tokenize_blank_thousands_sep: bool,
@@ -413,10 +417,21 @@ impl GlobalSettings {
 
         self.precomputed.fast_lexicographic =
             !disable_fast_lexicographic && self.can_use_fast_lexicographic();
-        self.precomputed.fast_locale_collation =
+        self.precomputed.whole_line_collation =
             disable_fast_lexicographic && self.can_use_fast_lexicographic();
+        self.precomputed.precompute_collation_keys = self.precomputed.whole_line_collation;
         self.precomputed.fast_ascii_insensitive = self.can_use_fast_ascii_insensitive();
         self.precomputed.whole_line_numeric = self.can_use_whole_line_numeric();
+    }
+
+    /// A copy of these settings that collates lines on demand rather than
+    /// storing a key per line. Precomputing the key only pays off when each
+    /// line takes part in many comparisons; merging and checking compare each
+    /// line about once.
+    pub(crate) fn collating_on_demand(&self) -> Self {
+        let mut settings = self.clone();
+        settings.precomputed.precompute_collation_keys = false;
+        settings
     }
 
     /// Returns true when a number parsed from the whole line can stand in for
@@ -726,7 +741,7 @@ impl<'a> Line<'a> {
         settings: &GlobalSettings,
     ) -> Self {
         #[cfg(feature = "i18n-collator")]
-        if settings.precomputed.fast_locale_collation {
+        if settings.precomputed.precompute_collation_keys {
             compute_sort_key_utf8(line, &mut line_data.collation_key_buffer);
             line_data
                 .collation_key_ends
@@ -2892,11 +2907,15 @@ fn compare_by<'a>(
     }
 
     #[cfg(feature = "i18n-collator")]
-    if global_settings.precomputed.fast_locale_collation {
-        let a_key = a_line_data.collation_key(a.index);
-        let b_key = b_line_data.collation_key(b.index);
-        let mut cmp = a_key.cmp(b_key);
-        // If collation keys are equal, fall back to lexicographic comparison
+    if global_settings.precomputed.whole_line_collation {
+        let mut cmp = if global_settings.precomputed.precompute_collation_keys {
+            let a_key = a_line_data.collation_key(a.index);
+            let b_key = b_line_data.collation_key(b.index);
+            a_key.cmp(b_key)
+        } else {
+            locale_cmp(a.line, b.line)
+        };
+        // If the lines collate equal, fall back to lexicographic comparison
         // This can be the case for inputs like `01` and `0_1`, which have equal keys
         if cmp == Ordering::Equal {
             // Reversing the order to match sort's sorting behaviour

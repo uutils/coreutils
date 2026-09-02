@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) ints (linux) NOFILE dfgi abmon avril
+// spell-checker:ignore (words) ints (linux) NOFILE dfgi abmon avril abricot figue échalote zeste nfigue nzeste néchalote
 #![allow(clippy::cast_possible_wrap)]
 
 use std::env;
@@ -3835,6 +3835,84 @@ fn test_whole_line_ordering_with_long_shared_prefix() {
         }
     }
 }
+
+#[test]
+fn test_merge_and_check_collate_by_locale() {
+    // -m and -c collate on demand rather than through precomputed keys, so
+    // make sure they still order by the locale and not by bytes.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("left.txt", "abricot\nfigue\n");
+    at.write("right.txt", "échalote\nzeste\n");
+    ucmd.env("LC_ALL", "en_US.UTF-8")
+        .args(&["-m", "left.txt", "right.txt"])
+        .succeeds()
+        .stdout_only("abricot\néchalote\nfigue\nzeste\n");
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-c")
+        .pipe_in("abricot\néchalote\nfigue\n")
+        .succeeds()
+        .no_output();
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-c")
+        .pipe_in("abricot\nfigue\néchalote\n")
+        .fails_with_code(1)
+        .stderr_only("sort: -:3: disorder: échalote\n");
+}
+
+#[test]
+fn test_locale_collation_agrees_between_sort_merge_and_check() {
+    // "café" spelled with a single é code point and with e + combining acute
+    // collates equal but differs in bytes. Every mode has to break that tie
+    // the same way: sorting, merging (which collates on demand), checking,
+    // and a sort that spills to temporary files.
+    let composed = "caf\u{e9}\n";
+    let combining = "cafe\u{301}\n";
+    let input = format!("{composed}{combining}");
+    let scene = TestScenario::new("sort");
+    let at = &scene.fixtures;
+    at.write("in.txt", &input);
+    let sorted = scene
+        .ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("in.txt")
+        .succeeds()
+        .stdout_move_str();
+    scene
+        .ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-c")
+        .pipe_in(sorted.clone())
+        .succeeds()
+        .no_output();
+    scene
+        .ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["-m", "in.txt"])
+        .succeeds()
+        .stdout_only(&sorted);
+    scene
+        .ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["-S", "1", "in.txt"])
+        .succeeds()
+        .stdout_only(&sorted);
+    // -u keeps both spellings, as the byte tie-break tells them apart.
+    scene
+        .ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["-u", "in.txt"])
+        .succeeds()
+        .stdout_only(&sorted);
+    scene
+        .ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["-mu", "in.txt"])
+        .succeeds()
+        .stdout_only(&sorted);
+}
+
 #[test]
 fn test_ignore_case_key_reverse_disagreeing_with_global() {
     // A key `r` that the global options lack has to be honored on the
