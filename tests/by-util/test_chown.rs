@@ -95,7 +95,7 @@ fn test_chown_only_owner() {
         return;
     }
     let user_name = String::from(result.stdout_str().trim());
-    assert!(!user_name.is_empty());
+    assert_ne!(user_name, "");
 
     let file1 = "test_chown_file1";
     at.touch(file1);
@@ -132,7 +132,7 @@ fn test_chown_only_owner_colon() {
         return;
     }
     let user_name = String::from(result.stdout_str().trim());
-    assert!(!user_name.is_empty());
+    assert_ne!(user_name, "");
 
     let file1 = "test_chown_file1";
     at.touch(file1);
@@ -176,7 +176,7 @@ fn test_chown_dot_separator_warning() {
         return;
     }
     let user_name = String::from(result.stdout_str().trim());
-    assert!(!user_name.is_empty());
+    assert_ne!(user_name, "");
 
     let file1 = "test_chown_dot_warn";
     at.touch(file1);
@@ -186,7 +186,7 @@ fn test_chown_dot_separator_warning() {
         return;
     }
     let group_name = String::from(result.stdout_str().trim());
-    assert!(!group_name.is_empty());
+    assert_ne!(group_name, "");
 
     // chown user. file should warn about '.' separator
     scene
@@ -294,7 +294,7 @@ fn test_chown_owner_group() {
     }
 
     let user_name = String::from(result.stdout_str().trim());
-    assert!(!user_name.is_empty());
+    assert_ne!(user_name, "");
 
     let file1 = "test_chown_file1";
     at.touch(file1);
@@ -304,7 +304,7 @@ fn test_chown_owner_group() {
         return;
     }
     let group_name = String::from(result.stdout_str().trim());
-    assert!(!group_name.is_empty());
+    assert_ne!(group_name, "");
 
     let result = scene
         .ucmd()
@@ -356,7 +356,7 @@ fn test_chown_various_input() {
     }
 
     let user_name = String::from(result.stdout_str().trim());
-    assert!(!user_name.is_empty());
+    assert_ne!(user_name, "");
 
     let file1 = "test_chown_file1";
     at.touch(file1);
@@ -366,7 +366,7 @@ fn test_chown_various_input() {
         return;
     }
     let group_name = String::from(result.stdout_str().trim());
-    assert!(!group_name.is_empty());
+    assert_ne!(group_name, "");
 
     let result = scene
         .ucmd()
@@ -415,7 +415,7 @@ fn test_chown_only_group() {
         return;
     }
     let group_name = String::from(result.stdout_str().trim());
-    assert!(!group_name.is_empty());
+    assert_ne!(group_name, "");
 
     let file1 = "test_chown_file1";
     at.touch(file1);
@@ -453,7 +453,7 @@ fn test_chown_only_user_id() {
         return;
     }
     let user_id = String::from(result.stdout_str().trim());
-    assert!(!user_id.is_empty());
+    assert_ne!(user_id, "");
 
     let file1 = "test_chown_file1";
     at.touch(file1);
@@ -487,7 +487,7 @@ fn test_chown_fail_id() {
         return;
     }
     let user_id = String::from(result.stdout_str().trim());
-    assert!(!user_id.is_empty());
+    assert_ne!(user_id, "");
 
     let file1 = "test_chown_file1";
     at.touch(file1);
@@ -543,7 +543,7 @@ fn test_chown_only_group_id() {
         return;
     }
     let group_id = String::from(result.stdout_str().trim());
-    assert!(!group_id.is_empty());
+    assert_ne!(group_id, "");
 
     let file1 = "test_chown_file1";
     at.touch(file1);
@@ -611,14 +611,14 @@ fn test_chown_owner_group_id() {
         return;
     }
     let user_id = String::from(result.stdout_str().trim());
-    assert!(!user_id.is_empty());
+    assert_ne!(user_id, "");
 
     let result = scene.cmd("id").arg("-g").run();
     if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
     let group_id = String::from(result.stdout_str().trim());
-    assert!(!group_id.is_empty());
+    assert_ne!(group_id, "");
 
     let file1 = "test_chown_file1";
     at.touch(file1);
@@ -671,14 +671,14 @@ fn test_chown_owner_group_mix() {
         return;
     }
     let user_id = String::from(result.stdout_str().trim());
-    assert!(!user_id.is_empty());
+    assert_ne!(user_id, "");
 
     let result = scene.cmd("id").arg("-gn").run();
     if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
     let group_name = String::from(result.stdout_str().trim());
-    assert!(!group_name.is_empty());
+    assert_ne!(group_name, "");
 
     let file1 = "test_chown_file1";
     at.touch(file1);
@@ -710,7 +710,7 @@ fn test_chown_recursive() {
         return;
     }
     let user_name = String::from(result.stdout_str().trim());
-    assert!(!user_name.is_empty());
+    assert_ne!(user_name, "");
 
     at.mkdir_all("a/b/c");
     at.mkdir("z");
@@ -740,7 +740,7 @@ fn test_root_preserve() {
         return;
     }
     let user_name = String::from(result.stdout_str().trim());
-    assert!(!user_name.is_empty());
+    assert_ne!(user_name, "");
 
     let result = scene
         .ucmd()
@@ -782,7 +782,7 @@ fn test_chown_file_notexisting() {
         return;
     }
     let user_name = String::from(result.stdout_str().trim());
-    assert!(!user_name.is_empty());
+    assert_ne!(user_name, "");
 
     scene
         .ucmd()
@@ -807,7 +807,7 @@ fn test_chown_no_change_to_user() {
         return;
     }
     let user_name = String::from(result.stdout_str().trim());
-    assert!(!user_name.is_empty());
+    assert_ne!(user_name, "");
 
     for (i, from) in ["42", ":42", "42:42"].iter().enumerate() {
         let file = i.to_string();
@@ -834,13 +834,13 @@ fn test_chown_no_change_to_group() {
         return;
     }
     let user_name = String::from(result.stdout_str().trim());
-    assert!(!user_name.is_empty());
+    assert_ne!(user_name, "");
     let result = scene.cmd("id").arg("-ng").run();
     if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
     let group_name = String::from(result.stdout_str().trim());
-    assert!(!group_name.is_empty());
+    assert_ne!(group_name, "");
 
     for (i, from) in ["42", ":42", "42:42"].iter().enumerate() {
         let file = i.to_string();
@@ -867,13 +867,13 @@ fn test_chown_no_change_to_user_group() {
         return;
     }
     let user_name = String::from(result.stdout_str().trim());
-    assert!(!user_name.is_empty());
+    assert_ne!(user_name, "");
     let result = scene.cmd("id").arg("-ng").run();
     if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
     let group_name = String::from(result.stdout_str().trim());
-    assert!(!group_name.is_empty());
+    assert_ne!(group_name, "");
 
     for (i, from) in ["42", ":42", "42:42"].iter().enumerate() {
         let file = i.to_string();
@@ -936,7 +936,7 @@ fn test_chown_no_dereference_symlink_to_dir() {
         return;
     }
     let user_name = String::from(result.stdout_str().trim());
-    assert!(!user_name.is_empty());
+    assert_ne!(user_name, "");
 
     at.mkdir("dir");
     at.symlink_dir("dir", "link_to_dir");
@@ -980,7 +980,7 @@ fn test_chown_symlink_cycles() {
         return;
     }
     let user_name = String::from(result.stdout_str().trim());
-    assert!(!user_name.is_empty());
+    assert_ne!(user_name, "");
 
     at.mkdir_all("a/b/c");
     at.symlink_dir("a", "a/b/c/d");
@@ -1028,7 +1028,7 @@ fn test_chown_symlink_two_links_same_dir() {
         return;
     }
     let user_name = String::from(result.stdout_str().trim());
-    assert!(!user_name.is_empty());
+    assert_ne!(user_name, "");
 
     // spell-checker:disable
     at.mkdir_all("base/realdir");
