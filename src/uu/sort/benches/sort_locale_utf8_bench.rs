@@ -232,6 +232,64 @@ fn merge_pre_sorted_files_utf8_locale(bencher: Bencher) {
     });
 }
 
+/// Benchmark a sort whose input does not fit the buffer (`-S`), so it is
+/// sorted in chunks written to temporary files and merged back, all under a
+/// UTF-8 locale. The merge compares each line about once and collates on
+/// demand instead of computing a key per line again.
+#[divan::bench]
+fn sort_spill_to_tmp_files_utf8_locale(bencher: Bencher) {
+    let data = text_data::generate_mixed_data(200_000);
+    let file_path = setup_test_file(&data);
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap().to_string();
+
+    let args = [
+        "--parallel",
+        "1",
+        "-S",
+        "1M",
+        "-o",
+        &output_path,
+        file_path.to_str().unwrap(),
+    ];
+    black_box(run_util_function(uumain, &args));
+    bencher.bench(|| {
+        black_box(run_util_function(uumain, &args));
+    });
+}
+
+/// Benchmark `sort -c` on already sorted input under a UTF-8 locale. Checking
+/// compares each line once with its predecessor, so collating on demand beats
+/// computing a key per line.
+#[divan::bench]
+fn check_sorted_utf8_locale(bencher: Bencher) {
+    let raw = text_data::generate_mixed_data(2_500_000);
+    let mut lines: Vec<&[u8]> = raw
+        .split(|&b| b == b'\n')
+        .filter(|l| !l.is_empty())
+        .collect();
+    lines.sort();
+    let mut data = Vec::with_capacity(raw.len());
+    for line in lines {
+        data.extend_from_slice(line);
+        data.push(b'\n');
+    }
+    // Byte order is not locale order, so sort once more the way `-c` expects.
+    let unsorted_path = setup_test_file(&data);
+    let sorted_file = NamedTempFile::new().unwrap();
+    let sorted_path = sorted_file.path().to_str().unwrap().to_string();
+    run_util_function(
+        uumain,
+        &["-o", &sorted_path, unsorted_path.to_str().unwrap()],
+    );
+
+    let args = ["-c", &sorted_path];
+    black_box(run_util_function(uumain, &args));
+    bencher.bench(|| {
+        black_box(run_util_function(uumain, &args));
+    });
+}
+
 fn main() {
     // Set UTF-8 locale BEFORE any benchmarks run.
     // This must happen before divan::main() because the locale is cached
