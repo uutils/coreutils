@@ -8,6 +8,7 @@
 // spell-checker:ignore (vars) fperm srwx
 
 use std::fmt::{self, Display};
+use std::num::ParseIntError;
 use std::ops::Range;
 
 #[cfg(windows)]
@@ -22,7 +23,7 @@ use crate::translate;
 /// character — that broke it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModeError {
-    pub message: String,
+    detail: Detail,
     pub span: Range<usize>,
     pub kind: ModeErrorKind,
 }
@@ -38,12 +39,50 @@ pub enum ModeErrorKind {
     InvalidNumber,
 }
 
+/// What a message would need to say, kept unformatted until something asks for
+/// it.
+///
+/// Formatting here means [`translate!`], and a translation needs a localizer.
+/// Building the message when the error is constructed would put that setup on
+/// the *parsing* path — which is the success path — for a string that is
+/// thrown away whenever the mode is valid. Worse, a caller that has not
+/// installed a localizer yet cannot install one afterwards to fix it: the
+/// message is already frozen as the message id. Holding the pieces instead
+/// means only [`Display`] pays, and only when someone prints.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Detail {
+    /// A clause that ran out where an operator was expected.
+    UnexpectedEnd,
+    /// Something other than `+`, `-` or `=`, and what stood there instead.
+    InvalidOperator(char),
+    /// A clause naming who to change but never what, and the clause itself.
+    MissingOperator(String),
+    /// A numeric mode that is not octal, and why the digits did not parse.
+    NotOctal(ParseIntError),
+    /// A numeric mode above `7777`, and the value that was read.
+    TooLarge(u32),
+}
+
+impl Detail {
+    /// The coarse classification that goes with these particulars.
+    ///
+    /// Deriving it here rather than passing it in is what keeps [`ModeError`]'s
+    /// `kind` from drifting away from what the message actually says.
+    fn kind(&self) -> ModeErrorKind {
+        match self {
+            Self::UnexpectedEnd | Self::MissingOperator(_) => ModeErrorKind::MissingOperator,
+            Self::InvalidOperator(_) => ModeErrorKind::InvalidOperator,
+            Self::NotOctal(_) | Self::TooLarge(_) => ModeErrorKind::InvalidNumber,
+        }
+    }
+}
+
 impl ModeError {
-    fn new(message: String, span: Range<usize>, kind: ModeErrorKind) -> Self {
+    fn new(detail: Detail, span: Range<usize>) -> Self {
         Self {
-            message,
+            kind: detail.kind(),
+            detail,
             span,
-            kind,
         }
     }
 
@@ -155,7 +194,28 @@ impl ModeError {
 
 impl Display for ModeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.message)
+        // The one place the message is built, so that a parse that succeeds --
+        // or an error that is only ever inspected through `kind` -- never
+        // touches the localizer.
+        match &self.detail {
+            Detail::UnexpectedEnd => f.write_str(&translate!("mode-error-unexpected-end")),
+            Detail::InvalidOperator(operator) => f.write_str(&translate!(
+                "mode-error-invalid-operator",
+                "operator" => *operator
+            )),
+            Detail::MissingOperator(clause) => f.write_str(&translate!(
+                "mode-error-missing-operator",
+                "mode" => clause.clone()
+            )),
+            // The text comes from `std`, which has no catalogue of ours to
+            // draw on, so it is passed through rather than given an id that
+            // could never be translated.
+            Detail::NotOctal(error) => write!(f, "{error}"),
+            Detail::TooLarge(mode) => f.write_str(&translate!(
+                "mode-error-too-large",
+                "mode" => format!("{mode:o}")
+            )),
+        }
     }
 }
 
@@ -170,20 +230,11 @@ pub fn parse_numeric(fperm: u32, mode: &str, considering_dir: bool) -> Result<u3
         0
     } else {
         let at = original.len() - original.trim_end().len();
-        u32::from_str_radix(mode, 8).map_err(|e| {
-            ModeError::new(
-                e.to_string(),
-                pos..original.len() - at,
-                ModeErrorKind::InvalidNumber,
-            )
-        })?
+        u32::from_str_radix(mode, 8)
+            .map_err(|e| ModeError::new(Detail::NotOctal(e), pos..original.len() - at))?
     };
     if change > 0o7777 {
-        Err(ModeError::new(
-            format!("mode is too large ({change:o} > 7777)"),
-            0..original.len(),
-            ModeErrorKind::InvalidNumber,
-        ))
+        Err(ModeError::new(Detail::TooLarge(change), 0..original.len()))
     } else {
         Ok(match op {
             Some('+') => fperm | change,
@@ -212,9 +263,8 @@ pub fn parse_symbolic(
     if pos == mode.len() {
         // Who the clause applies to, and then nothing: no operator followed.
         return Err(ModeError::new(
-            format!("invalid mode ({mode})"),
+            Detail::MissingOperator(mode.to_owned()),
             0..mode.len(),
-            ModeErrorKind::MissingOperator,
         ));
     }
     let respect_umask = pos == 0;
@@ -264,18 +314,13 @@ fn parse_levels(mode: &str) -> (u32, usize) {
 
 fn parse_op(mode: &str) -> Result<(char, usize), ModeError> {
     let Some(ch) = mode.chars().next() else {
-        return Err(ModeError::new(
-            translate!("mode-error-unexpected-end"),
-            0..0,
-            ModeErrorKind::MissingOperator,
-        ));
+        return Err(ModeError::new(Detail::UnexpectedEnd, 0..0));
     };
     match ch {
         '+' | '-' | '=' => Ok((ch, 1)),
         _ => Err(ModeError::new(
-            translate!("mode-error-invalid-operator", "operator" => ch),
+            Detail::InvalidOperator(ch),
             0..ch.len_utf8(),
-            ModeErrorKind::InvalidOperator,
         )),
     }
 }
@@ -392,6 +437,7 @@ mod tests {
 
     use super::parse;
     use super::parse_chmod;
+    use super::{ModeErrorKind, parse_numeric, parse_symbolic};
 
     #[test]
     fn test_chmod_symbolic_modes() {
@@ -525,5 +571,76 @@ mod tests {
 
         // First add user write, then set to 755 (should override)
         assert_eq!(parse("u+w,755", false, 0).unwrap(), 0o755);
+    }
+
+    #[test]
+    fn a_localizer_installed_after_the_parse_still_formats_the_message() {
+        // The point of holding the pieces instead of the finished string: a
+        // caller that only sets up localization once something has actually
+        // gone wrong -- off the success path -- must still get real text. Build
+        // the errors first, install the localizer second, print third.
+        //
+        // The localizer is thread-local, so this runs somewhere that has none
+        // yet rather than wherever the test harness put us.
+        std::thread::spawn(|| {
+            let errors = [
+                parse_symbolic(0, "u*rw", 0, false).unwrap_err(),
+                parse_numeric(0, "77777", false).unwrap_err(),
+                parse_symbolic(0, "u", 0, false).unwrap_err(),
+            ];
+
+            // Before: nothing is localized yet, so every message is its own id.
+            for error in &errors {
+                assert!(
+                    error.to_string().starts_with("mode-error-"),
+                    "expected an untranslated id, got {error}"
+                );
+            }
+
+            let _ = crate::locale::setup_localization("chmod");
+
+            // After: the same errors, now with something to translate against.
+            // What language that lands in depends on the environment, so this
+            // asserts only what is universal -- that a message came out, and
+            // not the id that a message built too early would be stuck with.
+            for error in &errors {
+                let message = error.to_string();
+                assert!(
+                    !message.starts_with("mode-error-"),
+                    "message was frozen before the localizer existed: {message}"
+                );
+                assert!(!message.is_empty());
+            }
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn the_kind_never_disagrees_with_the_message() {
+        // `kind` is derived from the same particulars the message is built
+        // from, so the two cannot drift apart.
+        assert_eq!(
+            parse_symbolic(0, "u*rw", 0, false).unwrap_err().kind,
+            ModeErrorKind::InvalidOperator
+        );
+        assert_eq!(
+            parse_symbolic(0, "u", 0, false).unwrap_err().kind,
+            ModeErrorKind::MissingOperator
+        );
+        // A trailing comma opens a clause whose first character is not an
+        // operator, rather than one that ends early.
+        assert_eq!(
+            parse_symbolic(0, "u+rw,", 0, false).unwrap_err().kind,
+            ModeErrorKind::InvalidOperator
+        );
+        assert_eq!(
+            parse_numeric(0, "8", false).unwrap_err().kind,
+            ModeErrorKind::InvalidNumber
+        );
+        assert_eq!(
+            parse_numeric(0, "77777", false).unwrap_err().kind,
+            ModeErrorKind::InvalidNumber
+        );
     }
 }
