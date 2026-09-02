@@ -489,6 +489,26 @@ fn test_non_numeric_width_argument() {
 }
 
 #[test]
+fn test_huge_width_argument() {
+    // A huge width must produce a clean error instead of aborting the process
+    // while allocating the line buffer. Regression test for issue #12839.
+    new_ucmd!()
+        .arg("-w1162652562662412622")
+        .arg("-An")
+        .pipe_in("")
+        .fails_with_code(1)
+        .stderr_contains("memory exhausted");
+
+    // A width that does not even fit in `usize` is rejected as too large.
+    new_ucmd!()
+        .arg("-w99999999999999999999999")
+        .arg("-An")
+        .pipe_in("")
+        .fails_with_code(1)
+        .stderr_contains("too large");
+}
+
+#[test]
 fn test_width_without_value() {
     let input: [u8; 40] = [0; 40];
     let expected_output = unindent("
