@@ -1377,6 +1377,18 @@ fn test_positive_bytes_file_offset_past_seek_limit() {
         .no_stdout();
 }
 
+// `tail -c -N` on a seekable file larger than the block size seeks back by
+// `N` bytes. A count past `i64::MAX` cannot be negated for the seek and must
+// not abort the process; it asks for the whole file.
+#[test]
+fn test_negative_bytes_file_count_past_seek_limit() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("big", &"a".repeat(8192));
+    ucmd.args(&["-c", "-9223372036854775808", "big"])
+        .succeeds()
+        .stdout_only("a".repeat(8192));
+}
+
 #[test]
 fn test_num_with_undocumented_sign_bytes() {
     // tail: '-' is not documented (8.32 man pages)
