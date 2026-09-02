@@ -942,12 +942,13 @@ impl Stater {
             '\'' => Token::Byte(b'\''), // Single quote
             '"' => Token::Byte(b'"'),   // Double quote
             '0'..='7' => {
-                // Parse octal escape sequence (up to 3 digits)
+                // Parse octal escape sequence (up to 3 digits). Like GNU,
+                // keep only the low byte of a value past `\377`.
                 let mut value = 0u8;
                 let mut count = 0;
                 while *i < bound && count < 3 {
                     if let Some(digit) = chars[*i].to_digit(8) {
-                        value = value * 8 + digit as u8;
+                        value = value.wrapping_mul(8).wrapping_add(digit as u8);
                         *i += 1;
                         count += 1;
                     } else {

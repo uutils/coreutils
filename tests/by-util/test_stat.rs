@@ -622,6 +622,16 @@ fn test_printf_octal_2() {
 }
 
 #[test]
+fn test_printf_octal_past_byte_range() {
+    let ts = TestScenario::new(util_name!());
+    let expected_stdout = vec![0x00, 0xFF, 0x01, b'X']; // GNU keeps the low byte
+    ts.ucmd()
+        .args(&["--printf=\\400\\777\\401X", "."])
+        .succeeds()
+        .stdout_is_bytes(expected_stdout);
+}
+
+#[test]
 fn test_printf_incomplete_hex() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd()
