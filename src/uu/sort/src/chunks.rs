@@ -273,12 +273,12 @@ fn parse_lines<'a>(
     let read = read.strip_suffix(&[separator]).unwrap_or(read);
 
     assert!(lines.is_empty());
-    assert!(line_data.selections.is_empty());
-    assert!(line_data.num_infos.is_empty());
-    assert!(line_data.parsed_floats.is_empty());
-    assert!(line_data.line_num_floats.is_empty());
-    assert!(line_data.collation_key_buffer.is_empty());
-    assert!(line_data.collation_key_ends.is_empty());
+    assert_eq!(line_data.selections, [] as [&[_]; 0]);
+    assert_eq!(line_data.num_infos, [] as [_; 0]);
+    assert_eq!(line_data.parsed_floats, [] as [_; 0]);
+    assert_eq!(line_data.line_num_floats, [] as [_; 0]);
+    assert_eq!(line_data.collation_key_buffer, [] as [_; 0]);
+    assert_eq!(line_data.collation_key_ends, [] as [_; 0]);
     token_buffer.clear();
     let mut estimated = (*line_count_hint).max(1);
     let mut exact_line_count = None;

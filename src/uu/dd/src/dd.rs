@@ -1796,6 +1796,6 @@ mod tests {
         use crate::AlignedBuf;
 
         let buf = AlignedBuf::new(0).unwrap();
-        assert!(buf.as_bytes().is_empty());
+        assert_eq!(buf.as_bytes(), []);
     }
 }

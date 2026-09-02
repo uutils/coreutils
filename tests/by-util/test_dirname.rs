@@ -83,7 +83,7 @@ fn test_dirname_non_utf8_paths() {
     let result = new_ucmd!().arg(non_utf8_name).succeeds();
 
     let output = result.stdout_str_lossy();
-    assert!(!output.is_empty());
+    assert_ne!(output, "");
     assert!(output.contains("test_"));
 }
 
@@ -189,7 +189,7 @@ fn test_trailing_dot_non_utf8() {
     let result = new_ucmd!().arg(non_utf8_path).succeeds();
 
     let output = result.stdout_str_lossy();
-    assert!(!output.is_empty());
+    assert_ne!(output, "");
     assert!(output.contains("test_"));
     assert!(!output.trim().ends_with('.'));
 }

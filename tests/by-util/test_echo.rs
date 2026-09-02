@@ -783,17 +783,17 @@ fn test_uchild_when_run_no_wait_with_a_non_blocking_util() {
 
     // check the current output is correct
     std::assert_eq!(child.stdout(), "hello world\n");
-    assert!(child.stderr().is_empty());
+    assert_eq!(child.stderr(), "");
 
     // check the current output of echo is empty. We already called `child.stdout()` and `echo`
     // exited so there's no additional output after the first call of `child.stdout()`
-    assert!(child.stdout().is_empty());
-    assert!(child.stderr().is_empty());
+    assert_eq!(child.stdout(), "");
+    assert_eq!(child.stderr(), "");
 
     // check that we're still able to access all output of the child process, even after exit
     // and call to `child.stdout()`
     std::assert_eq!(child.stdout_all(), "hello world\n");
-    assert!(child.stderr_all().is_empty());
+    assert_eq!(child.stderr_all(), "");
 
     // we should be able to call kill without panics, even if the process already exited
     child.make_assertion().is_not_alive();

@@ -17,13 +17,13 @@ fn test_hostname() {
 #[test]
 fn test_hostname_ip() {
     let result = new_ucmd!().arg("-i").succeeds();
-    assert!(!result.stdout_str().trim().is_empty());
+    assert_ne!(result.stdout_str().trim(), "");
 }
 
 #[test]
 fn test_hostname_full() {
     let ls_short_res = new_ucmd!().arg("-s").succeeds();
-    assert!(!ls_short_res.stdout_str().trim().is_empty());
+    assert_ne!(ls_short_res.stdout_str().trim(), "");
 
     new_ucmd!()
         .arg("-f")
@@ -44,7 +44,7 @@ fn test_hostname_domain_empty() {
     let domain_short = new_ucmd!().arg("-sd").succeeds();
 
     if fqdn.stdout() == short.stdout() {
-        assert!(domain.stdout().is_empty());
-        assert!(domain_short.stdout().is_empty());
+        assert_eq!(domain.stdout(), []);
+        assert_eq!(domain_short.stdout(), []);
     }
 }

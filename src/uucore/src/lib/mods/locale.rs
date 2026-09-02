@@ -1687,7 +1687,7 @@ invalid-syntax = This is { $missing
             // Test that we can get messages (should use embedded English for "test" utility)
             let message = get_message("test-about");
             // Since we're using embedded resources, we should get the expected message
-            assert!(!message.is_empty());
+            assert_ne!(message, "");
 
             // Restore original LANG value
             if let Some(val) = original_lang {
@@ -1718,7 +1718,7 @@ invalid-syntax = This is { $missing
 
             // Should fall back to English embedded resources
             let message = get_message("test-about");
-            assert!(!message.is_empty()); // Should get something, not just the key
+            assert_ne!(message, ""); // Should get something, not just the key
 
             // Restore original LANG value
             if let Some(val) = original_lang {
@@ -1797,18 +1797,18 @@ invalid-syntax = This is { $missing
             // Test that common strings are available after initialization
             let error_after_init = get_message("common-error");
             // Should either be translated or return the key (but not panic)
-            assert!(!error_after_init.is_empty());
+            assert_ne!(error_after_init, "");
 
             let tip_after_init = get_message("common-tip");
-            assert!(!tip_after_init.is_empty());
+            assert_ne!(tip_after_init, "");
 
             // Test that clap error keys work with fallbacks
             let unknown_arg_key = get_message("clap-error-unexpected-argument");
-            assert!(!unknown_arg_key.is_empty());
+            assert_ne!(unknown_arg_key, "");
 
             // Test usage key fallback
             let usage_key = get_message("common-usage");
-            assert!(!usage_key.is_empty());
+            assert_ne!(usage_key, "");
         })
         .join()
         .unwrap();

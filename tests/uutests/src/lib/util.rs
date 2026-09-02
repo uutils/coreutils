@@ -3289,6 +3289,7 @@ pub fn run_ucmd_as_root_with_stdin_stdout(
 mod tests {
     // spell-checker:ignore (tests) asdfsadfa
     use super::*;
+    use pretty_assertions::assert_eq;
 
     // Create a init for the test with a fake value (not needed)
     #[cfg(test)]
@@ -3322,8 +3323,8 @@ mod tests {
         assert!(!result.succeeded());
         result.failure();
         result.fails_silently();
-        assert!(result.stderr.is_empty());
-        assert!(result.stdout.is_empty());
+        assert_eq!(result.stderr, [] as [_; 0]);
+        assert_eq!(result.stdout, [] as [_; 0]);
         result.no_output();
         result.no_stderr();
         result.no_stdout();
@@ -3344,8 +3345,8 @@ mod tests {
         result.code_is(0);
         assert!(result.succeeded());
         result.success();
-        assert!(result.stderr.is_empty());
-        assert!(result.stdout.is_empty());
+        assert_eq!(result.stderr, [] as [_; 0]);
+        assert_eq!(result.stdout, [] as [_; 0]);
         result.no_output();
         result.no_stderr();
         result.no_stdout();
@@ -3383,7 +3384,7 @@ mod tests {
         result.code_is(0);
         assert!(result.succeeded());
         result.success();
-        assert!(result.stderr.is_empty());
+        assert_eq!(result.stderr, [] as [_; 0]);
         std::assert_eq!(result.stdout, vector);
         result.no_stderr();
         result.stdout_is(string);
@@ -3412,7 +3413,7 @@ mod tests {
         result.code_is(0);
         assert!(result.succeeded());
         result.success();
-        assert!(result.stdout.is_empty());
+        assert_eq!(result.stdout, [] as [_; 0]);
         result.no_stdout();
         std::assert_eq!(result.stderr, vector);
         result.stderr_is(string);
