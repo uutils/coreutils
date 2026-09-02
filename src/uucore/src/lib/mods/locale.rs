@@ -204,6 +204,19 @@ thread_local! {
     )]
     static ERRORS_BUNDLE: OnceLock<Option<FluentBundle<FluentResource>>> =
         const { OnceLock::new() };
+    /// Whether this thread has already installed a localizer.
+    ///
+    /// Installing one is expensive, and both entry points have to agree on
+    /// whether it has happened, so the flag lives beside the localizer rather
+    /// than inside either of them.
+    #[cfg_attr(
+        target_os = "android",
+        expect(
+            clippy::missing_const_for_thread_local,
+            reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
+        )
+    )]
+    static LOCALIZER_IS_SET: Cell<bool> = const { Cell::new(false) };
 }
 
 /// Helper function to find the uucore locales directory from a utility's locales directory
@@ -591,57 +604,111 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
 /// }
 /// ```
 pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
-    // Avoid duplicated and high-cost localizer setup
-    thread_local! {
-        #[cfg_attr(
-            target_os = "android",
-            expect(
-                clippy::missing_const_for_thread_local,
-                reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
-            )
-        )]
-        static LOCALIZER_IS_SET: Cell<bool> = const { Cell::new(false) };
-    }
     if LOCALIZER_IS_SET.with(Cell::get) {
         return Ok(());
     }
 
-    let locale = detect_system_locale().unwrap_or_else(|_| {
-        LanguageIdentifier::from_str(DEFAULT_LOCALE).expect("Default locale should always be valid")
-    });
+    let locale = system_locale();
 
     // Load common strings along with utility-specific strings
     if let Ok(locales_dir) = get_locales_dir(p) {
         // Load both utility-specific and common strings
         init_localization(&locale, &locales_dir, p)?;
+        LOCALIZER_IS_SET.with(|f| f.set(true));
+        Ok(())
     } else {
         // No locales directory found, use embedded locales
-        let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
-            .expect("Default locale should always be valid");
-
-        #[cfg(target_os = "wasi")]
-        let localizer = {
-            let english_bundle = create_wasi_bundle_from_embedded(&default_locale, p)?;
-            if locale == default_locale {
-                Localizer::new(english_bundle)
-            } else if let Ok(localized) = create_wasi_bundle_from_embedded(&locale, p) {
-                Localizer::new(localized).with_fallback(english_bundle)
-            } else {
-                Localizer::new(english_bundle)
-            }
-        };
-
-        #[cfg(not(target_os = "wasi"))]
-        let localizer = {
-            let english_bundle = create_english_bundle_from_embedded(&default_locale, p)?;
-            Localizer::new(english_bundle)
-        };
-
-        LOCALIZER.with(|lock| {
-            lock.set(localizer)
-                .map_err(|_| LocalizationError::Bundle("Localizer already initialized".into()))
-        })?;
+        install_embedded_localizer(&locale, p)
     }
+}
+
+/// Set up localization from the strings compiled into uucore, without looking
+/// for a locales directory on disk.
+///
+/// [`setup_localization`] searches the filesystem first, along paths that only
+/// mean something for a utility shipped as part of coreutils. A crate that
+/// merely *depends* on uucore has no such directory: the search can only fail,
+/// and every one of its `stat` calls is waste on what is usually an error path.
+/// This is the entry point for that case -- it goes straight to the embedded
+/// bundle, which is where the other one would have ended up anyway.
+///
+/// # Arguments
+///
+/// * `p` - Name of the program whose strings to load, alongside uucore's own.
+///   A name with no embedded catalogue still gets uucore's common strings, so
+///   errors coming out of uucore read properly.
+///
+/// # Returns
+///
+/// * `Ok(())` if a localizer was installed, or one already was
+/// * `Err(LocalizationError)` if no embedded strings could be found at all
+///
+/// # Errors
+///
+/// Returns a `LocalizationError` if neither uucore's common strings nor any
+/// utility-specific strings for `p` are compiled in, or if the bundle cannot be
+/// initialized.
+///
+/// # Examples
+///
+/// ```
+/// use uucore::locale::setup_localization_embedded;
+///
+/// // A third-party utility that ships no .ftl files of its own, but wants
+/// // uucore's error messages to come out as text rather than message ids.
+/// let _ = setup_localization_embedded("my-tool");
+/// ```
+pub fn setup_localization_embedded(p: &str) -> Result<(), LocalizationError> {
+    if LOCALIZER_IS_SET.with(Cell::get) {
+        return Ok(());
+    }
+
+    install_embedded_localizer(&system_locale(), p)
+}
+
+/// The locale to render messages in, falling back to [`DEFAULT_LOCALE`] when the
+/// environment does not name one we understand.
+fn system_locale() -> LanguageIdentifier {
+    detect_system_locale().unwrap_or_else(|_| {
+        LanguageIdentifier::from_str(DEFAULT_LOCALE).expect("Default locale should always be valid")
+    })
+}
+
+/// Install a localizer built from the strings compiled into the binary, and
+/// record that this thread now has one.
+fn install_embedded_localizer(
+    locale: &LanguageIdentifier,
+    p: &str,
+) -> Result<(), LocalizationError> {
+    let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
+        .expect("Default locale should always be valid");
+
+    #[cfg(target_os = "wasi")]
+    let localizer = {
+        let english_bundle = create_wasi_bundle_from_embedded(&default_locale, p)?;
+        if *locale == default_locale {
+            Localizer::new(english_bundle)
+        } else if let Ok(localized) = create_wasi_bundle_from_embedded(locale, p) {
+            Localizer::new(localized).with_fallback(english_bundle)
+        } else {
+            Localizer::new(english_bundle)
+        }
+    };
+
+    // Only English is embedded here: unlike the WASI path, the resources are
+    // interned per file rather than per locale, so a second language would need
+    // a locale-keyed cache. Everything else falls back to English rather than
+    // to message ids.
+    #[cfg(not(target_os = "wasi"))]
+    let localizer = {
+        let _ = locale;
+        Localizer::new(create_english_bundle_from_embedded(&default_locale, p)?)
+    };
+
+    LOCALIZER.with(|lock| {
+        lock.set(localizer)
+            .map_err(|_| LocalizationError::Bundle("Localizer already initialized".into()))
+    })?;
     LOCALIZER_IS_SET.with(|f| f.set(true));
     Ok(())
 }
@@ -671,40 +738,70 @@ fn resolve_locales_dir_from_exe_dir(exe_dir: &Path, p: &str) -> Option<PathBuf> 
     None
 }
 
+/// The locales directory to use in a development build, given where uucore was
+/// compiled from.
+///
+/// # Arguments
+///
+/// * `manifest_dir` - uucore's own `CARGO_MANIFEST_DIR`, baked in at compile
+///   time. It names the coreutils tree only when uucore was built from a
+///   checkout of it; for a crate that depends on uucore from crates.io it
+///   points inside the cargo registry, where nothing has anything to do with
+///   the running program.
+/// * `p` - Name of the program whose strings are wanted.
+///
+/// # Returns
+///
+/// The directory to read `.ftl` files from, or an error when there is none --
+/// in which case the caller falls back to the strings compiled into the binary.
+#[cfg(debug_assertions)]
+fn development_locales_dir(manifest_dir: &Path, p: &str) -> Result<PathBuf, LocalizationError> {
+    // uucore's own catalogue is the one thing that is uucore's wherever the
+    // crate was unpacked, registry included: the published package ships it.
+    if p == "uucore" {
+        let uucore_path = manifest_dir.join("locales");
+        if uucore_path.exists() {
+            return Ok(uucore_path);
+        }
+    }
+
+    // The directory holding the utility crates. It is there in a checkout and
+    // absent anywhere uucore was merely unpacked as a dependency, which makes
+    // it the marker for whether the paths below mean anything at all. Without
+    // it, looking further would at best waste the syscalls on what is usually
+    // an error path, and at worst read translations out of the cargo registry.
+    let utilities_dir = manifest_dir.join("../uu");
+    if !utilities_dir.exists() {
+        return Err(LocalizationError::LocalesDirNotFound(format!(
+            "not built from a coreutils checkout, so there are no development locales for {}",
+            p.quote()
+        )));
+    }
+
+    // from uucore path, load the locales directory from the program directory
+    let dev_path = utilities_dir.join(p).join("locales");
+    if dev_path.exists() {
+        return Ok(dev_path);
+    }
+
+    // Fallback for development if the expected path doesn't exist
+    let fallback_dev_path = manifest_dir.join(p);
+    if fallback_dev_path.exists() {
+        return Ok(fallback_dev_path);
+    }
+
+    Err(LocalizationError::LocalesDirNotFound(format!(
+        "Development locales directory not found at {} or {}",
+        dev_path.quote(),
+        fallback_dev_path.quote()
+    )))
+}
+
 /// Helper function to get the locales directory based on the build configuration
 fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
     #[cfg(debug_assertions)]
     {
-        // During development, use the project's locales directory
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        if p == "uucore" {
-            let uucore_path = PathBuf::from(manifest_dir).join("locales");
-            if uucore_path.exists() {
-                return Ok(uucore_path);
-            }
-        }
-
-        // from uucore path, load the locales directory from the program directory
-        let dev_path = PathBuf::from(manifest_dir)
-            .join("../uu")
-            .join(p)
-            .join("locales");
-
-        if dev_path.exists() {
-            return Ok(dev_path);
-        }
-
-        // Fallback for development if the expected path doesn't exist
-        let fallback_dev_path = PathBuf::from(manifest_dir).join(p);
-        if fallback_dev_path.exists() {
-            return Ok(fallback_dev_path);
-        }
-
-        Err(LocalizationError::LocalesDirNotFound(format!(
-            "Development locales directory not found at {} or {}",
-            dev_path.quote(),
-            fallback_dev_path.quote()
-        )))
+        development_locales_dir(Path::new(env!("CARGO_MANIFEST_DIR")), p)
     }
 
     #[cfg(not(debug_assertions))]
@@ -1837,5 +1934,55 @@ mod fhs_tests {
             .expect("should find locales via FHS path");
 
         assert_eq!(result, share_dir);
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn development_locales_come_from_the_checkout() {
+        // A coreutils checkout: <manifest>/../uu/<util>/locales next to uucore.
+        let root = TempDir::new().unwrap();
+        let manifest = root.path().join("uucore");
+        let utility = root.path().join("uu").join("cut").join("locales");
+        fs::create_dir_all(&manifest).unwrap();
+        fs::create_dir_all(&utility).unwrap();
+
+        let found = development_locales_dir(&manifest, "cut").expect("checkout layout resolves");
+        assert!(found.ends_with("uu/cut/locales"));
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn development_locales_are_not_looked_for_outside_a_checkout() {
+        // What a crate depending on uucore from crates.io sees: the manifest
+        // directory is the unpacked crate, with no sibling `uu` tree. Nothing
+        // below it belongs to the running program, so nothing below it may be
+        // consulted -- not even a directory that happens to carry the right
+        // name, which is what the old fallback would have picked up.
+        let registry = TempDir::new().unwrap();
+        let manifest = registry.path().join("uucore-0.0.0");
+        fs::create_dir_all(manifest.join("find")).unwrap();
+
+        let error = development_locales_dir(&manifest, "find")
+            .expect_err("a bare dependency has no development locales");
+        assert!(
+            error
+                .to_string()
+                .contains("not built from a coreutils checkout"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn uucores_own_catalogue_is_found_wherever_it_was_unpacked() {
+        // The published crate ships `locales/`, and those strings are uucore's
+        // regardless of where cargo put them -- so this one lookup stays.
+        let registry = TempDir::new().unwrap();
+        let manifest = registry.path().join("uucore-0.0.0");
+        fs::create_dir_all(manifest.join("locales")).unwrap();
+
+        let found = development_locales_dir(&manifest, "uucore")
+            .expect("uucore's own locales are always its own");
+        assert_eq!(found, manifest.join("locales"));
     }
 }
