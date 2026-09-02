@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) ints (linux) NOFILE dfgi abmon avril
+// spell-checker:ignore (words) ints (linux) NOFILE dfgi abmon avril setrlimit EISDIR
 #![allow(clippy::cast_possible_wrap)]
 
 use std::env;
@@ -37,10 +37,6 @@ fn test_helper(file_name: &str, possible_args: &[&str]) {
 
 #[test]
 fn test_buffer_sizes() {
-    #[cfg(target_os = "linux")]
-    let buffer_sizes = ["0", "50K", "50k", "1M", "100M", "0%", "10%"];
-    // TODO Percentage sizes are not yet supported beyond Linux.
-    #[cfg(not(target_os = "linux"))]
     let buffer_sizes = ["0", "50K", "50k", "1M", "100M"];
     for buffer_size in &buffer_sizes {
         new_ucmd!()
@@ -52,7 +48,23 @@ fn test_buffer_sizes() {
             .stdout_is_fixture("ext_sort.expected");
     }
 
-    #[cfg(not(target_pointer_width = "32"))]
+    // TODO Percentage sizes are not yet supported beyond Linux. A WASI guest
+    // also cannot inspect the Linux host's physical memory.
+    #[cfg(all(target_os = "linux", not(wasi_runner)))]
+    for buffer_size in ["0%", "10%"] {
+        new_ucmd!()
+            .arg("-n")
+            .arg("-S")
+            .arg(buffer_size)
+            .arg("ext_sort.txt")
+            .succeeds()
+            .stdout_is_fixture("ext_sort.expected");
+    }
+
+    // The test runner compiles for the host (often 64-bit), but the binary
+    // under test may be 32-bit (e.g. wasm32-wasip1), which rejects very
+    // large buffer sizes.
+    #[cfg(all(not(target_pointer_width = "32"), not(wasi_runner)))]
     {
         let buffer_sizes = ["1000G", "10T"];
         for buffer_size in &buffer_sizes {
@@ -92,7 +104,9 @@ fn test_invalid_buffer_size() {
     // A percentage can fit in a u128 while its product with the total
     // physical memory does not; the parser must report it as too large
     // rather than panicking or silently wrapping.
-    #[cfg(target_os = "linux")]
+    // The test runner is built for Linux, but the binary under test may not
+    // expose Linux host memory information (e.g. wasm32-wasip1).
+    #[cfg(all(target_os = "linux", not(wasi_runner)))]
     new_ucmd!()
         .arg("-S")
         .arg("340282366920938463463374607431768211455%")
@@ -776,6 +790,7 @@ fn month_sort_input_expected(months: &[String]) -> (String, String) {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_month_sort_french_locale() {
     let locale = "fr_FR.UTF-8";
     if !is_locale_available(locale) {
@@ -807,6 +822,7 @@ fn test_month_sort_french_locale() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_month_sort_hungarian_locale() {
     let locale = "hu_HU.UTF-8";
     if !is_locale_available(locale) {
@@ -838,6 +854,7 @@ fn test_month_sort_hungarian_locale() {
 /// E.g. "av   ril" should NOT match "avril" — GNU treats it as unknown.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_month_sort_french_embedded_blanks() {
     let locale = "fr_FR.UTF-8";
     if !is_locale_available(locale) {
@@ -890,6 +907,7 @@ fn test_month_sort_french_embedded_blanks() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_month_sort_japanese_locale() {
     let locale = "ja_JP.UTF-8";
     if !is_locale_available(locale) {
@@ -1316,6 +1334,22 @@ fn test_read_error_message() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_merge_flush_error_is_reported() {
+    use std::fs::File;
+
+    let ts = TestScenario::new("sort");
+    ts.fixtures.write("input.txt", "line\n");
+
+    let dev_full = File::create("/dev/full").expect("Failed to open /dev/full");
+    ts.ucmd()
+        .args(&["-m", "input.txt"])
+        .set_stdout(dev_full)
+        .fails()
+        .stderr_contains("No space left on device");
+}
+
+#[test]
 fn test_merge_unique() {
     new_ucmd!()
         .arg("-m")
@@ -1531,6 +1565,7 @@ fn sort_empty_chunk() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no subprocess spawning")]
 fn test_compress() {
     new_ucmd!()
         .args(&[
@@ -1547,6 +1582,7 @@ fn test_compress() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no subprocess spawning")]
 fn test_compress_merge() {
     new_ucmd!()
         .args(&[
@@ -1570,6 +1606,7 @@ fn test_compress_merge() {
 
 #[test]
 #[cfg(not(target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no subprocess spawning")]
 fn test_compress_fail() {
     let result = new_ucmd!()
         .args(&[
@@ -1632,7 +1669,7 @@ fn test_batch_size_too_large() {
             "--batch-size argument '{large_batch_size}' too large"
         ));
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(wasi_runner)))]
     new_ucmd!()
         .arg(format!("--batch-size={large_batch_size}"))
         .fails_with_code(2)
@@ -1659,6 +1696,7 @@ fn test_merge_batch_size() {
 // TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
 // #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: rlimit/setrlimit not supported")]
 fn test_merge_batch_size_with_limit() {
     use rlimit::Resource;
     // Currently need...
@@ -1684,6 +1722,7 @@ fn test_merge_batch_size_with_limit() {
 #[test]
 // TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: rlimit/setrlimit not supported")]
 fn test_batch_size_above_fd_limit_is_rejected() {
     use rlimit::Resource;
     // Only stdin, stdout and stderr are unavailable for merge inputs, so the
@@ -1702,6 +1741,7 @@ fn test_batch_size_above_fd_limit_is_rejected() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: rlimit/setrlimit not supported")]
 fn test_batch_size_at_fd_limit_is_accepted() {
     use rlimit::Resource;
     let limit_fd = 27;
@@ -1753,6 +1793,7 @@ fn test_sigpipe_panic() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
 fn test_fifo_without_trailing_newline() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("FIFO");
@@ -1838,6 +1879,7 @@ fn test_verifies_files_after_keys() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_verifies_input_files() {
     new_ucmd!()
         .args(&["/dev/random", "nonexistent_file"])
@@ -1899,7 +1941,52 @@ fn test_output_is_input() {
 }
 
 #[test]
+fn test_output_is_input_without_merge() {
+    let input = "a\nb\n";
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("file", input);
+
+    ucmd.args(&["-r", "-o", "file", "file"]).succeeds();
+    assert_eq!(at.read("file"), "b\na\n");
+}
+
+#[test]
+fn test_output_is_input_via_stdin_in_merge_mode() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("file", "a\n");
+
+    ucmd.args(&["-m", "-o", "file", "-"])
+        .set_stdin(std::fs::File::open(at.plus("file")).unwrap())
+        .succeeds();
+
+    assert_eq!(at.read("file"), "a\n");
+}
+
+#[test]
+fn test_merge_with_output_reads_repeated_stdin_once() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.args(&["-m", "-o", "file", "-", "-"])
+        .pipe_in("a\n")
+        .succeeds();
+
+    assert_eq!(at.read("file"), "a\n");
+}
+
+#[test]
+fn test_output_named_stdin_marker_reads_stdin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("-", "old contents\n");
+
+    ucmd.args(&["-o", "-", "-"]).pipe_in("b\na\n").succeeds();
+
+    assert_eq!(at.read("-"), "a\nb\n");
+}
+
+#[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_output_device() {
     new_ucmd!()
         .args(&["-o", "/dev/null"])
@@ -1933,6 +2020,7 @@ fn test_wrong_args_exit_code() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no pipe/signal support")]
 fn test_tmp_files_deleted_on_sigint() {
     use rand::{RngExt as _, SeedableRng, rngs::SmallRng};
     use rustix::process::{Pid, Signal, kill_process};
@@ -2130,6 +2218,10 @@ fn test_files0_from_non_utf8_filename() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: opening a directory as a file reports EBADF instead of EISDIR"
+)]
 fn test_files0_from_unreadable_source() {
     new_ucmd!()
         .args(&["--files0-from", "."])
@@ -2139,6 +2231,7 @@ fn test_files0_from_unreadable_source() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 // Test files0-from with non-regular empty file
 fn test_files0_from_dev_null_is_empty() {
     new_ucmd!()
@@ -2226,6 +2319,7 @@ fn test_files0_from_two_entries_trailing_nul() {
 #[test]
 // Test files0-from with non-UTF-8 filenames
 #[cfg(all(unix, not(target_vendor = "apple")))]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_files0_from_non_utf8_content() {
     use std::os::unix::ffi::OsStringExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3212,6 +3306,7 @@ fn test_locale_collation_utf8() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_locale_interleaved_en_us_utf8() {
     // Test case for issue: locale-based collation support
     // In en_US.UTF-8, lowercase and uppercase letters should interleave
@@ -3284,6 +3379,7 @@ fn test_locale_with_ignore_case_flag() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_locale_complex_utf8_sorting() {
     // More complex test with mixed case and special characters
     // In en_US.UTF-8, should respect locale collation rules
@@ -3308,6 +3404,7 @@ fn test_locale_posix_sort_debug_message() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_locale_utf8_sort_debug_message() {
     new_ucmd!()
         .env("LC_ALL", "en_US.UTF-8")
@@ -3319,6 +3416,7 @@ fn test_locale_utf8_sort_debug_message() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_failed_to_set_locale_debug_message() {
     let result = new_ucmd!()
         .env("LC_ALL", "not-valid-locale")
@@ -3350,6 +3448,7 @@ e f 5436 down data path1 path2 path3 path4 path5\n";
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_consistent_sorting_with_i18n_collate() {
     // Regression test for issue #11980
     // Lexicographic fallback sorting for equal sorting keys for 01 and 0_1
