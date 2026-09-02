@@ -656,7 +656,7 @@ mod tests {
         assert!(!opts.quiet);
         assert_eq!(opts.line_ending, LineEnding::Newline);
         assert_eq!(opts.mode, Mode::FirstLines(10));
-        assert!(opts.files.is_empty());
+        assert_eq!(opts.files, [] as [OsString; 0]);
     }
 
     fn arg_outputs(src: &str) -> Result<String, ()> {

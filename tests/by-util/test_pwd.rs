@@ -51,7 +51,7 @@ fn test_deleted_dir() {
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert!(output.stdout.is_empty());
+    assert_eq!(output.stdout, [] as [_; 0]);
     assert_eq!(
         String::from_utf8_lossy(&output.stderr),
         "pwd: failed to get current directory: No such file or directory\n"

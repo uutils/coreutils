@@ -2181,7 +2181,7 @@ fn test_locale_aware_case_conversion() {
     } else {
         println!("Turkish locale not available, using fallback behavior");
         // Test that it at least doesn't crash and produces some output
-        assert!(!result.stdout().is_empty());
+        assert_ne!(result.stdout(), []);
     }
 }
 
@@ -2206,7 +2206,7 @@ fn test_french_locale_case_conversion() {
     } else {
         println!("French locale not available, using fallback behavior");
         // Test that it at least doesn't crash and produces some output
-        assert!(!result.stdout().is_empty());
+        assert_ne!(result.stdout(), []);
     }
 
     // Test reverse conversion: à (0xE0) should convert to À (0xC0) with ucase
@@ -2222,7 +2222,7 @@ fn test_french_locale_case_conversion() {
         println!("French locale case conversion working correctly for à -> À");
     } else {
         println!("French locale not available for reverse conversion, using fallback behavior");
-        assert!(!result.stdout().is_empty());
+        assert_ne!(result.stdout(), []);
     }
 
     // Test another French character: Ç (0xC7) should convert to ç (0xE7) with lcase
@@ -2238,7 +2238,7 @@ fn test_french_locale_case_conversion() {
         println!("French locale case conversion working correctly for Ç -> ç");
     } else {
         println!("French locale not available for Ç conversion, using fallback behavior");
-        assert!(!result.stdout().is_empty());
+        assert_ne!(result.stdout(), []);
     }
 }
 

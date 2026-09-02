@@ -776,5 +776,5 @@ fn test_write_failure_reports_error_and_nonzero_exit() {
 
     let result = ucmd.arg("out_dir").pipe_in("data").fails();
 
-    assert!(!result.stderr_str().is_empty());
+    assert_ne!(result.stderr_str(), "");
 }

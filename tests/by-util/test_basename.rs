@@ -97,14 +97,7 @@ fn test_zero_param() {
 }
 
 fn expect_error(input: &[&str]) {
-    assert!(
-        !new_ucmd!()
-            .args(input)
-            .fails()
-            .no_stdout()
-            .stderr_str()
-            .is_empty()
-    );
+    assert_ne!(new_ucmd!().args(input).fails().no_stdout().stderr_str(), "");
 }
 
 #[test]

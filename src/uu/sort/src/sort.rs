@@ -883,7 +883,7 @@ fn tokenize(
     token_buffer: &mut Vec<Field>,
     precomputed: &Precomputed,
 ) {
-    assert!(token_buffer.is_empty());
+    assert_eq!(token_buffer, &[] as &[Field; 0]);
     if let Some(separator) = separator {
         tokenize_with_separator(line, separator, token_buffer);
     } else {
