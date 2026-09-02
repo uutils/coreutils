@@ -426,13 +426,14 @@ impl GlobalSettings {
     /// looking at any key. That is only the same comparison when the single
     /// key spans the entire line: `-n -k1.2` sorts on the line's second
     /// character onwards, and `-n -t. -k2` on its second field, neither of
-    /// which the line as a whole stands for. A key of its own `r` also has to
-    /// go the long way, since the shortcut only knows the global one.
+    /// which the line as a whole stands for. A key whose `r` disagrees with
+    /// the global one (`-k1r` without `-r`) also has to go the long way, since
+    /// the shortcut only knows the global one.
     fn can_use_whole_line_numeric(&self) -> bool {
         self.mode == SortMode::Numeric && self.selectors.len() == 1 && {
             let selector = &self.selectors[0];
             selector.settings.mode == SortMode::Numeric
-                && !selector.settings.reverse
+                && selector.settings.reverse == self.reverse
                 && selector.from.field == 1
                 && selector.from.char == 1
                 && selector.to.is_none()
@@ -443,6 +444,8 @@ impl GlobalSettings {
     /// Note: When i18n-collator is enabled, the caller must have already determined
     /// whether locale-aware collation is needed (via checking if we're in a UTF-8 locale).
     /// This check is performed in uumain() before init_precomputed() is called.
+    /// A key whose `r` disagrees with the global one (`-k1r` without `-r`) is
+    /// excluded as the fast path only knows the global one.
     fn can_use_fast_lexicographic(&self) -> bool {
         self.mode == SortMode::Default
             && !self.ignore_case
@@ -453,6 +456,7 @@ impl GlobalSettings {
             && {
                 let selector = &self.selectors[0];
                 !selector.needs_selection
+                    && selector.settings.reverse == self.reverse
                     && matches!(selector.settings.mode, SortMode::Default)
                     && !selector.settings.ignore_case
                     && !selector.settings.dictionary_order
@@ -461,7 +465,9 @@ impl GlobalSettings {
             }
     }
 
-    /// Returns true when the ASCII case-insensitive fast path is valid.
+    /// Returns true when the ASCII case-insensitive fast path is valid. Like
+    /// the lexicographic one it only knows the global `r`, so a key whose `r`
+    /// disagrees with it is excluded.
     fn can_use_fast_ascii_insensitive(&self) -> bool {
         self.mode == SortMode::Default
             && self.ignore_case
@@ -472,6 +478,7 @@ impl GlobalSettings {
             && {
                 let selector = &self.selectors[0];
                 !selector.needs_selection
+                    && selector.settings.reverse == self.reverse
                     && matches!(selector.settings.mode, SortMode::Default)
                     && selector.settings.ignore_case
                     && !selector.settings.dictionary_order
@@ -666,7 +673,44 @@ type Field = Range<usize>;
 #[derive(Clone, Debug)]
 pub struct Line<'a> {
     line: &'a [u8],
+    /// Position in the chunk, used to find the line's entries in `LineData`.
+    /// A whole-line sort has none and stores a [`prefix_key`] here instead.
     index: usize,
+}
+
+/// The first bytes of `bytes` as a big-endian `usize`, zero padded. Keys order
+/// like the bytes they came from; equal keys leave the order undecided.
+fn prefix_key(bytes: &[u8]) -> usize {
+    let mut key = [0; size_of::<usize>()];
+    let len = bytes.len().min(key.len());
+    key[..len].copy_from_slice(&bytes[..len]);
+    usize::from_be_bytes(key)
+}
+
+/// Store a prefix key in each line's `index`, taken past the prefix shared by
+/// all lines (paths, timestamped logs, ...), and return that prefix's length.
+fn set_prefix_keys(lines: &mut [Line<'_>]) -> usize {
+    let mut shared = lines.first().map_or(&[][..], |first| first.line);
+    for line in lines.iter().skip(1) {
+        if shared.is_empty() {
+            break;
+        }
+        // Most lines keep the prefix intact; `starts_with` checks that with a
+        // single memcmp, leaving the byte walk to the few lines that shorten it.
+        if !line.line.starts_with(shared) {
+            let common = shared
+                .iter()
+                .zip(line.line)
+                .take_while(|(a, b)| a == b)
+                .count();
+            shared = &shared[..common];
+        }
+    }
+    let shared_len = shared.len();
+    for line in lines {
+        line.index = prefix_key(&line.line[shared_len..]);
+    }
+    shared_len
 }
 
 impl<'a> Line<'a> {
@@ -2784,19 +2828,50 @@ fn exec(
 }
 
 fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_data: &LineData<'a>) {
-    let cmp = |a: &Line<'a>, b: &Line<'a>| compare_by(a, b, settings, line_data, line_data);
-    // WASI does not support threads, so use non-parallel sort to avoid
-    // rayon's thread pool which triggers an unreachable trap.
-    if settings.stable || settings.unique {
-        #[cfg(not(target_os = "wasi"))]
-        unsorted.par_sort_by(cmp);
-        #[cfg(target_os = "wasi")]
-        unsorted.sort_by(cmp);
+    // `compare_by` is far too large to be inlined into the sort, so the plain
+    // whole-line comparison would pay for a call into it on every one of the
+    // n log n comparisons. Hand the sort a comparator that only holds that
+    // case instead, which does inline.
+    if settings.precomputed.fast_lexicographic {
+        // The prefix keys decide most comparisons without reading the lines;
+        // equal keys leave only the bytes past the shared prefix to compare.
+        // Tied lines are identical, so the unstable sort is fine even for -s/-u.
+        let reverse = settings.reverse;
+        let shared_len = line_data.shared_prefix_len;
+        sort_lines(unsorted, false, |a, b| {
+            let cmp = a
+                .index
+                .cmp(&b.index)
+                .then_with(|| a.line[shared_len..].cmp(&b.line[shared_len..]));
+            if reverse { cmp.reverse() } else { cmp }
+        });
     } else {
-        #[cfg(not(target_os = "wasi"))]
-        unsorted.par_sort_unstable_by(cmp);
-        #[cfg(target_os = "wasi")]
-        unsorted.sort_unstable_by(cmp);
+        sort_lines(unsorted, settings.stable || settings.unique, |a, b| {
+            compare_by(a, b, settings, line_data, line_data)
+        });
+    }
+}
+
+/// Sort `unsorted` with `compare`, keeping equal lines in input order if `stable`.
+fn sort_lines<'a, F>(unsorted: &mut [Line<'a>], stable: bool, compare: F)
+where
+    F: Fn(&Line<'a>, &Line<'a>) -> Ordering + Sync,
+{
+    // WASI has no threads. Elsewhere, rayon's sorts are older ports of std's
+    // and only worth it with more than one thread.
+    #[cfg(not(target_os = "wasi"))]
+    if rayon::current_num_threads() > 1 {
+        if stable {
+            unsorted.par_sort_by(compare);
+        } else {
+            unsorted.par_sort_unstable_by(compare);
+        }
+        return;
+    }
+    if stable {
+        unsorted.sort_by(compare);
+    } else {
+        unsorted.sort_unstable_by(compare);
     }
 }
 
@@ -3456,6 +3531,24 @@ mod tests {
         let c = get_rand_string();
 
         assert_eq!(Ordering::Equal, random_shuffle(a, b, &c));
+    }
+
+    #[test]
+    fn test_prefix_keys() {
+        assert!(prefix_key(b"m") < prefix_key(b"m\x01"));
+        assert!(prefix_key(b"m\x01") < prefix_key(b"n"));
+        assert!(prefix_key(b"zebra") < prefix_key(b"zebras"));
+        // Only the first bytes count, and a NUL is indistinguishable from padding.
+        assert_eq!(prefix_key(b"wordsmith-A"), prefix_key(b"wordsmith-B"));
+        assert_eq!(prefix_key(b"hi"), prefix_key(b"hi\0"));
+
+        let raw: [&[u8]; 3] = [b"/srv/www/logs", b"/srv/www/", b"/srv/www/tmp"];
+        let mut lines: Vec<Line> = raw.iter().map(|line| Line { line, index: 0 }).collect();
+        assert_eq!(set_prefix_keys(&mut lines), b"/srv/www/".len());
+        assert_eq!(lines[1].index, 0);
+        assert_eq!(lines[2].index, prefix_key(b"tmp"));
+        assert!(lines[0].index < lines[2].index);
+        assert_eq!(set_prefix_keys(&mut []), 0);
     }
 
     #[test]

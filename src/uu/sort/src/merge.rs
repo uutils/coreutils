@@ -279,6 +279,7 @@ fn reader(
                 &mut iter::empty(),
                 separator,
                 settings,
+                false,
             )?;
             if !should_continue {
                 // Remove the file from the list by replacing it with `None`.

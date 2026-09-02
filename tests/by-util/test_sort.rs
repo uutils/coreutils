@@ -353,6 +353,13 @@ fn test_numeric_sort_uses_the_key_not_the_whole_line() {
         .pipe_in("19\n21\n3\n")
         .succeeds()
         .stdout_is("3\n21\n19\n");
+    // With the global `-r` agreeing, the key still keeps its own ordering:
+    // the `r` on it switches `-n` off for that key, so this is lexicographic.
+    new_ucmd!()
+        .args(&["-n", "-k1r", "-r"])
+        .pipe_in("19\n21\n3\n")
+        .succeeds()
+        .stdout_is("3\n21\n19\n");
 
     // Equal keys fall back to comparing the lines byte by byte, not
     // numerically.
@@ -3738,4 +3745,117 @@ fn test_single_line_without_any_line_ending() {
         .pipe_in(line.clone())
         .succeeds()
         .stdout_is(format!("{line}\n"));
+}
+
+#[test]
+fn test_whole_line_ordering_matches_across_sort_flavors() {
+    // Plain whole-line sorting takes a dedicated comparison path; the flag
+    // combinations below each pick a different sort, so check they agree.
+    let input = "pear\nfig\npear\nquince\nfig\napricot\n";
+
+    new_ucmd!()
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("apricot\nfig\nfig\npear\npear\nquince\n");
+    new_ucmd!()
+        .arg("-r")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("quince\npear\npear\nfig\nfig\napricot\n");
+    new_ucmd!()
+        .arg("-u")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("apricot\nfig\npear\nquince\n");
+    new_ucmd!()
+        .args(&["-u", "-r"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("quince\npear\nfig\napricot\n");
+    new_ucmd!()
+        .arg("-s")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("apricot\nfig\nfig\npear\npear\nquince\n");
+    // `r` on the key rather than global
+    new_ucmd!()
+        .arg("-k1r")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("quince\npear\npear\nfig\nfig\napricot\n");
+    new_ucmd!()
+        .args(&["-k1r", "-u"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("quince\npear\nfig\napricot\n");
+    // A key `r` that agrees with the global one reverses once, not twice.
+    new_ucmd!()
+        .args(&["-k1r", "-r"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("quince\npear\npear\nfig\nfig\napricot\n");
+    new_ucmd!()
+        .args(&["-r", "-k1"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("quince\npear\npear\nfig\nfig\napricot\n");
+}
+
+#[test]
+fn test_whole_line_ordering_with_long_shared_prefix() {
+    // Lines share a long prefix and differ before, inside and past the eight
+    // bytes that follow it; one is the bare prefix and one holds a NUL.
+    let prefix = "/var/lib/backups/nightly/host-";
+    let input = format!(
+        "{prefix}beta/2026-08-31.tar\n{prefix}alpha/2026-09-01.tar\n\
+         {prefix}alpha/2026-09-01.tar.gz\n{prefix}alpha\0/x\n{prefix}\n\
+         {prefix}alpha/2026-08-30.tar\n{prefix}alpha\n{prefix}alpha/2026-09-01.tar\n"
+    );
+    let expected = format!(
+        "{prefix}\n{prefix}alpha\n{prefix}alpha\0/x\n{prefix}alpha/2026-08-30.tar\n\
+         {prefix}alpha/2026-09-01.tar\n{prefix}alpha/2026-09-01.tar\n\
+         {prefix}alpha/2026-09-01.tar.gz\n{prefix}beta/2026-08-31.tar\n"
+    );
+    let unique_reversed = format!(
+        "{prefix}beta/2026-08-31.tar\n{prefix}alpha/2026-09-01.tar.gz\n\
+         {prefix}alpha/2026-09-01.tar\n{prefix}alpha/2026-08-30.tar\n\
+         {prefix}alpha\0/x\n{prefix}alpha\n{prefix}\n"
+    );
+    for parallel in ["--parallel=1", "--parallel=4"] {
+        for (args, expected) in [
+            (vec![parallel], &expected),
+            (vec![parallel, "-s"], &expected),
+            (vec![parallel, "-u", "-r"], &unique_reversed),
+        ] {
+            new_ucmd!()
+                .args(&args)
+                .pipe_in(input.as_bytes())
+                .succeeds()
+                .stdout_is_bytes(expected.as_bytes());
+        }
+    }
+}
+#[test]
+fn test_ignore_case_key_reverse_disagreeing_with_global() {
+    // A key `r` that the global options lack has to be honored on the
+    // case-insensitive whole-line path too.
+    let input = "Kiwi\nplum\nDATE\n";
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["-f", "-k1fr"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("plum\nKiwi\nDATE\n");
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["-f", "-r", "-k1f"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("DATE\nKiwi\nplum\n");
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["-f", "-r", "-k1fr"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("plum\nKiwi\nDATE\n");
 }

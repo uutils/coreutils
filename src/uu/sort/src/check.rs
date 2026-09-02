@@ -132,6 +132,7 @@ fn reader(
             &mut iter::empty(),
             settings.line_ending.into(),
             settings,
+            false,
         )?;
         if !should_continue {
             break;
