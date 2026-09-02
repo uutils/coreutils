@@ -395,6 +395,17 @@ fn test_check_empty_line() {
 }
 
 #[test]
+#[cfg(windows)]
+fn test_check_invalid_utf8_reports_read_error() {
+    new_ucmd!()
+        .args(&["--check", "-"])
+        .pipe_in(b"invalid\xff\n")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("md5sum: -: read error\n");
+}
+
+#[test]
 #[cfg_attr(windows, ignore = "Disabled on windows")]
 fn test_check_with_escape_filename() {
     let scene = TestScenario::new(util_name!());
