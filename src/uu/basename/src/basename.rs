@@ -9,7 +9,7 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::io::{Write, stdout};
-use std::path::PathBuf;
+use std::path::{PathBuf, is_separator};
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;
@@ -121,8 +121,20 @@ pub fn uu_app() -> Command {
 fn basename(fullname: &OsString, suffix: &OsString) -> UResult<Vec<u8>> {
     let fullname_bytes = uucore::os_str_as_bytes(fullname)?;
 
-    // Handle special case where path ends with /.
-    if fullname_bytes.ends_with(b"/.") {
+    // Path::components() normalizes a trailing `.` away. Inspect a trimmed view
+    // first so `foo/./` yields `.`, while using the original path below keeps
+    // platform-specific root paths intact.
+    let mut path_end = fullname_bytes;
+    while path_end
+        .last()
+        .is_some_and(|&byte| is_separator(char::from(byte)))
+    {
+        path_end = &path_end[..path_end.len() - 1];
+    }
+    if path_end.len() > 1
+        && path_end.ends_with(b".")
+        && is_separator(char::from(path_end[path_end.len() - 2]))
+    {
         return Ok(b".".into());
     }
 
