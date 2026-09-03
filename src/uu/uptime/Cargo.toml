@@ -26,7 +26,9 @@ thiserror = { workspace = true }
 uucore = { workspace = true, features = ["libc", "utmpx", "uptime"] }
 
 [features]
-feat_systemd_logind = ["uucore/systemd_logind"]
+default = ["signals"]
+signals = ["uucore/signals"]
+systemd_logind = ["uucore/systemd_logind"]
 
 [lints]
 workspace = true

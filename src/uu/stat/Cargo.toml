@@ -31,7 +31,9 @@ uucore = { workspace = true, features = [
 ] }
 
 [features]
+default = ["signals"]
 selinux = ["uucore/selinux"]
+signals = ["uucore/signals"]
 
 [lints]
 workspace = true

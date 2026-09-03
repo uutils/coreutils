@@ -31,7 +31,9 @@ uucore = { workspace = true, features = ["benchmark"] }
 rustix = { workspace = true, features = ["fs"] }
 
 [features]
+default = ["signals"]
 diagnostics = ["uucore/diagnostics"]
+signals = ["uucore/signals"]
 
 [lints]
 workspace = true

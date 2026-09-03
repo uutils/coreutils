@@ -23,6 +23,10 @@ rustix = { workspace = true, features = ["process"] }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["entries", "fs"] }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true
 

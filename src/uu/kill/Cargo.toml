@@ -25,6 +25,10 @@ uucore = { workspace = true, features = ["process", "signals"] }
 libc = { workspace = true }
 rustix = { workspace = true, features = ["process"] }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true
 

@@ -28,8 +28,10 @@ rustix = { workspace = true, features = ["fs", "process"] }
 libc = { workspace = true }
 
 [features]
+default = ["signals"]
 diagnostics = ["uucore/diagnostics"]
 selinux = ["uucore/selinux"]
+signals = ["uucore/signals"]
 smack = ["uucore/smack"]
 
 [lints]

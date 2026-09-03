@@ -25,6 +25,10 @@ regex = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["entries", "time"] }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true
 

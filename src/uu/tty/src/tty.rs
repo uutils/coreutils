@@ -22,7 +22,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Disable SIGPIPE so we can handle broken pipe errors gracefully
     // and exit with code 3 instead of being killed by the signal.
-    #[cfg(unix)]
+    #[cfg(all(feature = "signals", unix))]
     let _ = uucore::signals::disable_pipe_errors();
 
     let silent = matches.get_flag(options::SILENT);
