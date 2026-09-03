@@ -17,22 +17,36 @@ use uufuzz::{
 
 static CMD_PATH: &str = "env";
 
-fn generate_env_args() -> Vec<String> {
+/// A non-empty variable name. `env "=value"` is a known divergence: GNU injects
+/// the empty name into environ via putenv(), we reject it on purpose.
+fn generate_env_name() -> String {
     let mut rng = rand::rng();
-    let mut args = Vec::new();
-
-    let opts = ["-i", "-0", "-v", "-vv"];
-    for opt in &opts {
-        if rng.random_bool(0.2) {
-            args.push(opt.to_string());
+    loop {
+        let name = generate_random_string(rng.random_range(1..10));
+        if !name.is_empty() {
+            return name;
         }
     }
+}
+
+fn generate_env_args() -> Vec<String> {
+    let mut rng = rand::rng();
+
+    // -i is mandatory: we run uumain in-process, so without it the Rust side
+    // sees the fuzzer's environment plus set_var leftovers from earlier
+    // iterations, while GNU runs as a child.
+    let mut args = vec![String::from("-i")];
+
+    if rng.random_bool(0.2) {
+        args.push(String::from("-0"));
+    }
+
+    // -v/-vv skipped: we don't print GNU's "cleaning environ"/"setenv:"/"unset:".
+    // https://github.com/uutils/coreutils/issues/14171
 
     if rng.random_bool(0.3) {
-        args.push(format!(
-            "-u={}",
-            generate_random_string(rng.random_range(3..10))
-        ));
+        args.push(String::from("-u"));
+        args.push(generate_env_name());
     }
 
     if rng.random_bool(0.2) {
@@ -55,7 +69,7 @@ fn generate_env_args() -> Vec<String> {
     for _ in 0..rng.random_range(0..3) {
         args.push(format!(
             "{}={}",
-            generate_random_string(5),
+            generate_env_name(),
             generate_random_string(5)
         ));
     }

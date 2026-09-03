@@ -48,6 +48,8 @@ pub fn uu_app() -> Command {
         .about(translate!("paste-about"))
         .override_usage(format_usage(&translate!("paste-usage")))
         .infer_long_args(true)
+        // GNU lets a later -d override an earlier one.
+        .args_override_self(true)
         .arg(
             Arg::new(options::SERIAL)
                 .long(options::SERIAL)
@@ -63,6 +65,7 @@ pub fn uu_app() -> Command {
                 .value_name("LIST")
                 .default_value("\t")
                 .hide_default_value(true)
+                .allow_hyphen_values(true)
                 .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
@@ -138,12 +141,8 @@ fn paste(
         for input_source in &mut input_source_vec {
             output.clear();
 
-            loop {
-                if input_source.read_until(line_ending_byte, &mut output)? == 0 {
-                    break;
-                }
+            while input_source.read_until(line_ending_byte, &mut output)? > 0 {
                 remove_trailing_line_ending_byte(line_ending_byte, &mut output);
-
                 delimiter_state.write_delimiter(&mut output);
             }
 
@@ -213,13 +212,7 @@ fn write_single_input_source(
     let mut has_data = false;
     let mut last_byte = line_ending_byte;
 
-    loop {
-        let bytes_read = input_source.read(&mut buffer)?;
-
-        if bytes_read == 0 {
-            break;
-        }
-
+    while let bytes_read @ 1.. = input_source.read(&mut buffer)? {
         has_data = true;
         last_byte = buffer[bytes_read - 1];
 
@@ -259,7 +252,7 @@ fn parse_delimiters(delimiters: &OsString) -> UResult<Box<[Box<[u8]>]>> {
                 _ => {
                     // Unknown escape: strip backslash, use the following character(s)
                     let remaining = &bytes[i..];
-                    let len = mb_char_len(remaining).min(remaining.len());
+                    let len = mb_char_len(remaining);
                     vec.push(Box::from(&bytes[i..i + len]));
                     i += len;
                     continue;
@@ -268,7 +261,7 @@ fn parse_delimiters(delimiters: &OsString) -> UResult<Box<[Box<[u8]>]>> {
             i += 1;
         } else {
             let remaining = &bytes[i..];
-            let len = mb_char_len(remaining).min(remaining.len());
+            let len = mb_char_len(remaining);
             vec.push(Box::from(&bytes[i..i + len]));
             i += len;
         }

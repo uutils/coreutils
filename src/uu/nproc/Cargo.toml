@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/nproc.rs"
 test = false
@@ -26,6 +23,8 @@ libc = { workspace = true }
 rustix = { workspace = true, features = ["thread"] }
 uucore = { workspace = true, features = ["fs"] }
 
+[lints]
+workspace = true
 
 [[bin]]
 name = "nproc"

@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/mkfifo.rs"
 test = false
@@ -31,8 +28,12 @@ rustix = { workspace = true, features = ["fs", "process"] }
 libc = { workspace = true }
 
 [features]
+diagnostics = ["uucore/diagnostics"]
 selinux = ["uucore/selinux"]
 smack = ["uucore/smack"]
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "mkfifo"

@@ -84,14 +84,12 @@ impl Iterator for ReverseChunks<'_> {
 
         // Seek backwards by the next chunk, read the full chunk into
         // `buf`, and then seek back to the start of the chunk again.
-        let mut buf = vec![0; BLOCK_SIZE as usize];
+        let mut buf = vec![0; block_size as usize];
         let pos = self
             .file
             .seek(SeekFrom::Current(-(block_size as i64)))
             .unwrap();
-        self.file
-            .read_exact(&mut buf[0..(block_size as usize)])
-            .unwrap();
+        self.file.read_exact(&mut buf).unwrap();
         let pos2 = self
             .file
             .seek(SeekFrom::Current(-(block_size as i64)))
@@ -100,7 +98,7 @@ impl Iterator for ReverseChunks<'_> {
 
         self.block_idx += 1;
 
-        Some(buf[0..(block_size as usize)].to_vec())
+        Some(buf)
     }
 }
 

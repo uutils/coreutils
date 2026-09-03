@@ -383,7 +383,43 @@ fn test_verbose_write_error_does_not_panic_dir() {
         .stderr_contains("No space left on device")
         .stderr_does_not_contain("panicked");
 
+    // A broken stdout must not stop the removal itself.
     assert!(!at.file_exists(file));
+    assert!(!at.dir_exists(dir));
+}
+
+// A broken standard output must be reported once, not once per removed entry.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_verbose_write_error_reported_once() {
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_verbose_write_error_once";
+
+    at.mkdir(dir);
+    for name in ["alpha", "bravo", "charlie", "delta"] {
+        at.touch(format!("{dir}/{name}"));
+    }
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    let result = ucmd
+        .arg("-r")
+        .arg("-v")
+        .arg(dir)
+        .set_stdout(dev_full)
+        .fails();
+    result.code_is(1);
+    assert_eq!(
+        result
+            .stderr_str()
+            .matches("No space left on device")
+            .count(),
+        1
+    );
+
+    assert!(!at.dir_exists(dir));
 }
 
 #[test]
@@ -1245,7 +1281,7 @@ fn test_rm_recursive_long_path_safe_traversal() {
 #[cfg(all(not(windows), feature = "chmod"))]
 #[test]
 fn test_rm_directory_not_executable() {
-    // Test from GNU rm/rm2.sh
+    // Test removing files with specific permission scenarios
     // Exercise code paths when directories have no execute permission
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1285,7 +1321,7 @@ fn test_rm_directory_not_executable() {
 #[cfg(all(not(windows), feature = "chmod"))]
 #[test]
 fn test_rm_directory_not_writable() {
-    // Test from GNU rm/rm1.sh
+    // Test basic recursive removal
     // Exercise code paths when directories have no write permission
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

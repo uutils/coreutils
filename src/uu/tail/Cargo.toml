@@ -12,9 +12,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/tail.rs"
 doctest = false
@@ -23,7 +20,6 @@ doctest = false
 clap = { workspace = true }
 memchr = { workspace = true }
 uucore = { workspace = true, features = ["fs", "parser-size", "signals"] }
-same-file = { workspace = true }
 fluent = { workspace = true }
 
 [target.'cfg(not(target_os = "wasi"))'.dependencies]
@@ -44,6 +40,12 @@ windows-sys = { workspace = true, features = [
 
 [dev-dependencies]
 rstest = { workspace = true }
+
+[features]
+diagnostics = ["uucore/diagnostics"]
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "tail"

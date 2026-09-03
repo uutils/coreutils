@@ -12,6 +12,19 @@ use crate::conversion_tables::{
 };
 use crate::parseargs::Parser;
 
+impl Parser {
+    /// Parse the operands, keeping only the error itself.
+    ///
+    /// The utility goes through `parse_with_diagnostics`, which also knows
+    /// which operand failed; this is the plain form the tests compare against.
+    pub(crate) fn parse(
+        self,
+        operands: impl IntoIterator<Item: AsRef<str>>,
+    ) -> Result<Settings, ParseError> {
+        self.read(operands).map_err(|(_, error)| error)?.validate()
+    }
+}
+
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 #[allow(clippy::useless_vec)]
 #[test]

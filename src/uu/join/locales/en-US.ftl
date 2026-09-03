@@ -24,7 +24,7 @@ join-help-z = line delimiter is NUL, not newline
 join-error-io = io error: { $error }
 join-error-non-utf8-tab = non-UTF-8 multi-byte tab
 join-error-unprintable-separators = unprintable field separators are only supported on unix-like platforms
-join-error-multi-character-tab = multi-character tab { $value }
+join-error-multi-character-tab = multi-character tab '{ $value }'
 join-error-both-files-stdin = both files cannot be standard input
 join-error-invalid-field-specifier = invalid field specifier: { $spec }
 join-error-invalid-file-number = invalid file number in field spec: { $spec }
@@ -33,3 +33,6 @@ join-error-invalid-field-number = invalid field number: { $value }
 join-error-incompatible-fields = incompatible join fields { $field1 }, { $field2 }
 join-error-not-sorted = { $file }:{ $line_num }: is not sorted: { $content }
 join-error-input-not-sorted = input is not in sorted order
+
+# Diagnostics
+join-diag-help-format = an output field is FILENUM.FIELD, as in -o 1.2,2.1; 0 stands for the join field

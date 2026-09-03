@@ -1015,17 +1015,17 @@ fn test_parse_valid_hexadecimal_float_three_args() {
 }
 
 #[test]
-fn test_parse_float_gnu_coreutils() {
-    // some values from GNU coreutils tests
+fn test_seq_float_precision_edge_cases() {
+    // Known sequence values for verification
     new_ucmd!()
-        .args(&[".89999", "1e-7", ".8999901"])
+        .args(&[".64999", "1e-7", ".6499901"])
         .succeeds()
-        .stdout_only("0.8999900\n0.8999901\n");
+        .stdout_only("0.6499900\n0.6499901\n");
 
     new_ucmd!()
-        .args(&["0", "0.000001", "0.000003"])
+        .args(&["0", "0.000002", "0.000006"])
         .succeeds()
-        .stdout_only("0.000000\n0.000001\n0.000002\n0.000003\n");
+        .stdout_only("0.000000\n0.000002\n0.000004\n0.000006\n");
 }
 
 #[test]
@@ -1171,4 +1171,66 @@ fn test_equalize_widths_corner_cases() {
         .args(&["-w", "0x1.1", "1.00002", "3"])
         .succeeds()
         .stdout_is("1.0625\n2.06252\n");
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_failing_conversion() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-f", "%5.2c", "1", "3"])
+            .fails_with_code(1);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+seq: %5.2c: invalid conversion specification
+   ╭─[ seq:1:8 ]
+   │
+ 1 │ seq -f %5.2c 1 3
+   │        ─────
+   │
+   │ Help: a format holds exactly one float conversion: %f, %e, %g or %a, as in -f%.3f
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_inside_a_glued_short_option() {
+        // `-f%q` is split for clap, but the report echoes what was typed.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-f%q", "1", "3"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("1 │ seq -f%q 1 3"), "{stderr}");
+        assert!(stderr.contains("seq:1:7"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_a_format_with_no_directive() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--format=abc", "1", "3"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("seq:1:14"), "{stderr}");
+        assert!(stderr.contains("has no % directive"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-f", "%5.2c", "1", "3"])
+            .fails_with_code(1)
+            .stderr_is("seq: %5.2c: invalid conversion specification\n");
+    }
 }

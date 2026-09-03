@@ -340,8 +340,8 @@ impl CmdResult {
     ///
     /// # Platform specific behavior
     ///
-    /// This assertion method is only available on unix systems.
-    #[cfg(unix)]
+    /// This assertion method is only available on unix systems, except for fuchsia.
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     #[track_caller]
     pub fn signal_name_is(&self, name: &str) -> &Self {
         use uucore::signals::signal_by_name_or_value;
@@ -397,6 +397,42 @@ impl CmdResult {
     /// Returns the program's standard error as a string slice
     pub fn stderr_str(&self) -> &str {
         std::str::from_utf8(&self.stderr).unwrap()
+    }
+
+    /// Returns the program's standard error with the carriage returns a
+    /// pseudo-terminal inserts and any trailing padding on each line removed.
+    ///
+    /// Diagnostics rendered under [`UCommand::terminal_sim_stderr`] pad their
+    /// lines out to the width of the report, which makes them awkward to
+    /// compare verbatim; this gives back the block as it reads on screen.
+    pub fn stderr_as_displayed(&self) -> String {
+        self.stderr_str()
+            .lines()
+            .map(str::trim_end)
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Returns the one-based column a caret diagnostic points at.
+    ///
+    /// A report opens with a header naming the utility and the position it
+    /// points at — `╭─[ chmod:1:5 ]` — which is the only place the column is
+    /// written out; the caret row itself is padded and drawn with box
+    /// characters. Asserting on the column keeps a test to the one thing it
+    /// cares about, where matching the block verbatim would break on every
+    /// wording change.
+    ///
+    /// # Returns
+    ///
+    /// `None` when stderr carries no such header: the plain one-line message
+    /// was printed, or the diagnostic pointed at another line.
+    pub fn caret_column(&self) -> Option<usize> {
+        let header = format!("{}:1:", self.util_name.as_ref()?);
+        let line = self
+            .stderr_str()
+            .lines()
+            .find(|line| line.contains(&header))?;
+        line.rsplit(':').next()?.trim_end_matches(" ]").parse().ok()
     }
 
     /// Returns the program's standard error as a string slice, automatically handling invalid utf8
@@ -961,7 +997,7 @@ pub fn get_root_path() -> &'static str {
 /// # Returns
 ///
 /// `true` if both paths have the same set of extended attributes, `false` otherwise.
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "openbsd"))))]
+#[cfg(all(unix, not(any(target_vendor = "apple", target_os = "openbsd"))))]
 pub fn compare_xattrs<P: AsRef<Path>>(path1: P, path2: P) -> bool {
     let get_sorted_xattrs = |path: P| {
         xattr::list(path)
@@ -1721,6 +1757,21 @@ impl UCommand {
     pub fn terminal_sim_stdio(&mut self, config: TerminalSimulation) -> &mut Self {
         self.terminal_simulation = Some(config);
         self
+    }
+
+    /// Attach stderr (and only stderr) to a simulated terminal, with colors
+    /// disabled through `NO_COLOR`.
+    ///
+    /// This is useful to test output that is only rendered when
+    /// `stderr.is_terminal()` is `true`, such as the rich error reports of
+    /// `chmod` or `test`, while letting assertions see plain text.
+    #[cfg(unix)]
+    pub fn terminal_sim_stderr(&mut self) -> &mut Self {
+        self.terminal_sim_stdio(TerminalSimulation {
+            stderr: true,
+            ..Default::default()
+        })
+        .env("NO_COLOR", "1")
     }
 
     #[cfg(unix)]
@@ -3562,7 +3613,7 @@ mod tests {
         }
     }
 
-    #[cfg(all(unix, not(any(target_os = "macos", target_os = "openbsd"))))]
+    #[cfg(all(unix, not(any(target_vendor = "apple", target_os = "openbsd"))))]
     #[test]
     fn test_compare_xattrs() {
         use tempfile::tempdir;
@@ -3598,7 +3649,11 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn test_application_of_process_resource_limits_limited_file_size() {
-        let unit_size_bytes = if cfg!(target_os = "macos") { 1024 } else { 512 };
+        let unit_size_bytes = if cfg!(target_vendor = "apple") {
+            1024
+        } else {
+            512
+        };
 
         let ts = TestScenario::new("util");
         ts.cmd("sh")

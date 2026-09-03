@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) NEWROOT Userspec pstatus chdir
+// spell-checker:ignore (ToDO) NEWROOT Userspec chrooting chroots chdir pstatus repointed
 mod error;
 
 use crate::error::ChrootError;
@@ -192,10 +192,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // destination, minus the window. NEWROOT is kept for diagnostics so the
         // error text still names what the caller asked for.
         options.chroot_target = resolved;
-    }
-
-    if !options.newroot.is_dir() {
-        return Err(ChrootError::NoSuchDirectory(options.newroot).into());
     }
 
     let mut cmd_iter = matches

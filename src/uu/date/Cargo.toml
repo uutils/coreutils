@@ -12,9 +12,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/date.rs"
 doctest = false
@@ -40,6 +37,7 @@ jiff = { workspace = true, features = [
   "tzdb-concatenated",
 ] }
 parse_datetime = { workspace = true }
+thiserror = { workspace = true }
 uucore = { workspace = true, features = ["parser", "i18n-datetime"] }
 
 [target.'cfg(unix)'.dependencies]
@@ -60,6 +58,9 @@ path = "src/main.rs"
 divan = { workspace = true }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
+
+[lints]
+workspace = true
 
 [[bench]]
 name = "date_bench"

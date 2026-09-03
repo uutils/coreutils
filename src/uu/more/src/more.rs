@@ -220,7 +220,7 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::LOGICAL)
-                .short('l')
+                .short('f')
                 .long(options::LOGICAL)
                 .action(ArgAction::SetTrue)
                 .help(translate!("more-help-logical")),
@@ -234,7 +234,7 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::NO_PAUSE)
-                .short('f')
+                .short('l')
                 .long(options::NO_PAUSE)
                 .action(ArgAction::SetTrue)
                 .help(translate!("more-help-no-pause")),
@@ -607,10 +607,9 @@ impl<'a> Pager<'a> {
         let pattern = self.pattern.clone().expect("pattern should be set");
         let mut line_num = self.upper_mark;
         loop {
-            match self.get_line(line_num) {
-                Some(line) if line.contains(&pattern) => return Some(line_num),
-                Some(_) => line_num += 1,
-                None => return None,
+            match self.get_line(line_num)? {
+                line if line.contains(&pattern) => return Some(line_num),
+                _ => line_num += 1,
             }
         }
     }

@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) copydir fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
+// spell-checker:ignore (ToDO) copydir fiemap linkgs lstat nlink nlinks pathbuf reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
 // spell-checker:ignore RDONLY futimens utimensat
 
 use std::cmp::Ordering;
@@ -17,7 +17,7 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{fmt, io};
 #[cfg(all(unix, not(target_os = "android")))]
-use uucore::fsxattr::{copy_acls, copy_xattrs, copy_xattrs_skip_selinux};
+use uucore::fsxattr::{copy_acls, copy_xattrs_fd, copy_xattrs_skip_selinux};
 use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_parser};
@@ -63,6 +63,17 @@ pub enum CpError {
     /// General copy error
     #[error("{0}")]
     Error(String),
+
+    /// The SELinux security context of the destination could not be
+    /// preserved; unlike other attribute failures, this one empties the
+    /// destination file.
+    #[error("{0}")]
+    SelinuxContext(String),
+
+    /// Same as [`CpError::SelinuxContext`], but keeping the errno so that an
+    /// ENOTSUP on a fixed-context mount can still be silenced.
+    #[error("{1}: {0}")]
+    SelinuxContextIoErr(io::Error, String),
 
     /// Represents the state when a non-fatal error has occurred
     /// and not all files were copied.
@@ -123,7 +134,7 @@ impl Display for BackupError {
         write!(
             f,
             "{}",
-            translate!("cp-error-backup-format", "error" => self.0.clone(), "exec" => uucore::execution_phrase())
+            translate!("cp-error-backup-format", "error" => self.0, "exec" => uucore::execution_phrase())
         )
     }
 }
@@ -175,11 +186,11 @@ pub enum ReflinkMode {
 impl Default for ReflinkMode {
     #[allow(clippy::derivable_impls)]
     fn default() -> Self {
-        #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+        #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
         {
             Self::Auto
         }
-        #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
+        #[cfg(not(any(target_vendor = "apple", target_os = "linux", target_os = "android")))]
         {
             Self::Never
         }
@@ -1078,9 +1089,9 @@ impl Options {
                 .get_one::<String>(update_control::arguments::OPT_UPDATE)
                 .is_some_and(|v| v == "none" || v == "none-fail")
         {
-            return Err(CpError::InvalidArgument(
-                translate!("cp-error-invalid-backup-argument").to_string(),
-            ));
+            return Err(CpError::InvalidArgument(translate!(
+                "cp-error-invalid-backup-argument"
+            )));
         }
 
         let backup_suffix = backup_control::determine_backup_suffix(matches);
@@ -1374,7 +1385,9 @@ fn is_enotsup_error(error: &CpError) -> bool {
     const EOPNOTSUPP: i32 = 95;
 
     match error {
-        CpError::IoErr(e) | CpError::IoErrContext(e, _) => e.raw_os_error() == Some(EOPNOTSUPP),
+        CpError::IoErr(e) | CpError::IoErrContext(e, _) | CpError::SelinuxContextIoErr(e, _) => {
+            e.raw_os_error() == Some(EOPNOTSUPP)
+        }
         _ => false,
     }
 }
@@ -1394,7 +1407,7 @@ fn show_error_if_needed(error: &CpError) {
         }
         // Format IoErrContext using strip_errno to remove "(os error N)" suffix
         // for GNU-compatible output
-        CpError::IoErrContext(io_err, context) => {
+        CpError::IoErrContext(io_err, context) | CpError::SelinuxContextIoErr(io_err, context) => {
             show_error!("{context}: {}", strip_errno(io_err));
         }
         _ => {
@@ -1627,47 +1640,38 @@ fn copy_source(
 // This fix adds yet another metadata read.
 // Should this metadata be read once and then reused throughout the execution?
 // https://github.com/uutils/coreutils/issues/6658
-#[allow(clippy::if_not_else)]
-fn file_mode_for_interactive_overwrite(
-    #[cfg_attr(not(unix), allow(unused_variables))] path: &Path,
-) -> Option<(String, String)> {
-    // Retain outer braces to ensure only one branch is included
-    {
-        #[cfg(unix)]
-        {
-            use libc::{S_IWUSR, mode_t};
-            use std::os::unix::prelude::MetadataExt;
+#[cfg(unix)]
+fn file_mode_for_interactive_overwrite(path: &Path) -> Option<(String, String)> {
+    use libc::{S_IWUSR, mode_t};
+    use std::os::unix::prelude::MetadataExt;
 
-            match path.metadata() {
-                Ok(me) => {
-                    // Cast is necessary on some platforms
-                    #[allow(clippy::unnecessary_cast)]
-                    let mode: mode_t = me.mode() as mode_t;
+    match path.metadata() {
+        Ok(me) => {
+            // Cast is necessary on some platforms
+            #[allow(clippy::unnecessary_cast)]
+            let mode: mode_t = me.mode() as mode_t;
 
-                    // It looks like this extra information is added to the prompt iff the file's user write bit is 0
-                    //  write permission, owner
-                    if uucore::has!(mode, S_IWUSR) {
-                        None
-                    } else {
-                        // Discard leading digits
-                        let mode_without_leading_digits = mode & 0o7777;
+            // It looks like this extra information is added to the prompt iff the file's user write bit is 0
+            //  write permission, owner
+            if !uucore::has!(mode, S_IWUSR) {
+                // Discard leading digits
+                let mode_without_leading_digits = mode & 0o7777;
 
-                        Some((
-                            format!("{mode_without_leading_digits:04o}"),
-                            uucore::fs::display_permissions_unix(mode as u32, false),
-                        ))
-                    }
-                }
-                // TODO: How should failure to read the metadata be handled? Ignoring for now.
-                Err(_) => None,
+                return Some((
+                    format!("{mode_without_leading_digits:04o}"),
+                    uucore::fs::display_permissions_unix(mode as u32, false),
+                ));
             }
-        }
-
-        #[cfg(not(unix))]
-        {
             None
         }
+        // TODO: How should failure to read the metadata be handled? Ignoring for now.
+        Err(_) => None,
     }
+}
+
+#[cfg(not(unix))]
+fn file_mode_for_interactive_overwrite(_: &Path) -> Option<(String, String)> {
+    None
 }
 
 impl OverwriteMode {
@@ -1746,8 +1750,12 @@ pub(crate) fn set_selinux_context(path: &Path, context: Option<&String>) -> Copy
 /// user-writable if needed and restoring its original permissions afterward. This avoids "Operation
 /// not permitted" errors on read-only files. Returns an error if permission or metadata operations fail,
 /// or if xattr copying fails.
+///
+/// Uses file descriptor-based operations to avoid TOCTOU races during xattr copying.
 #[cfg(all(unix, not(target_os = "android")))]
 fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyResult<()> {
+    use std::fs::File;
+    use uucore::fsxattr::copy_xattrs;
     let metadata = fs::symlink_metadata(dest)?;
 
     // Check if the destination file is currently read-only for the user.
@@ -1767,6 +1775,13 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
         // When -Z is used, skip copying security.selinux xattr so that
         // the default context can be set instead of preserving from source
         copy_xattrs_skip_selinux(source, dest)
+    } else if metadata.is_file() {
+        // Use file descriptor-based operations for regular files to avoid TOCTOU races.
+        // Directories cannot be opened with write mode for xattr operations
+        // Symlinks (especially dangling ones) cannot be opened via File::open
+        let source_file = File::open(source)?;
+        let dest_file = OpenOptions::new().write(true).open(dest)?;
+        copy_xattrs_fd(&source_file, &dest_file)
     } else {
         copy_xattrs(source, dest)
     };
@@ -1884,18 +1899,13 @@ pub(crate) fn copy_attributes(
 
             fs::set_permissions(dest, source_perms)
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-            // FIXME: Implement this for windows as well
-            #[cfg(feature = "feat_acl")]
-            exacl::getfacl(source, None)
-                .and_then(|acl| exacl::setfacl(&[dest], &acl, None))
-                .map_err(|err| CpError::Error(err.to_string()))?;
             // GNU `cp -p` preserves POSIX ACLs as part of mode. On Linux the
             // ACLs are stored as `system.posix_acl_*` xattrs; copy just those
             // so we keep ACL parity with GNU without preserving user xattrs
             // (which are intentionally excluded from the default -p set per
             // issue #9704). Best-effort: ignore failures on filesystems that
             // do not support ACL xattrs.
-            #[cfg(all(unix, not(target_os = "android")))]
+            #[cfg(all(unix, not(target_os = "android")))] // todo: support acl for other targets
             copy_acls(source, dest);
         }
 
@@ -1934,12 +1944,26 @@ pub(crate) fn copy_attributes(
     handle_preserve(attributes.context, || -> CopyResult<()> {
         // Get the source context and apply it to the destination
         let context = selinux::SecurityContext::of_path(source, false, false).map_err(|_| {
-            CpError::Error(translate!("cp-error-selinux-get-context", "path" => source.quote()))
+            CpError::SelinuxContext(
+                translate!("cp-error-selinux-get-context", "path" => source.quote()),
+            )
         })?;
         if let Some(context) = context {
-            context.set_for_path(dest, false, false).map_err(|e|CpError::Error(
-					translate!("cp-error-selinux-set-context", "path" => dest.quote(), "error" => e),
-				))?;
+            context.set_for_path(dest, false, false).map_err(|e| {
+                // Keep the errno: the ENOTSUP of a mount with a fixed context is
+                // what -a and --preserve=all have to stay quiet about.
+                let source = match e {
+                    selinux::errors::Error::IO { source, .. }
+                    | selinux::errors::Error::IO1Name { source, .. }
+                    | selinux::errors::Error::IO1Path { source, .. }
+                    | selinux::errors::Error::IO1Process { source, .. } => source,
+                    e => io::Error::other(e),
+                };
+                CpError::SelinuxContextIoErr(
+                    source,
+                    translate!("cp-error-selinux-set-context", "path" => dest.quote()),
+                )
+            })?;
         }
         Ok(())
     })?;
@@ -1973,18 +1997,8 @@ pub(crate) fn copy_attributes(
 fn symlink_file(
     source: &Path,
     dest: &Path,
-    #[cfg(not(target_os = "wasi"))] symlinked_files: &mut HashSet<FileInformation>,
-    #[cfg(target_os = "wasi")] _symlinked_files: &mut HashSet<FileInformation>,
+    symlinked_files: &mut HashSet<FileInformation>,
 ) -> CopyResult<()> {
-    #[cfg(target_os = "wasi")]
-    {
-        Err(CpError::IoErrContext(
-            io::Error::new(io::ErrorKind::Unsupported, "symlinks not supported"),
-            translate!("cp-error-cannot-create-symlink",
-                       "dest" => get_filename(dest).unwrap_or("?").quote(),
-                       "source" => get_filename(source).unwrap_or("?").quote()),
-        ))
-    }
     #[cfg(not(any(windows, target_os = "wasi")))]
     {
         std::os::unix::fs::symlink(source, dest).map_err(|e| {
@@ -2007,13 +2021,21 @@ fn symlink_file(
             )
         })?;
     }
-    #[cfg(not(target_os = "wasi"))]
+    #[cfg(target_os = "wasi")]
     {
-        if let Ok(file_info) = FileInformation::from_path(dest, false) {
-            symlinked_files.insert(file_info);
-        }
-        Ok(())
+        platform::create_symlink(source, dest).map_err(|e| {
+            CpError::IoErrContext(
+                e,
+                translate!("cp-error-cannot-create-symlink",
+                           "dest" => get_filename(dest).unwrap_or("?").quote(),
+                           "source" => get_filename(source).unwrap_or("?").quote()),
+            )
+        })?;
     }
+    if let Ok(file_info) = FileInformation::from_path(dest, false) {
+        symlinked_files.insert(file_info);
+    }
+    Ok(())
 }
 
 fn context_for(src: &Path, dest: &Path) -> String {
@@ -2620,6 +2642,23 @@ fn copy_file(
         }
     }
 
+    // `--attributes-only` skips `handle_existing_dest` above, so its
+    // same-file check never runs; GNU cp refuses self-copies in this
+    // mode too.
+    if initial_dest_metadata.is_some()
+        && options.attributes_only
+        && !matches!(
+            options.overwrite,
+            OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+        )
+        && is_forbidden_to_copy_to_same_file(source, dest, options, source_in_command_line)
+    {
+        return Err(translate!("cp-error-same-file",
+                       "source" => source.quote(),
+                       "dest" => dest.quote())
+        .into());
+    }
+
     if options.attributes_only
         && source_is_symlink
         && !matches!(
@@ -2697,7 +2736,13 @@ fn copy_file(
     }
 
     // TODO: implement something similar to gnu's lchown
-    if !dest_is_symlink {
+    //
+    // Check the destination as it is now, not as it was before the copy:
+    // copying a symlink without dereferencing recreates it as a symlink here,
+    // and chmod() would follow it and change the mode of the link target,
+    // which can live outside the copied tree. Conversely, --remove-destination
+    // replaces a symlink with a regular file that still needs its mode set.
+    if !dest.is_symlink() {
         // Here, to match GNU semantics, we quietly ignore an error
         // if a user does not have the correct ownership to modify
         // the permissions of a file.
@@ -2737,9 +2782,28 @@ fn copy_file(
         )
     };
 
-    // GNU cp truncates the destination when a required attribute cannot be preserved
-    copy_attributes_result.inspect_err(|_| {
-        fs::File::create(dest).map(|f| f.set_len(0)).ok();
+    // Empty the destination when the SELinux security context cannot be
+    // preserved, but keep the copied data when preserving other attributes
+    // (e.g. xattrs) fails.
+    copy_attributes_result.inspect_err(|err| {
+        if matches!(
+            err,
+            CpError::SelinuxContext(_) | CpError::SelinuxContextIoErr(..)
+        ) && fs::File::create(dest).is_err()
+        {
+            // The permissions applied above may lack the write bit (e.g. a
+            // read-only source), making the truncating open fail. Restore
+            // owner write long enough to truncate, then put the intended
+            // permissions back.
+            #[cfg(unix)]
+            if let Ok(metadata) = fs::symlink_metadata(dest) {
+                let mode = metadata.permissions().mode();
+                if fs::set_permissions(dest, Permissions::from_mode(mode | 0o200)).is_ok() {
+                    fs::File::create(dest).ok();
+                    fs::set_permissions(dest, Permissions::from_mode(mode)).ok();
+                }
+            }
+        }
     })?;
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -2785,8 +2849,8 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
         };
 
         #[cfg(not(any(
+            target_vendor = "apple",
             target_os = "android",
-            target_os = "macos",
             target_os = "freebsd",
             target_os = "redox",
         )))]
@@ -2801,8 +2865,8 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
         }
 
         #[cfg(any(
+            target_vendor = "apple",
             target_os = "android",
-            target_os = "macos",
             target_os = "freebsd",
             target_os = "redox",
         ))]

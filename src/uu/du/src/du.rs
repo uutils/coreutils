@@ -11,7 +11,7 @@ use rustc_hash::FxHashSet as HashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, DirEntry, File, Metadata};
-use std::io::{BufRead, BufReader, Write, stdout};
+use std::io::{self, BufRead, BufReader, Write, stdout};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
@@ -19,11 +19,11 @@ use std::os::windows::fs::OpenOptionsExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::sync::mpsc;
 use std::thread;
 use std::time::SystemTime;
 use thiserror::Error;
+use uucore::diagnostics::OptionValue;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
@@ -137,7 +137,7 @@ impl Stat {
         path: &Path,
         dir_entry: Option<&DirEntry>,
         options: &TraversalOptions,
-    ) -> std::io::Result<Self> {
+    ) -> io::Result<Self> {
         // Determine whether to dereference (follow) the symbolic link
         let should_dereference = match &options.dereference {
             Deref::All => true,
@@ -179,7 +179,7 @@ impl Stat {
         dir_fd: &DirFd,
         full_path: &Path,
         time: Option<MetadataTimeField>,
-    ) -> std::io::Result<Self> {
+    ) -> io::Result<Self> {
         // Get metadata for the directory itself using fstat
         let safe_metadata = dir_fd.metadata()?;
 
@@ -223,7 +223,7 @@ fn get_blocks(_path: &Path, metadata: &Metadata) -> u64 {
 // fails with access denied unless `FILE_FLAG_BACKUP_SEMANTICS` is set), so
 // use that flag explicitly to be able to query directories as well as files.
 #[cfg(windows)]
-fn open_for_query(path: &Path) -> std::io::Result<File> {
+fn open_for_query(path: &Path) -> io::Result<File> {
     fs::OpenOptions::new()
         .read(true)
         .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
@@ -301,10 +301,29 @@ fn get_file_info(path: &Path, _metadata: &Metadata) -> Option<FileInfo> {
     result
 }
 
-fn read_block_size(s: Option<&str>) -> UResult<u64> {
+fn read_block_size(s: Option<&str>, diag_args: Option<&[OsString]>) -> UResult<u64> {
     if let Some(s) = s {
         parse_size_u64(s)
-            .map_err(|e| USimpleError::new(1, format_error_message(&e, s, options::BLOCK_SIZE)))
+            .and_then(|bytes| {
+                // A block size of zero is rejected here rather than by the
+                // caller, so that it goes through the caret path like every
+                // other bad SIZE.
+                if bytes == 0 {
+                    Err(ParseSizeError::ParseFailure(s.to_string()))
+                } else {
+                    Ok(bytes)
+                }
+            })
+            .map_err(|e| {
+                let message = format_error_message(&e, s, options::BLOCK_SIZE);
+                e.size_value_error(
+                    diag_args,
+                    &OptionValue::new(s, 'B', options::BLOCK_SIZE),
+                    0,
+                    &message,
+                    USimpleError::new(1, message.clone()),
+                )
+            })
     } else if let Some(bytes) =
         parse_block_size::block_size_from_env(&["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"]).found()
     {
@@ -337,7 +356,7 @@ fn safe_du(
     seen_inodes: &mut HashSet<FileInfo>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
     parent_fd: Option<&DirFd>,
-    initial_stat: Option<std::io::Result<Stat>>,
+    initial_stat: Option<io::Result<Stat>>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
     // The caller provides an already-computed stat for this entry, which lets us
     // avoid re-stating it here. For subdirectories this saves both a redundant
@@ -642,8 +661,8 @@ fn du_regular(
 
                         // Check symlink depth limit
                         if current_symlink_depth > MAX_SYMLINK_DEPTH {
-                            print_tx.send(Err(std::io::Error::new(
-                                std::io::ErrorKind::InvalidData,
+                            print_tx.send(Err(io::Error::new(
+                                io::ErrorKind::InvalidData,
                                 "Too many levels of symbolic links",
                             ).map_err_context(
                                 || translate!("du-error-cannot-access", "path" => entry_path.quote()),
@@ -813,7 +832,7 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
         if matches.get_flag(options::VERBOSE) {
             println!(
                 "{}",
-                translate!("du-verbose-adding-to-exclude-list", "pattern" => f.clone())
+                translate!("du-verbose-adding-to-exclude-list", "pattern" => f)
             );
         }
         let glob = parse_glob::from_str(&f).map_err(DuError::InvalidGlob)?;
@@ -842,32 +861,27 @@ impl StatPrinter {
 
     fn print_stats(&self, rx: &mpsc::Receiver<UResult<StatPrintInfo>>) -> UResult<()> {
         let mut grand_total = 0;
-        loop {
-            let received = rx.recv();
-
+        while let Ok(received) = rx.recv() {
             match received {
-                Ok(message) => match message {
-                    Ok(stat_info) => {
-                        let size = self.choose_size(&stat_info.stat);
+                Ok(stat_info) => {
+                    let size = self.choose_size(&stat_info.stat);
 
-                        if stat_info.depth == 0 {
-                            grand_total += size;
-                        }
-
-                        if !self
-                            .threshold
-                            .is_some_and(|threshold| threshold.should_exclude(size))
-                            && self
-                                .max_depth
-                                .is_none_or(|max_depth| stat_info.depth <= max_depth)
-                            && (!self.summarize || stat_info.depth == 0)
-                        {
-                            self.print_stat(&stat_info.stat, size)?;
-                        }
+                    if stat_info.depth == 0 {
+                        grand_total += size;
                     }
-                    Err(e) => show!(e),
-                },
-                Err(_) => break,
+
+                    if !self
+                        .threshold
+                        .is_some_and(|threshold| threshold.should_exclude(size))
+                        && self
+                            .max_depth
+                            .is_none_or(|max_depth| stat_info.depth <= max_depth)
+                        && (!self.summarize || stat_info.depth == 0)
+                    {
+                        self.print_stat(&stat_info.stat, size)?;
+                    }
+                }
+                Err(e) => show!(e),
             }
         }
 
@@ -930,15 +944,15 @@ impl StatPrinter {
 }
 
 /// Read file paths from the specified file, separated by null characters
-fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
+fn read_files_from(file_name: &OsStr) -> io::Result<Vec<PathBuf>> {
     let reader: Box<dyn BufRead> = if file_name == "-" {
         // Read from standard input
-        Box::new(BufReader::new(std::io::stdin()))
+        Box::new(BufReader::new(io::stdin()))
     } else {
         // First, check if the file_name is a directory
         let path = PathBuf::from(file_name);
         if path.is_dir() {
-            return Err(std::io::Error::other(
+            return Err(io::Error::other(
                 translate!("du-error-read-error-is-directory", "file" => file_name.maybe_quote()),
             ));
         }
@@ -946,8 +960,8 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
         // Attempt to open the file and handle the error if it does not exist
         match File::open(file_name) {
             Ok(file) => Box::new(BufReader::new(file)),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return Err(std::io::Error::other(
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                return Err(io::Error::other(
                     translate!("du-error-cannot-open-for-reading", "file" => file_name.quote()),
                 ));
             }
@@ -992,18 +1006,15 @@ fn get_size_format_flag_arg_index_if_present(matches: &ArgMatches, arg: &str) ->
     }
 }
 
-fn parse_block_size_arg_or_default_fallback(matches: &ArgMatches) -> UResult<SizeFormat> {
-    let block_size_str = matches.get_one::<String>(options::BLOCK_SIZE);
-    let block_size = read_block_size(block_size_str.map(AsRef::as_ref))?;
-    if block_size == 0 {
-        return Err(std::io::Error::other(translate!("du-error-invalid-block-size-argument", "option" => options::BLOCK_SIZE, "value" => block_size_str.map_or("???BUG", |v| v).quote()))
-        .into());
-    }
-    Ok(SizeFormat::BlockSize(block_size))
-}
-
-fn parse_size_format(matches: &ArgMatches) -> UResult<SizeFormat> {
-    let block_size_value_or_default_fallback = parse_block_size_arg_or_default_fallback(matches)?;
+fn parse_size_format(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<SizeFormat> {
+    // `read_block_size` falls back to the environment and rejects a zero block
+    // size itself, so that the caret can point at the offending value.
+    let block_size_value_or_default_fallback = SizeFormat::BlockSize(read_block_size(
+        matches
+            .get_one::<String>(options::BLOCK_SIZE)
+            .map(AsRef::as_ref),
+        diag_args,
+    )?);
     let candidates = [
         (
             SizeFormat::BlockSize(1),
@@ -1042,7 +1053,13 @@ fn parse_size_format(matches: &ArgMatches) -> UResult<SizeFormat> {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    // The arguments are kept for the caret in SIZE diagnostics, which echoes
+    // the command line.
+    let (matches, diag_args) = uucore::clap_localization::handle_clap_result_with_diagnostics(
+        uu_app(),
+        args.collect(),
+        1,
+    )?;
 
     let summarize = matches.get_flag(options::SUMMARIZE);
 
@@ -1057,15 +1074,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let files = if let Some(file_from) = matches.get_one::<OsString>(options::FILES0_FROM) {
         if file_from == "-" && matches.get_one::<OsString>(options::FILE).is_some() {
-            return Err(std::io::Error::other(
-                translate!("du-error-extra-operand-with-files0-from",
+            return Err(
+                io::Error::other(translate!("du-error-extra-operand-with-files0-from",
                     "file" => matches
                         .get_one::<OsString>(options::FILE)
                         .unwrap()
                         .quote()
-                ),
-            )
-            .into());
+                ))
+                .into(),
+            );
         }
 
         read_files_from(file_from)?
@@ -1084,7 +1101,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .map_or(MetadataTimeField::Modification, |s| s.as_str().into())
     });
 
-    let size_format = parse_size_format(&matches)?;
+    let size_format = parse_size_format(&matches, diag_args.as_deref())?;
 
     let traversal_options = TraversalOptions {
         all: matches.get_flag(options::ALL),
@@ -1119,8 +1136,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         threshold: matches
             .get_one::<String>(options::THRESHOLD)
             .map(|s| {
-                Threshold::from_str(s).map_err(|e| {
-                    USimpleError::new(1, format_error_message(&e, s, options::THRESHOLD))
+                parse_threshold(s).map_err(|(e, size_at)| {
+                    let message = format_error_message(&e, s, options::THRESHOLD);
+                    e.size_value_error(
+                        diag_args.as_deref(),
+                        &OptionValue::new(s, 't', options::THRESHOLD),
+                        size_at,
+                        &message,
+                        USimpleError::new(1, message.clone()),
+                    )
                 })
             })
             .transpose()?,
@@ -1546,24 +1570,31 @@ enum Threshold {
     Upper(u64),
 }
 
-impl FromStr for Threshold {
-    type Err = ParseSizeError;
+/// Parse a `--threshold` value, and say where its caret should start.
+///
+/// The parser only ever sees the part after the sign, so on failure the
+/// offset of the size within `s` comes back with the error: the caret has to
+/// count the sign back in. The one exception is the `-0` rejection below,
+/// which is about the sign and the zero together and so starts at 0.
+///
+/// The sign is stripped here rather than with
+/// `uucore::parser::parse_signed_num::number_offset`, which head and tail use
+/// for the same purpose: that one skips leading whitespace as well, and GNU du
+/// rejects a padded `--threshold` such as `'  -1K'`.
+fn parse_threshold(s: &str) -> Result<Threshold, (ParseSizeError, usize)> {
+    let offset = usize::from(s.starts_with(['-', '+']));
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let offset = usize::from(s.starts_with(&['-', '+'][..]));
+    let size = parse_size_u64(&s[offset..]).map_err(|e| (e, offset))?;
 
-        let size = parse_size_u64(&s[offset..])?;
-
-        if s.starts_with('-') {
-            // Threshold of '-0' excludes everything besides 0 sized entries
-            // GNU's du treats '-0' as an invalid argument
-            if size == 0 {
-                return Err(ParseSizeError::ParseFailure(s.to_string()));
-            }
-            Ok(Self::Upper(size))
-        } else {
-            Ok(Self::Lower(size))
+    if s.starts_with('-') {
+        // Threshold of '-0' excludes everything besides 0 sized entries
+        // GNU's du treats '-0' as an invalid argument
+        if size == 0 {
+            return Err((ParseSizeError::ParseFailure(s.to_string()), 0));
         }
+        Ok(Threshold::Upper(size))
+    } else {
+        Ok(Threshold::Lower(size))
     }
 }
 
@@ -1601,7 +1632,7 @@ mod test_du {
     fn test_read_block_size() {
         let test_data = [Some("1024".to_string()), Some("K".to_string()), None];
         for it in &test_data {
-            assert!(matches!(read_block_size(it.as_deref()), Ok(1024)));
+            assert!(matches!(read_block_size(it.as_deref(), None), Ok(1024)));
         }
     }
 }

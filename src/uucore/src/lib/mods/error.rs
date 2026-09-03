@@ -319,7 +319,7 @@ impl UError for USimpleError {
     }
 }
 
-/// Wrapper type around [`std::io::Error`].
+/// A usage error type with an exit code and a message that implements [`UError`].
 #[derive(Debug)]
 pub struct UUsageError {
     /// Exit code of the error.
@@ -459,6 +459,24 @@ impl Display for UIoError {
 }
 
 /// Strip the trailing " (os error XX)" from io error strings.
+///
+/// Rust renders OS errors as `"No such file or directory (os error 2)"`, while GNU
+/// coreutils only prints the `strerror` part. Use this when formatting a message
+/// that has to match GNU's output.
+///
+/// # Examples
+///
+/// ```
+/// use std::io::{Error, ErrorKind};
+/// use uucore::error::strip_errno;
+///
+/// let err = Error::from_raw_os_error(2);
+/// assert_eq!(strip_errno(&err), "No such file or directory");
+///
+/// // Errors without an errno are returned unchanged.
+/// let err = Error::new(ErrorKind::Other, "custom failure");
+/// assert_eq!(strip_errno(&err), "custom failure");
+/// ```
 pub fn strip_errno(err: &std::io::Error) -> String {
     let mut msg = err.to_string();
     if let Some(pos) = msg.find(" (os error ") {
@@ -660,6 +678,45 @@ impl ExitCode {
     }
 }
 
+/// The error to return once its message may already have reached stderr.
+///
+/// A utility that renders its own report — a caret diagnostic, a warning it
+/// printed itself — has already said everything the error would say, and
+/// returning the error too would print the message twice. This keeps the exit
+/// code without the second message: the code is taken from the error itself,
+/// so both paths always agree on it.
+///
+/// # Arguments
+///
+/// * `reported` - Whether the message has already been written to stderr.
+/// * `error` - The error that would otherwise be printed.
+///
+/// # Returns
+///
+/// A bare [`ExitCode`] carrying `error`'s code when `reported`, and `error`
+/// itself otherwise. An error that asks for a usage hint still gets one: the
+/// hint is not part of the message the report replaced.
+///
+/// # Examples
+///
+/// ```
+/// use uucore::error::{USimpleError, quiet_if_reported};
+///
+/// let reported = false; // e.g. a caret diagnostic could not be rendered
+/// let error = quiet_if_reported(reported, USimpleError::new(2, "bad key".to_string()));
+/// assert_eq!(error.code(), 2);
+/// ```
+pub fn quiet_if_reported<E: Into<Box<dyn UError>>>(reported: bool, error: E) -> Box<dyn UError> {
+    let error = error.into();
+    if !reported {
+        return error;
+    }
+    if error.usage() {
+        return UUsageError::new(error.code(), String::new());
+    }
+    ExitCode::new(error.code())
+}
+
 impl Error for ExitCode {}
 
 impl Display for ExitCode {
@@ -779,6 +836,34 @@ impl Display for ClapErrorWrapper {
 
 #[cfg(test)]
 mod tests {
+    use super::{USimpleError, UUsageError, quiet_if_reported};
+
+    /// A quieted error keeps its code but says nothing: the report already did.
+    #[test]
+    fn a_reported_error_carries_only_its_code() {
+        let error = quiet_if_reported(true, USimpleError::new(3, "bad size".to_string()));
+        assert_eq!(error.code(), 3);
+        assert_eq!(error.to_string(), "");
+        assert!(!error.usage());
+    }
+
+    /// Quieting a usage error must not swallow its "Try --help" hint, or the
+    /// output would depend on whether a caret happened to be drawn.
+    #[test]
+    fn a_reported_usage_error_still_asks_for_the_hint() {
+        let error = quiet_if_reported(true, UUsageError::new(125, "bad mode".to_string()));
+        assert_eq!(error.code(), 125);
+        assert_eq!(error.to_string(), "");
+        assert!(error.usage());
+    }
+
+    #[test]
+    fn an_unreported_error_is_left_alone() {
+        let error = quiet_if_reported(false, UUsageError::new(125, "bad mode".to_string()));
+        assert_eq!(error.to_string(), "bad mode");
+        assert!(error.usage());
+    }
+
     #[test]
     #[cfg(unix)]
     fn test_nix_error_conversion() {

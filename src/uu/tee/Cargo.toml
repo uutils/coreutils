@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/tee.rs"
 test = false
@@ -21,7 +18,6 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-rustix = { workspace = true, features = ["stdio", "fs"] }
 uucore = { workspace = true, features = ["fs", "parser", "signals"] }
 fluent = { workspace = true }
 
@@ -29,9 +25,18 @@ fluent = { workspace = true }
 divan = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
 
+[target.'cfg(unix)'.dev-dependencies]
+rustix = { workspace = true, features = ["fs"] }
+
+[target.'cfg(any(unix, target_os = "wasi"))'.dependencies]
+rustix = { workspace = true, features = ["stdio"] }
+
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 rustix = { workspace = true, features = ["pipe"] }
 uucore = { workspace = true, features = ["pipes"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "tee"

@@ -961,7 +961,7 @@ fn test_hard_logical_dir_fail() {
         .ucmd()
         .args(&["-L", target, "hard-to-dir-link"])
         .fails()
-        .stderr_contains("failed to create hard link 'link-to-dir'");
+        .stderr_contains("failed to create hard link 'hard-to-dir-link'");
 }
 
 #[test]

@@ -246,7 +246,7 @@ pub mod arguments {
 ///
 /// 1. From the '-S' or '--suffix' CLI argument, if present
 /// 2. From the "SIMPLE_BACKUP_SUFFIX" environment variable, if present
-/// 3. By using the default '~' if none of the others apply, or if they contained slashes
+/// 3. By using the default '~' if none of the others apply, or if they are empty or contain slashes
 ///
 /// This function directly takes [`ArgMatches`] as argument and looks for
 /// the '-S' and '--suffix' arguments itself.
@@ -257,7 +257,7 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
     } else {
         env::var("SIMPLE_BACKUP_SUFFIX").unwrap_or_else(|_| DEFAULT_BACKUP_SUFFIX.to_owned())
     };
-    if suffix.contains('/') {
+    if suffix.is_empty() || suffix.contains('/') {
         DEFAULT_BACKUP_SUFFIX.to_owned()
     } else {
         suffix
@@ -533,7 +533,7 @@ pub fn backup_would_destroy_source(
     }
 
     // Then compare the files themselves rather than how they were spelled, so
-    // `a~`, `./a~` and an absolute path are all recognised. If the backup does
+    // `a~`, `./a~` and an absolute path are all recognized. If the backup does
     // not exist yet there is nothing to destroy.
     let mut target_backup_filename = target.as_os_str().to_owned();
     target_backup_filename.push(suffix);

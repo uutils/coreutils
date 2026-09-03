@@ -18,6 +18,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
 use std::path::MAIN_SEPARATOR;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
@@ -87,36 +88,44 @@ fn verbose_removed_directory(path: &Path, options: &Options) -> UResult<()> {
     Ok(())
 }
 
-/// Helper function to report a verbose output write error and return error status
-fn show_verbose_write_error(result: UResult<()>) -> bool {
-    if let Err(e) = &result {
+/// Set once a verbose write failure has happened. Like GNU, a broken standard
+/// output neither interrupts the removal nor is reported more than once, but it
+/// does make `rm` exit with a failure status.
+static VERBOSE_WRITE_FAILED: AtomicBool = AtomicBool::new(false);
+
+/// Helper function to report a verbose output write error, at most once
+fn report_verbose_write_error(result: UResult<()>) {
+    if let Err(e) = result
+        && !VERBOSE_WRITE_FAILED.swap(true, Ordering::Relaxed)
+    {
         show_error!("{e}");
     }
-    result.is_err()
 }
 
 /// Helper function to show error with context and return error status
 fn show_removal_error(error: io::Error, path: &Path) -> bool {
-    if error.kind() == io::ErrorKind::PermissionDenied {
-        show_error!("cannot remove {}: Permission denied", path.quote());
-    } else {
-        let e =
-            error.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
-        show_error!("{e}");
-    }
+    let e = error.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
+    show_error!("{e}");
     true
 }
 
 /// Helper function for permission denied errors
 fn show_permission_denied_error(path: &Path) -> bool {
-    show_error!("cannot remove {}: Permission denied", path.quote());
+    show_error!(
+        "{}",
+        translate!("rm-error-cannot-remove-permission-denied", "file" =>  path.quote())
+    );
+
     true
 }
 
 /// Helper function to remove a directory and handle results
 fn remove_dir_with_feedback(path: &Path, options: &Options) -> bool {
     match fs::remove_dir(path) {
-        Ok(_) => show_verbose_write_error(verbose_removed_directory(path, options)),
+        Ok(_) => {
+            report_verbose_write_error(verbose_removed_directory(path, options));
+            false
+        }
         Err(e) => show_removal_error(e, path),
     }
 }
@@ -315,7 +324,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    if remove(&files, &options) {
+    if remove(&files, &options) || VERBOSE_WRITE_FAILED.load(Ordering::Relaxed) {
         return Err(1.into());
     }
 
@@ -740,9 +749,7 @@ fn remove_dir_recursive(
                 // show another error message as we return from each level
                 // of the recursion.
             }
-            Ok(_) => {
-                error = error || show_verbose_write_error(verbose_removed_directory(path, options));
-            }
+            Ok(_) => report_verbose_write_error(verbose_removed_directory(path, options)),
         }
 
         error
@@ -867,7 +874,7 @@ fn remove_file(path: &Path, options: &Options, progress_bar: Option<&ProgressBar
         // Fallback method for non-Unix, Redox, or when safe traversal is unavailable
         match fs::remove_file(path) {
             Ok(_) => {
-                return show_verbose_write_error(verbose_removed_file(path, options));
+                report_verbose_write_error(verbose_removed_file(path, options));
             }
             Err(e) => {
                 if e.kind() == io::ErrorKind::PermissionDenied {

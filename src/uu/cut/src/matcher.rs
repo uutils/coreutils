@@ -3,7 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore clen
+
 use memchr::{memchr, memchr2};
+use uucore::i18n::charmap::{Encoding, locale_encoding};
 
 // Find the next matching byte sequence positions
 // Return (first, last) where haystack[first..last] corresponds to the matched pattern
@@ -39,22 +42,71 @@ impl Matcher for ExactMatcher<'_> {
     }
 }
 
-// Matches for any number of SPACE or TAB
+// Matches the delimiter as a whole character, never inside a multi-byte
+// character. Used for delimiters that could be a continuation byte (e.g. a
+// lone `0xa9`) or a multi-byte character; ASCII delimiters use `ExactMatcher`.
+pub struct MbExactMatcher<'a> {
+    needle: &'a [u8],
+}
+
+impl<'a> MbExactMatcher<'a> {
+    pub fn new(needle: &'a [u8]) -> Self {
+        assert!(!needle.is_empty());
+        Self { needle }
+    }
+}
+
+impl Matcher for MbExactMatcher<'_> {
+    fn next_match(&self, haystack: &[u8]) -> Option<(usize, usize)> {
+        // Resolved once per line: character boundaries have to be walked from
+        // the start, so there is no way to skip ahead with `memchr` here.
+        let encoding = locale_encoding();
+        let mut pos = 0;
+        while pos < haystack.len() {
+            let clen = encoding.char_len(&haystack[pos..]);
+            if clen == self.needle.len() && &haystack[pos..pos + clen] == self.needle {
+                return Some((pos, pos + clen));
+            }
+            pos += clen;
+        }
+        None
+    }
+}
+
+// Matches any number of whitespace characters. ASCII space and tab are always
+// recognized; in a UTF-8 locale Unicode space separators are too.
 pub struct WhitespaceMatcher {}
 
 impl Matcher for WhitespaceMatcher {
     fn next_match(&self, haystack: &[u8]) -> Option<(usize, usize)> {
-        let match_idx = memchr2(b' ', b'\t', haystack)?;
-        let mut skip = match_idx + 1;
-
-        while skip < haystack.len() {
-            match haystack[skip] {
-                b' ' | b'\t' => skip += 1,
-                _ => break,
+        // In a single-byte locale SPACE and TAB are the only blanks, so the run
+        // can be found with a SIMD scan instead of decoding every character.
+        let encoding = locale_encoding();
+        if encoding == Encoding::SingleByte {
+            let start = memchr2(b' ', b'\t', haystack)?;
+            let mut end = start + 1;
+            while end < haystack.len() && matches!(haystack[end], b' ' | b'\t') {
+                end += 1;
             }
+            return Some((start, end));
         }
 
-        Some((match_idx, skip))
+        let mut pos = 0;
+        while pos < haystack.len() {
+            if let Some(blank_len) = encoding.blank_len(&haystack[pos..]) {
+                let start = pos;
+                pos += blank_len;
+                while pos < haystack.len() {
+                    match encoding.blank_len(&haystack[pos..]) {
+                        Some(len) => pos += len,
+                        None => break,
+                    }
+                }
+                return Some((start, pos));
+            }
+            pos += encoding.char_len(&haystack[pos..]);
+        }
+        None
     }
 }
 

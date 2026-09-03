@@ -9,15 +9,20 @@ is_already_published() {
     local crate_name=$1
     local crate_version=$2
 
-    # Use the crates.io API to get the latest version of the crate
-    local latest_published_version
-    latest_published_version=$(curl -s https://crates.io/api/v1/crates/$crate_name | jq -r '.crate.max_version')
+    # Use the sparse index (meant for automated access, unlike the crates.io
+    # API which rejects requests without a browser-like user agent) and check
+    # whether this exact version has been published.
+    local prefix
+    case ${#crate_name} in
+        1) prefix="1" ;;
+        2) prefix="2" ;;
+        3) prefix="3/${crate_name:0:1}" ;;
+        *) prefix="${crate_name:0:2}/${crate_name:2:2}" ;;
+    esac
 
-    if [ "$latest_published_version" = "$crate_version" ]; then
-        return 0
-    else
-        return 1
-    fi
+    curl -s "https://index.crates.io/$prefix/$crate_name" \
+        | jq -r '.vers' 2>/dev/null \
+        | grep -qx "$crate_version"
 }
 
 # Figure out any dependencies between the util via Cargo.toml
