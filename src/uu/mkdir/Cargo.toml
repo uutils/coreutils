@@ -27,7 +27,9 @@ uucore = { workspace = true, features = [
 ] }
 
 [features]
+default = ["signals"]
 diagnostics = ["uucore/diagnostics"]
+signals = ["uucore/signals"]
 selinux = ["uucore/selinux"]
 smack = ["uucore/smack"]
 

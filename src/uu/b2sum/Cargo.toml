@@ -30,6 +30,10 @@ uucore = { workspace = true, features = [
 [dev-dependencies]
 uucore = { workspace = true, features = ["benchmark"] }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true
 

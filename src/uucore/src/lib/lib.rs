@@ -223,11 +223,11 @@ macro_rules! bin_inner {
             use uucore::locale;
 
             // Preserve inherited SIGPIPE settings (e.g., from env --default-signal=PIPE)
-            #[cfg(all(unix, not(target_os = "fuchsia")))]
+            #[cfg(all(feature = "signals", unix, not(target_os = "fuchsia")))]
             uucore::signals::preserve_inherited_sigpipe();
 
             // suppress extraneous error output for SIGPIPE failures/panics
-            uucore::panic::mute_sigpipe_panic();
+            uucore::panic::silence_broken_pipe_panic();
             locale::setup_localization(uucore::get_canonical_util_name(stringify!($util)))
                 .unwrap_or_else(|err| {
                     match err {

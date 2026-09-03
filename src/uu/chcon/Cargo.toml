@@ -31,6 +31,7 @@ uucore = { workspace = true, features = [
 ], optional = true }
 
 [features]
+default = ["signals"]
 selinux = [
   "dep:clap",
   "dep:fluent",
@@ -40,6 +41,7 @@ selinux = [
   "dep:thiserror",
   "dep:uucore",
 ]
+signals = ["uucore/signals"]
 
 [lints]
 workspace = true

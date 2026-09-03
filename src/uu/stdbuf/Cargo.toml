@@ -47,7 +47,9 @@ libstdbuf = { package = "uu_stdbuf_libstdbuf", version = "0.13.0", path = "src/l
 #    installation directory during the build. E.g. LIBSTDBUF_DIR="/usr/lib"
 
 [features]
+default = ["signals"]
 feat_external_libstdbuf = []
+signals = ["uucore/signals"]
 
 [lints]
 workspace = true

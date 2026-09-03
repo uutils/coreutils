@@ -30,6 +30,8 @@ name = "id"
 path = "src/main.rs"
 
 [features]
+default = ["signals"]
+signals = ["uucore/signals"]
 selinux = ["dep:selinux"]
 smack = ["uucore/smack"]
 
