@@ -462,6 +462,33 @@ fn test_symlink_dir() {
 }
 
 #[test]
+fn test_recursive_removes_directory_symlink_in_tree() {
+    // `rm -r` over a tree that contains a symbolic link to a directory must
+    // remove the link itself, not follow it, and leave the target intact.
+    // On Windows this previously failed with "Permission denied" because
+    // directory symlinks were routed through the file-deletion API
+    // (DeleteFileW) instead of the directory-removal API (RemoveDirectoryW).
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let target = "test_rm_dir_symlink_in_tree_target";
+    let tree = "test_rm_dir_symlink_in_tree";
+    let link = "test_rm_dir_symlink_in_tree/link";
+
+    at.mkdir(target);
+    at.touch(format!("{target}/keepme"));
+    at.mkdir(tree);
+    at.symlink_dir(target, link);
+
+    ucmd.arg("-r").arg(tree).succeeds().no_stderr();
+
+    assert!(!at.dir_exists(tree));
+    // The link is gone (it lived inside `tree`), but the directory it pointed
+    // at must be untouched.
+    assert!(at.dir_exists(target));
+    assert!(at.file_exists(&format!("{target}/keepme")));
+}
+
+#[test]
 fn test_invalid_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let link = "test_rm_invalid_symlink";
