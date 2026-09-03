@@ -943,11 +943,14 @@ impl Stater {
             '"' => Token::Byte(b'"'),   // Double quote
             '0'..='7' => {
                 // Parse octal escape sequence (up to 3 digits)
-                let mut value = 0u8;
+                // Accumulate in a wider type: three octal digits can reach 511,
+                // and only the low byte is kept, which is what GNU prints for
+                // an out-of-range escape such as `\400`.
+                let mut value = 0u32;
                 let mut count = 0;
                 while *i < bound && count < 3 {
                     if let Some(digit) = chars[*i].to_digit(8) {
-                        value = value * 8 + digit as u8;
+                        value = value * 8 + digit;
                         *i += 1;
                         count += 1;
                     } else {
@@ -955,7 +958,7 @@ impl Stater {
                     }
                 }
                 *i -= 1; // Adjust index to account for the outer loop increment
-                Token::Byte(value)
+                Token::Byte(value as u8)
             }
             'x' => {
                 // Parse hexadecimal escape sequence (\xNN format)
