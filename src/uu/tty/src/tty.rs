@@ -43,10 +43,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let name = rustix::termios::ttyname(std::io::stdin(), Vec::with_capacity(8));
     #[cfg(unix)]
     let write_result = if let Ok(name) = name {
-        use std::os::unix::ffi::OsStrExt;
-        use uucore::display::OsWrite;
-        let os_name = std::ffi::OsStr::from_bytes(name.as_bytes());
-        stdout.write_all_os(os_name)
+        let mut buf = name.as_bytes().to_vec();
+        buf.push(b'\n');
+        stdout.write_all(&buf)
     } else {
         set_exit_code(1);
         writeln!(stdout, "{}", translate!("tty-not-a-tty"))
