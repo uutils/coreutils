@@ -48,6 +48,31 @@ fn test_file() {
 }
 
 #[test]
+fn test_trailing_separators() {
+    for (path, expected) in [
+        ("foo/bar", "bar\n"),
+        ("foo/bar/", "bar\n"),
+        ("foo/bar///", "bar\n"),
+        ("foo/./", ".\n"),
+        ("foo/.//", ".\n"),
+    ] {
+        new_ucmd!().arg(path).succeeds().stdout_only(expected);
+    }
+
+    let separator = std::path::MAIN_SEPARATOR;
+    let native_dot_path = format!("foo{separator}.{separator}{separator}");
+    new_ucmd!()
+        .arg(native_dot_path)
+        .succeeds()
+        .stdout_only(".\n");
+
+    let root = if cfg!(windows) { "\\\n" } else { "/\n" };
+    for path in ["/", "//", "///"] {
+        new_ucmd!().arg(path).succeeds().stdout_only(root);
+    }
+}
+
+#[test]
 fn test_remove_suffix() {
     new_ucmd!()
         .args(&["/usr/local/bin/reallylongexecutable.exe", ".exe"])
