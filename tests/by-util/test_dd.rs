@@ -2522,3 +2522,19 @@ dd: unrecognized operand 'bsx=1'
             .stderr_does_not_contain("╭─");
     }
 }
+
+#[test]
+fn test_invalid_status_level() {
+    new_ucmd!()
+        .args(&["status=invalid"])
+        .fails()
+        .stderr_contains("dd: invalid status level: 'invalid'");
+}
+
+#[test]
+fn test_invalid_status_level_shell_escaped() {
+    new_ucmd!()
+        .args(&["status=foo bar"])
+        .fails()
+        .stderr_contains("dd: invalid status level: 'foo bar'");
+}
