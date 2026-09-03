@@ -57,10 +57,7 @@ fn find_valid_number_with_suffix(s: &str, unit: Unit) -> Option<&str> {
     let accepts_suffix = unit != Unit::None;
     let accepts_i = [Unit::Auto, Unit::Iec(true)].contains(&unit);
 
-    // Look at the characters immediately after the numeric part. `numeric_part` is a prefix of
-    // `s`, so its byte length is a valid char boundary to slice/iterate from. (Using it as a
-    // *character* count for `chars().skip(..)` was wrong for multi-byte numeric parts, e.g. a
-    // multi-byte decimal separator, and led to slicing inside a multi-byte suffix char. See #13937.)
+    // Slice by byte offset, not char count, so a multi-byte suffix isn't split (#13937).
     let mut characters = s[numeric_part.len()..].chars();
     let potential_suffix = characters.next();
     let potential_i = characters.next();
