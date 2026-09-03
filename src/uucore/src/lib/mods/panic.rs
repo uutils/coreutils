@@ -5,7 +5,7 @@
 
 //! Custom panic hooks that allow silencing certain types of errors.
 //!
-//! Use the [`mute_sigpipe_panic`] function to silence panics caused by
+//! Use the [`silence_broken_pipe_panic`] function to silence panics caused by
 //! broken pipe errors. This can happen when a process is still
 //! producing data when the consuming process terminates and closes the
 //! pipe. For example,
@@ -34,7 +34,7 @@ fn is_broken_pipe(info: &PanicHookInfo) -> bool {
 /// * `<https://github.com/BurntSushi/ripgrep/issues/200>`
 /// * `<https://github.com/crev-dev/cargo-crev/issues/287>`
 ///
-pub fn mute_sigpipe_panic() {
+pub fn silence_broken_pipe_panic() {
     let hook = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
         if !is_broken_pipe(info) {

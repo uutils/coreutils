@@ -22,6 +22,10 @@ fluent = { workspace = true }
 platform-info = { workspace = true }
 uucore = { workspace = true }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true
 

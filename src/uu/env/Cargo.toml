@@ -25,7 +25,9 @@ uucore = { workspace = true, features = ["signals"] }
 nix = { workspace = true, features = ["process", "signal"] }
 
 [features]
+default = ["signals"]
 diagnostics = ["uucore/diagnostics"]
+signals = ["uucore/signals"]
 
 [lints]
 workspace = true

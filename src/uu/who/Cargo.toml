@@ -25,6 +25,8 @@ rustix = { workspace = true, features = ["fs", "termios"] }
 uucore = { workspace = true, features = ["utmpx"] }
 
 [features]
+default = ["signals"]
+signals = ["uucore/signals"]
 systemd_logind = ["uucore/systemd_logind"]
 
 [lints]

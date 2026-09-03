@@ -22,7 +22,9 @@ uu_ls = { workspace = true }
 uucore = { workspace = true, features = ["entries", "fs", "quoting-style"] }
 
 [features]
+default = ["signals"]
 diagnostics = ["uucore/diagnostics"]
+signals = ["uucore/signals"]
 
 [lints]
 workspace = true

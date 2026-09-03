@@ -21,6 +21,10 @@ clap = { workspace = true }
 fluent = { workspace = true }
 uucore = { workspace = true, features = ["i18n-charmap"] }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true
 

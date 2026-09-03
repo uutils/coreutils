@@ -22,7 +22,9 @@ fluent = { workspace = true }
 uucore = { workspace = true, features = ["format", "quoting-style"] }
 
 [features]
+default = ["signals"]
 diagnostics = ["uucore/diagnostics"]
+signals = ["uucore/signals"]
 
 [lints]
 workspace = true

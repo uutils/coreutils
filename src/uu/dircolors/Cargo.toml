@@ -20,6 +20,10 @@ clap = { workspace = true }
 fluent = { workspace = true }
 uucore = { workspace = true, features = ["colors", "parser"] }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true
 

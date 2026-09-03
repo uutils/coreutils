@@ -38,6 +38,10 @@ name = "rm"
 path = "src/main.rs"
 required-features = ["uucore/default"]
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true
 

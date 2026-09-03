@@ -67,7 +67,9 @@ name = "cp_bench"
 harness = false
 
 [features]
+default = ["signals"]
 selinux = ["dep:selinux", "uucore/selinux"]
+signals = ["uucore/signals"]
 
 [lints]
 workspace = true

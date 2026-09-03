@@ -32,7 +32,9 @@ tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark", "diagnostics"] }
 
 [features]
+default = ["signals"]
 diagnostics = ["uucore/diagnostics"]
+signals = ["uucore/signals"]
 
 [lints]
 workspace = true

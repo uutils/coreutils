@@ -22,7 +22,9 @@ thiserror = { workspace = true }
 uucore = { workspace = true, features = ["fs", "mode", "perms"] }
 
 [features]
+default = ["signals"]
 diagnostics = ["uucore/diagnostics"]
+signals = ["uucore/signals"]
 
 [lints]
 workspace = true

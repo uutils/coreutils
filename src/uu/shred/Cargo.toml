@@ -22,6 +22,10 @@ libc = { workspace = true }
 rand = { workspace = true }
 uucore = { workspace = true, features = ["parser-size"] }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true
 
