@@ -49,7 +49,8 @@ dd-after-help = Operands:
     - nocreat : the output file will not be created. Fail if the output file is not already present.
     - notrunc : the output file will not be truncated. If this option is not present, output will be truncated when opened.
     - noerror : all read errors will be ignored. If this option is not present, dd will only ignore Error::Interrupted.
-    - fdatasync : data will be written before finishing.  - fsync : data and metadata will be written before finishing.
+    - fdatasync : data will be written before finishing.
+    - fsync : data and metadata will be written before finishing.
 
   Input flags:
 
