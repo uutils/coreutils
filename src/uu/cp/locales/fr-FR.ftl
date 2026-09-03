@@ -84,7 +84,7 @@ cp-error-reflink-not-supported = --reflink n'est pris en charge que sur linux et
 cp-error-sparse-not-supported = --sparse n'est pris en charge que sur linux
 cp-error-not-a-directory = { $path } n'est pas un répertoire
 cp-error-selinux-not-enabled = SELinux n'était pas activé lors de la compilation !
-cp-error-selinux-set-context = échec de la définition du contexte de sécurité de { $path } : { $error }
+cp-error-selinux-set-context = échec de la définition du contexte de sécurité de { $path }
 cp-error-selinux-get-context = échec de l'obtention du contexte de sécurité de { $path }
 cp-error-selinux-error = Erreur SELinux : { $error }
 cp-error-selinux-context-conflict = impossible de combiner --context (-Z) avec --preserve=context

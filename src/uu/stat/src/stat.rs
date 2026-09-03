@@ -38,19 +38,17 @@ use uucore::time::{FormatSystemTimeFallback, format_system_time, system_time_to_
 
 #[derive(Debug, Error)]
 enum StatError {
-    #[error("{}", translate!("stat-error-invalid-quoting-style", "style" => style.clone()))]
+    #[error("{}", translate!("stat-error-invalid-quoting-style", "style" => style))]
     InvalidQuotingStyle { style: String },
-    #[error("{}", translate!("stat-error-missing-operand"))]
-    MissingOperand,
-    #[error("{}", translate!("stat-error-invalid-directive", "directive" => directive.clone()))]
+    #[error("{}", translate!("stat-error-invalid-directive", "directive" => directive))]
     InvalidDirective { directive: String },
-    #[error("{}", translate!("stat-error-cannot-read-filesystem", "error" => error.clone()))]
+    #[error("{}", translate!("stat-error-cannot-read-filesystem", "error" => error))]
     CannotReadFilesystem { error: String },
     #[error("{}", translate!("stat-error-stdin-filesystem-mode"))]
     StdinFilesystemMode,
-    #[error("{}", translate!("stat-error-cannot-read-filesystem-info", "file" => file.clone(), "error" => error.clone()))]
+    #[error("{}", translate!("stat-error-cannot-read-filesystem-info", "file" => file, "error" => error))]
     CannotReadFilesystemInfo { file: String, error: String },
-    #[error("{}", translate!("stat-error-cannot-statx", "file" => file.clone(), "error" => error.clone()))]
+    #[error("{}", translate!("stat-error-cannot-statx", "file" => file, "error" => error))]
     CannotStatx { file: String, error: String },
 }
 
@@ -1045,13 +1043,11 @@ impl Stater {
     }
 
     fn new(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Self> {
+        #[expect(clippy::unwrap_used, reason = "set as required by clap")]
         let files: Vec<OsString> = matches
             .get_many::<OsString>(options::FILES)
             .map(|v| v.map(OsString::from).collect())
-            .unwrap_or_default();
-        if files.is_empty() {
-            return Err(Box::new(StatError::MissingOperand) as Box<dyn UError>);
-        }
+            .unwrap();
         let format_str = if matches.contains_id(options::PRINTF) {
             matches
                 .get_one::<String>(options::PRINTF)
@@ -1432,15 +1428,14 @@ impl Stater {
                 "%n %i %l %t %s %S %b %f %a %c %d\n".into()
             } else {
                 format!(
-                    "  {}: \"%n\"\n    {}: %-8i {}: %-7l {}: %T\n{} \
-                         {}: %-10s {} {}: %S\n{}: {}: %-10b \
+                    "  {}: \"%n\"\n    {}: %-8i {}: %-7l {}: %T\n{}: %-10s \
+                         {} {}: %S\n{}: {}: %-10b \
                          {}: %-10f {}: %a\n{}: {}: %-10c {}: %d\n",
                     translate!("stat-word-file"),
                     translate!("stat-word-id"),
                     translate!("stat-word-namelen"),
                     translate!("stat-word-type"),
-                    translate!("stat-word-block"),
-                    translate!("stat-word-size"),
+                    translate!("stat-word-block-size-capitalized"),
                     translate!("stat-word-fundamental"),
                     translate!("stat-word-block-size"),
                     translate!("stat-word-blocks"),
@@ -1496,8 +1491,11 @@ impl Stater {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // The command line is kept for the caret in format diagnostics, which
     // needs the format as typed.
-    let (matches, diag_args) =
-        uucore::clap_localization::handle_clap_result_with_diagnostics(uu_app(), args.collect())?;
+    let (matches, diag_args) = uucore::clap_localization::handle_clap_result_with_diagnostics(
+        uu_app(),
+        args.collect(),
+        1,
+    )?;
 
     let stater = Stater::new(&matches, diag_args.as_deref())?;
     let exit_status = stater.exec()?;
@@ -1542,18 +1540,21 @@ pub fn uu_app() -> Command {
                 .short('c')
                 .long(options::FORMAT)
                 .help(translate!("stat-help-format"))
-                .value_name("FORMAT"),
+                .value_name("FORMAT")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(options::PRINTF)
                 .long(options::PRINTF)
                 .value_name("FORMAT")
+                .allow_hyphen_values(true)
                 .help(translate!("stat-help-printf")),
         )
         .arg(
             Arg::new(options::FILES)
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
+                .required(true)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }

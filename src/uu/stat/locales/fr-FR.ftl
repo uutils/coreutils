@@ -73,6 +73,7 @@ stat-word-block = Bloc
 stat-word-size = Taille
 stat-word-fundamental = Fondamentale
 stat-word-block-size = taille bloc
+stat-word-block-size-capitalized = Taille bloc
 stat-word-blocks = Blocs
 stat-word-total = Total
 stat-word-free = Libres
@@ -93,8 +94,6 @@ stat-word-birth = Créé
 
 stat-error-invalid-quoting-style = Style de guillemets invalide : {$style}
 stat-warning-invalid-env-quoting-style = valeur invalide de la variable d'environnement QUOTING_STYLE ignorée : '{$style}'
-stat-error-missing-operand = opérande manquant
-  Essayez 'stat --help' pour plus d'informations.
 stat-error-invalid-directive = {$directive} : directive invalide
 stat-error-cannot-read-filesystem = impossible de lire la table des systèmes de fichiers montés : {$error}
 stat-error-stdin-filesystem-mode = utiliser '-' pour désigner l'entrée standard ne fonctionne pas en mode système de fichiers

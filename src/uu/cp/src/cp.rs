@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) copydir fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
+// spell-checker:ignore (ToDO) copydir fiemap linkgs lstat nlink nlinks pathbuf reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
 // spell-checker:ignore RDONLY futimens utimensat
 
 use std::cmp::Ordering;
@@ -64,6 +64,17 @@ pub enum CpError {
     #[error("{0}")]
     Error(String),
 
+    /// The SELinux security context of the destination could not be
+    /// preserved; unlike other attribute failures, this one empties the
+    /// destination file.
+    #[error("{0}")]
+    SelinuxContext(String),
+
+    /// Same as [`CpError::SelinuxContext`], but keeping the errno so that an
+    /// ENOTSUP on a fixed-context mount can still be silenced.
+    #[error("{1}: {0}")]
+    SelinuxContextIoErr(io::Error, String),
+
     /// Represents the state when a non-fatal error has occurred
     /// and not all files were copied.
     #[error("{}", translate!("cp-error-not-all-files-copied"))]
@@ -123,7 +134,7 @@ impl Display for BackupError {
         write!(
             f,
             "{}",
-            translate!("cp-error-backup-format", "error" => self.0.clone(), "exec" => uucore::execution_phrase())
+            translate!("cp-error-backup-format", "error" => self.0, "exec" => uucore::execution_phrase())
         )
     }
 }
@@ -175,11 +186,11 @@ pub enum ReflinkMode {
 impl Default for ReflinkMode {
     #[allow(clippy::derivable_impls)]
     fn default() -> Self {
-        #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+        #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
         {
             Self::Auto
         }
-        #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
+        #[cfg(not(any(target_vendor = "apple", target_os = "linux", target_os = "android")))]
         {
             Self::Never
         }
@@ -1078,9 +1089,9 @@ impl Options {
                 .get_one::<String>(update_control::arguments::OPT_UPDATE)
                 .is_some_and(|v| v == "none" || v == "none-fail")
         {
-            return Err(CpError::InvalidArgument(
-                translate!("cp-error-invalid-backup-argument").to_string(),
-            ));
+            return Err(CpError::InvalidArgument(translate!(
+                "cp-error-invalid-backup-argument"
+            )));
         }
 
         let backup_suffix = backup_control::determine_backup_suffix(matches);
@@ -1374,7 +1385,9 @@ fn is_enotsup_error(error: &CpError) -> bool {
     const EOPNOTSUPP: i32 = 95;
 
     match error {
-        CpError::IoErr(e) | CpError::IoErrContext(e, _) => e.raw_os_error() == Some(EOPNOTSUPP),
+        CpError::IoErr(e) | CpError::IoErrContext(e, _) | CpError::SelinuxContextIoErr(e, _) => {
+            e.raw_os_error() == Some(EOPNOTSUPP)
+        }
         _ => false,
     }
 }
@@ -1394,7 +1407,7 @@ fn show_error_if_needed(error: &CpError) {
         }
         // Format IoErrContext using strip_errno to remove "(os error N)" suffix
         // for GNU-compatible output
-        CpError::IoErrContext(io_err, context) => {
+        CpError::IoErrContext(io_err, context) | CpError::SelinuxContextIoErr(io_err, context) => {
             show_error!("{context}: {}", strip_errno(io_err));
         }
         _ => {
@@ -1931,12 +1944,26 @@ pub(crate) fn copy_attributes(
     handle_preserve(attributes.context, || -> CopyResult<()> {
         // Get the source context and apply it to the destination
         let context = selinux::SecurityContext::of_path(source, false, false).map_err(|_| {
-            CpError::Error(translate!("cp-error-selinux-get-context", "path" => source.quote()))
+            CpError::SelinuxContext(
+                translate!("cp-error-selinux-get-context", "path" => source.quote()),
+            )
         })?;
         if let Some(context) = context {
-            context.set_for_path(dest, false, false).map_err(|e|CpError::Error(
-					translate!("cp-error-selinux-set-context", "path" => dest.quote(), "error" => e),
-				))?;
+            context.set_for_path(dest, false, false).map_err(|e| {
+                // Keep the errno: the ENOTSUP of a mount with a fixed context is
+                // what -a and --preserve=all have to stay quiet about.
+                let source = match e {
+                    selinux::errors::Error::IO { source, .. }
+                    | selinux::errors::Error::IO1Name { source, .. }
+                    | selinux::errors::Error::IO1Path { source, .. }
+                    | selinux::errors::Error::IO1Process { source, .. } => source,
+                    e => io::Error::other(e),
+                };
+                CpError::SelinuxContextIoErr(
+                    source,
+                    translate!("cp-error-selinux-set-context", "path" => dest.quote()),
+                )
+            })?;
         }
         Ok(())
     })?;
@@ -2755,9 +2782,28 @@ fn copy_file(
         )
     };
 
-    // GNU cp truncates the destination when a required attribute cannot be preserved
-    copy_attributes_result.inspect_err(|_| {
-        fs::File::create(dest).map(|f| f.set_len(0)).ok();
+    // Empty the destination when the SELinux security context cannot be
+    // preserved, but keep the copied data when preserving other attributes
+    // (e.g. xattrs) fails.
+    copy_attributes_result.inspect_err(|err| {
+        if matches!(
+            err,
+            CpError::SelinuxContext(_) | CpError::SelinuxContextIoErr(..)
+        ) && fs::File::create(dest).is_err()
+        {
+            // The permissions applied above may lack the write bit (e.g. a
+            // read-only source), making the truncating open fail. Restore
+            // owner write long enough to truncate, then put the intended
+            // permissions back.
+            #[cfg(unix)]
+            if let Ok(metadata) = fs::symlink_metadata(dest) {
+                let mode = metadata.permissions().mode();
+                if fs::set_permissions(dest, Permissions::from_mode(mode | 0o200)).is_ok() {
+                    fs::File::create(dest).ok();
+                    fs::set_permissions(dest, Permissions::from_mode(mode)).ok();
+                }
+            }
+        }
     })?;
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -2803,8 +2849,8 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
         };
 
         #[cfg(not(any(
+            target_vendor = "apple",
             target_os = "android",
-            target_os = "macos",
             target_os = "freebsd",
             target_os = "redox",
         )))]
@@ -2819,8 +2865,8 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
         }
 
         #[cfg(any(
+            target_vendor = "apple",
             target_os = "android",
-            target_os = "macos",
             target_os = "freebsd",
             target_os = "redox",
         ))]

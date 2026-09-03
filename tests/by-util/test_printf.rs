@@ -674,6 +674,16 @@ fn stop_after_additional_escape() {
 }
 
 #[test]
+fn stop_after_additional_escape_in_b_string() {
+    // A `\c` inside a %b argument must stop the entire invocation, not just
+    // that argument's own expansion.
+    new_ucmd!()
+        .args(&["A%bB\\n", "x\\cy"])
+        .succeeds()
+        .stdout_only("Ax");
+}
+
+#[test]
 fn sub_float_leading_zeroes() {
     new_ucmd!()
         .args(&["%010f", "1"])
@@ -1551,6 +1561,18 @@ fn test_large_width_format() {
             .stderr_contains("write error")
             .no_stdout();
     }
+}
+
+#[test]
+fn test_numeric_field_width_above_u16_max() {
+    const WIDTH: usize = 65_536;
+
+    let result = new_ucmd!().args(&["%65536d", "5"]).succeeds();
+    let stdout = result.stdout();
+
+    assert_eq!(stdout.len(), WIDTH);
+    assert!(stdout[..WIDTH - 1].iter().all(|&byte| byte == b' '));
+    assert_eq!(stdout[WIDTH - 1], b'5');
 }
 
 #[test]

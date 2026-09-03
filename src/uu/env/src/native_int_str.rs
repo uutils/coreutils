@@ -17,13 +17,13 @@ use std::ffi::OsString;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 #[cfg(target_os = "wasi")]
 use std::os::wasi::ffi::{OsStrExt, OsStringExt};
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 use std::os::windows::prelude::*;
 use std::{borrow::Cow, ffi::OsStr};
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 use u8 as NativeIntCharU;
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 use u16 as NativeIntCharU;
 
 pub type NativeCharInt = NativeIntCharU;
@@ -40,12 +40,12 @@ pub trait Convert<From, To> {
 
 impl<'a> Convert<&'a str, Cow<'a, NativeIntStr>> for NCvt {
     fn convert(f: &'a str) -> Cow<'a, NativeIntStr> {
-        #[cfg(target_os = "windows")]
+        #[cfg(windows)]
         {
             Cow::Owned(f.encode_utf16().collect())
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(windows))]
         {
             Cow::Borrowed(f.as_bytes())
         }
@@ -54,12 +54,12 @@ impl<'a> Convert<&'a str, Cow<'a, NativeIntStr>> for NCvt {
 
 impl<'a> Convert<&'a String, Cow<'a, NativeIntStr>> for NCvt {
     fn convert(f: &'a String) -> Cow<'a, NativeIntStr> {
-        #[cfg(target_os = "windows")]
+        #[cfg(windows)]
         {
             Cow::Owned(f.encode_utf16().collect())
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(windows))]
         {
             Cow::Borrowed(f.as_bytes())
         }
@@ -68,12 +68,12 @@ impl<'a> Convert<&'a String, Cow<'a, NativeIntStr>> for NCvt {
 
 impl<'a> Convert<String, Cow<'a, NativeIntStr>> for NCvt {
     fn convert(f: String) -> Cow<'a, NativeIntStr> {
-        #[cfg(target_os = "windows")]
+        #[cfg(windows)]
         {
             Cow::Owned(f.encode_utf16().collect())
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(windows))]
         {
             Cow::Owned(f.into_bytes())
         }
@@ -96,12 +96,12 @@ impl<'a> Convert<&'a OsString, Cow<'a, NativeIntStr>> for NCvt {
 
 impl<'a> Convert<OsString, Cow<'a, NativeIntStr>> for NCvt {
     fn convert(f: OsString) -> Cow<'a, NativeIntStr> {
-        #[cfg(target_os = "windows")]
+        #[cfg(windows)]
         {
             Cow::Owned(f.encode_wide().collect())
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(windows))]
         {
             Cow::Owned(f.into_vec())
         }
@@ -135,12 +135,12 @@ impl<'a> Convert<Vec<String>, Vec<Cow<'a, NativeIntStr>>> for NCvt {
 }
 
 pub fn to_native_int_representation(input: &OsStr) -> Cow<'_, NativeIntStr> {
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
         Cow::Owned(input.encode_wide().collect())
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         Cow::Borrowed(input.as_bytes())
     }
@@ -148,12 +148,12 @@ pub fn to_native_int_representation(input: &OsStr) -> Cow<'_, NativeIntStr> {
 
 #[allow(clippy::needless_pass_by_value)] // needed on windows
 pub fn from_native_int_representation(input: Cow<'_, NativeIntStr>) -> Cow<'_, OsStr> {
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
         Cow::Owned(OsString::from_wide(&input))
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         match input {
             Cow::Borrowed(borrow) => Cow::Borrowed(OsStr::from_bytes(borrow)),
@@ -164,26 +164,26 @@ pub fn from_native_int_representation(input: Cow<'_, NativeIntStr>) -> Cow<'_, O
 
 #[allow(clippy::needless_pass_by_value)] // needed on windows
 pub fn from_native_int_representation_owned(input: NativeIntString) -> OsString {
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
         OsString::from_wide(&input)
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         OsString::from_vec(input)
     }
 }
 
 pub fn get_single_native_int_value(c: char) -> Option<NativeCharInt> {
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
         let mut buf = [0u16, 0];
         let s = c.encode_utf16(&mut buf);
         if s.len() == 1 { Some(buf[0]) } else { None }
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         let mut buf = [0u8, 0, 0, 0];
         let s = c.encode_utf8(&mut buf);
@@ -193,12 +193,12 @@ pub fn get_single_native_int_value(c: char) -> Option<NativeCharInt> {
 
 pub fn get_char_from_native_int(ni: NativeCharInt) -> Option<(char, NativeCharInt)> {
     let c_opt;
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
         c_opt = char::decode_utf16([ni; 1]).next().unwrap().ok();
     };
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         c_opt = std::str::from_utf8(&[ni; 1])
             .ok()
@@ -225,10 +225,6 @@ impl<'a> NativeStr<'a> {
 
     pub fn native(&self) -> Cow<'a, NativeIntStr> {
         self.native.clone()
-    }
-
-    pub fn into_native(self) -> Cow<'a, NativeIntStr> {
-        self.native
     }
 
     pub fn contains(&self, x: char) -> Option<bool> {

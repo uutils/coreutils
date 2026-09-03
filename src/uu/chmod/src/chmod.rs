@@ -40,7 +40,7 @@ enum ChmodError {
     PreserveRootSameAs(PathBuf),
     #[error("{}", translate!("chmod-error-permission-denied", "file" => _0.quote()))]
     PermissionDenied(PathBuf),
-    #[error("{}", translate!("chmod-error-new-permissions", "file" => _0.maybe_quote(), "actual" => _1.clone(), "expected" => _2.clone()))]
+    #[error("{}", translate!("chmod-error-new-permissions", "file" => _0.maybe_quote(), "actual" => _1, "expected" => _2))]
     NewPermissions(PathBuf, String, String),
     #[error("{}", translate!("chmod-error-changing-permissions", "file" => _0.quote(), "err" => strip_errno(_1)))]
     ChangingPermissions(PathBuf, std::io::Error),
@@ -146,12 +146,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let verbose = matches.get_flag(options::VERBOSE);
     let preserve_root = matches.get_flag(options::PRESERVE_ROOT);
     let fmode = match matches.get_one::<OsString>(options::REFERENCE) {
-        Some(fref) => match fs::metadata(fref) {
-            Ok(meta) => Some(meta.mode() & 0o7777),
-            Err(_) => {
-                return Err(ChmodError::CannotStat(fref.into()).into());
-            }
-        },
+        Some(fref) => Some(
+            fs::metadata(fref)
+                .map(|meta| meta.mode() & 0o7777)
+                .map_err(|_| ChmodError::CannotStat(fref.into()))?,
+        ),
         None => None,
     };
 

@@ -65,7 +65,7 @@ impl FileInformation {
     }
 
     /// Get information from a currently open file
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     pub fn from_file(file: &impl AsRawHandle) -> IOResult<Self> {
         let mut info = BY_HANDLE_FILE_INFORMATION::default();
         // SAFETY: `info` is a valid pointer to be populated by GetFileInformationByHandle.
@@ -89,7 +89,7 @@ impl FileInformation {
             };
             Ok(Self(stat?))
         }
-        #[cfg(target_os = "windows")]
+        #[cfg(windows)]
         {
             use std::fs::OpenOptions;
             use std::os::windows::fs::OpenOptionsExt;
@@ -112,7 +112,7 @@ impl FileInformation {
             assert!(self.0.st_size >= 0, "File size is negative");
             self.0.st_size.try_into().unwrap()
         }
-        #[cfg(target_os = "windows")]
+        #[cfg(windows)]
         {
             ((self.0.nFileSizeHigh as u64) << 32) | (self.0.nFileSizeLow as u64)
         }
@@ -187,7 +187,7 @@ impl PartialEq for FileInformation {
     }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 impl PartialEq for FileInformation {
     fn eq(&self, other: &Self) -> bool {
         self.0.dwVolumeSerialNumber == other.0.dwVolumeSerialNumber
@@ -204,7 +204,7 @@ impl Hash for FileInformation {
             self.0.st_dev.hash(state);
             self.0.st_ino.hash(state);
         }
-        #[cfg(target_os = "windows")]
+        #[cfg(windows)]
         {
             self.0.dwVolumeSerialNumber.hash(state);
             self.file_index().hash(state);
@@ -887,7 +887,7 @@ pub fn is_stdin_directory(stdin: &Stdin) -> bool {
     #[cfg(any(unix, all(target_os = "wasi", target_env = "p2")))]
     {
         use mode::{S_IFDIR, S_IFMT};
-        if let Ok(stat) = rustix::fs::fstat(stdin.as_fd()) {
+        if let Ok(stat) = rustix::fs::fstat(stdin) {
             #[allow(clippy::unnecessary_cast)]
             let mode = stat.st_mode as u32;
             // We use the S_IFMT mask ala S_ISDIR() to avoid mistaking

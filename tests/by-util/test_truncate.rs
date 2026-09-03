@@ -6,6 +6,8 @@
 // spell-checker:ignore (words) RFILE
 
 use std::io::{Seek, SeekFrom, Write};
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -36,6 +38,16 @@ fn test_increase_file_size_kb() {
     file.seek(SeekFrom::End(0)).unwrap();
     let actual = file.stream_position().unwrap();
     assert_eq!(expected, actual, "expected '{expected}' got '{actual}'");
+}
+
+#[test]
+fn test_size_above_i64_max_is_rejected_without_creating_file() {
+    // A size above i64::MAX is rejected up front and the file is not created.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-s", "9223372036854775808", "new-file"])
+        .fails_with_code(1)
+        .stderr_contains("Value too large for defined data type");
+    assert!(!at.file_exists("new-file"));
 }
 
 #[test]
@@ -297,6 +309,35 @@ fn test_relative_size_overflow_preserves_file() {
     assert_eq!(at.read(FILE1), "x");
 }
 
+#[cfg(unix)]
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no block size support")]
+fn test_io_blocks_uses_file_block_size() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(FILE1, "x");
+    let block_size = at.metadata(FILE1).blksize();
+
+    ucmd.args(&["--io-blocks", "--size=1", FILE1])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.metadata(FILE1).len(), block_size);
+}
+
+#[cfg(unix)]
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no block size support")]
+fn test_io_blocks_uses_parent_block_size_for_new_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let block_size = at.metadata(".").blksize();
+
+    ucmd.args(&["--io-blocks", "--size=2", FILE1])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.metadata(FILE1).len(), 2 * block_size);
+}
+
 /// Test that truncating a non-existent file creates that file.
 #[test]
 fn test_new_file() {
@@ -539,4 +580,13 @@ mod diagnostics {
             .fails_with_code(1)
             .stderr_contains("Invalid number: '10fb'");
     }
+}
+
+#[test]
+fn test_repeated_size_takes_the_last() {
+    // GNU lets a later -s override an earlier one rather than erroring.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.make_file("repeated");
+    ucmd.args(&["-s", "1", "-s", "2", "repeated"]).succeeds();
+    assert_eq!(at.metadata("repeated").len(), 2);
 }

@@ -14,7 +14,10 @@ use uucore::{format_usage, translate};
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let command = uu_app();
-    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(command, args, 2)?;
+    // The arguments are kept for the caret in SIZE diagnostics, which echoes
+    // the command line.
+    let (matches, diag_args) =
+        uucore::clap_localization::handle_clap_result_with_diagnostics(command, args.collect(), 2)?;
 
     let mut default_quoting_style = false;
     let mut default_format_style = false;
@@ -42,7 +45,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         default_format_style = true;
     }
 
-    let mut config = Config::from(&matches)?;
+    let mut config = Config::from(&matches, diag_args.as_deref())?;
 
     if default_quoting_style {
         config.quoting_style = QuotingStyle::C_NO_QUOTES;

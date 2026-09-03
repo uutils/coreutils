@@ -12,14 +12,20 @@
 use libc::{gid_t, pid_t, uid_t};
 #[cfg(not(target_os = "redox"))]
 use nix::errno::Errno;
-use nix::sys::signal::{self as nix_signal, SigHandler, SigSet, Signal};
+#[cfg(not(target_os = "fuchsia"))]
+use nix::sys::signal::{self as nix_signal, SigHandler};
+use nix::sys::signal::{SigSet, Signal};
 use nix::unistd::Pid;
 use rustix::process::Signal as RixSignal;
 use std::io;
+#[cfg(not(target_os = "fuchsia"))]
 use std::process::Child;
+#[cfg(not(target_os = "fuchsia"))]
 use std::time::{Duration, Instant};
+#[cfg(not(target_os = "fuchsia"))]
 use timer::Timer;
 
+#[cfg(not(target_os = "fuchsia"))]
 use super::{ChildExt, TimeoutRet};
 
 /// `geteuid()` returns the effective user ID of the calling process.
@@ -77,6 +83,7 @@ pub fn getsid(pid: i32) -> Result<pid_t, Errno> {
     nix::unistd::getsid(pid).map(Pid::as_raw)
 }
 
+#[cfg(not(target_os = "fuchsia"))]
 impl ChildExt for Child {
     fn send_signal(&mut self, signal: usize) -> io::Result<()> {
         let pid = Pid::from_raw(self.id() as pid_t);
@@ -173,6 +180,7 @@ pub fn unblock_signal(signal: RixSignal) -> io::Result<()> {
 /// Ensures there is no overflow on time_t operations. Some BSDs (notably XNU)
 /// will return EINVAL otherwise; POSIX only defines it up to 10e8, so we cap
 /// it on all targets we do not trust to support the full integer range.
+#[cfg(not(target_os = "fuchsia"))]
 const MAX_KTIME_T: Duration = if cfg!(target_os = "linux") {
     Duration::from_secs(9_223_372_036)
 } else {
@@ -182,7 +190,12 @@ const MAX_KTIME_T: Duration = if cfg!(target_os = "linux") {
 /// Sets up a timer on SIGALRM for platforms that support POSIX.1-2008 realtime
 /// clock extensions. Notably, both Android and Redox do not support the latter
 /// fallback since it was removed in that same spec.
-#[cfg(not(any(target_vendor = "apple", target_os = "openbsd", target_os = "windows")))]
+#[cfg(not(any(
+    target_vendor = "apple",
+    target_os = "fuchsia",
+    target_os = "openbsd",
+    windows
+)))]
 mod timer {
     use super::MAX_KTIME_T;
     use std::io;
@@ -297,7 +310,7 @@ mod timer {
 
 /// Sets up a timer on SIGALRM for platforms that do not support POSIX.1-2008
 /// realtime clock extensions. Notably, Darwin, OpenBSD, and Windows.
-#[cfg(any(target_vendor = "apple", target_os = "openbsd", target_os = "windows"))]
+#[cfg(any(target_vendor = "apple", target_os = "openbsd", windows))]
 mod timer {
     use super::MAX_KTIME_T;
     use nix::errno::Errno;
@@ -335,6 +348,7 @@ mod timer {
     }
 }
 
+#[cfg(not(target_os = "fuchsia"))]
 impl Timer {
     fn timed_sigwait(&mut self, timeout: Duration) -> io::Result<Option<Signal>> {
         self.arm(timeout)?;

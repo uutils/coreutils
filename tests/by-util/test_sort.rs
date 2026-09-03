@@ -326,6 +326,56 @@ fn test_numeric_sort_rejects_leading_plus_sign() {
 }
 
 #[test]
+fn test_numeric_sort_uses_the_key_not_the_whole_line() {
+    // `-n` compares a number parsed from the line as a whole, which only
+    // stands for the key when the key is the whole line.
+
+    // Character offset: the key is "9" and "1", so 21 comes first. Comparing
+    // the lines instead puts 19 first.
+    new_ucmd!()
+        .args(&["-n", "-k1.2"])
+        .pipe_in("19\n21\n")
+        .succeeds()
+        .stdout_is("21\n19\n");
+
+    // Field: with '.' as the separator the key is "9" and "1" again, while
+    // both lines parse as numbers on their own.
+    new_ucmd!()
+        .args(&["-n", "-t.", "-k2"])
+        .pipe_in("1.9\n2.1\n")
+        .succeeds()
+        .stdout_is("2.1\n1.9\n");
+
+    // A key that reverses on its own: the shortcut only knows the global
+    // ordering, so it has to go the long way.
+    new_ucmd!()
+        .args(&["-n", "-k1r"])
+        .pipe_in("19\n21\n3\n")
+        .succeeds()
+        .stdout_is("3\n21\n19\n");
+
+    // Equal keys fall back to comparing the lines byte by byte, not
+    // numerically.
+    new_ucmd!()
+        .args(&["-n", "-k1.2"])
+        .pipe_in("1\n10\n2\n20\n3\n")
+        .succeeds()
+        .stdout_is("1\n10\n2\n20\n3\n");
+
+    // The whole-line cases keep working.
+    new_ucmd!()
+        .arg("-n")
+        .pipe_in("19\n21\n3\n")
+        .succeeds()
+        .stdout_is("3\n19\n21\n");
+    new_ucmd!()
+        .args(&["-n", "-k1"])
+        .pipe_in("19\n21\n3\n")
+        .succeeds()
+        .stdout_is("3\n19\n21\n");
+}
+
+#[test]
 fn test_check_zero_terminated_failure() {
     new_ucmd!()
         .arg("-z")
@@ -1249,14 +1299,20 @@ fn test_merge_write_error_does_not_panic() {
 // A read error must be reported with context and without the raw io::Error suffix.
 // It used to print `sort: Input/output error (os error 5)`.
 #[test]
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[cfg(target_os = "linux")]
 #[cfg_attr(wasi_runner, ignore)]
 fn test_read_error_message() {
     // Reading /proc/self/mem from offset 0 fails with EIO.
-    new_ucmd!()
-        .arg("/proc/self/mem")
-        .fails_with_code(2)
-        .stderr_only("sort: read failed: Input/output error\n");
+    let result = new_ucmd!().arg("/proc/self/mem").fails_with_code(2);
+    result.no_stdout();
+    // The strerror text for EIO differs between C libraries: glibc says
+    // "Input/output error" while musl says "I/O error".
+    let stderr = result.stderr_str();
+    assert!(
+        stderr == "sort: read failed: Input/output error\n"
+            || stderr == "sort: read failed: I/O error\n",
+        "unexpected stderr: {stderr}"
+    );
 }
 
 #[test]
@@ -2169,7 +2225,7 @@ fn test_files0_from_two_entries_trailing_nul() {
 
 #[test]
 // Test files0-from with non-UTF-8 filenames
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_files0_from_non_utf8_content() {
     use std::os::unix::ffi::OsStringExt;
     let (at, mut ucmd) = at_and_ucmd!();

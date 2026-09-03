@@ -7,7 +7,7 @@
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
-#[cfg(all(unix, not(feature = "feat_selinux")))]
+#[cfg(all(unix, not(feature = "selinux")))]
 use uutests::util::run_ucmd_as_root_with_stdin_stdout;
 #[cfg(not(windows))]
 use uutests::util::{UCommand, get_tests_binary};
@@ -19,7 +19,7 @@ use uucore::io::OwnedFileDescriptorOrHandle;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd"),))]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "freebsd"),))]
 use std::process::Command;
 use std::process::Stdio;
 #[cfg(not(windows))]
@@ -1652,7 +1652,7 @@ fn test_nocache_file() {
 
 #[test]
 #[cfg(unix)]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(feature = "selinux"))]
 // Disabled on SELinux for now
 fn test_skip_past_dev() {
     // NOTE: This test intends to trigger code which can only be reached with root permissions.
@@ -1677,7 +1677,7 @@ fn test_skip_past_dev() {
 
 #[test]
 #[cfg(unix)]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(feature = "selinux"))]
 fn test_seek_past_dev() {
     // NOTE: This test intends to trigger code which can only be reached with root permissions.
     let ts = TestScenario::new(util_name!());
@@ -1700,7 +1700,7 @@ fn test_seek_past_dev() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd"),))]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "freebsd"),))]
 fn test_reading_partial_blocks_from_fifo() {
     // Create the FIFO.
     let ts = TestScenario::new(util_name!());
@@ -1740,7 +1740,7 @@ fn test_reading_partial_blocks_from_fifo() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd"),))]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "freebsd"),))]
 fn test_reading_partial_blocks_from_fifo_unbuffered() {
     // Create the FIFO.
     let ts = TestScenario::new(util_name!());
@@ -1789,7 +1789,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
 /// The writer below runs `printf` inside `sh`, where it is a builtin, so this
 /// needs no `printf` feature.
 #[test]
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd")))]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "freebsd")))]
 fn test_reading_partial_blocks_from_fifo_gathered_into_larger_obs() {
     // Create the FIFO.
     let ts = TestScenario::new(util_name!());
@@ -2037,6 +2037,37 @@ fn test_skip_overflow() {
 }
 
 #[test]
+fn test_skip_blocks_times_ibs_overflow_does_not_wrap() {
+    // 17592186044416 * 1048576 == 2^64 would wrap around to 0, and
+    // must be rejected
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in.f", "0123456789abcdef");
+    ucmd.args(&["if=in.f", "skip=17592186044416", "ibs=1048576", "count=1"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("Value too large for defined data type");
+}
+
+#[test]
+fn test_seek_blocks_times_obs_overflow_does_not_wrap() {
+    // Same as test_skip_blocks_times_ibs_overflow_does_not_wrap,
+    // but for `seek=`/`obs=`.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("out.f", "0123456789abcdef");
+    ucmd.args(&[
+        "if=/dev/null",
+        "of=out.f",
+        "seek=17592186044416",
+        "obs=1048576",
+        "conv=notrunc",
+    ])
+    .fails()
+    .stderr_contains("Value too large for defined data type");
+    // The output file must be untouched, not overwritten at offset 0.
+    assert_eq!(at.read("out.f"), "0123456789abcdef");
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_nocache_eof() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2269,7 +2300,7 @@ fn test_count_bytes_with_expanding_block_conv() {
 // A failed copy still has to report what it transferred, including complete
 // and partial records.
 #[test]
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_stats_are_reported_when_a_write_fails() {
     use rlimit::Resource;
 
@@ -2442,6 +2473,52 @@ dd: unrecognized operand 'bsx=1'
             .fails_with_code(1)
             .stderr_contains("dd: unrecognized operand 'bsx=1'\n")
             .stderr_contains("--help' for more information.")
+            .stderr_does_not_contain("╭─");
+    }
+
+    // The three below cover the shared switch in `uucore::diagnostics`.
+
+    #[test]
+    fn test_report_is_drawn_into_a_pipe_when_asked_for() {
+        let result = new_ucmd!()
+            .env("UUTILS_DIAG", "always")
+            .args(&["bsx=1"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        // No terminal anywhere, and the report is drawn all the same.
+        assert!(stderr.contains("dd:1:4"), "{stderr}");
+        assert!(stderr.contains("1 \u{2502} dd bsx=1"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_plain_message_at_a_terminal_when_asked_for() {
+        let result = new_ucmd!()
+            .env("UUTILS_DIAG", "never")
+            .terminal_sim_stderr()
+            .args(&["bsx=1"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(
+            stderr.contains("dd: unrecognized operand 'bsx=1'"),
+            "{stderr}"
+        );
+        assert!(!stderr.contains('\u{256d}'), "{stderr}");
+    }
+
+    #[test]
+    fn test_unknown_mode_leaves_the_terminal_in_charge() {
+        // A value nobody meant behaves as if the variable were unset.
+        new_ucmd!()
+            .env("UUTILS_DIAG", "sometimes")
+            .args(&["bsx=1"])
+            .pipe_in("")
+            .fails_with_code(1)
+            .stderr_contains("dd: unrecognized operand 'bsx=1'\n")
             .stderr_does_not_contain("╭─");
     }
 }

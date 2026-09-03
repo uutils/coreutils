@@ -88,7 +88,6 @@ struct Settings {
 ///
 /// When all instances are dropped the background thread will exit on the next interval.
 pub struct Alarm {
-    interval: Duration,
     trigger: Arc<AtomicU8>,
 }
 
@@ -109,7 +108,7 @@ impl Alarm {
             }
         });
 
-        Self { interval, trigger }
+        Self { trigger }
     }
 
     /// Manually trigger the alarm as a signal event
@@ -125,11 +124,6 @@ impl Alarm {
     /// by the closure returned from `manual_trigger_fn`
     pub fn get_trigger(&self) -> u8 {
         self.trigger.swap(ALARM_TRIGGER_NONE, Relaxed)
-    }
-
-    // Getter function for the configured interval duration
-    pub fn get_interval(&self) -> Duration {
-        self.interval
     }
 }
 
@@ -160,7 +154,7 @@ impl Num {
 
     fn to_bytes(self, block_size: u64) -> u64 {
         match self {
-            Self::Blocks(n) => n * block_size,
+            Self::Blocks(n) => n.saturating_mul(block_size),
             Self::Bytes(n) => n,
         }
     }
@@ -372,20 +366,14 @@ impl<'a> Input<'a> {
         #[cfg(windows)]
         let mut src = {
             let f = File::from(io::stdin().as_handle().try_clone_to_owned()?);
-            let is_file = if let Ok(metadata) = f.metadata() {
-                // this hack is needed as there is no other way on windows
-                // to differentiate between the case where `seek` works
-                // on a file handle or not. i.e. when the handle is no real
-                // file but a pipe, `seek` is still successful, but following
-                // `read`s are not affected by the seek.
-                metadata.creation_time() != 0
-            } else {
-                false
-            };
-            if is_file {
-                Source::File(f)
-            } else {
-                Source::Stdin(io::stdin())
+            // this hack is needed as there is no other way on windows
+            // to differentiate between the case where `seek` works
+            // on a file handle or not. i.e. when the handle is no real
+            // file but a pipe, `seek` is still successful, but following
+            // `read`s are not affected by the seek.
+            match f.metadata() {
+                Ok(metadata) if metadata.creation_time() != 0 => Source::File(f),
+                _ => Source::Stdin(io::stdin()),
             }
         };
         #[cfg(all(not(unix), not(windows)))]
@@ -1572,8 +1560,11 @@ fn is_fifo(filename: &str) -> bool {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // The command line is kept for the caret in operand diagnostics.
-    let (matches, diag_args) =
-        uucore::clap_localization::handle_clap_result_with_diagnostics(uu_app(), args.collect())?;
+    let (matches, diag_args) = uucore::clap_localization::handle_clap_result_with_diagnostics(
+        uu_app(),
+        args.collect(),
+        1,
+    )?;
 
     let settings: Settings = Parser::new().parse_with_diagnostics(
         matches
@@ -1582,7 +1573,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         diag_args.as_deref(),
     )?;
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     if uucore::signals::stderr_was_closed() && settings.status != Some(StatusLevel::None) {
         return Err(USimpleError::new(1, "write error"));
     }

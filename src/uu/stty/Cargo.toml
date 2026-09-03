@@ -15,16 +15,14 @@ readme.workspace = true
 path = "src/stty.rs"
 doctest = false
 
-[dependencies]
+[target.'cfg(unix)'.dependencies]
 clap = { workspace = true }
+nix = { workspace = true, features = ["ioctl", "term"] }
 uucore = { workspace = true, features = ["parser"] }
 fluent = { workspace = true }
 
 [build-dependencies]
 cfg_aliases = { workspace = true }
-
-[target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["ioctl", "term"] }
 
 [lints]
 workspace = true
@@ -32,3 +30,4 @@ workspace = true
 [[bin]]
 name = "stty"
 path = "src/main.rs"
+required-features = ["uucore/default"]
