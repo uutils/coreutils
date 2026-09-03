@@ -32,6 +32,36 @@ use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetS
 
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 
+/// OHOS helper: pass through the system time zone ID returned by
+/// TimeService (OH_TimeService_GetTimeZone, e.g. "Asia/Shanghai") and
+/// resolve it against the embedded IANA tzdata (jiff-tzdb) so that
+/// historial DST rules and transitions are preserved. jiff's
+/// `try_system()` is useless on OHOS because both `/etc/localtime` and
+/// the zoneinfo dirs are absent.
+#[cfg(target_env = "ohos")]
+fn ohos_system_zone() -> jiff::tz::TimeZone {
+    use core::ffi::{CStr, c_char};
+
+    #[link(name = "time_service_ndk")]
+    unsafe extern "C" {
+        fn OH_TimeService_GetTimeZone(tz: *mut c_char, len: u32) -> i32;
+    }
+    let mut buf = [0u8; 64];
+    let rc = unsafe { OH_TimeService_GetTimeZone(buf.as_mut_ptr() as *mut c_char, 64) };
+    if rc != 0 {
+        return jiff::tz::TimeZone::UTC;
+    }
+    let id = unsafe { CStr::from_ptr(buf.as_ptr() as *const c_char) }
+        .to_string_lossy()
+        .into_owned();
+    if let Some((name, tzif)) = jiff_tzdb::get(&id) {
+        if let Ok(tz) = jiff::tz::TimeZone::tzif(name, tzif) {
+            return tz;
+        }
+    }
+    jiff::tz::TimeZone::UTC
+}
+
 // Options
 const DATE: &str = "date";
 const HOURS: &str = "hours";
@@ -371,7 +401,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let now = if utc {
         Timestamp::now().to_zoned(TimeZone::UTC)
     } else {
-        Zoned::now()
+        #[cfg(target_env = "ohos")]
+        {
+            Timestamp::now().to_zoned(ohos_system_zone())
+        }
+        #[cfg(not(target_env = "ohos"))]
+        {
+            Zoned::now()
+        }
     };
 
     let set_to = match matches.get_one::<String>(OPT_SET) {
@@ -557,12 +594,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     translate!("date-error-cannot-set-date", "path" => path.quote(), "error" => e),
                 )
             })?;
+            #[cfg(target_env = "ohos")]
+            let date = ts.to_zoned(ohos_system_zone());
+            #[cfg(not(target_env = "ohos"))]
             let date = ts.to_zoned(TimeZone::try_system().unwrap_or(TimeZone::UTC));
             let iter = std::iter::once(Ok(ParsedDateTime::InRange(date)));
             Box::new(iter)
         }
         DateSource::Resolution => {
             let resolution = get_clock_resolution();
+            #[cfg(target_env = "ohos")]
+            let date = resolution.to_zoned(ohos_system_zone());
+            #[cfg(not(target_env = "ohos"))]
             let date = resolution.to_zoned(TimeZone::system());
             let iter = std::iter::once(Ok(ParsedDateTime::InRange(date)));
             Box::new(iter)
