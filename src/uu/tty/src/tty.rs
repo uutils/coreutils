@@ -9,10 +9,8 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::io::{IsTerminal, Write};
-use uucore::error::{UResult, set_exit_code};
-use uucore::format_usage;
-
-use uucore::translate;
+use uucore::error::{UResult, set_exit_code, strip_errno};
+use uucore::{format_usage, show_error, translate};
 
 mod options {
     pub const SILENT: &str = "silent";
@@ -75,10 +73,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    if write_result.is_err() || stdout.flush().is_err() {
-        // Don't return to prevent a panic later when another flush is attempted
-        // because the `uucore_procs::main` macro inserts a flush after execution for every utility.
-        std::process::exit(3);
+    if let Err(e) = write_result {
+        show_error!("{}", strip_errno(&e));
+        set_exit_code(3);
     }
 
     Ok(())
