@@ -22,6 +22,10 @@ fluent = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["entries", "process"] }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true
 

@@ -31,6 +31,10 @@ windows-sys = { workspace = true, features = [
   "Win32_Foundation",
 ] }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true
 

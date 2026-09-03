@@ -64,9 +64,10 @@ uucore = { workspace = true, features = [
 ] }
 
 [features]
-default = ["i18n-collator"]
+default = ["i18n-collator", "signals"]
 diagnostics = ["uucore/diagnostics"]
 i18n-collator = ["uucore/i18n-collator"]
+signals = ["uucore/signals"]
 
 [lints]
 workspace = true

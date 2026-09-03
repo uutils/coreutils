@@ -34,5 +34,9 @@ path = "src/main.rs"
 [dev-dependencies]
 tempfile = { workspace = true }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true

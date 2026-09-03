@@ -24,6 +24,10 @@ uucore = { workspace = true, features = ["fs", "pipes"] }
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 rustix = { workspace = true, features = ["stdio", "pipe"] }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true
 
