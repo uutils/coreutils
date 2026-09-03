@@ -205,10 +205,9 @@ impl<'a> StyleManager<'a> {
         self.current_style = Some(*new_style);
         let mut nu_a_style = new_style.to_nu_ansi_term_style();
         nu_a_style.prefix_with_reset = false;
-        let mut ret = nu_a_style.paint("").to_string();
-        // remove the suffix reset
-        ret.truncate(ret.len() - 4);
-        ret
+        // `prefix()` yields the escape sequence on its own, and an empty string
+        // for a style without any attribute, so there is no trailing reset to strip
+        nu_a_style.prefix().to_string()
     }
 
     pub(crate) fn is_current_style(&self, new_style: &Style) -> bool {

@@ -6806,6 +6806,24 @@ fn test_ls_color_norm() {
         .stdout_contains(expected);
 }
 
+// A style that renders to an empty ANSI sequence, such as the default
+// foreground color, used to make `ls --color` panic while stripping the
+// trailing reset from the style code.
+#[test]
+fn test_ls_color_empty_style() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .env("LS_COLORS", "no=39")
+        .arg("--color=always")
+        .arg("f")
+        .succeeds()
+        .stdout_only("\u{1b}[0mf\u{1b}[0m\n");
+}
+
 #[test]
 fn test_ls_color_clear_to_eol() {
     let scene = TestScenario::new(util_name!());
