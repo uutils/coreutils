@@ -1290,6 +1290,20 @@ fn test_number_by_lines_fewer_bytes_than_chunks_elide() {
     assert!(!at.plus("xac").exists());
 }
 
+/// A huge chunk count must not overflow the skipped-chunk counter.
+///
+/// With far more chunks than input bytes, all of the trailing chunks are
+/// zero-sized and get skipped in one go. Counting them used to overflow and
+/// panic in a build with overflow checks enabled.
+#[test]
+fn test_number_by_lines_kth_huge_number_of_chunks() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "a");
+    ucmd.args(&["-n", "l/1/9999999999", "in"])
+        .succeeds()
+        .stdout_only("a");
+}
+
 #[test]
 #[cfg(unix)]
 fn test_number_by_lines_kth_dev_null() {
