@@ -57,7 +57,7 @@ fn find_valid_number_with_suffix(s: &str, unit: Unit) -> Option<&str> {
     let accepts_suffix = unit != Unit::None;
     let accepts_i = [Unit::Auto, Unit::Iec(true)].contains(&unit);
 
-    // Slice by byte offset, not char count, so a multi-byte suffix isn't split (#13937).
+    // Byte offset, not char count: the numeric part may contain a multi-byte separator (#13937).
     let mut characters = s[numeric_part.len()..].chars();
     let potential_suffix = characters.next();
     let potential_i = characters.next();
@@ -68,10 +68,11 @@ fn find_valid_number_with_suffix(s: &str, unit: Unit) -> Option<&str> {
 
     match (potential_suffix, potential_i) {
         (Some(suffix), Some('i')) if accepts_i && RawSuffix::try_from(&suffix).is_ok() => {
-            Some(&s[..numeric_part.len() + suffix.len_utf8() + 'i'.len_utf8()])
+            // A valid suffix and the `i` marker are both single-byte ASCII.
+            Some(&s[..numeric_part.len() + 2])
         }
         (Some(suffix), _) if RawSuffix::try_from(&suffix).is_ok() => {
-            Some(&s[..numeric_part.len() + suffix.len_utf8()])
+            Some(&s[..=numeric_part.len()])
         }
         _ => Some(numeric_part),
     }
@@ -177,7 +178,8 @@ fn detailed_error_message(s: &str, unit: Unit, unit_separator: &str) -> Option<S
     let valid_part = &s[..valid_prefix_len(s, unit, unit_separator)];
 
     if valid_part != s && valid_part.parse::<f64>().is_ok() {
-        return match s.chars().nth(valid_part.len()) {
+        // Byte offset, not char count (`valid_part` is a prefix, so its length is a char boundary).
+        return match s[valid_part.len()..].chars().next() {
             Some('+' | '-') => {
                 Some(translate!("numfmt-error-invalid-suffix", "input" => s.quote()))
             }
