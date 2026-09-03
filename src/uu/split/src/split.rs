@@ -1148,22 +1148,28 @@ fn n_chunks_by_line(
         // empty files in place(s) of skipped chunk(s)
         let num_line_bytes = bytes.len() as u64;
         num_bytes_written += num_line_bytes;
-        let mut skipped = -1;
+        let first_chunk_number = chunk_number;
         // Cap at the last chunk to avoid an infinite loop when trailing chunks are
         // zero-sized, and keep excess input from indexing past out_files.
         while chunk_number < num_chunks && num_bytes_should_be_written <= num_bytes_written {
-            num_bytes_should_be_written +=
-                chunk_size_base + (chunk_size_reminder > chunk_number) as u64;
+            let chunk_size = chunk_size_base + (chunk_size_reminder > chunk_number) as u64;
+            if chunk_size == 0 {
+                // Every remaining chunk is zero-sized as well, so all of them
+                // would be skipped one at a time, which takes prohibitively
+                // long for a huge number of chunks. Jump to the last one.
+                chunk_number = num_chunks;
+                break;
+            }
+            num_bytes_should_be_written += chunk_size;
             chunk_number += 1;
-            skipped += 1;
         }
 
         // If a chunk was skipped and `elide_empty_files` flag is set,
         // roll chunk_number back to preserve sequential continuity
         // of file names for files written to,
         // except for Kth chunk of N mode
-        if settings.elide_empty_files && skipped > 0 && kth_chunk.is_none() {
-            chunk_number -= skipped as u64;
+        if settings.elide_empty_files && kth_chunk.is_none() {
+            chunk_number = chunk_number.min(first_chunk_number + 1);
         }
         if kth_chunk.is_some_and(|k| chunk_number > k) {
             break;
