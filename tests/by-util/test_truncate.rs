@@ -73,6 +73,32 @@ fn test_reference() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
+fn test_reference_non_utf8_path() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let expected = 5 * 1000;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let mut file = at.make_file(FILE2);
+
+    let reference = std::ffi::OsStr::from_bytes(b"test_\xFF\xFE.txt");
+    scene.ucmd().arg("-s").arg("+5KB").arg(reference).succeeds();
+
+    scene
+        .ucmd()
+        .arg("--reference")
+        .arg(reference)
+        .arg(FILE2)
+        .succeeds();
+
+    file.seek(SeekFrom::End(0)).unwrap();
+    let actual = file.stream_position().unwrap();
+    assert_eq!(expected, actual, "expected '{expected}' got '{actual}'");
+}
+
+#[test]
 fn test_decrease_file_size() {
     let expected = 6;
     let (at, mut ucmd) = at_and_ucmd!();
