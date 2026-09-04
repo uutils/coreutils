@@ -57,7 +57,11 @@ fn find_valid_number_with_suffix(s: &str, unit: Unit) -> Option<&str> {
     let accepts_suffix = unit != Unit::None;
     let accepts_i = [Unit::Auto, Unit::Iec(true)].contains(&unit);
 
-    let mut characters = s.chars().skip(numeric_part.len());
+    // What follows the number begins where the number ends, which is a
+    // position in bytes: the decimal separator of a locale such as ar-SA is
+    // two bytes wide, so skipping that many *characters* instead lands past
+    // the suffix, and the byte index taken from it lands inside a character.
+    let mut characters = s[numeric_part.len()..].chars();
     let potential_suffix = characters.next();
     let potential_i = characters.next();
 
@@ -65,14 +69,12 @@ fn find_valid_number_with_suffix(s: &str, unit: Unit) -> Option<&str> {
         return Some(numeric_part);
     }
 
+    // Every suffix is one ASCII character, so the byte it ends on is known.
     match (potential_suffix, potential_i) {
-        (Some(suffix), None) if RawSuffix::try_from(&suffix).is_ok() => {
-            Some(&s[..=numeric_part.len()])
-        }
         (Some(suffix), Some('i')) if accepts_i && RawSuffix::try_from(&suffix).is_ok() => {
             Some(&s[..numeric_part.len() + 2])
         }
-        (Some(suffix), Some(_)) if RawSuffix::try_from(&suffix).is_ok() => {
+        (Some(suffix), _) if RawSuffix::try_from(&suffix).is_ok() => {
             Some(&s[..=numeric_part.len()])
         }
         _ => Some(numeric_part),

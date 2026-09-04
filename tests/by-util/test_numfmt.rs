@@ -1682,6 +1682,35 @@ fn test_locale_fr_rejects_period() {
         .stderr_contains("invalid");
 }
 
+/// The suffix begins where the number ends, and ar-SA's decimal separator is
+/// two bytes wide, so counting that end in characters walked into the middle
+/// of the one after it and aborted the process.
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+fn test_locale_multibyte_separator_before_a_multibyte_char() {
+    for (unit, input) in [
+        ("si", "1٫€K"),
+        ("si", "1٫€Kx"),
+        ("auto", "1٫€Ki"),
+        ("iec-i", "1٫€K"),
+        ("none", "1٫€K"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "ar_SA.UTF-8")
+            .args(&[format!("--from={unit}"), input.into()])
+            .fails_with_code(2)
+            .stderr_contains("invalid suffix in input");
+    }
+
+    // The suffix that is there is still found: '€' is what is wrong with this
+    // one, not 'K'.
+    new_ucmd!()
+        .env("LC_ALL", "ar_SA.UTF-8")
+        .args(&["--from=si", "1٫Ki"])
+        .fails_with_code(2)
+        .stderr_is("numfmt: invalid suffix in input '1٫Ki': 'i'\n");
+}
+
 #[test]
 fn test_locale_c_uses_period() {
     // C locale should still use '.' as usual
