@@ -32,9 +32,7 @@ pub(crate) fn copy_on_write(
     nofollow: bool,
 ) -> CopyResult<CopyDebug> {
     if sparse_mode != SparseMode::Auto {
-        return Err(translate!("cp-error-sparse-not-supported")
-            .to_string()
-            .into());
+        return Err(translate!("cp-error-sparse-not-supported").into());
     }
     let mut copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unknown,

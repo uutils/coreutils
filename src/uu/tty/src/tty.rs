@@ -5,12 +5,12 @@
 
 // spell-checker:ignore (ToDO) ttyname filedesc
 
+#![cfg(not(target_os = "fuchsia"))]
+
 use clap::{Arg, ArgAction, Command};
 use std::io::{IsTerminal, Write};
-use uucore::error::{UResult, set_exit_code};
-use uucore::format_usage;
-
-use uucore::translate;
+use uucore::error::{UResult, set_exit_code, strip_errno};
+use uucore::{format_usage, show_error, translate};
 
 mod options {
     pub const SILENT: &str = "silent";
@@ -41,10 +41,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let name = rustix::termios::ttyname(std::io::stdin(), Vec::with_capacity(8));
     #[cfg(unix)]
     let write_result = if let Ok(name) = name {
-        use std::os::unix::ffi::OsStrExt;
-        use uucore::display::OsWrite;
-        let os_name = std::ffi::OsStr::from_bytes(name.as_bytes());
-        stdout.write_all_os(os_name)
+        let mut buf = name.as_bytes().to_vec();
+        buf.push(b'\n');
+        stdout.write_all(&buf)
     } else {
         set_exit_code(1);
         writeln!(stdout, "{}", translate!("tty-not-a-tty"))
@@ -57,7 +56,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         set_exit_code(1);
         writeln!(stdout, "{}", translate!("tty-not-a-tty"))
     };
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     let write_result = {
         use std::os::windows::io::AsHandle;
         let stdin = std::io::stdin();
@@ -74,16 +73,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    if write_result.is_err() || stdout.flush().is_err() {
-        // Don't return to prevent a panic later when another flush is attempted
-        // because the `uucore_procs::main` macro inserts a flush after execution for every utility.
-        std::process::exit(3);
+    if let Err(e) = write_result {
+        show_error!("{}", strip_errno(&e));
+        set_exit_code(3);
     }
 
     Ok(())
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn file_name(handle: std::os::windows::io::BorrowedHandle) -> Option<String> {
     // This code is adapted from rust's standard library
     // https://github.com/rust-lang/rust/blob/0424cc16731e6141a18077f8ccde77ba148d9649/library/std/src/sys/io/is_terminal/windows.rs#L25

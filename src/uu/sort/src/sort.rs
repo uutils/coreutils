@@ -332,6 +332,7 @@ struct Precomputed {
     fast_lexicographic: bool,
     fast_locale_collation: bool,
     fast_ascii_insensitive: bool,
+    whole_line_numeric: bool,
     tokenize_blank_thousands_sep: bool,
     tokenize_allow_unit_after_blank: bool,
 }
@@ -397,6 +398,27 @@ impl GlobalSettings {
         self.precomputed.fast_locale_collation =
             disable_fast_lexicographic && self.can_use_fast_lexicographic();
         self.precomputed.fast_ascii_insensitive = self.can_use_fast_ascii_insensitive();
+        self.precomputed.whole_line_numeric = self.can_use_whole_line_numeric();
+    }
+
+    /// Returns true when a number parsed from the whole line can stand in for
+    /// the key.
+    ///
+    /// `-n` parses the line once up front and compares those numbers before
+    /// looking at any key. That is only the same comparison when the single
+    /// key spans the entire line: `-n -k1.2` sorts on the line's second
+    /// character onwards, and `-n -t. -k2` on its second field, neither of
+    /// which the line as a whole stands for. A key of its own `r` also has to
+    /// go the long way, since the shortcut only knows the global one.
+    fn can_use_whole_line_numeric(&self) -> bool {
+        self.mode == SortMode::Numeric && self.selectors.len() == 1 && {
+            let selector = &self.selectors[0];
+            selector.settings.mode == SortMode::Numeric
+                && !selector.settings.reverse
+                && selector.from.field == 1
+                && selector.from.char == 1
+                && selector.to.is_none()
+        }
     }
 
     /// Returns true when the fast lexicographic path can be used safely.
@@ -654,7 +676,7 @@ impl<'a> Line<'a> {
             || settings.precomputed.selections_per_line > 0
             || settings.precomputed.num_infos_per_line > 0
             || settings.precomputed.floats_per_line > 0
-            || settings.mode == SortMode::Numeric;
+            || settings.precomputed.whole_line_numeric;
         if !needs_line_data {
             return Self { line, index };
         }
@@ -667,7 +689,7 @@ impl<'a> Line<'a> {
                 &settings.precomputed,
             );
         }
-        if settings.mode == SortMode::Numeric {
+        if settings.precomputed.whole_line_numeric {
             // exclude inf, nan, scientific notation; GNU -n does not treat '+' as a sign
             let line_num_float = (!line.iter().any(u8::is_ascii_alphabetic))
                 .then(|| std::str::from_utf8(line).ok())

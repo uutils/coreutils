@@ -594,7 +594,7 @@ fn get_file_to_check(
 /// Returns a reader to the list of checksums
 fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
     let file = File::open(filename).map_err(|e| match e.kind() {
-        #[cfg(any(target_os = "wasi", target_os = "windows"))]
+        #[cfg(any(target_os = "wasi", windows))]
         io::ErrorKind::NotFound => io::Error::other(format!(
             "{}: {}",
             filename.maybe_quote(),
@@ -603,7 +603,7 @@ fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
         _ => io::Error::other(format!("{}: {}", filename.maybe_quote(), strip_errno(&e))),
     })?;
     // some platforms shows different read error
-    #[cfg(any(target_os = "wasi", target_os = "windows"))]
+    #[cfg(any(target_os = "wasi", windows))]
     if file.metadata().is_ok_and(|m| m.is_dir()) {
         return Err(io::Error::other(
             translate!("error-is-a-directory", "file" => filename.maybe_quote()),

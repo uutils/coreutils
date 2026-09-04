@@ -231,7 +231,21 @@ fn tab_multi_character() {
         .arg("-t")
         .arg("ab")
         .fails()
-        .stderr_is("join: multi-character tab ab\n");
+        .stderr_is("join: multi-character tab 'ab'\n");
+}
+
+#[test]
+fn tab_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading separator value passed as its own argument (not
+    // attached with `-t-x`/`=`) must not be mistaken for a new,
+    // unrecognized flag.
+    new_ucmd!()
+        .arg("semicolon_fields_1.txt")
+        .arg("semicolon_fields_2.txt")
+        .arg("-t")
+        .arg("-x")
+        .fails()
+        .stderr_is("join: multi-character tab '-x'\n");
 }
 
 #[test]
@@ -803,5 +817,18 @@ join: invalid field number: 'x'
             .args(&["-o", "1.2,2.x", "/dev/null", "/dev/null"])
             .fails_with_code(1)
             .stderr_is("join: invalid field number: 'x'\n");
+    }
+}
+
+#[test]
+fn test_hyphen_leading_field_number_is_reported_as_invalid() {
+    // GNU hands the argument after the option to that option even when it
+    // starts with a hyphen, so it is reported as an invalid field number
+    // rather than as an unknown option.
+    for opt in ["-1", "-2", "-j"] {
+        new_ucmd!()
+            .args(&[opt, "-1", "empty.txt", "empty.txt"])
+            .fails()
+            .stderr_contains("invalid field number: '-1'");
     }
 }

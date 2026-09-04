@@ -35,22 +35,21 @@ walkdir = { workspace = true }
 indicatif = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
-rustix = { workspace = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 selinux = { workspace = true, optional = true }
 
+[target.'cfg(any(target_os = "linux", target_os = "android", target_os = "wasi"))'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
+
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["fs"] }
 
-[target.'cfg(target_os = "windows")'.dependencies]
+[target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
   "Win32_Foundation",
   "Win32_Storage_FileSystem",
 ] }
-
-[target.'cfg(target_os = "wasi")'.dependencies]
-rustix = { workspace = true, features = ["fs"] }
 
 [[bin]]
 name = "cp"
@@ -66,7 +65,7 @@ name = "cp_bench"
 harness = false
 
 [features]
-feat_selinux = ["selinux", "uucore/selinux"]
+selinux = ["dep:selinux", "uucore/selinux"]
 
 [lints]
 workspace = true

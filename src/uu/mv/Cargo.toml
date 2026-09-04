@@ -20,7 +20,7 @@ clap = { workspace = true }
 fs_extra = { workspace = true }
 indicatif = { workspace = true }
 libc = { workspace = true }
-nix = { workspace = true }
+nix = { workspace = true, features = ["fs"] }
 rustc-hash = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
