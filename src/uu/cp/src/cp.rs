@@ -2184,11 +2184,22 @@ fn delete_dest_if_needed_and_allowed(
         OverwriteMode::Clobber(cl) | OverwriteMode::Interactive(cl) => {
             match cl {
                 ClobberMode::Force => {
-                    // TODO
-                    // Using `readonly` here to check if `dest` needs to be deleted is not correct:
-                    // "On Unix-based platforms this checks if any of the owner, group or others write permission bits are set. It does not check if the current user is in the file's assigned group. It also does not check ACLs. Therefore the return value of this function cannot be relied upon to predict whether attempts to read or write the file will actually succeed."
-                    // This results in some copy operations failing, because this necessary deletion is being skipped.
-                    is_symlink_loop(dest) || fs::metadata(dest)?.permissions().readonly()
+                    if is_symlink_loop(dest) {
+                        true
+                    } else {
+                        let dest_metadata = fs::metadata(dest)?;
+                        if dest_metadata.is_file() {
+                            // Determine whether `dest` needs to be removed before
+                            // copying by trying to open it for writing.
+                            OpenOptions::new().write(true).open(dest).is_err()
+                        } else {
+                            // For non-regular destinations (FIFOs, sockets,
+                            // devices) an open-for-write probe can block
+                            // indefinitely (e.g. opening a FIFO with no reader)
+                            // Fall back to the permission-bit check instead of actually opening.
+                            dest_metadata.permissions().readonly()
+                        }
+                    }
                 }
                 ClobberMode::RemoveDestination => true,
                 ClobberMode::Standard => {

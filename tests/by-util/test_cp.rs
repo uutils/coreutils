@@ -798,13 +798,21 @@ fn test_cp_arg_interactive_verbose_clobber() {
 #[test]
 #[cfg(unix)]
 fn test_cp_f_i_verbose_non_writeable_destination_y() {
+    use rustix::process::geteuid;
+
+    // A privileged process can write to a 000-mode file regardless of its
+    // permission bits, so -f never needs to remove and recreate it
+    if geteuid().is_root() {
+        return;
+    }
+
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("a");
     at.touch("b");
 
     // Non-writeable file
-    at.set_mode("b", 0o0000);
+    rustix::fs::chmod(at.plus("b"), rustix::fs::Mode::from_bits_truncate(0o000)).unwrap();
 
     ucmd.args(&["-f", "-i", "--verbose", "a", "b"])
         .pipe_in("y")
@@ -828,6 +836,35 @@ fn test_cp_f_i_verbose_non_writeable_destination_empty() {
         .pipe_in("")
         .fails()
         .stderr_only("cp: replace 'b', overriding mode 0000 (---------)? ");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_f_preserves_dest_mode_when_writable_by_privilege() {
+    use rustix::process::geteuid;
+
+    // A privileged process can write to a file regardless of its permission
+    // bits, so `cp -f` must not unlink and recreate such a destination: GNU
+    // cp only removes the destination when it genuinely cannot be opened for
+    // writing. Removing it needlessly loses the destination's original mode
+    // (e.g. resets `000` to the umask-derived default).
+    if !geteuid().is_root() {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("a", "s");
+    at.write("b", "d");
+    rustix::fs::chmod(at.plus("b"), rustix::fs::Mode::from_bits_truncate(0o000)).unwrap();
+
+    ucmd.args(&["-f", "a", "b"]).succeeds();
+
+    assert_eq!(at.read("b"), "s");
+    assert_eq!(
+        rustix::fs::stat(at.plus("b")).unwrap().st_mode & 0o777,
+        0o000
+    );
 }
 
 #[test]
