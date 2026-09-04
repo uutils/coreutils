@@ -605,8 +605,8 @@ pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
         return move_files_into_dir(&paths, &PathBuf::from(name), opts);
     }
 
-    match paths.len() {
-        2 => handle_two_paths(&paths[0], &paths[1], opts),
+    match paths.as_slice() {
+        [path0, path1] => handle_two_paths(path0, path1, opts),
         _ => handle_multiple_paths(&paths, opts),
     }
 }
