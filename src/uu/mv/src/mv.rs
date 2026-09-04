@@ -22,7 +22,7 @@ use rustc_hash::FxHashSet;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
-use std::io::{self, IsTerminal};
+use std::io::{self, IsTerminal, Write};
 #[cfg(unix)]
 use std::os::unix;
 #[cfg(unix)]
@@ -30,6 +30,7 @@ use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf, absolute};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(unix)]
 use crate::hardlink::{
@@ -38,7 +39,9 @@ use crate::hardlink::{
 };
 use uucore::backup_control::{self, backup_would_destroy_source};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::error::{
+    FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code, strip_errno,
+};
 #[cfg(unix)]
 use uucore::fs::display_permissions_unix;
 use uucore::fs::{
@@ -55,7 +58,7 @@ use uucore::update_control;
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
 // requires these enums
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
-use uucore::{format_usage, prompt_yes, show};
+use uucore::{format_usage, prompt_yes, show, show_error};
 
 use fs_extra::dir::get_size as dir_get_size;
 
@@ -585,10 +588,48 @@ fn handle_multiple_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
     move_files_into_dir(sources, target_dir, opts)
 }
 
+/// Write one verbose/debug status line to standard output, turning a write
+/// failure (e.g. a full device or a closed pipe) into an error instead of
+/// panicking like `println!` would.
+fn write_verbose_line(message: &str) -> UResult<()> {
+    writeln!(io::stdout().lock(), "{message}").map_err(|err| {
+        USimpleError::new(
+            1,
+            translate!("mv-error-standard-output", "error" => strip_errno(&err)),
+        )
+    })?;
+    Ok(())
+}
+
+/// Set once a status-line write failure has happened. Like GNU, a broken
+/// standard output neither interrupts the move nor is reported more than
+/// once, but it does make `mv` exit with a failure status.
+static VERBOSE_WRITE_FAILED: AtomicBool = AtomicBool::new(false);
+
+/// Helper function to report a verbose output write error, at most once
+fn report_verbose_write_error(result: UResult<()>) {
+    if let Err(e) = result
+        && !VERBOSE_WRITE_FAILED.swap(true, Ordering::Relaxed)
+    {
+        show_error!("{e}");
+    }
+}
+
 /// Execute the mv command. This moves 'source' to 'target', where
 /// 'target' is a directory. If 'target' does not exist, and source is a single
 /// file or directory, then 'source' will be renamed to 'target'.
 pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
+    VERBOSE_WRITE_FAILED.store(false, Ordering::Relaxed);
+    let result = dispatch_mv(files, opts);
+    if result.is_ok() && VERBOSE_WRITE_FAILED.load(Ordering::Relaxed) {
+        // The filesystem operations all succeeded, but a status line could
+        // not be written; exit with a failure status.
+        return Err(1.into());
+    }
+    result
+}
+
+fn dispatch_mv(files: &[OsString], opts: &Options) -> UResult<()> {
     let paths = parse_paths(files, opts);
 
     if opts.exchange {
@@ -660,10 +701,11 @@ fn exchange_two_paths(from: &Path, to: &Path, opts: &Options) -> UResult<()> {
             || translate!("mv-error-cannot-move", "source" => from.quote(), "target" => to.quote()),
         )?;
     if opts.verbose {
-        println!(
-            "{}",
-            translate!("mv-verbose-exchanged", "from" => from.quote(), "to" => to.quote())
-        );
+        report_verbose_write_error(write_verbose_line(&translate!(
+            "mv-verbose-exchanged",
+            "from" => from.quote(),
+            "to" => to.quote()
+        )));
     }
     Ok(())
 }
@@ -809,7 +851,10 @@ fn rename(
     if to.exists() {
         if opts.update == UpdateMode::None {
             if opts.debug {
-                println!("{}", translate!("mv-debug-skipped", "target" => to.quote()));
+                report_verbose_write_error(write_verbose_line(&translate!(
+                    "mv-debug-skipped",
+                    "target" => to.quote()
+                )));
             }
             return Ok(());
         }
@@ -828,7 +873,10 @@ fn rename(
         match opts.overwrite {
             OverwriteMode::NoClobber => {
                 if opts.debug {
-                    println!("{}", translate!("mv-debug-skipped", "target" => to.quote()));
+                    report_verbose_write_error(write_verbose_line(&translate!(
+                        "mv-debug-skipped",
+                        "target" => to.quote()
+                    )));
                 }
                 return Ok(());
             }
@@ -902,9 +950,9 @@ fn rename(
 
         match display_manager {
             Some(pb) => pb.suspend(|| {
-                println!("{message}");
+                report_verbose_write_error(write_verbose_line(&message));
             }),
-            None => println!("{message}"),
+            None => report_verbose_write_error(write_verbose_line(&message)),
         }
     }
     Ok(())
@@ -1282,9 +1330,9 @@ fn copy_dir_contents_recursive(
                 translate!("mv-verbose-renamed", "from" => from.quote(), "to" => to.quote());
             match display_manager {
                 Some(pb) => pb.suspend(|| {
-                    println!("{message}");
+                    report_verbose_write_error(write_verbose_line(&message));
                 }),
-                None => println!("{message}"),
+                None => report_verbose_write_error(write_verbose_line(&message)),
             }
         }
     };
