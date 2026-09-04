@@ -470,7 +470,7 @@ fn test_underflow_relative_size() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-s-1", FILE1]).succeeds().no_output();
     assert!(at.file_exists(FILE1));
-    assert!(at.read_bytes(FILE1).is_empty());
+    assert_eq!(at.read_bytes(FILE1), [] as [_; 0]);
 }
 
 #[test]
@@ -478,7 +478,7 @@ fn test_negative_size_with_space() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-s", "-1", FILE1]).succeeds().no_output();
     assert!(at.file_exists(FILE1));
-    assert!(at.read_bytes(FILE1).is_empty());
+    assert_eq!(at.read_bytes(FILE1), [] as [_; 0]);
 }
 
 #[cfg(not(windows))]

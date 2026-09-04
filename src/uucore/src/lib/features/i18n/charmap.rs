@@ -69,7 +69,7 @@ impl Encoding {
     /// `bytes.len()`, and never `0` for a non-empty slice.
     #[inline]
     pub fn char_len(self, bytes: &[u8]) -> usize {
-        debug_assert!(!bytes.is_empty());
+        debug_assert_ne!(bytes, []);
         let b0 = bytes[0];
         if b0 <= 0x7F {
             return 1;

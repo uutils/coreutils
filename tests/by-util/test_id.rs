@@ -161,7 +161,7 @@ fn test_id_groups_ordering() {
 
     let groups = ts.ucmd().arg("-G").succeeds().stdout_move_str();
     let mut from_flag: Vec<&str> = groups.split_whitespace().collect();
-    assert!(!from_flag.is_empty());
+    assert_ne!(from_flag, [] as [&str; 0]);
 
     // `-G` heads with the real gid
     let rgid = ts.ucmd().args(&["-g", "-r"]).succeeds().stdout_move_str();

@@ -963,6 +963,6 @@ mod tests {
         let (c, a, i) = extract_negative_modes(["--", "-r", "file"].iter().map(OsString::from));
         assert_eq!(c, None);
         assert_eq!(a, ["--", "-r", "file"]);
-        assert!(i.is_empty());
+        assert_eq!(i, [] as [_; 0]);
     }
 }

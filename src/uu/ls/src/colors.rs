@@ -142,7 +142,7 @@ impl<'a> StyleManager<'a> {
         style_code: &mut String,
     ) {
         if let Some(raw) = self.indicator_codes.get(&indicator).cloned() {
-            debug_assert!(!raw.is_empty());
+            debug_assert_ne!(raw, "");
             style_code.push_str(self.reset(!self.initial_reset_is_done));
             style_code.push_str(ANSI_CSI);
             style_code.push_str(&raw);
