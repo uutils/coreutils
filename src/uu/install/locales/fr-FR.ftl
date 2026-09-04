@@ -44,7 +44,7 @@ install-error-override-directory-failed = impossible d'écraser le répertoire {
 install-error-same-file = { $file1 } et { $file2 } sont le même fichier
 install-error-extra-operand = opérande supplémentaire { $operand }
   { $usage }
-install-error-invalid-mode = Chaîne de mode invalide : { $error }
+install-error-invalid-mode = mode invalide '{ $mode }'
 install-error-mutually-exclusive-target = Les options --target-directory et --no-target-directory sont mutuellement exclusives
 install-error-mutually-exclusive-compare-strip = Les options --compare et --strip sont mutuellement exclusives
 install-error-missing-file-operand = opérande de fichier manquant

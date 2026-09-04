@@ -28,7 +28,7 @@ mknod-help-context = comme -Z, ou si CTX est spécifié, définir le contexte de
 # Messages d'erreur
 mknod-error-fifo-no-major-minor = Les fifos n'ont pas de numéros de périphérique majeur et mineur.
 mknod-error-special-require-major-minor = Les fichiers spéciaux nécessitent des numéros de périphérique majeur et mineur.
-mknod-error-invalid-mode = mode invalide ({ $error })
+mknod-error-invalid-mode = mode invalide
 mknod-error-mode-permission-bits-only = le mode ne doit spécifier que les bits de permission de fichier
 mknod-error-missing-device-type = type de périphérique manquant
 mknod-error-invalid-device-type = type de périphérique invalide { $type }
