@@ -131,19 +131,18 @@ impl ModeError {
     /// The caret label for this error, translated, and the advice that goes
     /// under it.
     ///
-    /// Labelled only where a label would add to the message, per the
-    /// convention in [`crate::diagnostics`].
+    /// The headline callers show is the same for every `ModeError` — GNU
+    /// itself only ever says "invalid mode: 'WHOLE_MODE'" — so the detail
+    /// that used to live there moves down to the label instead.
     fn describe(&self) -> (Option<String>, Option<String>) {
         let label = match self.kind {
-            // The message already names the expected operators.
-            ModeErrorKind::InvalidOperator => None,
-            ModeErrorKind::MissingOperator => Some("mode-diag-label-missing-operator"),
-            ModeErrorKind::InvalidNumber => Some("mode-diag-label-invalid-number"),
+            // `self.message` already names the operator that was expected
+            // and the one that was found instead.
+            ModeErrorKind::InvalidOperator => Some(self.message.clone()),
+            ModeErrorKind::MissingOperator => Some(translate!("mode-diag-label-missing-operator")),
+            ModeErrorKind::InvalidNumber => Some(translate!("mode-diag-label-invalid-number")),
         };
-        (
-            label.map(|label| translate!(label)),
-            Some(translate!("mode-diag-help-syntax")),
-        )
+        (label, Some(translate!("mode-diag-help-syntax")))
     }
 
     /// Where this error sits inside the whole mode, given where the clause it

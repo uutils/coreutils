@@ -15,6 +15,7 @@ chmod-error-permission-denied = cannot access {$file}: Permission denied
 chmod-error-new-permissions = {$file}: new permissions are {$actual}, not {$expected}
 chmod-error-changing-permissions = changing permissions of {$file}: {$err}
 chmod-error-missing-operand = missing operand
+chmod-error-invalid-mode = invalid mode: '{$mode}'
 
 # Help messages
 chmod-help-print-help = Print help information.
