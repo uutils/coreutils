@@ -18,7 +18,7 @@ truncate-after-help = TAILLE est un entier avec un préfixe optionnel et une uni
       '%' => arrondir vers le haut au multiple de
 
 # Messages d'aide
-truncate-help-io-blocks = traiter TAILLE comme le nombre de blocs I/O du fichier plutôt que des octets (NON IMPLÉMENTÉ)
+truncate-help-io-blocks = traiter TAILLE comme le nombre de blocs I/O du fichier plutôt que des octets
 truncate-help-no-create = ne pas créer les fichiers qui n'existent pas
 truncate-help-reference = baser la taille de chaque fichier sur la taille de RFICHIER
 truncate-help-size = définir ou ajuster la taille de chaque fichier selon TAILLE, qui est en octets sauf si --io-blocks est spécifié

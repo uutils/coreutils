@@ -862,7 +862,7 @@ fn test_touch_dash_updates_stdout_file() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_touch_trailing_slash() {
     let file = "no-file/";
     new_ucmd!().args(&[file]).fails().stderr_only(format!(
@@ -871,7 +871,7 @@ fn test_touch_trailing_slash() {
 }
 
 #[test]
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn test_touch_trailing_slash_windows() {
     let file = "no-file/";
     new_ucmd!()
@@ -1001,7 +1001,7 @@ fn test_touch_trailing_slash_no_create() {
     ucmd.args(&["-c", "loop/"]).fails_with_code(1);
     assert!(!at.file_exists("loop"));
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(target_vendor = "apple"))]
     // MacOS supports trailing slash for symlinks to files
     {
         let (at, mut ucmd) = at_and_ucmd!();

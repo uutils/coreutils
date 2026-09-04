@@ -144,6 +144,74 @@ fn test_negative_padding() {
 }
 
 #[test]
+fn test_negative_padding_as_separate_arg() {
+    // A negative padding value passed as its own argument (not attached
+    // with `=`) must not be mistaken for a new, unrecognized flag.
+    new_ucmd!()
+        .args(&["--from=si", "--padding", "-8"])
+        .pipe_in("1K\n1.1M\n0.1G")
+        .succeeds()
+        .stdout_is("1000    \n1100000 \n100000000");
+}
+
+#[test]
+fn test_suffix_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading suffix value passed as its own argument (not
+    // attached with `=`) must not be mistaken for a new, unrecognized
+    // flag.
+    new_ucmd!()
+        .args(&["--suffix", "-x"])
+        .pipe_in("5\n")
+        .succeeds()
+        .stdout_is("5-x\n");
+}
+
+#[test]
+fn test_delimiter_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading delimiter value passed as its own argument (not
+    // attached with `-d-x`/`=`) must not be mistaken for a new,
+    // unrecognized flag.
+    new_ucmd!()
+        .args(&["-d", "-x", "--field=1"])
+        .fails()
+        .stderr_contains("the delimiter must be a single character");
+}
+
+#[test]
+fn test_unit_size_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading unit size passed as its own argument must reach
+    // our own validation instead of being read as an unknown flag.
+    for opt in ["--from-unit", "--to-unit"] {
+        new_ucmd!()
+            .args(&[opt, "-1"])
+            .pipe_in("5\n")
+            .fails()
+            .stderr_contains("invalid unit size: '-1'");
+    }
+}
+
+#[test]
+fn test_unit_hyphen_leading_as_separate_arg() {
+    // Same for the --from/--to units.
+    for opt in ["--from", "--to"] {
+        new_ucmd!()
+            .args(&[opt, "-x"])
+            .pipe_in("5\n")
+            .fails()
+            .stderr_contains("invalid argument '-x' for '--");
+    }
+}
+
+#[test]
+fn test_unit_separator_hyphen_leading_as_separate_arg() {
+    new_ucmd!()
+        .args(&["--to=si", "--unit-separator", "-"])
+        .pipe_in("1000\n")
+        .succeeds()
+        .stdout_is("1.0-k\n");
+}
+
+#[test]
 fn test_header() {
     new_ucmd!()
         .args(&["--from=si", "--header=2"])

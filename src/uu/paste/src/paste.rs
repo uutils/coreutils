@@ -48,6 +48,8 @@ pub fn uu_app() -> Command {
         .about(translate!("paste-about"))
         .override_usage(format_usage(&translate!("paste-usage")))
         .infer_long_args(true)
+        // GNU lets a later -d override an earlier one.
+        .args_override_self(true)
         .arg(
             Arg::new(options::SERIAL)
                 .long(options::SERIAL)
@@ -63,6 +65,7 @@ pub fn uu_app() -> Command {
                 .value_name("LIST")
                 .default_value("\t")
                 .hide_default_value(true)
+                .allow_hyphen_values(true)
                 .value_parser(clap::value_parser!(OsString)),
         )
         .arg(

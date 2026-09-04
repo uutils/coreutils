@@ -63,7 +63,8 @@ name = "ls_bench"
 harness = false
 
 [features]
-feat_selinux = ["selinux", "uucore/selinux"]
+diagnostics = ["uucore/diagnostics"]
+selinux = ["dep:selinux", "uucore/selinux"]
 smack = ["uucore/smack"]
 
 [lints]

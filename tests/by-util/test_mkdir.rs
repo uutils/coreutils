@@ -11,10 +11,7 @@
 use libc::mode_t;
 #[cfg(not(windows))]
 use std::os::unix::fs::PermissionsExt;
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
 #[cfg(not(windows))]
 use uutests::at_and_ucmd;
@@ -538,10 +535,7 @@ fn test_empty_argument() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_selinux() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -565,10 +559,7 @@ fn test_selinux() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_selinux_invalid() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1132,5 +1123,57 @@ mod diagnostics {
 
         assert!(stderr.starts_with("mkdir: "), "{stderr}");
         assert!(!stderr.contains(":1:"), "{stderr}");
+    }
+}
+
+#[test]
+fn test_mkdir_concurrent_non_recursive() {
+    // Test concurrent mkdir operations without -p: exactly one process must succeed per round
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::thread;
+
+    for round in 0..10 {
+        let scene = TestScenario::new(util_name!());
+        let target_dir = scene.fixtures.plus(format!("concurrent_target_{round}"));
+        let path_str = target_dir.to_string_lossy().to_string();
+        let bin_path = scene.bin_path.clone();
+
+        let winners = Arc::new(AtomicUsize::new(0));
+        let mut handles = vec![];
+
+        for _ in 0..16 {
+            let path_clone = path_str.clone();
+            let bin_path_clone = bin_path.clone();
+            let winners_clone = Arc::clone(&winners);
+
+            let handle = thread::spawn(move || {
+                let result = std::process::Command::new(&bin_path_clone)
+                    .arg("mkdir")
+                    .arg(&path_clone)
+                    .current_dir(std::env::current_dir().unwrap())
+                    .output()
+                    .expect("failed to run binary");
+                if result.status.success() {
+                    winners_clone.fetch_add(1, Ordering::SeqCst);
+                }
+            });
+            handles.push(handle);
+        }
+
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        assert_eq!(
+            winners.load(Ordering::SeqCst),
+            1,
+            "round {round}: expected exactly 1 winner for concurrent non-recursive mkdir"
+        );
+        assert!(
+            scene
+                .fixtures
+                .dir_exists(format!("concurrent_target_{round}"))
+        );
     }
 }
