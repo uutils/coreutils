@@ -171,8 +171,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let io_blocks = matches.get_flag(options::IO_BLOCKS);
     let no_create = matches.get_flag(options::NO_CREATE);
     let reference = matches
-        .get_one::<String>(options::REFERENCE)
-        .map(String::from);
+        .get_one::<OsString>(options::REFERENCE)
+        .map(OsString::from);
     let size = matches.get_one::<String>(options::SIZE).map(String::from);
 
     truncate(
@@ -217,7 +217,8 @@ pub fn uu_app() -> Command {
                 .required_unless_present(options::SIZE)
                 .help(translate!("truncate-help-reference"))
                 .value_name("RFILE")
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::SIZE)
@@ -367,7 +368,7 @@ fn truncate(
     filenames: &[OsString],
     no_create: bool,
     io_blocks: bool,
-    reference: Option<String>,
+    reference: Option<OsString>,
     size: Option<String>,
     diag_args: Option<&[OsString]>,
 ) -> UResult<()> {
