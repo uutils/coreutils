@@ -278,6 +278,23 @@ fn test_x_multiplier() {
 }
 
 #[test]
+fn test_zero_factor_skips_the_rest_of_the_multiplier() {
+    // A zero factor makes the whole expression zero, so the factor after it
+    // is never parsed and an oversized one must not be reported as an error.
+    for arg in ["count", "seek", "skip"] {
+        new_ucmd!()
+            .args(&[
+                format!("{arg}=00x9999999999999999999999999999999999999999999999999999999999999")
+                    .as_str(),
+                "status=none",
+            ])
+            .pipe_in("")
+            .succeeds()
+            .no_output();
+    }
+}
+
+#[test]
 fn test_zero_multiplier_warning() {
     for arg in ["count", "seek", "skip"] {
         new_ucmd!()

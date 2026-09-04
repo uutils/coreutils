@@ -576,12 +576,24 @@ pub fn parse_bytes_with_opt_multiplier(s: &str) -> Result<u64, ParseError> {
     if parts.len() == 1 {
         parse_bytes_no_x(s, parts[0])
     } else {
-        let mut total: u64 = 1;
+        // The warning is purely lexical, so it is reported for every "0"
+        // factor even though the parsing below stops at the first zero.
         for (i, part) in parts.iter().enumerate() {
             if *part == "0" && i != parts.len() - 1 {
                 show_zero_multiplier_warning();
             }
+        }
+
+        let mut total: u64 = 1;
+        for part in &parts {
             let num = parse_bytes_no_x(s, part)?;
+            // GNU stops at a zero factor and never looks at the rest of the
+            // expression, so the remaining factors must not be parsed: one
+            // of them not fitting in a u64 would otherwise be reported as an
+            // error even though the result is already known to be zero.
+            if num == 0 {
+                return Ok(0);
+            }
             total = total
                 .checked_mul(num)
                 .ok_or_else(|| ParseError::InvalidNumber(s.to_string()))?;
@@ -687,6 +699,31 @@ mod tests {
             2 * 2 * (3 * 2) // (1 * 2) * (2 * 1) * (3 * 2)
         );
     }
+
+    #[test]
+    fn test_parse_bytes_with_opt_multiplier_zero_factor() {
+        // GNU stops at a zero factor and never looks at the rest of the
+        // expression, so a later factor that does not fit in a u64 must not
+        // turn this into an error.
+        assert_eq!(parse_bytes_with_opt_multiplier("0x5").unwrap(), 0);
+        assert_eq!(parse_bytes_with_opt_multiplier("00x5").unwrap(), 0);
+        assert_eq!(
+            parse_bytes_with_opt_multiplier(&format!("0x{BIG}")).unwrap(),
+            0
+        );
+        assert_eq!(
+            parse_bytes_with_opt_multiplier(&format!("00x{BIG}")).unwrap(),
+            0
+        );
+        // The zero does not have to be the leading factor.
+        assert_eq!(
+            parse_bytes_with_opt_multiplier(&format!("2x0x{BIG}")).unwrap(),
+            0
+        );
+        // A trailing zero is still a zero result.
+        assert_eq!(parse_bytes_with_opt_multiplier("5x0").unwrap(), 0);
+    }
+
     #[test]
     fn test_parse_n() {
         for arg in ["1x8x4", "1c", "123b", "123w"] {
