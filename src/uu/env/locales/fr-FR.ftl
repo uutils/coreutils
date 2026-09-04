@@ -36,8 +36,6 @@ env-error-cannot-unset-invalid = impossible de supprimer { $name } : Argument in
 env-error-must-specify-command-with-chdir = doit spécifier une commande avec --chdir (-C)
 env-error-cannot-change-directory = impossible de changer de répertoire vers { $directory } : { $error }
 env-error-argv0-not-supported = --argv0 n'est actuellement pas pris en charge sur cette plateforme
-env-error-permission-denied = { $program } : Permission refusée
-env-error-unknown = erreur inconnue : { $error }
 env-error-failed-set-signal-action = échec de la définition de l'action du signal pour le signal { $signal } : { $error }
 
 # Messages d'avertissement

@@ -17,7 +17,7 @@ use simd::process_input;
 use std::ffi::OsString;
 use std::io::{stdin, stdout};
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError, UUsageError, quiet_if_reported};
+use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::fs::is_stdin_directory;
 use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, show};
@@ -46,14 +46,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // pattern API on OsStr
     let sets: Vec<_> = matches
         .get_many::<OsString>(options::SETS)
-        .into_iter()
-        .flatten()
+        .ok_or_else(|| UUsageError::new(1, translate!("tr-error-missing-operand")))?
         .map(ToOwned::to_owned)
         .collect();
-
-    if sets.is_empty() {
-        return Err(UUsageError::new(1, translate!("tr-error-missing-operand")));
-    }
 
     let sets_len = sets.len();
 
@@ -118,10 +113,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (set1, set2) = match solved {
         Ok(sets_solved) => sets_solved,
         Err(error) => {
-            let reported = set_args
-                .as_ref()
-                .is_some_and(|args| diagnostics::render(args, &sets, &error));
-            return Err(quiet_if_reported(reported, error));
+            return Err(uucore::diagnostics::error_after_report(
+                set_args.as_deref(),
+                error,
+                |args, error| diagnostics::render(args, &sets, error),
+            ));
         }
     };
 

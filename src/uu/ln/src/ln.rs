@@ -66,7 +66,7 @@ pub enum LnError {
     #[error("{}", translate!("ln-error-missing-destination", "operand" => _0.quote()))]
     MissingDestination(PathBuf),
 
-    #[error("{}", translate!("ln-error-extra-operand", "operand" => _0.quote(), "program" => _1.clone()))]
+    #[error("{}", translate!("ln-error-extra-operand", "operand" => _0.quote(), "program" => _1))]
     ExtraOperand(OsString, String),
 
     #[error("{}", translate!("ln-failed-to-create-hard-link-dir", "source" => _0.to_string_lossy()))]
@@ -263,41 +263,30 @@ pub fn uu_app() -> Command {
         )
 }
 
-/// Executes the `ln` utility with the given paths and settings.
-///
-/// This is made public to allow other apps to use `ln` as a library.
-pub fn exec(files: &[PathBuf], settings: &Settings) -> LnResult<()> {
+fn exec(files: &[PathBuf], settings: &Settings) -> LnResult<()> {
     // Handle cases where we create links in a directory first.
     if let Some(ref target_path) = settings.target_dir {
         // 4th form: a directory is specified by -t.
         return link_files_in_dir(files, target_path, settings);
     }
-    if !settings.no_target_dir {
-        if files.len() == 1 {
-            // 2nd form: the target directory is the current directory.
-            return link_files_in_dir(files, &PathBuf::from("."), settings);
-        }
-        let last_file = &PathBuf::from(files.last().unwrap());
-        if files.len() > 2 || last_file.is_dir() {
-            // 3rd form: create links in the last argument.
-            return link_files_in_dir(&files[0..files.len() - 1], last_file, settings);
-        }
-    }
 
-    // 1st form. Now there should be only two operands, but if -T is
-    // specified we may have a wrong number of operands.
-    if files.len() == 1 {
-        return Err(LnError::MissingDestination(files[0].clone()));
-    }
-    if files.len() > 2 {
-        return Err(LnError::ExtraOperand(
-            files[2].clone().into(),
+    // if -T is specified we may have a wrong number of operands.
+    match files.split_last().expect("clap rejects empty") {
+        // the target directory is the current directory
+        (_, []) if !settings.no_target_dir => {
+            link_files_in_dir(files, &PathBuf::from("."), settings)
+        }
+        // create links in the last argument
+        (last, rest) if !settings.no_target_dir && (rest.len() > 1 || last.is_dir()) => {
+            link_files_in_dir(rest, last, settings)
+        }
+        (f0, []) => Err(LnError::MissingDestination(f0.clone())),
+        (last, [f]) => link(f, last, settings),
+        (extra, [_, _]) | (_, [_, _, extra, ..]) => Err(LnError::ExtraOperand(
+            extra.into(),
             uucore::execution_phrase().to_string(),
-        ));
+        )),
     }
-    assert!(!files.is_empty());
-
-    link(&files[0], &files[1], settings)
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -361,7 +350,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
             all_successful = false;
         }
 
-        linked_destinations.insert(targetpath.clone());
+        linked_destinations.insert(targetpath);
     }
     if all_successful {
         Ok(())
@@ -398,8 +387,11 @@ fn is_same_entry(src: &Path, dst: &Path) -> bool {
     }
 }
 
+/// Create symlink to src at dst with the given settings
+///
+/// This is made public to allow other apps to use `ln` as a library.
 #[allow(clippy::cognitive_complexity)]
-fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
+pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
     let mut backup_path = None;
     let source: Cow<'_, Path> = if settings.relative {
         relative_path(src, dst)

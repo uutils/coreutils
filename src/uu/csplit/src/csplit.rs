@@ -21,6 +21,7 @@ use uucore::error::{FromIo, UResult};
 use uucore::format_usage;
 
 mod csplit_error;
+mod diagnostics;
 mod patterns;
 mod split_name;
 
@@ -325,7 +326,7 @@ impl SplitWriter<'_> {
             if self.options.elide_empty_files && self.size == 0 {
                 self.counter -= 1;
             } else if !self.options.quiet {
-                println!("{}", self.size);
+                writeln!(io::stdout(), "{}", self.size).map_err(CsplitError::IoError)?;
             }
         }
         Ok(())
@@ -624,6 +625,10 @@ where
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let args: Vec<OsString> = args.collect();
+    // Kept for the caret in pattern diagnostics, which needs the operands as
+    // typed.
+    let diag_args = uucore::diagnostics::capture(&args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     // get the file to split
@@ -635,15 +640,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap()
         .map(Borrow::borrow)
         .collect();
-    let options = CsplitOptions::new(&matches)?;
+    let operands = diagnostics::Operands {
+        patterns: &patterns,
+        suffix_format: matches
+            .get_one::<String>(options::SUFFIX_FORMAT)
+            .map(String::as_str),
+        digits: matches
+            .get_one::<String>(options::DIGITS)
+            .map(String::as_str),
+    };
+    let report = |error| {
+        uucore::diagnostics::error_after_report(diag_args.as_deref(), error, |args, error| {
+            diagnostics::render(args, &operands, error)
+        })
+    };
+
+    let options = CsplitOptions::new(&matches).map_err(report)?;
     if file_name == "-" {
         let stdin = io::stdin();
-        Ok(csplit(&options, &patterns, stdin.lock())?)
+        csplit(&options, &patterns, stdin.lock()).map_err(report)?;
     } else {
         let file = File::open(file_name)
             .map_err_context(|| format!("cannot open {} for reading", file_name.quote()))?;
-        Ok(csplit(&options, &patterns, BufReader::new(file))?)
+        csplit(&options, &patterns, BufReader::new(file)).map_err(report)?;
     }
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
@@ -659,6 +680,7 @@ pub fn uu_app() -> Command {
                 .short('b')
                 .long(options::SUFFIX_FORMAT)
                 .value_name("FORMAT")
+                .allow_hyphen_values(true)
                 .help(translate!("csplit-help-suffix-format")),
         )
         .arg(

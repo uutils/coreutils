@@ -2,10 +2,10 @@ name: CICD
 
 # spell-checker:ignore (abbrev/names) CACHEDIR CICD CodeCOV MacOS MinGW MSVC musl taiki
 # spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS CLEVEL nodocs
-# spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata profraw
+# spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata profraw Cprofile
 # spell-checker:ignore (people) Peltoche rivy Anson dawidd
 # spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libcrypto libfuse libssl limactl nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache setfacl utmpdump xargs zstd
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest tempfile testsuite toybox uutils libsystemd codspeed wasip libexecinfo
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest tempfile testsuite toybox uutils libsystemd codspeed wasip libexecinfo oniguruma sysroot
 
 env:
   PROJECT_NAME: coreutils
@@ -368,29 +368,40 @@ jobs:
       matrix:
         job:
           # - { os , target , default-features,  features , use-cross , toolchain, skip-tests, workspace-tests, skip-package, skip-publish }
+          # `pgo: PGO` marks a published target whose instrumented binary the
+          # runner can execute, which is what training a profile needs. It is
+          # therefore off for the `cross` targets (no emulator) and the wasm
+          # ones (no runtime). The value is spelled `PGO` because GitHub appends
+          # the matrix values to the job title, so those jobs read as
+          # "Build (..., x86_64-unknown-linux-gnu, ..., PGO)".
           - { os: ubuntu-latest  , target: arm-unknown-linux-gnueabihf , features: feat_os_unix_gnueabihf , use-cross: use-cross , skip-tests: true }
-          - { os: ubuntu-24.04-arm  , target: aarch64-unknown-linux-gnu   , features: feat_os_unix_gnueabihf }
+          - { os: ubuntu-24.04-arm  , target: aarch64-unknown-linux-gnu   , features: feat_os_unix_gnueabihf, pgo: PGO }
           - { os: ubuntu-latest  , target: aarch64-unknown-linux-musl  , features: feat_os_unix_musl , use-cross: use-cross , skip-tests: true }
           - { os: ubuntu-latest  , target: riscv64gc-unknown-linux-musl  , features: feat_os_unix_musl , use-cross: use-cross , skip-tests: true }
           # - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: feat_selinux           , use-cross: use-cross }
           - { os: ubuntu-latest  , target: i686-unknown-linux-gnu      , features: "feat_os_unix,test_risky_names", use-cross: use-cross }
           - { os: ubuntu-latest  , target: i686-unknown-linux-musl     , features: feat_os_unix_musl , use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,test_risky_names", use-cross: use-cross, skip-publish: true }
-          - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,uudoc"   , use-cross: no, workspace-tests: true }
+          - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,uudoc"   , use-cross: no, workspace-tests: true, pgo: PGO }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl , use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-netbsd, features: "feat_os_unix", use-cross: use-cross , skip-tests: true , check-only: true }
           # - { os: ubuntu-latest  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer , skip-tests: true , check-only: true }
           - { os: ubuntu-latest  , target: wasm32-wasip1, default-features: false, features: feat_wasm, skip-tests: true }
           - { os: ubuntu-latest  , target: wasm32-wasip2, default-features: false, features: feat_wasm, skip-tests: true }
-          - { os: macos-latest   , target: aarch64-apple-darwin        , features: feat_os_unix, workspace-tests: true } # M1 CPU
+          - { os: macos-latest   , target: aarch64-apple-darwin        , features: feat_os_unix, workspace-tests: true, pgo: PGO } # M1 CPU
           # PR #7964: chcon should not break build without the feature. cargo check is enough to detect it.
           - { os: macos-latest   , target: aarch64-apple-darwin        , workspace-tests: true, check-only: true } # M1 CPU
-          - { os: macos-latest   , target: x86_64-apple-darwin         , features: feat_os_unix, workspace-tests: true }
+          - { os: macos-latest   , target: x86_64-apple-darwin         , features: feat_os_unix, workspace-tests: true, pgo: PGO }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
           # msvc and gnu works on the same target. So publishing msvc is enough.
           - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows, skip-publish: true }
-          - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
-          - { os: windows-latest , target: aarch64-pc-windows-msvc     , features: feat_os_windows, use-cross: use-cross , skip-tests: true }
+          - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows, pgo: PGO }
+          # No `pgo` here: on aarch64-pc-windows-msvc the instrumented binary
+          # writes .profraw files whose name table llvm-profdata rejects with
+          # "symbol name is empty", so every profile is unusable. Upstream bugs:
+          # https://github.com/rust-lang/rust/issues/150123 (same message with
+          # `-C instrument-coverage`) and https://github.com/rust-lang/rust/issues/156675.
+          - { os: windows-11-arm , target: aarch64-pc-windows-msvc     , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -543,6 +554,15 @@ jobs:
             sudo apt-get -y update
             sudo apt-get -y install fuse3 libfuse-dev
           ;;
+          wasm32-wasi*)
+            # expr depends on oniguruma, a C library, so cross-compiling needs a WASI sysroot
+            WASI_SDK=wasi-sdk-25.0-x86_64-linux
+            curl -sSfL "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-25/${WASI_SDK}.tar.gz" | tar -xz -C "$HOME"
+            for abi in wasip1 wasip2; do
+              echo "CC_wasm32_${abi}=$HOME/${WASI_SDK}/bin/clang" >> $GITHUB_ENV
+              echo "AR_wasm32_${abi}=$HOME/${WASI_SDK}/bin/llvm-ar" >> $GITHUB_ENV
+            done
+          ;;
         esac
         case '${{ matrix.job.os }}' in
           macos-latest) brew install coreutils ;; # needed for testing
@@ -626,6 +646,35 @@ jobs:
         ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} -p coreutils
       env:
         RUST_BACKTRACE: "1"
+    - name: Install llvm-tools (PGO)
+      if: matrix.job.pgo
+      shell: bash
+      run: rustup component add llvm-tools
+    - name: Train PGO profiles
+      if: matrix.job.pgo
+      shell: bash
+      run: |
+        ## The target dir is relative: on Windows `github.workspace` is a
+        ## backslash path that git-bash would not resolve. The script writes the
+        ## profile's absolute path (natively spelled) to profdata-path.txt.
+        ./util/build-pgo.sh \
+          --target "${{ matrix.job.target }}" \
+          --target-dir target/coreutils-pgo \
+          --features "${{ matrix.job.features }}" \
+          --train-only
+        echo "RUSTFLAGS=${RUSTFLAGS:+${RUSTFLAGS} }-Cprofile-use=$(cat target/coreutils-pgo/profdata-path.txt)" >> "$GITHUB_ENV"
+    - name: Verify PGO is applied to the published build
+      if: matrix.job.pgo
+      shell: bash
+      run: |
+        ## The release artifact must be the PGO build: if RUSTFLAGS did not
+        ## survive GITHUB_ENV we would silently publish an unoptimized binary.
+        echo "RUSTFLAGS=${RUSTFLAGS}"
+        case "${RUSTFLAGS}" in
+          *-Cprofile-use=*) ;;
+          *) echo "::error::-Cprofile-use missing from RUSTFLAGS" ; exit 1 ;;
+        esac
+        test -s "$(cat target/coreutils-pgo/profdata-path.txt)"
     - name: Build coreutils
       shell: bash
       if: matrix.job.skip-publish != true && matrix.job.check-only != true && matrix.job.target != 'x86_64-pc-windows-msvc'
@@ -681,6 +730,7 @@ jobs:
       if: steps.vars.outputs.DEPLOY && matrix.job.skip-publish != true && matrix.job.check-only != true
       with:
         draft: true
+        overwrite_files: true
         files: |
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
           docs.tar.zst
@@ -695,6 +745,7 @@ jobs:
           commit: ${{ github.sha }}
         draft: false
         prerelease: true
+        overwrite_files: true
         files: |
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
           docs.tar.zst
@@ -852,7 +903,6 @@ jobs:
     - uses: actions/checkout@v7
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
@@ -910,7 +960,6 @@ jobs:
     - uses: actions/checkout@v7
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
@@ -994,7 +1043,6 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Build SELinux utilities as stubs
       run: cargo build -p uu_chcon -p uu_runcon
@@ -1016,7 +1064,6 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Install strace and libselinux headers (needed to build chcon)
       run: sudo apt-get update && sudo apt-get install -y strace libselinux1-dev
@@ -1024,6 +1071,40 @@ jobs:
       run: cargo build --profile=release-small -p uu_rm -p uu_chmod -p uu_chown -p uu_chgrp -p uu_mv -p uu_du -p uu_split -p uu_chcon
     - name: Run safe traversal verification
       run: ./util/check-safe-traversal.sh
+
+  test_libc_interposition:
+    name: libc Interposition Check
+    runs-on: ubuntu-latest
+    needs: [ min_version, deps ]
+
+    steps:
+    - uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+    - uses: Swatinem/rust-cache@v2
+    - name: Install fakeroot
+      run: sudo apt-get update && sudo apt-get install -y fakeroot
+    - name: Build utilities that must stay interposable
+      run: cargo build --profile=release-small -p uu_chmod -p uu_chown
+    - name: Run libc interposition verification
+      run: ./util/check-libc-interposition.sh
+
+  test_open_once:
+    name: Redundant Open Check
+    runs-on: ubuntu-latest
+    needs: [ min_version, deps ]
+
+    steps:
+    - uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+    - uses: Swatinem/rust-cache@v2
+    - name: Install strace
+      run: sudo apt-get update && sudo apt-get install -y strace
+    - name: Build utilities for redundant open checks
+      run: cargo build --profile=release-small -p uu_cp -p uu_mv
+    - name: Run redundant open verification
+      run: ./util/check-open-once.sh
 
   test_toctou:
     name: TOCTOU Security Check
@@ -1034,7 +1115,6 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Install strace
       run: sudo apt-get update && sudo apt-get install -y strace

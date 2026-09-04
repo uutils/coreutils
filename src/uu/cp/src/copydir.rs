@@ -44,7 +44,7 @@ struct DirNeedingPermissions {
 }
 
 /// Ensure a Windows path starts with a `\\?`.
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn adjust_canonicalization(p: &Path) -> Cow<'_, Path> {
     // In some cases, \\? can be missing on some Windows paths.  Add it at the
     // beginning unless the path is prefixed with a device namespace.
@@ -119,7 +119,11 @@ struct Context<'a> {
 
 impl<'a> Context<'a> {
     fn new(root: &'a Path, target: &'a Path) -> io::Result<Self> {
-        let current_dir = env::current_dir()?;
+        let current_dir = if root.is_absolute() {
+            PathBuf::new()
+        } else {
+            env::current_dir()?
+        };
         let root_path = current_dir.join(root);
         let target_is_file = target.is_file();
         let root_parent =

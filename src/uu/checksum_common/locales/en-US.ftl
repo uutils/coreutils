@@ -5,7 +5,6 @@ ck-common-help-algorithm = select the digest type to use. See DIGEST below
 ck-common-help-untagged = create a reversed style checksum, without digest type
 ck-common-help-tag-default = create a BSD style checksum (default)
 ck-common-help-tag = create a BSD style checksum
-ck-common-help-text = read in text mode (default)
 ck-common-help-length = digest length in bits; must not exceed the max size and must be a multiple of 8 for blake2b; must be 224, 256, 384, or 512 for sha2 or sha3
 ck-common-help-check = read checksums from the FILEs and check them
 ck-common-help-base64 = emit base64-encoded digests, not hexadecimal

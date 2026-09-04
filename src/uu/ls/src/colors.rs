@@ -205,10 +205,9 @@ impl<'a> StyleManager<'a> {
         self.current_style = Some(*new_style);
         let mut nu_a_style = new_style.to_nu_ansi_term_style();
         nu_a_style.prefix_with_reset = false;
-        let mut ret = nu_a_style.paint("").to_string();
-        // remove the suffix reset
-        ret.truncate(ret.len() - 4);
-        ret
+        // `prefix()` yields the escape sequence on its own, and an empty string
+        // for a style without any attribute, so there is no trailing reset to strip
+        nu_a_style.prefix().to_string()
     }
 
     pub(crate) fn is_current_style(&self, new_style: &Style) -> bool {
@@ -522,7 +521,7 @@ pub(crate) fn color_name(
     wrap: bool,
 ) -> OsString {
     // Check if the file has capabilities
-    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    #[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android"))))]
     {
         // Skip checking capabilities if LS_COLORS=ca=:
         let has_capabilities = style_manager
@@ -590,30 +589,30 @@ fn validate_ls_colors(ls_colors: &str) -> Result<(), LsColorsParseError> {
     let bytes = ls_colors.as_bytes();
     let mut idx = 0;
 
-    while idx < bytes.len() {
-        match bytes[idx] {
+    while let Some(&byte) = bytes.get(idx) {
+        match byte {
             b':' => {
                 idx += 1;
             }
             b'*' => {
                 idx += 1;
                 idx = parse_funky_string(bytes, idx, true)?;
-                if idx >= bytes.len() || bytes[idx] != b'=' {
+                if bytes.get(idx) != Some(&b'=') {
                     return Err(LsColorsParseError::InvalidSyntax);
                 }
                 idx += 1;
                 idx = parse_funky_string(bytes, idx, false)?;
-                if idx < bytes.len() && bytes[idx] == b':' {
+                if bytes.get(idx) == Some(&b':') {
                     idx += 1;
                 }
             }
             _ => {
-                if idx + 1 >= bytes.len() {
+                let Some(&byte_next) = bytes.get(idx + 1) else {
                     return Err(LsColorsParseError::InvalidSyntax);
-                }
-                let label = [bytes[idx], bytes[idx + 1]];
+                };
+                let label = [byte, byte_next];
                 idx += 2;
-                if idx >= bytes.len() || bytes[idx] != b'=' {
+                if bytes.get(idx) != Some(&b'=') {
                     return Err(LsColorsParseError::InvalidSyntax);
                 }
                 if !is_valid_ls_colors_prefix(label) {
@@ -622,7 +621,7 @@ fn validate_ls_colors(ls_colors: &str) -> Result<(), LsColorsParseError> {
                 }
                 idx += 1;
                 idx = parse_funky_string(bytes, idx, false)?;
-                if idx < bytes.len() && bytes[idx] == b':' {
+                if bytes.get(idx) == Some(&b':') {
                     idx += 1;
                 }
             }
@@ -781,7 +780,9 @@ fn parse_indicator_codes() -> (FxHashMap<Indicator, String>, bool) {
 }
 
 fn canonicalize_indicator_value(value: &str) -> Cow<'_, str> {
-    if value.len() == 1 && value.as_bytes()[0].is_ascii_digit() {
+    if let [first] = value.as_bytes()
+        && first.is_ascii_digit()
+    {
         let mut canonical = String::with_capacity(2);
         canonical.push('0');
         canonical.push_str(value);

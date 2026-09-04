@@ -12,6 +12,7 @@ use std::io::ErrorKind;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
+use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
@@ -22,7 +23,7 @@ use uucore::parser::parse_size::{
     ParseSizeError, Parser, allow_list_with_all_suffixes, size_offset,
 };
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 enum TruncateMode {
     Absolute(u64),
     Extend(u64),
@@ -40,6 +41,35 @@ enum SizeCalculationError {
 }
 
 impl TruncateMode {
+    fn scaled_by(&self, factor: u64) -> Result<Self, SizeCalculationError> {
+        let scale = |size: u64| {
+            size.checked_mul(factor)
+                .ok_or(SizeCalculationError::Overflow)
+        };
+
+        Ok(match self {
+            Self::Absolute(size) => Self::Absolute(scale(*size)?),
+            Self::Extend(size) => Self::Extend(scale(*size)?),
+            Self::Reduce(size) => Self::Reduce(scale(*size)?),
+            Self::AtMost(size) => Self::AtMost(scale(*size)?),
+            Self::AtLeast(size) => Self::AtLeast(scale(*size)?),
+            Self::RoundDown(size) => Self::RoundDown(scale(*size)?),
+            Self::RoundUp(size) => Self::RoundUp(scale(*size)?),
+        })
+    }
+
+    fn value(&self) -> u64 {
+        match self {
+            Self::Absolute(size)
+            | Self::Extend(size)
+            | Self::Reduce(size)
+            | Self::AtMost(size)
+            | Self::AtLeast(size)
+            | Self::RoundDown(size)
+            | Self::RoundUp(size) => *size,
+        }
+    }
+
     /// Compute a target size in bytes for this truncate mode.
     ///
     /// `fsize` is the size of the reference file, in bytes.
@@ -141,8 +171,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let io_blocks = matches.get_flag(options::IO_BLOCKS);
     let no_create = matches.get_flag(options::NO_CREATE);
     let reference = matches
-        .get_one::<String>(options::REFERENCE)
-        .map(String::from);
+        .get_one::<OsString>(options::REFERENCE)
+        .map(OsString::from);
     let size = matches.get_one::<String>(options::SIZE).map(String::from);
 
     truncate(
@@ -161,12 +191,15 @@ pub fn uu_app() -> Command {
         .about(translate!("truncate-about"))
         .override_usage(format_usage(&translate!("truncate-usage")))
         .after_help(translate!("truncate-after-help"))
-        .infer_long_args(true);
+        .infer_long_args(true)
+        // GNU lets a later -s override an earlier one.
+        .args_override_self(true);
     uucore::clap_localization::configure_localized_command(cmd)
         .arg(
             Arg::new(options::IO_BLOCKS)
                 .short('o')
                 .long(options::IO_BLOCKS)
+                .requires(options::SIZE)
                 .help(translate!("truncate-help-io-blocks"))
                 .action(ArgAction::SetTrue),
         )
@@ -184,7 +217,8 @@ pub fn uu_app() -> Command {
                 .required_unless_present(options::SIZE)
                 .help(translate!("truncate-help-reference"))
                 .value_name("RFILE")
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::SIZE)
@@ -228,9 +262,25 @@ fn do_file_truncate(filename: &Path, create: bool, size: u64) -> UResult<()> {
     )
 }
 
+/// Block size for file in question, or if file does not yet exist, for the
+/// parent directory of the file.
+fn io_block_size(path: &Path, metadata: Option<&std::fs::Metadata>) -> u64 {
+    metadata.map_or_else(
+        || {
+            let parent = path
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .unwrap_or_else(|| Path::new("."));
+            uucore::fs::sane_blksize::sane_blksize_from_path(parent)
+        },
+        uucore::fs::sane_blksize::sane_blksize_from_metadata,
+    )
+}
+
 fn file_truncate(
     filename: &OsString,
     no_create: bool,
+    io_blocks: bool,
     reference_size: Option<u64>,
     mode: &TruncateMode,
     size_argument: Option<&str>,
@@ -238,7 +288,8 @@ fn file_truncate(
     let path = Path::new(filename);
 
     // Get the length of the file.
-    let file_size = match metadata(path) {
+    let file_metadata = metadata(path);
+    let file_size = match file_metadata.as_ref() {
         Ok(metadata) => {
             // A pipe has no length. Do this check here to avoid duplicate `stat()` syscall.
             #[cfg(unix)]
@@ -258,6 +309,23 @@ fn file_truncate(
     // 1. The size of a given file
     // 2. The size of the file to be truncated if no reference has been provided.
     let actual_reference_size = reference_size.unwrap_or(file_size);
+
+    let mode = if io_blocks {
+        let factor = io_block_size(path, file_metadata.as_ref().ok());
+        mode.scaled_by(factor).map_err(|error| match error {
+            SizeCalculationError::Overflow => USimpleError::new(
+                1,
+                translate!(
+                    "truncate-error-io-block-mul-overflow",
+                    "num" => mode.value(),
+                    "factor" => factor
+                ),
+            ),
+            SizeCalculationError::DivisionByZero => unreachable!(),
+        })?
+    } else {
+        mode.clone()
+    };
 
     let truncate_size = mode
         .to_size(actual_reference_size)
@@ -279,14 +347,28 @@ fn file_truncate(
             }
         })?;
 
+    // Reject a size above i64::MAX up front like GNU.
+    if truncate_size > i64::MAX as u64 {
+        let error = match size_argument {
+            None => translate!("truncate-error-value-too-large"),
+            Some(arg) => {
+                translate!("truncate-error-value-too-large-arg", "arg" => arg.quote())
+            }
+        };
+        return Err(USimpleError::new(
+            1,
+            translate!("truncate-error-invalid-number", "error" => error),
+        ));
+    }
+
     do_file_truncate(path, !no_create, truncate_size)
 }
 
 fn truncate(
     filenames: &[OsString],
     no_create: bool,
-    _io_blocks: bool, // TODO: implement handling
-    reference: Option<String>,
+    io_blocks: bool,
+    reference: Option<OsString>,
     size: Option<String>,
     diag_args: Option<&[OsString]>,
 ) -> UResult<()> {
@@ -314,12 +396,10 @@ fn truncate(
                 let message = translate!("truncate-error-invalid-number", "error" => &error);
                 return Err(error.size_value_error(
                     diag_args,
-                    string,
+                    &OptionValue::new(string, 's', "size"),
                     // The parser never saw the mode character; the caret has
                     // to count it back in.
                     size_offset(string, is_modifier),
-                    's',
-                    "size",
                     &message,
                     USimpleError::new(1, message.clone()),
                 ));
@@ -343,6 +423,7 @@ fn truncate(
         show_if_err!(file_truncate(
             filename,
             no_create,
+            io_blocks,
             reference_size,
             &mode,
             size_string,
@@ -466,6 +547,18 @@ mod tests {
         );
         assert_eq!(
             TruncateMode::RoundUp(u64::MAX - 1).to_size(u64::MAX),
+            Err(SizeCalculationError::Overflow)
+        );
+    }
+
+    #[test]
+    fn test_scale_mode_by_io_block_size() {
+        assert_eq!(
+            TruncateMode::Extend(2).scaled_by(4096),
+            Ok(TruncateMode::Extend(8192))
+        );
+        assert_eq!(
+            TruncateMode::Absolute(u64::MAX).scaled_by(4096),
             Err(SizeCalculationError::Overflow)
         );
     }

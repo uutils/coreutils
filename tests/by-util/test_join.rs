@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) autoformat nocheck
+// spell-checker:ignore (words) autoformat nocheck FILENUM
 
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 use std::fs::OpenOptions;
@@ -231,7 +231,21 @@ fn tab_multi_character() {
         .arg("-t")
         .arg("ab")
         .fails()
-        .stderr_is("join: multi-character tab ab\n");
+        .stderr_is("join: multi-character tab 'ab'\n");
+}
+
+#[test]
+fn tab_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading separator value passed as its own argument (not
+    // attached with `-t-x`/`=`) must not be mistaken for a new,
+    // unrecognized flag.
+    new_ucmd!()
+        .arg("semicolon_fields_1.txt")
+        .arg("semicolon_fields_2.txt")
+        .arg("-t")
+        .arg("-x")
+        .fails()
+        .stderr_is("join: multi-character tab '-x'\n");
 }
 
 #[test]
@@ -249,6 +263,50 @@ fn default_format() {
         .arg("fields_2.txt")
         .arg("-o")
         .arg("0 2.2")
+        .succeeds()
+        .stdout_only_fixture("default.expected");
+}
+
+#[test]
+fn repeated_o_accumulates_fields() {
+    // GNU lets -o repeat; the fields accumulate in the order they appear,
+    // here giving the reverse of the default format.
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_2.txt")
+        .arg("-o")
+        .arg("2.2")
+        .arg("-o")
+        .arg("1.1")
+        .succeeds()
+        .stdout_only("a 1\nb 2\nc 3\ne 5\nh 8\n");
+}
+
+#[test]
+fn repeated_o_ignores_auto_when_mixed() {
+    // When -o is repeated and not every value is `auto`, each `auto` is
+    // ignored: only the explicit fields are printed, repeats included.
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_2.txt")
+        .arg("-o")
+        .arg("auto")
+        .arg("-o")
+        .arg("2.2 2.2 1.1")
+        .succeeds()
+        .stdout_only("a a 1\nb b 2\nc c 3\ne e 5\nh h 8\n");
+}
+
+#[test]
+fn repeated_o_auto_stays_auto() {
+    // `auto` still applies when every -o value is `auto`.
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_2.txt")
+        .arg("-o")
+        .arg("auto")
+        .arg("-o")
+        .arg("auto")
         .succeeds()
         .stdout_only_fixture("default.expected");
 }
@@ -661,4 +719,116 @@ fn test_locale_collation() {
         .succeeds()
         .stdout_contains("abc:d 2 y")
         .stdout_contains("ab:d 1 x");
+}
+
+#[test]
+fn test_incompatible_fields_reports_exact_field_number() {
+    // An out-of-range field clamps to usize::MAX, which used to overflow the
+    // one-based increment. Field numbers past 2^53 also used to be rounded on
+    // their way through the localization layer.
+    //
+    // `parse_field_number` uses `usize`, so a value at or above `usize::MAX`
+    // saturates to it. The saturation ceiling is therefore pointer-width
+    // dependent, and the expected text is built from `usize::MAX` rather than a
+    // hard-coded 64-bit literal.
+    let max_field = usize::MAX.to_string();
+
+    // A small field number takes the i64 number path through the localization
+    // layer and is platform-independent.
+    new_ucmd!()
+        .args(&["-j", "3", "-1", "5", "/dev/null", "/dev/null"])
+        .fails()
+        .stderr_contains("incompatible join fields 3, 5");
+
+    // Values at or above `usize::MAX` saturate to `usize::MAX` on every
+    // platform; the localization layer must carry that ceiling as an exact
+    // decimal string rather than rounding it through Fluent's f64-backed number
+    // type.
+    for field in ["18446744073709551615", "99999999999999999999999"] {
+        new_ucmd!()
+            .args(&["-j", field, "-1", "5", "/dev/null", "/dev/null"])
+            .fails()
+            .stderr_contains(format!("incompatible join fields {max_field}, 5"));
+    }
+
+    // A value above f64 precision (2^53) but below `usize::MAX` is reported
+    // exactly on 64-bit (where `usize` holds it); on 32-bit it saturates to
+    // `usize::MAX` like the cases above.
+    #[cfg(target_pointer_width = "64")]
+    let expected_above: String = "9007199254740993".to_string();
+    #[cfg(not(target_pointer_width = "64"))]
+    let expected_above: String = max_field.clone();
+    new_ucmd!()
+        .args(&[
+            "-j",
+            "9007199254740993",
+            "-1",
+            "5",
+            "/dev/null",
+            "/dev/null",
+        ])
+        .fails()
+        .stderr_contains(format!("incompatible join fields {expected_above}, 5"));
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_failing_field_of_a_list() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-o", "1.2,2.x", "/dev/null", "/dev/null"])
+            .fails_with_code(1);
+
+        // The first field is fine; only the second one is at fault.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+join: invalid field number: 'x'
+   ╭─[ join:1:13 ]
+   │
+ 1 │ join -o 1.2,2.x /dev/null /dev/null
+   │             ───
+   │
+   │ Help: an output field is FILENUM.FIELD, as in -o 1.2,2.1; 0 stands for the join field
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_inside_a_glued_short_option() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-o1.2,0.4", "/dev/null", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("join:1:12"), "{stderr}");
+        assert!(stderr.contains("invalid field specifier"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-o", "1.2,2.x", "/dev/null", "/dev/null"])
+            .fails_with_code(1)
+            .stderr_is("join: invalid field number: 'x'\n");
+    }
+}
+
+#[test]
+fn test_hyphen_leading_field_number_is_reported_as_invalid() {
+    // GNU hands the argument after the option to that option even when it
+    // starts with a hyphen, so it is reported as an invalid field number
+    // rather than as an unknown option.
+    for opt in ["-1", "-2", "-j"] {
+        new_ucmd!()
+            .args(&[opt, "-1", "empty.txt", "empty.txt"])
+            .fails()
+            .stderr_contains("invalid field number: '-1'");
+    }
 }

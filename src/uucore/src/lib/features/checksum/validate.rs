@@ -18,7 +18,7 @@ use crate::checksum::{
     AlgoKind, BlakeLength, ChecksumError, HashLength, ReadingMode, ShaLength, SizedAlgoKind,
     digest_reader, parse_blake_length, unescape_filename,
 };
-use crate::error::{FromIo, UError, UIoError, UResult, USimpleError};
+use crate::error::{FromIo, UError, UIoError, UResult, USimpleError, strip_errno};
 use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use crate::sum::{self, Blake2b, Blake3, DigestOutput};
 use crate::{
@@ -593,24 +593,24 @@ fn get_file_to_check(
 
 /// Returns a reader to the list of checksums
 fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
-    match File::open(filename) {
-        Ok(f) => {
-            if f.metadata()?.is_dir() {
-                Err(io::Error::other(
-                    translate!("error-is-a-directory", "file" => filename.maybe_quote()),
-                )
-                .into())
-            } else {
-                Ok(Box::new(f))
-            }
-        }
-        Err(_) => Err(io::Error::other(format!(
+    let file = File::open(filename).map_err(|e| match e.kind() {
+        #[cfg(any(target_os = "wasi", windows))]
+        io::ErrorKind::NotFound => io::Error::other(format!(
             "{}: {}",
             filename.maybe_quote(),
             translate!("error-file-not-found")
-        ))
-        .into()),
+        )),
+        _ => io::Error::other(format!("{}: {}", filename.maybe_quote(), strip_errno(&e))),
+    })?;
+    // some platforms shows different read error
+    #[cfg(any(target_os = "wasi", windows))]
+    if file.metadata().is_ok_and(|m| m.is_dir()) {
+        return Err(io::Error::other(
+            translate!("error-is-a-directory", "file" => filename.maybe_quote()),
+        )
+        .into());
     }
+    Ok(Box::new(file))
 }
 
 /// Gets the algorithm name and length from the `LineInfo` if the algo-based format is matched.
@@ -621,10 +621,8 @@ fn identify_algo_name_and_length(
 ) -> Result<(AlgoKind, Option<HashLength>), LineCheckError> {
     use AlgoKind as ak;
     let algo_from_line = line_info.algo_name.clone().unwrap_or_default();
-    let Ok(line_algo) = AlgoKind::from_cksum(algo_from_line.to_lowercase()) else {
-        // Unknown algorithm
-        return Err(LineCheckError::ImproperlyFormatted);
-    };
+    let line_algo = AlgoKind::from_cksum(algo_from_line.to_lowercase())
+        .map_err(|_| LineCheckError::ImproperlyFormatted)?;
     *last_algo = Some(algo_from_line);
 
     // check if we are called with XXXsum (example: md5sum) but we detected a
@@ -643,10 +641,9 @@ fn identify_algo_name_and_length(
     let hash_len = if let Some(bitlen) = line_info.algo_bit_len {
         match line_algo {
             algo @ (ak::Blake2b | ak::Blake3) => {
-                match parse_blake_length(algo, BlakeLength::Int(bitlen)) {
-                    Ok(len) => Some(len),
-                    Err(_) => return Err(LineCheckError::ImproperlyFormatted),
-                }
+                let len = parse_blake_length(algo, BlakeLength::Int(bitlen))
+                    .map_err(|_| LineCheckError::ImproperlyFormatted)?;
+                Some(len)
             }
             ak::Sha2 | ak::Sha3 if [224, 256, 384, 512].contains(&bitlen) => {
                 Some(HashLength::from_bits(bitlen))

@@ -6,11 +6,13 @@
 mod blocks;
 mod columns;
 mod filesystem;
+mod platform;
 mod table;
 
 use blocks::HumanReadable;
 use clap::builder::ValueParser;
 use table::HeaderMode;
+use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError, get_exit_code};
 use uucore::fsext::{MountInfo, read_fs_list};
@@ -34,6 +36,11 @@ use crate::table::Table;
 static OPT_HELP: &str = "help";
 static OPT_ALL: &str = "all";
 static OPT_BLOCKSIZE: &str = "blocksize";
+/// The long name of [`OPT_BLOCKSIZE`], which its clap id does not spell.
+///
+/// The caret report looks the option up on the command line by this name, so
+/// the `Arg` and the report have to agree on it.
+static OPT_BLOCKSIZE_LONG: &str = "block-size";
 static OPT_TOTAL: &str = "total";
 static OPT_HUMAN_READABLE_BINARY: &str = "human-readable-binary";
 static OPT_HUMAN_READABLE_DECIMAL: &str = "human-readable-decimal";
@@ -113,8 +120,8 @@ impl Default for Options {
 
 impl Options {
     /// Convert command-line arguments into [`Options`].
-    pub fn from_matches(matches: &ArgMatches) -> UResult<Self> {
-        Ok(Self::from(matches).map_err(DfError::OptionsError)?)
+    pub fn from_matches(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Self> {
+        Self::from(matches, diag_args)
     }
 
     /// Whether -a, -l, -t, or -x options require the mount table.
@@ -127,15 +134,15 @@ impl Options {
 enum OptionsError {
     // TODO This needs to vary based on whether `--block-size`
     // or `-B` were provided.
-    #[error("{}", translate!("df-error-block-size-too-large", "size" => .0.clone()))]
+    #[error("{}", translate!("df-error-block-size-too-large", "size" => .0))]
     BlockSizeTooLarge(String),
     // TODO This needs to vary based on whether `--block-size`
     // or `-B` were provided.,
-    #[error("{}", translate!("df-error-invalid-block-size", "size" => .0.clone()))]
+    #[error("{}", translate!("df-error-invalid-block-size", "size" => .0))]
     InvalidBlockSize(String),
     // TODO This needs to vary based on whether `--block-size`
     // or `-B` were provided.
-    #[error("{}", translate!("df-error-invalid-suffix", "size" => .0.clone()))]
+    #[error("{}", translate!("df-error-invalid-suffix", "size" => .0))]
     InvalidSuffix(String),
 
     /// An error getting the columns to display in the output table.
@@ -152,9 +159,46 @@ enum OptionsError {
     FilesystemTypeBothSelectedAndExcluded(Vec<String>),
 }
 
+/// The error for a `--block-size` that could not be parsed, with a caret under
+/// the part of it that is at fault.
+///
+/// # Arguments
+///
+/// * `error` - What the size parser rejected the value with.
+/// * `matches` - The parsed command line, for the value as it was typed.
+/// * `diag_args` - The arguments as typed, or `None` when they were not kept.
+fn block_size_error(
+    error: &ParseSizeError,
+    matches: &ArgMatches,
+    diag_args: Option<&[OsString]>,
+) -> Box<dyn UError> {
+    // Only `-B`/`--block-size` reaches the parser with a value to point at:
+    // `read_block_size` parses a size only under `contains_id(OPT_BLOCKSIZE)`,
+    // and the `DF_BLOCK_SIZE` fallbacks go through `found()`, which drops an
+    // invalid value silently. So the value the caret points at is always there.
+    let size = matches
+        .get_one::<String>(OPT_BLOCKSIZE)
+        .expect("a block size error can only come from --block-size");
+    let options_error = match error {
+        ParseSizeError::InvalidSuffix(s) => OptionsError::InvalidSuffix(s.clone()),
+        ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(size.clone()),
+        ParseSizeError::ParseFailure(s) | ParseSizeError::PhysicalMem(s) => {
+            OptionsError::InvalidBlockSize(s.clone())
+        }
+    };
+    let message = options_error.to_string();
+    error.size_value_error(
+        diag_args,
+        &OptionValue::new(size, 'B', OPT_BLOCKSIZE_LONG),
+        0,
+        &message,
+        DfError::OptionsError(options_error),
+    )
+}
+
 impl Options {
     /// Convert command-line arguments into [`Options`].
-    fn from(matches: &ArgMatches) -> Result<Self, OptionsError> {
+    fn from(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Self> {
         let include: Option<Vec<_>> = matches
             .get_many::<OsString>(OPT_TYPE)
             .map(|v| v.map(|s| s.to_string_lossy().to_string()).collect());
@@ -165,22 +209,18 @@ impl Options {
         if let (Some(include), Some(exclude)) = (&include, &exclude)
             && let Some(types) = Self::get_intersected_types(include, exclude)
         {
-            return Err(OptionsError::FilesystemTypeBothSelectedAndExcluded(types));
+            return Err(DfError::OptionsError(
+                OptionsError::FilesystemTypeBothSelectedAndExcluded(types),
+            )
+            .into());
         }
 
         Ok(Self {
             show_local_fs: matches.get_flag(OPT_LOCAL),
             show_all_fs: matches.get_flag(OPT_ALL),
             sync: matches.get_flag(OPT_SYNC),
-            block_size: read_block_size(matches).map_err(|e| match e {
-                ParseSizeError::InvalidSuffix(s) => OptionsError::InvalidSuffix(s),
-                ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(
-                    matches.get_one::<String>(OPT_BLOCKSIZE).unwrap().to_owned(),
-                ),
-                ParseSizeError::ParseFailure(s) | ParseSizeError::PhysicalMem(s) => {
-                    OptionsError::InvalidBlockSize(s)
-                }
-            })?,
+            block_size: read_block_size(matches)
+                .map_err(|error| block_size_error(&error, matches, diag_args))?,
             header_mode: {
                 if matches.get_flag(OPT_HUMAN_READABLE_BINARY)
                     || matches.get_flag(OPT_HUMAN_READABLE_DECIMAL)
@@ -208,7 +248,8 @@ impl Options {
             include,
             exclude,
             show_total: matches.get_flag(OPT_TOTAL),
-            columns: Column::from_matches(matches).map_err(OptionsError::ColumnError)?,
+            columns: Column::from_matches(matches)
+                .map_err(|e| DfError::OptionsError(OptionsError::ColumnError(e)))?,
         })
     }
 
@@ -316,10 +357,7 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
     // Convert each `MountInfo` into a `Filesystem`, which contains
     // both the mount information and usage information.
 
-    #[cfg(not(windows))]
-    let maybe_mount = |m| Filesystem::from_mount(&mounts, m, None).ok();
-    #[cfg(windows)]
-    let maybe_mount = |m| Filesystem::from_mount(m, None).ok();
+    let maybe_mount = |m| platform::filesystem_from_mount(&mounts, m, None).ok();
 
     Ok(mounts
         .iter()
@@ -336,7 +374,6 @@ where
     // The list of all mounted filesystems.
     let mounts_result = read_fs_list();
 
-    #[allow(unused_variables)]
     let (mounts, use_fallback) = match mounts_result {
         Ok(m) => (m, false),
         Err(e) => {
@@ -356,14 +393,7 @@ where
     // Convert each path into a `Filesystem`, which contains
     // both the mount information and usage information.
     for path in paths {
-        #[cfg(unix)]
-        let fs_result = if use_fallback {
-            Filesystem::from_path_direct(path)
-        } else {
-            Filesystem::from_path(&mounts, path)
-        };
-        #[cfg(not(unix))]
-        let fs_result = Filesystem::from_path(&mounts, path);
+        let fs_result = platform::filesystem_for_path(&mounts, use_fallback, path);
 
         match fs_result {
             Ok(fs) => {
@@ -424,8 +454,7 @@ impl UError for DfError {
 pub fn filesystems(paths: Option<&[&Path]>, opt: &Options) -> UResult<Vec<Filesystem>> {
     // Run a sync call before any operation if so instructed.
     if opt.sync {
-        #[cfg(not(any(windows, target_os = "redox")))]
-        rustix::fs::sync();
+        platform::sync();
     }
 
     let unreadable_mount_table = |e: Box<dyn UError>| {
@@ -482,20 +511,19 @@ pub fn df(paths: Option<&[&Path]>, opt: &Options) -> UResult<()> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    // The arguments are kept for the caret in SIZE diagnostics, which echoes
+    // the command line.
+    let (matches, diag_args) = uucore::clap_localization::handle_clap_result_with_diagnostics(
+        uu_app(),
+        args.collect(),
+        1,
+    )?;
 
-    #[cfg(windows)]
-    {
-        if matches.get_flag(OPT_INODES) {
-            println!(
-                "{}",
-                translate!("df-error-inodes-not-supported-windows", "program" => "df")
-            );
-            return Ok(());
-        }
+    if let Some(result) = platform::maybe_unsupported_options(&matches) {
+        return result;
     }
 
-    let opt = Options::from_matches(&matches)?;
+    let opt = Options::from_matches(&matches, diag_args.as_deref())?;
     let paths: Option<Vec<&Path>> = matches
         .get_many::<OsString>(OPT_PATHS)
         .map(|paths| paths.map(Path::new).collect());
@@ -529,7 +557,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_BLOCKSIZE)
                 .short('B')
-                .long("block-size")
+                .long(OPT_BLOCKSIZE_LONG)
                 .value_name("SIZE")
                 .overrides_with_all([OPT_KILO, OPT_BLOCKSIZE])
                 .help(translate!("df-help-block-size")),

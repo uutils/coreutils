@@ -6,6 +6,8 @@
 
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util::is_locale_available;
 use uutests::util_name;
 
 #[test]
@@ -579,7 +581,7 @@ fn test_both_inputs_out_of_order_but_identical() {
 fn test_comm_arg_error() {
     let scene = TestScenario::new(util_name!());
 
-    // Test extra argument error case from GNU test
+    // Test extra argument error case
     scene
         .ucmd()
         .args(&["a", "b", "no-such"])
@@ -588,7 +590,7 @@ fn test_comm_arg_error() {
         .stderr_contains("error: unexpected argument 'no-such' found")
         .stderr_contains("Usage: comm [OPTION]... FILE1 FILE2")
         .stderr_contains("For more information, try '--help'.");
-    // Test extra argument error case from GNU test
+    // Test extra argument error case
     scene
         .ucmd()
         .args(&["a"])
@@ -733,6 +735,51 @@ fn test_read_error() {
 }
 
 #[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+fn test_locale_collation() {
+    // In a UTF-8 locale the collation puts `a1` before `a-b` and the byte order
+    // puts them the other way round. Reading a file `sort` produced with a byte
+    // comparison rejects it as unsorted and drops the line the two files share.
+    let locale = "en_US.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("f1", "a1\na-b\n");
+    scene.fixtures.write("f2", "a-b\n");
+
+    scene
+        .ucmd()
+        .env("LC_ALL", locale)
+        .args(&["-12", "f1", "f2"])
+        .succeeds()
+        .stdout_only("a-b\n");
+
+    scene
+        .ucmd()
+        .env("LC_ALL", locale)
+        .args(&["-23", "f1", "f2"])
+        .succeeds()
+        .stdout_only("a1\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_c_locale_still_orders_by_bytes() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("f1", "a-b\na1\n");
+    scene.fixtures.write("f2", "a-b\n");
+
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .args(&["-12", "f1", "f2"])
+        .succeeds()
+        .stdout_only("a-b\n");
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_comm_write_error_dev_full() {
     use std::fs::OpenOptions;
@@ -744,5 +791,5 @@ fn test_comm_write_error_dev_full() {
         .args(&["a", "a"])
         .set_stdout(dev_full)
         .fails()
-        .stderr_contains("No space left on device");
+        .stderr_is("comm: write error: No space left on device\n");
 }

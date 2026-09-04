@@ -28,7 +28,7 @@ use uutests::new_ucmd;
 #[cfg(unix)]
 use uutests::unwrap_or_return;
 use uutests::util::TestScenario;
-#[cfg(any(unix, feature = "feat_selinux"))]
+#[cfg(any(unix, feature = "selinux"))]
 use uutests::util::expected_result;
 use uutests::{at_and_ucmd, util_name};
 
@@ -1168,7 +1168,7 @@ fn test_ls_long() {
 
 #[cfg(not(windows))]
 #[test]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(feature = "selinux"))]
 // Disabled on the SELinux runner for now
 fn test_ls_long_format() {
     let scene = TestScenario::new(util_name!());
@@ -1766,7 +1766,7 @@ fn test_ls_long_total_size() {
 }
 
 #[test]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(feature = "selinux"))]
 // Disabled on the SELinux runner for now
 fn test_ls_long_formats() {
     let scene = TestScenario::new(util_name!());
@@ -3296,7 +3296,7 @@ mod quoting {
         );
     }
 
-    #[cfg(not(any(target_vendor = "apple", target_os = "windows", target_os = "openbsd")))]
+    #[cfg(not(any(target_vendor = "apple", windows, target_os = "openbsd")))]
     #[test]
     /// This test creates files with an UTF-8 encoded name and verify that it
     /// gets escaped depending on the used locale.
@@ -3455,7 +3455,7 @@ fn test_ls_color() {
 
 #[cfg(unix)]
 #[test]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(feature = "selinux"))]
 // Disabled on the SELinux runner for now
 fn test_ls_inode() {
     let scene = TestScenario::new(util_name!());
@@ -3743,7 +3743,7 @@ fn test_ls_indicator_style() {
     }
 }
 
-#[cfg(not(any(target_vendor = "apple", target_os = "windows", target_os = "openbsd")))] // Truncate not available on mac or win
+#[cfg(not(any(target_vendor = "apple", windows, target_os = "openbsd")))] // Truncate not available on mac or win
 #[test]
 fn test_ls_human_si() {
     let scene = TestScenario::new(util_name!());
@@ -4185,6 +4185,30 @@ fn test_ls_quoting_style_env_var_default() {
         .env("QUOTING_STYLE", "c")
         .succeeds()
         .stdout_only(format!("{correct_c}\n"));
+}
+
+// An unwritable stderr must not turn the QUOTING_STYLE warning into an abort:
+// the diagnostic is best-effort, so a failed write is dropped and the listing
+// still goes out. /dev/full is Linux-only.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_ls_invalid_quoting_style_env_var_with_unwritable_stderr() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("zeta");
+    at.touch("alpha");
+
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+
+    scene
+        .ucmd()
+        .env("QUOTING_STYLE", "not-a-style")
+        .set_stderr(dev_full)
+        .succeeds()
+        .stdout_is("alpha\nzeta\n");
 }
 
 #[test]
@@ -5027,10 +5051,7 @@ fn test_ls_long_self_referential_dir_lists_contents() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_ls_context1() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -5045,10 +5066,7 @@ fn test_ls_context1() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_ls_context2() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -5064,10 +5082,7 @@ fn test_ls_context2() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_ls_context_long() {
     if !uucore::selinux::is_selinux_enabled() {
         return;
@@ -5086,10 +5101,7 @@ fn test_ls_context_long() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_ls_context_format() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -5119,10 +5131,7 @@ fn test_ls_context_format() {
 }
 
 /// Helper function to validate `SELinux` context format
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn validate_selinux_context(context: &str) {
     assert!(
         context.contains(':'),
@@ -5137,10 +5146,7 @@ fn validate_selinux_context(context: &str) {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_ls_selinux_context_format() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -5173,10 +5179,7 @@ fn test_ls_selinux_context_format() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_ls_selinux_context_indicator() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -6292,7 +6295,7 @@ fn test_ls_hyperlink() {
 fn test_ls_hyperlink_encode_link() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         at.touch("back\\slash");
         at.touch("ques?tion");
@@ -6301,7 +6304,7 @@ fn test_ls_hyperlink_encode_link() {
     at.touch("sp ace");
 
     let result = ucmd.arg("--hyperlink").succeeds();
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         assert!(
             result
@@ -6467,9 +6470,9 @@ fn test_ls_hyperlink_utf8_encoding() {
     let at = &scene.fixtures;
 
     at.touch("café.txt");
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     at.touch("file:with:colons.txt");
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     at.touch("file-with-colons.txt");
     at.touch("file with spaces.txt");
 
@@ -6477,9 +6480,9 @@ fn test_ls_hyperlink_utf8_encoding() {
     let output = result.stdout_str();
 
     assert!(output.contains("caf%c3%a9.txt"));
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     assert!(output.contains("file%3awith%3acolons.txt"));
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     assert!(output.contains("file-with-colons.txt"));
     assert!(output.contains("file%20with%20spaces.txt"));
 
@@ -6567,7 +6570,7 @@ fn test_term_colorterm() {
     );
 }
 
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 #[test]
 fn test_acl_display() {
     use std::process::Command;
@@ -6623,7 +6626,7 @@ fn test_acl_display() {
 
 // Regression test for https://github.com/uutils/coreutils/issues/10980
 // Each file with an ACL must not inflate the link-count column width.
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 #[test]
 fn test_acl_padding_not_inflated() {
     use std::process::Command;
@@ -6677,7 +6680,7 @@ fn test_acl_padding_not_inflated() {
 // setting is also configured).
 #[cfg(unix)]
 #[test]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(feature = "selinux"))]
 // Disabled on the SELinux runner for now
 fn test_ls_color_norm() {
     let scene = TestScenario::new(util_name!());
@@ -6801,6 +6804,24 @@ fn test_ls_color_norm() {
         .arg("exe")
         .succeeds()
         .stdout_contains(expected);
+}
+
+// A style that renders to an empty ANSI sequence, such as the default
+// foreground color, used to make `ls --color` panic while stripping the
+// trailing reset from the style code.
+#[test]
+fn test_ls_color_empty_style() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .env("LS_COLORS", "no=39")
+        .arg("--color=always")
+        .arg("f")
+        .succeeds()
+        .stdout_only("\u{1b}[0mf\u{1b}[0m\n");
 }
 
 #[test]
@@ -7043,7 +7064,7 @@ fn test_unknown_format_specifier() {
         .stdout_matches(&re_custom_format);
 }
 
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 #[test]
 fn test_acl_display_symlink() {
     use std::process::Command;
@@ -7623,11 +7644,11 @@ fn test_ls_recursive_no_fd_leak() {
         .arg("1")
         .limit(Resource::NOFILE, 20, 20)
         .succeeds()
-        .stderr_is("");
+        .no_stderr();
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_ls_non_utf8_hidden() {
     use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
     let scene = TestScenario::new(util_name!());
@@ -7711,4 +7732,71 @@ fn test_no_extra_stat_without_recursion() {
         return; // strace unavailable, e.g. restricted ptrace in a container
     };
     assert_eq!(count, 1, "expected a single stat of the directory operand");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_write_error() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.fixtures.touch("dummy_file.txt");
+
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+
+    ts.ucmd()
+        .set_stdout(dev_full)
+        .fails_with_code(2)
+        .stderr_is("ls: write error: No space left on device\n");
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit_of_block_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .arg("--block-size=1fb")
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+ls: invalid --block-size argument '1fb'
+   ╭─[ ls:1:18 ]
+   │
+ 1 │ ls --block-size=1fb
+   │                  ─┬
+   │                   ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_a_zero_block_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--block-size", "0"])
+            .fails_with_code(2);
+        let stderr = result.stderr_as_displayed();
+
+        assert_eq!(result.caret_column(), Some(17));
+        assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .arg("--block-size=1fb")
+            .fails_with_code(2)
+            .stderr_is("ls: invalid --block-size argument '1fb'\n");
+    }
 }

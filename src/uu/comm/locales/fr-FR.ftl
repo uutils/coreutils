@@ -18,6 +18,7 @@ comm-help-check-order = vérifier que l'entrée est correctement triée, même s
 comm-help-no-check-order = ne pas vérifier que l'entrée est correctement triée
 
 # Messages d'erreur
+comm-error-write = erreur d'écriture
 comm-error-file-not-sorted = comm : le fichier { $file_num } n'est pas dans l'ordre trié
 comm-error-input-not-sorted = comm : l'entrée n'est pas dans l'ordre trié
 comm-error-is-directory = Est un répertoire

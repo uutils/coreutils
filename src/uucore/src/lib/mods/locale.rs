@@ -518,6 +518,28 @@ pub fn get_message_with_args(id: &str, ftl_args: FluentArgs) -> String {
     get_message_internal(id, Some(ftl_args))
 }
 
+/// The value as an `i64` when Fluent can represent it exactly, else `None`.
+#[doc(hidden)]
+pub fn exact_fluent_integer(s: &str) -> Option<i64> {
+    // Fluent stores numbers as f64, which represents integers exactly only up
+    // to 2^53. Anything beyond that has to travel as a string.
+    const MAX_EXACT: i64 = 1 << 53;
+    match s.parse::<i64>() {
+        Ok(n) if (-MAX_EXACT..=MAX_EXACT).contains(&n) => Some(n),
+        _ => None,
+    }
+}
+
+/// Whether `s` is a plain decimal integer literal, with an optional sign.
+///
+/// Used by [`translate!`] to tell an integer that Fluent cannot hold exactly
+/// from a genuine float, so the former can bypass Fluent's number type.
+#[doc(hidden)]
+pub fn is_integer_literal(s: &str) -> bool {
+    let digits = s.strip_prefix(['-', '+']).unwrap_or(s);
+    !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
+}
+
 /// Function to detect system locale from environment variables
 fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
     let locale_str = std::env::var("LANG")
@@ -796,8 +818,13 @@ macro_rules! translate {
             let mut args = fluent::FluentArgs::new();
             $(
                 let value_str = $value.to_string();
-                if let Ok(num_val) = value_str.parse::<i64>() {
+                if let Some(num_val) = $crate::locale::exact_fluent_integer(&value_str) {
                     args.set($key, num_val);
+                } else if $crate::locale::is_integer_literal(&value_str) {
+                    // An integer Fluent cannot hold exactly. Its number type is
+                    // f64-backed, so setting it as a number would round it; keep
+                    // the exact decimal string instead.
+                    args.set($key, value_str);
                 } else if let Ok(float_val) = value_str.parse::<f64>() {
                     args.set($key, float_val);
                 } else {
@@ -820,6 +847,27 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
+
+    #[test]
+    fn integers_beyond_f64_precision_stay_exact() {
+        // Fluent's number type is f64-backed, so values past 2^53 must travel
+        // as strings to survive intact.
+        assert_eq!(exact_fluent_integer("3"), Some(3));
+        assert_eq!(exact_fluent_integer("-3"), Some(-3));
+        assert_eq!(exact_fluent_integer("9007199254740992"), Some(1 << 53));
+        assert_eq!(exact_fluent_integer("9007199254740993"), None);
+        assert_eq!(exact_fluent_integer("-9007199254740993"), None);
+        assert_eq!(exact_fluent_integer("18446744073709551615"), None);
+        assert_eq!(exact_fluent_integer("1.5"), None);
+
+        assert!(is_integer_literal("18446744073709551615"));
+        assert!(is_integer_literal("-7"));
+        assert!(is_integer_literal("+7"));
+        assert!(!is_integer_literal("1.5"));
+        assert!(!is_integer_literal(""));
+        assert!(!is_integer_literal("-"));
+        assert!(!is_integer_literal("12a"));
+    }
 
     /// Test-specific helper function to create a bundle from test directory only
     #[cfg(test)]

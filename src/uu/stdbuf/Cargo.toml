@@ -25,7 +25,7 @@ thiserror = { workspace = true }
 fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-libstdbuf = { package = "uu_stdbuf_libstdbuf", version = "0.10.0", path = "src/libstdbuf" }
+libstdbuf = { package = "uu_stdbuf_libstdbuf", version = "0.11.0", path = "src/libstdbuf" }
 
 # "feat_external_libstdbuf": use an external libstdbuf.so for stdbuf instead of embedding it into
 # the stdbuf binary.
@@ -38,6 +38,7 @@ libstdbuf = { package = "uu_stdbuf_libstdbuf", version = "0.10.0", path = "src/l
 #    on some platforms, e.g. because the SELinux permissions may not allow
 #    stdbuf to write to /tmp, /tmp may be read-only, libstdbuf.so may not work
 #    at all without SELinux labels, etc.
+#    See https://github.com/rust-lang/cargo/issues/8317, still unresolved.
 #
 # 2. Installation of uutils-coreutils using an external tool, e.g. dpkg/apt on
 #    debian. In this case, libstdbuf.so should be installed separately to its

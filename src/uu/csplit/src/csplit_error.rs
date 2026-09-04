@@ -4,10 +4,28 @@
 // file that was distributed with this source code.
 
 use std::io;
+use std::ops::Range;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, strip_errno};
 use uucore::translate;
+
+/// Where inside a pattern operand the caret belongs, and what to write under
+/// it.
+///
+/// `csplit: '/a(b/': invalid pattern` says nothing about which part of the
+/// pattern the parser choked on. The parser works that out anyway, so it is
+/// kept here for [`crate::diagnostics`] rather than thrown away; it never
+/// changes the one-line message.
+#[derive(Debug)]
+pub struct PatternProblem {
+    /// Byte range inside the operand to point at.
+    pub span: Range<usize>,
+    /// What the regex engine said, when the operand was a well-formed
+    /// `/REGEXP/` or `%REGEXP%` whose regex did not compile. Not localized:
+    /// it is quoted from the engine, which has no translations.
+    pub label: Option<String>,
+}
 
 /// Errors thrown by the csplit command
 #[derive(Debug, Error)]
@@ -27,7 +45,7 @@ pub enum CsplitError {
     #[error("{}", translate!("csplit-error-line-number-smaller-than-previous", "current" => _0, "previous" => _1))]
     LineNumberSmallerThanPrevious(usize, usize),
     #[error("{}", translate!("csplit-error-invalid-pattern", "pattern" => _0.quote()))]
-    InvalidPattern(String),
+    InvalidPattern(String, Option<PatternProblem>),
     #[error("{}", translate!("csplit-error-invalid-number", "number" => _0.quote()))]
     InvalidNumber(String),
     #[error("{}", translate!("csplit-error-suffix-format-incorrect"))]

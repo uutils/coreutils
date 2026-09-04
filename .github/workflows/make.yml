@@ -4,7 +4,7 @@ name: make
 # spell-checker:ignore (jargon) deps softprops toolchain
 # spell-checker:ignore (people) dawidd
 # spell-checker:ignore (shell/tools) bsdtar nextest pacman sccache zstd
-# spell-checker:ignore (misc) bindir busytest defconfig dynamicbase DESTDIR manpages multisize noconfirm runtest testsuite toybox uutils
+# spell-checker:ignore (misc) bindir busytest defconfig dynamicbase DESTDIR libopenssl manpages multisize noconfirm runtest testsuite toybox uutils
 
 env:
   PROJECT_NAME: coreutils
@@ -154,6 +154,7 @@ jobs:
         tag_name: latest-commit
         draft: false
         prerelease: true
+        overwrite_files: true
         files: |
           individual-x86_64-unknown-linux-gnu.tar.zst
       env:
@@ -182,14 +183,14 @@ jobs:
               --arg multisize "$SIZE_MULTI" \
               '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
     - name: Download the previous individual size result
-      uses: dawidd6/action-download-artifact@v23
+      uses: dawidd6/action-download-artifact@v24
       with:
         workflow: make.yml
         name: individual-size-result
         repo: uutils/coreutils
         path: dl
     - name: Download the previous size result
-      uses: dawidd6/action-download-artifact@v23
+      uses: dawidd6/action-download-artifact@v24
       with:
         workflow: make.yml
         name: size-result
@@ -312,19 +313,22 @@ jobs:
       # which causes subsequent fork() calls to fail with EAGAIN (exit code 254).
       shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
       run: |
-        pacman -Sy --noconfirm --needed make rust base-devel
+        pacman -Sy --noconfirm --needed base-devel libopenssl make openssl-devel pkgconf rust
       env:
         CHERE_INVOKING: 1
     - name: "`(x86_64-pc-cygwin) make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n`"
       shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
       run: |
         set -x
+        export OPENSSL_NO_VENDOR=1
+        export CARGOFLAGS="--features openssl"
         DESTDIR=/tmp/c make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
-        # Check that utils are built with given profile
-        ./target/release-small/true
+        # Check that cksum is linked with openssl (e.g. msys-crypto-*.dll)
+        # Also check that utils are built with given profile
+        ldd target/release-small/cksum | grep crypto
         # Check that the progs have prefix
         test -f /tmp/c/usr/local/bin/uu-tty
-        test -f /tmp/c/usr/local/libexec/uu-coreutils/libstdbuf.*
+        test -f /tmp/c/usr/local/libexec/uu-coreutils/libstdbuf.dll
         # Check that the manpage is not present
         ! test -f /tmp/c/usr/local/share/man/man1/uu-whoami.1
         # Check that the completion is not present
@@ -344,6 +348,7 @@ jobs:
         tag_name: latest-commit
         draft: false
         prerelease: true
+        overwrite_files: true
         files: |
           x86_64-pc-cygwin.tar.zst
       env:

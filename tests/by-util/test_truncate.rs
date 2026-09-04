@@ -6,10 +6,10 @@
 // spell-checker:ignore (words) RFILE
 
 use std::io::{Seek, SeekFrom, Write};
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use uutests::util::TestScenario;
-use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 static FILE1: &str = "truncate_test_1";
 static FILE2: &str = "truncate_test_2";
@@ -39,6 +39,16 @@ fn test_increase_file_size_kb() {
 }
 
 #[test]
+fn test_size_above_i64_max_is_rejected_without_creating_file() {
+    // A size above i64::MAX is rejected up front and the file is not created.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-s", "9223372036854775808", "new-file"])
+        .fails_with_code(1)
+        .stderr_contains("Value too large for defined data type");
+    assert!(!at.file_exists("new-file"));
+}
+
+#[test]
 fn test_reference() {
     let expected = 5 * 1000;
     let scene = TestScenario::new(util_name!());
@@ -52,6 +62,32 @@ fn test_reference() {
         .ucmd()
         .arg("--reference")
         .arg(FILE1)
+        .arg(FILE2)
+        .succeeds();
+
+    file.seek(SeekFrom::End(0)).unwrap();
+    let actual = file.stream_position().unwrap();
+    assert_eq!(expected, actual, "expected '{expected}' got '{actual}'");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
+fn test_reference_non_utf8_path() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let expected = 5 * 1000;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let mut file = at.make_file(FILE2);
+
+    let reference = std::ffi::OsStr::from_bytes(b"test_\xFF\xFE.txt");
+    scene.ucmd().arg("-s").arg("+5KB").arg(reference).succeeds();
+
+    scene
+        .ucmd()
+        .arg("--reference")
+        .arg(reference)
         .arg(FILE2)
         .succeeds();
 
@@ -297,6 +333,35 @@ fn test_relative_size_overflow_preserves_file() {
     assert_eq!(at.read(FILE1), "x");
 }
 
+#[cfg(unix)]
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no block size support")]
+fn test_io_blocks_uses_file_block_size() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(FILE1, "x");
+    let block_size = at.metadata(FILE1).blksize();
+
+    ucmd.args(&["--io-blocks", "--size=1", FILE1])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.metadata(FILE1).len(), block_size);
+}
+
+#[cfg(unix)]
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no block size support")]
+fn test_io_blocks_uses_parent_block_size_for_new_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let block_size = at.metadata(".").blksize();
+
+    ucmd.args(&["--io-blocks", "--size=2", FILE1])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.metadata(FILE1).len(), 2 * block_size);
+}
+
 /// Test that truncating a non-existent file creates that file.
 #[test]
 fn test_new_file() {
@@ -440,44 +505,6 @@ fn test_negative_size_with_space() {
     assert!(at.read_bytes(FILE1).is_empty());
 }
 
-#[cfg(not(windows))]
-#[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
-fn test_fifo_error_size_only() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.mkfifo("fifo");
-    ucmd.args(&["-s", "0", "fifo"])
-        .fails()
-        .no_stdout()
-        .stderr_contains("cannot open 'fifo' for writing: No such device or address");
-}
-
-#[cfg(not(windows))]
-#[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
-fn test_fifo_error_reference_file_only() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.mkfifo("fifo");
-    at.make_file("reference_file");
-    ucmd.args(&["-r", "reference_file", "fifo"])
-        .fails()
-        .no_stdout()
-        .stderr_contains("cannot open 'fifo' for writing: No such device or address");
-}
-
-#[cfg(not(windows))]
-#[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
-fn test_fifo_error_reference_and_size() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.mkfifo("fifo");
-    at.make_file("reference_file");
-    ucmd.args(&["-r", "reference_file", "-s", "+0", "fifo"])
-        .fails()
-        .no_stdout()
-        .stderr_contains("cannot open 'fifo' for writing: No such device or address");
-}
-
 #[test]
 #[cfg(target_os = "linux")]
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
@@ -506,6 +533,15 @@ fn test_sign_as_a_size() {
         .args(&["-s", "+", "asd"])
         .fails()
         .stderr_is("truncate: Invalid number: '+'\n");
+}
+
+#[test]
+fn test_repeated_size_takes_the_last() {
+    // GNU lets a later -s override an earlier one rather than erroring.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.make_file("repeated");
+    ucmd.args(&["-s", "1", "-s", "2", "repeated"]).succeeds();
+    assert_eq!(at.metadata("repeated").len(), 2);
 }
 
 #[cfg(unix)]
@@ -538,5 +574,43 @@ mod diagnostics {
         ucmd.args(&["-s", "10fb", "probe"])
             .fails_with_code(1)
             .stderr_contains("Invalid number: '10fb'");
+    }
+}
+
+#[cfg(not(windows))]
+#[cfg(not(wasi_runner))] // WASI: no FIFO/mkfifo support
+mod fifo {
+    use super::*;
+
+    #[test]
+    fn test_fifo_error_size_only() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkfifo("fifo");
+        ucmd.args(&["-s", "0", "fifo"])
+            .fails()
+            .no_stdout()
+            .stderr_contains("cannot open 'fifo' for writing: No such device or address");
+    }
+
+    #[test]
+    fn test_fifo_error_reference_file_only() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkfifo("fifo");
+        at.make_file("reference_file");
+        ucmd.args(&["-r", "reference_file", "fifo"])
+            .fails()
+            .no_stdout()
+            .stderr_contains("cannot open 'fifo' for writing: No such device or address");
+    }
+
+    #[test]
+    fn test_fifo_error_reference_and_size() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkfifo("fifo");
+        at.make_file("reference_file");
+        ucmd.args(&["-r", "reference_file", "-s", "+0", "fifo"])
+            .fails()
+            .no_stdout()
+            .stderr_contains("cannot open 'fifo' for writing: No such device or address");
     }
 }

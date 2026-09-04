@@ -15,13 +15,14 @@ readme.workspace = true
 path = "src/od.rs"
 
 [dependencies]
-byteorder = { workspace = true }
 clap = { workspace = true }
 half = { workspace = true }
-rustix = { workspace = true, features = ["stdio"] }
 uucore = { workspace = true, features = ["fs", "parser-size", "pipes"] }
 fluent = { workspace = true }
 libc.workspace = true
+
+[target.'cfg(any(unix, target_os = "wasi"))'.dependencies]
+rustix = { workspace = true, features = ["stdio"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }

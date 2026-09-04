@@ -636,7 +636,7 @@ impl ParseSizeError {
         }
     }
 
-    /// Render this error against `args`, with a caret under the part of the
+    /// Render this error against `snapshot`, with a caret under the part of the
     /// SIZE that is at fault.
     ///
     /// Every utility taking a SIZE takes the same syntax, so the label and the
@@ -646,32 +646,27 @@ impl ParseSizeError {
     ///
     /// * `args` - The whole argument list, program name included — as
     ///   [`crate::diagnostics::capture`] returns it.
-    /// * `operand` - The option's value as typed. It may carry something in
-    ///   front of the size — `truncate` takes a mode character, as in `+2K`,
-    ///   `head` and `tail` a sign — which the caret has to count but the parser
-    ///   never saw.
-    /// * `size_at` - Where the size itself starts inside `operand`, zero when
+    /// * `option` - The option's value as typed, and the option it was given
+    ///   to. The value may carry something in front of the size — `truncate`
+    ///   takes a mode character, as in `+2K`, `head` and `tail` a sign — which
+    ///   the caret has to count but the parser never saw.
+    /// * `size_at` - Where the size itself starts inside the value, zero when
     ///   the whole of it is the size.
-    /// * `short` - The short name of the option it was given to, if it has one.
-    /// * `long` - Its long name, if it has one.
     /// * `message` - The headline, already localized. It differs between
     ///   utilities, so it is passed in rather than built here.
     ///
     /// # Returns
     ///
-    /// `false` when no argument carries `size` as that option's value, in
+    /// `false` when no argument carries the value as that option's value, in
     /// which case the caller should fall back to the plain one-line message.
-    #[allow(clippy::too_many_arguments)]
     pub fn render_size_value(
         &self,
         args: &[std::ffi::OsString],
-        operand: &str,
+        option: &crate::diagnostics::OptionValue,
         size_at: usize,
-        short: Option<char>,
-        long: Option<&str>,
         message: &str,
     ) -> bool {
-        let Some(size) = operand.get(size_at..) else {
+        let Some(size) = option.value.get(size_at..) else {
             return false;
         };
         // Labelled only where a label would add to the message, per the
@@ -682,10 +677,8 @@ impl ParseSizeError {
             Self::ParseFailure(_) | Self::PhysicalMem(_) => None,
         };
         let span = self.span(size);
-        crate::diagnostics::Snapshot::with_program(args).render_option_value(
-            operand,
-            short,
-            long,
+        crate::diagnostics::Snapshot::with_program(args).render_option(
+            option,
             size_at + span.start..size_at + span.end,
             message,
             label.as_deref(),
@@ -704,24 +697,19 @@ impl ParseSizeError {
     ///
     /// * `diag_args` - The arguments as typed, or `None` when they were not
     ///   kept — as [`crate::diagnostics::capture`] returns them.
-    /// * `operand`, `size_at`, `short`, `long`, `message` - As for
-    ///   [`Self::render_size_value`].
+    /// * `option`, `size_at`, `message` - As for [`Self::render_size_value`].
     /// * `error` - The error to raise if nothing was drawn.
-    #[allow(clippy::too_many_arguments)]
     pub fn size_value_error(
         &self,
         diag_args: Option<&[std::ffi::OsString]>,
-        operand: &str,
+        option: &crate::diagnostics::OptionValue,
         size_at: usize,
-        short: char,
-        long: &str,
         message: &str,
         error: impl Into<Box<dyn crate::error::UError>>,
     ) -> Box<dyn crate::error::UError> {
-        let reported = diag_args.is_some_and(|args| {
-            self.render_size_value(args, operand, size_at, Some(short), Some(long), message)
-        });
-        crate::error::quiet_if_reported(reported, error)
+        crate::diagnostics::error_after_report(diag_args, error, |args, _| {
+            self.render_size_value(args, option, size_at, message)
+        })
     }
 
     fn size_too_big(s: &str) -> Self {

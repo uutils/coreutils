@@ -862,7 +862,7 @@ fn test_touch_dash_updates_stdout_file() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_touch_trailing_slash() {
     let file = "no-file/";
     new_ucmd!().args(&[file]).fails().stderr_only(format!(
@@ -871,7 +871,7 @@ fn test_touch_trailing_slash() {
 }
 
 #[test]
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn test_touch_trailing_slash_windows() {
     let file = "no-file/";
     new_ucmd!()
@@ -1001,7 +1001,7 @@ fn test_touch_trailing_slash_no_create() {
     ucmd.args(&["-c", "loop/"]).fails_with_code(1);
     assert!(!at.file_exists("loop"));
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(target_vendor = "apple"))]
     // MacOS supports trailing slash for symlinks to files
     {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -1237,7 +1237,7 @@ fn test_touch_through_dangling_symlink_creates_target() {
 // touch must be able to update the times of an owned file that is neither
 // readable nor writable (mode 0). Setting explicit times via utimensat-by-path
 // only requires ownership, so this succeeds even though the file cannot be
-// opened. Regression test for GNU tests/touch/no-rights.sh.
+// opened. Regression test: touch should fail gracefully on unwritable directory.
 #[test]
 #[cfg(unix)]
 fn test_touch_set_time_on_unreadable_unwritable_file() {

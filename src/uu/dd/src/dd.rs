@@ -3,12 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat oconv canonicalized FADV DONTNEED ESPIPE SPIPE bufferedoutput, SETFL
+// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, virtio, wlen, wstat, zram, oconv canonicalized FADV DONTNEED ESPIPE SPIPE bufferedoutput, SETFL
 
 mod blocks;
 mod bufferedoutput;
 mod conversion_tables;
 mod datastructures;
+mod diagnostics;
 mod numbers;
 mod parseargs;
 mod progress;
@@ -56,8 +57,6 @@ use uucore::error::{USimpleError, set_exit_code};
 use uucore::show_if_err;
 use uucore::{format_usage, show_error};
 
-const BUF_INIT_BYTE: u8 = 0xDD;
-
 /// Final settings after parsing
 #[derive(Default)]
 struct Settings {
@@ -89,7 +88,6 @@ struct Settings {
 ///
 /// When all instances are dropped the background thread will exit on the next interval.
 pub struct Alarm {
-    interval: Duration,
     trigger: Arc<AtomicU8>,
 }
 
@@ -110,7 +108,7 @@ impl Alarm {
             }
         });
 
-        Self { interval, trigger }
+        Self { trigger }
     }
 
     /// Manually trigger the alarm as a signal event
@@ -126,11 +124,6 @@ impl Alarm {
     /// by the closure returned from `manual_trigger_fn`
     pub fn get_trigger(&self) -> u8 {
         self.trigger.swap(ALARM_TRIGGER_NONE, Relaxed)
-    }
-
-    // Getter function for the configured interval duration
-    pub fn get_interval(&self) -> Duration {
-        self.interval
     }
 }
 
@@ -161,9 +154,56 @@ impl Num {
 
     fn to_bytes(self, block_size: u64) -> u64 {
         match self {
-            Self::Blocks(n) => n * block_size,
+            Self::Blocks(n) => n.saturating_mul(block_size),
             Self::Bytes(n) => n,
         }
+    }
+}
+
+/// A 4 KiB-aligned heap buffer used as `dd`'s read scratch.
+///
+/// `O_DIRECT` fails reads with `EINVAL` when the user buffer does not meet
+/// the device's DMA alignment (typically 512 bytes; 4 KiB covers every
+/// mainline Linux block driver). Over-allocates [`alloc_copy_buffer`]
+/// storage by one alignment unit and slices at the first aligned byte,
+/// keeping the pages zeroed and not faulted in.
+struct AlignedBuf {
+    storage: Vec<u8>,
+    /// Distance from the start of `storage` to the first aligned byte;
+    /// `offset + len <= storage.len()` since `storage` is over-allocated
+    /// by `ALIGNMENT`.
+    offset: usize,
+    /// Logical buffer length in bytes.
+    len: usize,
+}
+
+impl AlignedBuf {
+    const ALIGNMENT: usize = 4096;
+
+    fn new(size: usize) -> io::Result<Self> {
+        let total = size
+            .checked_add(Self::ALIGNMENT)
+            .ok_or_else(|| io::Error::from(io::ErrorKind::OutOfMemory))?;
+        let storage = alloc_copy_buffer(total)?;
+        let misalignment = storage.as_ptr().addr() % Self::ALIGNMENT;
+        let offset = if misalignment == 0 {
+            0
+        } else {
+            Self::ALIGNMENT - misalignment
+        };
+        Ok(Self {
+            storage,
+            offset,
+            len: size,
+        })
+    }
+
+    fn as_mut_bytes(&mut self) -> &mut [u8] {
+        &mut self.storage[self.offset..self.offset + self.len]
+    }
+
+    fn as_bytes(&self) -> &[u8] {
+        &self.storage[self.offset..self.offset + self.len]
     }
 }
 
@@ -326,20 +366,14 @@ impl<'a> Input<'a> {
         #[cfg(windows)]
         let mut src = {
             let f = File::from(io::stdin().as_handle().try_clone_to_owned()?);
-            let is_file = if let Ok(metadata) = f.metadata() {
-                // this hack is needed as there is no other way on windows
-                // to differentiate between the case where `seek` works
-                // on a file handle or not. i.e. when the handle is no real
-                // file but a pipe, `seek` is still successful, but following
-                // `read`s are not affected by the seek.
-                metadata.creation_time() != 0
-            } else {
-                false
-            };
-            if is_file {
-                Source::File(f)
-            } else {
-                Source::Stdin(io::stdin())
+            // this hack is needed as there is no other way on windows
+            // to differentiate between the case where `seek` works
+            // on a file handle or not. i.e. when the handle is no real
+            // file but a pipe, `seek` is still successful, but following
+            // `read`s are not affected by the seek.
+            match f.metadata() {
+                Ok(metadata) if metadata.creation_time() != 0 => Source::File(f),
+                _ => Source::Stdin(io::stdin()),
             }
         };
         #[cfg(all(not(unix), not(windows)))]
@@ -490,7 +524,7 @@ impl Input<'_> {
     /// The start of each ibs-sized read follows the previous one; a short
     /// read ends the fill, so the bytes received so far form one partial
     /// record for the copy loop (as in GNU dd).
-    fn fill_consecutive(&mut self, buf: &mut Vec<u8>) -> io::Result<ReadStat> {
+    fn fill_consecutive(&mut self, buf: &mut [u8]) -> io::Result<ReadStat> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut bytes_total = 0;
@@ -506,15 +540,15 @@ impl Input<'_> {
                     reads_partial += 1;
                     // A short read must end this fill: the next read would
                     // start at the following ibs-aligned chunk, leaving a
-                    // gap of stale bytes inside `buf` that the `truncate`
-                    // below would keep in the output while dropping the
-                    // same number of real trailing bytes (issue #13458).
+                    // gap of stale bytes inside `buf` that the caller's
+                    // `bytes_total` slice would keep in the output while
+                    // dropping the same number of real trailing bytes
+                    // (issue #13458).
                     break;
                 }
                 _ => break,
             }
         }
-        buf.truncate(bytes_total);
         Ok(ReadStat {
             reads_complete,
             reads_partial,
@@ -527,7 +561,8 @@ impl Input<'_> {
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read is aligned to multiples of ibs; remaining space is filled with the 'pad' byte.
-    fn fill_blocks(&mut self, buf: &mut Vec<u8>, pad: u8) -> io::Result<ReadStat> {
+    /// Returns the read statistics and the total filled length (reads + padding).
+    fn fill_blocks(&mut self, buf: &mut [u8], pad: u8) -> io::Result<(ReadStat, usize)> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut base_idx = 0;
@@ -542,8 +577,7 @@ impl Input<'_> {
                 rlen if rlen < target_len => {
                     bytes_total += rlen;
                     reads_partial += 1;
-                    let padding = vec![pad; target_len - rlen];
-                    buf.splice(base_idx + rlen..next_blk, padding);
+                    buf[base_idx + rlen..next_blk].fill(pad);
                 }
                 rlen => {
                     bytes_total += rlen;
@@ -554,13 +588,15 @@ impl Input<'_> {
             base_idx += self.settings.ibs;
         }
 
-        buf.truncate(base_idx);
-        Ok(ReadStat {
-            reads_complete,
-            reads_partial,
-            records_truncated: 0,
-            bytes_total: bytes_total.try_into().unwrap(),
-        })
+        Ok((
+            ReadStat {
+                reads_complete,
+                reads_partial,
+                records_truncated: 0,
+                bytes_total: bytes_total.try_into().unwrap(),
+            },
+            base_idx,
+        ))
     }
 }
 
@@ -1180,10 +1216,13 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         BlockWriter::Unbuffered(o)
     };
 
-    // Create a common empty buffer with a capacity of the block size.
-    // This is the max size needed.
-    let mut buf = Vec::new();
-    buf.try_reserve(bsize)?; // try_with_capacity is unstable https://github.com/rust-lang/rust/issues/91913
+    // Aligned read scratch sized to the block size (the max size needed).
+    // 4 KiB alignment satisfies block devices that enforce a strict
+    // `dma_alignment` for `iflag=direct` reads — see `AlignedBuf`.
+    let mut buf = AlignedBuf::new(bsize)?;
+    // Separate scratch for `conv=block` / `conv=unblock`, which can change
+    // the byte count and so cannot be done in-place in `buf`.
+    let mut conv_buf: Vec<u8> = Vec::new();
 
     // The main read/write loop.
     //
@@ -1200,8 +1239,8 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // best buffer size for reading based on the number of
         // blocks already read and the number of blocks remaining.
         let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, i.settings.ibs, bsize);
-        let Ok(rstat_update) =
-            read_helper(&mut i, &mut buf, loop_bsize).map_err(|e| copy_error = Some(e))
+        let Ok((rstat_update, data)) = read_helper(&mut i, &mut buf, &mut conv_buf, loop_bsize)
+            .map_err(|e| copy_error = Some(e))
         else {
             break;
         };
@@ -1214,7 +1253,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             }
             break;
         }
-        let Ok(wstat_update) = o.write_blocks(&buf).map_err(|e| copy_error = Some(e)) else {
+        let Ok(wstat_update) = o.write_blocks(data).map_err(|e| copy_error = Some(e)) else {
             break;
         };
 
@@ -1347,45 +1386,72 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<core::ffi::c_int> {
     if flag == 0 { None } else { Some(flag) }
 }
 
-/// Read from an input (that is, a source of bytes) into the given buffer.
+/// The copy buffer, `bsize` bytes long and ready to be read into.
 ///
-/// This function also performs any conversions as specified by
-/// `conv=swab` or `conv=block` command-line arguments. This function
-/// mutates the `buf` argument in-place. The returned [`ReadStat`]
-/// indicates how many blocks were read.
-fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> io::Result<ReadStat> {
-    // Local Helper Fns -------------------------------------------------
+/// `Read::read` fills an initialized slice, and zeroed pages are the only
+/// initialization that costs nothing: `vec![0; n]` allocates through
+/// `alloc_zeroed`, so the pages arrive from the kernel already zero and stay
+/// untouched until something is read into them. Writing a fill byte over
+/// reserved capacity instead faults in the whole of `bs=` before the first
+/// read, which is what made a large `bs=` cost its full size in time and in
+/// resident memory even with nothing to copy.
+///
+/// The reservation still happens first, because `vec![0; n]` aborts when the
+/// allocation fails and `dd` reports that as an error instead.
+fn alloc_copy_buffer(bsize: usize) -> io::Result<Vec<u8>> {
+    let mut probe: Vec<u8> = Vec::new();
+    // try_with_capacity is unstable https://github.com/rust-lang/rust/issues/91913
+    probe.try_reserve(bsize)?;
+    drop(probe);
+    Ok(vec![0u8; bsize])
+}
+
+/// Read one block worth of data, applying any `conv=` transformations.
+///
+/// `read_buf` is the page-aligned scratch read into directly. `conv_scratch`
+/// is only populated when `iconv.mode` is set (`conv=block` / `conv=unblock`)
+/// — those modes can change the byte count, so the converted output lives
+/// in a separate `Vec`. The returned slice points into whichever of the two
+/// holds the final data to be written.
+fn read_helper<'a>(
+    i: &mut Input,
+    read_buf: &'a mut AlignedBuf,
+    conv_scratch: &'a mut Vec<u8>,
+    bsize: usize,
+) -> io::Result<(ReadStat, &'a [u8])> {
     fn perform_swab(buf: &mut [u8]) {
         for base in (1..buf.len()).step_by(2) {
             buf.swap(base, base - 1);
         }
     }
-    // ------------------------------------------------------------------
-    // Read
-    // Resize the buffer to the bsize. Any garbage data in the buffer is overwritten or truncated, so there is no need to fill with BUF_INIT_BYTE first.
-    // resizing buf cause serious performance drop https://github.com/uutils/coreutils/issues/11544
-    buf.resize(bsize, BUF_INIT_BYTE);
 
-    let mut rstat = match i.settings.iconv.sync {
-        Some(ch) => i.fill_blocks(buf, ch)?,
-        _ => i.fill_consecutive(buf)?,
+    let (rstat, data_len) = {
+        let scratch = &mut read_buf.as_mut_bytes()[..bsize];
+        let (rstat, data_len) = if let Some(ch) = i.settings.iconv.sync {
+            i.fill_blocks(scratch, ch)?
+        } else {
+            let s = i.fill_consecutive(scratch)?;
+            let n = s.bytes_total as usize;
+            (s, n)
+        };
+        if !rstat.is_empty() && i.settings.iconv.swab {
+            perform_swab(&mut scratch[..data_len]);
+        }
+        (rstat, data_len)
     };
-    // Return early if no data
-    if rstat.reads_complete == 0 && rstat.reads_partial == 0 {
-        return Ok(rstat);
-    }
 
-    // Perform any conv=x[,x...] options
-    if i.settings.iconv.swab {
-        perform_swab(buf);
+    if rstat.is_empty() {
+        return Ok((rstat, &[]));
     }
 
     match i.settings.iconv.mode {
         Some(ref mode) => {
-            *buf = conv_block_unblock_helper(buf.clone(), mode, &mut rstat);
-            Ok(rstat)
+            let mut rstat = rstat;
+            let input = read_buf.as_bytes()[..data_len].to_vec();
+            *conv_scratch = conv_block_unblock_helper(input, mode, &mut rstat);
+            Ok((rstat, conv_scratch.as_slice()))
         }
-        None => Ok(rstat),
+        None => Ok((rstat, &read_buf.as_bytes()[..data_len])),
     }
 }
 
@@ -1493,15 +1559,21 @@ fn is_fifo(filename: &str) -> bool {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    // The command line is kept for the caret in operand diagnostics.
+    let (matches, diag_args) = uucore::clap_localization::handle_clap_result_with_diagnostics(
+        uu_app(),
+        args.collect(),
+        1,
+    )?;
 
-    let settings: Settings = Parser::new().parse(
+    let settings: Settings = Parser::new().parse_with_diagnostics(
         matches
             .get_many::<String>(options::OPERANDS)
             .unwrap_or_default(),
+        diag_args.as_deref(),
     )?;
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     if uucore::signals::stderr_was_closed() && settings.status != Some(StatusLevel::None) {
         return Err(USimpleError::new(1, "write error"));
     }
@@ -1538,6 +1610,41 @@ mod tests {
     use crate::{Output, Parser, calc_bsize};
 
     use std::path::Path;
+
+    /// `dd` has to accept a `bs=` far larger than the data it will copy, the
+    /// way GNU dd does, so the copy buffer must not fault in its pages.
+    /// Constructing through `AlignedBuf` covers `alloc_copy_buffer` too,
+    /// since that is where the aligned buffer takes its storage from.
+    #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+    #[test]
+    fn copy_buffer_does_not_touch_its_pages() {
+        use crate::AlignedBuf;
+
+        fn peak_rss_kib() -> u64 {
+            std::fs::read_to_string("/proc/self/status")
+                .unwrap()
+                .lines()
+                .find_map(|line| line.strip_prefix("VmHWM:"))
+                .and_then(|v| v.trim().trim_end_matches("kB").trim().parse().ok())
+                .unwrap()
+        }
+
+        // Larger than anything else this test binary allocates, so the reading
+        // below cannot be attributed to another test.
+        const BSIZE: usize = 4 << 30;
+        const SLACK_KIB: u64 = 64 << 10;
+
+        let before = peak_rss_kib();
+        let buf = AlignedBuf::new(BSIZE).unwrap();
+        let after = peak_rss_kib();
+
+        assert_eq!(buf.as_bytes().len(), BSIZE);
+        assert!(
+            after - before < SLACK_KIB,
+            "a {BSIZE}-byte copy buffer raised peak RSS by {} KiB",
+            after - before
+        );
+    }
 
     #[test]
     fn bsize_test_primes() {
@@ -1668,5 +1775,27 @@ mod tests {
                 expected
             );
         }
+    }
+
+    #[test]
+    fn test_aligned_buf_is_aligned_and_sized() {
+        use crate::AlignedBuf;
+
+        // Sizes around and away from the 4096 chunk boundary.
+        for size in [1, 511, 4096, 4097, 65536, (1 << 20) + 13] {
+            let mut buf = AlignedBuf::new(size).unwrap();
+            assert_eq!(buf.as_bytes().len(), size);
+            assert_eq!(buf.as_mut_bytes().len(), size);
+            // The alignment `O_DIRECT` reads rely on.
+            assert_eq!(buf.as_bytes().as_ptr().addr() % 4096, 0);
+        }
+    }
+
+    #[test]
+    fn test_aligned_buf_zero_size() {
+        use crate::AlignedBuf;
+
+        let buf = AlignedBuf::new(0).unwrap();
+        assert!(buf.as_bytes().is_empty());
     }
 }

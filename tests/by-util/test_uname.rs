@@ -111,7 +111,7 @@ fn test_uname_operating_system() {
         .arg("--operating-system")
         .succeeds()
         .stdout_is("Redox\n");
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
         let result = new_ucmd!().arg("--operating-system").succeeds();
         println!("{:?}", result.stdout_str());

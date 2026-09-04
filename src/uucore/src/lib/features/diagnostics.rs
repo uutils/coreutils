@@ -19,7 +19,8 @@
 //!
 //! Rendering only happens when stderr is a terminal, so anything reading our
 //! output — a script, a pipe, a test suite — still sees the plain one-line
-//! message it always did.
+//! message it always did. `UUTILS_DIAG=always` or `never` overrides that
+//! check.
 //!
 //! ```text
 //! tr: range-endpoints of 'y-b' are in reverse collating sequence order
@@ -41,11 +42,44 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::Write as _;
 use std::io::IsTerminal;
 use std::ops::Range;
+use std::sync::OnceLock;
 
 use ariadne::{CharSet, Color, Config, IndexType, Label, Report, ReportKind, Source};
 
 use crate::display::Quotable;
 use crate::translate;
+
+/// The variable that overrides the terminal check.
+const MODE_VAR: &str = "UUTILS_DIAG";
+
+/// When to render an error against its argument list.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Mode {
+    /// Let stderr decide.
+    Auto,
+    Always,
+    Never,
+}
+
+impl Mode {
+    /// What [`MODE_VAR`] asks for.
+    ///
+    /// Anything but `always` and `never` is [`Mode::Auto`] rather than an
+    /// error — this gets exported from shell profiles, and no spelling of it
+    /// should make a utility fail.
+    fn from_env(value: Option<&OsStr>) -> Self {
+        let Some(value) = value.and_then(OsStr::to_str) else {
+            return Self::Auto;
+        };
+        if value.eq_ignore_ascii_case("always") {
+            Self::Always
+        } else if value.eq_ignore_ascii_case("never") {
+            Self::Never
+        } else {
+            Self::Auto
+        }
+    }
+}
 
 /// Whether errors should be rendered against their argument list.
 ///
@@ -54,11 +88,18 @@ use crate::translate;
 ///
 /// # Returns
 ///
-/// `true` when stderr is a terminal — a person is watching, and gets the rich
-/// form. `false` in a script or a pipe, where whatever reads stderr gets the
-/// plain message it can grep for.
+/// What `UUTILS_DIAG` asks for, when it asks. Otherwise `true` when stderr is
+/// a terminal — a person is watching, and gets the rich form — and `false` in
+/// a script or a pipe, where whatever reads stderr gets the plain message it
+/// can grep for.
 pub fn enabled() -> bool {
-    std::io::stderr().is_terminal()
+    // Read once: this runs before the argument capture of every caret.
+    static MODE: OnceLock<Mode> = OnceLock::new();
+    match MODE.get_or_init(|| Mode::from_env(env::var_os(MODE_VAR).as_deref())) {
+        Mode::Always => true,
+        Mode::Never => false,
+        Mode::Auto => std::io::stderr().is_terminal(),
+    }
 }
 
 /// Keep the arguments a diagnostic would point at, as they were typed.
@@ -93,7 +134,35 @@ pub fn operands(args: &[OsString]) -> Option<Vec<OsString>> {
     capture(args.get(1..).unwrap_or_default())
 }
 
-pub use crate::features::diagnostics_boundary::{char_span, floor_boundary};
+pub use crate::features::diagnostics_boundary::{
+    OptionValue, ValueOptions, char_span, floor_boundary, list_items,
+};
+
+/// The error to raise for something a caret may have just explained.
+///
+/// Draws the report when the arguments as typed were kept, and quiets `error`
+/// when it did: the report has already said everything the one-line message
+/// would, and the exit code is all that is left to carry. Every caret
+/// diagnostic ends this way, so it is written once here.
+///
+/// # Arguments
+///
+/// * `diag_args` - The arguments as typed, program name included, or `None`
+///   when they were not kept — as [`capture`] returns them.
+/// * `error` - The error to raise when nothing was drawn. It is lent to `draw`
+///   rather than moved into it, since it is usually the error the report is
+///   about as well.
+/// * `draw` - Draws the report against the arguments, and returns `false` when
+///   it could not — because the error is not about any one of them, or because
+///   none of them turned out to carry what the caret would point at.
+pub fn error_after_report<E: Into<Box<dyn crate::error::UError>>>(
+    diag_args: Option<&[OsString]>,
+    error: E,
+    draw: impl FnOnce(&[OsString], &E) -> bool,
+) -> Box<dyn crate::error::UError> {
+    let reported = diag_args.is_some_and(|args| draw(args, &error));
+    crate::error::quiet_if_reported(reported, error)
+}
 
 /// An argument list rendered as a single line, with the position of every
 /// argument inside it.
@@ -322,16 +391,56 @@ impl Snapshot {
     ///
     /// The index of that positional, or `None` if there are not that many.
     pub fn index_of_positional(&self, n: usize) -> Option<usize> {
+        self.index_of_operand(n, &ValueOptions::NONE)
+    }
+
+    /// Index of the `n`-th operand, stepping over the values of `options`.
+    ///
+    /// As [`Snapshot::index_of_positional`], but for a utility whose options
+    /// take a separate value: `csplit -n 3 file 5` has two operands, not
+    /// three, and naming `-n` is what keeps the caret off the `3`.
+    ///
+    /// # Arguments
+    ///
+    /// * `n` - Zero-based rank among the operands.
+    /// * `options` - The options whose value is a separate argument.
+    ///
+    /// # Returns
+    ///
+    /// The index of that operand, or `None` if there are not that many.
+    pub fn index_of_operand(&self, n: usize, options: &ValueOptions) -> Option<usize> {
         let mut options_ended = false;
-        let mut positionals = (self.first_operand..self.args.len()).filter(|&index| {
-            let bytes = self.args[index].as_encoded_bytes();
-            if !options_ended && bytes == b"--" {
-                options_ended = true;
-                return false;
+        let mut skip_value = false;
+        let mut rank = 0;
+
+        for index in self.first_operand..self.args.len() {
+            let arg = &self.args[index];
+            if skip_value {
+                skip_value = false;
+                continue;
             }
-            options_ended || !bytes.starts_with(b"-") || bytes == b"-"
-        });
-        positionals.nth(n)
+            if !options_ended {
+                let bytes = arg.as_encoded_bytes();
+                if bytes == b"--" {
+                    options_ended = true;
+                    continue;
+                }
+                // A lone `-` is an operand, and so is an argument that is not
+                // UTF-8, which no option spelling can be.
+                if let Some(text) = arg.to_str()
+                    && text.starts_with('-')
+                    && text != "-"
+                {
+                    skip_value = options.takes_next(text);
+                    continue;
+                }
+            }
+            if rank == n {
+                return Some(index);
+            }
+            rank += 1;
+        }
+        None
     }
 
     /// Byte range of the argument at `index`.
@@ -462,6 +571,39 @@ impl Snapshot {
             return false;
         };
         self.render_inside_at(index, operand, range, message, label, help)
+    }
+
+    /// Write a report pointing at `range` inside the value of an option.
+    ///
+    /// As [`Snapshot::render_option_value`], for a value that travels with the
+    /// option it was given to.
+    ///
+    /// # Arguments
+    ///
+    /// * `option` - The value at fault and the option it came from.
+    /// * `range` - Byte range inside the value to point at. An empty range
+    ///   marks the character it starts at.
+    /// * `message` - The error message, already localized.
+    /// * `label` - Text placed under the caret, already localized, or `None`
+    ///   for a bare underline.
+    /// * `help` - An optional line of advice, already localized.
+    pub fn render_option(
+        &self,
+        option: &OptionValue,
+        range: Range<usize>,
+        message: &str,
+        label: Option<&str>,
+        help: Option<&str>,
+    ) -> bool {
+        self.render_option_value(
+            &option.value,
+            option.short,
+            option.long,
+            range,
+            message,
+            label,
+            help,
+        )
     }
 
     /// Byte range covered by `range` — an offset inside `operand` — within the
@@ -667,6 +809,23 @@ mod tests {
 
     fn snapshot(args: &[&str]) -> Snapshot {
         Snapshot::new(args)
+    }
+
+    /// Everything but `always` and `never` leaves the terminal check in
+    /// charge, rather than failing.
+    #[test]
+    fn the_mode_variable_decides_only_when_it_is_spelled_out() {
+        let mode = |value| Mode::from_env(Some(OsStr::new(value)));
+
+        assert_eq!(mode("always"), Mode::Always);
+        assert_eq!(mode("ALWAYS"), Mode::Always);
+        assert_eq!(mode("never"), Mode::Never);
+        assert_eq!(mode("Never"), Mode::Never);
+
+        for undecided in ["auto", "", "yes", "1", "sometimes"] {
+            assert_eq!(mode(undecided), Mode::Auto, "{undecided:?}");
+        }
+        assert_eq!(Mode::from_env(None), Mode::Auto);
     }
 
     /// `localize_help` and `is_label_row` both address ariadne's output by row
@@ -903,6 +1062,64 @@ mod tests {
     fn a_lone_dash_is_a_positional() {
         let snap = snapshot(&["-c", "-", "x"]);
         assert_eq!(snap.index_of_positional(0), Some(1));
+    }
+
+    /// A utility with one option of each spelling that takes a value.
+    const VALUE_OPTIONS: ValueOptions = ValueOptions {
+        shorts: &['d'],
+        longs: &["suffix", "delimiter"],
+    };
+
+    #[test]
+    fn an_operand_is_found_past_a_detached_option_value() {
+        // Counting positionals would stop at the `q` given to `--suffix`.
+        let snap = Snapshot::with_program(&["numfmt", "--suffix", "q", "1000"]);
+        assert_eq!(snap.index_of_operand(0, &VALUE_OPTIONS), Some(3));
+        assert_eq!(snap.index_of_operand(1, &VALUE_OPTIONS), None);
+        assert_eq!(snap.index_of_positional(0), Some(2));
+    }
+
+    #[test]
+    fn an_attached_value_does_not_swallow_the_operand() {
+        for args in [
+            &["numfmt", "--suffix=q", "1000"][..],
+            &["numfmt", "-dq", "1000"][..],
+        ] {
+            let snap = Snapshot::with_program(args);
+            assert_eq!(
+                snap.index_of_operand(0, &VALUE_OPTIONS),
+                Some(2),
+                "in {args:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_abbreviated_long_option_still_takes_its_value() {
+        let snap = Snapshot::with_program(&["numfmt", "--suf", "q", "1000"]);
+        assert_eq!(snap.index_of_operand(0, &VALUE_OPTIONS), Some(3));
+    }
+
+    #[test]
+    fn only_the_last_of_a_short_cluster_takes_the_next_argument() {
+        // `-zd` ends in the value option, `-dz` does not.
+        let snap = Snapshot::with_program(&["numfmt", "-zd", ",", "1000"]);
+        assert_eq!(snap.index_of_operand(0, &VALUE_OPTIONS), Some(3));
+        let snap = Snapshot::with_program(&["numfmt", "-dz", "1000"]);
+        assert_eq!(snap.index_of_operand(0, &VALUE_OPTIONS), Some(2));
+    }
+
+    #[test]
+    fn an_option_value_past_a_double_dash_is_an_operand() {
+        let snap = Snapshot::with_program(&["numfmt", "--", "--suffix", "q"]);
+        assert_eq!(snap.index_of_operand(0, &VALUE_OPTIONS), Some(2));
+        assert_eq!(snap.index_of_operand(1, &VALUE_OPTIONS), Some(3));
+    }
+
+    #[test]
+    fn an_option_the_table_does_not_name_takes_nothing() {
+        let snap = Snapshot::with_program(&["numfmt", "--round", "up", "1000"]);
+        assert_eq!(snap.index_of_operand(0, &VALUE_OPTIONS), Some(2));
     }
 
     #[test]

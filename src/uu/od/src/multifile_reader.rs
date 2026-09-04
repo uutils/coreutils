@@ -118,7 +118,7 @@ impl MultifileReader<'_> {
                             // print an error at the time that the file is needed,
                             // then move to the next file
                             let error_msg = match e.kind() {
-                                #[cfg(target_os = "windows")]
+                                #[cfg(windows)]
                                 io::ErrorKind::NotFound => "No such file or directory",
                                 _ => &strip_errno(&e),
                             };

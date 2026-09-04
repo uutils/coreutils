@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel Secho sighandler
+// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel Secho sighandler putenv
 #![allow(clippy::missing_errors_doc)]
 
 #[cfg(unix)]
@@ -53,9 +53,9 @@ impl Target {
             .expect("failed to send signal")
             .wait();
         // macOS CI needs a longer delay for process teardown after signal delivery
-        #[cfg(target_os = "macos")]
+        #[cfg(target_vendor = "apple")]
         self.child.delay(500);
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(target_vendor = "apple"))]
         self.child.delay(100);
     }
     fn is_alive(&mut self) -> bool {
@@ -75,7 +75,7 @@ fn test_invalid_arg() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_flags_after_command() {
     new_ucmd!()
         // This would cause an error if -u=v were processed because it's malformed
@@ -159,9 +159,9 @@ fn test_env_permissions() {
 
 #[test]
 fn test_echo() {
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     let args = ["cmd", "/d/c", "echo"];
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     let args = ["echo"];
 
     let result = new_ucmd!().args(&args).arg("FOO-bar").succeeds();
@@ -169,7 +169,7 @@ fn test_echo() {
     assert_eq!(result.stdout_str().trim(), "FOO-bar");
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 #[test]
 fn test_if_windows_batch_files_can_be_executed() {
     let result = new_ucmd!().arg("./runBat.bat").succeeds();
@@ -375,6 +375,31 @@ fn test_empty_name() {
         .stderr_only("env: warning: no name specified for value 'xyz'\n");
 }
 
+// An empty name is dropped with a warning (GNU injects it via putenv, we
+// can't with set_var); the other assignments must still go through.
+#[test]
+fn test_empty_name_does_not_affect_other_assignments() {
+    let result = new_ucmd!()
+        .args(&["-i", "MOTOR=idle", "=zap", "GEARBOX=locked"])
+        .succeeds();
+    result.stderr_is("env: warning: no name specified for value 'zap'\n");
+
+    // Windows sorts the environment block, so don't depend on the order.
+    let mut vars: Vec<_> = result.stdout_str().lines().collect();
+    vars.sort_unstable();
+    assert_eq!(vars, ["GEARBOX=locked", "MOTOR=idle"]);
+}
+
+// "=" alone is name and value both empty; still just a warning, exit 0.
+#[test]
+fn test_empty_name_and_empty_value() {
+    new_ucmd!()
+        .args(&["-i", "="])
+        .succeeds()
+        .no_stdout()
+        .stderr_is("env: warning: no name specified for value ''\n");
+}
+
 #[test]
 fn test_null_delimiter() {
     let out = new_ucmd!()
@@ -513,7 +538,7 @@ fn test_chdir_happens_after_relative_file_loading() {
     );
 }
 
-#[cfg(not(target_os = "windows"))] // windows has no executable "echo", its only supported as part of a batch-file
+#[cfg(not(windows))] // windows has no executable "echo", its only supported as part of a batch-file
 #[test]
 fn test_split_string_into_args_one_argument_no_quotes() {
     let scene = TestScenario::new(util_name!());
@@ -526,7 +551,7 @@ fn test_split_string_into_args_one_argument_no_quotes() {
     assert_eq!(out, "hello world\n");
 }
 
-#[cfg(not(target_os = "windows"))] // windows has no executable "echo", its only supported as part of a batch-file
+#[cfg(not(windows))] // windows has no executable "echo", its only supported as part of a batch-file
 #[test]
 fn test_split_string_into_args_one_argument() {
     let scene = TestScenario::new(util_name!());
@@ -539,7 +564,7 @@ fn test_split_string_into_args_one_argument() {
     assert_eq!(out, "hello world\n");
 }
 
-#[cfg(not(target_os = "windows"))] // windows has no executable "echo", its only supported as part of a batch-file
+#[cfg(not(windows))] // windows has no executable "echo", its only supported as part of a batch-file
 #[test]
 fn test_split_string_into_args_s_escaping_challenge() {
     let scene = TestScenario::new(util_name!());
@@ -563,7 +588,7 @@ fn test_split_string_into_args_s_escaped_c_not_allowed() {
     );
 }
 
-#[cfg(not(target_os = "windows"))] // no printf available
+#[cfg(not(windows))] // no printf available
 #[test]
 fn test_split_string_into_args_s_whitespace_handling() {
     let scene = TestScenario::new(util_name!());
@@ -576,7 +601,7 @@ fn test_split_string_into_args_s_whitespace_handling() {
     assert_eq!(out, "xAx\nxBx\n");
 }
 
-#[cfg(not(target_os = "windows"))] // no printf available
+#[cfg(not(windows))] // no printf available
 #[test]
 fn test_split_string_into_args_long_option_whitespace_handling() {
     let scene = TestScenario::new(util_name!());
@@ -589,7 +614,7 @@ fn test_split_string_into_args_long_option_whitespace_handling() {
     assert_eq!(out, "xAx\nxBx\n");
 }
 
-#[cfg(not(target_os = "windows"))] // no printf available
+#[cfg(not(windows))] // no printf available
 #[test]
 fn test_split_string_option_forms_match_gnu_required_argument_handling() {
     let scene = TestScenario::new(util_name!());
@@ -613,7 +638,7 @@ fn test_split_string_option_forms_match_gnu_required_argument_handling() {
         .stdout_is("x:one\nx:two\n");
 }
 
-#[cfg(not(target_os = "windows"))] // no printf available
+#[cfg(not(windows))] // no printf available
 #[test]
 fn test_split_string_into_args_debug_output_whitespace_handling() {
     let scene = TestScenario::new(util_name!());
@@ -632,21 +657,21 @@ fn test_split_string_into_args_debug_output_whitespace_handling() {
 }
 
 // FixMe: This test fails on MACOS:
-// thread 'test_env::test_gnu_e20' panicked at 'assertion failed: `(left == right)`
-// left: `"A=B C=D\n__CF_USER_TEXT_ENCODING=0x1F5:0x0:0x0\n"`,
-// right: `"A=B C=D\n"`', tests/by-util/test_env.rs:369:5
-#[cfg(not(target_os = "macos"))]
+// thread 'test_env::test_env_split_quoted_with_backslash_space' panicked at 'assertion failed: `(left == right)`
+// left: `"X=Y Z=W\n__CF_USER_TEXT_ENCODING=0x1F5:0x0:0x0\n"`,
+// right: `"X=Y Z=W\n"`', tests/by-util/test_env.rs:369:5
+#[cfg(not(target_vendor = "apple"))]
 #[test]
-fn test_gnu_e20() {
+fn test_env_split_quoted_with_backslash_space() {
     let scene = TestScenario::new(util_name!());
 
     let env_bin = String::from(uutests::util::get_tests_binary()) + " " + util_name!();
     let input = [
         String::from("-i"),
-        String::from(r#"-SA="B\_C=D" "#) + env_bin.escape_default().to_string().as_str() + "",
+        String::from(r#"-SX="Y\_Z=W" "#) + env_bin.escape_default().to_string().as_str() + "",
     ];
 
-    let mut output = "A=B C=D\n".to_string();
+    let mut output = "X=Y Z=W\n".to_string();
 
     // Workaround for the test to pass when coverage is being run.
     // If enabled, the binary called by env_bin will most probably be
@@ -657,10 +682,17 @@ fn test_gnu_e20() {
     }
 
     let out = scene.ucmd().args(&input).succeeds();
-    assert_eq!(out.stdout_str(), output);
+    // Windows hands PROCESSOR_ARCHITECTURE to every process it starts, so it
+    // shows up even in the empty environment `-i` asks for (seen on arm64).
+    let stdout: Vec<&str> = out
+        .stdout_str()
+        .lines()
+        .filter(|line| !line.starts_with("PROCESSOR_ARCHITECTURE="))
+        .collect();
+    assert_eq!(stdout, output.lines().collect::<Vec<_>>());
 }
 
-#[cfg(not(target_os = "windows"))] // no printf available
+#[cfg(not(windows))] // no printf available
 #[test]
 fn test_split_string_single_quotes_keep_unknown_backslash_sequences_literal() {
     let scene = TestScenario::new(util_name!());
@@ -696,7 +728,7 @@ fn test_split_string_single_quotes_keep_unknown_backslash_sequences_literal() {
         .stdout_is("\\9");
 }
 
-#[cfg(not(target_os = "windows"))] // no printf available
+#[cfg(not(windows))] // no printf available
 #[test]
 fn test_split_string_backslash_a_behavior_matches_gnu_quoting_context() {
     let scene = TestScenario::new(util_name!());
@@ -830,8 +862,7 @@ fn test_env_overwrite_arg0() {
     ts.ucmd()
         .args(&["--argv0", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 }
 
 // Do not assume that coreutils uses argv0
@@ -845,32 +876,28 @@ fn test_env_arg_argv0_overwrite() {
         .args(&["--argv0", "dirname"])
         .args(&["--argv0", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // overwrite -a by -a
     ts.ucmd()
         .args(&["-a", "dirname"])
         .args(&["-a", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // overwrite --argv0 by -a
     ts.ucmd()
         .args(&["--argv0", "dirname"])
         .args(&["-a", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // overwrite -a by --argv0
     ts.ucmd()
         .args(&["-a", "dirname"])
         .args(&["--argv0", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 }
 
 // Do not assume that coreutils uses argv0
@@ -884,31 +911,27 @@ fn test_env_arg_argv0_overwrite_mixed_with_string_args() {
         .args(&["-S--argv0 dirname"])
         .args(&["--argv0", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // normal following string arg
     ts.ucmd()
         .args(&["-a", "dirname"])
         .args(&["-S-a hijacked sh -c 'echo $0'"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // one large string arg
     ts.ucmd()
         .args(&["-S--argv0 dirname -a hijacked sh -c 'echo $0'"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // two string args
     ts.ucmd()
         .args(&["-S-a dirname"])
         .args(&["-S--argv0 hijacked sh -c 'echo $0'"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // three args: normal, string, normal
     ts.ucmd()
@@ -916,8 +939,7 @@ fn test_env_arg_argv0_overwrite_mixed_with_string_args() {
         .args(&["-S-a dirname"])
         .args(&["-a", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 }
 
 #[test]
@@ -1481,7 +1503,7 @@ mod test_raw_string_parser {
         string_parser,
     };
 
-    const LEN_OWL: usize = if cfg!(target_os = "windows") { 2 } else { 4 };
+    const LEN_OWL: usize = if cfg!(windows) { 2 } else { 4 };
 
     #[test]
     fn test_ascii_only_take_one_look_at_correct_data_and_end_behavior() {
@@ -1694,7 +1716,7 @@ mod test_raw_string_parser {
     fn test_deal_with_invalid_encoding() {
         let owl_invalid_part;
         let (brace_1, brace_2);
-        #[cfg(target_os = "windows")]
+        #[cfg(windows)]
         {
             let mut buffer = [0u16; 2];
             let owl = '🦉'.encode_utf16(&mut buffer);
@@ -1702,7 +1724,7 @@ mod test_raw_string_parser {
             brace_1 = '<'.encode_utf16(&mut buffer).to_vec();
             brace_2 = '>'.encode_utf16(&mut buffer).to_vec();
         }
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(windows))]
         {
             let mut buffer = [0u8; 4];
             let owl = '🦉'.encode_utf8(&mut buffer);
@@ -1972,7 +1994,7 @@ fn test_shebang_error() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_reject_shell_style_variable_expansions() {
     for split in [
         "-Secho $TEST_VAR_12345",
@@ -1989,7 +2011,7 @@ fn test_reject_shell_style_variable_expansions() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_simple_braced_variable() {
     new_ucmd!()
         .env("TEST_VAR_12345", "value")

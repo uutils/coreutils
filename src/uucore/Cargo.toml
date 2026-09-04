@@ -25,7 +25,6 @@ bstr = { workspace = true, optional = true }
 clap = { workspace = true }
 data-encoding = { workspace = true, optional = true }
 data-encoding-macro = { workspace = true, optional = true }
-dns-lookup = { workspace = true, optional = true }
 dunce = { workspace = true, optional = true }
 glob = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
@@ -38,12 +37,7 @@ libc = { workspace = true, optional = true }
 openssl = { workspace = true, optional = true }
 os_display = { workspace = true }
 rustc-hash = { workspace = true }
-rustix = { workspace = true, features = ["fs", "net", "pipe", "process"] }
-time = { workspace = true, optional = true, features = [
-  "formatting",
-  "local-offset",
-  "macros",
-] }
+rustix = { workspace = true, optional = true }
 # Not optional: os_display already pulls unicode-width into every uucore build,
 # so making it a direct dependency here is free and keeps char_width available
 # on all targets (a feature-gated optional dep failed to activate on wasm).
@@ -101,24 +95,23 @@ tempfile = { workspace = true }
 selinux = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = [
-  "dir",
-  "fs",
-  "poll",
-  "signal",
-  "uio",
-  "user",
-  "zerocopy",
+# utmpx is unix-only, so its dependencies must not be pulled into other targets
+# (the uptime feature enables utmpx and now builds on windows too).
+dns-lookup = { workspace = true, optional = true }
+time = { workspace = true, optional = true, features = [
+  "formatting",
+  "local-offset",
+  "macros",
 ] }
+nix = { workspace = true, optional = true }
 walkdir = { workspace = true, optional = true }
 xattr = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true, optional = true }
 
-[target.'cfg(target_os = "windows")'.dependencies]
+[target.'cfg(windows)'.dependencies]
 wild = { workspace = true }
-winapi-util = { workspace = true, optional = true }
 windows-sys = { workspace = true, optional = true, default-features = false, features = [
   "Wdk_System_SystemInformation",
   "Win32_Security",
@@ -143,12 +136,12 @@ default = ["signals"]
 backup-control = []
 colors = []
 diagnostics = ["dep:ariadne"]
-checksum = ["quoting-style", "sum", "base64-simd"]
+checksum = ["base64-simd", "quoting-style", "rustix/fs", "sum"]
 encoding = ["data-encoding", "data-encoding-macro", "z85", "base64-simd"]
-entries = ["libc"]
+entries = ["libc", "rustix/fs"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
 fast-inc = []
-fs = ["dunce", "libc", "winapi-util", "windows-sys"]
+fs = ["dunce", "libc", "rustix/fs", "windows-sys"]
 fsext = ["libc", "windows-sys", "bstr"]
 fsxattr = ["xattr", "itertools", "libc"]
 hardware = []
@@ -175,24 +168,24 @@ i18n-datetime = [
   "jiff-icu",
   "jiff",
 ]
-mode = ["libc"]
-perms = ["entries", "libc", "walkdir"]
-buf-copy = []
+mode = ["libc", "rustix/process"]
+perms = ["entries", "libc", "safe-traversal", "walkdir"]
+buf-copy = ["pipes"]
 parser-num = ["extendedbigdecimal", "num-traits"]
 parser-size = ["parser-num", "procfs"]
 parser-glob = ["glob"]
 parser = ["parser-num", "parser-size", "parser-glob"]
-pipes = ["fs"]
-process = ["libc", "windows-sys"]
+pipes = ["fs", "rustix/pipe"]
+process = ["libc", "nix/user", "rustix/process", "windows-sys"]
 proc-info = ["tty", "walkdir"]
 quoting-style = ["i18n-common"]
 ranges = []
 ringbuffer = []
 safe-copy = []
-safe-traversal = ["libc"]
+safe-traversal = ["libc", "nix/fs", "nix/dir", "nix/user"]
 selinux = ["dep:selinux"]
 smack = ["xattr"]
-signals = []
+signals = ["nix/fs", "nix/signal", "nix/poll"]
 sum = [
   "digest",
   "hex",
@@ -219,7 +212,7 @@ version-cmp = []
 wide = []
 tty = []
 time = ["jiff"]
-uptime = ["jiff", "libc", "windows-sys", "utmpx", "utmp-classic"]
+uptime = ["jiff", "libc", "rustix/time", "utmp-classic", "utmpx", "windows-sys"]
 benchmark = ["divan", "itertools", "tempfile"]
 
 [lints]

@@ -54,7 +54,7 @@ mod options {
     pub const PAGE_WIDTH: &str = "page-width";
     pub const ACROSS: &str = "across";
     pub const COLUMN_DOWN: &str = "column-down";
-    pub const COLUMN: &str = "column";
+    pub const COLUMNS: &str = "columns";
     pub const COLUMN_CHAR_SEPARATOR: &str = "separator";
     pub const COLUMN_STRING_SEPARATOR: &str = "sep-string";
     pub const MERGE: &str = "merge";
@@ -238,6 +238,8 @@ pub fn uu_app() -> Command {
                 .long(options::NUMBER_LINES)
                 .help(translate!("pr-help-number-lines"))
                 .allow_hyphen_values(true)
+                // GNU pr makes -n optional (defaults to width 5, tab).
+                .num_args(0..=1)
                 .value_name("[char][width]"),
         )
         .arg(
@@ -278,7 +280,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FORM_FEED)
                 .short('F')
-                .short_alias('f')
+                .visible_short_alias('f')
                 .long(options::FORM_FEED)
                 .help(translate!("pr-help-form-feed"))
                 .action(ArgAction::SetTrue),
@@ -312,10 +314,10 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::COLUMN)
-                .long(options::COLUMN)
-                .help(translate!("pr-help-column"))
-                .value_name("column"),
+            Arg::new(options::COLUMNS)
+                .long(options::COLUMNS)
+                .help(translate!("pr-help-columns"))
+                .value_name("columns"),
         )
         .arg(
             Arg::new(options::COLUMN_CHAR_SEPARATOR)
@@ -352,6 +354,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::JOIN_LINES)
                 .short('J')
+                .long(options::JOIN_LINES)
                 .help(translate!("pr-help-join-lines"))
                 .action(ArgAction::SetTrue),
         )
@@ -586,7 +589,7 @@ fn build_options(
 
     let is_merge_mode = matches.get_flag(options::MERGE);
 
-    if is_merge_mode && matches.contains_id(options::COLUMN) {
+    if is_merge_mode && matches.contains_id(options::COLUMNS) {
         return Err(PrError::EncounteredErrors {
             msg: translate!("pr-error-column-merge-conflict"),
         });
@@ -867,7 +870,10 @@ fn build_options(
         });
     }
 
-    let page_length_le_ht = page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
+    // `pr --help` states the rule twice: a page length of 10 or less implies
+    // `-t`. At exactly 10 the old `<` left the header and trailer in place and
+    // subtracted them from the page, so the page had no room for content at all.
+    let page_length_le_ht = page_length <= (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
 
     let display_header_and_trailer = !page_length_le_ht
         && !matches.get_flag(options::OMIT_HEADER)
@@ -954,20 +960,20 @@ fn build_options(
     let start_column_option = match res {
         Some(Ok(0)) => {
             return Err(PrError::EncounteredErrors {
-                msg: "invalid --column argument '0'".to_string(),
+                msg: "invalid --columns argument '0'".to_string(),
             });
         }
         Some(res) => Some(res?),
         None => None,
     };
 
-    // --column has more priority than -column
+    // --columns has more priority than -column
 
     let column_option_value =
-        match parse_usize(matches, options::COLUMN, "invalid number of columns") {
+        match parse_usize(matches, options::COLUMNS, "invalid number of columns") {
             Some(Ok(0)) => {
                 return Err(PrError::EncounteredErrors {
-                    msg: "invalid --column argument '0'".to_string(),
+                    msg: "invalid --columns argument '0'".to_string(),
                 });
             }
             Some(res) => Some(res?),
@@ -1173,7 +1179,7 @@ fn get_pages(
             // TODO Optimization opportunity: don't bother pushing
             // lines and pages if we aren't going to display it.
             if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-                pages.push((page_num, page.clone()));
+                pages.push((page_num, std::mem::take(&mut page)));
             }
             page_num += 1;
             page.clear();
@@ -1197,7 +1203,7 @@ fn get_pages(
             // and clear the `page` buffer for the next iteration.
             if page.len() >= lines_needed_per_page {
                 if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-                    pages.push((page_num, page.clone()));
+                    pages.push((page_num, std::mem::take(&mut page)));
                 }
                 page_num += 1;
                 page.clear();
@@ -1213,7 +1219,7 @@ fn get_pages(
 
     // Consider all trailing lines as the last page.
     if !page.is_empty() && start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-        pages.push((page_num, page.clone()));
+        pages.push((page_num, std::mem::take(&mut page)));
     }
 
     (pages, page_num + 1)
@@ -1243,8 +1249,7 @@ fn group_lines(num_files: usize, lines: Vec<FileLine>) -> Vec<(usize, Vec<FileLi
                 current_group.push(file_line);
             }
             Some(key) => {
-                result.push((key, current_group.clone()));
-                current_group.clear();
+                result.push((key, std::mem::take(&mut current_group)));
                 current_key = Some(group_key(num_files, &file_line));
                 current_group.push(file_line);
             }
@@ -1397,14 +1402,37 @@ fn to_table(
 ///
 /// This function should be applied when there are fewer lines than the
 /// total number of cells in the table.
+///
+/// The lines are spread over the columns the way `pr` fills a page it cannot
+/// fill completely: every column takes the ceiling of what is still unplaced
+/// divided by the number of columns left to fill, so the leftmost columns are
+/// the long ones and no line is left over.
 fn to_table_short_file(
     content_lines_per_page: usize,
     columns: usize,
     lines: &[FileLine],
 ) -> Vec<Vec<Option<&FileLine>>> {
-    let num_rows = lines.len() / columns;
+    let mut bounds = Vec::with_capacity(columns + 1);
+    bounds.push(0);
+    let mut placed = 0;
+    for column in 0..columns {
+        placed += (lines.len() - placed).div_ceil(columns - column);
+        bounds.push(placed);
+    }
+
+    let num_rows = (0..columns)
+        .map(|j| bounds[j + 1] - bounds[j])
+        .max()
+        .unwrap_or(0);
     let mut table: Vec<Vec<_>> = (0..num_rows)
-        .map(|i| (0..columns).map(|j| lines.get(num_rows * j + i)).collect())
+        .map(|i| {
+            (0..columns)
+                .map(|j| {
+                    let index = bounds[j] + i;
+                    (index < bounds[j + 1]).then(|| &lines[index])
+                })
+                .collect()
+        })
         .collect();
     // Fill the rest with Nones.
     for _ in num_rows..content_lines_per_page {
@@ -1475,19 +1503,28 @@ fn write_columns(
     // cells, where each row will be printed as a single line in the
     // output.
     let merge = options.merge_files_print.is_some();
-    let table = if !merge && (lines.len() < (content_lines_per_page * columns)) {
-        to_table_short_file(content_lines_per_page, columns, lines)
+    let table = if merge {
+        to_table_merged(content_lines_per_page, columns, filled_lines)
     } else if across_mode {
         to_table_across(content_lines_per_page, columns, lines)
-    } else if merge {
-        to_table_merged(content_lines_per_page, columns, filled_lines)
+    } else if lines.len() < (content_lines_per_page * columns) {
+        to_table_short_file(content_lines_per_page, columns, lines)
     } else {
         to_table(content_lines_per_page, columns, lines)
     };
 
     let blank_line = FileLine::default();
     for row in table {
-        let indexes = row.len();
+        // On a page that is not completely filled the last row stops part way
+        // through, and its final cell must not be followed by a column
+        // separator. Merging prints an empty cell for every column instead, so
+        // there the row always spans the full width.
+        let indexes = if merge {
+            row.len()
+        } else {
+            row.iter().take_while(|cell| cell.is_some()).count()
+        };
+        let mut cells_written = 0;
         for (i, cell) in row.iter().enumerate() {
             let line_to_print = match cell {
                 None if options.merge_files_print.is_some() => &blank_line,
@@ -1503,8 +1540,15 @@ fn write_columns(
                 get_line_for_printing(options, line_to_print, columns, i, line_width, indexes)
                     .as_bytes(),
             )?;
+            cells_written += 1;
         }
-        if not_found_break && (feed_line_present || !options.display_header_and_trailer) {
+        // The last row of a partly filled page has content in its leading
+        // columns and nothing in the rest, so it still needs to be terminated.
+        // Only a row without any content at all means the page ran out.
+        if cells_written == 0
+            && not_found_break
+            && (feed_line_present || !options.display_header_and_trailer)
+        {
             break;
         }
         writer.write_all(line_separator)?;

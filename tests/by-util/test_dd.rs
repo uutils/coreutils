@@ -7,7 +7,7 @@
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
-#[cfg(all(unix, not(feature = "feat_selinux")))]
+#[cfg(all(unix, not(feature = "selinux")))]
 use uutests::util::run_ucmd_as_root_with_stdin_stdout;
 #[cfg(not(windows))]
 use uutests::util::{UCommand, get_tests_binary};
@@ -19,7 +19,7 @@ use uucore::io::OwnedFileDescriptorOrHandle;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd"),))]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "freebsd"),))]
 use std::process::Command;
 use std::process::Stdio;
 #[cfg(not(windows))]
@@ -107,7 +107,13 @@ fn version() {
 
 #[test]
 fn help() {
-    new_ucmd!().args(&["--help"]).succeeds();
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("\nOperands:\n")
+        .stdout_contains("\nConversion options:\n")
+        .stdout_does_not_contain("###")
+        .stdout_does_not_contain("```");
 }
 
 #[test]
@@ -142,6 +148,18 @@ fn test_huge_block_size_is_rejected_without_panicking() {
             .arg(arg)
             .fails_with_code(1)
             .no_stdout()
+            .stderr_contains("Value too large for defined data type");
+    }
+}
+
+#[test]
+fn test_count_past_u64_is_rejected() {
+    // A number past u64 used to saturate, so count= silently copied the whole
+    // input and exited 0 where GNU rejects the operand.
+    for arg in ["count=99999999999999999999", "skip=18446744073709551616"] {
+        new_ucmd!()
+            .args(&["if=/dev/null", arg])
+            .fails_with_code(1)
             .stderr_contains("Value too large for defined data type");
     }
 }
@@ -1351,29 +1369,28 @@ fn test_invalid_number_arg_gnu_compatibility() {
         new_ucmd!()
             .args(&[format!("{command}=")])
             .fails()
-            .stderr_is("dd: invalid number: ‘’\n");
+            .stderr_is("dd: invalid number: ''\n");
 
         new_ucmd!()
             .args(&[format!("{command}=29d")])
             .fails()
-            .stderr_is("dd: invalid number: ‘29d’\n");
+            .stderr_is("dd: invalid number: '29d'\n");
     }
 }
 
 #[test]
 fn test_invalid_flag_arg_gnu_compatibility() {
-    let commands = vec!["iflag", "oflag"];
-
-    for command in commands {
+    // GNU names the direction the flag was given in.
+    for (command, direction) in [("iflag", "input"), ("oflag", "output")] {
         new_ucmd!()
             .args(&[format!("{command}=")])
             .fails()
-            .usage_error("invalid input flag: ‘’");
+            .usage_error(format!("invalid {direction} flag: ''"));
 
         new_ucmd!()
             .args(&[format!("{command}=29d")])
             .fails()
-            .usage_error("invalid input flag: ‘29d’");
+            .usage_error(format!("invalid {direction} flag: '29d'"));
     }
 }
 
@@ -1619,7 +1636,7 @@ fn test_empty_count_number() {
     new_ucmd!()
         .args(&["count=B"])
         .fails_with_code(1)
-        .stderr_only("dd: invalid number: ‘B’\n");
+        .stderr_only("dd: invalid number: 'B'\n");
 }
 
 /// Test for discarding system file cache.
@@ -1635,7 +1652,7 @@ fn test_nocache_file() {
 
 #[test]
 #[cfg(unix)]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(feature = "selinux"))]
 // Disabled on SELinux for now
 fn test_skip_past_dev() {
     // NOTE: This test intends to trigger code which can only be reached with root permissions.
@@ -1660,7 +1677,7 @@ fn test_skip_past_dev() {
 
 #[test]
 #[cfg(unix)]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(feature = "selinux"))]
 fn test_seek_past_dev() {
     // NOTE: This test intends to trigger code which can only be reached with root permissions.
     let ts = TestScenario::new(util_name!());
@@ -1683,7 +1700,7 @@ fn test_seek_past_dev() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd"),))]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "freebsd"),))]
 fn test_reading_partial_blocks_from_fifo() {
     // Create the FIFO.
     let ts = TestScenario::new(util_name!());
@@ -1723,7 +1740,7 @@ fn test_reading_partial_blocks_from_fifo() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd"),))]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "freebsd"),))]
 fn test_reading_partial_blocks_from_fifo_unbuffered() {
     // Create the FIFO.
     let ts = TestScenario::new(util_name!());
@@ -1772,7 +1789,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
 /// The writer below runs `printf` inside `sh`, where it is a builtin, so this
 /// needs no `printf` feature.
 #[test]
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd")))]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "freebsd")))]
 fn test_reading_partial_blocks_from_fifo_gathered_into_larger_obs() {
     // Create the FIFO.
     let ts = TestScenario::new(util_name!());
@@ -1809,6 +1826,43 @@ fn test_reading_partial_blocks_from_fifo_gathered_into_larger_obs() {
     assert_eq!(output.stdout, b"abcd");
     let expected = b"0+2 records in\n0+1 records out\n4 bytes copied";
     assert!(output.stderr.starts_with(expected));
+}
+
+// `O_DIRECT` requires the read buffer to satisfy the device's DMA alignment;
+// with a misaligned buffer the kernel fails the read with EINVAL (#12085).
+// Reading a regular file with `iflag=direct` exercises the same requirement
+// on filesystems that support it.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_iflag_direct_read_uses_aligned_buffer() {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    // A multiple of the block size: the EOF read then happens at an aligned
+    // file offset. A trailing partial block would leave the offset
+    // misaligned, which some kernels (e.g. f2fs on Android) reject with
+    // EINVAL instead of reporting end of file.
+    let data = build_ascii_block(2 * 4096);
+    at.write_bytes("direct-in.bin", &data);
+
+    if OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECT)
+        .open(at.plus("direct-in.bin"))
+        .is_err()
+    {
+        print!("Test skipped; filesystem does not support O_DIRECT");
+        return;
+    }
+
+    ucmd.args(&[
+        "if=direct-in.bin",
+        "of=direct-out.bin",
+        "iflag=direct",
+        "bs=4096",
+    ])
+    .succeeds();
+    assert_eq!(at.read_bytes("direct-out.bin"), data);
 }
 
 #[test]
@@ -1957,8 +2011,7 @@ fn test_oflag_direct_partial_block() {
             "status=none".to_string(),
         ])
         .succeeds()
-        .stdout_is("")
-        .stderr_is("");
+        .no_output();
     assert!(output_path.exists());
     let output_size = output_path.metadata().unwrap().len() as usize;
     assert_eq!(output_size, input_size);
@@ -1979,8 +2032,39 @@ fn test_skip_overflow() {
         .args(&["bs=1", "skip=9223372036854775808", "count=0"])
         .fails()
         .stderr_contains(
-            "dd: invalid number: ‘9223372036854775808’: Value too large for defined data type",
+            "dd: invalid number: '9223372036854775808': Value too large for defined data type",
         );
+}
+
+#[test]
+fn test_skip_blocks_times_ibs_overflow_does_not_wrap() {
+    // 17592186044416 * 1048576 == 2^64 would wrap around to 0, and
+    // must be rejected
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in.f", "0123456789abcdef");
+    ucmd.args(&["if=in.f", "skip=17592186044416", "ibs=1048576", "count=1"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("Value too large for defined data type");
+}
+
+#[test]
+fn test_seek_blocks_times_obs_overflow_does_not_wrap() {
+    // Same as test_skip_blocks_times_ibs_overflow_does_not_wrap,
+    // but for `seek=`/`obs=`.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("out.f", "0123456789abcdef");
+    ucmd.args(&[
+        "if=/dev/null",
+        "of=out.f",
+        "seek=17592186044416",
+        "obs=1048576",
+        "conv=notrunc",
+    ])
+    .fails()
+    .stderr_contains("Value too large for defined data type");
+    // The output file must be untouched, not overwritten at offset 0.
+    assert_eq!(at.read("out.f"), "0123456789abcdef");
 }
 
 #[test]
@@ -2188,7 +2272,7 @@ fn test_bs_not_positive() {
                 .fails()
                 .no_stdout()
                 .code_is(1)
-                .stderr_is(format!("dd: invalid number: ‘{bs}’\n"));
+                .stderr_is(format!("dd: invalid number: '{bs}'\n"));
         }
     }
 }
@@ -2216,7 +2300,7 @@ fn test_count_bytes_with_expanding_block_conv() {
 // A failed copy still has to report what it transferred, including complete
 // and partial records.
 #[test]
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_stats_are_reported_when_a_write_fails() {
     use rlimit::Resource;
 
@@ -2248,4 +2332,193 @@ fn test_stats_are_reported_when_a_write_fails() {
     result.stderr_contains("1+1 records out");
     result.stderr_contains("786432 bytes");
     assert_eq!(at.metadata("capped.bin").len(), CAP);
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unrecognized_key() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["bsx=1"])
+            .pipe_in("")
+            .fails_with_code(1);
+
+        // The caret takes the key alone: the value is fine, it is the operand
+        // name that dd does not know. The usage hint that follows names the
+        // binary as it was invoked, so it is checked apart from the report.
+        let stderr = result.stderr_as_displayed();
+        let (report, hint) = stderr.trim_end().rsplit_once('\n').unwrap();
+        assert_eq!(
+            report,
+            "\
+dd: unrecognized operand 'bsx=1'
+   ╭─[ dd:1:4 ]
+   │
+ 1 │ dd bsx=1
+   │    ───
+   │
+   │ Help: an operand is KEY=VALUE, as in if=file bs=4k count=10
+───╯"
+        );
+        assert!(
+            hint.ends_with("dd --help' for more information."),
+            "{stderr}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_failing_flag_of_a_list() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["conv=ucase,zap"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // Only the second flag is wrong, and the caret says so.
+        assert!(stderr.contains("dd:1:15"), "{stderr}");
+        assert!(stderr.contains("1 │ dd conv=ucase,zap"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_names_the_flags_rather_than_the_commas() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["conv=ucase,zap"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // The list syntax parsed: it is the flag that is unknown, so the
+        // report names the conversions instead of explaining commas.
+        assert!(stderr.contains("not a known conversion"), "{stderr}");
+        assert!(stderr.contains("conv= is one of ascii"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_failing_flag_and_not_the_one_it_starts() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["conv=notrunc,not"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // `not` also opens the `notrunc` in front of it, and the caret belongs
+        // on the flag that failed rather than on the one that parsed.
+        assert!(stderr.contains("dd:1:17"), "{stderr}");
+        assert!(
+            stderr.contains("1 \u{2502} dd conv=notrunc,not"),
+            "{stderr}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_value_of_a_count() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["count=8x"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("dd:1:10"), "{stderr}");
+        assert!(stderr.contains("a number may be followed by"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_keeps_the_try_help_hint_of_a_flag_message() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["iflag=nope"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("dd:1:10"), "{stderr}");
+        // The caret replaces the message, not the usage hint: a pipe and a
+        // terminal must not disagree on whether one was printed.
+        assert!(
+            stderr
+                .trim_end()
+                .ends_with("dd --help' for more information."),
+            "{stderr}"
+        );
+    }
+
+    #[test]
+    fn test_plain_message_keeps_the_try_help_hint_of_a_flag_message() {
+        new_ucmd!()
+            .args(&["iflag=nope"])
+            .pipe_in("")
+            .fails_with_code(1)
+            .stderr_contains("dd: invalid input flag: 'nope'")
+            .stderr_contains("--help' for more information.");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["bsx=1"])
+            .pipe_in("")
+            .fails_with_code(1)
+            .stderr_contains("dd: unrecognized operand 'bsx=1'\n")
+            .stderr_contains("--help' for more information.")
+            .stderr_does_not_contain("╭─");
+    }
+
+    // The three below cover the shared switch in `uucore::diagnostics`.
+
+    #[test]
+    fn test_report_is_drawn_into_a_pipe_when_asked_for() {
+        let result = new_ucmd!()
+            .env("UUTILS_DIAG", "always")
+            .args(&["bsx=1"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        // No terminal anywhere, and the report is drawn all the same.
+        assert!(stderr.contains("dd:1:4"), "{stderr}");
+        assert!(stderr.contains("1 \u{2502} dd bsx=1"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_plain_message_at_a_terminal_when_asked_for() {
+        let result = new_ucmd!()
+            .env("UUTILS_DIAG", "never")
+            .terminal_sim_stderr()
+            .args(&["bsx=1"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(
+            stderr.contains("dd: unrecognized operand 'bsx=1'"),
+            "{stderr}"
+        );
+        assert!(!stderr.contains('\u{256d}'), "{stderr}");
+    }
+
+    #[test]
+    fn test_unknown_mode_leaves_the_terminal_in_charge() {
+        // A value nobody meant behaves as if the variable were unset.
+        new_ucmd!()
+            .env("UUTILS_DIAG", "sometimes")
+            .args(&["bsx=1"])
+            .pipe_in("")
+            .fails_with_code(1)
+            .stderr_contains("dd: unrecognized operand 'bsx=1'\n")
+            .stderr_does_not_contain("╭─");
+    }
 }

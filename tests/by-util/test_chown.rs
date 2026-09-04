@@ -35,9 +35,9 @@ fn skipping_test_is_okay(result: &CmdResult, needle: &str) -> bool {
     false
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "android", windows))]
 const ROOT_GROUP: &str = "root";
-#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "windows")))]
+#[cfg(not(any(target_os = "linux", target_os = "android", windows)))]
 const ROOT_GROUP: &str = "wheel";
 
 #[cfg(test)]
@@ -560,7 +560,7 @@ fn test_chown_only_group_id() {
 
     // Apparently on CI "macos-latest, x86_64-apple-darwin, feat_os_unix"
     // the process has the rights to change from runner:staff to runner:wheel
-    #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
+    #[cfg(any(windows, all(unix, not(target_vendor = "apple"))))]
     // FreeBSD user on CI is part of wheel group
     if group_id != "0" {
         scene
@@ -965,7 +965,7 @@ fn test_chown_symlink_cycles() {
 
     let result = scene.ucmd().arg("-vRL").arg(&user_name).arg("a").run();
 
-    if cfg!(target_os = "macos") || cfg!(target_os = "openbsd") || cfg!(target_os = "android") {
+    if cfg!(target_vendor = "apple") || cfg!(target_os = "openbsd") || cfg!(target_os = "android") {
         result
             .stdout_contains(format!("ownership of 'a' retained as {user_name}"))
             .stdout_contains(format!("ownership of 'a/b' retained as {user_name}"))

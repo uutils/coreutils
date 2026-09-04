@@ -33,7 +33,18 @@ pub fn operands(_args: &[OsString]) -> Option<Vec<OsString>> {
 // an offset before it knows whether anything will be drawn. It is the one part
 // of this module that is not a no-op, so it is shared with the real one rather
 // than restated here.
-pub use crate::features::diagnostics_boundary::{char_span, floor_boundary};
+pub use crate::features::diagnostics_boundary::{
+    OptionValue, ValueOptions, char_span, floor_boundary, list_items,
+};
+
+/// Always the error itself: nothing is ever drawn to replace it.
+pub fn error_after_report<E: Into<Box<dyn crate::error::UError>>>(
+    _diag_args: Option<&[OsString]>,
+    error: E,
+    _draw: impl FnOnce(&[OsString], &E) -> bool,
+) -> Box<dyn crate::error::UError> {
+    error.into()
+}
 
 /// A snapshot of nothing: it finds nothing and renders nothing.
 ///
@@ -76,6 +87,10 @@ impl Snapshot {
         None
     }
 
+    pub fn index_of_operand(&self, _n: usize, _options: &ValueOptions) -> Option<usize> {
+        None
+    }
+
     pub fn render(
         &self,
         _index: usize,
@@ -90,6 +105,17 @@ impl Snapshot {
         &self,
         _index: usize,
         _operand: &str,
+        _range: Range<usize>,
+        _message: &str,
+        _label: Option<&str>,
+        _help: Option<&str>,
+    ) -> bool {
+        false
+    }
+
+    pub fn render_option(
+        &self,
+        _option: &OptionValue,
         _range: Range<usize>,
         _message: &str,
         _label: Option<&str>,
