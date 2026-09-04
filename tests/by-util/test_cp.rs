@@ -8983,3 +8983,16 @@ fn test_progressbar_inexistent_source() {
         .fails_with_code(1)
         .stderr_contains("cp: cannot stat 'inexistent1': No such file or directory");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_sparse_always_to_character_device() {
+    // The sparse paths use ftruncate and positional writes, which a character
+    // device rejects with EINVAL. Only a fifo destination was excluded, so
+    // `cp --sparse=always FILE /dev/null` failed where GNU copies normally.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("src.txt", "hello world\n");
+    ucmd.args(&["--sparse=always", "src.txt", "/dev/null"])
+        .succeeds()
+        .no_stderr();
+}
