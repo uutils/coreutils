@@ -59,12 +59,10 @@ fn split_short_args_with_value(args: impl uucore::Args) -> impl uucore::Args {
     let mut v: Vec<OsString> = Vec::new();
 
     for arg in args {
-        let bytes = arg.as_encoded_bytes();
-
-        if bytes.len() > 2
-            && (bytes.starts_with(b"-f") || bytes.starts_with(b"-s") || bytes.starts_with(b"-t"))
+        if let Some((short_arg, value)) = arg.as_encoded_bytes().split_at_checked(2)
+            && !value.is_empty()
+            && matches!(short_arg, b"-f" | b"-s" | b"-t")
         {
-            let (short_arg, value) = bytes.split_at(2);
             // SAFETY:
             // Both `short_arg` and `value` only contain content that originated from `OsStr::as_encoded_bytes`
             v.push(unsafe { OsString::from_encoded_bytes_unchecked(short_arg.to_vec()) });
@@ -129,17 +127,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(SeqError::FormatAndEqualWidth.into());
     }
 
-    let first = if numbers.len() > 1 {
-        numbers[0]
-            .parse()
-            .map_err(|e| SeqError::ParseError(numbers[0].to_owned(), e))?
+    let first = if let [n, _, ..] = numbers[..] {
+        n.parse()
+            .map_err(|e| SeqError::ParseError(n.to_owned().clone(), e))?
     } else {
         PreciseNumber::one()
     };
-    let increment = if numbers.len() > 2 {
-        numbers[1]
-            .parse()
-            .map_err(|e| SeqError::ParseError(numbers[1].to_owned(), e))?
+    let increment = if let [_, n, _, ..] = numbers[..] {
+        n.parse()
+            .map_err(|e| SeqError::ParseError(n.to_owned().clone(), e))?
     } else {
         PreciseNumber::one()
     };
