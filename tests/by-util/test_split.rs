@@ -2232,3 +2232,13 @@ split: invalid number of bytes: '7zq'
             .stderr_is("split: invalid number of bytes: '7zq'\n");
     }
 }
+
+#[test]
+fn test_obsolete_lines_not_read_after_double_dash() {
+    // After `--` there are no more options, so `-1` names a file rather than
+    // being taken as the obsolete `split -1` line-count spelling.
+    new_ucmd!()
+        .args(&["--", "-1"])
+        .fails()
+        .stderr_contains("cannot open '-1' for reading");
+}
