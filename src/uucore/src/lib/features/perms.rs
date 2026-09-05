@@ -108,13 +108,14 @@ pub fn wrap_chown<P: AsRef<Path>>(
             VerbosityLevel::Silent => (),
             level => {
                 out = format!(
-                    "changing {} of {}: {e}",
+                    "changing {} of {}: {}",
                     if verbosity.groups_only {
                         "group"
                     } else {
                         "ownership"
                     },
                     path.quote(),
+                    strip_errno(&e),
                 );
                 if level == VerbosityLevel::Verbose {
                     out = if verbosity.groups_only {
