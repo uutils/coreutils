@@ -782,18 +782,22 @@ fn width_of(total: u64, minimum_width: usize) -> usize {
 /// [`MINIMUM_WIDTH`], but when stdin is a regular file its size is known up
 /// front and dictates the width the same way a named file's size does.
 fn stdin_size() -> Option<u64> {
+    // Only Unix is handled: on Windows, `metadata()` of a pipe handle reports a
+    // regular file of length 0, which would shrink the width to 1 instead of
+    // falling back to `MINIMUM_WIDTH`.
     #[cfg(unix)]
-    use std::os::fd::AsFd;
-    #[cfg(windows)]
-    use std::os::windows::io::AsHandle;
+    {
+        use std::os::fd::AsFd;
 
-    let stdin = io::stdin();
-    #[cfg(unix)]
-    let cloned = stdin.as_fd().try_clone_to_owned().ok()?;
-    #[cfg(windows)]
-    let cloned = stdin.as_handle().try_clone_to_owned().ok()?;
-    let metadata = File::from(cloned).metadata().ok()?;
-    metadata.is_file().then_some(metadata.len())
+        let stdin = io::stdin();
+        let cloned = stdin.as_fd().try_clone_to_owned().ok()?;
+        let metadata = File::from(cloned).metadata().ok()?;
+        metadata.is_file().then_some(metadata.len())
+    }
+    #[cfg(not(unix))]
+    {
+        None
+    }
 }
 
 type InputIterItem<'a> = Result<Input<'a>, Box<dyn UError>>;
