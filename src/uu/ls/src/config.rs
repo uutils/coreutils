@@ -124,42 +124,86 @@ const POSIXLY_CORRECT_BLOCK_SIZE: u64 = 512;
 const DEFAULT_BLOCK_SIZE: u64 = 1024;
 const DEFAULT_FILE_SIZE_BLOCK_SIZE: u64 = 1;
 
-/// Resolve `(file_size_block_size, block_size)` from environment variables.
-///
-/// `LS_BLOCK_SIZE` and `BLOCK_SIZE` affect both values.
-/// `BLOCKSIZE` only affects `block_size` (allocation display with `-s`).
-/// `POSIXLY_CORRECT` sets `block_size` to 512 as a last resort.
-/// `-k` (`opt_kb`) forces `block_size` to `DEFAULT_BLOCK_SIZE`.
-fn resolve_block_sizes_from_env(opt_kb: bool) -> (u64, u64) {
-    match parse_block_size::block_size_from_env(&["LS_BLOCK_SIZE", "BLOCK_SIZE"]) {
-        parse_block_size::BlockSizeEnv::Found(size) => {
+/// The block sizes `ls` divides by, plus the units echoed next to them.
+struct BlockSizes {
+    /// Divisor for file sizes (the size column of `-l`).
+    file_size: u64,
+    /// Divisor for allocated sizes (`-s`, and the `total` line).
+    alloc: u64,
+    /// Suffix echoed next to a file size, if any.
+    file_size_suffix: Option<String>,
+    /// Suffix echoed next to an allocated size, if any.
+    alloc_suffix: Option<String>,
+}
+
+impl BlockSizes {
+    /// Both columns share one spec, as with `--block-size=SIZE`.
+    fn uniform(size: u64, suffix: Option<String>) -> Self {
+        Self {
+            file_size: size,
+            alloc: size,
+            file_size_suffix: suffix.clone(),
+            alloc_suffix: suffix,
+        }
+    }
+
+    /// Plain sizes with no suffix to echo.
+    fn plain(file_size: u64, alloc: u64) -> Self {
+        Self {
+            file_size,
+            alloc,
+            file_size_suffix: None,
+            alloc_suffix: None,
+        }
+    }
+}
+
+/// Resolve the block sizes from the environment, in GNU's precedence order:
+/// `LS_BLOCK_SIZE`/`BLOCK_SIZE` set both, `BLOCKSIZE` only the allocation
+/// one, `POSIXLY_CORRECT` 512 as a last resort. `-k` (`opt_kb`) resets the
+/// allocation block size and its unit, leaving the file-size ones alone.
+fn resolve_block_sizes_from_env(opt_kb: bool) -> BlockSizes {
+    match parse_block_size::block_size_from_env_with_suffix(&["LS_BLOCK_SIZE", "BLOCK_SIZE"]) {
+        (parse_block_size::BlockSizeEnv::Found(size), suffix) => {
             if opt_kb {
-                (size, DEFAULT_BLOCK_SIZE)
+                BlockSizes {
+                    file_size: size,
+                    alloc: DEFAULT_BLOCK_SIZE,
+                    file_size_suffix: suffix,
+                    alloc_suffix: None,
+                }
             } else {
-                (size, size)
+                BlockSizes::uniform(size, suffix)
             }
         }
-        parse_block_size::BlockSizeEnv::SetButInvalid => (DEFAULT_BLOCK_SIZE, DEFAULT_BLOCK_SIZE),
-        parse_block_size::BlockSizeEnv::NotSet => {
+        (parse_block_size::BlockSizeEnv::SetButInvalid, _) => {
+            BlockSizes::plain(DEFAULT_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+        }
+        (parse_block_size::BlockSizeEnv::NotSet, _) => {
             // Neither LS_BLOCK_SIZE nor BLOCK_SIZE was set; check BLOCKSIZE
             // which only affects allocation display, not file size.
-            match parse_block_size::block_size_from_env(&["BLOCKSIZE"]) {
-                parse_block_size::BlockSizeEnv::Found(size) => {
+            match parse_block_size::block_size_from_env_with_suffix(&["BLOCKSIZE"]) {
+                (parse_block_size::BlockSizeEnv::Found(size), suffix) => {
                     if opt_kb {
-                        (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+                        BlockSizes::plain(DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
                     } else {
-                        (DEFAULT_FILE_SIZE_BLOCK_SIZE, size)
+                        BlockSizes {
+                            file_size: DEFAULT_FILE_SIZE_BLOCK_SIZE,
+                            alloc: size,
+                            file_size_suffix: None,
+                            alloc_suffix: suffix,
+                        }
                     }
                 }
-                parse_block_size::BlockSizeEnv::SetButInvalid => {
+                (parse_block_size::BlockSizeEnv::SetButInvalid, _) => {
                     // BLOCKSIZE was set but invalid: stop lookup, use defaults.
-                    (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+                    BlockSizes::plain(DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
                 }
-                parse_block_size::BlockSizeEnv::NotSet => {
+                (parse_block_size::BlockSizeEnv::NotSet, _) => {
                     if std::env::var_os("POSIXLY_CORRECT").is_some() && !opt_kb {
-                        (DEFAULT_FILE_SIZE_BLOCK_SIZE, POSIXLY_CORRECT_BLOCK_SIZE)
+                        BlockSizes::plain(DEFAULT_FILE_SIZE_BLOCK_SIZE, POSIXLY_CORRECT_BLOCK_SIZE)
                     } else {
-                        (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+                        BlockSizes::plain(DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
                     }
                 }
             }
@@ -212,6 +256,13 @@ pub struct Config {
     pub(crate) file_size_block_size: u64,
     #[allow(dead_code)]
     pub(crate) block_size: u64, // is never read on Windows
+    /// Display suffix (e.g. `"K"`) echoed back next to a file size, set when
+    /// `--block-size`/`LS_BLOCK_SIZE`/`BLOCK_SIZE` held a suffix-only spec
+    /// rather than a numeric one.
+    pub(crate) file_size_block_size_suffix: Option<String>,
+    /// Display suffix echoed back next to an allocated size (`-s`, `total`).
+    /// `BLOCKSIZE` feeds this one only; `-k` clears it.
+    pub(crate) block_size_suffix: Option<String>,
     pub(crate) width: u16,
     // Dir and vdir needs access to this field
     pub quoting_style: QuotingStyle,
@@ -754,13 +805,13 @@ impl Config {
             SizeFormat::Bytes
         };
 
-        let (file_size_block_size, block_size) = if let Some(opt_block_size) = opt_block_size {
+        let block_sizes = if let Some(opt_block_size) = opt_block_size {
             // --block-size command-line argument: parse it, error on invalid
             // If --block-size=si or --block-size=human-readable, skip numeric parsing
             if opt_si {
-                (DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
+                BlockSizes::plain(DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
             } else if opt_hr {
-                (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+                BlockSizes::plain(DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
             } else {
                 let size = parse_size_non_zero_u64(opt_block_size).map_err(|error| {
                     let ls_error = LsError::BlockSizeParseError(opt_block_size.clone());
@@ -778,15 +829,22 @@ impl Config {
                     )
                 })?;
                 // --block-size overrides -k
-                (size, size)
+                let suffix = parse_block_size::suffix_from_parsed_block_size(opt_block_size);
+                BlockSizes::uniform(size, suffix)
             }
         } else if !opt_si && !opt_hr {
             resolve_block_sizes_from_env(opt_kb)
         } else if opt_si {
-            (DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
+            BlockSizes::plain(DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
         } else {
-            (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+            BlockSizes::plain(DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
         };
+        let BlockSizes {
+            file_size: file_size_block_size,
+            alloc: block_size,
+            file_size_suffix: file_size_block_size_suffix,
+            alloc_suffix: block_size_suffix,
+        } = block_sizes;
 
         let long = {
             let author = options.get_flag(options::AUTHOR);
@@ -1004,6 +1062,8 @@ impl Config {
             alloc_size: options.get_flag(options::size::ALLOCATION_SIZE),
             file_size_block_size,
             block_size,
+            file_size_block_size_suffix,
+            block_size_suffix,
             width,
             quoting_style,
             locale_quoting,

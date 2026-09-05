@@ -39,7 +39,7 @@ use uucore::fsxattr::has_acl;
 use uucore::libc::{dev_t, major, minor};
 use uucore::{
     error::UResult,
-    format::human::human_readable,
+    format::human::{SizeFormat, human_readable},
     fs::display_permissions,
     fsext::metadata_get_time,
     i18n::{UEncoding, get_ctype_encoding},
@@ -722,11 +722,26 @@ fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
         let r = metadata.len() % config.file_size_block_size;
         if r == 0 { d } else { d + 1 }
     };
-    SizeOrDeviceId::Size(display_size(len_adjusted, config))
+    SizeOrDeviceId::Size(display_file_size(len_adjusted, config))
 }
 
+/// Render an allocated size (`-s`, and the `total` line).
 pub fn display_size(size: u64, config: &Config) -> String {
-    human_readable(size, config.size_format)
+    scaled_size(size, config, config.block_size_suffix.as_deref())
+}
+
+/// Render a file size (the size column of `-l`).
+fn display_file_size(size: u64, config: &Config) -> String {
+    scaled_size(size, config, config.file_size_block_size_suffix.as_deref())
+}
+
+fn scaled_size(size: u64, config: &Config, suffix: Option<&str>) -> String {
+    let s = human_readable(size, config.size_format);
+    // -h/--si scale dynamically and print their own units.
+    match (&config.size_format, suffix) {
+        (SizeFormat::Bytes, Some(suffix)) => format!("{s}{suffix}"),
+        _ => s,
+    }
 }
 
 /// Takes a [`PathData`] struct and returns a cell with a name ready for displaying.
