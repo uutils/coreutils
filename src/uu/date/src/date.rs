@@ -776,6 +776,60 @@ fn substitute_epoch_seconds(fmt: &str, date: &Zoned) -> String {
     out
 }
 
+/// Neutralize the no-pad (`-`) and space-pad (`_`) GNU flags that sit
+/// directly in front of a *composite* strftime specifier
+/// (`%D %F %T %r %R %c %x %X`).
+///
+/// In GNU `date` these specifiers expand to a fixed sequence of simpler
+/// fields (`%D` → `%m/%d/%y`, etc.) and are treated as a single atomic unit:
+/// Strip `-` and `_` pad flags before composite strftime specifiers
+/// (`%D`, `%F`, `%T`, `%r`, `%R`, `%c`, `%x`, `%X`).  GNU treats these
+/// composites as atomic so the flag must not leak into inner fields.
+/// Other modifiers (width, `0`/`^`/`#`/`+`) are left untouched.
+fn strip_modifiers_on_composite(fmt: &str) -> String {
+    const COMPOSITES: &[char] = &['D', 'F', 'T', 'r', 'R', 'c', 'x', 'X'];
+    if !fmt.contains('%') {
+        return fmt.to_string();
+    }
+
+    let mut out = String::with_capacity(fmt.len());
+    let mut chars = fmt.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '%' {
+            out.push(c);
+            continue;
+        }
+        // Skip `%%` literally.
+        if chars.peek() == Some(&'%') {
+            chars.next();
+            out.push_str("%%");
+            continue;
+        }
+        // Look ahead: optional pad flags (`-`/`_`), other modifiers, then a
+        // composite letter?
+        let mut ahead = chars.clone();
+        while ahead
+            .peek()
+            .is_some_and(|&m| m == '-' || m == '_' || "_0^#+".contains(m) || m.is_ascii_digit())
+        {
+            ahead.next();
+        }
+        if ahead.peek().is_some_and(|&l| COMPOSITES.contains(&l)) {
+            // Consume only the pad flags (`-`/`_`); keep the rest so the
+            // downstream width/flag handling (and its huge-width guard) still
+            // applies to the whole composite.
+            while chars.peek().is_some_and(|&m| m == '-' || m == '_') {
+                chars.next();
+            }
+            out.push('%');
+            out.push(chars.next().unwrap());
+        } else {
+            out.push('%');
+        }
+    }
+    out
+}
+
 /// Remove the `O` strftime modifier from `fmt`.
 ///
 /// In the C locale `%O` requests alternative numeric symbols that do not
@@ -913,7 +967,8 @@ fn format_date_with_locale_aware_months(
     // negative infinity (e.g. `@-1.5` → `-2`, not `-1`). Every other field jiff
     // produces already agrees with GNU, so only `%s` needs correcting; rewrite it
     // to the floored epoch second before jiff sees the format string.
-    let fmt_owned = strip_o_modifier(&substitute_epoch_seconds(fmt, date));
+    let fmt_owned =
+        strip_modifiers_on_composite(&strip_o_modifier(&substitute_epoch_seconds(fmt, date)));
     let fmt = fmt_owned.as_str();
 
     // Check if format string has GNU modifiers (width/flags) and format if present
@@ -1324,6 +1379,31 @@ fn set_system_datetime(date: Zoned) -> UResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_strip_modifiers_on_composite() {
+        // Pad flags before a composite are dropped (GNU treats the
+        // composite as atomic, so the flag must not leak into inner fields).
+        assert_eq!(strip_modifiers_on_composite("%-D"), "%D");
+        assert_eq!(strip_modifiers_on_composite("%_x"), "%x");
+        assert_eq!(strip_modifiers_on_composite("%-F"), "%F");
+        assert_eq!(strip_modifiers_on_composite("%_T"), "%T");
+
+        // Non-composite specs keep their modifiers untouched.
+        assert_eq!(strip_modifiers_on_composite("%-d"), "%-d");
+        assert_eq!(strip_modifiers_on_composite("%_m"), "%_m");
+        assert_eq!(strip_modifiers_on_composite("%10Y"), "%10Y");
+
+        // Width is preserved so the huge-width guard still fires.
+        assert_eq!(
+            strip_modifiers_on_composite("%18446744073709551615c"),
+            "%18446744073709551615c"
+        );
+
+        // `%%` literals are left alone; only the composite after a real `%` is affected.
+        assert_eq!(strip_modifiers_on_composite("%%-D"), "%%-D");
+        assert_eq!(strip_modifiers_on_composite("a%-Db"), "a%Db");
+    }
 
     #[test]
     fn test_parse_military_timezone_with_offset() {
