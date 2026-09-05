@@ -1613,6 +1613,46 @@ fn test_format_precision_zero_with_to_scale_issue_11667() {
         .stdout_is("5M\n");
 }
 
+// `--format=%.0f` with `--to=<scale>` must round the scaled value with the
+// selected `--round` method, instead of first keeping a fractional digit and
+// then rounding that to nearest.
+#[test]
+fn test_format_precision_zero_with_to_scale_honors_round_method() {
+    let cases = [
+        (vec!["--to=si", "--format=%.0f", "1234567"], "2M"),
+        (vec!["--to=si", "--format=%.0f", "--", "-1234567"], "-2M"),
+        (vec!["--to=iec", "--format=%.0f", "1234567"], "2M"),
+        (
+            vec!["--to=si", "--format=%.0f", "--round=up", "1234567"],
+            "2M",
+        ),
+        (
+            vec!["--to=si", "--format=%.0f", "--round=down", "1934567"],
+            "1M",
+        ),
+        (
+            vec!["--to=si", "--format=%.0f", "--round=nearest", "1234567"],
+            "1M",
+        ),
+        (
+            vec![
+                "--to=si",
+                "--format=%.0f",
+                "--round=towards-zero",
+                "1934567",
+            ],
+            "1M",
+        ),
+    ];
+
+    for (args, expected) in cases {
+        new_ucmd!()
+            .args(&args)
+            .succeeds()
+            .stdout_only(format!("{expected}\n"));
+    }
+}
+
 #[test]
 fn test_invalid_utf8_input() {
     // 0xFF is invalid UTF-8
