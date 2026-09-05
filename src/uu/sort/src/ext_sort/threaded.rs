@@ -293,13 +293,45 @@ fn write<I: WriteableTmpFile>(
     separator: u8,
 ) -> UResult<I::Closed> {
     let mut tmp_file = I::create(file, compress_prog)?;
-    write_lines(chunk.lines(), tmp_file.as_write(), separator);
+    write_lines(chunk.lines(), tmp_file.as_write(), separator)?;
     tmp_file.finished_writing()
 }
 
-fn write_lines<T: Write>(lines: &[Line], writer: &mut T, separator: u8) {
+fn write_lines<T: Write>(lines: &[Line], writer: &mut T, separator: u8) -> std::io::Result<()> {
     for s in lines {
-        writer.write_all(s.line).unwrap();
-        writer.write_all(&[separator]).unwrap();
+        writer.write_all(s.line)?;
+        writer.write_all(&[separator])?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{self, Write};
+
+    use super::*;
+
+    struct FailingWriter;
+
+    impl Write for FailingWriter {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            Err(io::Error::new(io::ErrorKind::StorageFull, "disk full"))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn write_lines_propagates_write_errors() {
+        let lines = [Line {
+            line: b"line",
+            index: 0,
+        }];
+
+        let result = write_lines(&lines, &mut FailingWriter, b'\n');
+
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::StorageFull);
     }
 }
