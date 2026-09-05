@@ -382,9 +382,10 @@ fn test_file_one_long_word() {
 /// file redirected onto stdin has a size known up front, so it dictates the
 /// width just like a named file does.
 #[test]
-// `at_and_ucmd!` is only imported on unix in this file, and the wasm targets
-// have no meaningful stdin file to redirect.
+// `at_and_ucmd!` is only imported on unix in this file, and a wasm binary
+// cannot inspect its stdin, so it falls back to the minimum width there.
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_stdin_size_dictates_width() {
     use std::fs::File;
 
