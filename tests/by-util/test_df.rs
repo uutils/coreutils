@@ -863,6 +863,130 @@ fn test_ignore_block_size_from_env_in_posix_portability_mode() {
     assert_eq!(header, default_block_size_header);
 }
 
+/// The first data value of a `df --output=size` listing.
+fn scaled_size(stdout: &str) -> String {
+    stdout.lines().nth(1).unwrap().trim().to_string()
+}
+
+/// Assert that `value` is digits followed by exactly `suffix` (or by nothing,
+/// when `suffix` is `None`).
+fn assert_unit_suffix(value: &str, suffix: Option<&str>, context: &str) {
+    let digits = match suffix {
+        Some(suffix) => {
+            let stripped = value.strip_suffix(suffix).unwrap_or_else(|| {
+                panic!("expected {value:?} to end in {suffix:?} for {context}");
+            });
+            assert!(
+                !stripped.ends_with(|c: char| c.is_ascii_alphabetic()),
+                "expected exactly the unit {suffix:?} in {value:?} for {context}"
+            );
+            stripped
+        }
+        None => value,
+    };
+    assert!(
+        !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()),
+        "expected a plain number in {value:?} for {context}"
+    );
+}
+
+#[test]
+fn test_df_suffix_only_block_size() {
+    // --block-size=K echoes the unit ("123K"); =1K and =1024 do not.
+    for (arg, suffix) in [
+        ("--block-size=K", Some("K")),
+        ("--block-size=k", Some("K")),
+        ("--block-size=M", Some("M")),
+        ("--block-size=KB", Some("kB")),
+        ("--block-size=KiB", Some("KiB")),
+        ("--block-size=MiB", Some("MiB")),
+        ("--block-size=G", Some("G")),
+        ("--block-size=1K", None),
+        ("--block-size=1024", None),
+        ("--block-size=2K", None),
+        ("--block-size=1MB", None),
+    ] {
+        let out = new_ucmd!()
+            .args(&[arg, "--output=size"])
+            .succeeds()
+            .stdout_move_str();
+        assert_unit_suffix(&scaled_size(&out), suffix, arg);
+    }
+}
+
+#[test]
+fn test_df_suffix_only_env_block_size() {
+    for (var, value, suffix) in [
+        ("DF_BLOCK_SIZE", "M", Some("M")),
+        ("BLOCK_SIZE", "K", Some("K")),
+        ("BLOCKSIZE", "K", Some("K")),
+        ("DF_BLOCK_SIZE", "KB", Some("kB")),
+        ("DF_BLOCK_SIZE", "1M", None),
+        ("BLOCK_SIZE", "1024", None),
+    ] {
+        let out = new_ucmd!()
+            .env(var, value)
+            .arg("--output=size")
+            .succeeds()
+            .stdout_move_str();
+        assert_unit_suffix(&scaled_size(&out), suffix, &format!("{var}={value}"));
+    }
+}
+
+#[test]
+fn test_df_block_size_header_keeps_iec_spelling() {
+    for (arg, header) in [
+        ("--block-size=KiB", "1KiB-blocks"),
+        ("--block-size=MiB", "1MiB-blocks"),
+        ("--block-size=K", "1K-blocks"),
+        ("--block-size=KB", "1kB-blocks"),
+        ("--block-size=1K", "1K-blocks"),
+        ("--block-size=2K", "2K-blocks"),
+        ("--block-size=2KiB", "2K-blocks"),
+    ] {
+        let out = new_ucmd!()
+            .args(&[arg, "--output=size"])
+            .succeeds()
+            .stdout_move_str();
+        assert_eq!(out.lines().next().unwrap().trim(), header, "for {arg}");
+    }
+}
+
+#[test]
+fn test_df_suffix_only_block_size_not_used_with_human_readable() {
+    // -h/--si print their own units and header; nothing is echoed.
+    for flag in ["-h", "-H"] {
+        let out = new_ucmd!()
+            .env("DF_BLOCK_SIZE", "K")
+            .args(&[flag, "--output=size"])
+            .succeeds()
+            .stdout_move_str();
+        assert_eq!(
+            out.lines().next().unwrap().trim(),
+            "Size",
+            "expected the human-readable header for {flag}, got {out:?}"
+        );
+    }
+}
+
+#[test]
+fn test_df_suffix_only_block_size_ignored_in_posix_portability_mode() {
+    // -P pins the block size, so no unit is echoed next to the values.
+    let out = new_ucmd!()
+        .env("DF_BLOCK_SIZE", "M")
+        .arg("-P")
+        .succeeds()
+        .stdout_move_str();
+    let size = out
+        .lines()
+        .nth(1)
+        .unwrap()
+        .split_whitespace()
+        .nth(1)
+        .unwrap();
+    assert_unit_suffix(size, None, "-P with DF_BLOCK_SIZE=M");
+}
+
 #[test]
 fn test_too_large_block_size() {
     fn run_command(size: &str) {
