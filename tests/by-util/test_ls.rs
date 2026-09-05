@@ -6079,6 +6079,46 @@ fn test_posixly_correct_and_block_size_env_vars_with_k() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_ls_block_size_rounds_up() {
+    // A block that is only partly used still occupies a whole block, so
+    // scaling an allocation to the block size rounds up. The total scales the
+    // sum of the allocations once; rounding every file first and adding the
+    // results overshoots it.
+    use std::os::unix::fs::MetadataExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    for name in ["dir/a", "dir/b", "dir/c"] {
+        at.write(name, "x");
+    }
+
+    let allocated: Vec<u64> = ["dir/a", "dir/b", "dir/c"]
+        .iter()
+        .map(|name| at.metadata(name).blocks() * 512)
+        .collect();
+    // An allocation that is a whole number of blocks, or none at all, cannot
+    // tell rounding up from rounding down.
+    if allocated
+        .iter()
+        .any(|bytes| bytes == &0 || bytes % 1000 == 0)
+    {
+        return;
+    }
+    let sizes: Vec<u64> = allocated.iter().map(|bytes| bytes.div_ceil(1000)).collect();
+    let total = allocated.iter().sum::<u64>().div_ceil(1000);
+
+    ucmd.arg("-s")
+        .arg("--block-size=1000")
+        .arg("dir")
+        .succeeds()
+        .stdout_is(format!(
+            "total {total}\n{} a\n{} b\n{} c\n",
+            sizes[0], sizes[1], sizes[2]
+        ));
+}
+
+#[test]
 fn test_ls_invalid_block_size() {
     new_ucmd!()
         .arg("--block-size=invalid")
