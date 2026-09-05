@@ -759,7 +759,7 @@ selinux = { workspace = true, optional = true }
 [target.'cfg(unix)'.dev-dependencies]
 nix = { workspace = true, features = ["fs", "signal"] }
 rlimit = { workspace = true }
-rustix = { workspace = true, features = ["net"] }
+rustix = { workspace = true, features = ["net", "process"] }
 
 [build-dependencies]
 phf_codegen.workspace = true
