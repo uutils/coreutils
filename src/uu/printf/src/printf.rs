@@ -42,11 +42,35 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     result
 }
 
+/// Mark where the options end, so that only a `--` written before FORMAT acts
+/// as the terminator.
+///
+/// GNU accepts a leading `--` (`printf -- '%s\n' a`), but past FORMAT every
+/// operand is data: `printf '%s\n' --` prints `--`. clap would instead
+/// swallow the first `--` wherever it appears, so insert one in front of the
+/// format operand when the caller did not write it there.
+fn mark_end_of_options(mut args: Vec<OsString>) -> Vec<OsString> {
+    let mut i = 1;
+    while i < args.len() {
+        // Both exit before FORMAT is looked at, and GNU honors them only here.
+        if args[i] == "--help" || args[i] == "--version" {
+            i += 1;
+            continue;
+        }
+        if args[i] != "--" {
+            args.insert(i, OsString::from("--"));
+        }
+        break;
+    }
+    args
+}
+
 fn print_formatted(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<OsString> = args.collect();
     // Kept for the caret in format diagnostics, which needs the format as typed.
     let diag_args = uucore::diagnostics::capture(&args);
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let matches =
+        uucore::clap_localization::handle_clap_result(uu_app(), mark_end_of_options(args))?;
 
     let format = matches
         .get_one::<OsString>(options::FORMAT)
