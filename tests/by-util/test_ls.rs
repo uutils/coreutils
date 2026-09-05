@@ -6239,6 +6239,214 @@ fn test_ls_block_size_si_file_size() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_ls_suffix_only_block_size() {
+    // --block-size=K echoes the unit ("1K"); =1K and =1024 do not ("1").
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write_bytes("file", &[0u8; 1024]);
+
+    for (arg, expected) in [
+        ("--block-size=K", "1K"),
+        ("--block-size=k", "1K"),
+        ("--block-size=KB", "2kB"),
+        ("--block-size=KiB", "1KiB"),
+        ("--block-size=M", "1M"),
+        ("--block-size=1K", "1"),
+        ("--block-size=1024", "1"),
+        ("--block-size=2K", "1"),
+        ("--block-size=1MB", "1"),
+    ] {
+        let out = scene
+            .ucmd()
+            .args(&["-l", arg, "file"])
+            .succeeds()
+            .stdout_move_str();
+        assert_eq!(long_size_column(&out), expected, "for {arg}");
+    }
+}
+
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_ls_suffix_only_block_size_allocation() {
+    // The same holds for the allocation column of -s and for the total line.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write_bytes("file", &[0u8; 1024]);
+
+    for (arg, suffix) in [
+        ("--block-size=K", Some("K")),
+        ("--block-size=MiB", Some("MiB")),
+        ("--block-size=1K", None),
+        ("--block-size=1024", None),
+    ] {
+        let out = scene
+            .ucmd()
+            .args(&["-s", "-1", arg])
+            .succeeds()
+            .stdout_move_str();
+        let mut lines = out.lines();
+        let total = lines.next().unwrap().split_whitespace().nth(1).unwrap();
+        let alloc = lines.next().unwrap().split_whitespace().next().unwrap();
+        for value in [total, alloc] {
+            assert_unit_suffix(value, suffix, arg);
+        }
+    }
+}
+
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_ls_suffix_only_env_block_size() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write_bytes("file", &[0u8; 1024]);
+
+    for (var, value, expected) in [
+        ("LS_BLOCK_SIZE", "K", "1K"),
+        ("LS_BLOCK_SIZE", "M", "1M"),
+        ("BLOCK_SIZE", "M", "1M"),
+        ("LS_BLOCK_SIZE", "1K", "1"),
+        ("BLOCK_SIZE", "1024", "1"),
+    ] {
+        let out = scene
+            .ucmd()
+            .env(var, value)
+            .args(&["-l", "file"])
+            .succeeds()
+            .stdout_move_str();
+        assert_eq!(long_size_column(&out), expected, "for {var}={value}");
+    }
+}
+
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_ls_suffix_only_blocksize_env_does_not_reach_file_size() {
+    // BLOCKSIZE drives only the allocation column, not the file size.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write_bytes("file", &[0u8; 1024]);
+
+    let out = scene
+        .ucmd()
+        .env("BLOCKSIZE", "K")
+        .args(&["-l", "-s", "-1"])
+        .succeeds()
+        .stdout_move_str();
+    let line = out.lines().nth(1).unwrap();
+    let mut fields = line.split_whitespace();
+    let alloc = fields.next().unwrap();
+    let size = fields.nth(4).unwrap();
+    assert_unit_suffix(alloc, Some("K"), "BLOCKSIZE=K");
+    assert_eq!(
+        size, "1024",
+        "BLOCKSIZE must not scale or annotate file sizes"
+    );
+}
+
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_ls_suffix_only_block_size_with_kibibyte_flag() {
+    // -k resets the allocation block size and unit, not the file-size ones.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write_bytes("file", &[0u8; 1024]);
+
+    let out = scene
+        .ucmd()
+        .env("LS_BLOCK_SIZE", "K")
+        .args(&["-l", "-s", "-1", "-k"])
+        .succeeds()
+        .stdout_move_str();
+    let line = out.lines().nth(1).unwrap();
+    let mut fields = line.split_whitespace();
+    let alloc = fields.next().unwrap();
+    let size = fields.nth(4).unwrap();
+    assert_unit_suffix(alloc, None, "-k with LS_BLOCK_SIZE=K");
+    assert_eq!(size, "1K");
+
+    // -k alone strips the unit BLOCKSIZE would otherwise have contributed.
+    let out = scene
+        .ucmd()
+        .env("BLOCKSIZE", "K")
+        .args(&["-s", "-1", "-k"])
+        .succeeds()
+        .stdout_move_str();
+    let alloc = out
+        .lines()
+        .nth(1)
+        .unwrap()
+        .split_whitespace()
+        .next()
+        .unwrap();
+    assert_unit_suffix(alloc, None, "-k with BLOCKSIZE=K");
+}
+
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_ls_suffix_only_block_size_not_used_with_human_readable() {
+    // -h/--si print their own units, unaffected by the environment.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write_bytes("file", &[0u8; 1024]);
+
+    for flag in ["-h", "--si"] {
+        let plain = scene
+            .ucmd()
+            .args(&["-l", flag, "file"])
+            .succeeds()
+            .stdout_move_str();
+        let with_env = scene
+            .ucmd()
+            .env("LS_BLOCK_SIZE", "K")
+            .args(&["-l", flag, "file"])
+            .succeeds()
+            .stdout_move_str();
+        assert_eq!(
+            long_size_column(&with_env),
+            long_size_column(&plain),
+            "LS_BLOCK_SIZE must not change what {flag} prints"
+        );
+    }
+}
+
+/// The size column of a single-entry `ls -l` listing.
+#[cfg(not(target_os = "openbsd"))]
+fn long_size_column(stdout: &str) -> String {
+    stdout
+        .lines()
+        .find(|line| line.starts_with('-'))
+        .unwrap_or_else(|| panic!("no file entry in {stdout:?}"))
+        .split_whitespace()
+        .nth(4)
+        .unwrap()
+        .to_string()
+}
+
+/// Assert that `value` is digits followed by exactly `suffix` (or by nothing,
+/// when `suffix` is `None`).
+#[cfg(not(target_os = "openbsd"))]
+fn assert_unit_suffix(value: &str, suffix: Option<&str>, context: &str) {
+    let digits = match suffix {
+        Some(suffix) => {
+            let stripped = value.strip_suffix(suffix).unwrap_or_else(|| {
+                panic!("expected {value:?} to end in {suffix:?} for {context}");
+            });
+            assert!(
+                !stripped.ends_with(|c: char| c.is_ascii_alphabetic()),
+                "expected exactly the unit {suffix:?} in {value:?} for {context}"
+            );
+            stripped
+        }
+        None => value,
+    };
+    assert!(
+        !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()),
+        "expected a plain number{} in {value:?} for {context}",
+        suffix.map_or(String::new(), |s| format!(" before {s:?}"))
+    );
+}
+
+#[test]
 fn test_ls_block_size_override_self() {
     new_ucmd!()
         .arg("--block-size=512")
