@@ -455,3 +455,32 @@ fn test_fmt_width_multiplication_overflow() {
         .fails_with_code(1)
         .stderr_is("fmt: invalid width: '267672676527678256'\n");
 }
+
+#[test]
+fn test_fmt_goal_only_defaults_width_to_goal_plus_ten() {
+    // GNU defaults the width to goal + 10 when only --goal is given, so `-g G`
+    // has to lay a paragraph out exactly as `-w G+10 -g G` does.
+    for goal in [5, 10, 20, 30, 50, 65] {
+        let widened = new_ucmd!()
+            .args(&[
+                "one-word-per-line.txt",
+                "-w",
+                &(goal + 10).to_string(),
+                "-g",
+                &goal.to_string(),
+            ])
+            .succeeds()
+            .stdout_move_str();
+
+        new_ucmd!()
+            .args(&["one-word-per-line.txt", "-g", &goal.to_string()])
+            .succeeds()
+            .stdout_is(&widened);
+    }
+
+    // The whole 37-column paragraph therefore fits on one line at goal 30.
+    new_ucmd!()
+        .args(&["one-word-per-line.txt", "--goal", "30"])
+        .succeeds()
+        .stdout_is("this is a file with one word per line\n");
+}
