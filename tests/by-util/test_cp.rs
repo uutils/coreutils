@@ -5089,12 +5089,13 @@ fn test_acl_preserve() {
 fn test_cp_debug_reflink_never_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
+    let page_size = rustix::param::page_size();
     at.write("a", "hello");
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
         .unwrap();
-    f.set_len(10000).unwrap();
+    f.set_len((page_size as u64) * 4).unwrap();
 
     ts.ucmd()
         .arg("--debug")
@@ -5140,11 +5141,12 @@ fn test_cp_debug_default_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.touch("a");
+    let page_size = rustix::param::page_size();
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
         .unwrap();
-    f.set_len(10000).unwrap();
+    f.set_len((page_size as u64) * 4).unwrap();
 
     at.append_bytes("a", "hello".as_bytes());
 
@@ -5234,12 +5236,13 @@ fn test_cp_debug_default_empty_file_with_hole() {
 fn test_cp_debug_reflink_never_sparse_always_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
+    let page_size = rustix::param::page_size();
     at.write("a", "hello");
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
         .unwrap();
-    f.set_len(10000).unwrap();
+    f.set_len((page_size as u64) * 4).unwrap();
 
     ts.ucmd()
         .arg("--debug")
@@ -5468,12 +5471,13 @@ fn test_cp_debug_reflink_never_file_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.touch("a");
+    let page_size = rustix::param::page_size();
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
         .unwrap();
-    f.set_len(10000).unwrap();
-    at.append_bytes("a", "hello".as_bytes());
+    f.set_len((page_size as u64) * 4).unwrap();
+    at.append_bytes("a", b"hello");
 
     ts.ucmd()
         .arg("--debug")
@@ -5557,12 +5561,13 @@ fn test_cp_debug_sparse_never_empty_file_with_hole() {
 fn test_cp_debug_sparse_never_file_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
+    let page_size = rustix::param::page_size();
     at.touch("a");
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
         .unwrap();
-    f.set_len(10000).unwrap();
+    f.set_len((page_size as u64) * 4).unwrap();
     at.append_bytes("a", "hello".as_bytes());
 
     ts.ucmd()
