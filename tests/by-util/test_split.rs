@@ -428,12 +428,12 @@ fn test_split_lines_number() {
         .ucmd()
         .args(&["--lines", "0", "file"])
         .fails_with_code(1)
-        .stderr_only("split: invalid number of lines: 0\n");
+        .stderr_only("split: invalid number of lines: '0'\n");
     scene
         .ucmd()
         .args(&["-0", "file"])
         .fails_with_code(1)
-        .stderr_only("split: invalid number of lines: 0\n");
+        .stderr_only("split: invalid number of lines: '0'\n");
     scene
         .ucmd()
         .args(&["--lines", "2fb", "file"])
@@ -1704,37 +1704,29 @@ fn test_round_robin_limited_file_descriptors() {
         .succeeds();
 }
 
+/// A zero SIZE or NUMBER is rejected and quoted, as GNU does, in both option forms.
 #[test]
 fn test_split_invalid_input() {
-    // Test if stdout/stderr for '--lines' option is correct
     let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-    at.touch("file");
+    scene.fixtures.touch("file");
 
-    scene
-        .ucmd()
-        .args(&["--lines", "0", "file"])
-        .fails()
-        .no_stdout()
-        .stderr_contains("split: invalid number of lines: 0");
-    scene
-        .ucmd()
-        .args(&["-C", "0", "file"])
-        .fails()
-        .no_stdout()
-        .stderr_contains("split: invalid number of bytes: 0");
-    scene
-        .ucmd()
-        .args(&["-b", "0", "file"])
-        .fails()
-        .no_stdout()
-        .stderr_contains("split: invalid number of bytes: 0");
-    scene
-        .ucmd()
-        .args(&["-n", "0", "file"])
-        .fails()
-        .no_stdout()
-        .stderr_contains("split: invalid number of chunks: '0'");
+    for (option, message) in [
+        ("-l", "invalid number of lines"),
+        ("--lines", "invalid number of lines"),
+        ("-b", "invalid number of bytes"),
+        ("--bytes", "invalid number of bytes"),
+        ("-C", "invalid number of bytes"),
+        ("--line-bytes", "invalid number of bytes"),
+        ("-n", "invalid number of chunks"),
+        ("--number", "invalid number of chunks"),
+    ] {
+        scene
+            .ucmd()
+            .args(&[option, "0", "file"])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains(format!("split: {message}: '0'\n"));
+    }
 }
 
 /// Test if there are invalid (non UTF-8) in the arguments - unix
