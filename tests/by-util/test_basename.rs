@@ -322,3 +322,12 @@ fn test_emoji_handling() {
         .succeeds()
         .stdout_only("file🎯\n");
 }
+
+#[test]
+fn test_suffix_beginning_with_hyphen() {
+    // A suffix may start with a hyphen; GNU reads `-s -1` as the suffix "-1".
+    new_ucmd!()
+        .args(&["-s", "-1", "/a/b-1"])
+        .succeeds()
+        .stdout_is("b\n");
+}
