@@ -13,7 +13,7 @@ tr-error-missing-operand = opérande manquant
 tr-error-missing-operand-translating = opérande manquant après { $set }
   Deux chaînes doivent être données lors de la traduction.
 tr-error-missing-operand-deleting-squeezing = opérande manquant après { $set }
-  Deux chaînes doivent être données lors de la suppression et compression.
+  Deux chaînes doivent être données lors de la suppression et de la compression des répétitions.
 tr-error-extra-operand-deleting-without-squeezing = opérande supplémentaire { $operand }
   Une seule chaîne peut être donnée lors de la suppression sans compression des répétitions.
 tr-error-extra-operand-simple = opérande supplémentaire { $operand }
@@ -35,7 +35,7 @@ tr-error-char-repeat-in-set1 = la construction de répétition [c*] ne peut pas 
 tr-error-invalid-repeat-count = nombre de répétitions invalide { $count } dans la construction [c*n]
 tr-error-empty-set2-when-not-truncating = quand on ne tronque pas set1, string2 doit être non-vide
 tr-error-class-except-lower-upper-in-set2 = lors de la traduction, les seules classes de caractères qui peuvent apparaître dans set2 sont 'upper' et 'lower'
-tr-error-class-in-set2-not-matched = lors de la traduction, chaque 'upper'/'lower' dans set2 doit être associé à un 'upper'/'lower' à la même position dans set1
+tr-error-class-in-set2-not-matched = construction [:upper:] et/ou [:lower:] mal alignée
 tr-error-set1-longer-set2-ends-in-class = lors de la traduction avec string1 plus long que string2,
   cette dernière chaîne ne doit pas se terminer par une classe de caractères
 tr-error-complement-more-than-one-unique = lors de la traduction avec des classes de caractères complémentées,
