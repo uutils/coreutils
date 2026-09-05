@@ -120,6 +120,8 @@ pub mod selinux;
 pub mod signals;
 #[cfg(all(feature = "smack", target_os = "linux"))]
 pub mod smack;
+#[cfg(all(feature = "stdio", any(unix, target_os = "wasi")))]
+pub mod stdio;
 #[cfg(feature = "feat_systemd_logind")]
 pub mod systemd_logind;
 #[cfg(all(
