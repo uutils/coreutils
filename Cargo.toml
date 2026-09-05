@@ -75,14 +75,6 @@ feat_diagnostics = ["uucore/diagnostics"]
 ## Optional feature for stdbuf
 # "feat_external_libstdbuf" == use an external libstdbuf.so for stdbuf instead of embedding it
 feat_external_libstdbuf = ["stdbuf/feat_external_libstdbuf"]
-# "feat_systemd_logind" == enable feat_systemd_logind support for utmpx replacement
-feat_systemd_logind = [
-  "pinky/feat_systemd_logind",
-  "uptime/feat_systemd_logind",
-  "users/feat_systemd_logind",
-  "uucore/feat_systemd_logind",
-  "who/feat_systemd_logind",
-]
 # "feat_selinux" == enable support for SELinux Security Context (by using `--features feat_selinux`)
 # NOTE:
 # * The selinux(-sys) crate requires `libselinux` headers and shared library to be accessible in the C toolchain at compile time.
@@ -453,6 +445,7 @@ itoa = "1.0.15"
 jiff = "0.2.18"
 jiff-icu = "0.2.2"
 libc = "0.2.186"
+libloading = "0.8.9"
 lscolors = { version = "0.21.0", default-features = false, features = [
   "gnu_legacy",
 ] }
