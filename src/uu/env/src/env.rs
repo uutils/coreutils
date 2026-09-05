@@ -830,14 +830,14 @@ impl EnvAppData {
         // NOTE: we manually set and unset the env vars below rather than using Command::env() to more
         //       easily handle the case where no command is given
 
-        apply_removal_of_all_env_vars(&opts);
+        apply_removal_of_all_env_vars(&opts, self.do_debug_printing);
 
         // load .env-style config file prior to those given on the command-line
         load_config_file(&mut opts)?;
 
-        apply_unset_env_vars(&opts)?;
+        apply_unset_env_vars(&opts, self.do_debug_printing)?;
 
-        apply_specified_env_vars(&opts);
+        apply_specified_env_vars(&opts, self.do_debug_printing);
 
         #[cfg(all(unix, not(target_os = "fuchsia")))]
         {
@@ -990,9 +990,12 @@ impl EnvAppData {
     }
 }
 
-fn apply_removal_of_all_env_vars(opts: &Options<'_>) {
+fn apply_removal_of_all_env_vars(opts: &Options<'_>, do_debug_printing: bool) {
     // remove all env vars if told to ignore presets
     if opts.ignore_env {
+        if do_debug_printing {
+            let _ = writeln!(stderr(), "cleaning environ");
+        }
         for (ref name, _) in env::vars_os() {
             unsafe {
                 env::remove_var(name);
@@ -1075,7 +1078,13 @@ fn make_options<'a>(
     Ok(opts)
 }
 
-fn apply_unset_env_vars(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
+fn apply_unset_env_vars(
+    opts: &Options<'_>,
+    do_debug_printing: bool,
+) -> Result<(), Box<dyn UError>> {
+    // -i has already emptied the environment, and GNU does not log the
+    // individual unsets in that case.
+    let do_debug_printing = do_debug_printing && !opts.ignore_env;
     for name in &opts.unsets {
         let native_name = NativeStr::new(name);
         if name.is_empty()
@@ -1086,6 +1095,9 @@ fn apply_unset_env_vars(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
                 125,
                 translate!("env-error-cannot-unset-invalid", "name" => name.quote()),
             ));
+        }
+        if do_debug_printing {
+            let _ = writeln!(stderr(), "unset:    {}", name.to_string_lossy());
         }
         unsafe {
             env::remove_var(name);
@@ -1117,7 +1129,7 @@ fn apply_change_directory(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
     Ok(())
 }
 
-fn apply_specified_env_vars(opts: &Options<'_>) {
+fn apply_specified_env_vars(opts: &Options<'_>, do_debug_printing: bool) {
     // set specified env vars
     for (name, val) in &opts.sets {
         /*
@@ -1148,6 +1160,14 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
                 translate!("env-warning-no-name-specified", "value" => val.quote())
             );
             continue;
+        }
+        if do_debug_printing {
+            let _ = writeln!(
+                stderr(),
+                "setenv:   {}={}",
+                name.to_string_lossy(),
+                val.to_string_lossy()
+            );
         }
         unsafe {
             env::set_var(name, val);

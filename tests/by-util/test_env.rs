@@ -265,6 +265,7 @@ fn test_debug2_part_of_string_arg() {
             r"arg\[2\]: '[^\n]+(\/|\\)coreutils(.exe)?'\n",
             r"arg\[3\]: 'echo'\n",
             r"arg\[4\]: 'hello2'\n",
+            r"setenv:   FOO=BAR\n",
             r"executing: [^\n]+(\/|\\)coreutils(.exe)?\n",
             r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(.exe)?'\n",
             r"   arg\[1\]= 'echo'\n",
@@ -2259,4 +2260,32 @@ env: no terminating quote in -S string at position 18 for quote '''
             .fails_with_code(125)
             .stderr_is("env: no terminating quote in -S string at position 18 for quote '''\n");
     }
+}
+
+/// -v traces what it does to the environment before exec, as GNU does:
+/// "cleaning environ" for -i, one "unset:" line per -u and one "setenv:"
+/// line per assignment.
+#[test]
+fn test_debug_traces_environment_changes() {
+    new_ucmd!()
+        .args(&["-v", "-u", "A", "-u", "B", "FOO=1", "true"])
+        .succeeds()
+        .stderr_contains("unset:    A\nunset:    B\nsetenv:   FOO=1\nexecuting: true\n");
+
+    new_ucmd!()
+        .args(&["-v", "-i", "FOO=1", "true"])
+        .succeeds()
+        .stderr_contains("cleaning environ\nsetenv:   FOO=1\nexecuting: true\n");
+
+    // -i has already emptied the environment, so the unset is not logged.
+    new_ucmd!()
+        .args(&["-v", "-i", "-u", "PATH", "true"])
+        .succeeds()
+        .stderr_contains("cleaning environ\nexecuting: true\n");
+
+    // Without -v nothing is traced.
+    new_ucmd!()
+        .args(&["-i", "-u", "A", "FOO=1", "true"])
+        .succeeds()
+        .no_stderr();
 }
