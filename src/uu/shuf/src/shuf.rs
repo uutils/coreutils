@@ -8,6 +8,7 @@
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::num::IntErrorKind;
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -78,8 +79,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 .cloned()
                 .collect(),
         )
-    } else if let Some(range) = matches.get_one(options::INPUT_RANGE).cloned() {
-        Mode::InputRange(range)
+    } else if let Some(range) = matches.get_one::<String>(options::INPUT_RANGE) {
+        Mode::InputRange(parse_range(range)?)
     } else {
         let mut operands = matches
             .get_many::<OsString>(options::FILE_OR_ARGS)
@@ -197,7 +198,6 @@ pub fn uu_app() -> Command {
                 .long(options::INPUT_RANGE)
                 .value_name("LO-HI")
                 .help(translate!("shuf-help-input-range"))
-                .value_parser(parse_range)
                 .conflicts_with(options::FILE_OR_ARGS),
         )
         .arg(
@@ -445,17 +445,39 @@ fn shuf_exec(
     Ok(())
 }
 
-fn parse_range(input_range: &str) -> Result<RangeInclusive<u64>, String> {
-    if let Some((from, to)) = input_range.split_once('-') {
-        let begin = from.parse::<u64>().map_err(|e| e.to_string())?;
-        let end = to.parse::<u64>().map_err(|e| e.to_string())?;
-        if begin <= end || begin == end + 1 {
-            Ok(begin..=end)
-        } else {
-            Err(translate!("shuf-error-start-exceeds-end"))
-        }
+/// Parse the `LO-HI` of `-i`.
+///
+/// Whatever is wrong with it, GNU reports the range as a whole rather than
+/// the part that failed, and adds a detail only when a bound does not fit in
+/// a `u64`.
+fn parse_range(input_range: &str) -> UResult<RangeInclusive<u64>> {
+    let invalid = || {
+        USimpleError::new(
+            1,
+            translate!("shuf-error-invalid-input-range", "range" => input_range.quote()),
+        )
+    };
+    let too_large = || {
+        USimpleError::new(
+            1,
+            translate!("shuf-error-invalid-input-range-too-large", "range" => input_range.quote()),
+        )
+    };
+
+    let Some((from, to)) = input_range.split_once('-') else {
+        return Err(invalid());
+    };
+    let parse = |bound: &str| match bound.parse::<u64>() {
+        Ok(n) => Ok(n),
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => Err(too_large()),
+        Err(_) => Err(invalid()),
+    };
+    let begin = parse(from)?;
+    let end = parse(to)?;
+    if begin <= end || begin == end + 1 {
+        Ok(begin..=end)
     } else {
-        Err(translate!("shuf-error-missing-dash"))
+        Err(invalid())
     }
 }
 
