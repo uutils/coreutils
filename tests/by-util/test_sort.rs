@@ -1391,6 +1391,30 @@ fn test_check() {
 }
 
 #[test]
+fn test_check_disorder_echoes_line_verbatim() {
+    // The line reported in a "disorder" diagnostic is the raw offending input line.
+    // It must never be reinterpreted/reformatted as a number, even though it looks
+    // like one (GNU sort echoes it verbatim too).
+    new_ucmd!()
+        .args(&["-n", "-c"])
+        .pipe_in("2\n1.10\n")
+        .fails()
+        .stderr_only("sort: -:2: disorder: 1.10\n");
+
+    new_ucmd!()
+        .args(&["-n", "-c"])
+        .pipe_in("5\nnan\n")
+        .fails()
+        .stderr_only("sort: -:2: disorder: nan\n");
+
+    new_ucmd!()
+        .args(&["-g", "-c"])
+        .pipe_in("1e10\n1e5\n")
+        .fails()
+        .stderr_only("sort: -:2: disorder: 1e5\n");
+}
+
+#[test]
 fn test_check_silent() {
     for silent_arg in [
         "-C",
