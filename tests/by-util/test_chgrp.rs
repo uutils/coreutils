@@ -221,7 +221,7 @@ fn test_reference() {
         .arg("/etc")
         .fails()
         // group name can differ, so just check the first part of the message
-        .stderr_contains("chgrp: changing group of '/etc': Operation not permitted (os error 1)\nfailed to change group of '/etc' from ");
+        .stderr_contains("chgrp: changing group of '/etc': Operation not permitted\nfailed to change group of '/etc' from ");
 }
 
 #[test]
@@ -277,7 +277,7 @@ fn test_big_p() {
             .arg("/proc/self/cwd")
             .fails()
             .stderr_contains(
-                "chgrp: changing group of '/proc/self/cwd': Operation not permitted (os error 1)\n",
+                "chgrp: changing group of '/proc/self/cwd': Operation not permitted\n",
             );
     }
 }
