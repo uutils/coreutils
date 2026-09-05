@@ -12,20 +12,20 @@
 use libc::{gid_t, pid_t, uid_t};
 #[cfg(not(target_os = "redox"))]
 use nix::errno::Errno;
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use nix::sys::signal::{self as nix_signal, SigHandler};
 use nix::sys::signal::{SigSet, Signal};
 use nix::unistd::Pid;
 use rustix::process::Signal as RixSignal;
 use std::io;
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use std::process::Child;
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use std::time::{Duration, Instant};
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use timer::Timer;
 
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use super::{ChildExt, TimeoutRet};
 
 /// `geteuid()` returns the effective user ID of the calling process.
@@ -83,7 +83,7 @@ pub fn getsid(pid: i32) -> Result<pid_t, Errno> {
     nix::unistd::getsid(pid).map(Pid::as_raw)
 }
 
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 impl ChildExt for Child {
     fn send_signal(&mut self, signal: usize) -> io::Result<()> {
         let pid = Pid::from_raw(self.id() as pid_t);
@@ -180,7 +180,7 @@ pub fn unblock_signal(signal: RixSignal) -> io::Result<()> {
 /// Ensures there is no overflow on time_t operations. Some BSDs (notably XNU)
 /// will return EINVAL otherwise; POSIX only defines it up to 10e8, so we cap
 /// it on all targets we do not trust to support the full integer range.
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 const MAX_KTIME_T: Duration = if cfg!(target_os = "linux") {
     Duration::from_secs(9_223_372_036)
 } else {
@@ -193,6 +193,7 @@ const MAX_KTIME_T: Duration = if cfg!(target_os = "linux") {
 #[cfg(not(any(
     target_vendor = "apple",
     target_os = "fuchsia",
+    target_os = "haiku",
     target_os = "openbsd",
     windows
 )))]
@@ -348,7 +349,7 @@ mod timer {
     }
 }
 
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 impl Timer {
     fn timed_sigwait(&mut self, timeout: Duration) -> io::Result<Option<Signal>> {
         self.arm(timeout)?;

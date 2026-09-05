@@ -7,6 +7,8 @@
 //
 // spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind
 
+#![cfg(not(any(target_os = "aix", target_os = "horizon")))]
+
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
 pub extern crate libc;
@@ -99,7 +101,7 @@ pub use crate::features::entries;
 pub use crate::features::perms;
 #[cfg(all(feature = "pipes", any(target_os = "linux", target_os = "android")))]
 pub use crate::features::pipes;
-#[cfg(all(any(unix, windows), feature = "process"))]
+#[cfg(all(any(all(unix, not(target_os = "aix")), windows), feature = "process"))]
 pub use crate::features::process;
 #[cfg(all(unix, feature = "safe-copy"))]
 pub use crate::features::safe_copy;
@@ -128,12 +130,14 @@ pub use crate::features::safe_traversal;
 ))]
 pub use crate::features::signals;
 #[cfg(all(
-    unix,
-    not(target_os = "android"),
-    not(target_os = "fuchsia"),
-    not(target_os = "openbsd"),
-    not(target_os = "redox"),
-    feature = "utmpx"
+    feature = "utmpx",
+    any(
+        target_vendor = "apple",
+        target_os = "cygwin",
+        target_os = "freebsd",
+        all(target_os = "linux", not(target_env = "ohos")),
+        target_os = "netbsd"
+    )
 ))]
 pub use crate::features::utmpx;
 // ** windows-only

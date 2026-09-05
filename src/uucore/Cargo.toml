@@ -22,7 +22,6 @@ path = "src/lib/lib.rs"
 ariadne = { workspace = true, optional = true }
 base64-simd = { workspace = true, optional = true }
 bstr = { workspace = true, optional = true }
-clap = { workspace = true }
 data-encoding = { workspace = true, optional = true }
 data-encoding-macro = { workspace = true, optional = true }
 dunce = { workspace = true, optional = true }
@@ -37,7 +36,6 @@ libc = { workspace = true, optional = true }
 openssl = { workspace = true, optional = true }
 os_display = { workspace = true }
 rustc-hash = { workspace = true }
-rustix = { workspace = true, optional = true }
 # Not optional: os_display already pulls unicode-width into every uucore build,
 # so making it a direct dependency here is free and keeps char_width available
 # on all targets (a feature-gated optional dep failed to activate on wasm).
@@ -91,19 +89,33 @@ thiserror = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 
+[target.'cfg(not(target_os = "horizon"))'.dependencies]
+# TODO: https://github.com/eminence/terminal-size/pull/78
+clap = { workspace = true }
+
+[target.'cfg(not(any(target_os = "hermit", target_os = "horizon")))'.dependencies]
+# TODO: https://github.com/bytecodealliance/rustix/pull/1671
+# TODO: https://github.com/bytecodealliance/rustix/pull/1672
+rustix = { workspace = true, optional = true }
+
+[target.'cfg(all(unix, not(target_os = "horizon")))'.dependencies]
+# TODO: https://github.com/nix-rust/nix/pull/2817
+nix = { workspace = true, optional = true }
+
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 selinux = { workspace = true, optional = true }
+
+[target.'cfg(any(target_vendor = "apple", target_os = "cygwin", target_os = "freebsd", all(target_os = "linux", not(target_env = "ohos")), target_os = "netbsd"))'.dependencies]
+dns-lookup = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 # utmpx is unix-only, so its dependencies must not be pulled into other targets
 # (the uptime feature enables utmpx and now builds on windows too).
-dns-lookup = { workspace = true, optional = true }
 time = { workspace = true, optional = true, features = [
   "formatting",
   "local-offset",
   "macros",
 ] }
-nix = { workspace = true, optional = true }
 walkdir = { workspace = true, optional = true }
 xattr = { workspace = true, optional = true }
 
