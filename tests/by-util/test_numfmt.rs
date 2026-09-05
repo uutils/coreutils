@@ -1114,6 +1114,41 @@ fn test_format_with_zero_padding_and_suffix() {
         .stdout_is("001234 ?\n");
 }
 
+// GNU zero-pads the number only: "Optional zero (%010f) width will zero pad
+// the number". The unit from --to and the --suffix text stay outside the width.
+#[test]
+fn test_format_with_zero_padding_excludes_unit_suffix() {
+    let cases = [
+        (vec!["--format=%05.1f", "--to=si", "1234567"], "001.3M"),
+        (vec!["--format=%06.1f", "--to=si", "1234"], "0001.3k"),
+        (
+            vec!["--format=%08.1f", "--to=iec-i", "1234567"],
+            "000001.2Mi",
+        ),
+        (
+            vec!["--format=%08.1f", "--to=si", "--", "-1234567"],
+            "-00001.3M",
+        ),
+        (vec!["--format=%03.1f", "--to=si", "1234567"], "1.3M"),
+        (
+            vec!["--format=%05.1f", "--to=si", "--suffix=B", "1234567"],
+            "001.3MB",
+        ),
+        (vec!["--format=%05.1f", "--suffix=B", "1.5"], "001.5B"),
+        (
+            vec!["--format=%08.1f", "--to=si", "--padding=12", "1234567"],
+            "   000001.3M",
+        ),
+    ];
+
+    for (args, expected) in cases {
+        new_ucmd!()
+            .args(&args)
+            .succeeds()
+            .stdout_only(format!("{expected}\n"));
+    }
+}
+
 #[test]
 fn test_format_with_precision() {
     let values = vec![("0.99", "1.0"), ("1", "1.0"), ("1.01", "1.1")];
