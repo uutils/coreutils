@@ -6,7 +6,6 @@
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-
 #[test]
 #[cfg(target_os = "linux")]
 fn test_tsort_non_utf8_paths() {
@@ -250,4 +249,22 @@ fn test_nonexistent_file_error_includes_filename() {
         .arg("nosuchfile.txt")
         .fails_with_code(1)
         .stderr_only("tsort: nosuchfile.txt: No such file or directory\n");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_write_error() {
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("input", "a d\n");
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    ucmd.arg("input")
+        .set_stdout(dev_full)
+        .fails()
+        .stderr_contains("write error")
+        .stderr_contains("No space left on device");
 }
