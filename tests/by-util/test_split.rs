@@ -428,12 +428,12 @@ fn test_split_lines_number() {
         .ucmd()
         .args(&["--lines", "0", "file"])
         .fails_with_code(1)
-        .stderr_only("split: invalid number of lines: 0\n");
+        .stderr_only("split: invalid number of lines: '0'\n");
     scene
         .ucmd()
         .args(&["-0", "file"])
         .fails_with_code(1)
-        .stderr_only("split: invalid number of lines: 0\n");
+        .stderr_only("split: invalid number of lines: '0'\n");
     scene
         .ucmd()
         .args(&["--lines", "2fb", "file"])
@@ -1704,6 +1704,26 @@ fn test_round_robin_limited_file_descriptors() {
         .succeeds();
 }
 
+/// A zero SIZE is quoted like any other rejected SIZE, as GNU does.
+#[test]
+fn test_split_zero_size_is_quoted() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("file");
+
+    for (option, message) in [
+        ("--lines", "invalid number of lines"),
+        ("--bytes", "invalid number of bytes"),
+        ("--line-bytes", "invalid number of bytes"),
+    ] {
+        scene
+            .ucmd()
+            .args(&[option, "0", "file"])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains(format!("split: {message}: '0'\n"));
+    }
+}
+
 #[test]
 fn test_split_invalid_input() {
     // Test if stdout/stderr for '--lines' option is correct
@@ -1716,19 +1736,19 @@ fn test_split_invalid_input() {
         .args(&["--lines", "0", "file"])
         .fails()
         .no_stdout()
-        .stderr_contains("split: invalid number of lines: 0");
+        .stderr_contains("split: invalid number of lines: '0'");
     scene
         .ucmd()
         .args(&["-C", "0", "file"])
         .fails()
         .no_stdout()
-        .stderr_contains("split: invalid number of bytes: 0");
+        .stderr_contains("split: invalid number of bytes: '0'");
     scene
         .ucmd()
         .args(&["-b", "0", "file"])
         .fails()
         .no_stdout()
-        .stderr_contains("split: invalid number of bytes: 0");
+        .stderr_contains("split: invalid number of bytes: '0'");
     scene
         .ucmd()
         .args(&["-n", "0", "file"])
