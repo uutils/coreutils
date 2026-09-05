@@ -37,6 +37,7 @@ use std::io::{Seek, SeekFrom};
 ))]
 use std::path::Path;
 use std::process::Stdio;
+use std::time::Duration;
 use tail::chunks::BUFFER_SIZE as CHUNK_BUFFER_SIZE;
 #[cfg(all(
     not(target_vendor = "apple"),
@@ -73,6 +74,10 @@ const FOLLOW_NAME_EXP: &str = "follow_name.expected";
 const DEFAULT_SLEEP_INTERVAL_MILLIS: u64 = 1500;
 #[cfg(not(target_vendor = "apple"))]
 const DEFAULT_SLEEP_INTERVAL_MILLIS: u64 = 1000;
+
+/// Generous upper bound for event-based waits. Tests return as soon as the
+/// expected output appears, so the common case is far below this timeout.
+const WAIT_TIMEOUT: Duration = Duration::from_secs(5);
 
 // The binary integer "10000000" is *not* a valid UTF-8 encoding
 // of a character: https://en.wikipedia.org/wiki/UTF-8#Encoding
@@ -543,12 +548,16 @@ fn test_null_default() {
 fn test_follow_single() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let mut child = ucmd.arg("-f").arg(FOOBAR_TXT).run_no_wait();
+    let mut child = ucmd
+        .args(&["-f", "-s.1", "--max-unchanged-stats=1", FOOBAR_TXT])
+        .run_no_wait();
 
     let expected_fixture = "foobar_single_default.expected";
+    let initial = at.read(expected_fixture);
 
     child
-        .make_assertion_with_delay(200)
+        .wait_for_stdout_contains(&initial, WAIT_TIMEOUT)
+        .make_assertion()
         .is_alive()
         .with_current_output()
         .stdout_only_fixture(expected_fixture);
@@ -558,7 +567,8 @@ fn test_follow_single() {
     at.append(FOOBAR_TXT, expected);
 
     child
-        .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .wait_for_stdout_contains(expected, WAIT_TIMEOUT)
+        .make_assertion()
         .is_alive();
     child
         .kill()
@@ -585,10 +595,14 @@ fn test_follow_file_unsupported() {
 fn test_follow_non_utf8_bytes() {
     // Tail the test file and start following it.
     let (at, mut ucmd) = at_and_ucmd!();
-    let mut child = ucmd.arg("-f").arg(FOOBAR_TXT).run_no_wait();
+    let mut child = ucmd
+        .args(&["-f", "-s.1", "--max-unchanged-stats=1", FOOBAR_TXT])
+        .run_no_wait();
 
+    let initial = at.read("foobar_single_default.expected");
     child
-        .make_assertion_with_delay(500)
+        .wait_for_stdout_contains(&initial, WAIT_TIMEOUT)
+        .make_assertion()
         .is_alive()
         .with_current_output()
         .stdout_only_fixture("foobar_single_default.expected");
@@ -604,8 +618,22 @@ fn test_follow_non_utf8_bytes() {
     let expected = [INVALID_UTF8, b'\n'];
     at.append_bytes(FOOBAR_TXT, &expected);
 
+    // Poll raw bytes (invalid UTF-8 is not representable via the str helpers).
+    let start = std::time::Instant::now();
+    loop {
+        let all = child.stdout_all_bytes_peek();
+        if all.windows(expected.len()).any(|w| w == expected) {
+            break;
+        }
+        assert!(
+            start.elapsed() < WAIT_TIMEOUT,
+            "timeout waiting for non-utf8 bytes in stdout"
+        );
+        child.delay(10);
+    }
+
     child
-        .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .make_assertion()
         .with_current_output()
         .stdout_only_bytes(expected);
 
@@ -643,13 +671,18 @@ fn test_permission_denied_is_not_reported_as_not_found() {
 fn test_follow_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut child = ucmd
-        .arg("-f")
-        .arg(FOOBAR_TXT)
-        .arg(FOOBAR_2_TXT)
+        .args(&[
+            "-f",
+            "-s.1",
+            "--max-unchanged-stats=1",
+            FOOBAR_TXT,
+            FOOBAR_2_TXT,
+        ])
         .run_no_wait();
 
     child
-        .make_assertion_with_delay(500)
+        .wait_for_stdout_contains("==> foobar2.txt <==", WAIT_TIMEOUT)
+        .make_assertion()
         .is_alive()
         .with_current_output()
         .stdout_only_fixture("foobar_follow_multiple.expected");
@@ -658,7 +691,8 @@ fn test_follow_multiple() {
     at.append(FOOBAR_2_TXT, first_append);
 
     child
-        .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .wait_for_stdout_contains(first_append, WAIT_TIMEOUT)
+        .make_assertion()
         .with_current_output()
         .stdout_only(first_append);
 
@@ -666,7 +700,8 @@ fn test_follow_multiple() {
     at.append(FOOBAR_TXT, second_append);
 
     child
-        .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .wait_for_stdout_contains("thirty\n", WAIT_TIMEOUT)
+        .make_assertion()
         .with_current_output()
         .stdout_only_fixture("foobar_follow_multiple_appended.expected");
 
@@ -681,20 +716,19 @@ fn test_follow_name_multiple() {
     for argument in ["--follow=name", "--follo=nam", "--f=n"] {
         let (at, mut ucmd) = at_and_ucmd!();
         let mut child = ucmd
-            .arg(argument)
-            .arg(FOOBAR_TXT)
-            .arg(FOOBAR_2_TXT)
+            .args(&[
+                argument,
+                "-s.1",
+                "--max-unchanged-stats=1",
+                FOOBAR_TXT,
+                FOOBAR_2_TXT,
+            ])
             .run_no_wait();
 
-        #[cfg(target_os = "linux")]
-        let delay = 100;
-        #[cfg(target_vendor = "apple")]
-        let delay = 2000;
-        #[cfg(not(any(target_vendor = "apple", target_os = "linux")))]
-        let delay = 1000;
-
+        // Wait until the initial multi-file headers/content have been printed.
         child
-            .make_assertion_with_delay(delay)
+            .wait_for_stdout_contains("==> foobar2.txt <==", WAIT_TIMEOUT)
+            .make_assertion()
             .is_alive()
             .with_all_output()
             .stdout_only_fixture("foobar_follow_multiple.expected");
@@ -703,7 +737,8 @@ fn test_follow_name_multiple() {
         at.append(FOOBAR_2_TXT, first_append);
 
         child
-            .make_assertion_with_delay(delay)
+            .wait_for_stdout_contains(first_append, WAIT_TIMEOUT)
+            .make_assertion()
             .with_current_output()
             .stdout_only(first_append);
 
@@ -711,7 +746,8 @@ fn test_follow_name_multiple() {
         at.append(FOOBAR_TXT, second_append);
 
         child
-            .make_assertion_with_delay(delay)
+            .wait_for_stdout_contains("thirty\n", WAIT_TIMEOUT)
+            .make_assertion()
             .with_current_output()
             .stdout_only_fixture("foobar_follow_multiple_appended.expected");
 
@@ -1476,18 +1512,26 @@ fn test_retry_follow_name_waits_for_creation() {
         tail: 'watchme' has appeared;  following new file\n";
     let expected_stdout = "hello\n";
 
-    let mut delay = 1500;
-    let mut args = vec!["--follow=name", "--retry", missing, "--use-polling"];
+    let mut args = vec![
+        "-s.1",
+        "--max-unchanged-stats=1",
+        "--follow=name",
+        "--retry",
+        missing,
+        "--use-polling",
+    ];
     for _ in 0..2 {
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
-        p.make_assertion_with_delay(delay).is_alive();
+        p.wait_for_stderr_contains(&format!("cannot open '{missing}'"), WAIT_TIMEOUT)
+            .make_assertion()
+            .is_alive();
 
         at.touch(missing);
-        p.delay(delay);
+        p.wait_for_stderr_contains("has appeared", WAIT_TIMEOUT);
 
         at.truncate(missing, "hello\n");
-        p.delay(delay);
+        p.wait_for_stdout_contains("hello\n", WAIT_TIMEOUT);
 
         p.kill()
             .make_assertion()
@@ -1497,7 +1541,6 @@ fn test_retry_follow_name_waits_for_creation() {
 
         at.remove(missing);
         args.pop();
-        delay /= 3;
     }
 }
 
@@ -1532,21 +1575,22 @@ fn test_retry_descriptor_detects_truncation() {
         missing,
         "---disable-inotify",
     ];
-    let mut delay = 150;
     for _ in 0..2 {
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
-        p.make_assertion_with_delay(delay).is_alive();
+        p.wait_for_stderr_contains(&format!("cannot open '{missing}'"), WAIT_TIMEOUT)
+            .make_assertion()
+            .is_alive();
 
         at.touch(missing);
-        p.delay(delay);
+        p.wait_for_stderr_contains("has appeared", WAIT_TIMEOUT);
 
         at.truncate(missing, "greetings\n");
-        p.delay(delay);
+        p.wait_for_stdout_contains("greetings\n", WAIT_TIMEOUT);
 
-        // shorter than the previous content, so tail sees the shrink as a truncation
         at.truncate(missing, "hi\n");
-        p.delay(delay);
+        p.wait_for_stderr_contains("file truncated", WAIT_TIMEOUT)
+            .wait_for_stdout_contains("greetings\nhi\n", WAIT_TIMEOUT);
 
         p.make_assertion().is_alive();
         p.kill()
@@ -1557,7 +1601,6 @@ fn test_retry_descriptor_detects_truncation() {
 
         at.remove(missing);
         args.pop();
-        delay /= 3;
     }
 }
 
@@ -1583,17 +1626,24 @@ fn test_retry_descriptor_gives_up_on_untailable() {
         tail: 'watchme' has been replaced with an untailable file; giving up on this name\n\
         tail: no files remaining\n";
 
-    let mut delay = 1500;
-    let mut args = vec!["--follow=descriptor", "--retry", missing, "--use-polling"];
+    let mut args = vec![
+        "-s.1",
+        "--max-unchanged-stats=1",
+        "--follow=descriptor",
+        "--retry",
+        missing,
+        "--use-polling",
+    ];
     for _ in 0..2 {
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
-        p.make_assertion_with_delay(delay).is_alive();
+        p.wait_for_stderr_contains(&format!("cannot open '{missing}'"), WAIT_TIMEOUT)
+            .make_assertion()
+            .is_alive();
 
         at.mkdir(missing);
-        p.delay(delay);
-
-        p.make_assertion()
+        p.wait_until_exited(WAIT_TIMEOUT)
+            .make_assertion()
             .is_not_alive()
             .with_all_output()
             .stderr_only(expected_stderr)
@@ -1601,14 +1651,13 @@ fn test_retry_descriptor_gives_up_on_untailable() {
 
         at.rmdir(missing);
         args.pop();
-        delay /= 3;
     }
 }
 
 // intermittent failures on android with diff
 // Diff < left / right > :
-// ==> existing <==
-// >X
+// ==> active <==
+// >here
 #[test]
 #[cfg(all(not(windows), not(target_os = "android")))] // FIXME: for currently not working platforms
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
@@ -1628,22 +1677,26 @@ fn test_descriptor_no_retry_skips_late_file() {
 
     let mut p = ts
         .ucmd()
-        .arg("--follow=descriptor")
-        .arg("nofile")
-        .arg("active")
+        .args(&[
+            "-s.1",
+            "--max-unchanged-stats=1",
+            "--follow=descriptor",
+            missing,
+            existing,
+        ])
         .run_no_wait();
 
-    #[cfg(target_vendor = "apple")]
-    let delay = 1500;
-    #[cfg(not(target_vendor = "apple"))]
-    let delay = 1000;
-    p.make_assertion_with_delay(delay).is_alive();
+    p.wait_for_stderr_contains(&format!("cannot open '{missing}'"), WAIT_TIMEOUT)
+        .wait_for_stdout_contains(&format!("==> {existing} <=="), WAIT_TIMEOUT)
+        .make_assertion()
+        .is_alive();
 
     at.truncate(missing, "gone\n");
-    p.delay(delay);
+    // Without --retry, missing must stay ignored. Brief settle before writing existing.
+    p.delay(50);
 
     at.truncate(existing, "here\n");
-    p.delay(delay);
+    p.wait_for_stdout_contains("here\n", WAIT_TIMEOUT);
 
     p.make_assertion().is_alive();
     p.kill()
@@ -1686,35 +1739,40 @@ fn test_capital_f_recovers_after_dir_swap() {
         "--use-polling",
     ];
 
-    let mut delay = 500;
     for _ in 0..2 {
         at.mkdir(untailable);
 
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
-        p.make_assertion_with_delay(delay).is_alive();
+        p.wait_for_stderr_contains("cannot follow end of this type of file", WAIT_TIMEOUT)
+            .make_assertion()
+            .is_alive();
 
         // tail: 'untailable' has become accessible
         // or (The first is the common case, "has appeared" arises with slow rmdir):
         // tail: 'untailable' has appeared;  following new file
         at.rmdir(untailable);
         at.truncate(untailable, "alpha\n");
-        p.delay(delay);
+        p.wait_for_stdout_contains("alpha\n", WAIT_TIMEOUT)
+            .wait_for_stderr_contains("has become accessible", WAIT_TIMEOUT);
 
         // NOTE: GNU's `tail` only shows "become inaccessible"
-        // if there's a delay between rm and mkdir.
-        // tail: 'dir_node' has become inaccessible: No such file or directory
+        // if there's a gap between rm and mkdir. Wait for the event before mkdir.
+        // tail: 'untailable' has become inaccessible: No such file or directory
         at.remove(untailable);
-        p.delay(delay);
+        p.wait_for_stderr_contains("has become inaccessible", WAIT_TIMEOUT);
 
         // tail: 'dir_node' has been replaced with an untailable file\n";
         at.mkdir(untailable);
-        p.delay(delay);
+        p.wait_for_stderr_contains("has been replaced with an untailable file", WAIT_TIMEOUT);
 
         // full circle, back to the beginning
         at.rmdir(untailable);
         at.truncate(untailable, "beta\n");
-        p.delay(delay);
+        p.wait_for_stdout_contains("alpha\nbeta\n", WAIT_TIMEOUT)
+            .wait_until(WAIT_TIMEOUT, |_, stderr| {
+                stderr.matches("has become accessible").count() >= 2
+            });
 
         p.make_assertion().is_alive();
         p.kill()
@@ -1725,7 +1783,6 @@ fn test_capital_f_recovers_after_dir_swap() {
 
         args.pop();
         at.remove(untailable);
-        delay /= 3;
     }
 }
 
@@ -1817,8 +1874,6 @@ fn test_retry8() {
         tail: 'parent_dir/watched_file' has appeared;  following new file\n";
     let expected_stdout = "foo\nbar\n";
 
-    let delay = 1000;
-
     let mut p = ts
         .ucmd()
         .arg("-F")
@@ -1827,7 +1882,9 @@ fn test_retry8() {
         .arg(user_path)
         .run_no_wait();
 
-    p.make_assertion_with_delay(delay).is_alive();
+    p.wait_for_stderr_contains("cannot open 'parent_dir/watched_file'", WAIT_TIMEOUT)
+        .make_assertion()
+        .is_alive();
 
     // 'parent_dir/watched_file' is orphan
     // tail: cannot open 'parent_dir/watched_file' for reading: No such file or directory\n\
@@ -1835,18 +1892,22 @@ fn test_retry8() {
     // tail: 'parent_dir/watched_file' has appeared;  following new file\n\
     at.mkdir(parent_dir); // not an orphan anymore
     at.append(user_path, "foo\n");
-    p.delay(delay);
+    p.wait_for_stdout_contains("foo\n", WAIT_TIMEOUT)
+        .wait_for_stderr_contains("has appeared", WAIT_TIMEOUT);
 
     // tail: 'parent_dir/watched_file' has become inaccessible: No such file or directory\n\
     at.remove(user_path);
     at.rmdir(parent_dir); // 'parent_dir/watched_file' is orphan *again*
-    p.delay(delay);
+    p.wait_for_stderr_contains("has become inaccessible", WAIT_TIMEOUT);
 
     // Since 'parent_dir/watched_file' is orphan, this needs to be picked up by polling
     // tail: 'parent_dir/watched_file' has appeared;  following new file\n";
     at.mkdir(parent_dir); // not an orphan anymore
     at.append(user_path, "bar\n");
-    p.delay(delay);
+    p.wait_for_stdout_contains("foo\nbar\n", WAIT_TIMEOUT)
+        .wait_until(WAIT_TIMEOUT, |_, stderr| {
+            stderr.matches("has appeared").count() >= 2
+        });
 
     p.make_assertion().is_alive();
     p.kill()
@@ -1893,43 +1954,51 @@ fn test_retry9() {
     );
     let expected_stdout = "foo\nbar\nfoo\nbar\n";
 
-    let delay = 400;
-
     at.mkdir(parent_dir);
     at.truncate(user_path, "foo\n");
     let mut p = ts
         .ucmd()
         .arg("-F")
-        .arg("-s.2")
+        .arg("-s.1")
         .arg("--max-unchanged-stats=1")
         .arg(user_path)
         .run_no_wait();
 
-    p.make_assertion_with_delay(delay).is_alive();
+    p.wait_for_stdout_contains("foo\n", WAIT_TIMEOUT)
+        .make_assertion()
+        .is_alive();
 
     at.remove(user_path);
     at.rmdir(parent_dir);
-    p.delay(delay);
+    p.wait_for_stderr_contains("reverting to polling", WAIT_TIMEOUT);
 
     at.mkdir(parent_dir);
     at.truncate(user_path, "bar\n");
-    p.delay(delay);
+    p.wait_for_stdout_contains("foo\nbar\n", WAIT_TIMEOUT)
+        .wait_for_stderr_contains("has appeared", WAIT_TIMEOUT);
 
     at.remove(user_path);
     at.rmdir(parent_dir);
-    p.delay(delay);
+    p.wait_until(WAIT_TIMEOUT, |_, stderr| {
+        stderr.matches("has become inaccessible").count() >= 2
+    });
 
     at.mkdir(parent_dir);
     at.truncate(user_path, "foo\n");
-    p.delay(delay);
+    p.wait_for_stdout_contains("foo\nbar\nfoo\n", WAIT_TIMEOUT);
 
     at.remove(user_path);
     at.rmdir(parent_dir);
-    p.delay(delay);
+    p.wait_until(WAIT_TIMEOUT, |_, stderr| {
+        stderr.matches("has become inaccessible").count() >= 3
+    });
 
     at.mkdir(parent_dir);
     at.truncate(user_path, "bar\n");
-    p.delay(delay);
+    p.wait_for_stdout_contains(expected_stdout, WAIT_TIMEOUT)
+        .wait_until(WAIT_TIMEOUT, |_, stderr| {
+            stderr.matches("has appeared").count() >= 3
+        });
 
     p.make_assertion().is_alive();
     p.kill()
@@ -1970,28 +2039,28 @@ fn test_follow_descriptor_vs_rename1() {
         "---disable-inotify",
     ];
 
-    let mut delay = 100;
     for _ in 0..2 {
         at.touch(file_a);
 
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
-        p.make_assertion_with_delay(delay).is_alive();
+        p.make_assertion().is_alive();
 
         at.append(file_a, "A\n");
-        p.delay(delay);
+        p.wait_for_stdout_contains("A\n", WAIT_TIMEOUT);
 
         at.rename(file_a, file_b);
-        p.delay(delay);
+        // Descriptor follow keeps watching the same inode across renames; brief settle.
+        p.delay(50);
 
         at.append(file_b, "B\n");
-        p.delay(delay);
+        p.wait_for_stdout_contains("A\nB\n", WAIT_TIMEOUT);
 
         at.rename(file_b, file_c);
-        p.delay(delay);
+        p.delay(50);
 
         at.append(file_c, "C\n");
-        p.delay(delay);
+        p.wait_for_stdout_contains("A\nB\nC\n", WAIT_TIMEOUT);
 
         p.make_assertion().is_alive();
         p.kill()
@@ -2000,7 +2069,6 @@ fn test_follow_descriptor_vs_rename1() {
             .stdout_only("A\nB\nC\n");
 
         args.pop();
-        delay /= 3;
     }
 }
 
@@ -2033,19 +2101,24 @@ fn test_follow_descriptor_vs_rename2() {
         "---disable-inotify",
     ];
 
-    let mut delay = 150;
     for _ in 0..2 {
         at.touch(file_a);
         at.touch(file_b);
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
-        p.make_assertion_with_delay(delay).is_alive();
+        p.wait_for_stdout_contains("==> FILE_B <==", WAIT_TIMEOUT)
+            .make_assertion()
+            .is_alive();
 
         at.rename(file_a, file_c);
-        p.delay(delay);
+        // Descriptor follow keeps watching the same inode; brief settle before append.
+        p.delay(50);
 
         at.append(file_c, "X\n");
-        p.delay(delay);
+        p.wait_for_stdout_contains(
+            "==> FILE_A <==\n\n==> FILE_B <==\n\n==> FILE_A <==\nX\n",
+            WAIT_TIMEOUT,
+        );
 
         p.make_assertion().is_alive();
         p.kill()
@@ -2054,7 +2127,6 @@ fn test_follow_descriptor_vs_rename2() {
             .stdout_only("==> FILE_A <==\n\n==> FILE_B <==\n\n==> FILE_A <==\nX\n");
 
         args.pop();
-        delay /= 3;
     }
 }
 
@@ -2099,17 +2171,20 @@ fn test_follow_name_shows_headers_on_creation() {
         "---disable-inotify",
     ];
 
-    let mut delay = 150;
     for _ in 0..2 {
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
-        p.make_assertion_with_delay(delay).is_alive();
+        p.wait_for_stderr_contains(&format!("cannot open '{file_b}'"), WAIT_TIMEOUT)
+            .make_assertion()
+            .is_alive();
 
         at.truncate(file_a, "ping\n");
-        p.delay(delay);
+        p.wait_for_stdout_contains(&format!("==> {file_a} <==\nping\n"), WAIT_TIMEOUT)
+            .wait_for_stderr_contains(&format!("'{file_a}' has appeared"), WAIT_TIMEOUT);
 
         at.truncate(file_b, "pong\n");
-        p.delay(delay);
+        p.wait_for_stdout_contains(&format!("==> {file_b} <==\npong\n"), WAIT_TIMEOUT)
+            .wait_for_stderr_contains(&format!("'{file_b}' has appeared"), WAIT_TIMEOUT);
 
         let expected_stderr = "tail: cannot open 'log1' for reading: No such file or directory\n\
                 tail: cannot open 'log2' for reading: No such file or directory\n\
@@ -2127,7 +2202,6 @@ fn test_follow_name_shows_headers_on_creation() {
         at.remove(file_a);
         at.remove(file_b);
         args.pop();
-        delay /= 3;
     }
 }
 
@@ -2453,18 +2527,29 @@ fn test_follow_name_move_create1() {
     #[cfg(not(target_os = "linux"))]
     let expected_stderr = format!("{}: {source}: No such file or directory\n", ts.util_name);
 
-    let delay = 500;
-    let args = ["--follow=name", source];
+    let args = ["-s.1", "--max-unchanged-stats=1", "--follow=name", source];
 
     let mut p = ts.ucmd().args(&args).run_no_wait();
 
-    p.make_assertion_with_delay(delay).is_alive();
+    // Wait until the initial last-N lines have been fully printed before renaming.
+    // Waiting only for non-empty stdout races with the first write and can truncate
+    // the captured initial chunk on busy CI hosts.
+    p.wait_for_stdout_contains("END(25)", WAIT_TIMEOUT)
+        .make_assertion()
+        .is_alive();
 
     at.rename(source, backup);
-    p.delay(delay);
+    p.wait_for_stderr_contains("No such file or directory", WAIT_TIMEOUT);
 
     at.copy(backup, source);
-    p.delay(delay);
+    #[cfg(target_os = "linux")]
+    {
+        // After re-open, tail emits the recreated file content (START…END).
+        p.wait_for_stderr_contains("has appeared", WAIT_TIMEOUT)
+            .wait_for_stdout_contains("START(0)", WAIT_TIMEOUT);
+    }
+    #[cfg(not(target_os = "linux"))]
+    p.delay(500);
 
     p.make_assertion().is_alive();
     p.kill()
@@ -2510,20 +2595,20 @@ fn test_follow_name_hash_table_stress() {
         "9",
     ];
 
-    let mut delay = 100;
     for i in 0..2 {
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
-        p.make_assertion_with_delay(delay).is_alive();
+        p.make_assertion().is_alive();
 
         at.truncate("9", "x\n");
-        p.delay(delay);
+        p.wait_for_stdout_contains("x\n", WAIT_TIMEOUT);
 
         at.rename("1", "moved");
-        p.delay(delay);
+        p.wait_for_stderr_contains("has become inaccessible", WAIT_TIMEOUT);
 
         at.truncate("1", "a\n");
-        p.delay(delay);
+        p.wait_for_stdout_contains("a\n", WAIT_TIMEOUT)
+            .wait_for_stderr_contains("has appeared", WAIT_TIMEOUT);
 
         // NOTE: Files used in the previous loop iteration are reused intentionally
         // during the first loop iteration, we also don't clear them to get the same side-effects.
@@ -2551,7 +2636,6 @@ fn test_follow_name_hash_table_stress() {
         if i == 0 {
             args.push("---disable-inotify");
         }
-        delay *= 3;
     }
 }
 
@@ -2584,17 +2668,18 @@ fn test_follow_name_move1() {
         ),
     ];
 
-    let mut args = vec!["--follow=name", source];
+    let mut args = vec!["-s.1", "--max-unchanged-stats=1", "--follow=name", source];
 
-    let mut delay = 500;
     #[allow(clippy::needless_range_loop)]
     for i in 0..2 {
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
-        p.make_assertion_with_delay(delay).is_alive();
+        p.wait_for_stdout_contains(&expected_stdout, WAIT_TIMEOUT)
+            .make_assertion()
+            .is_alive();
 
         at.rename(source, backup);
-        p.delay(delay);
+        p.wait_for_stderr_contains("No such file or directory", WAIT_TIMEOUT);
 
         if i == 0 {
             p.make_assertion().is_alive();
@@ -2604,7 +2689,8 @@ fn test_follow_name_move1() {
                 .stderr_is(&expected_stderr[i])
                 .stdout_is(&expected_stdout);
         } else {
-            p.make_assertion()
+            p.wait_until_exited(WAIT_TIMEOUT)
+                .make_assertion()
                 .is_not_alive()
                 .with_all_output()
                 .stderr_is(&expected_stderr[i])
@@ -2614,7 +2700,6 @@ fn test_follow_name_move1() {
 
         at.rename(backup, source);
         args.push("--use-polling");
-        delay *= 3;
     }
 }
 
@@ -2665,24 +2750,33 @@ fn test_follow_name_move2() {
         ts.util_name, file1, file2
     );
 
-    let mut args = vec!["--follow=name", file1, file2];
+    let mut args = vec![
+        "-s.1",
+        "--max-unchanged-stats=1",
+        "--follow=name",
+        file1,
+        file2,
+    ];
 
-    let mut delay = 500;
     for i in 0..2 {
         at.truncate(file1, "file1_content\n");
         at.truncate(file2, "file2_content\n");
 
         let mut p = ts.ucmd().args(&args).run_no_wait();
-        p.make_assertion_with_delay(delay).is_alive();
+        p.wait_for_stdout_contains("file2_content\n", WAIT_TIMEOUT)
+            .make_assertion()
+            .is_alive();
 
         at.rename(file1, file2);
-        p.delay(delay);
+        p.wait_for_stderr_contains("has been replaced", WAIT_TIMEOUT)
+            .wait_for_stderr_contains("No such file or directory", WAIT_TIMEOUT);
 
         at.append(file2, "more_file2_content\n");
-        p.delay(delay);
+        p.wait_for_stdout_contains("more_file2_content\n", WAIT_TIMEOUT);
 
         at.append(file1, "more_file1_content\n");
-        p.delay(delay);
+        p.wait_for_stdout_contains("more_file1_content\n", WAIT_TIMEOUT)
+            .wait_for_stderr_contains("has appeared", WAIT_TIMEOUT);
 
         p.make_assertion().is_alive();
         p.kill()
@@ -2694,7 +2788,6 @@ fn test_follow_name_move2() {
         if i == 0 {
             args.push("--use-polling");
         }
-        delay *= 3;
         // NOTE: Switch the first and second line because the events come in this order from
         //  `notify::PollWatcher`. However, for GNU's tail, the order between polling and not
         //  polling does not change.
@@ -2733,27 +2826,33 @@ fn test_follow_name_move_retry1() {
     );
     let expected_stdout = "tailed\nnew content\n";
 
-    let mut args = vec!["--follow=name", "--retry", source, "--use-polling"];
+    let mut args = vec![
+        "-s.1",
+        "--max-unchanged-stats=1",
+        "--follow=name",
+        "--retry",
+        source,
+        "--use-polling",
+    ];
 
-    let mut delay = 1500;
     for _ in 0..2 {
         at.touch(source);
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
-        p.make_assertion_with_delay(delay).is_alive();
+        p.make_assertion().is_alive();
 
         at.append(source, "tailed\n");
-        p.delay(delay);
+        p.wait_for_stdout_contains("tailed\n", WAIT_TIMEOUT);
 
         // with --follow=name, tail should stop monitoring the renamed file
         at.rename(source, backup);
-        p.delay(delay);
+        p.wait_for_stderr_contains("has become inaccessible", WAIT_TIMEOUT);
         // overwrite backup while it's not monitored
         at.truncate(backup, "new content\n");
-        p.delay(delay);
         // move back, tail should pick this up and print new content
         at.rename(backup, source);
-        p.delay(delay);
+        p.wait_for_stdout_contains("new content\n", WAIT_TIMEOUT)
+            .wait_for_stderr_contains("has appeared", WAIT_TIMEOUT);
 
         p.make_assertion().is_alive();
         p.kill()
@@ -2764,7 +2863,6 @@ fn test_follow_name_move_retry1() {
 
         at.remove(source);
         args.pop();
-        delay /= 3;
     }
 }
 
@@ -2827,28 +2925,31 @@ fn test_follow_name_rename_chain() {
 
     let mut args = vec!["-s.1", "--max-unchanged-stats=1", "-F", file1, file2];
 
-    let mut delay = 60;
     for i in 0..2 {
         at.touch(file1);
         at.touch(file2);
 
         let mut p = ts.ucmd().args(&args).run_no_wait();
-        p.make_assertion_with_delay(delay).is_alive();
+        p.wait_for_stdout_contains("==> b <==", WAIT_TIMEOUT)
+            .make_assertion()
+            .is_alive();
 
         at.truncate(file1, "x\n");
-        p.delay(delay);
+        p.wait_for_stdout_contains("==> a <==\nx\n", WAIT_TIMEOUT);
 
         at.rename(file1, file2);
-        p.delay(delay);
+        p.wait_for_stderr_contains("has been replaced", WAIT_TIMEOUT)
+            .wait_for_stderr_contains("has become inaccessible", WAIT_TIMEOUT);
 
         at.truncate(file1, "x2\n");
-        p.delay(delay);
+        p.wait_for_stdout_contains("x2\n", WAIT_TIMEOUT)
+            .wait_for_stderr_contains("has appeared", WAIT_TIMEOUT);
 
         at.append(file2, "y\n");
-        p.delay(delay);
+        p.wait_for_stdout_contains("y\n", WAIT_TIMEOUT);
 
         at.append(file1, "z\n");
-        p.delay(delay);
+        p.wait_for_stdout_contains("z\n", WAIT_TIMEOUT);
 
         p.make_assertion().is_alive();
         p.kill()
@@ -2862,7 +2963,6 @@ fn test_follow_name_rename_chain() {
         if i == 0 {
             args.push("--use-polling");
         }
-        delay *= 3;
         // NOTE: Switch the first and second line because the events come in this order from
         //  `notify::PollWatcher`. However, for GNU's tail, the order between polling and not
         //  polling does not change.
