@@ -61,6 +61,7 @@ use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::posix::{MODERN, TRADITIONAL};
 use uucore::show_error;
 use uucore::translate;
+use uucore::translate_text;
 use uucore::version_cmp::version_cmp;
 use uucore::{format_usage, i18n};
 
@@ -204,7 +205,11 @@ fn format_disorder(file: &OsString, line_number: &usize, line: &String, silent: 
     if *silent {
         String::new()
     } else {
-        translate!("sort-error-disorder", "file" => file.maybe_quote(), "line_number" => line_number, "line" => line.to_owned())
+        // `line` is the offending input line echoed back verbatim (GNU sort does the
+        // same): it must not be reinterpreted as a number by `translate!`, which would
+        // reformat it via Fluent's numeric formatting (e.g. "1.10" -> "1.1", "1e5" ->
+        // "100000", "nan" -> "NaN").
+        translate_text!("sort-error-disorder", "file" => file.maybe_quote(), "line_number" => line_number, "line" => line.to_owned())
     }
 }
 
