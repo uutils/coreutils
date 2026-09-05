@@ -6,6 +6,8 @@
 // spell-checker:ignore TAOCP indegree
 // spell-checker:ignore (libs) interner
 
+mod error;
+
 use clap::{Arg, ArgAction, Command};
 use rustc_hash::FxHashMap;
 use std::collections::VecDeque;
@@ -15,10 +17,11 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use string_interner::StringInterner;
 use string_interner::backend::BucketBackend;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::{format_usage, show, translate};
+
+use crate::error::{Error, ReadError};
 
 // short types for switching interning behavior on the fly.
 type Sym = string_interner::symbol::SymbolUsize;
@@ -59,7 +62,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         {
             let input = std::path::Path::new(input);
             if input.is_dir() {
-                return Err(TsortError::IsDir(input.to_string_lossy().to_string()).into());
+                return Err(
+                    Error::Read(ReadError::IsDir(input.to_string_lossy().to_string())).into(),
+                );
             }
         }
         let file = File::open(input).map_err_context(|| input.maybe_quote().to_string())?;
@@ -71,7 +76,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         process_input(reader, &mut g)?;
     }
 
-    g.run_tsort()
+    g.run_tsort()?;
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
@@ -99,37 +105,15 @@ pub fn uu_app() -> Command {
         )
 }
 
-#[derive(Debug, Error)]
-enum TsortError {
-    /// The input file is actually a directory.
-    #[error("{input}: {message}", input = .0.maybe_quote(), message = translate!("tsort-error-is-dir"))]
-    IsDir(String),
-
-    /// The number of tokens in the input data is odd.
-    ///
-    /// The length of the list of edges must be even because each edge has two
-    /// components: a source node and a target node.
-    #[error("{input}: {message}", input = .0.maybe_quote(), message = translate!("tsort-error-odd"))]
-    NumTokensOdd(String),
-
-    /// The graph contains a cycle.
-    #[error("{input}: {message}", input = .0, message = translate!("tsort-error-loop"))]
-    Loop(String),
-
-    /// Wrapper for bubbling up IO errors
-    #[error("{0}")]
-    IO(#[from] io::Error),
-}
-
 // Auxiliary struct, just for printing loop nodes via show! macro
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 #[error("{0}")]
 struct LoopNode<'a>(&'a str);
 
-impl UError for TsortError {}
+impl UError for Error {}
 impl UError for LoopNode<'_> {}
 
-fn process_input<R: BufRead>(reader: R, graph: &mut Graph) -> Result<(), TsortError> {
+fn process_input<R: BufRead>(reader: R, graph: &mut Graph) -> Result<(), Error> {
     let mut pending: Option<Sym> = None;
 
     // Input is considered to be in the format
@@ -137,13 +121,13 @@ fn process_input<R: BufRead>(reader: R, graph: &mut Graph) -> Result<(), TsortEr
     // with tokens separated by whitespaces
 
     for line in reader.lines() {
-        let line = line.map_err(|e| {
-            if e.kind() == io::ErrorKind::IsADirectory {
-                TsortError::IsDir(graph.name())
-            } else {
-                e.into()
+        let line = match line {
+            Err(e) if e.kind() == io::ErrorKind::IsADirectory => {
+                return Err(ReadError::IsDir(graph.name()).into());
             }
-        })?;
+            Err(e) => return Err(ReadError::Io(e).into()),
+            Ok(line) => line,
+        };
         for token in line.split_whitespace() {
             // Intern the token and get a Sym
             let token_sym = graph.interner.get_or_intern(token);
@@ -156,7 +140,7 @@ fn process_input<R: BufRead>(reader: R, graph: &mut Graph) -> Result<(), TsortEr
         }
     }
     if pending.is_some() {
-        return Err(TsortError::NumTokensOdd(graph.name()));
+        return Err(ReadError::NumTokensOdd(graph.name()).into());
     }
 
     Ok(())
@@ -244,7 +228,7 @@ impl Graph {
     }
 
     /// Implementation of algorithm T from TAOCP (Don. Knuth), vol. 1.
-    fn run_tsort(&mut self) -> UResult<()> {
+    fn run_tsort(&mut self) -> Result<(), Error> {
         let mut independent_nodes_queue: VecDeque<Sym> = self
             .nodes
             .iter()
@@ -264,7 +248,7 @@ impl Graph {
         let mut out = BufWriter::new(io::stdout().lock());
         while !self.nodes.is_empty() {
             let v = self.find_next_node(&mut independent_nodes_queue);
-            writeln!(out, "{}", self.get_node_name(v))?;
+            writeln!(out, "{}", self.get_node_name(v)).map_err(Error::Write)?;
             if let Some(node_to_process) = self.nodes.remove(&v) {
                 for successor_name in node_to_process.successor_tokens.into_iter().rev() {
                     // we reverse to match GNU tsort order
@@ -279,6 +263,7 @@ impl Graph {
                 }
             }
         }
+        out.flush().map_err(Error::Write)?;
         Ok(())
     }
     pub fn indegree(&self, sym: Sym) -> Option<usize> {
@@ -309,7 +294,7 @@ impl Graph {
 
     fn find_and_break_cycle(&mut self, frontier: &mut VecDeque<Sym>) {
         let cycle = self.detect_cycle();
-        show!(TsortError::Loop(self.name()));
+        show!(Error::Loop(self.name()));
         for &sym in &cycle {
             show!(LoopNode(self.get_node_name(sym)));
         }
