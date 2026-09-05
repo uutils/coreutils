@@ -35,7 +35,7 @@ tr-error-char-repeat-in-set1 = la construction de répétition [c*] ne peut pas 
 tr-error-invalid-repeat-count = nombre de répétitions invalide { $count } dans la construction [c*n]
 tr-error-empty-set2-when-not-truncating = quand on ne tronque pas set1, string2 doit être non-vide
 tr-error-class-except-lower-upper-in-set2 = lors de la traduction, les seules classes de caractères qui peuvent apparaître dans set2 sont 'upper' et 'lower'
-tr-error-class-in-set2-not-matched = construction [:upper:] et/ou [:lower:] mal alignée
+tr-error-class-in-set2-not-matched = les structures [:upper:] ou [:lower:] sont mal alignées
 tr-error-set1-longer-set2-ends-in-class = lors de la traduction avec string1 plus long que string2,
   cette dernière chaîne ne doit pas se terminer par une classe de caractères
 tr-error-complement-more-than-one-unique = lors de la traduction avec des classes de caractères complémentées,
