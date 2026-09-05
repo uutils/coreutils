@@ -544,6 +544,7 @@ fn consider_suffix(
     u: Unit,
     round_method: RoundMethod,
     precision: usize,
+    is_precision_specified: bool,
 ) -> Result<(f64, Option<Suffix>)> {
     use crate::units::RawSuffix::{E, G, K, M, P, Q, R, T, Y, Z};
 
@@ -582,7 +583,10 @@ fn consider_suffix(
     } else {
         precision
     };
-    let v = if precision > 0 {
+    let v = if is_precision_specified {
+        // An explicit `--format` precision, `%.0f` included, rounds the scaled
+        // value to exactly that many decimals. `div_round` is for the default
+        // presentation instead, which keeps one decimal below the next base.
         round_with_precision(n / bases[i], round_method, effective_precision)
     } else {
         div_round(n, bases[i], round_method)
@@ -699,7 +703,7 @@ fn transform_to(
 
     let s = s.to_f64();
     let i2 = s / (opts.to_unit as f64);
-    let (i2, s) = consider_suffix(i2, opts.to, round_method, precision)?;
+    let (i2, s) = consider_suffix(i2, opts.to, round_method, precision, is_precision_specified)?;
     let dec_sep = locale_decimal_separator();
     let localize = |s: String| -> String {
         if dec_sep == "." {
@@ -1216,7 +1220,7 @@ mod tests {
         use crate::options::RoundMethod;
         use crate::units::Unit;
 
-        let result = consider_suffix(1e27, Unit::Si, RoundMethod::FromZero, 0);
+        let result = consider_suffix(1e27, Unit::Si, RoundMethod::FromZero, 0, false);
         assert!(result.is_ok());
         let (value, suffix) = result.unwrap();
         assert!(suffix.is_some());
@@ -1224,7 +1228,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::R as i32);
         assert_eq!(value, 1.0);
 
-        let result = consider_suffix(1e30, Unit::Si, RoundMethod::FromZero, 0);
+        let result = consider_suffix(1e30, Unit::Si, RoundMethod::FromZero, 0, false);
         assert!(result.is_ok());
         let (value, suffix) = result.unwrap();
         assert!(suffix.is_some());
@@ -1232,7 +1236,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::Q as i32);
         assert_eq!(value, 1.0);
 
-        let result = consider_suffix(5e30, Unit::Si, RoundMethod::FromZero, 0);
+        let result = consider_suffix(5e30, Unit::Si, RoundMethod::FromZero, 0, false);
         assert!(result.is_ok());
         let (value, suffix) = result.unwrap();
         assert!(suffix.is_some());
