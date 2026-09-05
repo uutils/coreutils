@@ -52,6 +52,7 @@ base-common-extra-operand = extra operand {$operand}
 base-common-no-such-file = {$file}: No such file or directory
 base-common-invalid-wrap-size = invalid wrap size: {$size}
 base-common-read-error = read error: {$error}
+base-common-invalid-input = invalid input
 
 # Shared base_common help messages
 base-common-help-decode = decode data
