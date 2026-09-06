@@ -477,7 +477,7 @@ rand_chacha = { version = "0.10.0" }
 rayon = "1.10"
 regex = "1.10.4"
 rlimit = "0.11.0"
-rstest = "0.26.0"
+rstest = "0.27.0"
 rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"
 rust-ini = "0.21.0"
