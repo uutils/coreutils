@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) defaultcheck nocheck helpb helpz nwordb nwordwordz wordtotal
 
+use std::time::Duration;
+
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 #[cfg(unix)]
@@ -792,4 +794,17 @@ fn test_comm_write_error_dev_full() {
         .set_stdout(dev_full)
         .fails()
         .stderr_is("comm: write error: No space left on device\n");
+}
+
+#[test]
+fn test_both_operands_read_stdin() {
+    // Both operands name standard input, so they share one stream and take
+    // lines from it in turn. This used to deadlock on locking it twice, hence
+    // the timeout.
+    new_ucmd!()
+        .args(&["-", "-"])
+        .pipe_in("a\nb\nc\n")
+        .timeout(Duration::from_secs(30))
+        .succeeds()
+        .stdout_only("a\n\tb\nc\n");
 }
