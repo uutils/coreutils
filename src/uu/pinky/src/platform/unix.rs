@@ -164,30 +164,33 @@ fn format_quiet_time(quiet_for: i64) -> String {
     }
 }
 
-/// Render an entry's login time. The C locale gets the terse month-and-day
-/// form; everything else gets the ISO-like one.
+/// Render an entry's login time.
 fn format_timestamp(ut: &UtmpxRecord) -> String {
     const FORMAT_DESCRIPTION_VERSION: usize = 2;
 
-    let description: Vec<time::format_description::FormatItem> = if ["LC_ALL", "LC_TIME", "LANG"]
-        .into_iter()
-        .find_map(std::env::var_os)
-        .as_deref()
-        == Some(std::ffi::OsStr::new("C"))
-    {
-        // "%b %e %H:%M"
-        time::format_description::parse_borrowed::<FORMAT_DESCRIPTION_VERSION>(
-            "[month repr:short] [day padding:space] [hour]:[minute]",
-        )
-        .unwrap()
-    } else {
-        // "%Y-%m-%d %H:%M"
-        time::format_description::parse_borrowed::<FORMAT_DESCRIPTION_VERSION>(
-            "[year]-[month]-[day] [hour]:[minute]",
-        )
-        .unwrap()
-    };
-    ut.login_time().format(&description).unwrap()
+    thread_local! {
+        /// The C locale gets the terse month-and-day form; everything else gets
+        /// the ISO-like one. Neither the environment nor the descriptions change
+        /// while we print, so settle on one and parse it once.
+        static TIME_FORMAT: Vec<time::format_description::FormatItem<'static>> = {
+            let description = if ["LC_ALL", "LC_TIME", "LANG"]
+                .into_iter()
+                .find_map(std::env::var_os)
+                .as_deref()
+                == Some(std::ffi::OsStr::new("C"))
+            {
+                // "%b %e %H:%M"
+                "[month repr:short] [day padding:space] [hour]:[minute]"
+            } else {
+                // "%Y-%m-%d %H:%M"
+                "[year]-[month]-[day] [hour]:[minute]"
+            };
+            time::format_description::parse_borrowed::<FORMAT_DESCRIPTION_VERSION>(description)
+                .unwrap()
+        };
+    }
+
+    TIME_FORMAT.with(|description| ut.login_time().format(description).unwrap())
 }
 
 /// Pull the real name out of a password entry: it is the part of the comment
