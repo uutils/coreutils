@@ -1135,16 +1135,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fts-sys"
-version = "0.2.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c03259139c9b098dd92241b046fedfeebcd6b000d491c821b24ced28558a9c2"
-dependencies = [
- "bindgen",
- "libc",
-]
-
-[[package]]
 name = "funty"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3336,7 +3326,6 @@ version = "0.11.0"
 dependencies = [
  "clap",
  "fluent",
- "fts-sys",
  "libc",
  "rustix",
  "selinux",

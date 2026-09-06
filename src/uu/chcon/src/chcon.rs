@@ -17,15 +17,17 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use rustix::fs::{Mode, OFlags, openat};
 use selinux::{OpaqueSecurityContext, SecurityContext};
 
-use core::ffi::{CStr, c_int};
+use uucore::safe_traversal::{DirFd, Metadata as TraversalMetadata, SymlinkBehavior};
+
+use core::ffi::CStr;
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::ffi::{CString, OsStr, OsString};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 mod errors;
-mod fts;
 
 use errors::{Error, Result, report_full_error};
 
@@ -405,18 +407,6 @@ impl RecursiveMode {
             | Self::RecursiveAndFollowArgDirSymLinks => true,
         }
     }
-
-    fn fts_open_options(self) -> c_int {
-        match self {
-            Self::NotRecursive | Self::RecursiveButDoNotFollowSymLinks => fts_sys::FTS_PHYSICAL,
-
-            Self::RecursiveAndFollowAllDirSymLinks => fts_sys::FTS_LOGICAL,
-
-            Self::RecursiveAndFollowArgDirSymLinks => {
-                fts_sys::FTS_PHYSICAL | fts_sys::FTS_COMFOLLOW
-            }
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -435,7 +425,7 @@ enum CommandLineMode {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct DeviceAndINode {
     device_id: u64,
     inode: u64,
@@ -453,6 +443,16 @@ impl From<fs::Metadata> for DeviceAndINode {
     }
 }
 
+impl From<&TraversalMetadata> for DeviceAndINode {
+    fn from(md: &TraversalMetadata) -> Self {
+        let info = md.file_info();
+        Self {
+            device_id: info.device(),
+            inode: info.inode(),
+        }
+    }
+}
+
 impl TryFrom<&libc::stat> for DeviceAndINode {
     type Error = Error;
 
@@ -464,275 +464,204 @@ impl TryFrom<&libc::stat> for DeviceAndINode {
     }
 }
 
+/// Whether a symlink at this position should be resolved before it is examined.
+///
+/// `-P` never resolves, `-L` always does, and `-H` resolves only the operands
+/// named on the command line.
+fn follows_symlinks(mode: RecursiveMode, top_level: bool) -> SymlinkBehavior {
+    match mode {
+        RecursiveMode::RecursiveAndFollowAllDirSymLinks => SymlinkBehavior::Follow,
+        RecursiveMode::RecursiveAndFollowArgDirSymLinks => top_level.into(),
+        RecursiveMode::NotRecursive | RecursiveMode::RecursiveButDoNotFollowSymLinks => {
+            SymlinkBehavior::NoFollow
+        }
+    }
+}
+
+/// Whether a directory's contents were fully dealt with.
+#[derive(PartialEq, Eq, Clone, Copy)]
+enum Descent {
+    Complete,
+    Abandoned,
+}
+
+/// Whether revisiting a directory indicates real damage rather than an ordinary
+/// consequence of following symlinks.
+fn cycle_is_alarming(mode: RecursiveMode, top_level: bool) -> bool {
+    match mode {
+        RecursiveMode::RecursiveAndFollowAllDirSymLinks => false,
+        RecursiveMode::RecursiveAndFollowArgDirSymLinks => !top_level,
+        RecursiveMode::NotRecursive | RecursiveMode::RecursiveButDoNotFollowSymLinks => true,
+    }
+}
+
 fn relabel_all(
     options: &Options,
     context: &SELinuxSecurityContext,
     root_id: Option<DeviceAndINode>,
 ) -> Vec<Error> {
-    let traversal_flags = options.recursive_mode.fts_open_options();
-    let mut fts = match fts::FTS::new(options.files.iter(), traversal_flags) {
-        Ok(fts) => fts,
-        Err(err) => return vec![err],
+    let mut errors = Vec::default();
+
+    // Operands are named relative to where we were started, so anchor them to a
+    // descriptor for that directory rather than re-resolving each path.
+    let start = match DirFd::open(Path::new("."), SymlinkBehavior::Follow) {
+        Ok(dir) => dir,
+        Err(err) => {
+            errors.push(Error::from_io1(translate!("chcon-op-accessing"), ".", err));
+            return errors;
+        }
     };
 
-    let mut errors = Vec::default();
-    loop {
-        match fts.read_next_entry() {
-            Ok(true) => {
-                if let Err(err) = relabel_entry(options, context, &mut fts, root_id) {
-                    errors.push(err);
-                }
-            }
-
-            Ok(false) => break,
-
-            Err(err) => {
-                errors.push(err);
-                break;
-            }
-        }
-    }
-    errors
-}
-
-/// The traversal facts a relabel decision needs, lifted out of the live `fts`
-/// entry so the walk can be steered afterwards without holding a borrow on it.
-struct Entry {
-    full_name: PathBuf,
-    access_path: PathBuf,
-    id: DeviceAndINode,
-    flags: c_int,
-    top_level: bool,
-    first_sighting: bool,
-    errno: c_int,
-}
-
-impl Entry {
-    fn read(fts: &mut fts::FTS) -> Result<Self> {
-        let entry = fts
-            .last_entry_ref()
-            .expect("last_entry_ref is present after successful read_next_entry");
-
-        let full_name = entry.path().map(PathBuf::from).ok_or_else(|| {
-            Error::from_io(
-                translate!("chcon-op-file-name-validation"),
-                io::ErrorKind::InvalidInput.into(),
-            )
-        })?;
-
-        let access_path = entry.access_path().map(PathBuf::from).ok_or_else(|| {
-            Error::from_io1(
-                translate!("chcon-op-file-name-validation"),
-                &full_name,
-                io::ErrorKind::InvalidInput.into(),
-            )
-        })?;
-
-        // SAFETY: If `entry.fts_statp` is not null, then it is assumed to be valid.
-        let id = entry
-            .stat()
-            .ok_or_else(|| {
-                Error::from_io1(
-                    translate!("chcon-op-getting-meta-data"),
-                    &full_name,
-                    io::ErrorKind::InvalidInput.into(),
-                )
-            })
-            .and_then(DeviceAndINode::try_from)?;
-
-        Ok(Self {
-            full_name,
-            access_path,
-            id,
-            flags: entry.flags(),
-            top_level: entry.level() == 0,
-            first_sighting: entry.number() == 0,
-            errno: entry.errno(),
-        })
-    }
-
-    /// An error carrying the errno the traversal recorded for this entry.
-    fn traversal_error(&self, op: String) -> Error {
-        Error::from_io1(
-            op,
-            &self.full_name,
-            io::Error::from_raw_os_error(self.errno),
-        )
-    }
-
-    /// An error of our own making, unrelated to errno.
-    fn rejected(&self, op: String, kind: io::ErrorKind) -> Error {
-        Error::from_io1(op, &self.full_name, kind.into())
-    }
-
-    /// Decide what to do with this entry. Reaches nothing outside itself: the
-    /// caller owns every side effect, including the diagnostics.
-    fn classify(&self, options: &Options, root_id: Option<DeviceAndINode>) -> Step {
-        let recursive = options.recursive_mode.is_recursive();
-        let is_root = || targets_root(root_id, self.id);
-        let refuse_root = || {
-            self.rejected(
-                translate!("chcon-op-modifying-root-path"),
-                io::ErrorKind::PermissionDenied,
-            )
-        };
-
-        match self.flags {
-            // Pre-order visit. Directories are labelled on the way back up, so
-            // there is nothing to do here beyond refusing to descend into `/`.
-            fts_sys::FTS_D if recursive => {
-                if is_root() {
-                    Step::Prune(Notice::RecursiveRoot, refuse_root())
-                } else {
-                    Step::Pass
-                }
-            }
-
-            // Post-order visit, which is where a directory actually gets its
-            // context. Without `-R` the pre-order visit already covered it.
-            fts_sys::FTS_DP if !recursive => Step::Pass,
-            fts_sys::FTS_DP if is_root() => {
-                Step::Refuse(Some(Notice::RecursiveRoot), refuse_root())
-            }
-
-            fts_sys::FTS_NS if self.top_level && self.first_sighting => Step::Restat,
-
-            fts_sys::FTS_NS | fts_sys::FTS_ERR => {
-                Step::Refuse(None, self.traversal_error(translate!("chcon-op-accessing")))
-            }
-
-            fts_sys::FTS_DNR => Step::Refuse(
-                None,
-                self.traversal_error(translate!("chcon-op-reading-directory")),
-            ),
-
-            fts_sys::FTS_DC
-                if cycle_deserves_warning(
-                    options.recursive_mode.fts_open_options(),
-                    self.top_level,
-                ) =>
-            {
-                Step::Refuse(
-                    Some(Notice::DirectoryCycle),
-                    self.rejected(
-                        translate!("chcon-op-reading-cyclic-directory"),
-                        io::ErrorKind::InvalidData,
-                    ),
-                )
-            }
-
-            _ => Step::Relabel,
-        }
-    }
-}
-
-/// What the walk should do with one entry.
-enum Step {
-    /// Nothing to do; carry on.
-    Pass,
-    /// Ask for a fresh stat and revisit this entry.
-    Restat,
-    /// Apply the requested context.
-    Relabel,
-    /// Report the entry and carry on.
-    Refuse(Option<Notice>, Error),
-    /// Report the entry and keep the walk out of everything below it.
-    Prune(Notice, Error),
-}
-
-/// A diagnostic emitted alongside a refusal.
-enum Notice {
-    RecursiveRoot,
-    DirectoryCycle,
-}
-
-impl Notice {
-    fn emit(self, path: &Path) {
-        match self {
-            Self::RecursiveRoot => warn_recursive_root(path),
-            Self::DirectoryCycle => warn_directory_cycle(path),
-        }
-    }
-}
-
-fn relabel_entry(
-    options: &Options,
-    context: &SELinuxSecurityContext,
-    fts: &mut fts::FTS,
-    root_id: Option<DeviceAndINode>,
-) -> Result<()> {
-    let entry = Entry::read(fts)?;
-
-    match entry.classify(options, root_id) {
-        Step::Pass => Ok(()),
-
-        Step::Restat => {
-            if let Some(mut live) = fts.last_entry_ref() {
-                live.set_number(1);
-            }
-            let _ignored = fts.set(fts_sys::FTS_AGAIN);
-            Ok(())
-        }
-
-        Step::Prune(notice, error) => {
-            notice.emit(&entry.full_name);
-
-            // Prune the walk here so nothing underneath gets relabelled.
-            let _ignored = fts.set(fts_sys::FTS_SKIP);
-
-            // Swallow the post-order visit too, so the same directory is not
-            // handed back a second time.
-            let _ignored = fts.read_next_entry();
-            Err(error)
-        }
-
-        Step::Refuse(notice, error) => {
-            if let Some(notice) = notice {
-                notice.emit(&entry.full_name);
-            }
-            halt_descent(fts, options);
-            Err(error)
-        }
-
-        Step::Relabel => {
-            let outcome = relabel(options, context, fts, &entry);
-            halt_descent(fts, options);
-            outcome
-        }
-    }
-}
-
-/// Without `-R` an entry is labelled but never descended into.
-fn halt_descent(fts: &mut fts::FTS, options: &Options) {
-    if !options.recursive_mode.is_recursive() {
-        let _ignored = fts.set(fts_sys::FTS_SKIP);
-    }
-}
-
-fn relabel(
-    options: &Options,
-    context: &SELinuxSecurityContext,
-    fts: &fts::FTS,
-    entry: &Entry,
-) -> Result<()> {
-    if options.verbose {
-        println!(
-            "{}",
-            translate!("chcon-verbose-changing-context", "util_name" => "chcon", "file" => entry.full_name.quote())
-        );
-    }
-
-    let traversal_dir_fd = fts
-        .current_dir_fd()
-        .map_err(|r| Error::from_io1(translate!("chcon-op-accessing"), &entry.full_name, r))?;
-
-    apply_context(
+    let mut walk = Walk {
         options,
         context,
-        traversal_dir_fd.as_fd(),
-        &entry.access_path,
-        &entry.full_name,
-    )
+        root_id,
+        // Directories reached on the way down, so a symlink loop is noticed
+        // instead of followed forever.
+        open_ancestors: HashSet::new(),
+        errors,
+    };
+
+    for operand in &options.files {
+        let behavior = follows_symlinks(options.recursive_mode, true);
+        walk.visit(&start, operand.as_os_str(), operand, behavior, true);
+    }
+
+    walk.errors
+}
+
+/// State carried down the walk. Directories are relabelled on the way back up,
+/// so a context that forbids reading one is applied only once we are done with it.
+struct Walk<'a> {
+    options: &'a Options,
+    context: &'a SELinuxSecurityContext<'a>,
+    root_id: Option<DeviceAndINode>,
+    open_ancestors: HashSet<DeviceAndINode>,
+    errors: Vec<Error>,
+}
+
+impl Walk<'_> {
+    fn fail(&mut self, op: String, display: &Path, err: io::Error) {
+        self.errors.push(Error::from_io1(op, display, err));
+    }
+
+    fn reject(&mut self, op: String, display: &Path, kind: io::ErrorKind) {
+        self.errors.push(Error::from_io1(op, display, kind.into()));
+    }
+
+    fn visit(
+        &mut self,
+        parent: &DirFd,
+        name: &OsStr,
+        display: &Path,
+        behavior: SymlinkBehavior,
+        top_level: bool,
+    ) {
+        let meta = match parent.metadata_at(name, behavior) {
+            Ok(meta) => meta,
+            Err(err) => return self.fail(translate!("chcon-op-accessing"), display, err),
+        };
+        let id = DeviceAndINode::from(&meta);
+
+        let recursive = self.options.recursive_mode.is_recursive();
+
+        // `--preserve-root` guards recursion only: naming `/` outright is still
+        // allowed, it is descending into it that is refused.
+        if recursive && self.root_id == Some(id) {
+            warn_recursive_root(display);
+            return self.reject(
+                translate!("chcon-op-modifying-root-path"),
+                display,
+                io::ErrorKind::PermissionDenied,
+            );
+        }
+
+        // A symlink is only descended when this position resolves symlinks; the
+        // metadata above already reflects that choice.
+        let descended = if recursive
+            && meta.is_dir()
+            && (behavior.should_follow() || !meta.file_type().is_symlink())
+        {
+            self.descend(parent, name, display, behavior, id, top_level)
+        } else {
+            Descent::Complete
+        };
+
+        // A directory we could not read is reported, not relabelled: its context
+        // would otherwise change while its contents were left untouched.
+        if descended == Descent::Complete {
+            self.relabel(parent, name, display);
+        }
+    }
+
+    fn descend(
+        &mut self,
+        parent: &DirFd,
+        name: &OsStr,
+        display: &Path,
+        behavior: SymlinkBehavior,
+        id: DeviceAndINode,
+        top_level: bool,
+    ) -> Descent {
+        if !self.open_ancestors.insert(id) {
+            // Following symlinks is expected to reach the same directory twice, so
+            // only a walk that stays on the physical tree treats this as damage.
+            if !cycle_is_alarming(self.options.recursive_mode, top_level) {
+                return Descent::Complete;
+            }
+            warn_directory_cycle(display);
+            self.reject(
+                translate!("chcon-op-reading-cyclic-directory"),
+                display,
+                io::ErrorKind::InvalidData,
+            );
+            return Descent::Abandoned;
+        }
+
+        let outcome = match parent.open_subdir(name, behavior) {
+            Ok(dir) => match dir.read_dir() {
+                Ok(children) => {
+                    let inner = follows_symlinks(self.options.recursive_mode, false);
+                    for child in children {
+                        self.visit(&dir, &child, &display.join(&child), inner, false);
+                    }
+                    Descent::Complete
+                }
+                Err(err) => {
+                    self.fail(translate!("chcon-op-reading-directory"), display, err);
+                    Descent::Abandoned
+                }
+            },
+            Err(err) => {
+                self.fail(translate!("chcon-op-reading-directory"), display, err);
+                Descent::Abandoned
+            }
+        };
+
+        // Sibling subtrees may legitimately reach this directory again, so only
+        // the path currently being walked counts as a cycle.
+        self.open_ancestors.remove(&id);
+        outcome
+    }
+
+    fn relabel(&mut self, parent: &DirFd, name: &OsStr, display: &Path) {
+        if self.options.verbose {
+            println!(
+                "{}",
+                translate!("chcon-verbose-changing-context", "util_name" => "chcon", "file" => display.quote())
+            );
+        }
+
+        if let Err(err) = apply_context(
+            self.options,
+            self.context,
+            parent.as_fd(),
+            Path::new(name),
+            display,
+        ) {
+            self.errors.push(err);
+        }
+    }
 }
 
 fn open_target_fd(
@@ -904,10 +833,6 @@ fn root_identity() -> Result<DeviceAndINode> {
         .map_err(|r| Error::from_io1("std::fs::symlink_metadata", "/", r))
 }
 
-fn targets_root(root_id: Option<DeviceAndINode>, dir_dev_ino: DeviceAndINode) -> bool {
-    root_id == Some(dir_dev_ino)
-}
-
 fn warn_recursive_root(dir_name: &Path) {
     if dir_name.as_os_str() == "/" {
         show_warning!(
@@ -920,18 +845,6 @@ fn warn_recursive_root(dir_name: &Path) {
             translate!("chcon-warning-dangerous-recursive-dir", "dir" => dir_name.quote(), "option" => options::preserve_root::NO_PRESERVE_ROOT)
         );
     }
-}
-
-/// Whether a reported directory cycle is worth warning about.
-///
-/// A cycle only matters when the walk was asked to stay on the physical tree.
-/// One that deliberately follows symlinks is expected to revisit directories, so
-/// a cycle there is unremarkable and stays quiet.
-fn cycle_deserves_warning(traversal_flags: c_int, top_level: bool) -> bool {
-    // On a physical walk every cycle is real. The one exception is `-H`, where the
-    // command-line entry itself is allowed to be followed and so may loop legitimately.
-    ((traversal_flags & fts_sys::FTS_PHYSICAL) != 0)
-        && (((traversal_flags & fts_sys::FTS_COMFOLLOW) == 0) || !top_level)
 }
 
 fn warn_directory_cycle(file_name: &Path) {
