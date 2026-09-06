@@ -3,8 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) BUFSIZE gecos fullname, mesg iobuf
-
 use crate::Capitalize;
 use crate::options;
 use crate::uu_app;
@@ -15,7 +13,7 @@ use uucore::libc::S_IWGRP;
 use uucore::translate;
 use uucore::utmpx::{self, Utmpx, UtmpxRecord, time};
 
-use std::fmt;
+use std::fmt::{self, Write as _};
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
@@ -139,47 +137,39 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut stdout = io::stdout().lock();
     if matches.get_flag(options::LONG_FORMAT) {
-        pinky.write_long(&mut stdout)?;
+        pinky.describe_users(&mut stdout)?;
     } else {
-        pinky.write_short(&mut stdout)?;
+        pinky.list_sessions(&mut stdout)?;
     }
     Ok(())
 }
 
-struct Pinky {
-    resolve_hosts: bool,
-    layout: Layout,
-    details: Details,
-    names: Vec<String>,
-}
-
-/// Render how long a terminal has been quiet: blanks under a minute,
-/// `hours:minutes` under a day, and a count of days past that.
-fn idle_string(when: i64) -> String {
+/// Render how long the terminal last read at `read_at` has been quiet.
+fn format_idle(read_at: i64) -> String {
     thread_local! {
         static NOW: time::OffsetDateTime = time::OffsetDateTime::now_local().unwrap_or_else(|_| time::OffsetDateTime::now_utc());
     }
-    NOW.with(|n| {
-        let duration = n.unix_timestamp() - when;
-        if duration < 60 {
-            "     ".to_owned()
-        } else if duration < 24 * 3600 {
-            let hours = duration / (60 * 60);
-            let minutes = (duration % (60 * 60)) / 60;
-            format!("{hours:02}:{minutes:02}")
-        } else {
-            let days = duration / (24 * 3600);
-            format!("{days}d")
-        }
-    })
+    NOW.with(|n| format_quiet_time(n.unix_timestamp() - read_at))
+}
+
+/// Render `quiet_for` seconds of silence: blanks under a minute,
+/// `hours:minutes` under a day, and a count of days past that.
+fn format_quiet_time(quiet_for: i64) -> String {
+    if quiet_for < 60 {
+        "     ".to_owned()
+    } else if quiet_for < 24 * 3600 {
+        format!("{:02}:{:02}", quiet_for / 3600, (quiet_for % 3600) / 60)
+    } else {
+        format!("{}d", quiet_for / (24 * 3600))
+    }
 }
 
 /// Render an entry's login time. The C locale gets the terse month-and-day
 /// form; everything else gets the ISO-like one.
-fn time_string(ut: &UtmpxRecord) -> String {
+fn format_timestamp(ut: &UtmpxRecord) -> String {
     const FORMAT_DESCRIPTION_VERSION: usize = 2;
 
-    let time_format: Vec<time::format_description::FormatItem> = if ["LC_ALL", "LC_TIME", "LANG"]
+    let description: Vec<time::format_description::FormatItem> = if ["LC_ALL", "LC_TIME", "LANG"]
         .into_iter()
         .find_map(std::env::var_os)
         .as_deref()
@@ -197,148 +187,162 @@ fn time_string(ut: &UtmpxRecord) -> String {
         )
         .unwrap()
     };
-    ut.login_time().format(&time_format).unwrap()
+    ut.login_time().format(&description).unwrap()
 }
 
 /// Pull the real name out of a password entry: it is the part of the comment
 /// field ahead of the first comma, with `&` standing in for the login name.
-fn gecos_to_fullname(pw: &Passwd) -> Option<String> {
-    let mut gecos = if let Some(gecos) = &pw.user_info {
-        gecos.clone()
-    } else {
-        return None;
-    };
-    if let Some(n) = gecos.find(',') {
-        gecos.truncate(n);
+fn real_name(pw: &Passwd) -> Option<String> {
+    let mut comment = pw.user_info.clone()?;
+    if let Some(comma) = comment.find(',') {
+        comment.truncate(comma);
     }
-    Some(gecos.replace('&', &pw.name.capitalize()))
+    Some(comment.replace('&', &pw.name.capitalize()))
+}
+
+struct Pinky {
+    resolve_hosts: bool,
+    layout: Layout,
+    details: Details,
+    names: Vec<String>,
 }
 
 impl Pinky {
-    fn write_entry(&self, writer: &mut impl Write, ut: &UtmpxRecord) -> io::Result<()> {
+    /// Assemble one short-format line, column by column.
+    fn session_row(&self, ut: &UtmpxRecord) -> String {
         let terminal = Terminal::query(ut.tty_device().as_str());
+        let mut row = String::new();
 
-        write!(writer, "{1:<8.0$}", utmpx::UT_NAMESIZE, ut.user())?;
+        let _ = write!(row, "{1:<8.0$}", utmpx::UT_NAMESIZE, ut.user());
 
         if self.layout.real_name {
-            let fullname = if let Ok(pw) = Passwd::locate(ut.user().as_ref()) {
-                gecos_to_fullname(&pw)
-            } else {
-                None
-            };
-            if let Some(fullname) = fullname {
-                write!(writer, " {fullname:<19.19}")?;
-            } else {
-                write!(writer, " {:19}", "        ???")?;
+            let name = Passwd::locate(ut.user().as_ref())
+                .ok()
+                .and_then(|pw| real_name(&pw));
+            match name {
+                Some(name) => {
+                    let _ = write!(row, " {name:<19.19}");
+                }
+                None => {
+                    let _ = write!(row, " {:19}", "        ???");
+                }
             }
         }
 
-        write!(
-            writer,
+        let _ = write!(
+            row,
             " {}{:<8.*}",
             terminal.messages,
             utmpx::UT_LINESIZE,
             ut.tty_device()
-        )?;
+        );
 
         if self.layout.idle {
             let idle = match terminal.read_at {
-                Some(read_at) => idle_string(read_at),
+                Some(read_at) => format_idle(read_at),
                 None => "?????".to_owned(),
             };
-            write!(writer, " {idle:<6}")?;
+            let _ = write!(row, " {idle:<6}");
         }
 
-        write!(writer, " {}", time_string(ut))?;
+        let _ = write!(row, " {}", format_timestamp(ut));
 
         if self.layout.origin {
-            let s: String = if self.resolve_hosts {
+            let host = if self.resolve_hosts {
                 ut.canon_host().unwrap_or(ut.host())
             } else {
                 ut.host()
             };
-
-            if !s.is_empty() {
-                write!(writer, " {s}")?;
+            if !host.is_empty() {
+                let _ = write!(row, " {host}");
             }
         }
 
-        writeln!(writer)?;
-        Ok(())
+        row
     }
 
-    fn write_heading(&self, writer: &mut impl Write) -> io::Result<()> {
-        write!(writer, "{:<8}", translate!("pinky-column-login"))?;
+    /// Name each column that `Layout` turned on.
+    fn header_row(&self) -> String {
+        let mut row = String::new();
+
+        let _ = write!(row, "{:<8}", translate!("pinky-column-login"));
         if self.layout.real_name {
-            write!(writer, " {:<19}", translate!("pinky-column-name"))?;
+            let _ = write!(row, " {:<19}", translate!("pinky-column-name"));
         }
-        write!(writer, " {:<9}", translate!("pinky-column-tty"))?;
+        let _ = write!(row, " {:<9}", translate!("pinky-column-tty"));
         if self.layout.idle {
-            write!(writer, " {:<6}", translate!("pinky-column-idle"))?;
+            let _ = write!(row, " {:<6}", translate!("pinky-column-idle"));
         }
-        write!(writer, " {:<16}", translate!("pinky-column-when"))?;
+        let _ = write!(row, " {:<16}", translate!("pinky-column-when"));
         if self.layout.origin {
-            write!(writer, " {}", translate!("pinky-column-where"))?;
+            let _ = write!(row, " {}", translate!("pinky-column-where"));
         }
-        writeln!(writer)?;
-        Ok(())
+
+        row
     }
 
-    fn write_short(&self, writer: &mut impl Write) -> io::Result<()> {
+    /// One line per session, restricted to the named accounts when any were
+    /// given on the command line.
+    fn list_sessions(&self, writer: &mut impl Write) -> io::Result<()> {
         if self.layout.header {
-            self.write_heading(writer)?;
+            writeln!(writer, "{}", self.header_row())?;
         }
         for ut in Utmpx::iter_all_records() {
             if ut.is_user_process()
                 && (self.names.is_empty() || self.names.iter().any(|n| n.as_str() == ut.user()))
             {
-                self.write_entry(writer, &ut)?;
+                writeln!(writer, "{}", self.session_row(&ut))?;
             }
         }
         Ok(())
     }
 
-    fn write_long(&self, writer: &mut impl Write) -> io::Result<()> {
-        for u in &self.names {
+    /// A paragraph per named account, drawn from the password file and from
+    /// the dot files in the account's home directory.
+    fn describe_users(&self, writer: &mut impl Write) -> io::Result<()> {
+        for name in &self.names {
             write!(
                 writer,
-                "{} {u:<28}{} ",
+                "{} {name:<28}{} ",
                 translate!("pinky-login-name-label"),
                 translate!("pinky-real-life-label")
             )?;
-            if let Ok(pw) = Passwd::locate(u.as_str()) {
-                let fullname = gecos_to_fullname(&pw).unwrap_or_default();
-                let user_dir = pw.user_dir.unwrap_or_default();
-                let user_shell = pw.user_shell.unwrap_or_default();
-                writeln!(writer, " {fullname}")?;
-                if self.details.home_and_shell {
-                    write!(
-                        writer,
-                        "{} {user_dir:<29}",
-                        translate!("pinky-directory-label")
-                    )?;
-                    writeln!(writer, "{}  {user_shell}", translate!("pinky-shell-label"))?;
-                }
-                if self.details.project {
-                    let mut p = PathBuf::from(&user_dir);
-                    p.push(".project");
-                    if let Ok(mut reader) = File::open(p) {
-                        write!(writer, "{} ", translate!("pinky-project-label"))?;
-                        io::copy(&mut reader, writer)?;
-                    }
-                }
-                if self.details.plan {
-                    let mut p = PathBuf::from(&user_dir);
-                    p.push(".plan");
-                    if let Ok(mut reader) = File::open(p) {
-                        writeln!(writer, "{}:", translate!("pinky-plan-label"))?;
-                        io::copy(&mut reader, writer)?;
-                    }
-                }
-                writeln!(writer)?;
-            } else {
+
+            // An unknown account gets the header line and nothing else, not
+            // even the blank line that closes a paragraph below: GNU returns
+            // from the entry right here.
+            let Ok(pw) = Passwd::locate(name.as_str()) else {
                 writeln!(writer, " ???")?;
+                continue;
+            };
+
+            writeln!(writer, " {}", real_name(&pw).unwrap_or_default())?;
+
+            let home = pw.user_dir.unwrap_or_default();
+            if self.details.home_and_shell {
+                write!(writer, "{} {home:<29}", translate!("pinky-directory-label"))?;
+                writeln!(
+                    writer,
+                    "{}  {}",
+                    translate!("pinky-shell-label"),
+                    pw.user_shell.unwrap_or_default()
+                )?;
             }
+
+            if self.details.project
+                && let Ok(mut reader) = File::open(PathBuf::from(&home).join(".project"))
+            {
+                write!(writer, "{} ", translate!("pinky-project-label"))?;
+                io::copy(&mut reader, writer)?;
+            }
+            if self.details.plan
+                && let Ok(mut reader) = File::open(PathBuf::from(&home).join(".plan"))
+            {
+                writeln!(writer, "{}:", translate!("pinky-plan-label"))?;
+                io::copy(&mut reader, writer)?;
+            }
+
+            writeln!(writer)?;
         }
         Ok(())
     }
