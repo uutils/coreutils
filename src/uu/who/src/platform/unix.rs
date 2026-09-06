@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ttyname hostnames runlevel mesg wtmp statted boottime deadprocs initspawn clockchange curr pidstr exitstr hoststr
+// spell-checker:ignore (ToDO) ttyname hostnames runlevel mesg wtmp
 
 use crate::options;
 use crate::uu_app;
@@ -175,23 +175,20 @@ struct Who {
     args: Vec<String>,
 }
 
-fn idle_string<'a>(when: i64, boottime: i64) -> Cow<'a, str> {
+/// Render how long a terminal has been quiet: `hours:minutes`, `.` when under a
+/// minute, and the localized `old` past a day or before the given boot time.
+fn format_idle<'a>(when: i64, since_boot: i64) -> Cow<'a, str> {
     thread_local! {
         static NOW: time::OffsetDateTime = time::OffsetDateTime::now_local().unwrap();
     }
     NOW.with(|n| {
         let now = n.unix_timestamp();
-        if boottime < when && now - 24 * 3600 < when && when <= now {
-            let seconds_idle = now - when;
-            if seconds_idle < 60 {
+        if since_boot < when && now - 24 * 3600 < when && when <= now {
+            let quiet_for = now - when;
+            if quiet_for < 60 {
                 "  .  ".into()
             } else {
-                format!(
-                    "{:02}:{:02}",
-                    seconds_idle / 3600,
-                    (seconds_idle % 3600) / 60
-                )
-                .into()
+                format!("{:02}:{:02}", quiet_for / 3600, (quiet_for % 3600) / 60).into()
             }
         } else {
             translate!("who-idle-old").into()
@@ -199,10 +196,10 @@ fn idle_string<'a>(when: i64, boottime: i64) -> Cow<'a, str> {
     })
 }
 
-fn time_string(ut: &UtmpxRecord) -> String {
+fn format_timestamp(ut: &UtmpxRecord) -> String {
     const FORMAT_DESCRIPTION_VERSION: usize = 2;
 
-    let time_format: Vec<time::format_description::FormatItem> = if ["LC_ALL", "LC_TIME", "LANG"]
+    let pattern: Vec<time::format_description::FormatItem> = if ["LC_ALL", "LC_TIME", "LANG"]
         .into_iter()
         .find_map(std::env::var_os)
         .as_deref()
@@ -220,7 +217,7 @@ fn time_string(ut: &UtmpxRecord) -> String {
         )
         .unwrap()
     };
-    ut.login_time().format(&time_format).unwrap()
+    ut.login_time().format(&pattern).unwrap()
 }
 
 fn current_tty() -> String {
@@ -243,7 +240,7 @@ impl Who {
         let records = utmpx::Utmpx::iter_all_records_from(f);
 
         if self.layout.header {
-            self.print_heading()?;
+            self.emit_header()?;
         }
         let cur_tty = if self.own_terminal_only {
             current_tty()
@@ -256,7 +253,7 @@ impl Who {
                 continue;
             }
             if self.select.sessions && ut.is_user_process() {
-                self.print_user(&ut)?;
+                self.emit_session(&ut)?;
             } else if let Some(event) = self.event_for(&ut) {
                 self.emit_event(&ut, event)?;
             }
@@ -303,7 +300,7 @@ impl Who {
     }
 
     fn emit_event(&self, ut: &UtmpxRecord, event: Event) -> UResult<()> {
-        let time = time_string(ut);
+        let time = format_timestamp(ut);
         let pid = format!("{}", ut.pid());
         let note = translate!("who-login-id", "id" => ut.terminal_suffix());
 
@@ -328,8 +325,8 @@ impl Who {
             #[cfg(target_os = "linux")]
             Event::Runlevel => {
                 let last = (ut.pid() / 256) as u8 as char;
-                let curr = (ut.pid() % 256) as u8 as char;
-                runlevel_line = translate!("who-runlevel", "level" => curr);
+                let level = (ut.pid() % 256) as u8 as char;
+                runlevel_line = translate!("who-runlevel", "level" => level);
                 runlevel_note = translate!("who-runlevel-last", "last" => (if last == 'N' { 'S' } else { 'N' }));
                 Row {
                     line: &runlevel_line,
@@ -371,14 +368,14 @@ impl Who {
             }
         };
 
-        self.print_line(&row)
+        self.emit_row(&row)
     }
 
-    fn print_user(&self, ut: &UtmpxRecord) -> UResult<()> {
+    fn emit_session(&self, ut: &UtmpxRecord) -> UResult<()> {
         let mut p = PathBuf::from("/dev");
         p.push(ut.tty_device().as_str());
-        let mesg;
-        let last_change;
+        let write_state;
+        let last_touched;
         if let Ok(meta) = p.metadata() {
             #[cfg(all(
                 not(target_vendor = "apple"),
@@ -388,20 +385,20 @@ impl Who {
             let iwgrp = S_IWGRP;
             #[cfg(any(target_vendor = "apple", target_os = "android", target_os = "freebsd"))]
             let iwgrp = S_IWGRP as u32;
-            mesg = if meta.mode() & iwgrp == 0 { '-' } else { '+' };
-            last_change = meta.atime();
+            write_state = if meta.mode() & iwgrp == 0 { '-' } else { '+' };
+            last_touched = meta.atime();
         } else {
-            mesg = '?';
-            last_change = 0;
+            write_state = '?';
+            last_touched = 0;
         }
 
-        let idle = if last_change == 0 {
+        let idle = if last_touched == 0 {
             "  ?".into()
         } else {
-            idle_string(last_change, 0)
+            format_idle(last_touched, 0)
         };
 
-        let s = if self.resolve_hosts {
+        let host = if self.resolve_hosts {
             ut.canon_host().map_err_context(|| {
                 let host = ut.host();
                 translate!("who-canonicalize-error", "host" => host.split(':').next().unwrap_or(&host).quote())
@@ -409,23 +406,27 @@ impl Who {
         } else {
             ut.host()
         };
-        let hoststr = if s.is_empty() { s } else { format!("({s})") };
+        let note = if host.is_empty() {
+            host
+        } else {
+            format!("({host})")
+        };
 
-        self.print_line(&Row {
+        self.emit_row(&Row {
             user: &ut.user(),
-            write_state: mesg,
+            write_state,
             line: &ut.tty_device(),
-            time: &time_string(ut),
+            time: &format_timestamp(ut),
             idle: &idle,
             pid: &format!("{}", ut.pid()),
-            note: &hoststr,
+            note: &note,
             exit: "",
         })?;
 
         Ok(())
     }
 
-    fn print_line(&self, row: &Row) -> UResult<()> {
+    fn emit_row(&self, row: &Row) -> UResult<()> {
         // Width of "%b %e %H:%M" under LC_ALL=C.
         const TIME_WIDTH: usize = 3 + 2 + 2 + 1 + 2;
 
@@ -453,8 +454,8 @@ impl Who {
     }
 
     #[inline]
-    fn print_heading(&self) -> UResult<()> {
-        self.print_line(&Row {
+    fn emit_header(&self) -> UResult<()> {
+        self.emit_row(&Row {
             user: &translate!("who-heading-name"),
             write_state: ' ',
             line: &translate!("who-heading-line"),
