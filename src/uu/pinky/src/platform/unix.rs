@@ -15,6 +15,7 @@ use uucore::libc::S_IWGRP;
 use uucore::translate;
 use uucore::utmpx::{self, Utmpx, UtmpxRecord, time};
 
+use std::fmt;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
@@ -49,6 +50,59 @@ struct Details {
     project: bool,
     /// The contents of `~/.plan`.
     plan: bool,
+}
+
+/// Whether the terminal would let another user write to it, which is what
+/// the flag ahead of the device name in the short listing reports.
+enum Messages {
+    /// The device is group-writable, so `write` and `wall` can reach it.
+    Accepted,
+    /// The device is not group-writable; `mesg n` leaves a terminal here.
+    Refused,
+    /// The device could not be stat'd, so there is nothing to report.
+    Unknown,
+}
+
+impl fmt::Display for Messages {
+    /// The listing spends one column on this, the same character GNU prints.
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            Self::Accepted => " ",
+            Self::Refused => "*",
+            Self::Unknown => "?",
+        })
+    }
+}
+
+/// What an entry's terminal has to say about the session.
+struct Terminal {
+    messages: Messages,
+    /// When the terminal was last read from, if that is known.
+    read_at: Option<i64>,
+}
+
+impl Terminal {
+    /// Query the device the entry names, relative to `/dev`.
+    fn query(device: &str) -> Self {
+        let mut path = PathBuf::from("/dev");
+        path.push(device);
+
+        #[allow(clippy::unnecessary_cast)]
+        match path.metadata() {
+            Ok(meta) => Self {
+                messages: if meta.mode() & (S_IWGRP as u32) == 0 {
+                    Messages::Refused
+                } else {
+                    Messages::Accepted
+                },
+                read_at: Some(meta.atime()).filter(|at| *at != 0),
+            },
+            Err(_) => Self {
+                messages: Messages::Unknown,
+                read_at: None,
+            },
+        }
+    }
 }
 
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -162,24 +216,7 @@ fn gecos_to_fullname(pw: &Passwd) -> Option<String> {
 
 impl Pinky {
     fn write_entry(&self, writer: &mut impl Write, ut: &UtmpxRecord) -> io::Result<()> {
-        let mut pts_path = PathBuf::from("/dev");
-        pts_path.push(ut.tty_device().as_str());
-
-        let mesg;
-        let last_change;
-
-        #[allow(clippy::unnecessary_cast)]
-        if let Ok(meta) = pts_path.metadata() {
-            mesg = if (meta.mode() & (S_IWGRP as u32)) == 0 {
-                '*'
-            } else {
-                ' '
-            };
-            last_change = meta.atime();
-        } else {
-            mesg = '?';
-            last_change = 0;
-        }
+        let terminal = Terminal::query(ut.tty_device().as_str());
 
         write!(writer, "{1:<8.0$}", utmpx::UT_NAMESIZE, ut.user())?;
 
@@ -198,17 +235,18 @@ impl Pinky {
 
         write!(
             writer,
-            " {mesg}{:<8.*}",
+            " {}{:<8.*}",
+            terminal.messages,
             utmpx::UT_LINESIZE,
             ut.tty_device()
         )?;
 
         if self.layout.idle {
-            if last_change == 0 {
-                write!(writer, " {:<6}", "?????")?;
-            } else {
-                write!(writer, " {:<6}", idle_string(last_change))?;
-            }
+            let idle = match terminal.read_at {
+                Some(read_at) => idle_string(read_at),
+                None => "?????".to_owned(),
+            };
+            write!(writer, " {idle:<6}")?;
         }
 
         write!(writer, " {}", time_string(ut))?;
