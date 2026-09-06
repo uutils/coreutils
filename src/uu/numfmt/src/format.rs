@@ -762,6 +762,18 @@ fn pad_string(s: &str, width: usize, fill: char, right_align: bool) -> String {
     result
 }
 
+/// Split a scaled value into its numeric part and the unit suffix that trails
+/// it (`k`, `Mi`, ...).
+///
+/// A value with no digits at all, such as `inf`, has no numeric part to pad, so
+/// it is returned whole and is padded as before.
+fn split_number_and_units(s: &str) -> (&str, &str) {
+    match s.rfind(|c: char| c.is_ascii_digit()) {
+        Some(last_digit) => s.split_at(last_digit + 1),
+        None => (s, ""),
+    }
+}
+
 fn format_string(
     source: &str,
     options: &NumfmtOptions,
@@ -816,11 +828,30 @@ fn format_string(
     let padded_number = match padding {
         0 => number_with_suffix,
         p if p > 0 && options.format.zero_padding => {
-            let zero_padded = if let Some(unsigned) = number_with_suffix.strip_prefix(['-', '+']) {
-                let sign = &number_with_suffix[..1];
-                format!("{sign}{}", pad_string(unsigned, p as usize - 1, '0', true))
+            // GNU zero-pads the number itself: "Optional zero (%010f) width
+            // will zero pad the number". A unit suffix from --to and the
+            // --suffix text sit outside the width, unlike space padding,
+            // which applies to the whole output.
+            // The --suffix text is user-supplied and may itself contain
+            // digits, so peel it off before locating the number.
+            let (scaled, user_suffix) = match &options.suffix {
+                Some(suffix) => number_with_suffix
+                    .strip_suffix(suffix.as_str())
+                    .map_or((number_with_suffix.as_str(), ""), |rest| {
+                        (rest, suffix.as_str())
+                    }),
+                None => (number_with_suffix.as_str(), ""),
+            };
+            let (number, unit) = split_number_and_units(scaled);
+            let trailing = format!("{unit}{user_suffix}");
+            let zero_padded = if let Some(unsigned) = number.strip_prefix(['-', '+']) {
+                let sign = &number[..1];
+                format!(
+                    "{sign}{}{trailing}",
+                    pad_string(unsigned, (p as usize).saturating_sub(1), '0', true)
+                )
             } else {
-                pad_string(&number_with_suffix, p as usize, '0', true)
+                format!("{}{trailing}", pad_string(number, p as usize, '0', true))
             };
 
             match implicit_padding.unwrap_or(options.padding) {
