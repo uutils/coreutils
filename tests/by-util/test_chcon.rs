@@ -590,6 +590,112 @@ fn valid_reference_multi() {
     );
 }
 
+#[test]
+fn recursive_directory_labelled_after_its_contents() {
+    // A context that forbids reading a directory must not be applied until the
+    // walk is done with it, so directories are labelled on the way back up.
+    let (dir, mut cmd) = at_and_ucmd!();
+    dir.mkdir_all("d/sub");
+    dir.touch("d/sub/deep.txt");
+    dir.touch("d/top.txt");
+
+    let output = cmd
+        .args(&["--verbose", "--recursive", "guest_u:object_r:etc_t:s0:c42"])
+        .arg(dir.plus("d"))
+        .succeeds()
+        .stdout_move_str();
+
+    let position = |suffix: &str| {
+        output
+            .lines()
+            .position(|line| line.contains(suffix))
+            .unwrap_or_else(|| panic!("no line for {suffix} in:\n{output}"))
+    };
+
+    assert!(position("d/sub/deep.txt'") < position("d/sub'"));
+    assert!(position("d/sub'") < position("d'"));
+    assert!(position("d/top.txt'") < position("d'"));
+}
+
+#[test]
+fn recursive_unreadable_directory_is_reported_and_left_alone() {
+    // Descending failed, so the contents keep their old context. Relabelling the
+    // directory anyway would leave the tree half-converted.
+    if rustix::process::geteuid().is_root() {
+        return; // root reads it regardless, so there is nothing to observe
+    }
+
+    let (dir, mut cmd) = at_and_ucmd!();
+    dir.mkdir("noread");
+    dir.touch("noread/hidden.txt");
+    dir.set_mode("noread", 0o000);
+
+    let before = get_file_context(dir.plus("noread")).unwrap();
+
+    cmd.args(&["--recursive", "guest_u:object_r:etc_t:s0:c42"])
+        .arg(dir.plus("noread"))
+        .fails()
+        .stderr_contains("Reading directory");
+
+    dir.set_mode("noread", 0o755);
+    assert_eq!(get_file_context(dir.plus("noread")).unwrap(), before);
+}
+
+#[test]
+fn recursive_symlink_loop_terminates_without_a_cycle_warning() {
+    // Following symlinks is expected to reach the same directory twice, so `-L`
+    // must not report the corrupted-filesystem warning that a physical walk would.
+    let (dir, mut cmd) = at_and_ucmd!();
+    dir.mkdir_all("t/sub");
+    dir.touch("t/sub/f.txt");
+    dir.relative_symlink_dir("../sub", "t/sub/loop");
+
+    let result = cmd
+        .args(&["--recursive", "-L", "guest_u:object_r:etc_t:s0:c42"])
+        .arg(dir.plus("t"))
+        .succeeds();
+    result.no_stderr();
+}
+
+#[test]
+fn multi_component_operands() {
+    // Operands are resolved against the directory the command started in, so a
+    // path with several components, a `..`, or a trailing slash must still land
+    // on the same entry.
+    for operand in ["a/b/c", "a/b/c/", "a/b/../b/c"] {
+        let (dir, mut cmd) = at_and_ucmd!();
+        dir.mkdir_all("a/b/c");
+        dir.touch("a/b/c/leaf.txt");
+        dir.touch("a/b/sibling.txt");
+
+        let sibling = get_file_context(dir.plus("a/b/sibling.txt")).unwrap();
+        let new_context = "guest_u:object_r:etc_t:s0:c42";
+
+        cmd.args(&["--recursive", new_context])
+            .arg(dir.plus(operand))
+            .succeeds();
+
+        assert_eq!(
+            get_file_context(dir.plus("a/b/c")).unwrap().as_deref(),
+            Some(new_context),
+            "operand {operand} did not label the directory"
+        );
+        assert_eq!(
+            get_file_context(dir.plus("a/b/c/leaf.txt"))
+                .unwrap()
+                .as_deref(),
+            Some(new_context),
+            "operand {operand} did not recurse"
+        );
+        // Nothing outside the named subtree may be touched.
+        assert_eq!(
+            get_file_context(dir.plus("a/b/sibling.txt")).unwrap(),
+            sibling,
+            "operand {operand} reached outside its subtree"
+        );
+    }
+}
+
 fn get_file_context(path: impl AsRef<Path>) -> Result<Option<String>, selinux::errors::Error> {
     let path = path.as_ref();
     match selinux::SecurityContext::of_path(path, false, false) {
