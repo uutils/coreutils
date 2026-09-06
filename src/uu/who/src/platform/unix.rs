@@ -258,8 +258,6 @@ impl Who {
                         }
                     }
                 }
-
-                if ut.record_type() == utmpx::BOOT_TIME {}
             }
         }
         Ok(())
