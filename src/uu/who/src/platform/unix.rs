@@ -374,23 +374,23 @@ impl Who {
     fn emit_session(&self, ut: &UtmpxRecord) -> UResult<()> {
         let mut p = PathBuf::from("/dev");
         p.push(ut.tty_device().as_str());
-        let write_state;
-        let last_touched;
-        if let Ok(meta) = p.metadata() {
-            #[cfg(all(
-                not(target_vendor = "apple"),
-                not(target_os = "android"),
-                not(target_os = "freebsd")
-            ))]
-            let iwgrp = S_IWGRP;
-            #[cfg(any(target_vendor = "apple", target_os = "android", target_os = "freebsd"))]
-            let iwgrp = S_IWGRP as u32;
-            write_state = if meta.mode() & iwgrp == 0 { '-' } else { '+' };
-            last_touched = meta.atime();
-        } else {
-            write_state = '?';
-            last_touched = 0;
-        }
+        // A terminal that cannot be stat'ed reports an unknown write state and
+        // an unknown idle time rather than failing the whole listing.
+        let (write_state, last_touched) = match p.metadata() {
+            Ok(meta) => {
+                #[cfg(all(
+                    not(target_vendor = "apple"),
+                    not(target_os = "android"),
+                    not(target_os = "freebsd")
+                ))]
+                let iwgrp = S_IWGRP;
+                #[cfg(any(target_vendor = "apple", target_os = "android", target_os = "freebsd"))]
+                let iwgrp = S_IWGRP as u32;
+                let state = if meta.mode() & iwgrp == 0 { '-' } else { '+' };
+                (state, meta.atime())
+            }
+            Err(_) => ('?', 0),
+        };
 
         let idle = if last_touched == 0 {
             "  ?".into()
