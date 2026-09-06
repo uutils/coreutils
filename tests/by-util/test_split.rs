@@ -942,6 +942,48 @@ fn test_suffix_length_req() {
         .stderr_only("split: the suffix length needs to be at least 2\n");
 }
 
+/// The width the suffixes need is worked out from the start value plus the
+/// number of chunks, and either of those on its own can be the largest value
+/// there is, so the sum of them does not fit where they do.
+///
+/// `u64::MAX` only reaches `--numeric-suffixes`'s `start` at all on a target
+/// where `usize` is 64 bits -- on a 32-bit target the value is already
+/// rejected by the `usize` parse, before the overflow this guards against
+/// could occur.
+#[test]
+#[cfg(target_pointer_width = "64")]
+fn test_suffix_start_at_the_top_of_the_range() {
+    new_ucmd!()
+        .args(&["-n", "5", "--numeric-suffixes=18446744073709551615", "-"])
+        .pipe_in("")
+        .fails_with_code(1)
+        .stderr_only("split: the suffix length needs to be at least 20\n");
+
+    // The hexadecimal start is read in base 16, so it takes fewer digits to
+    // reach the same place.
+    new_ucmd!()
+        .args(&["-n", "5", "--hex-suffixes=ffffffffffffffff", "-"])
+        .pipe_in("")
+        .fails_with_code(1)
+        .stderr_only("split: the suffix length needs to be at least 16\n");
+
+    // A suffix wide enough for the start is accepted, and the first name is
+    // the start itself.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "-n",
+        "5",
+        "--numeric-suffixes=18446744073709551615",
+        "-a",
+        "20",
+        "-",
+    ])
+    .pipe_in("")
+    .fails_with_code(1)
+    .stderr_only("split: output file suffixes exhausted\n");
+    assert!(at.file_exists("x18446744073709551615"));
+}
+
 #[test]
 fn test_large_suffix_length_is_rejected() {
     new_ucmd!()
