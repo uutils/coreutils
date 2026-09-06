@@ -193,14 +193,12 @@ fn format_timestamp(ut: &UtmpxRecord) -> String {
     TIME_FORMAT.with(|description| ut.login_time().format(description).unwrap())
 }
 
-/// Pull the real name out of a password entry: it is the part of the comment
-/// field ahead of the first comma, with `&` standing in for the login name.
-fn real_name(pw: &Passwd) -> Option<String> {
-    let mut comment = pw.user_info.clone()?;
-    if let Some(comma) = comment.find(',') {
-        comment.truncate(comma);
-    }
-    Some(comment.replace('&', &capitalize(&pw.name)))
+/// Pull the real name out of a password entry's comment field: it is the part
+/// ahead of the first comma, with `&` standing in for the login name.
+fn real_name(login: &str, comment: Option<&str>) -> Option<String> {
+    let comment = comment?;
+    let name = &comment[..comment.find(',').unwrap_or(comment.len())];
+    Some(name.replace('&', &capitalize(login)))
 }
 
 /// Append one column to a row under construction. Only a `Display` impl that
@@ -230,7 +228,7 @@ impl Pinky {
         if self.layout.real_name {
             let name = Passwd::locate(ut.user().as_ref())
                 .ok()
-                .and_then(|pw| real_name(&pw));
+                .and_then(|pw| real_name(&pw.name, pw.user_info.as_deref()));
             match name {
                 Some(name) => {
                     column!(row, " {name:<19.19}");
@@ -328,7 +326,11 @@ impl Pinky {
                 continue;
             };
 
-            writeln!(writer, " {}", real_name(&pw).unwrap_or_default())?;
+            writeln!(
+                writer,
+                " {}",
+                real_name(&pw.name, pw.user_info.as_deref()).unwrap_or_default()
+            )?;
 
             let home = pw.user_dir.unwrap_or_default();
             if self.details.home_and_shell {
@@ -357,5 +359,58 @@ impl Pinky {
             writeln!(writer)?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{format_quiet_time, real_name};
+
+    #[test]
+    fn idle_under_a_minute_is_blank() {
+        assert_eq!(format_quiet_time(0), "     ");
+        assert_eq!(format_quiet_time(30), "     ");
+        assert_eq!(format_quiet_time(59), "     ");
+    }
+
+    #[test]
+    fn idle_under_a_day_is_hours_and_minutes() {
+        assert_eq!(format_quiet_time(60), "00:01");
+        assert_eq!(format_quiet_time(90), "00:01");
+        assert_eq!(format_quiet_time(2 * 3600 + 3 * 60 + 30), "02:03");
+        assert_eq!(format_quiet_time(23 * 3600), "23:00");
+    }
+
+    #[test]
+    fn idle_past_a_day_is_counted_in_days() {
+        assert_eq!(format_quiet_time(24 * 3600), "1d");
+        assert_eq!(format_quiet_time(25 * 3600), "1d");
+        assert_eq!(format_quiet_time(9 * 24 * 3600), "9d");
+    }
+
+    #[test]
+    fn real_name_stops_at_the_first_comma() {
+        assert_eq!(
+            real_name("alice", Some("Alice Smith,101,555-0100,")).unwrap(),
+            "Alice Smith"
+        );
+        assert_eq!(
+            real_name("alice", Some("Alice Smith")).unwrap(),
+            "Alice Smith"
+        );
+        assert_eq!(real_name("alice", Some(",101")).unwrap(), "");
+    }
+
+    #[test]
+    fn real_name_expands_ampersands_to_the_login() {
+        assert_eq!(real_name("alice", Some("&")).unwrap(), "Alice");
+        assert_eq!(real_name("alice", Some("& Smith")).unwrap(), "Alice Smith");
+        assert_eq!(real_name("alice", Some("& &,room")).unwrap(), "Alice Alice");
+    }
+
+    #[test]
+    fn real_name_without_a_comment_field() {
+        assert_eq!(real_name("alice", None), None);
+        assert_eq!(real_name("alice", Some("")).unwrap(), "");
     }
 }
