@@ -313,7 +313,9 @@ fn test_misaligned_upper_lower_construct() {
     ] {
         new_ucmd!()
             .args(&sets)
-            .pipe_in("aZ1")
+            // No input: the sets are validated before stdin is read, so tr exits
+            // while the harness is still writing and the write hits a broken pipe.
+            .pipe_in("")
             .fails_with_code(1)
             .no_stdout()
             .stderr_contains("tr: misaligned [:upper:] and/or [:lower:] construct\n");
