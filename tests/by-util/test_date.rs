@@ -2365,8 +2365,8 @@ fn test_date_ethiopian_locale_calendar() {
 #[test]
 #[cfg(unix)]
 fn test_date_thai_locale_solar_calendar() {
-    // Test Thai locale uses Thai solar calendar
-    // Verify the Thai solar calendar is used with the Thai locale
+    // Match GNU tests/date/date-thailand.sh: Thai solar calendar for %Y,
+    // Thai month names, Gregorian for --iso-8601 / --rfc-3339.
     if !is_locale_available("th_TH.UTF-8") {
         println!("Skipping Thai locale test - th_TH.UTF-8 locale not available");
         return;
@@ -2394,6 +2394,36 @@ fn test_date_thai_locale_solar_calendar() {
 
     assert_eq!(thai_year, current_year + 543);
 
+    let buddhist_year = current_year + 543;
+
+    // GNU date also formats the locale era via %EY / %EC / %Ey.
+    let thai_ey_year = new_ucmd!()
+        .env("LC_ALL", "th_TH.UTF-8")
+        .arg("+%EY")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .to_string();
+    assert_eq!(thai_ey_year, format!("พ.ศ. {buddhist_year}"));
+
+    let thai_ec = new_ucmd!()
+        .env("LC_ALL", "th_TH.UTF-8")
+        .arg("+%EC")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .to_string();
+    assert_eq!(thai_ec, "พ.ศ.");
+
+    let thai_ey = new_ucmd!()
+        .env("LC_ALL", "th_TH.UTF-8")
+        .arg("+%Ey")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .to_string();
+    assert_eq!(thai_ey, buddhist_year.to_string());
+
     // All months that have 31 days have names that end with "คม" (Thai characters)
     let days_31_suffix = "\u{0E04}\u{0E21}"; // "คม" in Unicode
 
@@ -2411,6 +2441,14 @@ fn test_date_thai_locale_solar_calendar() {
             "Month {month} should end with 'คม', got: {month_name}"
         );
     }
+
+    // GNU date keeps Thai month/day names with solar-calendar %Y.
+    check_date(
+        "th_TH.UTF-8",
+        "2026-06-14",
+        "+%Y %EY %B %A",
+        "2569 พ.ศ. 2569 มิถุนายน อาทิตย์",
+    );
 
     // Check that --iso-8601 and --rfc-3339 use the Gregorian calendar
     let iso_result = new_ucmd!()
@@ -2463,7 +2501,7 @@ fn test_locale_calendar_conversions() {
         check_date("fa_IR.UTF-8", d, "+%Y-%m-%d", e);
     }
 
-    // Thai Buddhist (year + 543, same month/day)
+    // Thai Buddhist / solar calendar (year + 543, same month/day since 1941)
     for (d, e) in [
         ("2026-01-01", "2569-01-01"),
         ("2026-01-26", "2569-01-26"),
@@ -2475,6 +2513,7 @@ fn test_locale_calendar_conversions() {
         ("1970-01-01", "2513-01-01"),
     ] {
         check_date("th_TH.UTF-8", d, "+%Y-%m-%d", e);
+        check_date("th_TH.UTF-8", d, "+%EY-%m-%d", &format!("พ.ศ. {e}"));
     }
 
     // Ethiopian (13 months, New Year on Sept 11)

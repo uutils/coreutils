@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fieldsets prefs febr abmon langinfo uppercased
+// spell-checker:ignore fieldsets prefs febr abmon langinfo uppercased พ.ศ.
 
 //! Locale-aware datetime formatting utilities using ICU and jiff-icu
 
@@ -67,6 +67,59 @@ pub enum CalendarType {
     Ethiopian,
 }
 
+/// Thai solar month names used by GNU coreutils for th_TH (post-1941 layout).
+fn thai_month_name(date: &Date<Iso>, long: bool) -> Option<String> {
+    // spell-checker:ignore มกราคม กุมภาพันธ์ มีนาคม เมษายน พฤษภาคม มิถุนายน กรกฎาคม สิงหาคม กันยายน ตุลาคม พฤศจิกายน ธันวาคม
+    // spell-checker:ignore ม.ค. ก.พ. มี.ค. เม.ย. พ.ค. มิ.ย. ก.ค. ส.ค. ก.ย. ต.ค. พ.ย. ธ.ค.
+    const FULL: [&str; 12] = [
+        "มกราคม",
+        "กุมภาพันธ์",
+        "มีนาคม",
+        "เมษายน",
+        "พฤษภาคม",
+        "มิถุนายน",
+        "กรกฎาคม",
+        "สิงหาคม",
+        "กันยายน",
+        "ตุลาคม",
+        "พฤศจิกายน",
+        "ธันวาคม",
+    ];
+    const ABBREV: [&str; 12] = [
+        "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.",
+        "ธ.ค.",
+    ];
+    let ordinal = usize::from(date.month().ordinal).checked_sub(1)?;
+    Some(if long {
+        FULL[ordinal].to_string()
+    } else {
+        ABBREV[ordinal].to_string()
+    })
+}
+
+/// Thai weekday names matching glibc `th_TH` / GNU date output.
+fn thai_weekday_name(date: &Date<Iso>, long: bool) -> Option<String> {
+    // spell-checker:ignore อาทิตย์ จันทร์ อังคาร พุธ พฤหัสบดี ศุกร์ เสาร์
+    // spell-checker:ignore อา. จ. อ. พ. พฤ. ศ. ส.
+    // Index 0 = Sunday, matching libc DAY_1 / ICU weekday % 7.
+    const FULL: [&str; 7] = [
+        "อาทิตย์",
+        "จันทร์",
+        "อังคาร",
+        "พุธ",
+        "พฤหัสบดี",
+        "ศุกร์",
+        "เสาร์",
+    ];
+    const ABBREV: [&str; 7] = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
+    let weekday = usize::from((date.weekday() as u8) % 7);
+    Some(if long {
+        FULL[weekday].to_string()
+    } else {
+        ABBREV[weekday].to_string()
+    })
+}
+
 /// Transform a strftime format string to use locale-specific calendar values
 pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     const PERCENT_PLACEHOLDER: &str = "\x00\x00";
@@ -76,74 +129,104 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
 
     let mut fmt = format.replace("%%", PERCENT_PLACEHOLDER);
 
-    // For non-Gregorian calendars, replace date components with converted values
+    // Match GNU coreutils' non-Gregorian calendar support in strftime: for
+    // th_TH, %Y/%m/%d use the Thai solar (Buddhist) calendar, while era
+    // conversions (%EY/%EC/%Ey) follow the locale's พ.ศ. era.
     let calendar_type = get_locale_calendar_type(locale);
-    if calendar_type != CalendarType::Gregorian {
-        let (cal_year, cal_month, cal_day) = match calendar_type {
-            CalendarType::Buddhist => {
-                let d = iso_date.to_calendar(Buddhist);
-                (
-                    d.year().extended_year(),
-                    d.month().ordinal,
-                    d.day_of_month().0,
-                )
-            }
-            CalendarType::Persian => {
-                let d = iso_date.to_calendar(Persian);
-                (
-                    d.year().extended_year(),
-                    d.month().ordinal,
-                    d.day_of_month().0,
-                )
-            }
-            CalendarType::Ethiopian => {
-                let d = iso_date.to_calendar(Ethiopian::new());
-                (
-                    d.year().extended_year(),
-                    d.month().ordinal,
-                    d.day_of_month().0,
-                )
-            }
-            CalendarType::Gregorian => unreachable!(),
-        };
-        fmt = fmt
-            .replace("%Y", &cal_year.to_string())
-            .replace("%m", &format!("{cal_month:02}"))
-            .replace("%d", &format!("{cal_day:02}"))
-            .replace("%e", &format!("{cal_day:2}"));
+    match calendar_type {
+        CalendarType::Buddhist => {
+            let d = iso_date.to_calendar(Buddhist);
+            let buddhist_year = d.year().extended_year();
+            let cal_month = d.month().ordinal;
+            let cal_day = d.day_of_month().0;
+            fmt = fmt
+                .replace("%EY", &format!("พ.ศ. {buddhist_year}"))
+                .replace("%EC", "พ.ศ.")
+                .replace("%Ey", &buddhist_year.to_string())
+                .replace("%Y", &buddhist_year.to_string())
+                .replace("%m", &format!("{cal_month:02}"))
+                .replace("%d", &format!("{cal_day:02}"))
+                .replace("%e", &format!("{cal_day:2}"));
+        }
+        CalendarType::Persian => {
+            let d = iso_date.to_calendar(Persian);
+            let cal_year = d.year().extended_year();
+            let cal_month = d.month().ordinal;
+            let cal_day = d.day_of_month().0;
+            fmt = fmt
+                .replace("%Y", &cal_year.to_string())
+                .replace("%m", &format!("{cal_month:02}"))
+                .replace("%d", &format!("{cal_day:02}"))
+                .replace("%e", &format!("{cal_day:2}"));
+        }
+        CalendarType::Ethiopian => {
+            let d = iso_date.to_calendar(Ethiopian::new());
+            let cal_year = d.year().extended_year();
+            let cal_month = d.month().ordinal;
+            let cal_day = d.day_of_month().0;
+            fmt = fmt
+                .replace("%Y", &cal_year.to_string())
+                .replace("%m", &format!("{cal_month:02}"))
+                .replace("%d", &format!("{cal_day:02}"))
+                .replace("%e", &format!("{cal_day:2}"));
+        }
+        CalendarType::Gregorian => {}
     }
 
-    // Format localized names using ICU DateTimeFormatter
-    let locale_prefs = locale.clone().into();
-
-    if fmt.contains("%B")
-        && let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::long())
-    {
-        fmt = fmt.replace("%B", &f.format(&iso_date).to_string());
+    // Prefer GNU Thai names for th_* locales; otherwise use ICU.
+    let is_thai = locale.to_string().starts_with("th");
+    if fmt.contains("%B") {
+        if is_thai {
+            if let Some(name) = thai_month_name(&iso_date, true) {
+                fmt = fmt.replace("%B", &name);
+            }
+        } else if let Ok(f) =
+            DateTimeFormatter::try_new(locale.clone().into(), fieldsets::M::long())
+        {
+            fmt = fmt.replace("%B", &f.format(&iso_date).to_string());
+        }
     }
-    if (fmt.contains("%b") || fmt.contains("%h"))
-        && let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::medium())
-    {
-        // ICU's medium format may include trailing periods (e.g., "febr." for Hungarian),
-        // which when combined with locale format strings that also add periods after
-        // %b (e.g., "%Y. %b. %d") results in double periods ("febr..").
-        // The standard C/POSIX locale via nl_langinfo returns abbreviations
-        // WITHOUT trailing periods, so we strip them here for consistency.
-        let month_abbrev = f.format(&iso_date).to_string();
-        let month_abbrev = month_abbrev.trim_end_matches('.').to_string();
-        fmt = fmt
-            .replace("%b", &month_abbrev)
-            .replace("%h", &month_abbrev);
+    if fmt.contains("%b") || fmt.contains("%h") {
+        if is_thai {
+            if let Some(name) = thai_month_name(&iso_date, false) {
+                fmt = fmt.replace("%b", &name).replace("%h", &name);
+            }
+        } else if let Ok(f) =
+            DateTimeFormatter::try_new(locale.clone().into(), fieldsets::M::medium())
+        {
+            // ICU's medium format may include trailing periods (e.g., "febr." for Hungarian),
+            // which when combined with locale format strings that also add periods after
+            // %b (e.g., "%Y. %b. %d") results in double periods ("febr..").
+            // The standard C/POSIX locale via nl_langinfo returns abbreviations
+            // WITHOUT trailing periods, so we strip them here for consistency.
+            let month_abbrev = f.format(&iso_date).to_string();
+            let month_abbrev = month_abbrev.trim_end_matches('.').to_string();
+            fmt = fmt
+                .replace("%b", &month_abbrev)
+                .replace("%h", &month_abbrev);
+        }
     }
-    if fmt.contains("%A")
-        && let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::long())
-    {
-        fmt = fmt.replace("%A", &f.format(&iso_date).to_string());
+    if fmt.contains("%A") {
+        if is_thai {
+            if let Some(name) = thai_weekday_name(&iso_date, true) {
+                fmt = fmt.replace("%A", &name);
+            }
+        } else if let Ok(f) =
+            DateTimeFormatter::try_new(locale.clone().into(), fieldsets::E::long())
+        {
+            fmt = fmt.replace("%A", &f.format(&iso_date).to_string());
+        }
     }
-    if fmt.contains("%a")
-        && let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::short())
-    {
-        fmt = fmt.replace("%a", &f.format(&iso_date).to_string());
+    if fmt.contains("%a") {
+        if is_thai {
+            if let Some(name) = thai_weekday_name(&iso_date, false) {
+                fmt = fmt.replace("%a", &name);
+            }
+        } else if let Ok(f) =
+            DateTimeFormatter::try_new(locale.clone().into(), fieldsets::E::short())
+        {
+            fmt = fmt.replace("%a", &f.format(&iso_date).to_string());
+        }
     }
 
     fmt.replace(PERCENT_PLACEHOLDER, "%%")
