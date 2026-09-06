@@ -311,11 +311,11 @@ mod tests {
 
     use super::*;
 
-    struct FailingWriter;
+    struct FailingWriter(io::ErrorKind);
 
     impl Write for FailingWriter {
         fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
-            Err(io::Error::new(io::ErrorKind::StorageFull, "disk full"))
+            Err(io::Error::from(self.0))
         }
 
         fn flush(&mut self) -> io::Result<()> {
