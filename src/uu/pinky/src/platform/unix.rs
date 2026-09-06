@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use crate::Capitalize;
+use crate::capitalize;
 use crate::options;
 use crate::uu_app;
 
@@ -200,7 +200,16 @@ fn real_name(pw: &Passwd) -> Option<String> {
     if let Some(comma) = comment.find(',') {
         comment.truncate(comma);
     }
-    Some(comment.replace('&', &pw.name.capitalize()))
+    Some(comment.replace('&', &capitalize(&pw.name)))
+}
+
+/// Append one column to a row under construction. Only a `Display` impl that
+/// fails can fail here, since the sink is a `String`, and no column formats
+/// anything but strings and numbers — so say so rather than truncate quietly.
+macro_rules! column {
+    ($row:expr, $($arg:tt)*) => {{
+        write!($row, $($arg)*).expect("a column cannot fail to format");
+    }};
 }
 
 struct Pinky {
@@ -216,7 +225,7 @@ impl Pinky {
         let terminal = Terminal::query(ut.tty_device().as_str());
         let mut row = String::new();
 
-        let _ = write!(row, "{1:<8.0$}", utmpx::UT_NAMESIZE, ut.user());
+        column!(row, "{1:<8.0$}", utmpx::UT_NAMESIZE, ut.user());
 
         if self.layout.real_name {
             let name = Passwd::locate(ut.user().as_ref())
@@ -224,15 +233,15 @@ impl Pinky {
                 .and_then(|pw| real_name(&pw));
             match name {
                 Some(name) => {
-                    let _ = write!(row, " {name:<19.19}");
+                    column!(row, " {name:<19.19}");
                 }
                 None => {
-                    let _ = write!(row, " {:19}", "        ???");
+                    column!(row, " {:19}", "        ???");
                 }
             }
         }
 
-        let _ = write!(
+        column!(
             row,
             " {}{:<8.*}",
             terminal.messages,
@@ -245,10 +254,10 @@ impl Pinky {
                 Some(read_at) => format_idle(read_at),
                 None => "?????".to_owned(),
             };
-            let _ = write!(row, " {idle:<6}");
+            column!(row, " {idle:<6}");
         }
 
-        let _ = write!(row, " {}", format_timestamp(ut));
+        column!(row, " {}", format_timestamp(ut));
 
         if self.layout.origin {
             let host = if self.resolve_hosts {
@@ -257,7 +266,7 @@ impl Pinky {
                 ut.host()
             };
             if !host.is_empty() {
-                let _ = write!(row, " {host}");
+                column!(row, " {host}");
             }
         }
 
@@ -268,17 +277,17 @@ impl Pinky {
     fn header_row(&self) -> String {
         let mut row = String::new();
 
-        let _ = write!(row, "{:<8}", translate!("pinky-column-login"));
+        column!(row, "{:<8}", translate!("pinky-column-login"));
         if self.layout.real_name {
-            let _ = write!(row, " {:<19}", translate!("pinky-column-name"));
+            column!(row, " {:<19}", translate!("pinky-column-name"));
         }
-        let _ = write!(row, " {:<9}", translate!("pinky-column-tty"));
+        column!(row, " {:<9}", translate!("pinky-column-tty"));
         if self.layout.idle {
-            let _ = write!(row, " {:<6}", translate!("pinky-column-idle"));
+            column!(row, " {:<6}", translate!("pinky-column-idle"));
         }
-        let _ = write!(row, " {:<16}", translate!("pinky-column-when"));
+        column!(row, " {:<16}", translate!("pinky-column-when"));
         if self.layout.origin {
-            let _ = write!(row, " {}", translate!("pinky-column-where"));
+            column!(row, " {}", translate!("pinky-column-where"));
         }
 
         row

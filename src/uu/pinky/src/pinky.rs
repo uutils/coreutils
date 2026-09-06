@@ -66,6 +66,8 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            // Accepted and ignored: the short format is what pinky prints
+            // unless -l asks for the long one.
             Arg::new(options::SHORT_FORMAT)
                 .short('s')
                 .help(translate!("pinky-help-short-format"))
@@ -116,22 +118,19 @@ pub fn uu_app() -> Command {
         )
 }
 
-pub trait Capitalize {
-    fn capitalize(&self) -> String;
-}
-
-impl Capitalize for str {
-    fn capitalize(&self) -> String {
-        self.char_indices()
-            .fold(String::with_capacity(self.len()), |mut acc, x| {
-                if x.0 == 0 {
-                    acc.push(x.1.to_ascii_uppercase());
-                } else {
-                    acc.push(x.1);
-                }
-                acc
-            })
+/// Upper-case the first character if it is ASCII, leaving the rest of the
+/// string alone. This matches what GNU does to a login name.
+///
+/// Public because `tests/by-util/test_pinky.rs` builds the expected long-format
+/// output with it, so that the test spells the rule out the same way.
+pub fn capitalize(s: &str) -> String {
+    let mut chars = s.chars();
+    let mut capitalized = String::with_capacity(s.len());
+    if let Some(first) = chars.next() {
+        capitalized.push(first.to_ascii_uppercase());
+        capitalized.push_str(chars.as_str());
     }
+    capitalized
 }
 
 #[cfg(test)]
@@ -140,9 +139,9 @@ mod test {
 
     #[test]
     fn test_capitalize() {
-        assert_eq!("Zbnmasd", "zbnmasd".capitalize()); // spell-checker:disable-line
-        assert_eq!("Abnmasd", "Abnmasd".capitalize()); // spell-checker:disable-line
-        assert_eq!("1masd", "1masd".capitalize()); // spell-checker:disable-line
-        assert_eq!("", "".capitalize());
+        assert_eq!("Zbnmasd", capitalize("zbnmasd")); // spell-checker:disable-line
+        assert_eq!("Abnmasd", capitalize("Abnmasd")); // spell-checker:disable-line
+        assert_eq!("1masd", capitalize("1masd")); // spell-checker:disable-line
+        assert_eq!("", capitalize(""));
     }
 }
