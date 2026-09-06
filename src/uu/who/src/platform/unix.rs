@@ -74,6 +74,33 @@ struct Layout {
     terse: bool,
 }
 
+/// One output line, before the columns are padded out.
+struct Row<'a> {
+    user: &'a str,
+    write_state: char,
+    line: &'a str,
+    time: &'a str,
+    idle: &'a str,
+    pid: &'a str,
+    note: &'a str,
+    exit: &'a str,
+}
+
+impl Default for Row<'_> {
+    fn default() -> Self {
+        Self {
+            user: "",
+            write_state: ' ',
+            line: "",
+            time: "",
+            idle: "",
+            pid: "",
+            note: "",
+            exit: "",
+        }
+    }
+}
+
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches =
         uucore::clap_localization::handle_clap_result(uu_app().after_help(get_long_usage()), args)?;
@@ -272,31 +299,22 @@ impl Who {
         let comment =
             translate!("who-runlevel-last", "last" => (if last == 'N' { 'S' } else { 'N' }));
 
-        self.print_line(
-            "",
-            ' ',
-            &runlevel_line,
-            &time_string(ut),
-            "",
-            "",
-            if last.is_control() { "" } else { &comment },
-            "",
-        )?;
+        self.print_line(&Row {
+            line: &runlevel_line,
+            time: &time_string(ut),
+            note: if last.is_control() { "" } else { &comment },
+            ..Row::default()
+        })?;
         Ok(())
     }
 
     #[inline]
     fn print_clockchange(&self, ut: &UtmpxRecord) -> UResult<()> {
-        self.print_line(
-            "",
-            ' ',
-            &translate!("who-clock-change"),
-            &time_string(ut),
-            "",
-            "",
-            "",
-            "",
-        )?;
+        self.print_line(&Row {
+            line: &translate!("who-clock-change"),
+            time: &time_string(ut),
+            ..Row::default()
+        })?;
         Ok(())
     }
 
@@ -304,16 +322,14 @@ impl Who {
     fn print_login(&self, ut: &UtmpxRecord) -> UResult<()> {
         let comment = translate!("who-login-id", "id" => ut.terminal_suffix());
         let pidstr = format!("{}", ut.pid());
-        self.print_line(
-            &translate!("who-login"),
-            ' ',
-            &ut.tty_device(),
-            &time_string(ut),
-            "",
-            &pidstr,
-            &comment,
-            "",
-        )?;
+        self.print_line(&Row {
+            user: &translate!("who-login"),
+            line: &ut.tty_device(),
+            time: &time_string(ut),
+            pid: &pidstr,
+            note: &comment,
+            ..Row::default()
+        })?;
         Ok(())
     }
 
@@ -323,16 +339,14 @@ impl Who {
         let pidstr = format!("{}", ut.pid());
         let e = ut.exit_status();
         let exitstr = translate!("who-dead-exit-status", "term" => e.0, "exit" => e.1);
-        self.print_line(
-            "",
-            ' ',
-            &ut.tty_device(),
-            &time_string(ut),
-            "",
-            &pidstr,
-            &comment,
-            &exitstr,
-        )?;
+        self.print_line(&Row {
+            line: &ut.tty_device(),
+            time: &time_string(ut),
+            pid: &pidstr,
+            note: &comment,
+            exit: &exitstr,
+            ..Row::default()
+        })?;
         Ok(())
     }
 
@@ -340,31 +354,23 @@ impl Who {
     fn print_initspawn(&self, ut: &UtmpxRecord) -> UResult<()> {
         let comment = translate!("who-login-id", "id" => ut.terminal_suffix());
         let pidstr = format!("{}", ut.pid());
-        self.print_line(
-            "",
-            ' ',
-            &ut.tty_device(),
-            &time_string(ut),
-            "",
-            &pidstr,
-            &comment,
-            "",
-        )?;
+        self.print_line(&Row {
+            line: &ut.tty_device(),
+            time: &time_string(ut),
+            pid: &pidstr,
+            note: &comment,
+            ..Row::default()
+        })?;
         Ok(())
     }
 
     #[inline]
     fn print_boottime(&self, ut: &UtmpxRecord) -> UResult<()> {
-        self.print_line(
-            "",
-            ' ',
-            &translate!("who-system-boot"),
-            &time_string(ut),
-            "",
-            "",
-            "",
-            "",
-        )?;
+        self.print_line(&Row {
+            line: &translate!("who-system-boot"),
+            time: &time_string(ut),
+            ..Row::default()
+        })?;
         Ok(())
     }
 
@@ -405,53 +411,42 @@ impl Who {
         };
         let hoststr = if s.is_empty() { s } else { format!("({s})") };
 
-        self.print_line(
-            ut.user().as_ref(),
-            mesg,
-            ut.tty_device().as_ref(),
-            time_string(ut).as_str(),
-            idle.as_ref(),
-            format!("{}", ut.pid()).as_str(),
-            hoststr.as_str(),
-            "",
-        )?;
+        self.print_line(&Row {
+            user: &ut.user(),
+            write_state: mesg,
+            line: &ut.tty_device(),
+            time: &time_string(ut),
+            idle: &idle,
+            pid: &format!("{}", ut.pid()),
+            note: &hoststr,
+            exit: "",
+        })?;
 
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn print_line(
-        &self,
-        user: &str,
-        state: char,
-        line: &str,
-        time: &str,
-        idle: &str,
-        pid: &str,
-        comment: &str,
-        exit: &str,
-    ) -> UResult<()> {
-        let mut buf = String::with_capacity(64);
-        let msg = vec![' ', state].into_iter().collect::<String>();
+    fn print_line(&self, row: &Row) -> UResult<()> {
+        // Width of "%b %e %H:%M" under LC_ALL=C.
+        const TIME_WIDTH: usize = 3 + 2 + 2 + 1 + 2;
 
-        write!(buf, "{user:<8}").unwrap();
+        let mut buf = String::with_capacity(64);
+        write!(buf, "{:<8}", row.user).unwrap();
         if self.layout.write_state {
-            buf.push_str(&msg);
+            buf.push(' ');
+            buf.push(row.write_state);
         }
-        write!(buf, " {line:<12}").unwrap();
-        // "%b %e %H:%M" (LC_ALL=C)
-        let time_size = 3 + 2 + 2 + 1 + 2;
-        write!(buf, " {time:<time_size$}").unwrap();
+        write!(buf, " {:<12}", row.line).unwrap();
+        write!(buf, " {:<TIME_WIDTH$}", row.time).unwrap();
 
         if !self.layout.terse {
             if self.layout.idle {
-                write!(buf, " {idle:<6}").unwrap();
+                write!(buf, " {:<6}", row.idle).unwrap();
             }
-            write!(buf, " {pid:>10}").unwrap();
+            write!(buf, " {:>10}", row.pid).unwrap();
         }
-        write!(buf, " {comment:<8}").unwrap();
+        write!(buf, " {:<8}", row.note).unwrap();
         if self.layout.exit {
-            write!(buf, " {exit:<12}").unwrap();
+            write!(buf, " {:<12}", row.exit).unwrap();
         }
         writeln!(stdout(), "{}", buf.trim_end())?;
         Ok(())
@@ -459,16 +454,16 @@ impl Who {
 
     #[inline]
     fn print_heading(&self) -> UResult<()> {
-        self.print_line(
-            &translate!("who-heading-name"),
-            ' ',
-            &translate!("who-heading-line"),
-            &translate!("who-heading-time"),
-            &translate!("who-heading-idle"),
-            &translate!("who-heading-pid"),
-            &translate!("who-heading-comment"),
-            &translate!("who-heading-exit"),
-        )?;
+        self.print_line(&Row {
+            user: &translate!("who-heading-name"),
+            write_state: ' ',
+            line: &translate!("who-heading-line"),
+            time: &translate!("who-heading-time"),
+            idle: &translate!("who-heading-idle"),
+            pid: &translate!("who-heading-pid"),
+            note: &translate!("who-heading-comment"),
+            exit: &translate!("who-heading-exit"),
+        })?;
         Ok(())
     }
 }
