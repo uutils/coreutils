@@ -865,6 +865,40 @@ fn partial_char() {
 }
 
 #[test]
+fn partial_char_posixly_correct() {
+    // GNU suppresses the "character(s) following character constant" warning
+    // when POSIXLY_CORRECT is set. Only the presence of the variable matters,
+    // its value is irrelevant.
+    for value in ["1", "", "0"] {
+        for arg in ["'AB", "'ABC", "\"AB", "'-1"] {
+            new_ucmd!()
+                .args(&["%d", arg])
+                .env("POSIXLY_CORRECT", value)
+                .succeeds()
+                .no_stderr();
+        }
+    }
+
+    // Without POSIXLY_CORRECT the warning is still emitted.
+    for (arg, rest) in [("'AB", "B"), ("'ABC", "BC"), ("\"AB", "B"), ("'-1", "1")] {
+        new_ucmd!().args(&["%d", arg]).succeeds().stderr_is(format!(
+            "printf: warning: {rest}: character(s) following character constant have been ignored\n"
+        ));
+    }
+}
+
+#[test]
+fn value_not_completely_converted_ignores_posixly_correct() {
+    // POSIXLY_CORRECT only silences the character-constant warning; the
+    // unrelated "value not completely converted" error is unaffected.
+    new_ucmd!()
+        .args(&["%d", "42abc"])
+        .env("POSIXLY_CORRECT", "1")
+        .fails_with_code(1)
+        .stderr_contains("value not completely converted");
+}
+
+#[test]
 fn sub_alternative_lower_hex_0() {
     new_ucmd!().args(&["%#x", "0"]).succeeds().stdout_only("0");
 }

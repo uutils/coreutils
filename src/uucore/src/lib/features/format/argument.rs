@@ -222,9 +222,14 @@ fn extract_value<T: Default>(
                 ExtendedParserError::PartialMatch(v, rest) => {
                     if quote_start {
                         set_exit_code(0);
-                        show_warning!(
-                            "{rest}: character(s) following character constant have been ignored"
-                        );
+                        // GNU stays silent about the ignored trailing bytes when
+                        // POSIXLY_CORRECT is set. Only the presence of the variable
+                        // matters, its value is irrelevant.
+                        if std::env::var_os("POSIXLY_CORRECT").is_none() {
+                            show_warning!(
+                                "{rest}: character(s) following character constant have been ignored"
+                            );
+                        }
                     } else {
                         show_error!("{}: value not completely converted", input.quote());
                     }
