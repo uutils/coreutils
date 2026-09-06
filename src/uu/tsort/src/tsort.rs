@@ -14,6 +14,7 @@ use std::collections::VecDeque;
 use std::collections::hash_map::Entry;
 use std::ffi::OsString;
 use std::fs::File;
+use std::fs::OpenOptions;
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use string_interner::StringInterner;
 use string_interner::backend::BucketBackend;
@@ -57,19 +58,49 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if input == "-" {
         process_input(io::stdin().lock(), &mut g)?;
     } else {
+        let mut options: OpenOptions;
         // some platforms cannot catch this as read error. Needs additional cost by stat
         #[cfg(windows)]
         {
+            use std::os::windows::fs::OpenOptionsExt;
+            use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_SEQUENTIAL_SCAN;
             let input = std::path::Path::new(input);
             if input.is_dir() {
                 return Err(
                     Error::Read(ReadError::IsDir(input.to_string_lossy().to_string())).into(),
                 );
             }
+            // advise the OS we will access the data sequentially if possible (windows)
+            options = File::options()
+                .custom_flags(FILE_FLAG_SEQUENTIAL_SCAN)
+                .clone();
         }
-        let file = File::open(input).map_err_context(|| input.maybe_quote().to_string())?;
-        // advise the OS we will access the data sequentially if possible
-        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+
+        #[cfg(not(windows))]
+        {
+            options = File::options();
+        }
+        let file = options
+            .read(true)
+            .open(input)
+            .map_err_context(|| input.maybe_quote().to_string())?;
+
+        // advise the OS we will access the data sequentially if possible (unix)
+        #[cfg(all(
+            any(unix, target_os = "wasi"),
+            not(any(
+                target_vendor = "apple",
+                target_os = "netbsd",
+                target_os = "openbsd",
+                target_os = "dragonfly",
+                target_os = "espidf",
+                target_os = "haiku",
+                target_os = "horizon",
+                target_os = "redox",
+                target_os = "solaris",
+                target_os = "vita",
+            ))
+        ))]
         let _ = rustix::fs::fadvise(&file, 0, None, rustix::fs::Advice::Sequential);
 
         let reader = BufReader::new(file);
