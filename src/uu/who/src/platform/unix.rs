@@ -237,42 +237,48 @@ impl Who {
             utmpx::DEFAULT_FILE
         };
         if self.names_only {
-            let users = utmpx::Utmpx::iter_all_records_from(f)
-                .filter(UtmpxRecord::is_user_process)
-                .map(|ut| ut.user())
-                .collect::<Vec<_>>();
-            // `println!` panics on a write error; the rest of this file surfaces
-            // it through `?` instead so the caller can report it and exit
-            // non-zero, matching GNU (#13388).
-            writeln!(stdout(), "{}", users.join(" "))?;
-            writeln!(
-                stdout(),
-                "{}",
-                translate!("who-user-count", "count" => users.len())
-            )?;
+            return self.emit_names(f);
+        }
+
+        let records = utmpx::Utmpx::iter_all_records_from(f);
+
+        if self.layout.header {
+            self.print_heading()?;
+        }
+        let cur_tty = if self.own_terminal_only {
+            current_tty()
         } else {
-            let records = utmpx::Utmpx::iter_all_records_from(f);
+            String::new()
+        };
 
-            if self.layout.header {
-                self.print_heading()?;
+        for ut in records {
+            if self.own_terminal_only && cur_tty != ut.tty_device() {
+                continue;
             }
-            let cur_tty = if self.own_terminal_only {
-                current_tty()
-            } else {
-                String::new()
-            };
-
-            for ut in records {
-                if self.own_terminal_only && cur_tty != ut.tty_device() {
-                    continue;
-                }
-                if self.select.sessions && ut.is_user_process() {
-                    self.print_user(&ut)?;
-                } else if let Some(event) = self.event_for(&ut) {
-                    self.emit_event(&ut, event)?;
-                }
+            if self.select.sessions && ut.is_user_process() {
+                self.print_user(&ut)?;
+            } else if let Some(event) = self.event_for(&ut) {
+                self.emit_event(&ut, event)?;
             }
         }
+        Ok(())
+    }
+
+    /// The `-q` report: every login name on one line, then the total.
+    fn emit_names(&self, path: &str) -> UResult<()> {
+        let users = utmpx::Utmpx::iter_all_records_from(path)
+            .filter(UtmpxRecord::is_user_process)
+            .map(|ut| ut.user())
+            .collect::<Vec<_>>();
+        // `println!` panics on a write error; the rest of this file surfaces
+        // it through `?` instead so the caller can report it and exit
+        // non-zero, matching GNU (#13388).
+        writeln!(stdout(), "{}", users.join(" "))?;
+        writeln!(
+            stdout(),
+            "{}",
+            translate!("who-user-count", "count" => users.len())
+        )?;
         Ok(())
     }
 
