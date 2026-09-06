@@ -94,12 +94,13 @@ fn parse_code(input: &mut &[u8], base: Base) -> Option<u8> {
 /// Parse `\uHHHH` and `\UHHHHHHHH`
 fn parse_unicode(input: &mut &[u8], digits: u8) -> Result<char, EscapeError> {
     if let Some((new_digits, rest)) = input.split_at_checked(digits as usize) {
-        *input = rest;
-        let ret = new_digits
+        let hex_bytes = new_digits
             .iter()
             .map(|c| Base::Hex.convert_digit(*c))
             .collect::<Option<Vec<u8>>>()
-            .ok_or(EscapeError::MissingHexadecimalNumber)?
+            .ok_or(EscapeError::MissingHexadecimalNumber)?;
+        *input = rest;
+        let ret = hex_bytes
             .iter()
             .map(|n| *n as u32)
             .reduce(|ret, n| ret.wrapping_mul(Base::Hex.as_base() as u32).wrapping_add(n))

@@ -113,6 +113,36 @@ fn sub_b_string_handle_escapes() {
 }
 
 #[test]
+fn sub_b_string_missing_hex() {
+    for arg in [
+        r"\x",
+        r"\u",
+        r"\U",
+        r"\uabc",
+        r"\Uabcd",
+        "C:\\users\\file",
+        r"\uABCZ|TAIL",
+        r"\U0000004Z|TAIL",
+        r"x\unit",
+    ] {
+        new_ucmd!()
+            .args(&["%b", arg])
+            .fails_with_code(1)
+            .stderr_only("printf: missing hexadecimal number in escape\n");
+    }
+}
+
+#[test]
+fn sub_b_string_invalid_unicode() {
+    for arg in [r"\ud800", r"\ud9d0", r"\U0000D8F9"] {
+        new_ucmd!()
+            .args(&["%b", arg])
+            .fails_with_code(1)
+            .stderr_only(format!("printf: invalid universal character name {arg}\n"));
+    }
+}
+
+#[test]
 fn sub_b_string_variable_size_unicode() {
     for x in ["\\5|", "\\05|", "\\005|", "\\0005|"] {
         new_ucmd!()
