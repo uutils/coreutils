@@ -25,6 +25,55 @@ fn get_long_usage() -> String {
     translate!("who-long-usage", "default_file" => utmpx::DEFAULT_FILE)
 }
 
+/// Which kinds of accounting record are worth reporting.
+#[derive(Default)]
+struct Selection {
+    /// The record left by the last system boot.
+    boot: bool,
+    /// The records of processes that have since exited.
+    exited: bool,
+    /// The login processes still waiting for someone to sign in.
+    login_slots: bool,
+    /// The processes that init spawned.
+    init_children: bool,
+    /// The record left by the most recent clock adjustment.
+    clock_change: bool,
+    /// The record holding the current runlevel.
+    runlevel: bool,
+    /// Ordinary user sessions.
+    sessions: bool,
+}
+
+impl Selection {
+    /// True when no selecting option was given at all, including `--users`.
+    /// Such an invocation falls back to reporting user sessions.
+    fn is_default(&self) -> bool {
+        !(self.boot
+            || self.exited
+            || self.login_slots
+            || self.init_children
+            || self.clock_change
+            || self.runlevel
+            || self.sessions)
+    }
+}
+
+/// Which columns each row carries.
+#[derive(Default)]
+struct Layout {
+    /// Prepend a header row naming the columns.
+    header: bool,
+    /// The column reporting whether the terminal accepts messages: `+` when it
+    /// does, `-` when it does not, `?` when the terminal cannot be queried.
+    write_state: bool,
+    /// How long the terminal has been quiet.
+    idle: bool,
+    /// How the process ended and with what status.
+    exit: bool,
+    /// Drop everything but the name, line and time columns.
+    terse: bool,
+}
+
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches =
         uucore::clap_localization::handle_clap_result(uu_app().after_help(get_long_usage()), args)?;
@@ -34,81 +83,43 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    // Resolve each recorded host to its canonical name before printing it.
-    let do_lookup = matches.get_flag(options::LOOKUP);
-
-    // Print just the login names followed by a total, instead of one row per
-    // record. Carries no meaning in the `who am i` form.
-    let short_list = matches.get_flag(options::COUNT);
-
     let all = matches.get_flag(options::ALL);
+    let flag = |name: &str| all || matches.get_flag(name);
 
-    // Prepend a header row naming the columns.
-    let include_heading = matches.get_flag(options::HEADING);
+    let mut select = Selection {
+        boot: flag(options::BOOT),
+        exited: flag(options::DEAD),
+        login_slots: flag(options::LOGIN),
+        init_children: flag(options::PROCESS),
+        clock_change: flag(options::TIME),
+        runlevel: flag(options::RUNLEVEL),
+        sessions: matches.get_flag(options::USERS),
+    };
 
-    // Add the column reporting whether the terminal accepts messages: `+` when
-    // it does, `-` when it does not, `?` when the terminal cannot be queried.
-    let include_mesg = all || matches.get_flag(options::MESG);
+    // With no selecting option the report falls back to user sessions, and the
+    // narrower row shape that goes with them.
+    let defaulted = select.is_default();
+    select.sessions |= all || defaulted;
 
-    // Include the record left by the last system boot.
-    let need_boottime = all || matches.get_flag(options::BOOT);
-
-    // Include the records of processes that have since exited.
-    let need_deadprocs = all || matches.get_flag(options::DEAD);
-
-    // Include the login processes still waiting for someone to sign in.
-    let need_login = all || matches.get_flag(options::LOGIN);
-
-    // Include the processes that init spawned.
-    let need_initspawn = all || matches.get_flag(options::PROCESS);
-
-    // Include the record left by the most recent clock adjustment.
-    let need_clockchange = all || matches.get_flag(options::TIME);
-
-    // Include the record holding the current runlevel.
-    let need_runlevel = all || matches.get_flag(options::RUNLEVEL);
-
-    let use_defaults = !(all
-        || need_boottime
-        || need_deadprocs
-        || need_login
-        || need_initspawn
-        || need_runlevel
-        || need_clockchange
-        || matches.get_flag(options::USERS));
-
-    // Include ordinary user sessions.
-    let need_users = all || matches.get_flag(options::USERS) || use_defaults;
-
-    // Add the idle column, measuring how long the terminal has been quiet:
-    // `hours:minutes`, `.` when under a minute, `old` when past a day.
-    let include_idle = need_deadprocs || need_login || need_runlevel || need_users;
-
-    // Add the columns carrying how the process ended and with what status.
-    let include_exit = need_deadprocs;
-
-    // Narrow each row down to the name, line and time columns.
-    let short_output = !include_exit && use_defaults;
-
-    // Report only the session attached to the invoking terminal.
-    let my_line_only = matches.get_flag(options::ONLY_HOSTNAME_USER) || files.len() == 2;
+    let layout = Layout {
+        header: matches.get_flag(options::HEADING),
+        write_state: flag(options::MESG),
+        // The idle column is only meaningful for records tied to a terminal.
+        idle: select.exited || select.login_slots || select.runlevel || select.sessions,
+        exit: select.exited,
+        terse: !select.exited && defaulted,
+    };
 
     let mut who = Who {
-        do_lookup,
-        short_list,
-        short_output,
-        include_idle,
-        include_heading,
-        include_mesg,
-        include_exit,
-        need_boottime,
-        need_deadprocs,
-        need_login,
-        need_initspawn,
-        need_clockchange,
-        need_runlevel,
-        need_users,
-        my_line_only,
+        // Resolve each recorded host to its canonical name before printing it.
+        resolve_hosts: matches.get_flag(options::LOOKUP),
+        // Print just the login names followed by a total, instead of one row
+        // per record. Carries no meaning in the `who am i` form.
+        names_only: matches.get_flag(options::COUNT),
+        // Report only the session attached to the invoking terminal.
+        own_terminal_only: matches.get_flag(options::ONLY_HOSTNAME_USER) || files.len() == 2,
+        select,
+        layout,
         args: files,
     };
 
@@ -117,21 +128,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 struct Who {
-    do_lookup: bool,
-    short_list: bool,
-    short_output: bool,
-    include_idle: bool,
-    include_heading: bool,
-    include_mesg: bool,
-    include_exit: bool,
-    need_boottime: bool,
-    need_deadprocs: bool,
-    need_login: bool,
-    need_initspawn: bool,
-    need_clockchange: bool,
-    need_runlevel: bool,
-    need_users: bool,
-    my_line_only: bool,
+    resolve_hosts: bool,
+    names_only: bool,
+    own_terminal_only: bool,
+    select: Selection,
+    layout: Layout,
     args: Vec<String>,
 }
 
@@ -202,7 +203,7 @@ impl Who {
         } else {
             utmpx::DEFAULT_FILE
         };
-        if self.short_list {
+        if self.names_only {
             let users = utmpx::Utmpx::iter_all_records_from(f)
                 .filter(UtmpxRecord::is_user_process)
                 .map(|ut| ut.user())
@@ -219,39 +220,39 @@ impl Who {
         } else {
             let records = utmpx::Utmpx::iter_all_records_from(f);
 
-            if self.include_heading {
+            if self.layout.header {
                 self.print_heading()?;
             }
-            let cur_tty = if self.my_line_only {
+            let cur_tty = if self.own_terminal_only {
                 current_tty()
             } else {
                 String::new()
             };
 
             for ut in records {
-                if !self.my_line_only || cur_tty == ut.tty_device() {
-                    if self.need_users && ut.is_user_process() {
+                if !self.own_terminal_only || cur_tty == ut.tty_device() {
+                    if self.select.sessions && ut.is_user_process() {
                         self.print_user(&ut)?;
                     } else {
                         match ut.record_type() {
-                            rt if self.need_runlevel && run_level_chk(rt) => {
+                            rt if self.select.runlevel && run_level_chk(rt) => {
                                 if cfg!(target_os = "linux") {
                                     self.print_runlevel(&ut)?;
                                 }
                             }
-                            x if x == utmpx::BOOT_TIME && self.need_boottime => {
+                            x if x == utmpx::BOOT_TIME && self.select.boot => {
                                 self.print_boottime(&ut)?;
                             }
-                            x if x == utmpx::NEW_TIME && self.need_clockchange => {
+                            x if x == utmpx::NEW_TIME && self.select.clock_change => {
                                 self.print_clockchange(&ut)?;
                             }
-                            x if x == utmpx::INIT_PROCESS && self.need_initspawn => {
+                            x if x == utmpx::INIT_PROCESS && self.select.init_children => {
                                 self.print_initspawn(&ut)?;
                             }
-                            x if x == utmpx::LOGIN_PROCESS && self.need_login => {
+                            x if x == utmpx::LOGIN_PROCESS && self.select.login_slots => {
                                 self.print_login(&ut)?;
                             }
-                            x if x == utmpx::DEAD_PROCESS && self.need_deadprocs => {
+                            x if x == utmpx::DEAD_PROCESS && self.select.exited => {
                                 self.print_deadprocs(&ut)?;
                             }
                             _ => {}
@@ -394,7 +395,7 @@ impl Who {
             idle_string(last_change, 0)
         };
 
-        let s = if self.do_lookup {
+        let s = if self.resolve_hosts {
             ut.canon_host().map_err_context(|| {
                 let host = ut.host();
                 translate!("who-canonicalize-error", "host" => host.split(':').next().unwrap_or(&host).quote())
@@ -434,7 +435,7 @@ impl Who {
         let msg = vec![' ', state].into_iter().collect::<String>();
 
         write!(buf, "{user:<8}").unwrap();
-        if self.include_mesg {
+        if self.layout.write_state {
             buf.push_str(&msg);
         }
         write!(buf, " {line:<12}").unwrap();
@@ -442,14 +443,14 @@ impl Who {
         let time_size = 3 + 2 + 2 + 1 + 2;
         write!(buf, " {time:<time_size$}").unwrap();
 
-        if !self.short_output {
-            if self.include_idle {
+        if !self.layout.terse {
+            if self.layout.idle {
                 write!(buf, " {idle:<6}").unwrap();
             }
             write!(buf, " {pid:>10}").unwrap();
         }
         write!(buf, " {comment:<8}").unwrap();
-        if self.include_exit {
+        if self.layout.exit {
             write!(buf, " {exit:<12}").unwrap();
         }
         writeln!(stdout(), "{}", buf.trim_end())?;
