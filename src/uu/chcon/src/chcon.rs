@@ -544,14 +544,15 @@ fn process_file(
         match entry.flags() {
             fts_sys::FTS_D if options.recursive_mode.is_recursive() => {
                 if root_dev_ino_check(root_dev_ino, file_dev_ino) {
-                    // This happens e.g., with "chcon -R --preserve-root ... /"
-                    // and with "chcon -RH --preserve-root ... symlink-to-root".
+                    // Reached either by `-R --preserve-root` naming `/` outright, or
+                    // by `-RH --preserve-root` following a symlink that lands there.
                     root_dev_ino_warn(&file_full_name);
 
-                    // Tell fts not to traverse into this hierarchy.
+                    // Prune the walk here so nothing underneath gets relabelled.
                     let _ignored = fts.set(fts_sys::FTS_SKIP);
 
-                    // Ensure that we do not process "/" on the second visit.
+                    // Swallow the post-order visit too, so the same directory is
+                    // not handed back a second time.
                     let _ignored = fts.read_next_entry();
 
                     return Err(err(
@@ -568,11 +569,10 @@ fn process_file(
             }
 
             fts_sys::FTS_NS => {
-                // For a top-level file or directory, this FTS_NS (stat failed) indicator is determined
-                // at the time of the initial fts_open call. With programs like chmod, chown, and chgrp,
-                // that modify permissions, it is possible that the file in question is accessible when
-                // control reaches this point. So, if this is the first time we've seen the FTS_NS for
-                // this file, tell fts_read to stat it "again".
+                // At the top level the stat failure was recorded when the walk was
+                // opened, which may have been before a permission change made the
+                // entry reachable. Give it exactly one more chance: mark the entry
+                // on first sighting and ask for a fresh stat.
                 if entry.level() == 0 && entry.number() == 0 {
                     entry.set_number(1);
                     let _ignored = fts.set(fts_sys::FTS_AGAIN);
@@ -693,8 +693,9 @@ fn change_file_context(
             range,
         } => {
             let err0 = || -> Result<()> {
-                // If the file doesn't have a context, and we're not setting all of the context
-                // components, there isn't really an obvious default. Thus, we just give up.
+                // Setting only part of a context needs an existing one to merge into.
+                // When the file carries none there is nothing sensible to assume, so
+                // report it rather than invent a default.
                 let op = translate!("chcon-op-applying-partial-context");
                 let err = io::ErrorKind::InvalidInput.into();
                 Err(Error::from_io1(op, display_path, err))
@@ -800,7 +801,7 @@ pub(crate) fn os_str_to_c_string(s: &OsStr) -> Result<CString> {
         .map_err(|_r| Error::from_io("CString::new()", io::ErrorKind::InvalidInput.into()))
 }
 
-/// Call `lstat()` to get the device and inode numbers for `/`.
+/// Identify the root directory by device and inode, without following it.
 #[cfg(unix)]
 fn get_root_dev_ino() -> Result<DeviceAndINode> {
     fs::symlink_metadata("/")
@@ -826,16 +827,14 @@ fn root_dev_ino_warn(dir_name: &Path) {
     }
 }
 
-/// When `fts_read` returns [`fts_sys::FTS_DC`] to indicate a directory cycle, it may or may not indicate
-/// a real problem.
-/// When a program like chgrp performs a recursive traversal that requires traversing symbolic links,
-/// it is *not* a problem.
-/// However, when invoked with "-P -R", it deserves a warning.
-/// The `fts_options` parameter records the options that control this aspect of fts behavior,
-/// so test that.
+/// Whether a reported directory cycle is worth warning about.
+///
+/// A cycle only matters when the walk was asked to stay on the physical tree.
+/// One that deliberately follows symlinks is expected to revisit directories, so
+/// a cycle there is unremarkable and stays quiet.
 fn cycle_warning_required(fts_options: c_int, entry: &fts::EntryRef) -> bool {
-    // When dereferencing no symlinks, or when dereferencing only those listed on the command line
-    // and we're not processing a command-line argument, then a cycle is a serious problem.
+    // On a physical walk every cycle is real. The one exception is `-H`, where the
+    // command-line entry itself is allowed to be followed and so may loop legitimately.
     ((fts_options & fts_sys::FTS_PHYSICAL) != 0)
         && (((fts_options & fts_sys::FTS_COMFOLLOW) == 0) || entry.level() != 0)
 }
