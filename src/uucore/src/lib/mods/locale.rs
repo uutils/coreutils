@@ -5,6 +5,9 @@
 // spell-checker:disable
 
 use crate::error::UError;
+use crate::mods::locale_negotiate::{
+    available_locales, default_locale, negotiate, requested_locales,
+};
 
 use fluent::{FluentArgs, FluentBundle, FluentResource};
 use fluent_syntax::parser::ParserError;
@@ -540,17 +543,32 @@ pub fn is_integer_literal(s: &str) -> bool {
     !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
 }
 
-/// Function to detect system locale from environment variables
-fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
-    let locale_str = std::env::var("LANG")
-        .unwrap_or_else(|_| DEFAULT_LOCALE.to_string())
-        .split('.')
+/// The locale to read, which is not simply the locale that was asked for.
+///
+/// A POSIX environment asks with a region — `zh_CN`, `de_DE`, `es_MX` — while a
+/// translation is filed under whatever distinction its translators needed: a
+/// language (`de.ftl`), a region (`pt-BR.ftl`) or a script (`zh-Hans.ftl`).
+/// Taking the request for a file name finds only the translations whose name
+/// happens to coincide with a locale's, which is why `LANG=zh_CN.UTF-8` used to
+/// read no Chinese at all ([#12305]). So the request is negotiated against the
+/// translations `locales_dir` actually holds, and it is the name of the winner
+/// that everything downstream reads.
+///
+/// Without a locales directory to negotiate against — a build that carries its
+/// translations inside it — the locale as asked for is all there is to go on.
+///
+/// [#12305]: https://github.com/uutils/coreutils/issues/12305
+fn locale_to_read(
+    requested: &[LanguageIdentifier],
+    locales_dir: Option<&Path>,
+) -> LanguageIdentifier {
+    locales_dir
+        .map(|dir| negotiate(requested, &available_locales(dir)))
+        .unwrap_or_default()
+        .into_iter()
         .next()
-        .unwrap_or(DEFAULT_LOCALE)
-        .to_string();
-    LanguageIdentifier::from_str(&locale_str).map_err(|_| {
-        LocalizationError::ParseLocale(format!("Failed to parse locale: {locale_str}"))
-    })
+        .or_else(|| requested.first().cloned())
+        .unwrap_or_else(default_locale)
 }
 
 /// Sets up localization using the system locale with English fallback.
@@ -606,12 +624,12 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
         return Ok(());
     }
 
-    let locale = detect_system_locale().unwrap_or_else(|_| {
-        LanguageIdentifier::from_str(DEFAULT_LOCALE).expect("Default locale should always be valid")
-    });
+    let locales_dir = get_locales_dir(p).ok();
+    let requested = requested_locales(|name| std::env::var(name).ok());
+    let locale = locale_to_read(&requested, locales_dir.as_deref());
 
     // Load common strings along with utility-specific strings
-    if let Ok(locales_dir) = get_locales_dir(p) {
+    if let Some(locales_dir) = locales_dir {
         // Load both utility-specific and common strings
         init_localization(&locale, &locales_dir, p)?;
     } else {
@@ -1627,49 +1645,32 @@ invalid-syntax = This is { $missing
         .unwrap();
     }
 
+    /// A system locale is not the name its translation is filed under, so what
+    /// gets read is negotiated against the files that are actually there.
+    ///
+    /// <https://github.com/uutils/coreutils/issues/12305>
     #[test]
-    fn test_detect_system_locale_from_lang_env() {
-        // Test locale parsing logic directly instead of relying on environment variables
-        // which can have race conditions in multi-threaded test environments
-
-        // Test parsing logic with UTF-8 encoding
-        let locale_with_encoding = "fr-FR.UTF-8";
-        let parsed = locale_with_encoding.split('.').next().unwrap();
-        let lang_id = LanguageIdentifier::from_str(parsed).unwrap();
-        assert_eq!(lang_id.to_string(), "fr-FR");
-
-        // Test parsing logic without encoding
-        let locale_without_encoding = "es-ES";
-        let lang_id = LanguageIdentifier::from_str(locale_without_encoding).unwrap();
-        assert_eq!(lang_id.to_string(), "es-ES");
-
-        // Test that DEFAULT_LOCALE is valid
-        let default_lang_id = LanguageIdentifier::from_str(DEFAULT_LOCALE).unwrap();
-        assert_eq!(default_lang_id.to_string(), "en-US");
-    }
-
-    #[test]
-    fn test_detect_system_locale_no_lang_env() {
-        // Save current LANG value
-        let original_lang = env::var("LANG").ok();
-
-        // Remove LANG environment variable
-        unsafe {
-            env::remove_var("LANG");
+    fn locale_to_read_negotiates_against_the_files_that_exist() {
+        let dir = TempDir::new().unwrap();
+        for locale in ["en-US", "zh-Hans", "de"] {
+            fs::write(dir.path().join(format!("{locale}.ftl")), "").unwrap();
         }
+        let read = |lang: &str| {
+            let requested = [LanguageIdentifier::from_str(lang).unwrap()];
+            locale_to_read(&requested, Some(dir.path())).to_string()
+        };
 
-        let result = detect_system_locale();
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().to_string(), "en-US");
-
-        // Restore original LANG value
-        if let Some(val) = original_lang {
-            unsafe {
-                env::set_var("LANG", val);
-            }
-        } else {
-            {} // Was already unset
-        }
+        // What LANG holds once the encoding is stripped is a region, where the
+        // translations name a script or nothing at all.
+        assert_eq!(read("zh-CN"), "zh-Hans");
+        assert_eq!(read("de-DE"), "de");
+        // A locale naming a file exactly still reads it.
+        assert_eq!(read("zh-Hans"), "zh-Hans");
+        // A locale nothing here serves keeps its own name, and so goes on to
+        // read nothing: Taiwan does not read Simplified Chinese.
+        assert_eq!(read("zh-TW"), "zh-TW");
+        // With no directory to negotiate against, the request stands as asked.
+        assert_eq!(locale_to_read(&[], None).to_string(), DEFAULT_LOCALE);
     }
 
     #[test]
@@ -1741,6 +1742,11 @@ invalid-syntax = This is { $missing
             // Force English locale for this test
             unsafe {
                 env::set_var("LANG", "en-US");
+                // These outrank LANG, so an ambient one would otherwise be
+                // what decides the language this test reads.
+                for name in ["LC_ALL", "LC_MESSAGES", "LANGUAGE"] {
+                    env::remove_var(name);
+                }
             }
 
             // Test with a utility name that has embedded locales

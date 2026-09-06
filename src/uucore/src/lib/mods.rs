@@ -11,6 +11,7 @@ pub mod error;
 pub mod io;
 pub mod line_ending;
 pub mod locale;
+pub mod locale_negotiate;
 pub mod os;
 pub mod panic;
 pub mod posix;

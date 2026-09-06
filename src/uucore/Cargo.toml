@@ -84,6 +84,7 @@ jiff-icu = { workspace = true, optional = true }
 
 # Fluent dependencies (always available for localization)
 fluent = { workspace = true }
+fluent-langneg = { workspace = true }
 fluent-syntax = { workspace = true }
 unic-langid = { workspace = true }
 thiserror = { workspace = true }

@@ -1980,7 +1980,9 @@ fn test_simulation_of_terminal_pty_write_in_data_and_sends_eot_automatically() {
 fn test_env_french() {
     new_ucmd!()
         .arg("--verbo")
-        .env("LANG", "fr_FR")
+        // LC_ALL rather than LANG, because the test environment sets LC_ALL to
+        // C and, as POSIX has it, that is what outranks LANG.
+        .env("LC_ALL", "fr_FR")
         .fails()
         .stderr_contains("erreur : argument inattendu");
 }
