@@ -34,39 +34,38 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    // If true, attempt to canonicalize hostnames via a DNS lookup.
+    // Resolve each recorded host to its canonical name before printing it.
     let do_lookup = matches.get_flag(options::LOOKUP);
 
-    // If true, display only a list of usernames and count of
-    // the users logged on.
-    // Ignored for 'who am i'.
+    // Print just the login names followed by a total, instead of one row per
+    // record. Carries no meaning in the `who am i` form.
     let short_list = matches.get_flag(options::COUNT);
 
     let all = matches.get_flag(options::ALL);
 
-    // If true, display a line at the top describing each field.
+    // Prepend a header row naming the columns.
     let include_heading = matches.get_flag(options::HEADING);
 
-    // If true, display a '+' for each user if mesg y, a '-' if mesg n,
-    // or a '?' if their tty cannot be statted.
+    // Add the column reporting whether the terminal accepts messages: `+` when
+    // it does, `-` when it does not, `?` when the terminal cannot be queried.
     let include_mesg = all || matches.get_flag(options::MESG);
 
-    // If true, display the last boot time.
+    // Include the record left by the last system boot.
     let need_boottime = all || matches.get_flag(options::BOOT);
 
-    // If true, display dead processes.
+    // Include the records of processes that have since exited.
     let need_deadprocs = all || matches.get_flag(options::DEAD);
 
-    // If true, display processes waiting for user login.
+    // Include the login processes still waiting for someone to sign in.
     let need_login = all || matches.get_flag(options::LOGIN);
 
-    // If true, display processes started by init.
+    // Include the processes that init spawned.
     let need_initspawn = all || matches.get_flag(options::PROCESS);
 
-    // If true, display the last clock change.
+    // Include the record left by the most recent clock adjustment.
     let need_clockchange = all || matches.get_flag(options::TIME);
 
-    // If true, display the current runlevel.
+    // Include the record holding the current runlevel.
     let need_runlevel = all || matches.get_flag(options::RUNLEVEL);
 
     let use_defaults = !(all
@@ -78,21 +77,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         || need_clockchange
         || matches.get_flag(options::USERS));
 
-    // If true, display user processes.
+    // Include ordinary user sessions.
     let need_users = all || matches.get_flag(options::USERS) || use_defaults;
 
-    // If true, display the hours:minutes since each user has touched
-    // the keyboard, or "." if within the last minute, or "old" if
-    // not within the last day.
+    // Add the idle column, measuring how long the terminal has been quiet:
+    // `hours:minutes`, `.` when under a minute, `old` when past a day.
     let include_idle = need_deadprocs || need_login || need_runlevel || need_users;
 
-    // If true, display process termination & exit status.
+    // Add the columns carrying how the process ended and with what status.
     let include_exit = need_deadprocs;
 
-    // If true, display only name, line, and time fields.
+    // Narrow each row down to the name, line and time columns.
     let short_output = !include_exit && use_defaults;
 
-    // If true, display info only for the controlling tty.
+    // Report only the session attached to the invoking terminal.
     let my_line_only = matches.get_flag(options::ONLY_HOSTNAME_USER) || files.len() == 2;
 
     let mut who = Who {
