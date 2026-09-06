@@ -74,6 +74,18 @@ struct Layout {
     terse: bool,
 }
 
+/// The events that are reported from something other than a live session.
+#[derive(Clone, Copy)]
+enum Event {
+    Boot,
+    ClockChange,
+    #[cfg(target_os = "linux")]
+    Runlevel,
+    LoginSlot,
+    InitChild,
+    Exited,
+}
+
 /// One output line, before the columns are padded out.
 struct Row<'a> {
     user: &'a str,
@@ -218,13 +230,7 @@ fn current_tty() -> String {
 }
 
 impl Who {
-    #[allow(clippy::cognitive_complexity)]
     fn exec(&mut self) -> UResult<()> {
-        #[cfg(target_os = "linux")]
-        let run_level_chk = |record: i16| record == utmpx::RUN_LVL;
-        #[cfg(not(target_os = "linux"))]
-        let run_level_chk = |_| false;
-
         let f = if self.args.len() == 1 {
             self.args[0].as_ref()
         } else {
@@ -257,121 +263,109 @@ impl Who {
             };
 
             for ut in records {
-                if !self.own_terminal_only || cur_tty == ut.tty_device() {
-                    if self.select.sessions && ut.is_user_process() {
-                        self.print_user(&ut)?;
-                    } else {
-                        match ut.record_type() {
-                            rt if self.select.runlevel && run_level_chk(rt) => {
-                                if cfg!(target_os = "linux") {
-                                    self.print_runlevel(&ut)?;
-                                }
-                            }
-                            x if x == utmpx::BOOT_TIME && self.select.boot => {
-                                self.print_boottime(&ut)?;
-                            }
-                            x if x == utmpx::NEW_TIME && self.select.clock_change => {
-                                self.print_clockchange(&ut)?;
-                            }
-                            x if x == utmpx::INIT_PROCESS && self.select.init_children => {
-                                self.print_initspawn(&ut)?;
-                            }
-                            x if x == utmpx::LOGIN_PROCESS && self.select.login_slots => {
-                                self.print_login(&ut)?;
-                            }
-                            x if x == utmpx::DEAD_PROCESS && self.select.exited => {
-                                self.print_deadprocs(&ut)?;
-                            }
-                            _ => {}
-                        }
-                    }
+                if self.own_terminal_only && cur_tty != ut.tty_device() {
+                    continue;
+                }
+                if self.select.sessions && ut.is_user_process() {
+                    self.print_user(&ut)?;
+                } else if let Some(event) = self.event_for(&ut) {
+                    self.emit_event(&ut, event)?;
                 }
             }
         }
         Ok(())
     }
 
-    #[inline]
-    fn print_runlevel(&self, ut: &UtmpxRecord) -> UResult<()> {
-        let last = (ut.pid() / 256) as u8 as char;
-        let curr = (ut.pid() % 256) as u8 as char;
-        let runlevel_line = translate!("who-runlevel", "level" => curr);
-        let comment =
-            translate!("who-runlevel-last", "last" => (if last == 'N' { 'S' } else { 'N' }));
+    /// Map a record to the event it stands for, or `None` when that kind was
+    /// not selected.
+    fn event_for(&self, ut: &UtmpxRecord) -> Option<Event> {
+        let rt = ut.record_type();
 
-        self.print_line(&Row {
-            line: &runlevel_line,
-            time: &time_string(ut),
-            note: if last.is_control() { "" } else { &comment },
-            ..Row::default()
-        })?;
-        Ok(())
+        #[cfg(target_os = "linux")]
+        if self.select.runlevel && rt == utmpx::RUN_LVL {
+            return Some(Event::Runlevel);
+        }
+
+        match rt {
+            utmpx::BOOT_TIME if self.select.boot => Some(Event::Boot),
+            utmpx::NEW_TIME if self.select.clock_change => Some(Event::ClockChange),
+            utmpx::INIT_PROCESS if self.select.init_children => Some(Event::InitChild),
+            utmpx::LOGIN_PROCESS if self.select.login_slots => Some(Event::LoginSlot),
+            utmpx::DEAD_PROCESS if self.select.exited => Some(Event::Exited),
+            _ => None,
+        }
     }
 
-    #[inline]
-    fn print_clockchange(&self, ut: &UtmpxRecord) -> UResult<()> {
-        self.print_line(&Row {
-            line: &translate!("who-clock-change"),
-            time: &time_string(ut),
-            ..Row::default()
-        })?;
-        Ok(())
-    }
+    fn emit_event(&self, ut: &UtmpxRecord, event: Event) -> UResult<()> {
+        let time = time_string(ut);
+        let pid = format!("{}", ut.pid());
+        let note = translate!("who-login-id", "id" => ut.terminal_suffix());
 
-    #[inline]
-    fn print_login(&self, ut: &UtmpxRecord) -> UResult<()> {
-        let comment = translate!("who-login-id", "id" => ut.terminal_suffix());
-        let pidstr = format!("{}", ut.pid());
-        self.print_line(&Row {
-            user: &translate!("who-login"),
-            line: &ut.tty_device(),
-            time: &time_string(ut),
-            pid: &pidstr,
-            note: &comment,
-            ..Row::default()
-        })?;
-        Ok(())
-    }
+        // Held outside the match so the borrows below outlive it.
+        #[cfg(target_os = "linux")]
+        let runlevel_line;
+        #[cfg(target_os = "linux")]
+        let runlevel_note;
+        let exit;
 
-    #[inline]
-    fn print_deadprocs(&self, ut: &UtmpxRecord) -> UResult<()> {
-        let comment = translate!("who-login-id", "id" => ut.terminal_suffix());
-        let pidstr = format!("{}", ut.pid());
-        let e = ut.exit_status();
-        let exitstr = translate!("who-dead-exit-status", "term" => e.0, "exit" => e.1);
-        self.print_line(&Row {
-            line: &ut.tty_device(),
-            time: &time_string(ut),
-            pid: &pidstr,
-            note: &comment,
-            exit: &exitstr,
-            ..Row::default()
-        })?;
-        Ok(())
-    }
+        let row = match event {
+            Event::Boot => Row {
+                line: &translate!("who-system-boot"),
+                time: &time,
+                ..Row::default()
+            },
+            Event::ClockChange => Row {
+                line: &translate!("who-clock-change"),
+                time: &time,
+                ..Row::default()
+            },
+            #[cfg(target_os = "linux")]
+            Event::Runlevel => {
+                let last = (ut.pid() / 256) as u8 as char;
+                let curr = (ut.pid() % 256) as u8 as char;
+                runlevel_line = translate!("who-runlevel", "level" => curr);
+                runlevel_note = translate!("who-runlevel-last", "last" => (if last == 'N' { 'S' } else { 'N' }));
+                Row {
+                    line: &runlevel_line,
+                    time: &time,
+                    note: if last.is_control() {
+                        ""
+                    } else {
+                        &runlevel_note
+                    },
+                    ..Row::default()
+                }
+            }
+            Event::LoginSlot => Row {
+                user: &translate!("who-login"),
+                line: &ut.tty_device(),
+                time: &time,
+                pid: &pid,
+                note: &note,
+                ..Row::default()
+            },
+            Event::InitChild => Row {
+                line: &ut.tty_device(),
+                time: &time,
+                pid: &pid,
+                note: &note,
+                ..Row::default()
+            },
+            Event::Exited => {
+                let e = ut.exit_status();
+                exit = translate!("who-dead-exit-status", "term" => e.0, "exit" => e.1);
+                Row {
+                    line: &ut.tty_device(),
+                    time: &time,
+                    pid: &pid,
+                    note: &note,
+                    exit: &exit,
+                    ..Row::default()
+                }
+            }
+        };
 
-    #[inline]
-    fn print_initspawn(&self, ut: &UtmpxRecord) -> UResult<()> {
-        let comment = translate!("who-login-id", "id" => ut.terminal_suffix());
-        let pidstr = format!("{}", ut.pid());
-        self.print_line(&Row {
-            line: &ut.tty_device(),
-            time: &time_string(ut),
-            pid: &pidstr,
-            note: &comment,
-            ..Row::default()
-        })?;
-        Ok(())
-    }
-
-    #[inline]
-    fn print_boottime(&self, ut: &UtmpxRecord) -> UResult<()> {
-        self.print_line(&Row {
-            line: &translate!("who-system-boot"),
-            time: &time_string(ut),
-            ..Row::default()
-        })?;
-        Ok(())
+        self.print_line(&row)
     }
 
     fn print_user(&self, ut: &UtmpxRecord) -> UResult<()> {
