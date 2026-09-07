@@ -469,7 +469,11 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
             file.seek(SeekFrom::End(0)).unwrap();
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
-            if file.seek(SeekFrom::End(-(*count as i64))).is_err() {
+            // A count above `i64::MAX` has no negative counterpart to seek by,
+            // and reaches further back than any file can be long, so treat it
+            // like any other offset landing before the start of the file.
+            let offset = i64::try_from(*count).ok();
+            if offset.is_none_or(|offset| file.seek(SeekFrom::End(-offset)).is_err()) {
                 file.seek(SeekFrom::Start(0)).unwrap();
             }
             limit = Some(*count);
