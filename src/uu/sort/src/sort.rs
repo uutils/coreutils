@@ -2475,11 +2475,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         });
     }
 
-    let opened_inputs = if settings.merge || settings.check {
-        Vec::new()
-    } else {
-        files.iter().map(open).collect::<UResult<Vec<_>>>()?
-    };
+    if !(settings.merge || settings.check) {
+        check_inputs(&files)?;
+    }
 
     let output = Output::new(matches.get_one::<OsString>(options::OUTPUT))?;
 
@@ -2498,7 +2496,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     settings.init_precomputed(needs_locale_collation);
 
-    let result = exec(&mut files, opened_inputs, &settings, output, &mut tmp_dir);
+    let result = exec(&mut files, &settings, output, &mut tmp_dir);
     // Wait here if `SIGINT` was received,
     // for signal handler to do its work and terminate the program.
     tmp_dir.wait_if_signal();
@@ -2749,7 +2747,6 @@ pub fn uu_app() -> Command {
 
 fn exec(
     files: &mut [OsString],
-    opened_inputs: Vec<Box<dyn Read + Send>>,
     settings: &GlobalSettings,
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
@@ -2766,7 +2763,9 @@ fn exec(
             check::check(files.first().unwrap(), settings)
         }
     } else {
-        let mut lines = opened_inputs.into_iter().map(Ok);
+        // Open each input once, when it is reached, so that only one input is open
+        // at a time and FIFOs are never reopened.
+        let mut lines = files.iter().map(open);
         ext_sort(&mut lines, settings, output, tmp_dir)
     }
 }
@@ -3309,6 +3308,38 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
         line.write(&mut writer, settings).map_err_context(ctx)?;
     }
     writer.flush().map_err_context(ctx)?;
+    Ok(())
+}
+
+/// Check that all inputs are readable before sorting starts, like GNU sort's
+/// `check_inputs`. The inputs are probed with `access(2)` rather than opened:
+/// opening a FIFO here would block until a writer appears and lose data on the
+/// reopen, and keeping every input open would be bounded by `RLIMIT_NOFILE`.
+fn check_inputs(files: &[OsString]) -> UResult<()> {
+    for file in files {
+        if file == STDIN_FILE {
+            continue;
+        }
+        let path = Path::new(file);
+        check_readable(path).map_err(|error| SortError::ReadFailed {
+            path: path.to_owned(),
+            error,
+        })?;
+    }
+    Ok(())
+}
+
+#[cfg(all(unix, not(target_os = "redox")))]
+fn check_readable(path: &Path) -> std::io::Result<()> {
+    use rustix::fs::{Access, access};
+
+    access(path, Access::READ_OK).map_err(|e| std::io::Error::from_raw_os_error(e.raw_os_error()))
+}
+
+#[cfg(any(not(unix), target_os = "redox"))]
+fn check_readable(path: &Path) -> std::io::Result<()> {
+    // No `rustix::fs::access` here, so open the file and close it right away.
+    File::open(path)?;
     Ok(())
 }
 
