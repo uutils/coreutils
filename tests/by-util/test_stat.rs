@@ -622,6 +622,17 @@ fn test_printf_octal_2() {
 }
 
 #[test]
+fn test_printf_octal_out_of_range() {
+    // Octal escapes whose value exceeds 255 wrap around, as they do in GNU stat.
+    let ts = TestScenario::new(util_name!());
+    let expected_stdout = vec![0x00, 0xFF]; // \400 -> 256 & 0xFF, \777 -> 511 & 0xFF
+    ts.ucmd()
+        .args(&["--printf=\\400\\777", "."])
+        .succeeds()
+        .stdout_is_bytes(expected_stdout);
+}
+
+#[test]
 fn test_printf_incomplete_hex() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd()

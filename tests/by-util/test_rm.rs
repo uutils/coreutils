@@ -1511,6 +1511,78 @@ fn test_preserve_root_symlink_removal_without_trailing_slash() {
     assert!(!at.symlink_exists("rootlink"));
 }
 
+/// `--preserve-root` must refuse a bind mount of `/`.
+///
+/// A bind mount of `/` is an ordinary directory - not a symlink, not a cycle -
+/// so `canonicalize()` yields the mountpoint and every name-based check waves it
+/// through. Only `(st_dev, st_ino)` identifies it, and that is what the failsafe
+/// compares.
+///
+/// The mount is of the real root, so nothing here may be able to delete anything
+/// even with the guard gone: `-i` reads stdin at EOF and so answers "no" to the
+/// first "descend into directory?" prompt, before any unlink. **Never make this
+/// `-rf`.** The mount itself lives in a throwaway user + mount namespace.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_preserve_root_bind_mount_of_root() {
+    use std::process::Command;
+
+    let ts = TestScenario::new(util_name!());
+
+    // Unprivileged user namespaces are disabled in some kernels and sandboxes.
+    let can_unshare = Command::new("unshare")
+        .args(["--user", "--map-root-user", "--mount", "true"])
+        .status()
+        .is_ok_and(|status| status.success());
+    if !can_unshare {
+        println!("TEST SKIPPED: no unprivileged mount namespace available");
+        return;
+    }
+
+    // Mount point lives in this test's own temp dir, so parallel runs cannot
+    // collide and it goes away with the scenario.
+    let mount_point = ts.fixtures.plus_as_string("rootbind");
+
+    // `mount --bind /` is refused inside a user namespace because of locked
+    // submounts; --make-rprivate + --rbind produces the same (st_dev, st_ino).
+    // The mount setup can still be blocked (e.g. `mount(2)` denied in a cross
+    // container even though `unshare` starts); if it fails, exit 99 so the test
+    // skips instead of failing for the wrong reason.
+    let script = format!(
+        "mkdir -p {mp}
+         {{ mount --make-rprivate / && mount --rbind / {mp}; }} \
+             || {{ echo MOUNT_SETUP_FAILED >&2; exit 99; }}
+         exec {bin} rm -ri --preserve-root {mp} < /dev/null",
+        mp = shell_quote(&mount_point),
+        bin = shell_quote(&ts.bin_path.to_string_lossy())
+    );
+    let output = Command::new("unshare")
+        .args(["--user", "--map-root-user", "--mount", "sh", "-c", &script])
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("LANGUAGE", "C")
+        .output()
+        .expect("failed to spawn unshare");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if output.status.code() == Some(99) || stderr.contains("MOUNT_SETUP_FAILED") {
+        println!("TEST SKIPPED: could not set up a bind mount in the namespace: {stderr}");
+        return;
+    }
+    assert!(
+        stderr.contains("it is dangerous to operate recursively on")
+            && stderr.contains("(same as '/')"),
+        "--preserve-root did not refuse a bind mount of /: {stderr}"
+    );
+    assert!(!output.status.success());
+}
+
+/// Wrap `s` in single quotes for `sh -c`, escaping any single quote in it.
+#[cfg(target_os = "linux")]
+fn shell_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
+}
+
 /// Test that literal "/" is still properly protected.
 #[test]
 fn test_preserve_root_literal_root() {
