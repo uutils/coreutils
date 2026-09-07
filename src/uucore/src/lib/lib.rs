@@ -106,7 +106,7 @@ pub use crate::features::mode;
 // ** unix-only
 #[cfg(all(unix, feature = "entries"))]
 pub use crate::features::entries;
-#[cfg(all(unix, feature = "perms"))]
+#[cfg(all(feature = "perms", unix, not(target_os = "haiku")))]
 pub use crate::features::perms;
 #[cfg(all(feature = "pipes", any(target_os = "linux", target_os = "android")))]
 pub use crate::features::pipes;
