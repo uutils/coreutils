@@ -350,7 +350,16 @@ use std::ptr;
 use std::slice;
 
 /// Read file system list.
-#[cfg_attr(target_os = "wasi", allow(clippy::unnecessary_wraps))]
+#[cfg_attr(
+    any(
+        target_os = "aix",
+        target_os = "redox",
+        target_os = "illumos",
+        target_os = "solaris",
+        target_os = "wasi"
+    ),
+    expect(clippy::unnecessary_wraps)
+)]
 pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
     {
