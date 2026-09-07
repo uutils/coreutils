@@ -215,6 +215,14 @@ fn test_realpath_existing_error() {
 }
 
 #[test]
+fn test_realpath_existing_error_quiet() {
+    new_ucmd!()
+        .args(&["-q", "-e", GIBBERISH])
+        .fails_with_code(1)
+        .no_output();
+}
+
+#[test]
 fn test_realpath_missing() {
     let p = Path::new("").join(GIBBERISH).join(GIBBERISH);
     let (at, mut ucmd) = at_and_ucmd!();
