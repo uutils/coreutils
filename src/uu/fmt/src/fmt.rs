@@ -108,8 +108,8 @@ impl FmtOptions {
             tagged = false;
         }
 
-        let xprefix = matches.contains_id(options::EXACT_PREFIX);
-        let xanti_prefix = matches.contains_id(options::SKIP_PREFIX);
+        let xprefix = matches.get_flag(options::EXACT_PREFIX);
+        let xanti_prefix = matches.get_flag(options::EXACT_SKIP_PREFIX);
 
         let prefix = matches.get_one::<String>(options::PREFIX).map(String::from);
         let anti_prefix = matches
