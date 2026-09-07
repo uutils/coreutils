@@ -454,8 +454,18 @@ impl DirFd {
     }
 
     /// Open a file for writing relative to this directory
-    /// Creates the file if it doesn't exist, truncates if it does
+    /// Creates the file if it doesn't exist, truncates if it does.
     pub fn open_file_at(&self, name: &OsStr) -> io::Result<fs::File> {
+        self.open_file_at_with_mode(name, 0o666)
+    }
+
+    /// Open a file for writing with an explicit creation mode.
+    ///
+    /// The requested mode is still filtered by the process umask when the file
+    /// is created; an existing file keeps its current permissions. Callers
+    /// that will apply final permissions later should use a restrictive initial
+    /// mode so failures cannot leave a partially-created file overly permissive.
+    pub fn open_file_at_with_mode(&self, name: &OsStr, mode: u32) -> io::Result<fs::File> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
         // O_NOFOLLOW: `openat` anchors the *directory*, not the final component,
@@ -467,9 +477,9 @@ impl DirFd {
             | OFlag::O_TRUNC
             | OFlag::O_CLOEXEC
             | OFlag::O_NOFOLLOW;
-        let mode = Mode::from_bits_truncate(0o666); // Default file permissions
+        let creation_mode = Mode::from_bits_truncate(mode as libc::mode_t);
 
-        let fd: OwnedFd = openat(self.fd.as_fd(), name_cstr.as_c_str(), flags, mode)
+        let fd: OwnedFd = openat(self.fd.as_fd(), name_cstr.as_c_str(), flags, creation_mode)
             .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
 
         Ok(fs::File::from(fd))
@@ -620,8 +630,11 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
 ///
 /// # Arguments
 /// * `path` - The path to create directories for
-/// * `mode` - The mode to use when creating new directories (e.g., 0o755). The actual
-///   mode will be modified by the process umask.
+/// * `mode` - The mode to use when creating new directories (e.g., 0o755). The
+///   kernel applies the umask to the mode on each mkdir, so callers that
+///   require exact modes (e.g. install) should wrap the call in
+///   `uucore::mode::with_umask(0, ...)` rather than changing the umask
+///   themselves.
 ///
 /// # Returns
 /// A DirFd for the final created directory, or the first existing parent if
@@ -1288,6 +1301,51 @@ mod tests {
 
         let content = fs::read_to_string(temp_dir.path().join("new_file.txt")).unwrap();
         assert_eq!(content, "test content");
+    }
+
+    #[test]
+    fn test_open_file_at_with_mode_uses_requested_initial_mode() {
+        use std::os::unix::fs::PermissionsExt;
+
+        const CHILD_ENV: &str = "UUTEST_OPEN_FILE_AT_WITH_MODE_CHILD";
+
+        if std::env::var_os(CHILD_ENV).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .env(CHILD_ENV, "1")
+                .arg("test_open_file_at_with_mode_uses_requested_initial_mode")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "child test failed\nstdout: {}\nstderr: {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+
+        let previous_umask = nix::sys::stat::umask(Mode::from_bits_truncate(0o027));
+        let temp_dir = TempDir::new().unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+
+        for (name, requested, expected) in [
+            ("group-readable.txt", 0o664, 0o640),
+            ("executable.txt", 0o751, 0o750),
+        ] {
+            let file = dir_fd
+                .open_file_at_with_mode(OsStr::new(name), requested)
+                .unwrap();
+            drop(file);
+
+            let actual = fs::metadata(temp_dir.path().join(name))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(actual, expected);
+        }
+
+        nix::sys::stat::umask(previous_umask);
     }
 
     #[test]

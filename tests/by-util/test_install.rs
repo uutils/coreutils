@@ -113,12 +113,9 @@ fn test_install_ancestors_mode_directories() {
     let target_dir = "ancestor1/ancestor2/target_dir";
     let directories_arg = "-d";
     let mode_arg = "--mode=200";
-    let probe = "probe";
 
-    at.mkdir(probe);
-    let default_perms = at.metadata(probe).permissions().mode();
-
-    ucmd.args(&[mode_arg, directories_arg, target_dir])
+    ucmd.umask(0o077)
+        .args(&[mode_arg, directories_arg, target_dir])
         .succeeds()
         .no_stderr();
 
@@ -126,11 +123,10 @@ fn test_install_ancestors_mode_directories() {
     assert!(at.dir_exists(ancestor2));
     assert!(at.dir_exists(target_dir));
 
-    assert_eq!(default_perms, at.metadata(ancestor1).permissions().mode());
-    assert_eq!(default_perms, at.metadata(ancestor2).permissions().mode());
-
-    // Expected mode only on the target_dir.
-    assert_eq!(0o40_200_u32, at.metadata(target_dir).permissions().mode());
+    // Ancestors use the default mode; --mode applies only to the target.
+    assert_eq!(0o755, at.metadata(ancestor1).permissions().mode() & 0o777);
+    assert_eq!(0o755, at.metadata(ancestor2).permissions().mode() & 0o777);
+    assert_eq!(0o200, at.metadata(target_dir).permissions().mode() & 0o777);
 }
 
 #[test]
@@ -142,14 +138,11 @@ fn test_install_ancestors_mode_directories_with_file() {
     let directories_arg = "-D";
     let mode_arg = "--mode=200";
     let file = "file";
-    let probe = "probe";
-
-    at.mkdir(probe);
-    let default_perms = at.metadata(probe).permissions().mode();
 
     at.touch(file);
 
-    ucmd.args(&[mode_arg, directories_arg, file, target_file])
+    ucmd.umask(0o077)
+        .args(&[mode_arg, directories_arg, file, target_file])
         .succeeds()
         .no_stderr();
 
@@ -157,11 +150,10 @@ fn test_install_ancestors_mode_directories_with_file() {
     assert!(at.dir_exists(ancestor2));
     assert!(at.file_exists(target_file));
 
-    assert_eq!(default_perms, at.metadata(ancestor1).permissions().mode());
-    assert_eq!(default_perms, at.metadata(ancestor2).permissions().mode());
-
-    // Expected mode only on the target_file.
-    assert_eq!(0o100_200_u32, at.metadata(target_file).permissions().mode());
+    // Ancestors use the default mode; --mode applies only to the target.
+    assert_eq!(0o755, at.metadata(ancestor1).permissions().mode() & 0o777);
+    assert_eq!(0o755, at.metadata(ancestor2).permissions().mode() & 0o777);
+    assert_eq!(0o200, at.metadata(target_file).permissions().mode() & 0o777);
 }
 
 #[test]
@@ -816,6 +808,7 @@ fn test_install_and_strip() {
 
     scene
         .ucmd()
+        .umask(0o777)
         .env("PATH", path)
         .arg("-s")
         .arg("source")
@@ -824,6 +817,65 @@ fn test_install_and_strip() {
         .no_stderr();
 
     assert_eq!(at.metadata(STRIP_TARGET_FILE).len(), 0);
+}
+
+#[test]
+fn test_install_strip_program_sees_zeroed_umask() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("probe", "#!/bin/sh\numask > \"$1\"\n");
+    at.set_mode("probe", 0o755);
+    at.write("source", "file contents");
+
+    scene
+        .ucmd()
+        .umask(0o077)
+        .args(&[
+            "-s",
+            "--strip-program",
+            "./probe",
+            "source",
+            STRIP_TARGET_FILE,
+        ])
+        .succeeds()
+        .no_stderr();
+
+    // Follow GNU's behavior: the strip program sees a zeroed umask. Shells
+    // differ on whether they print it as 000 or 0000, so compare the value.
+    let reported = at.read(STRIP_TARGET_FILE);
+    let reported = reported.trim();
+    assert_eq!(
+        u32::from_str_radix(reported, 8).unwrap(),
+        0,
+        "strip program saw umask {reported}"
+    );
+}
+
+#[test]
+fn test_install_and_strip_with_ancestor_directories() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("strip", STRIP_PROGRAM);
+    at.set_mode("strip", 0o755);
+    at.write("source", "file contents");
+    let path = format!(
+        "{}:{}",
+        at.plus(".").display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let target = "ancestor/helloworld_installed";
+
+    scene
+        .ucmd()
+        .umask(0o777)
+        .env("PATH", path)
+        .args(&["-s", "-D", "source", target])
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.metadata(target).len(), 0);
 }
 
 #[test]
