@@ -14,7 +14,6 @@ use std::{
     io::{Write, stdout},
     path::{Path, PathBuf},
 };
-use uucore::fs::make_path_relative_to;
 use uucore::translate;
 use uucore::{
     display::{Quotable, print_verbatim},
@@ -22,8 +21,8 @@ use uucore::{
     format_usage,
     fs::{MissingHandling, ResolveMode, canonicalize},
     line_ending::LineEnding,
-    show_if_err,
 };
+use uucore::{error::set_exit_code, fs::make_path_relative_to, show};
 
 const OPT_QUIET: &str = "quiet";
 const OPT_STRIP: &str = "strip";
@@ -115,13 +114,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             relative_to.as_deref(),
             relative_base.as_deref(),
         );
-        if !quiet {
-            show_if_err!(result.map_err_context(|| path.maybe_quote().to_string()));
+        if let Err(e) = result.map_err_context(|| path.maybe_quote().to_string()) {
+            if quiet {
+                set_exit_code(e.code());
+            } else {
+                show!(e);
+            }
         }
     }
     // Although we return `Ok`, it is possible that a call to
-    // `show!()` above has set the exit code for the program to a
-    // non-zero integer.
+    // `show!()` or `set_exit_code` above has set the exit code
+    // for the program to a non-zero integer.
     Ok(())
 }
 
