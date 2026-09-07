@@ -384,7 +384,7 @@ impl From<StatFs> for MountInfo {
     }
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
     // spell-checker:disable
     match fs_type {
