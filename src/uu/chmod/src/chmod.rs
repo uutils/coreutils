@@ -581,10 +581,10 @@ impl Chmoder {
             // don't stat the same directory twice. If it's already on the current path,
             // it's a cycle.
             let dir_info = FileInformation::from_path(file_path, true).ok();
-            if let Some(info) = &dir_info {
-                if !ancestors.insert(info.clone()) {
-                    return r;
-                }
+            if let Some(info) = &dir_info
+                && !ancestors.insert(info.clone())
+            {
+                return r;
             }
 
             // We buffer all paths in this dir to not keep too many fd's open during recursion
@@ -593,10 +593,7 @@ impl Chmoder {
             for dir_entry in file_path.read_dir()? {
                 match dir_entry {
                     Ok(entry) => paths_in_this_dir.push(entry.path()),
-                    Err(err) => {
-                        r = r.and(Err(err.into()));
-                        continue;
-                    }
+                    Err(err) => r = r.and(Err(err.into())),
                 }
             }
             for path in paths_in_this_dir {
