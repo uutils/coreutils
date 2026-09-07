@@ -413,8 +413,7 @@ impl Snapshot {
         let mut skip_value = false;
         let mut rank = 0;
 
-        for index in self.first_operand..self.args.len() {
-            let arg = &self.args[index];
+        for (index, arg) in self.args.iter().enumerate().skip(self.first_operand) {
             if skip_value {
                 skip_value = false;
                 continue;
