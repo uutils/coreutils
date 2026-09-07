@@ -196,6 +196,63 @@ fn test_recursive() {
 }
 
 #[test]
+fn test_one_file_system_same_device() {
+    // Cross-device skipping needs a mount point (root privileges), so here we
+    // only guard the single-device case: the whole tree must still be removed.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_one_file_system_dir";
+    let subdir = format!("{dir}/subdir");
+    let file = format!("{subdir}/file");
+
+    at.mkdir(dir);
+    at.mkdir(&subdir);
+    at.touch(&file);
+
+    ucmd.arg("--one-file-system")
+        .arg("-rf")
+        .arg(dir)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.file_exists(&file));
+    assert!(!at.dir_exists(&subdir));
+    assert!(!at.dir_exists(dir));
+}
+
+#[test]
+fn test_preserve_root_all_same_device() {
+    // Refusing to cross a device boundary needs a mount point (root
+    // privileges); without one, --preserve-root=all must remove the tree as
+    // usual since it stays on a single device.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_preserve_root_all_dir";
+    let subdir = format!("{dir}/subdir");
+    let file = format!("{subdir}/file");
+
+    at.mkdir(dir);
+    at.mkdir(&subdir);
+    at.touch(&file);
+
+    ucmd.arg("--preserve-root=all")
+        .arg("-rf")
+        .arg(dir)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.dir_exists(dir));
+}
+
+#[test]
+fn test_preserve_root_rejects_unknown_value() {
+    new_ucmd!()
+        .arg("--preserve-root=bogus")
+        .arg("-rf")
+        .arg("anything")
+        .fails()
+        .stderr_contains("invalid value 'bogus'");
+}
+
+#[test]
 fn test_recursive_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_recursive_directory";
@@ -275,6 +332,94 @@ fn test_verbose() {
         .arg(file_b)
         .succeeds()
         .stdout_only(format!("removed '{file_a}'\nremoved '{file_b}'\n"));
+}
+
+// Regression test for issue #10551: `rm -v` must report a verbose output
+// write failure on stderr and exit 1 instead of panicking.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_verbose_write_error_does_not_panic() {
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_rm_verbose_write_error_file";
+
+    at.touch(file);
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    ucmd.arg("-v")
+        .arg(file)
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device")
+        .stderr_does_not_contain("panicked");
+
+    assert!(!at.file_exists(file));
+}
+
+// Directory variant of the #10551 regression test.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_verbose_write_error_does_not_panic_dir() {
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_verbose_write_error_dir";
+    let file = "test_rm_verbose_write_error_dir/a";
+
+    at.mkdir(dir);
+    at.touch(file);
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    ucmd.arg("-r")
+        .arg("-v")
+        .arg(dir)
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device")
+        .stderr_does_not_contain("panicked");
+
+    // A broken stdout must not stop the removal itself.
+    assert!(!at.file_exists(file));
+    assert!(!at.dir_exists(dir));
+}
+
+// A broken standard output must be reported once, not once per removed entry.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_verbose_write_error_reported_once() {
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_verbose_write_error_once";
+
+    at.mkdir(dir);
+    for name in ["alpha", "bravo", "charlie", "delta"] {
+        at.touch(format!("{dir}/{name}"));
+    }
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    let result = ucmd
+        .arg("-r")
+        .arg("-v")
+        .arg(dir)
+        .set_stdout(dev_full)
+        .fails();
+    result.code_is(1);
+    assert_eq!(
+        result
+            .stderr_str()
+            .matches("No space left on device")
+            .count(),
+        1
+    );
+
+    assert!(!at.dir_exists(dir));
 }
 
 #[test]
@@ -1136,7 +1281,7 @@ fn test_rm_recursive_long_path_safe_traversal() {
 #[cfg(all(not(windows), feature = "chmod"))]
 #[test]
 fn test_rm_directory_not_executable() {
-    // Test from GNU rm/rm2.sh
+    // Test removing files with specific permission scenarios
     // Exercise code paths when directories have no execute permission
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1176,7 +1321,7 @@ fn test_rm_directory_not_executable() {
 #[cfg(all(not(windows), feature = "chmod"))]
 #[test]
 fn test_rm_directory_not_writable() {
-    // Test from GNU rm/rm1.sh
+    // Test basic recursive removal
     // Exercise code paths when directories have no write permission
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1364,6 +1509,78 @@ fn test_preserve_root_symlink_removal_without_trailing_slash() {
     ucmd.arg("--preserve-root").arg("rootlink").succeeds();
 
     assert!(!at.symlink_exists("rootlink"));
+}
+
+/// `--preserve-root` must refuse a bind mount of `/`.
+///
+/// A bind mount of `/` is an ordinary directory - not a symlink, not a cycle -
+/// so `canonicalize()` yields the mountpoint and every name-based check waves it
+/// through. Only `(st_dev, st_ino)` identifies it, and that is what the failsafe
+/// compares.
+///
+/// The mount is of the real root, so nothing here may be able to delete anything
+/// even with the guard gone: `-i` reads stdin at EOF and so answers "no" to the
+/// first "descend into directory?" prompt, before any unlink. **Never make this
+/// `-rf`.** The mount itself lives in a throwaway user + mount namespace.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_preserve_root_bind_mount_of_root() {
+    use std::process::Command;
+
+    let ts = TestScenario::new(util_name!());
+
+    // Unprivileged user namespaces are disabled in some kernels and sandboxes.
+    let can_unshare = Command::new("unshare")
+        .args(["--user", "--map-root-user", "--mount", "true"])
+        .status()
+        .is_ok_and(|status| status.success());
+    if !can_unshare {
+        println!("TEST SKIPPED: no unprivileged mount namespace available");
+        return;
+    }
+
+    // Mount point lives in this test's own temp dir, so parallel runs cannot
+    // collide and it goes away with the scenario.
+    let mount_point = ts.fixtures.plus_as_string("rootbind");
+
+    // `mount --bind /` is refused inside a user namespace because of locked
+    // submounts; --make-rprivate + --rbind produces the same (st_dev, st_ino).
+    // The mount setup can still be blocked (e.g. `mount(2)` denied in a cross
+    // container even though `unshare` starts); if it fails, exit 99 so the test
+    // skips instead of failing for the wrong reason.
+    let script = format!(
+        "mkdir -p {mp}
+         {{ mount --make-rprivate / && mount --rbind / {mp}; }} \
+             || {{ echo MOUNT_SETUP_FAILED >&2; exit 99; }}
+         exec {bin} rm -ri --preserve-root {mp} < /dev/null",
+        mp = shell_quote(&mount_point),
+        bin = shell_quote(&ts.bin_path.to_string_lossy())
+    );
+    let output = Command::new("unshare")
+        .args(["--user", "--map-root-user", "--mount", "sh", "-c", &script])
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("LANGUAGE", "C")
+        .output()
+        .expect("failed to spawn unshare");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if output.status.code() == Some(99) || stderr.contains("MOUNT_SETUP_FAILED") {
+        println!("TEST SKIPPED: could not set up a bind mount in the namespace: {stderr}");
+        return;
+    }
+    assert!(
+        stderr.contains("it is dangerous to operate recursively on")
+            && stderr.contains("(same as '/')"),
+        "--preserve-root did not refuse a bind mount of /: {stderr}"
+    );
+    assert!(!output.status.success());
+}
+
+/// Wrap `s` in single quotes for `sh -c`, escaping any single quote in it.
+#[cfg(target_os = "linux")]
+fn shell_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
 }
 
 /// Test that literal "/" is still properly protected.
@@ -1580,4 +1797,41 @@ fn test_symlink_to_dot_protection() {
     assert!(at.dir_exists("subdir"));
     assert!(at.file_exists("subdir/file"));
     assert!(at.file_exists("topfile"));
+}
+
+#[test]
+fn test_dash_hint_shown_for_existing_dash_file() {
+    // A dash-prefixed name that exists is parsed as an option; rm should point
+    // the user at the `./` workaround instead of silently failing.
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("-z");
+    let result = ucmd.arg("-z").fails_with_code(1);
+    result.stderr_contains("./-z' to remove the file '-z'.");
+    result.stderr_contains("--help' for more information.");
+    assert!(at.file_exists("-z"));
+}
+
+#[test]
+fn test_dash_hint_absent_without_matching_file() {
+    // When no such file is on disk there is nothing to suggest, so the hint
+    // line must be omitted entirely.
+    new_ucmd!()
+        .arg("-q")
+        .fails_with_code(1)
+        .stderr_does_not_contain("to remove the file");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_dash_hint_is_shell_escaped() {
+    // Awkward characters in the name (here a tab and a quote) must be escaped so
+    // the printed command can be pasted into a shell verbatim.
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let name = "-a\tb'c";
+    at.touch(name);
+    ucmd.arg(name)
+        .fails_with_code(1)
+        .stderr_contains("./'-a'$'\\t''b'\\''c'' to remove the file '-a'$'\\t''b'\\''c'.");
 }

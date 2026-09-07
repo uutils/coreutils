@@ -41,7 +41,7 @@ use uucore::{show, show_error};
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let settings = parse_args(args)?;
 
-    settings.check_warnings();
+    settings.check_warnings()?;
 
     match settings.verify() {
         args::VerificationResult::CannotFollowStdinByName => {
@@ -76,7 +76,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
 
     // Do an initial tail print of each path's content.
     // Add `path` and `reader` to `files` map if `--follow` is selected.
-    for input in &settings.inputs.clone() {
+    for input in &settings.inputs {
         match input.kind() {
             InputKind::Stdin => {
                 tail_stdin(settings, &mut printer, input, &mut observer)?;
@@ -85,7 +85,9 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
                 tail_stdin(settings, &mut printer, input, &mut observer)?;
             }
             InputKind::File(path) => {
-                tail_file(settings, &mut printer, input, path, &mut observer, 0)?;
+                if let Err(err) = tail_file(settings, &mut printer, input, path, &mut observer, 0) {
+                    show!(err);
+                }
             }
         }
     }
@@ -100,7 +102,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
         the input file is not a FIFO, pipe, or regular file, it is unspecified whether or
         not the -f option shall be ignored.
         */
-        if !settings.has_only_stdin() || settings.pid != 0 {
+        if !settings.has_only_stdin() || settings.pid.is_some_and(|pid| pid != 0) {
             follow::follow(observer, settings)?;
         }
     }
@@ -116,6 +118,8 @@ fn tail_file(
     observer: &mut Observer,
     offset: u64,
 ) -> UResult<()> {
+    // some platform has different read error message
+    #[cfg(not(unix))]
     if path
         .metadata()
         .is_err_and(|e| e.kind() == ErrorKind::NotFound)
@@ -125,7 +129,7 @@ fn tail_file(
             "{}",
             translate!(
                 "tail-error-cannot-open-no-such-file",
-                "file" => input.display_name.clone(),
+                "file" => input.display_name,
                 "error" => translate!("tail-no-such-file-or-directory")
             )
         );
@@ -141,7 +145,7 @@ fn tail_file(
 
         show_error!(
             "{}",
-            translate!("tail-error-reading-file", "file" => input.display_name.clone(), "error" => err_msg)
+            translate!("tail-error-reading-file", "file" => input.display_name, "error" => err_msg)
         );
         if settings.follow.is_some() {
             let msg = if settings.retry {
@@ -151,7 +155,7 @@ fn tail_file(
             };
             show_error!(
                 "{}",
-                translate!("tail-error-cannot-follow-file-type", "file" => input.display_name.clone(), "msg" => msg)
+                translate!("tail-error-cannot-follow-file-type", "file" => input.display_name, "msg" => msg)
             );
         }
         if !observer.follow_name_retry() {
@@ -160,7 +164,7 @@ fn tail_file(
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
     } else {
         #[cfg(unix)]
-        let open_result = open_file(path, settings.pid != 0);
+        let open_result = open_file(path, settings.pid.is_some_and(|pid| pid != 0));
         #[cfg(not(unix))]
         let open_result = File::open(path);
 
@@ -194,13 +198,13 @@ fn tail_file(
             Err(e) if e.kind() == ErrorKind::PermissionDenied => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 show!(e.map_err_context(|| {
-                    translate!("tail-error-cannot-open-for-reading", "file" => input.display_name.clone())
+                    translate!("tail-error-cannot-open-for-reading", "file" => input.display_name)
                 }));
             }
             Err(e) => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 return Err(e.map_err_context(|| {
-                    translate!("tail-error-cannot-open-for-reading", "file" => input.display_name.clone())
+                    translate!("tail-error-cannot-open-for-reading", "file" => input.display_name)
                 }));
             }
         }
@@ -221,13 +225,9 @@ fn tail_file(
 fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
     use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
     use std::fs::OpenOptions;
-    use std::os::fd::AsFd;
     use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
 
-    let is_fifo = path
-        .metadata()
-        .ok()
-        .is_some_and(|m| m.file_type().is_fifo());
+    let is_fifo = path.metadata().is_ok_and(|m| m.file_type().is_fifo());
 
     if is_fifo && use_nonblock_for_fifo {
         let file = OpenOptions::new()
@@ -236,9 +236,9 @@ fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
             .open(path)?;
 
         // Clear O_NONBLOCK so reads block normally
-        let flags = fcntl_getfl(file.as_fd())?;
+        let flags = fcntl_getfl(&file)?;
         let new_flags = flags & !OFlags::NONBLOCK;
-        fcntl_setfl(file.as_fd(), new_flags)?;
+        fcntl_setfl(&file, new_flags)?;
 
         Ok(file)
     } else {
@@ -258,20 +258,14 @@ fn tail_stdin(
     // bad file descriptor or might not catch directory cases
     // e.g. see the differences between running ls -l /dev/stdin /dev/fd/0
     // on macOS and Linux.
-    #[cfg(target_os = "macos")]
-    {
-        if let Ok(mut stdin_handle) = same_file::Handle::stdin() {
-            if let Ok(meta) = stdin_handle.as_file_mut().metadata() {
-                if meta.file_type().is_dir() {
-                    set_exit_code(1);
-                    show_error!(
-                        "{}",
-                        translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
-                    );
-                    return Ok(());
-                }
-            }
-        }
+    #[cfg(target_vendor = "apple")]
+    if uucore::fs::is_stdin_directory(&stdin()) {
+        set_exit_code(1);
+        show_error!(
+            "{}",
+            translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name, "error" => translate!("tail-no-such-file-or-directory"))
+        );
+        return Ok(());
     }
 
     // Check if stdin was closed before Rust reopened it as /dev/null
@@ -291,9 +285,7 @@ fn tail_stdin(
         // Save the current seek position/offset of a stdin redirected file.
         // This is needed to pass "gnu/tests/tail-2/start-middle.sh"
         #[cfg(unix)]
-        let stdin_offset = same_file::Handle::stdin()
-            .and_then(|mut h| h.as_file_mut().stream_position())
-            .unwrap_or(0); // fifo
+        let stdin_offset = rustix::fs::tell(stdin()).unwrap_or(0); // fifo
         tail_file(
             settings,
             header_printer,
@@ -473,7 +465,7 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
             let i = forwards_thru_file(file, *count - 1, *delimiter).unwrap();
             file.seek(SeekFrom::Start(i as u64)).unwrap();
         }
-        FilterMode::Lines(Signum::MinusZero, _) => {
+        FilterMode::Lines(Signum::MinusZero, _) | FilterMode::Bytes(Signum::MinusZero) => {
             file.seek(SeekFrom::End(0)).unwrap();
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
@@ -485,10 +477,12 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
         FilterMode::Bytes(Signum::Positive(count)) if count > &1 => {
             // GNU `tail` seems to index bytes and lines starting at 1, not
             // at 0. It seems to treat `+0` and `+1` as the same thing.
-            file.seek(SeekFrom::Start(*count - 1)).unwrap();
-        }
-        FilterMode::Bytes(Signum::MinusZero) => {
-            file.seek(SeekFrom::End(0)).unwrap();
+            // A start offset past the largest seekable position makes the
+            // underlying `lseek` fail with `EINVAL`; treat that like a start
+            // beyond the end of the file and produce no output.
+            file.seek(SeekFrom::Start(*count - 1))
+                .or_else(|_| file.seek(SeekFrom::End(0)))
+                .unwrap();
         }
         _ => {}
     }
@@ -505,7 +499,8 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
             chunks.fill(reader)?;
             chunks.write(&mut writer)?;
         }
-        FilterMode::Lines(Signum::PlusZero | Signum::Positive(1), _) => {
+        FilterMode::Lines(Signum::PlusZero | Signum::Positive(1), _)
+        | FilterMode::Bytes(Signum::PlusZero | Signum::Positive(1)) => {
             io::copy(reader, &mut writer)?;
         }
         FilterMode::Lines(Signum::Positive(count), sep) => {
@@ -534,27 +529,23 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
             chunks.fill(reader)?;
             chunks.write(&mut writer)?;
         }
-        FilterMode::Bytes(Signum::PlusZero | Signum::Positive(1)) => {
-            io::copy(reader, &mut writer)?;
-        }
         FilterMode::Bytes(Signum::Positive(count)) => {
             let mut num_skip = *count - 1;
             let mut chunk = chunks::BytesChunk::new();
             loop {
-                if let Some(bytes) = chunk.fill(reader)? {
-                    let bytes: u64 = bytes as u64;
-                    match bytes.cmp(&num_skip) {
-                        Ordering::Less => num_skip -= bytes,
-                        Ordering::Equal => {
-                            break;
-                        }
-                        Ordering::Greater => {
-                            writer.write_all(chunk.get_buffer_with(num_skip as usize))?;
-                            break;
-                        }
-                    }
-                } else {
+                let Some(bytes) = chunk.fill(reader)? else {
                     return Ok(());
+                };
+                let bytes: u64 = bytes as u64;
+                match bytes.cmp(&num_skip) {
+                    Ordering::Less => num_skip -= bytes,
+                    Ordering::Equal => {
+                        break;
+                    }
+                    Ordering::Greater => {
+                        writer.write_all(chunk.get_buffer_with(num_skip as usize))?;
+                        break;
+                    }
                 }
             }
 
@@ -562,11 +553,11 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         }
         _ => {}
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     writer.flush()?;
 
     // SIGPIPE is not available on Windows.
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     writer.flush().inspect_err(|err| {
         if err.kind() == ErrorKind::BrokenPipe {
             std::process::exit(13);
@@ -576,6 +567,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
 }
 
 // Print the target section of the file
+// use zero-copy on Linux
 fn print_target_section<
     #[cfg(any(target_os = "linux", target_os = "android"))] R: Read + rustix::fd::AsFd,
     #[cfg(not(any(target_os = "linux", target_os = "android")))] R: Read,
@@ -586,12 +578,16 @@ fn print_target_section<
     let stdout = stdout();
     let mut stdout = stdout.lock();
     if let Some(limit) = limit {
-        let mut reader = file.take(limit);
-        io::copy(&mut reader, &mut stdout)?;
-    } else {
-        // zero-copy fast-path
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        if uucore::pipes::splice_unbounded_broker(file, &mut stdout)? {
+        uucore::pipes::send_n_bytes(file, &mut stdout, limit)?;
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        {
+            let mut reader = file.take(limit);
+            io::copy(&mut reader, &mut stdout)?;
+        }
+    } else {
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        if uucore::pipes::splice_unbounded_auto(file, &mut stdout)?.is_err() {
             io::copy(file, &mut stdout)?;
         }
         #[cfg(not(any(target_os = "linux", target_os = "android")))]

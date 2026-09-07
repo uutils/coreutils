@@ -18,8 +18,7 @@ pub enum NumfmtError {
 impl UError for NumfmtError {
     fn code(&self) -> i32 {
         match self {
-            Self::IoError(_) => 1,
-            Self::IllegalArgument(_) => 1,
+            Self::IoError(_) | Self::IllegalArgument(_) => 1,
             Self::FormattingError(_) => 2,
         }
     }

@@ -3,8 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use clap::{Arg, ArgAction, Command};
-use std::io::Write;
-use uucore::{crate_version, translate};
+use std::io::{self, Write as _};
+use uucore::error::strip_errno;
+use uucore::{crate_version, show_error, translate};
 
 // uucore::main does not support no-result
 pub fn uumain(mut args: impl uucore::Args) -> i32 {
@@ -13,20 +14,20 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
         return 0;
     };
 
-    let error = if flag == "--help" {
+    let res = if flag == "--help" {
         uu_app().print_help()
     } else if flag == "--version" {
         // avoid uu_app for smaller binary size
-        writeln!(std::io::stdout(), "true {}", crate_version!())
+        writeln!(io::stdout(), "true {}", crate_version!())
     } else {
         return 0;
     };
 
-    if let Err(print_fail) = error
-        && print_fail.kind() != std::io::ErrorKind::BrokenPipe
+    if let Err(e) = res
+        && e.kind() != io::ErrorKind::BrokenPipe
     {
         // Try to display this error.
-        let _ = writeln!(std::io::stderr(), "true: {print_fail}");
+        show_error!("{}", strip_errno(&e));
         // Mirror GNU options. When failing to print warnings or version flags, then we exit
         // with FAIL. This avoids allocation some error information which may result in yet
         // other types of failure.

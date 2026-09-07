@@ -18,6 +18,7 @@ comm-help-check-order = check that the input is correctly sorted, even if all in
 comm-help-no-check-order = do not check that the input is correctly sorted
 
 # Error messages
+comm-error-write = write error
 comm-error-file-not-sorted = comm: file { $file_num } is not in sorted order
 comm-error-input-not-sorted = comm: input is not in sorted order
 comm-error-is-directory = Is a directory

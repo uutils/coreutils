@@ -17,12 +17,15 @@ pub fn build_lcase_table() -> ConversionTable {
     // Initialize locale from environment if not already done
     // SAFETY: setlocale is called with a valid C string and is used to initialize
     // the locale for character conversion functions
-    unsafe { libc::setlocale(libc::LC_CTYPE, c"".as_ptr()) };
+    #[cfg(not(target_os = "wasi"))]
+    unsafe {
+        libc::setlocale(libc::LC_CTYPE, c"".as_ptr())
+    };
 
     let mut table = [0u8; 256];
     for (i, item) in table.iter_mut().enumerate() {
         // SAFETY: tolower is called with a valid byte value and returns a valid byte
-        *item = unsafe { libc::tolower(i as libc::c_int) } as u8;
+        *item = unsafe { libc::tolower(i as core::ffi::c_int) } as u8;
     }
     table
 }
@@ -34,12 +37,15 @@ pub fn build_ucase_table() -> ConversionTable {
     // Initialize locale from environment if not already done
     // SAFETY: setlocale is called with a valid C string and is used to initialize
     // the locale for character conversion functions
-    unsafe { libc::setlocale(libc::LC_CTYPE, c"".as_ptr()) };
+    #[cfg(not(target_os = "wasi"))]
+    unsafe {
+        libc::setlocale(libc::LC_CTYPE, c"".as_ptr())
+    };
 
     let mut table = [0u8; 256];
     for (i, item) in table.iter_mut().enumerate() {
         // SAFETY: toupper is called with a valid byte value and returns a valid byte
-        *item = unsafe { libc::toupper(i as libc::c_int) } as u8;
+        *item = unsafe { libc::toupper(i as core::ffi::c_int) } as u8;
     }
     table
 }

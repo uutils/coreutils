@@ -14,12 +14,11 @@ use uucore::translate;
 
 use std::env;
 use std::ffi::{OsStr, OsString};
+use std::fs;
 use std::io::ErrorKind;
 use std::iter;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
-#[cfg(unix)]
-use std::fs;
 #[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
 
@@ -72,7 +71,7 @@ enum MkTempError {
     #[error("{}", translate!("mktemp-error-too-many-templates"))]
     TooManyTemplates,
 
-    #[error("{}", translate!("mktemp-error-not-found", "template_type" => .0.clone(), "template" => .1.quote()))]
+    #[error("{}", translate!("mktemp-error-not-found", "template_type" => .0, "template" => .1.quote()))]
     NotFound(String, PathBuf),
 }
 
@@ -238,7 +237,7 @@ impl Params {
 
         // The template argument must end in 'X' if a suffix option is given.
         if options.suffix.is_some() && !template_str.ends_with('X') {
-            return Err(MkTempError::MustEndInX(template_str.clone()));
+            return Err(MkTempError::MustEndInX(template_str));
         }
 
         // Get the start and end indices of the randomized part of the template.
@@ -251,7 +250,7 @@ impl Params {
                     .chars()
                     .take(template_str.len())
                     .collect::<String>(),
-                None => template_str.clone(),
+                None => template_str,
             };
             return Err(MkTempError::TooFewXs(s));
         };
@@ -265,12 +264,10 @@ impl Params {
         let prefix_from_template = &template_str[..i];
         let prefix_path = Path::new(&prefix_from_option).join(prefix_from_template);
         if options.treat_as_template && prefix_from_template.contains(MAIN_SEPARATOR) {
-            return Err(MkTempError::PrefixContainsDirSeparator(
-                template_str.clone(),
-            ));
+            return Err(MkTempError::PrefixContainsDirSeparator(template_str));
         }
         if tmpdir.is_some() && Path::new(prefix_from_template).is_absolute() {
-            return Err(MkTempError::InvalidTemplate(template_str.clone().into()));
+            return Err(MkTempError::InvalidTemplate(template_str.into()));
         }
 
         // Split the parent directory from the file part of the prefix.
@@ -281,6 +278,16 @@ impl Params {
             let prefix_str = prefix_path.to_string_lossy();
             if prefix_str.ends_with(MAIN_SEPARATOR) {
                 (prefix_path, String::new())
+            } else if prefix_from_template.ends_with("/.") || prefix_from_template == "." {
+                // Path normalizes trailing '.' away, making both parent() and file_name()
+                // return wrong results for hidden files like /tmp/.XXXXXXXX.
+                // Use prefix_from_template directly instead.
+                let directory = Path::new(&prefix_from_option)
+                    .join(&prefix_from_template[..prefix_from_template.len() - 1]); // strip trailing '.'
+
+                let prefix = ".".to_string();
+
+                (directory, prefix)
             } else {
                 let directory = match prefix_path.parent() {
                     None => PathBuf::new(),
@@ -369,27 +376,22 @@ impl ValueParserFactory for OptionalPathBufParser {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<_> = args.collect();
-    let matches = match uu_app().try_get_matches_from(&args) {
-        Ok(m) => m,
-        Err(e) => {
-            use uucore::clap_localization::handle_clap_error_with_exit_code;
-            if e.kind() == clap::error::ErrorKind::UnknownArgument {
-                handle_clap_error_with_exit_code(e, 1);
-            }
-            if e.kind() == clap::error::ErrorKind::TooManyValues
-                && e.context().any(|(kind, val)| {
-                    kind == clap::error::ContextKind::InvalidArg
-                        && val == &clap::error::ContextValue::String("[template]".into())
-                })
+    let matches = uu_app().try_get_matches_from(&args).map_err(|e| {
+        use clap::error::{ContextKind, ContextValue, ErrorKind};
+        use uucore::clap_localization::handle_clap_error_with_exit_code;
+
+        match e.kind() {
+            ErrorKind::UnknownArgument => handle_clap_error_with_exit_code(e, 1),
+            ErrorKind::TooManyValues
+                if e.context().any(|(k, v)| {
+                    k == ContextKind::InvalidArg && v == &ContextValue::String("[template]".into())
+                }) =>
             {
-                return Err(UUsageError::new(
-                    1,
-                    translate!("mktemp-error-too-many-templates"),
-                ));
+                UUsageError::new(1, translate!("mktemp-error-too-many-templates"))
             }
-            return Err(e.into());
+            _ => e.into(),
         }
-    };
+    })?;
 
     // Parse command-line options into a format suitable for the
     // application logic.
@@ -430,7 +432,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         res
     };
-    println_verbatim(res?).map_err_context(|| translate!("mktemp-error-failed-print"))
+    let path = res?;
+    if let Err(e) = println_verbatim(&path) {
+        // The caller never learns the name, so leaving the file behind would
+        // litter the temporary directory with something nothing can clean up.
+        if !dry_run {
+            let _ = if make_dir {
+                fs::remove_dir(&path)
+            } else {
+                fs::remove_file(&path)
+            };
+        }
+        return Err(e).map_err_context(|| translate!("common-write-error"));
+    }
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
@@ -551,7 +566,7 @@ fn make_temp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult
     // The directory is created with these permission at creation time, using mkdir(3) syscall.
     // This is not relevant on Windows systems. See: https://docs.rs/tempfile/latest/tempfile/#security
     // `fs` is not imported on Windows anyways.
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     builder.permissions(fs::Permissions::from_mode(0o700));
 
     match builder.tempdir_in(dir) {

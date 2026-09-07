@@ -4,13 +4,17 @@
 // file that was distributed with this source code.
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
-use std::io::stdout;
+use std::io::{Write, stdout};
 use std::ops::ControlFlow;
 use uucore::display::Quotable;
-use uucore::error::{UResult, UUsageError};
-use uucore::format::{FormatArgument, FormatArguments, FormatItem, parse_spec_and_escape};
+use uucore::error::{FromIo, UError, UResult, UUsageError};
+use uucore::format::{
+    FormatArgument, FormatArguments, FormatError, FormatItem, parse_spec_and_escape,
+};
 use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, show_warning};
+
+mod diagnostics;
 
 const VERSION: &str = "version";
 const HELP: &str = "help";
@@ -22,7 +26,51 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let result = print_formatted(args);
+
+    // A format without a trailing newline leaves the output sitting in the
+    // buffer, so a failed write is only visible once it is flushed. Without
+    // this the data would be dropped while printf still reported success.
+    // A broken pipe is how a downstream reader normally ends a stream, so it
+    // is left alone; and a failure already reported is not repeated.
+    if result.is_ok()
+        && let Err(e) = stdout().flush()
+        && e.kind() != std::io::ErrorKind::BrokenPipe
+    {
+        return Err(e).map_err_context(|| translate!("common-write-error"));
+    }
+    result
+}
+
+/// Mark where the options end, so that only a `--` written before FORMAT acts
+/// as the terminator.
+///
+/// GNU accepts a leading `--` (`printf -- '%s\n' a`), but past FORMAT every
+/// operand is data: `printf '%s\n' --` prints `--`. clap would instead
+/// swallow the first `--` wherever it appears, so insert one in front of the
+/// format operand when the caller did not write it there.
+fn mark_end_of_options(mut args: Vec<OsString>) -> Vec<OsString> {
+    let mut i = 1;
+    while i < args.len() {
+        // Both exit before FORMAT is looked at, and GNU honors them only here.
+        if args[i] == "--help" || args[i] == "--version" {
+            i += 1;
+            continue;
+        }
+        if args[i] != "--" {
+            args.insert(i, OsString::from("--"));
+        }
+        break;
+    }
+    args
+}
+
+fn print_formatted(args: impl uucore::Args) -> UResult<()> {
+    let args: Vec<OsString> = args.collect();
+    // Kept for the caret in format diagnostics, which needs the format as typed.
+    let diag_args = uucore::diagnostics::capture(&args);
+    let matches =
+        uucore::clap_localization::handle_clap_result(uu_app(), mark_end_of_options(args))?;
 
     let format = matches
         .get_one::<OsString>(options::FORMAT)
@@ -36,6 +84,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => vec![],
     };
 
+    // A parse error is rendered against the argument list when stderr is a
+    // terminal; the plain one-line message is kept anywhere else.
+    let raise = |error: FormatError| -> Box<dyn UError> {
+        uucore::diagnostics::error_after_report(diag_args.as_deref(), error, |args, error| {
+            diagnostics::render(args, format, error)
+        })
+    };
+
     let mut format_seen = false;
     // Parse and process the format string
     let mut args = FormatArguments::new(&values);
@@ -43,7 +99,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if let Ok(FormatItem::Spec(_)) = item {
             format_seen = true;
         }
-        match item?.write(stdout(), &mut args)? {
+        match item.map_err(&raise)?.write(stdout(), &mut args)? {
             ControlFlow::Continue(()) => {}
             ControlFlow::Break(()) => return Ok(()),
         }
@@ -70,7 +126,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     while !args.is_exhausted() {
         for item in parse_spec_and_escape(format) {
-            match item?.write(stdout(), &mut args)? {
+            match item.map_err(&raise)?.write(stdout(), &mut args)? {
                 ControlFlow::Continue(()) => {}
                 ControlFlow::Break(()) => return Ok(()),
             }

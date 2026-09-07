@@ -11,8 +11,8 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
+[package.metadata.cargo-udeps.ignore]
+normal = ["uucore_procs"]
 
 [lib]
 path = "src/sync.rs"
@@ -25,18 +25,18 @@ uucore = { workspace = true, features = ["wide"] }
 fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true }
+rustix = { workspace = true, features = ["fs"] }
 
-[target.'cfg(target_os = "windows")'.dependencies]
+[target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
   "Win32_Storage_FileSystem",
   "Win32_System_WindowsProgramming",
   "Win32_Foundation",
 ] }
 
+[lints]
+workspace = true
+
 [[bin]]
 name = "sync"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

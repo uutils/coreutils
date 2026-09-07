@@ -37,7 +37,7 @@
 //!     }
 //! }
 //!
-//! let config = Config::from(&matches)?;
+//! let config = Config::from(&matches, None)?;
 //! let mut output = MySink::new();
 //! list_with_output(vec![Path::new(".")], &config, &mut output)?;
 //! println!("processed {} entries", output.count);

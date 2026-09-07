@@ -7,7 +7,7 @@
 
 mod platform;
 
-use crate::platform::is_unsafe_overwrite;
+use crate::platform::is_safe_overwrite;
 use clap::{Arg, ArgAction, Command};
 use memchr::memchr2;
 use std::ffi::OsString;
@@ -22,10 +22,6 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
 use uucore::translate;
 use uucore::{fast_inc::fast_inc_one, format_usage};
-
-/// Linux splice support
-#[cfg(any(target_os = "linux", target_os = "android"))]
-mod splice;
 
 // Allocate 32 digits for the line number.
 // An estimate is that we can print about 1e8 lines/seconds, so 32 digits
@@ -102,13 +98,6 @@ enum CatError {
 }
 
 type CatResult<T> = Result<T, CatError>;
-
-#[cfg(any(unix, target_os = "wasi"))]
-impl From<rustix::io::Errno> for CatError {
-    fn from(value: rustix::io::Errno) -> Self {
-        Self::Io(value.into())
-    }
-}
 
 #[derive(PartialEq)]
 enum NumberingMode {
@@ -373,12 +362,13 @@ fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -
     match get_input_type(path)? {
         InputType::StdIn => {
             let stdin = io::stdin();
-            if is_unsafe_overwrite(&stdin, &io::stdout()) {
+            let is_interactive = stdin.is_terminal();
+            if !is_safe_overwrite(&stdin, &io::stdout()) {
                 return Err(CatError::OutputIsInput);
             }
             let mut handle = InputHandle {
                 reader: stdin,
-                is_interactive: io::stdin().is_terminal(),
+                is_interactive,
             };
             cat_handle(&mut handle, options, state)
         }
@@ -387,7 +377,7 @@ fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -
         InputType::Socket => Err(CatError::NoSuchDeviceOrAddress),
         _ => {
             let file = File::open(path)?;
-            if is_unsafe_overwrite(&file, &io::stdout()) {
+            if !is_safe_overwrite(&file, &io::stdout()) {
                 return Err(CatError::OutputIsInput);
             }
             let mut handle = InputHandle {
@@ -420,16 +410,15 @@ where
         print!("\r");
     }
     if error_messages.is_empty() {
-        Ok(())
-    } else {
-        // each next line is expected to display "cat: …"
-        let line_joiner = "\ncat: ";
-
-        Err(uucore::error::USimpleError::new(
-            error_messages.len() as i32,
-            error_messages.join(line_joiner),
-        ))
+        return Ok(());
     }
+    // each next line is expected to display "cat: …"
+    let line_joiner = "\ncat: ";
+
+    Err(uucore::error::USimpleError::new(
+        1,
+        error_messages.join(line_joiner),
+    ))
 }
 
 /// Classifies the `InputType` of file at `path` if possible
@@ -448,9 +437,9 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
             if let Some(raw_error) = e.raw_os_error() {
                 // On Unix-like systems, the error code for "Too many levels of symbolic links" is 40 (ELOOP).
                 // we want to provide a proper error message in this case.
-                #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
+                #[cfg(not(any(target_vendor = "apple", target_os = "freebsd")))]
                 let too_many_symlink_code = 40;
-                #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+                #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
                 let too_many_symlink_code = 62;
                 if raw_error == too_many_symlink_code {
                     return Err(CatError::TooManySymlinks);
@@ -483,45 +472,25 @@ fn print_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     let stdout = io::stdout();
     #[cfg(any(target_os = "linux", target_os = "android"))]
     let mut stdout = stdout;
+    // Try to use the splice() system call for faster writing. If it works, we're done.
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        // If we're on Linux or Android, try to use the splice() system call
-        // for faster writing. If it works, we're done.
-        if !splice::write_fast_using_splice(handle, &mut stdout)? {
-            return Ok(());
-        }
+    if uucore::pipes::splice_unbounded_auto(&handle.reader, &mut stdout)?.is_ok() {
+        return Ok(());
     }
+
     // If we're not on Linux or Android, or the splice() call failed,
     // fall back on slower writing.
     print_unbuffered(handle, stdout)
 }
 
 #[cfg_attr(any(target_os = "linux", target_os = "android"), inline(never))] // splice fast-path does not require this allocation
-#[cfg(any(unix, target_os = "wasi"))]
 fn print_unbuffered<R: FdReadable>(
     handle: &mut InputHandle<R>,
     stdout: io::Stdout,
 ) -> CatResult<()> {
-    // todo: since there is no cost by 0-fill, we could use larger heap buffer for throughput
-    let mut buf = [std::mem::MaybeUninit::<u8>::uninit(); 1024 * 64];
-    // use raw syscall to remove buffering
-    loop {
-        match rustix::io::read(&handle.reader, &mut buf) {
-            Ok(([], _)) => return Ok(()),
-            Ok((filled, _)) => {
-                uucore::io::write_all_raw(&stdout, filled).inspect_err(handle_broken_pipe)?;
-            }
-            Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e.into()),
-            _ => {}
-        }
-    }
-}
-
-#[cfg(not(any(unix, target_os = "wasi")))]
-fn print_unbuffered<R: FdReadable>(
-    handle: &mut InputHandle<R>,
-    stdout: io::Stdout,
-) -> CatResult<()> {
+    #[cfg(any(unix, target_os = "wasi"))]
+    let mut stdout = uucore::io::RawWriter(stdout); // use raw syscall to remove buffering
+    #[cfg(not(any(unix, target_os = "wasi")))]
     let mut stdout = stdout.lock();
     let mut buf = [0; 1024 * 64];
     loop {
@@ -531,8 +500,9 @@ fn print_unbuffered<R: FdReadable>(
                 stdout
                     .write_all(&buf[..n])
                     .inspect_err(handle_broken_pipe)?;
-                // we cannot use rustix::io on Windows
+                // cannot use rustix::io on Windows
                 // really bad workaround for unbuffered write <https://github.com/uutils/coreutils/issues/12188>
+                #[cfg(not(any(unix, target_os = "wasi")))]
                 stdout.flush().inspect_err(handle_broken_pipe)?;
             }
             Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e.into()),
@@ -563,9 +533,9 @@ fn print_lines<R: FdReadable>(
         };
         let in_buf = &in_buf[..n];
         let mut pos = 0;
-        while pos < n {
+        while let Some(in_buf_pos) = in_buf.get(pos) {
             // skip empty line_number enumerating them if needed
-            if in_buf[pos] == b'\n' {
+            if in_buf_pos == &b'\n' {
                 write_new_line(&mut writer, options, state, handle.is_interactive)?;
                 state.at_line_start = true;
                 pos += 1;
@@ -585,15 +555,16 @@ fn print_lines<R: FdReadable>(
             // print to end of line or end of buffer
             let offset = write_end(&mut writer, &in_buf[pos..], options)?;
 
-            // end of buffer?
-            if offset + pos == in_buf.len() {
+            let Some(in_buf_pos_off) = in_buf.get(offset + pos) else {
+                // end of buffer
                 state.at_line_start = false;
                 break;
-            }
-            if in_buf[pos + offset] == b'\r' {
+            };
+
+            if in_buf_pos_off == &b'\r' {
                 state.skipped_carriage_return = true;
             } else {
-                assert_eq!(in_buf[pos + offset], b'\n');
+                assert_eq!(in_buf_pos_off, &b'\n');
                 // print suitable end of line
                 write_end_of_line(
                     &mut writer,
@@ -679,25 +650,23 @@ fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> io::Result<usize> {
 
 fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> io::Result<usize> {
     let mut count = 0;
-    loop {
-        if let Some(p) = in_buf
-            .iter()
-            .position(|c| *c == b'\n' || *c == b'\t' || *c == b'\r')
-        {
-            writer.write_all(&in_buf[..p])?;
-            if in_buf[p] == b'\t' {
-                writer.write_all(b"^I")?;
-                in_buf = &in_buf[p + 1..];
-                count += p + 1;
-            } else {
-                // b'\n' or b'\r'
-                return Ok(count + p);
-            }
+
+    while let Some(p) = in_buf
+        .iter()
+        .position(|c| *c == b'\n' || *c == b'\t' || *c == b'\r')
+    {
+        writer.write_all(&in_buf[..p])?;
+        if in_buf[p] == b'\t' {
+            writer.write_all(b"^I")?;
+            in_buf = &in_buf[p + 1..];
+            count += p + 1;
         } else {
-            writer.write_all(in_buf)?;
-            return Ok(in_buf.len() + count);
+            // b'\n' or b'\r'
+            return Ok(count + p);
         }
     }
+    writer.write_all(in_buf)?;
+    Ok(in_buf.len() + count)
 }
 
 fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) -> io::Result<usize> {
@@ -735,7 +704,7 @@ fn write_end_of_line<W: Write>(
 
 fn handle_broken_pipe(error: &io::Error) {
     // SIGPIPE is not available on Windows.
-    if cfg!(target_os = "windows") && error.kind() == ErrorKind::BrokenPipe {
+    if cfg!(windows) && error.kind() == ErrorKind::BrokenPipe {
         std::process::exit(13);
     }
 }

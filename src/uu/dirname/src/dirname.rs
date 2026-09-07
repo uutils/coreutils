@@ -5,6 +5,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
+use std::io::{Write as _, stdout};
 #[cfg(unix)]
 use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
@@ -104,15 +105,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
+    // todo: use .required(true) of clap and sed GnuTests to provide better error message
     let dirnames: Vec<OsString> = matches
         .get_many::<OsString>(options::DIR)
-        .unwrap_or_default()
+        .ok_or_else(|| UUsageError::new(1, translate!("dirname-missing-operand")))?
         .cloned()
         .collect();
-
-    if dirnames.is_empty() {
-        return Err(UUsageError::new(1, translate!("dirname-missing-operand")));
-    }
 
     for path in &dirnames {
         let path_bytes = uucore::os_str_as_bytes(path.as_os_str()).unwrap_or(&[]);
@@ -122,20 +120,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         {
             use std::os::unix::ffi::OsStrExt;
             let result_os = std::ffi::OsStr::from_bytes(result);
-            print_verbatim(result_os).unwrap();
+            print_verbatim(result_os)?;
         }
         #[cfg(not(unix))]
         {
             // On non-Unix, fall back to lossy conversion
             if let Ok(s) = std::str::from_utf8(result) {
-                print!("{s}");
+                write!(stdout(), "{s}")?;
             } else {
                 // Fallback for non-UTF-8 paths on non-Unix systems
-                print!(".");
+                write!(stdout(), ".")?;
             }
         }
 
-        print!("{line_ending}");
+        write!(stdout(), "{line_ending}")?;
     }
 
     Ok(())

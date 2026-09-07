@@ -79,6 +79,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILES)
                 .action(ArgAction::Append)
                 .value_parser(clap::value_parser!(OsString))
+                .default_value("-")
                 .value_hint(clap::ValueHint::FilePath),
         )
 }

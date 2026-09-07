@@ -30,11 +30,6 @@ use std::fmt;
 use std::fs::File;
 use std::io::{self, BufWriter, Stdout, StdoutLock, Write as _};
 
-#[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
-#[cfg(target_os = "wasi")]
-use std::os::wasi::ffi::OsStrExt;
-
 // These used to be defined here, but they live in their own crate now.
 pub use os_display::{Quotable, Quoted};
 
@@ -78,7 +73,7 @@ pub trait OsWrite: io::Write {
     fn write_all_os(&mut self, buf: &OsStr) -> io::Result<()> {
         #[cfg(any(unix, target_os = "wasi"))]
         {
-            self.write_all(buf.as_bytes())
+            self.write_all(buf.as_encoded_bytes())
         }
 
         #[cfg(not(any(unix, target_os = "wasi")))]

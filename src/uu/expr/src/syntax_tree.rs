@@ -7,9 +7,9 @@
 
 use std::{cell::Cell, collections::BTreeMap};
 
+use fancy_regex::{Regex, RegexBuilder};
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
-use onig::{MatchParam, Regex, RegexOptions, SearchOptions, Syntax};
 
 use crate::{
     ExprError, ExprResult,
@@ -208,8 +208,8 @@ where
 
     // Check if parsed quantifier is valid
     let re = Regex::new(r"^([0-9]*,[0-9]*|[0-9]+)$").expect("valid regular expression");
-    if let Some(captures) = re.captures(&quantifier) {
-        let matched = captures.at(0).unwrap_or_default();
+    if let Ok(Some(captures)) = re.captures(&quantifier) {
+        let matched = captures.get(0).map_or("", |m| m.as_str());
         match matched.split_once(',') {
             Some(("", "")) => Ok(()),
             Some((x, "") | ("", x)) if x.parse::<i16>().is_ok() => Ok(()),
@@ -230,14 +230,13 @@ where
 /// Check for errors in a supplied regular expression
 ///
 /// GNU coreutils shows messages for invalid regular expressions
-/// differently from the oniguruma library used by the regex crate.
+/// differently from standard regex engines.
 /// This method attempts to do these checks manually in one pass
 /// through the regular expression.
 ///
 /// This method is not comprehensively checking all cases in which
 /// a regular expression could be invalid; any cases not caught will
-/// result in a [`ExprError::InvalidRegexExpression`] when passing the
-/// regular expression through the Oniguruma bindings. This method is
+/// result in a [`ExprError::InvalidRegexExpression`]. This method is
 /// intended to just identify a few situations for which GNU coreutils
 /// has specific error messages.
 fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
@@ -265,24 +264,16 @@ fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
     }
 }
 
-/// Build a regex from a pattern string with locale-aware encoding
-fn build_regex(pattern_bytes: Vec<u8>) -> ExprResult<(Regex, String)> {
-    use onig::EncodedBytes;
-    use uucore::i18n::UEncoding;
-
-    let encoding = uucore::i18n::get_locale_encoding();
-
-    // For pattern processing, we need to handle it based on locale
-    let pattern_str = String::from_utf8(pattern_bytes.clone())
-        .unwrap_or_else(|_| String::from_utf8_lossy(&pattern_bytes).into());
-    check_posix_regex_errors(&pattern_str)?;
-
-    // Transpile the input pattern from BRE syntax to `onig` crate's `Syntax::grep`
-    let mut re_string = String::with_capacity(pattern_str.len() + 1);
+/// Transpile the input pattern from BRE syntax to ERE for fancy-regex
+fn transpile_bre_to_ere(pattern_str: &str) -> ExprResult<String> {
+    let mut re_string = String::with_capacity(pattern_str.len() + 8);
     let mut pattern_chars = pattern_str.chars().peekable();
     let mut prev = '\0';
     let mut prev_is_escaped = false;
+    let mut in_bracket = false;
+    let mut bracket_start_idx = 0;
     let mut is_start_of_expression = true;
+    let mut after_anchor_caret = false;
 
     // All patterns are anchored so they begin with a caret (^)
     if pattern_chars.peek() != Some(&'^') {
@@ -291,216 +282,218 @@ fn build_regex(pattern_bytes: Vec<u8>) -> ExprResult<(Regex, String)> {
 
     while let Some(curr) = pattern_chars.next() {
         let curr_is_escaped = prev == '\\' && !prev_is_escaped;
-        let is_first_character = prev == '\0';
+        let mut next_is_start = false;
+        let mut next_after_anchor = false;
 
-        match curr {
-            // Character class negation "[^a]"
-            // Explicitly escaped caret "\^"
-            '^' if !is_start_of_expression && !matches!(prev, '[' | '\\') => {
-                re_string.push_str(r"\^");
+        if in_bracket {
+            let is_first = re_string.len() == bracket_start_idx + 1
+                || (re_string.ends_with("[^") && re_string.len() == bracket_start_idx + 2);
+            if curr == ']' && !curr_is_escaped && !is_first {
+                in_bracket = false;
             }
-            '$' if !curr_is_escaped && !is_end_of_expression(&pattern_chars) => {
-                re_string.push_str(r"\$");
-            }
-            '\\' if !curr_is_escaped && pattern_chars.peek().is_none() => {
-                return Err(ExprError::TrailingBackslash);
-            }
-            '{' if curr_is_escaped => {
-                // Handle '{' literally at the start of an expression
-                if is_start_of_expression {
-                    if re_string.ends_with('\\') {
-                        let _ = re_string.pop();
-                    }
-                    re_string.push(curr);
-                } else {
-                    // Check if the following section is a valid range quantifier
-                    verify_range_quantifier(&pattern_chars)?;
-
-                    re_string.push(curr);
-                    // Set the lower bound of range quantifier to 0 if it is missing
-                    if pattern_chars.peek() == Some(&',') {
-                        re_string.push('0');
+            re_string.push(curr);
+        } else {
+            match curr {
+                '[' if !curr_is_escaped => {
+                    in_bracket = true;
+                    bracket_start_idx = re_string.len();
+                    re_string.push('[');
+                }
+                // In BRE, '(', ')', '|', '+', '?', '{', '}' are literal by default,
+                // and become operators only when escaped. ERE has the exact opposite convention.
+                '(' | ')' | '|' | '+' | '?' | '{' | '}' => {
+                    if curr_is_escaped {
+                        if re_string.ends_with('\\') {
+                            re_string.pop();
+                        }
+                        match curr {
+                            '(' | '|' => {
+                                re_string.push(curr);
+                                next_is_start = true;
+                            }
+                            '+' | '?' => {
+                                if is_start_of_expression || after_anchor_caret {
+                                    re_string.push('\\');
+                                }
+                                re_string.push(curr);
+                            }
+                            '{' => {
+                                // Handle '{' literally at the start of an expression
+                                if is_start_of_expression || after_anchor_caret {
+                                    re_string.push_str(r"\{");
+                                } else {
+                                    // Check if the following section is a valid range quantifier
+                                    verify_range_quantifier(&pattern_chars)?;
+                                    re_string.push('{');
+                                    // Set the lower bound of range quantifier to 0 if it is missing
+                                    if pattern_chars.peek() == Some(&',') {
+                                        re_string.push('0');
+                                    }
+                                }
+                            }
+                            _ => re_string.push(curr), // ')' and '}'
+                        }
+                    } else {
+                        // Unescaped metacharacter in BRE -> literal in ERE
+                        re_string.push('\\');
+                        re_string.push(curr);
                     }
                 }
+                '*' => {
+                    if curr_is_escaped {
+                        re_string.push('*');
+                    } else if is_start_of_expression || after_anchor_caret {
+                        re_string.push_str(r"\*");
+                    } else {
+                        re_string.push('*');
+                    }
+                }
+                // Character class negation "[^a]"
+                // Explicitly escaped caret "\^"
+                '^' => {
+                    if curr_is_escaped {
+                        re_string.push('^');
+                    } else if is_start_of_expression {
+                        re_string.push('^');
+                        next_after_anchor = true;
+                    } else if prev == '[' && !prev_is_escaped {
+                        re_string.push('^');
+                    } else {
+                        re_string.push_str(r"\^");
+                    }
+                }
+                '$' if !curr_is_escaped && !is_end_of_expression(&pattern_chars) => {
+                    re_string.push_str(r"\$");
+                }
+                '<' if curr_is_escaped => {
+                    if re_string.ends_with('\\') {
+                        re_string.pop();
+                    }
+                    re_string.push_str(r"\b(?=\w)");
+                }
+                '>' if curr_is_escaped => {
+                    if re_string.ends_with('\\') {
+                        re_string.pop();
+                    }
+                    re_string.push_str(r"\b(?<=\w)");
+                }
+                '\\' if !curr_is_escaped => {
+                    if pattern_chars.peek().is_none() {
+                        return Err(ExprError::TrailingBackslash);
+                    }
+                    // Carry the expression-start / after-anchor state over the
+                    // backslash so the escaped character is still treated as the
+                    // first token of a (sub)expression.
+                    next_is_start = is_start_of_expression;
+                    next_after_anchor = after_anchor_caret;
+                    re_string.push('\\');
+                }
+                _ => {
+                    if curr_is_escaped
+                        && !"123456789.*^$[]\\wWsSbB".contains(curr)
+                        && re_string.ends_with('\\')
+                    {
+                        re_string.pop();
+                    }
+                    re_string.push(curr);
+                }
             }
-            _ => re_string.push(curr),
         }
 
-        // Capturing group "\(abc\)"
-        // Alternative pattern "a\|b"
-        is_start_of_expression = curr == '\\' && is_first_character
-            || curr_is_escaped && matches!(curr, '(' | '|')
-            || curr == '\\' && prev_is_escaped && matches!(prev, '(' | '|');
-
+        is_start_of_expression = next_is_start;
+        after_anchor_caret = next_after_anchor;
         prev_is_escaped = curr_is_escaped;
         prev = curr;
     }
 
-    // Create regex with proper encoding
-    let re = match encoding {
-        UEncoding::Utf8 => {
-            // For UTF-8 locale, use UTF-8 encoding
-            Regex::with_options_and_encoding(
-                &re_string,
-                RegexOptions::REGEX_OPTION_SINGLELINE | RegexOptions::REGEX_OPTION_MULTILINE,
-                Syntax::grep(),
-            )
-        }
-        UEncoding::Ascii => {
-            // For non-UTF-8 locale, use ASCII encoding
-            Regex::with_options_and_encoding(
-                EncodedBytes::ascii(re_string.as_bytes()),
-                RegexOptions::REGEX_OPTION_SINGLELINE | RegexOptions::REGEX_OPTION_MULTILINE,
-                Syntax::grep(),
-            )
-        }
-    }
-    .map_err(|error| match error.code() {
-        // "invalid repeat range {lower,upper}"
-        -123 => ExprError::InvalidBracketContent,
-        // "too big number for repeat range"
-        -201 => ExprError::TooBigRangeQuantifierIndex,
-        _ => ExprError::InvalidRegexExpression,
-    })?;
-
-    Ok((re, re_string))
+    Ok(re_string)
 }
 
-/// Run a regex search, treating runtime match errors as no match.
-fn regex_search<T: onig::EncodedChars>(
-    regex: &Regex,
-    chars: T,
-    to: usize,
-    region: &mut onig::Region,
-) -> Option<usize> {
-    regex
-        .search_with_param(
-            chars,
-            0,
-            to,
-            SearchOptions::SEARCH_OPTION_NONE,
-            Some(region),
-            MatchParam::default(),
-        )
-        .unwrap_or(None)
-}
-
-/// Find matches in the input using the compiled regex
-fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> String {
-    use onig::EncodedBytes;
+/// Build a regex from a pattern string with locale-aware encoding
+fn build_regex(pattern_bytes: Vec<u8>) -> ExprResult<Regex> {
     use uucore::i18n::UEncoding;
 
     let encoding = uucore::i18n::get_locale_encoding();
 
+    // For pattern processing, we need to handle it based on locale
+    let pattern_str = match encoding {
+        UEncoding::Utf8 => String::from_utf8(pattern_bytes.clone())
+            .unwrap_or_else(|_| String::from_utf8_lossy(&pattern_bytes).into()),
+        UEncoding::Ascii => pattern_bytes.iter().map(|&b| b as char).collect(),
+    };
+    check_posix_regex_errors(&pattern_str)?;
+
+    let re_string = transpile_bre_to_ere(&pattern_str)?;
+
+    RegexBuilder::new(&format!("(?s){re_string}"))
+        .oniguruma_mode(true)
+        .build()
+        .map_err(|_| ExprError::InvalidRegexExpression)
+}
+
+/// Find matches in the input using the compiled regex
+fn find_match(regex: Regex, left_bytes: Vec<u8>) -> String {
+    use uucore::i18n::UEncoding;
+
+    let encoding = uucore::i18n::get_locale_encoding();
+    let has_captures = regex.captures_len() > 1;
+
     // Match against the input using the appropriate encoding
-    let mut region = onig::Region::new();
     match encoding {
         UEncoding::Utf8 => {
             // In UTF-8 locale, check if input is valid UTF-8
             if let Ok(left_str) = std::str::from_utf8(&left_bytes) {
                 // Valid UTF-8, match as UTF-8
-                let pos = regex_search(&regex, left_str, left_str.len(), &mut region);
-
-                if pos.is_some() {
-                    if regex.captures_len() > 0 {
+                if let Ok(Some(caps)) = regex.captures(left_str) {
+                    return if has_captures {
                         // Get first capture group
-                        region
-                            .pos(1)
-                            .map(|(start, end)| left_str[start..end].to_string())
-                            .unwrap_or_default()
+                        caps.get(1)
+                            .map_or(String::new(), |m| m.as_str().to_string())
                     } else {
                         // Count characters in the match
-                        let (start, end) = region.pos(0).unwrap();
-                        left_str[start..end].chars().count().to_string()
-                    }
-                } else {
-                    // No match
-                    if regex.captures_len() > 0 {
-                        String::new()
-                    } else {
-                        "0".to_string()
-                    }
+                        caps.get(0).unwrap().as_str().chars().count().to_string()
+                    };
                 }
             } else {
-                // Invalid UTF-8 in UTF-8 locale
-                // Try to match as bytes using ASCII encoding
-                let left_encoded = EncodedBytes::ascii(&left_bytes);
-                // Need to create ASCII version of regex too
-                let re_ascii = Regex::with_options_and_encoding(
-                    EncodedBytes::ascii(re_string.as_bytes()),
-                    RegexOptions::REGEX_OPTION_SINGLELINE | RegexOptions::REGEX_OPTION_MULTILINE,
-                    Syntax::grep(),
-                )
-                .ok();
-
-                if let Some(re_ascii) = re_ascii {
-                    let pos = regex_search(&re_ascii, left_encoded, left_bytes.len(), &mut region);
-
-                    if pos.is_some() {
-                        if re_ascii.captures_len() > 0 {
-                            // Get first capture group
-                            region
-                                .pos(1)
-                                .map(|(start, end)| {
-                                    // Return empty string for invalid UTF-8 capture in UTF-8 locale
-                                    if std::str::from_utf8(&left_bytes[start..end]).is_err() {
-                                        String::new()
-                                    } else {
-                                        String::from_utf8_lossy(&left_bytes[start..end])
-                                            .into_owned()
-                                    }
-                                })
-                                .unwrap_or_default()
-                        } else {
-                            // No capture groups - return 0 for invalid UTF-8 in UTF-8 locale
-                            "0".to_string()
+                // Invalid UTF-8 in UTF-8 locale: match on Latin-1 byte mapping
+                let left_str: String = left_bytes.iter().map(|&b| b as char).collect();
+                if let Ok(Some(caps)) = regex.captures(&left_str) {
+                    if has_captures {
+                        if let Some(m) = caps.get(1) {
+                            let bytes: Vec<u8> = m.as_str().chars().map(|c| c as u8).collect();
+                            // Return empty string for invalid UTF-8 capture in UTF-8 locale
+                            if let Ok(s) = String::from_utf8(bytes) {
+                                return s;
+                            }
                         }
-                    } else {
-                        // No match
-                        if re_ascii.captures_len() > 0 {
-                            String::new()
-                        } else {
-                            "0".to_string()
-                        }
+                        return String::new();
                     }
-                } else {
-                    // Couldn't create ASCII regex - no match
-                    if regex.captures_len() > 0 {
-                        String::new()
-                    } else {
-                        "0".to_string()
-                    }
+                    // No capture groups - return 0 for invalid UTF-8 in UTF-8 locale
+                    return "0".to_string();
                 }
             }
         }
         UEncoding::Ascii => {
-            // In ASCII/C locale, work with bytes directly
-            let left_encoded = EncodedBytes::ascii(&left_bytes);
-            let pos = regex_search(&regex, left_encoded, left_bytes.len(), &mut region);
-
-            if pos.is_some() {
-                if regex.captures_len() > 0 {
-                    // Get first capture group - return raw bytes for C locale
-                    if let Some((start, end)) = region.pos(1) {
-                        let capture_bytes = &left_bytes[start..end];
-                        // Return raw bytes as String for consistency with other cases
-                        return String::from_utf8_lossy(capture_bytes).into_owned();
-                    }
-                    String::new()
+            // In ASCII/C locale, work with Latin-1 byte mapping
+            let left_str: String = left_bytes.iter().map(|&b| b as char).collect();
+            if let Ok(Some(caps)) = regex.captures(&left_str) {
+                return if has_captures {
+                    caps.get(1).map_or_else(String::new, |m| {
+                        let bytes: Vec<u8> = m.as_str().chars().map(|c| c as u8).collect();
+                        String::from_utf8_lossy(&bytes).into_owned()
+                    })
                 } else {
-                    // Return byte count of match
-                    let (start, end) = region.pos(0).unwrap();
-                    (end - start).to_string()
-                }
-            } else {
-                // No match
-                if regex.captures_len() > 0 {
-                    String::new()
-                } else {
-                    "0".to_string()
-                }
+                    caps.get(0).unwrap().as_str().chars().count().to_string()
+                };
             }
         }
+    }
+
+    // No match
+    if has_captures {
+        String::new()
+    } else {
+        "0".to_string()
     }
 }
 
@@ -508,26 +501,23 @@ fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> String {
 fn evaluate_match_expression(left_bytes: Vec<u8>, right_bytes: Vec<u8>) -> ExprResult<NumOrStr> {
     use uucore::i18n::UEncoding;
 
-    let (regex, re_string) = build_regex(right_bytes)?;
+    let regex = build_regex(right_bytes)?;
 
     // Special case for ASCII locale with capture groups that need to return raw bytes
     let encoding = uucore::i18n::get_locale_encoding();
 
-    if matches!(encoding, UEncoding::Ascii) && regex.captures_len() > 0 {
+    if matches!(encoding, UEncoding::Ascii) && regex.captures_len() > 1 {
         // Try to find the actual capture bytes for ASCII locale
-        let mut region = onig::Region::new();
-        let left_encoded = onig::EncodedBytes::ascii(&left_bytes);
-        let pos = regex_search(&regex, left_encoded, left_bytes.len(), &mut region);
-
-        if pos.is_some() {
-            if let Some((start, end)) = region.pos(1) {
-                let capture_bytes = &left_bytes[start..end];
-                return Ok(MaybeNonUtf8String::from(capture_bytes.to_vec()).into());
-            }
+        let left_str: String = left_bytes.iter().map(|&b| b as char).collect();
+        if let Ok(Some(caps)) = regex.captures(&left_str)
+            && let Some(m) = caps.get(1)
+        {
+            let bytes: Vec<u8> = m.as_str().chars().map(|c| c as u8).collect();
+            return Ok(MaybeNonUtf8String::from(bytes).into());
         }
     }
 
-    Ok(find_match(regex, re_string, left_bytes).into())
+    Ok(find_match(regex, left_bytes).into())
 }
 
 /// Precedence for infix binary operators
@@ -595,10 +585,10 @@ impl NumOrStr {
     pub fn eval_as_bigint(self) -> ExprResult<BigInt> {
         match self {
             Self::Num(num) => Ok(num),
-            Self::Str(str) => String::from_utf8(str)
-                .map_err(|_| ExprError::NonIntegerArgument)?
-                .parse::<BigInt>()
-                .map_err(|_| ExprError::NonIntegerArgument),
+            Self::Str(str) => std::str::from_utf8(&str)
+                .ok()
+                .and_then(|s| s.parse::<BigInt>().ok())
+                .ok_or_else(|| ExprError::NonIntegerArgument(str.clone())),
         }
     }
 
@@ -616,12 +606,14 @@ pub struct AstNode {
     inner: AstNodeInner,
 }
 
-// We derive Eq and PartialEq only for tests because we want to ignore the id field.
+// Eq and PartialEq are implemented only for tests, ignoring the id and
+// position fields.
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
 pub enum AstNodeInner {
     Leaf {
         value: MaybeNonUtf8String,
+        /// Index of the argument the value came from, for diagnostics.
+        position: usize,
     },
     BinOp {
         op_type: BinOp,
@@ -639,17 +631,40 @@ pub enum AstNodeInner {
 }
 
 impl AstNode {
-    pub fn parse(input: &[impl AsRef<MaybeNonUtf8Str>]) -> ExprResult<Self> {
-        Parser::new(input).parse()
+    fn new(inner: AstNodeInner) -> Self {
+        Self {
+            id: get_next_id(),
+            inner,
+        }
     }
 
+    /// Parse `input`, reporting on failure how many arguments the parser had
+    /// consumed. Together with the error kind that is enough to say which
+    /// argument is at fault.
+    pub fn parse_located(
+        input: &[impl AsRef<MaybeNonUtf8Str>],
+    ) -> Result<Self, (ExprError, usize)> {
+        let mut parser = Parser::new(input);
+        parser.parse().map_err(|e| (e, parser.index))
+    }
+
+    /// [`AstNode::eval_located`] without the location, for tests that only
+    /// care about the value.
+    #[cfg(test)]
     pub fn eval(&self) -> ExprResult<NumOrStr> {
+        self.eval_located().map_err(|(error, _)| error)
+    }
+
+    /// Evaluate, reporting on failure the index of the argument the error is
+    /// about, when there is one single argument to blame.
+    pub fn eval_located(&self) -> Result<NumOrStr, (ExprError, Option<usize>)> {
         // This function implements a recursive tree-walking algorithm, but uses an explicit
         // stack approach instead of native recursion to avoid potential stack overflow
         // on deeply nested expressions.
 
         let mut stack = vec![self];
-        let mut result_stack = BTreeMap::new();
+        let mut result_stack: BTreeMap<u32, Result<NumOrStr, (ExprError, Option<usize>)>> =
+            BTreeMap::new();
 
         while let Some(node) = stack.pop() {
             match &node.inner {
@@ -661,7 +676,7 @@ impl AstNode {
                     left,
                     right,
                 } => {
-                    let (Some(right), Some(left)) = (
+                    let (Some(right_result), Some(left_result)) = (
                         result_stack.remove(&right.id),
                         result_stack.remove(&left.id),
                     ) else {
@@ -671,7 +686,23 @@ impl AstNode {
                         continue;
                     };
 
-                    let result = op_type.eval(left, right);
+                    // The operator takes plain results — some, like `|`,
+                    // swallow their children's errors — so the positions are
+                    // held back and re-attached if an error comes out.
+                    let (left_result, left_position) = split(left_result);
+                    let (right_result, right_position) = split(right_result);
+                    let result = op_type.eval(left_result, right_result).map_err(|error| {
+                        let position = match &error {
+                            // Born here from a leaf operand, unless a child
+                            // already located it deeper in the expression.
+                            ExprError::NonIntegerArgument(value) => left_position
+                                .or(right_position)
+                                .or_else(|| leaf_position(left, value))
+                                .or_else(|| leaf_position(right, value)),
+                            _ => left_position.or(right_position),
+                        };
+                        (error, position)
+                    });
                     result_stack.insert(node.id, result);
                 }
                 AstNodeInner::Substr {
@@ -738,6 +769,67 @@ impl AstNode {
     }
 }
 
+/// Take the position out of a located result, leaving the plain result the
+/// operator evaluators work on.
+fn split(
+    result: Result<NumOrStr, (ExprError, Option<usize>)>,
+) -> (ExprResult<NumOrStr>, Option<usize>) {
+    match result {
+        Ok(value) => (Ok(value), None),
+        Err((error, position)) => (Err(error), position),
+    }
+}
+
+/// The position of `node`, when it is a leaf holding exactly `value`.
+fn leaf_position(node: &AstNode, value: &MaybeNonUtf8Str) -> Option<usize> {
+    match &node.inner {
+        AstNodeInner::Leaf {
+            value: leaf,
+            position,
+        } if leaf == value => Some(*position),
+        _ => None,
+    }
+}
+
+impl Drop for AstNode {
+    // This is a tree-walking algorithm, so like `eval` it uses an explicit
+    // stack instead of native recursion to avoid a stack overflow when
+    // dropping a deeply nested AST.
+    fn drop(&mut self) {
+        fn detach_children(inner: &mut AstNodeInner, stack: &mut Vec<AstNode>) {
+            let empty = AstNodeInner::Leaf {
+                value: Vec::new(),
+                position: 0,
+            };
+            match std::mem::replace(inner, empty) {
+                AstNodeInner::Leaf { .. } => {}
+                AstNodeInner::BinOp { left, right, .. } => {
+                    stack.push(*left);
+                    stack.push(*right);
+                }
+                AstNodeInner::Substr {
+                    string,
+                    pos,
+                    length,
+                } => {
+                    stack.push(*string);
+                    stack.push(*pos);
+                    stack.push(*length);
+                }
+                AstNodeInner::Length { string } => stack.push(*string),
+            }
+        }
+
+        let mut stack = Vec::new();
+        detach_children(&mut self.inner, &mut stack);
+        // The detached nodes are leaves by now, so dropping them at the end of
+        // each iteration doesn't recurse.
+        while let Some(mut node) = stack.pop() {
+            detach_children(&mut node.inner, &mut stack);
+        }
+    }
+}
+
 thread_local! {
     static NODE_ID: Cell<u32> = const { Cell::new(1) };
 }
@@ -751,6 +843,77 @@ fn get_next_id() -> u32 {
         id.set(current + 1);
         current
     })
+}
+
+/// A prefix keyword that takes a fixed number of simple-expression arguments
+#[derive(Debug, Clone, Copy)]
+enum Keyword {
+    Match,
+    Substr,
+    Index,
+    Length,
+}
+
+impl Keyword {
+    fn arity(self) -> usize {
+        match self {
+            Self::Length => 1,
+            Self::Match | Self::Index => 2,
+            Self::Substr => 3,
+        }
+    }
+
+    fn build(self, args: Vec<AstNode>) -> AstNodeInner {
+        let mut args = args.into_iter();
+        let mut next = || Box::new(args.next().expect("arity checked by caller"));
+        match self {
+            Self::Match => AstNodeInner::BinOp {
+                op_type: BinOp::String(StringOp::Match),
+                left: next(),
+                right: next(),
+            },
+            Self::Substr => AstNodeInner::Substr {
+                string: next(),
+                pos: next(),
+                length: next(),
+            },
+            Self::Index => AstNodeInner::BinOp {
+                op_type: BinOp::String(StringOp::Index),
+                left: next(),
+                right: next(),
+            },
+            Self::Length => AstNodeInner::Length { string: next() },
+        }
+    }
+}
+
+/// What the parser has to parse next
+enum ParseState {
+    /// An expression containing operators of at least `min_prec` precedence
+    Expression { min_prec: usize },
+    /// A simple expression: a leaf token, or a keyword/parenthesized expression
+    Simple,
+    /// Nothing; a sub-expression has been fully parsed
+    Value(AstNode),
+}
+
+/// Work to resume once the pending sub-expression is parsed
+enum ParseFrame {
+    /// Use the value as the left operand of the operator loop at `min_prec`
+    ContinueExpression { min_prec: usize },
+    /// Use the value as the right operand of `op`, then continue at `min_prec`
+    CombineBinOp {
+        min_prec: usize,
+        op: BinOp,
+        left: AstNode,
+    },
+    /// Use the value as the next argument of `keyword`
+    KeywordArg {
+        keyword: Keyword,
+        args: Vec<AstNode>,
+    },
+    /// The value is a parenthesized expression; a closing parenthesis must follow
+    CloseParen,
 }
 
 struct Parser<'a, S: AsRef<MaybeNonUtf8Str>> {
@@ -801,108 +964,126 @@ impl<'a, S: AsRef<MaybeNonUtf8Str>> Parser<'a, S> {
         Ok(res)
     }
 
-    fn parse_expression(&mut self) -> ExprResult<AstNode> {
-        self.parse_precedence(0)
-    }
-
-    fn parse_op(&mut self, precedence: usize) -> Option<BinOp> {
+    /// Accept the next token if it is an operator of at least `min_prec`
+    /// precedence, returning the operator and its precedence
+    fn parse_op(&mut self, min_prec: usize) -> Option<(usize, BinOp)> {
         self.accept(|s| {
-            for (op_string, op) in PRECEDENCE[precedence] {
-                if s == *op_string {
-                    return Some(*op);
+            for (prec, ops) in PRECEDENCE.iter().enumerate().skip(min_prec) {
+                for (op_string, op) in *ops {
+                    if s == *op_string {
+                        return Some((prec, *op));
+                    }
                 }
             }
             None
         })
     }
 
-    fn parse_precedence(&mut self, precedence: usize) -> ExprResult<AstNode> {
-        if precedence >= PRECEDENCE.len() {
-            return self.parse_simple_expression();
-        }
-
-        let mut left = self.parse_precedence(precedence + 1)?;
-        while let Some(op) = self.parse_op(precedence) {
-            let right = self.parse_precedence(precedence + 1)?;
-            left = AstNode {
-                id: get_next_id(),
-                inner: AstNodeInner::BinOp {
-                    op_type: op,
-                    left: Box::new(left),
-                    right: Box::new(right),
+    // This is a recursive-descent algorithm (precedence climbing), but like
+    // `eval` it uses an explicit stack instead of native recursion to avoid a
+    // stack overflow on deeply nested expressions (e.g. thousands of nested
+    // parentheses or `length` keywords).
+    fn parse_expression(&mut self) -> ExprResult<AstNode> {
+        let mut stack = Vec::new();
+        let mut state = ParseState::Expression { min_prec: 0 };
+        loop {
+            state = match state {
+                ParseState::Expression { min_prec } => {
+                    stack.push(ParseFrame::ContinueExpression { min_prec });
+                    ParseState::Simple
+                }
+                ParseState::Simple => match self.next()? {
+                    b"match" => {
+                        stack.push(ParseFrame::KeywordArg {
+                            keyword: Keyword::Match,
+                            args: Vec::new(),
+                        });
+                        ParseState::Simple
+                    }
+                    b"substr" => {
+                        stack.push(ParseFrame::KeywordArg {
+                            keyword: Keyword::Substr,
+                            args: Vec::new(),
+                        });
+                        ParseState::Simple
+                    }
+                    b"index" => {
+                        stack.push(ParseFrame::KeywordArg {
+                            keyword: Keyword::Index,
+                            args: Vec::new(),
+                        });
+                        ParseState::Simple
+                    }
+                    b"length" => {
+                        stack.push(ParseFrame::KeywordArg {
+                            keyword: Keyword::Length,
+                            args: Vec::new(),
+                        });
+                        ParseState::Simple
+                    }
+                    b"+" => ParseState::Value(AstNode::new(AstNodeInner::Leaf {
+                        value: self.next()?.into(),
+                        position: self.index - 1,
+                    })),
+                    b"(" => {
+                        stack.push(ParseFrame::CloseParen);
+                        ParseState::Expression { min_prec: 0 }
+                    }
+                    s => ParseState::Value(AstNode::new(AstNodeInner::Leaf {
+                        value: s.into(),
+                        position: self.index - 1,
+                    })),
+                },
+                ParseState::Value(value) => match stack.pop() {
+                    None => return Ok(value),
+                    Some(ParseFrame::ContinueExpression { min_prec }) => {
+                        if let Some((prec, op)) = self.parse_op(min_prec) {
+                            stack.push(ParseFrame::CombineBinOp {
+                                min_prec,
+                                op,
+                                left: value,
+                            });
+                            ParseState::Expression { min_prec: prec + 1 }
+                        } else {
+                            ParseState::Value(value)
+                        }
+                    }
+                    Some(ParseFrame::CombineBinOp { min_prec, op, left }) => {
+                        stack.push(ParseFrame::ContinueExpression { min_prec });
+                        ParseState::Value(AstNode::new(AstNodeInner::BinOp {
+                            op_type: op,
+                            left: Box::new(left),
+                            right: Box::new(value),
+                        }))
+                    }
+                    Some(ParseFrame::KeywordArg { keyword, mut args }) => {
+                        args.push(value);
+                        if args.len() < keyword.arity() {
+                            stack.push(ParseFrame::KeywordArg { keyword, args });
+                            ParseState::Simple
+                        } else {
+                            ParseState::Value(AstNode::new(keyword.build(args)))
+                        }
+                    }
+                    Some(ParseFrame::CloseParen) => match self.next() {
+                        Ok(b")") => ParseState::Value(value),
+                        // Since we have parsed at least a '(', there will be a token
+                        // at `self.index - 1`. So this indexing won't panic.
+                        Ok(_) => {
+                            return Err(ExprError::ExpectedClosingBraceInsteadOf(
+                                String::from_utf8_lossy(self.input[self.index - 1].as_ref()).into(),
+                            ));
+                        }
+                        Err(ExprError::MissingArgument(_)) => {
+                            return Err(ExprError::ExpectedClosingBraceAfter(
+                                String::from_utf8_lossy(self.input[self.index - 1].as_ref()).into(),
+                            ));
+                        }
+                        Err(e) => return Err(e),
+                    },
                 },
             };
         }
-        Ok(left)
-    }
-
-    fn parse_simple_expression(&mut self) -> ExprResult<AstNode> {
-        let first = self.next()?;
-        let inner = match first {
-            b"match" => {
-                let left = self.parse_simple_expression()?;
-                let right = self.parse_simple_expression()?;
-                AstNodeInner::BinOp {
-                    op_type: BinOp::String(StringOp::Match),
-                    left: Box::new(left),
-                    right: Box::new(right),
-                }
-            }
-            b"substr" => {
-                let string = self.parse_simple_expression()?;
-                let pos = self.parse_simple_expression()?;
-                let length = self.parse_simple_expression()?;
-                AstNodeInner::Substr {
-                    string: Box::new(string),
-                    pos: Box::new(pos),
-                    length: Box::new(length),
-                }
-            }
-            b"index" => {
-                let left = self.parse_simple_expression()?;
-                let right = self.parse_simple_expression()?;
-                AstNodeInner::BinOp {
-                    op_type: BinOp::String(StringOp::Index),
-                    left: Box::new(left),
-                    right: Box::new(right),
-                }
-            }
-            b"length" => {
-                let string = self.parse_simple_expression()?;
-                AstNodeInner::Length {
-                    string: Box::new(string),
-                }
-            }
-            b"+" => AstNodeInner::Leaf {
-                value: self.next()?.into(),
-            },
-            b"(" => {
-                let s = self.parse_expression()?;
-
-                match self.next() {
-                    Ok(b")") => {}
-                    // Since we have parsed at least a '(', there will be a token
-                    // at `self.index - 1`. So this indexing won't panic.
-                    Ok(_) => {
-                        return Err(ExprError::ExpectedClosingBraceInsteadOf(
-                            String::from_utf8_lossy(self.input[self.index - 1].as_ref()).into(),
-                        ));
-                    }
-                    Err(ExprError::MissingArgument(_)) => {
-                        return Err(ExprError::ExpectedClosingBraceAfter(
-                            String::from_utf8_lossy(self.input[self.index - 1].as_ref()).into(),
-                        ));
-                    }
-                    Err(e) => return Err(e),
-                }
-                s.inner
-            }
-            s => AstNodeInner::Leaf { value: s.into() },
-        };
-        Ok(AstNode {
-            id: get_next_id(),
-            inner,
-        })
     }
 }
 
@@ -933,13 +1114,18 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::ExprError;
     use crate::syntax_tree::verify_range_quantifier;
+    use crate::{ExprError, ExprResult};
 
     use super::{
-        AstNode, AstNodeInner, BinOp, NumericOp, RelationOp, StringOp, check_posix_regex_errors,
-        get_next_id,
+        AstNode, AstNodeInner, BinOp, MaybeNonUtf8Str, NumericOp, RelationOp, StringOp,
+        check_posix_regex_errors, get_next_id,
     };
+
+    /// Parse an expression, discarding how far the parser got.
+    fn parse<S: AsRef<MaybeNonUtf8Str>>(input: &[S]) -> ExprResult<AstNode> {
+        AstNode::parse_located(input).map_err(|(e, _)| e)
+    }
 
     impl PartialEq for AstNode {
         fn eq(&self, other: &Self) -> bool {
@@ -949,12 +1135,51 @@ mod test {
 
     impl Eq for AstNode {}
 
+    // Hand-built expectations cannot know real argument positions, so
+    // equality ignores them, like it ignores ids.
+    impl PartialEq for AstNodeInner {
+        fn eq(&self, other: &Self) -> bool {
+            match (self, other) {
+                (Self::Leaf { value: a, .. }, Self::Leaf { value: b, .. }) => a == b,
+                (
+                    Self::BinOp {
+                        op_type: a_op,
+                        left: a_left,
+                        right: a_right,
+                    },
+                    Self::BinOp {
+                        op_type: b_op,
+                        left: b_left,
+                        right: b_right,
+                    },
+                ) => a_op == b_op && a_left == b_left && a_right == b_right,
+                (
+                    Self::Substr {
+                        string: a_string,
+                        pos: a_pos,
+                        length: a_length,
+                    },
+                    Self::Substr {
+                        string: b_string,
+                        pos: b_pos,
+                        length: b_length,
+                    },
+                ) => a_string == b_string && a_pos == b_pos && a_length == b_length,
+                (Self::Length { string: a }, Self::Length { string: b }) => a == b,
+                _ => false,
+            }
+        }
+    }
+
+    impl Eq for AstNodeInner {}
+
     impl From<&str> for AstNode {
         fn from(value: &str) -> Self {
             Self {
                 id: get_next_id(),
                 inner: AstNodeInner::Leaf {
                     value: value.into(),
+                    position: 0,
                 },
             }
         }
@@ -1014,31 +1239,28 @@ mod test {
             (":", BinOp::String(StringOp::Match)),
         ];
         for (string, value) in cases {
-            assert_eq!(AstNode::parse(&["1", string, "2"]), Ok(op(value, "1", "2")));
+            assert_eq!(parse(&["1", string, "2"]), Ok(op(value, "1", "2")));
         }
     }
 
     #[test]
     fn other_operators() {
         assert_eq!(
-            AstNode::parse(&["match", "1", "2"]),
+            parse(&["match", "1", "2"]),
             Ok(op(BinOp::String(StringOp::Match), "1", "2")),
         );
         assert_eq!(
-            AstNode::parse(&["index", "1", "2"]),
+            parse(&["index", "1", "2"]),
             Ok(op(BinOp::String(StringOp::Index), "1", "2")),
         );
-        assert_eq!(AstNode::parse(&["length", "1"]), Ok(length("1")));
-        assert_eq!(
-            AstNode::parse(&["substr", "1", "2", "3"]),
-            Ok(substr("1", "2", "3")),
-        );
+        assert_eq!(parse(&["length", "1"]), Ok(length("1")));
+        assert_eq!(parse(&["substr", "1", "2", "3"]), Ok(substr("1", "2", "3")),);
     }
 
     #[test]
     fn precedence() {
         assert_eq!(
-            AstNode::parse(&["1", "+", "2", "*", "3"]),
+            parse(&["1", "+", "2", "*", "3"]),
             Ok(op(
                 BinOp::Numeric(NumericOp::Add),
                 "1",
@@ -1046,7 +1268,7 @@ mod test {
             ))
         );
         assert_eq!(
-            AstNode::parse(&["(", "1", "+", "2", ")", "*", "3"]),
+            parse(&["(", "1", "+", "2", ")", "*", "3"]),
             Ok(op(
                 BinOp::Numeric(NumericOp::Mul),
                 op(BinOp::Numeric(NumericOp::Add), "1", "2"),
@@ -1054,7 +1276,7 @@ mod test {
             ))
         );
         assert_eq!(
-            AstNode::parse(&["1", "*", "2", "+", "3"]),
+            parse(&["1", "*", "2", "+", "3"]),
             Ok(op(
                 BinOp::Numeric(NumericOp::Add),
                 op(BinOp::Numeric(NumericOp::Mul), "1", "2"),
@@ -1064,13 +1286,30 @@ mod test {
     }
 
     #[test]
+    fn deeply_nested_parse_eval_drop() {
+        // Deeply nested expressions should parse, evaluate and drop without
+        // overflowing the stack.
+        let depth = 100_000;
+        let mut input: Vec<&str> = vec!["("; depth];
+        input.push("1");
+        input.extend(std::iter::repeat_n(")", depth));
+        let result = parse(&input).unwrap().eval().unwrap();
+        assert_eq!(result.eval_as_string(), b"1");
+
+        let mut input: Vec<&str> = vec!["length"; depth];
+        input.push("1");
+        let result = parse(&input).unwrap().eval().unwrap();
+        assert_eq!(result.eval_as_string(), b"1");
+    }
+
+    #[test]
     fn missing_closing_parenthesis() {
         assert_eq!(
-            AstNode::parse(&["(", "42"]),
+            parse(&["(", "42"]),
             Err(ExprError::ExpectedClosingBraceAfter("42".to_string()))
         );
         assert_eq!(
-            AstNode::parse(&["(", "42", "a"]),
+            parse(&["(", "42", "a"]),
             Err(ExprError::ExpectedClosingBraceInsteadOf("a".to_string()))
         );
     }
@@ -1078,34 +1317,22 @@ mod test {
     #[test]
     fn empty_substitution() {
         // causes a panic in 0.0.25
-        let result = AstNode::parse(&["a", ":", r"\(b\)*"])
-            .unwrap()
-            .eval()
-            .unwrap();
+        let result = parse(&["a", ":", r"\(b\)*"]).unwrap().eval().unwrap();
         assert_eq!(result.eval_as_string(), b"");
     }
 
     #[test]
     fn starting_stars_become_escaped() {
-        let result = AstNode::parse(&["cats", ":", r"*cats"])
-            .unwrap()
-            .eval()
-            .unwrap();
+        let result = parse(&["cats", ":", r"*cats"]).unwrap().eval().unwrap();
         assert_eq!(result.eval_as_string(), b"0");
 
-        let result = AstNode::parse(&["*cats", ":", r"*cats"])
-            .unwrap()
-            .eval()
-            .unwrap();
+        let result = parse(&["*cats", ":", r"*cats"]).unwrap().eval().unwrap();
         assert_eq!(result.eval_as_string(), b"5");
     }
 
     #[test]
     fn only_match_in_beginning() {
-        let result = AstNode::parse(&["budget", ":", r"get"])
-            .unwrap()
-            .eval()
-            .unwrap();
+        let result = parse(&["budget", ":", r"get"]).unwrap().eval().unwrap();
         assert_eq!(result.eval_as_string(), b"0");
     }
 
@@ -1362,5 +1589,84 @@ mod test {
         // Invalid bracket content
         let result = evaluate_match_expression(b"hello".to_vec(), b"a\\{invalid\\}".to_vec());
         assert!(matches!(result, Err(ExprError::InvalidBracketContent)));
+    }
+
+    #[test]
+    fn test_evaluate_match_expression_multibyte_character_class() {
+        use super::evaluate_match_expression;
+        use uucore::i18n::{UEncoding, get_locale_encoding};
+
+        let result = evaluate_match_expression(
+            vec![0xce, 0xb1, b'b', b'c', 0xce, 0xb4, b'e', b'f'],
+            vec![b'[', 0xce, 0xb1, b']'],
+        )
+        .unwrap();
+        assert_eq!(result.eval_as_string(), b"1");
+
+        let result = evaluate_match_expression(
+            vec![0xce, 0xb1, b'b', b'c', 0xce, 0xb4, b'e', b'f'],
+            vec![b'\\', b'(', b'[', 0xce, 0xb1, b']', b'\\', b')'],
+        )
+        .unwrap();
+        match get_locale_encoding() {
+            UEncoding::Utf8 => assert_eq!(result.eval_as_string(), &[0xce, 0xb1]),
+            UEncoding::Ascii => assert_eq!(result.eval_as_string(), &[0xce]),
+        }
+    }
+
+    #[test]
+    fn test_adjacent_quantifiers() {
+        use super::evaluate_match_expression;
+
+        let result = evaluate_match_expression(b"aaa".to_vec(), br"\(a\)\{2\}*".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"a");
+
+        let result = evaluate_match_expression(b"aaa".to_vec(), br"a**".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+    }
+
+    #[test]
+    fn test_gnu_bre_extensions_and_escaped_caret() {
+        use super::evaluate_match_expression;
+
+        // Word character \w
+        let result = evaluate_match_expression(b"a1b".to_vec(), br"\w".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"1");
+
+        // Word boundary \b
+        let result = evaluate_match_expression(b"abc".to_vec(), br"\ba".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"1");
+
+        // Beginning of word \<
+        let result = evaluate_match_expression(b"abc".to_vec(), br"\<a".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"1");
+
+        // End of word \>
+        let result = evaluate_match_expression(b"b".to_vec(), br"b\>".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"1");
+
+        // Escaped caret with quantifier \^*
+        let result = evaluate_match_expression(b"^".to_vec(), br"\^*".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"1");
+    }
+
+    #[test]
+    fn test_invalid_utf8_with_high_bytes_before_capture() {
+        use super::evaluate_match_expression;
+        use uucore::i18n::{UEncoding, get_locale_encoding};
+
+        // Input contains non-UTF-8 byte >= 0x80 (0xFF) before a valid ASCII capture
+        let result =
+            evaluate_match_expression(vec![0xff, b'a', b'b', b'c'], br".\(abc\)".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"abc");
+
+        // In UTF-8 locale, capture group containing invalid UTF-8 returns empty string;
+        // in ASCII/C locale (e.g. WASI default), raw bytes are captured.
+        let result =
+            evaluate_match_expression(vec![0xff, b'a', b'b', b'c'], br"\(.*\)".to_vec()).unwrap();
+        match get_locale_encoding() {
+            UEncoding::Utf8 => assert_eq!(result.eval_as_string(), b""),
+            UEncoding::Ascii => assert_eq!(result.eval_as_string(), &[0xff, b'a', b'b', b'c']),
+        }
     }
 }

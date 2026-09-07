@@ -23,3 +23,4 @@ shuf-error-no-lines-to-repeat = aucune ligne à répéter
 shuf-error-start-exceeds-end = le début dépasse la fin
 shuf-error-missing-dash = '-' manquant
 shuf-error-write-failed = échec de l'écriture
+shuf-error-memory-exhausted = mémoire épuisée

@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/chown.rs"
 doctest = false
@@ -27,6 +24,9 @@ uucore = { workspace = true, features = [
   "safe-traversal",
 ] }
 fluent = { workspace = true }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "chown"

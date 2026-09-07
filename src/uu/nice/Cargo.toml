@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/nice.rs"
 test = false
@@ -26,6 +23,9 @@ fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["process"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "nice"

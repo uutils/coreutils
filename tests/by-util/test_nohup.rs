@@ -29,11 +29,11 @@ fn test_nohup_exit_codes() {
 
 #[test]
 #[cfg(any(
+    target_vendor = "apple",
     target_os = "linux",
     target_os = "android",
     target_os = "freebsd",
-    target_os = "openbsd",
-    target_vendor = "apple"
+    target_os = "openbsd"
 ))]
 fn test_nohup_multiple_args_and_flags() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -48,11 +48,11 @@ fn test_nohup_multiple_args_and_flags() {
 
 #[test]
 #[cfg(any(
+    target_vendor = "apple",
     target_os = "linux",
     target_os = "android",
     target_os = "freebsd",
-    target_os = "openbsd",
-    target_vendor = "apple"
+    target_os = "openbsd"
 ))]
 fn test_nohup_with_pseudo_terminal_emulation_on_stdin_stdout_stderr_get_replaced() {
     let ts = TestScenario::new(util_name!());
@@ -84,11 +84,11 @@ fn test_nohup_with_pseudo_terminal_emulation_on_stdin_stdout_stderr_get_replaced
 // Test that nohup creates nohup.out in current directory
 #[test]
 #[cfg(any(
+    target_vendor = "apple",
     target_os = "linux",
     target_os = "android",
     target_os = "freebsd",
-    target_os = "openbsd",
-    target_vendor = "apple"
+    target_os = "openbsd"
 ))]
 fn test_nohup_creates_output_in_cwd() {
     let ts = TestScenario::new(util_name!());
@@ -111,11 +111,11 @@ fn test_nohup_creates_output_in_cwd() {
 // Test that nohup appends to existing nohup.out
 #[test]
 #[cfg(any(
+    target_vendor = "apple",
     target_os = "linux",
     target_os = "android",
     target_os = "freebsd",
-    target_os = "openbsd",
-    target_vendor = "apple"
+    target_os = "openbsd"
 ))]
 fn test_nohup_appends_to_existing_file() {
     let ts = TestScenario::new(util_name!());
@@ -203,9 +203,10 @@ fn test_nohup_fallback_to_home() {
 // or 126 when command exists but is not executable
 #[test]
 fn test_nohup_command_not_found() {
-    let result = new_ucmd!()
-        .arg("this-command-definitely-does-not-exist-anywhere")
-        .fails();
+    let command = "this-command-definitely-does-not-exist-anywhere";
+    let result = new_ucmd!().arg(command).fails();
+
+    result.stderr_contains(format!("failed to run command '{command}'"));
 
     // Accept either 126 (cannot execute) or 127 (command not found)
     let code = result.try_exit_status().and_then(|s| s.code());
@@ -218,11 +219,11 @@ fn test_nohup_command_not_found() {
 // Test stderr is redirected to stdout
 #[test]
 #[cfg(any(
+    target_vendor = "apple",
     target_os = "linux",
     target_os = "android",
     target_os = "freebsd",
-    target_os = "openbsd",
-    target_vendor = "apple"
+    target_os = "openbsd"
 ))]
 fn test_nohup_stderr_to_stdout() {
     let ts = TestScenario::new(util_name!());

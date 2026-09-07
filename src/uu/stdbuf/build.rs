@@ -10,39 +10,20 @@ use std::path::Path;
 use std::process::Command;
 
 fn main() {
+    // do not compile libstdbuf for windows target. The windows stdbuf.exe loads libstdbuf.dll compiled for the cygwin target.
+    if env::var("CARGO_CFG_UNIX").is_err() {
+        println!("cargo:rustc-cfg=feature=\"feat_external_libstdbuf\"");
+        return;
+    }
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/libstdbuf/src/libstdbuf.rs");
-
-    // Check for external stdbuf feature requirements
-    #[cfg(feature = "feat_external_libstdbuf")]
-    {
-        if env::var("LIBSTDBUF_DIR").is_err() {
-            eprintln!(
-                "\n\x1b[31mError:\x1b[0m The 'feat_external_libstdbuf' feature requires the LIBSTDBUF_DIR environment variable to be set."
-            );
-            eprintln!(
-                "\x1b[33mUsage:\x1b[0m LIBSTDBUF_DIR=/path/to/lib/directory cargo build --features feat_external_libstdbuf"
-            );
-            eprintln!(
-                "\x1b[33mExample:\x1b[0m LIBSTDBUF_DIR=/usr/lib cargo build --features feat_external_libstdbuf"
-            );
-            eprintln!(
-                "\nThis directory should point to where libstdbuf.so / libstdbuf.dylib will be installed on the target system."
-            );
-            std::process::exit(1);
-        }
-    }
 
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR not set");
     let target = env::var("TARGET").unwrap_or_else(|_| "unknown".to_string());
 
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     let target_vendor = env::var("CARGO_CFG_TARGET_VENDOR").unwrap();
-    let target_family = env::var("CARGO_CFG_TARGET_FAMILY").unwrap();
 
-    if target_family != "unix" {
-        return;
-    }
     let dylib_ext = if target_vendor == "apple" {
         ".dylib"
     } else if target_os == "cygwin" {

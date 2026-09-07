@@ -7,7 +7,6 @@
 use std::ffi::OsString;
 
 use crate::options;
-use uucore::translate;
 
 // parse_options loads the options into the settings, returning an array of
 // error messages.
@@ -16,17 +15,23 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
     // This vector holds error messages encountered.
     let mut errs: Vec<String> = vec![];
     settings.renumber = opts.get_flag(options::NO_RENUMBER);
-    if let Some(delimiter) = opts.get_one::<OsString>(options::SECTION_DELIMITER) {
-        // GNU nl determines whether a delimiter is a "single character" based on byte length, not
-        // character length. A "single character" implies the second character is a ':'.
-        settings.section_delimiter = if delimiter.len() == 1 {
-            let mut delimiter = delimiter.clone();
+
+    if let Some(mut delimiter) = opts
+        .get_one::<OsString>(options::SECTION_DELIMITER)
+        .cloned()
+    {
+        let is_single_char = delimiter
+            .to_str()
+            .map_or_else(|| delimiter.len() == 1, |s| s.chars().count() == 1);
+
+        // A "single character" implies the second character of the delimiter is ':'.
+        if is_single_char {
             delimiter.push(":");
-            delimiter
-        } else {
-            delimiter.clone()
-        };
+        }
+
+        settings.section_delimiter = delimiter;
     }
+
     if let Some(val) = opts.get_one::<OsString>(options::NUMBER_SEPARATOR) {
         settings.number_separator.clone_from(val);
     }
@@ -61,10 +66,8 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
         Some(Ok(style)) => settings.footer_numbering = style,
         Some(Err(message)) => errs.push(message),
     }
-    match opts.get_one::<usize>(options::NUMBER_WIDTH) {
-        None => {}
-        Some(num) if *num > 0 => settings.number_width = *num,
-        Some(_) => errs.push(translate!("nl-error-invalid-line-width", "value" => "0")),
+    if let Some(&num) = opts.get_one::<u64>(options::NUMBER_WIDTH) {
+        settings.number_width = num as usize;
     }
     if let Some(num) = opts.get_one::<u64>(options::JOIN_BLANK_LINES) {
         settings.join_blank_lines = *num;

@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/base32.rs"
 doctest = false
@@ -22,6 +19,12 @@ doctest = false
 clap = { workspace = true }
 uucore = { workspace = true, features = ["encoding"] }
 fluent = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "base32"

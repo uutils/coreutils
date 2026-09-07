@@ -62,16 +62,7 @@ impl Config {
                 if name == "-" {
                     None
                 } else {
-                    let path = Path::new(name);
-
-                    if !path.exists() {
-                        return Err(USimpleError::new(
-                            BASE_CMD_PARSE_ERROR,
-                            translate!("base-common-no-such-file", "file" => path.maybe_quote()),
-                        ));
-                    }
-
-                    Some(path.to_owned())
+                    Some(Path::new(name).to_owned())
                 }
             }
             None => None,
@@ -152,6 +143,8 @@ pub fn get_input(config: &Config) -> UResult<Box<dyn BufRead>> {
         Some(path_buf) => {
             let file =
                 File::open(path_buf).map_err_context(|| path_buf.maybe_quote().to_string())?;
+            #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+            let _ = rustix::fs::fadvise(&file, 0, None, rustix::fs::Advice::Sequential);
             Ok(Box::new(BufReader::with_capacity(DEFAULT_BUF_SIZE, file)))
         }
         None => {
@@ -549,14 +542,11 @@ pub mod fast_encode {
         let mut encoded_buffer = VecDeque::<u8>::new();
         let mut leftover_buffer = Vec::<u8>::with_capacity(encode_in_chunks_of_size);
 
-        loop {
-            let read_buffer = input
-                .fill_buf()
-                .map_err(|err| USimpleError::new(1, super::format_read_error(&err)))?;
-            if read_buffer.is_empty() {
-                break;
-            }
-
+        while let read_buffer = input
+            .fill_buf()
+            .map_err(|e| USimpleError::new(1, super::format_read_error(&e)))?
+            && !read_buffer.is_empty()
+        {
             let mut consumed = 0;
 
             if !leftover_buffer.is_empty() {
@@ -816,15 +806,11 @@ pub mod fast_decode {
         let mut buffer = Vec::with_capacity(decode_in_chunks_of_size);
         let mut decoded_buffer = Vec::<u8>::new();
 
-        loop {
-            let read_buffer = input
-                .fill_buf()
-                .map_err(|err| USimpleError::new(1, super::format_read_error(&err)))?;
-            let read_len = read_buffer.len();
-            if read_len == 0 {
-                break;
-            }
-
+        while let read_buffer = input
+            .fill_buf()
+            .map_err(|e| USimpleError::new(1, super::format_read_error(&e)))?
+            && let read_len @ 1.. = read_buffer.len()
+        {
             for &byte in read_buffer {
                 if byte == b'\n' || byte == b'\r' {
                     continue;

@@ -62,10 +62,11 @@ impl FileHandling {
 
     /// Canonicalize `path` if it is not already an absolute path
     fn canonicalize_path(path: &Path) -> PathBuf {
-        if path.is_relative() && !path.is_stdin() {
-            if let Ok(p) = path.canonicalize() {
-                return p;
-            }
+        if path.is_relative()
+            && !path.is_stdin()
+            && let Ok(p) = path.canonicalize()
+        {
+            return p;
         }
         path.to_owned()
     }

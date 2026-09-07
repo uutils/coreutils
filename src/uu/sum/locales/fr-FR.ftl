@@ -10,3 +10,4 @@ sum-help-sysv-compatible = utiliser l'algorithme de somme System V, utiliser des
 # Messages d'erreur
 sum-error-is-directory = { $name } : Est un répertoire
 sum-error-no-such-file-or-directory = { $name } : Aucun fichier ou répertoire de ce type
+sum-error-not-a-directory = { $name } : Pas un répertoire

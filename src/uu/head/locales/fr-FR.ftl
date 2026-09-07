@@ -3,7 +3,7 @@ head-about = Affiche les 10 premières lignes de chaque FICHIER sur la sortie st
   Sans FICHIER, ou quand FICHIER est -, lit l'entrée standard.
 
   Les arguments obligatoires pour les options longues sont obligatoires pour les options courtes aussi.
-head-usage = head [DRAPEAU]... [FICHIER]...
+head-usage = head [OPTION]... [FICHIER]...
 
 # Messages d'aide
 head-help-bytes = affiche les premiers NUM octets de chaque fichier ;

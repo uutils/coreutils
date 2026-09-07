@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/pr.rs"
 test = false
@@ -27,6 +24,9 @@ memchr = { workspace = true }
 regex = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "pr"

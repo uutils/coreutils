@@ -167,6 +167,19 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_delimiter_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading delimiter value passed as its own argument (not
+    // attached with `-d-x`/`=`) must not be mistaken for a new,
+    // unrecognized flag.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f1", "a\nb\n");
+    at.write("f2", "1\n2\n");
+    ucmd.args(&["-d", "-x", "f1", "f2"])
+        .succeeds()
+        .stdout_is("a-1\nb-2\n");
+}
+
+#[test]
 fn test_combine_pairs_of_lines() {
     for s in ["-s", "--serial"] {
         for d in ["-d", "--delimiters"] {
@@ -276,6 +289,25 @@ FIRST!SECOND@THIRD#FOURTH!ABCDEFG
     }
 }
 
+// With `-s`, each input file is written as its own output line, so the
+// delimiter list must restart from its first element for every file instead
+// of carrying the cycle over from the previous one.
+#[test]
+fn test_serial_delimiter_list_resets_per_file() {
+    for option_style in ["-d", "--delimiters"] {
+        for serial in ["-s", "--serial"] {
+            let (at, mut ucmd) = at_and_ucmd!();
+            at.write("f1", "a\nb\n");
+            at.write("f2", "c\nd\ne\n");
+            at.write("f3", "f\ng\n");
+
+            ucmd.args(&[option_style, ":|", serial, "f1", "f2", "f3"])
+                .succeeds()
+                .stdout_only("a:b\nc:d|e\nf:g\n");
+        }
+    }
+}
+
 #[test]
 #[cfg(unix)]
 fn test_non_utf8_input() {
@@ -359,13 +391,13 @@ fn test_backslash_zero_delimiter() {
 }
 
 #[test]
-fn test_gnu_escape_sequences() {
+fn test_paste_delimiter_escape_sequences() {
     let cases: &[(&str, u8)] = &[(r"\b", 0x08), (r"\f", 0x0C), (r"\r", 0x0D), (r"\v", 0x0B)];
     for &(esc, byte) in cases {
-        let expected = [b'1', byte, b'2', byte, b'3', b'\n'];
+        let expected = [b'a', byte, b'b', byte, b'c', b'\n'];
         new_ucmd!()
             .args(&["-s", "-d", esc])
-            .pipe_in("1\n2\n3\n")
+            .pipe_in("a\nb\nc\n")
             .succeeds()
             .stdout_only_bytes(expected);
     }
@@ -374,9 +406,12 @@ fn test_gnu_escape_sequences() {
 // As of 2024-10-09, only bsdutils (https://github.com/dcantrell/bsdutils, derived from FreeBSD) and toybox handle
 // multibyte delimiter characters in the way a user would likely expect. BusyBox and GNU Core Utilities do not.
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
 fn test_multi_byte_delimiter() {
     for option_style in ["-d", "--delimiters"] {
         new_ucmd!()
+            // A multibyte delimiter is stepped per character in a UTF-8 locale.
+            .env("LC_ALL", "C.UTF-8")
             .args(&[option_style, "!ß@", "-s"])
             .pipe_in(
                 "\
@@ -398,6 +433,7 @@ fn test_multi_byte_delimiter() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
 fn test_data() {
     for example in EXAMPLE_DATA {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -408,7 +444,9 @@ fn test_data() {
             ins.push(file);
         }
         println!("{}", example.name);
-        ucmd.args(example.args)
+        // Some examples use multibyte delimiters, which need a UTF-8 locale.
+        ucmd.env("LC_ALL", "C.UTF-8")
+            .args(example.args)
             .args(&ins)
             .succeeds()
             .stdout_is(example.out);
@@ -450,12 +488,12 @@ fn test_paste_non_utf8_paths() {
 }
 
 #[cfg(target_os = "linux")]
-fn make_broken_pipe() -> std::fs::File {
-    let (read, write) = rustix::pipe::pipe().expect("Failed to create pipe");
+fn make_broken_pipe() -> std::io::PipeWriter {
+    let (read, write) = std::io::pipe().expect("Failed to create pipe");
     // Drop the read end so writes fail with EPIPE.
     drop(read);
-
-    write.into()
+    // Return the write end of the pipe
+    write
 }
 
 #[test]
@@ -484,4 +522,14 @@ fn test_dev_zero_closed_pipe() {
         .set_stdout(make_broken_pipe())
         .run()
         .fails_silently();
+}
+
+#[test]
+fn test_repeated_delimiter_takes_the_last() {
+    // GNU lets a later -d override an earlier one rather than erroring.
+    new_ucmd!()
+        .args(&["-d", ",", "-d", ":", "-s", "-"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is("a:b\n");
 }

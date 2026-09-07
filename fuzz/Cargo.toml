@@ -8,6 +8,9 @@ rust-version.workspace = true
 license.workspace = true
 publish = false
 
+[package.metadata]
+cargo-fuzz = true
+
 # Prevent this from interfering with workspaces
 [workspace]
 members = ["."]
@@ -16,9 +19,6 @@ members = ["."]
 edition = "2024"
 rust-version = "1.88.0"
 license = "MIT"
-
-[package.metadata]
-cargo-fuzz = true
 
 # Enable debug symbols in release builds for readable backtraces
 # when fuzzing discovers crashes. This addresses issue #5343.

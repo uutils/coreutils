@@ -3,13 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (API) nodename osname sysname (options) mnrsv mnrsvo
+// spell-checker:ignore (API) nodename osname sysname (options) mnrsv mnrsvo mnrsvoA
 
 use std::ffi::{OsStr, OsString};
 
 use clap::{Arg, ArgAction, Command};
 use platform_info::{PlatformInfo, PlatformInfoAPI, UNameAPI};
-use uucore::display::println_verbatim;
+use uucore::display::{print_verbatim, println_verbatim};
 use uucore::translate;
 use uucore::{
     error::{UResult, USimpleError},
@@ -18,6 +18,7 @@ use uucore::{
 
 pub mod options {
     pub static ALL: &str = "all";
+    pub static ALL_LABELED: &str = "all-labeled";
     pub static KERNEL_NAME: &str = "kernel-name";
     pub static NODENAME: &str = "nodename";
     pub static KERNEL_VERSION: &str = "kernel-version";
@@ -58,10 +59,35 @@ impl UNameOutput {
         .join(OsStr::new(" "))
     }
 
+    fn display_labeled(&self) -> OsString {
+        let mut out = OsString::new();
+        for (label, value) in [
+            ("uname-label-kernel-name", self.kernel_name.as_ref()),
+            ("uname-label-nodename", self.nodename.as_ref()),
+            ("uname-label-kernel-release", self.kernel_release.as_ref()),
+            ("uname-label-kernel-version", self.kernel_version.as_ref()),
+            ("uname-label-machine", self.machine.as_ref()),
+            ("uname-label-processor", self.processor.as_ref()),
+            (
+                "uname-label-hardware-platform",
+                self.hardware_platform.as_ref(),
+            ),
+            ("uname-label-os", self.os.as_ref()),
+        ] {
+            let Some(value) = value else { continue };
+            out.push(OsStr::new(
+                &translate!(label, "value" => value.to_string_lossy()),
+            ));
+            out.push("\n");
+        }
+        out
+    }
+
     pub fn new(opts: &Options) -> UResult<Self> {
         let uname = PlatformInfo::new()
             .map_err(|_e| USimpleError::new(1, translate!("uname-error-cannot-get-system-name")))?;
         let none = !(opts.all
+            || opts.all_labeled
             || opts.kernel_name
             || opts.nodename
             || opts.kernel_release
@@ -71,21 +97,28 @@ impl UNameOutput {
             || opts.processor
             || opts.hardware_platform);
 
-        let kernel_name =
-            (opts.kernel_name || opts.all || none).then(|| uname.sysname().to_owned());
+        let kernel_name = (opts.kernel_name || opts.all || opts.all_labeled || none)
+            .then(|| uname.sysname().to_owned());
 
-        let nodename = (opts.nodename || opts.all).then(|| uname.nodename().to_owned());
+        let nodename =
+            (opts.nodename || opts.all || opts.all_labeled).then(|| uname.nodename().to_owned());
 
-        let kernel_release = (opts.kernel_release || opts.all).then(|| uname.release().to_owned());
+        let kernel_release = (opts.kernel_release || opts.all || opts.all_labeled)
+            .then(|| uname.release().to_owned());
 
-        let kernel_version = (opts.kernel_version || opts.all).then(|| uname.version().to_owned());
+        let kernel_version = (opts.kernel_version || opts.all || opts.all_labeled)
+            .then(|| uname.version().to_owned());
 
-        let machine = (opts.machine || opts.all).then(|| uname.machine().to_owned());
+        let machine =
+            (opts.machine || opts.all || opts.all_labeled).then(|| uname.machine().to_owned());
 
-        let os = (opts.os || opts.all).then(|| uname.osname().to_owned());
+        let os = (opts.os || opts.all || opts.all_labeled).then(|| uname.osname().to_owned());
 
         // This option is unsupported on modern Linux systems
         // See: https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
+        //
+        // -a and -A omit an unknown processor or hardware platform, and since we never
+        // determine either one, they only ever show up when explicitly requested.
         let processor = opts.processor.then(|| translate!("uname-unknown").into());
 
         // This option is unsupported on modern Linux systems
@@ -109,6 +142,7 @@ impl UNameOutput {
 
 pub struct Options {
     pub all: bool,
+    pub all_labeled: bool,
     pub kernel_name: bool,
     pub nodename: bool,
     pub kernel_version: bool,
@@ -125,6 +159,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let options = Options {
         all: matches.get_flag(options::ALL),
+        all_labeled: matches.get_flag(options::ALL_LABELED),
         kernel_name: matches.get_flag(options::KERNEL_NAME),
         nodename: matches.get_flag(options::NODENAME),
         kernel_release: matches.get_flag(options::KERNEL_RELEASE),
@@ -135,8 +170,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         os: matches.get_flag(options::OS),
     };
     let output = UNameOutput::new(&options)?;
-    println_verbatim(output.display().as_os_str())
-        .map_err(|e| USimpleError::new(1, e.to_string()))?;
+    if options.all_labeled {
+        print_verbatim(output.display_labeled().as_os_str())
+            .map_err(|e| USimpleError::new(1, e.to_string()))?;
+    } else {
+        println_verbatim(output.display().as_os_str())
+            .map_err(|e| USimpleError::new(1, e.to_string()))?;
+    }
     Ok(())
 }
 
@@ -152,6 +192,13 @@ pub fn uu_app() -> Command {
                 .short('a')
                 .long(options::ALL)
                 .help(translate!("uname-help-all"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::ALL_LABELED)
+                .short('A')
+                .long(options::ALL_LABELED)
+                .help(translate!("uname-help-all-labeled"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

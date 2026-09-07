@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-import multiprocessing
-import subprocess
 import argparse
 import csv
+import multiprocessing
+import subprocess
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -50,6 +50,10 @@ TARGETS = [
     "aarch64-fuchsia",
     "x86_64-fuchsia",
 ]
+
+
+class MissingToolchainError(Exception):
+    """A toolchain or SDK needed to check a target is not installed."""
 
 
 class Target(str):
@@ -105,36 +109,38 @@ class Target(str):
                 f"--target={self}",
             ]
 
-        res = subprocess.run(args, capture_output=True)
+        res = subprocess.run(args, capture_output=True, check=False)
         return res.returncode
 
     # Validate that the dependencies for running this target are met
     def is_installed(self):
         # check IOS sdk is installed, raise exception otherwise
         if "ios" in self:
-            res = subprocess.run(["which", "xcrun"], capture_output=True)
+            res = subprocess.run(["which", "xcrun"], capture_output=True, check=False)
             if len(res.stdout) == 0:
-                raise Exception(
+                raise MissingToolchainError(
                     "Error: IOS sdk does not seem to be installed. Please do that manually"
                 )
         if not self.requires_nightly():
             # check std toolchains are installed
             toolchains = subprocess.run(
-                ["rustup", "target", "list"], capture_output=True
+                ["rustup", "target", "list"], capture_output=True, check=False
             )
             toolchains = toolchains.stdout.decode("utf-8").split("\n")
             if "installed" not in next(filter(lambda x: self in x, toolchains)):
-                raise Exception(
+                raise MissingToolchainError(
                     f"Error: the {self} target is not installed. Please do that manually"
                 )
         else:
             # check nightly toolchains are installed
             toolchains = subprocess.run(
-                ["rustup", "+nightly", "target", "list"], capture_output=True
+                ["rustup", "+nightly", "target", "list"],
+                capture_output=True,
+                check=False,
             )
             toolchains = toolchains.stdout.decode("utf-8").split("\n")
             if "installed" not in next(filter(lambda x: self in x, toolchains)):
-                raise Exception(
+                raise MissingToolchainError(
                     f"Error: the {self} nightly target is not installed. Please do that manually"
                 )
         return True
@@ -143,13 +149,12 @@ class Target(str):
 def install_targets():
     cmd = ["rustup", "target", "add"] + TARGETS
     print(" ".join(cmd))
-    ret = subprocess.run(cmd)
+    ret = subprocess.run(cmd, check=False)
     assert ret.returncode == 0
 
 
 def get_all_bins():
-    bins = map(lambda x: x.name, BINS_PATH.iterdir())
-    return sorted(list(bins))
+    return sorted(path.name for path in BINS_PATH.iterdir())
 
 
 def get_targets(selection):
@@ -180,7 +185,7 @@ def test_all_targets(targets, bins):
 
 def save_csv(file, table):
     targets = get_targets(table.keys())  # preserve order in CSV
-    bins = list(list(table.values())[0].keys())
+    bins = list(next(iter(table.values())).keys())
     with open(file, "w") as csvfile:
         header = ["target"] + bins
         writer = csv.DictWriter(csvfile, fieldnames=header)
@@ -215,8 +220,8 @@ def merge_tables(old, new):
 
 
 def render_md(fd, table, headings: str, row_headings: Target):
-    def print_row(lst, lens=[]):
-        lens = lens + [0] * (len(lst) - len(lens))
+    def print_row(lst, lens=None):
+        lens = (lens or []) + [0] * (len(lst) - len(lens or []))
         for e, lmd in zip(lst, lens):
             fmt = "|{}" if lmd == 0 else "|{:>%s}" % len(header[0])
             fd.write(fmt.format(e))
@@ -227,8 +232,8 @@ def render_md(fd, table, headings: str, row_headings: Target):
 
     # add some 'hard' padding to specific columns
     lens = [
-        max(map(lambda x: len(x.os), row_headings)) + 2,
-        max(map(lambda x: len(x.arch), row_headings)) + 2,
+        max(len(target.os) for target in row_headings) + 2,
+        max(len(target.arch) for target in row_headings) + 2,
     ]
     header = Target.get_heading()
     header[0] = ("{:#^%d}" % lens[0]).format(header[0])
@@ -236,11 +241,11 @@ def render_md(fd, table, headings: str, row_headings: Target):
 
     header += headings
     print_row(header)
-    lines = list(map(lambda x: "-" * len(x), header))
+    lines = ["-" * len(column) for column in header]
     print_row(lines)
 
     for t in row_headings:
-        row = list(map(lambda b: cell_render(t, b), headings))
+        row = [cell_render(t, b) for b in headings]
         row = t.get_row_heading() + row
         print_row(row)
 

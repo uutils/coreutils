@@ -84,11 +84,11 @@ impl Input {
                 // on dev/fd/0 (or /dev/stdin) will fail (NotFound),
                 // so we treat stdin as a pipe here
                 // https://github.com/rust-lang/rust/issues/95239
-                #[cfg(target_os = "macos")]
+                #[cfg(target_vendor = "apple")]
                 {
                     None
                 }
-                #[cfg(not(target_os = "macos"))]
+                #[cfg(not(target_vendor = "apple"))]
                 {
                     PathBuf::from(text::FD0).canonicalize().ok()
                 }
@@ -208,7 +208,7 @@ impl MetadataExtTail for Metadata {
 #[cfg(not(target_os = "wasi"))]
 pub trait PathExtTail {
     fn is_stdin(&self) -> bool;
-    fn is_orphan(&self) -> bool;
+    fn has_active_parent(&self) -> bool;
     fn is_tailable(&self) -> bool;
 }
 
@@ -220,12 +220,12 @@ impl PathExtTail for Path {
             || self.eq(Self::new(&translate!("tail-stdin-header")))
     }
 
-    /// Return true if `path` does not have an existing parent directory
-    fn is_orphan(&self) -> bool {
-        !matches!(self.parent(), Some(parent) if parent.is_dir())
+    /// Return true if `path` has an existing parent directory
+    fn has_active_parent(&self) -> bool {
+        self.parent().is_some_and(Self::is_dir)
     }
 
-    /// Return true if `path` is is a file type that can be tailed
+    /// Return true if `path` is a file type that can be tailed
     fn is_tailable(&self) -> bool {
         path_is_tailable(self)
     }
@@ -236,13 +236,13 @@ pub fn path_is_tailable(path: &Path) -> bool {
 }
 
 #[inline]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 pub fn stdin_is_bad_fd() -> bool {
     uucore::signals::stdin_was_closed()
 }
 
 #[inline]
-#[cfg(not(unix))]
+#[cfg(not(all(unix, not(target_os = "fuchsia"))))]
 pub fn stdin_is_bad_fd() -> bool {
     false
 }

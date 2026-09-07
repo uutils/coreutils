@@ -5,10 +5,12 @@
 //! Determine the strategy for breaking up the input (file or stdin) into chunks
 //! based on the command line options
 
-use crate::{OPT_BYTES, OPT_LINE_BYTES, OPT_LINES, OPT_NUMBER};
+use crate::cli::options;
 use clap::{ArgMatches, parser::ValueSource};
+use std::ffi::OsString;
 use thiserror::Error;
 use uucore::{
+    diagnostics::OptionValue,
     display::Quotable,
     parser::parse_size::{ParseSizeError, parse_size_u64, parse_size_u64_max},
     translate,
@@ -44,12 +46,12 @@ impl NumberType {
     /// The number of chunks for this number type.
     pub fn num_chunks(&self) -> u64 {
         match self {
-            Self::Bytes(n) => *n,
-            Self::KthBytes(_, n) => *n,
-            Self::Lines(n) => *n,
-            Self::KthLines(_, n) => *n,
-            Self::RoundRobin(n) => *n,
-            Self::KthRoundRobin(_, n) => *n,
+            Self::Bytes(n)
+            | Self::KthBytes(_, n)
+            | Self::Lines(n)
+            | Self::KthLines(_, n)
+            | Self::RoundRobin(n)
+            | Self::KthRoundRobin(_, n) => *n,
         }
     }
 }
@@ -144,6 +146,9 @@ impl NumberType {
             (Some("l"), Some(n_str), None, None) => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                if num_chunks == 0 {
+                    return Err(NumberTypeError::NumberOfChunks(n_str.to_string()));
+                }
                 Ok(Self::Lines(num_chunks))
             }
             (Some("l"), Some(k_str), Some(n_str), None) => {
@@ -159,6 +164,9 @@ impl NumberType {
             (Some("r"), Some(n_str), None, None) => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                if num_chunks == 0 {
+                    return Err(NumberTypeError::NumberOfChunks(n_str.to_string()));
+                }
                 Ok(Self::RoundRobin(num_chunks))
             }
             (Some("r"), Some(k_str), Some(n_str), None) => {
@@ -196,15 +204,19 @@ pub enum Strategy {
 }
 
 /// An error when parsing a chunking strategy from command-line arguments.
+///
+/// A bad size carries the option it was given to, so that a caret can point
+/// inside it — `None` when it came from no option, as with the obsolete
+/// `split -22` spelling.
 #[derive(Debug, Error)]
 pub enum StrategyError {
     /// Invalid number of lines.
     #[error("{}", translate!("split-error-invalid-number-of-lines", "error" => .0))]
-    Lines(ParseSizeError),
+    Lines(ParseSizeError, Option<OptionValue>),
 
     /// Invalid number of bytes.
     #[error("{}", translate!("split-error-invalid-number-of-bytes", "error" => .0))]
-    Bytes(ParseSizeError),
+    Bytes(ParseSizeError, Option<OptionValue>),
 
     /// Invalid number type.
     #[error("{0}")]
@@ -215,21 +227,46 @@ pub enum StrategyError {
     MultipleWays,
 }
 
+impl StrategyError {
+    /// Draw a caret under the part of the SIZE that is at fault.
+    ///
+    /// # Arguments
+    ///
+    /// * `diag_args` - The arguments as typed, program name included.
+    /// * `message` - The headline, already localized.
+    ///
+    /// # Returns
+    ///
+    /// `false` when this error is not about a SIZE given to an option, or when
+    /// nothing could be drawn; the caller then falls back to the plain
+    /// one-line message.
+    pub fn render(&self, diag_args: &[OsString], message: &str) -> bool {
+        let (Self::Lines(error, Some(option)) | Self::Bytes(error, Some(option))) = self else {
+            return false;
+        };
+        error.render_size_value(diag_args, option, 0, message)
+    }
+}
+
 impl Strategy {
     /// Parse a strategy from the command-line arguments.
     pub fn from(matches: &ArgMatches, obs_lines: Option<&str>) -> Result<Self, StrategyError> {
         fn get_and_parse(
             matches: &ArgMatches,
-            option: &str,
+            option: &'static str,
+            short: char,
             strategy: fn(u64) -> Strategy,
-            error: fn(ParseSizeError) -> StrategyError,
+            error: fn(ParseSizeError, Option<OptionValue>) -> StrategyError,
         ) -> Result<Strategy, StrategyError> {
             let s = matches.get_one::<String>(option).unwrap();
-            let n = parse_size_u64_max(s).map_err(error)?;
+            // `None` for a size that did not come from an option, such as the
+            // obsolete `split -22` spelling: there is nothing to point at.
+            let origin = || Some(OptionValue::new(s, short, option));
+            let n = parse_size_u64_max(s).map_err(|e| error(e, origin()))?;
             if n > 0 {
                 Ok(strategy(n))
             } else {
-                Err(error(ParseSizeError::ParseFailure(s.to_owned())))
+                Err(error(ParseSizeError::ParseFailure(s.to_owned()), origin()))
             }
         }
         // Check that the user is not specifying more than one strategy.
@@ -238,38 +275,48 @@ impl Strategy {
         // overrides_with_all() due to obsolete lines value option
         match (
             obs_lines,
-            matches.value_source(OPT_LINES) == Some(ValueSource::CommandLine),
-            matches.value_source(OPT_BYTES) == Some(ValueSource::CommandLine),
-            matches.value_source(OPT_LINE_BYTES) == Some(ValueSource::CommandLine),
-            matches.value_source(OPT_NUMBER) == Some(ValueSource::CommandLine),
+            matches.value_source(options::LINES) == Some(ValueSource::CommandLine),
+            matches.value_source(options::BYTES) == Some(ValueSource::CommandLine),
+            matches.value_source(options::LINE_BYTES) == Some(ValueSource::CommandLine),
+            matches.value_source(options::NUMBER) == Some(ValueSource::CommandLine),
         ) {
             (Some(v), false, false, false, false) => {
                 let v = parse_size_u64_max(v).map_err(|_| {
-                    StrategyError::Lines(ParseSizeError::ParseFailure(v.to_string()))
+                    StrategyError::Lines(ParseSizeError::ParseFailure(v.to_string()), None)
                 })?;
                 if v > 0 {
                     Ok(Self::Lines(v))
                 } else {
-                    Err(StrategyError::Lines(ParseSizeError::ParseFailure(
-                        v.to_string(),
-                    )))
+                    Err(StrategyError::Lines(
+                        ParseSizeError::ParseFailure(v.to_string()),
+                        None,
+                    ))
                 }
             }
             (None, false, false, false, false) => Ok(Self::Lines(1000)),
-            (None, true, false, false, false) => {
-                get_and_parse(matches, OPT_LINES, Self::Lines, StrategyError::Lines)
-            }
-            (None, false, true, false, false) => {
-                get_and_parse(matches, OPT_BYTES, Self::Bytes, StrategyError::Bytes)
-            }
+            (None, true, false, false, false) => get_and_parse(
+                matches,
+                options::LINES,
+                'l',
+                Self::Lines,
+                StrategyError::Lines,
+            ),
+            (None, false, true, false, false) => get_and_parse(
+                matches,
+                options::BYTES,
+                'b',
+                Self::Bytes,
+                StrategyError::Bytes,
+            ),
             (None, false, false, true, false) => get_and_parse(
                 matches,
-                OPT_LINE_BYTES,
+                options::LINE_BYTES,
+                'C',
                 Self::LineBytes,
                 StrategyError::Bytes,
             ),
             (None, false, false, false, true) => {
-                let s = matches.get_one::<String>(OPT_NUMBER).unwrap();
+                let s = matches.get_one::<String>(options::NUMBER).unwrap();
                 let number_type = NumberType::from(s).map_err(StrategyError::NumberType)?;
                 Ok(Self::Number(number_type))
             }
@@ -344,6 +391,18 @@ mod tests {
         assert_eq!(
             NumberType::from("r/xyz").unwrap_err(),
             NumberTypeError::NumberOfChunks("xyz".to_string())
+        );
+        assert_eq!(
+            NumberType::from("0").unwrap_err(),
+            NumberTypeError::NumberOfChunks("0".to_string())
+        );
+        assert_eq!(
+            NumberType::from("l/0").unwrap_err(),
+            NumberTypeError::NumberOfChunks("0".to_string())
+        );
+        assert_eq!(
+            NumberType::from("r/0").unwrap_err(),
+            NumberTypeError::NumberOfChunks("0".to_string())
         );
         assert_eq!(
             NumberType::from("r/123/xyz").unwrap_err(),

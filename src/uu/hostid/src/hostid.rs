@@ -6,11 +6,37 @@
 // spell-checker:ignore (ToDO) gethostid
 
 use clap::Command;
-use libc::{c_long, gethostid};
+use core::ffi::c_long;
+#[cfg(not(target_env = "ohos"))]
+use libc::gethostid;
 use std::io::{Write, stdout};
 use uucore::{error::UResult, format_usage};
 
 use uucore::translate;
+
+// OHOS SDK libc no longer exports gethostid; replicate the glibc semantics:
+// read /etc/hostid when present, otherwise hash the hostname.
+#[cfg(target_env = "ohos")]
+fn gethostid() -> c_long {
+    use std::fs::read;
+    if let Ok(data) = read("/etc/hostid") {
+        if data.len() >= 4 {
+            let n: u32 = u32::from_ne_bytes([data[0], data[1], data[2], data[3]]);
+            return n as c_long;
+        }
+    }
+    let mut name = [0u8; 256];
+    if unsafe { libc::gethostname(name.as_mut_ptr() as *mut _, name.len()) } == 0 {
+        let end = name.iter().position(|&b| b == 0).unwrap_or(name.len());
+        let mut h: u32 = 0x811c9dc5;
+        for &b in &name[..end] {
+            h ^= b as u32;
+            h = h.wrapping_mul(0x01000193);
+        }
+        return h as c_long;
+    }
+    0
+}
 
 #[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -27,7 +53,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mask = 0xffff_ffff;
 
     result &= mask;
-    writeln!(stdout().lock(), "{result:0>8x}")?;
+    writeln!(stdout(), "{result:0>8x}")?;
     Ok(())
 }
 

@@ -4,7 +4,9 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (regex) SKIPTO UPTO ; (vars) ntimes
 
-use crate::csplit_error::CsplitError;
+use std::ops::Range;
+
+use crate::csplit_error::{CsplitError, PatternProblem};
 use regex::Regex;
 use uucore::show_warning;
 use uucore::translate;
@@ -137,20 +139,78 @@ fn extract_patterns(args: &[&str]) -> Result<Vec<Pattern>, CsplitError> {
             };
             if let Some(up_to_match) = captures.name("UPTO") {
                 let pattern = Regex::new(up_to_match.as_str())
-                    .map_err(|_| CsplitError::InvalidPattern(arg.to_owned()))?;
+                    .map_err(|e| invalid_regex(arg, up_to_match.range(), &e))?;
                 patterns.push(Pattern::UpToMatch(pattern, offset, execute_ntimes));
             } else if let Some(skip_to_match) = captures.name("SKIPTO") {
                 let pattern = Regex::new(skip_to_match.as_str())
-                    .map_err(|_| CsplitError::InvalidPattern(arg.to_owned()))?;
+                    .map_err(|e| invalid_regex(arg, skip_to_match.range(), &e))?;
                 patterns.push(Pattern::SkipToMatch(pattern, offset, execute_ntimes));
             }
         } else if let Ok(line_number) = arg.parse::<usize>() {
             patterns.push(Pattern::UpToLine(line_number, execute_ntimes));
         } else {
-            return Err(CsplitError::InvalidPattern(arg.to_owned()));
+            // Nothing about the operand parsed, so the whole of it is at fault.
+            return Err(CsplitError::InvalidPattern(
+                arg.to_owned(),
+                Some(PatternProblem {
+                    span: 0..arg.len(),
+                    label: None,
+                }),
+            ));
         }
     }
     Ok(patterns)
+}
+
+/// The error for a `/REGEXP/` or `%REGEXP%` operand whose regex did not
+/// compile, told where inside `arg` the caret belongs.
+///
+/// # Arguments
+///
+/// * `arg` - The pattern operand as typed.
+/// * `body` - Byte range of the regex inside `arg`, delimiters excluded.
+/// * `error` - What the regex engine returned.
+fn invalid_regex(arg: &str, body: Range<usize>, error: &regex::Error) -> CsplitError {
+    let text = error.to_string();
+    let span = caret_span(&text, &arg[body.clone()])
+        .map_or(body.clone(), |s| body.start + s.start..body.start + s.end);
+    CsplitError::InvalidPattern(
+        arg.to_owned(),
+        Some(PatternProblem {
+            span,
+            label: text
+                .lines()
+                .find_map(|line| line.strip_prefix("error: "))
+                .map(str::to_owned),
+        }),
+    )
+}
+
+/// The range of `regex` that the engine's own caret line marks.
+///
+/// A regex error is rendered as the pattern echoed under a four-space indent
+/// with a row of carets beneath it, which is exactly the span wanted here. It
+/// is read back rather than trusted: the echoed line has to be the regex as
+/// passed, or `None` is returned and the caller falls back to the whole of it.
+///
+/// # Arguments
+///
+/// * `text` - The engine's message.
+/// * `regex` - The regex it was given.
+fn caret_span(text: &str, regex: &str) -> Option<Range<usize>> {
+    const INDENT: &str = "    ";
+    let echoed = format!("{INDENT}{regex}");
+    let mut lines = text.lines();
+    while let Some(line) = lines.next() {
+        if line != echoed {
+            continue;
+        }
+        let carets = lines.next()?;
+        let start = carets.find('^')?;
+        let width = carets[start..].bytes().take_while(|&b| b == b'^').count();
+        return start.checked_sub(INDENT.len()).map(|s| s..s + width);
+    }
+    None
 }
 
 /// Asserts the line numbers are in increasing order, starting at 1.

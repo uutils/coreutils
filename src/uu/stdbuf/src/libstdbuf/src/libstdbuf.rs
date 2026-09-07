@@ -4,8 +4,9 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) getreent reent IOFBF IOLBF IONBF setvbuf stderrp stdinp stdoutp fdopen
 
+use core::ffi::{c_char, c_int};
 use ctor::ctor;
-use libc::{_IOFBF, _IOLBF, _IONBF, FILE, c_char, c_int, fileno, size_t};
+use libc::{_IOFBF, _IOLBF, _IONBF, FILE, fileno, size_t};
 use std::io::{Write, stderr};
 use std::{env, ptr};
 
@@ -19,7 +20,7 @@ fn init() {
 /// This function is unsafe because it calls a C API
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
-    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     {
         unsafe extern "C" {
             fn __stdinp() -> *mut FILE;
@@ -64,7 +65,7 @@ pub unsafe extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
     }
 
     #[cfg(not(any(
-        target_os = "macos",
+        target_vendor = "apple",
         target_os = "freebsd",
         target_os = "netbsd",
         target_os = "openbsd",
@@ -82,7 +83,7 @@ pub unsafe extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
 /// This function is unsafe because it calls a C API
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
-    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     {
         unsafe extern "C" {
             fn __stdoutp() -> *mut FILE;
@@ -127,7 +128,7 @@ pub unsafe extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
     }
 
     #[cfg(not(any(
-        target_os = "macos",
+        target_vendor = "apple",
         target_os = "freebsd",
         target_os = "netbsd",
         target_os = "openbsd",
@@ -145,7 +146,7 @@ pub unsafe extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
 /// This function is unsafe because it calls a C API
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __stdbuf_get_stderr() -> *mut FILE {
-    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     {
         unsafe extern "C" {
             fn __stderrp() -> *mut FILE;
@@ -190,7 +191,7 @@ pub unsafe extern "C" fn __stdbuf_get_stderr() -> *mut FILE {
     }
 
     #[cfg(not(any(
-        target_os = "macos",
+        target_vendor = "apple",
         target_os = "freebsd",
         target_os = "netbsd",
         target_os = "openbsd",

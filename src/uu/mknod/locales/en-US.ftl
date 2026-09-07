@@ -8,9 +8,9 @@ mknod-after-help = Mandatory arguments to long options are mandatory for short o
   it is interpreted as hexadecimal; otherwise, if it begins with 0, as octal;
   otherwise, as decimal. TYPE may be:
 
-  - b create a block (buffered) special file
-  - c, u create a character (unbuffered) special file
-  - p create a FIFO
+    - b create a block (buffered) special file
+    - c, u create a character (unbuffered) special file
+    - p create a FIFO
 
   NOTE: your shell may have its own version of mknod, which usually supersedes
   the version described here. Please refer to your shell's documentation

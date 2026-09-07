@@ -24,7 +24,7 @@ join-help-z = le délimiteur de ligne est NUL, pas de nouvelle ligne
 join-error-io = erreur d'E/S : { $error }
 join-error-non-utf8-tab = tabulation multi-octets non-UTF-8
 join-error-unprintable-separators = les séparateurs de champs non imprimables ne sont pris en charge que sur les plateformes de type unix
-join-error-multi-character-tab = tabulation multi-caractères { $value }
+join-error-multi-character-tab = tabulation multi-caractères '{ $value }'
 join-error-both-files-stdin = les deux fichiers ne peuvent pas être l'entrée standard
 join-error-invalid-field-specifier = spécificateur de champ invalide : { $spec }
 join-error-invalid-file-number = numéro de fichier invalide dans la spécification de champ : { $spec }
@@ -33,3 +33,6 @@ join-error-invalid-field-number = numéro de champ invalide : { $value }
 join-error-incompatible-fields = champs de jointure incompatibles { $field1 }, { $field2 }
 join-error-not-sorted = { $file }:{ $line_num } : n'est pas trié : { $content }
 join-error-input-not-sorted = l'entrée n'est pas dans l'ordre trié
+
+# Diagnostics
+join-diag-help-format = un champ de sortie s'écrit NUMFICHIER.CHAMP, comme dans -o 1.2,2.1 ; 0 désigne le champ de jointure

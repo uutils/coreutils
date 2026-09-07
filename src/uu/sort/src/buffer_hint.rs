@@ -83,46 +83,21 @@ fn desired_file_buffer_bytes(total_bytes: u128) -> u128 {
     quarter.max(max)
 }
 
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "fn sig must match on all platforms"
+)]
 fn physical_memory_bytes() -> Option<u128> {
-    #[cfg(all(
-        target_family = "unix",
-        not(target_os = "redox"),
-        any(target_os = "linux", target_os = "android")
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        physical_memory_bytes_unix()
+        Some(rustix::system::sysinfo().totalram as u128)
     }
 
-    #[cfg(any(
-        not(target_family = "unix"),
-        target_os = "redox",
-        not(any(target_os = "linux", target_os = "android"))
-    ))]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     {
         // No portable or safe API is available here to detect total physical memory.
         None
     }
-}
-
-#[cfg(all(
-    target_family = "unix",
-    not(target_os = "redox"),
-    any(target_os = "linux", target_os = "android")
-))]
-fn physical_memory_bytes_unix() -> Option<u128> {
-    use nix::unistd::{SysconfVar, sysconf};
-
-    let pages = match sysconf(SysconfVar::_PHYS_PAGES) {
-        Ok(Some(pages)) if pages > 0 => u128::try_from(pages).ok()?,
-        _ => return None,
-    };
-
-    let page_size = match sysconf(SysconfVar::PAGE_SIZE) {
-        Ok(Some(page_size)) if page_size > 0 => u128::try_from(page_size).ok()?,
-        _ => return None,
-    };
-
-    Some(pages.saturating_mul(page_size))
 }
 
 #[cfg(test)]

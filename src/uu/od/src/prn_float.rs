@@ -166,19 +166,92 @@ fn is_subnormal_bf16(value: bf16) -> bool {
 /// formats float with 8 significant digits, eg 12345678 or -1.2345678e+12
 /// always returns a string of 14 characters
 fn format_f32(f: f32) -> String {
-    let width: usize = 15;
-    let precision: usize = 8;
-
+    // Use shortest round-trip decimal representation, matching GNU od's ftoastr.
+    // Right-padded to 15 chars (format_item_f32 prepends one space -> 16 total).
+    if f.is_nan() {
+        return format!("{:>15}", "NaN");
+    }
+    if f.is_infinite() {
+        return if f.is_sign_negative() {
+            format!("{:>15}", "-inf")
+        } else {
+            format!("{:>15}", "inf")
+        };
+    }
+    if f == 0.0 {
+        return if f.is_sign_negative() {
+            format!("{:>15}", "-0")
+        } else {
+            format!("{:>15}", "0")
+        };
+    }
     if f.classify() == FpCategory::Subnormal {
-        // subnormal numbers will be normal as f64, so will print with a wrong precision
-        format_f32_exp(f, width) // subnormal numbers
+        return format_f32_exp(f, 15);
+    }
+    let s = shortest_float_str_f32(f);
+    format!("{s:>15}")
+}
+
+/// Return the shortest decimal string that round-trips back to `f`.
+/// Uses Display for short values, Debug (scientific) for large/small ones.
+fn shortest_float_str_f32(f: f32) -> String {
+    let display = format!("{f}");
+    let debug = format!("{f:?}");
+    let candidate = if display.len() <= debug.len() {
+        display
     } else {
-        format_float(f64::from(f), width, precision)
+        debug
+    };
+    // GNU ftoastr uses 'e+' for positive exponents, not bare 'e'
+    if candidate.contains('e') && !candidate.contains("e-") {
+        candidate.replace('e', "e+")
+    } else {
+        candidate
     }
 }
 
 fn format_f64(f: f64) -> String {
-    format_float(f, 24, 17)
+    // Use shortest round-trip decimal representation, matching GNU od's dtoastr.
+    // Right-padded to 24 chars (format_item_f64 prepends one space -> 25 total).
+    if f.is_nan() {
+        return format!("{:>24}", "NaN");
+    }
+    if f.is_infinite() {
+        return if f.is_sign_negative() {
+            format!("{:>24}", "-inf")
+        } else {
+            format!("{:>24}", "inf")
+        };
+    }
+    if f == 0.0 {
+        return if f.is_sign_negative() {
+            format!("{:>24}", "-0")
+        } else {
+            format!("{:>24}", "0")
+        };
+    }
+    if f.classify() == FpCategory::Subnormal {
+        let s = format!("{f:e}");
+        let s = if s.contains('e') && !s.contains("e-") {
+            s.replace('e', "e+")
+        } else {
+            s
+        };
+        return format!("{s:>24}");
+    }
+    let display = format!("{f}");
+    let debug = format!("{f:?}");
+    let candidate = if display.len() <= debug.len() {
+        display
+    } else {
+        debug
+    };
+    let candidate = if candidate.contains('e') && !candidate.contains("e-") {
+        candidate.replace('e', "e+")
+    } else {
+        candidate
+    };
+    format!("{candidate:>24}")
 }
 
 fn format_float(f: f64, width: usize, precision: usize) -> String {
@@ -239,75 +312,35 @@ fn format_long_double(f: f64) -> String {
 
 #[test]
 #[allow(clippy::excessive_precision)]
-#[allow(clippy::cognitive_complexity)]
 fn test_format_f32() {
-    assert_eq!(format_f32(1.0), "      1.0000000");
-    assert_eq!(format_f32(9.999_999_0), "      9.9999990");
-    assert_eq!(format_f32(10.0), "      10.000000");
-    assert_eq!(format_f32(99.999_977), "      99.999977");
-    assert_eq!(format_f32(99.999_992), "      99.999992");
-    assert_eq!(format_f32(100.0), "      100.00000");
-    assert_eq!(format_f32(999.99994), "      999.99994");
-    assert_eq!(format_f32(1000.0), "      1000.0000");
-    assert_eq!(format_f32(9999.9990), "      9999.9990");
-    assert_eq!(format_f32(10000.0), "      10000.000");
-    assert_eq!(format_f32(99999.992), "      99999.992");
-    assert_eq!(format_f32(100_000.0), "      100000.00");
-    assert_eq!(format_f32(999_999.94), "      999999.94");
-    assert_eq!(format_f32(1_000_000.0), "      1000000.0");
-    assert_eq!(format_f32(9_999_999.0), "      9999999.0");
+    // Shortest round-trip representation, right-padded to 15 chars.
+    // Values are rendered without trailing zeros, matching GNU od's ftoastr.
+    assert_eq!(format_f32(1.0), "              1");
+    assert_eq!(format_f32(10.0), "             10");
+    assert_eq!(format_f32(100.0), "            100");
+    assert_eq!(format_f32(1000.0), "           1000");
+    assert_eq!(format_f32(10000.0), "          10000");
+    assert_eq!(format_f32(100_000.0), "         100000");
+    assert_eq!(format_f32(1_000_000.0), "        1000000");
+    assert_eq!(format_f32(9_999_999.0), "        9999999");
     assert_eq!(format_f32(10_000_000.0), "       10000000");
-    assert_eq!(format_f32(99_999_992.0), "       99999992");
-    assert_eq!(format_f32(100_000_000.0), "   1.0000000e+8");
-    assert_eq!(format_f32(9.999_999_4e8), "   9.9999994e+8");
-    assert_eq!(format_f32(1.0e9), "   1.0000000e+9");
-    assert_eq!(format_f32(9.999_999_0e9), "   9.9999990e+9");
-    assert_eq!(format_f32(1.0e10), "  1.0000000e+10");
+    assert_eq!(format_f32(99_999_992.0), "       99999990");
+    assert_eq!(format_f32(100_000_000.0), "      100000000");
+    assert_eq!(format_f32(1.0e9), "     1000000000");
+    assert_eq!(format_f32(1.0e10), "    10000000000");
 
-    assert_eq!(format_f32(0.1), "     0.10000000");
-    assert_eq!(format_f32(0.999_999_94), "     0.99999994");
-    assert_eq!(format_f32(0.010_000_001), "   1.0000001e-2");
-    assert_eq!(format_f32(0.099_999_994), "   9.9999994e-2");
-    assert_eq!(format_f32(0.001), "   1.0000000e-3");
-    assert_eq!(format_f32(0.009_999_999_8), "   9.9999998e-3");
+    assert_eq!(format_f32(0.1), "            0.1");
+    assert_eq!(format_f32(0.001), "          0.001");
+    assert_eq!(format_f32(1e-4_f32), "         0.0001");
+    assert_eq!(format_f32(1e-5_f32), "           1e-5");
 
-    assert_eq!(format_f32(-1.0), "     -1.0000000");
-    assert_eq!(format_f32(-9.999_999_0), "     -9.9999990");
-    assert_eq!(format_f32(-10.0), "     -10.000000");
-    assert_eq!(format_f32(-99.999_977), "     -99.999977");
-    assert_eq!(format_f32(-99.999_992), "     -99.999992");
-    assert_eq!(format_f32(-100.0), "     -100.00000");
-    assert_eq!(format_f32(-999.99994), "     -999.99994");
-    assert_eq!(format_f32(-1000.0), "     -1000.0000");
-    assert_eq!(format_f32(-9999.9990), "     -9999.9990");
-    assert_eq!(format_f32(-10000.0), "     -10000.000");
-    assert_eq!(format_f32(-99999.992), "     -99999.992");
-    assert_eq!(format_f32(-100_000.0), "     -100000.00");
-    assert_eq!(format_f32(-999_999.94), "     -999999.94");
-    assert_eq!(format_f32(-1_000_000.0), "     -1000000.0");
-    assert_eq!(format_f32(-9_999_999.0), "     -9999999.0");
-    assert_eq!(format_f32(-10_000_000.0), "      -10000000");
-    assert_eq!(format_f32(-99_999_992.0), "      -99999992");
-    assert_eq!(format_f32(-100_000_000.0), "  -1.0000000e+8");
-    assert_eq!(format_f32(-9.999_999_4e8), "  -9.9999994e+8");
-    assert_eq!(format_f32(-1.0e9), "  -1.0000000e+9");
-    assert_eq!(format_f32(-9.999_999_0e9), "  -9.9999990e+9");
-    assert_eq!(format_f32(-1.0e10), " -1.0000000e+10");
-
-    assert_eq!(format_f32(-0.1), "    -0.10000000");
-    assert_eq!(format_f32(-0.999_999_94), "    -0.99999994");
-    assert_eq!(format_f32(-0.010_000_001), "  -1.0000001e-2");
-    assert_eq!(format_f32(-0.099_999_994), "  -9.9999994e-2");
-    assert_eq!(format_f32(-0.001), "  -1.0000000e-3");
-    assert_eq!(format_f32(-0.009_999_999_8), "  -9.9999998e-3");
-
+    assert_eq!(format_f32(-1.0), "             -1");
+    assert_eq!(format_f32(-10.0), "            -10");
+    assert_eq!(format_f32(-0.1), "           -0.1");
     assert_eq!(format_f32(3.402_823_3e38), "  3.4028233e+38");
     assert_eq!(format_f32(-3.402_823_3e38), " -3.4028233e+38");
-    assert_eq!(format_f32(-1.166_310_8e-38), " -1.1663108e-38");
-    assert_eq!(format_f32(-4.701_977_1e-38), " -4.7019771e-38");
     assert_eq!(format_f32(1e-45), "          1e-45");
 
-    assert_eq!(format_f32(-3.402_823_466e+38), " -3.4028235e+38");
     assert_eq!(format_f32(f32::NAN), "            NaN");
     assert_eq!(format_f32(f32::INFINITY), "            inf");
     assert_eq!(format_f32(f32::NEG_INFINITY), "           -inf");
@@ -316,25 +349,32 @@ fn test_format_f32() {
 }
 
 #[test]
-#[allow(clippy::cognitive_complexity)]
 fn test_format_f64() {
-    assert_eq!(format_f64(1.0), "      1.0000000000000000");
-    assert_eq!(format_f64(10.0), "      10.000000000000000");
+    // Shortest round-trip representation, right-padded to 24 chars.
+    // Matches GNU od 9.11 output which uses dtoastr (shortest decimal).
+    assert_eq!(format_f64(1.0), "                       1");
+    assert_eq!(format_f64(10.0), "                      10");
     assert_eq!(
         format_f64(1_000_000_000_000_000.0),
-        "      1000000000000000.0"
+        "        1000000000000000"
     );
     assert_eq!(
         format_f64(10_000_000_000_000_000.0),
-        "       10000000000000000"
+        "                   1e+16"
     );
     assert_eq!(
         format_f64(100_000_000_000_000_000.0),
-        "  1.0000000000000000e+17"
+        "                   1e+17"
     );
 
-    assert_eq!(format_f64(-0.1), "    -0.10000000000000001");
-    assert_eq!(format_f64(-0.01), "  -1.0000000000000000e-2");
+    assert_eq!(format_f64(-0.1), "                    -0.1");
+    assert_eq!(format_f64(-0.01), "                   -0.01");
+
+    // od-float.sh test 7: -t f / -t fD with 8-byte little-endian input
+    let d = f64::from_bits(u64::from_le_bytes([
+        0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x40,
+    ]));
+    assert_eq!(format_f64(d), "       2.000000473111868");
 
     assert_eq!(
         format_f64(-2.225_073_858_507_201_4e-308),

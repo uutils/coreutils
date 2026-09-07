@@ -14,6 +14,7 @@ FIFO
 FIFOs
 flac
 FQDN # fully qualified domain name
+FSCTL # Windows file system control code
 GID # group ID
 GIDs
 GNU
@@ -26,6 +27,7 @@ lzma
 MSRV # minimum supported rust version
 MSVC
 NixOS
+NTFS # Windows NT file system
 POSIX
 POSIXLY
 ReiserFS

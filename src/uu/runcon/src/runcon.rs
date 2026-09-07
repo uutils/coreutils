@@ -15,9 +15,11 @@ use clap::{Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
 use uucore::format_usage;
 
+use core::ffi::CStr;
 use std::borrow::Cow;
-use std::ffi::{CStr, CString, OsStr, OsString};
+use std::ffi::{CString, OsStr, OsString};
 use std::io;
+use std::io::Write;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::process::CommandExt;
 use std::process;
@@ -242,12 +244,14 @@ fn print_current_context() -> Result<()> {
         .to_c_string()
         .map_err(|r| Error::from_selinux("runcon-operation-getting-current-context", r))?;
 
-    if let Some(context) = context {
+    let mut out = io::stdout().lock();
+    let result = if let Some(context) = context {
         let context = context.as_ref().to_str()?;
-        println!("{context}");
+        writeln!(out, "{context}").and_then(|()| out.flush())
     } else {
-        println!();
-    }
+        writeln!(out).and_then(|()| out.flush())
+    };
+    result.map_err(Error::Write)?;
     Ok(())
 }
 

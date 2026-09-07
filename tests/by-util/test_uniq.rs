@@ -163,6 +163,23 @@ fn test_stdin_all_repeated() {
 }
 
 #[test]
+fn test_repeated_all_repeated_uses_final_delimiter() {
+    const DUPLICATE_RUNS: &str = "copper\ncopper\nsilver\ngold\ngold\nplatinum\n";
+
+    new_ucmd!()
+        .args(&["--all-repeated=prepend", "-D"])
+        .pipe_in(DUPLICATE_RUNS)
+        .succeeds()
+        .stdout_is("copper\ncopper\ngold\ngold\n");
+
+    new_ucmd!()
+        .args(&["-D", "--all-repeated=separate"])
+        .pipe_in(DUPLICATE_RUNS)
+        .succeeds()
+        .stdout_is("copper\ncopper\n\ngold\ngold\n");
+}
+
+#[test]
 fn test_all_repeated_followed_by_filename() {
     let filename = "test.txt";
     let (at, mut ucmd) = at_and_ucmd!();
@@ -355,10 +372,10 @@ struct TestCase {
 
 #[test]
 #[allow(clippy::too_many_lines)]
-fn gnu_tests() {
+fn uniq_basic_dedup_cases() {
     let cases = [
         TestCase {
-            name: "1",
+            name: "tc_01",
             args: &[],
             input: "",
             stdout: Some(""),
@@ -366,58 +383,58 @@ fn gnu_tests() {
             exit: None,
         },
         TestCase {
-            name: "2",
+            name: "tc_02",
             args: &[],
-            input: "a\na\n",
-            stdout: Some("a\n"),
+            input: "x\nx\n",
+            stdout: Some("x\n"),
             stderr: None,
             exit: None,
         },
         TestCase {
-            name: "3",
+            name: "tc_03",
             args: &[],
-            input: "a\na",
-            stdout: Some("a\n"),
+            input: "x\nx",
+            stdout: Some("x\n"),
             stderr: None,
             exit: None,
         },
         TestCase {
-            name: "4",
+            name: "tc_04",
             args: &[],
-            input: "a\nb",
-            stdout: Some("a\nb\n"),
+            input: "p\nq",
+            stdout: Some("p\nq\n"),
             stderr: None,
             exit: None,
         },
         TestCase {
-            name: "5",
+            name: "tc_05",
             args: &[],
-            input: "a\na\nb",
-            stdout: Some("a\nb\n"),
+            input: "x\nx\ny",
+            stdout: Some("x\ny\n"),
             stderr: None,
             exit: None,
         },
         TestCase {
-            name: "6",
+            name: "tc_06",
             args: &[],
-            input: "b\na\na\n",
-            stdout: Some("b\na\n"),
+            input: "q\np\np\n",
+            stdout: Some("q\np\n"),
             stderr: None,
             exit: None,
         },
         TestCase {
-            name: "7",
+            name: "tc_07",
             args: &[],
-            input: "a\nb\nc\n",
-            stdout: Some("a\nb\nc\n"),
+            input: "r\ns\nt\n",
+            stdout: Some("r\ns\nt\n"),
             stderr: None,
             exit: None,
         },
         TestCase {
             name: "2z",
             args: &["-z"],
-            input: "a\na\n",
-            stdout: Some("a\na\n\0"),
+            input: "x\nx\n",
+            stdout: Some("x\nx\n\0"),
             stderr: None,
             exit: None,
         },
@@ -1202,4 +1219,22 @@ fn test_failed_write_is_reported() {
         .set_stdout(std::fs::File::create("/dev/full").unwrap())
         .fails()
         .stderr_is("uniq: write error: No space left on device\n");
+}
+
+#[test]
+fn test_repeated_skip_fields_takes_the_last() {
+    // GNU lets a later -f override an earlier one rather than erroring.
+    new_ucmd!()
+        .args(&["-f", "1", "-f", "2"])
+        .pipe_in("x y a\nz w a\n")
+        .succeeds()
+        .stdout_is("x y a\n");
+}
+
+#[test]
+fn test_nonexistent_input_file_error_matches_gnu() {
+    new_ucmd!()
+        .arg("nosuchfile.txt")
+        .fails_with_code(1)
+        .stderr_only("uniq: nosuchfile.txt: No such file or directory\n");
 }

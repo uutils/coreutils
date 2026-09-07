@@ -39,4 +39,3 @@ uniq-error-all-repeated-badoption = argument invalide 'badoption' pour '--all-re
 
 uniq-error-counts-and-repeated-meaningless = afficher toutes les lignes dupliquées et les nombres de répétitions n'a pas de sens
   Essayez 'uniq --help' pour plus d'informations.
-uniq-error-could-not-open = Impossible d'ouvrir { $path }

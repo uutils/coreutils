@@ -37,25 +37,19 @@ impl ParsedFormatterItemInfo {
 fn od_argument_traditional_format(ch: char) -> Option<FormatterItemInfo> {
     match ch {
         'a' => Some(FORMAT_ITEM_A),
-        'B' => Some(FORMAT_ITEM_OCT16),
+        'B' | 'o' => Some(FORMAT_ITEM_OCT16),
         'b' => Some(FORMAT_ITEM_OCT8),
         'c' => Some(FORMAT_ITEM_C),
         'D' => Some(FORMAT_ITEM_DEC32U),
         'd' => Some(FORMAT_ITEM_DEC16U),
-        'e' => Some(FORMAT_ITEM_F64),
-        'F' => Some(FORMAT_ITEM_F64),
+        'e' | 'F' => Some(FORMAT_ITEM_F64),
         'f' => Some(FORMAT_ITEM_F32),
-        'H' => Some(FORMAT_ITEM_HEX32),
-        'h' => Some(FORMAT_ITEM_HEX16),
+        'H' | 'X' => Some(FORMAT_ITEM_HEX32),
+        'h' | 'x' => Some(FORMAT_ITEM_HEX16),
         'i' => Some(FORMAT_ITEM_DEC32S),
-        'I' => Some(FORMAT_ITEM_DEC64S),
-        'L' => Some(FORMAT_ITEM_DEC64S),
-        'l' => Some(FORMAT_ITEM_DEC64S),
+        'I' | 'L' | 'l' => Some(FORMAT_ITEM_DEC64S),
         'O' => Some(FORMAT_ITEM_OCT32),
-        'o' => Some(FORMAT_ITEM_OCT16),
         's' => Some(FORMAT_ITEM_DEC16S),
-        'X' => Some(FORMAT_ITEM_HEX32),
-        'x' => Some(FORMAT_ITEM_HEX16),
         _ => None,
     }
 }
@@ -87,8 +81,7 @@ fn od_format_type(type_char: FormatType, byte_size: u8) -> Option<FormatterItemI
 
         (FormatType::Float, 2) => Some(FORMAT_ITEM_F16),
         (FormatType::Float, 4) => Some(FORMAT_ITEM_F32),
-        (FormatType::Float, 0) => Some(FORMAT_ITEM_F64),
-        (FormatType::Float, 8) => Some(FORMAT_ITEM_F64),
+        (FormatType::Float, 0) | (FormatType::Float, 8) => Some(FORMAT_ITEM_F64),
         (FormatType::Float, 16) => Some(FORMAT_ITEM_LONG_DOUBLE),
 
         _ => None,
@@ -222,29 +215,16 @@ fn is_format_size_char(
             *byte_size = 1;
             true
         }
-        (FormatTypeCategory::Integer, Some('S')) => {
+        (FormatTypeCategory::Integer, Some('S')) | (FormatTypeCategory::Float, Some('H' | 'B')) => {
             *byte_size = 2;
             true
         }
-        (FormatTypeCategory::Integer, Some('I')) => {
+        (FormatTypeCategory::Integer, Some('I')) | (FormatTypeCategory::Float, Some('F')) => {
             *byte_size = 4;
             true
         }
-        (FormatTypeCategory::Integer, Some('L')) => {
+        (FormatTypeCategory::Integer, Some('L')) | (FormatTypeCategory::Float, Some('D')) => {
             *byte_size = 8;
-            true
-        }
-
-        (FormatTypeCategory::Float, Some('F')) => {
-            *byte_size = 4;
-            true
-        }
-        (FormatTypeCategory::Float, Some('D')) => {
-            *byte_size = 8;
-            true
-        }
-        (FormatTypeCategory::Float, Some('H' | 'B')) => {
-            *byte_size = 2;
             true
         }
         (FormatTypeCategory::Float, Some('L')) => {

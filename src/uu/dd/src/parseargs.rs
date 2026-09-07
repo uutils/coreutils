@@ -9,6 +9,7 @@ mod unit_tests;
 
 use super::{ConversionMode, IConvFlags, IFlags, Num, OConvFlags, OFlags, Settings, StatusLevel};
 use crate::conversion_tables::ConversionTable;
+use std::ffi::OsString;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
@@ -19,7 +20,7 @@ use uucore::translate;
 /// Parser Errors describe errors with parser input
 #[derive(Debug, PartialEq, Eq, Error)]
 pub enum ParseError {
-    #[error("{}", translate!("dd-error-unrecognized-operand", "operand" => .0.clone()))]
+    #[error("{}", translate!("dd-error-unrecognized-operand", "operand" => .0))]
     UnrecognizedOperand(String),
     #[error("{}", translate!("dd-error-multiple-format-table"))]
     MultipleFmtTable,
@@ -29,25 +30,27 @@ pub enum ParseError {
     MultipleBlockUnblock,
     #[error("{}", translate!("dd-error-multiple-excl"))]
     MultipleExclNoCreate,
-    #[error("{}", translate!("dd-error-invalid-flag", "flag" => .0.clone(), "cmd" => uucore::execution_phrase()))]
+    #[error("{}", translate!("dd-error-invalid-flag", "flag" => .0))]
     FlagNoMatch(String),
-    #[error("{}", translate!("dd-error-conv-flag-no-match", "flag" => .0.clone()))]
+    #[error("{}", translate!("dd-error-invalid-output-flag", "flag" => .0))]
+    OutputFlagNoMatch(String),
+    #[error("{}", translate!("dd-error-conv-flag-no-match", "flag" => .0))]
     ConvFlagNoMatch(String),
-    #[error("{}", translate!("dd-error-multiplier-parse-failure", "input" => .0.clone()))]
+    #[error("{}", translate!("dd-error-multiplier-parse-failure", "input" => .0))]
     MultiplierStringParseFailure(String),
-    #[error("{}", translate!("dd-error-multiplier-overflow", "input" => .0.clone()))]
+    #[error("{}", translate!("dd-error-multiplier-overflow", "input" => .0))]
     MultiplierStringOverflow(String),
     #[error("{}", translate!("dd-error-block-without-cbs"))]
     BlockUnblockWithoutCBS,
-    #[error("{}", translate!("dd-error-status-not-recognized", "level" => .0.clone()))]
+    #[error("{}", translate!("dd-error-status-not-recognized", "level" => .0))]
     StatusLevelNotRecognized(String),
-    #[error("{}", translate!("dd-error-unimplemented", "feature" => .0.clone()))]
+    #[error("{}", translate!("dd-error-unimplemented", "feature" => .0))]
     Unimplemented(String),
-    #[error("{}", translate!("dd-error-bs-out-of-range", "param" => .0.clone()))]
+    #[error("{}", translate!("dd-error-bs-out-of-range", "param" => .0))]
     BsOutOfRange(String),
-    #[error("{}", translate!("dd-error-invalid-number", "input" => .0.clone()))]
+    #[error("{}", translate!("dd-error-invalid-number", "input" => .0))]
     InvalidNumber(String),
-    #[error("invalid number: ‘{0}’: {1}")]
+    #[error("invalid number: '{0}': {1}")]
     InvalidNumberWithErrMsg(String, String),
 }
 
@@ -129,19 +132,42 @@ impl Parser {
         Self::default()
     }
 
-    pub(crate) fn parse(
+    /// Parse the operands, pointing a caret at the one that is at fault.
+    ///
+    /// # Arguments
+    ///
+    /// * `operands` - The operands as typed.
+    /// * `diag_args` - The whole argument list, program name included, or
+    ///   `None` when it was not kept.
+    pub(crate) fn parse_with_diagnostics(
         self,
         operands: impl IntoIterator<Item: AsRef<str>>,
-    ) -> Result<Settings, ParseError> {
-        self.read(operands)?.validate()
+        diag_args: Option<&[OsString]>,
+    ) -> Result<Settings, Box<dyn UError>> {
+        match self.read(operands) {
+            Err((operand, error)) => Err(crate::diagnostics::operand_error(
+                diag_args, &operand, error,
+            )),
+            // A validation error is about how the operands combine rather than
+            // about any one of them, so it keeps its plain message.
+            Ok(parser) => parser.validate().map_err(Into::into),
+        }
     }
 
+    /// Read the operands into the parser state.
+    ///
+    /// # Returns
+    ///
+    /// The operand at fault along with the error, so that a caller with the
+    /// command line at hand can point a caret inside it.
     pub(crate) fn read(
         mut self,
         operands: impl IntoIterator<Item: AsRef<str>>,
-    ) -> Result<Self, ParseError> {
+    ) -> Result<Self, (String, ParseError)> {
         for operand in operands {
-            self.parse_operand(operand.as_ref())?;
+            let operand = operand.as_ref();
+            self.parse_operand(operand)
+                .map_err(|error| (operand.to_string(), error))?;
         }
 
         Ok(self)
@@ -325,6 +351,14 @@ impl Parser {
         if num == 0 {
             return Err(ParseError::InvalidNumber(val.to_string()));
         }
+        // GNU rejects a block size >= i64::MAX (intmax_t); otherwise the value
+        // overflows later when the buffer is computed or allocated.
+        if num >= i64::MAX as u64 {
+            return Err(ParseError::InvalidNumberWithErrMsg(
+                val.to_string(),
+                "Value too large for defined data type".to_string(),
+            ));
+        }
         num.try_into()
             .map_err(|_| ParseError::BsOutOfRange(arg.to_string()))
     }
@@ -344,7 +378,6 @@ impl Parser {
         for f in val.split(',') {
             match f {
                 // Common flags
-                "cio" => return Err(ParseError::Unimplemented(f.to_string())),
                 "direct" => linux_only!(f, i.direct = true),
                 "directory" => linux_only!(f, i.directory = true),
                 "dsync" => linux_only!(f, i.dsync = true),
@@ -354,9 +387,9 @@ impl Parser {
                 "noatime" => linux_only!(f, i.noatime = true),
                 "noctty" => linux_only!(f, i.noctty = true),
                 "nofollow" => linux_only!(f, i.nofollow = true),
-                "nolinks" => return Err(ParseError::Unimplemented(f.to_string())),
-                "binary" => return Err(ParseError::Unimplemented(f.to_string())),
-                "text" => return Err(ParseError::Unimplemented(f.to_string())),
+                "cio" | "nolinks" | "binary" | "text" => {
+                    return Err(ParseError::Unimplemented(f.to_string()));
+                }
 
                 // Input-only flags
                 "fullblock" => i.fullblock = true,
@@ -376,7 +409,6 @@ impl Parser {
         for f in val.split(',') {
             match f {
                 // Common flags
-                "cio" => return Err(ParseError::Unimplemented(val.to_string())),
                 "direct" => linux_only!(f, o.direct = true),
                 "directory" => linux_only!(f, o.directory = true),
                 "dsync" => linux_only!(f, o.dsync = true),
@@ -386,16 +418,16 @@ impl Parser {
                 "noatime" => linux_only!(f, o.noatime = true),
                 "noctty" => linux_only!(f, o.noctty = true),
                 "nofollow" => linux_only!(f, o.nofollow = true),
-                "nolinks" => return Err(ParseError::Unimplemented(f.to_string())),
-                "binary" => return Err(ParseError::Unimplemented(f.to_string())),
-                "text" => return Err(ParseError::Unimplemented(f.to_string())),
+                "cio" | "nolinks" | "binary" | "text" => {
+                    return Err(ParseError::Unimplemented(f.to_string()));
+                }
 
                 // Output-only flags
                 "append" => o.append = true,
                 "seek_bytes" => o.seek_bytes = true,
                 // GNU silently ignores iflags given as oflag.
                 "fullblock" | "count_bytes" | "skip_bytes" => {}
-                _ => return Err(ParseError::FlagNoMatch(f.to_string())),
+                _ => return Err(ParseError::OutputFlagNoMatch(f.to_string())),
             }
         }
         Ok(())
@@ -441,6 +473,20 @@ impl UError for ParseError {
     fn code(&self) -> i32 {
         1
     }
+
+    /// The messages that end on a hint about the syntax they rejected, as
+    /// GNU does. The hint is left to this, rather than written into the
+    /// message, so that it survives a caret report replacing the message.
+    fn usage(&self) -> bool {
+        matches!(
+            self,
+            Self::UnrecognizedOperand(_)
+                | Self::FlagNoMatch(_)
+                | Self::OutputFlagNoMatch(_)
+                | Self::ConvFlagNoMatch(_)
+                | Self::StatusLevelNotRecognized(_)
+        )
+    }
 }
 
 fn show_zero_multiplier_warning() {
@@ -468,8 +514,6 @@ fn parse_bytes_only(s: &str, i: usize) -> Result<u64, ParseError> {
 /// 512. You can also use standard block size suffixes like `'k'` for
 /// 1024.
 ///
-/// If the number would be too large, return [`u64::MAX`] instead.
-///
 /// # Errors
 ///
 /// If a number cannot be parsed or if the multiplication would cause
@@ -493,7 +537,12 @@ fn parse_bytes_no_x(full: &str, s: &str) -> Result<u64, ParseError> {
     let (num, multiplier) = match (s.find('c'), s.rfind('w'), s.rfind('b')) {
         (None, None, None) => match parser.parse_u64(s) {
             Ok(n) => (n, 1),
-            Err(ParseSizeError::SizeTooBig(_)) => (u64::MAX, 1),
+            Err(ParseSizeError::SizeTooBig(_)) => {
+                return Err(ParseError::InvalidNumberWithErrMsg(
+                    full.to_string(),
+                    "Value too large for defined data type".to_string(),
+                ));
+            }
             Err(_) => return Err(ParseError::InvalidNumber(full.to_string())),
         },
         (Some(i), None, None) => (parse_bytes_only(s, i)?, 1),
@@ -626,7 +675,7 @@ mod tests {
         assert_eq!(parse_bytes_with_opt_multiplier("123w").unwrap(), 123 * 2);
         assert_eq!(parse_bytes_with_opt_multiplier("123b").unwrap(), 123 * 512);
         assert_eq!(parse_bytes_with_opt_multiplier("123k").unwrap(), 123 * 1024);
-        assert_eq!(parse_bytes_with_opt_multiplier(BIG).unwrap(), u64::MAX);
+        assert!(parse_bytes_with_opt_multiplier(BIG).is_err());
     }
 
     #[test]

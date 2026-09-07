@@ -316,8 +316,7 @@ fn test_mktemp_quiet() {
         .arg("/definitely/not/exist/I/promise")
         .arg("-q")
         .fails()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     scene
         .ucmd()
         .arg("-d")
@@ -325,8 +324,7 @@ fn test_mktemp_quiet() {
         .arg("/definitely/not/exist/I/promise")
         .arg("-q")
         .fails()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 }
 
 #[test]
@@ -695,6 +693,14 @@ fn test_too_few_xs_suffix() {
 fn test_too_few_xs_suffix_directory() {
     new_ucmd!()
         .args(&["-d", "--suffix=X", "aXX"])
+        .fails()
+        .stderr_only("mktemp: too few X's in template 'aXX'\n");
+}
+
+#[test]
+fn test_too_few_xs_quiet() {
+    new_ucmd!()
+        .args(&["-q", "aXX"])
         .fails()
         .stderr_only("mktemp: too few X's in template 'aXX'\n");
 }
@@ -1146,7 +1152,7 @@ fn test_invalid_utf8_suffix() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     // Create invalid UTF-8 bytes for suffix
-    // This mimics the GNU test which tests mktemp with bad unicode characters
+    // Test mktemp with bad unicode characters
     let invalid_utf8 = std::ffi::OsStr::from_bytes(b"\xC3|\xED\xBA\xAD");
 
     // Test that mktemp handles invalid UTF-8 in suffix gracefully
@@ -1173,4 +1179,71 @@ fn test_non_utf8_tmpdir_directory_creation() {
     // We can't easily verify the exact output path because of UTF8 conversion issues,
     // but we can verify the command succeeds
     ucmd.arg("-d").arg("-p").arg(at.plus(dir_name)).succeeds();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_mktemp_hidden_file_single_dot() {
+    let scene = TestScenario::new(util_name!());
+    let dir = tempdir().unwrap();
+    let template_name = ".XXXXXX";
+    let template = dir.path().join(template_name);
+
+    let result = scene.ucmd().arg(template.to_str().unwrap()).succeeds();
+
+    let path = result.stdout_str().trim();
+    let filename = std::path::Path::new(path)
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap();
+
+    assert!(
+        filename.starts_with('.'),
+        "expected hidden file, got {path}"
+    );
+    assert_eq!(
+        filename.len(),
+        template_name.len(),
+        "expected filename of length {}, got {filename}",
+        template_name.len()
+    );
+}
+
+// When the name cannot be printed the caller never learns it, so the file must
+// not be left behind for nothing to clean up.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_removes_the_temporary_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("keep-none-XXXX")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("mktemp: write error: No space left on device\n");
+
+    let leftovers: Vec<_> = std::fs::read_dir(at.as_string())
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|name| name.starts_with("keep-none-"))
+        .collect();
+    assert!(leftovers.is_empty(), "left behind: {leftovers:?}");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_removes_the_temporary_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-d", "keep-none-XXXX"])
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("mktemp: write error: No space left on device\n");
+
+    let leftovers: Vec<_> = std::fs::read_dir(at.as_string())
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|name| name.starts_with("keep-none-"))
+        .collect();
+    assert!(leftovers.is_empty(), "left behind: {leftovers:?}");
 }

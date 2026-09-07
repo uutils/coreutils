@@ -11,9 +11,10 @@ du-after-help = Les valeurs affichées sont en unités de la première TAILLE di
 
   MOTIF permet des exclusions avancées. Par exemple, les syntaxes suivantes
   sont prises en charge :
-  ? correspondra à un seul caractère
-  { "*" } correspondra à zéro ou plusieurs caractères
-  {"{"}a,b{"}"} correspondra à a ou b
+
+    - ? correspondra à un seul caractère
+    - { "*" } correspondra à zéro ou plusieurs caractères
+    - {"{"}a,b{"}"} correspondra à a ou b
 
 # Messages d'aide
 du-help-print-help = Afficher les informations d'aide.
@@ -63,7 +64,6 @@ du-error-cannot-open-for-reading = impossible d'ouvrir { $file } en lecture : Au
 du-error-invalid-zero-length-file-name = { $file }:{ $line } : nom de fichier de longueur zéro invalide
 du-error-extra-operand-with-files0-from = opérande supplémentaire { $file }
   les opérandes de fichier ne peuvent pas être combinées avec --files0-from
-du-error-invalid-block-size-argument = argument --{ $option } invalide { $value }
 du-error-cannot-access-no-such-file = impossible d'accéder à { $path } : Aucun fichier ou répertoire de ce type
 du-error-printing-thread-panicked = Le thread d'affichage a paniqué.
 du-error-invalid-suffix = suffixe invalide dans l'argument --{ $option } { $value }

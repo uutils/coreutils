@@ -6,10 +6,10 @@
 // spell-checker:ignore (words) RFILE
 
 use std::io::{Seek, SeekFrom, Write};
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use uutests::util::TestScenario;
-use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 static FILE1: &str = "truncate_test_1";
 static FILE2: &str = "truncate_test_2";
@@ -39,6 +39,16 @@ fn test_increase_file_size_kb() {
 }
 
 #[test]
+fn test_size_above_i64_max_is_rejected_without_creating_file() {
+    // A size above i64::MAX is rejected up front and the file is not created.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-s", "9223372036854775808", "new-file"])
+        .fails_with_code(1)
+        .stderr_contains("Value too large for defined data type");
+    assert!(!at.file_exists("new-file"));
+}
+
+#[test]
 fn test_reference() {
     let expected = 5 * 1000;
     let scene = TestScenario::new(util_name!());
@@ -52,6 +62,32 @@ fn test_reference() {
         .ucmd()
         .arg("--reference")
         .arg(FILE1)
+        .arg(FILE2)
+        .succeeds();
+
+    file.seek(SeekFrom::End(0)).unwrap();
+    let actual = file.stream_position().unwrap();
+    assert_eq!(expected, actual, "expected '{expected}' got '{actual}'");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
+fn test_reference_non_utf8_path() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let expected = 5 * 1000;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let mut file = at.make_file(FILE2);
+
+    let reference = std::ffi::OsStr::from_bytes(b"test_\xFF\xFE.txt");
+    scene.ucmd().arg("-s").arg("+5KB").arg(reference).succeeds();
+
+    scene
+        .ucmd()
+        .arg("--reference")
+        .arg(reference)
         .arg(FILE2)
         .succeeds();
 
@@ -87,12 +123,6 @@ fn test_space_in_size() {
 #[test]
 fn test_failed() {
     new_ucmd!().fails();
-}
-
-#[test]
-fn test_failed_2() {
-    let (_at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&[FILE1]).fails();
 }
 
 #[test]
@@ -291,15 +321,53 @@ fn test_truncate_bytes_size() {
         .stderr_only("truncate: Invalid number: '1Y': Value too large for defined data type\n");
 }
 
+#[test]
+fn test_relative_size_overflow_preserves_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(FILE1, "x");
+
+    ucmd.args(&["--size=+18446744073709551615", FILE1])
+        .fails_with_code(1)
+        .stderr_contains("Value too large for defined data type");
+
+    assert_eq!(at.read(FILE1), "x");
+}
+
+#[cfg(unix)]
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no block size support")]
+fn test_io_blocks_uses_file_block_size() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(FILE1, "x");
+    let block_size = at.metadata(FILE1).blksize();
+
+    ucmd.args(&["--io-blocks", "--size=1", FILE1])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.metadata(FILE1).len(), block_size);
+}
+
+#[cfg(unix)]
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no block size support")]
+fn test_io_blocks_uses_parent_block_size_for_new_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let block_size = at.metadata(".").blksize();
+
+    ucmd.args(&["--io-blocks", "--size=2", FILE1])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.metadata(FILE1).len(), 2 * block_size);
+}
+
 /// Test that truncating a non-existent file creates that file.
 #[test]
 fn test_new_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let filename = "new_file_that_does_not_exist_yet";
-    ucmd.args(&["-s", "8", filename])
-        .succeeds()
-        .no_stdout()
-        .no_stderr();
+    ucmd.args(&["-s", "8", filename]).succeeds().no_output();
     assert!(at.file_exists(filename));
     assert_eq!(at.read_bytes(filename), vec![b'\0'; 8]);
 }
@@ -311,10 +379,7 @@ fn test_new_file_reference() {
     let mut old_file = at.make_file(FILE1);
     old_file.write_all(b"1234567890").unwrap();
     let filename = "new_file_that_does_not_exist_yet";
-    ucmd.args(&["-r", FILE1, filename])
-        .succeeds()
-        .no_stdout()
-        .no_stderr();
+    ucmd.args(&["-r", FILE1, filename]).succeeds().no_output();
     assert!(at.file_exists(filename));
     assert_eq!(at.read_bytes(filename), vec![b'\0'; 10]);
 }
@@ -328,8 +393,7 @@ fn test_new_file_size_and_reference() {
     let filename = "new_file_that_does_not_exist_yet";
     ucmd.args(&["-s", "+3", "-r", FILE1, filename])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert!(at.file_exists(filename));
     assert_eq!(at.read_bytes(filename), vec![b'\0'; 13]);
 }
@@ -341,8 +405,7 @@ fn test_new_file_no_create_size_only() {
     let filename = "new_file_that_does_not_exist_yet";
     ucmd.args(&["-s", "8", "-c", filename])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert!(!at.file_exists(filename));
 }
 
@@ -355,8 +418,7 @@ fn test_new_file_no_create_reference_only() {
     let filename = "new_file_that_does_not_exist_yet";
     ucmd.args(&["-r", FILE1, "-c", filename])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert!(!at.file_exists(filename));
 }
 
@@ -369,8 +431,7 @@ fn test_new_file_no_create_size_and_reference() {
     let filename = "new_file_that_does_not_exist_yet";
     ucmd.args(&["-r", FILE1, "-s", "+8", "-c", filename])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert!(!at.file_exists(filename));
 }
 
@@ -414,14 +475,24 @@ fn test_no_such_dir() {
         .stderr_contains("cannot open 'a/b' for writing: No such file or directory");
 }
 
+/// Test that truncate processes every file even if one fails.
+#[test]
+fn test_continue_after_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    ucmd.args(&["-s", "0", "a", "dir", "b"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("dir");
+    assert!(at.file_exists("a"));
+    assert!(at.file_exists("b"));
+}
+
 /// Test that truncate with a relative size less than 0 is not an error.
 #[test]
 fn test_underflow_relative_size() {
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["-s-1", FILE1])
-        .succeeds()
-        .no_stdout()
-        .no_stderr();
+    ucmd.args(&["-s-1", FILE1]).succeeds().no_output();
     assert!(at.file_exists(FILE1));
     assert!(at.read_bytes(FILE1).is_empty());
 }
@@ -429,50 +500,9 @@ fn test_underflow_relative_size() {
 #[test]
 fn test_negative_size_with_space() {
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["-s", "-1", FILE1])
-        .succeeds()
-        .no_stdout()
-        .no_stderr();
+    ucmd.args(&["-s", "-1", FILE1]).succeeds().no_output();
     assert!(at.file_exists(FILE1));
     assert!(at.read_bytes(FILE1).is_empty());
-}
-
-#[cfg(not(windows))]
-#[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
-fn test_fifo_error_size_only() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.mkfifo("fifo");
-    ucmd.args(&["-s", "0", "fifo"])
-        .fails()
-        .no_stdout()
-        .stderr_contains("cannot open 'fifo' for writing: No such device or address");
-}
-
-#[cfg(not(windows))]
-#[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
-fn test_fifo_error_reference_file_only() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.mkfifo("fifo");
-    at.make_file("reference_file");
-    ucmd.args(&["-r", "reference_file", "fifo"])
-        .fails()
-        .no_stdout()
-        .stderr_contains("cannot open 'fifo' for writing: No such device or address");
-}
-
-#[cfg(not(windows))]
-#[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
-fn test_fifo_error_reference_and_size() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.mkfifo("fifo");
-    at.make_file("reference_file");
-    ucmd.args(&["-r", "reference_file", "-s", "+0", "fifo"])
-        .fails()
-        .no_stdout()
-        .stderr_contains("cannot open 'fifo' for writing: No such device or address");
 }
 
 #[test]
@@ -487,4 +517,100 @@ fn test_truncate_non_utf8_paths() {
 
     // Test that truncate can handle non-UTF-8 filenames
     ts.ucmd().arg("-s").arg("10").arg(file_name).succeeds();
+}
+
+#[test]
+fn test_empty_size() {
+    new_ucmd!()
+        .args(&["-s", "", "asd"])
+        .fails()
+        .stderr_is("truncate: Invalid number: ''\n");
+}
+
+#[test]
+fn test_sign_as_a_size() {
+    new_ucmd!()
+        .args(&["-s", "+", "asd"])
+        .fails()
+        .stderr_is("truncate: Invalid number: '+'\n");
+}
+
+#[test]
+fn test_repeated_size_takes_the_last() {
+    // GNU lets a later -s override an earlier one rather than erroring.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.make_file("repeated");
+    ucmd.args(&["-s", "1", "-s", "2", "repeated"]).succeeds();
+    assert_eq!(at.metadata("repeated").len(), 2);
+}
+
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[test]
+    fn test_snippet_counts_the_mode_character_before_the_size() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["--size=+2Zx", "probe"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // The `+` is part of the operand but not of the size, so the caret has
+        // to count it back in to land on the unit.
+        assert!(stderr.contains("truncate:1:19"), "{stderr}");
+        assert!(stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        ucmd.args(&["-s", "10fb", "probe"])
+            .fails_with_code(1)
+            .stderr_contains("Invalid number: '10fb'");
+    }
+}
+
+#[cfg(not(windows))]
+#[cfg(not(wasi_runner))] // WASI: no FIFO/mkfifo support
+mod fifo {
+    use super::*;
+
+    #[test]
+    fn test_fifo_error_size_only() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkfifo("fifo");
+        ucmd.args(&["-s", "0", "fifo"])
+            .fails()
+            .no_stdout()
+            .stderr_contains("cannot open 'fifo' for writing: No such device or address");
+    }
+
+    #[test]
+    fn test_fifo_error_reference_file_only() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkfifo("fifo");
+        at.make_file("reference_file");
+        ucmd.args(&["-r", "reference_file", "fifo"])
+            .fails()
+            .no_stdout()
+            .stderr_contains("cannot open 'fifo' for writing: No such device or address");
+    }
+
+    #[test]
+    fn test_fifo_error_reference_and_size() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkfifo("fifo");
+        at.make_file("reference_file");
+        ucmd.args(&["-r", "reference_file", "-s", "+0", "fifo"])
+            .fails()
+            .no_stdout()
+            .stderr_contains("cannot open 'fifo' for writing: No such device or address");
+    }
 }

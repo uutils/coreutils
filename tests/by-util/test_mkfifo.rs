@@ -5,7 +5,7 @@
 
 // spell-checker:ignore nconfined
 
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -18,7 +18,7 @@ fn test_invalid_arg() {
 
 #[test]
 fn test_create_fifo_missing_operand() {
-    new_ucmd!().fails().stderr_is("mkfifo: missing operand\n");
+    new_ucmd!().fails(); // clap provided error message
 }
 
 #[test]
@@ -153,9 +153,10 @@ fn test_create_fifo_permission_denied() {
     at.mkdir(no_exec_dir);
     at.set_mode(no_exec_dir, 0o644);
 
-    // We no longer attempt to modify file permission if the file was failed to be created.
-    // Therefore the error message should only contain "cannot create".
-    let err_msg = format!("mkfifo: cannot create fifo '{named_pipe}': File exists\n");
+    // The parent directory has no execute bit, so the kernel refuses to add
+    // an entry to it (EACCES). mkfifo should surface that reason instead of
+    // the old hardcoded "File exists".
+    let err_msg = format!("mkfifo: cannot create fifo '{named_pipe}': Permission denied\n");
 
     scene
         .ucmd()
@@ -167,7 +168,7 @@ fn test_create_fifo_permission_denied() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mkfifo_selinux() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -191,7 +192,7 @@ fn test_mkfifo_selinux() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mkfifo_selinux_invalid() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -238,4 +239,35 @@ fn test_mkfifo_permission_unchanged_when_failed() {
     let permissions = display_permissions(&metadata, true);
     let expected = "-rw-------";
     assert_eq!(permissions, expected.to_string());
+}
+
+// The mode is only parsed where a mode means something.
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+    #[test]
+    fn test_snippet_points_at_the_bad_operator() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-m", "+rw?", "some_pipe"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("invalid mode"), "{stderr}");
+        // The caret lands on `?`: three columns of `-m ` and four of mode.
+        assert_eq!(result.caret_column(), Some(7), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        // The test harness pipes stderr, so the report must not appear.
+        let result = new_ucmd!()
+            .args(&["-m", "+rw?", "some_pipe"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.starts_with("mkfifo: "), "{stderr}");
+        assert!(!stderr.contains(":1:"), "{stderr}");
+    }
 }

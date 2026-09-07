@@ -11,9 +11,6 @@ license.workspace = true
 version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/runcon.rs"
 test = false
@@ -27,6 +24,9 @@ selinux = { workspace = true }
 thiserror = { workspace = true }
 libc = { workspace = true }
 fluent = { workspace = true }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "runcon"

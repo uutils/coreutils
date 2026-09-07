@@ -103,7 +103,7 @@ impl Number {
     #[allow(dead_code)]
     fn digits(&self) -> Vec<u8> {
         match self {
-            Self::FixedWidth(number) => number.digits.clone(),
+            Self::FixedWidth(number) => number.digits(),
             Self::DynamicWidth(number) => number.digits(),
         }
     }
@@ -188,27 +188,26 @@ impl Display for Number {
 #[derive(Clone)]
 pub struct FixedWidthNumber {
     radix: u8,
-    digits: Vec<u8>,
+    width: usize,
+    current: usize,
 }
 
 impl FixedWidthNumber {
     /// Instantiate a number of the given radix and width.
-    pub fn new(radix: u8, width: usize, mut suffix_start: usize) -> Result<Self, Overflow> {
-        let mut digits = vec![0_u8; width];
-
-        for i in (0..digits.len()).rev() {
-            let remainder = (suffix_start % (radix as usize)) as u8;
-            suffix_start /= radix as usize;
-            digits[i] = remainder;
-            if suffix_start == 0 {
-                break;
-            }
-        }
-        if suffix_start == 0 {
-            Ok(Self { radix, digits })
+    pub fn new(radix: u8, width: usize, suffix_start: usize) -> Result<Self, Overflow> {
+        if fits_in_width(radix, width, suffix_start) {
+            Ok(Self {
+                radix,
+                width,
+                current: suffix_start,
+            })
         } else {
             Err(Overflow)
         }
+    }
+
+    fn digits(&self) -> Vec<u8> {
+        fixed_width_digits(self.radix, self.width, self.current)
     }
 
     /// Increment this number.
@@ -217,38 +216,64 @@ impl FixedWidthNumber {
     /// number would require more digits than are available with the
     /// specified width, then this method returns `Err(Overflow)`.
     fn increment(&mut self) -> Result<(), Overflow> {
-        for i in (0..self.digits.len()).rev() {
-            // Increment the current digit.
-            self.digits[i] += 1;
-
-            // If the digit overflows, then set it to 0 and continue
-            // to the next iteration to increment the next most
-            // significant digit. Otherwise, terminate the loop, since
-            // there will be no further changes to any higher order
-            // digits.
-            if self.digits[i] == self.radix {
-                self.digits[i] = 0;
-            } else {
-                break;
-            }
-        }
-
-        // Return an error on overflow, which is signified by all zeros.
-        if self.digits == vec![0; self.digits.len()] {
-            Err(Overflow)
-        } else {
+        let next = self.current.checked_add(1).ok_or(Overflow)?;
+        if fits_in_width(self.radix, self.width, next) {
+            self.current = next;
             Ok(())
+        } else {
+            Err(Overflow)
         }
     }
 }
 
 impl Display for FixedWidthNumber {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        for d in &self.digits {
-            f.write_char(map_digit(self.radix, *d))?;
+        let radix = self.radix as usize;
+        let mut remaining = self.current;
+        let mut significant_digits = Vec::new();
+
+        while remaining > 0 {
+            significant_digits.push((remaining % radix) as u8);
+            remaining /= radix;
+        }
+
+        for _ in significant_digits.len()..self.width {
+            f.write_char(map_digit(self.radix, 0))?;
+        }
+
+        for d in significant_digits.into_iter().rev() {
+            f.write_char(map_digit(self.radix, d))?;
         }
         Ok(())
     }
+}
+
+fn fits_in_width(radix: u8, width: usize, value: usize) -> bool {
+    let radix = radix as usize;
+    let mut remaining = value;
+
+    for _ in 0..width {
+        remaining /= radix;
+        if remaining == 0 {
+            return true;
+        }
+    }
+
+    remaining == 0
+}
+
+fn fixed_width_digits(radix: u8, width: usize, value: usize) -> Vec<u8> {
+    let radix = radix as usize;
+    let mut remaining = value;
+    let mut digits = Vec::with_capacity(width);
+
+    for _ in 0..width {
+        digits.push((remaining % radix) as u8);
+        remaining /= radix;
+    }
+
+    digits.reverse();
+    digits
 }
 
 /// A positional notation representation of a number of dynamically growing width.
@@ -569,6 +594,11 @@ mod tests {
 
         assert_eq!(format!("{}", num(0).unwrap()), "14");
         assert_eq!(format!("{}", num(0xf).unwrap()), "23");
+    }
+
+    #[test]
+    fn test_fixed_width_number_large_width_does_not_allocate() {
+        assert!(FixedWidthNumber::new(26, usize::MAX, 0).is_ok());
     }
 
     #[test]

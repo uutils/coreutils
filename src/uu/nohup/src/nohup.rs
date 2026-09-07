@@ -12,13 +12,14 @@ use rustix::stdio::{dup2_stderr, dup2_stdin, dup2_stdout, stdout};
 use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{Error, ErrorKind, IsTerminal};
+use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::sync::LazyLock;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult, set_exit_code};
+use uucore::error::{UError, UResult, set_exit_code, strip_errno};
 use uucore::translate;
 use uucore::{format_usage, show_error};
 
@@ -91,6 +92,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let err = process::Command::new(cmd).args(args).exec();
 
+    show_error!(
+        "{}",
+        translate!("nohup-error-failed-to-run-command", "command" => cmd.quote(), "error" => strip_errno(&err))
+    );
+
     match err.kind() {
         ErrorKind::NotFound => set_exit_code(EXIT_ENOENT),
         _ => set_exit_code(EXIT_CANNOT_INVOKE),
@@ -152,7 +158,15 @@ fn find_stdout() -> UResult<File> {
 }
 
 fn try_open_nohup_file(path: &str) -> std::io::Result<File> {
-    let file = OpenOptions::new().create(true).append(true).open(path)?;
+    // POSIX nohup creates the output file with mode 0600 so that other
+    // users on a shared host can't read whatever the detached job logs.
+    // Setting `.mode()` here only affects newly-created files; if the
+    // file already exists its permissions are left alone.
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .mode(0o600)
+        .open(path)?;
 
     show_error!(
         "{}",
@@ -164,5 +178,5 @@ fn try_open_nohup_file(path: &str) -> std::io::Result<File> {
 
 #[cfg(target_vendor = "apple")]
 unsafe extern "C" {
-    fn _vprocmgr_detach_from_console(flags: u32) -> *const libc::c_int;
+    fn _vprocmgr_detach_from_console(flags: u32) -> *const core::ffi::c_int;
 }

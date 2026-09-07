@@ -1,6 +1,7 @@
 tail-about = Afficher les 10 dernières lignes de chaque FICHIER sur la sortie standard.
   Avec plus d'un FICHIER, précéder chacun d'un en-tête donnant le nom du fichier.
   Sans FICHIER, ou quand FICHIER est -, lire l'entrée standard.
+
   Les arguments obligatoires pour les options longues sont également obligatoires pour les options courtes.
 tail-usage = tail [OPTION]... [FICHIER]...
 
@@ -56,6 +57,7 @@ tail-status-has-appeared-following-new-file = { $file } est apparu ; suivi du no
 tail-status-has-been-replaced-following-new-file = { $file } a été remplacé ; suivi du nouveau fichier
 tail-status-file-truncated = { $file } : fichier tronqué
 tail-status-replaced-with-untailable-file = { $file } a été remplacé par un fichier non suivable
+tail-status-replaced-with-untailable-symlink = { $file } a été remplacé par un lien symbolique non suivable
 tail-status-replaced-with-untailable-file-giving-up = { $file } a été remplacé par un fichier non suivable ; abandon de ce nom
 tail-status-directory-containing-watched-file-removed = le répertoire contenant le fichier surveillé a été supprimé
 tail-status-backend-cannot-be-used-reverting-to-polling = { $backend } ne peut pas être utilisé, retour au sondage
