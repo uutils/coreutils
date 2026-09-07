@@ -53,7 +53,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mask = 0xffff_ffff;
 
     result &= mask;
-    writeln!(stdout().lock(), "{result:0>8x}")?;
+    writeln!(stdout(), "{result:0>8x}")?;
     Ok(())
 }
 
