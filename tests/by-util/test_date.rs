@@ -2156,10 +2156,8 @@ fn test_date_strftime_n_width_and_flags() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/coreutils/issues/11657 — GNU date treats composite strftime specifiers (%D, %F, %T, ...) as atomic; flags like `-` should not propagate to sub-fields."]
 fn test_date_strftime_flag_on_composite() {
     // GNU `%-D` keeps `06/15/24` (flag ignored on composite).
-    // uutils applies `-` to inner `%m`, producing `6/15/24`.
     new_ucmd!()
         .env("LC_ALL", "C")
         .env("TZ", "UTC")
