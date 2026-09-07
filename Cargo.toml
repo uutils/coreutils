@@ -612,7 +612,6 @@ base64 = { optional = true, version = "0.11.0", package = "uu_base64", path = "s
 basename = { optional = true, version = "0.11.0", package = "uu_basename", path = "src/uu/basename" }
 basenc = { optional = true, version = "0.11.0", package = "uu_basenc", path = "src/uu/basenc" }
 cat = { optional = true, version = "0.11.0", package = "uu_cat", path = "src/uu/cat" }
-chcon = { optional = true, version = "0.11.0", package = "uu_chcon", path = "src/uu/chcon" }
 chgrp = { optional = true, version = "0.11.0", package = "uu_chgrp", path = "src/uu/chgrp" }
 chmod = { optional = true, version = "0.11.0", package = "uu_chmod", path = "src/uu/chmod" }
 chown = { optional = true, version = "0.11.0", package = "uu_chown", path = "src/uu/chown" }
@@ -680,7 +679,6 @@ readlink = { optional = true, version = "0.11.0", package = "uu_readlink", path 
 realpath = { optional = true, version = "0.11.0", package = "uu_realpath", path = "src/uu/realpath" }
 rm = { optional = true, version = "0.11.0", package = "uu_rm", path = "src/uu/rm" }
 rmdir = { optional = true, version = "0.11.0", package = "uu_rmdir", path = "src/uu/rmdir" }
-runcon = { optional = true, version = "0.11.0", package = "uu_runcon", path = "src/uu/runcon" }
 seq = { optional = true, version = "0.11.0", package = "uu_seq", path = "src/uu/seq" }
 shred = { optional = true, version = "0.11.0", package = "uu_shred", path = "src/uu/shred" }
 shuf = { optional = true, version = "0.11.0", package = "uu_shuf", path = "src/uu/shuf" }
@@ -751,6 +749,10 @@ rustix = { workspace = true, features = ["param", "use-libc-auxv"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 selinux = { workspace = true, optional = true }
+
+# * uutils
+chcon = { optional = true, version = "0.11.0", package = "uu_chcon", path = "src/uu/chcon" }
+runcon = { optional = true, version = "0.11.0", package = "uu_runcon", path = "src/uu/runcon" }
 
 # * pinned transitive dependencies
 # Not needed for now. Keep as examples:
