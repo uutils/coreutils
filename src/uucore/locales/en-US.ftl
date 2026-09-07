@@ -93,3 +93,7 @@ mode-error-invalid-operator = invalid operator (expected +, -, or =, but found {
 mode-diag-label-missing-operator = this clause says who, but not what to change
 mode-diag-label-invalid-number = not an octal mode
 mode-diag-help-syntax = a mode is either octal, as in 644, or clauses such as u+rwx,go-w
+
+# Encoding/decoding error messages (base32, base64, basenc)
+encoding-error-invalid-input = invalid input
+encoding-error-invalid-input-z85-length = invalid input (length must be multiple of 4 characters)

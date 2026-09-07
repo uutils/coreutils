@@ -87,3 +87,7 @@ mode-error-invalid-operator = opérateur invalide (+, - ou = attendu, mais { $op
 mode-diag-label-missing-operator = cette clause indique qui, mais pas quoi changer
 mode-diag-label-invalid-number = n'est pas un mode octal
 mode-diag-help-syntax = un mode est soit octal, comme 644, soit des clauses comme u+rwx,go-w
+
+# Messages d'erreur d'encodage/décodage (base32, base64, basenc)
+encoding-error-invalid-input = entrée invalide
+encoding-error-invalid-input-z85-length = entrée invalide (la longueur doit être un multiple de 4 caractères)

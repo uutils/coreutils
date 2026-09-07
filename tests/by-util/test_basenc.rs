@@ -24,7 +24,7 @@ fn test_z85_not_padded_decode() {
         .args(&["--z85", "-d"])
         .pipe_in("##########")
         .fails()
-        .stderr_only("basenc: error: invalid input\n");
+        .stderr_only("basenc: invalid input\n");
 }
 
 #[test]
@@ -34,7 +34,7 @@ fn test_z85_not_padded_encode() {
         .args(&["--z85"])
         .pipe_in("123")
         .fails()
-        .stderr_only("basenc: error: invalid input (length must be multiple of 4 characters)\n");
+        .stderr_only("basenc: invalid input (length must be multiple of 4 characters)\n");
 }
 
 #[test]
@@ -147,7 +147,7 @@ fn test_base32_baddecode_keeps_prefix() {
         .pipe_in("MFRGGZDF=")
         .fails()
         .stdout_is("abcde")
-        .stderr_is("basenc: error: invalid input\n");
+        .stderr_is("basenc: invalid input\n");
 }
 
 #[test]
@@ -166,7 +166,7 @@ fn test_base32hex_rejects_trailing_garbage() {
         .pipe_in("VNC0FKD5W")
         .fails()
         .stdout_is_bytes(b"\xFD\xD8\x07\xD1\xA5")
-        .stderr_is("basenc: error: invalid input\n");
+        .stderr_is("basenc: invalid input\n");
 }
 
 #[test]
@@ -176,7 +176,7 @@ fn test_base32hex_truncated_block_keeps_prefix() {
         .pipe_in("CPNMUO")
         .fails()
         .stdout_is_bytes(b"foo")
-        .stderr_is("basenc: error: invalid input\n");
+        .stderr_is("basenc: invalid input\n");
 }
 
 #[test]
