@@ -197,6 +197,7 @@ feat_Tier1 = [
   "arch",
   "kill",
   "hostname",
+  "hostid",
   "nproc",
   "sync",
   "timeout",
@@ -232,6 +233,7 @@ feat_wasm = [
   "fmt",
   "fold",
   "head",
+  "hostid",
   "join",
   "link",
   "ln",
@@ -292,7 +294,6 @@ feat_os_unix = [
   "feat_Tier1",
   #
   "feat_require_unix",
-  "feat_require_unix_hostid",
   "feat_require_unix_utmpx",
 ]
 # "feat_os_unix_musl" == set of utilities which can be built/run on targets binding to the "musl" library (ref: <https://musl.libc.org/about.html>)
@@ -301,7 +302,6 @@ feat_os_unix_musl = [
   "feat_Tier1",
   #
   "feat_require_unix_musl",
-  "feat_require_unix_hostid",
   "feat_require_unix_utmpx",
 ]
 # "feat_os_windows" == set of utilities which can be built/run on modern windows platforms
@@ -312,7 +312,6 @@ feat_os_unix_gnueabihf = [
   "feat_Tier1",
   #
   "feat_require_unix",
-  "feat_require_unix_hostid",
   "feat_require_unix_utmpx",
 ]
 feat_os_unix_android = [
@@ -350,8 +349,6 @@ feat_require_unix_core = [
 # "feat_require_unix_utmpx" == set of utilities requiring unix utmp/utmpx support
 # * ref: <https://wiki.musl-libc.org/faq.html#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?>
 feat_require_unix_utmpx = ["pinky", "uptime", "users", "who"]
-# "feat_require_unix_hostid" == set of utilities requiring gethostid in libc (only some unixes provide)
-feat_require_unix_hostid = ["hostid"]
 # "feat_require_selinux" == set of utilities depending on SELinux.
 feat_require_selinux = ["chcon", "runcon"]
 ## (alternate/newer/smaller platforms) feature sets
