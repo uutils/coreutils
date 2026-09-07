@@ -108,9 +108,6 @@ impl FmtOptions {
             tagged = false;
         }
 
-        // `contains_id` is true whenever the argument has a value, and `SetTrue`
-        // gives these flags a default of `false`, so it was always true and both
-        // prefixes were matched exactly whether or not `-x`/`-X` was passed.
         let xprefix = matches.get_flag(options::EXACT_PREFIX);
         let xanti_prefix = matches.get_flag(options::EXACT_SKIP_PREFIX);
 
