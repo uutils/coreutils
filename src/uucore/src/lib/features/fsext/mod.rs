@@ -648,7 +648,7 @@ impl FsMeta for StatFs {
     }
 
     /// The preferred transfer size, which on Linux is `f_bsize`.
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(any(target_os = "aix", target_os = "linux", target_os = "android"))]
     #[allow(clippy::unnecessary_cast)]
     fn io_size(&self) -> u64 {
         self.f_bsize as u64
@@ -664,6 +664,7 @@ impl FsMeta for StatFs {
     // XXX: dunno if this is right
     #[cfg(not(any(
         target_vendor = "apple",
+        target_os = "aix",
         target_os = "freebsd",
         target_os = "linux",
         target_os = "android",
@@ -713,7 +714,12 @@ impl FsMeta for StatFs {
     fn namelen(&self) -> u64 {
         1024
     }
-    #[cfg(any(target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))]
+    #[cfg(any(
+        target_os = "aix",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
     #[allow(clippy::unnecessary_cast)]
     fn namelen(&self) -> u64 {
         self.f_namemax as u64 // spell-checker:disable-line
@@ -721,6 +727,7 @@ impl FsMeta for StatFs {
     // XXX: should everything just use statvfs?
     #[cfg(not(any(
         target_vendor = "apple",
+        target_os = "aix",
         target_os = "freebsd",
         target_os = "linux",
         target_os = "android",
