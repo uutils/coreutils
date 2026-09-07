@@ -14,7 +14,7 @@ use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
 use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::show_if_err;
 use uucore::translate;
@@ -159,14 +159,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let files: Vec<OsString> = matches
         .get_many::<OsString>(options::ARG_FILES)
         .map(|v| v.cloned().collect())
-        .unwrap_or_default();
-
-    if files.is_empty() {
-        return Err(UUsageError::new(
-            1,
-            translate!("truncate-error-missing-file-operand"),
-        ));
-    }
+        .expect("ARG_FILES should be required by clap");
 
     let io_blocks = matches.get_flag(options::IO_BLOCKS);
     let no_create = matches.get_flag(options::NO_CREATE);

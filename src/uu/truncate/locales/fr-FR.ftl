@@ -24,7 +24,6 @@ truncate-help-reference = baser la taille de chaque fichier sur la taille de RFI
 truncate-help-size = définir ou ajuster la taille de chaque fichier selon TAILLE, qui est en octets sauf si --io-blocks est spécifié
 
 # Messages d'erreur
-truncate-error-missing-file-operand = opérande de fichier manquant
 truncate-error-cannot-open-no-device = impossible d'ouvrir { $filename } en écriture : Aucun périphérique ou adresse de ce type
 truncate-error-cannot-open-for-writing = impossible d'ouvrir { $filename } en écriture
 truncate-error-invalid-number = Nombre invalide : { $error }
