@@ -51,6 +51,7 @@ fn test_internal_db() {
 #[test]
 fn test_ls_colors() {
     new_ucmd!()
+        .env("TERM", "screen")
         .arg("--print-ls-colors")
         .succeeds()
         .stdout_is_fixture("ls_colors.expected");
@@ -248,4 +249,67 @@ fn test_invalid_term_glob() {
         .args(&["-b", "-"])
         .succeeds()
         .stdout_only("LS_COLORS='';\nexport LS_COLORS\n");
+}
+
+#[test]
+fn test_builtin_database_unknown_term() {
+    for (arg, expected) in [
+        ("-b", "LS_COLORS='';\nexport LS_COLORS\n"),
+        ("-c", "setenv LS_COLORS ''\n"),
+    ] {
+        new_ucmd!()
+            .env("TERM", "no-such-terminal")
+            .arg(arg)
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn test_builtin_database_no_term() {
+    new_ucmd!()
+        .arg("-b")
+        .succeeds()
+        .stdout_only("LS_COLORS='';\nexport LS_COLORS\n");
+}
+
+#[test]
+fn test_builtin_database_print_ls_colors_unknown_term() {
+    new_ucmd!()
+        .env("TERM", "no-such-terminal")
+        .arg("--print-ls-colors")
+        .succeeds()
+        .stdout_only("\n");
+}
+
+#[test]
+fn test_builtin_database_known_term() {
+    let stdout = new_ucmd!()
+        .env("TERM", "xterm")
+        .arg("-b")
+        .succeeds()
+        .stdout_move_str();
+    assert!(stdout.contains("di=01;34"), "{stdout}");
+}
+
+#[test]
+fn test_builtin_database_colorterm_without_term() {
+    let stdout = new_ucmd!()
+        .env("TERM", "no-such-terminal")
+        .env("COLORTERM", "truecolor")
+        .arg("-b")
+        .succeeds()
+        .stdout_move_str();
+    assert!(stdout.contains("di=01;34"), "{stdout}");
+}
+
+#[test]
+fn test_print_database_ignores_term() {
+    // -p dumps the database itself, so it is not filtered by TERM.
+    let stdout = new_ucmd!()
+        .env("TERM", "no-such-terminal")
+        .arg("-p")
+        .succeeds()
+        .stdout_move_str();
+    assert!(stdout.contains("DIR 01;34"), "{stdout}");
 }

@@ -86,7 +86,22 @@ fn generate_type_output(fmt: &OutputFmt) -> String {
     }
 }
 
+/// The built-in database is guarded by `COLORTERM ?*` followed by one `TERM`
+/// entry per known terminal. Those entries only take effect when one of them
+/// matches the environment, so reproduce that check before emitting anything.
+fn builtin_database_applies() -> bool {
+    if !env::var("COLORTERM").unwrap_or_default().is_empty() {
+        return true;
+    }
+    let term = env::var("TERM").unwrap_or_else(|_| "none".to_owned());
+    TERMS.iter().any(|pattern| term.fnmatch(pattern))
+}
+
 fn generate_ls_colors(fmt: &OutputFmt, sep: &str) -> String {
+    if !builtin_database_applies() {
+        let (prefix, suffix) = get_colors_format_strings(fmt);
+        return format!("{prefix}{suffix}");
+    }
     if let OutputFmt::Display = fmt {
         let mut display_parts = vec![];
         let type_output = generate_type_output(fmt);
