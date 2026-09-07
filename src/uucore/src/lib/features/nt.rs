@@ -116,7 +116,6 @@ pub fn open_file(path: &Path, desired_access: u32, open_options: u32) -> io::Res
 pub fn query_nt_path(handle: &NtHandle) -> io::Result<OsString> {
     let mut buffer = vec![0u16; MAX_PATH as usize];
     loop {
-        // SAFETY: The handle is open and the output buffer has the given size.
         let length = unsafe {
             GetFinalPathNameByHandleW(
                 handle.0,
