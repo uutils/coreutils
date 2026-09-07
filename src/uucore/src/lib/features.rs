@@ -101,7 +101,7 @@ pub mod mode;
 // ** unix-only
 #[cfg(all(unix, feature = "entries"))]
 pub mod entries;
-#[cfg(all(unix, feature = "perms"))]
+#[cfg(all(feature = "perms", unix, not(target_os = "haiku")))]
 pub mod perms;
 #[cfg(all(feature = "pipes", any(target_os = "linux", target_os = "android")))]
 pub mod pipes;
