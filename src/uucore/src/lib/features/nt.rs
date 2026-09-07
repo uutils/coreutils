@@ -5,112 +5,43 @@
 
 //! Windows NT API helpers with RAII wrappers.
 
-use std::os::windows::ffi::OsStrExt;
+use std::ffi::OsString;
+use std::mem::MaybeUninit;
+use std::os::windows::ffi::OsStringExt;
 use std::path::Path;
-use std::ptr;
-use std::{io::Error, mem::MaybeUninit};
+use std::{io, ptr};
 
-use crate::error::{UResult, USimpleError};
+use windows_sys::Wdk::Foundation::{NtClose, OBJECT_ATTRIBUTES};
+pub use windows_sys::Wdk::Storage::FileSystem::{
+    FILE_DIRECTORY_FILE, FILE_OPEN_FOR_FREE_SPACE_QUERY, FILE_SYNCHRONOUS_IO_NONALERT,
+    FileFsDeviceInformation, FileFsFullSizeInformation,
+};
+use windows_sys::Wdk::Storage::FileSystem::{
+    FS_INFORMATION_CLASS, FileFsAttributeInformation, NtOpenFile, NtQueryVolumeInformationFile,
+    RtlDosPathNameToNtPathName_U_WithStatus,
+};
+pub use windows_sys::Wdk::System::SystemServices::{
+    FILE_FS_DEVICE_INFORMATION, FILE_FS_FULL_SIZE_INFORMATION, FILE_REMOTE_DEVICE,
+};
+use windows_sys::Win32::Foundation::{
+    HANDLE, MAX_PATH, NTSTATUS, OBJ_CASE_INSENSITIVE, RtlNtStatusToDosError, UNICODE_STRING,
+};
+pub use windows_sys::Win32::Storage::FileSystem::{
+    FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, SYNCHRONIZE,
+};
+use windows_sys::Win32::Storage::FileSystem::{GetFinalPathNameByHandleW, VOLUME_NAME_NT};
+use windows_sys::Win32::System::{IO::IO_STATUS_BLOCK, WindowsProgramming::RtlFreeUnicodeString};
 
-use windows_sys::Win32::Foundation::NTSTATUS;
+use crate::wide::ToWide as _;
 
-pub const SYNCHRONIZE: u32 = 0x00100000;
-pub const FILE_SHARE_READ: u32 = 0x00000001;
-pub const FILE_SHARE_WRITE: u32 = 0x00000002;
-pub const FILE_SHARE_DELETE: u32 = 0x00000004;
-pub const FILE_DIRECTORY_FILE: u32 = 0x00000001;
-pub const FILE_SYNCHRONOUS_IO_NONALERT: u32 = 0x00000020;
-pub const FILE_OPEN_FOR_FREE_SPACE_QUERY: u32 = 0x00800000;
-
-const OBJ_CASE_INSENSITIVE: u32 = 0x00000040;
-
-pub const FILE_REMOTE_DEVICE: u32 = 0x00000010;
-
-#[allow(non_upper_case_globals)]
-pub const FileFsDeviceInformation: u32 = 4;
-#[allow(non_upper_case_globals)]
-pub const FileFsAttributeInformation: u32 = 5;
-#[allow(non_upper_case_globals)]
-pub const FileFsFullSizeInformation: u32 = 7;
-
-#[repr(C)]
-pub struct FILE_FS_DEVICE_INFORMATION {
-    pub device_type: u32,
-    pub characteristics: u32,
-}
-
-#[repr(C)]
-pub struct FILE_FS_ATTRIBUTE_INFORMATION {
-    pub file_system_attributes: u32,
-    pub maximum_component_name_length: i32,
-    pub file_system_name_length: u32,
-    pub file_system_name: [u16; 128],
-}
-
-#[repr(C)]
-pub struct FILE_FS_FULL_SIZE_INFORMATION {
-    pub total_allocation_units: i64,
-    pub caller_available_allocation_units: i64,
-    pub actual_available_allocation_units: i64,
-    pub sectors_per_allocation_unit: u32,
-    pub bytes_per_sector: u32,
-}
-
-#[repr(C)]
-struct UNICODE_STRING {
-    length: u16,
-    maximum_length: u16,
-    buffer: *mut u16,
-}
-
-#[repr(C)]
-struct OBJECT_ATTRIBUTES {
-    length: u32,
-    root_directory: *mut std::ffi::c_void,
-    object_name: *const UNICODE_STRING,
-    attributes: u32,
-    security_descriptor: *mut std::ffi::c_void,
-    security_quality_of_service: *mut std::ffi::c_void,
-}
-
-#[repr(C)]
-struct IO_STATUS_BLOCK {
-    status: NTSTATUS,
-    information: usize,
-}
-
-unsafe extern "system" {
-    fn NtOpenFile(
-        file_handle: *mut *mut std::ffi::c_void,
-        desired_access: u32,
-        object_attributes: *const OBJECT_ATTRIBUTES,
-        io_status_block: *mut IO_STATUS_BLOCK,
-        share_access: u32,
-        open_options: u32,
-    ) -> NTSTATUS;
-
-    fn NtClose(handle: *mut std::ffi::c_void) -> NTSTATUS;
-
-    fn NtQueryVolumeInformationFile(
-        file_handle: *mut std::ffi::c_void,
-        io_status_block: *mut IO_STATUS_BLOCK,
-        fs_information: *mut std::ffi::c_void,
-        length: u32,
-        fs_information_class: u32,
-    ) -> NTSTATUS;
-
-    fn RtlDosPathNameToNtPathName_U(
-        dos_file_name: *const u16,
-        nt_file_name: *mut UNICODE_STRING,
-        file_part: *mut *mut u16,
-        reserved: *mut std::ffi::c_void,
-    ) -> u8;
-
-    fn RtlFreeUnicodeString(unicode_string: *mut UNICODE_STRING);
+#[cold]
+fn nt_status_to_io_error(status: NTSTATUS) -> io::Error {
+    // SAFETY: This function accepts any NTSTATUS and has no pointer arguments.
+    io::Error::from_raw_os_error(unsafe { RtlNtStatusToDosError(status) } as i32)
 }
 
 #[repr(transparent)]
-pub struct NtHandle(*mut std::ffi::c_void);
+pub struct NtHandle(HANDLE);
 
 impl Drop for NtHandle {
     fn drop(&mut self) {
@@ -125,17 +56,13 @@ struct UnicodeString(UNICODE_STRING);
 
 impl UnicodeString {
     fn empty() -> Self {
-        Self(UNICODE_STRING {
-            length: 0,
-            maximum_length: 0,
-            buffer: ptr::null_mut(),
-        })
+        Self(UNICODE_STRING::default())
     }
 }
 
 impl Drop for UnicodeString {
     fn drop(&mut self) {
-        if !self.0.buffer.is_null() {
+        if !self.0.Buffer.is_null() {
             unsafe { RtlFreeUnicodeString(&raw mut self.0) };
         }
     }
@@ -144,34 +71,28 @@ impl Drop for UnicodeString {
 /// Opens a file or directory via `NtOpenFile`.
 ///
 /// The file is opened with full share access (`READ | WRITE | DELETE`).
-pub fn open_file(path: &Path, desired_access: u32, open_options: u32) -> UResult<NtHandle> {
-    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+pub fn open_file(path: &Path, desired_access: u32, open_options: u32) -> io::Result<NtHandle> {
+    let wide: Vec<u16> = path.to_wide_null();
     let mut nt_path = UnicodeString::empty();
-    if unsafe {
-        RtlDosPathNameToNtPathName_U(
+    let status = unsafe {
+        RtlDosPathNameToNtPathName_U_WithStatus(
             wide.as_ptr(),
             &raw mut nt_path.0,
             ptr::null_mut(),
-            ptr::null_mut(),
+            ptr::null(),
         )
-    } == 0
-    {
-        return Err(USimpleError::new(
-            1,
-            format!(
-                "RtlDosPathNameToNtPathName_U failed: {}",
-                Error::last_os_error()
-            ),
-        ));
+    };
+    if status < 0 {
+        return Err(nt_status_to_io_error(status));
     }
 
     let attr = OBJECT_ATTRIBUTES {
-        length: size_of::<OBJECT_ATTRIBUTES>() as u32,
-        root_directory: ptr::null_mut(),
-        object_name: &nt_path.0,
-        attributes: OBJ_CASE_INSENSITIVE,
-        security_descriptor: ptr::null_mut(),
-        security_quality_of_service: ptr::null_mut(),
+        Length: size_of::<OBJECT_ATTRIBUTES>() as u32,
+        RootDirectory: ptr::null_mut(),
+        ObjectName: &raw const nt_path.0,
+        Attributes: OBJ_CASE_INSENSITIVE,
+        SecurityDescriptor: ptr::null_mut(),
+        SecurityQualityOfService: ptr::null_mut(),
     };
     let mut handle = ptr::null_mut();
     let mut iosb = MaybeUninit::<IO_STATUS_BLOCK>::uninit();
@@ -179,19 +100,39 @@ pub fn open_file(path: &Path, desired_access: u32, open_options: u32) -> UResult
         NtOpenFile(
             &raw mut handle,
             desired_access,
-            &attr,
+            &raw const attr,
             iosb.as_mut_ptr(),
             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
             open_options,
         )
     };
     if status < 0 {
-        return Err(USimpleError::new(
-            1,
-            format!("NtOpenFile failed: 0x{:08X}", status as u32),
-        ));
+        return Err(nt_status_to_io_error(status));
     }
     Ok(NtHandle(handle))
+}
+
+/// Returns the NT path of the file associated with the given handle.
+pub fn query_nt_path(handle: &NtHandle) -> io::Result<OsString> {
+    let mut buffer = vec![0u16; MAX_PATH as usize];
+    loop {
+        // SAFETY: The handle is open and the output buffer has the given size.
+        let length = unsafe {
+            GetFinalPathNameByHandleW(
+                handle.0,
+                buffer.as_mut_ptr(),
+                buffer.len() as u32,
+                VOLUME_NAME_NT,
+            ) as usize
+        };
+        if length == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if length < buffer.len() {
+            return Ok(OsString::from_wide(&buffer[..length]));
+        }
+        buffer.resize(length, 0);
+    }
 }
 
 /// Queries volume information for the file associated with the given handle.
@@ -199,9 +140,13 @@ pub fn open_file(path: &Path, desired_access: u32, open_options: u32) -> UResult
 /// # Safety
 ///
 /// `T` must be the correct struct for the given `information_class`.
-pub unsafe fn query_volume_information<T>(handle: &NtHandle, information_class: u32) -> UResult<T> {
+pub unsafe fn query_volume_information<T>(
+    handle: &NtHandle,
+    information_class: FS_INFORMATION_CLASS,
+) -> io::Result<T> {
     let mut info = MaybeUninit::<T>::uninit();
     let mut iosb = MaybeUninit::<IO_STATUS_BLOCK>::uninit();
+
     let status = unsafe {
         NtQueryVolumeInformationFile(
             handle.0,
@@ -212,13 +157,47 @@ pub unsafe fn query_volume_information<T>(handle: &NtHandle, information_class: 
         )
     };
     if status < 0 {
-        return Err(USimpleError::new(
-            1,
-            format!(
-                "NtQueryVolumeInformationFile failed: 0x{:08X}",
-                status as u32
-            ),
+        return Err(nt_status_to_io_error(status));
+    }
+
+    // SAFETY: The caller guarantees that a successful query produces a valid T,
+    // with any potentially uninitialized fields represented by MaybeUninit.
+    Ok(unsafe { info.assume_init() })
+}
+
+/// Returns the filesystem type name, such as "NTFS" or "ReFS".
+pub fn query_filesystem_name(handle: &NtHandle) -> io::Result<String> {
+    const BUF_LEN: usize = 122; // --> sizeof(FILE_FS_ATTRIBUTE_INFORMATION) == 256
+
+    // The official FILE_FS_ATTRIBUTE_INFORMATION definition uses a
+    // variable-length array for FileSystemName, but we allocate a
+    // fixed-size array to make things easier.
+    #[repr(C)]
+    #[allow(dead_code, non_snake_case)]
+    struct FILE_FS_ATTRIBUTE_INFORMATION {
+        FileSystemAttributes: u32,
+        MaximumComponentNameLength: i32,
+        FileSystemNameLength: u32,
+        FileSystemName: [MaybeUninit<u16>; BUF_LEN],
+    }
+
+    let info: FILE_FS_ATTRIBUTE_INFORMATION =
+        unsafe { query_volume_information(handle, FileFsAttributeInformation)? };
+
+    let length = info.FileSystemNameLength as usize;
+    if !length.is_multiple_of(2) || length > BUF_LEN * 2 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Invalid filesystem name length",
         ));
     }
-    Ok(unsafe { info.assume_init() })
+
+    // SAFETY: The query initialized the reported name bytes, and the length
+    // check ensures they form whole u16 elements within the buffer.
+    Ok(String::from_utf16_lossy(unsafe {
+        std::slice::from_raw_parts(
+            info.FileSystemName.as_ptr().cast::<u16>(),
+            length / size_of::<u16>(),
+        )
+    }))
 }

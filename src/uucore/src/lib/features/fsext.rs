@@ -248,29 +248,24 @@ impl MountInfo {
     fn new(volume_name_buf: &[u16]) -> Option<Self> {
         use super::nt;
         let nul = volume_name_buf.iter().position(|&c| c == 0)?;
-        let volume_name = String::from_utf16_lossy(&volume_name_buf[..nul]);
-        if !volume_name.starts_with("\\\\?\\") || !volume_name.ends_with('\\') {
+        let dev_id = String::from_utf16_lossy(&volume_name_buf[..nul]);
+        if !dev_id.starts_with("\\\\?\\") || !dev_id.ends_with('\\') {
             return None;
         }
 
         let handle = nt::open_file(
-            Path::new(&volume_name),
+            Path::new(&dev_id),
             nt::SYNCHRONIZE,
             nt::FILE_SYNCHRONOUS_IO_NONALERT | nt::FILE_DIRECTORY_FILE,
         )
         .ok()?;
 
-        let fs_type = unsafe {
-            nt::query_volume_information::<nt::FILE_FS_ATTRIBUTE_INFORMATION>(
-                &handle,
-                nt::FileFsAttributeInformation,
-            )
-        }
-        .map(|info| {
-            let len = info.file_system_name_length as usize / size_of::<u16>();
-            String::from_utf16_lossy(&info.file_system_name[..len])
-        })
-        .unwrap_or_default();
+        let dev_name = nt::query_nt_path(&handle)
+            .ok()?
+            .to_string_lossy()
+            .trim_end_matches('\\')
+            .to_owned();
+        let fs_type = nt::query_filesystem_name(&handle).unwrap_or_default();
 
         let remote = unsafe {
             nt::query_volume_information::<nt::FILE_FS_DEVICE_INFORMATION>(
@@ -278,7 +273,7 @@ impl MountInfo {
                 nt::FileFsDeviceInformation,
             )
         }
-        .is_ok_and(|info| info.characteristics & nt::FILE_REMOTE_DEVICE != 0);
+        .is_ok_and(|info| info.Characteristics & nt::FILE_REMOTE_DEVICE != 0);
 
         let mount_dir: String = unsafe {
             // TODO: Once we're on Rust 1.93 we could use MaybeUninit<u16>
@@ -312,8 +307,8 @@ impl MountInfo {
         };
 
         Some(Self {
-            dev_id: volume_name.clone(),
-            dev_name: volume_name,
+            dev_id,
+            dev_name,
             fs_type,
             mount_root: OsString::new(),
             mount_dir: mount_dir.into(),
@@ -426,8 +421,7 @@ use std::io::{BufRead, BufReader};
     target_vendor = "apple",
     target_os = "freebsd",
     target_os = "netbsd",
-    target_os = "openbsd",
-    windows
+    target_os = "openbsd"
 ))]
 use std::ptr;
 #[cfg(any(
@@ -608,18 +602,17 @@ impl FsUsage {
 
         let info: nt::FILE_FS_FULL_SIZE_INFORMATION =
             unsafe { nt::query_volume_information(&handle, nt::FileFsFullSizeInformation)? };
-        let bytes_per_cluster =
-            info.sectors_per_allocation_unit as u64 * info.bytes_per_sector as u64;
-        let avail = info.caller_available_allocation_units as u64;
+        let bytes_per_cluster = info.SectorsPerAllocationUnit as u64 * info.BytesPerSector as u64;
+        let avail = info.CallerAvailableAllocationUnits as u64;
 
         Ok(Self {
             // f_bsize      File system block size.
             blocksize: bytes_per_cluster,
             // f_blocks - Total number of blocks on the file system, in units of f_frsize.
             // frsize =     Fundamental file system block size (fragment size).
-            blocks: info.total_allocation_units as u64,
+            blocks: info.TotalAllocationUnits as u64,
             //  Total number of free blocks.
-            bfree: info.actual_available_allocation_units as u64,
+            bfree: info.ActualAvailableAllocationUnits as u64,
             //  Total number of free blocks available to non-privileged processes.
             bavail: avail,
             bavail_top_bit_set: (avail & (1u64.rotate_right(1))) != 0,
