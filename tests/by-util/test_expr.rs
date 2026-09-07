@@ -288,12 +288,6 @@ fn test_regex_trailing_backslash() {
 }
 
 #[test]
-// expr mismatches `\[^a]` against `[^a]` on Windows for arm64 only; it passes
-// everywhere else, including x86_64 Windows.
-#[cfg_attr(
-    all(windows, target_arch = "aarch64"),
-    ignore = "bracket expression mismatches on Windows arm64"
-)]
 fn test_regex_caret() {
     new_ucmd!()
         .args(&["a^b", ":", "a^b"])
@@ -335,8 +329,9 @@ fn test_regex_caret() {
         .args(&["ab[^c]", ":", "ab\\[^c]"])
         .succeeds()
         .stdout_only("6\n");
+    // Use `[^x]` to avoid Windows `wild` glob matching the runner's `C:\a` directory
     new_ucmd!()
-        .args(&["[^a]", ":", "\\[^a]"])
+        .args(&["[^x]", ":", "\\[^x]"])
         .succeeds()
         .stdout_only("4\n");
     new_ucmd!()
