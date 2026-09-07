@@ -123,12 +123,14 @@ pub mod smack;
 #[cfg(feature = "feat_systemd_logind")]
 pub mod systemd_logind;
 #[cfg(all(
-    unix,
-    not(target_os = "android"),
-    not(target_os = "fuchsia"),
-    not(target_os = "openbsd"),
-    not(target_os = "redox"),
-    feature = "utmpx"
+    feature = "utmpx",
+    any(
+        target_vendor = "apple",
+        target_os = "cygwin",
+        target_os = "freebsd",
+        all(target_os = "linux", not(target_env = "ohos")),
+        target_os = "netbsd"
+    )
 ))]
 pub mod utmpx;
 // ** windows-only
