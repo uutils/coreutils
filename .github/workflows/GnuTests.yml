@@ -4,7 +4,6 @@ name: GnuTests
 # spell-checker:ignore (jargon) submodules devel
 # spell-checker:ignore (libs/utils) chksum dpkg getenforce gperf lcov libexpect limactl pyinotify setenforce shopt valgrind libattr libcap taiki-e zstd cpio
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
-# spell-checker:ignore (people) Dawid Dziurla * dawidd
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
 # spell-checker:ignore userns nodocs
 
@@ -15,6 +14,8 @@ on:
   push:
     branches:
       - '*'
+      ## the reference branch carries no code, only published test results
+      - '!gnu-reference'
 
 permissions:
   contents: read
@@ -26,6 +27,9 @@ concurrency:
 
 env:
   DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+  ## Machine-maintained branch holding the latest GNU test results of the
+  ## default branch; every PR run is compared against what it carries.
+  REFERENCE_BRANCH: 'gnu-reference'
   TEST_FULL_SUMMARY_FILE: 'gnu-full-result.json'
   TEST_ROOT_FULL_SUMMARY_FILE: 'gnu-root-full-result.json'
   TEST_STTY_FULL_SUMMARY_FILE: 'gnu-stty-full-result.json'
@@ -332,9 +336,8 @@ jobs:
   aggregate:
     needs: [native, selinux, qemu]
     permissions:
-      actions: read  # for dawidd6/action-download-artifact to query and download artifacts
-      contents: read  # for actions/checkout to fetch code
-      pull-requests: read  # for dawidd6/action-download-artifact to query commit hash
+      actions: read  # to download this run's own result artifacts
+      contents: read  # for actions/checkout to fetch code, and to read the reference branch
     name: Aggregate GNU test results
     runs-on: ubuntu-24.04
     steps:
@@ -354,57 +357,54 @@ jobs:
       with:
         path: 'uutils'
         persist-credentials: false
-    - name: Resolve reference run (most recent on the default branch)
-      id: reference
+    - name: Fetch reference results (default branch)
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        ## Pick the newest completed run of this workflow on the default branch
-        ## that still has an 'aggregated-result' artifact.
-        ## Without this, the artifact action occasionally settles on a run that
-        ## is weeks old, and every test fixed since then is reported as a "fix"
-        ## of the current PR (and every test broken since then as a regression).
-        ## note: the server-side 'status' filter is served from a search index
-        ## that can lag weeks behind (observed returning nothing newer than a
-        ## month old while the unfiltered listing was current), so filter on
-        ## 'status' client-side instead.
-        RUN_ID=''
-        RUN_DATE=''
-        runs=$(gh api "repos/${{ github.repository }}/actions/workflows/GnuTests.yml/runs?branch=${{ env.DEFAULT_BRANCH }}&per_page=30" \
-                 --jq '.workflow_runs[] | select(.status == "completed") | "\(.id) \(.created_at)"' || true)
-        while read -r id run_date; do
-          [[ -n "$id" ]] || continue
-          has_artifact=$(gh api "repos/${{ github.repository }}/actions/runs/${id}/artifacts?per_page=100" \
-                           --jq '[.artifacts[] | select(.name == "aggregated-result" and .expired == false)] | length' || echo 0)
-          if [[ "$has_artifact" -gt 0 ]]; then
-            RUN_ID="$id"
-            RUN_DATE="$run_date"
-            break
+        ## Fetch the reference results published by the last GnuTests run on the
+        ## default branch.
+        ## They live on a dedicated, machine-maintained branch rather than in a
+        ## workflow artifact: an artifact is addressable only by run id, so
+        ## finding one meant listing workflow runs, and the server-side 'branch'
+        ## filter of that listing is served by a search index that is only
+        ## eventually consistent (observed returning nothing newer than a month
+        ## old while the unfiltered listing was current).  A run resolved from a
+        ## stale listing made every test fixed on the default branch since then
+        ## look like a fix contributed by the PR, and every test broken since
+        ## then like a regression introduced by it.  A branch has no such index,
+        ## and no 90-day expiry either.
+        ## A missing reference is not fatal: the branch does not exist until the
+        ## first run on the default branch has published to it.
+        mkdir -p reference/aggregated-result reference/test-summary
+        fetch() {
+          gh api "repos/${{ github.repository }}/contents/${1}?ref=${REFERENCE_BRANCH}" \
+             -H 'Accept: application/vnd.github.raw' > "${2}" 2>/dev/null \
+            && [[ -s "${2}" ]]
+        }
+        if fetch aggregated-result.json reference/aggregated-result/aggregated-result.json \
+           && fetch gnu-result.json reference/test-summary/gnu-result.json; then
+          ## 'meta.json' says which commit the reference was built from; it is
+          ## informational, so tolerate it being absent or unparsable.
+          meta=$(gh api "repos/${{ github.repository }}/contents/meta.json?ref=${REFERENCE_BRANCH}" \
+                   -H 'Accept: application/vnd.github.raw' 2>/dev/null || true)
+          published_sha=$(jq -r '.sha // empty' <<< "${meta}" 2>/dev/null || true)
+          published_at=$(jq -r '.published_at // empty' <<< "${meta}" 2>/dev/null || true)
+          echo "Reference: ${{ env.DEFAULT_BRANCH }}@${published_sha:-<unknown>} (published ${published_at:-<unknown>})"
+          published_epoch=''
+          if [[ -n "${published_at}" ]]; then
+            published_epoch=$(date -u -d "${published_at}" +%s 2>/dev/null || true)
           fi
-        done <<< "$runs"
-        if [[ -z "$RUN_ID" ]]; then
-          echo "::warning ::No usable reference run found; falling back to the artifact action's own lookup."
+          if [[ -n "${published_epoch}" ]]; then
+            age_days=$(( ( $(date -u +%s) - published_epoch ) / 86400 ))
+            if [[ "${age_days}" -gt 2 ]]; then
+              echo "::warning ::The reference results are ${age_days} days old (${published_at}); the comparison below may report unrelated fixes and regressions."
+            fi
+          fi
         else
-          age_days=$(( ( $(date -u +%s) - $(date -u -d "$RUN_DATE" +%s) ) / 86400 ))
-          echo "Reference run: ${RUN_ID} (${RUN_DATE}, ${age_days} day(s) old)"
-          if [[ "$age_days" -gt 7 ]]; then
-            echo "::warning ::The newest usable reference run is ${age_days} days old (${RUN_DATE}); the comparison below may report unrelated fixes and regressions."
-          fi
+          rm -f reference/aggregated-result/aggregated-result.json reference/test-summary/gnu-result.json
+          echo "::warning ::No reference results found on the '${REFERENCE_BRANCH}' branch; the comparisons below will be skipped."
         fi
-        echo "RUN_ID=${RUN_ID}" >> $GITHUB_OUTPUT
-    - name: Retrieve reference artifacts
-      uses: dawidd6/action-download-artifact@v24
-      # ref: <https://github.com/dawidd6/action-download-artifact>
-      continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
-      with:
-        workflow: GnuTests.yml
-        run_id: "${{ steps.reference.outputs.RUN_ID }}"
-        ## 'run_id' and 'branch' are mutually exclusive: only fall back to the branch lookup when the run could not be resolved
-        branch: "${{ steps.reference.outputs.RUN_ID == '' && env.DEFAULT_BRANCH || '' }}"
-        # workflow_conclusion: success ## (default); * but, if commit with failed GnuTests is merged into the default branch, future commits will all show regression errors in GnuTests CI until o/w fixed
-        workflow_conclusion: completed ## continually recalibrates to last commit of default branch with a successful GnuTests (ie, "self-heals" from GnuTest regressions, but needs more supervision for/of regressions)
-        path: "reference"
     - name: Download full json results
       uses: actions/download-artifact@v8
       with:
@@ -565,3 +565,79 @@ jobs:
         else
           echo "::warning ::Skipping test summary comparison; no prior reference summary is available."
         fi
+
+  publish-reference:
+    ## Publish this run's results as the reference that every later PR run is
+    ## compared against.  Only runs on a push to the default branch, so a fork
+    ## PR can never reach it.
+    needs: aggregate
+    if: >
+      always()
+      && github.event_name == 'push'
+      && github.ref_name == github.event.repository.default_branch
+      && needs.aggregate.result != 'cancelled'
+      && needs.aggregate.result != 'skipped'
+    permissions:
+      actions: read  # to download this run's own result artifacts
+      contents: write  # to push to the reference branch
+    name: Publish reference GNU test results
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Download aggregated json results
+      continue-on-error: true ## 'aggregate' may have failed before uploading
+      uses: actions/download-artifact@v8
+      with:
+        name: aggregated-result
+        path: publish
+    - name: Download test results summary
+      continue-on-error: true ## 'aggregate' may have failed before uploading
+      uses: actions/download-artifact@v8
+      with:
+        name: test-summary
+        path: publish
+    - name: Publish to the reference branch
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        ## Publish to the reference branch
+        ## The branch is a single-commit orphan history, force-pushed on every
+        ## run, so it never accumulates history.  Runs on the default branch can
+        ## finish out of order, so refuse to overwrite a reference published by a
+        ## *newer* run (run ids are monotonic).
+        if [[ ! -s publish/aggregated-result.json || ! -s publish/gnu-result.json ]]; then
+          echo "::warning ::This run produced no results to publish; leaving the '${REFERENCE_BRANCH}' branch untouched."
+          exit 0
+        fi
+        published_run=$(gh api "repos/${{ github.repository }}/contents/meta.json?ref=${REFERENCE_BRANCH}" \
+                          -H 'Accept: application/vnd.github.raw' 2>/dev/null | jq -r '.run_id // 0' || echo 0)
+        if [[ "${published_run}" =~ ^[0-9]+$ ]] && (( published_run > GITHUB_RUN_ID )); then
+          echo "::notice ::Run ${published_run} already published a newer reference; nothing to do."
+          exit 0
+        fi
+        jq -n --arg sha "${GITHUB_SHA}" \
+              --arg run_id "${GITHUB_RUN_ID}" \
+              --arg branch "${GITHUB_REF_NAME}" \
+              --arg published_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              '{sha: $sha, run_id: $run_id, branch: $branch, published_at: $published_at}' \
+          > publish/meta.json
+        printf '%s\n' \
+          '# GNU test reference results' \
+          '' \
+          'Machine-maintained branch: the GNU test results of the latest run of' \
+          'the `GnuTests` workflow on the default branch.  Every pull request run' \
+          'is compared against the files here, so that it reports only the test' \
+          'changes the pull request is itself responsible for.' \
+          '' \
+          'Do not commit here by hand; the branch is force-pushed on every run.' \
+          > publish/README.md
+        cd publish
+        git init -q -b "${REFERENCE_BRANCH}"
+        git config user.name 'github-actions[bot]'
+        git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+        git add -A
+        git commit -q -m "GNU test results for ${GITHUB_SHA}"
+        git push -q --force \
+          "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+          "HEAD:refs/heads/${REFERENCE_BRANCH}"
+        echo "::notice ::Published reference results for ${GITHUB_SHA}."
