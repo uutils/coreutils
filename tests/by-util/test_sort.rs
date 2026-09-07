@@ -1894,7 +1894,7 @@ fn test_separator_attached_equals_double() {
     // `-t==` selects the two-character separator `==`, which GNU rejects.
     new_ucmd!()
         .args(&["-t==", "-k", "2"])
-        .pipe_in("a=b=c\n")
+        .pipe_in("")
         .fails()
         .stderr_contains("separator must be exactly one character long: '=='");
 }
@@ -1904,7 +1904,7 @@ fn test_separator_attached_equals_multi_char() {
     // `-t=a` selects the two-character separator `=a`, which GNU rejects.
     new_ucmd!()
         .args(&["-t=a", "-k", "2"])
-        .pipe_in("a=b=c\n")
+        .pipe_in("")
         .fails()
         .stderr_contains("separator must be exactly one character long: '=a'");
 }
