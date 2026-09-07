@@ -16,17 +16,11 @@
 use pretty_assertions::assert_eq;
 use rand::distr::Alphanumeric;
 use rstest::rstest;
-#[cfg(all(
-    not(target_vendor = "apple"),
-    not(target_os = "android"),
-    not(target_os = "freebsd"),
-    not(windows)
-))]
+#[cfg(all(not(target_os = "android"), not(target_os = "freebsd"), not(windows)))]
 use rustix::process::{Pid, Signal, kill_process};
 use std::char::from_digit;
 use std::fs::File;
 use std::io::Write;
-#[cfg(not(target_vendor = "apple"))]
 use std::io::{Seek, SeekFrom};
 #[cfg(all(
     not(target_vendor = "apple"),
@@ -106,7 +100,6 @@ fn test_stdin_explicit() {
 }
 
 #[test]
-#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_file() {
     // $ echo foo > f
 
@@ -160,7 +153,6 @@ fn test_stdin_redirect_file_follow() {
 }
 
 #[test]
-#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_offset() {
     // Test following a file from the middle
 
@@ -174,7 +166,6 @@ fn test_stdin_redirect_offset() {
 }
 
 #[test]
-#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_offset2() {
     // like test_stdin_redirect_offset but with multiple files
 
@@ -2966,7 +2957,6 @@ fn test_fifo() {
 /// Without non-blocking FIFO open, tail would block forever waiting for a writer.
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
@@ -5124,7 +5114,6 @@ fn test_obsolete_encoding_windows() {
 }
 
 #[test]
-#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_following_with_pid() {
     use std::process::Command;
