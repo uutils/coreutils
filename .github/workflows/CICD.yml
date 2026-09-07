@@ -623,8 +623,6 @@ jobs:
       shell: bash
       if: matrix.job.skip-publish != true && matrix.job.check-only == true
       run: |
-        # expr breaks redox
-        if [[ "${{ matrix.job.target }}" == *"redox"* ]]; then sed -i.b '/"expr",/d' Cargo.toml; fi
         ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} check \
         --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }}
     - name: Test
