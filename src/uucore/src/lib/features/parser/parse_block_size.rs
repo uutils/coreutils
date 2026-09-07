@@ -62,6 +62,42 @@ pub fn block_size_from_env(vars: &[&str]) -> BlockSizeEnv {
     BlockSizeEnv::NotSet
 }
 
+/// Returns the GNU display unit of a suffix-only block-size spec, `None` if
+/// the spec starts with a digit or is a plain `B`.
+///
+/// ```
+/// # use uucore::parser::parse_block_size::suffix_from_parsed_block_size;
+/// assert_eq!(suffix_from_parsed_block_size("k"), Some("K".into()));
+/// assert_eq!(suffix_from_parsed_block_size("1K"), None);
+/// ```
+pub fn suffix_from_parsed_block_size(s: &str) -> Option<String> {
+    let mut chars = s.chars();
+    let unit = chars.next()?.to_ascii_uppercase();
+    if !unit.is_ascii_alphabetic() || unit == 'B' {
+        return None;
+    }
+
+    Some(match chars.as_str() {
+        "" | "D" => unit.to_string(),
+        "B" if unit == 'K' => "kB".to_string(),
+        suffix => format!("{unit}{suffix}"),
+    })
+}
+
+/// Like [`block_size_from_env`], but also returns the
+/// [`suffix_from_parsed_block_size`] of the variable that won.
+pub fn block_size_from_env_with_suffix(vars: &[&str]) -> (BlockSizeEnv, Option<String>) {
+    let result = block_size_from_env(vars);
+    let suffix = if matches!(result, BlockSizeEnv::Found(_)) {
+        vars.iter()
+            .find_map(|var| std::env::var(var).ok())
+            .and_then(|value| suffix_from_parsed_block_size(&value))
+    } else {
+        None
+    };
+    (result, suffix)
+}
+
 /// Default block size when no env var or flag is set.
 ///
 /// Returns 512 if `POSIXLY_CORRECT` is set, 1024 otherwise.
@@ -97,6 +133,106 @@ mod tests {
         unsafe {
             std::env::set_var(key, value);
         }
+    }
+
+    #[test]
+    fn test_suffix_from_parsed_block_size_bare_units() {
+        // A bare unit is echoed back, canonicalized to the form the unit is
+        // conventionally spelled with.
+        for (spec, expected) in [
+            ("K", "K"),
+            ("k", "K"),
+            ("KB", "kB"),
+            ("kB", "kB"),
+            ("KiB", "KiB"),
+            ("kiB", "KiB"),
+            ("M", "M"),
+            ("m", "M"),
+            ("MB", "MB"),
+            ("MiB", "MiB"),
+            ("G", "G"),
+            ("T", "T"),
+            ("P", "P"),
+            ("E", "E"),
+        ] {
+            assert_eq!(
+                suffix_from_parsed_block_size(spec).as_deref(),
+                Some(expected),
+                "spec {spec:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_suffix_from_parsed_block_size_decimal_marker() {
+        // `KD` selects a decimal multiplier but still displays as `K`.
+        assert_eq!(
+            suffix_from_parsed_block_size("KD").as_deref(),
+            Some("K"),
+            "the trailing D is a multiplier marker, not part of the unit"
+        );
+        assert_eq!(suffix_from_parsed_block_size("MD").as_deref(), Some("M"));
+    }
+
+    #[test]
+    fn test_suffix_from_parsed_block_size_numeric_specs_have_none() {
+        for spec in ["1K", "1024", "2K", "1MB", "0", ""] {
+            assert_eq!(
+                suffix_from_parsed_block_size(spec),
+                None,
+                "a spec with a leading number echoes no unit: {spec:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_suffix_from_parsed_block_size_plain_bytes_have_none() {
+        assert_eq!(suffix_from_parsed_block_size("B"), None);
+    }
+
+    #[test]
+    fn test_block_size_from_env_with_suffix_reports_unit() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let vars = ["TEST_PROG_SFX", "BLOCK_SIZE", "BLOCKSIZE"];
+        clear_env_vars(&vars);
+
+        set_env_var("TEST_PROG_SFX", "K");
+        assert_eq!(
+            block_size_from_env_with_suffix(&vars),
+            (BlockSizeEnv::Found(1024), Some("K".to_string()))
+        );
+
+        set_env_var("TEST_PROG_SFX", "1K");
+        assert_eq!(
+            block_size_from_env_with_suffix(&vars),
+            (BlockSizeEnv::Found(1024), None),
+            "a numeric spec carries no unit to echo"
+        );
+
+        set_env_var("TEST_PROG_SFX", "bogus");
+        assert_eq!(
+            block_size_from_env_with_suffix(&vars),
+            (BlockSizeEnv::SetButInvalid, None)
+        );
+
+        clear_env_vars(&vars);
+    }
+
+    #[test]
+    fn test_block_size_from_env_with_suffix_uses_winning_var() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let vars = ["TEST_PROG_SFX2", "BLOCK_SIZE", "BLOCKSIZE"];
+        clear_env_vars(&vars);
+
+        // The first *set* variable wins, and the unit comes from that one.
+        set_env_var("BLOCK_SIZE", "M");
+        set_env_var("BLOCKSIZE", "K");
+        assert_eq!(
+            block_size_from_env_with_suffix(&vars),
+            (BlockSizeEnv::Found(1024 * 1024), Some("M".to_string()))
+        );
+
+        clear_env_vars(&vars);
     }
 
     #[test]

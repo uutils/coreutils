@@ -694,7 +694,7 @@ mod tests {
         /// (`POSIXLY_CORRECT` halves it), so pin it for reproducible output.
         fn options() -> Options {
             Options {
-                block_size: BlockSize::Bytes(1024),
+                block_size: BlockSize::Bytes(1024, None),
                 ..Options::default()
             }
         }
