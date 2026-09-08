@@ -1050,12 +1050,10 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
     }
 }
 
-// For windows we can use windows metadata trait and file attributes to see if a directory is readonly
+// For Windows, metadata.permissions().readonly() checks FILE_ATTRIBUTE_READONLY
 #[cfg(windows)]
 fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
-    use std::os::windows::prelude::MetadataExt;
-    use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_READONLY;
-    let not_user_writable = (metadata.file_attributes() & FILE_ATTRIBUTE_READONLY) != 0;
+    let not_user_writable = metadata.permissions().readonly();
     let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
     match (stdin_ok, not_user_writable, options.interactive) {
         (false, _, InteractiveMode::PromptProtected) => true,
@@ -1121,11 +1119,9 @@ fn is_symlink_dir(_metadata: &Metadata) -> bool {
 
 #[cfg(windows)]
 fn is_symlink_dir(metadata: &Metadata) -> bool {
-    use std::os::windows::prelude::MetadataExt;
-    use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_DIRECTORY;
+    use std::os::windows::fs::FileTypeExt;
 
-    metadata.file_type().is_symlink()
-        && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY) != 0)
+    metadata.file_type().is_symlink_dir()
 }
 
 mod tests {

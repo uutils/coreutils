@@ -1604,44 +1604,11 @@ fn prompt_overwrite(to: &Path, cached_mode: Option<u32>) -> io::Result<()> {
 /// Checks if a file can be deleted by attempting to open it with delete permissions.
 #[cfg(windows)]
 fn can_delete_file(path: &Path) -> bool {
-    use std::{
-        os::windows::ffi::OsStrExt as _,
-        ptr::{null, null_mut},
-    };
+    use std::fs::OpenOptions;
+    use std::os::windows::fs::OpenOptionsExt;
+    use windows_sys::Win32::Storage::FileSystem::DELETE;
 
-    use windows_sys::Win32::{
-        Foundation::{CloseHandle, INVALID_HANDLE_VALUE},
-        Storage::FileSystem::{
-            CreateFileW, DELETE, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_DELETE, FILE_SHARE_READ,
-            FILE_SHARE_WRITE, OPEN_EXISTING,
-        },
-    };
-
-    let wide_path = path
-        .as_os_str()
-        .encode_wide()
-        .chain([0])
-        .collect::<Vec<u16>>();
-
-    let handle = unsafe {
-        CreateFileW(
-            wide_path.as_ptr(),
-            DELETE,
-            FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
-            null(),
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL,
-            null_mut(),
-        )
-    };
-
-    if handle == INVALID_HANDLE_VALUE {
-        return false;
-    }
-
-    unsafe { CloseHandle(handle) };
-
-    true
+    OpenOptions::new().access_mode(DELETE).open(path).is_ok()
 }
 
 #[cfg(not(windows))]
