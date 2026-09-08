@@ -495,8 +495,7 @@ pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<'_, [u8]> {
     }
 }
 
-/// Converts a `&[u8]` to an `&OsStr`,
-/// or parses it as UTF-8 into an [`OsString`] on non-unix platforms.
+/// Converts a `&[u8]` to an `&OsStr`.
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
@@ -504,14 +503,14 @@ pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<'_, [u8]> {
     any(unix, all(target_os = "wasi", target_env = "p1")),
     expect(clippy::unnecessary_wraps)
 )]
-pub fn os_str_from_bytes(bytes: &[u8]) -> error::UResult<Cow<'_, OsStr>> {
+pub fn os_str_from_bytes(bytes: &[u8]) -> error::UResult<&OsStr> {
     #[cfg(any(unix, all(target_os = "wasi", target_env = "p1")))]
-    return Ok(Cow::Borrowed(OsStr::from_bytes(bytes)));
+    return Ok(OsStr::from_bytes(bytes));
 
     #[cfg(not(any(unix, all(target_os = "wasi", target_env = "p1"))))]
-    Ok(Cow::Owned(OsString::from(str::from_utf8(bytes).map_err(
-        |_| error::UUsageError::new(1, "Unable to transform bytes into OsStr"),
-    )?)))
+    Ok(OsStr::new(str::from_utf8(bytes).map_err(|_| {
+        error::UUsageError::new(1, "Unable to transform bytes into OsStr")
+    })?))
 }
 
 /// Converts a `Vec<u8>` into an `OsString`, parsing as UTF-8 on non-unix platforms.

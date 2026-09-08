@@ -685,7 +685,7 @@ fn compute_and_check_digest_from_file(
     let real_filename_to_check = os_str_from_bytes(&filename_to_check_unescaped)?;
 
     // Open the input file
-    let file_to_check = get_file_to_check(&real_filename_to_check, opts)?;
+    let file_to_check = get_file_to_check(real_filename_to_check, opts)?;
     let mut file_reader = BufReader::new(file_to_check);
 
     // Read the file and calculate the checksum
@@ -699,14 +699,14 @@ fn compute_and_check_digest_from_file(
             Ok(result) => result,
             Err(err) => {
                 show!(err.map_err_context(|| {
-                    locale_aware_escape_name(&real_filename_to_check, QuotingStyle::SHELL_ESCAPE)
+                    locale_aware_escape_name(real_filename_to_check, QuotingStyle::SHELL_ESCAPE)
                         .to_string_lossy()
                         .to_string()
                 }));
 
                 let _ = write_file_report(
                     io::stdout(),
-                    &real_filename_to_check,
+                    real_filename_to_check,
                     FileChecksumResult::CantOpen,
                     opts.verbose,
                 );
@@ -722,7 +722,7 @@ fn compute_and_check_digest_from_file(
     };
     let _ = write_file_report(
         io::stdout(),
-        &real_filename_to_check,
+        real_filename_to_check,
         FileChecksumResult::from_bool(checksum_correct),
         opts.verbose,
     );
