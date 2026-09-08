@@ -33,6 +33,18 @@ fn test_default_output() {
 }
 
 #[test]
+fn test_default_format_overrides() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("file");
+    for (flag, expected) in [("-1", "file\n"), ("--zero", "file\0")] {
+        scene.ucmd().arg(flag).succeeds().stdout_only(expected);
+    }
+    for flag in ["--full-time", "--dired"] {
+        scene.ucmd().arg(flag).succeeds().stdout_contains("total 0");
+    }
+}
+
+#[test]
 fn test_long_output() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

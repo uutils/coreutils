@@ -6,7 +6,7 @@
 use clap::Command;
 use std::ffi::OsString;
 use std::path::Path;
-use uu_ls::{Config, Format, options};
+use uu_ls::{Config, options};
 use uucore::error::UResult;
 use uucore::quoting_style::QuotingStyle;
 use uucore::{format_usage, translate};
@@ -20,10 +20,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         uucore::clap_localization::handle_clap_result_with_diagnostics(command, args.collect(), 2)?;
 
     let mut default_quoting_style = false;
-    let mut default_format_style = false;
 
-    // We check if any options on formatting or quoting style have been given.
-    // If not, we will use dir default formatting and quoting style options
+    // If no quoting option was given, use vdir's default quoting style.
 
     if !matches.contains_id(options::QUOTING_STYLE)
         && !matches.get_flag(options::quoting::C)
@@ -32,26 +30,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     {
         default_quoting_style = true;
     }
-    if !matches.contains_id(options::FORMAT)
-        && !matches.get_flag(options::format::ACROSS)
-        && !matches.get_flag(options::format::COLUMNS)
-        && !matches.get_flag(options::format::COMMAS)
-        && !matches.get_flag(options::format::LONG)
-        && !matches.get_flag(options::format::LONG_NO_GROUP)
-        && !matches.get_flag(options::format::LONG_NO_OWNER)
-        && !matches.get_flag(options::format::LONG_NUMERIC_UID_GID)
-        && !matches.get_flag(options::format::ONE_LINE)
-    {
-        default_format_style = true;
-    }
 
-    let mut config = Config::from(&matches, diag_args.as_deref())?;
+    let mut config = Config::from_vdir(&matches, diag_args.as_deref())?;
 
     if default_quoting_style {
         config.quoting_style = QuotingStyle::C_NO_QUOTES;
-    }
-    if default_format_style {
-        config.format = Format::Long;
     }
 
     let locs = matches

@@ -23,13 +23,57 @@ fn test_default_output() {
     let at = &scene.fixtures;
     at.mkdir("some-dir1");
     at.touch("some-file1");
+    filetime::set_file_mtime(
+        at.plus("some-file1"),
+        filetime::FileTime::from_unix_time(978_307_200, 0),
+    )
+    .unwrap();
 
     scene.ucmd().succeeds().stdout_contains("some-file1");
 
     scene
         .ucmd()
         .succeeds()
-        .stdout_matches(&Regex::new("[rwx-]{10}.*some-file1\n$").unwrap());
+        .stdout_contains("Jan  1  2001 some-file1\n");
+    scene
+        .ucmd()
+        .arg("--time-style=long-iso")
+        .succeeds()
+        .stdout_contains("2001-01-01 00:00 some-file1\n");
+    scene
+        .ucmd()
+        .env("TIME_STYLE", "long-iso")
+        .succeeds()
+        .stdout_contains("2001-01-01 00:00 some-file1\n");
+}
+
+#[test]
+fn test_default_format_overrides() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("file");
+    for (args, expected) in [
+        (vec!["-1"], "file\n"),
+        (vec!["-C"], "file\n"),
+        (vec!["-x"], "file\n"),
+        (vec!["-m"], "file\n"),
+        (vec!["--format=single-column"], "file\n"),
+        (vec!["--zero"], "file\0"),
+        (vec!["-g", "-C"], "file\n"),
+    ] {
+        scene
+            .ucmd()
+            .env("TIME_STYLE", "invalid")
+            .args(&args)
+            .succeeds()
+            .stdout_only(expected);
+    }
+    for args in [["-l", "-1"], ["-g", "--zero"], ["-C", "-g"]] {
+        scene
+            .ucmd()
+            .args(&args)
+            .succeeds()
+            .stdout_contains("total 0");
+    }
 }
 
 #[test]
