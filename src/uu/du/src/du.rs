@@ -989,7 +989,7 @@ fn read_files_from(file_name: &OsStr) -> io::Result<Vec<PathBuf>> {
             // relies on inode-based deduplication during traversal (which is
             // disabled by --count-links). Deduplicating by name would, e.g.,
             // collapse repeated missing files into a single error.
-            paths.push(PathBuf::from(&*uucore::os_str_from_bytes(&path).unwrap()));
+            paths.push(PathBuf::from(uucore::os_str_from_bytes(&path).unwrap()));
         }
     }
 

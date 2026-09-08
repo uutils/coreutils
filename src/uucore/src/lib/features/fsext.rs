@@ -365,7 +365,7 @@ impl From<StatFs> for MountInfo {
             // spell-checker:disable-next-line
             CStr::from_ptr(statfs.f_mntonname.as_ptr()).to_bytes()
         };
-        let mount_dir = os_str_from_bytes(mount_dir_bytes).unwrap().into_owned();
+        let mount_dir = os_str_from_bytes(mount_dir_bytes).unwrap().to_owned();
 
         let dev_id = mount_dev_id(&mount_dir);
         let dummy = is_dummy_filesystem(&fs_type, "");
