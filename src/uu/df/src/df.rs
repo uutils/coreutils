@@ -519,10 +519,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         1,
     )?;
 
-    if let Some(result) = platform::maybe_unsupported_options(&matches) {
-        return result;
-    }
-
     let opt = Options::from_matches(&matches, diag_args.as_deref())?;
     let paths: Option<Vec<&Path>> = matches
         .get_many::<OsString>(OPT_PATHS)
@@ -532,12 +528,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    let after_help = translate!("df-after-help");
+    #[cfg(windows)]
+    let after_help = format!("{after_help}\n\n{}", translate!("df-after-help-windows"));
     Command::new("df")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("df-about"))
         .override_usage(format_usage(&translate!("df-usage")))
-        .after_help(translate!("df-after-help"))
+        .after_help(after_help)
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(
@@ -718,8 +717,8 @@ mod tests {
                     bfree: 4,
                     bavail: 3,
                     bavail_top_bit_set: false,
-                    files: 20,
-                    ffree: 5,
+                    files: Some(20),
+                    ffree: Some(5),
                 },
             }
         }

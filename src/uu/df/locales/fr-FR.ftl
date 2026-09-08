@@ -8,6 +8,19 @@ df-after-help = Les valeurs affichées sont en unités de la première TAILLE di
   TAILLE est un entier et une unité optionnelle (exemple : 10M est 10*1024*1024).
   Les unités sont K, M, G, T, P, E, Z, Y (puissances de 1024) ou KB, MB,... (puissances
   de 1000). Les unités peuvent être décimales, hexadécimales, octales, binaires.
+df-after-help-windows = Notes pour Windows :
+  Le nombre d'inodes n'est pas disponible : -i et les colonnes itotal, iused,
+  iavail et ipcent affichent -. --sync ne fait rien. La colonne Sys. de
+  fichiers contient le chemin de montage (C:\, C:\mount\) ou le partage d'un
+  lecteur réseau connecté ; il n'y a pas de nom de périphérique. Les types
+  pour -t et -x sont les noms indiqués par Windows, comme NTFS, FAT32, exFAT
+  ou ReFS.
+
+  Les lecteurs SUBST ne sont pas listés, car ils sont le volume vers lequel
+  ils pointent, mais peuvent être nommés. Les lecteurs sans support sont
+  omis, même avec -a. Les liens symboliques et les jonctions dans les
+  opérandes ne sont pas suivis : le système de fichiers contenant le lien
+  lui-même est indiqué.
 
 # Messages d'aide
 df-help-print-help = afficher les informations d'aide.
@@ -37,7 +50,6 @@ df-error-no-such-file-or-directory = { $path } : aucun fichier ou répertoire de
 df-error-no-file-systems-processed = aucun système de fichiers traité
 df-error-cannot-access-over-mounted = impossible d'accéder à { $path } : sur-monté par un autre périphérique
 df-error-cannot-read-table-of-mounted-filesystems = impossible de lire la table des systèmes de fichiers montés
-df-error-inodes-not-supported-windows = { $program } : ne supporte pas l'option -i
 
 # En-têtes du tableau
 df-header-filesystem = Sys. de fichiers
