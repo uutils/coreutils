@@ -230,16 +230,15 @@ mod timer {
 
         pub(super) fn arm(&mut self, timeout: Duration) -> Result<(), io::Error> {
             let timeout = timeout.min(MAX_KTIME_T).max(Duration::from_micros(1));
-            let time = libc::itimerspec {
-                it_interval: libc::timespec {
-                    tv_sec: 0,
-                    tv_nsec: 0,
-                },
-                it_value: libc::timespec {
-                    tv_sec: timeout.as_secs() as _,
-                    tv_nsec: timeout.subsec_nanos() as _,
-                },
+            // `timespec` has private padding members on time64 targets, so its
+            // fields cannot be listed in a struct literal; start from the
+            // zeroed default and fill in the ones we care about.
+            let mut time = libc::itimerspec {
+                it_interval: libc::timespec::default(),
+                it_value: libc::timespec::default(),
             };
+            time.it_value.tv_sec = timeout.as_secs() as _;
+            time.it_value.tv_nsec = timeout.subsec_nanos() as _;
 
             // SAFETY: All values are properly initialized.
             if unsafe { libc::timer_settime(self.0, 0, &raw const time, null_mut()) } == -1 {
