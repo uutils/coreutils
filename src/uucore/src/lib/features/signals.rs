@@ -94,6 +94,53 @@ pub static ALL_SIGNALS: [&str; 32] = [
 
 /*
 
+     The following signals are defined in GNU/Hurd:
+     // https://github.com/sailfishos-mirror/glibc/blob/glibc-2.35/bits/signum-generic.h
+     // https://github.com/sailfishos-mirror/glibc/blob/glibc-2.35/sysdeps/mach/hurd/bits/signum-arch.h
+
+     SIGHUP           1     Hangup.
+     SIGINT           2     Interactive attention signal.
+     SIGQUIT          3     Quit.
+     SIGILL           4     Illegal instruction.
+     SIGTRAP          5     Trace/breakpoint trap.
+     SIGABRT          6     Abnormal termination.
+     SIGEMT           7     Emulator trap (4.2 BSD).
+     SIGFPE           8     Erroneous arithmetic operation.
+     SIGKILL          9     Killed.
+     SIGBUS           10    Bus error.
+     SIGSEGV          11    Invalid access to storage.
+     SIGSYS           12    Bad system call.
+     SIGPIPE          13    Broken pipe.
+     SIGALRM          14    Alarm clock.
+     SIGTERM          15    Termination request.
+     SIGURG           16    Urgent data is available at a socket.
+     SIGSTOP          17    Stop, unblockable.
+     SIGTSTP          18    Keyboard stop.
+     SIGCONT          19    Continue.
+     SIGCHLD          20    Child terminated or stopped.
+     SIGTTIN          21    Background read from control terminal.
+     SIGTTOU          22    Background write to control terminal.
+     SIGPOLL          23    Pollable event occurred (System V).
+     SIGXCPU          24    CPU time limit exceeded.
+     SIGXFSZ          25    File size limit exceeded.
+     SIGVTALRM        26    Virtual timer expired.
+     SIGPROF          27    Profiling timer expired.
+     SIGWINCH         28    Window size change (4.3 BSD, Sun).
+     SIGINFO          29    Information request (4.4 BSD).
+     SIGUSR1          30    User-defined signal 1.
+     SIGUSR2          31    User-defined signal 2.
+     SIGLOST          32    Resource lost (Sun); server died (GNU).
+*/
+
+#[cfg(target_os = "hurd")]
+pub static ALL_SIGNALS: [&str; 33] = [
+    "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV",
+    "SYS", "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "POLL",
+    "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "INFO", "USR1", "USR2", "LOST",
+];
+
+/*
+
      The following signals are defined in NetBSD:
 
      SIGHUP           1     Hangup
