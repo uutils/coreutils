@@ -13,7 +13,7 @@ mod hardlink;
 #[cfg(target_os = "redox")]
 mod platform;
 #[cfg(target_os = "redox")]
-use platform::{copy_special_file, rename_special_fallback, replace_symlink};
+use platform::{copy_special_file, create_symlink_replace, rename_special_fallback};
 
 use clap::builder::ValueParser;
 use clap::error::ErrorKind;
@@ -1186,7 +1186,7 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
             #[cfg(not(target_os = "redox"))]
             uucore::fs::replace_link(&path_symlink_points_to, to, true)?;
             #[cfg(target_os = "redox")]
-            replace_symlink(&path_symlink_points_to, to)?;
+            create_symlink_replace(&path_symlink_points_to, to)?;
         }
         Err(e) => return Err(e),
     }
@@ -1223,7 +1223,6 @@ fn random_temp_name(urandom: &mut impl io::Read) -> io::Result<[u8; 8]> {
     }
     Ok(tmp_bytes)
 }
-
 
 #[cfg(windows)]
 fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
@@ -1807,6 +1806,24 @@ fn prompt_overwrite(to: &Path, cached_mode: Option<u32>) -> io::Result<()> {
 }
 
 /// Checks if a file can be deleted by attempting to open it with delete permissions.
+#[cfg(windows)]
+fn can_delete_file(path: &Path) -> bool {
+    use std::fs::OpenOptions;
+    use std::os::windows::fs::OpenOptionsExt;
+    use windows_sys::Win32::Storage::FileSystem::DELETE;
+
+    OpenOptions::new().access_mode(DELETE).open(path).is_ok()
+}
+
+#[cfg(not(windows))]
+fn can_delete_file(_: &Path) -> bool {
+    // On non-Windows platforms, always return false to indicate that we don't need
+    // to try the copy+delete fallback. This is because on Unix-like systems,
+    // rename() failing with errors other than EXDEV means the operation cannot
+    // succeed even with a copy+delete approach (e.g. permission errors).
+    false
+}
+
 #[cfg(all(test, unix, not(target_os = "redox")))]
 mod tests {
     use super::*;
@@ -1842,22 +1859,4 @@ mod tests {
         assert_eq!(fs::read(&destination).unwrap(), b"source");
         assert!(!real_parent.join("source").exists());
     }
-}
-
-#[cfg(windows)]
-fn can_delete_file(path: &Path) -> bool {
-    use std::fs::OpenOptions;
-    use std::os::windows::fs::OpenOptionsExt;
-    use windows_sys::Win32::Storage::FileSystem::DELETE;
-
-    OpenOptions::new().access_mode(DELETE).open(path).is_ok()
-}
-
-#[cfg(not(windows))]
-fn can_delete_file(_: &Path) -> bool {
-    // On non-Windows platforms, always return false to indicate that we don't need
-    // to try the copy+delete fallback. This is because on Unix-like systems,
-    // rename() failing with errors other than EXDEV means the operation cannot
-    // succeed even with a copy+delete approach (e.g. permission errors).
-    false
 }

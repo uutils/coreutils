@@ -69,7 +69,7 @@ pub(crate) fn rename_special_fallback(
 }
 
 /// Replace an existing symlink using Redox's path-based filesystem operations.
-pub(crate) fn replace_symlink(target: &Path, to: &Path) -> io::Result<()> {
+pub(crate) fn create_symlink_replace(target: &Path, to: &Path) -> io::Result<()> {
     fs::remove_file(to)?;
     unix::fs::symlink(target, to)
 }
