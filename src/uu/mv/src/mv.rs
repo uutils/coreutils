@@ -57,8 +57,6 @@ use uucore::update_control;
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{format_usage, prompt_yes, show};
 
-use fs_extra::dir::get_size as dir_get_size;
-
 use crate::error::MvError;
 
 /// Options contains all the possible behaviors and flags for mv.
@@ -1144,8 +1142,7 @@ fn rename_dir_fallback(
     #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
 ) -> io::Result<()> {
     // We remove the destination directory if it exists to match the
-    // behavior of `fs::rename`. As far as I can tell, `fs_extra`'s
-    // `move_dir` would otherwise behave differently.
+    // behavior of `fs::rename`.
     if to.exists() {
         fs::remove_dir_all(to)?;
     }
@@ -1155,7 +1152,7 @@ fn rename_dir_fallback(
     //    If finding the total size fails for whatever reason,
     //    the progress bar wont be shown for this file / dir.
     //    (Move will probably fail due to permission error later?)
-    let total_size = dir_get_size(from).ok();
+    let total_size = display_manager.and_then(|_| get_dir_size(from).ok());
 
     let progress_bar = match (display_manager, total_size) {
         (Some(display_manager), Some(total_size)) => {
@@ -1227,6 +1224,24 @@ fn create_dir_fail_closed(path: &Path) -> io::Result<()> {
             e
         }
     })
+}
+
+fn get_dir_size(path: &Path) -> io::Result<u64> {
+    let metadata = path.symlink_metadata()?;
+
+    if !metadata.is_dir() {
+        return Ok(metadata.len());
+    }
+
+    let mut size = 0;
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        size += entry.metadata()?.len();
+        if entry.file_type()?.is_dir() {
+            size += get_dir_size(&entry.path())?;
+        }
+    }
+    Ok(size)
 }
 
 fn copy_dir_contents(
