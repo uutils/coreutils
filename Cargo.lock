@@ -4477,9 +4477,12 @@ name = "uu_who"
 version = "0.11.0"
 dependencies = [
  "clap",
+ "dns-lookup",
  "fluent",
  "rustix",
+ "time",
  "uucore",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

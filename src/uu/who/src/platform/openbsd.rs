@@ -5,13 +5,17 @@
 
 // Specific implementation for OpenBSD: tool unsupported (utmpx not supported)
 
-use crate::uu_app;
-
+use crate::Who;
 use uucore::error::UResult;
 use uucore::translate;
 
-pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let _matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-    println!("{}", translate!("who-unsupported-openbsd"));
-    Ok(())
+impl Who {
+    #[allow(
+        clippy::unnecessary_wraps,
+        reason = "signature shared across platforms"
+    )]
+    pub(crate) fn exec(&mut self) -> UResult<()> {
+        println!("{}", translate!("who-unsupported-openbsd"));
+        Ok(())
+    }
 }
