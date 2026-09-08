@@ -337,7 +337,6 @@ feat_require_unix_core = [
   "groups",
   "id",
   "install",
-  "kill",
   "logname",
   "mkfifo",
   "mknod",
@@ -345,7 +344,6 @@ feat_require_unix_core = [
   "nohup",
   "stat",
   "stty",
-  "timeout",
 ]
 # "feat_require_unix_utmpx" == set of utilities requiring unix utmp/utmpx support
 # * ref: <https://wiki.musl-libc.org/faq.html#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?>
