@@ -2742,7 +2742,7 @@ fn test_date_format_modifier_combined_flags() {
 
 #[test]
 fn test_date_format_modifier_case_precedence() {
-    // Test that ^ (uppercase) takes precedence over # (swap case) regardless of order
+    // "June" is upper-cased by either flag, so %^#B and %#^B agree
     new_ucmd!()
         .env("TZ", "UTC")
         .env("LC_ALL", "C")
@@ -2756,6 +2756,56 @@ fn test_date_format_modifier_case_precedence() {
         .args(&["-d", "1999-06-01", "+%#^B"])
         .succeeds()
         .stdout_is("JUNE\n");
+}
+
+#[test]
+fn test_date_format_modifier_case_flags_per_specifier() {
+    // GNU applies `^` and `#` inside each conversion instead of to the whole
+    // rendered string. Only the specifiers that emit a name honor `#`, and
+    // there it wins over `^`; the composite `%c` and `%r` are expanded without
+    // it, and `%P` stays lower case whatever the flags ask for.
+    let cases = [
+        ("%c", "Sat Jun 15 13:05:03 2024"),
+        ("%^c", "SAT JUN 15 13:05:03 2024"),
+        ("%#c", "Sat Jun 15 13:05:03 2024"),
+        ("%r", "01:05:03 PM"),
+        ("%^r", "01:05:03 PM"),
+        ("%#r", "01:05:03 PM"),
+        ("%p", "PM"),
+        ("%^p", "PM"),
+        ("%#p", "pm"),
+        ("%^#p", "pm"),
+        ("%#^p", "pm"),
+        ("%P", "pm"),
+        ("%^P", "pm"),
+        ("%#P", "pm"),
+        ("%^#P", "pm"),
+        ("%Z", "UTC"),
+        ("%^Z", "UTC"),
+        ("%#Z", "utc"),
+        ("%^#Z", "utc"),
+    ];
+    for (format, expected) in cases {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg("2024-06-15 13:05:03")
+            .arg(format!("+{format}"))
+            .succeeds()
+            .stdout_is(format!("{expected}\n"));
+    }
+}
+
+#[test]
+fn test_date_format_modifier_case_flags_on_named_zone() {
+    // `#` lower-cases a non-UTC abbreviation too, and `^` does not cancel it
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "America/New_York")
+        .args(&["-d", "2024-06-15", "+%Z %^Z %#Z %^#Z"])
+        .succeeds()
+        .stdout_is("EDT EDT edt edt\n");
 }
 
 #[test]
