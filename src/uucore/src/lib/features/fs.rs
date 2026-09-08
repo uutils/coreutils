@@ -7,7 +7,7 @@
 
 // spell-checker:ignore backport Ioctl absolutized
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "haiku")))]
 pub use libc::{major, makedev, minor};
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -132,6 +132,7 @@ impl FileInformation {
             not(target_os = "aix"),
             not(target_os = "android"),
             not(target_os = "freebsd"),
+            not(target_os = "haiku"),
             not(target_os = "netbsd"),
             not(target_os = "openbsd"),
             not(target_os = "illumos"),
@@ -148,6 +149,7 @@ impl FileInformation {
         return self.0.st_nlink;
         #[cfg(all(
             unix,
+            not(target_os = "haiku"),
             any(
                 target_vendor = "apple",
                 target_os = "android",
@@ -166,7 +168,7 @@ impl FileInformation {
         return self.0.st_nlink.into();
         #[cfg(target_os = "freebsd")]
         return self.0.st_nlink;
-        #[cfg(target_os = "aix")]
+        #[cfg(any(target_os = "aix", target_os = "haiku"))]
         return self.0.st_nlink.try_into().unwrap();
         #[cfg(windows)]
         return self.0.nNumberOfLinks as u64;
@@ -174,11 +176,19 @@ impl FileInformation {
 
     #[cfg(any(unix, target_os = "wasi"))]
     pub fn inode(&self) -> u64 {
-        #[cfg(all(not(any(target_os = "netbsd")), target_pointer_width = "64"))]
+        #[cfg(all(
+            not(any(target_os = "haiku", target_os = "netbsd")),
+            target_pointer_width = "64"
+        ))]
         return self.0.st_ino;
-        #[cfg(any(target_os = "netbsd", not(target_pointer_width = "64")))]
+        #[cfg(all(
+            not(target_os = "haiku"),
+            any(target_os = "netbsd", not(target_pointer_width = "64"))
+        ))]
         #[allow(clippy::useless_conversion)]
         return self.0.st_ino.into();
+        #[cfg(target_os = "haiku")]
+        return self.0.st_ino.try_into().unwrap();
     }
 }
 
