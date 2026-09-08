@@ -8,7 +8,7 @@ common-usage = Utilisation
 common-help = aide
 common-version = version
 common-write-error = erreur d'écriture
-
+common-read-error = erreur de lecture
 # Messages d'erreur clap communs
 clap-error-unexpected-argument = { $error_word } : argument inattendu '{ $arg }' trouvé
 clap-error-unexpected-argument-simple = argument inattendu
@@ -31,7 +31,8 @@ error-permission-denied = Permission refusée
 error-file-not-found = Aucun fichier ou répertoire de ce type
 error-no-such-process = Aucun processus de ce type
 error-invalid-argument = Argument invalide
-error-is-a-directory = { $file }: Est un répertoire
+error-is-a-directory-text = Est un répertoire
+error-is-a-directory = { $file }: { error-is-a-directory-text }
 
 # Actions communes
 action-copying = copie
