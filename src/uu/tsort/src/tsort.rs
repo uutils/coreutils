@@ -7,25 +7,22 @@
 // spell-checker:ignore (libs) interner
 
 mod error;
+mod interner;
 
 use clap::{Arg, ArgAction, Command};
 use rustc_hash::FxHashMap;
 use std::collections::VecDeque;
 use std::collections::hash_map::Entry;
 use std::ffi::OsString;
+use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
-use string_interner::StringInterner;
-use string_interner::backend::BucketBackend;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::{format_usage, show, translate};
 
 use crate::error::{Error, ReadError};
-
-// short types for switching interning behavior on the fly.
-type Sym = string_interner::symbol::SymbolUsize;
-type Interner = StringInterner<BucketBackend<Sym>, rustc_hash::FxBuildHasher>;
+use crate::interner::{ByteInterner, Sym};
 
 mod options {
     pub const FILE: &str = "file";
@@ -54,6 +51,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Create the directed graph from pairs of tokens in the input data.
     let mut g = Graph::new(input.to_string_lossy().to_string());
+
     if input == "-" {
         process_input(io::stdin().lock(), &mut g)?;
     } else {
@@ -67,7 +65,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 );
             }
         }
+
         let file = File::open(input).map_err_context(|| input.maybe_quote().to_string())?;
+
         // advise the OS we will access the data sequentially if possible
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
         let _ = rustix::fs::fadvise(&file, 0, None, rustix::fs::Advice::Sequential);
@@ -105,40 +105,75 @@ pub fn uu_app() -> Command {
         )
 }
 
-// Auxiliary struct, just for printing loop nodes via show! macro
-#[derive(Debug, thiserror::Error)]
-#[error("{0}")]
-struct LoopNode<'a>(&'a str);
+// Auxiliary struct, just for printing loop nodes via show! macro.
+//
+// Diagnostics go through Display, so invalid UTF-8 bytes are represented
+// lossily here.
+#[derive(Debug)]
+struct LoopNode<'a>(&'a [u8]);
+
+impl fmt::Display for LoopNode<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", String::from_utf8_lossy(self.0))
+    }
+}
+
+impl std::error::Error for LoopNode<'_> {}
 
 impl UError for Error {}
 impl UError for LoopNode<'_> {}
+
+fn for_each_token<R, F>(mut reader: R, mut f: F) -> io::Result<()>
+where
+    R: BufRead,
+    F: FnMut(&[u8]),
+{
+    let mut buf = Vec::new();
+
+    loop {
+        buf.clear();
+
+        if reader.read_until(b'\n', &mut buf)? == 0 {
+            break;
+        }
+
+        for token in buf
+            .split(|b| matches!(b, b' ' | b'\t' | b'\n'))
+            .filter(|token| !token.is_empty())
+        {
+            f(token);
+        }
+    }
+
+    Ok(())
+}
 
 fn process_input<R: BufRead>(reader: R, graph: &mut Graph) -> Result<(), Error> {
     let mut pending: Option<Sym> = None;
 
     // Input is considered to be in the format
     // From1 To1 From2 To2 ...
-    // with tokens separated by whitespaces
+    // with tokens separated by whitespaces.
+    //
+    // Tokens are kept as raw bytes so invalid UTF-8 can be preserved.
 
-    for line in reader.lines() {
-        let line = match line {
-            Err(e) if e.kind() == io::ErrorKind::IsADirectory => {
-                return Err(ReadError::IsDir(graph.name()).into());
-            }
-            Err(e) => return Err(ReadError::Io(e).into()),
-            Ok(line) => line,
-        };
-        for token in line.split_whitespace() {
-            // Intern the token and get a Sym
-            let token_sym = graph.interner.get_or_intern(token);
+    let result = for_each_token(reader, |token| {
+        let token_sym = graph.interner.get_or_intern(token);
 
-            if let Some(from) = pending.take() {
-                graph.add_edge(from, token_sym);
-            } else {
-                pending = Some(token_sym);
-            }
+        if let Some(from) = pending.take() {
+            graph.add_edge(from, token_sym);
+        } else {
+            pending = Some(token_sym);
         }
+    });
+
+    if let Err(e) = result {
+        if e.kind() == io::ErrorKind::IsADirectory {
+            return Err(ReadError::IsDir(graph.name()).into());
+        }
+        return Err(ReadError::Io(e).into());
     }
+
     if pending.is_some() {
         return Err(ReadError::NumTokensOdd(graph.name()).into());
     }
@@ -175,29 +210,25 @@ impl Node {
 }
 
 struct Graph {
-    name_sym: Sym,
+    name: String,
     nodes: FxHashMap<Sym, Node>,
-    interner: Interner,
+    interner: ByteInterner,
 }
 
 impl Graph {
     fn new(name: String) -> Self {
-        let mut interner = Interner::with_hasher(rustc_hash::FxBuildHasher);
-        let name_sym = interner.get_or_intern(name);
         Self {
-            name_sym,
-            interner,
+            name,
             nodes: FxHashMap::default(),
+            interner: ByteInterner::default(),
         }
     }
 
     fn name(&self) -> String {
-        self.interner
-            .resolve(self.name_sym)
-            .expect("symbol should be interned")
-            .to_owned()
+        self.name.clone()
     }
-    fn get_node_name(&self, node_sym: Sym) -> &str {
+
+    fn get_node_name(&self, node_sym: Sym) -> &[u8] {
         self.interner
             .resolve(node_sym)
             .expect("symbol should be interned")
@@ -205,8 +236,10 @@ impl Graph {
 
     fn add_edge(&mut self, from: Sym, to: Sym) {
         let from_node = self.nodes.entry(from).or_default();
+
         if from != to {
             from_node.add_successor(to);
+
             let to_node = self.nodes.entry(to).or_default();
             to_node.predecessor_count += 1;
         }
@@ -221,6 +254,7 @@ impl Graph {
                 .successor_tokens,
             v,
         );
+
         self.nodes
             .get_mut(&v)
             .expect("node is part of the graph")
@@ -241,14 +275,20 @@ impl Graph {
             })
             .collect();
 
-        // Sort by resolved string for deterministic output
+        // Sort by name for deterministic output.
         independent_nodes_queue
             .make_contiguous()
             .sort_unstable_by(|a, b| self.get_node_name(*a).cmp(self.get_node_name(*b)));
+
         let mut out = BufWriter::new(io::stdout().lock());
+
         while !self.nodes.is_empty() {
             let v = self.find_next_node(&mut independent_nodes_queue);
-            writeln!(out, "{}", self.get_node_name(v)).map_err(Error::Write)?;
+
+            // Write the node exactly as it appeared in the input, followed by a newline
+            out.write_all(self.get_node_name(v)).map_err(Error::Write)?;
+            writeln!(out).map_err(Error::Write)?;
+
             if let Some(node_to_process) = self.nodes.remove(&v) {
                 for successor_name in node_to_process.successor_tokens.into_iter().rev() {
                     // we reverse to match GNU tsort order
@@ -256,16 +296,20 @@ impl Graph {
                         .nodes
                         .get_mut(&successor_name)
                         .expect("node is part of the graph");
+
                     successor_node.predecessor_count -= 1;
+
                     if successor_node.predecessor_count == 0 {
                         independent_nodes_queue.push_back(successor_name);
                     }
                 }
             }
         }
+
         out.flush().map_err(Error::Write)?;
         Ok(())
     }
+
     pub fn indegree(&self, sym: Sym) -> Option<usize> {
         self.nodes.get(&sym).map(|data| data.predecessor_count)
     }
@@ -294,25 +338,32 @@ impl Graph {
 
     fn find_and_break_cycle(&mut self, frontier: &mut VecDeque<Sym>) {
         let cycle = self.detect_cycle();
+
         show!(Error::Loop(self.name()));
+
         for &sym in &cycle {
             show!(LoopNode(self.get_node_name(sym)));
         }
+
         let u = *cycle.last().expect("cycle must be non-empty");
         let v = cycle[0];
+
         self.remove_edge(u, v);
+
         if self.indegree(v).expect("node is part of the graph") == 0 {
             frontier.push_back(v);
         }
     }
 
     fn detect_cycle(&self) -> Vec<Sym> {
-        // Sort by resolved string for deterministic output
+        // Sort by name for deterministic output.
         let mut nodes: Vec<_> = self.nodes.keys().copied().collect();
+
         nodes.sort_unstable_by(|a, b| self.get_node_name(*a).cmp(self.get_node_name(*b)));
 
         let mut visited = FxHashMap::default();
         let mut stack = Vec::with_capacity(self.nodes.len());
+
         for &node in &nodes {
             if self.dfs(node, &mut visited, &mut stack) {
                 let (loop_entry, _) = stack.pop().expect("loop is not empty");
@@ -324,6 +375,7 @@ impl Graph {
                     .collect();
             }
         }
+
         unreachable!("detect_cycle is expected to be called only on graphs with cycles");
     }
 
@@ -339,6 +391,7 @@ impl Graph {
                 .get(&node)
                 .map_or(&[], |n: &Node| &n.successor_tokens),
         ));
+
         let state = *visited.entry(node).or_insert(VisitedState::Opened);
 
         if state == VisitedState::Closed {
@@ -359,6 +412,7 @@ impl Graph {
                 Entry::Vacant(v) => {
                     // first visit of the node
                     v.insert(VisitedState::Opened);
+
                     stack.push((
                         next_node,
                         self.nodes
@@ -366,10 +420,12 @@ impl Graph {
                             .map_or(&[], |n| &n.successor_tokens),
                     ));
                 }
+
                 Entry::Occupied(o) => {
                     if *o.get() == VisitedState::Opened {
-                        // We have found a node that was already visited by another iteration => loop completed
-                        // the stack may contain unrelated nodes. This allows narrowing the loop down.
+                        // We have found a node that was already visited by another
+                        // iteration => loop completed. The stack may contain
+                        // unrelated nodes. This allows narrowing the loop down.
                         stack.push((next_node, &[]));
                         return true;
                     }
