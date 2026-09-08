@@ -26,38 +26,9 @@ static OPT_FQDN: &str = "fqdn";
 static OPT_SHORT: &str = "short";
 static OPT_HOST: &str = "host";
 
-#[cfg(windows)]
-mod wsa {
-    use std::io;
-
-    use windows_sys::Win32::Networking::WinSock::{WSACleanup, WSADATA, WSAStartup};
-
-    pub(super) struct WsaHandle(());
-
-    pub(super) fn start() -> io::Result<WsaHandle> {
-        let mut data = std::mem::MaybeUninit::<WSADATA>::uninit();
-        let err = unsafe { WSAStartup(0x0202, data.as_mut_ptr()) };
-        if err == 0 {
-            Ok(WsaHandle(()))
-        } else {
-            Err(io::Error::from_raw_os_error(err))
-        }
-    }
-
-    impl Drop for WsaHandle {
-        fn drop(&mut self) {
-            // This possibly returns an error but we can't handle it
-            let _ = unsafe { WSACleanup() };
-        }
-    }
-}
-
 #[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-
-    #[cfg(windows)]
-    let _handle = wsa::start().map_err_context(|| translate!("hostname-error-winsock"))?;
 
     match matches.get_one::<OsString>(OPT_HOST) {
         None => display_hostname(&matches),
