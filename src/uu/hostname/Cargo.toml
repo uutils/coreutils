@@ -25,12 +25,6 @@ hostname = { workspace = true, features = ["set"] }
 uucore = { workspace = true, features = ["wide"] }
 fluent = { workspace = true }
 
-[target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true, features = [
-  "Win32_Networking_WinSock",
-  "Win32_Foundation",
-] }
-
 [[bin]]
 name = "hostname"
 path = "src/main.rs"
