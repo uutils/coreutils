@@ -808,12 +808,6 @@ pub fn is_symlink_loop(path: &Path) -> bool {
     false
 }
 
-#[cfg(not(unix))]
-// Hard link comparison is not supported on non-Unix platforms
-pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
-    false
-}
-
 /// Checks if two paths are hard links to the same file.
 ///
 /// # Arguments
@@ -824,23 +818,35 @@ pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
 /// # Returns
 ///
 /// * `bool` - Returns `true` if the paths are hard links to the same file, and `false` otherwise.
-#[cfg(unix)]
 pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
-    // The target is usually the one that does not exist, so look it up first
-    // and return early instead of also querying the source for nothing.
-    let Ok(target_metadata) = fs::symlink_metadata(target) else {
-        return false;
-    };
-    let Ok(source_metadata) = fs::symlink_metadata(source) else {
-        return false;
-    };
+    #[cfg(unix)]
+    {
+        // The target is usually the one that does not exist, so look it up first
+        // and return early instead of also querying the source for nothing.
+        let Ok(target_metadata) = fs::symlink_metadata(target) else {
+            return false;
+        };
+        let Ok(source_metadata) = fs::symlink_metadata(source) else {
+            return false;
+        };
 
-    source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
-}
+        source_metadata.ino() == target_metadata.ino()
+            && source_metadata.dev() == target_metadata.dev()
+    }
 
-#[cfg(not(unix))]
-pub fn are_hardlinks_or_one_way_symlink_to_same_file(_source: &Path, _target: &Path) -> bool {
-    false
+    #[cfg(windows)]
+    {
+        infos_refer_to_same_file(
+            FileInformation::from_path(source, false),
+            FileInformation::from_path(target, false),
+        )
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    {
+        _ = (source, target);
+        false
+    }
 }
 
 /// Checks if either two paths are hard links to the same file or if the source path is a symbolic link which when fully resolved points to target path
@@ -853,18 +859,35 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(_source: &Path, _target: &P
 /// # Returns
 ///
 /// * `bool` - Returns `true` if either of above conditions are true, and `false` otherwise.
-#[cfg(unix)]
 pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Path) -> bool {
-    // As above, look up the target first: if it does not exist, there is
-    // nothing to compare the source with.
-    let Ok(target_metadata) = fs::symlink_metadata(target) else {
-        return false;
-    };
-    let Ok(source_metadata) = fs::metadata(source) else {
-        return false;
-    };
+    #[cfg(unix)]
+    {
+        // As above, look up the target first: if it does not exist, there is
+        // nothing to compare the source with.
+        let Ok(target_metadata) = fs::symlink_metadata(target) else {
+            return false;
+        };
+        let Ok(source_metadata) = fs::metadata(source) else {
+            return false;
+        };
 
-    source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
+        source_metadata.ino() == target_metadata.ino()
+            && source_metadata.dev() == target_metadata.dev()
+    }
+
+    #[cfg(windows)]
+    {
+        infos_refer_to_same_file(
+            FileInformation::from_path(source, true),
+            FileInformation::from_path(target, false),
+        )
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    {
+        _ = (source, target);
+        false
+    }
 }
 
 /// Returns true if the passed `path` ends with a path terminator.
@@ -1146,11 +1169,9 @@ pub fn makedev(maj: core::ffi::c_uint, min: core::ffi::c_uint) -> libc::dev_t {
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
-    #[cfg(unix)]
     use std::io::Write;
     #[cfg(unix)]
     use std::os::unix;
-    #[cfg(unix)]
     use tempfile::{NamedTempFile, tempdir};
 
     struct NormalizePathTestCase<'a> {
@@ -1327,7 +1348,6 @@ mod tests {
         assert!(is_symlink_loop(&symlink1_path));
     }
 
-    #[cfg(unix)]
     #[test]
     fn test_are_hardlinks_to_same_file_same_file() {
         let mut temp_file = NamedTempFile::new().unwrap();
@@ -1337,9 +1357,9 @@ mod tests {
         let path2 = temp_file.path();
 
         assert!(are_hardlinks_to_same_file(path1, path2));
+        assert!(are_hardlinks_or_one_way_symlink_to_same_file(path1, path2));
     }
 
-    #[cfg(unix)]
     #[test]
     fn test_are_hardlinks_to_same_file_different_files() {
         let mut temp_file1 = NamedTempFile::new().unwrap();
@@ -1352,9 +1372,9 @@ mod tests {
         let path2 = temp_file2.path();
 
         assert!(!are_hardlinks_to_same_file(path1, path2));
+        assert!(!are_hardlinks_or_one_way_symlink_to_same_file(path1, path2));
     }
 
-    #[cfg(unix)]
     #[test]
     fn test_are_hardlinks_to_same_file_hard_link() {
         let mut temp_file = NamedTempFile::new().unwrap();
@@ -1365,6 +1385,28 @@ mod tests {
         fs::hard_link(path1, &path2).unwrap();
 
         assert!(are_hardlinks_to_same_file(path1, &path2));
+        assert!(are_hardlinks_or_one_way_symlink_to_same_file(path1, &path2));
+    }
+
+    #[test]
+    fn test_are_hardlinks_to_same_file_symlink() {
+        let directory = tempdir().unwrap();
+        let mut temp_file = NamedTempFile::new_in(directory.path()).unwrap();
+        writeln!(temp_file, "Test content").unwrap();
+
+        let path1 = temp_file.path();
+        let path2 = temp_file.path().with_extension("symlink");
+
+        #[cfg(unix)]
+        unix::fs::symlink(path1, &path2).unwrap();
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_file(path1, &path2).unwrap();
+
+        assert!(!are_hardlinks_to_same_file(&path2, path1));
+        assert!(are_hardlinks_or_one_way_symlink_to_same_file(&path2, path1));
+        assert!(!are_hardlinks_or_one_way_symlink_to_same_file(
+            path1, &path2
+        ));
     }
 
     #[test]
@@ -1449,7 +1491,7 @@ mod tests {
         use std::os::windows::fs::MetadataExt;
         use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_SPARSE_FILE;
 
-        let file = tempfile::NamedTempFile::new().unwrap();
+        let file = NamedTempFile::new().unwrap();
         set_file_sparse(file.as_file()).unwrap();
         let attributes = file.as_file().metadata().unwrap().file_attributes();
         assert_ne!(attributes & FILE_ATTRIBUTE_SPARSE_FILE, 0);
@@ -1457,9 +1499,6 @@ mod tests {
 
     #[test]
     fn test_are_files_identical() {
-        use std::io::Write;
-        use tempfile::NamedTempFile;
-
         let mut file1 = NamedTempFile::new().unwrap();
         let mut file2 = NamedTempFile::new().unwrap();
         let mut file3 = NamedTempFile::new().unwrap();
