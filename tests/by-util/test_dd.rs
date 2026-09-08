@@ -2117,7 +2117,7 @@ fn test_nocache_eof_fadvise_zero_length() {
 }
 
 #[test]
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(not(any(windows, target_os = "openbsd")))]
 fn test_iso8859_1_case_conversion() {
     use std::process::Command;
     // Test ISO-8859-1 case conversion for accented characters
