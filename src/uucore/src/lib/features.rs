@@ -35,7 +35,7 @@ pub mod extendedbigdecimal;
 pub mod fast_inc;
 #[cfg(feature = "format")]
 pub mod format;
-#[cfg(all(feature = "fs", not(target_os = "haiku")))]
+#[cfg(feature = "fs")]
 pub mod fs;
 #[cfg(feature = "fsext")]
 pub mod fsext;
