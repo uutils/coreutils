@@ -108,14 +108,7 @@ enum DateError {
     SettingDateNotSupportedRedox,
 }
 
-impl UError for DateError {
-    fn code(&self) -> i32 {
-        match self {
-            Self::ExpectedFileGotDirectory { .. } => 2,
-            _ => 1,
-        }
-    }
-}
+impl UError for DateError {}
 
 /// Settings for this program, parsed from the command line
 struct Settings {
