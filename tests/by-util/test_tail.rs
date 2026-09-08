@@ -2206,12 +2206,27 @@ fn test_follow_name_truncate1() {
     let backup = "backup";
 
     let expected_stdout = at.read(FOLLOW_NAME_EXP);
+    // `expected_stdout` starts with tail's initial static output (the last 10 lines);
+    // everything after that only appears once the truncate/restore below are observed.
+    let initial_stdout = &expected_stdout[..expected_stdout.find("END(25)\n").unwrap() + 8];
     let expected_stderr = format!("{}: {source}: file truncated\n", ts.util_name);
 
     let args = ["--follow=name", source];
     let mut p = ts.ucmd().args(&args).run_no_wait();
     let delay = 1000;
     p.make_assertion().is_alive();
+
+    // Wait for tail's initial read of `source` to finish before mutating it below.
+    // Watch registration happens before this initial output is printed, so once it
+    // appears the truncate/restore below are guaranteed to be observed as events.
+    // A fixed delay isn't enough here: a slow-starting child process (observed on
+    // macOS CI, see #12335) can otherwise race ahead of tail's own startup.
+    for _ in 0..500 {
+        if p.stdout_all() == initial_stdout {
+            break;
+        }
+        p.delay(10);
+    }
 
     at.copy(source, backup);
     p.delay(delay);

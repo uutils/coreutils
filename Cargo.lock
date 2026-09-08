@@ -4525,7 +4525,6 @@ dependencies = [
  "blake3",
  "bstr",
  "clap",
- "codspeed-divan-compat",
  "crc-fast",
  "data-encoding",
  "data-encoding-macro",

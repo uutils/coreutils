@@ -21,7 +21,6 @@ path = "src/lib/lib.rs"
 [dependencies]
 ariadne = { workspace = true, optional = true }
 base64-simd = { workspace = true, optional = true }
-bstr = { workspace = true, optional = true }
 clap = { workspace = true }
 data-encoding = { workspace = true, optional = true }
 data-encoding-macro = { workspace = true, optional = true }
@@ -47,7 +46,6 @@ uucore_procs = { workspace = true }
 z85 = { workspace = true, optional = true }
 
 # Benchmark dependencies (optional)
-divan = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
 
 digest = { workspace = true, optional = true }
@@ -93,6 +91,9 @@ tempfile = { workspace = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 selinux = { workspace = true, optional = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))'.dependencies]
+bstr = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 # utmpx is unix-only, so its dependencies must not be pulled into other targets
@@ -213,7 +214,7 @@ wide = []
 tty = []
 time = ["jiff"]
 uptime = ["jiff", "libc", "rustix/time", "utmp-classic", "utmpx", "windows-sys"]
-benchmark = ["divan", "itertools", "tempfile"]
+benchmark = ["itertools", "tempfile"]
 
 [lints]
 workspace = true
