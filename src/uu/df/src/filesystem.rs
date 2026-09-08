@@ -8,7 +8,9 @@
 //! filesystem mounted at a particular directory. It also includes
 //! information on amount of space available and amount of space used.
 // spell-checker:ignore canonicalized
-use std::{ffi::OsString, path::Path};
+use std::ffi::OsString;
+#[cfg(unix)]
+use std::path::Path;
 
 use uucore::fsext::{FsUsage, MountInfo};
 
@@ -59,6 +61,7 @@ pub(crate) enum FsError {
 ///
 /// * [`Path::canonicalize`]
 /// * [`MountInfo::mount_dir`]
+#[cfg(unix)]
 fn mount_info_from_path<P>(
     mounts: &[MountInfo],
     path: P,
@@ -128,6 +131,7 @@ impl Filesystem {
     /// * [`Path::canonicalize`]
     /// * [`MountInfo::mount_dir`]
     ///
+    #[cfg(unix)]
     pub(crate) fn from_path<P>(mounts: &[MountInfo], path: P) -> Result<Self, FsError>
     where
         P: AsRef<Path>,
@@ -141,7 +145,7 @@ impl Filesystem {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
 
     mod mount_info_from_path {
