@@ -1,4 +1,4 @@
-# spell-checker:ignore wasip wasmtime oniguruma sysroot
+# spell-checker:ignore wasip wasmtime
 name: WASI
 
 # spell-checker:ignore TRIGGERPATH

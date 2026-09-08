@@ -1,7 +1,7 @@
 name: Code Quality
 
 # spell-checker:ignore (people) juliangruber pell reactivecircus taiki-e taplo
-# spell-checker:ignore (misc) TERMUX noaudio pkill swiftshader esac sccache pcoreutils shopt subshell dequote libsystemd oniguruma sysroot wasi wasip
+# spell-checker:ignore (misc) TERMUX noaudio pkill swiftshader esac sccache pcoreutils shopt subshell dequote libsystemd wasi wasip
 
 on:
   pull_request:
