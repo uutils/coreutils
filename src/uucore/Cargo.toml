@@ -119,7 +119,9 @@ windows-sys = { workspace = true, optional = true, default-features = false, fea
   "Win32_Storage_FileSystem",
   "Win32_Foundation",
   "Win32_Globalization",
+  "Win32_NetworkManagement_WNet",
   "Win32_System_Console",
+  "Win32_System_Diagnostics_Debug",
   "Win32_System_IO",
   "Win32_System_Ioctl",
   "Win32_System_JobObjects",
@@ -144,7 +146,7 @@ entries = ["libc", "rustix/fs", "rustix/process"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
 fast-inc = []
 fs = ["dunce", "libc", "rustix/fs", "windows-sys"]
-fsext = ["libc", "windows-sys", "bstr"]
+fsext = ["libc", "windows-sys", "bstr", "wide"]
 fsxattr = ["xattr", "itertools", "libc"]
 hardware = []
 lines = []
