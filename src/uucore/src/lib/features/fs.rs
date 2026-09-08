@@ -836,10 +836,14 @@ pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
 
     #[cfg(windows)]
     {
-        infos_refer_to_same_file(
-            FileInformation::from_path(source, false),
-            FileInformation::from_path(target, false),
-        )
+        let Ok(target_metadata) = FileInformation::from_path(target, false) else {
+            return false;
+        };
+        let Ok(source_metadata) = FileInformation::from_path(source, false) else {
+            return false;
+        };
+
+        target_metadata == source_metadata
     }
 
     #[cfg(not(any(unix, windows)))]
@@ -877,10 +881,14 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Pat
 
     #[cfg(windows)]
     {
-        infos_refer_to_same_file(
-            FileInformation::from_path(source, true),
-            FileInformation::from_path(target, false),
-        )
+        let Ok(target_metadata) = FileInformation::from_path(target, false) else {
+            return false;
+        };
+        let Ok(source_metadata) = FileInformation::from_path(source, true) else {
+            return false;
+        };
+
+        target_metadata == source_metadata
     }
 
     #[cfg(not(any(unix, windows)))]
