@@ -12,7 +12,7 @@
 
 use std::collections::HashSet;
 
-#[cfg(not(any(target_os = "freebsd", windows)))]
+#[cfg(not(target_os = "freebsd"))]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 #[cfg(target_os = "linux")]
@@ -93,14 +93,43 @@ fn test_df_output_arg() {
 
 #[test]
 #[cfg(windows)]
-fn test_inodes_not_supported_windows() {
-    // The notice goes to stdout with exit 0, before any other option is validated.
-    for args in [&["-i"][..], &["-i", "--block-size=bogus"][..]] {
-        new_ucmd!()
-            .args(args)
-            .succeeds()
-            .stdout_only("df: doesn't support -i option\n");
-    }
+fn test_inodes_unknown_windows() {
+    let output = new_ucmd!()
+        .args(&["-i", "--total", "."])
+        .succeeds()
+        .stdout_str_lossy();
+    let mut lines = output.lines().skip(1);
+    let row: Vec<&str> = lines.next().unwrap().split_whitespace().collect();
+    assert_eq!(&row[1..5], ["-", "-", "-", "-"]);
+    let total: Vec<&str> = lines.next().unwrap().split_whitespace().collect();
+    assert_eq!(total, ["total", "0", "0", "0", "-", "-"]);
+}
+
+#[test]
+#[cfg(windows)]
+fn test_mount_point_windows() {
+    let output = new_ucmd!()
+        .args(&["--output=source,target,avail", "."])
+        .succeeds()
+        .stdout_str_lossy();
+    let row: Vec<&str> = output.lines().nth(1).unwrap().split_whitespace().collect();
+    assert_eq!(row[0], row[1]);
+    assert!(row[1].ends_with('\\'));
+    row[2].parse::<u64>().unwrap();
+}
+
+#[test]
+#[cfg(windows)]
+fn test_help_windows_notes() {
+    // Each phrase sits inside one `df-after-help-windows` line, which clap
+    // never re-wraps.
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("Windows notes:")
+        .stdout_contains("Inode counts are not available")
+        .stdout_contains("SUBST drives are not listed")
+        .stdout_contains("Drives without media are omitted");
 }
 
 #[test]
@@ -551,7 +580,13 @@ fn test_iuse_percentage() {
 
     for line in lines {
         let mut iter = line.split_whitespace();
-        let reported_inodes = iter.next().unwrap().parse::<f64>().unwrap();
+        let reported_inodes = iter.next().unwrap();
+        if reported_inodes == "-" {
+            // Windows: inode counts are unknown.
+            assert_eq!(iter.collect::<Vec<_>>(), ["-", "-"]);
+            continue;
+        }
+        let reported_inodes = reported_inodes.parse::<f64>().unwrap();
         let reported_iused = iter.next().unwrap().parse::<f64>().unwrap();
         let reported_percentage = iter.next().unwrap();
 
@@ -1006,7 +1041,7 @@ fn test_output_file_all_filesystems() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "freebsd", windows)))] // FIXME: fix test for FreeBSD & Win
+#[cfg(not(target_os = "freebsd"))] // FIXME: fix test for FreeBSD
 fn test_output_file_specific_files() {
     // Create three files.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1025,7 +1060,7 @@ fn test_output_file_specific_files() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "freebsd", windows)))] // FIXME: fix test for FreeBSD & Win
+#[cfg(not(target_os = "freebsd"))] // FIXME: fix test for FreeBSD
 fn test_file_column_width_if_filename_contains_unicode_chars() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("äöü.txt");
@@ -1048,7 +1083,7 @@ fn test_output_field_no_more_than_once() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "freebsd", windows)))] // FIXME: fix test for FreeBSD & Win
+#[cfg(not(target_os = "freebsd"))] // FIXME: fix test for FreeBSD
 fn test_nonexistent_file() {
     new_ucmd!()
         .arg("does-not-exist")

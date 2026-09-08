@@ -409,8 +409,9 @@ pub struct FsUsage {
     pub bfree: u64,
     pub bavail: u64,
     pub bavail_top_bit_set: bool,
-    pub files: u64,
-    pub ffree: u64,
+    /// `None` where the filesystem does not report inode counts (Windows).
+    pub files: Option<u64>,
+    pub ffree: Option<u64>,
 }
 
 impl FsUsage {
@@ -428,8 +429,8 @@ impl FsUsage {
                 bfree: statvfs.f_bfree,
                 bavail: statvfs.f_bavail,
                 bavail_top_bit_set: ((statvfs.f_bavail) & (1u64.rotate_right(1))) != 0,
-                files: statvfs.f_files,
-                ffree: statvfs.f_ffree,
+                files: Some(statvfs.f_files),
+                ffree: Some(statvfs.f_ffree),
             };
             #[cfg(all(
                 not(any(target_os = "freebsd", target_os = "openbsd")),
@@ -441,8 +442,8 @@ impl FsUsage {
                 bfree: statvfs.f_bfree.into(),
                 bavail: statvfs.f_bavail.into(),
                 bavail_top_bit_set: ((statvfs.f_bavail as u64) & (1u64.rotate_right(1))) != 0,
-                files: statvfs.f_files.into(),
-                ffree: statvfs.f_ffree.into(),
+                files: Some(statvfs.f_files.into()),
+                ffree: Some(statvfs.f_ffree.into()),
             };
             #[cfg(target_os = "freebsd")]
             return Self {
@@ -455,8 +456,8 @@ impl FsUsage {
                 bavail_top_bit_set: ((TryInto::<u64>::try_into(statvfs.f_bavail).unwrap())
                     & (1u64.rotate_right(1)))
                     != 0,
-                files: statvfs.f_files,
-                ffree: statvfs.f_ffree.try_into().unwrap(),
+                files: Some(statvfs.f_files),
+                ffree: Some(statvfs.f_ffree.try_into().unwrap()),
             };
             #[cfg(target_os = "openbsd")]
             return Self {
@@ -467,8 +468,8 @@ impl FsUsage {
                 bavail_top_bit_set: ((TryInto::<u64>::try_into(statvfs.f_bavail).unwrap())
                     & (1u64.rotate_right(1)))
                     != 0,
-                files: statvfs.f_files,
-                ffree: statvfs.f_ffree,
+                files: Some(statvfs.f_files),
+                ffree: Some(statvfs.f_ffree),
             };
         }
     }

@@ -8,6 +8,17 @@ df-after-help = Display values are in units of the first available SIZE from --b
   SIZE is an integer and optional unit (example: 10M is 10*1024*1024).
   Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB,... (powers
   of 1000). Units can be decimal, hexadecimal, octal, binary.
+df-after-help-windows = Windows notes:
+  Inode counts are not available: -i and the itotal, iused, iavail and
+  ipcent columns print -. --sync does nothing. The Filesystem column shows
+  the mount path (C:\, C:\mount\) or the share of a mapped network drive;
+  there are no device names. Types for -t and -x are the names Windows
+  reports, such as NTFS, FAT32, exFAT or ReFS.
+
+  SUBST drives are not listed since they are the volume they point to, but
+  can be named. Drives without media are omitted, also with -a. Symbolic
+  links and junctions in operands are not followed: the filesystem holding
+  the link itself is reported.
 
 # Help messages
 df-help-print-help = Print help information.
@@ -37,7 +48,6 @@ df-error-no-such-file-or-directory = { $path }: No such file or directory
 df-error-no-file-systems-processed = no file systems processed
 df-error-cannot-access-over-mounted = cannot access { $path }: over-mounted by another device
 df-error-cannot-read-table-of-mounted-filesystems = cannot read table of mounted file systems
-df-error-inodes-not-supported-windows = { $program }: doesn't support -i option
 
 # Headers
 df-header-filesystem = Filesystem
