@@ -1,0 +1,71 @@
+name: NotifyTracking
+
+# spell-checker:ignore zizmor
+# spell-checker:ignore (misc) busybox toybox multisize
+
+## Tell uutils/coreutils-tracking to refresh as soon as a workflow that
+## produces one of its inputs has finished on the default branch, so its graphs
+## follow the data instead of a twice-a-day cron.
+##
+## 'GnuTests' publishes 'test-summary' and 'aggregated-result'; 'make' publishes
+## 'busybox-result.json', 'toybox-result.json', 'size-result' and
+## 'individual-size-result'.  The tracking workflow picks up whatever is newest
+## for each of them, so a notification from either is enough to run it.
+
+on:
+  workflow_run:
+    workflows: ["GnuTests", "make"]
+    types:
+      - completed  # zizmor: ignore[dangerous-triggers]
+
+permissions: {}
+
+jobs:
+  dispatch:
+    name: Trigger the tracking refresh
+    ## Nothing is checked out and no result is read here, so the untrusted
+    ## content a 'workflow_run' trigger can carry is never executed.
+    if: >
+      github.repository == 'uutils/coreutils'
+      && github.event.workflow_run.event == 'push'
+      && github.event.workflow_run.head_branch == github.event.repository.default_branch
+      && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+    ## A GITHUB_TOKEN is scoped to the repository it runs in, so writing to a
+    ## sibling repository needs a credential of its own even within the same
+    ## organization.  This uses an organization-owned GitHub App rather than a
+    ## personal access token: it is not tied to an individual account and does
+    ## not silently expire.  Install it on uutils/coreutils-tracking only, with
+    ## 'contents: write', which is what the repository_dispatch endpoint needs.
+    - name: Mint a token for the tracking repository
+      id: app-token
+      if: ${{ secrets.TRACKING_APP_ID != '' && secrets.TRACKING_APP_PRIVATE_KEY != '' }}
+      uses: actions/create-github-app-token@v3
+      with:
+        app-id: ${{ secrets.TRACKING_APP_ID }}
+        private-key: ${{ secrets.TRACKING_APP_PRIVATE_KEY }}
+        owner: uutils
+        repositories: coreutils-tracking
+
+    - name: Send the repository_dispatch
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        SOURCE_WORKFLOW: ${{ github.event.workflow_run.name }}
+        SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+      run: |
+        ## Send the repository_dispatch
+        ## A missing token is not an error: the tracking repository still
+        ## refreshes on its own schedule, this only makes it prompt.
+        if [[ -z "${GH_TOKEN}" ]]; then
+          echo "::warning ::TRACKING_APP_ID / TRACKING_APP_PRIVATE_KEY are not set; leaving the tracking repository to its scheduled refresh."
+          exit 0
+        fi
+        gh api --method POST 'repos/uutils/coreutils-tracking/dispatches' \
+          -f 'event_type=refresh-data' \
+          -f "client_payload[workflow]=${SOURCE_WORKFLOW}" \
+          -f "client_payload[run_id]=${SOURCE_RUN_ID}" \
+          -f "client_payload[sha]=${SOURCE_SHA}"
+        echo "::notice ::Asked uutils/coreutils-tracking to refresh after '${SOURCE_WORKFLOW}' (${SOURCE_SHA})."
