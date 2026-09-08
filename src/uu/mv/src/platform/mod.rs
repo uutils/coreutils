@@ -7,4 +7,4 @@
 mod redox;
 
 #[cfg(target_os = "redox")]
-pub(super) use redox::{copy_special_file, rename_special_fallback, replace_symlink};
+pub(super) use redox::{copy_special_file, create_symlink_replace, rename_special_fallback};
