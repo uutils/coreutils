@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
-// spell-checker:ignore nohash strtime clocale
+// spell-checker:ignore nohash strtime clocale inode
 
 use clap::{
     Arg, ArgAction, Command,
@@ -1245,20 +1245,26 @@ pub fn list_with_output<O: LsOutput>(
         // Only recursion can revisit a directory, so only then is it worth a
         // stat to remember this one; without -R the set is never consulted.
         let mut listed_ancestors = FxHashSet::default();
-        if config.recursive {
-            listed_ancestors.insert(FileInformation::from_path(
-                path_data.path(),
-                path_data.must_dereference,
-            )?);
-        }
+        let id = if config.recursive {
+            let info = FileInformation::from_path(path_data.path(), path_data.must_dereference)?;
+            let id = DirId::new(&info);
+            listed_ancestors.insert(id);
+            Some(id)
+        } else {
+            None
+        };
+
         enter_directory(
             path_data,
             read_dir,
             config,
+            id,
             &mut listed_ancestors,
             output,
             &mut entries,
         )?;
+
+        debug_assert!(listed_ancestors.is_empty());
     }
 
     output.finalize(config)?;
@@ -1363,6 +1369,19 @@ fn write_directory_entries<O: LsOutput>(
     }
 }
 
+/// Wrapper for `(dev, inode)`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
+struct DirId(u64, u64);
+
+impl DirId {
+    fn new(info: &FileInformation) -> Self {
+        #[cfg(any(unix, target_os = "wasi"))]
+        return Self(info.dev(), info.inode());
+        #[cfg(windows)]
+        return Self(info.dev(), info.file_index());
+    }
+}
+
 /// Recursively traverse directories using an explicit stack.
 ///
 /// This avoids deep recursive call chains while preserving GNU-style
@@ -1371,7 +1390,8 @@ fn enter_directory<O: LsOutput>(
     path_data: &PathData,
     read_dir: ReadDir,
     config: &Config,
-    listed_ancestors: &mut FxHashSet<FileInformation>,
+    id: Option<DirId>,
+    listed_ancestors: &mut FxHashSet<DirId>,
     output: &mut O,
     entries: &mut Vec<PathData>,
 ) -> UResult<()> {
@@ -1379,17 +1399,44 @@ fn enter_directory<O: LsOutput>(
         path: PathBuf,
         command_line: bool,
         is_first: bool,
+        id: DirId,
+    }
+
+    /// Controls inode freeing precisely in the loop, so we correctly thread
+    /// cycle detection and inode discarding. Does away with many headaches.
+    enum StackItem {
+        Enter(StackEntry),
+        Exit(DirId),
     }
 
     let mut stack = Vec::new();
-    let mut current = Some(StackEntry {
+    let mut current = Some(StackItem::Enter(StackEntry {
         path: path_data.path().to_path_buf(),
         command_line: path_data.command_line,
         is_first: true,
-    });
+        id: id.unwrap_or_default(),
+    }));
     let mut initial_read_dir = Some(read_dir);
 
     while let Some(entry) = current.take().or_else(|| stack.pop()) {
+        let entry = match entry {
+            StackItem::Exit(id) => {
+                listed_ancestors.remove(&id);
+                continue;
+            }
+            StackItem::Enter(entry) => entry,
+        };
+
+        // Check for duplicates at entry time, so we can reliably track cycles.
+        if !entry.is_first && !listed_ancestors.insert(entry.id) {
+            output.flush()?;
+            show!(LsError::AlreadyListedError(entry.path.clone()));
+            continue;
+        }
+
+        // Register clean-up now.
+        stack.push(StackItem::Exit(entry.id));
+
         let path_data = PathData::new(
             entry.path.as_path().into(),
             None,
@@ -1435,7 +1482,19 @@ fn enter_directory<O: LsOutput>(
                 let child_must_dereference = child.must_dereference;
                 let child_command_line = child.command_line;
 
-                match fs::read_dir(&child_path) {
+                // Try to read_dir now to eagerly report errors, matching GNU.
+                if let Err(err) = fs::read_dir(&child_path) {
+                    output.flush()?;
+                    show!(LsError::IOErrorContext(
+                        child_path.clone(),
+                        err,
+                        child_command_line,
+                    ));
+                    continue;
+                }
+
+                let info = match FileInformation::from_path(&child_path, child_must_dereference) {
+                    Ok(info) => info,
                     Err(err) => {
                         output.flush()?;
                         show!(LsError::IOErrorContext(
@@ -1443,23 +1502,15 @@ fn enter_directory<O: LsOutput>(
                             err,
                             child_command_line,
                         ));
+                        continue;
                     }
-                    Ok(_) => {
-                        if listed_ancestors.insert(FileInformation::from_path(
-                            &child_path,
-                            child_must_dereference,
-                        )?) {
-                            stack.push(StackEntry {
-                                path: child_path,
-                                command_line: child_command_line,
-                                is_first: false,
-                            });
-                        } else {
-                            output.flush()?;
-                            show!(LsError::AlreadyListedError(child_path));
-                        }
-                    }
-                }
+                };
+                stack.push(StackItem::Enter(StackEntry {
+                    path: child_path,
+                    command_line: child_command_line,
+                    is_first: false,
+                    id: DirId::new(&info),
+                }));
             }
         }
     }
