@@ -28,9 +28,6 @@ uucore = { workspace = true, features = ["safe-traversal"] }
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
 
-[target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
-
 [[bin]]
 name = "rm"
 path = "src/main.rs"

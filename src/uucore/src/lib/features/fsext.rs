@@ -384,7 +384,7 @@ impl From<StatFs> for MountInfo {
     }
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
     // spell-checker:disable
     match fs_type {
@@ -799,7 +799,7 @@ impl FsMeta for StatFs {
     ))]
     fn fs_type(&self) -> i64 {
         #[cfg(all(
-            not(target_env = "musl"),
+            not(any(target_env = "musl", target_env = "ohos")),
             not(target_vendor = "apple"),
             not(target_os = "android"),
             not(target_os = "freebsd"),
@@ -808,7 +808,7 @@ impl FsMeta for StatFs {
         ))]
         return self.f_type;
         #[cfg(all(
-            not(target_env = "musl"),
+            not(any(target_env = "musl", target_env = "ohos")),
             any(
                 target_vendor = "apple",
                 all(target_os = "android", target_pointer_width = "32"),
@@ -820,6 +820,7 @@ impl FsMeta for StatFs {
         return self.f_type.into();
         #[cfg(any(
             target_env = "musl",
+            target_env = "ohos",
             all(target_os = "android", target_pointer_width = "64"),
         ))]
         return self.f_type.try_into().unwrap();
@@ -1258,7 +1259,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(unix, not(target_os = "redox")))]
+    #[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
     // spell-checker:ignore (word) binfmt
     fn test_binfmt_misc_is_dummy() {
         use super::is_dummy_filesystem;

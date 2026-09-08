@@ -1766,6 +1766,31 @@ fn test_merge_more_files_than_fd_limit() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_more_files_than_fd_limit() {
+    use rlimit::Resource;
+    let (at, mut ucmd) = at_and_ucmd!();
+    // The inputs are read one after another, so sorting must not need more open
+    // file descriptors than the soft limit allows, no matter how many inputs there are.
+    let count = 40;
+    let mut names = Vec::new();
+    for i in 0..count {
+        let name = format!("fdlimit_{i:02}.txt");
+        at.write(&name, &format!("{:02}\n", count - 1 - i));
+        names.push(name);
+    }
+    let mut expected = String::new();
+    for i in 0..count {
+        writeln!(expected, "{i:02}").unwrap();
+    }
+    let limit_fd = 24;
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
+        .args(&names)
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
 fn test_sigpipe_panic() {
     let mut cmd = new_ucmd!();
     let mut child = cmd.args(&["ext_sort.txt"]).run_no_wait();
@@ -1867,6 +1892,18 @@ fn test_verifies_input_files() {
         .args(&["/dev/random", "nonexistent_file"])
         .fails_with_code(2)
         .stderr_is("sort: cannot read: nonexistent_file: No such file or directory\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_verifies_input_files_without_opening_them() {
+    // Opening a FIFO blocks until a writer shows up, so if the input check opened
+    // the inputs, the missing second file would never be reported.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("FIFO");
+    ucmd.args(&["FIFO", "nonexistent_file"])
+        .fails_with_code(2)
+        .stderr_only("sort: cannot read: nonexistent_file: No such file or directory\n");
 }
 
 #[test]

@@ -91,22 +91,20 @@ mod platform {
 #[cfg(windows)]
 mod platform {
     use std::fs::OpenOptions;
-    use std::os::windows::prelude::*;
     use std::path::Path;
     use uucore::error::{UResult, USimpleError};
     use uucore::translate;
     use uucore::wide::{FromWide, ToWide};
     use windows_sys::Win32::Foundation::{
-        ERROR_NO_MORE_FILES, GetLastError, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
+        ERROR_NO_MORE_FILES, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
     };
     use windows_sys::Win32::Storage::FileSystem::{
-        FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, FlushFileBuffers, GetDriveTypeW,
+        FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDriveTypeW,
     };
     use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
 
     fn get_last_error() -> u32 {
-        // SAFETY: `GetLastError` has no safety preconditions
-        unsafe { GetLastError() as u32 }
+        std::io::Error::last_os_error().raw_os_error().unwrap_or(1) as u32
     }
 
     fn flush_volume(name: &str) -> UResult<()> {
@@ -125,13 +123,12 @@ mod platform {
                     translate!("sync-error-create-volume-handle"),
                 )
             })?;
-        // SAFETY: `file` is a valid `File`
-        if unsafe { FlushFileBuffers(file.as_raw_handle() as HANDLE) } == 0 {
-            return Err(USimpleError::new(
-                get_last_error() as i32,
+        file.sync_all().map_err(|e| {
+            USimpleError::new(
+                e.raw_os_error().unwrap_or(1),
                 translate!("sync-error-flush-file-buffer"),
-            ));
-        }
+            )
+        })?;
         Ok(())
     }
 
