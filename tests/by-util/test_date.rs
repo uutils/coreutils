@@ -626,7 +626,7 @@ fn test_date_for_no_permission_file() {
 
 #[test]
 fn test_date_for_dir_as_file() {
-    let result = new_ucmd!().arg("--file").arg("/").fails();
+    let result = new_ucmd!().arg("--file").arg("/").fails_with_code(1);
     result.no_stdout();
     assert_eq!(
         result.stderr_str().trim(),
