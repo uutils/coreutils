@@ -186,7 +186,13 @@ static CHECKSUM_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 static UTIL_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 thread_local! {
     #[cfg_attr(
-        target_os = "android",
+        any(
+            target_os = "android",
+            target_os = "haiku",
+            target_os = "illumos",
+            all(target_os = "linux", target_env = "ohos"),
+            target_os = "solaris",
+            all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))),
         expect(
             clippy::missing_const_for_thread_local,
             reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
@@ -196,7 +202,13 @@ thread_local! {
     /// Built on the first lookup that misses every ordinary bundle; `None`
     /// when there are no error strings to be found at all.
     #[cfg_attr(
-        target_os = "android",
+        any(
+            target_os = "android",
+            target_os = "haiku",
+            target_os = "illumos",
+            all(target_os = "linux", target_env = "ohos"),
+            target_os = "solaris",
+            all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))),
         expect(
             clippy::missing_const_for_thread_local,
             reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
@@ -591,7 +603,13 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     // Avoid duplicated and high-cost localizer setup
     thread_local! {
         #[cfg_attr(
-            target_os = "android",
+            any(
+                target_os = "android",
+                target_os = "haiku",
+                target_os = "illumos",
+                all(target_os = "linux", target_env = "ohos"),
+                target_os = "solaris",
+                all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))),
             expect(
                 clippy::missing_const_for_thread_local,
                 reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
