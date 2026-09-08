@@ -330,7 +330,11 @@ mod tests {
             index: 0,
         }];
 
-        let result = write_lines(&lines, &mut FailingWriter, b'\n');
+        let result = write_lines(
+            &lines,
+            &mut FailingWriter(io::ErrorKind::StorageFull),
+            b'\n',
+        );
 
         assert_eq!(result.unwrap_err().kind(), io::ErrorKind::StorageFull);
     }
