@@ -7,33 +7,47 @@
 
 use clap::Command;
 use core::ffi::c_long;
-#[cfg(not(target_env = "ohos"))]
-use libc::gethostid;
 use std::io::{Write, stdout};
-use uucore::{error::UResult, format_usage};
+use uucore::{error::UResult, format_usage, translate};
 
-use uucore::translate;
-
-// OHOS SDK libc no longer exports gethostid; replicate the glibc semantics:
-// read /etc/hostid when present, otherwise hash the hostname.
-#[cfg(target_env = "ohos")]
+// support targets missing libc::gethostid
 fn gethostid() -> c_long {
-    use std::fs::read;
-    if let Ok(data) = read("/etc/hostid") {
-        if data.len() >= 4 {
-            let n: u32 = u32::from_ne_bytes([data[0], data[1], data[2], data[3]]);
-            return n as c_long;
+    // /etc/hostid is still useful when
+    // - Windows native hostid is called on MSYS shell
+    // - wasi binary is called on unix host
+    if let Ok(data) = std::fs::read("/etc/hostid")
+        && let Some(bytes) = data.get(..4).and_then(|s| <[u8; 4]>::try_from(s).ok())
+    {
+        return u32::from_ne_bytes(bytes) as c_long;
+    }
+    #[cfg(unix)]
+    {
+        use std::net::{IpAddr, ToSocketAddrs as _};
+        let uname = rustix::system::uname();
+        if let Ok(hostname) = uname.nodename().to_str() {
+            let query = format!("{hostname}:0");
+            if let Ok(mut addrs) = query.to_socket_addrs()
+                && let Some(addr) = addrs.find(|a| a.ip().is_ipv4())
+                && let IpAddr::V4(ipv4) = addr.ip()
+            {
+                return u32::from_ne_bytes(ipv4.octets()).rotate_left(16) as c_long;
+            }
         }
     }
-    let mut name = [0u8; 256];
-    if unsafe { libc::gethostname(name.as_mut_ptr() as *mut _, name.len()) } == 0 {
-        let end = name.iter().position(|&b| b == 0).unwrap_or(name.len());
-        let mut h: u32 = 0x811c9dc5;
-        for &b in &name[..end] {
-            h ^= b as u32;
-            h = h.wrapping_mul(0x01000193);
+    // todo: remove to_string_lossy and use this for unix
+    // todo: use std::net::hostname when is was stabilized
+    #[cfg(windows)]
+    {
+        use std::net::{IpAddr, ToSocketAddrs as _};
+        if let Ok(mut hostname) = hostname::get() {
+            hostname.push(":0");
+            if let Ok(mut addrs) = hostname.to_string_lossy().to_socket_addrs()
+                && let Some(addr) = addrs.find(|a| a.ip().is_ipv4())
+                && let IpAddr::V4(ipv4) = addr.ip()
+            {
+                return u32::from_ne_bytes(ipv4.octets()).rotate_left(16) as c_long;
+            }
         }
-        return h as c_long;
     }
     0
 }
@@ -47,7 +61,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
      * is a no-op unless unsigned int is wider than 32 bits.
      */
 
-    let mut result: c_long = unsafe { gethostid() };
+    let mut result = gethostid();
 
     #[allow(overflowing_literals)]
     let mask = 0xffff_ffff;
