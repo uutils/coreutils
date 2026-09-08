@@ -23,9 +23,21 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
+fluent = { workspace = true }
+time = { workspace = true, features = ["formatting", "local-offset"] }
+
+[target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["fs", "termios"] }
 uucore = { workspace = true, features = ["utmpx"] }
-fluent = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+dns-lookup = { workspace = true }
+uucore = { workspace = true }
+windows-sys = { workspace = true, features = [
+  "Win32_Foundation",
+  "Win32_System_RemoteDesktop",
+  "Win32_System_Threading",
+] }
 
 [lints]
 workspace = true

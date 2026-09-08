@@ -5,9 +5,14 @@
 
 // spell-checker:ignore (flags) runlevel mesg
 
+#![cfg(not(target_os = "openbsd"))]
+
 use uutests::new_ucmd;
+#[cfg(unix)]
 use uutests::unwrap_or_return;
+#[cfg(unix)]
 use uutests::util::{TestScenario, expected_result, gnu_cmd_result};
+#[cfg(unix)]
 use uutests::util_name;
 #[test]
 fn test_invalid_arg() {
