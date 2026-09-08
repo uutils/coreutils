@@ -9,8 +9,15 @@ use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::io::{ErrorKind, Write, stdout};
 #[cfg(unix)]
-use std::os::unix::process::CommandExt;
+use std::os::unix::process::CommandExt as _;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt as _;
 use std::process;
+#[cfg(windows)]
+use windows_sys::Win32::System::Threading::{
+    ABOVE_NORMAL_PRIORITY_CLASS, BELOW_NORMAL_PRIORITY_CLASS, HIGH_PRIORITY_CLASS,
+    IDLE_PRIORITY_CLASS, NORMAL_PRIORITY_CLASS, REALTIME_PRIORITY_CLASS,
+};
 
 use uucore::translate;
 use uucore::{
@@ -100,7 +107,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
     #[cfg(not(unix))]
-    let current_niceness = 0; // todo: what we can do?
+    let current_niceness = 0i32; // todo: what we can do?
     #[cfg(unix)]
     let current_niceness = rustix::process::getpriority_process(None)
         .map_err(|e| uucore::error::USimpleError::new(125, format!("getpriority: {e}")))?;
@@ -117,7 +124,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Ok(());
     };
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     let adjustment = match matches.get_one::<String>(options::ADJUSTMENT) {
         None => 10,
         Some(nstr) => match nstr.parse::<i32>() {
@@ -133,14 +140,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
     };
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     let new_niceness = current_niceness.saturating_add(adjustment);
     // We can't use `show_warning` because that will panic if stderr
     // isn't writable. The GNU test suite checks specifically that the
     // exit code when failing to write the advisory is 125, but Rust
     // will produce an exit code of 101 when it panics.
     #[cfg(unix)]
-    // todo: map new_niceness on Windows <https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-setpriorityclass>
     if let Err(e) = rustix::process::setpriority_process(None, new_niceness) {
         let warning_msg = translate!("nice-warning-setpriority", "util_name" => "nice", "error" => uucore::error::strip_errno(&e.into()) );
 
@@ -150,16 +156,28 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
+    #[cfg(windows)]
+    let priority_class = match new_niceness {
+        ..=-20 => REALTIME_PRIORITY_CLASS,
+        -19 => HIGH_PRIORITY_CLASS,
+        -18..=-1 => ABOVE_NORMAL_PRIORITY_CLASS,
+        0 => NORMAL_PRIORITY_CLASS,
+        1..=18 => BELOW_NORMAL_PRIORITY_CLASS,
+        19.. => IDLE_PRIORITY_CLASS,
+    };
+
     let cmd = cmd_iter.next().unwrap();
     let args: Vec<&String> = cmd_iter.collect();
+    let mut command = process::Command::new(cmd);
+    command.args(args);
     #[cfg(unix)]
-    let err = process::Command::new(cmd).args(args).exec();
+    let err = command.exec();
     #[cfg(windows)]
-    let Err(err) = process::Command::new(cmd).args(args).spawn() else {
+    let Err(err) = command.creation_flags(priority_class).spawn() else {
         return Ok(());
     };
     #[cfg(not(any(unix, windows)))]
-    let Err(err) = process::Command::new(cmd).args(args).status() else {
+    let Err(err) = command.status() else {
         return Ok(());
     };
 
