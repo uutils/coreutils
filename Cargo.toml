@@ -199,6 +199,7 @@ feat_Tier1 = [
   "kill",
   "hostname",
   "hostid",
+  "nohup",
   "nproc",
   "sync",
   "timeout",
@@ -340,7 +341,6 @@ feat_require_unix_core = [
   "logname",
   "mkfifo",
   "mknod",
-  "nohup",
   "stat",
   "stty",
 ]
