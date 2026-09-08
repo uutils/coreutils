@@ -147,6 +147,128 @@ fn test_date_accepts_gnu_timezone_abbreviations() {
 }
 
 #[test]
+fn test_european_date() {
+    // DAY.MONTH.YEAR with one- or two-digit day and month. Expect the
+    // normalized ISO date; `%F` exercises the full-year renderer.
+    for (day, month, year) in [(1, 9, 1999), (7, 2, 2004), (31, 12, 2031)] {
+        let input = format!("{day}.{month}.{year}");
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .args(&["-d", &input, "+%F"])
+            .succeeds()
+            .stdout_is(format!("{year:04}-{month:02}-{day:02}\n"));
+    }
+
+    // A long year passes through the European form too.
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .args(&["-d", "31.12.123456", "+%Y-%m-%d"])
+        .succeeds()
+        .stdout_is("123456-12-31\n");
+
+    // Two-digit years use the 1969-2068 window.
+    for (input, expected) in [("11.6.99", "1999-06-11"), ("11.6.05", "2005-06-11")] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .args(&["-d", input, "+%Y-%m-%d"])
+            .succeeds()
+            .stdout_is(format!("{expected}\n"));
+    }
+
+    // DAY.MONTH. without a year fills in the current year: it must match
+    // whatever year the binary itself reports today.
+    let current_year = new_ucmd!()
+        .env("TZ", "UTC0")
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .to_string();
+    for (input, month_day) in [("05.12.", "12-05"), ("09.11.", "11-09")] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .args(&["-d", input, "+%Y-%m-%d"])
+            .succeeds()
+            .stdout_is(format!("{current_year}-{month_day}\n"));
+    }
+
+    // A year less date combines with a time on either side; the fractional
+    // seconds inside the time token must not be read as a date.
+    for (input, expected) in [
+        ("28.07. 3:15:30.25", "07-28 03:15:30"),
+        ("3:15:30.25 28.7.", "07-28 03:15:30"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .args(&["-d", input, "+%m-%d %H:%M:%S"])
+            .succeeds()
+            .stdout_is(format!("{expected}\n"));
+    }
+
+    // An immediately following three-or-more digit token is the year; one or
+    // two digits are a time of day instead.
+    for spec in [
+        ("09.11. 2004", "+%Y-%m-%d", "2004-11-09"),
+        ("09.11. 23", "+%m-%d %H", "11-09 23"),
+        ("23 09.11.", "+%m-%d %H", "11-09 23"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .args(&["-d", spec.0, spec.1])
+            .succeeds()
+            .stdout_is(format!("{}\n", spec.2));
+    }
+
+    // A non-digit suffix is not a European date; the error reports the
+    // original input rather than a rewritten string.
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .args(&["-d", "11.6.FOO"])
+        .fails_with_code(1)
+        .stderr_contains("invalid date '11.6.FOO'");
+}
+
+#[test]
+fn test_large_year_custom_format() {
+    // Years beyond 9999 work with any format string, not just the default.
+    for fmt in ["+%Y-%m-%d", "+%F"] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .args(&["-d", "1234567890-01-01", fmt])
+            .succeeds()
+            .stdout_is("1234567890-01-01\n");
+    }
+
+    // Year-derived specifiers render the real extended year, not the surrogate.
+    for (fmt, expected) in [
+        ("+%Y", "1234567890\n"),
+        ("+%y", "90\n"),
+        ("+%C", "12345678\n"),
+        ("+%G", "1234567890\n"),
+        ("+%g", "90\n"),
+        ("+%D", "01/01/90\n"),
+        ("+%v", " 1-Jan-1234567890\n"),
+        // Flags and widths use the same modifier semantics as in-range dates.
+        ("+%+Y", "+1234567890\n"),
+        ("+%10Y", "1234567890\n"),
+        ("+%+6Y", "+1234567890\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC0")
+            .args(&["-d", "1234567890-01-01", fmt])
+            .succeeds()
+            .stdout_is(expected);
+    }
+
+    // A year beyond the parser's representable range is rejected.
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .args(&["-d", "999999999999-01-01", "+%Y-%m-%d"])
+        .fails_with_code(1)
+        .stderr_contains("invalid date");
+}
+
+#[test]
 fn test_format_option_not_to_capture_other_valid_arguments() {
     new_ucmd!()
         .arg("+%Y%m%d%H%M%S")
