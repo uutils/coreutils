@@ -4420,7 +4420,7 @@ fn test_cp_mode_hardlink_no_dereference() {
     assert_eq!(at.read_symlink("z"), "slink");
 }
 
-#[cfg(not(any(windows, target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 #[test]
 #[cfg_attr(
     wasi_runner,
