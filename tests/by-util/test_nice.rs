@@ -3,9 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore getpriority setpriority
+#[cfg(unix)]
 use uutests::new_ucmd;
 
 #[test]
+#[cfg(unix)]
 #[cfg(not(target_os = "android"))]
 fn test_get_current_niceness() {
     // Test that the nice command with no arguments returns the default nice value
@@ -14,6 +16,7 @@ fn test_get_current_niceness() {
 }
 
 #[test]
+#[cfg(unix)]
 #[cfg(not(target_os = "android"))]
 fn test_nice_adj_negative() {
     // This assumes the test suite is run as a normal (non-root) user, and as
@@ -28,6 +31,7 @@ fn test_nice_adj_negative() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_adjustment_with_no_command_should_error() {
     new_ucmd!()
         .args(&["-n", "19"])
@@ -36,11 +40,13 @@ fn test_adjustment_with_no_command_should_error() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_command_with_no_adjustment() {
     new_ucmd!().args(&["echo", "a"]).succeeds().stdout_is("a\n");
 }
 
 #[test]
+#[cfg(unix)]
 fn test_command_with_no_args() {
     new_ucmd!()
         .args(&["-n", "19", "echo"])
@@ -49,6 +55,7 @@ fn test_command_with_no_args() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_command_with_args() {
     new_ucmd!()
         .args(&["-n", "19", "echo", "a", "b", "c"])
@@ -57,6 +64,7 @@ fn test_command_with_args() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_command_where_command_takes_n_flag() {
     new_ucmd!()
         .args(&["-n", "19", "echo", "-n", "a"])
@@ -65,11 +73,13 @@ fn test_command_where_command_takes_n_flag() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_invalid_argument() {
     new_ucmd!().arg("--invalid").fails_with_code(125);
 }
 
 #[test]
+#[cfg(unix)]
 fn test_bare_adjustment() {
     new_ucmd!()
         .args(&["-1", "echo", "-n", "a"])
@@ -78,6 +88,7 @@ fn test_bare_adjustment() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_trailing_empty_adjustment() {
     new_ucmd!()
         .args(&["-n", "1", "-n"])
@@ -89,6 +100,7 @@ fn test_trailing_empty_adjustment() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_nice_huge() {
     new_ucmd!()
         .args(&[
@@ -101,12 +113,14 @@ fn test_nice_huge() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_nice_huge_negative() {
     new_ucmd!().args(&["-n", "-9999999999", "true"]).succeeds();
     //.stderr_contains("Permission denied"); Depending on platform?
 }
 
 #[test]
+#[cfg(unix)]
 fn test_sign_middle() {
     new_ucmd!()
         .args(&["-n", "-2+4", "true"])
