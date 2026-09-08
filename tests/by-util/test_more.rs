@@ -152,7 +152,7 @@ fn test_file_arg() {
         .set_stdout(File::create(&path).unwrap())
         .arg(".")
         .succeeds()
-        .stderr_contains("'.' is a directory.");
+        .stderr_contains("'.': Is a directory");
 
     // Single argument errors
     let (path, _controller, _replica) = pty_path();
@@ -162,7 +162,7 @@ fn test_file_arg() {
         .set_stdout(File::create(&path).unwrap())
         .arg("folder")
         .succeeds()
-        .stderr_contains("is a directory");
+        .stderr_contains("Is a directory");
 
     let (path, _controller, _replica) = pty_path();
     new_ucmd!()

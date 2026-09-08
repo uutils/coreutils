@@ -22,7 +22,7 @@ use crossterm::{
     terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
-use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::{display::Quotable, show};
 
@@ -30,7 +30,6 @@ use uucore::translate;
 
 #[derive(Debug)]
 enum MoreError {
-    IsDirectory(PathBuf),
     CannotOpenNoSuchFile(PathBuf),
     CannotOpenIOError(PathBuf, std::io::ErrorKind),
     BadUsage,
@@ -39,16 +38,6 @@ enum MoreError {
 impl std::fmt::Display for MoreError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::IsDirectory(path) => {
-                write!(
-                    f,
-                    "{}",
-                    translate!(
-                        "more-error-is-directory",
-                        "path" => path.quote()
-                    )
-                )
-            }
             Self::CannotOpenNoSuchFile(path) => {
                 write!(
                     f,
@@ -159,13 +148,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let mut files_iter = files.peekable();
         while let (Some(file_os), next_file) = (files_iter.next(), files_iter.peek()) {
             let file = Path::new(file_os);
-            if file.is_dir() {
-                show!(UUsageError::new(
-                    0,
-                    MoreError::IsDirectory(file.into()).to_string(),
-                ));
-                continue;
-            }
             if !file.exists() {
                 show!(USimpleError::new(
                     0,
@@ -549,7 +531,11 @@ impl<'a> Pager<'a> {
         // Read lines until we reach the target line or EOF
         let mut line = String::new();
         while self.lines.len() <= target_line {
-            let bytes_read = self.input.read_line(&mut line)?;
+            let bytes_read = self
+                .input
+                .read_line(&mut line)
+                .map_err_context(|| self.file_name.unwrap().quote().to_string())
+                .map_err(|e| USimpleError::new(0, e.to_string()))?;
             if bytes_read == 0 {
                 return Ok(false); // EOF
             }

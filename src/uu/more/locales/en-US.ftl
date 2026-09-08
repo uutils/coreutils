@@ -2,7 +2,6 @@ more-about = Display the contents of a text file
 more-usage = more [OPTIONS] FILE...
 
 # Error messages
-more-error-is-directory = {$path} is a directory.
 more-error-cannot-open-no-such-file = cannot open {$path}: No such file or directory
 more-error-cannot-open-io-error = cannot open {$path}: {$error}
 more-error-bad-usage = bad usage
