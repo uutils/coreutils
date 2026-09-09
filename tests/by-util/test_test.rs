@@ -688,6 +688,26 @@ fn test_file_is_executable_windows() {
 }
 
 #[test]
+#[cfg(windows)]
+fn test_file_is_executable_from_pathext_windows() {
+    let scenario = TestScenario::new(util_name!());
+    scenario.fixtures.touch("script.Py");
+    scenario.fixtures.touch("program.exe");
+
+    scenario
+        .ucmd()
+        .env("PATHEXT", ".PY")
+        .args(&["-x", "script.Py"])
+        .succeeds();
+
+    scenario
+        .ucmd()
+        .env("PATHEXT", ".PY")
+        .args(&["!", "-x", "program.exe"])
+        .succeeds();
+}
+
+#[test]
 #[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
 fn test_directory_is_executable() {
     let (at, mut ucmd) = at_and_ucmd!();
