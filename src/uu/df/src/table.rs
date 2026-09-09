@@ -59,14 +59,14 @@ pub(crate) struct Row {
     #[cfg(target_vendor = "apple")]
     bytes_capacity: Option<f64>,
 
-    /// Total number of inodes in the filesystem.
-    inodes: u128,
+    /// Total number of inodes in the filesystem, `None` when unknown.
+    inodes: Option<u128>,
 
     /// Number of used inodes.
-    inodes_used: u128,
+    inodes_used: Option<u128>,
 
     /// Number of free inodes.
-    inodes_free: u128,
+    inodes_free: Option<u128>,
 
     /// Percentage of inodes that are used, given as a float between 0 and 1.
     ///
@@ -87,12 +87,17 @@ impl Row {
             bytes_usage: None,
             #[cfg(target_vendor = "apple")]
             bytes_capacity: None,
-            inodes: 0,
-            inodes_used: 0,
-            inodes_free: 0,
+            inodes: Some(0),
+            inodes_used: Some(0),
+            inodes_free: Some(0),
             inodes_usage: None,
         }
     }
+}
+
+/// Sum of two inode counts; an unknown count adds nothing.
+fn add_inodes(lhs: Option<u128>, rhs: Option<u128>) -> u128 {
+    lhs.unwrap_or(0) + rhs.unwrap_or(0)
 }
 
 impl AddAssign for Row {
@@ -104,8 +109,8 @@ impl AddAssign for Row {
         let bytes = self.bytes + rhs.bytes;
         let bytes_used = self.bytes_used + rhs.bytes_used;
         let bytes_avail = self.bytes_avail + rhs.bytes_avail;
-        let inodes = self.inodes + rhs.inodes;
-        let inodes_used = self.inodes_used + rhs.inodes_used;
+        let inodes = add_inodes(self.inodes, rhs.inodes);
+        let inodes_used = add_inodes(self.inodes_used, rhs.inodes_used);
         *self = Self {
             file: None,
             fs_device: translate!("df-total"),
@@ -125,9 +130,9 @@ impl AddAssign for Row {
             // TODO Figure out how to compute this.
             #[cfg(target_vendor = "apple")]
             bytes_capacity: None,
-            inodes,
-            inodes_used,
-            inodes_free: self.inodes_free + rhs.inodes_free,
+            inodes: Some(inodes),
+            inodes_used: Some(inodes_used),
+            inodes_free: Some(add_inodes(self.inodes_free, rhs.inodes_free)),
             inodes_usage: if inodes == 0 {
                 None
             } else {
@@ -157,7 +162,9 @@ impl Row {
 
         // On Windows WSL, files can be less than ffree. Protect such cases via saturating_sub.
         let bused = blocks.saturating_sub(bfree);
-        let fused = files.saturating_sub(ffree);
+        let fused = files
+            .zip(ffree)
+            .map(|(files, ffree)| files.saturating_sub(ffree));
         Self {
             file: fs.file,
             fs_device: dev_name,
@@ -180,13 +187,12 @@ impl Row {
             } else {
                 Some(bavail as f64 / ((bused + bavail) as f64))
             },
-            inodes: files as u128,
-            inodes_used: fused as u128,
-            inodes_free: ffree as u128,
-            inodes_usage: if files == 0 {
-                None
-            } else {
-                Some(fused as f64 / files as f64)
+            inodes: files.map(u128::from),
+            inodes_used: fused.map(u128::from),
+            inodes_free: ffree.map(u128::from),
+            inodes_usage: match (files, fused) {
+                (Some(files), Some(fused)) if files != 0 => Some(fused as f64 / files as f64),
+                _ => None,
             },
         }
     }
@@ -320,10 +326,14 @@ impl<'a> RowFormatter<'a> {
         Cell::from_ascii_string(s)
     }
 
-    /// Get a string giving the scaled version of the input number.
+    /// Get a string giving the scaled version of the input number, or `"-"`
+    /// when the number is unknown.
     ///
     /// The scaling factor is defined in the `options` field.
-    fn scaled_inodes(&self, size: u128) -> Cell {
+    fn scaled_inodes(&self, size: Option<u128>) -> Cell {
+        let Some(size) = size else {
+            return Cell::from_ascii_string("-");
+        };
         let s = if let Some(h) = self.options.human_readable {
             to_magnitude_and_suffix(size, SuffixType::HumanReadable(h), true)
         } else {
@@ -621,9 +631,9 @@ mod tests {
                 #[cfg(target_vendor = "apple")]
                 bytes_capacity: Some(0.5),
 
-                inodes: 10,
-                inodes_used: 2,
-                inodes_free: 8,
+                inodes: Some(10),
+                inodes_used: Some(2),
+                inodes_free: Some(8),
                 inodes_usage: Some(0.2),
             }
         }
@@ -832,9 +842,9 @@ mod tests {
             fs_device: "my_device".to_string(),
             fs_mount: "my_mount".into(),
 
-            inodes: 10,
-            inodes_used: 2,
-            inodes_free: 8,
+            inodes: Some(10),
+            inodes_used: Some(2),
+            inodes_free: Some(8),
             inodes_usage: Some(0.2),
 
             ..Default::default()
@@ -843,6 +853,32 @@ mod tests {
         assert!(compare_cell_content(
             fmt.get_cells(),
             vec!("my_device", "10", "2", "8", "20%", "my_mount")
+        ));
+    }
+
+    #[test]
+    fn test_row_formatter_with_unknown_inodes() {
+        init();
+        let options = Options {
+            columns: COLUMNS_WITH_INODES.to_vec(),
+            block_size: BlockSize::Bytes(1),
+            ..Default::default()
+        };
+        let row = Row {
+            fs_device: "my_device".to_string(),
+            fs_mount: "my_mount".into(),
+
+            inodes: None,
+            inodes_used: None,
+            inodes_free: None,
+            inodes_usage: None,
+
+            ..Default::default()
+        };
+        let fmt = RowFormatter::new(&row, &options, false);
+        assert!(compare_cell_content(
+            fmt.get_cells(),
+            vec!("my_device", "-", "-", "-", "-", "my_mount")
         ));
     }
 
@@ -856,7 +892,7 @@ mod tests {
         };
         let row = Row {
             bytes: BytesCell::new(100, &BlockSize::Bytes(100)),
-            inodes: 10,
+            inodes: Some(10),
             ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options, false);
@@ -1008,14 +1044,14 @@ mod tests {
                 bfree: 125_085_030,
                 bavail: 125_085_030,
                 bavail_top_bit_set: false,
-                files: 999,
-                ffree: 1_000_000,
+                files: Some(999),
+                ffree: Some(1_000_000),
             },
         };
 
         let row = Row::from_filesystem(d, &BlockSize::default());
 
-        assert_eq!(row.inodes_used, 0);
+        assert_eq!(row.inodes_used, Some(0));
     }
 
     #[test]
@@ -1039,8 +1075,8 @@ mod tests {
                 bfree: 125_085_030,
                 bavail: 125_085_030,
                 bavail_top_bit_set: false,
-                files: 99_999_999_999,
-                ffree: 999_999,
+                files: Some(99_999_999_999),
+                ffree: Some(999_999),
             },
         };
 
@@ -1110,8 +1146,8 @@ mod tests {
                 bfree: 125_085_030,
                 bavail: 125_085_030,
                 bavail_top_bit_set: false,
-                files: 99_999_999_999,
-                ffree: 999_999,
+                files: Some(99_999_999_999),
+                ffree: Some(999_999),
             },
         };
 
@@ -1143,23 +1179,40 @@ mod tests {
         let used2 = 50000u128;
 
         let mut row1 = Row {
-            inodes: total,
-            inodes_used: used1,
-            inodes_free: total - used1,
+            inodes: Some(total),
+            inodes_used: Some(used1),
+            inodes_free: Some(total - used1),
             ..Default::default()
         };
 
         let row2 = Row {
-            inodes: total,
-            inodes_used: used2,
-            inodes_free: total - used2,
+            inodes: Some(total),
+            inodes_used: Some(used2),
+            inodes_free: Some(total - used2),
             ..Default::default()
         };
 
         row1 += row2;
 
-        assert_eq!(row1.inodes, total * 2);
-        assert_eq!(row1.inodes_used, used1 + used2);
-        assert_eq!(row1.inodes_free, total * 2 - used1 - used2);
+        assert_eq!(row1.inodes, Some(total * 2));
+        assert_eq!(row1.inodes_used, Some(used1 + used2));
+        assert_eq!(row1.inodes_free, Some(total * 2 - used1 - used2));
+    }
+
+    #[test]
+    fn test_row_accumulation_unknown_inodes() {
+        init();
+        let mut total = Row::new("total");
+        total += Row {
+            inodes: None,
+            inodes_used: None,
+            inodes_free: None,
+            ..Default::default()
+        };
+
+        assert_eq!(total.inodes, Some(0));
+        assert_eq!(total.inodes_used, Some(0));
+        assert_eq!(total.inodes_free, Some(0));
+        assert_eq!(total.inodes_usage, None);
     }
 }
