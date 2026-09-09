@@ -389,7 +389,7 @@ impl Spec {
                 let mut parsed = Vec::<u8>::new();
 
                 for c in parse_escape_only(bytes, OctalParsing::ThreeDigits) {
-                    match c.write(&mut parsed)? {
+                    match c?.write(&mut parsed)? {
                         ControlFlow::Continue(()) => {}
                         ControlFlow::Break(()) => {
                             // A `\c` inside the argument stops output for the
