@@ -200,6 +200,77 @@ fn test_escape_vertical_tab() {
 }
 
 #[test]
+fn test_escape_unicode_and_quote_not_recognized() {
+    // `echo -e` has no `\u`, `\U` or `\"` escape, unlike `printf`: the
+    // backslash and the character following it are printed as given.
+    for arg in [
+        r"\u0041",
+        r"\U00000041",
+        r"\U0001F600",
+        r#"\""#,
+        r"a\u0041b",
+        r"a\U00000041b",
+        r#"a\"b"#,
+        r"\u\u",
+    ] {
+        new_ucmd!()
+            .args(&["-e", arg])
+            .succeeds()
+            .stdout_only(format!("{arg}\n"));
+    }
+}
+
+#[test]
+fn test_escape_malformed_unicode_not_recognized() {
+    // Truncated, non-hexadecimal, surrogate and out-of-range payloads are not
+    // special either: nothing is consumed and no error is reported.
+    for arg in [
+        r"\u",
+        r"\U",
+        r"\u00",
+        r"\U0000004",
+        r"\u00zz",
+        r"\U000000zz",
+        r"\uD800",
+        r"\U00110000",
+    ] {
+        new_ucmd!()
+            .args(&["-e", arg])
+            .succeeds()
+            .stdout_only(format!("{arg}\n"));
+    }
+}
+
+#[test]
+fn test_disable_escapes_unicode_and_quote() {
+    let input_str = r#"\u0041 \U00000041 \""#;
+    new_ucmd!()
+        .arg("-E")
+        .arg(input_str)
+        .succeeds()
+        .stdout_only(format!("{input_str}\n"));
+}
+
+#[test]
+fn test_escape_recognized_sequences_still_expand() {
+    // The sequences the GNU manual does list for `echo -e` are unaffected.
+    new_ucmd!()
+        .args(&["-e", r"\a\b\e\f\n\r\t\v\\"])
+        .succeeds()
+        .stdout_only("\x07\x08\x1B\x0C\n\r\t\x0B\\\n");
+
+    new_ucmd!()
+        .args(&["-e", r"\0101\101\x41"])
+        .succeeds()
+        .stdout_only("AAA\n");
+
+    new_ucmd!()
+        .args(&["-e", r"a\cb", "c"])
+        .succeeds()
+        .stdout_only("a");
+}
+
+#[test]
 fn test_disable_escapes() {
     let input_str = "\\a \\\\ \\b \\r \\e \\f \\x41 \\n a\\cb \\u0100 \\t \\v";
     new_ucmd!()
