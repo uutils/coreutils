@@ -563,7 +563,10 @@ impl ChownExecutor {
                 Err(e) => {
                     *ret = 1;
                     if self.verbosity.level != VerbosityLevel::Silent {
-                        show_error!("cannot access {}: {}", entry_path.quote(), strip_errno(&e));
+                        show_error!(
+                            "{}",
+                            translate!("perms-cannot-access", "file" => entry_path.quote(), "error" => strip_errno(&e))
+                        );
                     }
                     continue;
                 }
@@ -630,9 +633,8 @@ impl ChownExecutor {
                         *ret = 1;
                         if self.verbosity.level != VerbosityLevel::Silent {
                             show_error!(
-                                "cannot access {}: {}",
-                                entry_path.quote(),
-                                strip_errno(&e)
+                                "{}",
+                                translate!("perms-cannot-access", "file" => entry_path.quote(), "error" => strip_errno(&e))
                             );
                         }
                     }
@@ -669,13 +671,16 @@ impl ChownExecutor {
                     ret = 1;
                     if let Some(path) = e.path() {
                         show_error!(
-                            "cannot access {}: {}",
-                            path.quote(),
-                            if let Some(error) = e.io_error() {
-                                strip_errno(error)
-                            } else {
-                                "Too many levels of symbolic links".into()
-                            }
+                            "{}",
+                            translate!(
+                                "perms-cannot-access",
+                                "file" => path.quote(),
+                                "error" => if let Some(error) = e.io_error() {
+                                    strip_errno(error)
+                                } else {
+                                    translate!("perms-too-many-symlink-levels")
+                                }
+                            )
                         );
                     } else {
                         show_error!("{e}");
@@ -802,7 +807,10 @@ impl ChownExecutor {
         DirFd::open(path, SymlinkBehavior::Follow)
             .map_err(|e| {
                 if self.verbosity.level != VerbosityLevel::Silent {
-                    show_error!("cannot access {}: {}", path.quote(), strip_errno(&e));
+                    show_error!(
+                        "{}",
+                        translate!("perms-cannot-access", "file" => path.quote(), "error" => strip_errno(&e))
+                    );
                 }
             })
             .ok()
