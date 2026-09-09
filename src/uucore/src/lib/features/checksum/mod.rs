@@ -657,6 +657,12 @@ pub fn unescape_filename(filename: &[u8]) -> (Vec<u8>, &'static str) {
 
 pub fn escape_filename(filename: &OsStr) -> (String, &'static str) {
     let original = filename.to_string_lossy();
+
+    // On Windows, backslashes are path separators. Normalize them to forward
+    // slashes so that the checksum output is portable across platforms.
+    #[cfg(windows)]
+    let original = original.replace('\\', "/");
+
     let escaped = original
         .replace('\\', "\\\\")
         .replace('\n', "\\n")
@@ -702,7 +708,13 @@ mod tests {
         assert_eq!(prefix, "\\");
 
         let (escaped, prefix) = escape_filename(OsStr::new("test\\file.txt"));
+        #[cfg(windows)]
+        assert_eq!(escaped, "test/file.txt");
+        #[cfg(windows)]
+        assert_eq!(prefix, "");
+        #[cfg(not(windows))]
         assert_eq!(escaped, "test\\\\file.txt");
+        #[cfg(not(windows))]
         assert_eq!(prefix, "\\");
     }
 
