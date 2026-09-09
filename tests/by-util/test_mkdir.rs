@@ -79,7 +79,7 @@ fn test_mkdir_non_unicode() {
 
     let target = uucore::os_str_from_bytes(b"some-\xc0-dir-\xf3")
         .expect("Only unix platforms can test non-unicode names");
-    ucmd.arg(&target).succeeds();
+    ucmd.arg(target).succeeds();
 
     assert!(at.dir_exists(target));
 }
