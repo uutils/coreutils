@@ -1356,6 +1356,7 @@ mod tests {
         assert!(is_symlink_loop(&symlink1_path));
     }
 
+    #[cfg(any(unix, windows))]
     #[test]
     fn test_are_hardlinks_to_same_file_same_file() {
         let mut temp_file = NamedTempFile::new().unwrap();
@@ -1368,6 +1369,7 @@ mod tests {
         assert!(are_hardlinks_or_one_way_symlink_to_same_file(path1, path2));
     }
 
+    #[cfg(any(unix, windows))]
     #[test]
     fn test_are_hardlinks_to_same_file_different_files() {
         let mut temp_file1 = NamedTempFile::new().unwrap();
@@ -1383,6 +1385,7 @@ mod tests {
         assert!(!are_hardlinks_or_one_way_symlink_to_same_file(path1, path2));
     }
 
+    #[cfg(any(unix, windows))]
     #[test]
     fn test_are_hardlinks_to_same_file_hard_link() {
         let mut temp_file = NamedTempFile::new().unwrap();
@@ -1396,6 +1399,7 @@ mod tests {
         assert!(are_hardlinks_or_one_way_symlink_to_same_file(path1, &path2));
     }
 
+    #[cfg(any(unix, windows))]
     #[test]
     fn test_are_hardlinks_to_same_file_symlink() {
         let directory = tempdir().unwrap();
