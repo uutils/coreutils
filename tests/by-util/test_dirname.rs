@@ -263,3 +263,67 @@ fn test_dot_slash_component_preservation() {
         .succeeds()
         .stdout_is("/path/./to\n");
 }
+
+#[test]
+#[cfg(windows)]
+fn test_win_backslash_as_separator() {
+    for (input, expected) in [
+        // Relative paths
+        (r"foo\bar", "foo"),
+        (r"foo\bar\baz", r"foo\bar"),
+        // Mixed separators - whichever separator is "last" is removed
+        (r"C:\Users/foo", r"C:\Users"),
+        (r"C:/Users\foo", r"C:/Users"),
+        // Trailing backslashes stripped
+        (r"C:\Users\foo\", r"C:\Users"),
+        (r"\foo\bar\\", r"\foo"),
+        // Trailing `\.` pattern
+        (r"C:\foo\bar\.", r"C:\foo\bar"),
+        (r"\foo\.", r"\foo"),
+        // Repeated backslashes
+        (r"C:\foo\\bar", r"C:\foo"),
+    ] {
+        new_ucmd!()
+            .arg(input)
+            .succeeds()
+            .stdout_is(format!("{expected}\n"));
+    }
+
+    // -z flag
+    new_ucmd!()
+        .args(&["-z", r"C:\Users\foo"])
+        .succeeds()
+        .stdout_is("C:\\Users\u{0}");
+}
+
+#[test]
+#[cfg(windows)]
+fn test_win_path_prefixes() {
+    for (input, expected) in [
+        // Disk: C:\foo → C:\ ; C:\ → C:\ ; C:foo → C: ; C: → C:
+        (r"C:\foo", "C:\\"),
+        (r"C:\", "C:\\"),
+        (r"C:foo", "C:"),
+        ("C:", "C:"),
+        // UNC: \\server\share\foo → \\server\share\ ; \\server\share → as-is
+        (r"\\server\share\foo", r"\\server\share\"),
+        (r"\\server\share", r"\\server\share"),
+        // VerbatimDisk: \\?\C:\foo → \\?\C:\ ; \\?\C:\ → \\?\C:\
+        (r"\\?\C:\foo", r"\\?\C:\"),
+        (r"\\?\C:\", r"\\?\C:\"),
+        // VerbatimUNC: \\?\UNC\s\sh\foo → \\?\UNC\s\sh\
+        (r"\\?\UNC\server\share\foo", r"\\?\UNC\server\share\"),
+        (r"\\?\UNC\server\share\", r"\\?\UNC\server\share\"),
+        // DeviceNS: \\.\dev\foo → \\.\dev\ ; \\.\dev → as-is
+        (r"\\.\PhysicalDrive0\foo", r"\\.\PhysicalDrive0\"),
+        (r"\\.\PhysicalDrive0", r"\\.\PhysicalDrive0"),
+        // Root-only backslash (no prefix, just separator)
+        (r"\foo", "\\"),
+        ("\\", "\\"),
+    ] {
+        new_ucmd!()
+            .arg(input)
+            .succeeds()
+            .stdout_is(format!("{expected}\n"));
+    }
+}
