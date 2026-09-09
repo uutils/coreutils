@@ -99,3 +99,4 @@ mode-diag-help-syntax = a mode is either octal, as in 644, or clauses such as u+
 # Shared recursive chown/chgrp/chmod diagnostics (uucore::perms)
 perms-cannot-access = cannot access { $file }: { $error }
 perms-cannot-access-replaced = cannot access { $file }: replaced while it was being processed
+perms-too-many-symlink-levels = Too many levels of symbolic links
