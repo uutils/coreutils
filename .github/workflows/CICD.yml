@@ -883,10 +883,10 @@ jobs:
         job:
           # Linux: exercises both vendored (static) and OPENSSL_NO_VENDOR=1
           # (dynamic against system libcrypto). ubuntu-latest ships libssl-dev.
-          - { os: ubuntu-latest, features: feat_os_unix, dynamic: true }
+          - { os: ubuntu-latest, features: "md5sum,sha1sum,sha224sum,sha256sum,sha384sum,sha512sum,cksum,openssl", dynamic: true }
           # macOS: vendored only — system libcrypto needs OPENSSL_DIR
           # pointing at Homebrew, which isn't worth wiring up for a smoke test.
-          - { os: macos-latest, features: feat_os_unix, dynamic: false }
+          - { os: macos-latest, features: "md5sum,sha1sum,sha224sum,sha256sum,sha384sum,sha512sum,cksum,openssl", dynamic: false }
           # todo: check Windows (MinGW's system openssl)
     steps:
     - uses: actions/checkout@v7
@@ -912,16 +912,15 @@ jobs:
         RUST_BACKTRACE: "1"
       run: |
         cargo nextest run --hide-progress-bar --profile ci \
-          --features "${{ matrix.job.features }},openssl" \
-          -E 'test(/^test_(md5sum|sha1sum|sha224sum|sha256sum|sha384sum|sha512sum|cksum)::/)'
+          --no-default-features --features "${{ matrix.job.features }}"
     # Confirm the vendored build is actually statically linked. If this
     # regresses, the `vendored` feature has stopped doing its job.
     - name: Verify static linkage (vendored)
       if: matrix.job.os == 'ubuntu-latest'
       shell: bash
       run: |
-        cargo build --release --features "${{ matrix.job.features }},openssl" --bin coreutils
-        if ldd target/release/coreutils 2>&1 | grep -iE 'libssl|libcrypto'; then
+        cargo build --no-default-features --features "${{ matrix.job.features }}"
+        if ldd target/debug/coreutils 2>&1 | grep -iE 'libssl|libcrypto'; then
           echo "ERROR: coreutils dynamically links libssl/libcrypto despite vendored feature"
           exit 1
         fi
@@ -936,8 +935,7 @@ jobs:
         RUST_BACKTRACE: "1"
       run: |
         cargo nextest run --hide-progress-bar --profile ci \
-          --features "${{ matrix.job.features }},openssl" \
-          -E 'test(/^test_(md5sum|sha1sum|sha224sum|sha256sum|sha384sum|sha512sum|cksum)::/)'
+          --no-default-features --features "${{ matrix.job.features }}"
 
   test_no_diagnostics:
     name: Build/No-diagnostics
