@@ -692,6 +692,7 @@ mod tests {
 
         let required_keys = [
             "common-error",
+            "common-memory-exhausted",
             "common-usage",
             "common-tip",
             "common-help-suggestion",
@@ -724,6 +725,7 @@ mod tests {
             assert_eq!(get_message("common-error"), "erreur");
             assert_eq!(get_message("common-usage"), "Utilisation");
             assert_eq!(get_message("common-tip"), "conseil");
+            assert_eq!(get_message("common-memory-exhausted"), "mémoire épuisée");
         }
 
         unsafe {

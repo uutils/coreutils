@@ -22,6 +22,7 @@ mod mods; // core cross-platform modules
 pub use uucore_procs::*;
 
 // * cross-platform modules
+pub use crate::mods::allocation;
 pub use crate::mods::clap_localization;
 pub use crate::mods::display;
 pub use crate::mods::error;
@@ -206,9 +207,15 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
 #[macro_export]
 macro_rules! bin_inner {
     ($util:ident, $post:expr) => {
+        #[global_allocator]
+        static UU_ALLOCATOR: $crate::allocation::UuAllocator =
+            $crate::allocation::UuAllocator::new(&$util::UU_ALLOC_ERROR_CONFIG);
+
         pub fn main() {
             use std::io::Write;
             use uucore::locale;
+
+            $crate::allocation::activate(stringify!($util), &$util::UU_ALLOC_ERROR_CONFIG);
 
             // Preserve inherited SIGPIPE settings (e.g., from env --default-signal=PIPE)
             uucore::panic::preserve_inherited_sigpipe();
@@ -226,6 +233,7 @@ macro_rules! bin_inner {
                     }
                     std::process::exit(99)
                 });
+            $crate::allocation::localize_message();
 
             // execute utility code
             let code = $util::uumain(uucore::args_os());
