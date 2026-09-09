@@ -1268,6 +1268,11 @@ name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
+dependencies = [
+ "allocator-api2",
+ "equivalent",
+ "foldhash",
+]
 
 [[package]]
 name = "hex"
@@ -2899,16 +2904,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "string-interner"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad3df9b59e2eded8d825c7c4363ad339a20fb6bc0b9a4778560f518f59910b15"
-dependencies = [
- "hashbrown 0.16.1",
- "serde",
-]
-
-[[package]]
 name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4369,9 +4364,10 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "hashbrown 0.17.1",
+ "memchr",
  "rustc-hash",
  "rustix",
- "string-interner",
  "thiserror 2.0.20",
  "uucore",
 ]
