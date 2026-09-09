@@ -9,7 +9,7 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io::{StdoutLock, Write, stdout};
 use uucore::error::UResult;
-use uucore::format::{FormatChar, OctalParsing, parse_escape_only};
+use uucore::format::{EscapeSet, FormatChar, OctalParsing, parse_escape_only};
 use uucore::{crate_version, format_usage, os_str_as_bytes};
 
 use uucore::translate;
@@ -238,7 +238,11 @@ fn execute(
         }
 
         if options.escape {
-            for item in parse_escape_only(bytes, OctalParsing::ThreeDigits) {
+            for item in parse_escape_only(
+                bytes,
+                OctalParsing::ThreeDigits,
+                EscapeSet::WithoutUnicodeAndQuote,
+            ) {
                 if item.write(&mut *stdout)?.is_break() {
                     return Ok(());
                 }
