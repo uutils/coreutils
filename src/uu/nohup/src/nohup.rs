@@ -126,18 +126,17 @@ fn replace_fds() -> UResult<()> {
     if std::io::stdin().is_terminal() {
         let new_stdin = File::open(Path::new("/dev/null"))
             .map_err(|e| NohupError::CannotReplace("STDIN", e))?;
-        dup2_stdin(&new_stdin).map_err(|e| NohupError::CannotReplace("STDIN", Error::from(e)))?;
+        dup2_stdin(&new_stdin).map_err(|e| NohupError::CannotReplace("STDIN", e.into()))?;
     }
 
     if std::io::stdout().is_terminal() {
         let new_stdout = find_stdout()?;
 
-        dup2_stdout(&new_stdout)
-            .map_err(|e| NohupError::CannotReplace("STDOUT", Error::from(e)))?;
+        dup2_stdout(&new_stdout).map_err(|e| NohupError::CannotReplace("STDOUT", e.into()))?;
     }
 
     if std::io::stderr().is_terminal() {
-        dup2_stderr(stdout()).map_err(|e| NohupError::CannotReplace("STDERR", Error::from(e)))?;
+        dup2_stderr(stdout()).map_err(|e| NohupError::CannotReplace("STDERR", e.into()))?;
     }
     Ok(())
 }
