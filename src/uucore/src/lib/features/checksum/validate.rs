@@ -18,7 +18,7 @@ use crate::checksum::{
     AlgoKind, BlakeLength, ChecksumError, HashLength, ReadingMode, ShaLength, SizedAlgoKind,
     digest_reader, parse_blake_length, unescape_filename,
 };
-use crate::error::{FromIo, UError, UIoError, UResult, USimpleError, strip_errno};
+use crate::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use crate::sum::{self, Blake2b, Blake3, DigestOutput};
 use crate::{
@@ -884,11 +884,8 @@ fn process_checksum_file(
     let mut last_algo = None;
 
     for (i, line_res) in read_os_string_lines(reader).enumerate() {
-        let line = line_res.map_err(|e| {
-            USimpleError::new(
-                UIoError::from(e).code(),
-                format!("{}: read error", filename_input.maybe_quote()),
-            )
+        let line = line_res.map_err(|_| {
+            USimpleError::new(1, format!("{}: read error", filename_input.maybe_quote()))
         })?;
 
         let line_result = process_checksum_line(

@@ -7,7 +7,7 @@
 
 // spell-checker:ignore backport Ioctl absolutized
 
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(unix)]
 pub use libc::{major, makedev, minor};
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -1122,24 +1122,6 @@ pub fn set_file_sparse(file: &fs::File) -> IOResult<()> {
 /// * `None`: If the `file` path does not contain a valid filename or if the filename is not valid UTF-8.
 pub fn get_filename(file: &Path) -> Option<&str> {
     file.file_name().and_then(|filename| filename.to_str())
-}
-
-// Redox's libc appears not to include the following utilities
-
-#[cfg(target_os = "redox")]
-pub fn major(dev: libc::dev_t) -> core::ffi::c_uint {
-    (((dev >> 8) & 0xFFF) | ((dev >> 32) & 0xFFFFF000)) as _
-}
-
-#[cfg(target_os = "redox")]
-pub fn minor(dev: libc::dev_t) -> core::ffi::c_uint {
-    ((dev & 0xFF) | ((dev >> 12) & 0xFFFFF00)) as _
-}
-
-#[cfg(target_os = "redox")]
-pub fn makedev(maj: core::ffi::c_uint, min: core::ffi::c_uint) -> libc::dev_t {
-    let [maj, min] = [maj as libc::dev_t, min as libc::dev_t];
-    (min & 0xff) | ((maj & 0xfff) << 8) | ((min & !0xff) << 12) | ((maj & !0xfff) << 32)
 }
 
 #[cfg(test)]
