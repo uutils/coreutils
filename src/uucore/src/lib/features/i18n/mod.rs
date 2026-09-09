@@ -180,23 +180,28 @@ mod tests {
     #[test]
     fn test_get_locale_from_os() {
         use icu_locale::locale;
-        use windows_sys::Win32::Globalization::{
-            MUI_LANGUAGE_NAME, SetProcessPreferredUILanguages,
-        };
+        use std::ptr::null;
+        use windows_sys::Win32::Globalization::{MUI_LANGUAGE_NAME, SetThreadPreferredUILanguages};
         use windows_sys::w;
 
-        // Unfortunately it's not possible to test multiple languages to parser properly.
+        // Unfortunately it's not possible to test if multiple languages parse properly.
         // `Locale::try_from_str` succeeds on the first valid tag and
-        // `SetProcessPreferredUILanguages` does not allow setting invalid tags.
+        // `SetThreadPreferredUILanguages` does not allow setting invalid tags.
         unsafe {
             const LANGS: *const u16 = w!("fr-FR\0");
             let mut num = 0;
-            SetProcessPreferredUILanguages(MUI_LANGUAGE_NAME, LANGS, &raw mut num);
+            SetThreadPreferredUILanguages(MUI_LANGUAGE_NAME, LANGS, &raw mut num);
             assert_eq!(num, 1);
         }
 
         let (locale, encoding) = super::get_locale_from_os();
         assert_eq!(encoding, super::UEncoding::Utf8);
         assert_eq!(locale, locale!("fr-FR"));
+
+        unsafe {
+            let mut num = 0;
+            SetThreadPreferredUILanguages(MUI_LANGUAGE_NAME, null(), &raw mut num);
+            assert_eq!(num, 0);
+        }
     }
 }
