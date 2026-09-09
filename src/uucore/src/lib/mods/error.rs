@@ -470,8 +470,11 @@ impl Display for UIoError {
 /// use std::io::{Error, ErrorKind};
 /// use uucore::error::strip_errno;
 ///
-/// let err = Error::from_raw_os_error(2);
-/// assert_eq!(strip_errno(&err), "No such file or directory");
+/// #[cfg(unix)]
+/// {
+///     let err = Error::from_raw_os_error(2);
+///     assert_eq!(strip_errno(&err), "No such file or directory");
+/// }
 ///
 /// // Errors without an errno are returned unchanged.
 /// let err = Error::new(ErrorKind::Other, "custom failure");
