@@ -269,3 +269,29 @@ fn test_write_error() {
         .stderr_contains("write error")
         .stderr_contains("No space left on device");
 }
+
+#[test]
+fn test_invalid_utf8_input() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // Equivalent to:
+    //
+    // hrllo
+    // awuyues
+    // apple
+    // iphone
+    // iphone
+    // a
+    // \xff
+    // \xff
+
+    std::fs::write(
+        at.plus("a"),
+        b"hrllo\nawuyues\napple\niphone\niphone\na\n\xff\n\xff\n",
+    )
+    .unwrap();
+
+    ucmd.arg("a")
+        .succeeds()
+        .stdout_only_bytes(b"apple\nhrllo\n\xff\niphone\nawuyues\na\n");
+}
