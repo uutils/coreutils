@@ -6,6 +6,7 @@ doctest
 aho-corasick
 ariadne
 blake2b_simd
+libloading
 rustix
 
 # * uutils project
@@ -203,6 +204,7 @@ execvp
 fdatasync
 freeaddrinfo
 getaddrinfo
+dlopen
 getegid
 geteuid
 getgid
@@ -218,6 +220,7 @@ inode
 inodes
 isatty
 lchown
+libsystemd
 pathlen
 setgid
 setgroups
