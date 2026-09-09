@@ -4365,6 +4365,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "hashbrown 0.17.1",
+ "memchr",
  "rustc-hash",
  "rustix",
  "thiserror 2.0.20",

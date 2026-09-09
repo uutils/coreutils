@@ -8,6 +8,7 @@
 
 mod error;
 mod interner;
+mod parser;
 
 use clap::{Arg, ArgAction, Command};
 use rustc_hash::FxHashMap;
@@ -123,41 +124,16 @@ impl std::error::Error for LoopNode<'_> {}
 impl UError for Error {}
 impl UError for LoopNode<'_> {}
 
-fn for_each_token<R, F>(mut reader: R, mut f: F) -> io::Result<()>
-where
-    R: BufRead,
-    F: FnMut(&[u8]),
-{
-    let mut buf = Vec::new();
-
-    loop {
-        buf.clear();
-
-        if reader.read_until(b'\n', &mut buf)? == 0 {
-            break;
-        }
-
-        for token in buf
-            .split(|b| matches!(b, b' ' | b'\t' | b'\n'))
-            .filter(|token| !token.is_empty())
-        {
-            f(token);
-        }
-    }
-
-    Ok(())
-}
-
 fn process_input<R: BufRead>(reader: R, graph: &mut Graph) -> Result<(), Error> {
     let mut pending: Option<Sym> = None;
 
     // Input is considered to be in the format
     // From1 To1 From2 To2 ...
-    // with tokens separated by whitespaces.
+    // with tokens separated by whitespaces (<SPACE>, \t, or \n).
     //
     // Tokens are kept as raw bytes so invalid UTF-8 can be preserved.
 
-    let result = for_each_token(reader, |token| {
+    let result = parser::for_each_token(reader, |token| {
         let token_sym = graph.interner.get_or_intern(token);
 
         if let Some(from) = pending.take() {
@@ -177,7 +153,7 @@ fn process_input<R: BufRead>(reader: R, graph: &mut Graph) -> Result<(), Error> 
     if pending.is_some() {
         return Err(ReadError::NumTokensOdd(graph.name()).into());
     }
-
+    graph.interner.finish_interning();
     Ok(())
 }
 
