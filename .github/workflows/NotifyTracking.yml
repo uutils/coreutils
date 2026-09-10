@@ -25,11 +25,17 @@ jobs:
     name: Trigger the tracking refresh
     ## Nothing is checked out and no result is read here, so the untrusted
     ## content a 'workflow_run' trigger can carry is never executed.
+    ##
+    ## A failed run still counts.  'GnuTests' uploads its results and only then
+    ## fails the comparison when it finds a new failure, and 'publish-reference'
+    ## publishes regardless; requiring success here would leave the graphs
+    ## un-refreshed for exactly the regressions they exist to show.
     if: >
       github.repository == 'uutils/coreutils'
       && github.event.workflow_run.event == 'push'
       && github.event.workflow_run.head_branch == github.event.repository.default_branch
-      && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.conclusion != 'cancelled'
+      && github.event.workflow_run.conclusion != 'skipped'
     runs-on: ubuntu-latest
     ## The 'secrets' context is not available in a step's 'if:', so fold the
     ## check into a job-level env var, which is.
