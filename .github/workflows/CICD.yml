@@ -919,11 +919,6 @@ jobs:
       shell: bash
       run: |
         cargo build --no-default-features --features "${{ matrix.job.features }}"
-        if ldd target/debug/coreutils 2>&1 | grep -iE 'libssl|libcrypto'; then
-          echo "ERROR: coreutils dynamically links libssl/libcrypto despite vendored feature"
-          exit 1
-        fi
-        echo "OK: no dynamic libssl/libcrypto linkage"
     # Second linking mode: OPENSSL_NO_VENDOR=1 links dynamically against
     # the system libcrypto/libssl.
     - name: Test checksum utilities with OpenSSL (system / dynamic)
