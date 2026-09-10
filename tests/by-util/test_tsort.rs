@@ -91,11 +91,41 @@ fn test_error_on_dir() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+fn test_read_error() {
+    use uucore::error::strip_errno;
+
+    // Reading from offset zero of /proc/self/mem fails with EIO.
+    let expected = format!(
+        "tsort: /proc/self/mem: read error: {}\n",
+        strip_errno(&std::io::Error::from_raw_os_error(libc::EIO))
+    );
+    new_ucmd!()
+        .arg("/proc/self/mem")
+        .fails_with_code(1)
+        .stderr_only(expected);
+}
+
+#[test]
 fn test_split_on_any_whitespace() {
     new_ucmd!()
         .pipe_in("a\nb\n")
         .succeeds()
         .stdout_only("a\nb\n");
+}
+
+#[test]
+fn test_tokens_spanning_buffers() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let first = "a".repeat(64 * 1024 + 1);
+    let second = "b".repeat(64 * 1024 + 1);
+    // Exercise both a delimiter-terminated token and an EOF-terminated token.
+    at.write("input", &format!("start {first}\n{first} {second}"));
+
+    ucmd.arg("input")
+        .succeeds()
+        .stdout_only(format!("start\n{first}\n{second}\n"));
 }
 
 #[test]
