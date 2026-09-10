@@ -5,7 +5,7 @@ name: NotifyTracking
 
 ## Tell uutils/coreutils-tracking to refresh as soon as a workflow that
 ## produces one of its inputs has finished on the default branch, so its graphs
-## follow the data instead of a twice-a-day cron.
+## follow the data rather than wait for its scheduled refresh.
 ##
 ## 'GnuTests' publishes 'test-summary' and 'aggregated-result'; 'make' publishes
 ## 'busybox-result.json', 'toybox-result.json', 'size-result' and

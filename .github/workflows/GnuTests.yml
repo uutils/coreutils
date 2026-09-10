@@ -381,8 +381,29 @@ jobs:
         ## branch is force-pushed by 'publish-reference', so reading each file
         ## by branch name could straddle a publish and pair one file with
         ## another reference's, comparing against a baseline that never existed.
-        REFERENCE_SHA=$(gh api "repos/${{ github.repository }}/git/refs/heads/${REFERENCE_BRANCH}" \
-                          --jq '.object.sha' 2>/dev/null || true)
+        ## Only a 404 means "no reference yet"; any other failure must not be
+        ## mistaken for one, or a transient API error would silently skip both
+        ## comparisons and let a regression through unnoticed.
+        REFERENCE_SHA=''
+        ref_err="${RUNNER_TEMP:-/tmp}/reference-ref.err"
+        for attempt in 1 2 3; do
+          if REFERENCE_SHA=$(gh api "repos/${{ github.repository }}/git/refs/heads/${REFERENCE_BRANCH}" \
+                               --jq '.object.sha' 2>"${ref_err}"); then
+            break
+          fi
+          REFERENCE_SHA=''
+          if grep -q 'HTTP 404' "${ref_err}"; then
+            ## The branch does not exist until the first run on the default
+            ## branch has published to it.
+            break
+          fi
+          if [[ "${attempt}" -eq 3 ]]; then
+            cat "${ref_err}" >&2
+            echo "::error ::Could not resolve the '${REFERENCE_BRANCH}' branch; refusing to report an API failure as a missing baseline."
+            exit 1
+          fi
+          sleep $(( attempt * 5 ))
+        done
         fetch() {
           gh api "repos/${{ github.repository }}/contents/${1}?ref=${REFERENCE_SHA}" \
              -H 'Accept: application/vnd.github.raw' > "${2}" 2>/dev/null \
@@ -622,8 +643,27 @@ jobs:
           echo "::warning ::This run produced no results to publish; leaving the '${REFERENCE_BRANCH}' branch untouched."
           exit 0
         fi
-        published_run=$(gh api "repos/${{ github.repository }}/contents/meta.json?ref=${REFERENCE_BRANCH}" \
-                          -H 'Accept: application/vnd.github.raw' 2>/dev/null | jq -r '.run_id // 0' || echo 0)
+        ## Fail closed: only a 404 means nothing has been published yet.  A
+        ## suppressed error read as run id 0 would let this run force-push over
+        ## a reference a newer run had already placed.
+        published_run=0
+        meta_err="${RUNNER_TEMP:-/tmp}/published-meta.err"
+        for attempt in 1 2 3; do
+          if published_meta=$(gh api "repos/${{ github.repository }}/contents/meta.json?ref=${REFERENCE_BRANCH}" \
+                                -H 'Accept: application/vnd.github.raw' 2>"${meta_err}"); then
+            published_run=$(jq -r '.run_id // 0' <<< "${published_meta}" 2>/dev/null || echo 0)
+            break
+          fi
+          if grep -q 'HTTP 404' "${meta_err}"; then
+            break
+          fi
+          if [[ "${attempt}" -eq 3 ]]; then
+            cat "${meta_err}" >&2
+            echo "::error ::Could not read the published reference; refusing to force-push over a possibly newer one."
+            exit 1
+          fi
+          sleep $(( attempt * 5 ))
+        done
         if [[ "${published_run}" =~ ^[0-9]+$ ]] && (( published_run > GITHUB_RUN_ID )); then
           echo "::notice ::Run ${published_run} already published a newer reference; nothing to do."
           exit 0
