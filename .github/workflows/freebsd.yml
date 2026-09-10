@@ -41,9 +41,10 @@ jobs:
         sync: rsync
         copyback: false
         # We need jq and GNU coreutils to run show-utils.sh and bash to use inline shell string replacement
-        prepare: pkg install -y curl sudo jq coreutils bash python3
+        prepare: pkg install -y curl sudo jaq coreutils bash python3
         run: |
           ## Prepare, build, and test
+          sudo ln -s $(command -v jaq) /usr/local/bin/jq
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
           # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
           set -e
@@ -133,9 +134,10 @@ jobs:
         usesh: true
         sync: rsync
         copyback: false
-        prepare: pkg install -y curl gmake sudo jq
+        prepare: pkg install -y curl gmake sudo jaq
         run: |
           ## Prepare, build, and test
+          sudo ln -s $(command -v jaq) /usr/local/bin/jq
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
           # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
           set -e
