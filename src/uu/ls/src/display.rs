@@ -51,7 +51,7 @@ use uucore::{
 
 use crate::colors::{StyleManager, color_name};
 use crate::config::Files;
-use crate::dired::{self, DiredOutput};
+use crate::dired::{self, DiredOutput, NameSpan};
 use crate::{Config, ListState, LsError, PathData, get_block_size};
 use lscolors::Indicator;
 
@@ -89,7 +89,8 @@ pub(crate) struct PaddingCollection {
 
 pub(crate) struct DisplayItemName {
     pub(crate) displayed: OsString,
-    pub(crate) dired_name_len: usize,
+    /// Where the name sits inside `displayed`, for `--dired`.
+    pub(crate) dired_name: NameSpan,
 
     /// Keep track of whether the quoted name started with a quote, so when
     /// needed, we don't have to look at the `displayed` field and skip
@@ -97,7 +98,7 @@ pub(crate) struct DisplayItemName {
     pub(crate) starts_with_quote: bool,
 }
 
-/// Same as above, but without the `dired_name_len` field.
+/// Same as above, but without the `dired_name` field.
 pub(crate) struct DisplayWithQuote {
     pub(crate) displayed: OsString,
     pub(crate) starts_with_quote: bool,
@@ -107,7 +108,7 @@ impl From<DisplayItemName> for DisplayWithQuote {
     fn from(
         DisplayItemName {
             displayed,
-            dired_name_len: _,
+            dired_name: _,
             starts_with_quote,
         }: DisplayItemName,
     ) -> Self {
@@ -763,9 +764,16 @@ fn display_item_name(
         name = create_hyperlink(&name, path);
     }
 
+    // `--dired` reports the name only, so measure it before coloring.
+    let mut dired_name = NameSpan {
+        offset: 0,
+        len: if config.dired { name.len() } else { 0 },
+    };
+
     if let Some(style_manager) = style_manager.as_mut() {
         let len = name.len();
         name = color_name(name, path, style_manager, None, is_wrap(len));
+        dired_name.offset = style_manager.last_style_prefix_len();
     }
 
     if config.format != Format::Long
@@ -783,8 +791,6 @@ fn display_item_name(
     if !is_long_symlink && let Some(c) = indicator_char(path, config.indicator_style) {
         let _ = name.write_char(c);
     }
-
-    let dired_name_len = if config.dired { name.len() } else { 0 };
 
     if is_long_symlink {
         let has_mi_or_or = style_manager.as_ref().is_some_and(|sm| {
@@ -912,7 +918,7 @@ fn display_item_name(
 
     DisplayItemName {
         displayed: name,
-        dired_name_len,
+        dired_name,
         starts_with_quote,
     }
 }
@@ -1060,17 +1066,10 @@ fn display_item_long(
         let needs_space = quoted && !item_display.starts_with_quote;
 
         if config.dired {
-            let mut dired_name_len = item_display.dired_name_len;
-            if needs_space {
-                dired_name_len += 1;
-            }
+            // The alignment space is not part of the name, it only shifts it.
+            let dired_name = item_display.dired_name.shifted(usize::from(needs_space));
             let displayed_len = item_display.displayed.len() + usize::from(needs_space);
-            update_dired_for_item(
-                dired,
-                state.display_buf.len(),
-                displayed_len,
-                dired_name_len,
-            );
+            update_dired_for_item(dired, state.display_buf.len(), displayed_len, dired_name);
         }
 
         let item_name = item_display.displayed;
@@ -1180,7 +1179,7 @@ fn display_item_long(
                 dired,
                 state.display_buf.len(),
                 displayed_item.displayed.len(),
-                displayed_item.dired_name_len,
+                displayed_item.dired_name,
             );
         }
         let displayed_item = displayed_item.displayed;
@@ -1295,10 +1294,15 @@ fn update_dired_for_item(
     dired: &mut DiredOutput,
     output_display_len: usize,
     displayed_len: usize,
-    dired_name_len: usize,
+    name: NameSpan,
 ) {
     let line_len = output_display_len + displayed_len + 1; // +1 for line ending
-    dired::calculate_and_update_positions(dired, output_display_len, dired_name_len, line_len);
+    dired::calculate_and_update_positions(
+        dired,
+        output_display_len + name.offset,
+        name.len,
+        line_len,
+    );
 }
 
 #[cfg(unix)]

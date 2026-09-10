@@ -48,6 +48,9 @@ pub(crate) struct StyleManager<'a> {
     indicator_codes: FxHashMap<Indicator, String>,
     /// whether ln=target is active
     ln_color_from_target: bool,
+    /// Length of the escape sequence the last `apply_*` call prepended to the
+    /// name. Used by `--dired` to skip it.
+    last_style_prefix_len: usize,
 }
 
 impl<'a> StyleManager<'a> {
@@ -59,6 +62,7 @@ impl<'a> StyleManager<'a> {
             colors,
             indicator_codes,
             ln_color_from_target,
+            last_style_prefix_len: 0,
         }
     }
 
@@ -110,6 +114,7 @@ impl<'a> StyleManager<'a> {
         // till the end of line
         let clear_to_eol = if wrap { ANSI_CLEAR_EOL } else { "" };
 
+        self.last_style_prefix_len = style_code.len();
         let mut ret: OsString = style_code.into();
         ret.push(name);
         ret.push(self.reset(force_suffix_reset));
@@ -228,6 +233,11 @@ impl<'a> StyleManager<'a> {
         String::new()
     }
 
+    /// See [`StyleManager::last_style_prefix_len`].
+    pub(crate) fn last_style_prefix_len(&self) -> usize {
+        self.last_style_prefix_len
+    }
+
     pub(crate) fn apply_style_based_on_metadata(
         &mut self,
         path: &PathData,
@@ -262,7 +272,9 @@ impl<'a> StyleManager<'a> {
                 return self.apply_empty_style(name, wrap);
             }
 
-            let mut ret: OsString = self.build_raw_style_code(&raw).into();
+            let style_code = self.build_raw_style_code(&raw);
+            self.last_style_prefix_len = style_code.len();
+            let mut ret: OsString = style_code.into();
             ret.push(name);
             ret.push(self.reset(true));
             if wrap {
@@ -301,6 +313,7 @@ impl<'a> StyleManager<'a> {
         style_code.push_str(self.reset(!self.initial_reset_is_done));
         style_code.push_str(EMPTY_STYLE);
 
+        self.last_style_prefix_len = style_code.len();
         let mut ret: OsString = style_code.into();
         ret.push(name);
         ret.push(self.reset(true));
@@ -817,6 +830,7 @@ mod tests {
             colors,
             indicator_codes,
             ln_color_from_target: false,
+            last_style_prefix_len: 0,
         }
     }
 

@@ -45,6 +45,26 @@ pub struct BytePosition {
     pub end: usize,
 }
 
+/// Where the file name sits inside the item that displays it. `--dired`
+/// reports the name alone: no color escapes, no `-F` indicator.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct NameSpan {
+    /// Offset of the name, i.e. the color escape sequence preceding it, if any.
+    pub offset: usize,
+    /// Length of the quoted name.
+    pub len: usize,
+}
+
+impl NameSpan {
+    /// Moves the name `n` bytes to the right, e.g. past a padding space.
+    pub fn shifted(self, n: usize) -> Self {
+        Self {
+            offset: self.offset + n,
+            len: self.len,
+        }
+    }
+}
+
 /// Represents the output structure for DIRED, containing positions for both DIRED and SUBDIRED.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct DiredOutput {
