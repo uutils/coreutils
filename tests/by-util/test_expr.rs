@@ -2215,3 +2215,17 @@ expr: non-integer argument
             .stderr_is("expr: syntax error: unexpected argument 'spare'\n");
     }
 }
+
+#[test]
+fn test_exit_with_3_write_error() {
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+
+    new_ucmd!()
+        .arg("2 + 2")
+        .set_stdout(dev_full)
+        .fails_with_code(3)
+        .stderr_is("expr: No space left on device\n");
+}
