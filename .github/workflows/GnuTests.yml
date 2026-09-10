@@ -377,20 +377,27 @@ jobs:
         ## A missing reference is not fatal: the branch does not exist until the
         ## first run on the default branch has published to it.
         mkdir -p reference/aggregated-result reference/test-summary
+        ## Resolve the branch tip once and read every file at that commit.  The
+        ## branch is force-pushed by 'publish-reference', so reading each file
+        ## by branch name could straddle a publish and pair one file with
+        ## another reference's, comparing against a baseline that never existed.
+        REFERENCE_SHA=$(gh api "repos/${{ github.repository }}/git/refs/heads/${REFERENCE_BRANCH}" \
+                          --jq '.object.sha' 2>/dev/null || true)
         fetch() {
-          gh api "repos/${{ github.repository }}/contents/${1}?ref=${REFERENCE_BRANCH}" \
+          gh api "repos/${{ github.repository }}/contents/${1}?ref=${REFERENCE_SHA}" \
              -H 'Accept: application/vnd.github.raw' > "${2}" 2>/dev/null \
             && [[ -s "${2}" ]]
         }
-        if fetch aggregated-result.json reference/aggregated-result/aggregated-result.json \
+        if [[ -n "${REFERENCE_SHA}" ]] \
+           && fetch aggregated-result.json reference/aggregated-result/aggregated-result.json \
            && fetch gnu-result.json reference/test-summary/gnu-result.json; then
           ## 'meta.json' says which commit the reference was built from; it is
           ## informational, so tolerate it being absent or unparsable.
-          meta=$(gh api "repos/${{ github.repository }}/contents/meta.json?ref=${REFERENCE_BRANCH}" \
+          meta=$(gh api "repos/${{ github.repository }}/contents/meta.json?ref=${REFERENCE_SHA}" \
                    -H 'Accept: application/vnd.github.raw' 2>/dev/null || true)
           published_sha=$(jq -r '.sha // empty' <<< "${meta}" 2>/dev/null || true)
           published_at=$(jq -r '.published_at // empty' <<< "${meta}" 2>/dev/null || true)
-          echo "Reference: ${{ env.DEFAULT_BRANCH }}@${published_sha:-<unknown>} (published ${published_at:-<unknown>})"
+          echo "Reference: ${{ env.DEFAULT_BRANCH }}@${published_sha:-<unknown>} (published ${published_at:-<unknown>}, ${REFERENCE_BRANCH}@${REFERENCE_SHA})"
           published_epoch=''
           if [[ -n "${published_at}" ]]; then
             published_epoch=$(date -u -d "${published_at}" +%s 2>/dev/null || true)
