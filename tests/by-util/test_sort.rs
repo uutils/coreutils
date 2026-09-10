@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) ints (linux) NOFILE dfgi abmon avril
+// spell-checker:ignore (words) ints (linux) NOFILE dfgi abmon avril abricot figue échalote zeste nfigue nzeste néchalote
 #![allow(clippy::cast_possible_wrap)]
 
 use std::env;
@@ -350,6 +350,13 @@ fn test_numeric_sort_uses_the_key_not_the_whole_line() {
     // ordering, so it has to go the long way.
     new_ucmd!()
         .args(&["-n", "-k1r"])
+        .pipe_in("19\n21\n3\n")
+        .succeeds()
+        .stdout_is("3\n21\n19\n");
+    // With the global `-r` agreeing, the key still keeps its own ordering:
+    // the `r` on it switches `-n` off for that key, so this is lexicographic.
+    new_ucmd!()
+        .args(&["-n", "-k1r", "-r"])
         .pipe_in("19\n21\n3\n")
         .succeeds()
         .stdout_is("3\n21\n19\n");
@@ -2079,6 +2086,29 @@ fn test_args_check_conflict() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn test_merge_reports_failed_write_of_buffered_output() {
+    // Output smaller than the write buffer is only written when merging
+    // finishes, so the failure must still be reported and not swallowed.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("small.txt", "kiwi\nlime\n");
+    ucmd.args(&["-m", "small.txt"])
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("sort: write failed: 'standard output': No space left on device\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_merge_names_output_file_on_failed_write() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("small.txt", "kiwi\nlime\n");
+    ucmd.args(&["-m", "-o", "/dev/full", "small.txt"])
+        .fails()
+        .stderr_is("sort: write failed: /dev/full: No space left on device\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn test_failed_write_is_reported() {
     new_ucmd!()
         .pipe_in("hello")
@@ -3686,3 +3716,224 @@ sort: invalid suffix in --buffer-size argument '8zz'
 }
 
 /* spell-checker: enable */
+
+#[test]
+fn test_stdout_larger_than_the_output_buffer() {
+    // The sorted result is written to stdout through a buffer; make sure nothing
+    // is lost or reordered when the output is several times that buffer's size.
+    let line_count = 60_000;
+    let mut input = String::new();
+    // Feed the keys in descending order so every line has to move.
+    for key in (0..line_count).rev() {
+        writeln!(input, "{key:07}:filler-padding-to-widen-the-line").unwrap();
+    }
+    let mut expected = String::new();
+    for key in 0..line_count {
+        writeln!(expected, "{key:07}:filler-padding-to-widen-the-line").unwrap();
+    }
+    assert!(expected.len() > 512 * 1024);
+
+    new_ucmd!().pipe_in(input).succeeds().stdout_is(expected);
+}
+
+#[test]
+fn test_single_line_without_any_line_ending() {
+    // A line far longer than the output buffer that contains no line ending at
+    // all: sort still has to emit it in full, terminated.
+    let line = "q".repeat(400_000);
+    new_ucmd!()
+        .pipe_in(line.clone())
+        .succeeds()
+        .stdout_is(format!("{line}\n"));
+}
+
+#[test]
+fn test_whole_line_ordering_matches_across_sort_flavors() {
+    // Plain whole-line sorting takes a dedicated comparison path; the flag
+    // combinations below each pick a different sort, so check they agree.
+    let input = "pear\nfig\npear\nquince\nfig\napricot\n";
+
+    new_ucmd!()
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("apricot\nfig\nfig\npear\npear\nquince\n");
+    new_ucmd!()
+        .arg("-r")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("quince\npear\npear\nfig\nfig\napricot\n");
+    new_ucmd!()
+        .arg("-u")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("apricot\nfig\npear\nquince\n");
+    new_ucmd!()
+        .args(&["-u", "-r"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("quince\npear\nfig\napricot\n");
+    new_ucmd!()
+        .arg("-s")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("apricot\nfig\nfig\npear\npear\nquince\n");
+    // `r` on the key rather than global
+    new_ucmd!()
+        .arg("-k1r")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("quince\npear\npear\nfig\nfig\napricot\n");
+    new_ucmd!()
+        .args(&["-k1r", "-u"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("quince\npear\nfig\napricot\n");
+    // A key `r` that agrees with the global one reverses once, not twice.
+    new_ucmd!()
+        .args(&["-k1r", "-r"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("quince\npear\npear\nfig\nfig\napricot\n");
+    new_ucmd!()
+        .args(&["-r", "-k1"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("quince\npear\npear\nfig\nfig\napricot\n");
+}
+
+#[test]
+fn test_whole_line_ordering_with_long_shared_prefix() {
+    // Lines share a long prefix and differ before, inside and past the eight
+    // bytes that follow it; one is the bare prefix and one holds a NUL.
+    let prefix = "/var/lib/backups/nightly/host-";
+    let input = format!(
+        "{prefix}beta/2026-08-31.tar\n{prefix}alpha/2026-09-01.tar\n\
+         {prefix}alpha/2026-09-01.tar.gz\n{prefix}alpha\0/x\n{prefix}\n\
+         {prefix}alpha/2026-08-30.tar\n{prefix}alpha\n{prefix}alpha/2026-09-01.tar\n"
+    );
+    let expected = format!(
+        "{prefix}\n{prefix}alpha\n{prefix}alpha\0/x\n{prefix}alpha/2026-08-30.tar\n\
+         {prefix}alpha/2026-09-01.tar\n{prefix}alpha/2026-09-01.tar\n\
+         {prefix}alpha/2026-09-01.tar.gz\n{prefix}beta/2026-08-31.tar\n"
+    );
+    let unique_reversed = format!(
+        "{prefix}beta/2026-08-31.tar\n{prefix}alpha/2026-09-01.tar.gz\n\
+         {prefix}alpha/2026-09-01.tar\n{prefix}alpha/2026-08-30.tar\n\
+         {prefix}alpha\0/x\n{prefix}alpha\n{prefix}\n"
+    );
+    for parallel in ["--parallel=1", "--parallel=4"] {
+        for (args, expected) in [
+            (vec![parallel], &expected),
+            (vec![parallel, "-s"], &expected),
+            (vec![parallel, "-u", "-r"], &unique_reversed),
+        ] {
+            new_ucmd!()
+                .args(&args)
+                .pipe_in(input.as_bytes())
+                .succeeds()
+                .stdout_is_bytes(expected.as_bytes());
+        }
+    }
+}
+
+#[test]
+fn test_merge_and_check_collate_by_locale() {
+    // -m and -c collate on demand rather than through precomputed keys, so
+    // make sure they still order by the locale and not by bytes.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("left.txt", "abricot\nfigue\n");
+    at.write("right.txt", "échalote\nzeste\n");
+    ucmd.env("LC_ALL", "en_US.UTF-8")
+        .args(&["-m", "left.txt", "right.txt"])
+        .succeeds()
+        .stdout_only("abricot\néchalote\nfigue\nzeste\n");
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-c")
+        .pipe_in("abricot\néchalote\nfigue\n")
+        .succeeds()
+        .no_output();
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-c")
+        .pipe_in("abricot\nfigue\néchalote\n")
+        .fails_with_code(1)
+        .stderr_only("sort: -:3: disorder: échalote\n");
+}
+
+#[test]
+fn test_locale_collation_agrees_between_sort_merge_and_check() {
+    // "café" spelled with a single é code point and with e + combining acute
+    // collates equal but differs in bytes. Every mode has to break that tie
+    // the same way: sorting, merging (which collates on demand), checking,
+    // and a sort that spills to temporary files.
+    let composed = "caf\u{e9}\n";
+    let combining = "cafe\u{301}\n";
+    let input = format!("{composed}{combining}");
+    let scene = TestScenario::new("sort");
+    let at = &scene.fixtures;
+    at.write("in.txt", &input);
+    let sorted = scene
+        .ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("in.txt")
+        .succeeds()
+        .stdout_move_str();
+    scene
+        .ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-c")
+        .pipe_in(sorted.clone())
+        .succeeds()
+        .no_output();
+    scene
+        .ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["-m", "in.txt"])
+        .succeeds()
+        .stdout_only(&sorted);
+    scene
+        .ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["-S", "1", "in.txt"])
+        .succeeds()
+        .stdout_only(&sorted);
+    // -u keeps both spellings, as the byte tie-break tells them apart.
+    scene
+        .ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["-u", "in.txt"])
+        .succeeds()
+        .stdout_only(&sorted);
+    scene
+        .ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["-mu", "in.txt"])
+        .succeeds()
+        .stdout_only(&sorted);
+}
+
+#[test]
+fn test_ignore_case_key_reverse_disagreeing_with_global() {
+    // A key `r` that the global options lack has to be honored on the
+    // case-insensitive whole-line path too.
+    let input = "Kiwi\nplum\nDATE\n";
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["-f", "-k1fr"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("plum\nKiwi\nDATE\n");
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["-f", "-r", "-k1f"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("DATE\nKiwi\nplum\n");
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["-f", "-r", "-k1fr"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("plum\nKiwi\nDATE\n");
+}

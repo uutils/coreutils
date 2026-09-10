@@ -27,6 +27,7 @@ use uucore::error::UResult;
 ///
 /// The code we should exit with.
 pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
+    let settings = &settings.collating_on_demand();
     let max_allowed_cmp = if settings.unique {
         // If `unique` is enabled, the previous line must compare _less_ to the next one.
         Ordering::Less
@@ -132,6 +133,7 @@ fn reader(
             &mut iter::empty(),
             settings.line_ending.into(),
             settings,
+            false,
         )?;
         if !should_continue {
             break;

@@ -230,6 +230,7 @@ fn read_write_loop<I: WriteableTmpFile>(
             &mut files,
             separator,
             settings,
+            true,
         )?;
 
         if !should_continue {
@@ -276,6 +277,7 @@ fn read_write_loop<I: WriteableTmpFile>(
                 &mut files,
                 separator,
                 settings,
+                true,
             )?;
             if !should_continue {
                 sender_option = None;

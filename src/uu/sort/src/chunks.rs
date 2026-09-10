@@ -20,7 +20,9 @@ use self_cell::self_cell;
 use uucore::error::{UResult, USimpleError, strip_errno};
 use uucore::translate;
 
-use crate::{GeneralBigDecimalParseResult, GlobalSettings, Line, numeric_str_cmp::NumInfo};
+use crate::{
+    GeneralBigDecimalParseResult, GlobalSettings, Line, numeric_str_cmp::NumInfo, set_prefix_keys,
+};
 
 const ALLOC_CHUNK_SIZE: usize = 64 * 1024;
 const MAX_TOKEN_BUFFER_BYTES: usize = 4 * 1024 * 1024;
@@ -56,6 +58,8 @@ pub struct LineData<'a> {
     pub collation_key_buffer: Vec<u8>,
     /// End offsets into `collation_key_buffer` for each line's sort key.
     pub collation_key_ends: Vec<usize>,
+    /// Prefix shared by all lines, past which a whole-line sort takes its keys.
+    pub shared_prefix_len: usize,
 }
 
 impl LineData<'_> {
@@ -177,6 +181,8 @@ impl RecycledChunk {
 /// * `next_files`: What `file` should be updated to next.
 /// * `separator`: The line separator.
 /// * `settings`: The global settings.
+/// * `want_prefix_keys`: Whether the lines are going to be sorted in memory. Only that
+///   sorter reads the prefix keys; merging and checking never do, so they skip the scan.
 #[allow(clippy::too_many_arguments)]
 pub fn read<T: Read>(
     sender: &SyncSender<Chunk>,
@@ -187,6 +193,7 @@ pub fn read<T: Read>(
     next_files: &mut impl Iterator<Item = UResult<T>>,
     separator: u8,
     settings: &GlobalSettings,
+    want_prefix_keys: bool,
 ) -> UResult<bool> {
     let RecycledChunk {
         lines,
@@ -196,8 +203,8 @@ pub fn read<T: Read>(
         line_num_floats,
         collation_key_buffer,
         collation_key_ends,
-        mut token_buffer,
-        mut line_count_hint,
+        token_buffer,
+        line_count_hint,
         mut buffer,
     } = recycled_chunk;
     if buffer.len() < carry_over.len() {
@@ -223,35 +230,29 @@ pub fn read<T: Read>(
                 // It was only temporarily transmuted to a Vec<Line<'static>> to make recycling possible.
                 std::mem::transmute::<Vec<&'static [u8]>, Vec<&'_ [u8]>>(selections)
             };
-            let mut lines = unsafe {
+            let lines = unsafe {
                 // SAFETY: (same as above) It is safe to transmute to a vector of lines with shorter lifetime,
                 // because it was only temporarily transmuted to a Vec<Line<'static>> to make recycling possible.
                 std::mem::transmute::<Vec<Line<'static>>, Vec<Line<'_>>>(lines)
             };
             let read = &buffer[..read];
-            let mut line_data = LineData {
+            let line_data = LineData {
                 selections,
                 num_infos,
                 parsed_floats,
                 line_num_floats,
                 collation_key_buffer,
                 collation_key_ends,
+                shared_prefix_len: 0,
             };
-            parse_lines(
-                read,
-                &mut lines,
-                &mut line_data,
-                &mut token_buffer,
-                &mut line_count_hint,
-                separator,
-                settings,
-            );
-            Ok(ChunkContents {
+            let mut contents = ChunkContents {
                 lines,
                 line_data,
                 token_buffer,
                 line_count_hint,
-            })
+            };
+            parse_lines(read, &mut contents, separator, settings, want_prefix_keys);
+            Ok(contents)
         });
         sender.send(payload?).unwrap();
     }
@@ -261,14 +262,19 @@ pub fn read<T: Read>(
 /// Split `read` into `Line`s, and add them to `lines`.
 fn parse_lines<'a>(
     read: &'a [u8],
-    lines: &mut Vec<Line<'a>>,
-    line_data: &mut LineData<'a>,
-    token_buffer: &mut Vec<Range<usize>>,
-    line_count_hint: &mut usize,
+    contents: &mut ChunkContents<'a>,
     separator: u8,
     settings: &GlobalSettings,
+    want_prefix_keys: bool,
 ) {
     const SMALL_CHUNK_BYTES: usize = 64 * 1024;
+
+    let ChunkContents {
+        lines,
+        line_data,
+        token_buffer,
+        line_count_hint,
+    } = contents;
 
     let read = read.strip_suffix(&[separator]).unwrap_or(read);
 
@@ -324,6 +330,9 @@ fn parse_lines<'a>(
     let line = &read[start..];
     lines.push(Line::create(line, index, line_data, token_buffer, settings));
     *line_count_hint = exact_line_count.unwrap_or(index + 1);
+    if want_prefix_keys && settings.precomputed.fast_lexicographic {
+        line_data.shared_prefix_len = set_prefix_keys(lines);
+    }
 }
 
 /// Read from `file` into `buffer`.
@@ -441,23 +450,12 @@ pub fn parse_into_chunk<'a>(
     separator: u8,
     settings: &GlobalSettings,
 ) -> ChunkContents<'a> {
-    let mut lines = Vec::new();
-    let mut line_data = LineData::default();
-    let mut token_buffer = Vec::new();
-    let mut line_count_hint = 0;
-    parse_lines(
-        buffer,
-        &mut lines,
-        &mut line_data,
-        &mut token_buffer,
-        &mut line_count_hint,
-        separator,
-        settings,
-    );
-    ChunkContents {
-        lines,
-        line_data,
-        token_buffer,
-        line_count_hint,
-    }
+    let mut contents = ChunkContents {
+        lines: Vec::new(),
+        line_data: LineData::default(),
+        token_buffer: Vec::new(),
+        line_count_hint: 0,
+    };
+    parse_lines(buffer, &mut contents, separator, settings, true);
+    contents
 }
