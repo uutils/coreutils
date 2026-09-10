@@ -31,6 +31,10 @@ jobs:
       && github.event.workflow_run.head_branch == github.event.repository.default_branch
       && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    ## The 'secrets' context is not available in a step's 'if:', so fold the
+    ## check into a job-level env var, which is.
+    env:
+      HAVE_APP_CREDENTIALS: ${{ secrets.TRACKING_APP_ID != '' && secrets.TRACKING_APP_PRIVATE_KEY != '' }}
     steps:
     ## A GITHUB_TOKEN is scoped to the repository it runs in, so writing to a
     ## sibling repository needs a credential of its own even within the same
@@ -40,7 +44,7 @@ jobs:
     ## 'contents: write', which is what the repository_dispatch endpoint needs.
     - name: Mint a token for the tracking repository
       id: app-token
-      if: ${{ secrets.TRACKING_APP_ID != '' && secrets.TRACKING_APP_PRIVATE_KEY != '' }}
+      if: env.HAVE_APP_CREDENTIALS == 'true'
       uses: actions/create-github-app-token@v3
       with:
         app-id: ${{ secrets.TRACKING_APP_ID }}
