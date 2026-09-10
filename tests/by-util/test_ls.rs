@@ -7862,6 +7862,28 @@ fn test_write_error() {
         .stderr_is("ls: write error: No space left on device\n");
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_dired_write_error() {
+    let ts = TestScenario::new(util_name!());
+
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+
+    // Nothing is buffered for a failing operand, so the trailer is the first
+    // thing written: it must report the error rather than panic.
+    ts.ucmd()
+        .args(&["--dired", "nonexistent"])
+        .set_stdout(dev_full)
+        .fails_with_code(2)
+        .stderr_is(concat!(
+            "ls: cannot access 'nonexistent': No such file or directory\n",
+            "ls: write error: No space left on device\n",
+        ));
+}
+
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     use super::*;
