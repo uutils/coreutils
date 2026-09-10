@@ -154,7 +154,6 @@ jobs:
         tag_name: latest-commit
         draft: false
         prerelease: true
-        overwrite_files: true
         files: |
           individual-x86_64-unknown-linux-gnu.tar.zst
       env:
@@ -348,9 +347,8 @@ jobs:
         tag_name: latest-commit
         draft: false
         prerelease: true
-        overwrite_files: true
         files: |
-          x86_64-pc-cygwin.tar.zst
+          individual-x86_64-pc-cygwin.tar.zst
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: "`make install`"
