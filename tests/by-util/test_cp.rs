@@ -1191,8 +1191,7 @@ fn test_cp_arg_force() {
 }
 
 /// TODO: write a better test that differentiates --remove-destination
-/// from --force. Also this test currently doesn't work on
-/// Windows. This test originally checked file timestamps, which
+/// from --force. This test originally checked file timestamps, which
 /// proved to be unreliable per target / CI platform
 #[test]
 fn test_cp_arg_remove_destination() {
