@@ -734,7 +734,6 @@ jobs:
           commit: ${{ github.sha }}
         draft: false
         prerelease: true
-        overwrite_files: true
         files: |
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
           docs.tar.zst
