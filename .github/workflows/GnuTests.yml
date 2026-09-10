@@ -582,6 +582,12 @@ jobs:
       contents: write  # to push to the reference branch
     name: Publish reference GNU test results
     runs-on: ubuntu-24.04
+    ## Only one run may publish at a time.  The step below reads the currently
+    ## published run id and then force-pushes; two overlapping runs could
+    ## interleave those, letting an older one overwrite a newer reference.
+    concurrency:
+      group: publish-gnu-reference
+      cancel-in-progress: false
     steps:
     - name: Download aggregated json results
       continue-on-error: true ## 'aggregate' may have failed before uploading
