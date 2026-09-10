@@ -5903,6 +5903,65 @@ fn test_ls_dired_symlink_name_only() {
     assert_eq!(filenames, vec!["link", "target"]);
 }
 
+/// Extracts the file names delimited by the //DIRED// byte offsets.
+fn dired_names(output: &str) -> Vec<String> {
+    let dired_line = output
+        .lines()
+        .find(|&line| line.starts_with("//DIRED//"))
+        .unwrap();
+    let positions: Vec<usize> = dired_line
+        .split_whitespace()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect();
+    assert_eq!(positions.len() % 2, 0);
+    positions
+        .chunks(2)
+        .map(|chunk| String::from_utf8(output.as_bytes()[chunk[0]..chunk[1]].to_vec()).unwrap())
+        .collect()
+}
+
+#[test]
+fn test_ls_dired_name_boundaries() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("d");
+    at.touch("d/target");
+    at.relative_symlink_file("target", "d/link");
+    at.mkdir("d/sub");
+    at.touch("d/with space");
+
+    let quoted = ["link", "sub", "target", "'with space'"];
+    let literal = ["link", "sub", "target", "with space"];
+    // The quoting style is spelled out in every case: it decides both how the
+    // names are rendered and whether they get padded, so leaving it to the
+    // default would make the expectations depend on stdout being a terminal.
+    let cases: [(&[&str], [&str; 4]); 4] = [
+        // The color escapes wrapped around a name are not part of it,
+        (&["--quoting-style=literal", "--color=always"], literal),
+        // neither is the indicator character appended by -F,
+        (&["--quoting-style=literal", "-F", "--color=never"], literal),
+        (
+            &["--quoting-style=literal", "-F", "--color=always"],
+            literal,
+        ),
+        // nor the space padding unquoted names to align with quoted ones.
+        (&["--quoting-style=shell-escape"], quoted),
+    ];
+
+    for (args, expected) in cases {
+        let result = scene
+            .ucmd()
+            .arg("--dired")
+            .arg("-l")
+            .args(args)
+            .arg("d")
+            .succeeds();
+        assert_eq!(dired_names(result.stdout_str()), expected, "with {args:?}");
+    }
+}
+
 #[test]
 fn test_ls_dired_complex() {
     let scene = TestScenario::new(util_name!());
