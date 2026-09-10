@@ -818,39 +818,47 @@ pub fn is_symlink_loop(path: &Path) -> bool {
 /// # Returns
 ///
 /// * `bool` - Returns `true` if the paths are hard links to the same file, and `false` otherwise.
+#[cfg(unix)]
 pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
-    #[cfg(unix)]
-    {
-        // The target is usually the one that does not exist, so look it up first
-        // and return early instead of also querying the source for nothing.
-        let Ok(target_metadata) = fs::symlink_metadata(target) else {
-            return false;
-        };
-        let Ok(source_metadata) = fs::symlink_metadata(source) else {
-            return false;
-        };
+    // The target is usually the one that does not exist, so look it up first
+    // and return early instead of also querying the source for nothing.
+    let Ok(target_metadata) = fs::symlink_metadata(target) else {
+        return false;
+    };
+    let Ok(source_metadata) = fs::symlink_metadata(source) else {
+        return false;
+    };
 
-        source_metadata.ino() == target_metadata.ino()
-            && source_metadata.dev() == target_metadata.dev()
-    }
+    source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
+}
 
-    #[cfg(windows)]
-    {
-        let Ok(target_metadata) = FileInformation::from_path(target, false) else {
-            return false;
-        };
-        let Ok(source_metadata) = FileInformation::from_path(source, false) else {
-            return false;
-        };
+/// Checks if two paths are hard links to the same file.
+///
+/// # Arguments
+///
+/// * `source` - A reference to a `Path` representing the source path.
+/// * `target` - A reference to a `Path` representing the target path.
+///
+/// # Returns
+///
+/// * `bool` - Returns `true` if the paths are hard links to the same file, and `false` otherwise.
+#[cfg(windows)]
+pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
+    // The target is usually the one that does not exist, so look it up first
+    // and return early instead of also querying the source for nothing.
+    let Ok(target_metadata) = FileInformation::from_path(target, false) else {
+        return false;
+    };
+    let Ok(source_metadata) = FileInformation::from_path(source, false) else {
+        return false;
+    };
 
-        target_metadata == source_metadata
-    }
+    target_metadata == source_metadata
+}
 
-    #[cfg(not(any(unix, windows)))]
-    {
-        _ = (source, target);
-        false
-    }
+#[cfg(not(any(unix, windows)))]
+pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
+    false
 }
 
 /// Checks if either two paths are hard links to the same file or if the source path is a symbolic link which when fully resolved points to target path
@@ -863,39 +871,47 @@ pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
 /// # Returns
 ///
 /// * `bool` - Returns `true` if either of above conditions are true, and `false` otherwise.
+#[cfg(unix)]
 pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Path) -> bool {
-    #[cfg(unix)]
-    {
-        // As above, look up the target first: if it does not exist, there is
-        // nothing to compare the source with.
-        let Ok(target_metadata) = fs::symlink_metadata(target) else {
-            return false;
-        };
-        let Ok(source_metadata) = fs::metadata(source) else {
-            return false;
-        };
+    // As above, look up the target first: if it does not exist, there is
+    // nothing to compare the source with.
+    let Ok(target_metadata) = fs::symlink_metadata(target) else {
+        return false;
+    };
+    let Ok(source_metadata) = fs::metadata(source) else {
+        return false;
+    };
 
-        source_metadata.ino() == target_metadata.ino()
-            && source_metadata.dev() == target_metadata.dev()
-    }
+    source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
+}
 
-    #[cfg(windows)]
-    {
-        let Ok(target_metadata) = FileInformation::from_path(target, false) else {
-            return false;
-        };
-        let Ok(source_metadata) = FileInformation::from_path(source, true) else {
-            return false;
-        };
+/// Checks if either two paths are hard links to the same file or if the source path is a symbolic link which when fully resolved points to target path
+///
+/// # Arguments
+///
+/// * `source` - A reference to a `Path` representing the source path.
+/// * `target` - A reference to a `Path` representing the target path.
+///
+/// # Returns
+///
+/// * `bool` - Returns `true` if either of above conditions are true, and `false` otherwise.
+#[cfg(windows)]
+pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Path) -> bool {
+    // As above, look up the target first: if it does not exist, there is
+    // nothing to compare the source with.
+    let Ok(target_metadata) = FileInformation::from_path(target, false) else {
+        return false;
+    };
+    let Ok(source_metadata) = FileInformation::from_path(source, true) else {
+        return false;
+    };
 
-        target_metadata == source_metadata
-    }
+    target_metadata == source_metadata
+}
 
-    #[cfg(not(any(unix, windows)))]
-    {
-        _ = (source, target);
-        false
-    }
+#[cfg(not(any(unix, windows)))]
+pub fn are_hardlinks_or_one_way_symlink_to_same_file(_source: &Path, _target: &Path) -> bool {
+    false
 }
 
 /// Returns true if the passed `path` ends with a path terminator.
