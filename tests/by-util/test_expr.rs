@@ -2217,6 +2217,7 @@ expr: non-integer argument
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn test_exit_with_3_write_error() {
     let dev_full = std::fs::OpenOptions::new()
         .write(true)
