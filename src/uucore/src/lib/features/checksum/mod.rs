@@ -262,12 +262,6 @@ pub struct HashLength {
 impl HashLength {
     #[must_use]
     #[inline]
-    pub(crate) fn from_bytes(n: usize) -> Self {
-        Self { bit_len: n * 8 }
-    }
-
-    #[must_use]
-    #[inline]
     pub fn from_bits(n: usize) -> Self {
         Self { bit_len: n }
     }
