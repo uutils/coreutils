@@ -163,22 +163,13 @@ impl NumInfo {
 }
 
 fn get_unit(unit: Option<u8>) -> u8 {
-    if let Some(unit) = unit {
-        match unit {
-            b'K' | b'k' => 1,
-            b'M' => 2,
-            b'G' => 3,
-            b'T' => 4,
-            b'P' => 5,
-            b'E' => 6,
-            b'Z' => 7,
-            b'Y' => 8,
-            b'R' => 9,
-            b'Q' => 10,
-            _ => 0,
-        }
-    } else {
-        0
+    match unit {
+        Some(b'k') => 1,
+        Some(u) => b"KMGTPEZYRQ"
+            .iter()
+            .position(|&c| c == u)
+            .map_or(0, |pos| (pos + 1) as u8),
+        None => 0,
     }
 }
 
