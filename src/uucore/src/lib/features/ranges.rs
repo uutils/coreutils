@@ -163,7 +163,7 @@ impl Range {
                     RangeErrorKind::ZeroBound,
                 )),
                 // GNU fails when we are at the limit. Match their behavior
-                Ok(n) if n == usize::MAX => Err(at(
+                Ok(usize::MAX) => Err(at(
                     "byte/character offset is too large",
                     RangeErrorKind::TooLarge,
                 )),
