@@ -72,29 +72,14 @@ impl NumInfo {
             }
             first_char = false;
 
-            if matches!(
-                parse_settings.thousands_separator,
-                Some(c) if c == char
-            ) {
+            if parse_settings.thousands_separator == Some(char) {
                 continue;
             }
 
             if Self::is_invalid_char(char, &mut had_decimal_pt, parse_settings) {
                 return if let Some(start) = start {
-                    let has_si_unit = parse_settings.accept_si_units
-                        && matches!(
-                            char,
-                            b'K' | b'k'
-                                | b'M'
-                                | b'G'
-                                | b'T'
-                                | b'P'
-                                | b'E'
-                                | b'Z'
-                                | b'Y'
-                                | b'R'
-                                | b'Q'
-                        );
+                    let has_si_unit =
+                        parse_settings.accept_si_units && b"kKMGTPEZYRQ".contains(&char);
                     (
                         Self { exponent, sign },
                         start..if has_si_unit { idx + 1 } else { idx },

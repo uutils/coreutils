@@ -130,8 +130,8 @@ fn is_unicode_blank(c: char) -> bool {
 fn utf8_len(b: &[u8], b0: u8) -> usize {
     // Two-byte sequences are by far the most common outside ASCII, so they get
     // a single continuation-byte test rather than a loop.
-    if matches!(b0, 0xC2..=0xDF) {
-        return if b.len() >= 2 && is_continuation(b[1]) {
+    if (0xC2..=0xDF).contains(&b0) {
+        return if b.get(1).is_some_and(|&b| is_continuation(b)) {
             2
         } else {
             1
@@ -142,7 +142,9 @@ fn utf8_len(b: &[u8], b0: u8) -> usize {
         0xF0..=0xF4 => 4,
         _ => return 1,
     };
-    if b.len() >= n && b[1..n].iter().copied().all(is_continuation) {
+    if b.get(1..n)
+        .is_some_and(|s| s.iter().copied().all(is_continuation))
+    {
         n
     } else {
         1
