@@ -77,6 +77,8 @@ patches: assistants can reproduce GPL sources verbatim.
   Common ones worth catching in review: `redundant_closure_for_method_calls`,
   `map_unwrap_or`, `needless_for_each`, `items_after_statements`, `unnecessary_wraps`,
   `assigning_clones`, `needless_continue`, `unreadable_literal`.
+- Avoid one-line functions
+- If the code has a lot of platform specific modifications (#cfg), suggest to create a new platform specific file.
 
 ## Tests
 
