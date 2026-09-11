@@ -127,6 +127,12 @@ pub fn uu_app() -> Command {
 
 /// check a path, given as a slice of it's components and an operating mode
 fn check_path(mode: &Mode, path: &[String]) -> bool {
+    // GNU rejects an empty file name in any portability mode before touching the filesystem.
+    if !matches!(mode, Mode::Default) && path.join("/").is_empty() {
+        show_error!("{}", translate!("pathchk-error-empty-file-name"));
+        return false;
+    }
+
     match *mode {
         Mode::Basic => check_basic(path),
         Mode::Extra => check_default(path) && check_extra(path),
@@ -146,10 +152,8 @@ fn check_basic(path: &[String]) -> bool {
             translate!("pathchk-error-posix-path-length-exceeded", "limit" => POSIX_PATH_MAX, "length" => total_len, "path" => joined_path)
         );
         return false;
-    } else if total_len == 0 {
-        show_error!("{}", translate!("pathchk-error-empty-file-name"));
-        return false;
     }
+
     // components: character portability and length
     for p in path {
         let component_len = p.len();
@@ -171,18 +175,11 @@ fn check_basic(path: &[String]) -> bool {
 /// check a path in extra compatibility mode
 fn check_extra(path: &[String]) -> bool {
     // components: leading hyphens
-    for p in path {
-        if p.starts_with('-') {
-            show_error!(
-                "{}",
-                translate!("pathchk-error-leading-hyphen", "component" => p.quote())
-            );
-            return false;
-        }
-    }
-    // path length
-    if path.join("/").is_empty() {
-        show_error!("{}", translate!("pathchk-error-empty-file-name"));
+    if let Some(p) = path.iter().find(|p| p.starts_with('-')) {
+        show_error!(
+            "{}",
+            translate!("pathchk-error-leading-hyphen", "component" => p.quote())
+        );
         return false;
     }
     true
