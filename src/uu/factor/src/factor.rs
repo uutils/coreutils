@@ -85,14 +85,14 @@ fn parse_num(slice: &[u8]) -> UResult<Number> {
     match num.parse::<u64>() {
         Ok(x) => return Ok(Number::U64(x)),
         // If overflown, attempt a greater width
-        Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {}
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => {}
         Err(_) => return Err(err_invalid(num)),
     }
 
     match num.parse::<u128>() {
         Ok(x) => return Ok(Number::U128(x)),
         // If overflown, attempt a greater width
-        Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {}
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => {}
         Err(_) => return Err(err_invalid(num)),
     }
 

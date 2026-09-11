@@ -524,10 +524,7 @@ pub fn exact_fluent_integer(s: &str) -> Option<i64> {
     // Fluent stores numbers as f64, which represents integers exactly only up
     // to 2^53. Anything beyond that has to travel as a string.
     const MAX_EXACT: i64 = 1 << 53;
-    match s.parse::<i64>() {
-        Ok(n) if (-MAX_EXACT..=MAX_EXACT).contains(&n) => Some(n),
-        _ => None,
-    }
+    s.parse::<i64>().ok().filter(|n| n.abs() <= MAX_EXACT)
 }
 
 /// Whether `s` is a plain decimal integer literal, with an optional sign.

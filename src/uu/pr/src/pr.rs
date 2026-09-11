@@ -541,15 +541,13 @@ fn parse_usize(
     matches.get_one::<String>(opt).map(|i| {
         let raw = i.as_str();
         match raw.parse::<usize>() {
-            Ok(n) if n <= MAX_INT_VALUE => Ok(n),
+            Ok(n @ ..=MAX_INT_VALUE) => Ok(n),
             Ok(_) => Err(PrError::EncounteredErrors {
                 msg: value_too_large(too_large_error_message, raw),
             }),
-            Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
-                Err(PrError::EncounteredErrors {
-                    msg: value_too_large(too_large_error_message, raw),
-                })
-            }
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => Err(PrError::EncounteredErrors {
+                msg: value_too_large(too_large_error_message, raw),
+            }),
             Err(_) => {
                 let option = format!("-{opt}");
                 Err(PrError::EncounteredErrors {
@@ -653,7 +651,7 @@ fn build_options(
 
             if matches!(
                 &parse_result,
-                Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow)
+                Err(e) if *e.kind() == IntErrorKind::PosOverflow
             ) {
                 return Err(invalid_too_large(i));
             }
@@ -668,16 +666,14 @@ fn build_options(
             };
 
             let width = match parse_result {
-                Ok(res) if res > MAX_INT_VALUE => return Err(invalid_too_large(i)),
-                Ok(res) => res,
+                Ok(res @ ..=MAX_INT_VALUE) => res,
+                Ok(_) => return Err(invalid_too_large(i)),
                 Err(_) => {
                     let digits = i.get(1..).unwrap_or_default();
                     match digits.parse::<usize>() {
-                        Ok(res) if res > MAX_INT_VALUE => {
-                            return Err(invalid_too_large(digits));
-                        }
-                        Ok(res) => res,
-                        Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
+                        Ok(res @ ..=MAX_INT_VALUE) => res,
+                        Ok(_) => return Err(invalid_too_large(digits)),
+                        Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
                             return Err(invalid_too_large(digits));
                         }
                         Err(_) => NumberingMode::default().width,
@@ -944,16 +940,14 @@ fn build_options(
         .column
         .as_deref()
         .map(|unparsed_num| match unparsed_num.parse::<usize>() {
-            Ok(n) if n > MAX_INT_VALUE => Err(PrError::EncounteredErrors {
+            Ok(n @ ..=MAX_INT_VALUE) => Ok(n),
+            Ok(_) => Err(PrError::EncounteredErrors {
                 msg: value_too_large("invalid number of columns", unparsed_num),
             }),
-            Ok(n) => Ok(n),
-            Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
-                Err(PrError::EncounteredErrors {
-                    msg: value_too_large("invalid number of columns", unparsed_num),
-                })
-            }
-            Err(_e) => Err(PrError::EncounteredErrors {
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => Err(PrError::EncounteredErrors {
+                msg: value_too_large("invalid number of columns", unparsed_num),
+            }),
+            Err(_) => Err(PrError::EncounteredErrors {
                 msg: format!("invalid {} argument {}", "-", unparsed_num.quote()),
             }),
         });
@@ -992,8 +986,8 @@ fn build_options(
         // Parse as i32 to match GNU pr's behavior
         // Store the count. Spaces are streamed at print time to avoid huge allocations.
         Some(raw) => match raw.parse::<i32>() {
-            Ok(n) if n >= 0 => n as usize,
-            Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
+            Ok(n @ 0..) => n as usize,
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
                 return Err(PrError::EncounteredErrors {
                     msg: value_too_large("'-o MARGIN' invalid line offset", raw),
                 });

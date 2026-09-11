@@ -201,7 +201,7 @@ fn write_padded_bytes<W: Write>(
     precision: Precision,
 ) -> io::Result<()> {
     let display_bytes = match precision {
-        Precision::Number(p) if p < bytes.len() => &bytes[..p],
+        Precision::Number(p) => bytes.get(..p).unwrap_or(bytes),
         _ => bytes,
     };
 

@@ -116,7 +116,7 @@ fn parse_endpoint(digits: &str, default: usize, errors: &RangeErrors) -> Result<
         return Ok(default);
     }
     match digits.parse::<usize>() {
-        Ok(n) if n != usize::MAX => Ok(n),
+        Ok(n @ ..usize::MAX) => Ok(n),
         _ => Err(ItemError {
             message: about(errors.too_large, digits),
             kind: RangeErrorKind::TooLarge,
