@@ -211,7 +211,7 @@ impl<'a> ErrorFormatter<'a> {
                 );
                 // Include validation error if present
                 match err.source() {
-                    Some(source) if matches!(err.kind(), ErrorKind::ValueValidation) => {
+                    Some(source) if err.kind() == ErrorKind::ValueValidation => {
                         let _ = writeln!(stderr(), "{error_msg}: {source}");
                     }
                     _ => eprintln!("{error_msg}"),
@@ -219,7 +219,7 @@ impl<'a> ErrorFormatter<'a> {
             }
 
             // Show possible values for InvalidValue errors
-            if matches!(err.kind(), ErrorKind::InvalidValue)
+            if err.kind() == ErrorKind::InvalidValue
                 && let Some(valid_values) = err
                     .get(ContextKind::ValidValue)
                     .filter(|v| !v.to_string().is_empty())
@@ -239,7 +239,7 @@ impl<'a> ErrorFormatter<'a> {
         // But if a utility explicitly requests a high exit code (>= 125), respect it
         // This allows utilities like runcon (125) to override the default while preserving
         // the standard behavior for utilities using normal error codes (1, 2, etc.)
-        if matches!(err.kind(), ErrorKind::InvalidValue) && exit_code < 125 {
+        if err.kind() == ErrorKind::InvalidValue && exit_code < 125 {
             1 // Force exit code 1 for InvalidValue unless using special exit codes
         } else {
             exit_code // Respect the requested exit code for special cases
