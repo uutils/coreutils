@@ -67,13 +67,12 @@ patches: assistants can reproduce GPL sources verbatim.
   `unreachable!` needs a comment justifying why the branch can't happen.
 - Avoid `std::process::exit` in reusable utility logic; return `Result` and use `uucore::error`. Allow process-level entry points and platform/tooling paths that must terminate explicitly.
 - `OsStr`/`Path` for paths, not `String`/`str`.
-- Minimal `unsafe`, FFI only, each with a `// SAFETY:` comment.
+- Keep `unsafe` minimal; prefer FFI, allow rare documented non-FFI exceptions, and require a `// SAFETY:` comment.
 - `thiserror`, not `quick-error`; `rustix` preferred over `nix`.
 - Strip `(os error N)` from messages (`strip_errno`).
 - Descriptive names, no cryptic abbreviations. Avoid single-call wrapper functions
   and gratuitous macros.
-- No `#[allow(...)]` to silence clippy — `#[allow(dead_code)]` in particular; fix or
-  remove the code instead.
+- Do not use `#[allow(...)]` to hide warnings without a documented, narrowly scoped reason; prefer `#[expect(..., reason = "...")]` for justified exceptions.
 - Clippy runs with `all` + `cargo` + `pedantic` + `use_self`; CI fails on any warning.
   Common ones worth catching in review: `redundant_closure_for_method_calls`,
   `map_unwrap_or`, `needless_for_each`, `items_after_statements`, `unnecessary_wraps`,
@@ -92,13 +91,12 @@ patches: assistants can reproduce GPL sources verbatim.
 
 ## Docs, help and i18n
 
-- A new option or behavior updates `--help`, the docs, the generated man page, and at
-  least `src/uu/<util>/locales/en-US.ftl`.
+- New options or user-visible behavior should update the relevant `--help`/docs sources and generated man page as applicable, plus the appropriate `en-US.ftl` (utility, `uucore`, or shared crate).
 - User-facing strings go through `translate!` with a namespaced key, not hardcoded.
 
 ## Performance and size
 
-- Runtime must not regress more than **3%** vs `main`; binary size likewise.
+- Compare runtime changes with representative benchmarks, and apply the repository's established binary-size threshold rather than a blanket 3% limit.
 - Extra memory is acceptable when it buys real speed or correctness.
 - Watch for per-item work added to hot loops: new allocations, an extra pass over the
   data, newly non-inlined cross-crate calls, and — very common — error context
@@ -107,7 +105,7 @@ patches: assistants can reproduce GPL sources verbatim.
 
 ## Scope, dependencies and commits
 
-- Avoid code duplication at all cost. Look in uucore if the feature/function isn't there.
+- Avoid code duplication at all costs. Look in uucore if the feature/function isn't there.
 - Small and self-contained. Unrelated refactors, formatting-only churn, and
   dependency/lockfile bumps belong in their own PR. Pure code moves get their own commit.
 - When a PR mixes several logical changes, ask for a split and point the author at the
