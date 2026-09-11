@@ -65,7 +65,7 @@ patches: assistants can reproduce GPL sources verbatim.
 
 - No `panic!`, `.unwrap()`, `expect()` on fallible paths, or stray `println!`.
   `unreachable!` needs a comment justifying why the branch can't happen.
-- No `std::process::exit` — return `Result` and use `uucore::error`.
+- Avoid `std::process::exit` in reusable utility logic; return `Result` and use `uucore::error`. Allow process-level entry points and platform/tooling paths that must terminate explicitly.
 - `OsStr`/`Path` for paths, not `String`/`str`.
 - Minimal `unsafe`, FFI only, each with a `// SAFETY:` comment.
 - `thiserror`, not `quick-error`; `rustix` preferred over `nix`.
