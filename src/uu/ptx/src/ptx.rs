@@ -214,7 +214,7 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
     {
         // TODO: The regex crate used here is not fully compatible with GNU's regex implementation.
         // For example, it does not support backreferences.
-        // In the future, we might want to switch to the fancy-regex crate for better compatibility.
+        // In the future, we might want to switch to the onig crate (like expr does) for better compatibility.
 
         // Verify regex is valid and doesn't match empty string
         let re = Regex::new(&regex).map_err(|error| {
