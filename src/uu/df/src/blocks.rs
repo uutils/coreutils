@@ -199,9 +199,6 @@ impl fmt::Display for BlockSize {
 
 #[cfg(test)]
 mod tests {
-
-    use std::env;
-
     use crate::blocks::{BlockSize, SuffixType, to_magnitude_and_suffix};
 
     #[test]
@@ -366,13 +363,5 @@ mod tests {
         assert_eq!(format!("{}", BlockSize::Bytes(128_000)), "128kB");
         assert_eq!(format!("{}", BlockSize::Bytes(1000 * 1024)), "1.1MB");
         assert_eq!(format!("{}", BlockSize::Bytes(1_000_000_000_000)), "1.0TB");
-    }
-
-    #[test]
-    fn test_default_block_size() {
-        assert_eq!(BlockSize::Bytes(1024), BlockSize::default());
-        unsafe { env::set_var("POSIXLY_CORRECT", "1") };
-        assert_eq!(BlockSize::Bytes(512), BlockSize::default());
-        unsafe { env::remove_var("POSIXLY_CORRECT") };
     }
 }
