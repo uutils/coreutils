@@ -431,6 +431,7 @@ gcd = "2.3"
 glob = "0.3.1"
 half = "2.4.1"
 hashbrown = '0.17.1'
+hex-literal = "1.0.0"
 hostname = "0.4"
 icu_calendar = { version = "2.0.0", default-features = false }
 icu_collator = { version = "2.0.0", default-features = false }
@@ -465,6 +466,7 @@ phf = "0.14.0"
 phf_codegen = "0.14.0"
 platform-info = "2.0.3"
 pretty_assertions = "1.4.1"
+proc-macro2 = "1.0.81"
 procfs = "0.18"
 rand = { version = "0.10.1", features = ["std_rng"] }
 rand_chacha = { version = "0.10.0" }
@@ -483,7 +485,9 @@ terminal_size = "0.4.0"
 textwrap = { version = "0.16.1", features = ["terminal_size"] }
 thiserror = "2.0.3"
 time = { version = "0.3.36" }
+quote = "1.0.36"
 unicode-width = "0.2.0"
+unindent = "0.2.3"
 unit-prefix = "0.5"
 utmp-classic = "0.1.6"
 uutils_term_grid = "0.8"
@@ -721,7 +725,7 @@ sha1 = { workspace = true }
 tempfile.workspace = true
 time = { workspace = true, features = ["local-offset"] }
 unicode-width.workspace = true
-unindent = "0.2.3"
+unindent.workspace = true
 uutests.workspace = true
 uucore = { workspace = true, features = [
   "mode",
@@ -732,7 +736,7 @@ uucore = { workspace = true, features = [
   "utmpx",
 ] }
 walkdir.workspace = true
-hex-literal = "1.0.0"
+hex-literal.workspace = true
 rstest.workspace = true
 rstest_reuse.workspace = true
 
