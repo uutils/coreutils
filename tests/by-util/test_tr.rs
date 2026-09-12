@@ -1528,6 +1528,7 @@ fn test_backwards_range() {
         );
 }
 
+#[cfg(target_pointer_width = "64")]
 #[test]
 fn test_huge_repeat_count_in_set1() {
     // A repeat count this large used to be expanded character by character,
@@ -1554,6 +1555,7 @@ fn test_huge_repeat_count_in_set1() {
         .stdout_only("bc");
 }
 
+#[cfg(target_pointer_width = "64")]
 #[test]
 fn test_huge_repeat_count_in_set2() {
     new_ucmd!()
@@ -1571,6 +1573,30 @@ fn test_huge_repeat_count_in_set2() {
         .pipe_in("abc")
         .succeeds()
         .stdout_only("axx");
+}
+
+#[cfg(target_pointer_width = "64")]
+#[test]
+fn test_repeat_lengths_beyond_usize() {
+    // Set lengths are kept exact when repeat counts add up past usize::MAX,
+    // so positions past that point still line up the way they should.
+    new_ucmd!()
+        .args(&["-c", "[a*18446744073709551614]bc", "x"])
+        .pipe_in("abcd")
+        .succeeds()
+        .stdout_only("abcx");
+    new_ucmd!()
+        .args(&["[a*18446744073709551615]b", "[x*18446744073709551614][y*]z"])
+        .pipe_in("ab")
+        .succeeds()
+        .stdout_only("yz");
+    new_ucmd!()
+        .args(&[
+            "[a*18446744073709551615]b[:upper:]",
+            "[x*18446744073709551615][:upper:]",
+        ])
+        .fails()
+        .stderr_contains("must be matched by");
 }
 
 #[test]
