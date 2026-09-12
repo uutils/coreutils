@@ -567,6 +567,7 @@ dependencies = [
  "rustix",
  "selinux",
  "sha1",
+ "tap",
  "tempfile",
  "textwrap",
  "time",

@@ -354,7 +354,7 @@ icu_collator = { version = "2.1.0", default-features = false }
 icu_datetime = { version = "2.1.0", default-features = false }
 icu_decimal = { version = "2.1.0", default-features = false }
 icu_locale = { version = "2.1.0", default-features = false }
-icu_provider = { version = "2.1.0", default-features = false }
+icu_provider = { version = "2.1.1", default-features = false }
 indicatif = "0.18.0"
 itertools = "0.15.0"
 itoa = "1.0.15"
@@ -397,6 +397,8 @@ rustc-hash = "2.1.1"
 rustix = { version = "1.1.4", default-features = false }
 self_cell = "1.2.0"
 selinux = "0.6"
+# TODO: remove once bitvec releases the fix from https://github.com/ferrilab/bitvec/pull/301
+tap = "1.0.1"
 tempfile = "3.20.0"
 terminal_size = "0.4.4"
 textwrap = { version = "0.16.1", features = ["terminal_size"] }
@@ -424,7 +426,7 @@ shake = "0.1.0"
 blake2b_simd = "1.0.2"
 blake3 = "1.5.1"
 sm3 = { version = "0.5.0", default-features = false, features = ["alloc"] }
-crc-fast = { version = "1.7.0", default-features = false }
+crc-fast = { version = "1.8.2", default-features = false }
 digest = "0.11.0"
 openssl = { version = "0.10.72" }
 
@@ -640,6 +642,8 @@ regex.workspace = true
 rustc-hash.workspace = true
 sha1 = { workspace = true }
 tempfile.workspace = true
+# TODO: https://github.com/ferrilab/bitvec/pull/301
+tap.workspace = true
 time = { workspace = true, features = ["local-offset"] }
 unicode-width.workspace = true
 unindent.workspace = true

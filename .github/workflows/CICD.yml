@@ -194,7 +194,7 @@ jobs:
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
     - name: Generate minimal lockfile
-      run: RUSTC_BOOTSTRAP=1 cargo update -Z direct-minimal-versions
+      run: RUSTC_BOOTSTRAP=1 cargo update -Z minimal-versions
     - name: Confirm MinSRV compatible '*/Cargo.lock'
       shell: bash
       run: |
