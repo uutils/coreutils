@@ -1529,6 +1529,72 @@ fn test_backwards_range() {
 }
 
 #[test]
+fn test_huge_repeat_count_in_set1() {
+    // A repeat count this large used to be expanded character by character,
+    // which aborted the process before it read any input.
+    new_ucmd!()
+        .args(&["[a*9223372036854775808]", "b"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("bbc");
+    new_ucmd!()
+        .args(&["[a*99999999999999]b", "xy"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("yyc");
+    new_ucmd!()
+        .args(&["-t", "[a*99999999999999]", "x"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("xbc");
+    new_ucmd!()
+        .args(&["-d", "[a*99999999999999]"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("bc");
+}
+
+#[test]
+fn test_huge_repeat_count_in_set2() {
+    new_ucmd!()
+        .args(&["abc", "[x*99999999999999]"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("xxx");
+    new_ucmd!()
+        .args(&["abcd", "[x*99999999999999]yz"])
+        .pipe_in("abcd")
+        .succeeds()
+        .stdout_only("xxxx");
+    new_ucmd!()
+        .args(&["-c", "a", "[x*99999999999999]"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("axx");
+}
+
+#[test]
+fn test_repeat_keeps_every_set2_character_for_squeeze() {
+    // The mappings a->x and a->y both come from the one run of `a`, and the
+    // last one wins, but x is still part of set2 and so still squeezed.
+    new_ucmd!()
+        .args(&["-s", "[a*2]", "xy"])
+        .pipe_in("xxaa")
+        .succeeds()
+        .stdout_only("xy");
+    new_ucmd!()
+        .args(&["-s", "a", "xyz"])
+        .pipe_in("aazz")
+        .succeeds()
+        .stdout_only("xz");
+    new_ucmd!()
+        .args(&["[a*3]bc", "x[y*]z"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("yyz");
+}
+
+#[test]
 fn test_non_digit_repeat() {
     new_ucmd!()
         .args(&["a", "[b*c]"])
