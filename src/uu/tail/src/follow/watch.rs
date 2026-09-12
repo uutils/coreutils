@@ -327,9 +327,9 @@ impl Observer {
                     let pd = self.files.get(event_path);
                     if let Some(old_md) = &pd.metadata {
                         if is_tailable {
-                            // We resume tracking from the start of the file,
-                            // assuming it has been truncated to 0. This mimics GNU's `tail`
-                            // behavior and is the usual truncation operation for log files.
+                            // A file that has lost content is read again from
+                            // offset zero, since shortening a log almost always
+                            // means it was emptied outright. GNU does the same.
                             if !old_md.is_tailable() {
                                 show_error!(
                                     "{}",
@@ -659,14 +659,11 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
         if timeout_counter == settings.max_unchanged_stats {
             /*
             TODO: [2021-10; jhscheer] implement timeout_counter for each file.
-            '--max-unchanged-stats=n'
-            When tailing a file by name, if there have been n (default n=5) consecutive iterations
-            for which the file has not changed, then open/fstat the file to determine if that file
-            name is still associated with the same device/inode-number pair as before. When
-            following a log file that is rotated, this is approximately the number of seconds
-            between when tail prints the last pre-rotation lines and when it prints the lines that
-            have accumulated in the new log file. This option is meaningful only when polling
-            (i.e., without inotify) and when following by name.
+            `--max-unchanged-stats=n` counts per file, not once for the whole run:
+            a name that goes n polls (5 by default) without changing should be
+            re-opened and its device and inode compared against the handle still
+            held for it, which is how the swap behind a rotated log is noticed.
+            Only the polling path needs this, and only when following by name.
             */
         }
     }
