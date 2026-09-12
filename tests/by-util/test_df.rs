@@ -463,8 +463,8 @@ fn test_total() {
     }
 
     // The total row is the sum of the raw byte counts rounded up once, like
-    // GNU df does, while every other row is rounded up on its own. So the sum
-    // of the rows can exceed the total by less than one block per row.
+    // GNU df (9.11) does, while every other row is rounded up on its own. So
+    // the sum of the rows can exceed the total by less than one block per row.
     let rows = (n - 1) as u64;
     for (computed, reported) in [
         (computed_total_size, reported_total_size),
@@ -480,32 +480,27 @@ fn test_total() {
 
 #[test]
 fn test_total_rounds_up_once() {
-    // With a block size larger than any filesystem, every non-empty row rounds
-    // up to a single block, but the total is still one block, not one per row.
+    // With a block size larger than the filesystem, the one row rounds up to a
+    // single block and so does the total: it is rounded once from the summed
+    // bytes, as GNU df (9.11) does, not summed from the rounded-up rows.
     let output = new_ucmd!()
         .args(&[
             "--total",
             "--output=size",
             "--block-size=10000000000000000000",
+            ".",
         ])
         .succeeds()
         .stdout_str_lossy();
-    let total: u64 = output
-        .lines()
-        .last()
-        .unwrap()
-        .split_whitespace()
-        .last()
-        .unwrap()
-        .parse()
-        .unwrap();
-    assert!(total <= 1, "total row reports {total} blocks");
+    let values: Vec<&str> = output.lines().skip(1).map(str::trim).collect();
+    assert_eq!(values, vec!["1", "1"]);
 }
 
 #[test]
 fn test_total_human_readable_with_large_block_size() {
+    // Used to multiply the rounded total back by the block size and overflow.
     new_ucmd!()
-        .args(&["--total", "-h", "--block-size=10000000000000000000"])
+        .args(&["--total", "-h", "--block-size=10000000000000000000", "."])
         .succeeds();
 }
 
