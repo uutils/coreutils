@@ -75,6 +75,8 @@ pub use crate::features::quoting_style;
 pub use crate::features::ranges;
 #[cfg(feature = "ringbuffer")]
 pub use crate::features::ringbuffer;
+#[cfg(all(feature = "stdio", any(unix, target_os = "wasi")))]
+pub use crate::features::stdio;
 #[cfg(feature = "sum")]
 pub use crate::features::sum;
 #[cfg(feature = "feat_systemd_logind")]
