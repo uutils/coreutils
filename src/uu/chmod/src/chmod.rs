@@ -887,9 +887,10 @@ impl Chmoder {
             if self.verbose {
                 Self::print_neither_changed(file.into())?;
             }
-        } else {
-            self.change_file(fperm, self.fmode.unwrap_or(new_mode), file)?;
+            return Ok(());
         }
+
+        self.change_file(fperm, self.fmode.unwrap_or(new_mode), file)?;
 
         // A bare mode such as `-w` is umask-relative, so the umask can keep permissions that
         // the user asked to drop. GNU reports that as an error, but only when the mode was
