@@ -5963,6 +5963,34 @@ fn test_ls_dired_name_boundaries() {
 }
 
 #[test]
+fn test_ls_dired_leading_info_offsets() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("bay");
+    at.touch("bay/quill");
+    at.touch("bay/parchment");
+
+    // -i and -s prepend an inode / block-size column to every long line; those
+    // bytes shift the names and must be reflected in the //DIRED// offsets.
+    for args in [&["-i"][..], &["-s"][..], &["-i", "-s"][..]] {
+        let result = scene
+            .ucmd()
+            .arg("--dired")
+            .arg("-l")
+            .arg("--quoting-style=literal")
+            .args(args)
+            .arg("bay")
+            .succeeds();
+        assert_eq!(
+            dired_names(result.stdout_str()),
+            ["parchment", "quill"],
+            "with {args:?}"
+        );
+    }
+}
+
+#[test]
 fn test_ls_dired_normal_style_offsets() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
