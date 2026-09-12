@@ -199,7 +199,11 @@ jobs:
         unset CARGO_FEATURES_OPTION
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
-    - run: cargo update -Z direct-minimal-versions
+    - name: Generate minimal lockfile
+      run: |
+        cargo update -Z minimal-versions
+        # TODO: https://github.com/ferrilab/bitvec/pull/301
+        cargo update tap --precise 1.0.1
     - name: Confirm MinSRV compatible '*/Cargo.lock'
       shell: bash
       run: |
