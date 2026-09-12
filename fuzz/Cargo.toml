@@ -17,7 +17,7 @@ members = ["."]
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.88.0"
+rust-version = "1.89.0"
 license = "MIT"
 
 # Enable debug symbols in release builds for readable backtraces
