@@ -403,15 +403,6 @@ pub fn display_items(
         let padding_collection = calculate_padding_collection(items, config, state);
 
         for item in items {
-            #[cfg(unix)]
-            let should_display_leading_info = config.inode || config.alloc_size;
-            #[cfg(not(unix))]
-            let should_display_leading_info = config.alloc_size;
-
-            if should_display_leading_info {
-                display_additional_leading_info(item, &padding_collection, config, &mut state.out)?;
-            }
-
             display_item_long(item, &padding_collection, config, state, dired, quoted)?;
         }
     } else {
@@ -969,6 +960,18 @@ fn display_item_long(
     if config.dired {
         state.display_buf.extend(b"  ");
     }
+
+    #[cfg(unix)]
+    let should_display_leading_info = config.inode || config.alloc_size;
+    #[cfg(not(unix))]
+    let should_display_leading_info = config.alloc_size;
+
+    if should_display_leading_info {
+        // Write into the display buffer, not straight to the output, so that the
+        // --dired byte offsets computed from its length include this prefix.
+        display_additional_leading_info(item, padding, config, &mut state.display_buf)?;
+    }
+
     if let Some(md) = item.metadata() {
         #[cfg(any(not(unix), target_vendor = "apple", target_os = "android"))]
         // TODO: See how Mac should work here
