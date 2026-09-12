@@ -497,18 +497,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
             let date = if is_empty_or_whitespace || input == "-" || is_military_j {
                 // Treat empty string, single hyphen, or 'J' as midnight today in local time
-                let date_part =
-                    strtime::format("%F", &now).unwrap_or_else(|_| String::from("1970-01-01"));
-                let offset = if settings.utc {
-                    String::from("+00:00")
-                } else {
-                    strtime::format("%:z", &now).unwrap_or_default()
-                };
-                let composed = if offset.is_empty() {
-                    format!("{date_part} 00:00")
-                } else {
-                    format!("{date_part} 00:00 {offset}")
-                };
+                let composed = midnight_today(&now, settings.utc);
                 if settings.debug {
                     let _ = writeln!(
                         stderr(),
@@ -576,6 +565,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         DateSource::Stdin => parse_dates_from_reader(
             std::io::stdin(),
             &now,
+            settings.utc,
             DebugOptions::new(settings.debug, true),
             allow_extended,
         ),
@@ -590,6 +580,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             parse_dates_from_reader(
                 file,
                 &now,
+                settings.utc,
                 DebugOptions::new(settings.debug, true),
                 allow_extended,
             )
@@ -1144,6 +1135,32 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Optio
     Some(zoned.with_time_zone(now.time_zone().clone()))
 }
 
+/// Whether a date string only asks for midnight today: it is empty, whitespace
+/// (possibly a parenthesized comment), or a lone `-`.
+fn is_midnight_today_input(input: &str) -> bool {
+    let input = strip_parenthesized_comments(input);
+    let input = input.trim();
+    input.is_empty() || input == "-"
+}
+
+/// The date string for midnight today, in the local time zone or in UTC.
+///
+/// GNU parses an empty date string (or a lone `-`) as midnight today; this is
+/// the equivalent input for our parser.
+fn midnight_today(now: &Zoned, utc: bool) -> String {
+    let date_part = strtime::format("%F", now).unwrap_or_else(|_| String::from("1970-01-01"));
+    let offset = if utc {
+        String::from("+00:00")
+    } else {
+        strtime::format("%:z", now).unwrap_or_default()
+    };
+    if offset.is_empty() {
+        format!("{date_part} 00:00")
+    } else {
+        format!("{date_part} 00:00 {offset}")
+    }
+}
+
 /// Helper function to parse dates from a line-based reader (stdin or file)
 ///
 /// Takes any `Read` source, reads it line by line, and parses each line as a date.
@@ -1151,11 +1168,13 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Optio
 fn parse_dates_from_reader<R: Read + 'static>(
     reader: R,
     now: &Zoned,
+    utc: bool,
     dbg_opts: DebugOptions,
     allow_extended: bool,
 ) -> Box<
     dyn Iterator<Item = Result<ParsedDateTime, (String, parse_datetime::ParseDateTimeError)>> + '_,
 > {
+    let midnight = midnight_today(now, utc);
     let lines = BufReader::new(reader).split(b'\n');
     Box::new(lines.map_while(Result::ok).map(move |mut bytes| {
         // Strip a trailing '\r' (CRLF input; GNU's lexer ignores it too)
@@ -1163,6 +1182,22 @@ fn parse_dates_from_reader<R: Read + 'static>(
             bytes.pop();
         }
         match String::from_utf8(bytes) {
+            // GNU compatibility: an empty (or whitespace-only) line and a lone
+            // hyphen are midnight today, just like `-d ''`, not the current time.
+            Ok(s) if is_midnight_today_input(&s) => {
+                if dbg_opts.debug {
+                    let _ = writeln!(
+                        stderr(),
+                        "date: warning: using midnight as starting time: 00:00:00"
+                    );
+                }
+                parse_date(
+                    &midnight,
+                    now,
+                    DebugOptions::new(dbg_opts.debug, false),
+                    allow_extended,
+                )
+            }
             Ok(s) => parse_date(s, now, dbg_opts, allow_extended),
             // Report lines with invalid UTF-8 (with non-printable bytes
             // octal-escaped like GNU) instead of silently stopping the input
