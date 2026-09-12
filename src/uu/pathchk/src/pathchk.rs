@@ -197,10 +197,10 @@ fn check_default(path: &[String]) -> bool {
         return false;
     }
     if total_len == 0 {
-        // Check whether a file name component is in a directory that is not searchable,
-        // or has some other serious problem. POSIX does not allow "" as a file name,
-        // but some non-POSIX hosts do (as an alias for "."),
-        // so allow "" if `symlink_metadata` (corresponds to `lstat`) does.
+        // POSIX has no empty file name, yet some systems accept one as a way
+        // of writing the current directory. Rather than decide that here, ask
+        // the platform: keep the operand when `symlink_metadata` (`lstat`)
+        // resolves it, reject it when that fails.
         if fs::symlink_metadata(&joined_path).is_err() {
             show_error!("{}", translate!("pathchk-error-empty-path-not-found"));
             return false;
