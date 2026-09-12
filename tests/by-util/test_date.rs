@@ -683,6 +683,34 @@ fn test_date_stdin_invalid_utf8_line() {
 }
 
 #[test]
+fn test_date_file_blank_line_is_midnight() {
+    // GNU treats an empty (or whitespace-only) line and a lone `-` the same
+    // way as `-d ''`: midnight today, not the current time.
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .args(&["-f", "-", "+%T"])
+        .pipe_in("\n   \n-\n2023-03-27 08:30:00\n\r\n")
+        .succeeds()
+        .stdout_is("00:00:00\n00:00:00\n00:00:00\n08:30:00\n00:00:00\n");
+}
+
+#[test]
+fn test_date_file_blank_line_is_midnight_in_local_time() {
+    new_ucmd!()
+        .env("TZ", "Asia/Tokyo")
+        .args(&["-f", "-", "+%T %Z"])
+        .pipe_in("\n")
+        .succeeds()
+        .stdout_is("00:00:00 JST\n");
+    new_ucmd!()
+        .env("TZ", "Asia/Tokyo")
+        .args(&["-u", "-f", "-", "+%T %Z"])
+        .pipe_in("\n")
+        .succeeds()
+        .stdout_is("00:00:00 UTC\n");
+}
+
+#[test]
 fn test_date_for_file_mtime() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "reference_file";
