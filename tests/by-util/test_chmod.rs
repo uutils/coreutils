@@ -629,6 +629,31 @@ fn test_chmod_recursive_reference_does_not_follow_inner_symlink() {
 }
 
 #[test]
+fn test_chmod_recursive_symlink_option_like_mode() {
+    // A symlink met inside the tree during `chmod -R` must be left alone.
+    // When using an option-like mode (e.g. `-w`), umask sensitivity checks
+    // must not trigger for symlinks inside the tree.
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir_all("d/sub");
+    at.set_mode("d", 0o755);
+    at.set_mode("d/sub", 0o755);
+    at.touch("d/sub/target");
+    at.set_mode("d/sub/target", 0o644);
+    // Verbatim reproducer from Launchpad #2167122: ln -s target d/sub/link
+    at.relative_symlink_file("target", "d/sub/link");
+
+    ucmd.umask(0o022).arg("-R").arg("-w").arg("d").succeeds();
+
+    assert_eq!(at.metadata("d").permissions().mode() & 0o7777, 0o555);
+    assert_eq!(at.metadata("d/sub").permissions().mode() & 0o7777, 0o555);
+    assert_eq!(
+        at.metadata("d/sub/target").permissions().mode() & 0o7777,
+        0o444
+    );
+}
+
+#[test]
 fn test_chmod_symlink_non_existing_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
