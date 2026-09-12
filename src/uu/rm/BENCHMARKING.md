@@ -41,6 +41,7 @@ hyperfine --prepare "cp -r $test_dir tmp_d"  "rm -rf tmp_d" "target/release/core
 [samply](https://github.com/mstange/samply) is one option for simply creating flamegraphs. It uses the Firefox profiler as a UI.
 
 To install:
+
 ```bash
 cargo install samply
 ```
