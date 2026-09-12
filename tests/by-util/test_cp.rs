@@ -1094,7 +1094,7 @@ fn test_cp_reflink_always_failure_dest_cleanup() {
     wasi_runner,
     ignore = "WASI sandbox: host paths (/dev, /private) not visible"
 )]
-fn test_cp_reflink_always_failure() {
+fn test_cp_reflink_always_invalid_argument() {
     let scene = TestScenario::new(util_name!());
     scene
         .ucmd()
@@ -1102,12 +1102,26 @@ fn test_cp_reflink_always_failure() {
         .fails()
         .no_stdout()
         .stderr_contains("Invalid argument");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev, /private) not visible"
+)]
+fn test_cp_reflink_always_cross_device() {
+    let scene = TestScenario::new(util_name!());
     scene
         .ucmd()
         .args(&["--reflink=always", "/dev/null", "target"])
         .fails()
         .no_stdout()
-        .stderr_contains("ross-device link"); // cover both of glibc and musl
+        .stderr_contains(if cfg!(target_env = "musl") {
+            "'target': Cross-device link"
+        } else {
+            "Invalid cross-device link"
+        });
 }
 
 #[test]
