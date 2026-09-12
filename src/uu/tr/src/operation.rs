@@ -249,6 +249,68 @@ impl Sequence {
         }
     }
 
+    /// How many characters the sequence expands to, without expanding it:
+    /// the count of a `[c*n]` repeat can be far too large to materialize.
+    fn expanded_len(&self) -> usize {
+        match self {
+            Self::Char(_) => 1,
+            Self::CharRange(l, r) => usize::from(*r) - usize::from(*l) + 1,
+            // A star is only sized once it has been turned into a repeat.
+            Self::CharStar(_) => 0,
+            Self::CharRepeat(_, n) => *n,
+            Self::Class(_) => self.flatten().count(),
+        }
+    }
+
+    /// The expanded length of a set. Widened so that repeat counts close to
+    /// `usize::MAX` still add up exactly and positions keep their order.
+    fn expanded_len_of(set: &[Self]) -> u128 {
+        set.iter().map(|s| s.expanded_len() as u128).sum()
+    }
+
+    /// The characters of a set, in order, as runs of a repeated character.
+    ///
+    /// A `[c*n]` repeat is a single run however large `n` is; everything else
+    /// expands to runs of one character. Empty runs are left out, and a star
+    /// must have been turned into a repeat first.
+    fn runs(set: &[Self]) -> impl Iterator<Item = (u8, usize)> + '_ {
+        set.iter()
+            .flat_map(|s| -> Box<dyn Iterator<Item = (u8, usize)>> {
+                match s {
+                    Self::CharRepeat(c, n) => Box::new(std::iter::once((*c, *n))),
+                    Self::CharStar(_) => Box::new(std::iter::empty()),
+                    _ => Box::new(s.flatten().map(|c| (c, 1))),
+                }
+            })
+            .filter(|(_, n)| *n > 0)
+    }
+
+    /// The characters a set of runs is made of, as a sorted list without duplicates.
+    fn unique_chars(runs: &[(u8, usize)]) -> Vec<u8> {
+        let mut uniques: Vec<u8> = runs.iter().map(|(c, _)| *c).collect();
+        uniques.sort_unstable();
+        uniques.dedup();
+        uniques
+    }
+
+    /// The complement of the characters that a set holds, or that its first
+    /// `len` positions hold, one run per character.
+    fn complement_of_prefix(set: &[Self], len: Option<u128>) -> Vec<(u8, usize)> {
+        let mut present = [false; 256];
+        let mut remaining = len;
+        for (c, n) in Self::runs(set) {
+            if remaining == Some(0) {
+                break;
+            }
+            present[usize::from(c)] = true;
+            remaining = remaining.map(|left| left.saturating_sub(n as u128));
+        }
+        (0..=u8::MAX)
+            .filter(|c| !present[usize::from(*c)])
+            .map(|c| (c, 1))
+            .collect()
+    }
+
     // Hide all the nasty sh*t in here
     pub fn solve_set_characters(
         set1_str: &[u8],
@@ -292,22 +354,24 @@ impl Sequence {
             ));
         }
 
-        let mut set1_solved: Vec<u8> = set1.iter().flat_map(Self::flatten).collect();
-        if complement_flag {
-            set1_solved = (0..=u8::MAX).filter(|x| !set1_solved.contains(x)).collect();
-        }
-        let set1_len = set1_solved.len();
+        // Neither set is expanded character by character: a `[c*n]` repeat can
+        // be far too large for that. Both are handled as runs of one character
+        // instead, and only the lengths are ever computed in full.
+        let mut set1_runs: Vec<(u8, usize)> = if complement_flag {
+            Self::complement_of_prefix(&set1, None)
+        } else {
+            Self::runs(&set1).collect()
+        };
+        let set1_len: u128 = set1_runs.iter().map(|(_, n)| *n as u128).sum();
 
-        let set2_len = set2
+        let set2_len: u128 = set2
             .iter()
-            .filter_map(|s| match s {
-                Self::CharStar(_) => None,
-                r => Some(r),
-            })
-            .flat_map(Self::flatten)
-            .count();
+            .filter(|s| !matches!(s, Self::CharStar(_)))
+            .map(|s| s.expanded_len() as u128)
+            .sum();
 
-        let star_compensate_len = set1_len.saturating_sub(set2_len);
+        let star_compensate_len =
+            usize::try_from(set1_len.saturating_sub(set2_len)).unwrap_or(usize::MAX);
         //Replace CharStar with CharRepeat
         set2 = set2
             .iter()
@@ -321,25 +385,15 @@ impl Sequence {
         // For every upper/lower in set2, there must be an upper/lower in set1 at the same position. The position is calculated by expanding everything before the upper/lower in both sets
         for (set2_pos, set2_item) in set2.iter().enumerate() {
             if matches!(set2_item, Self::Class(_)) {
-                let mut set2_part_solved_len = 0;
-                if set2_pos >= 1 {
-                    set2_part_solved_len =
-                        set2.iter().take(set2_pos).flat_map(Self::flatten).count();
-                }
+                let set2_part_solved_len = Self::expanded_len_of(&set2[..set2_pos]);
 
                 let mut class_matches = false;
                 for (set1_pos, set1_item) in set1.iter().enumerate() {
-                    if matches!(set1_item, Self::Class(_)) {
-                        let mut set1_part_solved_len = 0;
-                        if set1_pos >= 1 {
-                            set1_part_solved_len =
-                                set1.iter().take(set1_pos).flat_map(Self::flatten).count();
-                        }
-
-                        if set1_part_solved_len == set2_part_solved_len {
-                            class_matches = true;
-                            break;
-                        }
+                    if matches!(set1_item, Self::Class(_))
+                        && Self::expanded_len_of(&set1[..set1_pos]) == set2_part_solved_len
+                    {
+                        class_matches = true;
+                        break;
                     }
                 }
 
@@ -352,12 +406,11 @@ impl Sequence {
             }
         }
 
-        let set2_solved: Vec<_> = set2.iter().flat_map(Self::flatten).collect();
+        let set2_runs: Vec<(u8, usize)> = Self::runs(&set2).collect();
+        let set2_len: u128 = set2_runs.iter().map(|(_, n)| *n as u128).sum();
 
         // Calculate the set of unique characters in set2
-        let mut set2_uniques = set2_solved.clone();
-        set2_uniques.sort_unstable();
-        set2_uniques.dedup();
+        let set2_uniques = Self::unique_chars(&set2_runs);
 
         let set1_has_class = set1.iter().any(|x| matches!(x, Self::Class(_)));
         // If the complement flag is used in translate mode, only one unique
@@ -367,7 +420,7 @@ impl Sequence {
         if set1_has_class
             && translating
             && complement_flag
-            && (set2_uniques.len() > 1 || set2_solved.len() > set1_len)
+            && (set2_uniques.len() > 1 || set2_len > set1_len)
         {
             return Err(SequenceError::whole_set(
                 BadSequence::ComplementMoreThanOneUniqueInSet2,
@@ -375,32 +428,24 @@ impl Sequence {
             ));
         }
 
-        if set2_solved.len() < set1_solved.len() {
+        if set2_len < set1_len {
             if truncate_set1_flag {
                 if complement_flag && set1_has_class {
                     // GNU applies -t before complementing a character class.
                     // That means we must first truncate the expanded, non-complemented
                     // source set, then complement the truncated prefix to recover the
                     // final translation domain.
-                    let truncated_set1: Vec<_> = set1
-                        .iter()
-                        .flat_map(Self::flatten)
-                        .take(set2_solved.len())
-                        .collect();
-                    set1_solved = (0..=u8::MAX)
-                        .filter(|x| !truncated_set1.contains(x))
-                        .collect();
+                    set1_runs = Self::complement_of_prefix(&set1, Some(set2_len));
                     // After expansion the complemented domain may be larger than set2.
                     // Re-check the complement validity constraint.
-                    if set2_uniques.len() > 1 || set1_solved.len() > set2_solved.len() {
+                    if set2_uniques.len() > 1 || set1_runs.len() as u128 > set2_len {
                         return Err(SequenceError::whole_set(
                             BadSequence::ComplementMoreThanOneUniqueInSet2,
                             2,
                         ));
                     }
-                } else {
-                    set1_solved.truncate(set2_solved.len());
                 }
+                // Otherwise set1 is cut to the length of set2 while pairing below.
             } else if matches!(
                 set2.last().copied(),
                 Some(Self::Class(Class::Upper | Class::Lower))
@@ -411,6 +456,42 @@ impl Sequence {
                 ));
             }
         }
+
+        // Line the two sets up position by position, one run at a time. A run
+        // of one character in set1 maps that character to every character it
+        // lines up with in set2, and the last mapping wins, so the pair at the
+        // end of each run boundary is all that is kept: the pairs in between
+        // repeat it. Once set2 runs out, set1 is either cut (-t) or the rest
+        // of it maps to the last character of set2.
+        let fallback = set2_runs.last().map(|(c, _)| *c);
+        let mut set1_solved = Vec::new();
+        let mut set2_solved = Vec::new();
+        let mut set2_runs = set2_runs.into_iter();
+        let mut pending = set2_runs.next();
+        'pairing: for (c1, mut n1) in set1_runs {
+            while n1 > 0 {
+                let Some((c2, n2)) = pending else {
+                    if truncate_set1_flag {
+                        break 'pairing;
+                    }
+                    set1_solved.push(c1);
+                    set2_solved.extend(fallback);
+                    break;
+                };
+                set1_solved.push(c1);
+                set2_solved.push(c2);
+                let step = n1.min(n2);
+                n1 -= step;
+                pending = if n2 > step {
+                    Some((c2, n2 - step))
+                } else {
+                    set2_runs.next()
+                };
+            }
+        }
+        // What is left of set2 is still part of it: with -s, the characters
+        // to squeeze come from all of set2.
+        set2_solved.extend(pending.into_iter().chain(set2_runs).map(|(c, _)| c));
 
         Ok((set1_solved, set2_solved))
     }
