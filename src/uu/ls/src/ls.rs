@@ -1126,7 +1126,7 @@ impl LsOutput for TextOutput<'_> {
         Ok(())
     }
 
-    fn initialize(&mut self, _config: &Config) -> UResult<()> {
+    fn initialize(&mut self, config: &Config) -> UResult<()> {
         if let Some(style_manager) = self
             .state
             .style_manager
@@ -1135,6 +1135,11 @@ impl LsOutput for TextOutput<'_> {
         {
             let to_write = style_manager.reset(true);
             write!(self.state.out, "{to_write}")?;
+            if config.dired {
+                // This reset is written before any listing, so the --dired
+                // offsets have to start after it.
+                self.dired.line_offset += to_write.len();
+            }
         }
         Ok(())
     }

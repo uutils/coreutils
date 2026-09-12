@@ -5963,6 +5963,31 @@ fn test_ls_dired_name_boundaries() {
 }
 
 #[test]
+fn test_ls_dired_normal_style_offsets() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("d");
+    at.touch("d/note");
+    at.mkdir("d/box");
+
+    // A `no` style makes ls emit a reset before the very first line; those
+    // bytes count towards the //DIRED// offsets like any other output.
+    let result = scene
+        .ucmd()
+        .env("LS_COLORS", "no=35:di=36")
+        .arg("--dired")
+        .arg("-l")
+        .arg("--quoting-style=literal")
+        .arg("--color=always")
+        .arg("d")
+        .succeeds();
+
+    assert!(result.stdout_str().starts_with("\x1b["));
+    assert_eq!(dired_names(result.stdout_str()), ["box", "note"]);
+}
+
+#[test]
 fn test_ls_dired_complex() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
