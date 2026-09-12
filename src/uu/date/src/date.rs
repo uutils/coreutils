@@ -497,14 +497,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
             let date = if is_empty_or_whitespace || input == "-" || is_military_j {
                 // Treat empty string, single hyphen, or 'J' as midnight today in local time
-                let composed = midnight_today(&now, settings.utc);
                 if settings.debug {
                     let _ = writeln!(
                         stderr(),
                         "date: warning: using midnight as starting time: 00:00:00"
                     );
                 }
-                parse(&composed, false)
+                parse(&midnight_today(&now, settings.utc), false)
             } else if let Some((total_hours, day_delta)) = military_tz_with_offset {
                 // Military timezone with optional hour offset
                 // Convert to UTC time: midnight + military_tz_offset + additional_hours
@@ -1146,19 +1145,17 @@ fn is_midnight_today_input(input: &str) -> bool {
 /// The date string for midnight today, in the local time zone or in UTC.
 ///
 /// GNU parses an empty date string (or a lone `-`) as midnight today; this is
-/// the equivalent input for our parser.
+/// the equivalent input for our parser. The start of the day is resolved in
+/// the time zone itself, because on a DST transition day the UTC offset at
+/// midnight is not the offset right now.
 fn midnight_today(now: &Zoned, utc: bool) -> String {
-    let date_part = strtime::format("%F", now).unwrap_or_else(|_| String::from("1970-01-01"));
-    let offset = if utc {
-        String::from("+00:00")
+    let today = if utc {
+        now.with_time_zone(TimeZone::UTC)
     } else {
-        strtime::format("%:z", now).unwrap_or_default()
+        now.clone()
     };
-    if offset.is_empty() {
-        format!("{date_part} 00:00")
-    } else {
-        format!("{date_part} 00:00 {offset}")
-    }
+    let midnight = today.start_of_day().unwrap_or(today);
+    strtime::format("%F %H:%M %:z", &midnight).unwrap_or_else(|_| String::from("1970-01-01 00:00"))
 }
 
 /// Helper function to parse dates from a line-based reader (stdin or file)
