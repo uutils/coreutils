@@ -1529,7 +1529,10 @@ fn test_backwards_range() {
 }
 
 #[cfg(target_pointer_width = "64")]
-#[cfg_attr(wasi_runner, ignore = "WASI: usize is 32-bit, so these repeat counts do not parse")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: usize is 32-bit, so these repeat counts do not parse"
+)]
 #[test]
 fn test_huge_repeat_count_in_set1() {
     // A repeat count this large used to be expanded character by character,
@@ -1557,7 +1560,10 @@ fn test_huge_repeat_count_in_set1() {
 }
 
 #[cfg(target_pointer_width = "64")]
-#[cfg_attr(wasi_runner, ignore = "WASI: usize is 32-bit, so these repeat counts do not parse")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: usize is 32-bit, so these repeat counts do not parse"
+)]
 #[test]
 fn test_huge_repeat_count_in_set2() {
     new_ucmd!()
@@ -1578,7 +1584,10 @@ fn test_huge_repeat_count_in_set2() {
 }
 
 #[cfg(target_pointer_width = "64")]
-#[cfg_attr(wasi_runner, ignore = "WASI: usize is 32-bit, so these repeat counts do not parse")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: usize is 32-bit, so these repeat counts do not parse"
+)]
 #[test]
 fn test_repeat_lengths_beyond_usize() {
     // Set lengths are kept exact when repeat counts add up past usize::MAX,
