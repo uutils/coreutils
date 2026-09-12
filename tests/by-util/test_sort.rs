@@ -1296,6 +1296,40 @@ fn test_merge_write_error_does_not_panic() {
     }
 }
 
+// Regression test: a full temporary filesystem must make external sort fail
+// cleanly instead of panicking while spilling a sorted chunk.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+fn test_spill_write_error_does_not_panic() {
+    let mut scene = TestScenario::new("sort");
+
+    // Mounting a filesystem requires privileges that are not available in all
+    // test environments, so leave this integration test skipped there.
+    let tmp_dir = "tmp_dir";
+    scene.fixtures.mkdir(tmp_dir);
+    if scene.mount_temp_fs(tmp_dir).is_err() {
+        return;
+    }
+
+    let lines = (0..200_000).fold(String::new(), |mut lines, line| {
+        writeln!(lines, "{line:06}").expect("writing to a String cannot fail");
+        lines
+    });
+    scene.fixtures.write("input.txt", &lines);
+
+    scene
+        .ucmd()
+        .args(&[
+            "--buffer-size=1",
+            "--temporary-directory",
+            tmp_dir,
+            "input.txt",
+        ])
+        .fails_with_code(1)
+        .stderr_contains("No space left on device")
+        .stderr_does_not_contain("panicked");
+}
+
 // A read error must be reported with context and without the raw io::Error suffix.
 // It used to print `sort: Input/output error (os error 5)`.
 #[test]
