@@ -8,11 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::env;
 use std::fs::File;
-use std::io::{Error, ErrorKind, IsTerminal as _};
-#[cfg(unix)]
-use std::os::unix::{fs::OpenOptionsExt as _, process::CommandExt as _};
-#[cfg(windows)]
-use std::os::windows::process::CommandExt as _;
+use std::io::{Error, ErrorKind};
 use std::process;
 use std::sync::LazyLock;
 use thiserror::Error;
@@ -20,6 +16,13 @@ use uucore::display::Quotable;
 use uucore::error::{UError, UResult, set_exit_code, strip_errno};
 use uucore::translate;
 use uucore::{format_usage, show_error};
+
+#[cfg(unix)]
+#[path = "platform/unix.rs"]
+mod platform;
+#[cfg(windows)]
+#[path = "platform/windows.rs"]
+mod platform;
 
 static NOHUP_OUT: &str = "nohup.out";
 // exit codes that match the GNU implementation
@@ -34,14 +37,6 @@ mod options {
 
 #[derive(Debug, Error)]
 enum NohupError {
-    #[cfg(target_vendor = "apple")]
-    #[error("{}", translate!("nohup-error-cannot-detach"))]
-    CannotDetach,
-
-    #[cfg(unix)]
-    #[error("{}", translate!("nohup-error-cannot-replace", "name" => (*_0), "err" => _1))]
-    CannotReplace(&'static str, #[source] Error),
-
     #[error("{}", translate!("nohup-error-open-failed", "path" => NOHUP_OUT.quote(), "err" => _1))]
     OpenFailed(i32, #[source] Error),
 
@@ -51,11 +46,8 @@ enum NohupError {
 
 impl UError for NohupError {
     fn code(&self) -> i32 {
-        #[allow(clippy::match_wildcard_for_single_variants)]
         match self {
             Self::OpenFailed(code, _) | Self::OpenFailed2(code, _, _, _) => *code,
-            #[cfg(unix)]
-            _ => 2,
         }
     }
 }
@@ -76,18 +68,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         *FAILURE_CODE,
     )?;
 
-    #[cfg(unix)]
-    replace_fds()?;
+    platform::prepare()?;
 
-    #[cfg(unix)]
-    unsafe {
-        libc::signal(libc::SIGHUP, libc::SIG_IGN)
-    };
-
-    #[cfg(target_vendor = "apple")]
-    if unsafe { !_vprocmgr_detach_from_console(0).is_null() } {
-        return Err(NohupError::CannotDetach.into());
-    }
     #[allow(clippy::unwrap_used, reason = "set as required by clap")]
     let mut cmd_iter = matches.get_many::<String>(options::CMD).unwrap();
     #[allow(clippy::unwrap_used, reason = "set as required by clap")]
@@ -96,25 +78,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut command = process::Command::new(cmd);
     command.args(args);
 
-    #[cfg(unix)]
-    let err = command.exec();
-    #[cfg(windows)]
-    {
-        if std::io::stdin().is_terminal() {
-            command.stdin(process::Stdio::null());
-        }
-        if std::io::stdout().is_terminal() {
-            command.stdout(find_stdout()?);
-        }
-        if std::io::stderr().is_terminal() {
-            command.stderr(process::Stdio::inherit());
-        }
-    }
-    #[cfg(windows)]
-    let Err(err) = command
-        .creation_flags(windows_sys::Win32::System::Threading::DETACHED_PROCESS)
-        .spawn()
-    else {
+    let Some(err) = platform::run(&mut command)? else {
         return Ok(());
     };
 
@@ -148,27 +112,8 @@ pub fn uu_app() -> Command {
         .infer_long_args(true)
 }
 
-#[cfg(unix)]
-fn replace_fds() -> UResult<()> {
-    use rustix::stdio::{dup2_stderr, dup2_stdin, dup2_stdout, stdout};
-    if std::io::stdin().is_terminal() {
-        let new_stdin = File::open(std::path::Path::new("/dev/null"))
-            .map_err(|e| NohupError::CannotReplace("STDIN", e))?;
-        dup2_stdin(&new_stdin).map_err(|e| NohupError::CannotReplace("STDIN", e.into()))?;
-    }
-
-    if std::io::stdout().is_terminal() {
-        let new_stdout = find_stdout()?;
-
-        dup2_stdout(&new_stdout).map_err(|e| NohupError::CannotReplace("STDOUT", e.into()))?;
-    }
-
-    if std::io::stderr().is_terminal() {
-        dup2_stderr(stdout()).map_err(|e| NohupError::CannotReplace("STDERR", e.into()))?;
-    }
-    Ok(())
-}
-
+/// Open the file the detached command's stdout is appended to: `nohup.out` in
+/// the current directory, falling back to `$HOME/nohup.out`.
 fn find_stdout() -> UResult<File> {
     try_open_nohup_file(NOHUP_OUT).or_else(|e1| {
         let Ok(home) = env::var("HOME") else {
@@ -187,12 +132,7 @@ fn find_stdout() -> UResult<File> {
 fn try_open_nohup_file(path: &str) -> std::io::Result<File> {
     let mut opt = std::fs::OpenOptions::new();
     opt.create(true).append(true);
-    // POSIX nohup creates the output file with mode 0600 so that other
-    // users on a shared host can't read whatever the detached job logs.
-    // Setting `.mode()` here only affects newly-created files; if the
-    // file already exists its permissions are left alone.
-    #[cfg(unix)]
-    opt.mode(0o600);
+    platform::set_output_file_mode(&mut opt);
     let file = opt.open(path)?;
 
     show_error!(
@@ -201,9 +141,4 @@ fn try_open_nohup_file(path: &str) -> std::io::Result<File> {
     );
 
     Ok(file)
-}
-
-#[cfg(target_vendor = "apple")]
-unsafe extern "C" {
-    fn _vprocmgr_detach_from_console(flags: u32) -> *const core::ffi::c_int;
 }
