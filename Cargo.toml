@@ -394,7 +394,7 @@ members = [
 [workspace.package]
 categories = ["command-line-utilities"]
 edition = "2024"
-rust-version = "1.88.0"
+rust-version = "1.89.0"
 homepage = "https://github.com/uutils/coreutils"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 license = "MIT"
