@@ -262,11 +262,10 @@ impl Sequence {
         }
     }
 
-    /// The expanded length of a set, saturating instead of overflowing.
-    fn expanded_len_of(set: &[Self]) -> usize {
-        set.iter()
-            .map(Self::expanded_len)
-            .fold(0, usize::saturating_add)
+    /// The expanded length of a set. Widened so that repeat counts close to
+    /// `usize::MAX` still add up exactly and positions keep their order.
+    fn expanded_len_of(set: &[Self]) -> u128 {
+        set.iter().map(|s| s.expanded_len() as u128).sum()
     }
 
     /// The characters of a set, in order, as runs of a repeated character.
@@ -294,17 +293,17 @@ impl Sequence {
         uniques
     }
 
-    /// The complement of the characters that the first `len` positions of a
-    /// set hold, one run per character.
-    fn complement_of_prefix(set: &[Self], len: usize) -> Vec<(u8, usize)> {
+    /// The complement of the characters that a set holds, or that its first
+    /// `len` positions hold, one run per character.
+    fn complement_of_prefix(set: &[Self], len: Option<u128>) -> Vec<(u8, usize)> {
         let mut present = [false; 256];
         let mut remaining = len;
         for (c, n) in Self::runs(set) {
-            if remaining == 0 {
+            if remaining == Some(0) {
                 break;
             }
             present[usize::from(c)] = true;
-            remaining = remaining.saturating_sub(n);
+            remaining = remaining.map(|left| left.saturating_sub(n as u128));
         }
         (0..=u8::MAX)
             .filter(|c| !present[usize::from(*c)])
@@ -359,22 +358,20 @@ impl Sequence {
         // be far too large for that. Both are handled as runs of one character
         // instead, and only the lengths are ever computed in full.
         let mut set1_runs: Vec<(u8, usize)> = if complement_flag {
-            Self::complement_of_prefix(&set1, usize::MAX)
+            Self::complement_of_prefix(&set1, None)
         } else {
             Self::runs(&set1).collect()
         };
-        let set1_len = set1_runs
-            .iter()
-            .map(|(_, n)| *n)
-            .fold(0, usize::saturating_add);
+        let set1_len: u128 = set1_runs.iter().map(|(_, n)| *n as u128).sum();
 
-        let set2_len = set2
+        let set2_len: u128 = set2
             .iter()
             .filter(|s| !matches!(s, Self::CharStar(_)))
-            .map(Self::expanded_len)
-            .fold(0, usize::saturating_add);
+            .map(|s| s.expanded_len() as u128)
+            .sum();
 
-        let star_compensate_len = set1_len.saturating_sub(set2_len);
+        let star_compensate_len =
+            usize::try_from(set1_len.saturating_sub(set2_len)).unwrap_or(usize::MAX);
         //Replace CharStar with CharRepeat
         set2 = set2
             .iter()
@@ -410,10 +407,7 @@ impl Sequence {
         }
 
         let set2_runs: Vec<(u8, usize)> = Self::runs(&set2).collect();
-        let set2_len = set2_runs
-            .iter()
-            .map(|(_, n)| *n)
-            .fold(0, usize::saturating_add);
+        let set2_len: u128 = set2_runs.iter().map(|(_, n)| *n as u128).sum();
 
         // Calculate the set of unique characters in set2
         let set2_uniques = Self::unique_chars(&set2_runs);
@@ -441,10 +435,10 @@ impl Sequence {
                     // That means we must first truncate the expanded, non-complemented
                     // source set, then complement the truncated prefix to recover the
                     // final translation domain.
-                    set1_runs = Self::complement_of_prefix(&set1, set2_len);
+                    set1_runs = Self::complement_of_prefix(&set1, Some(set2_len));
                     // After expansion the complemented domain may be larger than set2.
                     // Re-check the complement validity constraint.
-                    if set2_uniques.len() > 1 || set1_runs.len() > set2_len {
+                    if set2_uniques.len() > 1 || set1_runs.len() as u128 > set2_len {
                         return Err(SequenceError::whole_set(
                             BadSequence::ComplementMoreThanOneUniqueInSet2,
                             2,
