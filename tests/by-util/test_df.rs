@@ -462,10 +462,46 @@ fn test_total() {
         computed_total_avail += iter.next().unwrap().parse::<u64>().unwrap();
     }
 
-    // Check that the sum of each column matches the reported value in the last row.
-    assert_eq!(computed_total_size, reported_total_size);
-    assert_eq!(computed_total_used, reported_total_used);
-    assert_eq!(computed_total_avail, reported_total_avail);
+    // The total row is the sum of the raw byte counts rounded up once, like
+    // GNU df (9.11) does, while every other row is rounded up on its own. So
+    // the sum of the rows can exceed the total by less than one block per row.
+    let rows = (n - 1) as u64;
+    for (computed, reported) in [
+        (computed_total_size, reported_total_size),
+        (computed_total_used, reported_total_used),
+        (computed_total_avail, reported_total_avail),
+    ] {
+        assert!(
+            reported <= computed && computed - reported < rows.max(1),
+            "total {reported} is not the rounded sum of {rows} rows summing to {computed}"
+        );
+    }
+}
+
+#[test]
+fn test_total_rounds_up_once() {
+    // With a block size larger than the filesystem, the one row rounds up to a
+    // single block and so does the total: it is rounded once from the summed
+    // bytes, as GNU df (9.11) does, not summed from the rounded-up rows.
+    let output = new_ucmd!()
+        .args(&[
+            "--total",
+            "--output=size",
+            "--block-size=10000000000000000000",
+            ".",
+        ])
+        .succeeds()
+        .stdout_str_lossy();
+    let values: Vec<&str> = output.lines().skip(1).map(str::trim).collect();
+    assert_eq!(values, vec!["1", "1"]);
+}
+
+#[test]
+fn test_total_human_readable_with_large_block_size() {
+    // Used to multiply the rounded total back by the block size and overflow.
+    new_ucmd!()
+        .args(&["--total", "-h", "--block-size=10000000000000000000", "."])
+        .succeeds();
 }
 
 /// Test that the "total" label appears in the correct column.
