@@ -466,8 +466,11 @@ fn get_output_chunks(
     all_after: &[char],
     config: &Config,
 ) -> (String, String, String, String) {
-    // Chunk size logics are mostly copied from the GNU ptx source.
-    // https://github.com/MaiZure/coreutils-8.3/blob/master/src/ptx.c#L1234
+    // These widths have to agree with GNU's, because where the keyword sits in
+    // the line is part of ptx's output: half the line width for the context on
+    // either side, less the gap between fields, less the truncation marker at
+    // each end and the keyword itself. That layout leaves the arithmetic very
+    // little room to differ.
     let half_line_size = config.line_width / 2;
     let max_before_size = cmp::max(half_line_size as isize - config.gap_size as isize, 0) as usize;
 
