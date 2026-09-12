@@ -55,11 +55,11 @@ fn gethostid() -> c_long {
 #[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-    /*
-     * POSIX says gethostid returns a "32-bit identifier" but is silent
-     * whether it's sign-extended.  Turn off any sign-extension.  This
-     * is a no-op unless unsigned int is wider than 32 bits.
-     */
+    // The identifier `gethostid` reports is 32 bits wide, but it arrives in a
+    // `c_long`, and nothing promises how the unused upper bits are filled. Mask
+    // them off so a value with the high bit set prints as its own eight digits
+    // rather than as a sign-extended one; where `c_long` is itself 32 bits the
+    // mask changes nothing.
 
     let mut result = gethostid();
 

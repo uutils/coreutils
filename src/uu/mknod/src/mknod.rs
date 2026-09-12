@@ -294,8 +294,9 @@ pub fn uu_app() -> Command {
 }
 
 fn parse_type(tpe: &str) -> Result<FileType, String> {
-    // Only check the first character, to allow mnemonic usage like
-    // 'mknod /dev/rst0 character 18 0'.
+    // Dispatch on the leading character alone, so a spelled-out type works
+    // wherever its initial does: `character` is read like `c` in
+    // `mknod /dev/ttyS0 character 4 64`.
     tpe.chars()
         .next()
         .ok_or_else(|| translate!("mknod-error-missing-device-type"))
