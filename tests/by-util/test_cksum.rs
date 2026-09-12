@@ -1677,6 +1677,20 @@ fn test_md5_bits() {
 }
 
 #[test]
+fn test_blake2b_check_digest_too_long() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // The referenced file must exist: the digest length is only used once the
+    // line is accepted and the file is about to be hashed.
+    at.write("f1", "content\n");
+    // 65 bytes, above the 64 bytes BLAKE2b maximum.
+    at.write("sums", &format!("{}  f1\n", "a".repeat(130)));
+
+    ucmd.args(&["-a", "blake2b", "-c", "sums"])
+        .fails_with_code(1)
+        .stderr_contains("sums: no properly formatted checksum lines found");
+}
+
+#[test]
 fn test_blake2b_bits() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write(
