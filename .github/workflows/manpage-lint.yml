@@ -28,7 +28,7 @@ permissions:
 jobs:
   manpage-lint:
     name: Validate manpages with mandoc
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         locale: [en_US.UTF-8, fr_FR.UTF-8]
