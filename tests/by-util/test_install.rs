@@ -2661,7 +2661,7 @@ fn test_install_non_utf8_paths() {
 #[test]
 fn test_install_failed_chown_does_not_leave_setuid() {
     // Only meaningful when the chown can actually fail.
-    if geteuid().as_raw() == 0 {
+    if geteuid().is_root() {
         return;
     }
 
@@ -2719,7 +2719,7 @@ fn test_install_setuid_mode_applied_without_chown() {
 #[test]
 fn test_install_unprivileged_option_u_skips_chown() {
     // This test only makes sense when not running as root.
-    if geteuid().as_raw() == 0 {
+    if geteuid().is_root() {
         return;
     }
 

@@ -1585,7 +1585,7 @@ fn test_chmod_operator_only_still_calls_syscall() {
     // bits unchanged, yet chmod must still issue the chmod(2) call so that a
     // lack of permission is reported instead of silently succeeding. As a
     // non-root user, '/' (owned by root) is a file we cannot chmod.
-    if geteuid().as_raw() == 0 {
+    if geteuid().is_root() {
         return;
     }
     if metadata("/").map_or(0, |m| m.uid()) != 0 {
