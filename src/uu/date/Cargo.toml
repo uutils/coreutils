@@ -48,7 +48,7 @@ rustix = { workspace = true, features = ["time"] }
 # OHOS has no /usr/share/zoneinfo or /etc/localtime: embed IANA tzdata so
 # ohos_system_zone() can resolve the TimeService timezone ID directly (pass-through,
 # no environment injection).
-jiff-tzdb = "0.1"
+jiff-tzdb = "0.1.4"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
