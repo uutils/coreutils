@@ -57,7 +57,7 @@ fn find_valid_number_with_suffix(s: &str, unit: Unit) -> Option<&str> {
     let accepts_suffix = unit != Unit::None;
     let accepts_i = [Unit::Auto, Unit::Iec(true)].contains(&unit);
 
-    let mut characters = s.chars().skip(numeric_part.len());
+    let mut characters = s[numeric_part.len()..].chars();
     let potential_suffix = characters.next();
     let potential_i = characters.next();
 
