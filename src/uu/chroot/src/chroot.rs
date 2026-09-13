@@ -1,0 +1,440 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+// spell-checker:ignore (ToDO) NEWROOT Userspec chrooting chroots chdir pstatus repointed
+mod error;
+
+use crate::error::ChrootError;
+use clap::{Arg, ArgAction, Command};
+use std::ffi::OsString;
+use std::io::{Error, ErrorKind};
+use std::os::unix::process::CommandExt;
+use std::path::{Path, PathBuf};
+use std::process;
+use uucore::entries::{Locate, Passwd, grp2gid, usr2gid, usr2uid};
+use uucore::error::{UResult, UUsageError};
+use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
+use uucore::libc::{self, setgid, setgroups, setuid};
+use uucore::{format_usage, show};
+
+use uucore::translate;
+
+mod options {
+    pub const NEWROOT: &str = "newroot";
+    pub const GROUPS: &str = "groups";
+    pub const USERSPEC: &str = "userspec";
+    pub const COMMAND: &str = "command";
+    pub const SKIP_CHDIR: &str = "skip-chdir";
+}
+
+/// A user and group specification, where each is optional.
+enum UserSpec {
+    NeitherGroupNorUser,
+    UserOnly(String),
+    GroupOnly(String),
+    UserAndGroup(String, String),
+}
+
+struct Options {
+    /// Path to the new root directory, as the caller spelled it. Used for
+    /// diagnostics.
+    newroot: PathBuf,
+    /// The path actually passed to `chroot(2)`, when it must differ from
+    /// `newroot`. See the `--skip-chdir` handling in `uumain`.
+    chroot_target: Option<PathBuf>,
+    /// Whether to change to the new root directory.
+    skip_chdir: bool,
+    /// List of groups under which the command will be run.
+    groups: Option<Vec<String>>,
+    /// The user and group (each optional) under which the command will be run.
+    userspec: Option<UserSpec>,
+}
+
+/// Parse a user and group from the argument to `--userspec`.
+///
+/// The `spec` must be of the form `[USER][:[GROUP]]`, otherwise an
+/// error is returned.
+fn parse_userspec(spec: &str) -> UserSpec {
+    match spec.split_once(':') {
+        // ""
+        None if spec.is_empty() => UserSpec::NeitherGroupNorUser,
+        // "usr"
+        None => UserSpec::UserOnly(spec.to_string()),
+        // ":"
+        Some(("", "")) => UserSpec::NeitherGroupNorUser,
+        // ":grp"
+        Some(("", grp)) => UserSpec::GroupOnly(grp.to_string()),
+        // "usr:"
+        Some((usr, "")) => UserSpec::UserOnly(usr.to_string()),
+        // "usr:grp"
+        Some((usr, grp)) => UserSpec::UserAndGroup(usr.to_string(), grp.to_string()),
+    }
+}
+
+/// Pre-condition: `list_str` is non-empty.
+fn parse_group_list(list_str: &str) -> Result<Vec<String>, ChrootError> {
+    let split: Vec<&str> = list_str.split(',').collect();
+    if split.len() == 1 {
+        let name = split[0].trim();
+        if name.is_empty() {
+            // --groups=" "
+            // chroot: invalid group ' '
+            Err(ChrootError::InvalidGroup(name.to_string()))
+        } else {
+            // --groups="blah"
+            Ok(vec![name.to_string()])
+        }
+    } else if split.iter().all(|s| s.is_empty()) {
+        // --groups=","
+        // chroot: invalid group list ','
+        Err(ChrootError::InvalidGroupList(list_str.to_string()))
+    } else {
+        let mut result = vec![];
+        let mut err = false;
+        for name in split {
+            let trimmed_name = name.trim();
+            if trimmed_name.is_empty() {
+                if name.is_empty() {
+                    // --groups=","
+                    continue;
+                }
+
+                // --groups=", "
+                // chroot: invalid group ' '
+                show!(ChrootError::InvalidGroup(name.to_string()));
+                err = true;
+            } else {
+                // TODO Figure out a better condition here.
+                if trimmed_name.starts_with(char::is_numeric)
+                    && trimmed_name.ends_with(|c: char| !c.is_numeric())
+                {
+                    // --groups="0trail"
+                    // chroot: invalid group '0trail'
+                    show!(ChrootError::InvalidGroup(name.to_string()));
+                    err = true;
+                } else {
+                    result.push(trimmed_name.to_string());
+                }
+            }
+        }
+        if err {
+            Err(ChrootError::GroupsParsingFailed)
+        } else {
+            Ok(result)
+        }
+    }
+}
+
+impl Options {
+    /// Parse parameters from the command-line arguments.
+    fn from(matches: &clap::ArgMatches) -> UResult<Self> {
+        let newroot = match matches.get_one::<String>(options::NEWROOT) {
+            Some(v) => Path::new(v).to_path_buf(),
+            None => return Err(ChrootError::MissingNewRoot.into()),
+        };
+        let groups = match matches.get_one::<String>(options::GROUPS) {
+            None => None,
+            Some(s) => {
+                if s.is_empty() {
+                    Some(vec![])
+                } else {
+                    Some(parse_group_list(s)?)
+                }
+            }
+        };
+        let skip_chdir = matches.get_flag(options::SKIP_CHDIR);
+        let userspec = matches
+            .get_one::<String>(options::USERSPEC)
+            .map(|s| parse_userspec(s));
+        Ok(Self {
+            newroot,
+            chroot_target: None,
+            skip_chdir,
+            groups,
+            userspec,
+        })
+    }
+}
+
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches =
+        uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
+
+    let mut options = Options::from(&matches)?;
+
+    // We are resolving the path in case it is a symlink or /. or /../
+    //
+    // GNU validates the resolved path but then chroots the original spelling,
+    // which leaves a window: a NEWROOT symlink repointed after the check would
+    // pass the guard and still put the process somewhere else, with a working
+    // directory left outside it because --skip-chdir suppresses the chdir.
+    // Since the guard only succeeds when the resolution is `/`, chrooting the
+    // resolved path is the same destination and closes that window.
+    if options.skip_chdir {
+        let resolved = canonicalize(
+            &options.newroot,
+            MissingHandling::Normal,
+            ResolveMode::Logical,
+        )
+        // A NEWROOT that does not resolve is by definition not old `/`, so treat
+        // an Err as a non-match instead of unwrapping it.
+        .ok();
+        if resolved.as_deref().and_then(|p| p.to_str()) != Some("/") {
+            return Err(UUsageError::new(
+                125,
+                translate!("chroot-error-skip-chdir-only-permitted"),
+            ));
+        }
+        // The guard proved the resolution is `/`, so chrooting it is the same
+        // destination, minus the window. NEWROOT is kept for diagnostics so the
+        // error text still names what the caller asked for.
+        options.chroot_target = resolved;
+    }
+
+    let mut cmd_iter = matches
+        .get_many::<OsString>(options::COMMAND)
+        .into_iter()
+        .flatten();
+    let (chroot_command, args) = match cmd_iter.next() {
+        Some(c) => (c.clone(), cmd_iter.cloned().collect::<Vec<OsString>>()),
+        None => (
+            std::env::var_os("SHELL").unwrap_or_else(|| "/bin/sh".into()),
+            vec!["-i".into()],
+        ),
+    };
+
+    // NOTE: Tests can only trigger code beyond this point if they're invoked with root permissions
+    set_context(&options)?;
+
+    let err = process::Command::new(&chroot_command).args(&args).exec();
+
+    Err(if err.kind() == ErrorKind::NotFound {
+        ChrootError::CommandNotFound(chroot_command, err)
+    } else {
+        ChrootError::CommandFailed(chroot_command, err)
+    }
+    .into())
+}
+
+pub fn uu_app() -> Command {
+    let cmd = Command::new("chroot")
+        .version(uucore::crate_version!())
+        .about(translate!("chroot-about"))
+        .override_usage(format_usage(&translate!("chroot-usage")))
+        .infer_long_args(true)
+        .trailing_var_arg(true);
+    uucore::clap_localization::configure_localized_command(cmd)
+        .arg(
+            Arg::new(options::NEWROOT)
+                .value_hint(clap::ValueHint::DirPath)
+                .hide(true)
+                .required(true)
+                .index(1),
+        )
+        .arg(
+            Arg::new(options::GROUPS)
+                .long(options::GROUPS)
+                .overrides_with(options::GROUPS)
+                .help(translate!("chroot-help-groups"))
+                .value_name("GROUP1,GROUP2..."),
+        )
+        .arg(
+            Arg::new(options::USERSPEC)
+                .long(options::USERSPEC)
+                .help(translate!("chroot-help-userspec"))
+                .value_name("USER:GROUP"),
+        )
+        .arg(
+            Arg::new(options::SKIP_CHDIR)
+                .long(options::SKIP_CHDIR)
+                .help(translate!("chroot-help-skip-chdir"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::COMMAND)
+                .action(ArgAction::Append)
+                .value_hint(clap::ValueHint::CommandName)
+                .value_parser(clap::value_parser!(OsString))
+                .hide(true)
+                .index(2),
+        )
+}
+
+/// Get the UID for the given username, falling back to numeric parsing.
+///
+/// According to the documentation of GNU `chroot`, "POSIX requires that
+/// these commands first attempt to resolve the specified string as a
+/// name, and only once that fails, then try to interpret it as an ID."
+fn name_to_uid(name: &str) -> Result<libc::uid_t, ChrootError> {
+    match usr2uid(name) {
+        Ok(uid) => Ok(uid),
+        Err(_) => name
+            .parse::<libc::uid_t>()
+            .map_err(|_| ChrootError::NoSuchUser),
+    }
+}
+
+/// Get the GID for the given group name, falling back to numeric parsing.
+///
+/// According to the documentation of GNU `chroot`, "POSIX requires that
+/// these commands first attempt to resolve the specified string as a
+/// name, and only once that fails, then try to interpret it as an ID."
+fn name_to_gid(name: &str) -> Result<libc::gid_t, ChrootError> {
+    match grp2gid(name) {
+        Ok(gid) => Ok(gid),
+        Err(_) => name
+            .parse::<libc::gid_t>()
+            .map_err(|_| ChrootError::NoSuchGroup),
+    }
+}
+
+/// Get the list of group IDs for the given user.
+///
+/// According to the GNU documentation, "the supplementary groups are
+/// set according to the system defined list for that user". This
+/// function gets that list.
+fn supplemental_gids(uid: libc::uid_t) -> Vec<libc::gid_t> {
+    match Passwd::locate(uid) {
+        Err(_) => vec![],
+        Ok(passwd) => passwd.belongs_to(),
+    }
+}
+
+/// Set the supplemental group IDs for this process.
+fn set_supplemental_gids(gids: &[libc::gid_t]) -> std::io::Result<()> {
+    #[cfg(any(
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "cygwin",
+        target_os = "netbsd"
+    ))]
+    let n = gids.len() as core::ffi::c_int;
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    let n = gids.len() as libc::size_t;
+    let err = unsafe { setgroups(n, gids.as_ptr()) };
+    if err == 0 {
+        Ok(())
+    } else {
+        Err(Error::last_os_error())
+    }
+}
+
+/// Set the group ID of this process.
+fn set_gid(gid: libc::gid_t) -> std::io::Result<()> {
+    let err = unsafe { setgid(gid) };
+    if err == 0 {
+        Ok(())
+    } else {
+        Err(Error::last_os_error())
+    }
+}
+
+/// Set the user ID of this process.
+fn set_uid(uid: libc::uid_t) -> std::io::Result<()> {
+    let err = unsafe { setuid(uid) };
+    if err == 0 {
+        Ok(())
+    } else {
+        Err(Error::last_os_error())
+    }
+}
+
+/// What to do when the `--groups` argument is missing.
+enum Strategy {
+    /// Do nothing.
+    Nothing,
+    /// Use the list of supplemental groups for the given user.
+    ///
+    /// If the `bool` parameter is `false` and the list of groups for
+    /// the given user is empty, then this will result in an error.
+    FromUID(libc::uid_t, bool),
+}
+
+/// Set supplemental groups when the `--groups` argument is not specified.
+fn handle_missing_groups(strategy: Strategy) -> Result<(), ChrootError> {
+    match strategy {
+        Strategy::Nothing => Ok(()),
+        Strategy::FromUID(uid, false) => {
+            let gids = supplemental_gids(uid);
+            if gids.is_empty() {
+                Err(ChrootError::NoGroupSpecified(uid))
+            } else {
+                set_supplemental_gids(&gids).map_err(ChrootError::SetGroupsFailed)
+            }
+        }
+        Strategy::FromUID(uid, true) => {
+            let gids = supplemental_gids(uid);
+            set_supplemental_gids(&gids).map_err(ChrootError::SetGroupsFailed)
+        }
+    }
+}
+
+/// Set supplemental groups for this process.
+fn set_supplemental_gids_with_strategy(
+    strategy: Strategy,
+    groups: Option<&Vec<String>>,
+) -> Result<(), ChrootError> {
+    match groups {
+        None => handle_missing_groups(strategy),
+        Some(groups) => {
+            let mut gids = vec![];
+            for group in groups {
+                gids.push(name_to_gid(group)?);
+            }
+            set_supplemental_gids(&gids).map_err(ChrootError::SetGroupsFailed)
+        }
+    }
+}
+
+/// Change the root, set the user ID, and set the group IDs for this process.
+fn set_context(options: &Options) -> UResult<()> {
+    match &options.userspec {
+        None | Some(UserSpec::NeitherGroupNorUser) => {
+            let strategy = Strategy::Nothing;
+            set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
+            enter_chroot(options, options.skip_chdir)?;
+        }
+        Some(UserSpec::UserOnly(user)) => {
+            let uid = name_to_uid(user)?;
+            let gid = usr2gid(user).map_err(|_| ChrootError::NoGroupSpecified(uid))?;
+            let strategy = Strategy::FromUID(uid, false);
+            set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
+            enter_chroot(options, options.skip_chdir)?;
+            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(user.to_owned(), e))?;
+            set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_owned(), e))?;
+        }
+        Some(UserSpec::GroupOnly(group)) => {
+            let gid = name_to_gid(group)?;
+            let strategy = Strategy::Nothing;
+            set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
+            enter_chroot(options, options.skip_chdir)?;
+            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_owned(), e))?;
+        }
+        Some(UserSpec::UserAndGroup(user, group)) => {
+            let uid = name_to_uid(user)?;
+            let gid = name_to_gid(group)?;
+            let strategy = Strategy::FromUID(uid, true);
+            set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
+            enter_chroot(options, options.skip_chdir)?;
+            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_owned(), e))?;
+            set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_owned(), e))?;
+        }
+    }
+    Ok(())
+}
+
+fn enter_chroot(options: &Options, skip_chdir: bool) -> UResult<()> {
+    // chroot the resolved target when there is one; name the caller's spelling
+    // in the error either way.
+    let target = options.chroot_target.as_deref().unwrap_or(&options.newroot);
+    rustix::process::chroot(target)
+        .map_err(|e| ChrootError::CannotEnter(options.newroot.clone(), e.into()))?;
+    if !skip_chdir {
+        std::env::set_current_dir("/")?;
+    }
+    Ok(())
+}

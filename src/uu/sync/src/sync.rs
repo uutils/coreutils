@@ -1,0 +1,305 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+use clap::{Arg, ArgAction, Command};
+use std::path::Path;
+use uucore::display::Quotable;
+use uucore::error::{UResult, USimpleError, get_exit_code, set_exit_code};
+use uucore::format_usage;
+use uucore::show_error;
+use uucore::translate;
+
+pub mod options {
+    pub static FILE_SYSTEM: &str = "file-system";
+    pub static DATA: &str = "data";
+}
+
+static ARG_FILES: &str = "files";
+
+#[cfg(unix)]
+mod platform {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    use std::fs::{File, OpenOptions};
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    use std::os::unix::fs::OpenOptionsExt;
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    use uucore::display::Quotable;
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    use uucore::error::FromIo;
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    use uucore::translate;
+
+    use uucore::error::UResult;
+
+    #[expect(
+        clippy::unnecessary_wraps,
+        reason = "fn sig must match on all platforms"
+    )]
+    pub fn do_sync() -> UResult<()> {
+        rustix::fs::sync();
+        Ok(())
+    }
+
+    /// Opens a file and resets its O_NONBLOCK flag to match GNU behavior.
+    /// Returns the opened file or an error if opening fails.
+    /// Logs a warning if fcntl fails but doesn't abort the operation.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn open_and_reset_nonblock(path: &str) -> UResult<File> {
+        let f = OpenOptions::new()
+            .read(true)
+            .custom_flags(rustix::fs::OFlags::NONBLOCK.bits() as i32)
+            .open(path)
+            .map_err_context(|| path.to_string())?;
+        // Reset O_NONBLOCK flag if it was set (matches GNU behavior)
+        // This is non-critical, so we log errors but don't fail
+        if let Err(e) = rustix::fs::fcntl_setfl(&f, rustix::fs::OFlags::empty()) {
+            use std::io::{Write, stderr};
+            let msg = translate!("sync-warning-fcntl-failed", "file" => path, "error" => std::io::Error::from(e).to_string());
+            let _ = writeln!(stderr(), "sync: {msg}");
+            uucore::error::set_exit_code(1);
+        }
+        Ok(f)
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub fn do_sync_with<F>(files: &[String], op: F) -> UResult<()>
+    where
+        F: Fn(File) -> Result<(), rustix::io::Errno>,
+    {
+        for path in files {
+            let f = open_and_reset_nonblock(path)?;
+            op(f).map_err(std::io::Error::from).map_err_context(
+                || translate!("sync-error-syncing-file", "file" => path.quote()),
+            )?;
+        }
+        Ok(())
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub fn do_syncfs(files: &[String]) -> UResult<()> {
+        do_sync_with(files, rustix::fs::syncfs)
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub fn do_fdatasync(files: &[String]) -> UResult<()> {
+        do_sync_with(files, rustix::fs::fdatasync)
+    }
+}
+
+#[cfg(windows)]
+mod platform {
+    use std::fs::OpenOptions;
+    use std::path::Path;
+    use uucore::error::{UResult, USimpleError};
+    use uucore::translate;
+    use uucore::wide::{FromWide, ToWide};
+    use windows_sys::Win32::Foundation::{
+        ERROR_NO_MORE_FILES, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
+    };
+    use windows_sys::Win32::Storage::FileSystem::{
+        FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDriveTypeW,
+    };
+    use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
+
+    fn get_last_error() -> u32 {
+        std::io::Error::last_os_error().raw_os_error().unwrap_or(1) as u32
+    }
+
+    fn flush_volume(name: &str) -> UResult<()> {
+        let name_wide = name.to_wide_null();
+        // SAFETY: `name` is a valid `str`, so `name_wide` is valid null-terminated UTF-16
+        if unsafe { GetDriveTypeW(name_wide.as_ptr()) } != DRIVE_FIXED {
+            return Ok(());
+        }
+        let sliced_name = &name[..name.len() - 1]; // eliminate trailing backslash
+        let file = OpenOptions::new()
+            .write(true)
+            .open(sliced_name)
+            .map_err(|e| {
+                USimpleError::new(
+                    e.raw_os_error().unwrap_or(1),
+                    translate!("sync-error-create-volume-handle"),
+                )
+            })?;
+        file.sync_all().map_err(|e| {
+            USimpleError::new(
+                e.raw_os_error().unwrap_or(1),
+                translate!("sync-error-flush-file-buffer"),
+            )
+        })?;
+        Ok(())
+    }
+
+    fn find_first_volume() -> UResult<(String, HANDLE)> {
+        let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
+        // SAFETY: `name` was just constructed and in scope, `len()` is its length by definition
+        let handle = unsafe { FindFirstVolumeW(name.as_mut_ptr(), name.len() as u32) };
+        if handle == INVALID_HANDLE_VALUE {
+            return Err(USimpleError::new(
+                get_last_error() as i32,
+                translate!("sync-error-find-first-volume"),
+            ));
+        }
+        Ok((String::from_wide_null(&name), handle))
+    }
+
+    fn find_all_volumes() -> UResult<Vec<String>> {
+        let (first_volume, next_volume_handle) = find_first_volume()?;
+        let mut volumes = vec![first_volume];
+        loop {
+            let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
+            // SAFETY: `next_volume_handle` was returned by `find_first_volume`,
+            // `name` was just constructed and in scope, `len()` is its length by definition
+            if unsafe { FindNextVolumeW(next_volume_handle, name.as_mut_ptr(), name.len() as u32) }
+                == 0
+            {
+                return match get_last_error() {
+                    ERROR_NO_MORE_FILES => {
+                        // SAFETY: `next_volume_handle` was returned by `find_first_volume`
+                        unsafe { FindVolumeClose(next_volume_handle) };
+                        Ok(volumes)
+                    }
+                    err => Err(USimpleError::new(
+                        err as i32,
+                        translate!("sync-error-find-next-volume"),
+                    )),
+                };
+            }
+            volumes.push(String::from_wide_null(&name));
+        }
+    }
+
+    pub fn do_sync() -> UResult<()> {
+        let volumes = find_all_volumes()?;
+        for vol in &volumes {
+            flush_volume(vol)?;
+        }
+        Ok(())
+    }
+
+    pub fn do_syncfs(files: &[String]) -> UResult<()> {
+        for path in files {
+            let vol_name = Path::new(path)
+                .components()
+                .next()
+                .ok_or_else(|| {
+                    USimpleError::new(1, translate!("sync-error-no-such-file", "file" => path))
+                })?
+                .as_os_str()
+                .to_string_lossy()
+                .into_owned();
+            flush_volume(&vol_name)?;
+        }
+        Ok(())
+    }
+}
+
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let files: Vec<String> = matches
+        .get_many::<String>(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    if matches.get_flag(options::DATA) && files.is_empty() {
+        return Err(USimpleError::new(
+            1,
+            translate!("sync-error-data-needs-argument"),
+        ));
+    }
+
+    for f in &files {
+        // open with O_NONBLOCK to handle fifo files
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        {
+            let path = Path::new(f);
+            if let Err(e) = rustix::fs::open(
+                path,
+                rustix::fs::OFlags::NONBLOCK,
+                rustix::fs::Mode::empty(),
+            ) && (e != rustix::io::Errno::ACCESS || path.is_dir())
+            {
+                let msg = translate!("sync-error-opening-file", "file" => f.quote(), "err" => uucore::error::strip_errno(&std::io::Error::from(e)));
+                show_error!("{msg}");
+                set_exit_code(1);
+            }
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        {
+            if !Path::new(&f).exists() {
+                show_error!(
+                    "{}",
+                    translate!("sync-error-no-such-file", "file" => f.quote())
+                );
+                set_exit_code(1);
+            }
+        }
+    }
+
+    if get_exit_code() != 0 {
+        return Err(USimpleError::new(1, ""));
+    }
+
+    #[allow(clippy::if_same_then_else)]
+    if matches.get_flag(options::FILE_SYSTEM) {
+        if files.is_empty() {
+            sync()?;
+        } else {
+            #[cfg(any(target_os = "linux", target_os = "android", windows))]
+            syncfs(&files)?;
+        }
+    } else if matches.get_flag(options::DATA) {
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        fdatasync(&files)?;
+    } else {
+        sync()?;
+    }
+    Ok(())
+}
+
+pub fn uu_app() -> Command {
+    Command::new("sync")
+        .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template("sync"))
+        .about(translate!("sync-about"))
+        .override_usage(format_usage(&translate!("sync-usage")))
+        .infer_long_args(true)
+        .arg(
+            Arg::new(options::FILE_SYSTEM)
+                .short('f')
+                .long(options::FILE_SYSTEM)
+                .conflicts_with(options::DATA)
+                .help(translate!("sync-help-file-system"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::DATA)
+                .short('d')
+                .long(options::DATA)
+                .conflicts_with(options::FILE_SYSTEM)
+                .help(translate!("sync-help-data"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(ARG_FILES)
+                .action(ArgAction::Append)
+                .value_hint(clap::ValueHint::AnyPath),
+        )
+}
+
+fn sync() -> UResult<()> {
+    platform::do_sync()
+}
+
+#[cfg(any(target_os = "linux", target_os = "android", windows))]
+fn syncfs(files: &[String]) -> UResult<()> {
+    platform::do_syncfs(files)
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn fdatasync(files: &[String]) -> UResult<()> {
+    platform::do_fdatasync(files)
+}

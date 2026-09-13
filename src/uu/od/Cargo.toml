@@ -1,0 +1,35 @@
+[package]
+name = "uu_od"
+description = "od ~ (uutils) display formatted representation of input"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/od"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lib]
+path = "src/od.rs"
+
+[dependencies]
+clap = { workspace = true }
+half = { workspace = true }
+uucore = { workspace = true, features = ["fs", "parser-size", "pipes"] }
+fluent = { workspace = true }
+libc.workspace = true
+
+[target.'cfg(any(unix, target_os = "wasi"))'.dependencies]
+rustix = { workspace = true, features = ["stdio"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "od"
+path = "src/main.rs"

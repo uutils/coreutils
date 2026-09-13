@@ -1,0 +1,8 @@
+Filesystem                1B-blocks         Used    Available Use% Mounted on
+udev                     8192688128            0   8192688128   0% /dev
+tmpfs                    1643331584      2015232   1641316352   1% /run
+/dev/nvme0n1p2        1006530654208 432716689408 522613624832  46% /
+tmpfs                    8216649728    144437248   8072212480   2% /dev/shm
+tmpfs                       5242880         4096      5238784   1% /run/lock
+tmpfs                    8216649728            0   8216649728   0% /sys/fs/cgroup
+/dev/nvme0n1p1            535805952      8175616    527630336   2% /boot/efi

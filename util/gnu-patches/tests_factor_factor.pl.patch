@@ -1,0 +1,17 @@
+Index: gnu/tests/factor/factor.pl
+===================================================================
+--- gnu.orig/tests/factor/factor.pl
++++ gnu/tests/factor/factor.pl
+@@ -61,8 +61,10 @@ my @Tests =
+       # Map newer glibc diagnostic to expected.
+       # Also map OpenBSD 5.1's "unknown option" to expected "invalid option".
+       {ERR_SUBST => q!s/'1'/1/;s/unknown/invalid/!},
+-      {ERR => "$prog: invalid option -- 1\n"
+-       . "Try '$prog --help' for more information.\n"},
++      {ERR => "error: unexpected argument '-1' found\n\n"
++        . "  tip: to pass '-1' as a value, use '-- -1'\n\n"
++        . "Usage: factor [OPTION]... [NUMBER]...\n\n"
++        . "For more information, try '--help'.\n"},
+       {EXIT => 1}],
+      ['cont', 'a 4',
+       {OUT => "4: 2 2\n"},

@@ -1,0 +1,31 @@
+[package]
+name = "uu_ln"
+description = "ln ~ (uutils) create a (file system) link to TARGET"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/ln"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lib]
+path = "src/ln.rs"
+test = false
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+rustix = { workspace = true, features = ["fs"] }
+uucore = { workspace = true, features = ["backup-control", "fs"] }
+thiserror = { workspace = true }
+fluent = { workspace = true }
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "ln"
+path = "src/main.rs"

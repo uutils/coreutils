@@ -1,0 +1,45 @@
+[package]
+name = "uu_cat"
+description = "cat ~ (uutils) concatenate and display input"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/cat"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lib]
+path = "src/cat.rs"
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+memchr = { workspace = true }
+thiserror = { workspace = true }
+uucore = { workspace = true, features = ["fast-inc", "fs", "pipes", "signals"] }
+fluent = { workspace = true }
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "cat"
+path = "src/main.rs"
+
+[[bench]]
+name = "cat_bench"
+harness = false

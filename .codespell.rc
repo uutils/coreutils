@@ -1,0 +1,3 @@
+[codespell]
+ignore-words-list = crate
+skip = ./.git/**,./.vscode/cspell.dictionaries/**,./target/**,./tests/fixtures/**

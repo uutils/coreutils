@@ -1,0 +1,50 @@
+[package]
+name = "uu_test"
+description = "test ~ (uutils) evaluate comparison and file type expressions"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/test"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lib]
+path = "src/test.rs"
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+fluent = { workspace = true }
+thiserror = { workspace = true }
+uucore = { workspace = true, features = ["fs", "wide"] }
+
+[target.'cfg(not(any(windows, target_os = "wasi")))'.dependencies]
+rustix = { workspace = true, features = ["process"] }
+
+[target.'cfg(not(windows))'.dependencies]
+libc = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Security_Authorization",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[features]
+diagnostics = ["uucore/diagnostics"]
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "test"
+path = "src/main.rs"

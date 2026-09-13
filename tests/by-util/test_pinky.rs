@@ -1,0 +1,154 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+#[cfg(not(target_os = "openbsd"))]
+use uucore::entries::{Locate, Passwd};
+use uutests::new_ucmd;
+#[cfg(not(target_os = "openbsd"))]
+use uutests::util::{TestScenario, expected_result};
+#[cfg(not(target_os = "openbsd"))]
+use uutests::{unwrap_or_return, util_name};
+
+#[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_long_format() {
+    use pinky::capitalize;
+
+    let login = "root";
+    let pw: Passwd = Passwd::locate(login).unwrap();
+    let user_info = pw.user_info.unwrap_or_default();
+    let user_dir = pw.user_dir.unwrap_or_default();
+    let user_shell = pw.user_shell.unwrap_or_default();
+    let real_name = user_info.replace('&', &capitalize(&pw.name));
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd().arg("-l").arg(login).succeeds().stdout_is(format!(
+        "Login name: {login:<28}In real life:  {real_name}\nDirectory: {user_dir:<29}Shell:  {user_shell}\n\n"
+    ));
+
+    ts.ucmd()
+        .arg("-lb")
+        .arg(login)
+        .succeeds()
+        .stdout_is(format!(
+            "Login name: {login:<28}In real life:  {real_name}\n\n"
+        ));
+}
+
+#[cfg(unix)]
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_long_format_multiple_users() {
+    // multiple instances of one account we know exists,
+    // the account of the test runner,
+    // and an account that (probably) doesn't exist
+    let runner = std::env::var("USER").unwrap_or_default();
+    let args = ["-l", "root", "root", "root", &runner, "no_such_user"];
+    let ts = TestScenario::new(util_name!());
+    let expect = unwrap_or_return!(expected_result(&ts, &args));
+
+    ts.ucmd()
+        .args(&args)
+        .succeeds()
+        .stdout_is(expect.stdout_str())
+        .stderr_is(expect.stderr_str());
+}
+
+#[test]
+fn test_long_format_wo_user() {
+    // "no username specified; at least one must be specified when using -l"
+    new_ucmd!().arg("-l").fails();
+}
+
+#[cfg(unix)]
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_short_format_i() {
+    // allow whitespace variation
+    // * minor whitespace differences occur between platform built-in outputs; specifically, the number of trailing TABs may be variant
+    let args = ["-i"];
+    let ts = TestScenario::new(util_name!());
+    let actual = ts.ucmd().args(&args).succeeds().stdout_move_str();
+    let expect = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
+    let v_actual: Vec<&str> = actual.split_whitespace().collect();
+    let v_expect: Vec<&str> = expect.split_whitespace().collect();
+    assert_eq!(v_actual, v_expect);
+}
+
+/// Drop the clock-dependent tokens from a `pinky` output split on whitespace.
+///
+/// The idle column holds a live `HH:MM` duration, so it can tick over between the
+/// run of our binary and the run of the reference one, which made these tests flaky.
+/// Remove the `Idle` header and every `HH:MM`-looking token so only the stable
+/// fields are compared.
+#[cfg(unix)]
+#[cfg(not(target_os = "openbsd"))]
+fn strip_volatile_fields(fields: &[&str]) -> Vec<String> {
+    fn is_clock_value(s: &str) -> bool {
+        let bytes = s.as_bytes();
+        bytes.len() == 5
+            && bytes[2] == b':'
+            && bytes[..2].iter().chain(&bytes[3..]).all(u8::is_ascii_digit)
+    }
+
+    fields
+        .iter()
+        .filter(|s| **s != "Idle" && !is_clock_value(s))
+        .map(|s| (*s).to_string())
+        .collect()
+}
+
+#[cfg(unix)]
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_lookup() {
+    let args = ["--lookup"];
+    let ts = TestScenario::new(util_name!());
+    let actual = ts.ucmd().args(&args).succeeds().stdout_move_str();
+    let expect = unwrap_or_return!(expected_result(&ts, &[])).stdout_move_str();
+    let v_actual: Vec<&str> = actual.split_whitespace().collect();
+    let v_expect: Vec<&str> = expect.split_whitespace().collect();
+    assert_eq!(
+        strip_volatile_fields(&v_actual),
+        strip_volatile_fields(&v_expect)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_short_format_q() {
+    // allow whitespace variation
+    // * minor whitespace differences occur between platform built-in outputs; specifically, the number of trailing TABs may be variant
+    let args = ["-q"];
+    let ts = TestScenario::new(util_name!());
+    let actual = ts.ucmd().args(&args).succeeds().stdout_move_str();
+    let expect = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
+    let v_actual: Vec<&str> = actual.split_whitespace().collect();
+    let v_expect: Vec<&str> = expect.split_whitespace().collect();
+    assert_eq!(
+        strip_volatile_fields(&v_actual),
+        strip_volatile_fields(&v_expect)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_no_flag() {
+    let ts = TestScenario::new(util_name!());
+    let actual = ts.ucmd().succeeds().stdout_move_str();
+    let expect = unwrap_or_return!(expected_result(&ts, &[])).stdout_move_str();
+    let v_actual: Vec<&str> = actual.split_whitespace().collect();
+    let v_expect: Vec<&str> = expect.split_whitespace().collect();
+    assert_eq!(
+        strip_volatile_fields(&v_actual),
+        strip_volatile_fields(&v_expect)
+    );
+}

@@ -1,0 +1,1494 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+//! Set of functions to manage regular files, special files, and links.
+
+// spell-checker:ignore backport Ioctl absolutized
+
+#[cfg(unix)]
+pub use libc::{major, makedev, minor};
+use std::collections::HashSet;
+use std::collections::VecDeque;
+use std::env;
+use std::ffi::{OsStr, OsString};
+use std::fs;
+use std::fs::read_dir;
+use std::hash::Hash;
+use std::io::Stdin;
+use std::io::{Error, ErrorKind, Result as IOResult};
+#[cfg(any(unix, target_os = "wasi"))]
+use std::os::fd::AsFd;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+#[cfg(windows)]
+use std::os::windows::ffi::{OsStrExt, OsStringExt};
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
+use std::path::{Component, MAIN_SEPARATOR, Path, PathBuf};
+#[cfg(unix)]
+use std::sync::OnceLock;
+#[cfg(windows)]
+use windows_sys::Win32::Foundation::MAX_PATH;
+#[cfg(windows)]
+use windows_sys::Win32::Storage::FileSystem::{
+    BY_HANDLE_FILE_INFORMATION, GetDiskFreeSpaceW, GetFileInformationByHandle, GetVolumePathNameW,
+};
+#[cfg(windows)]
+use windows_sys::Win32::System::IO::DeviceIoControl;
+#[cfg(windows)]
+use windows_sys::Win32::System::Ioctl::FSCTL_SET_SPARSE;
+
+/// Used to check if the `mode` has its `perm` bit set.
+///
+/// This macro expands to `mode & perm != 0`.
+#[cfg(unix)]
+#[macro_export]
+macro_rules! has {
+    ($mode:expr, $perm:expr) => {
+        $mode & $perm != 0
+    };
+}
+
+/// Information to uniquely identify a file
+#[derive(Clone)]
+pub struct FileInformation(
+    #[cfg(any(unix, target_os = "wasi"))] rustix::fs::Stat,
+    #[cfg(windows)] BY_HANDLE_FILE_INFORMATION,
+);
+
+impl FileInformation {
+    /// Get information from a currently open file
+    #[cfg(any(unix, target_os = "wasi"))]
+    pub fn from_file(file: &impl AsFd) -> IOResult<Self> {
+        let stat = rustix::fs::fstat(file)?;
+        Ok(Self(stat))
+    }
+
+    /// Get information from a currently open file
+    #[cfg(windows)]
+    pub fn from_file(file: &impl AsRawHandle) -> IOResult<Self> {
+        let mut info = BY_HANDLE_FILE_INFORMATION::default();
+        // SAFETY: `info` is a valid pointer to be populated by GetFileInformationByHandle.
+        if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &raw mut info) } == 0 {
+            return Err(Error::last_os_error());
+        }
+        Ok(Self(info))
+    }
+
+    /// Get information for a given path.
+    ///
+    /// If `path` points to a symlink and `dereference` is true, information about
+    /// the link's target will be returned.
+    pub fn from_path(path: impl AsRef<Path>, dereference: bool) -> IOResult<Self> {
+        #[cfg(any(unix, target_os = "wasi"))]
+        {
+            let stat = if dereference {
+                rustix::fs::stat(path.as_ref())
+            } else {
+                rustix::fs::lstat(path.as_ref())
+            };
+            Ok(Self(stat?))
+        }
+        #[cfg(windows)]
+        {
+            use std::fs::OpenOptions;
+            use std::os::windows::fs::OpenOptionsExt;
+            let mut open_options = OpenOptions::new();
+            let mut custom_flags = 0;
+            if !dereference {
+                custom_flags |=
+                    windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT;
+            }
+            custom_flags |= windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
+            open_options.custom_flags(custom_flags);
+            let file = open_options.read(true).open(path.as_ref())?;
+            Self::from_file(&file)
+        }
+    }
+
+    pub fn file_size(&self) -> u64 {
+        #[cfg(any(unix, target_os = "wasi"))]
+        {
+            assert!(self.0.st_size >= 0, "File size is negative");
+            self.0.st_size.try_into().unwrap()
+        }
+        #[cfg(windows)]
+        {
+            ((self.0.nFileSizeHigh as u64) << 32) | (self.0.nFileSizeLow as u64)
+        }
+    }
+
+    #[cfg(windows)]
+    pub fn file_index(&self) -> u64 {
+        ((self.0.nFileIndexHigh as u64) << 32) | (self.0.nFileIndexLow as u64)
+    }
+
+    pub fn number_of_links(&self) -> u64 {
+        #[cfg(all(
+            unix,
+            not(target_vendor = "apple"),
+            not(target_os = "aix"),
+            not(target_os = "android"),
+            not(target_os = "freebsd"),
+            not(target_os = "netbsd"),
+            not(target_os = "openbsd"),
+            not(target_os = "illumos"),
+            not(target_os = "solaris"),
+            not(target_os = "cygwin"),
+            not(target_arch = "aarch64"),
+            not(target_arch = "riscv64"),
+            not(target_arch = "loongarch64"),
+            not(target_arch = "sparc64"),
+            target_pointer_width = "64"
+        ))]
+        return self.0.st_nlink;
+        #[cfg(target_os = "wasi")]
+        return self.0.st_nlink;
+        #[cfg(all(
+            unix,
+            any(
+                target_vendor = "apple",
+                target_os = "android",
+                target_os = "netbsd",
+                target_os = "openbsd",
+                target_os = "illumos",
+                target_os = "solaris",
+                target_os = "cygwin",
+                target_arch = "aarch64",
+                target_arch = "riscv64",
+                target_arch = "loongarch64",
+                target_arch = "sparc64",
+                not(target_pointer_width = "64")
+            )
+        ))]
+        return self.0.st_nlink.into();
+        #[cfg(target_os = "freebsd")]
+        return self.0.st_nlink;
+        #[cfg(target_os = "aix")]
+        return self.0.st_nlink.try_into().unwrap();
+        #[cfg(windows)]
+        return self.0.nNumberOfLinks as u64;
+    }
+
+    #[cfg(any(unix, target_os = "wasi"))]
+    pub fn inode(&self) -> u64 {
+        #[cfg(all(not(any(target_os = "netbsd")), target_pointer_width = "64"))]
+        return self.0.st_ino;
+        #[cfg(any(target_os = "netbsd", not(target_pointer_width = "64")))]
+        #[allow(clippy::useless_conversion)]
+        return self.0.st_ino.into();
+    }
+}
+
+#[cfg(any(unix, target_os = "wasi"))]
+impl PartialEq for FileInformation {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.st_dev == other.0.st_dev && self.0.st_ino == other.0.st_ino
+    }
+}
+
+#[cfg(windows)]
+impl PartialEq for FileInformation {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.dwVolumeSerialNumber == other.0.dwVolumeSerialNumber
+            && self.file_index() == other.file_index()
+    }
+}
+
+impl Eq for FileInformation {}
+
+impl Hash for FileInformation {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        #[cfg(any(unix, target_os = "wasi"))]
+        {
+            self.0.st_dev.hash(state);
+            self.0.st_ino.hash(state);
+        }
+        #[cfg(windows)]
+        {
+            self.0.dwVolumeSerialNumber.hash(state);
+            self.file_index().hash(state);
+        }
+    }
+}
+
+/// Controls how symbolic links should be handled when canonicalizing a path.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MissingHandling {
+    /// Return an error if any part of the path is missing.
+    Normal,
+
+    /// Resolve symbolic links, ignoring errors on the final component.
+    Existing,
+
+    /// Resolve symbolic links, ignoring errors on the non-final components.
+    Missing,
+}
+
+/// Controls when symbolic links are resolved
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ResolveMode {
+    /// Do not resolve any symbolic links.
+    None,
+
+    /// Resolve symlinks as encountered when processing the path
+    Physical,
+
+    /// Resolve '..' elements before symlinks
+    Logical,
+}
+
+/// Normalize a path by removing relative information
+/// For example, convert 'bar/../foo/bar.txt' => 'foo/bar.txt'
+/// copied from `<https://github.com/rust-lang/cargo/blob/2e4cfc2b7d43328b207879228a2ca7d427d188bb/src/cargo/util/paths.rs#L65-L90>`
+/// both projects are MIT `<https://github.com/rust-lang/cargo/blob/master/LICENSE-MIT>`
+/// for std impl progress see rfc `<https://github.com/rust-lang/rfcs/issues/2208>`
+/// replace this once that lands
+pub fn normalize_path(path: &Path) -> PathBuf {
+    let mut components = path.components().peekable();
+    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().copied() {
+        components.next();
+        PathBuf::from(c.as_os_str())
+    } else {
+        PathBuf::new()
+    };
+
+    for component in components {
+        match component {
+            Component::Prefix(..) => unreachable!(),
+            Component::RootDir => {
+                ret.push(component.as_os_str());
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if ret.as_os_str().is_empty()
+                    || matches!(ret.components().next_back(), Some(Component::ParentDir))
+                {
+                    ret.push("..");
+                } else {
+                    ret.pop();
+                }
+            }
+            Component::Normal(c) => {
+                ret.push(c);
+            }
+        }
+    }
+
+    if ret.as_os_str().is_empty() {
+        ret.push(".");
+    }
+
+    ret
+}
+
+fn resolve_symlink<P: AsRef<Path>>(path: P) -> IOResult<Option<PathBuf>> {
+    let result = if fs::symlink_metadata(&path)?.file_type().is_symlink() {
+        Some(fs::read_link(&path)?)
+    } else {
+        None
+    };
+    Ok(result)
+}
+
+enum OwningComponent {
+    Prefix(OsString),
+    RootDir,
+    CurDir,
+    ParentDir,
+    Normal(OsString),
+}
+
+impl OwningComponent {
+    fn as_os_str(&self) -> &OsStr {
+        match self {
+            Self::Prefix(s) | Self::Normal(s) => s.as_os_str(),
+            Self::RootDir => Component::RootDir.as_os_str(),
+            Self::CurDir => Component::CurDir.as_os_str(),
+            Self::ParentDir => Component::ParentDir.as_os_str(),
+        }
+    }
+}
+
+impl<'a> From<Component<'a>> for OwningComponent {
+    fn from(comp: Component<'a>) -> Self {
+        match comp {
+            Component::Prefix(_) => Self::Prefix(comp.as_os_str().to_os_string()),
+            Component::RootDir => Self::RootDir,
+            Component::CurDir => Self::CurDir,
+            Component::ParentDir => Self::ParentDir,
+            Component::Normal(s) => Self::Normal(s.to_os_string()),
+        }
+    }
+}
+
+/// Confirm that `path` (already known to exist) is a directory, without
+/// requiring permission to list its contents.
+///
+/// `read_dir` alone would raise the right error for a non-directory, but
+/// also requires listing permission on the target, which a plain "is this a
+/// directory" check should not need (e.g. `realpath /root/` succeeds for
+/// non-root users even though they can't list `/root`).
+fn ensure_is_directory(path: &Path) -> IOResult<()> {
+    if fs::metadata(path)?.is_dir() {
+        Ok(())
+    } else {
+        read_dir(path)?;
+        Ok(())
+    }
+}
+
+/// Return the canonical, absolute form of a path.
+///
+/// This function is a generalization of [`std::fs::canonicalize`] that
+/// allows controlling how symbolic links are resolved and how to deal
+/// with missing components. It returns the canonical, absolute form of
+/// a path.
+/// The `miss_mode` parameter controls how missing path elements are handled
+///
+/// * [`MissingHandling::Normal`] makes this function behave like
+///   [`std::fs::canonicalize`], resolving symbolic links and returning
+///   an error if the path does not exist.
+/// * [`MissingHandling::Missing`] makes this function ignore non-final
+///   components of the path that could not be resolved.
+/// * [`MissingHandling::Existing`] makes this function return an error
+///   if the final component of the path does not exist.
+///
+/// The `res_mode` parameter controls how symbolic links are
+/// resolved:
+///
+/// * [`ResolveMode::None`] makes this function not try to resolve
+///   any symbolic links.
+/// * [`ResolveMode::Physical`] makes this function resolve symlinks as they
+///   are encountered
+/// * [`ResolveMode::Logical`] makes this function resolve '..' components
+///   before symlinks
+///
+#[allow(clippy::cognitive_complexity)]
+pub fn canonicalize<P: AsRef<Path>>(
+    original: P,
+    miss_mode: MissingHandling,
+    res_mode: ResolveMode,
+) -> IOResult<PathBuf> {
+    const SYMLINKS_TO_LOOK_FOR_LOOPS: i32 = 20;
+    let original = original.as_ref();
+    let has_to_be_directory =
+        (miss_mode == MissingHandling::Normal || miss_mode == MissingHandling::Existing) && {
+            let path_str = original.to_string_lossy();
+            path_str.ends_with(MAIN_SEPARATOR) || path_str.ends_with('/')
+        };
+    let original = if original.is_absolute() {
+        original.to_path_buf()
+    } else {
+        let current_dir = env::current_dir()?;
+        dunce::canonicalize(current_dir)?.join(original)
+    };
+    let path = if res_mode == ResolveMode::Logical {
+        normalize_path(&original)
+    } else {
+        original
+    };
+    let mut parts: VecDeque<OwningComponent> = path.components().map(Into::into).collect();
+    let mut result = PathBuf::new();
+    let mut followed_symlinks = 0;
+    let mut visited_files = HashSet::new();
+    while let Some(part) = parts.pop_front() {
+        match part {
+            OwningComponent::Prefix(s) => {
+                result.push(s);
+                continue;
+            }
+            OwningComponent::RootDir | OwningComponent::Normal(..) => {
+                result.push(part.as_os_str());
+            }
+            OwningComponent::CurDir => {}
+            OwningComponent::ParentDir => {
+                result.pop();
+            }
+        }
+        if res_mode == ResolveMode::None {
+            continue;
+        }
+        match resolve_symlink(&result) {
+            Ok(Some(link_path)) => {
+                for link_part in link_path.components().rev() {
+                    parts.push_front(link_part.into());
+                }
+                if followed_symlinks < SYMLINKS_TO_LOOK_FOR_LOOPS {
+                    followed_symlinks += 1;
+                } else {
+                    let file_info =
+                        FileInformation::from_path(result.parent().unwrap(), false).unwrap();
+                    let mut path_to_follow = PathBuf::new();
+                    for part in &parts {
+                        path_to_follow.push(part.as_os_str());
+                    }
+                    if !visited_files.insert((file_info, path_to_follow)) {
+                        return Err(Error::new(
+                            ErrorKind::InvalidInput,
+                            "Too many levels of symbolic links",
+                        )); // TODO use ErrorKind::FilesystemLoop when stable
+                    }
+                }
+                result.pop();
+            }
+            Err(e)
+                if (miss_mode == MissingHandling::Existing
+                    || (miss_mode == MissingHandling::Normal && !parts.is_empty())) =>
+            {
+                return Err(e);
+            }
+            _ => {}
+        }
+    }
+    // raise Not a directory if required
+    match miss_mode {
+        MissingHandling::Existing => {
+            if has_to_be_directory {
+                ensure_is_directory(&result)?;
+            }
+        }
+        MissingHandling::Normal => {
+            if result.exists() {
+                if has_to_be_directory {
+                    ensure_is_directory(&result)?;
+                }
+            } else if let Some(parent) = result.parent() {
+                read_dir(parent)?;
+            }
+        }
+        MissingHandling::Missing => {}
+    }
+    Ok(result)
+}
+
+#[cfg(not(unix))]
+/// Display the permissions of a file
+pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> String {
+    let write = if metadata.permissions().readonly() {
+        '-'
+    } else {
+        'w'
+    };
+
+    if display_file_type {
+        let file_type = if metadata.is_symlink() {
+            'l'
+        } else if metadata.is_dir() {
+            'd'
+        } else {
+            '-'
+        };
+
+        format!("{file_type}r{write}xr{write}xr{write}x")
+    } else {
+        format!("r{write}xr{write}xr{write}x")
+    }
+}
+
+#[cfg(unix)]
+/// Display the permissions of a file
+pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> String {
+    display_permissions_unix(metadata.mode(), display_file_type)
+}
+
+/// Portable file mode bit constants, equivalent to the POSIX `S_I*` values.
+///
+/// These are defined here as plain `u32` so they are available on every
+/// platform, including Windows, without requiring `libc` or a Unix target.
+/// Callers that previously used `libc::S_IFDIR` etc. can import these instead.
+pub mod mode {
+    // File-type mask and values
+    pub const S_IFMT: u32 = 0o170_000; // bitmask for the file-type field
+    pub const S_IFSOCK: u32 = 0o140_000; // socket
+    pub const S_IFLNK: u32 = 0o120_000; // symbolic link
+    pub const S_IFREG: u32 = 0o100_000; // regular file
+    pub const S_IFBLK: u32 = 0o060_000; // block device
+    pub const S_IFDIR: u32 = 0o040_000; // directory
+    pub const S_IFCHR: u32 = 0o020_000; // character device
+    pub const S_IFIFO: u32 = 0o010_000; // named pipe (FIFO)
+
+    // Permission and special-mode bits
+    pub const S_ISUID: u32 = 0o4000; // setuid
+    pub const S_ISGID: u32 = 0o2000; // setgid
+    pub const S_ISVTX: u32 = 0o1000; // sticky
+
+    pub const S_IRUSR: u32 = 0o0400; // owner read
+    pub const S_IWUSR: u32 = 0o0200; // owner write
+    pub const S_IXUSR: u32 = 0o0100; // owner execute
+
+    pub const S_IRGRP: u32 = 0o0040; // group read
+    pub const S_IWGRP: u32 = 0o0020; // group write
+    pub const S_IXGRP: u32 = 0o0010; // group execute
+
+    pub const S_IROTH: u32 = 0o0004; // other read
+    pub const S_IWOTH: u32 = 0o0002; // other write
+    pub const S_IXOTH: u32 = 0o0001; // other execute
+}
+
+/// Returns a character representation of the file type based on its mode.
+///
+/// - `mode`: The mode of the file, typically obtained from file metadata.
+///
+/// # Returns
+/// - 'd' for directories
+/// - 'c' for character devices
+/// - 'b' for block devices
+/// - '-' for regular files
+/// - 'p' for FIFOs (named pipes)
+/// - 'l' for symbolic links
+/// - 's' for sockets
+/// - '?' for any other unrecognized file types
+fn get_file_display(mode: u32) -> char {
+    use mode::{S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK};
+    match mode & S_IFMT {
+        S_IFDIR => 'd',
+        S_IFCHR => 'c',
+        S_IFBLK => 'b',
+        S_IFREG => '-',
+        S_IFIFO => 'p',
+        S_IFLNK => 'l',
+        S_IFSOCK => 's',
+        // TODO: Other file types
+        _ => '?',
+    }
+}
+
+// The logic below is more readable written this way.
+#[allow(clippy::if_not_else)]
+#[allow(clippy::cognitive_complexity)]
+/// Display the unix permissions of a file
+pub fn display_permissions_unix(mode: u32, display_file_type: bool) -> String {
+    use mode::{
+        S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP,
+        S_IXOTH, S_IXUSR,
+    };
+    let mut result;
+    if display_file_type {
+        result = String::with_capacity(10);
+        result.push(get_file_display(mode));
+    } else {
+        result = String::with_capacity(9);
+    }
+
+    result.push(if mode & S_IRUSR != 0 { 'r' } else { '-' });
+    result.push(if mode & S_IWUSR != 0 { 'w' } else { '-' });
+    result.push(if mode & S_ISUID != 0 {
+        if mode & S_IXUSR != 0 { 's' } else { 'S' }
+    } else if mode & S_IXUSR != 0 {
+        'x'
+    } else {
+        '-'
+    });
+
+    result.push(if mode & S_IRGRP != 0 { 'r' } else { '-' });
+    result.push(if mode & S_IWGRP != 0 { 'w' } else { '-' });
+    result.push(if mode & S_ISGID != 0 {
+        if mode & S_IXGRP != 0 { 's' } else { 'S' }
+    } else if mode & S_IXGRP != 0 {
+        'x'
+    } else {
+        '-'
+    });
+
+    result.push(if mode & S_IROTH != 0 { 'r' } else { '-' });
+    result.push(if mode & S_IWOTH != 0 { 'w' } else { '-' });
+    result.push(if mode & S_ISVTX != 0 {
+        if mode & S_IXOTH != 0 { 't' } else { 'T' }
+    } else if mode & S_IXOTH != 0 {
+        'x'
+    } else {
+        '-'
+    });
+
+    result
+}
+
+/// For some programs like install or mkdir, dir/. or dir/./ can be provided
+/// Special case to match GNU's behavior:
+/// install -d foo/. (and foo/./) should work and just create foo/
+/// std::fs::create_dir("foo/."); fails in pure Rust
+pub fn dir_strip_dot_for_creation(path: &Path) -> PathBuf {
+    let path_str = path.to_string_lossy();
+
+    if path_str.ends_with("/.") || path_str.ends_with("/./") {
+        // Do a simple dance to strip the "/."
+        Path::new(&path).components().collect()
+    } else {
+        path.to_path_buf()
+    }
+}
+
+/// Checks if `p1` and `p2` are the same file.
+/// If error happens when trying to get files' metadata, returns false
+pub fn paths_refer_to_same_file<P: AsRef<Path>>(p1: P, p2: P, dereference: bool) -> bool {
+    infos_refer_to_same_file(
+        FileInformation::from_path(p1, dereference),
+        FileInformation::from_path(p2, dereference),
+    )
+}
+
+/// Checks if `p1` and `p2` are the same file information.
+/// If error happens when trying to get files' metadata, returns false
+pub fn infos_refer_to_same_file(
+    info1: IOResult<FileInformation>,
+    info2: IOResult<FileInformation>,
+) -> bool {
+    info1.is_ok() && info1.ok() == info2.ok()
+}
+
+/// The identity of `/`, stat'd once per process (like GNU's `get_root_dev_ino`).
+#[cfg(unix)]
+fn root_file_information() -> Option<&'static FileInformation> {
+    static ROOT: OnceLock<Option<FileInformation>> = OnceLock::new();
+    ROOT.get_or_init(|| FileInformation::from_path(Path::new("/"), true).ok())
+        .as_ref()
+}
+
+/// Whether `path` *is* `/`, by `(st_dev, st_ino)` rather than by name.
+///
+/// A bind mount of `/` (`mount --bind / /mnt`) is a real directory whose path
+/// never resolves to `/`, so a name-based `--preserve-root` check misses it;
+/// GNU compares dev/ino for the same reason. `dereference` says whether a
+/// symlink at `path` is about to be followed (only then does a link to `/`
+/// count). Returns `false` if `path` or `/` cannot be stat'd, or off unix.
+pub fn path_is_root_dir<P: AsRef<Path>>(path: P, dereference: bool) -> bool {
+    #[cfg(unix)]
+    {
+        let Some(root) = root_file_information() else {
+            return false;
+        };
+        FileInformation::from_path(path, dereference).is_ok_and(|info| &info == root)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (path, dereference);
+        false
+    }
+}
+
+/// Check if two files are identical by comparing their contents.
+///
+/// Returns `Ok(true)` if both files exist, are regular files, and have identical contents.
+/// Returns `Ok(false)` if the files differ in size, aren't both regular files, or have different contents.
+/// Returns `Err` if an I/O error occurs while opening or reading either file.
+///
+/// # Examples
+///
+/// ```
+/// use std::io::Write;
+/// use tempfile::NamedTempFile;
+/// use uucore::fs::are_files_identical;
+///
+/// let mut file1 = NamedTempFile::new().unwrap();
+/// let mut file2 = NamedTempFile::new().unwrap();
+/// file1.write_all(b"hello world").unwrap();
+/// file2.write_all(b"hello world").unwrap();
+///
+/// assert!(are_files_identical(file1.path(), file2.path()).unwrap());
+/// ```
+pub fn are_files_identical(path1: impl AsRef<Path>, path2: impl AsRef<Path>) -> IOResult<bool> {
+    use std::fs::{File, metadata};
+    use std::io::{BufReader, ErrorKind, Read};
+
+    let path1 = path1.as_ref();
+    let path2 = path2.as_ref();
+
+    // First compare file sizes
+    let metadata1 = metadata(path1)?;
+    let metadata2 = metadata(path2)?;
+
+    if metadata1.len() != metadata2.len() {
+        return Ok(false);
+    }
+
+    // only proceed if both are regular files
+    if !metadata1.is_file() || !metadata2.is_file() {
+        return Ok(false);
+    }
+
+    let file1 = File::open(path1)?;
+    let file2 = File::open(path2)?;
+
+    let mut reader1 = BufReader::new(file1);
+    let mut reader2 = BufReader::new(file2);
+
+    let mut buffer1 = [0; 8192];
+    let mut buffer2 = [0; 8192];
+
+    loop {
+        // Read from first file with EINTR retry handling
+        // This loop retries the read operation if it's interrupted by signals (e.g., SIGUSR1)
+        // instead of failing, which is the POSIX-compliant way to handle interrupted I/O
+        let bytes1 = loop {
+            match reader1.read(&mut buffer1) {
+                Err(e) if e.kind() == ErrorKind::Interrupted => {}
+                result => break result?,
+            }
+        };
+
+        // Read from second file with EINTR retry handling
+        // Same retry logic as above for the second file to ensure consistent behavior
+        let bytes2 = loop {
+            match reader2.read(&mut buffer2) {
+                Err(e) if e.kind() == ErrorKind::Interrupted => {}
+                result => break result?,
+            }
+        };
+
+        if bytes1 != bytes2 {
+            return Ok(false);
+        }
+
+        if bytes1 == 0 {
+            return Ok(true);
+        }
+
+        if buffer1[..bytes1] != buffer2[..bytes2] {
+            return Ok(false);
+        }
+    }
+}
+
+/// Converts absolute `path` to be relative to absolute `to` path.
+pub fn make_path_relative_to<P1: AsRef<Path>, P2: AsRef<Path>>(path: P1, to: P2) -> PathBuf {
+    let path = path.as_ref();
+    let to = to.as_ref();
+    let common_prefix_size = path
+        .components()
+        .zip(to.components())
+        .take_while(|(first, second)| first == second)
+        .count();
+    let path_suffix = path
+        .components()
+        .skip(common_prefix_size)
+        .map(Component::as_os_str);
+    let mut components: Vec<_> = to
+        .components()
+        .skip(common_prefix_size)
+        .map(|_| Component::ParentDir.as_os_str())
+        .chain(path_suffix)
+        .collect();
+    if components.is_empty() {
+        components.push(Component::CurDir.as_os_str());
+    }
+    components.iter().collect()
+}
+
+/// Checks if there is a symlink loop in the given path.
+///
+/// A symlink loop is a chain of symlinks where the last symlink points back to one of the previous symlinks in the chain.
+///
+/// # Arguments
+///
+/// * `path` - A reference to a `Path` representing the starting path to check for symlink loops.
+///
+/// # Returns
+///
+/// * `bool` - Returns `true` if a symlink loop is detected, `false` otherwise.
+pub fn is_symlink_loop(path: &Path) -> bool {
+    let mut visited_symlinks = HashSet::new();
+    let mut current_path = path.to_path_buf();
+
+    while let (Ok(metadata), Ok(link)) = (
+        current_path.symlink_metadata(),
+        fs::read_link(&current_path),
+    ) {
+        if !metadata.file_type().is_symlink() {
+            return false;
+        }
+        if !visited_symlinks.insert(current_path.clone()) {
+            return true;
+        }
+        current_path = link;
+    }
+
+    false
+}
+
+#[cfg(not(unix))]
+// Hard link comparison is not supported on non-Unix platforms
+pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
+    false
+}
+
+/// Checks if two paths are hard links to the same file.
+///
+/// # Arguments
+///
+/// * `source` - A reference to a `Path` representing the source path.
+/// * `target` - A reference to a `Path` representing the target path.
+///
+/// # Returns
+///
+/// * `bool` - Returns `true` if the paths are hard links to the same file, and `false` otherwise.
+#[cfg(unix)]
+pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
+    // The target is usually the one that does not exist, so look it up first
+    // and return early instead of also querying the source for nothing.
+    let Ok(target_metadata) = fs::symlink_metadata(target) else {
+        return false;
+    };
+    let Ok(source_metadata) = fs::symlink_metadata(source) else {
+        return false;
+    };
+
+    source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
+}
+
+#[cfg(not(unix))]
+pub fn are_hardlinks_or_one_way_symlink_to_same_file(_source: &Path, _target: &Path) -> bool {
+    false
+}
+
+/// Checks if either two paths are hard links to the same file or if the source path is a symbolic link which when fully resolved points to target path
+///
+/// # Arguments
+///
+/// * `source` - A reference to a `Path` representing the source path.
+/// * `target` - A reference to a `Path` representing the target path.
+///
+/// # Returns
+///
+/// * `bool` - Returns `true` if either of above conditions are true, and `false` otherwise.
+#[cfg(unix)]
+pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Path) -> bool {
+    // As above, look up the target first: if it does not exist, there is
+    // nothing to compare the source with.
+    let Ok(target_metadata) = fs::symlink_metadata(target) else {
+        return false;
+    };
+    let Ok(source_metadata) = fs::metadata(source) else {
+        return false;
+    };
+
+    source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
+}
+
+/// Returns true if the passed `path` ends with a path terminator.
+///
+/// This function examines the last character of the path to determine
+/// if it is a directory separator. It supports both Unix-style (`/`)
+/// and Windows-style (`\`) separators.
+///
+/// # Arguments
+///
+/// * `path` - A reference to the path to be checked.
+#[cfg(any(unix, target_os = "wasi"))]
+pub fn path_ends_with_terminator(path: &Path) -> bool {
+    #[cfg(unix)]
+    use std::os::unix::prelude::OsStrExt;
+    #[cfg(all(target_os = "wasi", target_env = "p1"))]
+    use std::os::wasi::ffi::OsStrExt;
+
+    #[cfg(all(target_os = "wasi", target_env = "p2"))]
+    return path
+        .as_os_str()
+        .as_encoded_bytes()
+        .last()
+        .is_some_and(|&byte| byte == b'/');
+    #[cfg(not(all(target_os = "wasi", target_env = "p2")))]
+    return path
+        .as_os_str()
+        .as_bytes()
+        .last()
+        .is_some_and(|&byte| byte == b'/');
+}
+
+#[cfg(windows)]
+pub fn path_ends_with_terminator(path: &Path) -> bool {
+    use std::os::windows::prelude::OsStrExt;
+    path.as_os_str()
+        .encode_wide()
+        .last()
+        .is_some_and(|wide| wide == b'/'.into() || wide == b'\\'.into())
+}
+
+/// Checks if the standard input (stdin) is a directory.
+///
+/// # Arguments
+///
+/// * `stdin` - A reference to the standard input handle.
+///
+/// # Returns
+///
+/// * `bool` - Returns `true` if stdin is a directory, `false` otherwise.
+pub fn is_stdin_directory(stdin: &Stdin) -> bool {
+    #[cfg(any(unix, all(target_os = "wasi", target_env = "p2")))]
+    {
+        use mode::{S_IFDIR, S_IFMT};
+        if let Ok(stat) = rustix::fs::fstat(stdin) {
+            #[allow(clippy::unnecessary_cast)]
+            let mode = stat.st_mode as u32;
+            // We use the S_IFMT mask ala S_ISDIR() to avoid mistaking
+            // sockets for directories.
+            return mode & S_IFMT == S_IFDIR;
+        }
+        false
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawHandle;
+        let handle = stdin.as_raw_handle();
+        if let Ok(metadata) = fs::metadata(format!("{}", handle as usize)) {
+            return metadata.is_dir();
+        }
+        false
+    }
+
+    // WASI P1: stdin is never a directory
+    #[cfg(all(target_os = "wasi", target_env = "p1"))]
+    {
+        let _ = stdin;
+        false
+    }
+}
+
+pub mod sane_blksize {
+
+    #[cfg(unix)]
+    use std::os::unix::fs::MetadataExt;
+    use std::{fs::metadata, path::Path};
+
+    pub const DEFAULT: u64 = 512;
+    pub const MAX: u64 = (u32::MAX / 8 + 1) as u64;
+
+    /// Provides sanity checked blksize value from the provided value.
+    ///
+    /// If the provided value is a invalid values a meaningful adaption
+    /// of that value is done.
+    pub fn sane_blksize(st_blksize: u64) -> u64 {
+        match st_blksize {
+            0 => DEFAULT,
+            1..=MAX => st_blksize,
+            _ => DEFAULT,
+        }
+    }
+
+    /// Provides the blksize information from the provided metadata.
+    ///
+    /// If the metadata contain invalid values a meaningful adaption
+    /// of that value is done.
+    pub fn sane_blksize_from_metadata(
+        #[cfg(unix)] metadata: &std::fs::Metadata,
+        #[cfg(not(unix))] _: &std::fs::Metadata,
+    ) -> u64 {
+        #[cfg(unix)]
+        {
+            sane_blksize(metadata.blksize())
+        }
+
+        #[cfg(not(unix))]
+        {
+            DEFAULT
+        }
+    }
+
+    /// Provides the blksize information from given file path's filesystem.
+    ///
+    /// If the metadata can't be fetched or contain invalid values a
+    /// meaningful adaption of that value is done.
+    pub fn sane_blksize_from_path(path: &Path) -> u64 {
+        match metadata(path) {
+            Ok(metadata) => sane_blksize_from_metadata(&metadata),
+            Err(_) => DEFAULT,
+        }
+    }
+}
+
+/// Disk geometry of a volume, as reported by the Windows `GetDiskFreeSpaceW`
+/// API. Cluster counts are in clusters, not bytes.
+#[cfg(windows)]
+#[derive(Clone, Copy, Debug)]
+pub struct DiskFreeSpace {
+    pub sectors_per_cluster: u32,
+    pub bytes_per_sector: u32,
+    pub free_clusters: u32,
+    pub total_clusters: u32,
+}
+
+/// Safe wrapper around the Windows `GetVolumePathNameW` API.
+///
+/// Returns the mount-point root of the volume holding `path` (e.g. `C:\` or
+/// `C:\mount\`), handling both plain drive letters and volumes mounted on a
+/// directory.
+#[cfg(windows)]
+pub fn volume_path_name(path: &Path) -> IOResult<PathBuf> {
+    let wide: Vec<u16> = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    // The returned mount point is a prefix of the (absolutized) input, so
+    // sizing the buffer to the input — with the documented MAX_PATH + 1
+    // minimum — means it cannot be too small, even for long paths.
+    let mut root = vec![0u16; wide.len().max(MAX_PATH as usize + 1)];
+    // SAFETY: `wide` is a valid null-terminated wide string, and `root` is a
+    // valid output buffer of `root.len()` u16s.
+    let ok = unsafe { GetVolumePathNameW(wide.as_ptr(), root.as_mut_ptr(), root.len() as u32) };
+    if ok == 0 {
+        return Err(Error::last_os_error());
+    }
+    let len = root.iter().position(|&c| c == 0).unwrap_or(root.len());
+    Ok(PathBuf::from(OsString::from_wide(&root[..len])))
+}
+
+/// Safe wrapper around the Windows `GetDiskFreeSpaceW` API for the volume
+/// rooted at `root` (as returned by [`volume_path_name`]).
+///
+/// The trailing separator the API requires on drive and UNC roots is appended
+/// if missing.
+#[cfg(windows)]
+pub fn disk_free_space(root: &Path) -> IOResult<DiskFreeSpace> {
+    let mut wide: Vec<u16> = root.as_os_str().encode_wide().collect();
+    if !matches!(wide.last(), Some(&sep) if sep == u16::from(b'\\') || sep == u16::from(b'/')) {
+        wide.push(u16::from(b'\\'));
+    }
+    wide.push(0);
+
+    let mut info = DiskFreeSpace {
+        sectors_per_cluster: 0,
+        bytes_per_sector: 0,
+        free_clusters: 0,
+        total_clusters: 0,
+    };
+    // SAFETY: `wide` is a valid null-terminated wide string; the four
+    // out-params are valid `u32` pointers.
+    let ok = unsafe {
+        GetDiskFreeSpaceW(
+            wide.as_ptr(),
+            &raw mut info.sectors_per_cluster,
+            &raw mut info.bytes_per_sector,
+            &raw mut info.free_clusters,
+            &raw mut info.total_clusters,
+        )
+    };
+    if ok == 0 {
+        return Err(Error::last_os_error());
+    }
+    Ok(info)
+}
+
+/// Flag `file` as sparse using the Windows `FSCTL_SET_SPARSE` control code.
+///
+/// Once a file is marked sparse, regions within its length that are never
+/// written are not allocated on disk and read back as zeros. On filesystems
+/// without sparse support the call fails with `ERROR_INVALID_FUNCTION` or
+/// `ERROR_NOT_SUPPORTED`.
+#[cfg(windows)]
+pub fn set_file_sparse(file: &fs::File) -> IOResult<()> {
+    let mut bytes_returned: u32 = 0;
+    // SAFETY: `file.as_raw_handle()` is a valid, open file handle owned by `file`.
+    // `FSCTL_SET_SPARSE` takes no input or output buffer, so the buffer pointers
+    // are null with zero lengths; `bytes_returned` is a valid out-parameter.
+    let ok = unsafe {
+        DeviceIoControl(
+            // `as_raw_handle()` yields the std `*mut c_void`; `.cast()` reinterprets
+            // it as the windows-sys `HANDLE` without an identity `as` pointer cast
+            // (which clippy::ptr_as_ptr flags).
+            file.as_raw_handle().cast(),
+            FSCTL_SET_SPARSE,
+            std::ptr::null(),
+            0,
+            std::ptr::null_mut(),
+            0,
+            &raw mut bytes_returned,
+            std::ptr::null_mut(),
+        )
+    };
+    if ok == 0 {
+        return Err(Error::last_os_error());
+    }
+    Ok(())
+}
+
+/// Extracts the filename component from the given `file` path and returns it as an `Option<&str>`.
+///
+/// If the `file` path contains a filename, this function returns `Some(filename)` where `filename` is
+/// the extracted filename as a string slice (`&str`). If the `file` path does not have a filename
+/// component or if the filename is not valid UTF-8, it returns `None`.
+///
+/// # Arguments
+///
+/// * `file`: A reference to a `Path` representing the file path from which to extract the filename.
+///
+/// # Returns
+///
+/// * `Some(filename)`: If a valid filename exists in the `file` path, where `filename` is the
+///   extracted filename as a string slice (`&str`).
+/// * `None`: If the `file` path does not contain a valid filename or if the filename is not valid UTF-8.
+pub fn get_filename(file: &Path) -> Option<&str> {
+    file.file_name().and_then(|filename| filename.to_str())
+}
+
+#[cfg(test)]
+mod tests {
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+    #[cfg(unix)]
+    use std::io::Write;
+    #[cfg(unix)]
+    use std::os::unix;
+    #[cfg(unix)]
+    use tempfile::{NamedTempFile, tempdir};
+
+    struct NormalizePathTestCase<'a> {
+        path: &'a str,
+        test: &'a str,
+    }
+
+    const NORMALIZE_PATH_TESTS: [NormalizePathTestCase; 15] = [
+        NormalizePathTestCase {
+            path: "foo/bar/../..",
+            test: ".",
+        },
+        NormalizePathTestCase {
+            path: ".",
+            test: ".",
+        },
+        // Should not try to eliminate leading .. components,
+        // as it may point to a sibling of the current dir
+        NormalizePathTestCase {
+            path: "../foo",
+            test: "../foo",
+        },
+        // Try to go down, then escape above current dir and back down again
+        NormalizePathTestCase {
+            path: "foo/../../../bar/baz",
+            test: "../../bar/baz",
+        },
+        NormalizePathTestCase {
+            path: "../../foo/..",
+            test: "../..",
+        },
+        NormalizePathTestCase {
+            path: "foo/../../..",
+            test: "../..",
+        },
+        NormalizePathTestCase {
+            path: "foo/bar/../../..",
+            test: "..",
+        },
+        NormalizePathTestCase {
+            path: "./foo/bar.txt",
+            test: "foo/bar.txt",
+        },
+        NormalizePathTestCase {
+            path: "bar/../foo/bar.txt",
+            test: "foo/bar.txt",
+        },
+        NormalizePathTestCase {
+            path: "foo///bar.txt",
+            test: "foo/bar.txt",
+        },
+        NormalizePathTestCase {
+            path: "foo///bar",
+            test: "foo/bar",
+        },
+        NormalizePathTestCase {
+            path: "foo//./bar",
+            test: "foo/bar",
+        },
+        NormalizePathTestCase {
+            path: "/foo//./bar",
+            test: "/foo/bar",
+        },
+        NormalizePathTestCase {
+            path: r"C:/you/later/",
+            test: "C:/you/later",
+        },
+        NormalizePathTestCase {
+            path: "\\networkShare/a//foo//./bar",
+            test: "\\networkShare/a/foo/bar",
+        },
+    ];
+
+    #[test]
+    fn test_normalize_path() {
+        for test in &NORMALIZE_PATH_TESTS {
+            let path = Path::new(test.path);
+            let normalized = normalize_path(path);
+            assert_eq!(
+                test.test.replace('/', MAIN_SEPARATOR.to_string().as_str()),
+                normalized.to_str().expect("Path is not valid utf-8!")
+            );
+        }
+    }
+
+    #[test]
+    fn test_display_permissions() {
+        use mode::*;
+        // spell-checker:ignore (perms) brwsr drwxr rwxr
+        assert_eq!(
+            "drwxr-xr-x",
+            display_permissions_unix(S_IFDIR | 0o755, true)
+        );
+        assert_eq!(
+            "rwxr-xr-x",
+            display_permissions_unix(S_IFDIR | 0o755, false)
+        );
+        assert_eq!(
+            "-rw-r--r--",
+            display_permissions_unix(S_IFREG | 0o644, true)
+        );
+        assert_eq!(
+            "srw-r-----",
+            display_permissions_unix(S_IFSOCK | 0o640, true)
+        );
+        assert_eq!(
+            "lrw-r-xr-x",
+            display_permissions_unix(S_IFLNK | 0o655, true)
+        );
+        assert_eq!("?rw-r-xr-x", display_permissions_unix(0o655, true));
+
+        assert_eq!(
+            "brwSr-xr-x",
+            display_permissions_unix(S_IFBLK | S_ISUID | 0o655, true)
+        );
+        assert_eq!(
+            "brwsr-xr-x",
+            display_permissions_unix(S_IFBLK | S_ISUID | 0o755, true)
+        );
+
+        assert_eq!(
+            "prw---sr--",
+            display_permissions_unix(S_IFIFO | S_ISGID | 0o614, true)
+        );
+        assert_eq!(
+            "prw---Sr--",
+            display_permissions_unix(S_IFIFO | S_ISGID | 0o604, true)
+        );
+
+        assert_eq!(
+            "c---r-xr-t",
+            display_permissions_unix(S_IFCHR | S_ISVTX | 0o055, true)
+        );
+        assert_eq!(
+            "c---r-xr-T",
+            display_permissions_unix(S_IFCHR | S_ISVTX | 0o054, true)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_is_symlink_loop_no_loop() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("file.txt");
+        let symlink_path = temp_dir.path().join("symlink");
+
+        fs::write(&file_path, "test content").unwrap();
+        unix::fs::symlink(&file_path, &symlink_path).unwrap();
+
+        assert!(!is_symlink_loop(&symlink_path));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_is_symlink_loop_direct_loop() {
+        let temp_dir = tempdir().unwrap();
+        let symlink_path = temp_dir.path().join("loop");
+
+        unix::fs::symlink(&symlink_path, &symlink_path).unwrap();
+
+        assert!(is_symlink_loop(&symlink_path));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_is_symlink_loop_indirect_loop() {
+        let temp_dir = tempdir().unwrap();
+        let symlink1_path = temp_dir.path().join("symlink1");
+        let symlink2_path = temp_dir.path().join("symlink2");
+
+        unix::fs::symlink(&symlink1_path, &symlink2_path).unwrap();
+        unix::fs::symlink(&symlink2_path, &symlink1_path).unwrap();
+
+        assert!(is_symlink_loop(&symlink1_path));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_are_hardlinks_to_same_file_same_file() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "Test content").unwrap();
+
+        let path1 = temp_file.path();
+        let path2 = temp_file.path();
+
+        assert!(are_hardlinks_to_same_file(path1, path2));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_are_hardlinks_to_same_file_different_files() {
+        let mut temp_file1 = NamedTempFile::new().unwrap();
+        writeln!(temp_file1, "Test content 1").unwrap();
+
+        let mut temp_file2 = NamedTempFile::new().unwrap();
+        writeln!(temp_file2, "Test content 2").unwrap();
+
+        let path1 = temp_file1.path();
+        let path2 = temp_file2.path();
+
+        assert!(!are_hardlinks_to_same_file(path1, path2));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_are_hardlinks_to_same_file_hard_link() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "Test content").unwrap();
+        let path1 = temp_file.path();
+
+        let path2 = temp_file.path().with_extension("hardlink");
+        fs::hard_link(path1, &path2).unwrap();
+
+        assert!(are_hardlinks_to_same_file(path1, &path2));
+    }
+
+    #[test]
+    fn test_get_file_display() {
+        use mode::*;
+        assert_eq!(get_file_display(S_IFDIR | 0o755), 'd');
+        assert_eq!(get_file_display(S_IFCHR | 0o644), 'c');
+        assert_eq!(get_file_display(S_IFBLK | 0o600), 'b');
+        assert_eq!(get_file_display(S_IFREG | 0o777), '-');
+        assert_eq!(get_file_display(S_IFIFO | 0o666), 'p');
+        assert_eq!(get_file_display(S_IFLNK | 0o777), 'l');
+        assert_eq!(get_file_display(S_IFSOCK | 0o600), 's');
+        assert_eq!(get_file_display(0o777), '?');
+    }
+
+    #[test]
+    fn test_path_ends_with_terminator() {
+        // Path ends with a forward slash
+        assert!(path_ends_with_terminator(Path::new("/some/path/")));
+
+        // Path ends with a backslash
+        #[cfg(windows)]
+        assert!(path_ends_with_terminator(Path::new("C:\\some\\path\\")));
+
+        // Path does not end with a terminator
+        assert!(!path_ends_with_terminator(Path::new("/some/path")));
+        assert!(!path_ends_with_terminator(Path::new("C:\\some\\path")));
+
+        // Empty path
+        assert!(!path_ends_with_terminator(Path::new("")));
+
+        // Root path
+        assert!(path_ends_with_terminator(Path::new("/")));
+        #[cfg(windows)]
+        assert!(path_ends_with_terminator(Path::new("C:\\")));
+    }
+
+    #[test]
+    fn test_sane_blksize() {
+        assert_eq!(512, sane_blksize::sane_blksize(0));
+        assert_eq!(512, sane_blksize::sane_blksize(512));
+        assert_eq!(4096, sane_blksize::sane_blksize(4096));
+        assert_eq!(0x2000_0000, sane_blksize::sane_blksize(0x2000_0000));
+        assert_eq!(512, sane_blksize::sane_blksize(0x2000_0001));
+    }
+    #[test]
+    fn test_get_file_name() {
+        let file_path = PathBuf::from("~/foo.txt");
+        assert!(matches!(get_filename(&file_path), Some("foo.txt")));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_volume_path_name() {
+        let temp = env::temp_dir();
+        let root = volume_path_name(&temp).unwrap();
+        assert!(path_ends_with_terminator(&root));
+        assert!(temp.starts_with(&root));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_disk_free_space() {
+        let root = volume_path_name(&env::temp_dir()).unwrap();
+        let info = disk_free_space(&root).unwrap();
+        assert!(info.sectors_per_cluster > 0);
+        assert!(info.bytes_per_sector > 0);
+
+        // The trailing separator required by the underlying API is appended
+        // when missing, so a bare drive path works too.
+        let stripped = root
+            .to_string_lossy()
+            .trim_end_matches(['\\', '/'])
+            .to_owned();
+        let info = disk_free_space(Path::new(&stripped)).unwrap();
+        assert!(info.bytes_per_sector > 0);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_set_file_sparse() {
+        use std::os::windows::fs::MetadataExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_SPARSE_FILE;
+
+        let file = tempfile::NamedTempFile::new().unwrap();
+        set_file_sparse(file.as_file()).unwrap();
+        let attributes = file.as_file().metadata().unwrap().file_attributes();
+        assert_ne!(attributes & FILE_ATTRIBUTE_SPARSE_FILE, 0);
+    }
+
+    #[test]
+    fn test_are_files_identical() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let mut file1 = NamedTempFile::new().unwrap();
+        let mut file2 = NamedTempFile::new().unwrap();
+        let mut file3 = NamedTempFile::new().unwrap();
+
+        file1.write_all(b"hello world").unwrap();
+        file2.write_all(b"hello world").unwrap();
+        file3.write_all(b"hello rust!").unwrap();
+
+        // Identical contents
+        assert!(are_files_identical(file1.path(), file2.path()).unwrap());
+
+        // Same size, different contents
+        assert!(!are_files_identical(file1.path(), file3.path()).unwrap());
+
+        // Different size
+        let mut file4 = NamedTempFile::new().unwrap();
+        file4.write_all(b"hello").unwrap();
+        assert!(!are_files_identical(file1.path(), file4.path()).unwrap());
+
+        // Non-existent file
+        assert!(are_files_identical(file1.path(), "non_existent_file_path").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_path_is_root_dir() {
+        assert!(path_is_root_dir("/", true));
+        assert!(path_is_root_dir("/", false));
+        // Reached by a different name, still the same directory.
+        assert!(path_is_root_dir("/..", true));
+        assert!(path_is_root_dir("/tmp/..", true));
+
+        let dir = tempdir().unwrap();
+        assert!(!path_is_root_dir(dir.path(), true));
+        assert!(!path_is_root_dir(dir.path().join("nonexistent"), true));
+        assert!(!path_is_root_dir("", true));
+    }
+
+    /// A symlink to `/` counts only when the caller would follow it.
+    #[cfg(unix)]
+    #[test]
+    fn test_path_is_root_dir_symlink() {
+        let dir = tempdir().unwrap();
+        let link = dir.path().join("root-link");
+        unix::fs::symlink("/", &link).unwrap();
+
+        assert!(path_is_root_dir(&link, true));
+        assert!(!path_is_root_dir(&link, false));
+    }
+}

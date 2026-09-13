@@ -1,0 +1,41 @@
+[package]
+name = "uu_unexpand"
+description = "unexpand ~ (uutils) convert input spaces to tabs"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/unexpand"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lib]
+path = "src/unexpand.rs"
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+fluent = { workspace = true }
+thiserror = { workspace = true }
+uucore = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "unexpand"
+path = "src/main.rs"
+
+[[bench]]
+name = "unexpand_bench"
+harness = false

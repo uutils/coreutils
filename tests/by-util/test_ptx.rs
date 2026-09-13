@@ -1,0 +1,487 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+// spell-checker:ignore roff
+// spell-checker:ignore funnnnnnnnnnnnnnnnn
+use uutests::new_ucmd;
+
+#[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+    new_ucmd!().arg("-g").arg("0").fails_with_code(1); // clap provided message
+    new_ucmd!().arg("-w").arg("0").fails_with_code(1); // clap provided message
+}
+#[test]
+fn test_reference_format_for_stdin() {
+    let input = "Rust is good language";
+    let expected_output = concat!(
+        r#".xx "" "" "Rust is good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Rust is" "good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Rust" "is good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Rust is good" "language" "" ":1""#,
+        "\n",
+    );
+    new_ucmd!()
+        .args(&["-G", "-A"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected_output);
+}
+#[test]
+fn test_tex_format_no_truncation_markers() {
+    let input = "Hello world Rust is a fun language";
+    new_ucmd!()
+        .args(&["-G", "-w", "30", "--format=tex"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only_fixture("test_tex_format_no_truncation_markers.expected");
+}
+#[test]
+fn gnu_ext_disabled_chunk_no_over_reading() {
+    let input = "Hello World Rust is a fun language";
+    new_ucmd!()
+        .args(&["-G", "-w", "30"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_chunk_no_over_reading.expected");
+}
+
+#[test]
+fn test_truncation_no_extra_space_in_after() {
+    new_ucmd!()
+        .args(&["-G", "-w", "30"])
+        .pipe_in("Rust is funnnnnnnnnnnnnnnnn")
+        .succeeds()
+        .stdout_contains(".xx \"\" \"Rust\" \"is/\" \"\"");
+}
+
+#[test]
+fn gnu_ext_disabled_reference_calculation() {
+    let input = "Hello World Rust is good language";
+    let expected_output = concat!(
+        r#".xx "language" "" "Hello World Rust is good" "" ":1""#,
+        "\n",
+        r#".xx "" "Hello World" "Rust is good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Hello" "World Rust is good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Hello World Rust is" "good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Hello World Rust" "is good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Hello World Rust is good" "language" "" ":1""#,
+        "\n",
+    );
+    new_ucmd!()
+        .args(&["-G", "-A"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected_output);
+}
+
+#[test]
+fn gnu_ext_disabled_rightward_no_ref() {
+    new_ucmd!()
+        .args(&["-G", "-R", "input"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_rightward_no_ref.expected");
+}
+
+#[test]
+fn gnu_ext_disabled_rightward_no_ref_empty_word_regexp() {
+    new_ucmd!()
+        .args(&["-G", "-R", "-W", "", "input"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_rightward_no_ref.expected");
+}
+
+#[test]
+fn gnu_ext_disabled_rightward_no_ref_word_regexp_exc_space() {
+    new_ucmd!()
+        .args(&["-G", "-R", "-W", "[^\t\n]+", "input"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_rightward_no_ref_word_regexp_exc_space.expected");
+}
+
+#[test]
+fn gnu_ext_disabled_rightward_input_ref() {
+    new_ucmd!()
+        .args(&["-G", "-r", "-R", "input"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_rightward_input_ref.expected");
+}
+
+#[test]
+fn gnu_ext_disabled_rightward_auto_ref() {
+    new_ucmd!()
+        .args(&["-G", "-A", "-R", "input"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_rightward_auto_ref.expected");
+}
+
+#[test]
+fn gnu_ext_disabled_tex_no_ref() {
+    new_ucmd!()
+        .args(&["-G", "-T", "-R", "input"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_tex_no_ref.expected");
+}
+
+#[test]
+fn gnu_ext_disabled_tex_input_ref() {
+    new_ucmd!()
+        .args(&["-G", "-T", "-r", "-R", "input"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_tex_input_ref.expected");
+}
+
+#[test]
+fn gnu_ext_disabled_tex_auto_ref() {
+    new_ucmd!()
+        .args(&["-G", "-T", "-A", "-R", "input"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_tex_auto_ref.expected");
+}
+
+#[test]
+fn gnu_ext_disabled_ignore_and_only_file() {
+    new_ucmd!()
+        .args(&["-G", "-o", "only", "-i", "ignore", "input"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_ignore_and_only_file.expected");
+}
+
+#[test]
+fn gnu_ext_disabled_output_width_50() {
+    new_ucmd!()
+        .args(&["-G", "-w", "50", "input"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_output_width_50.expected");
+}
+
+#[test]
+fn gnu_ext_disabled_output_width_70() {
+    new_ucmd!()
+        .args(&["-G", "-w", "70", "input"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_output_width_70.expected");
+}
+
+#[test]
+fn gnu_ext_disabled_break_file() {
+    new_ucmd!()
+        .args(&["-G", "-b", "break_file", "input"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_break_file.expected");
+}
+
+#[test]
+fn gnu_ext_disabled_empty_word_regexp_ignores_break_file() {
+    new_ucmd!()
+        .args(&["-G", "-b", "break_file", "-R", "-W", "", "input"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_rightward_no_ref.expected");
+}
+
+#[test]
+fn test_reject_too_many_operands() {
+    new_ucmd!().args(&["-G", "-", "-", "-"]).fails_with_code(1);
+}
+
+#[test]
+fn test_break_file_regex_escaping() {
+    new_ucmd!()
+        .pipe_in("\\.+*?()|[]{}^$#&-~")
+        .args(&["-G", "-b", "-", "input"])
+        .succeeds()
+        .stdout_only_fixture("break_file_regex_escaping.expected");
+}
+
+#[test]
+fn test_ignore_case() {
+    new_ucmd!()
+        .args(&["-G", "-f"])
+        .pipe_in("a _")
+        .succeeds()
+        .stdout_only(".xx \"\" \"\" \"a _\" \"\"\n.xx \"\" \"a\" \"_\" \"\"\n");
+}
+
+#[test]
+fn test_format() {
+    new_ucmd!()
+        .args(&["-G", "-O"])
+        .pipe_in("a")
+        .succeeds()
+        .stdout_only(".xx \"\" \"\" \"a\" \"\"\n");
+    new_ucmd!()
+        .args(&["-G", "-T"])
+        .pipe_in("a")
+        .succeeds()
+        .stdout_only("\\xx {}{}{a}{}{}\n");
+    new_ucmd!()
+        .args(&["-G", "--format=roff"])
+        .pipe_in("a")
+        .succeeds()
+        .stdout_only(".xx \"\" \"\" \"a\" \"\"\n");
+    new_ucmd!()
+        .args(&["-G", "--format=tex"])
+        .pipe_in("a")
+        .succeeds()
+        .stdout_only("\\xx {}{}{a}{}{}\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_failed_write_is_reported() {
+    new_ucmd!()
+        .arg("-G")
+        .pipe_in("hello")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("ptx: write failed: No space left on device\n");
+}
+
+#[test]
+fn test_utf8() {
+    new_ucmd!()
+        .args(&["-G"])
+        .pipe_in("it’s disabled\n")
+        .succeeds()
+        .stdout_only(".xx \"\" \"it’s\" \"disabled\" \"\"\n.xx \"\" \"\" \"it’s disabled\" \"\"\n");
+    new_ucmd!()
+        .args(&["-G", "-T"])
+        .pipe_in("it’s disabled\n")
+        .succeeds()
+        .stdout_only("\\xx {}{it’s}{disabled}{}{}\n\\xx {}{}{it’s}{ disabled}{}\n");
+}
+
+#[test]
+fn test_sentence_regexp_basic() {
+    new_ucmd!()
+        .args(&["-G", "-S", "\\."])
+        .pipe_in("Hello. World.")
+        .succeeds()
+        .stdout_contains("Hello")
+        .stdout_contains("World");
+}
+
+#[test]
+fn test_sentence_regexp_split_behavior() {
+    new_ucmd!()
+        .args(&["-G", "-w", "50", "-S", "[.!]"])
+        .pipe_in("One sentence. Two sentence!")
+        .succeeds()
+        .stdout_contains("One sentence")
+        .stdout_contains("Two sentence");
+}
+
+#[test]
+fn test_sentence_regexp_empty_match_failure() {
+    new_ucmd!()
+        .args(&["-G", "-S", "^"])
+        .fails()
+        .stderr_contains("A regular expression cannot match a length zero string");
+}
+
+#[test]
+fn test_sentence_regexp_newlines_are_spaces() {
+    new_ucmd!()
+        .args(&["-G", "-S", "\\."])
+        .pipe_in("Start of\nsentence.")
+        .succeeds()
+        .stdout_contains("Start of sentence");
+}
+
+#[test]
+fn test_sentence_regexp_invalid_syntax_failure() {
+    new_ucmd!()
+        .args(&["-S", "^["])
+        .fails()
+        .stderr_contains("Invalid regexp");
+}
+
+#[test]
+fn test_gnu_mode_dumb_format() {
+    // Test GNU mode (dumb format) - the default mode without -G flag
+    new_ucmd!().pipe_in("a b").succeeds().stdout_only(
+        "                                       a b\n                                   a   b\n",
+    );
+
+    new_ucmd!()
+        .pipe_in("2a")
+        .succeeds()
+        .stdout_only(format!("{}2   a\n", " ".repeat(35)));
+}
+
+#[test]
+fn test_gnu_compatibility_narrow_width() {
+    new_ucmd!()
+        .args(&["-w", "2"])
+        .pipe_in("qux")
+        .succeeds()
+        .stdout_only("      qux\n");
+}
+
+#[test]
+fn test_gnu_compatibility_truncation_width() {
+    new_ucmd!()
+        .args(&["-w", "10"])
+        .pipe_in("foo bar")
+        .succeeds()
+        .stdout_only("     /   bar\n        foo/\n");
+}
+
+#[test]
+fn test_unicode_padding_alignment() {
+    let input = "a\né";
+    new_ucmd!()
+        .args(&["-w", "10"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("        a\n        é\n");
+}
+
+#[test]
+fn test_gnu_compat_numeric_token_with_emoji_produces_no_index() {
+    // GNU ptx produces no output for this input in default mode.
+    new_ucmd!()
+        .pipe_in("012345678901234567890123456789🛠\n")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+fn test_unicode_truncation_alignment() {
+    new_ucmd!()
+        .args(&["-w", "10"])
+        .pipe_in("föö bar")
+        .succeeds()
+        .stdout_only("     /   bar\n        föö/\n");
+}
+
+#[test]
+fn test_unicode_in_after_chunk_does_not_panic() {
+    // Regression test for a panic in get_output_chunks() when the computed
+    // max_after_size used byte lengths but the output was assembled as chars.
+    // The emoji is multibyte in UTF-8 and previously could trigger:
+    // `assertion failed: max_after_size >= after.len()`.
+    new_ucmd!()
+        .pipe_in("We've got +11 more G of 1.70. 🛠\n")
+        .succeeds()
+        .stdout_contains("We've got +11");
+}
+
+#[test]
+fn test_unicode_in_before_chunk_does_not_panic() {
+    // Regression test for issue #10893: a panic in get_output_chunks() when the
+    // computed max_before_size used char counts but the assert compared against
+    // before.len() (byte length). A multibyte char in the before chunk could
+    // trigger: `assertion failed: max_before_size >= before.len()`.
+    new_ucmd!()
+        .args(&["-w", "10"])
+        .pipe_in("éé word\n")
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
+fn test_unicode_tail_chunk_sizing() {
+    // The tail chunk budget (max_tail_size) subtracts the size of the before
+    // chunk. It must use the before chunk's char count, not its byte length,
+    // otherwise a multibyte before chunk shrinks the tail too much and drops a
+    // word that fits. Here "cc" wraps into the tail before "aé bé KEY"; with the
+    // byte-based budget it was dropped.
+    new_ucmd!()
+        .args(&["-w", "20"])
+        .pipe_in("aé bé KEY cc dd ee ff gg\n")
+        .succeeds()
+        .stdout_contains("cc/ aé");
+}
+
+#[test]
+fn test_duplicate_input_files() {
+    new_ucmd!()
+        .args(&["one_word", "one_word"])
+        .succeeds()
+        .stdout_is("                                       rust\n                                       rust\n");
+}
+
+#[test]
+fn test_narrow_width_with_long_reference_no_panic() {
+    new_ucmd!()
+        .args(&["-w", "1", "-A"])
+        .pipe_in("content")
+        .succeeds()
+        .stdout_only(":1       content\n");
+}
+
+#[test]
+fn test_typeset_mode_default_width_100() {
+    new_ucmd!()
+        .args(&["-t"])
+        .pipe_in("bar\n")
+        .succeeds()
+        .stdout_only(format!("{}bar\n", " ".repeat(53)));
+}
+
+#[test]
+fn test_typeset_mode_w_overrides_t() {
+    new_ucmd!()
+        .args(&["-t", "-w", "10"])
+        .pipe_in("bar\n")
+        .succeeds()
+        .stdout_only(format!("{}bar\n", " ".repeat(8)));
+}
+
+#[test]
+fn test_default_width_72() {
+    new_ucmd!()
+        .pipe_in("bar\n")
+        .succeeds()
+        .stdout_only(format!("{}bar\n", " ".repeat(39)));
+}
+
+#[test]
+fn test_invalid_regex_word_trailing_backslash() {
+    new_ucmd!().args(&["-W", "bar\\"]).succeeds().no_stderr();
+}
+
+#[test]
+fn test_invalid_regex_word_unclosed_group() {
+    new_ucmd!().args(&["-W", "(wrong"]).succeeds().no_stderr();
+}
+
+#[test]
+fn test_missing_file_error_contains_filename() {
+    new_ucmd!()
+        .arg("zxc")
+        .fails()
+        .stderr_is("ptx: 'zxc': No such file or directory\n");
+}
+
+#[test]
+fn test_sentence_regex_trailing_backslash() {
+    // GNU treats a trailing lone backslash as a literal one instead of erroring.
+    new_ucmd!()
+        .args(&["-S", "paris\\"])
+        .pipe_in("")
+        .succeeds()
+        .no_output();
+    new_ucmd!()
+        .args(&["-S", "london\\\\\\"])
+        .pipe_in("")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+fn test_invalid_utf8_input_is_not_an_error() {
+    new_ucmd!()
+        .pipe_in(b"ab\xFFcd\n".to_vec())
+        .succeeds()
+        .no_stderr();
+}

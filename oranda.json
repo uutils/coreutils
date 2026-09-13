@@ -1,0 +1,18 @@
+{
+  "project": {
+    "name": "uutils coreutils"
+  },
+  "build": {
+    "path_prefix": "coreutils"
+  },
+  "components": {
+    "changelog": {
+      "read_changelog_file": false
+    }
+  },
+  "styles": {
+    "theme": "light",
+    "logo": "docs/src/logo.svg",
+    "additional_css": ["docs/src/oranda.css"]
+  }
+}

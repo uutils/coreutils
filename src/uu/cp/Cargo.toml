@@ -1,0 +1,71 @@
+[package]
+name = "uu_cp"
+description = "cp ~ (uutils) copy SOURCE to DESTINATION"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/cp"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lib]
+path = "src/cp.rs"
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+filetime = { workspace = true }
+libc = { workspace = true }
+uucore = { workspace = true, features = [
+  "backup-control",
+  "buf-copy",
+  "entries",
+  "fs",
+  "fsxattr",
+  "parser",
+  "perms",
+  "mode",
+  "safe-copy",
+  "update-control",
+] }
+walkdir = { workspace = true }
+indicatif = { workspace = true }
+thiserror = { workspace = true }
+fluent = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+selinux = { workspace = true, optional = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "android", target_os = "wasi"))'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["fs"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_Foundation",
+  "Win32_Storage_FileSystem",
+] }
+
+[[bin]]
+name = "cp"
+path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "cp_bench"
+harness = false
+
+[features]
+selinux = ["dep:selinux", "uucore/selinux"]
+
+[lints]
+workspace = true

@@ -1,0 +1,221 @@
+# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal tzdb zoneinfo logind libcrypto
+
+[package]
+name = "uucore"
+description = "uutils ~ 'core' uutils code library (cross-platform)"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uucore"
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+version.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+
+[lib]
+path = "src/lib/lib.rs"
+
+[dependencies]
+ariadne = { workspace = true, optional = true }
+base64-simd = { workspace = true, optional = true }
+clap = { workspace = true }
+data-encoding = { workspace = true, optional = true }
+data-encoding-macro = { workspace = true, optional = true }
+dunce = { workspace = true, optional = true }
+glob = { workspace = true, optional = true }
+itertools = { workspace = true, optional = true }
+jiff = { workspace = true, optional = true, features = [
+  "tzdb-bundle-platform",
+  "tzdb-zoneinfo",
+  "tzdb-concatenated",
+] }
+libc = { workspace = true, optional = true }
+openssl = { workspace = true, optional = true }
+os_display = { workspace = true }
+rustc-hash = { workspace = true }
+rustix = { workspace = true, optional = true }
+# Not optional: os_display already pulls unicode-width into every uucore build,
+# so making it a direct dependency here is free and keeps char_width available
+# on all targets (a feature-gated optional dep failed to activate on wasm).
+unicode-width = { workspace = true }
+unit-prefix = { workspace = true, optional = true }
+uucore_procs = { workspace = true }
+z85 = { workspace = true, optional = true }
+
+# Benchmark dependencies (optional)
+tempfile = { workspace = true, optional = true }
+
+digest = { workspace = true, optional = true }
+hex = { workspace = true, optional = true }
+memchr = { workspace = true, optional = true }
+md-5 = { workspace = true, optional = true }
+sha1 = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+sha3 = { workspace = true, optional = true }
+shake = { workspace = true, optional = true }
+blake2b_simd = { workspace = true, optional = true }
+blake3 = { workspace = true, optional = true }
+sm3 = { workspace = true, optional = true }
+crc-fast = { workspace = true, optional = true, features = ["std"] }
+bigdecimal = { workspace = true, optional = true }
+num-traits = { workspace = true, optional = true }
+
+# icu stuff
+icu_calendar = { workspace = true, optional = true, features = [
+  "compiled_data",
+] }
+icu_collator = { workspace = true, optional = true, features = [
+  "compiled_data",
+] }
+icu_datetime = { workspace = true, optional = true, features = [
+  "compiled_data",
+] }
+icu_decimal = { workspace = true, optional = true, features = [
+  "compiled_data",
+] }
+icu_locale = { workspace = true, optional = true, features = ["compiled_data"] }
+icu_provider = { workspace = true, optional = true }
+jiff-icu = { workspace = true, optional = true }
+
+# Fluent dependencies (always available for localization)
+fluent = { workspace = true }
+fluent-syntax = { workspace = true }
+unic-langid = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+selinux = { workspace = true, optional = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))'.dependencies]
+bstr = { workspace = true, optional = true }
+
+[target.'cfg(unix)'.dependencies]
+# utmpx is unix-only, so its dependencies must not be pulled into other targets
+# (the uptime feature enables utmpx and now builds on windows too).
+dns-lookup = { workspace = true, optional = true }
+time = { workspace = true, optional = true, features = [
+  "formatting",
+  "local-offset",
+  "macros",
+] }
+nix = { workspace = true, optional = true }
+walkdir = { workspace = true, optional = true }
+xattr = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+procfs = { workspace = true, optional = true }
+
+[target.'cfg(windows)'.dependencies]
+wild = { workspace = true }
+windows-sys = { workspace = true, optional = true, default-features = false, features = [
+  "Wdk_System_SystemInformation",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+  "Win32_Foundation",
+  "Win32_Globalization",
+  "Win32_System_Console",
+  "Win32_System_IO",
+  "Win32_System_Ioctl",
+  "Win32_System_JobObjects",
+  "Win32_System_RemoteDesktop",
+  "Win32_System_SystemInformation",
+  "Win32_System_Threading",
+  "Win32_System_WindowsProgramming",
+] }
+
+[target.'cfg(target_os = "openbsd")'.dependencies]
+utmp-classic = { workspace = true, optional = true }
+
+[features]
+default = ["signals"]
+# * non-default features
+backup-control = []
+colors = []
+diagnostics = ["dep:ariadne"]
+checksum = ["base64-simd", "quoting-style", "rustix/fs", "sum"]
+encoding = ["data-encoding", "data-encoding-macro", "z85", "base64-simd"]
+entries = ["libc", "rustix/fs", "rustix/process"]
+extendedbigdecimal = ["bigdecimal", "num-traits"]
+fast-inc = []
+fs = ["dunce", "libc", "rustix/fs", "windows-sys"]
+fsext = ["libc", "windows-sys", "bstr"]
+fsxattr = ["xattr", "itertools", "libc"]
+hardware = []
+lines = []
+feat_systemd_logind = ["utmpx", "libc"]
+format = [
+  "bigdecimal",
+  "extendedbigdecimal",
+  "itertools",
+  "parser-num",
+  "num-traits",
+  "quoting-style",
+  "unit-prefix",
+]
+i18n-all = ["i18n-charmap", "i18n-collator", "i18n-decimal", "i18n-datetime"]
+i18n-charmap = ["i18n-common"]
+i18n-common = ["icu_locale", "windows-sys"]
+i18n-collator = ["i18n-common", "icu_collator"]
+i18n-decimal = ["i18n-common", "icu_decimal", "icu_provider"]
+i18n-datetime = [
+  "i18n-common",
+  "icu_calendar",
+  "icu_datetime",
+  "jiff-icu",
+  "jiff",
+]
+mode = ["libc", "rustix/process"]
+perms = ["entries", "libc", "safe-traversal", "walkdir"]
+buf-copy = ["pipes"]
+parser-num = ["extendedbigdecimal", "num-traits"]
+parser-size = ["parser-num", "procfs"]
+parser-glob = ["glob"]
+parser = ["parser-num", "parser-size", "parser-glob"]
+pipes = ["fs", "rustix/pipe"]
+process = ["libc", "nix/user", "rustix/process", "windows-sys"]
+proc-info = ["tty", "walkdir"]
+quoting-style = ["i18n-common"]
+ranges = []
+ringbuffer = []
+safe-copy = []
+safe-traversal = ["libc", "nix/fs", "nix/dir", "nix/user"]
+selinux = ["dep:selinux"]
+smack = ["xattr"]
+signals = ["nix/fs", "nix/signal", "nix/poll"]
+sum = [
+  "digest",
+  "hex",
+  "memchr",
+  "md-5",
+  "sha1",
+  "sha2",
+  "sha3",
+  "shake",
+  "blake2b_simd",
+  "blake3",
+  "sm3",
+  "crc-fast",
+  "data-encoding",
+]
+# Use OpenSSL (libcrypto) for md5/sha1/sha2-family digests instead of the
+# pure-Rust crates. This dramatically speeds up checksum utilities on CPUs
+# without SHA-NI by using OpenSSL's optimized assembly implementations.
+openssl = ["dep:openssl"]
+update-control = ["parser"]
+utf8 = []
+utmpx = ["time", "time/macros", "libc", "dns-lookup"]
+version-cmp = []
+wide = []
+tty = []
+time = ["jiff"]
+uptime = ["jiff", "libc", "rustix/time", "utmp-classic", "utmpx", "windows-sys"]
+benchmark = ["itertools", "tempfile"]
+
+[lints]
+workspace = true

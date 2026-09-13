@@ -1,0 +1,9 @@
+this
+is
+a
+file
+with
+one
+word
+per
+line

@@ -1,0 +1,24 @@
+# spell-checker:ignore (misc) direnv
+
+target/
+coverage/
+/src/*/gen_table
+/build/
+/tmp/
+/busybox/
+/.vs/
+/public/
+*~
+.*.swp
+.*.swo
+.idea
+lib*.a
+/docs/_build
+*.iml
+### macOS ###
+.DS_Store
+
+### direnv ###
+/.direnv/
+
+*.code-workspace

@@ -1,0 +1,46 @@
+:root {
+    --PASS: #44AF69;
+    --ERROR: #F8333C;
+    --FAIL: #F8333C;
+    --SKIP: #d3c994;
+}
+.PASS {
+    color: var(--PASS);
+}
+.ERROR {
+    color: var(--ERROR);
+}
+.FAIL {
+    color: var(--FAIL);
+}
+.SKIP {
+    color: var(--SKIP);
+}
+.testSummary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 90%;
+}
+.progress {
+    width: 80%;
+    display: flex;
+    justify-content: right;
+    align-items: center;
+}
+.progress-bar {
+    height: 10px;
+    width: calc(100% - 15ch);
+    border-radius: 5px;
+}
+.result {
+    font-weight: bold;
+    width: 7ch;
+    display: inline-block;
+}
+.result-line {
+    margin: 8px;
+}
+.counts {
+    margin-right: 10px;
+}

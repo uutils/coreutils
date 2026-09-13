@@ -1,0 +1,13 @@
+Index: gnu/tests/mv/dup-source.sh
+===================================================================
+--- gnu.orig/tests/mv/dup-source.sh
++++ gnu/tests/mv/dup-source.sh
+@@ -83,7 +83,7 @@ $i: cannot stat 'a': No such file or dir
+ $i: cannot stat 'a': No such file or directory
+ $i: cannot stat 'b': No such file or directory
+ $i: cannot move './b' to a subdirectory of itself, 'b/b'
+-$i: warning: source directory 'b' specified more than once
++$i: cannot move 'b' to a subdirectory of itself, 'b/b'
+ EOF
+   compare exp out || fail=1
+ done

@@ -1,0 +1,25 @@
+zero-width space inbetween these: x​x
+and inbetween two spaces: [ ​ ]
+and at the end of the line: ​
+
+non-breaking space: x x [   ]  
+
+simple unicode: xµx [ µ ] µ
+
+wide: xｗx [ ｗ ] ｗ
+
+simple emoji: x👩x [ 👩 ] 👩
+
+complex emoji: x👩‍🔬x [ 👩‍🔬 ] 👩‍🔬
+
+Ｈｅｌｌｏ, ｗｏｒｌｄ!
+
+line feed: xx [  ] 
+
+vertical tab: xx [  ] 
+
+horizontal tab: x	x [ 	 ]
+this should be the longest line:
+1234567	12345678	123456781234567812345678
+
+Control character: xx [  ] 

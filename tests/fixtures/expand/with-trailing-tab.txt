@@ -1,0 +1,7 @@
+// !note: file contains significant whitespace
+// * indentation uses <TAB> characters
+int main() {
+	// * next line has both a leading & trailing tab
+	// with tabs=>	
+	return 0;
+}

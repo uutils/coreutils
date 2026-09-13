@@ -1,0 +1,72 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+exclude: ^tests/fixtures/
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-executables-have-shebangs
+      - id: check-json
+        exclude: '\.vscode/(cSpell|extensions)\.json' # cSpell.json and extensions.json use comments
+      - id: check-shebang-scripts-are-executable
+        exclude: '.+\.rs' # would be triggered by #![some_attribute]
+      - id: check-symlinks
+      - id: check-toml
+      - id: check-yaml
+        args: [ --allow-multiple-documents ]
+      - id: destroyed-symlinks
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [ --fix=lf ]
+      - id: trailing-whitespace
+
+  - repo: https://github.com/mozilla-l10n/moz-fluent-linter
+    rev: v0.4.9
+    hooks:
+      - id: fluent_linter
+        files: \.ftl$
+        args: [--config, .github/fluent_linter_config.yml, src/uu/]
+
+  - repo: https://github.com/streetsidesoftware/cspell-cli
+    rev: v10.2.0
+    hooks:
+      - id: cspell
+        # Pinned so the check does not depend on the node version a contributor
+        # happens to have installed; cspell v10 requires node >= 22.18.
+        language_version: '22.18.0'
+        args:
+          - --config
+          - .vscode/cSpell.json
+          - --no-must-find-files
+          - --no-progress
+          - --no-summary
+          - --gitignore
+          - --files # must stay last: pre-commit appends the filenames here
+
+  - repo: local
+    hooks:
+      - id: rust-linting
+        name: Rust linting
+        description: Run cargo fmt on files included in the commit.
+        entry: cargo +stable fmt --
+        pass_filenames: true
+        types: [file, rust]
+        language: system
+      - id: rust-clippy
+        name: Rust clippy
+        description: Run cargo clippy on files included in the commit.
+        entry: cargo +stable clippy --workspace --all-targets --all-features -- -D warnings
+        pass_filenames: false
+        types: [file, rust]
+        language: system
+      - id: cargo-lock-check
+        name: Cargo.lock sync check
+        description: Ensure Cargo.lock and fuzz/Cargo.lock are up-to-date.
+        entry: bash -c 'for dir in . fuzz; do ( cd "$dir" && cargo fetch --quiet ); done'
+        pass_filenames: false
+        files: 'Cargo\.(toml|lock)$'
+        language: system
+
+ci:
+  skip: [cspell, rust-linting, rust-clippy, cargo-lock-check]
