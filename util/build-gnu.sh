@@ -275,9 +275,6 @@ sed -i -e "s|invalid suffix in --pages argument|invalid --pages argument|" \
 sed -i "s/\(baddecode.*OUT=>\"\).*\"/\1\"/g" tests/basenc/base64.pl
 sed -i "s/\(\(b2[ml]_[69]\|z85_8\|z85_35\).*OUT=>\)[^}]*\(.*\)/\1\"\"\3/g" tests/basenc/basenc.pl
 
-# add "error: " to the expected error message
-sed -i "s/\$prog: invalid input/\$prog: error: invalid input/g" tests/basenc/basenc.pl
-
 # basenc: swap out error message for unexpected arg
 sed -i "s/  {ERR=>\"\$prog: foobar\\\\n\" \. \$try_help }/  {ERR=>\"error: unexpected argument '--foobar' found\n\n  tip: to pass '--foobar' as a value, use '-- --foobar'\n\nUsage: basenc [OPTION]... [FILE]\n\nFor more information, try '--help'.\n\"}]/" tests/basenc/basenc.pl
 sed -i "s/  {ERR_SUBST=>\"s\/(unrecognized|unknown) option \[-' \]\*foobar\[' \]\*\/foobar\/\"}],//" tests/basenc/basenc.pl
