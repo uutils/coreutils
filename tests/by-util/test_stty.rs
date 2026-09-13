@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar ispeed ospeed NCCS nonhex gstty notachar cbreak evenp oddp CSIZE
 
-use uutests::util::{expected_result, pty_path};
+use uutests::util::{CmdResult, expected_result, pty_path};
 use uutests::{at_and_ts, new_ucmd, unwrap_or_return};
 
 /// Normalize stderr by replacing the full binary path with just the utility name
@@ -13,6 +13,32 @@ fn normalize_stderr(stderr: &str) -> String {
     // Replace patterns like "Try 'gstty --help'" or "Try '/path/to/stty --help'" with "Try 'stty --help'"
     let re = regex::Regex::new(r"Try '[^']*(?:g)?stty --help'").unwrap();
     re.replace_all(stderr, "Try 'stty --help'").to_string()
+}
+
+/// Assert that `stty --all` reported `flag` as enabled.
+///
+/// The disabled form of a setting is its name prefixed with `-`, so a plain
+/// `stdout_contains("icanon")` also matches `-icanon` and passes whether or not
+/// the setting was applied. Comparing whole whitespace-delimited tokens tells
+/// the two forms apart.
+#[track_caller]
+fn assert_flag_enabled(result: &CmdResult, flag: &str) {
+    let stdout = result.stdout_str();
+    assert!(
+        stdout.split_whitespace().any(|token| token == flag),
+        "expected '{flag}' to be enabled in:\n{stdout}"
+    );
+}
+
+/// Assert that `stty --all` reported `flag` as disabled, that is, as `-flag`.
+#[track_caller]
+fn assert_flag_disabled(result: &CmdResult, flag: &str) {
+    let stdout = result.stdout_str();
+    let disabled = format!("-{flag}");
+    assert!(
+        stdout.split_whitespace().any(|token| token == disabled),
+        "expected '{flag}' to be disabled in:\n{stdout}"
+    );
 }
 
 #[test]
@@ -40,6 +66,8 @@ fn test_all_flag() {
     let (path, _controller, _replica) = pty_path();
     let result = new_ucmd!().args(&["--all", "--file", &path]).succeeds();
 
+    // Only checks that each flag is reported at all; either the enabled or the
+    // disabled form is fine here, whichever the terminal happens to be in.
     for flag in ["parenb", "parmrk", "ixany", "onlcr", "icanon", "noflsh"] {
         result.stdout_contains(flag);
     }
@@ -224,35 +252,42 @@ fn valid_baud_formats() {
 }
 
 #[test]
-#[ignore = "Fails because cargo test does not run in a tty"]
+#[cfg(unix)]
 fn set_mapping() {
-    new_ucmd!().args(&["intr", "'"]).succeeds();
+    let (path, _controller, _replica) = pty_path();
+    new_ucmd!().args(&["--file", &path, "intr", "'"]).succeeds();
     new_ucmd!()
-        .args(&["--all"])
+        .args(&["--file", &path, "--all"])
         .succeeds()
         .stdout_contains("intr = '");
 
-    new_ucmd!().args(&["intr", "undef"]).succeeds();
     new_ucmd!()
-        .args(&["--all"])
+        .args(&["--file", &path, "intr", "undef"])
+        .succeeds();
+    new_ucmd!()
+        .args(&["--file", &path, "--all"])
         .succeeds()
         .stdout_contains("intr = <undef>");
 
-    new_ucmd!().args(&["intr", "^-"]).succeeds();
     new_ucmd!()
-        .args(&["--all"])
+        .args(&["--file", &path, "intr", "^-"])
+        .succeeds();
+    new_ucmd!()
+        .args(&["--file", &path, "--all"])
         .succeeds()
         .stdout_contains("intr = <undef>");
 
-    new_ucmd!().args(&["intr", ""]).succeeds();
+    new_ucmd!().args(&["--file", &path, "intr", ""]).succeeds();
     new_ucmd!()
-        .args(&["--all"])
+        .args(&["--file", &path, "--all"])
         .succeeds()
         .stdout_contains("intr = <undef>");
 
-    new_ucmd!().args(&["intr", "^C"]).succeeds();
     new_ucmd!()
-        .args(&["--all"])
+        .args(&["--file", &path, "intr", "^C"])
+        .succeeds();
+    new_ucmd!()
+        .args(&["--file", &path, "--all"])
         .succeeds()
         .stdout_contains("intr = ^C");
 }
@@ -443,15 +478,15 @@ fn multiple_invalid_args() {
 }
 
 #[test]
-#[ignore = "Fails because cargo test does not run in a tty"]
+#[cfg(unix)]
 fn negatable_combo_settings() {
-    // These should fail without TTY but validate the argument parsing
-    // Testing that negatable combos are recognized (even if they fail later)
-    new_ucmd!().args(&["-cbreak"]).fails();
+    let (path, _controller, _replica) = pty_path();
+    // Testing that negatable combos are recognized
+    new_ucmd!().args(&["--file", &path, "-cbreak"]).succeeds();
 
-    new_ucmd!().args(&["-evenp"]).fails();
+    new_ucmd!().args(&["--file", &path, "-evenp"]).succeeds();
 
-    new_ucmd!().args(&["-oddp"]).fails();
+    new_ucmd!().args(&["--file", &path, "-oddp"]).succeeds();
 }
 
 #[test]
@@ -470,8 +505,9 @@ fn grouped_flag_removal() {
 }
 
 #[test]
-#[ignore = "Fails because cargo test does not run in a tty"]
+#[cfg(unix)]
 fn baud_rate_validation() {
+    let (path, _controller, _replica) = pty_path();
     // Test various baud rate formats
     #[cfg(any(
         target_vendor = "apple",
@@ -482,40 +518,59 @@ fn baud_rate_validation() {
     ))]
     {
         // BSD accepts numeric baud rates
-        new_ucmd!().args(&["9600"]).fails(); // Fails due to no TTY, but validates parsing
+        new_ucmd!().args(&["--file", &path, "9600"]).succeeds();
     }
 
     // Test ispeed/ospeed with valid baud rates
-    new_ucmd!().args(&["ispeed", "9600"]).fails(); // Fails due to no TTY
-    new_ucmd!().args(&["ospeed", "115200"]).fails(); // Fails due to no TTY
+    new_ucmd!()
+        .args(&["--file", &path, "ispeed", "9600"])
+        .succeeds();
+    new_ucmd!()
+        .args(&["--file", &path, "ospeed", "115200"])
+        .succeeds();
 }
 
 #[test]
-#[ignore = "Fails because cargo test does not run in a tty"]
+#[cfg(unix)]
 fn combination_setting_validation() {
+    let (path, _controller, _replica) = pty_path();
     // Test that combination settings are recognized
-    new_ucmd!().args(&["sane"]).fails(); // Fails due to no TTY, but validates parsing
-    new_ucmd!().args(&["raw"]).fails();
-    new_ucmd!().args(&["cooked"]).fails();
-    new_ucmd!().args(&["cbreak"]).fails();
+    new_ucmd!().args(&["--file", &path, "sane"]).succeeds();
+    new_ucmd!().args(&["--file", &path, "raw"]).succeeds();
+    new_ucmd!().args(&["--file", &path, "cooked"]).succeeds();
+    new_ucmd!().args(&["--file", &path, "cbreak"]).succeeds();
 }
 
 #[test]
-#[ignore = "Fails because cargo test does not run in a tty"]
+#[cfg(unix)]
 fn control_char_hat_notation() {
+    let (path, _controller, _replica) = pty_path();
     // Test various hat notation formats
-    new_ucmd!().args(&["intr", "^?"]).fails(); // Fails due to no TTY
-    new_ucmd!().args(&["quit", "^\\"]).fails();
-    new_ucmd!().args(&["erase", "^H"]).fails();
+    new_ucmd!()
+        .args(&["--file", &path, "intr", "^?"])
+        .succeeds();
+    new_ucmd!()
+        .args(&["--file", &path, "quit", "^\\"])
+        .succeeds();
+    new_ucmd!()
+        .args(&["--file", &path, "erase", "^H"])
+        .succeeds();
 }
 
 #[test]
-#[ignore = "Fails because cargo test does not run in a tty"]
+#[cfg(unix)]
 fn special_settings() {
-    // Test special settings that require arguments
-    new_ucmd!().args(&["speed"]).fails(); // Fails due to no TTY but validates it's recognized
+    let (path, _controller, _replica) = pty_path();
+    // Test special settings that print instead of setting
+    new_ucmd!().args(&["--file", &path, "size"]).succeeds();
 
-    new_ucmd!().args(&["size"]).fails(); // Fails due to no TTY but validates it's recognized
+    // `speed` is not implemented yet (see the ignored `test_print_speed`); it is
+    // currently rejected as an unknown operand. Assert that, so the day it is
+    // implemented this test points at the operand that needs new coverage.
+    new_ucmd!()
+        .args(&["--file", &path, "speed"])
+        .fails()
+        .stderr_contains("invalid argument 'speed'");
 }
 
 #[test]
@@ -545,13 +600,10 @@ fn conflicting_print_modes() {
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_save_format() {
+    let (path, _controller, _replica) = pty_path();
     // Test --save flag outputs settings in save format
-    let result = new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--save"])
-        .succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--save"]).succeeds();
     // Save format should contain colon-separated fields
     result.stdout_contains(":");
     // Should contain speed information
@@ -564,51 +616,27 @@ fn test_save_format() {
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_set_control_flags() {
+    let (path, _controller, _replica) = pty_path();
     // Test setting parenb flag and verify it's set
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["parenb"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds()
-        .stdout_contains("parenb");
+    new_ucmd!().args(&["--file", &path, "parenb"]).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_enabled(&result, "parenb");
 
     // Test unsetting parenb flag and verify it's unset
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["-parenb"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds()
-        .stdout_contains("-parenb");
+    new_ucmd!().args(&["--file", &path, "-parenb"]).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_disabled(&result, "parenb");
 
     // Test setting parodd flag
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["parodd"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds()
-        .stdout_contains("parodd");
+    new_ucmd!().args(&["--file", &path, "parodd"]).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_enabled(&result, "parodd");
 
     // Test setting cstopb flag
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["cstopb"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds()
-        .stdout_contains("cstopb");
+    new_ucmd!().args(&["--file", &path, "cstopb"]).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_enabled(&result, "cstopb");
 }
 
 // Tests for saved state parsing and restoration
@@ -629,40 +657,24 @@ fn test_save_and_restore() {
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_set_input_flags() {
+    let (path, _controller, _replica) = pty_path();
     // Test setting ignbrk flag and verify
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["ignbrk"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds()
-        .stdout_contains("ignbrk");
+    new_ucmd!().args(&["--file", &path, "ignbrk"]).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_enabled(&result, "ignbrk");
 
-    // Test setting brkint flag and verify
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["brkint"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds()
-        .stdout_contains("brkint");
+    // Test setting brkint flag and verify. It is on by default on most
+    // terminals, so clear it first to make sure the assertion sees a change.
+    new_ucmd!().args(&["--file", &path, "-brkint"]).succeeds();
+    new_ucmd!().args(&["--file", &path, "brkint"]).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_enabled(&result, "brkint");
 
     // Test setting ignpar flag and verify
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["ignpar"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds()
-        .stdout_contains("ignpar");
+    new_ucmd!().args(&["--file", &path, "ignpar"]).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_enabled(&result, "ignpar");
 }
 
 #[test]
@@ -682,173 +694,125 @@ fn test_save_with_g_flag() {
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_set_output_flags() {
-    // Test setting opost flag and verify
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["opost"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds()
-        .stdout_contains("opost");
+    let (path, _controller, _replica) = pty_path();
+    // Test setting opost flag and verify. It is on by default, so clear it
+    // first to make sure the assertion sees a change.
+    new_ucmd!().args(&["--file", &path, "-opost"]).succeeds();
+    new_ucmd!().args(&["--file", &path, "opost"]).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_enabled(&result, "opost");
 
     // Test unsetting opost flag and verify
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["-opost"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds()
-        .stdout_contains("-opost");
+    new_ucmd!().args(&["--file", &path, "-opost"]).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_disabled(&result, "opost");
 
-    // Test setting onlcr flag and verify
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["onlcr"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds()
-        .stdout_contains("onlcr");
+    // Test setting onlcr flag and verify, again from the opposite state
+    new_ucmd!().args(&["--file", &path, "-onlcr"]).succeeds();
+    new_ucmd!().args(&["--file", &path, "onlcr"]).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_enabled(&result, "onlcr");
 }
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_set_local_flags() {
-    // Test setting isig flag and verify
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["isig"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds()
-        .stdout_contains("isig");
+    let (path, _controller, _replica) = pty_path();
+    // These are all on by default, so each one is cleared first to make sure
+    // the assertion sees the setting being applied.
+    for flag in ["isig", "icanon", "echo"] {
+        new_ucmd!()
+            .args(&["--file", &path, &format!("-{flag}")])
+            .succeeds();
+        let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+        assert_flag_disabled(&result, flag);
 
-    // Test setting icanon flag and verify
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["icanon"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds()
-        .stdout_contains("icanon");
-
-    // Test setting echo flag and verify
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["echo"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds()
-        .stdout_contains("echo");
+        new_ucmd!().args(&["--file", &path, flag]).succeeds();
+        let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+        assert_flag_enabled(&result, flag);
+    }
 }
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_combo_cbreak() {
+    let (path, _controller, _replica) = pty_path();
     // Test cbreak combination setting - should disable icanon
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["cbreak"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds()
-        .stdout_contains("-icanon");
+    new_ucmd!().args(&["--file", &path, "cbreak"]).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_disabled(&result, "icanon");
 
     // Test -cbreak should enable icanon
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["-cbreak"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds()
-        .stdout_contains("icanon");
+    new_ucmd!().args(&["--file", &path, "-cbreak"]).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_enabled(&result, "icanon");
 }
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_combo_nl() {
+    let (path, _controller, _replica) = pty_path();
     // Test nl combination setting - should disable icrnl and onlcr
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["nl"])
-        .succeeds();
-    let result = new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds();
-    result.stdout_contains("-icrnl");
-    result.stdout_contains("-onlcr");
+    new_ucmd!().args(&["--file", &path, "nl"]).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_disabled(&result, "icrnl");
+    assert_flag_disabled(&result, "onlcr");
 }
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_combo_ek() {
+    let (path, _controller, _replica) = pty_path();
+    // Move erase and kill away from their defaults first, so that the
+    // assertions below fail if `ek` does not reset them.
+    new_ucmd!()
+        .args(&["--file", &path, "erase", "^A", "kill", "^B"])
+        .succeeds();
+
     // Test ek combination setting (erase and kill) - should set erase and kill to defaults
+    new_ucmd!().args(&["--file", &path, "ek"]).succeeds();
     new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["ek"])
-        .succeeds();
-    let result = new_ucmd!().terminal_simulation(true).succeeds();
-    // Should show erase and kill characters
-    result.stdout_contains("erase");
-    result.stdout_contains("kill");
+        .args(&["--file", &path, "--all"])
+        .succeeds()
+        .stdout_contains("erase = ^?")
+        .stdout_contains("kill = ^U");
 }
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_combo_litout() {
-    // Test litout combination setting - should disable parenb, istrip, opost
+    let (path, _controller, _replica) = pty_path();
+    // Set the opposite of what litout does first, so the assertions below fail
+    // if the combination is not applied.
     new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["litout"])
+        .args(&["--file", &path, "parenb", "istrip", "opost"])
         .succeeds();
-    let result = new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds();
-    result.stdout_contains("-parenb");
-    result.stdout_contains("-istrip");
-    result.stdout_contains("-opost");
+
+    // Test litout combination setting - should disable parenb, istrip, opost
+    new_ucmd!().args(&["--file", &path, "litout"]).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_disabled(&result, "parenb");
+    assert_flag_disabled(&result, "istrip");
+    assert_flag_disabled(&result, "opost");
 }
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_combo_pass8() {
-    // Test pass8 combination setting - should disable parenb, istrip, set cs8
+    let (path, _controller, _replica) = pty_path();
+    // Set the opposite of what pass8 does first, so the assertions below fail
+    // if the combination is not applied.
     new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["pass8"])
+        .args(&["--file", &path, "parenb", "istrip", "cs7"])
         .succeeds();
-    let result = new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds();
-    result.stdout_contains("-parenb");
-    result.stdout_contains("-istrip");
-    result.stdout_contains("cs8");
+
+    // Test pass8 combination setting - should disable parenb, istrip, set cs8
+    new_ucmd!().args(&["--file", &path, "pass8"]).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_disabled(&result, "parenb");
+    assert_flag_disabled(&result, "istrip");
+    assert_flag_enabled(&result, "cs8");
 }
 
 #[test]
@@ -900,51 +864,44 @@ fn test_saved_state_valid_formats() {
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_combo_decctlq() {
+    let (path, _controller, _replica) = pty_path();
+    // ixany may already be on, so clear it first
+    new_ucmd!().args(&["--file", &path, "-ixany"]).succeeds();
+
     // Test decctlq combination setting - should enable ixany
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["decctlq"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds()
-        .stdout_contains("ixany");
+    new_ucmd!().args(&["--file", &path, "decctlq"]).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_enabled(&result, "ixany");
 }
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_combo_dec() {
+    let (path, _controller, _replica) = pty_path();
+    // echoe is on by default, so clear it first
+    new_ucmd!().args(&["--file", &path, "-echoe"]).succeeds();
+
     // Test dec combination setting - should set multiple flags
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["dec"])
-        .succeeds();
-    let result = new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds();
+    new_ucmd!().args(&["--file", &path, "dec"]).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
     // dec sets echoe, echoctl, echoke
-    result.stdout_contains("echoe");
+    assert_flag_enabled(&result, "echoe");
+    assert_flag_enabled(&result, "echoctl");
+    assert_flag_enabled(&result, "echoke");
 }
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_combo_crt() {
+    let (path, _controller, _replica) = pty_path();
+    // echoe is on by default, so clear it first
+    new_ucmd!().args(&["--file", &path, "-echoe"]).succeeds();
+
     // Test crt combination setting - should set echoe
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["crt"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds()
-        .stdout_contains("echoe");
+    new_ucmd!().args(&["--file", &path, "crt"]).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_enabled(&result, "echoe");
 }
 
 #[test]
@@ -966,89 +923,58 @@ fn test_combo_tabs() {
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_multiple_settings() {
+    let (path, _controller, _replica) = pty_path();
     // Test setting multiple flags at once and verify all are set
     new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["parenb", "parodd", "cs7"])
+        .args(&["--file", &path, "parenb", "parodd", "cs7"])
         .succeeds();
-    let result = new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds();
-    result.stdout_contains("parenb");
-    result.stdout_contains("parodd");
-    result.stdout_contains("cs7");
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_enabled(&result, "parenb");
+    assert_flag_enabled(&result, "parodd");
+    assert_flag_enabled(&result, "cs7");
 }
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_set_all_control_chars() {
-    // Test setting intr control character and verify
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["intr", "^C"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .succeeds()
-        .stdout_contains("intr = ^C");
-
-    // Test setting quit control character and verify
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["quit", "^\\"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .succeeds()
-        .stdout_contains("quit = ^\\");
-
-    // Test setting erase control character and verify
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["erase", "^?"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .succeeds()
-        .stdout_contains("erase = ^?");
-
-    // Test setting kill control character and verify
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["kill", "^U"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .succeeds()
-        .stdout_contains("kill = ^U");
+    let (path, _controller, _replica) = pty_path();
+    // These are all sane defaults, so --all is needed to see them
+    for (name, value) in [
+        ("intr", "^C"),
+        ("quit", "^\\"),
+        ("erase", "^?"),
+        ("kill", "^U"),
+    ] {
+        new_ucmd!().args(&["--file", &path, name, value]).succeeds();
+        new_ucmd!()
+            .args(&["--file", &path, "--all"])
+            .succeeds()
+            .stdout_contains(format!("{name} = {value}"));
+    }
 }
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_print_size() {
-    // Test size print setting - should output "rows <num>; columns <num>;"
-    let result = new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["size"])
+    let (path, _controller, _replica) = pty_path();
+    // The size setting prints "<rows> <columns>"
+    new_ucmd!()
+        .args(&["--file", &path, "rows", "24", "cols", "80"])
         .succeeds();
-    result.stdout_contains("rows");
-    result.stdout_contains("columns");
+    new_ucmd!()
+        .args(&["--file", &path, "size"])
+        .succeeds()
+        .stdout_is("24 80\n");
 }
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
+#[ignore = "the `speed` setting is not implemented yet"]
 fn test_print_speed() {
+    let (path, _controller, _replica) = pty_path();
     // Test speed print setting - should output a numeric speed
-    let result = new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["speed"])
-        .succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "speed"]).succeeds();
     // Speed should be a number (common speeds: 9600, 38400, 115200, etc.)
     let stdout = result.stdout_str();
     assert!(
@@ -1059,189 +985,145 @@ fn test_print_speed() {
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_set_rows_cols() {
+    let (path, _controller, _replica) = pty_path();
     // Test setting rows and verify
     new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["rows", "24"])
+        .args(&["--file", &path, "rows", "24"])
         .succeeds();
     new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["size"])
+        .args(&["--file", &path, "--all"])
         .succeeds()
         .stdout_contains("rows 24");
 
     // Test setting cols and verify
     new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["cols", "80"])
+        .args(&["--file", &path, "cols", "80"])
         .succeeds();
     new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["size"])
+        .args(&["--file", &path, "--all"])
         .succeeds()
         .stdout_contains("columns 80");
 
     // Test setting both rows and cols together
     new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["rows", "50", "cols", "100"])
+        .args(&["--file", &path, "rows", "50", "cols", "100"])
         .succeeds();
-    let result = new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["size"])
-        .succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
     result.stdout_contains("rows 50");
     result.stdout_contains("columns 100");
 }
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_character_size_settings() {
-    // Test cs5 setting and verify
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["cs5"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds()
-        .stdout_contains("cs5");
-
-    // Test cs7 setting and verify
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["cs7"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds()
-        .stdout_contains("cs7");
-
-    // Test cs8 setting and verify
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["cs8"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds()
-        .stdout_contains("cs8");
+    let (path, _controller, _replica) = pty_path();
+    // The character size flags are mutually exclusive, so each one has to
+    // replace the previous one rather than being added to it
+    for size in ["cs5", "cs7", "cs8", "cs6"] {
+        new_ucmd!().args(&["--file", &path, size]).succeeds();
+        let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+        assert_flag_enabled(&result, size);
+        for other in ["cs5", "cs6", "cs7", "cs8"] {
+            if other != size {
+                assert!(
+                    !result
+                        .stdout_str()
+                        .split_whitespace()
+                        .any(|token| token == other),
+                    "'{other}' is still set after '{size}':\n{}",
+                    result.stdout_str()
+                );
+            }
+        }
+    }
 }
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_baud_rate_settings() {
-    // Test setting ispeed and verify
+    let (path, _controller, _replica) = pty_path();
+    // Test setting ispeed and ospeed and verify
     new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["ispeed", "9600"])
+        .args(&["--file", &path, "ispeed", "9600", "ospeed", "9600"])
         .succeeds();
     new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["speed"])
+        .args(&["--file", &path])
         .succeeds()
-        .stdout_contains("9600");
+        .stdout_contains("speed 9600 baud");
 
-    // Test setting both ispeed and ospeed
     new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["ispeed", "38400", "ospeed", "38400"])
+        .args(&["--file", &path, "ispeed", "38400", "ospeed", "38400"])
         .succeeds();
     new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["speed"])
+        .args(&["--file", &path])
         .succeeds()
-        .stdout_contains("38400");
+        .stdout_contains("speed 38400 baud");
 }
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_min_time_settings() {
+    let (path, _controller, _replica) = pty_path();
     // Test min setting and verify
+    new_ucmd!().args(&["--file", &path, "min", "1"]).succeeds();
     new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["min", "1"])
-        .succeeds();
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
+        .args(&["--file", &path, "--all"])
         .succeeds()
         .stdout_contains("min = 1");
 
     // Test time setting and verify
     new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["time", "10"])
+        .args(&["--file", &path, "time", "10"])
         .succeeds();
     new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
+        .args(&["--file", &path, "--all"])
         .succeeds()
         .stdout_contains("time = 10");
 }
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_complex_scenario() {
+    let (path, _controller, _replica) = pty_path();
     // Test a complex scenario with multiple settings and verify all are applied
     new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["sane", "rows", "24", "cols", "80", "intr", "^C"])
+        .args(&[
+            "--file", &path, "sane", "rows", "24", "cols", "80", "intr", "^C",
+        ])
         .succeeds();
 
     // Verify all settings were applied
-    let size_result = new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["size"])
-        .succeeds();
-    size_result.stdout_contains("rows 24");
-    size_result.stdout_contains("columns 80");
-
-    let result = new_ucmd!().terminal_simulation(true).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    result.stdout_contains("rows 24");
+    result.stdout_contains("columns 80");
     result.stdout_contains("intr = ^C");
 }
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_raw_mode() {
+    let (path, _controller, _replica) = pty_path();
     // Test raw mode setting
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["raw"])
-        .succeeds();
+    new_ucmd!().args(&["--file", &path, "raw"]).succeeds();
     // Verify raw mode is set by checking output
-    let result = new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds();
-    result.stdout_contains("-icanon");
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_disabled(&result, "icanon");
 }
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_cooked_mode() {
+    let (path, _controller, _replica) = pty_path();
+    // icanon is on by default, so switch to raw mode first, otherwise the
+    // assertion below would hold whether or not `cooked` did anything
+    new_ucmd!().args(&["--file", &path, "raw"]).succeeds();
+
     // Test cooked mode setting (opposite of raw)
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["cooked"])
-        .succeeds();
+    new_ucmd!().args(&["--file", &path, "cooked"]).succeeds();
     // Verify cooked mode is set
-    let result = new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds();
-    result.stdout_contains("icanon");
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_enabled(&result, "icanon");
 }
 
 #[test]
@@ -1312,32 +1194,26 @@ fn test_saved_state_invalid_formats() {
 
 #[test]
 #[cfg(unix)]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn test_parity_settings() {
-    // Test evenp setting and verify (should set parenb and cs7)
+    let (path, _controller, _replica) = pty_path();
+    // Test evenp setting and verify (should set parenb, -parodd and cs7)
+    new_ucmd!().args(&["--file", &path, "evenp"]).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_enabled(&result, "parenb");
+    assert_flag_disabled(&result, "parodd");
+    assert_flag_enabled(&result, "cs7");
+
+    // Undo it, so that the oddp assertions below fail if oddp is not applied
     new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["evenp"])
+        .args(&["--file", &path, "-parenb", "cs8"])
         .succeeds();
-    let result = new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds();
-    result.stdout_contains("parenb");
-    result.stdout_contains("cs7");
 
     // Test oddp setting and verify (should set parenb, parodd, and cs7)
-    new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["oddp"])
-        .succeeds();
-    let result = new_ucmd!()
-        .terminal_simulation(true)
-        .args(&["--all"])
-        .succeeds();
-    result.stdout_contains("parenb");
-    result.stdout_contains("parodd");
-    result.stdout_contains("cs7");
+    new_ucmd!().args(&["--file", &path, "oddp"]).succeeds();
+    let result = new_ucmd!().args(&["--file", &path, "--all"]).succeeds();
+    assert_flag_enabled(&result, "parenb");
+    assert_flag_enabled(&result, "parodd");
+    assert_flag_enabled(&result, "cs7");
 }
 
 // Additional integration tests for missing coverage

@@ -114,7 +114,17 @@ impl<T> Flag<T> {
 
 trait TermiosFlag: Copy {
     fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool;
-    fn apply(&self, termios: &mut Termios, val: bool);
+    /// Sets or clears the flag. Flags that belong to a group (such as the
+    /// character size flags in `CSIZE`) are mutually exclusive, so the whole
+    /// group is cleared before the flag is set.
+    ///
+    /// GNU's `set_mode` also clears the group when clearing a grouped flag,
+    /// which is deliberately not done here: that path is unreachable, because
+    /// `check_flag_group` rejects the negated form of every grouped flag
+    /// (`-cs7`, `-tab3`, `-nl1`, ...) as an `invalid argument`, just like GNU
+    /// does. If negating one ever becomes valid, the group has to be cleared
+    /// on that path too.
+    fn apply(&self, termios: &mut Termios, group: Option<Self>, val: bool);
 }
 
 mod options {
@@ -978,16 +988,16 @@ fn apply_setting(termios: &mut Termios, setting: &AllFlags) -> nix::Result<()> {
     match setting {
         AllFlags::Baud(_, _) => apply_baud_rate_flag(termios, setting)?,
         AllFlags::ControlFlags((setting, disable)) => {
-            setting.flag.apply(termios, !disable);
+            setting.flag.apply(termios, setting.group, !disable);
         }
         AllFlags::InputFlags((setting, disable)) => {
-            setting.flag.apply(termios, !disable);
+            setting.flag.apply(termios, setting.group, !disable);
         }
         AllFlags::LocalFlags((setting, disable)) => {
-            setting.flag.apply(termios, !disable);
+            setting.flag.apply(termios, setting.group, !disable);
         }
         AllFlags::OutputFlags((setting, disable)) => {
-            setting.flag.apply(termios, !disable);
+            setting.flag.apply(termios, setting.group, !disable);
         }
     }
     Ok(())
@@ -1309,7 +1319,10 @@ impl TermiosFlag for ControlFlags {
             && group.is_none_or(|g| !termios.control_flags.intersects(g - *self))
     }
 
-    fn apply(&self, termios: &mut Termios, val: bool) {
+    fn apply(&self, termios: &mut Termios, group: Option<Self>, val: bool) {
+        if val && let Some(group) = group {
+            termios.control_flags.remove(group);
+        }
         termios.control_flags.set(*self, val);
     }
 }
@@ -1320,7 +1333,10 @@ impl TermiosFlag for InputFlags {
             && group.is_none_or(|g| !termios.input_flags.intersects(g - *self))
     }
 
-    fn apply(&self, termios: &mut Termios, val: bool) {
+    fn apply(&self, termios: &mut Termios, group: Option<Self>, val: bool) {
+        if val && let Some(group) = group {
+            termios.input_flags.remove(group);
+        }
         termios.input_flags.set(*self, val);
     }
 }
@@ -1331,7 +1347,10 @@ impl TermiosFlag for OutputFlags {
             && group.is_none_or(|g| !termios.output_flags.intersects(g - *self))
     }
 
-    fn apply(&self, termios: &mut Termios, val: bool) {
+    fn apply(&self, termios: &mut Termios, group: Option<Self>, val: bool) {
+        if val && let Some(group) = group {
+            termios.output_flags.remove(group);
+        }
         termios.output_flags.set(*self, val);
     }
 }
@@ -1342,7 +1361,10 @@ impl TermiosFlag for LocalFlags {
             && group.is_none_or(|g| !termios.local_flags.intersects(g - *self))
     }
 
-    fn apply(&self, termios: &mut Termios, val: bool) {
+    fn apply(&self, termios: &mut Termios, group: Option<Self>, val: bool) {
+        if val && let Some(group) = group {
+            termios.local_flags.remove(group);
+        }
         termios.local_flags.set(*self, val);
     }
 }
