@@ -11,6 +11,7 @@ env:
   PROJECT_DESC: "Core universal (cross-platform) utilities"
   PROJECT_AUTH: "uutils"
   CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: "always"
   # * style job configuration
   STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
 
