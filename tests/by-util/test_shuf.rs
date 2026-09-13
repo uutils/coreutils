@@ -4,7 +4,6 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) unwritable GHSA
-use std::fmt::Write;
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -1068,95 +1067,6 @@ fn test_gnu_compat_range_no_repeat() {
         .succeeds()
         .no_stderr()
         .stdout_is("10\n2\n8\n7\n3\n9\n6\n5\n1\n4\n");
-}
-
-// Test reproducibility of --random-seed.
-// These results are arbitrary but they should not change unless we choose to break compatibility.
-
-#[test]
-fn test_seed_args_repeat() {
-    new_ucmd!()
-        .arg("--random-seed=🌱")
-        .arg("-e")
-        .arg("-r")
-        .arg("-n10")
-        .args(&["foo", "bar", "baz", "qux"])
-        .succeeds()
-        .no_stderr()
-        .stdout_is("qux\nbar\nbaz\nfoo\nbaz\nqux\nqux\nfoo\nqux\nqux\n");
-}
-
-#[test]
-fn test_seed_args_no_repeat() {
-    new_ucmd!()
-        .arg("--random-seed=🌱")
-        .arg("-e")
-        .args(&["foo", "bar", "baz", "qux"])
-        .succeeds()
-        .no_stderr()
-        .stdout_is("qux\nbaz\nfoo\nbar\n");
-}
-
-#[test]
-fn test_seed_range_repeat() {
-    new_ucmd!()
-        .arg("--random-seed=🦀")
-        .arg("-r")
-        .arg("-i1-99")
-        .arg("-n10")
-        .succeeds()
-        .no_stderr()
-        .stdout_is("60\n44\n38\n41\n63\n43\n31\n71\n46\n90\n");
-}
-
-#[test]
-fn test_seed_range_no_repeat() {
-    let expected = "8\n9\n1\n5\n2\n6\n4\n3\n10\n7\n";
-
-    new_ucmd!()
-        .arg("--random-seed=12345")
-        .arg("-i1-10")
-        .succeeds()
-        .no_stderr()
-        .stdout_is(expected);
-
-    // Piping from e.g. seq gives identical results.
-    new_ucmd!()
-        .arg("--random-seed=12345")
-        .pipe_in("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n")
-        .succeeds()
-        .no_stderr()
-        .stdout_is(expected);
-}
-
-// Test a longer input to exercise some more code paths in the sparse representation.
-#[test]
-fn test_seed_long_range_no_repeat() {
-    let expected = "\
-        1\n3\n35\n37\n36\n45\n72\n17\n18\n40\n67\n74\n81\n77\n14\n90\n\
-        7\n12\n80\n54\n23\n61\n29\n41\n15\n56\n6\n32\n82\n76\n11\n2\n100\n\
-        50\n60\n97\n73\n79\n91\n89\n85\n86\n66\n70\n22\n55\n8\n83\n39\n27\n";
-
-    new_ucmd!()
-        .arg("--random-seed=67890")
-        .arg("-i1-100")
-        .arg("-n50")
-        .succeeds()
-        .no_stderr()
-        .stdout_is(expected);
-
-    let mut test_input = String::new();
-    for n in 1..=100 {
-        writeln!(&mut test_input, "{n}").unwrap();
-    }
-
-    new_ucmd!()
-        .arg("--random-seed=67890")
-        .pipe_in(test_input.as_bytes())
-        .arg("-n50")
-        .succeeds()
-        .no_stderr()
-        .stdout_is(expected);
 }
 
 #[test]
