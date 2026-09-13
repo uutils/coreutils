@@ -1563,14 +1563,43 @@ fn test_directory_input_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("test_directory");
 
+    // The split that was open when the read failed is still accounted for:
+    // GNU prints its size before it gives up on the input.
     #[cfg(unix)]
     ucmd.args(&["test_directory", "1"])
         .fails_with_code(1)
-        .stderr_only("csplit: read error: Is a directory\n");
+        .stdout_is("0\n")
+        .stderr_is("csplit: read error: Is a directory\n");
     #[cfg(windows)]
     ucmd.args(&["test_directory", "1"])
         .fails_with_code(1)
         .stderr_only("csplit: cannot open 'test_directory' for reading: Permission denied\n");
+}
+
+/// The count of the split that was open when the input went wrong is printed
+/// the same way a completed one is: `--quiet` still silences it, `-z` still
+/// drops the empty split, and `-k` keeps the file it counted.
+#[cfg(unix)]
+#[test]
+fn test_read_error_reports_the_size_of_the_open_split() {
+    for (options, stdout) in [
+        (&[][..], "0\n"),
+        (&["-k"][..], "0\n"),
+        (&["-s"][..], ""),
+        (&["-z"][..], ""),
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("dir");
+
+        let mut args = vec!["dir", "/^a/"];
+        args.extend_from_slice(options);
+        ucmd.args(&args)
+            .fails_with_code(1)
+            .stdout_is(stdout)
+            .stderr_is("csplit: read error: Is a directory\n");
+
+        assert_eq!(at.file_exists("xx00"), options == ["-k"], "{options:?}");
+    }
 }
 
 #[test]
