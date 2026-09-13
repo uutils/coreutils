@@ -1041,6 +1041,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::GAP_SIZE)
                 .short('g')
                 .long(options::GAP_SIZE)
+                // report -NUM as invalid value
+                .allow_hyphen_values(true)
                 .value_parser(value_parser!(u64).range(1..))
                 .help(translate!("ptx-help-gap-size"))
                 .value_name("NUMBER"),
@@ -1082,6 +1084,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::WIDTH)
                 .short('w')
                 .long(options::WIDTH)
+                // report -NUM as invalid value
+                .allow_hyphen_values(true)
                 .value_parser(value_parser!(u64).range(1..))
                 .help(translate!("ptx-help-width"))
                 .value_name("NUMBER"),
