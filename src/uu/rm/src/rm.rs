@@ -666,7 +666,24 @@ fn remove_dir_recursive(
     // a directory and we don't want to recurse. In particular, this
     // avoids an infinite recursion in the case of a link to the current
     // directory, like `ln -s . link`.
-    if !path.is_dir() || path.is_symlink() {
+    //
+    // On Windows, a symbolic link to a directory (a directory reparse
+    // point) cannot be removed with the file-deletion API used by
+    // `remove_file` -> it fails with `ERROR_ACCESS_DENIED`. Route such
+    // links through `remove_dir` (the directory-removal API), which
+    // removes the reparse point itself instead of following the link.
+    // This mirrors how the top-level `remove` already handles directory
+    // symlinks. See microsoft/coreutils#84.
+    if path.is_symlink() {
+        #[cfg(windows)]
+        if let Ok(metadata) = fs::symlink_metadata(path) {
+            if is_symlink_dir(&metadata) {
+                return remove_dir(path, options, progress_bar);
+            }
+        }
+        return remove_file(path, options, progress_bar);
+    }
+    if !path.is_dir() {
         return remove_file(path, options, progress_bar);
     }
 
