@@ -426,25 +426,99 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
+/// The short flags that carry no value of their own, so they may precede an
+/// optional-value flag inside a cluster such as `-tn`.
+const VALUELESS_SHORT_FLAGS: &str = "dtTrFfabmJ";
+
+/// Every long option `pr` defines, used to tell an unambiguous abbreviation
+/// from one clap would reject.
+const LONG_OPTIONS: &[&str] = &[
+    "across",
+    "column-down",
+    "columns",
+    "date-format",
+    "double-space",
+    "expand-tabs",
+    "first-line-number",
+    "form-feed",
+    "header",
+    "help",
+    "indent",
+    "join-lines",
+    "length",
+    "merge",
+    "no-file-warnings",
+    "number-lines",
+    "omit-header",
+    "omit-pagination",
+    "pages",
+    "page-width",
+    "separator",
+    "sep-string",
+    "width",
+];
+
+/// Whether `arg` is `short` on its own or at the end of a cluster of valueless
+/// flags, carrying no attached value: `-n` and `-tn`, but not `-n3`.
+fn is_bare_short(arg: &str, short: char) -> bool {
+    arg.strip_prefix('-').is_some_and(|rest| {
+        !rest.starts_with('-')
+            && rest.ends_with(short)
+            && rest[..rest.len() - short.len_utf8()]
+                .chars()
+                .all(|c| VALUELESS_SHORT_FLAGS.contains(c))
+    })
+}
+
+/// Whether `arg` names `long`, spelled in full or as one of the abbreviations
+/// `infer_long_args` accepts, with no `=value` attached.
+fn is_bare_long(arg: &str, long: &str) -> bool {
+    let Some(name) = arg.strip_prefix("--") else {
+        return false;
+    };
+    !name.is_empty()
+        && !name.contains('=')
+        && long.starts_with(name)
+        // An ambiguous prefix is clap's to reject, not ours to resolve.
+        && LONG_OPTIONS.iter().filter(|o| o.starts_with(name)).count() == 1
+}
+
 /// Rewrite arguments before clap parsing, preserving legacy numeric operands.
 fn recreate_arguments(args: &[String]) -> Vec<String> {
-    let num_regex = Regex::new(r"^[^-]\d*$").unwrap();
-    let n_regex = Regex::new(r"^-n\s*$").unwrap();
     // `-e` ends a cluster of short flags that take no value of their own, as in `-tre`.
-    // Options that do take a value are excluded so that `-se` keeps meaning `-s e`.
     let e_regex = Regex::new(r"^-[dtTrFfabmJ]*e$").unwrap();
     let mut arguments = args.to_owned();
-    let num_option = args
-        .iter()
-        .take_while(|arg| arg.as_str() != "--")
-        .find_position(|x| n_regex.is_match(x.trim()));
-    if let Some((pos, _value)) = num_option
-        && let Some(num_val_opt) = args.get(pos + 1)
-        && !num_regex.is_match(num_val_opt)
-    {
-        let could_be_file = arguments.remove(pos + 1);
-        arguments.insert(pos + 1, format!("{}", NumberingMode::default().width));
-        arguments.insert(pos + 2, could_be_file);
+
+    // GNU takes the value of these attached only (`-n3`, `-s,`); the argument
+    // after them is always an operand. clap would swallow that operand as the
+    // value instead, and the two cannot be told apart by shape: in
+    // `pr -n FILE`, a file called `f1` reads exactly like the SEP[DIGITS] pair
+    // `f` and `1`. So the default is attached here, the same way `-e` is
+    // handled below, which leaves clap nothing to take.
+    //
+    // Every spelling has to be covered, not just the bare short flag: the
+    // trailing position of a cluster (`-tn`), the long name, and the
+    // abbreviations of it that `infer_long_args` accepts (`--number-l`).
+    let optional_value_defaults = [
+        (
+            options::NUMBER_LINES,
+            'n',
+            NumberingMode::default().width.to_string(),
+        ),
+        (options::COLUMN_CHAR_SEPARATOR, 's', "\t".to_string()),
+        (options::COLUMN_STRING_SEPARATOR, 'S', " ".to_string()),
+    ];
+    for arg in arguments.iter_mut().take_while(|arg| arg.as_str() != "--") {
+        for (long, short, default) in &optional_value_defaults {
+            if is_bare_short(arg.trim(), *short) {
+                *arg = format!("{}{default}", arg.trim());
+                break;
+            }
+            if is_bare_long(arg.trim(), long) {
+                *arg = format!("{}={default}", arg.trim());
+                break;
+            }
+        }
     }
 
     // `-e` takes an optional attached argument, which clap cannot express, so it is filled in
