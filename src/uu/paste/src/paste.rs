@@ -63,6 +63,9 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .help(translate!("paste-help-delimiter"))
                 .value_name("LIST")
+                // A delimiter list may begin with a hyphen: GNU reads `-d -1`
+                // as the list "-1" rather than rejecting it as an option.
+                .allow_hyphen_values(true)
                 .default_value("\t")
                 .hide_default_value(true)
                 .allow_hyphen_values(true)

@@ -102,6 +102,9 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(options::SUFFIX)
                 .value_name("SUFFIX")
+                // A suffix may begin with a hyphen: GNU reads `-s -1` as the
+                // suffix "-1" rather than rejecting it as an option.
+                .allow_hyphen_values(true)
                 .value_parser(ValueParser::os_string())
                 .help(translate!("basename-help-suffix"))
                 .overrides_with(options::SUFFIX),
