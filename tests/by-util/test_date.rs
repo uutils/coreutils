@@ -684,18 +684,20 @@ fn test_date_stdin_invalid_utf8_line() {
 
 #[test]
 fn test_date_for_file_mtime() {
+    use std::time::{Duration, UNIX_EPOCH};
+
     let (at, mut ucmd) = at_and_ucmd!();
-    let file = "reference_file";
-    at.touch(file);
-    std::thread::sleep(std::time::Duration::from_millis(100));
-    let result = ucmd.arg("--reference").arg(file).arg("+%s%N").succeeds();
-    let mtime = at.metadata(file).modified().unwrap();
-    let mtime_nanos = mtime
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos()
-        .to_string();
-    assert_eq!(result.stdout_str().trim(), &mtime_nanos[..]);
+
+    let reference_file = "reference_file";
+    let f = at.make_file(reference_file);
+    let modification_date = UNIX_EPOCH.checked_add(Duration::from_secs(1234)).unwrap();
+    f.set_modified(modification_date).unwrap();
+
+    ucmd.arg("--reference")
+        .arg(reference_file)
+        .arg("+%s")
+        .succeeds()
+        .stdout_only("1234\n");
 }
 
 #[test]
