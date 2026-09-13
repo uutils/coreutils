@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) copydir fiemap linkgs lstat nlink nlinks pathbuf reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
-// spell-checker:ignore RDONLY futimens utimensat unioned
+// spell-checker:ignore RDONLY futimens utimensat unioned fchmodat FDCWD
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -1972,7 +1972,7 @@ pub(crate) fn copy_attributes(
             #[cfg(not(unix))]
             let source_perms = source_metadata.permissions();
 
-            fs::set_permissions(dest, source_perms)
+            chmod_nofollow(dest, &source_perms)
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
             // GNU `cp -p` preserves POSIX ACLs as part of mode. On Linux the
             // ACLs are stored as `system.posix_acl_*` xattrs; copy just those
@@ -2643,6 +2643,39 @@ fn calculate_dest_permissions(
     }
 }
 
+/// Apply `permissions` to `dest` without following a symlink at the final component.
+///
+/// Both callers test `dest` for being a symlink well before the chmod, so one swapped
+/// in inside that gap would otherwise redirect the mode onto the link's target. A
+/// symlink is the callers' "do nothing" case, so it is not an error; anything else is.
+#[cfg(all(
+    unix,
+    not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))
+))]
+fn chmod_nofollow(dest: &Path, permissions: &Permissions) -> io::Result<()> {
+    let Err(e) = uucore::safe_traversal::chmod_nofollow(dest, permissions.mode()) else {
+        return Ok(());
+    };
+    // ENOTSUP and EOPNOTSUPP share a value on Linux but not on the BSDs; a guard
+    // rather than an or-pattern keeps the duplicate from being unreachable. The errno
+    // cannot tell a symlink from a platform that cannot chmod without following, so
+    // confirm it rather than report success on a mode that was never applied.
+    let refused = matches!(e.raw_os_error(),
+        Some(c) if c == libc::EOPNOTSUPP || c == libc::ENOTSUP || c == libc::ELOOP);
+    if refused && fs::symlink_metadata(dest).is_ok_and(|md| md.file_type().is_symlink()) {
+        return Ok(());
+    }
+    Err(e)
+}
+
+#[cfg(not(all(
+    unix,
+    not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))
+)))]
+fn chmod_nofollow(dest: &Path, permissions: &Permissions) -> io::Result<()> {
+    fs::set_permissions(dest, permissions.clone())
+}
+
 /// Copy the a file from `source` to `dest`. `source` will be dereferenced if
 /// `options.dereference` is set to true. `dest` will be dereferenced only if
 /// the source was not a symlink.
@@ -2868,7 +2901,7 @@ fn copy_file(
         //
         // FWIW, the OS will throw an error later, on the write op, if
         // the user does not have permission to write to the file.
-        fs::set_permissions(dest, dest_permissions).ok();
+        chmod_nofollow(dest, &dest_permissions).ok();
     }
 
     let copy_attributes_result = if options.dereference(source_in_command_line) {
