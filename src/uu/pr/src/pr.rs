@@ -139,6 +139,16 @@ struct NumberingMode {
     first_number: usize,
 }
 
+impl Default for NumberingMode {
+    fn default() -> Self {
+        Self {
+            width: 5,
+            separator: TAB.to_string(),
+            first_number: 1,
+        }
+    }
+}
+
 #[derive(Debug)]
 struct ExpandTabsOptions {
     input_char: char,
@@ -150,32 +160,6 @@ impl Default for ExpandTabsOptions {
         Self {
             width: 8,
             input_char: TAB,
-        }
-    }
-}
-
-impl Default for NumberingMode {
-    fn default() -> Self {
-        Self {
-            width: 5,
-            separator: TAB.to_string(),
-            first_number: 1,
-        }
-    }
-}
-
-impl From<FromUtf8Error> for PrError {
-    fn from(err: FromUtf8Error) -> Self {
-        Self::EncounteredErrors {
-            msg: err.to_string(),
-        }
-    }
-}
-
-impl From<Utf8Error> for PrError {
-    fn from(err: Utf8Error) -> Self {
-        Self::EncounteredErrors {
-            msg: err.to_string(),
         }
     }
 }
@@ -193,6 +177,22 @@ enum PrError {
 
     #[error("pr: {path}: {}", strip_errno(error))]
     ReadPath { path: PathBuf, error: io::Error },
+}
+
+impl From<FromUtf8Error> for PrError {
+    fn from(err: FromUtf8Error) -> Self {
+        Self::EncounteredErrors {
+            msg: err.to_string(),
+        }
+    }
+}
+
+impl From<Utf8Error> for PrError {
+    fn from(err: Utf8Error) -> Self {
+        Self::EncounteredErrors {
+            msg: err.to_string(),
+        }
+    }
 }
 
 pub fn uu_app() -> Command {
