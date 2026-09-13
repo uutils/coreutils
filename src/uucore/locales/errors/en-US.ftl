@@ -56,3 +56,13 @@ range-diag-label-inverted = this range ends before it starts
 
 # Invalid QUOTING_STYLE env var
 invalid-quoting-style-env-var = ignoring invalid value of environment variable QUOTING_STYLE: { $invalid }
+
+# Regex parsing messages (expr, grep, sed, ...)
+regex-error-unmatched-opening-parenthesis = Unmatched ( or \(
+regex-error-unmatched-closing-parenthesis = Unmatched ) or \)
+regex-error-trailing-backslash = Trailing backslash
+regex-error-unmatched-opening-brace = Unmatched {"\\{"}
+regex-error-invalid-bracket-content = Invalid content of {"\\{\\}"}
+regex-error-too-big-range-quantifier-index = Regular expression too big
+regex-error-invalid-character-class-name = Invalid character class name
+regex-error-compilation-failed = Invalid regular expression: { $error }

@@ -56,3 +56,13 @@ range-diag-label-inverted = cet intervalle se termine avant de commencer
 
 # variable d'environnement QUOTING_STYLE invalide
 invalid-quoting-style-env-var = valeur invalide de la variable d'environnement QUOTING_STYLE ignorée : { $invalid }
+
+# Messages d'analyse regex (expr, grep, sed, ...)
+regex-error-unmatched-opening-parenthesis = Parenthèse ouvrante ( ou \( non appariée
+regex-error-unmatched-closing-parenthesis = Parenthèse fermante ) ou \) non appariée
+regex-error-trailing-backslash = Barre oblique inverse en fin
+regex-error-unmatched-opening-brace = Accolade ouvrante {"\\{"} non appariée
+regex-error-invalid-bracket-content = Contenu invalide de {"\\{\\}"}
+regex-error-too-big-range-quantifier-index = Expression régulière trop grande
+regex-error-invalid-character-class-name = Nom de classe de caractères invalide
+regex-error-compilation-failed = Expression régulière invalide : { $error }
