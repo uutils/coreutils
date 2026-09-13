@@ -22,7 +22,7 @@ use crossterm::{
     terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
-use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::error::{UResult, USimpleError, UUsageError, strip_errno};
 use uucore::format_usage;
 use uucore::{display::Quotable, show};
 
@@ -31,8 +31,7 @@ use uucore::translate;
 #[derive(Debug)]
 enum MoreError {
     IsDirectory(PathBuf),
-    CannotOpenNoSuchFile(PathBuf),
-    CannotOpenIOError(PathBuf, std::io::ErrorKind),
+    CannotOpenError(PathBuf, std::io::Error),
     BadUsage,
 }
 
@@ -49,24 +48,14 @@ impl std::fmt::Display for MoreError {
                     )
                 )
             }
-            Self::CannotOpenNoSuchFile(path) => {
+            Self::CannotOpenError(path, error) => {
                 write!(
                     f,
                     "{}",
                     translate!(
-                        "more-error-cannot-open-no-such-file",
-                        "path" => path.quote()
-                    )
-                )
-            }
-            Self::CannotOpenIOError(path, error) => {
-                write!(
-                    f,
-                    "{}",
-                    translate!(
-                    "more-error-cannot-open-io-error",
+                    "more-error-cannot-open",
                     "path" => path.quote(),
-                    "error" => error
+                    "error" => strip_errno(error)
                     )
                 )
             }
@@ -166,18 +155,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 ));
                 continue;
             }
-            if !file.exists() {
-                show!(USimpleError::new(
-                    0,
-                    MoreError::CannotOpenNoSuchFile(file.into()).to_string(),
-                ));
-                continue;
-            }
             let opened_file = match File::open(file) {
                 Err(why) => {
                     show!(USimpleError::new(
                         0,
-                        MoreError::CannotOpenIOError(file.into(), why.kind()).to_string(),
+                        MoreError::CannotOpenError(file_os.into(), why).to_string(),
                     ));
                     continue;
                 }
