@@ -8572,6 +8572,41 @@ fn test_cp_current_directory_to_new_directory() {
     assert!(at.file_exists("new_dest_dir/subdir/file3.txt"));
 }
 
+// Regression test for Launchpad #2167118:
+// When copying current directory (.), files or directories inside it that share
+// the same name as the current directory itself must not be stripped to empty paths.
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: relative '..' path canonicalization differs, causing a false self-copy detection"
+)]
+fn test_cp_current_directory_with_entry_matching_parent_basename() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("demo");
+    at.touch("demo/file");
+    at.touch("demo/demo"); // file has the same name as parent directory
+
+    // Copy current directory (.) to a new directory (reproducer from LP #2167118)
+    ucmd.current_dir(at.plus("demo"))
+        .args(&["-R", ".", "../out"])
+        .succeeds();
+
+    assert!(at.file_exists("out/file"));
+    assert!(at.file_exists("out/demo"));
+
+    // Also test copying to an already existing destination directory
+    at.mkdir("existing_out");
+    let mut ucmd2 = uutests::new_ucmd!();
+    ucmd2
+        .current_dir(at.plus("demo"))
+        .args(&["-R", ".", "../existing_out"])
+        .succeeds();
+
+    assert!(at.file_exists("existing_out/file"));
+    assert!(at.file_exists("existing_out/demo"));
+}
+
 // Test copying current directory (.) with verbose output.
 // This ensures the verbose output shows the correct paths.
 #[test]
