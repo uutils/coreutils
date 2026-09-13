@@ -21,6 +21,7 @@ pub fn main() {
 
     // Check for tldr.zip when building uudoc to warn users once at build time
     // instead of repeatedly at runtime for each utility
+    println!("cargo:rerun-if-changed=docs/tldr.zip");
     if env::var("CARGO_FEATURE_UUDOC").is_ok() && !Path::new("docs/tldr.zip").exists() {
         println!(
             "cargo:warning=No tldr archive found, so the documentation will not include examples."
