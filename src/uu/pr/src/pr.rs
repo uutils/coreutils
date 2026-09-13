@@ -436,8 +436,8 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
     let num_option = args
         .iter()
         .take_while(|arg| arg.as_str() != "--")
-        .find_position(|x| x.trim() == "-n");
-    if let Some((pos, _value)) = num_option
+        .position(|x| x.trim() == "-n");
+    if let Some(pos) = num_option
         && let Some(num_val_opt) = args.get(pos + 1)
         && !num_regex.is_match(num_val_opt)
     {
