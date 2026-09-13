@@ -466,12 +466,11 @@ fn test_symlink_overwrite_dir_fail() {
     at.touch(path_a);
     at.mkdir(path_b);
 
-    assert!(
-        !ucmd
-            .args(&["-s", "-T", path_a, path_b])
+    assert_ne!(
+        ucmd.args(&["-s", "-T", path_a, path_b])
             .fails()
-            .stderr_str()
-            .is_empty()
+            .stderr_str(),
+        ""
     );
 }
 
@@ -522,13 +521,7 @@ fn test_symlink_target_only() {
 
     at.mkdir(dir);
 
-    assert!(
-        !ucmd
-            .args(&["-s", "-t", dir])
-            .fails()
-            .stderr_str()
-            .is_empty()
-    );
+    assert_ne!(ucmd.args(&["-s", "-t", dir]).fails().stderr_str(), "");
 }
 
 #[test]

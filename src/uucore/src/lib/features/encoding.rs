@@ -44,7 +44,7 @@ impl Base64SimdWrapper {
     ) -> Self {
         assert!(valid_decoding_multiple > 0);
         assert!(unpadded_multiple > 0);
-        assert!(!alphabet.is_empty());
+        assert_ne!(alphabet, []);
 
         Self {
             alphabet,
@@ -195,7 +195,7 @@ impl EncodingWrapper {
 
         assert!(unpadded_multiple > 0);
 
-        assert!(!alphabet.is_empty());
+        assert_ne!(alphabet, []);
 
         Self {
             alphabet,

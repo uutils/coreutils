@@ -28,7 +28,7 @@ fn test_normal() {
     }
 
     result.success();
-    assert!(!result.stdout_str().trim().is_empty());
+    assert_ne!(result.stdout_str().trim(), "");
 }
 
 #[test]
