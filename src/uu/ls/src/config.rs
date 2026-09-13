@@ -195,7 +195,7 @@ pub(crate) enum Files {
 /// Which listing program is constructing this [`Config`].
 ///
 /// `ls` defaults depend on whether stdout is a terminal. `dir` and `vdir`
-/// use a fixed format when the user did not pass a format option.
+/// default to a fixed format and escape quoting.
 #[derive(Clone, Copy)]
 enum ProgramMode {
     Ls,
@@ -579,6 +579,7 @@ fn match_quoting_style_name(
 fn extract_quoting_style(
     options: &clap::ArgMatches,
     show_control: bool,
+    mode: ProgramMode,
 ) -> (QuotingStyle, Option<LocaleQuoting>) {
     let opt_quoting_style = options.get_one::<String>(QUOTING_STYLE);
 
@@ -593,8 +594,6 @@ fn extract_quoting_style(
         (QuotingStyle::C_NO_QUOTES, None)
     } else if options.get_flag(options::quoting::C) {
         (QuotingStyle::C_DOUBLE, None)
-    } else if options.get_flag(options::DIRED) {
-        (QuotingStyle::Literal { show_control }, None)
     } else {
         // If set, the QUOTING_STYLE environment variable specifies a default style.
         if let Ok(style) = std::env::var("QUOTING_STYLE") {
@@ -608,12 +607,12 @@ fn extract_quoting_style(
             );
         }
 
-        // By default, `ls` uses Shell escape quoting style when writing to a terminal file
-        // descriptor and Literal otherwise.
-        if stdout().is_terminal() {
-            (QuotingStyle::SHELL_ESCAPE.show_control(show_control), None)
-        } else {
-            (QuotingStyle::Literal { show_control }, None)
+        match mode {
+            ProgramMode::Dir | ProgramMode::Vdir => (QuotingStyle::C_NO_QUOTES, None),
+            ProgramMode::Ls if !options.get_flag(options::DIRED) && stdout().is_terminal() => {
+                (QuotingStyle::SHELL_ESCAPE.show_control(show_control), None)
+            }
+            ProgramMode::Ls => (QuotingStyle::Literal { show_control }, None),
         }
     }
 }
@@ -710,12 +709,12 @@ impl Config {
         Self::from_with_program_mode(options, diag_args, ProgramMode::Ls)
     }
 
-    /// Construct a configuration with dir's default column format.
+    /// Construct a configuration with dir's default column format and escape quoting.
     pub fn from_dir(options: &clap::ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Self> {
         Self::from_with_program_mode(options, diag_args, ProgramMode::Dir)
     }
 
-    /// Construct a configuration with vdir's default long format.
+    /// Construct a configuration with vdir's default long format and escape quoting.
     pub fn from_vdir(options: &clap::ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Self> {
         Self::from_with_program_mode(options, diag_args, ProgramMode::Vdir)
     }
@@ -851,10 +850,13 @@ impl Config {
         let mut show_control = if options.get_flag(options::HIDE_CONTROL_CHARS) {
             false
         } else {
-            options.get_flag(options::SHOW_CONTROL_CHARS) || !stdout().is_terminal()
+            options.get_flag(options::SHOW_CONTROL_CHARS)
+                || !matches!(mode, ProgramMode::Ls)
+                || !stdout().is_terminal()
         };
 
-        let (mut quoting_style, mut locale_quoting) = extract_quoting_style(options, show_control);
+        let (mut quoting_style, mut locale_quoting) =
+            extract_quoting_style(options, show_control, mode);
         let indicator_style = extract_indicator_style(options);
 
         let mut ignore_patterns: Vec<Pattern> = Vec::new();
