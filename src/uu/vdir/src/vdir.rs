@@ -8,7 +8,6 @@ use std::ffi::OsString;
 use std::path::Path;
 use uu_ls::{Config, options};
 use uucore::error::UResult;
-use uucore::quoting_style::QuotingStyle;
 use uucore::{format_usage, translate};
 
 #[uucore::main]
@@ -19,23 +18,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (matches, diag_args) =
         uucore::clap_localization::handle_clap_result_with_diagnostics(command, args.collect(), 2)?;
 
-    let mut default_quoting_style = false;
-
-    // If no quoting option was given, use vdir's default quoting style.
-
-    if !matches.contains_id(options::QUOTING_STYLE)
-        && !matches.get_flag(options::quoting::C)
-        && !matches.get_flag(options::quoting::ESCAPE)
-        && !matches.get_flag(options::quoting::LITERAL)
-    {
-        default_quoting_style = true;
-    }
-
-    let mut config = Config::from_vdir(&matches, diag_args.as_deref())?;
-
-    if default_quoting_style {
-        config.quoting_style = QuotingStyle::C_NO_QUOTES;
-    }
+    let config = Config::from_vdir(&matches, diag_args.as_deref())?;
 
     let locs = matches
         .get_many::<OsString>(options::PATHS)

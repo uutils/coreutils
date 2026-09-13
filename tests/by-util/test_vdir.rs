@@ -77,6 +77,43 @@ fn test_default_format_overrides() {
 }
 
 #[test]
+fn test_quoting_defaults() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("a b");
+    scene.ucmd().succeeds().stdout_contains(" a\\ b\n");
+    scene.ucmd().arg("--zero").succeeds().stdout_only("a b\0");
+    scene
+        .ucmd()
+        .env("QUOTING_STYLE", "literal")
+        .succeeds()
+        .stdout_contains(" a b\n");
+    scene
+        .ucmd()
+        .env("QUOTING_STYLE", "literal")
+        .arg("-b")
+        .succeeds()
+        .stdout_contains(" a\\ b\n");
+    scene
+        .ucmd()
+        .arg("--dired")
+        .succeeds()
+        .stdout_contains(" a\\ b\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_literal_quoting_on_terminal() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("a\nb");
+    scene
+        .ucmd()
+        .env("QUOTING_STYLE", "literal")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_contains(" a\r\nb\r\n");
+}
+
+#[test]
 fn test_column_output() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
