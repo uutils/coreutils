@@ -3771,7 +3771,6 @@ version = "0.11.0"
 dependencies = [
  "clap",
  "fluent",
- "rustix",
  "uucore",
 ]
 

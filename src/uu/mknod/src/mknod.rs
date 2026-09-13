@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, Command, value_parser};
 use nix::libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t};
-use nix::sys::stat::{Mode, SFlag, mknod as nix_mknod, umask as nix_umask};
+use nix::sys::stat::{Mode, SFlag, mknod as nix_mknod};
 use std::ffi::OsString;
 use std::io::{self, Write as _};
 
@@ -93,26 +93,21 @@ fn mknod(file_name: &str, config: Config) -> i32 {
         None
     };
 
-    // set umask to 0 and store previous umask
-    let have_prev_umask = if config.use_umask {
-        None
-    } else {
-        Some(nix_umask(Mode::empty()))
+    let create_node = || {
+        nix_mknod(
+            file_name,
+            config.file_type.as_sflag(),
+            config.mode,
+            config.dev as _,
+        )
+        .err()
     };
-
-    let mknod_err = nix_mknod(
-        file_name,
-        config.file_type.as_sflag(),
-        config.mode,
-        config.dev as _,
-    )
-    .err();
+    let mknod_err = if config.use_umask {
+        create_node()
+    } else {
+        uucore::mode::with_umask(0, create_node)
+    };
     let errno = if mknod_err.is_some() { -1 } else { 0 };
-
-    // set umask back to original value
-    if let Some(prev_umask) = have_prev_umask {
-        nix_umask(prev_umask);
-    }
 
     if let Some(err) = mknod_err {
         let _ = writeln!(

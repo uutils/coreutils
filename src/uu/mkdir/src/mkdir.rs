@@ -249,77 +249,59 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
     create_single_dir(path, is_parent, config)
 }
 
-/// RAII guard to restore umask on drop, ensuring cleanup even on panic.
-#[cfg(unix)]
-struct UmaskGuard(rustix::fs::Mode);
-
-#[cfg(unix)]
-impl UmaskGuard {
-    /// Set umask to the given value and return a guard that restores the original on drop.
-    fn set(new_mask: rustix::fs::Mode) -> Self {
-        let old_mask = rustix::process::umask(new_mask);
-        Self(old_mask)
-    }
-}
-
-#[cfg(unix)]
-impl Drop for UmaskGuard {
-    fn drop(&mut self) {
-        rustix::process::umask(self.0);
-    }
-}
-
-/// Create a directory with the exact mode specified, bypassing umask.
-///
-/// GNU mkdir temporarily sets umask to a shaped umask before calling mkdir(2),
-/// ensuring the directory is created atomically with the correct permissions.
-/// This avoids a race condition where the directory briefly exists with
-/// umask-based permissions.
+/// Create a directory, shaping the umask only when it would block a mode bit
+/// that mkdir(2) has to set: bits requested through `-m`, and owner write and
+/// execute on a `-p` parent, which has to stay usable to create children in.
+/// Shaping it for the duration of the call creates the directory with its
+/// final permissions instead of widening them afterwards. Otherwise the
+/// kernel's umask handling already gives the right mode and the umask is left
+/// alone.
 #[cfg(unix)]
 fn create_dir_with_mode(
     path: &Path,
     mode: u32,
-    shaped_umask: rustix::fs::Mode,
+    is_parent: bool,
+    explicit_mode: Option<u32>,
 ) -> std::io::Result<()> {
     use std::os::unix::fs::DirBuilderExt;
 
-    let _guard = UmaskGuard::set(shaped_umask);
+    let create = || std::fs::DirBuilder::new().mode(mode).create(path);
 
-    std::fs::DirBuilder::new().mode(mode).create(path)
+    if is_parent {
+        // Parent directories are never affected by -m (matches GNU behavior).
+        // `mode` is 0o777 here, and the umask must not block owner write or
+        // execute (u+wx) or we could not create children inside the parent.
+        // Every other umask bit is preserved so the kernel applies it — and any
+        // default ACL on the grandparent — through the normal mkdir(2) path.
+        mode::with_umask_from_current(|current| current & !0o300, create)
+    } else if let Some(explicit) = explicit_mode {
+        // Explicit -m: shape the umask so it cannot block requested bits.
+        mode::with_umask_from_current(|current| current & !explicit, create)
+    } else {
+        create()
+    }
 }
 
 #[cfg(not(unix))]
-fn create_dir_with_mode(path: &Path, _mode: u32, _shaped_umask: u32) -> std::io::Result<()> {
+fn create_dir_with_mode(
+    path: &Path,
+    _mode: u32,
+    _is_parent: bool,
+    _explicit_mode: Option<u32>,
+) -> std::io::Result<()> {
     std::fs::create_dir(path)
 }
 
 // Helper function to create a single directory with appropriate permissions
-// `is_parent` argument is not used on windows
-#[cfg_attr(not(unix), allow(unused_variables))]
 fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
     #[cfg(unix)]
-    let (mkdir_mode, shaped_umask) = {
-        let mode_bits = |x: u32| rustix::fs::Mode::from_bits_truncate(x as rustix::fs::RawMode);
-        let umask_bits = mode_bits(mode::get_umask());
-        if is_parent {
-            // Parent directories are never affected by -m (matches GNU behavior).
-            // We pass 0o777 as the mode and shape the umask so it cannot block
-            // owner write or execute (u+wx), ensuring the owner can traverse and
-            // write into the parent to create children. All other umask bits are
-            // preserved so the kernel applies them — and any default ACL on the
-            // grandparent — through the normal mkdir(2) path.
-            (DEFAULT_PERM, umask_bits & !mode_bits(0o300))
-        } else {
-            match config.mode {
-                // Explicit -m: shape umask so it cannot block explicitly requested bits.
-                Some(m) => (m, umask_bits & !mode_bits(m)),
-                // No -m: leave umask fully intact; kernel applies umask + ACL naturally.
-                None => (DEFAULT_PERM, umask_bits),
-            }
-        }
+    let mkdir_mode = if is_parent {
+        DEFAULT_PERM
+    } else {
+        config.mode.unwrap_or(DEFAULT_PERM)
     };
     #[cfg(not(unix))]
-    let (mkdir_mode, shaped_umask) = (config.mode.unwrap_or(DEFAULT_PERM), 0u32);
+    let mkdir_mode = config.mode.unwrap_or(DEFAULT_PERM);
 
     // Label the directory at creation, as GNU does; relabelling after leaves a window.
     #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
@@ -333,7 +315,7 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
         None
     };
 
-    match create_dir_with_mode(path, mkdir_mode, shaped_umask) {
+    match create_dir_with_mode(path, mkdir_mode, is_parent, config.mode) {
         Ok(()) => {
             if config.verbose {
                 writeln!(

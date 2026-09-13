@@ -21,8 +21,8 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["fs", "mode"] }
 fluent = { workspace = true }
 
-[target.'cfg(unix)'.dependencies]
-rustix = { workspace = true, features = ["fs", "process"] }
+[target.'cfg(all(unix, not(target_vendor = "apple")))'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
 
 [target.'cfg(target_vendor = "apple")'.dependencies]
 libc = { workspace = true }

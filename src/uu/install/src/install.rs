@@ -499,13 +499,27 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
             // create all ancestors (or components) of a directory
             // regardless of the presence of the "-D" flag.
             //
-            // NOTE: the GNU "install" sets the expected mode only for the
-            // target directory. All created ancestor directories will have
-            // the default mode. Hence it is safe to use fs::create_dir_all
-            // and then only modify the target's dir mode.
-            if let Err(e) = fs::create_dir_all(&path_to_create).map_err_context(
-                || translate!("install-error-create-dir-failed", "path" => path_to_create.quote()),
-            ) {
+            // Only the target gets the requested mode; newly created ancestors
+            // use DEFAULT_MODE. An explicit builder mode is required because
+            // create_dir_all otherwise requests 0777 for each component.
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::DirBuilderExt;
+                let mut builder = fs::DirBuilder::new();
+                builder.recursive(true).mode(DEFAULT_MODE);
+                if let Err(e) = uucore::mode::with_umask(0, || {
+                    builder.create(path_to_create.as_path())
+                })
+                .map_err_context(|| translate!("install-error-create-dir-failed", "path" => path_to_create.as_path().quote()))
+                {
+                    show!(e);
+                    continue;
+                }
+            }
+            #[cfg(not(unix))]
+            if let Err(e) = fs::create_dir_all(path_to_create.as_path())
+                .map_err_context(|| translate!("install-error-create-dir-failed", "path" => path_to_create.as_path().quote()))
+            {
                 show!(e);
                 continue;
             }
@@ -706,9 +720,10 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
                 #[cfg(unix)]
                 {
-                    // Use DEFAULT_MODE (0o755) for created directories - this matches GNU install
-                    // behavior. The actual mode will be modified by umask at the kernel level.
-                    match create_dir_all_safe(to_create, DEFAULT_MODE) {
+                    // Create ancestors with DEFAULT_MODE regardless of the inherited umask.
+                    match uucore::mode::with_umask(0, || {
+                        create_dir_all_safe(to_create, DEFAULT_MODE)
+                    }) {
                         Ok(dir_fd) => {
                             if b.target_dir.is_none()
                                 && sources.len() == 1
@@ -946,7 +961,7 @@ fn perform_backup(from: &Path, to: &Path, b: &Behavior) -> UResult<Option<PathBu
 ///
 /// Note: This function and `copy_file` share similar logic but cannot easily
 /// be consolidated because they use fundamentally different APIs:
-/// - `copy_file_safe` uses fd-based `DirFd::open_file_at()` (openat syscall)
+/// - `copy_file_safe` uses fd-based `DirFd::open_file_at_with_mode()` (openat syscall)
 /// - `copy_file` uses path-based `OpenOptions::new().create_new().open()`
 #[cfg(unix)]
 fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsStr) -> UResult<()> {
@@ -964,7 +979,9 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
     }
 
     let mut src = File::open(from)?;
-    let mut dst = to_parent_fd.open_file_at(to_filename)?;
+    let mut dst = uucore::mode::with_umask(0, || {
+        to_parent_fd.open_file_at_with_mode(to_filename, 0o600)
+    })?;
     copy_fast(&mut src, &mut dst)?;
 
     Ok(())
@@ -1012,11 +1029,13 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
 
     let mut handle = File::open(from)?;
     // create_new provides TOCTOU protection
-    let mut dest = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(to)?;
+    let mut dest = uucore::mode::with_umask(0, || {
+        OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(to)
+    })?;
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     if rustix::fs::ioctl_ficlone(&dest, &handle).is_ok() {
@@ -1051,7 +1070,16 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
     } else {
         to.to_path_buf()
     };
-    match process::Command::new(&b.strip_program).arg(&to).status() {
+    // Follow GNU's behavior: the strip program sees a umask of 0. The mask is
+    // restored before waiting, so a slow strip does not hold up other callers.
+    #[cfg(unix)]
+    let spawned = uucore::mode::with_umask(0, || {
+        process::Command::new(&b.strip_program).arg(&to).spawn()
+    });
+    #[cfg(not(unix))]
+    let spawned = process::Command::new(&b.strip_program).arg(&to).spawn();
+
+    match spawned.and_then(|mut child| child.wait()) {
         Ok(status) => {
             if !status.success() {
                 // Follow GNU's behavior: if strip fails, removes the target
@@ -1540,6 +1568,52 @@ pub fn set_selinux_context_for_directories_install(target_path: &Path, context: 
 mod tests {
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     use super::derive_context_from_parent;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_uumain_restores_umask() {
+        const CHILD_ENV: &str = "UUTEST_INSTALL_UMASK_CHILD";
+
+        if std::env::var_os(CHILD_ENV).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .env(CHILD_ENV, "1")
+                .arg("test_uumain_restores_umask")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "child test failed\nstdout: {}\nstderr: {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+
+        let root =
+            std::env::temp_dir().join(format!("uutils-install-umask-{}", std::process::id()));
+        let target = root.join("ancestor/target");
+        let _ = std::fs::remove_dir_all(&root);
+
+        // SAFETY: umask has no memory-safety preconditions. This runs in a
+        // dedicated child process so the process-wide change is isolated.
+        let original_umask = unsafe { uucore::libc::umask(0o077) };
+        let status = super::uumain(
+            vec![
+                std::ffi::OsString::from("install"),
+                std::ffi::OsString::from("-d"),
+                target.as_os_str().to_os_string(),
+            ]
+            .into_iter(),
+        );
+        // SAFETY: same as above; this also restores the child's original mask.
+        let observed_umask = unsafe { uucore::libc::umask(original_umask) };
+        let target_exists = target.is_dir();
+        let _ = std::fs::remove_dir_all(root);
+
+        assert_eq!(status, 0);
+        assert!(target_exists);
+        assert_eq!(observed_umask, 0o077);
+    }
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     #[test]
