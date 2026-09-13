@@ -57,7 +57,8 @@ fn find_valid_number_with_suffix(s: &str, unit: Unit) -> Option<&str> {
     let accepts_suffix = unit != Unit::None;
     let accepts_i = [Unit::Auto, Unit::Iec(true)].contains(&unit);
 
-    let mut characters = s.chars().skip(numeric_part.len());
+    let numeric_char_count = numeric_part.chars().count();
+    let mut characters = s.chars().skip(numeric_char_count);
     let potential_suffix = characters.next();
     let potential_i = characters.next();
 
@@ -65,15 +66,24 @@ fn find_valid_number_with_suffix(s: &str, unit: Unit) -> Option<&str> {
         return Some(numeric_part);
     }
 
+    // Calculate byte index from char index since numeric_part may contain
+    // multibyte characters (e.g. locale decimal separators)
+    let suffix_byte_idx = s
+        .char_indices()
+        .nth(numeric_char_count)
+        .map_or(s.len(), |(i, _)| i);
+
     match (potential_suffix, potential_i) {
-        (Some(suffix), None) if RawSuffix::try_from(&suffix).is_ok() => {
-            Some(&s[..=numeric_part.len()])
-        }
         (Some(suffix), Some('i')) if accepts_i && RawSuffix::try_from(&suffix).is_ok() => {
-            Some(&s[..numeric_part.len() + 2])
+            let next_char_byte = s
+                .char_indices()
+                .nth(numeric_char_count + 2)
+                .map_or(s.len(), |(i, _)| i);
+            Some(&s[..next_char_byte])
         }
-        (Some(suffix), Some(_)) if RawSuffix::try_from(&suffix).is_ok() => {
-            Some(&s[..=numeric_part.len()])
+        (Some(suffix), None) | (Some(suffix), Some(_)) if RawSuffix::try_from(&suffix).is_ok() => {
+            let end = suffix_byte_idx + suffix.len_utf8();
+            Some(&s[..end])
         }
         _ => Some(numeric_part),
     }
