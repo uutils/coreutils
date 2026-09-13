@@ -114,7 +114,10 @@ procfs = { workspace = true, optional = true }
 [target.'cfg(windows)'.dependencies]
 wild = { workspace = true }
 windows-sys = { workspace = true, optional = true, default-features = false, features = [
+  "Wdk_Foundation",
+  "Wdk_Storage_FileSystem",
   "Wdk_System_SystemInformation",
+  "Wdk_System_SystemServices",
   "Win32_Security",
   "Win32_Storage_FileSystem",
   "Win32_Foundation",
@@ -144,7 +147,7 @@ entries = ["libc", "rustix/fs", "rustix/process"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
 fast-inc = []
 fs = ["dunce", "libc", "rustix/fs", "windows-sys"]
-fsext = ["libc", "windows-sys", "bstr"]
+fsext = ["libc", "windows-sys", "bstr", "wide"]
 fsxattr = ["xattr", "itertools", "libc"]
 hardware = []
 lines = []
