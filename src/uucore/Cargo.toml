@@ -36,7 +36,7 @@ libc = { workspace = true, optional = true }
 openssl = { workspace = true, optional = true }
 os_display = { workspace = true }
 rustc-hash = { workspace = true }
-rustix = { workspace = true, optional = true }
+rustix = { workspace = true, optional = true, features = ["std"] }
 # Not optional: os_display already pulls unicode-width into every uucore build,
 # so making it a direct dependency here is free and keeps char_width available
 # on all targets (a feature-gated optional dep failed to activate on wasm).
