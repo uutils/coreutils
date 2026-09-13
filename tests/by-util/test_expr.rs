@@ -499,6 +499,14 @@ fn test_regex_catastrophic_backtracking() {
 }
 
 #[test]
+fn test_regex_leftmost_longest_match_semantics() {
+    new_ucmd!()
+        .args(&["ab", ":", "a\\|ab"])
+        .succeeds()
+        .stdout_only("2\n");
+}
+
+#[test]
 fn test_substr() {
     new_ucmd!()
         .args(&["substr", "abc", "1", "1"])
