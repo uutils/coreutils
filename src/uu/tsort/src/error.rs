@@ -3,9 +3,16 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use std::collections::TryReserveError as StdTryReserveError;
 use std::io;
 
 use uucore::{display::Quotable as _, translate};
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum AllocationError {
+    #[error("{0}")]
+    Std(#[from] StdTryReserveError),
+}
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
@@ -16,6 +23,11 @@ pub(crate) enum Error {
     /// Error while writing output.
     #[error("{message}: {0}", message = translate!("common-write-error"))]
     Write(io::Error),
+
+    /// A collection could not grow because its capacity overflowed or the
+    /// allocator rejected the request.
+    #[error(transparent)]
+    Allocation(#[from] AllocationError),
 
     /// The graph contains a cycle.
     #[error("{input}: {message}", input = .0, message = translate!("tsort-error-loop"))]
