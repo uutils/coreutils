@@ -237,6 +237,92 @@ fn test_up_to_match_negative_offset() {
 }
 
 #[test]
+fn test_up_to_match_negative_offset_before_split_start() {
+    // The target line (match minus the offset) may not precede the start of the
+    // current split.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "/3$/-3"])
+        .fails()
+        .stdout_is("0\n")
+        .stderr_is("csplit: '/3$/-3': line number out of range\n");
+
+    assert_eq!(
+        glob(&at.plus_as_string("xx*"))
+            .expect("there should be no splits created")
+            .count(),
+        0
+    );
+}
+
+#[test]
+fn test_up_to_match_negative_offset_at_split_start() {
+    // The target line is exactly the first line of the current split: an empty
+    // split, not an error.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "/3$/-2"])
+        .succeeds()
+        .stdout_only("0\n141\n");
+
+    assert_eq!(at.read("xx00"), "");
+    assert_eq!(at.read("xx01"), generate(1, 51));
+}
+
+#[test]
+fn test_up_to_match_negative_offset_before_second_split_start() {
+    // The bound is the start of the current split, not the start of the input.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "/10$/", "/12$/-3"])
+        .fails()
+        .stdout_is("18\n0\n")
+        .stderr_is("csplit: '/12$/-3': line number out of range\n");
+
+    assert_eq!(
+        glob(&at.plus_as_string("xx*"))
+            .expect("there should be no splits created")
+            .count(),
+        0
+    );
+}
+
+#[test]
+fn test_up_to_match_negative_offset_at_second_split_start() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "/10$/", "/12$/-2"])
+        .succeeds()
+        .stdout_only("18\n0\n123\n");
+
+    assert_eq!(at.read("xx00"), generate(1, 10));
+    assert_eq!(at.read("xx01"), "");
+    assert_eq!(at.read("xx02"), generate(10, 51));
+}
+
+#[test]
+fn test_up_to_match_negative_offset_before_split_start_keep_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-k", "numbers50.txt", "/3$/-3"])
+        .fails()
+        .stdout_is("0\n")
+        .stderr_is("csplit: '/3$/-3': line number out of range\n");
+
+    assert_eq!(at.read("xx00"), "");
+}
+
+#[test]
+fn test_skip_to_match_negative_offset_before_split_start() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "%3$%-3"])
+        .fails()
+        .stderr_is("csplit: '%3$%-3': line number out of range\n");
+
+    assert_eq!(
+        glob(&at.plus_as_string("xx*"))
+            .expect("there should be no splits created")
+            .count(),
+        0
+    );
+}
+
+#[test]
 fn test_up_to_match_negative_offset_min_i32() {
     new_ucmd!()
         .args(&["numbers50.txt", "/45/-2147483648"])
