@@ -943,6 +943,47 @@ fn test_suffix_length_req() {
 }
 
 #[test]
+fn test_numeric_suffix_huge_start_requires_suffix_length() {
+    new_ucmd!()
+        .args(&[
+            "-n",
+            "5",
+            "--numeric-suffixes=18446744073709551615",
+            "asciilowercase.txt",
+        ])
+        .fails()
+        .stderr_only("split: the suffix length needs to be at least 20\n");
+}
+
+#[test]
+fn test_hex_suffix_huge_start_requires_suffix_length() {
+    new_ucmd!()
+        .args(&[
+            "-n",
+            "5",
+            "--hex-suffixes=ffffffffffffffff",
+            "asciilowercase.txt",
+        ])
+        .fails()
+        .stderr_only("split: the suffix length needs to be at least 16\n");
+}
+
+#[test]
+fn test_numeric_suffix_huge_chunk_count_requires_suffix_length() {
+    new_ucmd!()
+        .args(&[
+            "-n",
+            "18446744073709551615",
+            "--numeric-suffixes=5",
+            "-a",
+            "2",
+            "asciilowercase.txt",
+        ])
+        .fails()
+        .stderr_only("split: the suffix length needs to be at least 20\n");
+}
+
+#[test]
 fn test_large_suffix_length_is_rejected() {
     new_ucmd!()
         .args(&["-a", "66542562175252"])
