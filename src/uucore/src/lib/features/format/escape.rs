@@ -99,12 +99,15 @@ fn parse_unicode(input: &mut &[u8], digits: u8) -> Result<char, EscapeError> {
             .map(|c| Base::Hex.convert_digit(*c))
             .collect::<Option<Vec<u8>>>()
             .ok_or(EscapeError::MissingHexadecimalNumber)?;
-        *input = rest;
         let ret = hex_bytes
             .iter()
             .map(|n| *n as u32)
             .reduce(|ret, n| ret.wrapping_mul(Base::Hex.as_base() as u32).wrapping_add(n))
             .expect("must have multiple digits in unicode string");
+        if ret > 0x0010_FFFF {
+            return Err(EscapeError::OutOfRange);
+        }
+        *input = rest;
         char::from_u32(ret).ok_or_else(|| EscapeError::InvalidCharacters(new_digits.to_vec()))
     } else {
         Err(EscapeError::MissingHexadecimalNumber)
@@ -116,6 +119,7 @@ fn parse_unicode(input: &mut &[u8], digits: u8) -> Result<char, EscapeError> {
 pub enum EscapeError {
     InvalidCharacters(Vec<u8>),
     MissingHexadecimalNumber,
+    OutOfRange,
 }
 
 /// Parse an escape sequence, like `\n` or `\xff`, etc.
@@ -158,6 +162,7 @@ pub fn parse_escape_code(
             )),
             b'u' => match parse_unicode(rest, 4) {
                 Ok(c) => Ok(EscapedChar::Char(c)),
+                Err(EscapeError::OutOfRange) => Ok(EscapedChar::Backslash(b'u')),
                 Err(EscapeError::MissingHexadecimalNumber) => Err(FormatError::MissingHex(None)),
                 Err(EscapeError::InvalidCharacters(chars)) => {
                     Err(FormatError::InvalidCharacter('u', chars, None))
@@ -165,6 +170,7 @@ pub fn parse_escape_code(
             },
             b'U' => match parse_unicode(rest, 8) {
                 Ok(c) => Ok(EscapedChar::Char(c)),
+                Err(EscapeError::OutOfRange) => Ok(EscapedChar::Backslash(b'U')),
                 Err(EscapeError::MissingHexadecimalNumber) => Err(FormatError::MissingHex(None)),
                 Err(EscapeError::InvalidCharacters(chars)) => {
                     Err(FormatError::InvalidCharacter('U', chars, None))
@@ -233,6 +239,13 @@ mod tests {
                 parse_unicode(&mut &input[..], 4),
                 Err(EscapeError::InvalidCharacters(Vec::from(b"d800")))
             );
+        }
+
+        #[test]
+        fn out_of_range_unicode() {
+            let mut input = &b"00110000"[..];
+            assert_eq!(parse_unicode(&mut input, 8), Err(EscapeError::OutOfRange));
+            assert_eq!(input, b"00110000");
         }
     }
 }

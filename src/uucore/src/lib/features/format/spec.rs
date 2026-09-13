@@ -386,10 +386,9 @@ impl Spec {
             Self::EscapedString { position } => {
                 let os_str = args.next_string(*position);
                 let bytes = os_str_as_bytes(os_str)?;
-                let mut parsed = Vec::<u8>::new();
 
                 for c in parse_escape_only(bytes, OctalParsing::ThreeDigits) {
-                    match c?.write(&mut parsed)? {
+                    match c?.write(&mut writer).map_err(FormatError::IoError)? {
                         ControlFlow::Continue(()) => {}
                         ControlFlow::Break(()) => {
                             // A `\c` inside the argument stops output for the
@@ -399,7 +398,7 @@ impl Spec {
                         }
                     }
                 }
-                writer.write_all(&parsed).map_err(FormatError::IoError)
+                Ok(())
             }
             Self::QuotedString { position } => {
                 let s = locale_aware_escape_name(

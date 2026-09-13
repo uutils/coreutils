@@ -75,7 +75,11 @@ fn print_formatted(args: impl uucore::Args) -> UResult<()> {
         if let Ok(FormatItem::Spec(_)) = item {
             format_seen = true;
         }
-        match item.map_err(&raise)?.write(stdout(), &mut args).map_err(&raise)? {
+        match item
+            .map_err(&raise)?
+            .write(stdout(), &mut args)
+            .map_err(&raise)?
+        {
             ControlFlow::Continue(()) => {}
             ControlFlow::Break(()) => return Ok(()),
         }
@@ -102,7 +106,11 @@ fn print_formatted(args: impl uucore::Args) -> UResult<()> {
 
     while !args.is_exhausted() {
         for item in parse_spec_and_escape(format) {
-            match item.map_err(&raise)?.write(stdout(), &mut args).map_err(&raise)? {
+            match item
+                .map_err(&raise)?
+                .write(stdout(), &mut args)
+                .map_err(&raise)?
+            {
                 ControlFlow::Continue(()) => {}
                 ControlFlow::Break(()) => return Ok(()),
             }
