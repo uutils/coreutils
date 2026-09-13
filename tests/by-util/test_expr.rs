@@ -505,6 +505,47 @@ fn test_regex_leftmost_longest_match_semantics() {
         .args(&["ab", ":", "a\\|ab"])
         .succeeds()
         .stdout_only("2\n");
+
+    new_ucmd!()
+        .args(&["aaaaaa", ":", "aaaaa\\|a*"])
+        .succeeds()
+        .stdout_only("6\n");
+
+    new_ucmd!()
+        .args(&["ab", ":", "\\(a\\|ab\\)"])
+        .succeeds()
+        .stdout_only("ab\n");
+
+    new_ucmd!()
+        .args(&["aaaaaa", ":", "\\(aaaaa\\|a*\\)"])
+        .succeeds()
+        .stdout_only("aaaaaa\n");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data, every locale is C")]
+fn test_regex_posix_character_classes() {
+    new_ucmd!()
+        .args(&["é", ":", "[[:alpha:]]"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["é", ":", "[[:lower:]]"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["É", ":", "[[:upper:]]"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["a", ":", "[[:bogus:]]"])
+        .fails_with_code(2)
+        .stderr_contains("Invalid character class name");
 }
 
 #[test]
