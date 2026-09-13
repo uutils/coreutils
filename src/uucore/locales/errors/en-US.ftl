@@ -54,3 +54,13 @@ size-diag-help-syntax = a size is a number and an optional unit: K, M, G and so 
 # in its own words.
 range-diag-label-too-large = this number is too large
 range-diag-label-inverted = this range ends before it starts
+
+# Regex parsing messages (expr, grep, sed, ...)
+regex-error-unmatched-opening-parenthesis = Unmatched ( or \(
+regex-error-unmatched-closing-parenthesis = Unmatched ) or \)
+regex-error-trailing-backslash = Trailing backslash
+regex-error-unmatched-opening-brace = Unmatched {"\\{"}
+regex-error-invalid-bracket-content = Invalid content of {"\\{\\}"}
+regex-error-too-big-range-quantifier-index = Regular expression too big
+regex-error-invalid-character-class-name = Invalid character class name
+regex-error-compilation-failed = Invalid regular expression: { $error }
