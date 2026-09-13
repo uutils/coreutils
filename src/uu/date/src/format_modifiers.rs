@@ -19,7 +19,9 @@
 //! - `_`: Pad with spaces instead of zeros
 //! - `0`: Pad with zeros (default for numeric fields)
 //! - `^`: Convert to uppercase
-//! - `#`: Use opposite case (uppercase becomes lowercase and vice versa)
+//! - `#`: Use opposite case (uppercase becomes lowercase and vice versa).
+//!   Only the specifiers that emit a name (`%a %A %b %B %h %p %P %Z`) honor it,
+//!   and there it takes precedence over `^`
 //! - `+`: Force display of sign (+ for positive, - for negative)
 //!
 //! ### Width
@@ -265,6 +267,24 @@ fn is_text_specifier(specifier: &str) -> bool {
     )
 }
 
+/// Returns true if GNU's conversion for `specifier` honors the `#`
+/// (opposite case) flag.
+///
+/// Only the conversions that emit a locale name or abbreviation look at `#`.
+/// Composite specifiers such as `%c` and `%r` are expanded recursively without
+/// it, so `%#c` and `%#r` print like `%c` and `%r`, while `^` still reaches
+/// into that expansion.
+///
+/// This deliberately duplicates the list in `is_text_specifier` rather than
+/// calling it: that one classifies specifiers for padding, and the two sets
+/// only happen to coincide today.
+fn honors_opposite_case(specifier: &str) -> bool {
+    matches!(
+        specifier.chars().last(),
+        Some('A' | 'a' | 'B' | 'b' | 'h' | 'Z' | 'p' | 'P')
+    )
+}
+
 /// Returns true if the specifier defaults to space padding.
 /// This includes text specifiers and numeric specifiers like %e and %k
 /// that use blank-padding by default in GNU date.
@@ -391,10 +411,8 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
             }
             '^' => {
                 uppercase = true;
-                swap_case = false; // ^ overrides #
             }
-            '#' if !uppercase => {
-                // Only apply # if ^ hasn't been set
+            '#' => {
                 swap_case = true;
             }
             '+' => {
@@ -406,7 +424,15 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
         }
     }
 
-    // Apply case modifications (uppercase takes precedence over swap_case)
+    // GNU applies the case flags inside each conversion rather than to the
+    // whole rendered string, so `#` only reaches the specifiers that emit a
+    // name, and where it applies it wins over `^`: `%^#p` and `%#^p` both
+    // print `pm`.
+    let swap_case = swap_case && honors_opposite_case(specifier);
+    // `%P` is the lower-case form of `%p` and stays lower case whatever the
+    // flags ask for, so `%^P` prints `pm`.
+    let uppercase = uppercase && !swap_case && !specifier.ends_with('P');
+
     if uppercase {
         result = result.to_uppercase();
     } else if swap_case {
