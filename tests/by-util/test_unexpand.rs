@@ -329,6 +329,27 @@ fn test_extended_tabstop_increment_overflow() {
 }
 
 #[test]
+fn test_tabstop_near_max_does_not_overflow() {
+    new_ucmd!()
+        .arg(format!("-t{}", usize::MAX))
+        .pipe_in("a\tb")
+        .succeeds()
+        .stdout_is("a\tb");
+
+    new_ucmd!()
+        .arg(format!("-t{}", usize::MAX - 1))
+        .pipe_in("a\tb")
+        .succeeds()
+        .stdout_is("a\tb");
+
+    new_ucmd!()
+        .arg(format!("--tabs={}", usize::MAX))
+        .pipe_in("    a")
+        .succeeds()
+        .stdout_is("    a");
+}
+
+#[test]
 fn test_is_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir_name = "dir";
