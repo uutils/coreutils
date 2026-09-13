@@ -109,6 +109,7 @@ pub mod selinux;
         target_os = "android",
         target_os = "cygwin",
         target_os = "freebsd",
+        target_os = "hurd",
         target_os = "illumos",
         target_os = "linux",
         target_os = "netbsd",
