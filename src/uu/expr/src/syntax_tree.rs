@@ -427,6 +427,7 @@ fn build_regex(pattern_bytes: Vec<u8>) -> ExprResult<Regex> {
 
     RegexBuilder::new(&format!("(?s){re_string}"))
         .oniguruma_mode(true)
+        .leftmost_longest(true)
         .build()
         .map_err(|_| ExprError::InvalidRegexExpression)
 }
@@ -1623,6 +1624,17 @@ mod test {
 
         let result = evaluate_match_expression(b"aaa".to_vec(), br"a**".to_vec()).unwrap();
         assert_eq!(result.eval_as_string(), b"3");
+    }
+
+    #[test]
+    fn test_leftmost_longest_match_semantics() {
+        use super::evaluate_match_expression;
+
+        // This test verifies leftmost-longest (POSIX) match semantics.
+        // Pattern `(a|ab)` against `ab` should capture the longest alternative (`ab`)
+        // not the first (`a`).
+        let result = evaluate_match_expression(b"ab".to_vec(), br"\(a\|ab\)".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"ab");
     }
 
     #[test]
