@@ -42,26 +42,14 @@ pub enum ExprError {
     MissingOperand,
     #[error("{}", translate!("expr-error-division-by-zero"))]
     DivisionByZero,
-    #[error("{}", translate!("expr-error-invalid-regex-expression"))]
-    InvalidRegexExpression,
     #[error("{}", translate!("expr-error-expected-closing-brace-after", "arg" => _0.quote()))]
     ExpectedClosingBraceAfter(String),
     #[error("{}", translate!("expr-error-expected-closing-brace-instead-of", "arg" => _0.quote()))]
     ExpectedClosingBraceInsteadOf(String),
-    #[error("{}", translate!("expr-error-unmatched-opening-parenthesis"))]
-    UnmatchedOpeningParenthesis,
-    #[error("{}", translate!("expr-error-unmatched-closing-parenthesis"))]
-    UnmatchedClosingParenthesis,
-    #[error("{}", translate!("expr-error-unmatched-opening-brace"))]
-    UnmatchedOpeningBrace,
-    #[error("{}", translate!("expr-error-invalid-bracket-content"))]
-    InvalidBracketContent,
-    #[error("{}", translate!("expr-error-trailing-backslash"))]
-    TrailingBackslash,
-    #[error("{}", translate!("expr-error-too-big-range-quantifier-index"))]
-    TooBigRangeQuantifierIndex,
     #[error("{}", translate!("expr-error-match-utf8", "arg" => _0.quote()))]
     UnsupportedNonUtf8Match(String),
+    #[error(transparent)]
+    Regex(#[from] uucore::regex::RegexError),
 }
 
 impl UError for ExprError {

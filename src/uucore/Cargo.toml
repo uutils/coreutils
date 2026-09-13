@@ -25,6 +25,11 @@ clap = { workspace = true }
 data-encoding = { workspace = true, optional = true }
 data-encoding-macro = { workspace = true, optional = true }
 dunce = { workspace = true, optional = true }
+fancy-regex = { workspace = true, optional = true, features = [
+  "std",
+  "unicode",
+  "leftmost_longest",
+] }
 glob = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
 jiff = { workspace = true, optional = true, features = [
@@ -195,6 +200,7 @@ process = ["libc", "nix/user", "rustix/process", "windows-sys"]
 proc-info = ["tty", "walkdir"]
 quoting-style = ["i18n-common"]
 ranges = []
+regex = ["dep:fancy-regex"]
 ringbuffer = []
 safe-copy = ["rustix/fs"]
 safe-traversal = ["libc", "nix/fs", "nix/dir", "nix/user"]

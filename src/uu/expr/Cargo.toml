@@ -19,8 +19,7 @@ doctest = false
 clap = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
-fancy-regex = { workspace = true, default-features = false }
-uucore = { workspace = true, features = ["i18n-collator"] }
+uucore = { workspace = true, features = ["i18n-collator", "regex"] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 
