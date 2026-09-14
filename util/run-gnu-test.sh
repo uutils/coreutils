@@ -29,6 +29,7 @@ echo "path_GNU='${path_GNU}'"
 
 # Use GNU nproc for *BSD
 NPROC=$(command -v ${path_GNU}/src/nproc||command -v nproc)
+NPROC=$("${NPROC}")
 MAKEFLAGS="${MAKEFLAGS} -j ${NPROC}"
 export MAKEFLAGS
 ###
