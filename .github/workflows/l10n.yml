@@ -69,10 +69,6 @@ jobs:
             sudo locale-gen --keep-existing hu_HU.UTF-8 # Hungary
             sudo update-locale
           ;;
-          macos-*)
-            # needed for testing
-            brew install coreutils
-          ;;
         esac
     - name: Test l10n functionality
       shell: bash
@@ -428,9 +424,6 @@ jobs:
           ubuntu-*)
             sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
           ;;
-          macos-*)
-            brew install coreutils
-          ;;
         esac
     - name: Install via make and test multi-call binary
       shell: bash
@@ -583,9 +576,6 @@ jobs:
             # Generate French locale for testing
             sudo locale-gen --keep-existing fr_FR.UTF-8
             locale -a | grep -i fr || echo "French locale generation may have failed"
-          ;;
-          macos-*)
-            brew install coreutils
           ;;
         esac
     - name: Test Make installation
