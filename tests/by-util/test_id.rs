@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (ToDO) coreutil euid rgid
 
+#![cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))]
+
 use std::process::{Command, Stdio};
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
