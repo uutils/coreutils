@@ -535,6 +535,7 @@ impl FsUsage {
                 )),
                 not(target_pointer_width = "64")
             ))]
+            #[allow(clippy::useless_conversion)]
             return Self {
                 blocksize: statvfs.block_size() as u64,
                 blocks: statvfs.f_blocks.into(),
