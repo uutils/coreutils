@@ -13,9 +13,9 @@ use jiff::{Timestamp, ToSpan};
 use regex::Regex;
 #[cfg(all(unix, not(target_vendor = "apple")))]
 use rustix::process::geteuid;
-use uutests::util::TestScenario;
 #[cfg(unix)]
 use uutests::util::is_locale_available;
+use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 #[test]
@@ -571,11 +571,9 @@ fn test_date_set_mac_unavailable() {
         .arg("2020-03-11 21:45:00+08:00")
         .fails();
     result.no_stdout();
-    assert!(
-        result
-            .stderr_str()
-            .starts_with("date: setting the date is not supported by macOS")
-    );
+    assert!(result
+        .stderr_str()
+        .starts_with("date: setting the date is not supported by macOS"));
 }
 
 #[test]

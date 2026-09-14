@@ -7,10 +7,10 @@
 
 //! Locale-aware datetime formatting utilities using ICU and jiff-icu
 
-use icu_calendar::Date;
 use icu_calendar::cal::{Buddhist, Ethiopian, Iso, Persian};
-use icu_datetime::DateTimeFormatter;
+use icu_calendar::Date;
 use icu_datetime::fieldsets;
+use icu_datetime::DateTimeFormatter;
 use icu_locale::Locale;
 use jiff::civil::Date as JiffDate;
 use jiff_icu::ConvertFrom;
@@ -68,7 +68,7 @@ pub enum CalendarType {
 }
 
 /// Thai solar month names used by GNU coreutils for th_TH (post-1941 layout).
-fn thai_month_name(date: &Date<Iso>, long: bool) -> Option<String> {
+fn thai_month_name(date: Date<Iso>, long: bool) -> Option<String> {
     // spell-checker:ignore มกราคม กุมภาพันธ์ มีนาคม เมษายน พฤษภาคม มิถุนายน กรกฎาคม สิงหาคม กันยายน ตุลาคม พฤศจิกายน ธันวาคม
     // spell-checker:ignore ม.ค. ก.พ. มี.ค. เม.ย. พ.ค. มิ.ย. ก.ค. ส.ค. ก.ย. ต.ค. พ.ย. ธ.ค.
     const FULL: [&str; 12] = [
@@ -86,7 +86,17 @@ fn thai_month_name(date: &Date<Iso>, long: bool) -> Option<String> {
         "ธันวาคม",
     ];
     const ABBREV: [&str; 12] = [
-        "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.",
+        "ม.ค.",
+        "ก.พ.",
+        "มี.ค.",
+        "เม.ย.",
+        "พ.ค.",
+        "มิ.ย.",
+        "ก.ค.",
+        "ส.ค.",
+        "ก.ย.",
+        "ต.ค.",
+        "พ.ย.",
         "ธ.ค.",
     ];
     let ordinal = usize::from(date.month().ordinal).checked_sub(1)?;
@@ -98,26 +108,18 @@ fn thai_month_name(date: &Date<Iso>, long: bool) -> Option<String> {
 }
 
 /// Thai weekday names matching glibc `th_TH` / GNU date output.
-fn thai_weekday_name(date: &Date<Iso>, long: bool) -> Option<String> {
+fn thai_weekday_name(date: Date<Iso>, long: bool) -> String {
     // spell-checker:ignore อาทิตย์ จันทร์ อังคาร พุธ พฤหัสบดี ศุกร์ เสาร์
     // spell-checker:ignore อา. จ. อ. พ. พฤ. ศ. ส.
     // Index 0 = Sunday, matching libc DAY_1 / ICU weekday % 7.
-    const FULL: [&str; 7] = [
-        "อาทิตย์",
-        "จันทร์",
-        "อังคาร",
-        "พุธ",
-        "พฤหัสบดี",
-        "ศุกร์",
-        "เสาร์",
-    ];
+    const FULL: [&str; 7] = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
     const ABBREV: [&str; 7] = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
     let weekday = usize::from((date.weekday() as u8) % 7);
-    Some(if long {
+    if long {
         FULL[weekday].to_string()
     } else {
         ABBREV[weekday].to_string()
-    })
+    }
 }
 
 /// Transform a strftime format string to use locale-specific calendar values
@@ -177,7 +179,7 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     let is_thai = locale.to_string().starts_with("th");
     if fmt.contains("%B") {
         if is_thai {
-            if let Some(name) = thai_month_name(&iso_date, true) {
+            if let Some(name) = thai_month_name(iso_date, true) {
                 fmt = fmt.replace("%B", &name);
             }
         } else if let Ok(f) =
@@ -188,7 +190,7 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     }
     if fmt.contains("%b") || fmt.contains("%h") {
         if is_thai {
-            if let Some(name) = thai_month_name(&iso_date, false) {
+            if let Some(name) = thai_month_name(iso_date, false) {
                 fmt = fmt.replace("%b", &name).replace("%h", &name);
             }
         } else if let Ok(f) =
@@ -208,9 +210,7 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     }
     if fmt.contains("%A") {
         if is_thai {
-            if let Some(name) = thai_weekday_name(&iso_date, true) {
-                fmt = fmt.replace("%A", &name);
-            }
+            fmt = fmt.replace("%A", &thai_weekday_name(iso_date, true));
         } else if let Ok(f) =
             DateTimeFormatter::try_new(locale.clone().into(), fieldsets::E::long())
         {
@@ -219,9 +219,7 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     }
     if fmt.contains("%a") {
         if is_thai {
-            if let Some(name) = thai_weekday_name(&iso_date, false) {
-                fmt = fmt.replace("%a", &name);
-            }
+            fmt = fmt.replace("%a", &thai_weekday_name(iso_date, false));
         } else if let Ok(f) =
             DateTimeFormatter::try_new(locale.clone().into(), fieldsets::E::short())
         {
