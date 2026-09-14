@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (words) araba newroot userspec chdir pwd's isroot
 
+#![cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))]
+
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 #[cfg(not(target_os = "android"))]

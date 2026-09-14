@@ -5,6 +5,8 @@
 
 // spell-checker:ignore coreutil
 
+#![cfg(all(unix, not(target_os = "redox")))]
+
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
 use uutests::util::{TestScenario, check_coreutil_version, expected_result, whoami};
