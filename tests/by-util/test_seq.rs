@@ -826,6 +826,14 @@ fn test_parse_error_hex() {
 }
 
 #[test]
+fn test_large_precision_format() {
+    new_ucmd!()
+        .args(&["-f", "%.70000f", "1", "1"])
+        .succeeds()
+        .stdout_only(format!("1.{}\n", "0".repeat(70000)));
+}
+
+#[test]
 fn test_format_option() {
     new_ucmd!()
         .args(&["-f", "%.2f", "0.0", "0.1", "0.5"])
