@@ -773,8 +773,8 @@ pub fn is_symlink_loop(path: &Path) -> bool {
     false
 }
 
-#[cfg(not(unix))]
-// Hard link comparison is not supported on non-Unix platforms
+#[cfg(not(any(unix, target_os = "wasi")))]
+// Hard link comparison is not supported on non-Unix, non-WASI platforms
 pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
     false
 }
@@ -789,21 +789,24 @@ pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
 /// # Returns
 ///
 /// * `bool` - Returns `true` if the paths are hard links to the same file, and `false` otherwise.
-#[cfg(unix)]
+// `rustix::fs::lstat` exposes st_ino/st_dev on both Unix and WASI on stable,
+// unlike `std::os::unix::fs::MetadataExt` (Unix-only) and `std::os::wasi`
+// (nightly-only), so a single implementation covers both.
+#[cfg(any(unix, target_os = "wasi"))]
 pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
     // The target is usually the one that does not exist, so look it up first
     // and return early instead of also querying the source for nothing.
-    let Ok(target_metadata) = fs::symlink_metadata(target) else {
+    let Ok(target_stat) = rustix::fs::lstat(target) else {
         return false;
     };
-    let Ok(source_metadata) = fs::symlink_metadata(source) else {
+    let Ok(source_stat) = rustix::fs::lstat(source) else {
         return false;
     };
 
-    source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
+    source_stat.st_ino == target_stat.st_ino && source_stat.st_dev == target_stat.st_dev
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, target_os = "wasi")))]
 pub fn are_hardlinks_or_one_way_symlink_to_same_file(_source: &Path, _target: &Path) -> bool {
     false
 }
@@ -818,18 +821,19 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(_source: &Path, _target: &P
 /// # Returns
 ///
 /// * `bool` - Returns `true` if either of above conditions are true, and `false` otherwise.
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Path) -> bool {
     // As above, look up the target first: if it does not exist, there is
     // nothing to compare the source with.
-    let Ok(target_metadata) = fs::symlink_metadata(target) else {
+    let Ok(target_stat) = rustix::fs::lstat(target) else {
         return false;
     };
-    let Ok(source_metadata) = fs::metadata(source) else {
+    // Follow symlinks on the source so a source symlink pointing at target matches.
+    let Ok(source_stat) = rustix::fs::stat(source) else {
         return false;
     };
 
-    source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
+    source_stat.st_ino == target_stat.st_ino && source_stat.st_dev == target_stat.st_dev
 }
 
 /// Returns true if the passed `path` ends with a path terminator.
@@ -1217,6 +1221,36 @@ mod tests {
     #[cfg(unix)]
     use tempfile::{NamedTempFile, tempdir};
 
+    // `tempfile` is unusable on WASI (`std::env::temp_dir` aborts there), so
+    // tests shared with WASI create a uniquely named directory under the
+    // current (preopened, on WASI) directory and clean it up on drop.
+    #[cfg(any(unix, target_os = "wasi"))]
+    struct ScratchDir(PathBuf);
+
+    #[cfg(any(unix, target_os = "wasi"))]
+    impl ScratchDir {
+        fn new(tag: &str) -> Self {
+            use std::sync::atomic::{AtomicU32, Ordering};
+            static COUNTER: AtomicU32 = AtomicU32::new(0);
+            let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path = PathBuf::from(format!("uucore_fs_test_{tag}_{n}"));
+            let _ = fs::remove_dir_all(&path);
+            fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+
+        fn join(&self, name: &str) -> PathBuf {
+            self.0.join(name)
+        }
+    }
+
+    #[cfg(any(unix, target_os = "wasi"))]
+    impl Drop for ScratchDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
     struct NormalizePathTestCase<'a> {
         path: &'a str,
         test: &'a str,
@@ -1547,6 +1581,17 @@ mod tests {
         assert!(are_files_identical(file1.path(), "non_existent_file_path").is_err());
     }
 
+    #[cfg(any(unix, target_os = "wasi"))]
+    #[test]
+    fn test_file_information_equality_same_file() {
+        let dir = ScratchDir::new("eq_same");
+        let file = dir.join("file");
+        fs::write(&file, "content").unwrap();
+        let info1 = FileInformation::from_path(&file, true).unwrap();
+        let info2 = FileInformation::from_path(&file, true).unwrap();
+        assert!(info1 == info2);
+    }
+
     #[cfg(unix)]
     #[test]
     fn test_path_is_root_dir() {
@@ -1572,5 +1617,129 @@ mod tests {
 
         assert!(path_is_root_dir(&link, true));
         assert!(!path_is_root_dir(&link, false));
+    }
+
+    #[cfg(any(unix, target_os = "wasi"))]
+    #[test]
+    fn test_file_information_equality_hard_link() {
+        let dir = ScratchDir::new("eq_hl");
+        let file = dir.join("file");
+        let link = dir.join("link");
+        fs::write(&file, "content").unwrap();
+        fs::hard_link(&file, &link).unwrap();
+
+        let info1 = FileInformation::from_path(&file, true).unwrap();
+        let info2 = FileInformation::from_path(&link, true).unwrap();
+        assert!(info1 == info2);
+    }
+
+    #[cfg(any(unix, target_os = "wasi"))]
+    #[test]
+    fn test_file_information_inequality_different_files() {
+        let dir = ScratchDir::new("neq");
+        let a = dir.join("a");
+        let b = dir.join("b");
+        fs::write(&a, "a").unwrap();
+        fs::write(&b, "b").unwrap();
+
+        let info1 = FileInformation::from_path(&a, true).unwrap();
+        let info2 = FileInformation::from_path(&b, true).unwrap();
+        assert!(info1 != info2);
+    }
+
+    #[cfg(any(unix, target_os = "wasi"))]
+    #[test]
+    fn test_file_information_hash_consistent_with_eq() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::Hasher;
+
+        let dir = ScratchDir::new("hash");
+        let file = dir.join("file");
+        let link = dir.join("link");
+        fs::write(&file, "content").unwrap();
+        fs::hard_link(&file, &link).unwrap();
+
+        let info1 = FileInformation::from_path(&file, true).unwrap();
+        let info2 = FileInformation::from_path(&link, true).unwrap();
+
+        let mut h1 = DefaultHasher::new();
+        let mut h2 = DefaultHasher::new();
+        info1.hash(&mut h1);
+        info2.hash(&mut h2);
+        assert_eq!(h1.finish(), h2.finish());
+    }
+
+    #[cfg(any(unix, target_os = "wasi"))]
+    #[test]
+    fn test_are_hardlinks_to_same_file_missing_path() {
+        let dir = ScratchDir::new("missing");
+        let file = dir.join("file");
+        fs::write(&file, "content").unwrap();
+        let missing = dir.join("does_not_exist");
+
+        assert!(!are_hardlinks_to_same_file(&file, &missing));
+        assert!(!are_hardlinks_to_same_file(&missing, &file));
+    }
+
+    #[cfg(any(unix, target_os = "wasi"))]
+    #[test]
+    fn test_are_hardlinks_or_one_way_symlink_different_files() {
+        let dir = ScratchDir::new("sym_neq");
+        let a = dir.join("a");
+        let b = dir.join("b");
+        fs::write(&a, "a").unwrap();
+        fs::write(&b, "b").unwrap();
+
+        assert!(!are_hardlinks_or_one_way_symlink_to_same_file(&a, &b));
+    }
+
+    #[cfg(any(unix, target_os = "wasi"))]
+    #[test]
+    fn test_are_hardlinks_or_one_way_symlink_missing_path() {
+        let dir = ScratchDir::new("sym_missing");
+        let file = dir.join("file");
+        fs::write(&file, "content").unwrap();
+        let missing = dir.join("does_not_exist");
+
+        assert!(!are_hardlinks_or_one_way_symlink_to_same_file(
+            &file, &missing
+        ));
+    }
+
+    // wasip2's symlink creation aborts (rather than returning an error) when the
+    // runtime lacks support, which the harness cannot recover from, so the
+    // symlink case is limited to Unix and wasip1.
+    #[cfg(any(unix, all(target_os = "wasi", target_env = "p1")))]
+    #[test]
+    fn test_are_hardlinks_or_one_way_symlink_same_file() {
+        let dir = ScratchDir::new("symlink");
+        let file = dir.join("file");
+        fs::write(&file, "content").unwrap();
+        let link = dir.join("link");
+
+        // The link contents resolve relative to the link's own directory, so
+        // point it at the sibling file by name.
+        #[cfg(unix)]
+        unix::fs::symlink("file", &link).unwrap();
+        #[cfg(target_os = "wasi")]
+        {
+            #[allow(deprecated)]
+            fs::soft_link("file", &link).unwrap();
+        }
+
+        // Source symlink resolves (stat) to the target, matched against the
+        // target's own lstat.
+        assert!(are_hardlinks_or_one_way_symlink_to_same_file(&link, &file));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_file_information_inode() {
+        use std::os::unix::fs::MetadataExt;
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let info = FileInformation::from_path(temp_file.path(), true).unwrap();
+        let expected_ino = fs::metadata(temp_file.path()).unwrap().ino();
+        assert_eq!(info.inode(), expected_ino);
     }
 }
