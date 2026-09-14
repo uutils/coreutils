@@ -7649,6 +7649,10 @@ fn test_cp_recursive_target_dir_symlink_still_allowed() {
 /// applying them.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_preserve_mode_via_nofollow_chmod() {
     for mode in [0o644, 0o600, 0o755, 0o444, 0o4755] {
         let scene = TestScenario::new(util_name!());
