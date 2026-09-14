@@ -7,6 +7,11 @@ use std::io::{self, Write as _};
 use uucore::error::strip_errno;
 use uucore::{crate_version, show_error, translate};
 
+#[doc(hidden)]
+/// Allocation-failure policy for this utility.
+pub const UU_ALLOC_ERROR_CONFIG: uucore::allocation::AllocErrorConfig =
+    uucore::allocation::AllocErrorConfig::default_for(env!("CARGO_PKG_NAME"));
+
 // uucore::main does not support no-result
 pub fn uumain(mut args: impl uucore::Args) -> i32 {
     // skip binary name

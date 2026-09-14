@@ -66,7 +66,10 @@ pub fn main() {
     let mut mf = File::create(Path::new(&out_dir).join("uutils_map.rs")).unwrap();
 
     mf.write_all(
-        "type UtilityMap<T> = phf::OrderedMap<&'static str, (fn(T) -> i32, fn() -> Command)>;\n\
+        "type UtilityMap<T> = phf::OrderedMap<\n\
+             &'static str,\n\
+             (fn(T) -> i32, fn() -> Command, &'static allocation::AllocErrorConfig),\n\
+         >;\n\
          \n\
          #[allow(clippy::too_many_lines)]
          #[allow(clippy::unreadable_literal)]
@@ -77,27 +80,27 @@ pub fn main() {
 
     let mut phf_map = phf_codegen::OrderedMap::<&str>::new();
     let mut entries = Vec::new();
+    let map_value = |krate: &str| {
+        format!("({krate}::uumain, {krate}::uu_app, &{krate}::UU_ALLOC_ERROR_CONFIG)")
+    };
 
     for krate in &crates {
-        let map_value = format!("({krate}::uumain, {krate}::uu_app)");
         match krate.as_ref() {
             // 'test' is named uu_test to avoid collision with rust core crate 'test'.
             // It can also be invoked by name '[' for the '[ expr ] syntax'.
             "uu_test" => {
-                entries.push(("test", map_value.clone()));
-                entries.push(("[", map_value.clone()));
+                entries.push(("test", map_value(krate)));
+                entries.push(("[", map_value(krate)));
             }
             k if k.starts_with(OVERRIDE_PREFIX) => {
-                entries.push((&k[OVERRIDE_PREFIX.len()..], map_value.clone()));
+                entries.push((&k[OVERRIDE_PREFIX.len()..], map_value(krate)));
             }
             "false" | "true" => {
-                entries.push((
-                    krate.as_str(),
-                    format!("(r#{krate}::uumain, r#{krate}::uu_app)"),
-                ));
+                let raw_krate = format!("r#{krate}");
+                entries.push((krate.as_str(), map_value(&raw_krate)));
             }
             _ => {
-                entries.push((krate.as_str(), map_value.clone()));
+                entries.push((krate.as_str(), map_value(krate)));
             }
         }
     }
