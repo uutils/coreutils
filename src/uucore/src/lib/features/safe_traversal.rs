@@ -12,6 +12,7 @@
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR
 // spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot
+// spell-checker:ignore LARGEFILE
 
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;
@@ -135,6 +136,17 @@ pub struct DirFd {
     fd: OwnedFd,
 }
 
+/// `O_LARGEFILE`, or nothing where the platform has no such flag.
+///
+/// The libc `open`/`openat` bindings do not add it the way glibc's large-file
+/// entry points do, so on 32-bit Linux the kernel rejects anything whose
+/// metadata overflows the 32-bit ranges with `EOVERFLOW`. The flag is 0 on
+/// 64-bit, so adding it unconditionally costs nothing there.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const LARGEFILE: OFlag = OFlag::O_LARGEFILE;
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+const LARGEFILE: OFlag = OFlag::empty();
+
 impl DirFd {
     /// Open a directory and return a file descriptor
     ///
@@ -142,7 +154,7 @@ impl DirFd {
     /// * `path` - The path to the directory to open
     /// * `symlink_behavior` - Whether to follow symlinks when opening
     pub fn open(path: &Path, symlink_behavior: SymlinkBehavior) -> io::Result<Self> {
-        let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
+        let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC | LARGEFILE;
         if !symlink_behavior.should_follow() {
             flags |= OFlag::O_NOFOLLOW;
         }
@@ -163,7 +175,7 @@ impl DirFd {
     pub fn open_subdir(&self, name: &OsStr, symlink_behavior: SymlinkBehavior) -> io::Result<Self> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-        let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
+        let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC | LARGEFILE;
         if !symlink_behavior.should_follow() {
             flags |= OFlag::O_NOFOLLOW;
         }
@@ -467,7 +479,8 @@ impl DirFd {
             | OFlag::O_WRONLY
             | OFlag::O_TRUNC
             | OFlag::O_CLOEXEC
-            | OFlag::O_NOFOLLOW;
+            | OFlag::O_NOFOLLOW
+            | LARGEFILE;
         let mode = Mode::from_bits_truncate(0o666); // Default file permissions
 
         let fd: OwnedFd = openat(self.fd.as_fd(), name_cstr.as_c_str(), flags, mode)
@@ -1029,6 +1042,33 @@ mod tests {
         );
     }
 
+    /// A directory fd must end up with the same open-file status flags as one
+    /// `std::fs::File` would produce, `O_LARGEFILE` included. On 32-bit Linux a
+    /// missing `O_LARGEFILE` makes the kernel reject directories whose metadata
+    /// overflows the 32-bit ranges with EOVERFLOW.
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_dirfd_open_status_flags_match_std() {
+        use nix::fcntl::{FcntlArg, fcntl};
+
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir(temp_dir.path().join("nested")).unwrap();
+
+        let reference = fs::File::open(temp_dir.path().join("nested")).unwrap();
+        // F_GETFL reports O_DIRECTORY back for a directory fd; std opens the
+        // same directory as a plain file, so add it to the expected flags.
+        let expected = fcntl(&reference, FcntlArg::F_GETFL).unwrap() | libc::O_DIRECTORY;
+
+        let parent = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        let direct = DirFd::open(&temp_dir.path().join("nested"), SymlinkBehavior::Follow).unwrap();
+        let sub = parent
+            .open_subdir(OsStr::new("nested"), SymlinkBehavior::Follow)
+            .unwrap();
+
+        assert_eq!(fcntl(&direct.fd, FcntlArg::F_GETFL).unwrap(), expected);
+        assert_eq!(fcntl(&sub.fd, FcntlArg::F_GETFL).unwrap(), expected);
+    }
+
     #[test]
     fn test_dirfd_open_nonexistent_subdir() {
         let temp_dir = TempDir::new().unwrap();
@@ -1240,6 +1280,9 @@ mod tests {
         if let Err(e) = result {
             // Should be InvalidInput for null byte error
             assert_eq!(e.kind(), io::ErrorKind::InvalidInput);
+            // Reported as PathContainsNull, not as a raw EINVAL coming back
+            // from the openat call itself.
+            assert_eq!(e.raw_os_error(), None);
         }
     }
 
