@@ -76,6 +76,22 @@ fn compute_num_digits(input: &str, ebd: ExtendedBigDecimal) -> PreciseNumber {
         // Also ignore overflowed exponents (unwrap_or(0)).
         if exp > 0 {
             int_digits += exp.try_into().unwrap_or(0);
+            // If the mantissa has a leading placeholder zero (e.g. 0.xxx, .xxx,
+            // or -.xxx) and the fractional part contains a non-zero digit, a
+            // positive exponent shifts the decimal point past that zero, so it
+            // no longer contributes to the integral digit count.  We only do this
+            // when there is a non-zero fractional digit; otherwise the leading
+            // zero is the actual value (e.g. 0.0e15 = 0) and must be kept.
+            let mantissa_stripped = parts[0].strip_prefix('-').unwrap_or(parts[0]);
+            if mantissa_stripped.starts_with("0.") || mantissa_stripped.starts_with('.') {
+                // Check if the fractional part has any non-zero digit
+                if let Some(dot_pos) = mantissa_stripped.find('.') {
+                    let frac_part = &mantissa_stripped[dot_pos + 1..];
+                    if frac_part.chars().any(|c| c != '0') {
+                        int_digits = int_digits.saturating_sub(1).max(1);
+                    }
+                }
+            }
         }
         frac_digits = if exp < frac_digits as i64 {
             // Subtract from i128 to avoid any overflow
@@ -299,9 +315,9 @@ mod tests {
         assert_eq!(num_integral_digits("123.45e-6"), 3);
         assert_eq!(num_integral_digits("123.45e-1"), 3);
         assert_eq!(num_integral_digits("-0.1e0"), 2);
-        assert_eq!(num_integral_digits("-0.1e2"), 4);
+        assert_eq!(num_integral_digits("-0.1e2"), 3);
         assert_eq!(num_integral_digits("-.1e0"), 2);
-        assert_eq!(num_integral_digits("-.1e2"), 4);
+        assert_eq!(num_integral_digits("-.1e2"), 3);
         assert_eq!(num_integral_digits("-1.e-3"), 2);
         assert_eq!(num_integral_digits("-1.0e-4"), 2);
         // minus zero int
@@ -309,6 +325,9 @@ mod tests {
         assert_eq!(num_integral_digits("-0e-0"), 2);
         assert_eq!(num_integral_digits("-0e1"), 3);
         assert_eq!(num_integral_digits("-0e+1"), 3);
+        // Leading placeholder zero consumed by positive exponent
+        assert_eq!(num_integral_digits("0.5e1"), 1);
+        assert_eq!(num_integral_digits("0.5e2"), 2);
         assert_eq!(num_integral_digits("-0.0e1"), 3);
         // minus zero float
         assert_eq!(num_integral_digits("-0.0"), 2);
