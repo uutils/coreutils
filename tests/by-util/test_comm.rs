@@ -782,6 +782,7 @@ fn test_c_locale_still_orders_by_bytes() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: /dev/full filesystem not available")]
 fn test_comm_write_error_dev_full() {
     use std::fs::OpenOptions;
     let scene = TestScenario::new(util_name!());
