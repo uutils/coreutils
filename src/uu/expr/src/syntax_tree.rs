@@ -428,6 +428,7 @@ fn build_regex(pattern_bytes: Vec<u8>) -> ExprResult<Regex> {
     RegexBuilder::new(&format!("(?s){re_string}"))
         .oniguruma_mode(true)
         .leftmost_longest(true)
+        .seek(true)
         .build()
         .map_err(|_| ExprError::InvalidRegexExpression)
 }
