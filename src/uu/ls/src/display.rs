@@ -880,11 +880,16 @@ fn display_item_name(
                 }
             }
             Err(err) => {
-                show!(LsError::IOErrorContext(
-                    path.path().to_path_buf(),
-                    err,
-                    false
-                ));
+                // When the metadata could not be read either, the failure has already
+                // been reported by `PathData::metadata()`; GNU prints a single
+                // diagnostic and no link target in that case.
+                if path.metadata().is_some() {
+                    show!(LsError::IOErrorContext(
+                        path.path().to_path_buf(),
+                        err,
+                        false
+                    ));
+                }
             }
         }
     }
