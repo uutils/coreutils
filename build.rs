@@ -53,6 +53,54 @@ pub fn main() {
                 {
                     continue;
                 }
+                "chgrp" | "chmod" | "chown" | "logname" | "nice" | "stat" | "stty" if !is_unix => {
+                    continue;
+                }
+                "chroot" | "hostid" | "id" | "mkfifo"
+                    if !is_unix || target_os == "fuchsia" || target_os == "redox" =>
+                {
+                    continue;
+                }
+                "mknod" if !is_unix || target_os == "haiku" => {
+                    continue;
+                }
+                "groups" | "install" if !is_unix || target_os == "redox" => {
+                    continue;
+                }
+                "pinky"
+                    if !is_unix
+                        || target_os == "aix"
+                        || target_os == "android"
+                        || target_os == "fuchsia"
+                        || target_os == "redox" =>
+                {
+                    continue;
+                }
+                "who"
+                    if !is_unix
+                        || target_os == "aix"
+                        || target_os == "android"
+                        || target_os == "fuchsia"
+                        || target_os == "openbsd"
+                        || target_os == "redox" =>
+                {
+                    continue;
+                }
+                "users"
+                    if !is_unix
+                        || target_os == "android"
+                        || target_os == "fuchsia"
+                        || target_os == "redox" =>
+                {
+                    continue;
+                }
+                "pinky" | "uptime" | "users" | "who"
+                    if target_arch == "wasm32"
+                        || target_os == "fuchsia"
+                        || target_os == "redox" =>
+                {
+                    continue;
+                }
                 "default" | "macos" | "unix" | "windows" | "selinux" | "zip" | "clap_complete"
                 | "clap_mangen" | "fluent_syntax" | "openssl" => continue, // common/standard feature names
                 "nightly" | "test_unimplemented" | "expensive_tests" | "test_risky_names" => {
