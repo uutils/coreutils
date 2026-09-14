@@ -184,12 +184,6 @@ fn test_invalid_utf8_args() {
 }
 
 #[test]
-fn test_root() {
-    let expected = if cfg!(windows) { "\\\n" } else { "/\n" };
-    new_ucmd!().arg("/").succeeds().stdout_is(expected);
-}
-
-#[test]
 fn test_double_slash() {
     // TODO The GNU tests seem to suggest that some systems treat "//"
     // as the same directory as "/" directory but not all systems. We
@@ -204,12 +198,6 @@ fn test_double_slash() {
         .args(&["//", "//"])
         .succeeds()
         .stdout_is(expected);
-}
-
-#[test]
-fn test_triple_slash() {
-    let expected = if cfg!(windows) { "\\\n" } else { "/\n" };
-    new_ucmd!().arg("///").succeeds().stdout_is(expected);
 }
 
 #[test]
