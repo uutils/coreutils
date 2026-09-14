@@ -7595,6 +7595,70 @@ fn test_no_preserve_mode_with_later_preserve() {
     assert_eq!(dst5_mode, 0o755);
 }
 
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
+fn test_cp_recursive_dir_umask() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("src");
+    at.mkdir("src/dir777");
+    at.set_mode("src/dir777", 0o777);
+    at.mkdir("src/dir750");
+    at.set_mode("src/dir750", 0o750);
+    at.mkdir("src/dir700");
+    at.set_mode("src/dir700", 0o700);
+    at.touch("src/dir777/f");
+    at.set_mode("src/dir777/f", 0o666);
+
+    // 1. Default cp -r under umask 077: apply source_mode & !umask
+    scene
+        .ucmd()
+        .umask(0o077)
+        .args(&["-r", "src", "dst1"])
+        .succeeds();
+    assert_eq!(at.metadata("dst1/dir777").mode() & 0o777, 0o700);
+    assert_eq!(at.metadata("dst1/dir750").mode() & 0o777, 0o700);
+    assert_eq!(at.metadata("dst1/dir700").mode() & 0o777, 0o700);
+    assert_eq!(at.metadata("dst1/dir777/f").mode() & 0o777, 0o600);
+
+    // 2. Default cp -r under umask 022: apply source_mode & !umask
+    scene
+        .ucmd()
+        .umask(0o022)
+        .args(&["-r", "src", "dst2"])
+        .succeeds();
+    assert_eq!(at.metadata("dst2/dir777").mode() & 0o777, 0o755);
+    assert_eq!(at.metadata("dst2/dir750").mode() & 0o777, 0o750);
+    assert_eq!(at.metadata("dst2/dir700").mode() & 0o777, 0o700);
+    assert_eq!(at.metadata("dst2/dir777/f").mode() & 0o777, 0o644);
+
+    // 3. cp -r -a under umask 077: mode is preserved and umask is bypassed
+    scene
+        .ucmd()
+        .umask(0o077)
+        .args(&["-a", "src", "dst3"])
+        .succeeds();
+    assert_eq!(at.metadata("dst3/dir777").mode() & 0o777, 0o777);
+    assert_eq!(at.metadata("dst3/dir750").mode() & 0o777, 0o750);
+    assert_eq!(at.metadata("dst3/dir700").mode() & 0o777, 0o700);
+    assert_eq!(at.metadata("dst3/dir777/f").mode() & 0o777, 0o666);
+
+    // 4. cp -r --no-preserve=mode under umask 022: directories get 0777 & !umask
+    scene
+        .ucmd()
+        .umask(0o022)
+        .args(&["-r", "--no-preserve=mode", "src", "dst4"])
+        .succeeds();
+    assert_eq!(at.metadata("dst4/dir777").mode() & 0o777, 0o755);
+    assert_eq!(at.metadata("dst4/dir750").mode() & 0o777, 0o755);
+    assert_eq!(at.metadata("dst4/dir700").mode() & 0o777, 0o755);
+}
+
 /// Test the behavior of preserving permissions when copying through a symlink
 #[test]
 #[cfg(unix)]
