@@ -51,6 +51,39 @@ fn test_line_numbers_suppress_matched_final_empty_elided_with_z() {
 }
 
 #[test]
+fn test_up_to_match_suppress_matched_final_empty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--suppress-matched", "-", "2", "/a/"])
+        .pipe_in("1\n2\n3\n4\na\n")
+        .succeeds()
+        .stdout_only("2\n4\n0\n");
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 3);
+    assert_eq!(at.read("xx00"), "1\n");
+    assert_eq!(at.read("xx01"), "3\n4\n");
+    assert_eq!(at.read("xx02"), "");
+}
+
+#[test]
+fn test_up_to_match_offset_final_empty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-", "/a/+1"])
+        .pipe_in("1\na\n")
+        .succeeds()
+        .stdout_only("4\n0\n");
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 2);
+    assert_eq!(at.read("xx00"), "1\na\n");
+    assert_eq!(at.read("xx01"), "");
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
