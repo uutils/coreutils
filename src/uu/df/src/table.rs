@@ -216,7 +216,7 @@ impl BytesCell {
         Self {
             bytes,
             scaled: {
-                let BlockSize::Bytes(d) = block_size;
+                let BlockSize::Bytes(d, _) = block_size;
                 (bytes as f64 / *d as f64).ceil() as u64
             },
         }
@@ -308,12 +308,14 @@ impl<'a> RowFormatter<'a> {
         let size = bytes_column.scaled;
         let s = if let Some(h) = self.options.human_readable {
             let size = if self.is_total_row {
-                let BlockSize::Bytes(d) = self.options.block_size;
+                let BlockSize::Bytes(d, _) = self.options.block_size;
                 d * size
             } else {
                 bytes_column.bytes
             };
             to_magnitude_and_suffix(size.into(), SuffixType::HumanReadable(h), true)
+        } else if let Some(suffix) = self.options.block_size.suffix() {
+            format!("{size}{suffix}")
         } else {
             size.to_string()
         };
@@ -613,9 +615,9 @@ mod tests {
                 fs_type: "my_type".to_string(),
                 fs_mount: "my_mount".into(),
 
-                bytes: BytesCell::new(100, &BlockSize::Bytes(1)),
-                bytes_used: BytesCell::new(25, &BlockSize::Bytes(1)),
-                bytes_avail: BytesCell::new(75, &BlockSize::Bytes(1)),
+                bytes: BytesCell::new(100, &BlockSize::Bytes(1, None)),
+                bytes_used: BytesCell::new(25, &BlockSize::Bytes(1, None)),
+                bytes_avail: BytesCell::new(75, &BlockSize::Bytes(1, None)),
                 bytes_usage: Some(0.25),
 
                 #[cfg(target_vendor = "apple")]
@@ -692,7 +694,7 @@ mod tests {
     fn test_header_with_block_size_1024() {
         init();
         let options = Options {
-            block_size: BlockSize::Bytes(3 * 1024),
+            block_size: BlockSize::Bytes(3 * 1024, None),
             ..Default::default()
         };
         assert_eq!(
@@ -772,16 +774,16 @@ mod tests {
     fn test_row_formatter() {
         init();
         let options = Options {
-            block_size: BlockSize::Bytes(1),
+            block_size: BlockSize::Bytes(1, None),
             ..Default::default()
         };
         let row = Row {
             fs_device: "my_device".to_string(),
             fs_mount: "my_mount".into(),
 
-            bytes: BytesCell::new(100, &BlockSize::Bytes(1)),
-            bytes_used: BytesCell::new(25, &BlockSize::Bytes(1)),
-            bytes_avail: BytesCell::new(75, &BlockSize::Bytes(1)),
+            bytes: BytesCell::new(100, &BlockSize::Bytes(1, None)),
+            bytes_used: BytesCell::new(25, &BlockSize::Bytes(1, None)),
+            bytes_avail: BytesCell::new(75, &BlockSize::Bytes(1, None)),
             bytes_usage: Some(0.25),
 
             ..Default::default()
@@ -798,7 +800,7 @@ mod tests {
         init();
         let options = Options {
             columns: COLUMNS_WITH_FS_TYPE.to_vec(),
-            block_size: BlockSize::Bytes(1),
+            block_size: BlockSize::Bytes(1, None),
             ..Default::default()
         };
         let row = Row {
@@ -806,9 +808,9 @@ mod tests {
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".into(),
 
-            bytes: BytesCell::new(100, &BlockSize::Bytes(1)),
-            bytes_used: BytesCell::new(25, &BlockSize::Bytes(1)),
-            bytes_avail: BytesCell::new(75, &BlockSize::Bytes(1)),
+            bytes: BytesCell::new(100, &BlockSize::Bytes(1, None)),
+            bytes_used: BytesCell::new(25, &BlockSize::Bytes(1, None)),
+            bytes_avail: BytesCell::new(75, &BlockSize::Bytes(1, None)),
             bytes_usage: Some(0.25),
 
             ..Default::default()
@@ -825,7 +827,7 @@ mod tests {
         init();
         let options = Options {
             columns: COLUMNS_WITH_INODES.to_vec(),
-            block_size: BlockSize::Bytes(1),
+            block_size: BlockSize::Bytes(1, None),
             ..Default::default()
         };
         let row = Row {
@@ -851,11 +853,11 @@ mod tests {
         init();
         let options = Options {
             columns: vec![Column::Size, Column::Itotal],
-            block_size: BlockSize::Bytes(100),
+            block_size: BlockSize::Bytes(100, None),
             ..Default::default()
         };
         let row = Row {
-            bytes: BytesCell::new(100, &BlockSize::Bytes(100)),
+            bytes: BytesCell::new(100, &BlockSize::Bytes(100, None)),
             inodes: 10,
             ..Default::default()
         };
@@ -952,15 +954,15 @@ mod tests {
     fn test_row_formatter_with_round_up_byte_values() {
         fn get_formatted_values(bytes: u64, bytes_used: u64, bytes_avail: u64) -> Vec<Cell> {
             let options = Options {
-                block_size: BlockSize::Bytes(1000),
+                block_size: BlockSize::Bytes(1000, None),
                 columns: vec![Column::Size, Column::Used, Column::Avail],
                 ..Default::default()
             };
 
             let row = Row {
-                bytes: BytesCell::new(bytes, &BlockSize::Bytes(1000)),
-                bytes_used: BytesCell::new(bytes_used, &BlockSize::Bytes(1000)),
-                bytes_avail: BytesCell::new(bytes_avail, &BlockSize::Bytes(1000)),
+                bytes: BytesCell::new(bytes, &BlockSize::Bytes(1000, None)),
+                bytes_used: BytesCell::new(bytes_used, &BlockSize::Bytes(1000, None)),
+                bytes_avail: BytesCell::new(bytes_avail, &BlockSize::Bytes(1000, None)),
                 ..Default::default()
             };
             RowFormatter::new(&row, &options, false).get_cells()

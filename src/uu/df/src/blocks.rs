@@ -119,31 +119,36 @@ pub(crate) enum HumanReadable {
     Binary,
 }
 
-/// A block size to use in condensing the display of a large number of bytes.
+/// A static block size, plus the unit to echo next to scaled values.
 ///
-/// The [`BlockSize::Bytes`] variant represents a static block
-/// size.
-///
-/// The default variant is `Bytes(1024)`.
+/// The unit is set only for a suffix-only spec: `--block-size=K` gives
+/// `Bytes(1024, Some("K"))`, `--block-size=1K` gives `Bytes(1024, None)`.
 #[derive(Debug, PartialEq)]
 pub(crate) enum BlockSize {
-    /// A fixed number of bytes.
-    ///
-    /// The number must be positive.
-    Bytes(u64),
+    /// A positive number of bytes, with an optional display suffix.
+    Bytes(u64, Option<String>),
 }
 
 impl BlockSize {
     /// Returns the associated value
     pub(crate) fn as_u64(&self) -> u64 {
-        match *self {
-            Self::Bytes(n) => n,
+        match self {
+            Self::Bytes(n, _) => *n,
+        }
+    }
+
+    /// Returns the display suffix of a suffix-only spec.
+    pub(crate) fn suffix(&self) -> Option<&str> {
+        match self {
+            Self::Bytes(_, suffix) => suffix.as_deref(),
         }
     }
 
     pub(crate) fn to_header(&self) -> String {
         match self {
-            Self::Bytes(n) => {
+            // Full IEC form keeps its spelling: "KiB" -> "1KiB", not "1K".
+            Self::Bytes(_, Some(suffix)) if suffix.ends_with("iB") => format!("1{suffix}"),
+            Self::Bytes(n, _) => {
                 if n % 1024 == 0 && n % 1000 != 0 {
                     to_magnitude_and_suffix(*n as u128, SuffixType::Iec, false)
                 } else {
@@ -156,7 +161,7 @@ impl BlockSize {
 
 impl Default for BlockSize {
     fn default() -> Self {
-        Self::Bytes(parse_block_size::default_block_size())
+        Self::Bytes(parse_block_size::default_block_size(), None)
     }
 }
 
@@ -166,25 +171,28 @@ pub(crate) fn read_block_size(matches: &ArgMatches) -> Result<BlockSize, ParseSi
         let bytes = parse_size_u64(s)?;
 
         if bytes > 0 {
-            Ok(BlockSize::Bytes(bytes))
+            let suffix = parse_block_size::suffix_from_parsed_block_size(s);
+            Ok(BlockSize::Bytes(bytes, suffix))
         } else {
             Err(ParseSizeError::ParseFailure(format!("{}", s.quote())))
         }
     } else if matches.get_flag(OPT_PORTABILITY) {
         Ok(BlockSize::default())
-    } else if let Some(bytes) =
-        parse_block_size::block_size_from_env(&["DF_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"]).found()
-    {
-        Ok(BlockSize::Bytes(bytes))
     } else {
-        Ok(BlockSize::default())
+        let vars = ["DF_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"];
+        match parse_block_size::block_size_from_env_with_suffix(&vars) {
+            (parse_block_size::BlockSizeEnv::Found(bytes), suffix) => {
+                Ok(BlockSize::Bytes(bytes, suffix))
+            }
+            _ => Ok(BlockSize::default()),
+        }
     }
 }
 
 impl fmt::Display for BlockSize {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Bytes(n) => {
+            Self::Bytes(n, _) => {
                 let s = if n % 1024 == 0 && n % 1000 != 0 {
                     to_magnitude_and_suffix(*n as u128, SuffixType::Iec, true)
                 } else {
@@ -356,23 +364,52 @@ mod tests {
 
     #[test]
     fn test_block_size_display() {
-        assert_eq!(format!("{}", BlockSize::Bytes(1024)), "1.0K");
-        assert_eq!(format!("{}", BlockSize::Bytes(2 * 1024)), "2.0K");
-        assert_eq!(format!("{}", BlockSize::Bytes(3 * 1024 * 1024)), "3.0M");
+        assert_eq!(format!("{}", BlockSize::Bytes(1024, None)), "1.0K");
+        assert_eq!(format!("{}", BlockSize::Bytes(2 * 1024, None)), "2.0K");
+        assert_eq!(
+            format!("{}", BlockSize::Bytes(3 * 1024 * 1024, None)),
+            "3.0M"
+        );
     }
 
     #[test]
     fn test_block_size_display_multiples_of_1000_and_1024() {
-        assert_eq!(format!("{}", BlockSize::Bytes(128_000)), "128kB");
-        assert_eq!(format!("{}", BlockSize::Bytes(1000 * 1024)), "1.1MB");
-        assert_eq!(format!("{}", BlockSize::Bytes(1_000_000_000_000)), "1.0TB");
+        assert_eq!(format!("{}", BlockSize::Bytes(128_000, None)), "128kB");
+        assert_eq!(format!("{}", BlockSize::Bytes(1000 * 1024, None)), "1.1MB");
+        assert_eq!(
+            format!("{}", BlockSize::Bytes(1_000_000_000_000, None)),
+            "1.0TB"
+        );
+    }
+
+    #[test]
+    fn test_block_size_header_keeps_iec_spelling() {
+        assert_eq!(
+            BlockSize::Bytes(1024, Some("KiB".to_string())).to_header(),
+            "1KiB"
+        );
+        assert_eq!(
+            BlockSize::Bytes(1024 * 1024, Some("MiB".to_string())).to_header(),
+            "1MiB"
+        );
+        // A bare "K" and a numeric spec both stay in the short spelling.
+        assert_eq!(
+            BlockSize::Bytes(1024, Some("K".to_string())).to_header(),
+            "1K"
+        );
+        assert_eq!(BlockSize::Bytes(2048, None).to_header(), "2K");
+        // "KD" is 1000 bytes: decimal header, but values suffixed "K".
+        assert_eq!(
+            BlockSize::Bytes(1000, Some("K".to_string())).to_header(),
+            "1kB"
+        );
     }
 
     #[test]
     fn test_default_block_size() {
-        assert_eq!(BlockSize::Bytes(1024), BlockSize::default());
+        assert_eq!(BlockSize::Bytes(1024, None), BlockSize::default());
         unsafe { env::set_var("POSIXLY_CORRECT", "1") };
-        assert_eq!(BlockSize::Bytes(512), BlockSize::default());
+        assert_eq!(BlockSize::Bytes(512, None), BlockSize::default());
         unsafe { env::remove_var("POSIXLY_CORRECT") };
     }
 }
