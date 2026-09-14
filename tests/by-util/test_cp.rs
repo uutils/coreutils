@@ -7542,6 +7542,59 @@ fn test_preserve_attrs_overriding_2() {
     }
 }
 
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
+fn test_no_preserve_mode_with_later_preserve() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("src");
+    at.set_mode("src", 0o755);
+
+    // 1. cp --no-preserve=mode src dst1 -> mode should not have execute bit (default umask strips permissions)
+    scene
+        .ucmd()
+        .args(&["--no-preserve=mode", "src", "dst1"])
+        .succeeds();
+    let dst1_mode = at.metadata("dst1").mode() & 0o777;
+    assert_ne!(dst1_mode & 0o111, 0o111);
+
+    // 2. cp --no-preserve=mode --preserve=timestamps src dst2 -> mode should match dst1 (--no-preserve=mode not forgotten)
+    scene
+        .ucmd()
+        .args(&["--no-preserve=mode", "--preserve=timestamps", "src", "dst2"])
+        .succeeds();
+    let dst2_mode = at.metadata("dst2").mode() & 0o777;
+    assert_eq!(dst1_mode, dst2_mode);
+
+    // 3. cp --no-preserve=all --preserve=timestamps src dst3 -> mode should match dst1
+    scene
+        .ucmd()
+        .args(&["--no-preserve=all", "--preserve=timestamps", "src", "dst3"])
+        .succeeds();
+    let dst3_mode = at.metadata("dst3").mode() & 0o777;
+    assert_eq!(dst1_mode, dst3_mode);
+
+    // 4. cp --preserve=timestamps --no-preserve=mode src dst4 -> mode should match dst1
+    scene
+        .ucmd()
+        .args(&["--preserve=timestamps", "--no-preserve=mode", "src", "dst4"])
+        .succeeds();
+    let dst4_mode = at.metadata("dst4").mode() & 0o777;
+    assert_eq!(dst1_mode, dst4_mode);
+
+    // 5. cp --no-preserve=mode --preserve=mode src dst5 -> mode should be preserved (0o755) because later flag wins
+    scene
+        .ucmd()
+        .args(&["--no-preserve=mode", "--preserve=mode", "src", "dst5"])
+        .succeeds();
+    let dst5_mode = at.metadata("dst5").mode() & 0o777;
+    assert_eq!(dst5_mode, 0o755);
+}
+
 /// Test the behavior of preserving permissions when copying through a symlink
 #[test]
 #[cfg(unix)]
