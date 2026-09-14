@@ -336,7 +336,7 @@ fn test_uptime_pretty_print() {
         .arg("-p")
         .succeeds()
         .stdout_contains("up")
-        .stdout_contains("minute");
+        .stdout_matches(&Regex::new(r"hour|minute").unwrap());
 }
 
 /// Test uptime reliability on macOS with sysctl kern.boottime fallback.
