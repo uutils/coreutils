@@ -43,6 +43,22 @@ fn sha_fixture_name(algo: &str, len: u32, prefix: &str, suffix: &str) -> String 
 }
 
 #[test]
+#[cfg(feature = "openssl")]
+fn test_openssl_link() {
+    let Ok(out) = std::process::Command::new("ldd")
+        .arg(uutests::util::get_tests_binary())
+        .output()
+    else {
+        return; // missing ldd
+    };
+    let dynamic = String::from_utf8_lossy(&out.stdout).contains("crypto"); // covering MSYS/MinGW too
+    assert_eq!(
+        std::env::var("OPENSSL_NO_VENDOR") == Ok("1".to_string()),
+        dynamic
+    );
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
