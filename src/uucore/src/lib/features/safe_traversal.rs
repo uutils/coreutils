@@ -10,7 +10,7 @@
 //
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR
-// spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot
+// spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot FDCWD
 
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;
@@ -302,6 +302,22 @@ impl DirFd {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
 
+        Self::chmod_at_fd(
+            self.fd.as_fd(),
+            name_cstr.as_c_str(),
+            mode,
+            symlink_behavior,
+        )
+    }
+
+    /// Shared implementation behind [`DirFd::chmod_at`] and [`chmod_nofollow`],
+    /// which passes `AT_FDCWD` as `dirfd`.
+    fn chmod_at_fd(
+        dirfd: BorrowedFd<'_>,
+        name_cstr: &core::ffi::CStr,
+        mode: u32,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<()> {
         let flags = if symlink_behavior.should_follow() {
             FchmodatFlags::FollowSymlink
         } else {
@@ -316,8 +332,8 @@ impl DirFd {
         // fallback takes over instead.
         #[cfg_attr(target_os = "linux", allow(unused_variables))]
         let libc_err = match fchmodat(
-            &self.fd,
-            name_cstr.as_c_str(),
+            dirfd,
+            name_cstr,
             Mode::from_bits_truncate(mode as libc::mode_t),
             flags,
         ) {
@@ -368,7 +384,7 @@ impl DirFd {
                 let res = unsafe {
                     libc::syscall(
                         SYS_FCHMODAT2,
-                        self.fd.as_raw_fd(),
+                        dirfd.as_raw_fd(),
                         name_cstr.as_ptr(),
                         mode as libc::mode_t,
                         libc::AT_SYMLINK_NOFOLLOW,
@@ -390,7 +406,7 @@ impl DirFd {
 
         #[cfg(target_os = "linux")]
         {
-            self.chmod_at_via_opath(name_cstr.as_c_str(), mode)
+            Self::chmod_at_fd_via_opath(dirfd, name_cstr, mode)
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -406,13 +422,17 @@ impl DirFd {
     /// race because the fd pins the inode.
     ///
     #[cfg(target_os = "linux")]
-    fn chmod_at_via_opath(&self, name: &core::ffi::CStr, mode: u32) -> io::Result<()> {
+    fn chmod_at_fd_via_opath(
+        dirfd: BorrowedFd<'_>,
+        name: &core::ffi::CStr,
+        mode: u32,
+    ) -> io::Result<()> {
         // Same reason as in chmod_at: rustix's linux_raw backend would make
         // these raw syscalls, invisible to LD_PRELOAD wrappers.
         use std::os::unix::fs::PermissionsExt;
 
         let fd = openat(
-            &self.fd,
+            dirfd,
             name,
             OFlag::O_PATH | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
             Mode::empty(),
@@ -487,6 +507,24 @@ impl DirFd {
         let owned_fd = unsafe { OwnedFd::from_raw_fd(fd) };
         Ok(Self { fd: owned_fd })
     }
+}
+
+/// Change the mode of `path` without following a symlink at its final component.
+///
+/// The `AT_FDCWD` counterpart of [`DirFd::chmod_at`]: the whole path goes to one
+/// `fchmodat` call, so it costs the same as the `chmod(2)` it replaces rather than
+/// also opening the parent directory. Parent components are resolved by the kernel
+/// inside that single call, so there is no check-then-use window of our own.
+pub fn chmod_nofollow(path: &Path, mode: u32) -> io::Result<()> {
+    let path_cstr = CString::new(path.as_os_str().as_bytes())
+        .map_err(|_| SafeTraversalError::PathContainsNull)?;
+
+    // SAFETY: `AT_FDCWD` is the sentinel the `*at` calls accept to resolve a
+    // relative path against the current working directory. It is not a real
+    // descriptor, so it is always valid and is never closed.
+    let cwd = unsafe { BorrowedFd::borrow_raw(libc::AT_FDCWD) };
+
+    DirFd::chmod_at_fd(cwd, path_cstr.as_c_str(), mode, SymlinkBehavior::NoFollow)
 }
 
 /// Find the deepest existing directory ancestor for a path.
@@ -1405,6 +1443,43 @@ mod tests {
 
         // subdir should have been created inside the real target directory
         assert!(target.join("subdir").exists());
+    }
+
+    /// `chmod_nofollow` is the finalize-chmod primitive: a symlink planted at the
+    /// path must never have its target's mode changed.
+    #[test]
+    fn test_chmod_nofollow_does_not_follow_a_symlink() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path().join("target");
+        fs::write(&target, b"x").unwrap();
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o600)).unwrap();
+        symlink(&target, temp_dir.path().join("link")).unwrap();
+
+        let _ = chmod_nofollow(&temp_dir.path().join("link"), 0o777);
+
+        assert_eq!(
+            fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+            0o600,
+            "chmod_nofollow followed the symlink and changed its target"
+        );
+    }
+
+    #[test]
+    fn test_chmod_nofollow_changes_a_regular_file() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_dir = TempDir::new().unwrap();
+        let file = temp_dir.path().join("f");
+        fs::write(&file, b"x").unwrap();
+
+        chmod_nofollow(&file, 0o640).unwrap();
+
+        assert_eq!(
+            fs::metadata(&file).unwrap().permissions().mode() & 0o777,
+            0o640
+        );
     }
 
     #[test]
