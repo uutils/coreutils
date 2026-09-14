@@ -876,7 +876,9 @@ jobs:
           - { os: ubuntu-latest, features: "md5sum,sha1sum,sha224sum,sha256sum,sha384sum,sha512sum,cksum,openssl" }
           # macOS: vendored only — system libcrypto needs OPENSSL_DIR
           # pointing at Homebrew, which isn't worth wiring up for a smoke test.
-          # todo: check Windows (MinGW's system openssl)
+          # dynamic linkage with MSVC + vcpkg isn't useful by same reason.
+          # MSYS2 uses system openssl at MinGW package
+          - { os: windows-latest, features: "cksum,openssl" }
     steps:
     - uses: actions/checkout@v7
       with:
@@ -892,7 +894,21 @@ jobs:
       run: |
         echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
         echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - name: check checksum utilities with OpenSSL (MinGW dynamic)
+      if: matrix.job.os == 'windows-latest'
+      shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
+      env:
+        MSYSTEM: "UCRT64"
+        CHERE_INVOKING: 1
+        OPENSSL_DIR: "/ucrt64"
+        OPENSSL_NO_VENDOR: "1"
+        OPENSSL_STATIC: "0"
+        RUST_BACKTRACE: "1"
+      run: |
+        pacman -Sy --noconfirm --needed mingw-w64-ucrt-x86_64-openssl mingw-w64-ucrt-x86_64-rust
+        cargo check --no-default-features --features "${{ matrix.job.features }}"
     - name: Test checksum utilities with OpenSSL (system / dynamic)
+      if: matrix.job.os == 'ubuntu-latest'
       shell: bash
       env:
         OPENSSL_NO_VENDOR: "1"
