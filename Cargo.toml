@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime foldhash serde gethostid kqueue libcrypto libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner getauxval hashbrown
+# spell-checker:ignore (libs) bigdecimal datetime foldhash serde kqueue libcrypto libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner getauxval hashbrown
 
 [package]
 name = "coreutils"
@@ -112,6 +112,7 @@ feat_smack = [
 ## (common/core and Tier1) feature sets
 # "feat_common_core" == baseline core set of utilities which can be built/run on most targets
 feat_common_core = [
+  "arch",
   "base32",
   "base64",
   "basename",
@@ -132,13 +133,10 @@ feat_common_core = [
   "cut",
   "date",
   "dd",
-  "df",
   "dir",
   "dircolors",
   "dirname",
-  "du",
   "echo",
-  "env",
   "expand",
   "expr",
   "factor",
@@ -146,13 +144,13 @@ feat_common_core = [
   "fmt",
   "fold",
   "head",
+  "hostid",
   "join",
   "link",
   "ln",
   "ls",
   "mkdir",
   "mktemp",
-  "more",
   "mv",
   "nl",
   "numfmt",
@@ -175,7 +173,6 @@ feat_common_core = [
   "sort",
   "split",
   "sum",
-  "tac",
   "tail",
   "tee",
   "test",
@@ -185,6 +182,7 @@ feat_common_core = [
   "truncate",
   "tsort",
   "tty",
+  "uname",
   "unexpand",
   "uniq",
   "unlink",
@@ -195,102 +193,24 @@ feat_common_core = [
 # "feat_Tier1" == expanded set of utilities which can be built/run on the usual rust "Tier 1" target platforms (ref: <https://forge.rust-lang.org/release/platform-support.html>)
 feat_Tier1 = [
   "feat_common_core",
-  "arch",
-  "kill",
+  "df",
+  "du",
+  "env",
   "hostname",
-  "hostid",
+  "kill",
   "nohup",
   "nproc",
+  "more",
   "sync",
+  "tac",
   "timeout",
-  "uname",
   "uptime",
   "whoami",
 ]
 ## (primary platforms) feature sets
 # "feat_wasm" == set of utilities which can be built for wasm target
 # We don't need to support all of wasm targets. So the ambiguous name is used at here
-# It is bit complex to deduplicate with other lists
-feat_wasm = [
-  "arch",
-  "base32",
-  "base64",
-  "basename",
-  "basenc",
-  "cat",
-  "comm",
-  "cp",
-  "csplit",
-  "cut",
-  "date",
-  "dd",
-  "dir",
-  "dircolors",
-  "dirname",
-  "echo",
-  "expand",
-  "expr",
-  "factor",
-  "false",
-  "fmt",
-  "fold",
-  "head",
-  "hostid",
-  "join",
-  "link",
-  "ln",
-  "ls",
-  "mkdir",
-  "mktemp",
-  "mv",
-  "nl",
-  "nproc",
-  "numfmt",
-  "od",
-  "paste",
-  "pathchk",
-  "pr",
-  "printenv",
-  "printf",
-  "ptx",
-  "pwd",
-  "readlink",
-  "realpath",
-  "rm",
-  "rmdir",
-  "seq",
-  "shred",
-  "shuf",
-  "sleep",
-  "sort",
-  "split",
-  "sum",
-  "tail",
-  "tee",
-  "test",
-  "touch",
-  "tr",
-  "true",
-  "truncate",
-  "tsort",
-  "tty",
-  "uname",
-  "unexpand",
-  "uniq",
-  "unlink",
-  "vdir",
-  "wc",
-  "yes",
-  # cksum family
-  "cksum",
-  "b2sum",
-  "md5sum",
-  "sha1sum",
-  "sha224sum",
-  "sha256sum",
-  "sha384sum",
-  "sha512sum",
-]
+feat_wasm = ["feat_common_core", "nproc"]
 # "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms.
 feat_os_unix = [
   "feat_Tier1",
@@ -359,12 +279,10 @@ feat_os_unix_fuchsia = [
   "chown",
   "du",
   "groups",
-  "hostid",
   "install",
   "logname",
   "mkfifo",
   "mknod",
-  "uname",
   "unlink",
 ]
 # "feat_os_unix_redox" == set of utilities which can be built/run on "Redox OS" (refs: <https://www.redox-os.org>; <https://en.wikipedia.org/wiki/Redox_(operating_system)>)
@@ -373,7 +291,6 @@ feat_os_unix_redox = [
   #
   "chmod",
   "stat",
-  "uname",
 ]
 ##
 # * bypass/override ~ translate 'test' feature name to avoid dependency collision with rust core 'test' crate (o/w surfaces as compiler errors during testing)
