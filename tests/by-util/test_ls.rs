@@ -7975,6 +7975,36 @@ fn test_dired_write_error() {
         ));
 }
 
+#[cfg(unix)]
+#[test]
+fn test_ls_long_stat_failure_is_reported() {
+    use rustix::process::geteuid;
+    use std::os::unix::fs::PermissionsExt;
+
+    // root bypasses the directory search permission check this relies on
+    if geteuid().is_root() {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/file");
+    at.symlink_file("/", "dir/link");
+    // readable but not searchable: read_dir() succeeds while stat() on the
+    // entries fails with EACCES
+    at.set_mode("dir", 0o600);
+
+    ucmd.args(&["-l", "dir"])
+        .fails_with_code(1)
+        .stdout_contains("? file")
+        .stdout_contains("? link")
+        .stderr_contains("cannot access 'dir/file': Permission denied")
+        .stderr_contains("cannot access 'dir/link': Permission denied");
+
+    // restore so that the test directory can be cleaned up
+    std::fs::set_permissions(at.plus("dir"), std::fs::Permissions::from_mode(0o700)).unwrap();
+}
+
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     use super::*;
