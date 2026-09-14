@@ -74,6 +74,12 @@ fn create_utility_command(utility_name: &str) -> Command {
     let canonical_name = uucore::get_canonical_util_name(&uu_name);
     let mut cmd = Command::new(TESTS_BINARY);
     cmd.arg(canonical_name);
+    // Each test below says which language it expects by way of one variable.
+    // Drop the ones that outrank it so an ambient setting cannot be what
+    // decides the language read here.
+    for name in ["LC_ALL", "LC_MESSAGES", "LANGUAGE"] {
+        cmd.env_remove(name);
+    }
     cmd
 }
 

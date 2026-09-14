@@ -718,6 +718,11 @@ mod tests {
 
         unsafe {
             env::set_var("LANG", "fr_FR.UTF-8");
+            // These outrank LANG, so an ambient one would otherwise be what
+            // decides the language this test reads.
+            for name in ["LC_ALL", "LC_MESSAGES", "LANGUAGE"] {
+                env::remove_var(name);
+            }
         }
 
         if setup_localization("test").is_ok() {
