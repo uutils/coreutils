@@ -123,9 +123,15 @@ where
     let mut input_iter = InputSplitter::new(enumerated_input_lines);
     let mut split_writer = SplitWriter::new(options);
     let patterns_vec: Vec<patterns::Pattern> = patterns::get_patterns(patterns)?;
-    let all_up_to_line = patterns_vec
-        .iter()
-        .all(|p| matches!(p, patterns::Pattern::UpToLine(_, _)));
+    // A `{*}` regex only stops once it no longer matches, and by then it has
+    // consumed the rest of the input.
+    let repeats_forever = patterns_vec.iter().any(|p| {
+        matches!(
+            p,
+            patterns::Pattern::UpToMatch(_, _, patterns::ExecutePattern::Always)
+                | patterns::Pattern::SkipToMatch(_, _, patterns::ExecutePattern::Always)
+        )
+    });
     let ret = do_csplit(&mut split_writer, patterns_vec, &mut input_iter);
 
     // consume the rest, unless there was an error
@@ -139,9 +145,9 @@ where
                 split_writer.writeln(&line?)?;
             }
             split_writer.finish_split()
-        } else if all_up_to_line && options.suppress_matched {
-            // GNU semantics for integer patterns with --suppress-matched:
-            // even if no remaining input, create a final (possibly empty) split
+        } else if !repeats_forever {
+            // GNU semantics: even if no remaining input, create a final
+            // (possibly empty) split
             split_writer.new_writer()?;
             split_writer.finish_split()
         } else {
