@@ -753,6 +753,7 @@ pub fn uu_app() -> Command {
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::AnyPath)
                 .conflicts_with_all([OPT_DATE, OPT_FILE, OPT_RESOLUTION])
+                .overrides_with(OPT_REFERENCE)
                 .help(translate!("date-help-reference")),
         )
         .arg(

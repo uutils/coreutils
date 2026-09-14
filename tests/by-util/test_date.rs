@@ -701,6 +701,33 @@ fn test_date_for_file_mtime() {
 }
 
 #[test]
+fn test_date_multiple_references() {
+    use std::time::{Duration, UNIX_EPOCH};
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let create_file = |name: &str, secs: u64| {
+        let f = at.make_file(name);
+        let date = UNIX_EPOCH.checked_add(Duration::from_secs(secs)).unwrap();
+        f.set_modified(date).unwrap();
+    };
+
+    create_file("a", 1111);
+    create_file("b", 2222);
+
+    // last ref "wins"
+    for (refs, expected) in [(["a", "b"], "2222\n"), (["b", "a"], "1111\n")] {
+        scene
+            .ucmd()
+            .args(&["--reference", refs[0], "--reference", refs[1]])
+            .arg("+%s")
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_date_set_valid_3() {
     if geteuid().is_root() {
