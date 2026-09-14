@@ -30,7 +30,10 @@ use uutests::new_ucmd;
 #[cfg(unix)]
 use uutests::unwrap_or_return;
 use uutests::util::TestScenario;
-#[cfg(any(unix, feature = "selinux"))]
+#[cfg(any(
+    unix,
+    all(feature = "selinux", any(target_os = "linux", target_os = "android"))
+))]
 use uutests::util::expected_result;
 use uutests::{at_and_ucmd, util_name};
 

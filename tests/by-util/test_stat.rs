@@ -5,6 +5,8 @@
 
 // spell-checker:ignore crème brûlée
 
+#![cfg(unix)]
+
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
