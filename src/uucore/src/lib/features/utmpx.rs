@@ -54,6 +54,8 @@ pub use self::ut::*;
 pub use libc::endutxent;
 #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
 pub use libc::getutxent;
+#[cfg(target_os = "freebsd")]
+use libc::setutxdb;
 #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
 pub use libc::setutxent;
 use libc::utmpx;
@@ -65,13 +67,6 @@ use libc::utmpx;
 ))]
 #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
 pub use libc::utmpxname;
-
-/// # Safety
-/// Just fixed the clippy warning. Please add description here.
-#[cfg(target_os = "freebsd")]
-pub unsafe extern "C" fn utmpxname(_file: *const core::ffi::c_char) -> core::ffi::c_int {
-    0
-}
 
 use crate::libc; // import macros from `../../macros.rs`
 
@@ -377,6 +372,9 @@ impl Utmpx {
         let iter = UtmpxIter::new();
         let path = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
         unsafe {
+            #[cfg(target_os = "freebsd")]
+            setutxdb(libc::UTXDB_ACTIVE, path.as_ptr());
+
             // In glibc, utmpxname() only fails if there's not enough memory
             // to copy the string.
             // Solaris returns 1 on success instead of 0. Supposedly there also
@@ -385,9 +383,11 @@ impl Utmpx {
             // is specified, no warning or anything.
             // So this function is pretty crazy and we don't try to detect errors.
             // Not much we can do besides pray.
-            #[cfg_attr(target_env = "musl", allow(deprecated))]
+            #[cfg(not(target_os = "freebsd"))]
+            #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
             utmpxname(path.as_ptr());
-            #[cfg_attr(target_env = "musl", allow(deprecated))]
+
+            #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
             setutxent();
         }
         iter
