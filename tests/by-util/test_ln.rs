@@ -1190,3 +1190,15 @@ fn test_ln_backup_nonexistent_rollback() {
     assert!(!at.file_exists("dst~"));
     assert!(at.file_exists("dst"));
 }
+
+#[test]
+fn test_hard_link_force_failed_link_keeps_destination() {
+    // Regression for #14550: a failed forced link must not delete the destination.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("dst", "keep\n");
+
+    ucmd.args(&["-f", "no_such_source", "dst"]).fails();
+
+    assert!(at.file_exists("dst"));
+    assert_eq!(at.read("dst"), "keep\n");
+}
