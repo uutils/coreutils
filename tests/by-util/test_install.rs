@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (words) helloworld nodir objdump n'source nconfined testdir
 
 use rustix::process::{getegid, geteuid};
