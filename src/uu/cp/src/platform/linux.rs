@@ -149,26 +149,23 @@ fn check_sparse_detection(src_file: &File) -> io::Result<bool> {
 
 /// Optimized [`sparse_copy_fd`] doesn't create holes for large sequences of zeros in non `sparse_files`
 /// Used when `--sparse=auto`
-fn sparse_copy_without_hole_fd(src_file: &File, dst_file: &File, context: &str) -> CopyResult<()> {
+fn sparse_copy_without_hole_fd(
+    mut src_file: &File,
+    mut dst_file: &File,
+    context: &str,
+) -> CopyResult<()> {
     let ctx_err = |e: io::Error| CpError::IoErrContext(e, context.to_owned());
 
     let size = src_file.metadata().map_err(&ctx_err)?.size();
-    // A fifo, a socket, or a character device such as the `/dev/null` that
-    // `/dev/stdout` may resolve to all reject `ftruncate` with `EINVAL`
-    // since they support neither it nor the writes at explicit offsets the
-    // rest of this function makes; take the standard copy instead, which is
-    // what GNU does with them. Discovered here rather than checked in
-    // advance, since checking first would cost every ordinary destination
-    // -- overwhelmingly a regular file, for which this never fires -- a
-    // `metadata` call for no benefit. Nothing has been read from `src_file`
-    // or written to `dst_file` yet, so falling back here cannot duplicate
-    // or corrupt output.
+    // A fifo, a socket or a character device (`/dev/null`, say) rejects
+    // `ftruncate` and the positional writes below with `EINVAL`; copy those
+    // the standard way, as GNU does. Checking the file type first would cost
+    // every ordinary destination a `metadata` call, so it is discovered here,
+    // before anything has been read or written.
     match ftruncate(dst_file, size) {
         Ok(()) => {}
         Err(rustix::io::Errno::INVAL) => {
-            let mut src = src_file;
-            let mut dst = dst_file;
-            return buf_copy::copy_fast(&mut src, &mut dst).map_err(&ctx_err);
+            return buf_copy::copy_fast(&mut src_file, &mut dst_file).map_err(&ctx_err);
         }
         Err(e) => return Err(CpError::IoErrContext(e.into(), context.to_owned())),
     }
@@ -205,7 +202,7 @@ fn sparse_copy_without_hole_fd(src_file: &File, dst_file: &File, context: &str) 
 }
 /// Perform a sparse copy from one file to another.
 /// Creates a holes for large sequences of zeros in `non_sparse_files`, used for `--sparse=always`
-fn sparse_copy_fd(src_file: &mut File, dst_file: &File, context: &str) -> CopyResult<()> {
+fn sparse_copy_fd(src_file: &mut File, mut dst_file: &File, context: &str) -> CopyResult<()> {
     let ctx_err = |e: io::Error| CpError::IoErrContext(e, context.to_owned());
 
     // Keep the size as u64: on 32-bit targets a usize conversion would
@@ -216,8 +213,7 @@ fn sparse_copy_fd(src_file: &mut File, dst_file: &File, context: &str) -> CopyRe
     match ftruncate(dst_file, size) {
         Ok(()) => {}
         Err(rustix::io::Errno::INVAL) => {
-            let mut dst = dst_file;
-            return buf_copy::copy_fast(src_file, &mut dst).map_err(&ctx_err);
+            return buf_copy::copy_fast(src_file, &mut dst_file).map_err(&ctx_err);
         }
         Err(e) => return Err(CpError::IoErrContext(e.into(), context.to_owned())),
     }
