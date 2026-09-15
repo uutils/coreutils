@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore getpriority setpriority
+
 #[cfg(unix)]
 use uutests::new_ucmd;
 

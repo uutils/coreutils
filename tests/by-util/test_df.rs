@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore udev pcent iuse itotal iused ipcent binfmt
+
 #![allow(
     clippy::similar_names,
     clippy::cast_possible_truncation,
