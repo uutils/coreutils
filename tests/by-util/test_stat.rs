@@ -96,7 +96,7 @@ fn test_terse_normal_format() {
     println!("expect: {expect:?}");
     let v_actual: Vec<&str> = actual.trim().split(' ').collect();
     let mut v_expect: Vec<&str> = expect.trim().split(' ').collect();
-    assert!(!v_expect.is_empty());
+    assert_ne!(v_expect, [] as [&str; 0]);
 
     // uu_stat does not support selinux
     if v_actual.len() == v_expect.len() - 1 && v_expect[v_expect.len() - 1].contains(':') {
@@ -128,7 +128,7 @@ fn test_format_created_time() {
     let re = regex::Regex::new(r"\s").unwrap();
     let v_actual: Vec<&str> = re.split(&actual).collect();
     let v_expect: Vec<&str> = re.split(&expect).collect();
-    assert!(!v_expect.is_empty());
+    assert_ne!(v_expect, [] as [&str; 0]);
     // * allow for inequality if `stat` (aka, expect) returns "-" (unknown value)
     assert!(
         expect == "-"
@@ -153,7 +153,7 @@ fn test_format_created_seconds() {
     let re = regex::Regex::new(r"\s").unwrap();
     let v_actual: Vec<&str> = re.split(&actual).collect();
     let v_expect: Vec<&str> = re.split(&expect).collect();
-    assert!(!v_expect.is_empty());
+    assert_ne!(v_expect, [] as [&str; 0]);
     // * allow for inequality if `stat` (aka, expect) returns "0" (unknown value)
     assert!(
         expect == "0"
