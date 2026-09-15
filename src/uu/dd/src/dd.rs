@@ -1110,6 +1110,14 @@ fn flush_caches_full_length(i: &Input, o: &Output) {
     }
 }
 
+/// Which side of the copy failed, recorded by the main loop so that the
+/// message naming the file is built once afterwards rather than on every
+/// iteration.
+enum FailedOp {
+    Read,
+    Write,
+}
+
 /// Copy the given input data to this output, consuming both.
 ///
 /// This method contains the main loop for the `dd` program. Bytes
@@ -1121,7 +1129,7 @@ fn flush_caches_full_length(i: &Input, o: &Output) {
 ///
 /// If there is a problem reading from the input or writing to
 /// this output.
-fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
+fn dd_copy(mut i: Input, o: Output) -> UResult<()> {
     // The read and write statistics.
     //
     // These objects are counters, initialized to zero. After each
@@ -1178,7 +1186,8 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             &prog_tx,
             output_thread,
             truncate,
-        );
+        )
+        .map_err_context(|| translate!("dd-error-io-error"));
     }
 
     // Spawn a timer thread to provide a scheduled signal indicating when we
@@ -1211,7 +1220,9 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
 
     // Add partial block buffering, if needed.
     let mut o = if o.settings.buffered {
-        BlockWriter::Buffered(BufferedOutput::new(o)?)
+        BlockWriter::Buffered(
+            BufferedOutput::new(o).map_err_context(|| translate!("dd-error-io-error"))?,
+        )
     } else {
         BlockWriter::Unbuffered(o)
     };
@@ -1219,7 +1230,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     // Aligned read scratch sized to the block size (the max size needed).
     // 4 KiB alignment satisfies block devices that enforce a strict
     // `dma_alignment` for `iflag=direct` reads — see `AlignedBuf`.
-    let mut buf = AlignedBuf::new(bsize)?;
+    let mut buf = AlignedBuf::new(bsize).map_err_context(|| translate!("dd-error-io-error"))?;
     // Separate scratch for `conv=block` / `conv=unblock`, which can change
     // the byte count and so cannot be done in-place in `buf`.
     let mut conv_buf: Vec<u8> = Vec::new();
@@ -1231,7 +1242,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     // each iteration and cumulative statistics are reported to
     // the progress reporting thread.
     // A failure ends the loop, so the statistics gathered so far still get reported.
-    let mut copy_error = None;
+    let mut copy_error: Option<(FailedOp, io::Error)> = None;
     while below_count_limit(i.settings.count, &rstat) {
         // Read a block from the input then write the block to the output.
         //
@@ -1240,7 +1251,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // blocks already read and the number of blocks remaining.
         let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, i.settings.ibs, bsize);
         let Ok((rstat_update, data)) = read_helper(&mut i, &mut buf, &mut conv_buf, loop_bsize)
-            .map_err(|e| copy_error = Some(e))
+            .map_err(|e| copy_error = Some((FailedOp::Read, e)))
         else {
             break;
         };
@@ -1253,7 +1264,13 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             }
             break;
         }
-        let Ok(wstat_update) = o.write_blocks(data).map_err(|e| copy_error = Some(e)) else {
+        let Ok(wstat_update) = o
+            .write_blocks(data)
+            .map_err(|e| copy_error = Some((FailedOp::Write, e)))
+        else {
+            // The block was read before the write failed, so it still counts as
+            // a record in, as GNU `dd` reports it.
+            rstat += rstat_update;
             break;
         };
 
@@ -1302,17 +1319,35 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         prog_tx.send(prog_update).unwrap_or(());
     }
 
-    if let Some(e) = copy_error {
+    if let Some((op, e)) = copy_error {
         // Flushing and syncing are pointless now, but the caller still wants the statistics.
         let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), ProgUpdateType::Final);
         prog_tx.send(prog_update).unwrap_or(());
         output_thread
             .join()
             .expect("Failed to join with the output thread.");
-        return Err(e);
+        // Name the file as GNU `dd` does: the operand itself when given,
+        // `'standard input'` or `'standard output'` otherwise.
+        return Err(match op {
+            FailedOp::Read => {
+                let name = i.settings.infile.as_deref().map_or_else(
+                    || translate!("dd-standard-input"),
+                    |f| f.quote().to_string(),
+                );
+                e.map_err_context(|| translate!("dd-error-reading", "file" => name))
+            }
+            FailedOp::Write => {
+                let name = i.settings.outfile.as_deref().map_or_else(
+                    || translate!("dd-standard-output"),
+                    |f| f.quote().to_string(),
+                );
+                e.map_err_context(|| translate!("dd-error-writing", "file" => name))
+            }
+        });
     }
 
     finalize(o, rstat, wstat, start, &prog_tx, output_thread, truncate)
+        .map_err_context(|| translate!("dd-error-io-error"))
 }
 
 /// Flush output, print final stats, and join with the progress thread.
@@ -1591,7 +1626,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None if is_stdout_redirected_to_seekable_file() => Output::new_file_from_stdout(&settings)?,
         None => Output::new_stdout(&settings)?,
     };
-    dd_copy(i, o).map_err_context(|| translate!("dd-error-io-error"))
+    dd_copy(i, o)
 }
 
 pub fn uu_app() -> Command {
