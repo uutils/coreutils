@@ -1869,15 +1869,6 @@ pub(crate) fn copy_attributes(
     let source_metadata =
         fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
-    let mode_explicitly_disabled = matches!(attributes.mode, Preserve::No { explicit: true });
-
-    // preserve is true by default if the destination is created by us and it's a directory
-    let mode = if !mode_explicitly_disabled && dest_is_freshly_created_dir {
-        Preserve::Yes { required: false }
-    } else {
-        attributes.mode
-    };
-
     // Track whether `chown` to the source's uid succeeded. If it did not
     // (typical case: non-root user copying a root-owned setuid file), the
     // mode preservation below must strip setuid/setgid so the destination
@@ -1924,7 +1915,7 @@ pub(crate) fn copy_attributes(
         Ok(())
     })?;
 
-    handle_preserve(mode, || -> CopyResult<()> {
+    handle_preserve(attributes.mode, || -> CopyResult<()> {
         // The `chmod()` system call that underlies the
         // `fs::set_permissions()` call is unable to change the
         // permissions of a symbolic link. In that case, we just
@@ -1961,6 +1952,24 @@ pub(crate) fn copy_attributes(
 
         Ok(())
     })?;
+
+    #[cfg(unix)]
+    if dest_is_freshly_created_dir
+        && matches!(attributes.mode, Preserve::No { .. })
+        && !dest.is_symlink()
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = source_metadata.permissions();
+        let umask = uucore::mode::get_umask();
+        let target_mode = match attributes.mode {
+            Preserve::No { explicit: true } => 0o777 & !umask,
+            Preserve::No { explicit: false } => (perms.mode() & 0o777) & !umask,
+            _ => unreachable!(),
+        };
+        perms.set_mode(target_mode);
+        fs::set_permissions(dest, perms)
+            .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+    }
 
     handle_preserve(attributes.timestamps, || -> CopyResult<()> {
         let (atime, mtime) = source_times(&source_metadata, context)?;
