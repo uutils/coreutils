@@ -4,9 +4,11 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore TODO canonicalizes direntry pathbuf symlinked IRWXO IRWXG
+
 //! Recursively copy the contents of a directory.
 //!
 //! See the [`copy_directory`] function for more information.
+
 #[cfg(windows)]
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};

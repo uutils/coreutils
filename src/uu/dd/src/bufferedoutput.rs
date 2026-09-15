@@ -3,12 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//
 // spell-checker:ignore wstat towrite cdefg bufferedoutput
+
 //! Buffer partial output blocks until they are completed.
 //!
 //! Use the [`BufferedOutput`] struct to create a buffered form of the
 //! [`Output`] writer.
+
 use crate::{Output, WriteStat};
 
 /// Buffer partial output blocks until they are completed.

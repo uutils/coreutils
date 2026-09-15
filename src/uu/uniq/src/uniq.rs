@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore badoption CTYPE
+
 use clap::{
     Arg, ArgAction, ArgMatches, Command, builder::ValueParser, error::ContextKind, error::Error,
     error::ErrorKind,

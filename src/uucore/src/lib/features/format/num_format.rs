@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore bigdecimal prec cppreference bignums
+
 //! Utilities for formatting numbers in various formats
 
 use bigdecimal::BigDecimal;

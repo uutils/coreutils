@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (misc) uioerror
+
 use filetime::FileTime;
 use std::path::PathBuf;
 use thiserror::Error;

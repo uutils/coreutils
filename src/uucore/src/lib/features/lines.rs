@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (vars)
+
 //! Iterate over lines, including the line ending character(s).
 //!
 //! This module provides the [`lines`] function, similar to the
@@ -14,6 +15,7 @@
 //! characters. This is useful if the input data does not end with a
 //! newline character and you want to preserve the exact form of the
 //! input data.
+
 use std::io::BufRead;
 
 /// Returns an iterator over the lines, including line ending characters.
