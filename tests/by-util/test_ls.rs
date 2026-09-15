@@ -1766,6 +1766,25 @@ fn test_ls_long_total_size() {
 }
 
 #[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+fn test_human_readable_uses_locale_decimal_separator() {
+    // GNU's -h/--human-readable fraction follows LC_NUMERIC (e.g. "4,0K"
+    // under fr_FR, not "4.0K"); this implementation's own human-readable
+    // formatter has the same locale-aware logic, but ls's own Cargo.toml
+    // was missing the uucore feature flag that turns it on, so this
+    // silently always used '.' regardless of locale.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", &"a".repeat(4000));
+    ucmd.env("LC_ALL", "fr_FR.UTF-8")
+        .arg("-l")
+        .arg("-h")
+        .arg("f")
+        .succeeds()
+        .stdout_contains("4,0K");
+}
+
+#[test]
 #[cfg(not(feature = "selinux"))]
 // Disabled on the SELinux runner for now
 fn test_ls_long_formats() {
