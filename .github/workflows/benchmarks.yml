@@ -27,7 +27,7 @@ concurrency:
 jobs:
   detects-benchmarks:
     name: Detect changes on crates
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       package: ${{ steps.detect.outputs.package }}
     steps:
@@ -67,7 +67,7 @@ jobs:
     needs: detects-benchmarks
     if: needs.detects-benchmarks.outputs.package != '[]'
     name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package }} (CodSpeed)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
       CARGO_INCREMENTAL: 0
