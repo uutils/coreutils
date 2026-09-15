@@ -14,13 +14,39 @@ use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
 use uucore::parser::parse_size::{ParseSizeError, Parser as SizeParser};
+use uucore::quoting_style::{Quotes, QuotingStyle, locale_aware_escape_name};
 use uucore::show_warning;
 use uucore::translate;
+
+/// A value in single quotes, with the characters a terminal would not show
+/// spelled out, as GNU's `quote` does: `status=$'\1'` is reported as `'\001'`
+/// rather than as the byte itself.
+fn quote(value: &str) -> String {
+    escape(
+        value,
+        QuotingStyle::C {
+            quotes: Quotes::Single,
+        },
+    )
+}
+
+/// The same, in the shell syntax GNU quotes numbers and operands with, where
+/// an unprintable byte ends the quoted run rather than being escaped inside
+/// it: `''$'\001'`.
+fn shell_quote(value: &str) -> String {
+    escape(value, QuotingStyle::SHELL_ESCAPE_QUOTE)
+}
+
+fn escape(value: &str, style: QuotingStyle) -> String {
+    locale_aware_escape_name(value.as_ref(), style)
+        .into_string()
+        .expect("escaping a str only ever adds ASCII")
+}
 
 /// Parser Errors describe errors with parser input
 #[derive(Debug, PartialEq, Eq, Error)]
 pub enum ParseError {
-    #[error("{}", translate!("dd-error-unrecognized-operand", "operand" => .0))]
+    #[error("{}", translate!("dd-error-unrecognized-operand", "operand" => shell_quote(.0)))]
     UnrecognizedOperand(String),
     #[error("{}", translate!("dd-error-multiple-format-table"))]
     MultipleFmtTable,
@@ -30,27 +56,27 @@ pub enum ParseError {
     MultipleBlockUnblock,
     #[error("{}", translate!("dd-error-multiple-excl"))]
     MultipleExclNoCreate,
-    #[error("{}", translate!("dd-error-invalid-flag", "flag" => .0))]
+    #[error("{}", translate!("dd-error-invalid-flag", "flag" => quote(.0)))]
     FlagNoMatch(String),
-    #[error("{}", translate!("dd-error-invalid-output-flag", "flag" => .0))]
+    #[error("{}", translate!("dd-error-invalid-output-flag", "flag" => quote(.0)))]
     OutputFlagNoMatch(String),
-    #[error("{}", translate!("dd-error-conv-flag-no-match", "flag" => .0))]
+    #[error("{}", translate!("dd-error-conv-flag-no-match", "flag" => quote(.0)))]
     ConvFlagNoMatch(String),
-    #[error("{}", translate!("dd-error-multiplier-parse-failure", "input" => .0))]
+    #[error("{}", translate!("dd-error-multiplier-parse-failure", "input" => shell_quote(.0)))]
     MultiplierStringParseFailure(String),
     #[error("{}", translate!("dd-error-multiplier-overflow", "input" => .0))]
     MultiplierStringOverflow(String),
     #[error("{}", translate!("dd-error-block-without-cbs"))]
     BlockUnblockWithoutCBS,
-    #[error("{}", translate!("dd-error-status-not-recognized", "level" => .0))]
+    #[error("{}", translate!("dd-error-status-not-recognized", "level" => quote(.0)))]
     StatusLevelNotRecognized(String),
     #[error("{}", translate!("dd-error-unimplemented", "feature" => .0))]
     Unimplemented(String),
     #[error("{}", translate!("dd-error-bs-out-of-range", "param" => .0))]
     BsOutOfRange(String),
-    #[error("{}", translate!("dd-error-invalid-number", "input" => .0))]
+    #[error("{}", translate!("dd-error-invalid-number", "input" => shell_quote(.0)))]
     InvalidNumber(String),
-    #[error("invalid number: '{0}': {1}")]
+    #[error("invalid number: {}: {}", shell_quote(.0), .1)]
     InvalidNumberWithErrMsg(String, String),
 }
 

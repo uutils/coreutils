@@ -1394,6 +1394,49 @@ fn test_invalid_flag_arg_gnu_compatibility() {
     }
 }
 
+/// A value that would not survive being printed is spelled out instead, as
+/// GNU does, rather than sending the raw byte to the terminal.
+#[test]
+fn test_operand_value_is_quoted_like_gnu() {
+    // The choices GNU quotes plainly: single quotes with C escapes inside.
+    for (operand, message) in [
+        ("status=\u{1}", r"invalid status level: '\001'"),
+        ("status=a\tb", r"invalid status level: 'a\tb'"),
+        ("status=a'b", r"invalid status level: 'a\'b'"),
+        ("status=a\\b", r"invalid status level: 'a\\b'"),
+        ("status=a b", "invalid status level: 'a b'"),
+        ("iflag=\u{1}", r"invalid input flag: '\001'"),
+        ("oflag=\u{1}", r"invalid output flag: '\001'"),
+        ("conv=\u{1}", r"invalid conversion: '\001'"),
+    ] {
+        new_ucmd!().args(&[operand]).fails().usage_error(message);
+    }
+
+    // Numbers and operands take the shell syntax GNU uses for them, where an
+    // unprintable byte ends the quoted run rather than being escaped inside
+    // it, and a quote switches which quotes are used.
+    new_ucmd!()
+        .args(&["\u{1}=1"])
+        .fails()
+        .usage_error(r"unrecognized operand ''$'\001''=1'");
+
+    new_ucmd!()
+        .args(&["bs=\u{1}"])
+        .fails()
+        .stderr_is("dd: invalid number: ''$'\\001'\n");
+
+    new_ucmd!()
+        .args(&["bs=a'b"])
+        .fails()
+        .stderr_is("dd: invalid number: \"a'b\"\n");
+
+    // An ordinary value is quoted too, which is what it already was.
+    new_ucmd!()
+        .args(&["bs=29d"])
+        .fails()
+        .stderr_is("dd: invalid number: '29d'\n");
+}
+
 #[test]
 fn test_invalid_file_arg_gnu_compatibility() {
     new_ucmd!()
