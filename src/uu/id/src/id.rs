@@ -36,6 +36,7 @@
 use clap::{Arg, ArgAction, Command};
 use core::ffi::CStr;
 use std::io::{self, Write};
+use std::sync::LazyLock;
 use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::error::UResult;
@@ -737,10 +738,7 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
     )?;
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-    if state.selinux_supported
-        && !state.user_specified
-        && std::env::var_os("POSIXLY_CORRECT").is_none()
-    {
+    if state.selinux_supported && !state.user_specified && !*IS_POSIXLY_CORRECT {
         // print SElinux context (does not depend on "-Z")
         if let Ok(context) = selinux::SecurityContext::current(false) {
             let bytes = context.as_bytes();
@@ -749,10 +747,7 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
     }
 
     #[cfg(all(feature = "smack", target_os = "linux"))]
-    if state.smack_supported
-        && !state.user_specified
-        && std::env::var_os("POSIXLY_CORRECT").is_none()
-    {
+    if state.smack_supported && !state.user_specified && !*IS_POSIXLY_CORRECT {
         // print SMACK label (does not depend on "-Z")
         if let Ok(label) = uucore::smack::get_smack_label_for_self() {
             write!(lock, " context={label}")?;
@@ -761,6 +756,9 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
 
     Ok(())
 }
+
+static IS_POSIXLY_CORRECT: LazyLock<bool> =
+    LazyLock::new(|| std::env::var_os("POSIXLY_CORRECT").is_some());
 
 #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "openbsd")))]
 mod audit {
