@@ -9781,3 +9781,15 @@ fn test_progressbar_inexistent_source() {
         .fails_with_code(1)
         .stderr_contains("cp: cannot stat 'inexistent1': No such file or directory");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
+fn test_cp_sparse_always_to_non_truncatable() {
+    // The sparse paths use ftruncate. Fallback to normal copy when target is not truncatable e.g. `/dev/null`.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("src.txt", "hello world\n");
+    ucmd.args(&["--sparse=always", "src.txt", "/dev/null"])
+        .succeeds()
+        .no_stderr();
+}
