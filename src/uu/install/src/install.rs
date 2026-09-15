@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (ToDO) rwxr sourcepath targetpath Isnt uioerror matchpathcon
 
+#![cfg(unix)]
+
 mod mode;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
@@ -16,6 +18,8 @@ use std::fmt::Debug;
 use std::fs::{self, metadata};
 use std::fs::{File, OpenOptions};
 use std::io::{Write, stdout};
+use std::os::unix::fs::MetadataExt;
+use std::os::unix::prelude::OsStrExt;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process;
 use thiserror::Error;
@@ -26,7 +30,7 @@ use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
 use uucore::fs::{are_files_identical, dir_strip_dot_for_creation};
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
-#[cfg(unix)]
+#[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
 use uucore::safe_traversal::{DirFd, SymlinkBehavior, create_dir_all_safe};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::{
@@ -35,11 +39,6 @@ use uucore::selinux::{
 };
 use uucore::translate;
 use uucore::{format_usage, show, show_error, show_if_err};
-
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
-#[cfg(unix)]
-use std::os::unix::prelude::OsStrExt;
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
@@ -581,18 +580,9 @@ fn is_valid_target(path: &Path) -> bool {
 ///
 /// Returns true, if one of the conditions above is met; else false.
 ///
-#[cfg(unix)]
 fn is_potential_directory_path(path: &Path) -> bool {
     let separator = MAIN_SEPARATOR as u8;
     path.as_os_str().as_bytes().last() == Some(&separator) || path.is_dir()
-}
-
-#[cfg(not(unix))]
-fn is_potential_directory_path(path: &Path) -> bool {
-    matches!(
-        path.as_os_str().as_encoded_bytes().last(),
-        Some(b'/') | Some(b'\\')
-    ) || path.is_dir()
 }
 
 /// Perform an install, given a list of paths and behavior.
@@ -637,9 +627,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
     let sources = &paths.iter().map(PathBuf::from).collect::<Vec<_>>();
 
-    #[cfg(unix)]
+    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
     let mut target_parent_fd: Option<DirFd> = None;
-    #[cfg(unix)]
+    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
     let mut target_filename: Option<OsString> = None;
 
     if b.create_leading {
@@ -659,6 +649,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         }
 
         if let Some(to_create) = to_create {
+            #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
             let to_create_original = to_create;
             let to_create_owned;
             let to_create = match uucore::os_str_as_bytes(to_create.as_os_str()) {
@@ -677,7 +668,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             let dir_exists = to_create.exists() && metadata(to_create).is_ok_and(|m| m.is_dir());
 
             if dir_exists {
-                #[cfg(unix)]
+                #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
                 if b.target_dir.is_none()
                     && sources.len() == 1
                     && !is_potential_directory_path(&target)
@@ -704,7 +695,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     }
                 }
 
-                #[cfg(unix)]
+                #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
                 {
                     // Use DEFAULT_MODE (0o755) for created directories - this matches GNU install
                     // behavior. The actual mode will be modified by umask at the kernel level.
@@ -747,7 +738,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                         }
                     }
                 }
-                #[cfg(not(unix))]
+                #[cfg(any(target_os = "aix", target_os = "hurd", target_os = "redox"))]
                 fs::create_dir_all(to_create)
                     .map_err(|e| InstallError::CreateDirFailed(to_create.to_path_buf(), e))?;
             }
@@ -780,7 +771,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         }
 
         if is_valid_target(&target) {
-            #[cfg(unix)]
+            #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
             if let (Some(ref parent_fd), Some(ref filename)) = (target_parent_fd, target_filename) {
                 if b.compare && !need_copy(source, &target, b) {
                     return Ok(());
@@ -803,7 +794,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             } else {
                 copy(source, &target, b)
             }
-            #[cfg(not(unix))]
+            #[cfg(any(target_os = "aix", target_os = "hurd", target_os = "redox"))]
             {
                 copy(source, &target, b)
             }
@@ -948,7 +939,7 @@ fn perform_backup(from: &Path, to: &Path, b: &Behavior) -> UResult<Option<PathBu
 /// be consolidated because they use fundamentally different APIs:
 /// - `copy_file_safe` uses fd-based `DirFd::open_file_at()` (openat syscall)
 /// - `copy_file` uses path-based `OpenOptions::new().create_new().open()`
-#[cfg(unix)]
+#[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
 fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsStr) -> UResult<()> {
     let from_meta = metadata(from)?;
 
