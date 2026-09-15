@@ -1953,7 +1953,6 @@ name = "uu_expr"
 version = "0.11.0"
 dependencies = [
  "clap",
- "fancy-regex",
  "fluent",
  "num-bigint",
  "num-traits",
@@ -2068,6 +2067,7 @@ dependencies = [
  "data-encoding-macro",
  "digest 0.11.3",
  "dunce",
+ "fancy-regex",
  "fluent",
  "fluent-syntax",
  "glob",
