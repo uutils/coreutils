@@ -12,5 +12,5 @@ rustflags = ["-C", "target-feature=+crt-static"]
 rustflags = ["-C", "target-feature=+crt-static"]
 
 [env]
-# aws-lc is used only for chesksum. Reduce binary size
+# aws-lc is used only for checksum. Reduce binary size
 AWS_LC_SYS_NO_JITTER_ENTROPY = "1"
