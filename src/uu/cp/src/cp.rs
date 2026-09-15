@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) copydir fiemap linkgs lstat nlink nlinks pathbuf reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
-// spell-checker:ignore RDONLY futimens utimensat
+// spell-checker:ignore RDONLY futimens utimensat unioned
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
