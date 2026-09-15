@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore winsize Openpty openpty xpixel ypixel ptyprocess
+
 #[cfg(unix)]
 use std::thread::sleep;
 use uutests::new_ucmd;
