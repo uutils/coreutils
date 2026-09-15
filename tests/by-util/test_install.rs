@@ -339,11 +339,26 @@ fn test_install_mode_failing() {
         .arg(dir)
         .arg(mode_arg)
         .fails()
-        .stderr_contains("Invalid mode string: invalid digit found in string");
+        .stderr_contains("invalid mode '999'");
 
     let dest_file = &format!("{dir}/{file}");
     assert!(at.file_exists(file));
     assert!(!at.file_exists(dest_file));
+}
+
+/// GNU says the same thing for any way `-m`'s mode can be malformed, and it
+/// is not the message chmod uses for the same failure: install's has no
+/// colon before the quoted mode, and no "Try --help" hint.
+#[test]
+fn test_install_invalid_mode_names_the_operand() {
+    // The mode is validated before install so much as looks for the source,
+    // so a nonexistent one does not confuse this with a different error.
+    for mode in ["999", "", "a", "u?rwx"] {
+        new_ucmd!()
+            .args(&["source_file", "dest", "--mode", mode])
+            .fails_with_code(1)
+            .stderr_only(format!("install: invalid mode '{mode}'\n"));
+    }
 }
 
 #[test]

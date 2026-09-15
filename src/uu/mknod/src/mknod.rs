@@ -155,8 +155,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let mode =
                 uucore::mode::parse_chmod(MODE_RW_UGO, str_mode, true, uucore::mode::get_umask())
                     .map_err(|err| {
-                    let message =
-                        translate!("mknod-error-invalid-mode", "error" => err.to_string());
+                    // Unlike `chmod`/`mkdir`/`install`, GNU does not name the
+                    // mode operand here at all, regardless of what went wrong
+                    // with it.
+                    let message = translate!("mknod-error-invalid-mode");
                     if let Some(args) = &diag_args
                         && err.render_mode_value(args, str_mode, 0, &message)
                     {

@@ -28,7 +28,7 @@ mknod-help-context = like -Z, or if CTX is specified then set the SELinux or SMA
 # Error messages
 mknod-error-fifo-no-major-minor = Fifos do not have major and minor device numbers.
 mknod-error-special-require-major-minor = Special files require major and minor device numbers.
-mknod-error-invalid-mode = invalid mode ({ $error })
+mknod-error-invalid-mode = invalid mode
 mknod-error-mode-permission-bits-only = mode must specify only file permission bits
 mknod-error-missing-device-type = missing device type
 mknod-error-invalid-device-type = invalid device type { $type }

@@ -83,6 +83,18 @@ fn test_create_one_fifo_already_exists() {
         .stderr_is("mkfifo: cannot create fifo 'abcdef': File exists\n");
 }
 
+/// Unlike `chmod`/`mkdir`/`install`, GNU does not name the mode operand at
+/// all here, regardless of what specifically was wrong with it.
+#[test]
+fn test_invalid_mode_is_not_named() {
+    for mode in ["999", "", "a", "u?rwx"] {
+        new_ucmd!()
+            .args(&["-m", mode, "probe"])
+            .fails_with_code(1)
+            .stderr_only("mkfifo: invalid mode\n");
+    }
+}
+
 #[test]
 fn test_create_fifo_with_mode_and_umask() {
     use uucore::fs::display_permissions;
