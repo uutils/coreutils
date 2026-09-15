@@ -2135,6 +2135,51 @@ fn test_tmp_files_deleted_on_sigint() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_tmp_files_are_private() {
+    use rustix::process::{Pid, Signal, kill_process};
+    use std::os::unix::fs::PermissionsExt as _;
+    use std::{fs::read_dir, time::Duration};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("scratch");
+    let input = (0..200_000)
+        .map(|i| (i * 7919 % 200_003).to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    at.write("unsorted.txt", &input);
+    // A one byte buffer forces `sort` to spill its chunks to disk immediately.
+    let child = ucmd
+        .args(&["unsorted.txt", "-S", "1", "-T", "scratch"])
+        .umask(0o002)
+        .run_no_wait();
+
+    let mut modes = Vec::new();
+    for i in 0..6 {
+        std::thread::sleep(Duration::from_millis(50 << i));
+        if let Some(dir) = read_dir(at.plus("scratch")).unwrap().flatten().next() {
+            modes = read_dir(dir.path())
+                .unwrap()
+                .flatten()
+                .map(|f| f.metadata().unwrap().permissions().mode() & 0o777)
+                .collect();
+            if !modes.is_empty() {
+                assert_eq!(dir.metadata().unwrap().permissions().mode() & 0o777, 0o700);
+                break;
+            }
+        }
+    }
+    assert!(!modes.is_empty(), "sort did not spill any chunk to disk");
+    assert!(
+        modes.iter().all(|&m| m == 0o600),
+        "chunks are readable: {modes:?}"
+    );
+
+    kill_process(Pid::from_raw(child.id() as i32).unwrap(), Signal::INT).unwrap();
+    child.wait().unwrap().code_is(2);
+}
+
+#[test]
 fn test_same_sort_mode_twice() {
     new_ucmd!().args(&["-k", "2n,2n", "empty.txt"]).succeeds();
 }

@@ -7,8 +7,13 @@
 use std::path::Path;
 #[cfg(not(any(target_os = "redox", target_os = "wasi")))]
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(unix)]
 use std::{
-    fs::File,
+    fs::Permissions,
+    os::unix::fs::{OpenOptionsExt, PermissionsExt},
+};
+use std::{
+    fs::{File, OpenOptions},
     path::PathBuf,
     sync::{Arc, LazyLock, Mutex},
 };
@@ -112,14 +117,17 @@ impl TmpDirWrapper {
     fn init_tmp_dir(&mut self) -> UResult<()> {
         assert!(self.temp_dir.is_none());
         assert_eq!(self.size, 0);
-        self.temp_dir = Some(
-            tempfile::Builder::new()
-                .prefix("uutils_sort")
-                .tempdir_in(&self.parent_path)
-                .map_err(|_| SortError::TmpFileCreationFailed {
-                    path: self.parent_path.clone(),
-                })?,
-        );
+        let mut builder = tempfile::Builder::new();
+        builder.prefix("uutils_sort");
+        // The chunks hold a copy of the input, so keep them out of reach of other
+        // users instead of relying on whatever umask the process inherited.
+        #[cfg(unix)]
+        builder.permissions(Permissions::from_mode(0o700));
+        self.temp_dir = Some(builder.tempdir_in(&self.parent_path).map_err(|_| {
+            SortError::TmpFileCreationFailed {
+                path: self.parent_path.clone(),
+            }
+        })?);
 
         let path = self.temp_dir.as_ref().unwrap().path().to_owned();
         let state = HANDLER_STATE.clone();
@@ -145,8 +153,16 @@ impl TmpDirWrapper {
         let file_name = self.size.to_string();
         self.size += 1;
         let path = self.temp_dir.as_ref().unwrap().path().join(file_name);
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        // Restrict the chunks too, so a directory whose mode is later relaxed
+        // doesn't expose them.
+        #[cfg(unix)]
+        options.mode(0o600);
         Ok((
-            File::create(&path).map_err(|error| SortError::OpenTmpFileFailed { error })?,
+            options
+                .open(&path)
+                .map_err(|error| SortError::OpenTmpFileFailed { error })?,
             path,
         ))
     }
