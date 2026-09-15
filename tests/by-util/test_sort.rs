@@ -2020,6 +2020,40 @@ fn test_output_is_input() {
 }
 
 #[test]
+fn test_output_file_is_truncated() {
+    // The output file is opened without O_TRUNC (so it can also be an input),
+    // then truncated before writing: no leftover bytes may survive the sort.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(
+        "shrinking",
+        "zzz-leftover-one\nzzz-leftover-two\nzzz-leftover-three\n",
+    );
+
+    ucmd.args(&["-o", "shrinking"])
+        .pipe_in("kiwi\napple\n")
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("shrinking"), "apple\nkiwi\n");
+}
+
+#[test]
+fn test_merge_output_file_is_truncated() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("pears", "damson\nquince\n");
+    at.write(
+        "merged",
+        "zzz-leftover-one\nzzz-leftover-two\nzzz-leftover-three\n",
+    );
+
+    ucmd.args(&["-m", "-o", "merged", "pears"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("merged"), "damson\nquince\n");
+}
+
+#[test]
 #[cfg(unix)]
 fn test_output_device() {
     new_ucmd!()
