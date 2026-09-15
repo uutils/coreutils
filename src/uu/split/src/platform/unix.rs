@@ -2,9 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+use crate::platform::Writer;
 use std::env;
 use std::ffi::{OsStr, OsString};
-use std::io::{BufWriter, Error, Result};
+use std::io::{Error, Result};
 use std::io::{ErrorKind, Write};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -19,7 +21,7 @@ use uucore::translate;
 ///
 /// We use a shell process (not directly calling a sub-process) so we can forward the name of the
 /// corresponding output file (xaa, xab, xac… ). This is the way it was implemented in GNU split.
-struct FilterWriter {
+pub struct FilterWriter {
     /// Running shell process
     shell_process: Child,
 }
@@ -131,7 +133,7 @@ pub fn instantiate_current_writer(
     input: &OsStr,
     filename: &OsStr,
     is_new: bool,
-) -> Result<BufWriter<Box<dyn Write>>> {
+) -> Result<Writer> {
     match filter {
         None => {
             let file = if is_new {
@@ -156,12 +158,12 @@ pub fn instantiate_current_writer(
 
                 file
             };
-            Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))
+            Ok(Writer::File(file))
         }
-        Some(filter_command) => Ok(BufWriter::new(Box::new(
+        Some(filter_command) => Ok(
             // spawn a shell command and write to it
-            FilterWriter::new(filter_command, filename)?,
-        ) as Box<dyn Write>)),
+            Writer::Filter(FilterWriter::new(filter_command, filename)?),
+        ),
     }
 }
 
@@ -176,7 +178,7 @@ fn create_or_truncate_output_file(input: &OsStr, filename: &OsStr) -> Result<std
             let file = std::fs::OpenOptions::new()
                 .write(true)
                 .open(Path::new(filename))
-                .map_err(|err| open_file_error(filename, err.kind()))?;
+                .map_err(|e| open_file_error(filename, e))?;
 
             if input_and_output_refer_to_same_file(input, &file) {
                 return Err(Error::other(
@@ -184,23 +186,19 @@ fn create_or_truncate_output_file(input: &OsStr, filename: &OsStr) -> Result<std
                 ));
             }
 
-            file.set_len(0)
-                .map_err(|err| open_file_error(filename, err.kind()))?;
-            Ok(file)
+            match file.set_len(0) {
+                // allow writing to symlink to nonseekable
+                Err(e) if e.kind() != ErrorKind::InvalidInput => Err(open_file_error(filename, e)),
+                _ => Ok(file),
+            }
         }
-        Err(e) => Err(open_file_error(filename, e.kind())),
+        Err(e) => Err(open_file_error(filename, e)),
     }
 }
 
-fn open_file_error(filename: &OsStr, kind: ErrorKind) -> Error {
-    match kind {
-        ErrorKind::IsADirectory => {
-            Error::other(translate!("split-error-is-a-directory", "dir" => filename.quote()))
-        }
-        _ => {
-            Error::other(translate!("split-error-unable-to-open-file", "file" => filename.quote()))
-        }
-    }
+fn open_file_error(filename: &OsStr, e: Error) -> Error {
+    let e = uucore::error::strip_errno(&e);
+    Error::other(format!("{}: {e}", filename.quote()))
 }
 
 fn input_and_output_refer_to_same_file(input: &OsStr, output: &std::fs::File) -> bool {

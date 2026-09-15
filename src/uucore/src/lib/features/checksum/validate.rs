@@ -18,7 +18,7 @@ use crate::checksum::{
     AlgoKind, BlakeLength, ChecksumError, HashLength, ReadingMode, ShaLength, SizedAlgoKind,
     digest_reader, parse_blake_length, unescape_filename,
 };
-use crate::error::{FromIo, UError, UIoError, UResult, USimpleError};
+use crate::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use crate::sum::{self, Blake2b, Blake3, DigestOutput};
 use crate::{
@@ -281,12 +281,13 @@ impl LineFormat {
         // find the next parenthesis  using byte search (not next whitespace) because openssl's
         // tagged format does not put a space before (filename)
 
-        let par_idx = rest.iter().position(|&b| b == b'(')?;
-        // If the parenthesis is the first character (minus whitespace, which has already been stripped out), then,
-        // it's not a validly formatted line.
-        if par_idx == 0 {
-            return None;
-        }
+        let par_idx = rest
+            .iter()
+            .position(|&b| b == b'(')
+            // If the parenthesis is the first character (minus whitespace, which has already been stripped out), then,
+            // it's not a validly formatted line.
+            .filter(|b| *b != 0)?;
+
         let sub_case = if rest[par_idx - 1] == b' ' {
             SubCase::Posix
         } else {
@@ -592,24 +593,24 @@ fn get_file_to_check(
 
 /// Returns a reader to the list of checksums
 fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
-    match File::open(filename) {
-        Ok(f) => {
-            if f.metadata()?.is_dir() {
-                Err(io::Error::other(
-                    translate!("error-is-a-directory", "file" => filename.maybe_quote()),
-                )
-                .into())
-            } else {
-                Ok(Box::new(f))
-            }
-        }
-        Err(_) => Err(io::Error::other(format!(
+    let file = File::open(filename).map_err(|e| match e.kind() {
+        #[cfg(any(target_os = "wasi", windows))]
+        io::ErrorKind::NotFound => io::Error::other(format!(
             "{}: {}",
             filename.maybe_quote(),
             translate!("error-file-not-found")
-        ))
-        .into()),
+        )),
+        _ => io::Error::other(format!("{}: {}", filename.maybe_quote(), strip_errno(&e))),
+    })?;
+    // some platforms shows different read error
+    #[cfg(any(target_os = "wasi", windows))]
+    if file.metadata().is_ok_and(|m| m.is_dir()) {
+        return Err(io::Error::other(
+            translate!("error-is-a-directory", "file" => filename.maybe_quote()),
+        )
+        .into());
     }
+    Ok(Box::new(file))
 }
 
 /// Gets the algorithm name and length from the `LineInfo` if the algo-based format is matched.
@@ -620,10 +621,8 @@ fn identify_algo_name_and_length(
 ) -> Result<(AlgoKind, Option<HashLength>), LineCheckError> {
     use AlgoKind as ak;
     let algo_from_line = line_info.algo_name.clone().unwrap_or_default();
-    let Ok(line_algo) = AlgoKind::from_cksum(algo_from_line.to_lowercase()) else {
-        // Unknown algorithm
-        return Err(LineCheckError::ImproperlyFormatted);
-    };
+    let line_algo = AlgoKind::from_cksum(algo_from_line.to_lowercase())
+        .map_err(|_| LineCheckError::ImproperlyFormatted)?;
     *last_algo = Some(algo_from_line);
 
     // check if we are called with XXXsum (example: md5sum) but we detected a
@@ -642,10 +641,9 @@ fn identify_algo_name_and_length(
     let hash_len = if let Some(bitlen) = line_info.algo_bit_len {
         match line_algo {
             algo @ (ak::Blake2b | ak::Blake3) => {
-                match parse_blake_length(algo, BlakeLength::Int(bitlen)) {
-                    Ok(len) => Some(len),
-                    Err(_) => return Err(LineCheckError::ImproperlyFormatted),
-                }
+                let len = parse_blake_length(algo, BlakeLength::Int(bitlen))
+                    .map_err(|_| LineCheckError::ImproperlyFormatted)?;
+                Some(len)
             }
             ak::Sha2 | ak::Sha3 if [224, 256, 384, 512].contains(&bitlen) => {
                 Some(HashLength::from_bits(bitlen))
@@ -687,27 +685,28 @@ fn compute_and_check_digest_from_file(
     let real_filename_to_check = os_str_from_bytes(&filename_to_check_unescaped)?;
 
     // Open the input file
-    let file_to_check = get_file_to_check(&real_filename_to_check, opts)?;
+    let file_to_check = get_file_to_check(real_filename_to_check, opts)?;
     let mut file_reader = BufReader::new(file_to_check);
 
     // Read the file and calculate the checksum
     let mut digest = algo.create_digest();
 
-    // Set binary to false because --binary is not supported with --check
-
+    // Hash the raw bytes, matching the generation path: as decided in #9168,
+    // the text/binary distinction is ignored when computing digests, so on
+    // Windows no CRLF -> LF conversion must happen here either.
     let (calculated_checksum, _) =
-        match digest_reader(&mut digest, &mut file_reader, ReadingMode::Text) {
+        match digest_reader(&mut digest, &mut file_reader, ReadingMode::Binary) {
             Ok(result) => result,
             Err(err) => {
                 show!(err.map_err_context(|| {
-                    locale_aware_escape_name(&real_filename_to_check, QuotingStyle::SHELL_ESCAPE)
+                    locale_aware_escape_name(real_filename_to_check, QuotingStyle::SHELL_ESCAPE)
                         .to_string_lossy()
                         .to_string()
                 }));
 
                 let _ = write_file_report(
                     io::stdout(),
-                    &real_filename_to_check,
+                    real_filename_to_check,
                     FileChecksumResult::CantOpen,
                     opts.verbose,
                 );
@@ -723,7 +722,7 @@ fn compute_and_check_digest_from_file(
     };
     let _ = write_file_report(
         io::stdout(),
-        &real_filename_to_check,
+        real_filename_to_check,
         FileChecksumResult::from_bool(checksum_correct),
         opts.verbose,
     );
@@ -833,9 +832,8 @@ fn process_checksum_line(
 
     // Use `LineInfo` to extract the data of a line.
     // Then, depending on its format, apply a different pre-treatment.
-    let Some(line_info) = LineInfo::parse(line, cached_line_format) else {
-        return Err(LineCheckError::ImproperlyFormatted);
-    };
+    let line_info =
+        LineInfo::parse(line, cached_line_format).ok_or(LineCheckError::ImproperlyFormatted)?;
 
     if line_info.format == LineFormat::AlgoBased {
         process_algo_based_line(&line_info, cli_algo_name, opts, last_algo)
@@ -886,11 +884,8 @@ fn process_checksum_file(
     let mut last_algo = None;
 
     for (i, line_res) in read_os_string_lines(reader).enumerate() {
-        let line = line_res.map_err(|e| {
-            USimpleError::new(
-                UIoError::from(e).code(),
-                format!("{}: read error", filename_input.maybe_quote()),
-            )
+        let line = line_res.map_err(|_| {
+            USimpleError::new(1, format!("{}: read error", filename_input.maybe_quote()))
         })?;
 
         let line_result = process_checksum_line(
@@ -951,9 +946,7 @@ fn process_checksum_file(
     // not a single line correctly formatted found
     // return an error
     if res.total_properly_formatted() == 0 {
-        if opts.verbose.over_status() {
-            log_no_properly_formatted(filename_display());
-        }
+        log_no_properly_formatted(filename_display());
         return Err(FileCheckError::Failed);
     }
 
@@ -1290,6 +1283,8 @@ mod tests {
                 FileChecksumResult::CantOpen,
                 b"filename: FAILED open or read\n",
             ),
+            // A non-UTF-8 OsString cannot be built from bytes on Windows.
+            #[cfg(unix)]
             (
                 #[allow(clippy::unwrap_used, reason = "deterministic unwrap does not fail")]
                 os_str_from_bytes(b"funky\xffname").unwrap().to_os_string(),

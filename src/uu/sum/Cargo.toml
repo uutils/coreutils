@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/sum.rs"
 test = false
@@ -21,9 +18,14 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-rustix = { workspace = true }
 uucore = { workspace = true }
 fluent = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "sum"

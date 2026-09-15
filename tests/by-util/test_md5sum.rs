@@ -53,6 +53,22 @@ macro_rules! test_digest {
             }
 
             #[test]
+            fn test_stdin_with_dash_directory() {
+                let ts = TestScenario::new(util_name!());
+                ts.fixtures.mkdir("-");
+                assert_eq!(
+                    ts.fixtures.read(EXPECTED_FILE),
+                    get_hash!(
+                        ts.ucmd()
+                            .pipe_in_fixture(INPUT_FILE)
+                            .succeeds()
+                            .no_stderr()
+                            .stdout_str()
+                    )
+                );
+            }
+
+            #[test]
             fn test_check() {
                 let ts = TestScenario::new(util_name!());
                 println!("File content='{}'", ts.fixtures.read(INPUT_FILE));
@@ -210,6 +226,26 @@ fn test_check_md5sum_only_one_space() {
         .stdout_only("a: OK\n' b': OK\nc: OK\n");
 }
 
+// A generated checksum file must verify against the same file on all
+// platforms: generation and --check both hash raw bytes, so on Windows a file
+// containing CRLFs must not be hashed with CRLF -> LF conversion in check mode.
+#[test]
+fn test_check_generate_round_trip_crlf_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write_bytes("f", b"abc\r\nd\r");
+    let result = scene.ccmd("md5sum").arg("f").succeeds();
+    at.write_bytes("CHECKSUM", result.stdout());
+
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg("CHECKSUM")
+        .succeeds()
+        .stdout_only("f: OK\n");
+}
+
 #[test]
 fn test_check_md5sum_reverse_bsd() {
     let scene = TestScenario::new(util_name!());
@@ -306,6 +342,31 @@ fn test_conflicting_arg() {
 }
 
 #[test]
+#[cfg(windows)]
+fn test_windows_path_separator_round_trip() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("subdir");
+    scene.fixtures.write("subdir/file.txt", "abc");
+
+    let result = scene
+        .ucmd()
+        .args(&["--text", "subdir\\file.txt"])
+        .succeeds();
+
+    result
+        .no_stderr()
+        .stdout_is("900150983cd24fb0d6963f7d28e17f72  subdir/file.txt\n");
+
+    scene
+        .ucmd()
+        .args(&["--check", "--strict"])
+        .pipe_in(result.stdout_str())
+        .succeeds()
+        .no_stderr()
+        .stdout_is("subdir/file.txt: OK\n");
+}
+
+#[test]
 #[cfg_attr(windows, ignore = "Disabled on windows")]
 fn test_with_escape_filename() {
     let scene = TestScenario::new(util_name!());
@@ -356,6 +417,17 @@ fn test_check_empty_line() {
         .arg(at.subdir.join("in.md5"))
         .succeeds()
         .stderr_contains("WARNING: 1 line is improperly formatted");
+}
+
+#[test]
+#[cfg(windows)]
+fn test_check_invalid_utf8_reports_read_error() {
+    new_ucmd!()
+        .args(&["--check", "-"])
+        .pipe_in(b"invalid\xff\n")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("md5sum: -: read error\n");
 }
 
 #[test]
@@ -459,6 +531,18 @@ fn test_check_status_code() {
         .arg(at.subdir.join("in.md5"))
         .fails()
         .no_output();
+}
+
+#[test]
+fn test_check_status_reports_malformed_input() {
+    // --status should still print "no properly formatted checksum lines found"
+    // when all input lines are invalid (issue #12867)
+    new_ucmd!()
+        .args(&["-c", "--status"])
+        .pipe_in("I'mNotAHash\n")
+        .fails()
+        .no_stdout()
+        .stderr_contains("no properly formatted checksum lines found");
 }
 
 #[test]

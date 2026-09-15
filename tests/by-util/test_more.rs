@@ -79,6 +79,10 @@ fn test_valid_arg() {
         &["--from-line", "0"],
         &["-P", "something"],
         &["--pattern", "-1"],
+        &["-f"],
+        &["--logical"],
+        &["-l"],
+        &["--no-pause"],
     ];
     for args in args_list {
         test_alive(args);
@@ -252,5 +256,17 @@ fn test_from_line_option() {
         run_more_with_pty(&["-F", "2"], "test.txt", "line1\nline2\nline3\nline4\n");
     assert!(output.contains("line2"));
     assert!(!output.contains("line1"));
+    quit_more(&mut controller, child);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_lines_option_max_u16_no_overflow() {
+    // Regression test for https://github.com/uutils/coreutils/pull/12970
+    // When -n is u16::MAX (65535), adding 1 for the banner line used to
+    // overflow. Verify that more starts and displays content without crashing.
+    let (child, mut controller, output) =
+        run_more_with_pty(&["-n", "65535"], "test.txt", "line1\nline2\nline3\n");
+    assert!(output.contains("line1"));
     quit_more(&mut controller, child);
 }

@@ -4,6 +4,7 @@ doctest
 
 # * crates
 aho-corasick
+ariadne
 blake2b_simd
 rustix
 
@@ -43,7 +44,6 @@ lscolors
 mdbook
 memchr
 multifilereader
-onig
 ouroboros
 peekreader
 quickcheck
@@ -83,6 +83,7 @@ powi
 println
 repr
 rfind
+rsplit
 struct
 structs
 substr
@@ -133,6 +134,7 @@ EBADF
 EBUSY
 EEXIST
 EINVAL
+EISDIR
 ENODATA
 ENOENT
 ENOSPC
@@ -360,8 +362,10 @@ uutests
 uutils
 
 # * function names
+sendfile
 execfn
 fadvise
+ficlone
 fstatfs
 getcwd
 mkfifoat
@@ -369,11 +373,14 @@ setpipe
 
 # * other
 auxv
+btrfs
 getlimits
 weblate
 algs
 wasm
 wasip
+statx
+Statx
 
 # * stty terminal flags
 brkint

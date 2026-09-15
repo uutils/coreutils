@@ -20,7 +20,6 @@ use std::cell::RefCell;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::{
     cell::OnceCell,
-    cmp::Reverse,
     ffi::{OsStr, OsString},
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
     io::{BufWriter, ErrorKind, Stdout, Write, stdout},
@@ -34,7 +33,7 @@ use thiserror::Error;
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::{
     display::Quotable,
-    error::{UError, UResult, set_exit_code},
+    error::{UError, UResult, set_exit_code, strip_errno},
     format_usage,
     fs::FileInformation,
     fsext::metadata_get_time,
@@ -68,6 +67,9 @@ enum LsError {
     #[error("{}", translate!("ls-error-general-io", "error" => _0))]
     IOError(#[from] std::io::Error),
 
+    #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
+    WriteError(std::io::Error),
+
     #[error("{}", match .1.kind() {
 		ErrorKind::NotADirectory => translate!("ls-error-not-directory", "path" => .0.quote()),
         ErrorKind::NotFound => translate!("ls-error-cannot-access-no-such-file", "path" => .0.quote()),
@@ -90,6 +92,9 @@ enum LsError {
     #[error("{}", translate!("ls-error-invalid-block-size", "size" => format!("'{_0}'")))]
     BlockSizeParseError(String),
 
+    #[error("{}", translate!("ls-error-invalid-tab-size", "size" => .0.quote()))]
+    InvalidTabSize(String),
+
     #[error("{}", translate!("ls-error-dired-and-zero-incompatible"))]
     DiredAndZeroAreIncompatible,
 
@@ -103,23 +108,25 @@ enum LsError {
 impl UError for LsError {
     fn code(&self) -> i32 {
         match self {
-            Self::InvalidLineWidth(_) => 2,
-            Self::IOError(_) => 1,
-            Self::IOErrorContext(_, _, false) => 1,
-            Self::IOErrorContext(_, _, true) => 2,
-            Self::BlockSizeParseError(_) => 2,
-            Self::DiredAndZeroAreIncompatible => 2,
-            Self::AlreadyListedError(_) => 2,
-            Self::TimeStyleParseError(_) => 2,
+            Self::IOError(_) | Self::IOErrorContext(_, _, false) => 1,
+            _ => 2,
         }
     }
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
+    // The arguments are kept for the caret in SIZE diagnostics, which echoes
+    // the command line.
+    let (matches, diag_args) = uucore::clap_localization::handle_clap_result_with_diagnostics(
+        uu_app(),
+        args.collect(),
+        2,
+    )?;
 
-    let config = Config::from(&matches)?;
+    uucore::i18n::collator::init_locale_collation();
+
+    let config = Config::from(&matches, diag_args.as_deref())?;
 
     let locs = matches
         .get_many::<OsString>(options::PATHS)
@@ -160,7 +167,6 @@ pub fn uu_app() -> Command {
                 "commas",
             ]))
             .hide_possible_values(true)
-            .require_equals(true)
             .overrides_with_all([
                 options::FORMAT,
                 options::format::COLUMNS,
@@ -385,7 +391,6 @@ pub fn uu_app() -> Command {
                 PossibleValue::new("birth").alias("creation"),
             ]))
             .hide_possible_values(true)
-            .require_equals(true)
             .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE]),
     )
     .arg(
@@ -440,7 +445,6 @@ pub fn uu_app() -> Command {
                 "extension",
                 "width",
             ]))
-            .require_equals(true)
             .overrides_with_all([
                 options::SORT,
                 options::sort::SIZE,
@@ -627,7 +631,6 @@ pub fn uu_app() -> Command {
     .arg(
         Arg::new(options::size::BLOCK_SIZE)
             .long(options::size::BLOCK_SIZE)
-            .require_equals(true)
             .value_name("BLOCK_SIZE")
             .help(translate!("ls-help-block-size"))
             .overrides_with_all([options::size::SI, options::size::HUMAN_READABLE]),
@@ -861,19 +864,13 @@ impl<'a> PathData<'a> {
         let must_dereference = match &config.dereference {
             Dereference::All => true,
             Dereference::Args => command_line,
-            Dereference::DirArgs => {
-                if command_line {
-                    if let Ok(md) = p_buf.metadata() {
-                        md.is_dir()
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                }
-            }
+            Dereference::DirArgs => command_line && p_buf.metadata().is_ok_and(|m| m.is_dir()),
             Dereference::None => false,
         };
+
+        // `.`, `..`, `/` and trailing `..` denote the directory itself, not a symlink: on
+        // Windows/Redox `ls -l` in a symlinked dir would otherwise print `. -> target` (#6467, #7873).
+        let must_dereference = must_dereference || (command_line && p_buf.file_name().is_none());
 
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
@@ -882,11 +879,9 @@ impl<'a> PathData<'a> {
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
         let de: RefCell<Option<DirEntry>> = if let Some(de) = dir_entry {
-            if must_dereference {
-                if let Ok(md_pb) = p_buf.metadata() {
-                    ft.get_or_init(|| Some(md_pb.file_type()));
-                    md.get_or_init(|| Some(md_pb));
-                }
+            if must_dereference && let Ok(md_pb) = p_buf.metadata() {
+                ft.get_or_init(|| Some(md_pb.file_type()));
+                md.get_or_init(|| Some(md_pb));
             }
 
             if let Ok(ft_de) = de.file_type() {
@@ -914,10 +909,10 @@ impl<'a> PathData<'a> {
     fn metadata(&self) -> Option<&Metadata> {
         self.md
             .get_or_init(|| {
-                if !self.must_dereference {
-                    if let Some(dir_entry) = RefCell::take(&self.de) {
-                        return dir_entry.metadata().ok();
-                    }
+                if !self.must_dereference
+                    && let Some(dir_entry) = RefCell::take(&self.de)
+                {
+                    return dir_entry.metadata().ok();
                 }
 
                 match get_metadata_with_deref_opt(self.path(), self.must_dereference) {
@@ -930,10 +925,11 @@ impl<'a> PathData<'a> {
                         // but GNU will not throw an error until a bad fd "dir"
                         // is entered, here we match that GNU behavior, by handing
                         // back the non-dereferenced metadata upon an EBADF
-                        if self.must_dereference && errno == 9i32 {
-                            if let Ok(file) = self.path().read_link() {
-                                return file.symlink_metadata().ok();
-                            }
+                        if self.must_dereference
+                            && errno == 9i32
+                            && let Ok(file) = self.path().read_link()
+                        {
+                            return file.symlink_metadata().ok();
                         }
                         show!(LsError::IOErrorContext(
                             self.path().to_path_buf(),
@@ -1119,7 +1115,7 @@ impl LsOutput for TextOutput<'_> {
     }
 
     fn flush(&mut self) -> UResult<()> {
-        self.state.out.flush()?;
+        self.state.out.flush().map_err(LsError::WriteError)?;
         Ok(())
     }
 
@@ -1130,11 +1126,19 @@ impl LsOutput for TextOutput<'_> {
         Ok(())
     }
 
-    fn initialize(&mut self, _config: &Config) -> UResult<()> {
-        if let Some(style_manager) = self.state.style_manager.as_mut() {
-            if style_manager.get_normal_style().is_some() {
-                let to_write = style_manager.reset(true);
-                write!(self.state.out, "{to_write}")?;
+    fn initialize(&mut self, config: &Config) -> UResult<()> {
+        if let Some(style_manager) = self
+            .state
+            .style_manager
+            .as_mut()
+            .filter(|s| s.get_normal_style().is_some())
+        {
+            let to_write = style_manager.reset(true);
+            write!(self.state.out, "{to_write}")?;
+            if config.dired {
+                // This reset is written before any listing, so the --dired
+                // offsets have to start after it.
+                self.dired.line_offset += to_write.len();
             }
         }
         Ok(())
@@ -1159,7 +1163,7 @@ impl LsOutput for TextOutput<'_> {
 /// use uu_ls::{Config, list_with_output, StreamingOutput};
 /// use std::path::Path;
 ///
-/// let config = Config::from(&matches)?;
+/// let config = Config::from(&matches, None)?;
 /// let mut output = StreamingOutput::new();
 /// list_with_output(vec![Path::new(".")], &config, &mut output)?;
 ///
@@ -1242,11 +1246,15 @@ pub fn list_with_output<O: LsOutput>(
             output.write_dir_header(path_data, config, is_first)?;
         }
 
+        // Only recursion can revisit a directory, so only then is it worth a
+        // stat to remember this one; without -R the set is never consulted.
         let mut listed_ancestors = FxHashSet::default();
-        listed_ancestors.insert(FileInformation::from_path(
-            path_data.path(),
-            path_data.must_dereference,
-        )?);
+        if config.recursive {
+            listed_ancestors.insert(FileInformation::from_path(
+                path_data.path(),
+                path_data.must_dereference,
+            )?);
+        }
         enter_directory(
             path_data,
             read_dir,
@@ -1258,6 +1266,7 @@ pub fn list_with_output<O: LsOutput>(
     }
 
     output.finalize(config)?;
+    output.flush()?;
     Ok(())
 }
 
@@ -1472,13 +1481,30 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
 }
 
 fn sort_entries(entries: &mut [PathData], config: &Config) {
-    match config.sort {
-        Sort::Time => entries.sort_unstable_by_key(|k| {
-            Reverse(
-                k.metadata()
-                    .and_then(|md| metadata_get_time(md, config.time))
-                    .unwrap_or(UNIX_EPOCH),
+    // The order the name sort uses. Sorting by time falls back on it so that
+    // entries sharing a timestamp come out in a fixed order rather than in
+    // whatever order the directory was read in, which is what GNU ls does and
+    // what every other arm of this match already does.
+    let use_locale = uucore::i18n::collator::should_use_locale_collation();
+    let name_cmp = |a: &PathData, b: &PathData| {
+        if use_locale {
+            uucore::i18n::collator::locale_cmp(
+                os_str_as_bytes_lossy(a.display_name()).as_ref(),
+                os_str_as_bytes_lossy(b.display_name()).as_ref(),
             )
+        } else {
+            a.display_name().cmp(b.display_name())
+        }
+    };
+
+    match config.sort {
+        Sort::Time => entries.sort_unstable_by(|a, b| {
+            let time = |p: &PathData| {
+                p.metadata()
+                    .and_then(|md| metadata_get_time(md, config.time))
+                    .unwrap_or(UNIX_EPOCH)
+            };
+            time(b).cmp(&time(a)).then_with(|| name_cmp(a, b))
         }),
         Sort::Size => {
             entries.sort_unstable_by(|a, b| {
@@ -1489,7 +1515,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             });
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_unstable_by(|a, b| a.display_name().cmp(b.display_name())),
+        Sort::Name => entries.sort_unstable_by(name_cmp),
         Sort::Version => entries.sort_unstable_by(|a, b| {
             version_cmp(
                 os_str_as_bytes_lossy(a.file_name()).as_ref(),
@@ -1597,16 +1623,14 @@ fn get_security_context<'a>(
     // If we must dereference, ensure that the symlink is actually valid even if the system
     // does not support SELinux.
     // Conforms to the GNU coreutils where a dangling symlink results in exit code 1.
-    if must_dereference {
-        if let Err(err) = get_metadata_with_deref_opt(path, must_dereference) {
-            // The Path couldn't be dereferenced, so return early and set exit code 1
-            // to indicate a minor error
-            // Only show error when context display is requested to avoid duplicate messages
-            if config.context {
-                show!(LsError::IOErrorContext(path.to_path_buf(), err, false));
-            }
-            return Cow::Borrowed(SUBSTITUTE_STRING);
+    if must_dereference && let Err(err) = get_metadata_with_deref_opt(path, must_dereference) {
+        // The Path couldn't be dereferenced, so return early and set exit code 1
+        // to indicate a minor error
+        // Only show error when context display is requested to avoid duplicate messages
+        if config.context {
+            show!(LsError::IOErrorContext(path.to_path_buf(), err, false));
         }
+        return Cow::Borrowed(SUBSTITUTE_STRING);
     }
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]

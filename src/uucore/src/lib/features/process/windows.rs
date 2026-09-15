@@ -1,0 +1,1046 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+// spell-checker:ignore (win-api) WAITABLE Waitable PHANDLER unsignaled JOBOBJECT
+// spell-checker:ignore (signals) CHLD TSTP TTIN TTOU WINCH ESRCH
+// spell-checker:ignore catchable targetable wakeup unreaped pids LUID luid
+
+//! Windows emulation of POSIX signal delivery, for child processes, arbitrary
+//! pids ([`send_signal_to_pid`]) and the caller's own process group
+//! ([`send_signal_to_own_group`]).
+//!
+//! Windows has no signals, so this module emulates the POSIX default
+//! dispositions with native primitives: signal numbers follow the Linux
+//! layout (matching `uucore::signals::ALL_SIGNALS`), "terminate" signals
+//! force-exit with exit code `128 + n`, and `INT`/`QUIT` map to a
+//! `CTRL_BREAK_EVENT` on a console process group. [`Job`] gives process-tree
+//! termination, [`send_signal_to_own_group`] uses the job the caller runs in
+//! as the stand-in for a process group, and
+//! [`enable_ctrl_forwarding`]/[`take_last_ctrl_signal`] surface console
+//! control events (Ctrl-C, Ctrl-Break, close) as POSIX signal numbers for
+//! forwarding. All raw Win32 calls live in the safe [`sys`] wrappers.
+
+use std::io;
+use std::os::windows::io::{AsHandle, BorrowedHandle, OwnedHandle};
+use std::process::{Child, Command};
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicI32, Ordering};
+use std::time::Duration;
+
+use windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED;
+use windows_sys::Win32::System::Console::{CTRL_BREAK_EVENT, CTRL_C_EVENT, CTRL_CLOSE_EVENT};
+use windows_sys::Win32::System::Threading::{
+    CREATE_NEW_PROCESS_GROUP, INFINITE, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
+};
+use windows_sys::core::BOOL;
+
+use super::{ChildExt, TimeoutRet};
+use crate::translate;
+
+/// Safe wrappers around the raw Win32 calls used for process control: each
+/// validates results into [`io::Error`] and takes
+/// [`BorrowedHandle`]/[`OwnedHandle`] so callers never touch raw `HANDLE`s.
+pub mod sys {
+    use std::io;
+    use std::mem::offset_of;
+    use std::os::windows::io::{
+        AsRawHandle, BorrowedHandle, FromRawHandle, HandleOrNull, OwnedHandle,
+    };
+
+    use windows_sys::Win32::Foundation::{
+        ERROR_INVALID_PARAMETER, ERROR_MORE_DATA, FALSE, HANDLE, LUID, TRUE, WAIT_FAILED,
+        WAIT_OBJECT_0, WAIT_TIMEOUT,
+    };
+    use windows_sys::Win32::Security::{
+        AdjustTokenPrivileges, LUID_AND_ATTRIBUTES, LookupPrivilegeValueW, SE_DEBUG_NAME,
+        SE_PRIVILEGE_ENABLED, TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES,
+    };
+    use windows_sys::Win32::System::Console::{
+        GenerateConsoleCtrlEvent, PHANDLER_ROUTINE, SetConsoleCtrlHandler,
+    };
+    use windows_sys::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, IsProcessInJob,
+        JOBOBJECT_BASIC_PROCESS_ID_LIST, JobObjectBasicProcessIdList, QueryInformationJobObject,
+        TerminateJobObject,
+    };
+    use windows_sys::Win32::System::Threading::{
+        CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, CreateEventW, CreateWaitableTimerExW,
+        GetCurrentProcess, OpenProcess, OpenProcessToken, ResetEvent, SetEvent, SetWaitableTimer,
+        TIMER_ALL_ACCESS, TerminateProcess, WaitForMultipleObjects, WaitForSingleObject,
+    };
+    use windows_sys::core::BOOL;
+
+    /// The outcome of a successful bounded wait.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum WaitOutcome {
+        /// The object at this index in the wait set became signaled.
+        Object(u32),
+        /// The wait interval elapsed first.
+        TimedOut,
+    }
+
+    /// The outcome of listing the processes assigned to a job.
+    #[derive(Debug)]
+    pub enum JobProcessIds {
+        Complete(Vec<u32>),
+        Truncated,
+    }
+
+    /// Convert a Win32 `BOOL` result into an [`io::Result`]: zero (`FALSE`)
+    /// becomes the error from `GetLastError`.
+    fn cvt(result: BOOL) -> io::Result<()> {
+        if result == 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Take ownership of a `HANDLE` from a Win32 create-function, treating
+    /// null as failure.
+    ///
+    /// # Safety
+    ///
+    /// `raw` must be either null or a valid handle exclusively owned by the
+    /// caller (i.e. freshly returned by a Win32 function that transfers
+    /// ownership).
+    unsafe fn cvt_created_handle(raw: HANDLE) -> io::Result<OwnedHandle> {
+        // SAFETY: per this function's contract, `raw` is null or owned.
+        OwnedHandle::try_from(unsafe { HandleOrNull::from_raw_handle(raw) })
+            .map_err(|_| io::Error::last_os_error())
+    }
+
+    /// Create an anonymous job object.
+    pub fn create_job_object() -> io::Result<OwnedHandle> {
+        // SAFETY: null attributes and name are documented as valid; the
+        // returned handle is owned by us.
+        unsafe { cvt_created_handle(CreateJobObjectW(std::ptr::null(), std::ptr::null())) }
+    }
+
+    /// Assign the process behind `process` to the job behind `job`.
+    pub fn assign_process_to_job(job: BorrowedHandle, process: BorrowedHandle) -> io::Result<()> {
+        // SAFETY: both handles are valid for the duration of the call by
+        // construction of `BorrowedHandle`.
+        cvt(unsafe {
+            AssignProcessToJobObject(job.as_raw_handle() as HANDLE, process.as_raw_handle())
+        })
+    }
+
+    /// Terminate every process in the job with the given exit code.
+    pub fn terminate_job_object(job: BorrowedHandle, exit_code: u32) -> io::Result<()> {
+        // SAFETY: the job handle is valid for the duration of the call.
+        cvt(unsafe { TerminateJobObject(job.as_raw_handle() as HANDLE, exit_code) })
+    }
+
+    /// One slot on 64-bit, two on 32-bit.
+    const PID_LIST_HEADER_SLOTS: usize =
+        offset_of!(JOBOBJECT_BASIC_PROCESS_ID_LIST, ProcessIdList) / size_of::<usize>();
+
+    // `ProcessIdList` is a variable-length trailing array, so its buffers are
+    // allocated as `usize` slices: aligned for the struct by construction, and
+    // readable with bounds-checked indexing rather than pointer arithmetic.
+    // A target where that stops holding is a compile error, not run-time UB.
+    const _: () = assert!(
+        align_of::<JOBOBJECT_BASIC_PROCESS_ID_LIST>() == align_of::<usize>()
+            && offset_of!(JOBOBJECT_BASIC_PROCESS_ID_LIST, ProcessIdList) % size_of::<usize>() == 0
+    );
+
+    /// Whether the calling process runs inside any job object.
+    ///
+    /// A null job handle asks "in *a* job", not "in *this* job". Needed
+    /// because the code a job-less caller gets from
+    /// [`query_job_process_ids`] is undocumented.
+    pub fn is_process_in_job() -> io::Result<bool> {
+        let mut in_job: BOOL = FALSE;
+        // SAFETY: the current-process pseudo-handle is always valid, a null
+        // job handle is documented as "any job", and `in_job` is an out-param
+        // valid for the duration of the call.
+        cvt(unsafe { IsProcessInJob(GetCurrentProcess(), std::ptr::null_mut(), &raw mut in_job) })?;
+        Ok(in_job != FALSE)
+    }
+
+    /// List the processes assigned to `job`, with room for `capacity` of them;
+    /// `None` means the job the calling process itself belongs to.
+    ///
+    /// `None` is the only way to reach one's own job — a process cannot open a
+    /// handle to it — and it addresses the immediate job when jobs are nested,
+    /// whose list still covers that job's child jobs. It fails when the caller
+    /// is in no job at all, so check [`is_process_in_job`] first. Truncation
+    /// reports nothing but the fact: the counts and returned length are all
+    /// zero on that path on some Windows 10 builds, so only the caller can
+    /// pick a retry size.
+    pub fn query_job_process_ids(
+        job: Option<BorrowedHandle>,
+        capacity: usize,
+    ) -> io::Result<JobProcessIds> {
+        // `max(1)` keeps the buffer at least one whole struct wide.
+        let mut buffer = vec![0usize; PID_LIST_HEADER_SLOTS + capacity.max(1)];
+        let length = u32::try_from(buffer.len() * size_of::<usize>())
+            .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
+        let job = job.map_or(std::ptr::null_mut(), |job| job.as_raw_handle());
+        // SAFETY: `job` is null or a valid handle for the duration of the
+        // call; `buffer` is a live `usize` allocation of exactly `length`
+        // bytes, so it is aligned for the struct and as large as we claim; a
+        // null return-length pointer is documented as valid.
+        let result = unsafe {
+            QueryInformationJobObject(
+                job,
+                JobObjectBasicProcessIdList,
+                buffer.as_mut_ptr().cast(),
+                length,
+                std::ptr::null_mut(),
+            )
+        };
+        match cvt(result) {
+            Ok(()) => Ok(JobProcessIds::Complete(process_ids(&buffer))),
+            // How this info class reports STATUS_BUFFER_OVERFLOW.
+            Err(error) if error.raw_os_error() == Some(ERROR_MORE_DATA as i32) => {
+                Ok(JobProcessIds::Truncated)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn process_ids(buffer: &[usize]) -> Vec<u32> {
+        debug_assert!(buffer.len() > PID_LIST_HEADER_SLOTS);
+        // SAFETY: `buffer` is a `usize` allocation at least one whole
+        // `JOBOBJECT_BASIC_PROCESS_ID_LIST` long (its two counts plus one pid
+        // slot), so the read is aligned and in bounds, and every field is an
+        // integer, so any bit pattern read back is a valid value.
+        let header = unsafe {
+            buffer
+                .as_ptr()
+                .cast::<JOBOBJECT_BASIC_PROCESS_ID_LIST>()
+                .read()
+        };
+        buffer[PID_LIST_HEADER_SLOTS..]
+            .iter()
+            .take(header.NumberOfProcessIdsInList as usize)
+            // Pids are `ULONG_PTR`-wide but always fit a `DWORD`, and zero
+            // names no process.
+            .filter_map(|&pid| u32::try_from(pid).ok())
+            .filter(|&pid| pid != 0)
+            .collect()
+    }
+
+    /// Terminate the process behind `process` with the given exit code.
+    pub fn terminate_process(process: BorrowedHandle, exit_code: u32) -> io::Result<()> {
+        // SAFETY: the process handle is valid for the duration of the call;
+        // terminating an already-exited process fails cleanly.
+        cvt(unsafe { TerminateProcess(process.as_raw_handle() as HANDLE, exit_code) })
+    }
+
+    /// Open `pid` with exactly `desired_access`; the handle is non-inheritable.
+    ///
+    /// Dead, never-allocated and idle (0) pids report `ERROR_INVALID_PARAMETER`,
+    /// reported here as the POSIX ESRCH analog. `ERROR_ACCESS_DENIED` stays raw:
+    /// its kind already renders "Permission denied", like unix EPERM.
+    pub fn open_process(pid: u32, desired_access: u32) -> io::Result<OwnedHandle> {
+        // SAFETY: OpenProcess returns null on failure, otherwise a fresh
+        // handle owned by us — the `cvt_created_handle` contract.
+        unsafe { cvt_created_handle(OpenProcess(desired_access, FALSE, pid)) }.map_err(|error| {
+            if error.raw_os_error() == Some(ERROR_INVALID_PARAMETER as i32) {
+                super::no_such_process()
+            } else {
+                error
+            }
+        })
+    }
+
+    /// Request `SeDebugPrivilege` in this process's token.
+    ///
+    /// `Ok` does not mean the privilege is now enabled: `AdjustTokenPrivileges`
+    /// succeeds for a token that does not hold it too, reporting that only
+    /// through `GetLastError`.
+    pub fn enable_debug_privilege() -> io::Result<()> {
+        let mut token: HANDLE = std::ptr::null_mut();
+        // SAFETY: the pseudo-handle is always valid; `token` is an out-param.
+        cvt(unsafe {
+            OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &raw mut token)
+        })?;
+        // SAFETY: OpenProcessToken succeeded, so `token` is a fresh owned handle.
+        let token = unsafe { OwnedHandle::from_raw_handle(token) };
+
+        let mut luid = LUID::default();
+        // SAFETY: a null system name means the local system; `luid` is an out-param.
+        cvt(unsafe { LookupPrivilegeValueW(std::ptr::null(), SE_DEBUG_NAME, &raw mut luid) })?;
+
+        let privileges = TOKEN_PRIVILEGES {
+            PrivilegeCount: 1,
+            Privileges: [LUID_AND_ATTRIBUTES {
+                Luid: luid,
+                Attributes: SE_PRIVILEGE_ENABLED,
+            }],
+        };
+        // SAFETY: `privileges` outlives the call; a null previous-state pointer
+        // is documented as valid.
+        cvt(unsafe {
+            AdjustTokenPrivileges(
+                token.as_raw_handle(),
+                FALSE,
+                &raw const privileges,
+                0,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        })
+    }
+
+    /// Create an unnamed manual-reset event, initially unsignaled.
+    pub fn create_manual_reset_event() -> io::Result<OwnedHandle> {
+        // SAFETY: null attributes and name are documented as valid; the
+        // returned handle is owned by us.
+        unsafe {
+            cvt_created_handle(CreateEventW(
+                std::ptr::null(),
+                TRUE,
+                FALSE,
+                std::ptr::null(),
+            ))
+        }
+    }
+
+    /// Signal a (manual-reset or auto-reset) event.
+    pub fn set_event(event: BorrowedHandle) -> io::Result<()> {
+        // SAFETY: the event handle is valid for the duration of the call.
+        cvt(unsafe { SetEvent(event.as_raw_handle() as HANDLE) })
+    }
+
+    /// Return a manual-reset event to the unsignaled state.
+    pub fn reset_event(event: BorrowedHandle) -> io::Result<()> {
+        // SAFETY: the event handle is valid for the duration of the call.
+        cvt(unsafe { ResetEvent(event.as_raw_handle() as HANDLE) })
+    }
+
+    /// Create a one-shot waitable timer with the best resolution the OS
+    /// offers: a high-resolution timer (not coalesced to the ~15.6 ms
+    /// scheduler tick; Windows 10 1803+) when supported, a standard
+    /// waitable timer otherwise.
+    pub fn create_waitable_timer() -> io::Result<OwnedHandle> {
+        create_waitable_timer_with(CREATE_WAITABLE_TIMER_HIGH_RESOLUTION)
+            // Pre-1803 systems reject the high-resolution flag.
+            .or_else(|_| create_waitable_timer_with(0))
+    }
+
+    fn create_waitable_timer_with(flags: u32) -> io::Result<OwnedHandle> {
+        // SAFETY: null attributes and name are documented as valid; the
+        // returned handle is owned by us.
+        unsafe {
+            cvt_created_handle(CreateWaitableTimerExW(
+                std::ptr::null(),
+                std::ptr::null(),
+                flags,
+                TIMER_ALL_ACCESS,
+            ))
+        }
+    }
+
+    /// Arm `timer` to fire once after `ticks_100ns` (in 100 ns units).
+    pub fn set_relative_timer(timer: BorrowedHandle, ticks_100ns: i64) -> io::Result<()> {
+        // A negative due time means a relative wait.
+        let due_time = -ticks_100ns;
+        // SAFETY: the timer handle is valid, the due-time pointer is valid
+        // for the duration of the call, and no completion routine is used.
+        cvt(unsafe {
+            SetWaitableTimer(
+                timer.as_raw_handle() as HANDLE,
+                &raw const due_time,
+                0,
+                None,
+                std::ptr::null(),
+                FALSE,
+            )
+        })
+    }
+
+    /// Wait until any handle in `handles` is signaled or `timeout_ms`
+    /// elapses (`INFINITE` for no limit). On simultaneous completion the
+    /// lowest index wins.
+    ///
+    /// Mutexes are not supported (an abandoned-mutex result is reported as
+    /// an error).
+    pub fn wait_for_any(handles: &[BorrowedHandle], timeout_ms: u32) -> io::Result<WaitOutcome> {
+        let count = u32::try_from(handles.len())
+            .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
+        // SAFETY: `BorrowedHandle` is `repr(transparent)` over a raw handle,
+        // so the slice is layout-compatible with an array of `HANDLE`, and
+        // every element is a valid open handle for the duration of the call.
+        let result =
+            unsafe { WaitForMultipleObjects(count, handles.as_ptr().cast(), FALSE, timeout_ms) };
+        wait_outcome(result, count)
+    }
+
+    /// Wait until `handle` is signaled or `timeout_ms` elapses. A zero
+    /// timeout makes this a state poll.
+    pub fn wait_for_one(handle: BorrowedHandle, timeout_ms: u32) -> io::Result<WaitOutcome> {
+        // SAFETY: the handle is valid for the duration of the call.
+        let result = unsafe { WaitForSingleObject(handle.as_raw_handle() as HANDLE, timeout_ms) };
+        wait_outcome(result, 1)
+    }
+
+    fn wait_outcome(result: u32, count: u32) -> io::Result<WaitOutcome> {
+        if result == WAIT_TIMEOUT {
+            return Ok(WaitOutcome::TimedOut);
+        }
+        if result == WAIT_FAILED {
+            return Err(io::Error::last_os_error());
+        }
+        let index = result.wrapping_sub(WAIT_OBJECT_0);
+        if index < count {
+            Ok(WaitOutcome::Object(index))
+        } else {
+            // WAIT_ABANDONED_0..: only possible for mutexes, which this
+            // module never waits on; surface it instead of guessing.
+            Err(io::Error::other(format!("unexpected wait result {result}")))
+        }
+    }
+
+    /// Send a console control event (`CTRL_C_EVENT`/`CTRL_BREAK_EVENT`) to
+    /// the console process group led by `process_group_id`.
+    pub fn generate_console_ctrl_event(ctrl_event: u32, process_group_id: u32) -> io::Result<()> {
+        // SAFETY: no pointers involved; fails cleanly without a console.
+        cvt(unsafe { GenerateConsoleCtrlEvent(ctrl_event, process_group_id) })
+    }
+
+    /// Register `handler` to receive console control events.
+    ///
+    /// # Safety
+    ///
+    /// The OS invokes `handler` on a dedicated thread at any moment,
+    /// including while other threads run arbitrary code; it must be sound
+    /// under those conditions (touch only atomics and other thread-safe,
+    /// non-allocating state).
+    pub unsafe fn set_console_ctrl_handler(handler: PHANDLER_ROUTINE) -> io::Result<()> {
+        // SAFETY: the handler contract is upheld by the caller.
+        cvt(unsafe { SetConsoleCtrlHandler(handler, TRUE) })
+    }
+}
+
+// POSIX (Linux-layout) signal numbers, matching the Windows `ALL_SIGNALS`
+// table in `uucore::signals`. Kept local so the `process` feature does not
+// depend on the `signals` feature.
+const SIGNAL_HUP: i32 = 1;
+const SIGNAL_INT: i32 = 2;
+const SIGNAL_QUIT: i32 = 3;
+
+/// What delivering a given POSIX signal number means on Windows.
+enum Disposition {
+    Probe,
+    /// Discarded-by-default and stop signals: accepted, nothing to do.
+    Ignore,
+    /// `INT`/`QUIT`: deliverable to a console process group as CTRL_BREAK.
+    Interrupt,
+    Terminate,
+}
+
+fn disposition(signal: usize) -> io::Result<Disposition> {
+    match signal {
+        0 => Ok(Disposition::Probe),
+        2 | 3 => Ok(Disposition::Interrupt),
+        // Discarded-by-default (CHLD, CONT, URG, WINCH) and the stop family
+        // (STOP, TSTP, TTIN, TTOU): no documented emulation, so no-ops.
+        17..=23 | 28 => Ok(Disposition::Ignore),
+        1..=31 => Ok(Disposition::Terminate),
+        _ => Err(io::ErrorKind::InvalidInput.into()),
+    }
+}
+
+/// Terminate so the child's exit status becomes `128 + signal`, emulating
+/// "killed by signal" for exit-code observers.
+fn terminate_with_signal(handle: BorrowedHandle, signal: usize) -> io::Result<()> {
+    sys::terminate_process(handle, (128 + signal) as u32)
+}
+
+/// Deliver `signal` (POSIX numbering) to the child process only.
+///
+/// A console control event cannot target a single process, so `INT`/`QUIT`
+/// fall back to termination here; callers wanting a catchable interrupt must
+/// use [`send_signal_to_console_group`].
+pub fn send_signal_to_process(child: &Child, signal: usize) -> io::Result<()> {
+    match disposition(signal)? {
+        Disposition::Probe => match sys::wait_for_one(child.as_handle(), 0)? {
+            sys::WaitOutcome::TimedOut => Ok(()),
+            // The process has exited: the POSIX analog is ESRCH.
+            sys::WaitOutcome::Object(_) => Err(io::ErrorKind::NotFound.into()),
+        },
+        Disposition::Ignore => Ok(()),
+        Disposition::Interrupt | Disposition::Terminate => {
+            terminate_with_signal(child.as_handle(), signal)
+        }
+    }
+}
+
+const PROBE_ACCESS: u32 = PROCESS_SYNCHRONIZE;
+// SYNCHRONIZE tells "already exited" apart from a real denial after a failed
+// TerminateProcess (both report ERROR_ACCESS_DENIED).
+const TERMINATE_ACCESS: u32 = PROCESS_TERMINATE | PROCESS_SYNCHRONIZE;
+
+fn no_such_process() -> io::Error {
+    io::Error::new(io::ErrorKind::NotFound, translate!("error-no-such-process"))
+}
+
+/// A process handle becomes signaled when the process exits.
+fn has_exited(handle: BorrowedHandle) -> io::Result<bool> {
+    Ok(matches!(
+        sys::wait_for_one(handle, 0)?,
+        sys::WaitOutcome::Object(_)
+    ))
+}
+
+/// Request `SeDebugPrivilege` once per process; with it, opening a process
+/// bypasses the target's security descriptor.
+///
+/// Silent and best-effort: only an elevated administrator's token holds the
+/// privilege, and tokens without it are left untouched.
+pub fn enable_debug_privilege() {
+    static REQUESTED: OnceLock<()> = OnceLock::new();
+    REQUESTED.get_or_init(|| {
+        let _ = sys::enable_debug_privilege();
+    });
+}
+
+/// Deliver `signal` (POSIX numbering) to the arbitrary process `pid`,
+/// emulating `kill(2)` for `pid > 0`.
+pub fn send_signal_to_pid(pid: u32, signal: usize) -> io::Result<()> {
+    match disposition(signal)? {
+        Disposition::Probe | Disposition::Ignore => probe_pid(pid),
+        Disposition::Interrupt | Disposition::Terminate => terminate_pid(pid, signal),
+    }
+}
+
+/// Ok while `pid` runs, "No such process" once it has exited, even if open
+/// handles still pin its pid.
+fn probe_pid(pid: u32) -> io::Result<()> {
+    let handle = sys::open_process(pid, PROBE_ACCESS)?;
+    if has_exited(handle.as_handle())? {
+        return Err(no_such_process());
+    }
+    Ok(())
+}
+
+fn terminate_pid(pid: u32, signal: usize) -> io::Result<()> {
+    let handle = sys::open_process(pid, TERMINATE_ACCESS)?;
+    match terminate_with_signal(handle.as_handle(), signal) {
+        // An already-exited target also reports ERROR_ACCESS_DENIED; it
+        // counts as delivered, like unix kill on an unreaped process.
+        Err(e)
+            if e.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32)
+                && has_exited(handle.as_handle()).unwrap_or(false) =>
+        {
+            Ok(())
+        }
+        result => result,
+    }
+}
+
+/// Pids in the first attempt at listing a job, doubling up to [`JOB_PID_MAX`].
+///
+/// A job whose list does not fit can report a zero size to retry with
+/// (Windows 10, notably under WOW64), so the growth cannot be driven by the
+/// kernel's numbers.
+const JOB_PID_CAPACITY: usize = 64;
+const JOB_PID_MAX: usize = 128 * 1024;
+
+fn job_process_ids(job: Option<BorrowedHandle>) -> io::Result<Vec<u32>> {
+    let mut capacity = JOB_PID_CAPACITY;
+    while capacity <= JOB_PID_MAX {
+        match sys::query_job_process_ids(job, capacity)? {
+            sys::JobProcessIds::Complete(pids) => return Ok(pids),
+            sys::JobProcessIds::Truncated => capacity *= 2,
+        }
+    }
+    Err(io::Error::other(format!(
+        "job process list did not fit in {JOB_PID_MAX} entries"
+    )))
+}
+
+/// `members` with `own_pid` present exactly once, at the end, so a terminating
+/// signal reaches every other member before it kills this process.
+///
+/// Split out because an empty `members` *is* the job-less case, which no test
+/// can reproduce by spawning (a child created with `CREATE_BREAKAWAY_FROM_JOB`
+/// leaves only its immediate job; an ancestor job still claims it).
+fn with_self_last(mut members: Vec<u32>, own_pid: u32) -> Vec<u32> {
+    members.retain(|&pid| pid != own_pid);
+    members.push(own_pid);
+    members
+}
+
+/// Deliver `signal` to `pids` in order, succeeding if any one delivery did.
+///
+/// Reports the first failure rather than the last, since later ones can be
+/// consequences of earlier deliveries.
+fn send_signal_to_each(pids: &[u32], signal: usize) -> io::Result<()> {
+    let mut delivered = false;
+    let mut first_error = None;
+    for &pid in pids {
+        match send_signal_to_pid(pid, signal) {
+            Ok(()) => delivered = true,
+            Err(error) => {
+                first_error.get_or_insert(error);
+            }
+        }
+    }
+    if delivered {
+        Ok(())
+    } else {
+        Err(first_error.unwrap_or_else(no_such_process))
+    }
+}
+
+/// Deliver `signal` (POSIX numbering) to every process in the caller's own
+/// process group, emulating `kill(2)` for `pid == 0`.
+///
+/// The group is the caller's job object, which is broader than a POSIX process
+/// group: a terminal, IDE or CI agent that runs this process inside a job puts
+/// everything else it manages in the same group. A process in no job is a
+/// group of one. This process is signalled last, so a terminating signal ends
+/// it with exit code `128 + signal` instead of returning.
+///
+/// Like `kill(0, sig)`, succeeds as soon as one member was signalled: members
+/// this process may not touch, and members that exit between enumeration and
+/// delivery, do not fail the call.
+pub fn send_signal_to_own_group(signal: usize) -> io::Result<()> {
+    // Fail fast, before enumerating anything.
+    disposition(signal)?;
+    let members = if sys::is_process_in_job()? {
+        job_process_ids(None)?
+    } else {
+        Vec::new()
+    };
+    send_signal_to_each(&with_self_last(members, std::process::id()), signal)
+}
+
+/// Deliver `signal` (POSIX numbering) to the console process group led by
+/// `pid` (the process must have been created with `CREATE_NEW_PROCESS_GROUP`,
+/// e.g. via [`configure_process_group`]).
+///
+/// Only `INT`/`QUIT` are deliverable this way (as `CTRL_BREAK_EVENT`);
+/// terminating a whole group requires a [`Job`].
+pub fn send_signal_to_console_group(pid: u32, signal: usize) -> io::Result<()> {
+    match disposition(signal)? {
+        Disposition::Probe | Disposition::Ignore => Ok(()),
+        // CTRL_C_EVENT cannot target a nonzero group (it broadcasts to the
+        // whole console, including the sender), so INT/QUIT both use
+        // CTRL_BREAK: targetable, catchable, fatal by default.
+        Disposition::Interrupt => sys::generate_console_ctrl_event(CTRL_BREAK_EVENT, pid),
+        Disposition::Terminate => Err(io::ErrorKind::Unsupported.into()),
+    }
+}
+
+/// Deliver `signal` (POSIX numbering) to the child's whole process tree.
+///
+/// Terminating signals (including `INT`/`QUIT`, which cannot reach a tree as
+/// console events) terminate the job with exit code `128 + n`, falling back
+/// to the direct child when `job` is `None` or the job terminate fails;
+/// probe/ignored signals behave as [`send_signal_to_process`].
+pub fn send_signal_to_tree(child: &Child, job: Option<&Job>, signal: usize) -> io::Result<()> {
+    match disposition(signal)? {
+        Disposition::Probe | Disposition::Ignore => send_signal_to_process(child, signal),
+        Disposition::Interrupt | Disposition::Terminate => {
+            if let Some(job) = job
+                && job.terminate((128 + signal) as u32).is_ok()
+            {
+                return Ok(());
+            }
+            terminate_with_signal(child.as_handle(), signal)
+        }
+    }
+}
+
+/// Make `cmd` spawn its child as the leader of a new console process group,
+/// so `CTRL_BREAK_EVENT` can target exactly that group and the console's own
+/// Ctrl-C no longer reaches the child (the analog of unix `setpgid(0, 0)`).
+///
+/// Overwrites any creation flags set earlier via `CommandExt::creation_flags`.
+pub fn configure_process_group(cmd: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    cmd.creation_flags(CREATE_NEW_PROCESS_GROUP);
+}
+
+/// An anonymous Job Object: the Windows primitive for operating on a whole
+/// process tree, used here as the analog of signalling a process group.
+///
+/// No limits (in particular no `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) are set:
+/// the job is only a handle for [`Job::terminate`], and processes that
+/// outlive the job's owner deliberately keep running, just like a process
+/// group outlives its creator on unix.
+pub struct Job(OwnedHandle);
+
+impl Job {
+    /// Create a new anonymous job object.
+    pub fn new() -> io::Result<Self> {
+        sys::create_job_object().map(Self)
+    }
+
+    /// Assign `child` (and, transitively, every process it spawns from then
+    /// on) to this job.
+    ///
+    /// This can fail when nested jobs are unsupported (pre-Windows 8) and the
+    /// current process already runs inside a job; callers should degrade to
+    /// per-process operations in that case.
+    pub fn assign(&self, child: &Child) -> io::Result<()> {
+        sys::assign_process_to_job(self.0.as_handle(), child.as_handle())
+    }
+
+    /// Terminate every process in the job with the given exit code
+    /// (pass `128 + signal` to emulate death by signal).
+    pub fn terminate(&self, exit_code: u32) -> io::Result<()> {
+        sys::terminate_job_object(self.0.as_handle(), exit_code)
+    }
+}
+
+/// Manual-reset event signalled by the console control handler to wake
+/// [`ChildExt::wait_or_timeout`]. Unset until [`enable_ctrl_forwarding`]
+/// runs; the handle intentionally lives for the rest of the process.
+///
+/// Ownership of the *signaled state*: `wait_or_timeout` resets the event when
+/// it consumes a wake, and [`enable_ctrl_forwarding`] resets it so each
+/// forwarding session starts clean; the handler only ever sets it.
+static WAKE_EVENT: OnceLock<OwnedHandle> = OnceLock::new();
+/// POSIX signal number of the last console control event received (0 = none).
+/// Consumed (reset to 0) by [`take_last_ctrl_signal`] and cleared by
+/// [`enable_ctrl_forwarding`], so one event is observed at most once.
+static LAST_CTRL_SIGNAL: AtomicI32 = AtomicI32::new(0);
+
+/// Console control handler. Runs on an OS-spawned thread, so it only touches
+/// atomics and signals the pre-created event — no allocation, no locks.
+///
+/// # Safety
+///
+/// Registered only via [`sys::set_console_ctrl_handler`] and invoked by the
+/// system with a valid `ctrl_type`.
+unsafe extern "system" fn console_ctrl_handler(ctrl_type: u32) -> BOOL {
+    let signal = match ctrl_type {
+        CTRL_C_EVENT => SIGNAL_INT,
+        CTRL_BREAK_EVENT => SIGNAL_QUIT,
+        // Console window closing (analog of losing the controlling terminal);
+        // the system force-terminates us after a grace period, so react now.
+        CTRL_CLOSE_EVENT => SIGNAL_HUP,
+        // Logoff/shutdown reach only services; leave them to the default handler.
+        _ => return 0,
+    };
+    LAST_CTRL_SIGNAL.store(signal, Ordering::Release);
+    if let Some(event) = WAKE_EVENT.get() {
+        let _ = sys::set_event(event.as_handle());
+    }
+    1
+}
+
+/// Install a console control handler that records Ctrl-C, Ctrl-Break and
+/// console-close events as POSIX signal numbers (INT, QUIT, HUP) instead of
+/// letting them terminate this process, and wakes any pending
+/// [`ChildExt::wait_or_timeout`] call.
+///
+/// Use [`take_last_ctrl_signal`] to consume the last event received.
+///
+/// Idempotent; every call also discards any event latched by a previous
+/// forwarding session, so repeated in-process runs (benchmarks, fuzzing)
+/// start clean. Events arriving after this call still latch until consumed.
+pub fn enable_ctrl_forwarding() -> io::Result<()> {
+    if WAKE_EVENT.get().is_none() {
+        // Manual-reset so a wakeup latched before a wait starts is never lost.
+        let event = sys::create_manual_reset_event()?;
+        // A racing second caller just drops its event; registering the handler
+        // twice is harmless.
+        let _ = WAKE_EVENT.set(event);
+        // SAFETY: the handler only touches atomics, the immutable `WAKE_EVENT`
+        // cell and a live event handle — sound for arbitrary-thread invocation.
+        unsafe { sys::set_console_ctrl_handler(Some(console_ctrl_handler))? };
+    }
+    LAST_CTRL_SIGNAL.store(0, Ordering::Release);
+    if let Some(event) = WAKE_EVENT.get() {
+        let _ = sys::reset_event(event.as_handle());
+    }
+    Ok(())
+}
+
+/// Consume the POSIX signal number of the last console control event received
+/// since [`enable_ctrl_forwarding`], if any, resetting the latch so a stale
+/// event can never influence a later decision.
+pub fn take_last_ctrl_signal() -> Option<usize> {
+    match LAST_CTRL_SIGNAL.swap(0, Ordering::AcqRel) {
+        0 => None,
+        signal => Some(signal as usize),
+    }
+}
+
+/// Create a one-shot waitable timer that fires after `timeout`.
+fn start_relative_timer(timeout: Duration) -> io::Result<OwnedHandle> {
+    let timer = sys::create_waitable_timer()?;
+    // 100 ns ticks: round up so a sub-tick duration never fires early, and
+    // clamp huge durations.
+    let ticks = timeout.as_nanos().div_ceil(100).min(i64::MAX as u128) as i64;
+    sys::set_relative_timer(timer.as_handle(), ticks)?;
+    Ok(timer)
+}
+
+impl ChildExt for Child {
+    fn send_signal(&mut self, signal: usize) -> io::Result<()> {
+        send_signal_to_process(self, signal)
+    }
+
+    fn send_signal_group(&mut self, signal: usize) -> io::Result<()> {
+        // Unlike unix (which signals the caller's own process group), this
+        // targets the child's console group — the only group Windows lets us
+        // address at all.
+        let pid = self.id();
+        send_signal_to_console_group(pid, signal)
+    }
+
+    fn wait_or_timeout(&mut self, timeout: Duration, _ignore_term: bool) -> io::Result<TimeoutRet> {
+        // The unix implementation drops stdin so the child sees EOF; match it.
+        drop(self.stdin.take());
+
+        // Zero disables the timeout: no timer, so the wait blocks until the
+        // child exits (or a console event fires). `_ignore_term` has no
+        // effect here: a console cannot deliver TERM, so there is never a
+        // termination request to ignore.
+        let timer = if timeout.is_zero() {
+            None
+        } else {
+            Some(start_relative_timer(timeout)?)
+        };
+        let wake_event = WAKE_EVENT.get();
+
+        // A single blocking wait over up to three handles. On simultaneous
+        // completion the lowest index wins, so child-exit beats a console
+        // event, which beats timer expiry — matching the unix races.
+        let mut handles: Vec<BorrowedHandle> = Vec::with_capacity(3);
+        handles.push(self.as_handle());
+        let wake_index = wake_event.map(|event| {
+            handles.push(event.as_handle());
+            handles.len() - 1
+        });
+        if let Some(timer) = &timer {
+            handles.push(timer.as_handle());
+        }
+
+        loop {
+            let index = match sys::wait_for_any(&handles, INFINITE)? {
+                sys::WaitOutcome::Object(index) => index as usize,
+                // Unreachable with an INFINITE wait; treat as timer expiry.
+                sys::WaitOutcome::TimedOut => return Ok(TimeoutRet::TimedOut),
+            };
+            if index == 0 {
+                // Child exited; reap it without blocking.
+                drop(handles);
+                return self.wait().map(TimeoutRet::Exited);
+            }
+            if Some(index) == wake_index {
+                // Consume the wake so a handled console event cannot satisfy
+                // a later wait.
+                if let Some(event) = wake_event {
+                    let _ = sys::reset_event(event.as_handle());
+                }
+                match take_last_ctrl_signal() {
+                    Some(signal) => return Ok(TimeoutRet::Interrupted(signal)),
+                    // Stale wake with nothing latched: keep waiting (the
+                    // armed timer above still bounds the wait).
+                    None => continue,
+                }
+            }
+            return Ok(TimeoutRet::TimedOut);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::{Command, Stdio};
+    use std::time::Instant;
+
+    /// Poll whether the wake event is currently signaled.
+    fn wake_event_signaled() -> bool {
+        let event = WAKE_EVENT.get().expect("forwarding enabled");
+        matches!(
+            sys::wait_for_one(event.as_handle(), 0).unwrap(),
+            sys::WaitOutcome::Object(0)
+        )
+    }
+
+    fn spawn_child() -> Child {
+        Command::new("ping")
+            .args(["-n", "10", "127.0.0.1"])
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap()
+    }
+
+    /// `LAST_CTRL_SIGNAL` and `WAKE_EVENT` are process-global, so every phase
+    /// runs inside this single test to keep them free of cross-test races
+    /// (cargo runs tests on parallel threads).
+    #[test]
+    fn ctrl_forwarding_latch_and_wake_lifecycle() {
+        // Phase 1: enabling starts clean.
+        enable_ctrl_forwarding().unwrap();
+        assert_eq!(take_last_ctrl_signal(), None);
+        assert!(!wake_event_signaled());
+
+        // Phase 2: a console event latches its signal number exactly once and
+        // signals the wake event; consuming resets the latch.
+        // SAFETY: the handler only touches atomics and the event handle.
+        assert_eq!(unsafe { console_ctrl_handler(CTRL_C_EVENT) }, 1);
+        assert!(wake_event_signaled());
+        assert_eq!(take_last_ctrl_signal(), Some(SIGNAL_INT as usize));
+        assert_eq!(take_last_ctrl_signal(), None);
+
+        // Phase 3: unhandled control types latch nothing (5 = logoff).
+        // SAFETY: as above.
+        assert_eq!(unsafe { console_ctrl_handler(5) }, 0);
+        assert_eq!(take_last_ctrl_signal(), None);
+
+        // Phase 4: re-enabling discards state latched by a previous session.
+        // SAFETY: as above.
+        assert_eq!(unsafe { console_ctrl_handler(CTRL_BREAK_EVENT) }, 1);
+        enable_ctrl_forwarding().unwrap();
+        assert_eq!(take_last_ctrl_signal(), None);
+        assert!(!wake_event_signaled());
+
+        // Phase 5: `wait_or_timeout` consumes a latched console event: it
+        // returns `Interrupted` promptly with the child still running, and
+        // leaves latch and event clear so they cannot satisfy a later wait.
+        let mut child = spawn_child();
+        // SAFETY: as above.
+        assert_eq!(unsafe { console_ctrl_handler(CTRL_C_EVENT) }, 1);
+        let started = Instant::now();
+        let result = child
+            .wait_or_timeout(Duration::from_secs(60), false)
+            .unwrap();
+        assert!(matches!(result, TimeoutRet::Interrupted(sig) if sig == SIGNAL_INT as usize));
+        assert!(started.elapsed() < Duration::from_secs(30));
+        assert_eq!(take_last_ctrl_signal(), None);
+        assert!(!wake_event_signaled());
+        child.kill().unwrap();
+        child.wait().unwrap();
+    }
+
+    // The send_signal_to_pid tests touch no process-global state (unlike the
+    // ctrl-forwarding lifecycle above), so they can run in parallel.
+
+    #[test]
+    fn send_signal_to_pid_terminates_with_128_plus_signal() {
+        let mut child = spawn_child();
+        send_signal_to_pid(child.id(), 15).unwrap();
+        assert_eq!(child.wait().unwrap().code(), Some(143));
+    }
+
+    #[test]
+    fn send_signal_to_pid_probe_ignore_and_exited_semantics() {
+        let mut child = spawn_child();
+        send_signal_to_pid(child.id(), 0).unwrap();
+        send_signal_to_pid(child.id(), 17).unwrap();
+        assert!(child.try_wait().unwrap().is_none(), "CHLD must be a no-op");
+
+        child.kill().unwrap();
+        child.wait().unwrap();
+        // `child` still holds the process handle, pinning the pid: the checks
+        // below cannot race a pid reuse.
+        // The message text is asserted end-to-end in tests/by-util/test_kill.rs;
+        // unit tests run without localization initialized.
+        let err = send_signal_to_pid(child.id(), 0).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::NotFound);
+        send_signal_to_pid(child.id(), 9).unwrap();
+    }
+
+    #[test]
+    fn send_signal_to_pid_rejects_invalid_signal_before_any_open() {
+        assert_eq!(
+            send_signal_to_pid(std::process::id(), 64)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidInput
+        );
+    }
+
+    #[test]
+    fn enable_debug_privilege_is_silent_whether_or_not_the_token_holds_it() {
+        enable_debug_privilege();
+        enable_debug_privilege();
+    }
+
+    #[test]
+    fn send_signal_to_pid_reports_idle_pid_as_missing() {
+        // OpenProcess rejects the System Idle Process like any pid that names
+        // no process.
+        assert_eq!(
+            send_signal_to_pid(0, 9).unwrap_err().kind(),
+            io::ErrorKind::NotFound
+        );
+    }
+
+    // Nothing below assigns the *current* process to a job: joining one is
+    // irreversible and process-global, so it would rewrite what every other
+    // test in this binary sees (cargo runs them on parallel threads) — the same
+    // hazard that forces the ctrl-forwarding phases into a single test above.
+    //
+    // For the same reason, never pass a terminating signal to
+    // `send_signal_to_own_group` here: this process's group is whatever job the
+    // test runner provides. That path is covered in tests/by-util/test_kill.rs,
+    // inside a job the test creates itself.
+
+    #[test]
+    fn with_self_last_puts_this_process_exactly_once_at_the_end() {
+        // Empty members *is* the job-less case.
+        assert_eq!(with_self_last(vec![], 7), vec![7]);
+        assert_eq!(with_self_last(vec![3, 7], 7), vec![3, 7]);
+        assert_eq!(with_self_last(vec![7, 3, 5], 7), vec![3, 5, 7]);
+        // Listed twice, signalled once, so the loop cannot kill itself early.
+        assert_eq!(with_self_last(vec![7, 3, 7], 7), vec![3, 7]);
+    }
+
+    /// Also the canary for `QueryInformationJobObject(NULL, ...)`: if the
+    /// null-handle query were ever denied inside a job we do not own, this
+    /// fails on CI instead of `kill 0` failing in the field.
+    #[test]
+    fn send_signal_to_own_group_probe_and_ignore_are_no_ops() {
+        let mut child = spawn_child();
+        send_signal_to_own_group(0).unwrap();
+        send_signal_to_own_group(17).unwrap();
+        assert!(
+            child.try_wait().unwrap().is_none(),
+            "the group probe terminated a process"
+        );
+        child.kill().unwrap();
+        child.wait().unwrap();
+    }
+
+    #[test]
+    fn send_signal_to_own_group_rejects_invalid_signal_before_enumerating() {
+        assert_eq!(
+            send_signal_to_own_group(64).unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
+    }
+
+    /// Against a job whose membership we control; the caller's own job (`None`)
+    /// is whatever the machine running the tests happens to provide.
+    #[test]
+    fn job_process_ids_lists_members_and_reports_truncation() {
+        let job = Job::new().unwrap();
+        let mut children = [spawn_child(), spawn_child()];
+        for child in &children {
+            job.assign(child).unwrap();
+        }
+        let handle = job.0.as_handle();
+
+        let pids = job_process_ids(Some(handle)).unwrap();
+        for child in &children {
+            assert!(pids.contains(&child.id()));
+        }
+
+        // Two processes cannot fit a one-pid buffer.
+        assert!(matches!(
+            sys::query_job_process_ids(Some(handle), 1).unwrap(),
+            sys::JobProcessIds::Truncated
+        ));
+
+        for child in &mut children {
+            child.kill().unwrap();
+            child.wait().unwrap();
+        }
+    }
+}

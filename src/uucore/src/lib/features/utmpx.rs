@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 //
 // spell-checker:ignore IDLEN logind
 
@@ -68,7 +69,7 @@ pub use libc::utmpxname;
 /// # Safety
 /// Just fixed the clippy warning. Please add description here.
 #[cfg(target_os = "freebsd")]
-pub unsafe extern "C" fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
+pub unsafe extern "C" fn utmpxname(_file: *const core::ffi::c_char) -> core::ffi::c_int {
     0
 }
 

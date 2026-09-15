@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/rm.rs"
 doctest = false
@@ -31,9 +28,6 @@ uucore = { workspace = true, features = ["safe-traversal"] }
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
 
-[target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
-
 [[bin]]
 name = "rm"
 path = "src/main.rs"
@@ -42,6 +36,9 @@ path = "src/main.rs"
 divan = { workspace = true }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
+
+[lints]
+workspace = true
 
 [[bench]]
 name = "rm_bench"

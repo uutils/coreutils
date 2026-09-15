@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/dd.rs"
 doctest = false
@@ -22,7 +19,6 @@ doctest = false
 clap = { workspace = true }
 gcd = { workspace = true }
 libc = { workspace = true }
-rustix = { workspace = true }
 uucore = { workspace = true, features = [
   "format",
   "parser-size",
@@ -33,6 +29,9 @@ uucore = { workspace = true, features = [
 thiserror = { workspace = true }
 fluent = { workspace = true }
 
+[target.'cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
+
 [[bin]]
 name = "dd"
 path = "src/main.rs"
@@ -41,6 +40,9 @@ path = "src/main.rs"
 divan = { workspace = true }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
+
+[lints]
+workspace = true
 
 [[bench]]
 name = "dd_bench"

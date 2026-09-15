@@ -214,6 +214,15 @@ pub fn locale_aware_escape_name(name: &OsStr, style: QuotingStyle) -> OsString {
     escape_name(name, style, i18n::get_locale_encoding())
 }
 
+/// Shorthand function for [`locale_aware_escape_name`]
+/// Useful for quoting filenames in error messages.
+#[inline(always)]
+pub fn locale_aware_shell_escape(name: impl AsRef<OsStr>) -> String {
+    locale_aware_escape_name(name.as_ref(), QuotingStyle::SHELL_ESCAPE)
+        .into_string()
+        .unwrap() // SAFETY: string was just escaped
+}
+
 /// Escape a directory name with respect to the given style.
 /// This is mainly meant to be used for ls' directory name printing and is not
 /// likely to be used elsewhere.

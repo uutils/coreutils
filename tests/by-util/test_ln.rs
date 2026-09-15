@@ -2,9 +2,12 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 #![allow(clippy::similar_names)]
 
 use std::path::PathBuf;
+#[cfg(all(unix, not(target_os = "android")))]
+use std::time::Duration;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -581,6 +584,19 @@ fn test_symlink_missing_destination() {
 }
 
 #[test]
+fn test_symlink_error_includes_destination() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_symlink_error_includes_destination";
+    let link = "no_such_dir/test_symlink_error_includes_destination";
+
+    at.touch(file);
+
+    ucmd.args(&["-s", file, link]).fails().stderr_is(format!(
+        "ln: failed to create symbolic link '{link}': No such file or directory\n"
+    ));
+}
+
+#[test]
 fn test_symlink_relative() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_symlink_relative_a";
@@ -841,6 +857,38 @@ fn test_backup_same_file() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
+fn test_backup_existing_hard_linked_under_different_name() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.hard_link("a", "b");
+
+    ucmd.args(&["--backup", "a", "b"]).succeeds().no_stderr();
+
+    assert!(at.file_exists("a"));
+    assert!(at.file_exists("b"));
+    assert!(at.file_exists("b~"));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_backup_existing_hard_linked_target_is_fifo() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.hard_link("a", "b");
+    at.mkfifo("b~");
+
+    ucmd.args(&["--backup", "a", "b"])
+        .timeout(Duration::from_secs(10))
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists("a"));
+    assert!(at.file_exists("b"));
+    assert!(!at.is_fifo("b~"));
+}
+
+#[test]
 fn test_backup_force() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -914,7 +962,7 @@ fn test_hard_logical_dir_fail() {
         .ucmd()
         .args(&["-L", target, "hard-to-dir-link"])
         .fails()
-        .stderr_contains("failed to create hard link 'link-to-dir'");
+        .stderr_contains("failed to create hard link 'hard-to-dir-link'");
 }
 
 #[test]
@@ -1142,4 +1190,16 @@ fn test_ln_backup_nonexistent_rollback() {
 
     assert!(!at.file_exists("dst~"));
     assert!(at.file_exists("dst"));
+}
+
+#[test]
+fn test_hard_link_force_failed_link_keeps_destination() {
+    // Regression for #14550: a failed forced link must not delete the destination.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("dst", "keep\n");
+
+    ucmd.args(&["-f", "no_such_source", "dst"]).fails();
+
+    assert!(at.file_exists("dst"));
+    assert_eq!(at.read("dst"), "keep\n");
 }

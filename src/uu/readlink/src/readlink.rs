@@ -12,7 +12,7 @@ use std::fs;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, UUsageError};
+use uucore::error::{FromIo, UResult};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::libc::EINVAL;
 use uucore::line_ending::LineEnding;
@@ -58,17 +58,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         MissingHandling::Normal
     };
 
+    #[expect(clippy::unwrap_used, reason = "set as required by clap")]
     let files: Vec<PathBuf> = matches
         .get_many::<OsString>(ARG_FILES)
-        .map(|v| v.map(PathBuf::from).collect())
-        .unwrap_or_default();
-
-    if files.is_empty() {
-        return Err(UUsageError::new(
-            1,
-            translate!("readlink-error-missing-operand"),
-        ));
-    }
+        .unwrap()
+        .map(PathBuf::from)
+        .collect();
 
     if no_trailing_delimiter && files.len() > 1 {
         show_error!("{}", translate!("readlink-error-ignoring-no-newline"));
@@ -181,6 +176,7 @@ pub fn uu_app() -> Command {
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .value_parser(clap::value_parser!(OsString))
+                .required(true)
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }

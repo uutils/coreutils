@@ -542,14 +542,11 @@ pub mod fast_encode {
         let mut encoded_buffer = VecDeque::<u8>::new();
         let mut leftover_buffer = Vec::<u8>::with_capacity(encode_in_chunks_of_size);
 
-        loop {
-            let read_buffer = input
-                .fill_buf()
-                .map_err(|err| USimpleError::new(1, super::format_read_error(&err)))?;
-            if read_buffer.is_empty() {
-                break;
-            }
-
+        while let read_buffer = input
+            .fill_buf()
+            .map_err(|e| USimpleError::new(1, super::format_read_error(&e)))?
+            && !read_buffer.is_empty()
+        {
             let mut consumed = 0;
 
             if !leftover_buffer.is_empty() {
@@ -809,15 +806,11 @@ pub mod fast_decode {
         let mut buffer = Vec::with_capacity(decode_in_chunks_of_size);
         let mut decoded_buffer = Vec::<u8>::new();
 
-        loop {
-            let read_buffer = input
-                .fill_buf()
-                .map_err(|err| USimpleError::new(1, super::format_read_error(&err)))?;
-            let read_len = read_buffer.len();
-            if read_len == 0 {
-                break;
-            }
-
+        while let read_buffer = input
+            .fill_buf()
+            .map_err(|e| USimpleError::new(1, super::format_read_error(&e)))?
+            && let read_len @ 1.. = read_buffer.len()
+        {
             for &byte in read_buffer {
                 if byte == b'\n' || byte == b'\r' {
                     continue;

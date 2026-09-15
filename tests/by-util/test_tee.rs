@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 #![allow(clippy::borrow_as_ptr)]
 
 use uutests::{at_and_ucmd, new_ucmd};
@@ -669,7 +670,7 @@ mod linux_only {
             .pipe_in(&content[..])
             .fails()
             .stdout_contains(&content)
-            .stderr_contains("No space left on device");
+            .stderr_is("tee: /dev/full: No space left on device\n");
 
         assert_eq!(at.read(file_out), content);
     }
@@ -696,6 +697,14 @@ mod linux_only {
         assert_eq!(at.read(file_out_a), content);
         assert_eq!(at.read(file_out_b), content);
         assert!(result.stderr_str().contains("No space left on device"));
+    }
+
+    #[test]
+    fn test_permission_denied_clean() {
+        new_ucmd!()
+            .arg("/dev/mem")
+            .fails_with_code(1)
+            .stderr_is("tee: /dev/mem: Permission denied\n");
     }
 }
 

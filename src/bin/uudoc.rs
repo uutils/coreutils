@@ -60,13 +60,12 @@ fn post_process_manpage(manpage: String, date: &str) -> String {
     let lines: Vec<&str> = result.lines().map(str::trim_end).collect();
     let mut fixed_lines: Vec<&str> = Vec::with_capacity(lines.len());
 
-    for i in 0..lines.len() {
-        let line = lines[i];
-
+    for (i, &line) in lines.iter().enumerate() {
         if line == ".br" {
-            let preceded_by_empty_line = i > 0 && lines[i - 1].is_empty();
-            let followed_by_empty_line = i + 1 < lines.len() && lines[i + 1].is_empty();
-            let followed_by_br = i + 1 < lines.len() && lines[i + 1] == ".br";
+            let preceded_by_empty_line = lines.get(i - 1).is_some_and(|l| l.is_empty());
+            let line_next = lines.get(i + 1);
+            let followed_by_empty_line = line_next.is_some_and(|l| l.is_empty());
+            let followed_by_br = line_next == Some(&".br");
 
             if preceded_by_empty_line || followed_by_empty_line || followed_by_br {
                 // skip this ".br"
@@ -152,10 +151,10 @@ fn gen_manpage<T: Args>(
         let mut cmd = util_map.get(utility).unwrap().1();
         cmd.set_bin_name(utility.clone());
         let mut cmd = cmd.display_name(utility);
-        if let Some(zip) = tldr {
-            if let Ok(examples) = write_zip_examples(zip, utility, false) {
-                cmd = cmd.after_help(examples);
-            }
+        if let Some(zip) = tldr
+            && let Ok(examples) = write_zip_examples(zip, utility, false)
+        {
+            cmd = cmd.after_help(examples);
         }
         cmd
     };
@@ -273,8 +272,10 @@ fn main() -> io::Result<()> {
         * [Contributing](CONTRIBUTING.md)\n\
         \t* [Development](DEVELOPMENT.md)\n\
         \t* [Code of Conduct](CODE_OF_CONDUCT.md)\n\
+        \t* [Localization](l10n.md)\n\
         * [GNU test coverage](test_coverage.md)\n\
         * [Extensions](extensions.md)\n\
+        \t* [Error diagnostics](extensions-errors.md)\n\
         \n\
         # Reference\n\
         * [Multi-call binary](multicall.md)\n",
@@ -283,10 +284,14 @@ fn main() -> io::Result<()> {
     println!("Gathering utils per platform");
     let utils_per_platform = {
         let mut map = HashMap::new();
-        for platform in ["unix", "macos", "windows", "unix_android"] {
+        for (platform, features) in [
+            ("unix", "feat_os_unix"),
+            ("windows", "feat_os_windows"),
+            ("unix_android", "feat_os_unix_android"),
+        ] {
             let platform_utils: Vec<String> = String::from_utf8(
                 process::Command::new("./util/show-utils.sh")
-                    .arg(format!("--features=feat_os_{platform}"))
+                    .arg(format!("--features={features}"))
                     .output()?
                     .stdout,
             )
@@ -347,7 +352,7 @@ fn main() -> io::Result<()> {
                 "| {:<16} | {:<5} | {:<5} | {:<7} | {:<7} | {:<7} |",
                 format!("**{name}**"),
                 check_supported(name, "linux"),
-                check_supported(name, "macos"),
+                check_supported(name, "unix"),
                 check_supported(name, "windows"),
                 check_supported(name, "unix"),
                 check_supported(name, "unix_android"),
@@ -448,24 +453,23 @@ impl MDWriter<'_, '_> {
                 value: Some(Pattern { elements }),
                 ..
             }) = entry
+                && id.name == key
             {
-                if id.name == key {
-                    // Simple text extraction - just concatenate text elements
-                    let mut result = String::new();
-                    for element in elements {
-                        if let TextElement { ref value } = element {
-                            result.push_str(value);
-                        }
-                        if let Placeable {
-                            expression:
-                                Expression::Inline(InlineExpression::StringLiteral { ref value }),
-                        } = element
-                        {
-                            result.push_str(value);
-                        }
+                // Simple text extraction - just concatenate text elements
+                let mut result = String::new();
+                for element in elements {
+                    if let TextElement { ref value } = element {
+                        result.push_str(value);
                     }
-                    return Some(result);
+                    if let Placeable {
+                        expression:
+                            Expression::Inline(InlineExpression::StringLiteral { ref value }),
+                    } = element
+                    {
+                        result.push_str(value);
+                    }
                 }
+                return Some(result);
             }
         }
         None
@@ -488,7 +492,8 @@ impl MDWriter<'_, '_> {
             ("linux", "linux"),
             // freebsd is disabled for now because mdbook does not use font-awesome 5 yet.
             // ("unix", "freebsd"),
-            ("macos", "apple"),
+            // macOS uses the same feature set as generic Unix.
+            ("unix", "apple"),
             ("windows", "windows"),
         ] {
             if self.name.contains("sum")
@@ -554,10 +559,10 @@ impl MDWriter<'_, '_> {
     /// # Errors
     /// Returns an error if the writer fails.
     fn examples(&mut self) -> io::Result<()> {
-        if let Some(zip) = self.tldr_zip {
-            if let Ok(examples) = write_zip_examples(zip, self.name, true) {
-                writeln!(self.w, "{examples}")?;
-            }
+        if let Some(zip) = self.tldr_zip
+            && let Ok(examples) = write_zip_examples(zip, self.name, true)
+        {
+            writeln!(self.w, "{examples}")?;
         }
         Ok(())
     }

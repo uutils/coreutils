@@ -18,3 +18,6 @@ seq-error-format-and-equal-width = la chaîne de format ne peut pas être spéci
 # Types d'erreur d'analyse
 seq-parse-error-type-float = nombre à virgule flottante
 seq-parse-error-type-nan = 'non-un-nombre'
+
+# Diagnostics
+seq-diag-help-format = un format contient exactement une conversion flottante : %f, %e, %g ou %a, comme dans -f%.3f

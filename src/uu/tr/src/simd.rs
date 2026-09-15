@@ -92,12 +92,12 @@ where
 /// Helper function to handle platform-specific write operations
 #[inline]
 pub fn write_output<W: Write>(output: &mut W, buf: &[u8]) -> UResult<()> {
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     return output
         .write_all(buf)
         .map_err_context(|| translate!("tr-error-write-error"));
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     match output.write_all(buf) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {

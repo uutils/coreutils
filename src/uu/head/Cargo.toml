@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/head.rs"
 doctest = false
@@ -30,6 +27,12 @@ uucore = { workspace = true, features = [
   "fs",
 ] }
 fluent = { workspace = true }
+
+[features]
+diagnostics = ["uucore/diagnostics"]
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "head"

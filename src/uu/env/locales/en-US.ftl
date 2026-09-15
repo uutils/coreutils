@@ -36,9 +36,16 @@ env-error-cannot-unset-invalid = cannot unset { $name }: Invalid argument
 env-error-must-specify-command-with-chdir = must specify command with --chdir (-C)
 env-error-cannot-change-directory = cannot change directory to { $directory }: { $error }
 env-error-argv0-not-supported = --argv0 is currently not supported on this platform
-env-error-permission-denied = { $program }: Permission denied
-env-error-unknown = unknown error: { $error }
 env-error-failed-set-signal-action = failed to set signal action for signal { $signal }: { $error }
 
 # Warning messages
 env-warning-no-name-specified = no name specified for value { $value }
+
+# Diagnostic labels: what the caret points at in a -S string
+env-diag-label-variable-digit = a variable name cannot start with a digit
+env-diag-label-missing-brace = this {"{"} is never closed
+env-diag-help-quoting = -S quotes as the shell does: ' and " come in pairs, and \' escapes a quote
+env-diag-help-backslash = a backslash escapes the character after it, so one cannot end the string
+env-diag-help-backslash-c = \c ends the -S string, and has no meaning inside double quotes
+env-diag-help-escape = -S understands \r, \n, \t, \f, \v, \_, \#, \$, \" and \c
+env-diag-help-variable = only $NAME and ${"{"}NAME{"}"} are expanded; the other shell forms are not

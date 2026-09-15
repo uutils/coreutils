@@ -11,17 +11,20 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/truncate.rs"
 doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["parser-size"] }
+uucore = { workspace = true, features = ["fs", "parser-size"] }
 fluent = { workspace = true }
+
+[features]
+diagnostics = ["uucore/diagnostics"]
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "truncate"

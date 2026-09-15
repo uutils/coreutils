@@ -7,11 +7,11 @@
 
 use std::ffi::OsString;
 use std::fs::OpenOptions;
-use std::io::{self, Error, ErrorKind, Write, stderr};
+use std::io::{self, Error, ErrorKind, Write};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
-use uucore::translate;
+use uucore::{show_error, translate};
 
 mod cli;
 pub use crate::cli::uu_app;
@@ -19,7 +19,7 @@ use crate::cli::{Options, OutputErrorMode, options};
 
 #[cfg(target_os = "linux")]
 use uucore::signals::ensure_stdout_not_broken;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::signals::{disable_pipe_errors, ignore_interrupts};
 
 #[uucore::main]
@@ -57,11 +57,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 fn tee(options: &Options) -> Result<(), ()> {
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     if options.ignore_interrupts {
         ignore_interrupts().map_err(|_| ())?;
     }
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     if options.output_error.is_some() {
         disable_pipe_errors().map_err(|_| ())?;
     }
@@ -72,7 +72,7 @@ fn tee(options: &Options) -> Result<(), ()> {
         .filter_map(|file| open(file, options.append, options.output_error.as_ref()))
         .collect::<io::Result<Vec<NamedWriter>>>()
         .map_err(|_| ())?;
-    let had_open_errors = writers.len() != options.files.len();
+    let all_open_succeed = writers.len() == options.files.len();
 
     writers.insert(
         0,
@@ -96,10 +96,11 @@ fn tee(options: &Options) -> Result<(), ()> {
     }
 
     // don't use io::copy since content of 1 read should be immediately written for posix requirement
-    if output.copy_unbuffered().is_err() || had_open_errors || output.error_occurred() {
-        return Err(());
+    output.copy_unbuffered()?;
+    if all_open_succeed && output.ignored_errors == 0 {
+        return Ok(());
     }
-    Ok(())
+    Err(())
 }
 
 /// Tries to open the indicated file and return it. Reports an error if that's not possible.
@@ -123,7 +124,7 @@ fn open(
             name: name.clone(),
         })),
         Err(f) => {
-            let _ = writeln!(stderr(), "{}: {f}", name.maybe_quote());
+            show_error!("{}: {}", name.maybe_quote(), strip_errno(&f));
             match output_error {
                 Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) => Some(Err(f)),
                 _ => None,
@@ -143,22 +144,67 @@ impl MultiWriter {
     /// Copies all bytes from the input buffer to the output buffer
     /// without buffering which is POSIX requirement.
     pub fn copy_unbuffered(&mut self) -> Result<(), ()> {
-        // todo: support splice() and tee() fast-path at here
         #[cfg(not(any(unix, target_os = "wasi")))]
         use io::Read as _;
         const BUF_SIZE: usize = 32 * 1024;
+        #[cfg(any(unix, target_os = "wasi"))]
+        let input = rustix::stdio::stdin();
+        #[cfg(not(any(unix, target_os = "wasi")))]
+        let mut input = io::stdin();
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        macro_rules! splice_or_detach {
+            ($pipe:expr, $writer:expr, $len:expr) => {
+                if let Err(e) = uucore::pipes::drain_pipe($pipe, $writer, $len) {
+                    self.aborted |=
+                        process_error(self.output_error_mode, e, $writer, &mut self.ignored_errors)
+                            .is_err();
+                    $writer.name.clear(); //mark as exited
+                }
+            };
+        }
+        // needs 2 pipes to duplicate input multiple times
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        if let Ok((pipe_read, pipe_write)) = io::pipe()
+            && let Ok((pipe2_read, pipe2_write)) = io::pipe()
+        {
+            use rustix::pipe::fcntl_setpipe_size;
+            use uucore::pipes::MAX_ROOTLESS_PIPE_SIZE;
+            // improve throughput. 2nd pipe should be larger than 1st one for proper tee() length.
+            if fcntl_setpipe_size(&pipe2_read, MAX_ROOTLESS_PIPE_SIZE).is_ok() {
+                let _ = fcntl_setpipe_size(&pipe_read, MAX_ROOTLESS_PIPE_SIZE);
+                let _ = fcntl_setpipe_size(&self.writers[0], MAX_ROOTLESS_PIPE_SIZE); // stdout
+            }
+            while let Ok(s) = uucore::pipes::splice(&input, &pipe_write, MAX_ROOTLESS_PIPE_SIZE) {
+                if s == 0 {
+                    return Ok(());
+                }
+                let Some((last, others)) = self.writers.split_last_mut() else {
+                    // all writers exited
+                    return Ok(());
+                };
+                for other in others {
+                    // do not consume input
+                    let tee_res = uucore::pipes::tee(&pipe_read, &pipe2_write, s);
+                    assert_eq!(tee_res, Ok(s), "2nd pipe should have enough spare");
+                    splice_or_detach!(&pipe2_read, other, s);
+                }
+                // last one consumes input
+                splice_or_detach!(&pipe_read, last, s);
+                self.writers.retain(|w| !w.name.is_empty());
+                if self.aborted {
+                    return Err(());
+                }
+            }
+        }
+
         #[cfg(any(unix, target_os = "wasi"))]
         let mut buf = [std::mem::MaybeUninit::<u8>::uninit(); BUF_SIZE];
         // todo: avoid cost by 0-fill keeping throughput
         #[cfg(not(any(unix, target_os = "wasi")))]
         let mut buf = [0u8; BUF_SIZE];
-
-        let input = io::stdin();
-        #[cfg(not(any(unix, target_os = "wasi")))]
-        let mut input = input;
         loop {
             #[cfg(any(unix, target_os = "wasi"))]
-            let res = rustix::io::read(&input, &mut buf)
+            let res = rustix::io::read(input, &mut buf)
                 .map(|f| f.0)
                 .map_err(Error::from);
             #[cfg(not(any(unix, target_os = "wasi")))]
@@ -168,9 +214,8 @@ impl MultiWriter {
                 Ok(slice) => self.write_flush(slice)?,
                 Err(e) if e.kind() == ErrorKind::Interrupted => {}
                 Err(e) => {
-                    let _ = writeln!(
-                        stderr(),
-                        "tee: {}",
+                    show_error!(
+                        "{}",
                         translate!("tee-error-stdin", "error" => strip_errno(&e))
                     );
                     return Err(());
@@ -190,10 +235,6 @@ impl MultiWriter {
             ignored_errors: 0,
             aborted: false,
         }
-    }
-
-    fn error_occurred(&self) -> bool {
-        self.ignored_errors != 0
     }
 
     fn write_flush(&mut self, buf: &[u8]) -> Result<(), ()> {
@@ -228,7 +269,7 @@ fn process_error(
     if ignore_pipe && e.kind() == ErrorKind::BrokenPipe {
         return Ok(());
     }
-    let _ = writeln!(stderr(), "{}: {e}", writer.name.maybe_quote());
+    show_error!("{}: {}", writer.name.maybe_quote(), strip_errno(&e));
     if let Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) = mode {
         Err(())
     } else {
@@ -266,4 +307,14 @@ impl Writer {
 struct NamedWriter {
     inner: Writer,
     pub name: OsString,
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl rustix::fd::AsFd for NamedWriter {
+    fn as_fd(&self) -> rustix::fd::BorrowedFd<'_> {
+        match &self.inner {
+            Writer::File(f) => f.as_fd(),
+            Writer::Stdout(s) => s.0,
+        }
+    }
 }

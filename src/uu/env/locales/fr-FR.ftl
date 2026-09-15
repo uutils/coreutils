@@ -36,9 +36,16 @@ env-error-cannot-unset-invalid = impossible de supprimer { $name } : Argument in
 env-error-must-specify-command-with-chdir = doit spécifier une commande avec --chdir (-C)
 env-error-cannot-change-directory = impossible de changer de répertoire vers { $directory } : { $error }
 env-error-argv0-not-supported = --argv0 n'est actuellement pas pris en charge sur cette plateforme
-env-error-permission-denied = { $program } : Permission refusée
-env-error-unknown = erreur inconnue : { $error }
 env-error-failed-set-signal-action = échec de la définition de l'action du signal pour le signal { $signal } : { $error }
 
 # Messages d'avertissement
 env-warning-no-name-specified = aucun nom spécifié pour la valeur { $value }
+
+# Étiquettes de diagnostic : ce que le caret désigne dans une chaîne -S
+env-diag-label-variable-digit = un nom de variable ne peut pas commencer par un chiffre
+env-diag-label-missing-brace = cette {"{"} n'est jamais fermée
+env-diag-help-quoting = -S cite comme le shell : ' et " vont par paires, et \' échappe une apostrophe
+env-diag-help-backslash = une barre oblique inverse échappe le caractère qui suit, elle ne peut donc pas terminer la chaîne
+env-diag-help-backslash-c = \c termine la chaîne -S et n'a aucun sens entre guillemets
+env-diag-help-escape = -S comprend \r, \n, \t, \f, \v, \_, \#, \$, \" et \c
+env-diag-help-variable = seuls $NOM et ${"{"}NOM{"}"} sont développés ; les autres formes du shell ne le sont pas

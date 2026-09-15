@@ -65,16 +65,15 @@ fn logical_path() -> io::Result<PathBuf> {
                 return false;
             }
 
-            // Then, make sure there are no . or .. components.
+            // Then, make sure there are no . or .. components
             // Path::components() isn't useful here, it normalizes those out.
+            // Use as_encoded_bytes since . and .. are valid unicode
 
-            // to_string_lossy() may allocate, but that's fine, we call this
-            // only once per run. It may also lose information, but not any
-            // information that we need for this check.
             if path
-                .to_string_lossy()
-                .split(std::path::is_separator)
-                .any(|piece| piece == "." || piece == "..")
+                .as_os_str()
+                .as_encoded_bytes()
+                .split(|&b| std::path::is_separator(b as char))
+                .any(|p| p == b"." || p == b"..")
             {
                 return false;
             }

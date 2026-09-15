@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use uutests::at_and_ucmd;
@@ -104,4 +105,19 @@ fn test_filename_ends_with_slash() {
     ucmd.arg("a/")
         .fails_with_code(1)
         .stderr_is("sum: a/: Not a directory\n");
+}
+
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "openbsd")))]
+#[cfg_attr(wasi_runner, ignore)]
+#[test]
+fn test_filename_proc_self_mem() {
+    // https://github.com/uutils/coreutils/issues/12949
+    let result = new_ucmd!().arg("/proc/self/mem").fails_with_code(1);
+
+    let stderr = result.stderr_str();
+
+    let input_output = "sum: /proc/self/mem: Input/output error\n";
+    let io = "sum: /proc/self/mem: I/O error\n";
+
+    assert!(stderr == input_output || stderr == io);
 }

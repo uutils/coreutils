@@ -7,11 +7,12 @@
 
 use clap::{Arg, ArgAction, Command, value_parser};
 use nix::libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t};
-use nix::sys::stat::{Mode, SFlag, mknod as nix_mknod, umask as nix_umask};
+use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, umask as nix_umask};
+use std::ffi::OsString;
 use std::io::{self, Write as _};
 
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::error::{ExitCode, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::format_usage;
 use uucore::fs::makedev;
 use uucore::translate;
@@ -55,7 +56,7 @@ struct Config {
     /// when false, the exact mode bits will be set
     use_umask: bool,
 
-    dev: u64,
+    dev: dev_t,
 
     /// Set security context (SELinux/SMACK).
     #[cfg(any(
@@ -73,6 +74,25 @@ struct Config {
 }
 
 fn mknod(file_name: &str, config: Config) -> i32 {
+    // Label the node at creation, as GNU does; relabelling after leaves a window.
+    #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
+    let _selinux_guard = if config.set_security_context {
+        let mode = config.file_type.as_sflag().bits() | config.mode.bits();
+        match uucore::selinux::FsCreateContext::new(
+            std::path::Path::new(file_name),
+            Some(mode),
+            config.context.as_ref(),
+        ) {
+            Ok(guard) => Some(guard),
+            Err(e) => {
+                let _ = writeln!(io::stderr(), "mknod: {e}");
+                return 1;
+            }
+        }
+    } else {
+        None
+    };
+
     // set umask to 0 and store previous umask
     let have_prev_umask = if config.use_umask {
         None
@@ -84,7 +104,7 @@ fn mknod(file_name: &str, config: Config) -> i32 {
         file_name,
         config.file_type.as_sflag(),
         config.mode,
-        config.dev as _,
+        config.dev,
     )
     .err();
     let errno = if mknod_err.is_some() { -1 } else { 0 };
@@ -103,31 +123,16 @@ fn mknod(file_name: &str, config: Config) -> i32 {
         );
     }
 
-    // Apply SELinux context if requested
-    #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
-    if config.set_security_context {
-        if let Err(e) = uucore::selinux::set_selinux_security_context(
-            std::path::Path::new(file_name),
-            config.context.as_ref(),
-        ) {
-            // if it fails, delete the file
-            let _ = std::fs::remove_file(file_name);
-            let _ = writeln!(io::stderr(), "mknod: {e}");
-            return 1;
-        }
-    }
-
     // Apply SMACK context if requested
     #[cfg(all(feature = "smack", target_os = "linux"))]
-    if config.set_security_context {
-        if let Err(e) =
+    if config.set_security_context
+        && let Err(e) =
             uucore::smack::set_smack_label_and_cleanup(file_name, config.context.as_ref(), |p| {
                 std::fs::remove_file(p)
             })
-        {
-            let _ = writeln!(io::stderr(), "mknod: {e}");
-            return 1;
-        }
+    {
+        let _ = writeln!(io::stderr(), "mknod: {e}");
+        return 1;
     }
 
     errno
@@ -135,6 +140,9 @@ fn mknod(file_name: &str, config: Config) -> i32 {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let args: Vec<OsString> = args.collect();
+    // Kept for the caret in mode diagnostics, which needs the mode as typed.
+    let diag_args = uucore::diagnostics::operands(&args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let file_type = matches.get_one::<FileType>("type").unwrap();
@@ -144,7 +152,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => MODE_RW_UGO,
         Some(str_mode) => {
             use_umask = false;
-            parse_mode(str_mode).map_err(|e| USimpleError::new(1, e))?
+            let mode =
+                uucore::mode::parse_chmod(MODE_RW_UGO, str_mode, true, uucore::mode::get_umask())
+                    .map_err(|err| {
+                    let message =
+                        translate!("mknod-error-invalid-mode", "error" => err.to_string());
+                    if let Some(args) = &diag_args
+                        && err.render_mode_value(args, str_mode, 0, &message)
+                    {
+                        // The diagnostic is already on stderr; exit quietly.
+                        return ExitCode::new(1);
+                    }
+                    USimpleError::new(1, message)
+                })?;
+            if mode > 0o777 {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("mknod-error-mode-permission-bits-only"),
+                ));
+            }
+            mode
         }
     };
     let mode = Mode::from_bits_truncate(mode_permissions as mode_t);
@@ -177,7 +204,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 translate!("mknod-error-fifo-no-major-minor"),
             ));
         }
-        (_, Some(&major), Some(&minor)) => makedev(major as _, minor as _) as u64,
+        (_, Some(&major), Some(&minor)) => makedev(major as _, minor as _),
         _ => {
             return Err(UUsageError::new(
                 1,
@@ -264,24 +291,6 @@ pub fn uu_app() -> Command {
                 .require_equals(true)
                 .help(translate!("mknod-help-context")),
         )
-}
-
-fn parse_mode(str_mode: &str) -> Result<u32, String> {
-    let default_mode = MODE_RW_UGO;
-    uucore::mode::parse_chmod(default_mode, str_mode, true, uucore::mode::get_umask())
-        .map_err(|e| {
-            translate!(
-                "mknod-error-invalid-mode",
-                "error" => e
-            )
-        })
-        .and_then(|mode| {
-            if mode > 0o777 {
-                Err(translate!("mknod-error-mode-permission-bits-only"))
-            } else {
-                Ok(mode)
-            }
-        })
 }
 
 fn parse_type(tpe: &str) -> Result<FileType, String> {

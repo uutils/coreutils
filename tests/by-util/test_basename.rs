@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (words) reallylongexecutable nbaz
 
 use uutests::new_ucmd;
@@ -45,6 +46,31 @@ fn test_file() {
         .args(&["/etc/passwd"])
         .succeeds()
         .stdout_only("passwd\n");
+}
+
+#[test]
+fn test_trailing_separators() {
+    for (path, expected) in [
+        ("foo/bar", "bar\n"),
+        ("foo/bar/", "bar\n"),
+        ("foo/bar///", "bar\n"),
+        ("foo/./", ".\n"),
+        ("foo/.//", ".\n"),
+    ] {
+        new_ucmd!().arg(path).succeeds().stdout_only(expected);
+    }
+
+    let separator = std::path::MAIN_SEPARATOR;
+    let native_dot_path = format!("foo{separator}.{separator}{separator}");
+    new_ucmd!()
+        .arg(native_dot_path)
+        .succeeds()
+        .stdout_only(".\n");
+
+    let root = if cfg!(windows) { "\\\n" } else { "/\n" };
+    for path in ["/", "//", "///"] {
+        new_ucmd!().arg(path).succeeds().stdout_only(root);
+    }
 }
 
 #[test]
@@ -144,7 +170,7 @@ fn test_invalid_utf8_args() {
         .expect("Only unix platforms can test non-unicode names");
 
     new_ucmd!()
-        .arg(&param)
+        .arg(param)
         .succeeds()
         .stdout_is_bytes(b"some-\xc0-file.k\xf3\n");
 
@@ -152,8 +178,8 @@ fn test_invalid_utf8_args() {
         .expect("Only unix platforms can test non-unicode names");
 
     new_ucmd!()
-        .arg(&param)
-        .arg(&suffix)
+        .arg(param)
+        .arg(suffix)
         .succeeds()
         .stdout_is_bytes(b"some-\xc0-file\n");
 }

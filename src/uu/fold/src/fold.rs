@@ -8,6 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::num::IntErrorKind;
 use std::path::Path;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
@@ -69,14 +70,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Ok(0) => {
                 return Err(USimpleError::new(
                     1,
-                    translate!("fold-error-illegal-width", "width" => inp_width.quote()),
+                    translate!("fold-error-width-zero", "width" => inp_width.quote()),
                 ));
             }
             Ok(parsed_width) => parsed_width,
-            Err(e) => {
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
                 return Err(USimpleError::new(
                     1,
-                    translate!("fold-error-illegal-width", "width" => inp_width.quote(), "error" => e),
+                    translate!("fold-error-width-overflow", "width" => inp_width.quote()),
+                ));
+            }
+            Err(_) => {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("fold-error-illegal-width", "width" => inp_width.quote()),
                 ));
             }
         },
@@ -241,9 +248,11 @@ fn fold_file_bytewise<T: Read, W: Write>(
         // We have a full `width`-byte chunk plus at least one lookahead byte.
         let chunk = &line[..width];
 
-        // An existing newline within the chunk ends the line naturally; the
-        // newline is part of the slice, so no extra newline is emitted.
-        if let Some(end) = chunk.iter().position(|c| *c == NL).map(|i| i + 1) {
+        // A newline no further than the `width`-th byte ends the line
+        // naturally; the newline is part of the slice, so no extra newline is
+        // emitted. The lookahead byte is included because a line of exactly
+        // `width` bytes needs no fold at all.
+        if let Some(end) = line[..=width].iter().position(|c| *c == NL).map(|i| i + 1) {
             output.write_all(&line[..end])?;
             line.drain(..end);
             continue;
@@ -260,12 +269,10 @@ fn fold_file_bytewise<T: Read, W: Write>(
             width
         };
 
+        // Width/space-driven fold: `end <= width` and the check above ruled out
+        // a newline there, so the break always needs one.
         output.write_all(&line[..end])?;
-        // Width/space-driven fold: insert a newline unless the next byte is
-        // already a newline (it is emitted on the next pass).
-        if line[end] != NL {
-            output.write_all(&[NL])?;
-        }
+        output.write_all(&[NL])?;
         line.drain(..end);
     }
     Ok(())
