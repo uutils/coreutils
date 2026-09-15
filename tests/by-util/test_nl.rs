@@ -3,7 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//
 // spell-checker:ignore binvalid finvalid hinvalid iinvalid linvalid nabcabc nabcabcabc ninvalid vinvalid winvalid dabc näää févr
 
 use uutests::{at_and_ucmd, new_ucmd, util::TestScenario, util_name};
