@@ -17,7 +17,7 @@ use std::{
     collections::BinaryHeap,
     ffi::{OsStr, OsString},
     fs::{self, File},
-    io::{BufWriter, Read, Write},
+    io::{self, BufWriter, Read, Write},
     iter,
     path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
@@ -52,8 +52,13 @@ fn replace_output_file_in_input_files(
                 if let Some(copy) = &copy {
                     *file = copy.clone().into_os_string();
                 } else {
-                    let (_file, copy_path) = tmp_dir.next_file()?;
-                    fs::copy(&output_path, &copy_path)
+                    // Write through the descriptor `next_file` just opened rather
+                    // than `fs::copy`, which would put the source's permission bits
+                    // on the temporary file and undo the 0600 it was created with.
+                    let (mut copy_file, copy_path) = tmp_dir.next_file()?;
+                    let mut source = File::open(&output_path)
+                        .map_err(|error| SortError::OpenTmpFileFailed { error })?;
+                    io::copy(&mut source, &mut copy_file)
                         .map_err(|error| SortError::OpenTmpFileFailed { error })?;
                     *file = copy_path.clone().into_os_string();
                     copy = Some(copy_path);
@@ -388,7 +393,7 @@ impl FileMerger<'_> {
         &mut self,
         writer: &mut impl Write,
         settings: &GlobalSettings,
-    ) -> std::io::Result<bool> {
+    ) -> io::Result<bool> {
         if let Some(file) = self.heap.peek() {
             let prev = self.prev.replace(PreviousLine {
                 chunk: file.current_chunk.clone(),
@@ -638,5 +643,35 @@ impl<R: Read + Send> MergeInput for PlainMergeInput<R> {
     }
     fn as_read(&mut self) -> &mut Self::InnerRead {
         &mut self.inner
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    /// When the output file is also an input it is copied to a temporary file
+    /// first. That copy must stay private to the owner: `fs::copy` would carry the
+    /// source's 0644 over and undo what `next_file` created the file with.
+    #[test]
+    fn output_copy_keeps_the_tmp_file_private() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("out");
+        fs::write(&out, b"a\n").unwrap();
+        fs::set_permissions(&out, fs::Permissions::from_mode(0o644)).unwrap();
+
+        let mut tmp_dir = TmpDirWrapper::new(dir.path().to_owned());
+        let mut files = vec![out.clone().into_os_string()];
+        replace_output_file_in_input_files(&mut files, Some(out.as_os_str()), &mut tmp_dir)
+            .unwrap();
+
+        let copy = Path::new(&files[0]);
+        assert_ne!(copy, out, "the input was not replaced by a copy");
+        assert_eq!(
+            fs::metadata(copy).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(fs::read(copy).unwrap(), b"a\n");
     }
 }

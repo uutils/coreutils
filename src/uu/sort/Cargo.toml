@@ -35,6 +35,7 @@ thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "fs",
   "parser-size",
+  "safe-copy",
   "version-cmp",
   "i18n-decimal",
   "i18n-collator",
