@@ -2,12 +2,15 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore canonicalized
+
 //! Provides a summary representation of a filesystem.
 //!
 //! A [`Filesystem`] struct represents a device containing a
 //! filesystem mounted at a particular directory. It also includes
 //! information on amount of space available and amount of space used.
-// spell-checker:ignore canonicalized
+
 use std::ffi::OsString;
 #[cfg(unix)]
 use std::path::Path;

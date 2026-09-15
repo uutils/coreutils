@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (jargon) xattributes
 #![allow(clippy::missing_errors_doc, clippy::similar_names)]
 #![cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
