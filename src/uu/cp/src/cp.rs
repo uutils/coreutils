@@ -1877,6 +1877,11 @@ pub(crate) fn copy_attributes(
         attributes.mode
     };
 
+    // A created directory only defaults to copying the source mode; unlike an
+    // explicit preserve (-p/-a), GNU applies the umask to it.
+    let apply_umask_to_mode =
+        dest_is_freshly_created_dir && !matches!(attributes.mode, Preserve::Yes { .. });
+
     // Track whether `chown` to the source's uid succeeded. If it did not
     // (typical case: non-root user copying a root-owned setuid file), the
     // mode preservation below must strip setuid/setgid so the destination
@@ -1940,6 +1945,9 @@ pub(crate) fn copy_attributes(
                     // (01000) and all rwx bits.
                     let mode = perms.mode() & !0o6000;
                     perms.set_mode(mode);
+                }
+                if apply_umask_to_mode {
+                    perms.set_mode(perms.mode() & !uucore::mode::get_umask());
                 }
                 perms
             };
