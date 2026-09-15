@@ -5,6 +5,7 @@
 
 //
 // spell-checker:ignore utmp runlevel testusr testx boottime
+
 #![allow(clippy::cast_possible_wrap, clippy::unreadable_literal)]
 
 #[cfg(unix)]

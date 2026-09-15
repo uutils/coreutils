@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 //! Take all but the last elements of an iterator.
+
 use memchr::memchr_iter;
 use std::collections::VecDeque;
 use std::io::{ErrorKind, Read, Write};

@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel Secho sighandler putenv
+
 #![allow(clippy::missing_errors_doc)]
 
 #[cfg(unix)]
