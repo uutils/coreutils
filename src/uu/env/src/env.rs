@@ -29,12 +29,13 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 #[cfg(unix)]
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::env;
 #[cfg(unix)]
 use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
-#[cfg(not(unix))]
 use std::io;
+use std::io::Read as _;
 use std::io::Write as _;
 use std::io::stderr;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
@@ -99,12 +100,14 @@ mod options {
     pub const DEFAULT_SIGNAL: &str = "default-signal";
     pub const BLOCK_SIGNAL: &str = "block-signal";
     pub const LIST_SIGNAL_HANDLING: &str = "list-signal-handling";
+    pub const ENV0_FROM: &str = "env0-from";
 }
 
 struct Options<'a> {
     ignore_env: bool,
     line_ending: LineEnding,
     running_directory: Option<&'a OsStr>,
+    env0_from: Option<&'a OsStr>,
     unsets: Vec<&'a OsStr>,
     sets: Vec<(Cow<'a, OsStr>, Cow<'a, OsStr>)>,
     program: Vec<&'a OsStr>,
@@ -311,6 +314,205 @@ fn signal_is_valid(sig: usize) -> bool {
     true
 }
 
+fn validate_unset_arg(name: &OsStr) -> UResult<()> {
+    let native_name = NativeStr::new(name);
+    if name.is_empty()
+        || native_name.contains('\0').unwrap_or(false)
+        || native_name.contains('=').unwrap_or(false)
+    {
+        return Err(USimpleError::new(
+            125,
+            translate!("env-error-cannot-unset-invalid", "name" => name.quote()),
+        ));
+    }
+    Ok(())
+}
+
+fn entry_key(entry: &[u8]) -> Option<&[u8]> {
+    entry
+        .iter()
+        .position(|&b| b == b'=')
+        .map(|pos| &entry[..pos])
+}
+
+/// Ordered environment entries indexed by key for O(1) lookups.
+///
+/// The index maps each key to the position of its FIRST entry.
+/// Later duplicates are intentionally unindexed to preserve GNU-compatible semantics.
+#[derive(Default)]
+struct EnvEntries {
+    entries: Vec<Vec<u8>>,
+    index: HashMap<Vec<u8>, usize>,
+}
+
+impl EnvEntries {
+    /// Appends an entry. Only the first occurrence of a key is indexed.
+    fn push(&mut self, entry: Vec<u8>) {
+        if let Some(key) = entry_key(&entry) {
+            self.index.entry(key.to_vec()).or_insert(self.entries.len());
+        }
+        self.entries.push(entry);
+    }
+
+    /// Replaces the first entry matching key if present, otherwise appends it.
+    fn upsert(&mut self, entry: Vec<u8>) {
+        if let Some(key) = entry_key(&entry)
+            && let Some(&idx) = self.index.get(key)
+        {
+            self.entries[idx] = entry;
+            return;
+        }
+        self.push(entry);
+    }
+
+    /// Removes all entries matching key and rebuilds the index.
+    fn remove_key(&mut self, key: &[u8]) {
+        self.entries.retain(|e| entry_key(e) != Some(key));
+        self.index.clear();
+        for (i, entry) in self.entries.iter().enumerate() {
+            if let Some(k) = entry_key(entry) {
+                self.index.entry(k.to_vec()).or_insert(i);
+            }
+        }
+    }
+}
+
+impl std::ops::Deref for EnvEntries {
+    type Target = [Vec<u8>];
+
+    fn deref(&self) -> &Self::Target {
+        &self.entries
+    }
+}
+
+impl<'a> IntoIterator for &'a EnvEntries {
+    type Item = &'a Vec<u8>;
+    type IntoIter = std::slice::Iter<'a, Vec<u8>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.entries.iter()
+    }
+}
+
+fn read_env0_file(file: &OsStr) -> UResult<Vec<u8>> {
+    let res = if file == "-" {
+        let mut buf = Vec::new();
+        io::stdin().read_to_end(&mut buf).map(|_| buf)
+    } else {
+        std::fs::read(file)
+    };
+    let bytes = res.map_err(|e| {
+        USimpleError::new(
+            125,
+            translate!(
+                "env-error-cannot-read-file",
+                "file" => file.quote(),
+                "error" => strip_errno(&e)
+            ),
+        )
+    })?;
+
+    if bytes.last().is_some_and(|&byte| byte != 0) {
+        return Err(USimpleError::new(
+            125,
+            translate!(
+                "env-error-file-must-end-nul",
+                "file" => file.maybe_quote()
+            ),
+        ));
+    }
+
+    Ok(bytes)
+}
+
+// https://doc.rust-lang.org/src/std/sys/env/unix.rs.html
+#[cfg(all(unix, target_vendor = "apple"))]
+#[allow(clippy::missing_safety_doc)]
+unsafe fn environ() -> *mut *mut *mut libc::c_char {
+    unsafe { libc::_NSGetEnviron() }
+}
+
+#[cfg(all(unix, target_os = "freebsd"))]
+#[allow(clippy::missing_safety_doc)]
+unsafe fn environ() -> *mut *mut *mut libc::c_char {
+    use std::sync::LazyLock;
+
+    struct Environ(*mut *mut *mut libc::c_char);
+    unsafe impl Send for Environ {}
+    unsafe impl Sync for Environ {}
+
+    static ENVIRON: LazyLock<Environ> = LazyLock::new(|| {
+        Environ(unsafe { libc::dlsym(libc::RTLD_DEFAULT, c"environ".as_ptr()).cast() })
+    });
+    ENVIRON.0
+}
+
+#[cfg(all(unix, not(any(target_os = "freebsd", target_vendor = "apple"))))]
+#[allow(clippy::missing_safety_doc)]
+unsafe fn environ() -> *mut *mut *mut libc::c_char {
+    unsafe extern "C" {
+        static mut environ: *mut *mut libc::c_char;
+    }
+    &raw mut environ
+}
+
+fn load_env0_from(opts: &Options, env0_file: &OsStr) -> UResult<EnvEntries> {
+    let mut entries = EnvEntries::default();
+    if !opts.ignore_env {
+        #[cfg(unix)]
+        {
+            let mut ptr = unsafe { *environ() };
+
+            unsafe {
+                while !ptr.is_null() && !(*ptr).is_null() {
+                    let cstr = std::ffi::CStr::from_ptr(*ptr);
+                    entries.push(cstr.to_bytes().to_vec());
+                    ptr = ptr.add(1);
+                }
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            for (k, v) in env::vars_os() {
+                let mut b = k.as_encoded_bytes().to_vec();
+                b.push(b'=');
+                b.extend_from_slice(v.as_encoded_bytes());
+                entries.push(b);
+            }
+        }
+    }
+
+    let raw_data = read_env0_file(env0_file)?;
+    for chunk in raw_data.split_inclusive(|&b| b == 0) {
+        let entry = chunk[..chunk.len() - 1].to_vec();
+        if opts.ignore_env {
+            entries.push(entry);
+        } else {
+            entries.upsert(entry);
+        }
+    }
+
+    for name in &opts.unsets {
+        validate_unset_arg(name)?;
+        entries.remove_key(name.as_encoded_bytes());
+    }
+
+    for (name, val) in &opts.sets {
+        if name.is_empty() {
+            show_warning!(
+                "{}",
+                translate!("env-warning-no-name-specified", "value" => val.quote())
+            );
+            continue;
+        }
+        let mut new_entry = name.as_encoded_bytes().to_vec();
+        new_entry.push(b'=');
+        new_entry.extend_from_slice(val.as_encoded_bytes());
+        entries.upsert(new_entry);
+    }
+
+    Ok(entries)
+}
 pub fn uu_app() -> Command {
     Command::new("env")
         .version(uucore::crate_version!())
@@ -343,6 +545,16 @@ pub fn uu_app() -> Command {
                 .long(options::NULL)
                 .help(translate!("env-help-null"))
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::ENV0_FROM)
+                .overrides_with(options::ENV0_FROM)
+                .long(options::ENV0_FROM)
+                .value_name("FILE")
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(ValueParser::os_string())
+                .action(ArgAction::Set)
+                .help(translate!("env-help-env0-from")),
         )
         .arg(
             Arg::new(options::UNSET)
@@ -575,8 +787,12 @@ impl EnvAppData {
         let mut all_args: Vec<OsString> = Vec::new();
         let mut process_flags = true;
         let mut expecting_arg = false;
-        // Leave out split-string since it's a special case below
-        let flags_with_args = [options::ARGV0, options::CHDIR, options::UNSET];
+        let flags_with_args = [
+            options::ARGV0,
+            options::CHDIR,
+            options::ENV0_FROM,
+            options::UNSET,
+        ];
         let short_flags_with_args = ['a', 'C', 'u'];
         let mut consumed_split_payload_arg: Option<usize> = None;
         for (n, arg) in original_args.iter().enumerate() {
@@ -782,14 +998,17 @@ impl EnvAppData {
             &signal_apply_all,
         )?;
 
-        // NOTE: we manually set and unset the env vars below rather than using Command::env() to more
-        //       easily handle the case where no command is given
+        #[allow(unused_mut)]
+        let mut custom_env = opts
+            .env0_from
+            .map(|env0_file| load_env0_from(&opts, env0_file))
+            .transpose()?;
 
-        apply_removal_of_all_env_vars(&opts);
-
-        apply_unset_env_vars(&opts)?;
-
-        apply_specified_env_vars(&opts);
+        if custom_env.is_none() {
+            apply_removal_of_all_env_vars(&opts);
+            apply_unset_env_vars(&opts)?;
+            apply_specified_env_vars(&opts);
+        }
 
         #[cfg(all(unix, not(target_os = "fuchsia")))]
         {
@@ -817,12 +1036,37 @@ impl EnvAppData {
             }
         }
 
+        #[cfg(all(unix, not(target_os = "fuchsia")))]
+        if let Some(ref mut entries) = custom_env
+            && (opts
+                .default_signal
+                .signals
+                .contains(&(libc::SIGPIPE as usize))
+                || opts.default_signal.apply_all)
+        {
+            let sigpipe_entry = b"RUST_SIGPIPE=default".to_vec();
+            entries.upsert(sigpipe_entry);
+        }
+
         apply_change_directory(&opts)?;
         if opts.program.is_empty() {
-            // no program provided, so just dump all env vars to stdout
-            print_all_env_vars(opts.line_ending)?;
+            if let Some(ref entries) = custom_env {
+                let stdout = io::stdout().lock();
+                let mut writer = io::BufWriter::new(stdout);
+                for entry in entries {
+                    writer.write_all(entry)?;
+                    match opts.line_ending {
+                        LineEnding::Nul => writer.write_all(b"\0")?,
+                        LineEnding::Newline => writer.write_all(b"\n")?,
+                    }
+                }
+                writer.flush()?;
+            } else {
+                // no program provided, so just dump all env vars to stdout
+                print_all_env_vars(opts.line_ending)?;
+            }
         } else {
-            return self.run_program(&opts, self.do_debug_printing);
+            return self.run_program(&opts, self.do_debug_printing, custom_env.as_deref());
         }
 
         Ok(())
@@ -841,6 +1085,7 @@ impl EnvAppData {
         &mut self,
         opts: &Options<'_>,
         do_debug_printing: bool,
+        custom_env: Option<&[Vec<u8>]>,
     ) -> Result<(), Box<dyn UError>> {
         let prog = Cow::from(opts.program[0]);
 
@@ -903,11 +1148,38 @@ impl EnvAppData {
                 argv.push(arg_cstring);
             }
 
+            let env_cstrings = custom_env.map(|entries| {
+                entries
+                    .iter()
+                    .filter_map(|e| CString::new(e.clone()).ok())
+                    .collect::<Vec<_>>()
+            });
+            let mut envp_ptrs = env_cstrings.as_ref().map(|cstrings| {
+                let mut ptrs: Vec<*mut libc::c_char> =
+                    cstrings.iter().map(|cs| cs.as_ptr().cast_mut()).collect();
+                ptrs.push(std::ptr::null_mut());
+                ptrs
+            });
+
+            let orig = envp_ptrs.as_mut().map(|ptrs| unsafe {
+                let p = *environ();
+                *environ() = ptrs.as_mut_ptr();
+                p
+            });
+
             // Execute the program using execvp. this replaces the current
             // process. The execvp function takes care of appending a NULL
             // argument to the argument list so that we don't have to.
             // unwrap_err since execvp should never return on success
-            match execvp(&prog_cstring, &argv).unwrap_err() {
+            let exec_error = execvp(&prog_cstring, &argv).unwrap_err();
+
+            if let Some(orig) = orig {
+                unsafe {
+                    *environ() = orig;
+                }
+            }
+
+            match exec_error {
                 nix::errno::Errno::ENOENT => Err(self.make_error_no_such_file_or_dir(&prog)),
                 e => {
                     uucore::show_error!("{}: {}", prog.quote(), strip_errno(&e.into()));
@@ -921,6 +1193,18 @@ impl EnvAppData {
             // Fallback to Command::status for non-Unix systems
             let mut cmd = std::process::Command::new(&*prog);
             cmd.args(args);
+            if let Some(entries) = custom_env {
+                cmd.env_clear();
+                for entry in entries {
+                    if let Some(key) = entry_key(entry) {
+                        let val = &entry[key.len() + 1..];
+                        if let (Ok(k), Ok(v)) = (std::str::from_utf8(key), std::str::from_utf8(val))
+                        {
+                            cmd.env(k, v);
+                        }
+                    }
+                }
+            }
 
             match cmd.status() {
                 Ok(exit) if !exit.success() => Err(exit.code().unwrap_or(1).into()),
@@ -963,6 +1247,9 @@ fn make_options<'a>(
     let running_directory = matches
         .get_one::<OsString>("chdir")
         .map(OsString::as_os_str);
+    let env0_from = matches
+        .get_one::<OsString>(options::ENV0_FROM)
+        .map(OsString::as_os_str);
     let unsets = match matches.get_many::<OsString>("unset") {
         Some(v) => v.map(OsString::as_os_str).collect(),
         None => Vec::new(),
@@ -984,6 +1271,7 @@ fn make_options<'a>(
         ignore_env,
         line_ending,
         running_directory,
+        env0_from,
         unsets,
         sets: vec![],
         program: vec![],
@@ -1024,16 +1312,7 @@ fn make_options<'a>(
 
 fn apply_unset_env_vars(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
     for name in &opts.unsets {
-        let native_name = NativeStr::new(name);
-        if name.is_empty()
-            || native_name.contains('\0').unwrap()
-            || native_name.contains('=').unwrap()
-        {
-            return Err(USimpleError::new(
-                125,
-                translate!("env-error-cannot-unset-invalid", "name" => name.quote()),
-            ));
-        }
+        validate_unset_arg(name)?;
         unsafe {
             env::remove_var(name);
         }
