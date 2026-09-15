@@ -122,6 +122,7 @@ if test -f gnu-built; then
     echo "'rm -f $(pwd)/{gnu-built,src/getlimits}' to force the build"
     echo "Note: the customization of the tests will still happen"
 else
+    autoreconf
     # Disable useless checks
     sed -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
     # Stop manpage generation for cleaner log
