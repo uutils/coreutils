@@ -1055,6 +1055,22 @@ fn test_cp_umask_stripping_owner_write_bit_reflink_never() {
     }
 }
 
+// Regression for #14549: `cp -r` (without preserve) must apply the umask to
+// directories it creates, matching GNU, instead of copying the source's mode.
+#[test]
+#[cfg(unix)]
+fn test_cp_recursive_dir_applies_umask() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("src");
+    at.mkdir("src/dir");
+    at.set_mode("src/dir", 0o777);
+
+    ucmd.umask(0o077).arg("-r").arg("src").arg("d").succeeds();
+
+    // 0o777 & ~0o077 = 0o700, not the source's raw 0o777.
+    assert_eq!(at.metadata("d/dir").permissions().mode() & 0o777, 0o700);
+}
+
 // When --reflink=always fails, GNU cp removes a destination it created
 // itself but keeps a pre-existing (truncated) one. Only observable on
 // filesystems without clone support; when the clone succeeds there is
