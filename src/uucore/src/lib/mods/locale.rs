@@ -192,9 +192,10 @@ thread_local! {
             target_os = "haiku",
             target_os = "illumos",
             all(target_os = "linux", target_env = "ohos"),
+            target_os = "openbsd",
             target_os = "solaris",
             all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))),
-        expect(
+        allow(
             clippy::missing_const_for_thread_local,
             reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
         )
@@ -208,9 +209,10 @@ thread_local! {
             target_os = "haiku",
             target_os = "illumos",
             all(target_os = "linux", target_env = "ohos"),
+            target_os = "openbsd",
             target_os = "solaris",
             all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))),
-        expect(
+        allow(
             clippy::missing_const_for_thread_local,
             reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
         )
@@ -609,9 +611,10 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
                 target_os = "haiku",
                 target_os = "illumos",
                 all(target_os = "linux", target_env = "ohos"),
+                target_os = "openbsd",
                 target_os = "solaris",
                 all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))),
-            expect(
+            allow(
                 clippy::missing_const_for_thread_local,
                 reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
             )
