@@ -17,7 +17,7 @@ use std::{
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use regex::Regex;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult};
+use uucore::error::{FromIo, UError, UResult};
 use uucore::format_usage;
 
 mod csplit_error;
@@ -348,10 +348,20 @@ impl SplitWriter<'_> {
     ///
     /// The read error, or the error from closing the split if closing it is
     /// what went wrong.
+    #[inline]
     fn or_finish_split(&mut self, line: UResult<String>) -> Result<String, CsplitError> {
-        match line {
-            Ok(line) => Ok(line),
-            Err(err) => self.finish_split().and(Err(err.into())),
+        line.map_err(|err| self.finish_split_on_read_error(err))
+    }
+
+    /// Closes the split a read error interrupted, then returns that error, or
+    /// the error from closing the split if that is what went wrong. Kept out
+    /// of line so the per-line check above stays as cheap as a plain `?`.
+    #[cold]
+    #[inline(never)]
+    fn finish_split_on_read_error(&mut self, err: Box<dyn UError>) -> CsplitError {
+        match self.finish_split() {
+            Ok(()) => err.into(),
+            Err(err) => err,
         }
     }
 
