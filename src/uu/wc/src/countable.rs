@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 //! Traits and implementations for iterating over lines in a file-like object.
 //!
 //! This module provides a [`WordCountable`] trait and implementations

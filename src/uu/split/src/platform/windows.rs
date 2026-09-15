@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use crate::platform::Writer;
 use std::ffi::OsStr;
 use std::io::{Error, ErrorKind, Result};

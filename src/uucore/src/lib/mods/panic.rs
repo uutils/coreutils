@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 //! Custom panic hooks that allow silencing certain types of errors.
 //!
 //! Use the [`mute_sigpipe_panic`] function to silence panics caused by

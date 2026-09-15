@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore IAMNOTASIGNAL RTMAX RTMIN SIGIO SIGRTMAX GHSA CHLD SIGSTOP taskkill unreaped
 use regex::Regex;
 #[cfg(windows)]
