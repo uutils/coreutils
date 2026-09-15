@@ -702,6 +702,27 @@ fn test_date_for_file_mtime() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
+fn test_date_reference_is_non_utf8_path() {
+    use std::os::unix::ffi::OsStrExt;
+    use std::time::{Duration, UNIX_EPOCH};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let reference_file = std::ffi::OsStr::from_bytes(b"reference_\xFF\xFE.txt");
+    let f = std::fs::File::create(at.plus(reference_file)).unwrap();
+    let modification_date = UNIX_EPOCH.checked_add(Duration::from_secs(1234)).unwrap();
+    f.set_modified(modification_date).unwrap();
+
+    ucmd.arg("--reference")
+        .arg(reference_file)
+        .arg("+%s")
+        .succeeds()
+        .stdout_only("1234\n");
+}
+
+#[test]
 fn test_date_multiple_references() {
     use std::time::{Duration, UNIX_EPOCH};
 
