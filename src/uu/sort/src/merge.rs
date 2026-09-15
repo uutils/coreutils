@@ -337,7 +337,7 @@ struct FileMerger<'a> {
 impl FileMerger<'_> {
     /// Write the merged contents to the output file.
     fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
-        let mut out = output.into_write();
+        let mut out = output.into_write()?;
         self.write_all_to(settings, &mut out)
     }
 

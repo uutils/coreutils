@@ -150,6 +150,12 @@ pub enum SortError {
         error: std::io::Error,
     },
 
+    #[error("{}", translate!("sort-truncate-failed", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
+    TruncateFailed {
+        path: PathBuf,
+        error: std::io::Error,
+    },
+
     #[error("{}", translate!("sort-cannot-read", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
     ReadFailed {
         path: PathBuf,
@@ -255,15 +261,20 @@ impl Output {
         Ok(Self { file })
     }
 
-    fn into_write(self) -> BufWriter<Box<dyn Write>> {
-        BufWriter::new(match self.file {
-            Some((_name, file)) => {
-                // truncate the file
-                let _ = file.set_len(0);
+    fn into_write(self) -> UResult<BufWriter<Box<dyn Write>>> {
+        Ok(BufWriter::new(match self.file {
+            Some((name, file)) => {
+                // Only regular files can be truncated; there a failure leaves stale bytes.
+                if file.metadata().is_ok_and(|meta| meta.is_file()) {
+                    file.set_len(0).map_err(|error| SortError::TruncateFailed {
+                        path: PathBuf::from(name),
+                        error,
+                    })?;
+                }
                 Box::new(file)
             }
             None => Box::new(stdout()),
-        })
+        }))
     }
 
     fn as_output_name(&self) -> Option<&OsStr> {
@@ -3303,7 +3314,7 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
         .to_owned();
     let ctx = || translate!("sort-error-write-failed", "output" => output_name.maybe_quote());
 
-    let mut writer = output.into_write();
+    let mut writer = output.into_write()?;
     for line in iter {
         line.write(&mut writer, settings).map_err_context(ctx)?;
     }
