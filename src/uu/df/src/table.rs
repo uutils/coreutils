@@ -4,10 +4,12 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore tmpfs Pcent Itotal Iused Iavail Ipcent nosuid nodev
+
 //! The filesystem usage data table.
 //!
 //! A table ([`Table`]) comprises a header row ([`Header`]) and a
 //! collection of data rows ([`Row`]), one per filesystem.
+
 use unicode_width::UnicodeWidthStr;
 
 use crate::blocks::{SuffixType, to_magnitude_and_suffix};

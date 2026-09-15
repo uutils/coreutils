@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore reflink
+
 use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
 use std::os::unix::ffi::OsStrExt;

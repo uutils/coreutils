@@ -4,7 +4,9 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore NEWROOT Userspec userspec
+
 //! Errors returned by chroot.
+
 use std::ffi::OsString;
 use std::io::Error;
 use std::path::PathBuf;

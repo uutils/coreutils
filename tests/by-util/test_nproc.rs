@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore incorrectnumber
+
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;

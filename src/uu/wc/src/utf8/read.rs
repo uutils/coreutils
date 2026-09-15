@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore bytestream
+
 use super::{Incomplete, str};
 use std::io::{self, BufRead};
 use thiserror::Error;

@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore defaultcon setfscreatecon
+
 //! Set of functions to manage SELinux security contexts
 
 use std::borrow::Cow;
