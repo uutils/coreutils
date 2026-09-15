@@ -153,22 +153,31 @@ mod timer {
         pub(super) fn new() -> io::Result<Self> {
             use std::mem::MaybeUninit;
 
-            // SAFETY: we must zero the reserved, private bits and other fields.
+            // We must zero the reserved, private bits and other fields.
             // We cannot use nix or rustix because they don't support it in Redox.
-            let mut sev: libc::sigevent = unsafe { MaybeUninit::zeroed().assume_init() };
-            sev.sigev_notify = libc::SIGEV_SIGNAL;
-            sev.sigev_signo = libc::SIGALRM;
+            let mut sev = MaybeUninit::<libc::sigevent>::zeroed();
 
-            // SAFETY: On cygwin, it's a u64; otherwise, a ptr with exposed provenance.
-            let mut timer_id = unsafe { MaybeUninit::zeroed().assume_init() };
+            unsafe {
+                (*sev.as_mut_ptr()).sigev_notify = libc::SIGEV_SIGNAL;
+                (*sev.as_mut_ptr()).sigev_signo = libc::SIGALRM;
+            }
+
+            // On cygwin, it's a u64; otherwise, a ptr with exposed provenance.
+            let mut timer_id = MaybeUninit::zeroed();
             // SAFETY: All values are properly initialized.
-            if unsafe { libc::timer_create(libc::CLOCK_MONOTONIC, &raw mut sev, &raw mut timer_id) }
-                == -1
+            if unsafe {
+                libc::timer_create(
+                    libc::CLOCK_MONOTONIC,
+                    sev.as_mut_ptr(),
+                    timer_id.as_mut_ptr(),
+                )
+            } == -1
             {
                 return Err(io::Error::last_os_error());
             }
 
-            Ok(Self(timer_id))
+            // SAFETY: `timer_create` returned success and initialized timer_id.
+            Ok(Self(unsafe { timer_id.assume_init() }))
         }
 
         pub(super) fn arm(&mut self, timeout: Duration) -> Result<(), io::Error> {
