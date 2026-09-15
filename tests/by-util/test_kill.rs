@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore IAMNOTASIGNAL RTMAX RTMIN SIGIO SIGRTMAX GHSA CHLD SIGSTOP taskkill unreaped
+
 use regex::Regex;
 #[cfg(windows)]
 use std::io::Write;

@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (vars) NANOS numstr infinityh INFD nans nanh bigdecimal extendedbigdecimal
+
 //! Parsing a duration from a string.
 //!
 //! Use the [`from_str`] function to parse a [`Duration`] from a string.
