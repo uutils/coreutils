@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime foldhash serde kqueue libcrypto libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner getauxval hashbrown
+# spell-checker:ignore (libs) bigdecimal datetime foldhash serde kqueue libcrypto libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner getauxval hashbrown tzdb
 
 [package]
 name = "coreutils"
@@ -361,6 +361,7 @@ itertools = "0.15.0"
 itoa = "1.0.15"
 jiff = "0.2.18"
 jiff-icu = "0.2.2"
+jiff-tzdb = "0.1"
 libc = "0.2.186"
 lscolors = { version = "0.21.0", default-features = false, features = [
   "gnu_legacy",
