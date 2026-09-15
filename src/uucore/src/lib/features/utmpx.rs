@@ -50,11 +50,11 @@ pub use self::ut::*;
 // See the FAQ at https://wiki.musl-libc.org/faq#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?
 // Musl implements only stubs for the utmp functions, and the libc crate issues a deprecation warning about this.
 // However, calling these stubs is the correct approach to maintain consistent behavior with GNU coreutils.
-#[cfg_attr(target_env = "musl", allow(deprecated))]
+#[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
 pub use libc::endutxent;
-#[cfg_attr(target_env = "musl", allow(deprecated))]
+#[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
 pub use libc::getutxent;
-#[cfg_attr(target_env = "musl", allow(deprecated))]
+#[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
 pub use libc::setutxent;
 use libc::utmpx;
 #[cfg(any(
@@ -63,7 +63,7 @@ use libc::utmpx;
     target_os = "netbsd",
     target_os = "cygwin"
 ))]
-#[cfg_attr(target_env = "musl", allow(deprecated))]
+#[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
 pub use libc::utmpxname;
 
 /// # Safety
@@ -89,19 +89,19 @@ macro_rules! chars2string {
 mod ut {
     pub static DEFAULT_FILE: &str = "/var/run/utmp";
 
-    #[cfg(not(target_env = "musl"))]
+    #[cfg(target_env = "gnu")]
     pub use libc::__UT_HOSTSIZE as UT_HOSTSIZE;
-    #[cfg(target_env = "musl")]
+    #[cfg(not(target_env = "gnu"))]
     pub use libc::UT_HOSTSIZE;
 
-    #[cfg(not(target_env = "musl"))]
+    #[cfg(target_env = "gnu")]
     pub use libc::__UT_LINESIZE as UT_LINESIZE;
-    #[cfg(target_env = "musl")]
+    #[cfg(not(target_env = "gnu"))]
     pub use libc::UT_LINESIZE;
 
-    #[cfg(not(target_env = "musl"))]
+    #[cfg(target_env = "gnu")]
     pub use libc::__UT_NAMESIZE as UT_NAMESIZE;
-    #[cfg(target_env = "musl")]
+    #[cfg(not(target_env = "gnu"))]
     pub use libc::UT_NAMESIZE;
 
     pub const UT_IDSIZE: usize = 4;
@@ -347,7 +347,7 @@ impl Utmpx {
                 // This can technically fail, and it would be nice to detect that,
                 // but it doesn't return anything so we'd have to do nasty things
                 // with errno.
-                #[cfg_attr(target_env = "musl", allow(deprecated))]
+                #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
                 setutxent();
             }
             iter
@@ -564,7 +564,7 @@ impl Iterator for UtmpxIter {
 
         // Traditional utmp path
         unsafe {
-            #[cfg_attr(target_env = "musl", allow(deprecated))]
+            #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
             let res = getutxent();
             if res.is_null() {
                 None
@@ -584,7 +584,7 @@ impl Iterator for UtmpxIter {
 impl Drop for UtmpxIter {
     fn drop(&mut self) {
         unsafe {
-            #[cfg_attr(target_env = "musl", allow(deprecated))]
+            #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
             endutxent();
         }
     }
