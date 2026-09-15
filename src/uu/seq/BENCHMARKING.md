@@ -31,6 +31,7 @@ outputs (which is probably the most common use case for `seq`).
 
 Specifying a format or fixed width will slow down the
 execution a lot (~15-20 times on GNU `seq`):
+
 ```shell
 hyperfine -L seq seq,target/release/seq "{seq} -f%g 1000000"
 hyperfine -L seq seq,target/release/seq "{seq} -w 1000000"
@@ -38,6 +39,7 @@ hyperfine -L seq seq,target/release/seq "{seq} -w 1000000"
 
 Floating point increments, or any negative bound, also degrades the
 performance (~10-15 times on GNU `seq`):
+
 ```shell
 hyperfine -L seq seq,./target/release/seq "{seq} 0 0.000001 1"
 hyperfine -L seq seq,./target/release/seq "{seq} -100 1 1000000"
@@ -49,6 +51,7 @@ as GNU `seq` may not provide the same precision (`uutils` version of
 `seq` provides arbitrary precision, while GNU `seq` appears to be
 limited to `long double` on the given platform, i.e. 64/80/128-bit
 float):
+
 ```shell
 hyperfine -L seq seq,target/release/seq "{seq} -f%.30f 0 0.000001 1"
 ```
@@ -66,10 +69,13 @@ performance compared with GNU `seq`.
 ### Directly print strings
 
 As expected, directly printing a string:
+
 ```rust
 stdout.write_all(separator.as_bytes())?
 ```
+
 is quite a bit faster than using format to do the same operation:
+
 ```rust
 write!(stdout, "{separator}")?
 ```
