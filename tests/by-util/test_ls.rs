@@ -2624,6 +2624,16 @@ fn test_ls_order_time() {
     let result = scene.ucmd().arg("--sort=time").arg("-r").succeeds();
     result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
 
+    // Long format selects the displayed time without enabling time sorting.
+    let name_order = Regex::new(r"(?s)test-1\n.*test-2\n.*test-3\n.*test-4\n").unwrap();
+    for (time, format) in itertools::iproduct!(["-u", "-c"], ["-g", "--format=long", "--dired"]) {
+        scene
+            .ucmd()
+            .args(&[time, format])
+            .succeeds()
+            .stdout_matches(&name_order);
+    }
+
     let args: [&[&str]; 10] = [
         &["-t", "-u"],
         &["-u"], //-t is optional: when -l is not set -u/--time controls sorting
