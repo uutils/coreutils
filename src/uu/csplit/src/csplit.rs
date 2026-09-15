@@ -482,10 +482,7 @@ impl SplitWriter<'_> {
             // The consequence is that the buffer may already be full with lines from a previous
             // split, which is taken care of when calling `shrink_buffer_to_size`.
             let offset_usize = offset.unsigned_abs() as usize;
-            // Number of lines belonging to the current split that were read before the
-            // matching line: the ones already held in the buffer (they are written to the
-            // current split by `shrink_buffer_to_size`) plus the ones read below. The target
-            // line of a negative offset may not go back past the start of the current split.
+            // lines of the current split before the match; a negative offset may not go past them
             let mut lines_in_split = input_iter.buffer_len();
             input_iter.set_size_of_buffer(offset_usize);
             while let Some((ln, line)) = input_iter.next() {
