@@ -3,7 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//
 // This file is based on work from Tomasz Miąsko who published it as "shell_words" crate,
 // licensed under the Apache License, Version 2.0 <LICENSE-APACHE>
 // or the MIT license <LICENSE-MIT>, at your option.
