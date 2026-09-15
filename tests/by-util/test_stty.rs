@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar ispeed ospeed NCCS nonhex gstty notachar cbreak evenp oddp CSIZE
 
 use uutests::util::{expected_result, pty_path};
