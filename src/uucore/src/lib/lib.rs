@@ -368,13 +368,30 @@ pub fn set_utility_is_second_arg() {
 // So if we want only the first arg or so it's overkill. We cache it.
 #[cfg(windows)]
 static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| wild::args_os().collect());
-#[cfg(not(windows))]
+#[cfg(all(not(windows), not(target_os = "wasi")))]
 static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| std::env::args_os().collect());
+// `std::env::args_os()` can be empty on wasi when the component is not invoked as a CLI
+// command — for instance when it is embedded as a library and the host passes no argv at all.
+// `UTIL_NAME`/`EXECUTION_PHRASE` and their callers index `ARGV[0]`, which panics on an empty
+// vec, and a panic here aborts the whole component. Guarantee at least one element so those
+// globals resolve to a stable fallback name instead.
+#[cfg(all(not(windows), target_os = "wasi"))]
+static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| {
+    let argv: Vec<OsString> = std::env::args_os().collect();
+    if argv.is_empty() {
+        vec![OsString::from("uu")]
+    } else {
+        argv
+    }
+});
 
 static UTIL_NAME: LazyLock<String> = LazyLock::new(|| {
-    let base_index = usize::from(get_utility_is_second_arg());
+    // Clamp every index into `ARGV`: on wasip2 the vec may be shorter than the multicall layout
+    // assumes (see the ARGV comment above), and an out-of-bounds index aborts the component.
+    let last = ARGV.len().saturating_sub(1);
+    let base_index = usize::from(get_utility_is_second_arg()).min(last);
     let is_man = usize::from(ARGV[base_index].eq("manpage"));
-    let argv_index = base_index + is_man;
+    let argv_index = (base_index + is_man).min(last);
 
     // Strip directory path to show only utility name
     // (e.g., "mkdir" instead of "./target/debug/mkdir")
