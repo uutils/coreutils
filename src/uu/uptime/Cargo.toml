@@ -13,8 +13,8 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[features]
-feat_systemd_logind = ["uucore/feat_systemd_logind"]
+[lints]
+workspace = true
 
 [lib]
 path = "src/uptime.rs"
@@ -27,9 +27,6 @@ thiserror = { workspace = true }
 uucore = { workspace = true, features = ["libc", "utmpx", "uptime"] }
 fluent = { workspace = true }
 jiff = { workspace = true }
-
-[lints]
-workspace = true
 
 [[bin]]
 name = "uptime"
