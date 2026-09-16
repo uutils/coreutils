@@ -78,7 +78,7 @@ enum LsError {
             _ => if .0.is_dir() {
                 translate!("ls-error-cannot-open-directory-permission-denied", "path" => .0.quote())
             } else {
-                translate!("ls-error-cannot-open-file-permission-denied", "path" => .0.quote())
+                translate!("ls-error-cannot-access-permission-denied", "path" => .0.quote())
             },
         },
         _ => if 9 == .1.raw_os_error().unwrap_or(1) {
@@ -909,13 +909,18 @@ impl<'a> PathData<'a> {
     fn metadata(&self) -> Option<&Metadata> {
         self.md
             .get_or_init(|| {
-                if !self.must_dereference
+                // Prefer the metadata cached by `read_dir` when we don't have to
+                // dereference: it is cheaper than a fresh `stat()` call. Errors are
+                // reported below, just like for the non-cached path.
+                let md = if !self.must_dereference
                     && let Some(dir_entry) = RefCell::take(&self.de)
                 {
-                    return dir_entry.metadata().ok();
-                }
+                    dir_entry.metadata()
+                } else {
+                    get_metadata_with_deref_opt(self.path(), self.must_dereference)
+                };
 
-                match get_metadata_with_deref_opt(self.path(), self.must_dereference) {
+                match md {
                     Err(err) => {
                         // FIXME: A bit tricky to propagate the result here
                         let mut out: std::io::StdoutLock<'static> = stdout().lock();
