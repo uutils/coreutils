@@ -54,7 +54,7 @@ highlight = "all"
 # introduces it.
 # spell-checker: disable
 skip = [
-  # various crates
+  # notify
   { name = "windows-sys", version = "0.60.2" },
   # ansi-width
   { name = "unicode-width", version = "0.1.13" },
