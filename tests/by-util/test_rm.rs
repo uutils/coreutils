@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore rootlink dotdot rootfile deleteme keepme topfile
+// spell-checker:ignore rootlink dotdot rootfile deleteme keepme topfile mkdirat RDONLY FDCWD SIGSEGV rootbind submounts rprivate rbind overlayfs ENAMETOOLONG
 #![allow(clippy::stable_sort_primitive)]
 
 use std::process::Stdio;
@@ -1277,6 +1277,79 @@ fn test_rm_recursive_long_path_safe_traversal() {
 
     // Verify the directory is completely removed
     assert!(!at.dir_exists("rm_deep"));
+}
+
+/// A hierarchy thousands of levels deep used to make `rm -r` recurse until the
+/// stack ran out, which killed it with SIGSEGV and left the tree in place.
+///
+/// Linux only: building and removing 32768 levels is slow enough elsewhere to
+/// run out of patience before it runs out of stack, and should the removal
+/// fail, tearing the tree down again falls to `fs::remove_dir_all`, whose own
+/// recursion then overflows the test harness's stack.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_rm_recursive_very_deep_hierarchy() {
+    const DEPTH: u32 = 32 * 1024;
+
+    use std::time::Duration;
+
+    use nix::errno::Errno;
+    use nix::fcntl::{OFlag, openat};
+    use nix::sys::stat::{Mode, mkdirat};
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // The path of the deepest directory is far longer than PATH_MAX, so it has
+    // to be built one level at a time with openat/mkdirat.
+    at.mkdir("deep");
+    let flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY;
+    let mut fd = openat(nix::fcntl::AT_FDCWD, &at.plus("deep"), flags, Mode::empty()).unwrap();
+    // The recursion only ran out of stack around 5000 levels unoptimized and
+    // 20000 optimized, so a shallower tree would not test anything. Some
+    // filesystems resolve the whole path internally and refuse to go past
+    // PATH_MAX, which caps the depth near 2000: there is nothing to test on
+    // those, so give up rather than pretend.
+    let mut depth = 0;
+    while depth < DEPTH {
+        match mkdirat(&fd, "a", Mode::from_bits_truncate(0o755)) {
+            Ok(()) => {}
+            Err(Errno::ENAMETOOLONG) => break,
+            Err(e) => panic!("mkdirat at depth {depth} failed: {e}"),
+        }
+        fd = match openat(&fd, "a", flags, Mode::empty()) {
+            Ok(fd) => fd,
+            Err(Errno::ENAMETOOLONG) => break,
+            Err(e) => panic!("openat at depth {depth} failed: {e}"),
+        };
+        depth += 1;
+    }
+
+    // Release the deepest descriptor, so nothing holds the tree open while rm
+    // walks it.
+    drop(fd);
+
+    if depth < DEPTH {
+        println!("this filesystem stops nesting at {depth} levels; skipping");
+        // Still tear the tree down here: the harness cleanup recurses too.
+        ts.ucmd()
+            .arg("-rf")
+            .arg("deep")
+            .timeout(Duration::from_secs(240))
+            .succeeds();
+        return;
+    }
+
+    // 32768 levels are 65536 metadata operations; the default 30s is not much
+    // once the binary under test is built with coverage instrumentation.
+    ts.ucmd()
+        .arg("-rf")
+        .arg("deep")
+        .timeout(Duration::from_secs(240))
+        .succeeds()
+        .no_output();
+
+    assert!(!at.dir_exists("deep"));
 }
 
 #[cfg(all(not(windows), feature = "chmod"))]

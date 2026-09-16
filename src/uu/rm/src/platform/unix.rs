@@ -5,12 +5,13 @@
 
 // Unix-specific implementations for the rm utility
 
-// spell-checker:ignore fstatat unlinkat statx behaviour
+// spell-checker:ignore fstatat unlinkat statx behaviour automount
 
 use indicatif::ProgressBar;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::{IsTerminal, stdin};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use uucore::display::Quotable;
@@ -362,8 +363,7 @@ pub fn safe_remove_dir_recursive(
         }
     }
 
-    // Entries of the root directory have the root itself as their parent.
-    let error = safe_remove_dir_recursive_impl(path, &dir_fd, options, root_dev, root_dev);
+    let error = safe_remove_dir_recursive_impl(path, dir_fd, options, root_dev, root_ino);
 
     // After processing all children, remove the directory itself
     if error {
@@ -399,16 +399,80 @@ pub fn safe_remove_dir_recursive(
     }
 }
 
+/// A directory suspended while one of its entries is being emptied. Together
+/// with the directory being walked, only the deepest [`OPEN_DIR_FDS`] keep
+/// their descriptor; the others get it back through ".." on the way up, so
+/// depth costs memory, not file descriptors.
+#[cfg(not(target_os = "redox"))]
+struct Frame {
+    dir_fd: Option<DirFd>,
+    dev: u64,
+    ino: u64,
+    entries: std::vec::IntoIter<OsString>,
+    error: bool,
+    /// The entry being emptied, removed once that is done.
+    entry_name: OsString,
+    entry_mode: libc::mode_t,
+    /// Length of this directory's own path, to cut the entry back off with.
+    path_len: usize,
+}
+
+#[cfg(not(target_os = "redox"))]
+const OPEN_DIR_FDS: usize = 16;
+
+/// The path of the directory being walked, kept as raw bytes so that stepping
+/// into an entry and back out again is a truncation rather than a fresh
+/// allocation: a tree deep enough to need this walk has paths long enough that
+/// copying one per entry dominates the removal.
+#[cfg(not(target_os = "redox"))]
+fn path_of(buf: &[u8]) -> &Path {
+    Path::new(OsStr::from_bytes(buf))
+}
+
+#[cfg(not(target_os = "redox"))]
+fn path_push(buf: &mut Vec<u8>, name: &OsStr) {
+    if !buf.is_empty() && buf.last() != Some(&b'/') {
+        buf.push(b'/');
+    }
+    buf.extend_from_slice(name.as_bytes());
+}
+
+/// Whether `name` is an empty directory in `dir_fd`, asked through the
+/// descriptor rather than the path: past PATH_MAX a path-based check just
+/// fails, and a failure counts as non-empty, so rm would prompt before
+/// descending into an empty directory and leave it behind when that prompt is
+/// declined. An unreadable directory still counts as non-empty.
+#[cfg(not(target_os = "redox"))]
+fn is_subdir_empty(dir_fd: &DirFd, name: &OsStr) -> bool {
+    dir_fd
+        .open_subdir(name, SymlinkBehavior::NoFollow)
+        .and_then(|fd| fd.read_dir())
+        .is_ok_and(|entries| entries.is_empty())
+}
+
+/// Reopen the parent of `child_fd` through "..", checking it is still the
+/// directory we descended from and not one swapped in mid-walk.
+#[cfg(not(target_os = "redox"))]
+fn reopen_parent(child_fd: &DirFd, dev: u64, ino: u64) -> std::io::Result<DirFd> {
+    let parent_fd = child_fd.open_subdir(OsStr::new(".."), SymlinkBehavior::NoFollow)?;
+    let info = parent_fd.metadata()?.file_info();
+    if info.device() == dev && info.inode() == ino {
+        Ok(parent_fd)
+    } else {
+        Err(std::io::Error::from(std::io::ErrorKind::NotFound))
+    }
+}
+
 #[cfg(not(target_os = "redox"))]
 pub fn safe_remove_dir_recursive_impl(
     path: &Path,
-    dir_fd: &DirFd,
+    mut cur_fd: DirFd,
     options: &Options,
     root_dev: u64,
-    parent_dev: u64,
+    root_ino: u64,
 ) -> bool {
     // Read directory entries using safe traversal
-    let entries = match dir_fd.read_dir() {
+    let entries = match cur_fd.read_dir() {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
             if !options.force {
@@ -422,52 +486,110 @@ pub fn safe_remove_dir_recursive_impl(
     };
 
     let mut error = false;
+    let mut entries = entries.into_iter();
+    let mut path_buf = path.as_os_str().as_bytes().to_vec();
+    // Entries of the root directory have the root itself as their parent.
+    let (mut parent_dev, mut ino) = (root_dev, root_ino);
+    // Walk with an explicit stack: recursing once per level overflows the real
+    // stack on a tree tens of thousands of levels deep.
+    let mut stack: Vec<Frame> = Vec::new();
 
     // Process each entry
-    for entry_name in entries {
-        let entry_path = path.join(&entry_name);
+    loop {
+        let Some(entry_name) = entries.next() else {
+            // This directory is done: resume its parent, which removes it.
+            let Some(parent) = stack.pop() else {
+                return error;
+            };
+            cur_fd = if let Some(fd) = parent.dir_fd {
+                fd
+            } else {
+                match reopen_parent(&cur_fd, parent.dev, parent.ino) {
+                    Ok(fd) => fd,
+                    Err(e) => {
+                        // Name the parent, not the entry we came up from.
+                        path_buf.truncate(parent.path_len);
+                        return show_removal_error(e, path_of(&path_buf));
+                    }
+                }
+            };
+            let child_error = error;
+            (parent_dev, ino, entries) = (parent.dev, parent.ino, parent.entries);
+            error = parent.error | child_error;
 
-        // Get metadata for the entry using fstatat
-        let entry_stat = match dir_fd.stat_at(&entry_name, SymlinkBehavior::NoFollow) {
-            Ok(stat) => stat,
-            Err(e) => {
-                error |= handle_error_with_force(e, &entry_path, options);
-                continue;
+            // Ask user permission if needed for this subdirectory, then remove
+            // the now-empty subdirectory using safe unlinkat.
+            if !child_error
+                && (options.interactive != InteractiveMode::Always
+                    || prompt_dir_with_mode(path_of(&path_buf), parent.entry_mode, options))
+            {
+                error |= handle_unlink(
+                    &cur_fd,
+                    &parent.entry_name,
+                    path_of(&path_buf),
+                    true,
+                    options,
+                );
             }
+            path_buf.truncate(parent.path_len);
+            continue;
         };
 
-        // Check if it's a directory
-        let is_dir = ((entry_stat.st_mode as libc::mode_t) & libc::S_IFMT) == libc::S_IFDIR;
+        // Build the entry's path in place: a tree deep enough to need this
+        // walk also has paths too long to reallocate once per entry.
+        let parent_len = path_buf.len();
+        path_push(&mut path_buf, &entry_name);
+        let descended = 'entry: {
+            // Get metadata for the entry using fstatat
+            let entry_stat = match cur_fd.stat_at(&entry_name, SymlinkBehavior::NoFollow) {
+                Ok(stat) => stat,
+                Err(e) => {
+                    error |= handle_error_with_force(e, path_of(&path_buf), options);
+                    break 'entry false;
+                }
+            };
 
-        if is_dir {
+            // Check if it's a directory
+            let is_dir = ((entry_stat.st_mode as libc::mode_t) & libc::S_IFMT) == libc::S_IFDIR;
+            if !is_dir {
+                // Remove file - check if user wants to remove it first
+                if prompt_file_with_stat(path_of(&path_buf), &entry_stat, options) {
+                    error |=
+                        handle_unlink(&cur_fd, &entry_name, path_of(&path_buf), false, options);
+                }
+                break 'entry false;
+            }
+
             // st_dev's type varies by platform (i32 on macOS, u64 on Linux).
             #[allow(clippy::unnecessary_cast)]
             let entry_dev = entry_stat.st_dev as u64;
+            #[allow(clippy::unnecessary_cast)]
+            let entry_ino = entry_stat.st_ino as u64;
 
             if options.one_fs && entry_dev != root_dev {
                 show_error!(
                     "{}",
-                    translate!("rm-error-skipping-different-device", "file" => entry_path.quote())
+                    translate!("rm-error-skipping-different-device", "file" => path_of(&path_buf).quote())
                 );
                 error = true;
-                continue;
+                break 'entry false;
             }
 
             // --preserve-root=all compares against the immediate parent rather
             // than the tree root, so a mount nested anywhere in the tree is
             // caught even when --one-file-system is not in effect.
             if options.preserve_root_all && entry_dev != parent_dev {
-                show_preserve_root_all_skip(&entry_path);
+                show_preserve_root_all_skip(path_of(&path_buf));
                 error = true;
-                continue;
+                break 'entry false;
             }
 
             // Ask user if they want to descend into this directory
             if options.interactive == InteractiveMode::Always
-                && !is_dir_empty(&entry_path)
-                && !prompt_descend(&entry_path)
+                && !is_subdir_empty(&cur_fd, &entry_name)
+                && !prompt_descend(path_of(&path_buf))
             {
-                continue;
+                break 'entry false;
             }
 
             // Recursively remove subdirectory using safe traversal. rm never
@@ -475,64 +597,70 @@ pub fn safe_remove_dir_recursive_impl(
             // attacker swaps this just-stat'd directory for a symlink before the
             // open, O_NOFOLLOW makes openat fail instead of descending off-tree
             // and deleting unrelated files.
-            let child_dir_fd = match dir_fd.open_subdir(&entry_name, SymlinkBehavior::NoFollow) {
+            let child_dir_fd = match cur_fd.open_subdir(&entry_name, SymlinkBehavior::NoFollow) {
                 Ok(fd) => fd,
                 Err(e) => {
                     // If we can't open the subdirectory for safe traversal,
                     // try to handle it as best we can with safe operations
                     if e.kind() == std::io::ErrorKind::PermissionDenied {
                         error |= handle_permission_denied(
-                            dir_fd,
-                            entry_name.as_ref(),
-                            &entry_path,
+                            &cur_fd,
+                            &entry_name,
+                            path_of(&path_buf),
                             options,
                         );
                     } else {
-                        error |= handle_error_with_force(e, &entry_path, options);
+                        error |= handle_error_with_force(e, path_of(&path_buf), options);
                     }
-                    continue;
+                    break 'entry false;
                 }
             };
 
-            let child_error = safe_remove_dir_recursive_impl(
-                &entry_path,
-                &child_dir_fd,
-                options,
-                root_dev,
-                entry_dev,
-            );
-            error |= child_error;
+            let child_entries = match child_dir_fd.read_dir() {
+                Ok(child_entries) => (child_entries.into_iter(), false),
+                Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                    if !options.force {
+                        show_permission_denied_error(path_of(&path_buf));
+                    }
+                    (Vec::new().into_iter(), !options.force)
+                }
+                Err(e) => (
+                    Vec::new().into_iter(),
+                    handle_error_with_force(e, path_of(&path_buf), options),
+                ),
+            };
 
-            // Ask user permission if needed for this subdirectory
-            if !child_error
-                && options.interactive == InteractiveMode::Always
-                && !prompt_dir_with_mode(&entry_path, entry_stat.st_mode as libc::mode_t, options)
-            {
-                continue;
+            // Suspend this directory and empty the subdirectory first.
+            stack.push(Frame {
+                dir_fd: Some(std::mem::replace(&mut cur_fd, child_dir_fd)),
+                dev: parent_dev,
+                ino,
+                entries: std::mem::replace(&mut entries, child_entries.0),
+                error: std::mem::replace(&mut error, child_entries.1),
+                entry_name,
+                entry_mode: entry_stat.st_mode as libc::mode_t,
+                path_len: parent_len,
+            });
+            if let Some(closable) = stack.len().checked_sub(OPEN_DIR_FDS) {
+                stack[closable].dir_fd = None;
             }
-
-            // Remove the now-empty subdirectory using safe unlinkat
-            if !child_error {
-                error |= handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, true, options);
-            }
-        } else {
-            // Remove file - check if user wants to remove it first
-            if prompt_file_with_stat(&entry_path, &entry_stat, options) {
-                error |= handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, false, options);
-            }
+            parent_dev = entry_dev;
+            ino = entry_ino;
+            true
+        };
+        if !descended {
+            path_buf.truncate(parent_len);
         }
     }
-
-    error
 }
 
 #[cfg(target_os = "redox")]
 pub fn safe_remove_dir_recursive_impl(
     _path: &Path,
-    _dir_fd: &DirFd,
+    _dir_fd: DirFd,
     _options: &Options,
     _root_dev: u64,
-    _parent_dev: u64,
+    _root_ino: u64,
 ) -> bool {
     // safe_traversal stat_at is not supported on Redox
     // This shouldn't be called on Redox, but provide a stub for compilation
