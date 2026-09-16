@@ -3864,6 +3864,32 @@ fn test_cp_link_backup() {
     assert_eq!(at.read("file2"), "Hello, World!\n");
 }
 
+/// `--attributes-only` must still give the destination the source's type.
+/// It used to create a regular file for any source, which both got the type
+/// wrong and made the later xattr copy `open()` the source FIFO -- blocking
+/// forever, since nothing ever writes to it. GNU creates the FIFO and returns.
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
+fn test_cp_attributes_only_fifo_keeps_type_and_returns() {
+    for recursive in ["-a", "-R"] {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkfifo("fifo");
+
+        scene
+            .ucmd()
+            .args(&[recursive, "--attributes-only", "fifo", "copy"])
+            .succeeds()
+            .no_stderr();
+
+        assert!(
+            at.is_fifo("copy"),
+            "--attributes-only {recursive} did not create a FIFO"
+        );
+    }
+}
+
 #[test]
 #[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
