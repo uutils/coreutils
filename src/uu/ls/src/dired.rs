@@ -182,13 +182,6 @@ pub fn update_positions(dired: &mut DiredOutput, start: usize, end: usize, line_
     dired.padding = 0;
 }
 
-/// Checks if the "--dired" or "-D" argument is present in the command line arguments.
-/// we don't use clap here because we need to know if the argument is present
-/// as it can be overridden by --hyperlink
-pub fn is_dired_arg_present() -> bool {
-    std::env::args_os().any(|x| x == "--dired" || x == "-D")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
