@@ -151,7 +151,7 @@ fn test_sync_file_operands_fsync_each_file() {
     // the operands. /proc/self/mem rejects fsync() with EINVAL, so this
     // must fail; a global sync() would wrongly exit 0.
     new_ucmd!()
-        .arg("/proc/self/mem")
+        .arg("/dev/null")
         .fails_with_code(1)
         .stderr_contains("error syncing");
 }
