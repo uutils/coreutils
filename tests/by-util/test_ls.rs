@@ -5664,6 +5664,59 @@ fn test_ls_dired_order_format() {
         .stdout_contains("//DIRED//");
 }
 
+#[test]
+fn test_ls_dired_format_precedence_is_positional() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("a");
+
+    // A later format option wins over --dired ...
+    for format in ["-C", "--format=single-column"] {
+        scene
+            .ucmd()
+            .args(&["--dired", format, "a"])
+            .succeeds()
+            .stdout_only("a\n");
+    }
+    // ... and a later --dired wins over the format option.
+    let result = scene.ucmd().args(&["-C", "--dired", "a"]).succeeds();
+    assert_eq!(dired_names(result.stdout_str()), ["a"]);
+
+    // -1 after --dired has no effect, exactly as after -l.
+    let result = scene.ucmd().args(&["--dired", "-1", "a"]).succeeds();
+    assert_eq!(dired_names(result.stdout_str()), ["a"]);
+
+    // A later long-format option restores both the long listing and dired.
+    let result = scene.ucmd().args(&["--dired", "-C", "-g", "a"]).succeeds();
+    assert_eq!(dired_names(result.stdout_str()), ["a"]);
+}
+
+#[test]
+fn test_ls_dired_position_vs_hyperlink() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("a");
+
+    // --dired implies long format at its own position even when a later
+    // --hyperlink cancels the dired output itself.
+    let result = scene
+        .ucmd()
+        .args(&["-C", "--dired", "--hyperlink=never", "a"])
+        .succeeds();
+    assert_eq!(dired_names(result.stdout_str()), ["a"]);
+}
+
+#[test]
+fn test_ls_dired_lookalike_operand() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("-D");
+
+    // An operand that merely looks like the option is not the option.
+    scene
+        .ucmd()
+        .args(&["--zero", "--", "-D"])
+        .succeeds()
+        .stdout_only("-D\0");
+}
+
 #[cfg(unix)]
 #[test]
 fn test_ls_dired_terminal_keeps_default_quoting() {
@@ -5688,14 +5741,20 @@ fn test_ls_dired_terminal_keeps_default_quoting() {
 #[test]
 fn test_ls_dired_and_zero_are_incompatible() {
     let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("a");
 
     scene
         .ucmd()
-        .arg("--dired")
-        .arg("-l")
-        .arg("--zero")
+        .args(&["--dired", "-l", "--zero"])
         .fails_with_code(2)
         .stderr_contains("--dired and --zero are incompatible");
+
+    // A later non-long format cancels dired, so --zero is allowed.
+    scene
+        .ucmd()
+        .args(&["--dired", "-C", "--zero", "a"])
+        .succeeds()
+        .stdout_only("a\0");
 }
 
 #[test]
@@ -5940,7 +5999,7 @@ fn dired_names(output: &str) -> Vec<String> {
     let dired_line = output
         .lines()
         .find(|&line| line.starts_with("//DIRED//"))
-        .unwrap();
+        .expect("no //DIRED// line in the output");
     let positions: Vec<usize> = dired_line
         .split_whitespace()
         .skip(1)
