@@ -35,7 +35,7 @@ use uucore::error::{UError, UResult, UUsageError, set_exit_code, strip_errno};
 use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, are_hardlinks_to_same_file, canonicalize,
     get_filename, is_symlink_loop, normalize_path, path_ends_with_terminator,
-    paths_refer_to_same_file,
+    paths_refer_to_same_file, replace_link,
 };
 use uucore::{backup_control, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
@@ -2409,6 +2409,7 @@ fn handle_copy_mode(
 ) -> CopyResult<PerformedAction> {
     match options.copy_mode {
         CopyMode::Link => {
+            let mut force = false;
             if dest.exists() {
                 let backup_path =
                     backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
@@ -2416,16 +2417,19 @@ fn handle_copy_mode(
                     backup_dest(dest, &backup_path, dest.is_symlink())?;
                     fs::remove_file(dest)?;
                 }
-                if options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
-                    fs::remove_file(dest)?;
-                }
+                force = options.overwrite == OverwriteMode::Clobber(ClobberMode::Force);
             }
-            if options.dereference(source_in_command_line) && source.is_symlink() {
-                let resolved =
-                    canonicalize(source, MissingHandling::Missing, ResolveMode::Physical).unwrap();
-                fs::hard_link(resolved, dest)
+            let src = if options.dereference(source_in_command_line) && source.is_symlink() {
+                canonicalize(source, MissingHandling::Missing, ResolveMode::Physical).unwrap()
             } else {
-                fs::hard_link(source, dest)
+                source.to_path_buf()
+            };
+            // Replace atomically rather than unlinking first: the gap would
+            // let another user claim `dest` under a name the caller trusts.
+            if force {
+                replace_link(&src, dest, false)
+            } else {
+                fs::hard_link(&src, dest)
             }
             .map_err(|e| {
                 CpError::IoErrContext(
@@ -2447,10 +2451,13 @@ fn handle_copy_mode(
             )?;
         }
         CopyMode::SymLink => {
+            // Atomic replace, for the same reason as CopyMode::Link above.
             if dest.exists() && options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
-                fs::remove_file(dest)?;
+                replace_link(source, dest, true)?;
+                symlinked_files.insert(FileInformation::from_path(dest, false)?);
+            } else {
+                symlink_file(source, dest, symlinked_files)?;
             }
-            symlink_file(source, dest, symlinked_files)?;
         }
         CopyMode::Update => {
             if dest.exists() {
