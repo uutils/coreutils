@@ -379,7 +379,7 @@ fancy-regex = { version = "0.19.2", default-features = false, features = [
   "unicode",
   "leftmost_longest",
 ] }
-os_display = "0.1.3"
+os_display = "0.1.4"
 parse_datetime = "0.16.0"
 phf = "0.14.0"
 phf_codegen = "0.14.0"
@@ -399,9 +399,9 @@ rust-ini = "0.21.0"
 rustix = { version = "1.1.4", default-features = false }
 self_cell = "1.2.0"
 selinux = "0.6"
-tempfile = "3.20.0"
+tempfile = "3.23.0"
 terminal_size = "0.4.0"
-textwrap = { version = "0.16.1", features = ["terminal_size"] }
+textwrap = { version = "0.16.2", features = ["terminal_size"] }
 thiserror = "2.0.3"
 time = { version = "0.3.36" }
 quote = "1.0.38"
