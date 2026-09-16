@@ -791,7 +791,12 @@ fn process_non_algo_based_line(
     // bits except when dealing with blake2b, sha2 and sha3, where we will
     // detect the length.
     let algo_len = match cli_algo_kind {
-        ak::Blake2b | ak::Blake3 => Some(HashLength::from_bytes(expected_checksum.len())),
+        // An over-length digest makes this a malformed line for GNU, not a
+        // fatal error.
+        algo @ (ak::Blake2b | ak::Blake3) => Some(
+            parse_blake_length(algo, BlakeLength::Int(expected_checksum.len() * 8))
+                .map_err(|_| LineCheckError::ImproperlyFormatted)?,
+        ),
         ak::Sha2 | ak::Sha3 => {
             // multiplication by 8 to get the number of bits
             Some(
