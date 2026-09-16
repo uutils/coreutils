@@ -328,7 +328,7 @@ ansi-width = "0.1.0"
 ariadne = "0.6.0"
 base64-simd = "0.8"
 bigdecimal = "0.4"
-bstr = "1.9.1"
+bstr = { version = "1.9.1", default-features = false, features = ["std"] }
 bytecount = "0.6.8"
 cfg_aliases = "0.2.2"
 clap = { version = "4.5", features = ["wrap_help", "cargo", "color"] }
