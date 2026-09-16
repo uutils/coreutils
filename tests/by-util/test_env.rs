@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel Secho sighandler putenv
+// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel Secho sighandler putenv noeq OLDY
 #![allow(clippy::missing_errors_doc)]
 
 #[cfg(unix)]
@@ -392,6 +392,152 @@ fn test_fail_null_with_program() {
         .arg("cd")
         .fails()
         .stderr_contains("cannot specify --null (-0) with command");
+}
+
+// spell-checker:ignore (words) noeq OLDY
+#[test]
+fn test_env0_from_roundtrip() {
+    let scene = TestScenario::new(util_name!());
+    let contents = "A=1\0B=2\0A=3\0\0plain\0";
+    scene.fixtures.write("env0", contents);
+    scene
+        .ucmd()
+        .args(&["-i", "--env0-from=env0", "--null"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(contents.as_bytes());
+}
+
+#[test]
+fn test_env0_from_empty_file() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("env0", "");
+    scene
+        .ucmd()
+        .args(&["-i", "--env0-from", "env0", "--null"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+}
+
+#[test]
+fn test_env0_from_requires_nul_termination() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("env0", "A=1");
+    scene
+        .ucmd()
+        .args(&["-i", "--env0-from", "env0"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("env: 'env0': file must be empty or end with a NUL byte\n");
+}
+
+#[test]
+fn test_env0_from_multiple_files_processed_in_order() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("first", "FOO=one\0BAR=1\0");
+    scene.fixtures.write("second", "FOO=two\0");
+    scene
+        .ucmd()
+        .args(&[
+            "-i",
+            "--env0-from",
+            "first",
+            "--env0-from",
+            "second",
+            "--null",
+        ])
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes("FOO=two\0BAR=1\0".as_bytes());
+}
+
+#[test]
+fn test_env0_from_missing_file() {
+    new_ucmd!()
+        .args(&["-i", "--env0-from", "no_such_env0"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("env: no_such_env0: No such file or directory\n");
+}
+
+#[test]
+fn test_env0_from_stdin() {
+    new_ucmd!()
+        .args(&["-i", "--env0-from=-", "--null"])
+        .pipe_in("X=1\0Y=2\0")
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes("X=1\0Y=2\0".as_bytes());
+}
+
+#[test]
+fn test_env0_from_merges_with_inherited() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("env0", "FOO=fromfile\0OLDY=1\0");
+    let out = scene
+        .ucmd()
+        .env("FOO", "inherited")
+        .args(&["--env0-from", "env0"])
+        .succeeds()
+        .stdout_move_str();
+    assert!(out.lines().any(|l| l == "FOO=fromfile"), "got: {out}");
+    assert!(!out.lines().any(|l| l == "FOO=inherited"), "got: {out}");
+    assert!(out.lines().any(|l| l == "OLDY=1"));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_env0_from_exec_preserves_env() {
+    let scene = TestScenario::new(util_name!());
+    let contents = "FOO=1\0FOO=2\0";
+    scene.fixtures.write("env0", contents);
+    scene
+        .ucmd()
+        .args(&["-i", "--env0-from", "env0"])
+        .arg(uutests::util::get_tests_binary())
+        .args(&[util_name!(), "--null"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(contents.as_bytes());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_env0_from_passes_entries_without_equals_to_exec() {
+    let scene = TestScenario::new(util_name!());
+    let contents = "PATH=/bin\0A=1\0\0noeq\0";
+    scene.fixtures.write("env0", contents);
+    scene
+        .ucmd()
+        .args(&["-i", "--env0-from", "env0", "cat", "/proc/self/environ"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(contents.as_bytes());
+}
+
+#[test]
+fn test_env0_from_unset_applies_after() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("env0", "FOO=1\0FOO=2\0");
+    scene
+        .ucmd()
+        .args(&["-i", "--env0-from", "env0", "-u", "FOO", "--null"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+}
+
+#[test]
+fn test_env0_from_set_applies_after() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("env0", "FOO=1\0FOO=2\0");
+    scene
+        .ucmd()
+        .args(&["-i", "--env0-from", "env0", "--null", "FOO=3"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes("FOO=3\0FOO=2\0".as_bytes());
 }
 
 #[cfg(not(windows))]
