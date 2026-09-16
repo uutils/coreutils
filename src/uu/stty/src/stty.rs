@@ -1221,6 +1221,16 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
                 (S::VWERASE, "^W"),
                 (S::VLNEXT, "^V"),
                 (S::VDISCARD, "^O"),
+                #[cfg(any(
+                    target_os = "freebsd",
+                    target_os = "dragonfly",
+                    target_os = "ios",
+                    target_os = "macos",
+                    target_os = "netbsd",
+                    target_os = "openbsd",
+                    target_os = "illumos",
+                ))]
+                (S::VSTATUS, "^T"),
             ];
         }
         "tabs" => {
@@ -1262,6 +1272,16 @@ fn get_sane_control_char(cc_index: S) -> u8 {
         S::VTIME => 0,
         #[cfg(target_os = "linux")]
         S::VSWTC => 0,
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd",
+            target_os = "illumos",
+        ))]
+        S::VSTATUS => 20, // ^T
         _ => 0,
     }
 }
@@ -1401,6 +1421,24 @@ mod tests {
     fn test_combo_to_flags_sane() {
         let flags = combo_to_flags("sane");
         assert!(flags.len() > 5); // sane sets multiple flags
+
+        let has_mapping = |cc: S, val: u8| {
+            flags
+                .iter()
+                .any(|f| matches!(f, ArgOptions::Mapping((idx, v)) if *idx == cc && *v == val))
+        };
+        // sane always resets the standard control characters.
+        assert!(has_mapping(S::VINTR, 3)); // ^C
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd",
+            target_os = "illumos",
+        ))]
+        assert!(has_mapping(S::VSTATUS, 20)); // ^T
     }
 
     #[test]
@@ -1593,6 +1631,20 @@ mod tests {
         assert_eq!(get_sane_control_char(S::VWERASE), 23); // ^W
         assert_eq!(get_sane_control_char(S::VLNEXT), 22); // ^V
         assert_eq!(get_sane_control_char(S::VDISCARD), 15); // ^O
+    }
+
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "illumos",
+    ))]
+    #[test]
+    fn test_get_sane_control_char_status() {
+        assert_eq!(get_sane_control_char(S::VSTATUS), 20); // ^T
     }
 
     // Tests for parse_u8_or_err
