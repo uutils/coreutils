@@ -87,9 +87,7 @@ pub enum CpError {
     #[error("{}", translate!("cp-error-not-all-files-copied"))]
     NotAllFilesCopied,
 
-    /// Extended-attribute copying failed, but every failure was already
-    /// reported per-attribute when it happened (see `uucore::fsxattr`).
-    /// Only the exit code is still needed, so nothing more gets printed.
+    /// Xattr copying already reported each failure; only the exit code is needed.
     #[error("")]
     XattrErrorsReported,
 
@@ -1866,12 +1864,7 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
         fs::set_permissions(dest, revert_perms)?;
     }
 
-    // If copying xattrs failed, propagate that error now with context.
-    //
-    // `copy_xattrs*` already reported each failing attribute on stderr, so
-    // only an ENOTSUP-based failure (destination filesystem without xattr
-    // support) still needs the context added here. Anything else fails
-    // silently, keeping a single diagnostic per failing attribute.
+    // `copy_xattrs*` already reported each failure; add context only when xattrs are unsupported.
     copy_xattrs_result.map_err(|e| {
         if uucore::fsxattr::is_xattr_unsupported(&e) {
             CpError::IoErrContext(
