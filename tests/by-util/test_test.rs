@@ -634,11 +634,8 @@ fn test_file_is_not_executable() {
         use std::os::unix::fs::PermissionsExt;
         let metadata = std::fs::metadata(at.plus("regular_file")).unwrap();
         let mut permissions = metadata.permissions();
-
-        // The conversion is useless on some platforms and casts from u16 to
-        // u32 on others
-        #[allow(clippy::useless_conversion)]
-        permissions.set_mode(permissions.mode() & !u32::from(libc::S_IXUSR));
+        #[allow(clippy::unnecessary_cast)]
+        permissions.set_mode(permissions.mode() & !(libc::S_IXUSR as u32));
         std::fs::set_permissions(at.plus("regular_file"), permissions).unwrap();
     }
     ucmd.args(&["!", "-x", "regular_file"]).succeeds();
