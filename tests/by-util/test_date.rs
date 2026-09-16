@@ -3297,3 +3297,8 @@ fn test_write_error() {
         .fails_with_code(1)
         .stderr_is("date: write error: No space left on device\n");
 }
+
+#[test]
+fn test_date_separated_by_dots() {
+    new_ucmd!().args(&["-d", "15.06.2004 3:00 a.m."]).succeeds();
+}

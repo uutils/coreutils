@@ -1176,6 +1176,32 @@ fn parse_dates_from_reader<R: Read + 'static>(
     }))
 }
 
+/// Convert a date string to iso if it is seperated by dots.
+fn convert_to_iso(date_str: &str) -> Option<String> {
+    // Seperate the date from anything else, in case we have something like "01.01.2008 03:00 p.m."
+    let mut parts = date_str.splitn(2, ' ');
+    let date_part = parts.next()?;
+    let time_part = parts.next();
+
+    // Get the year, month and the day
+    let date_subparts: Vec<&str> = date_part.split('.').collect();
+    if date_subparts.len() != 3 {
+        return None;
+    }
+
+    // Format in iso style
+    let new_date = format!(
+        "{}-{}-{}",
+        date_subparts[2], date_subparts[1], date_subparts[0]
+    );
+
+    // Concat the date and the time back
+    match time_part {
+        Some(time) => Some(format!("{new_date} {time}")),
+        None => Some(new_date),
+    }
+}
+
 /// Parse a string into either an in-range [`Zoned`] value or an extended date.
 fn parse_date<S: AsRef<str>>(
     s: S,
@@ -1209,7 +1235,9 @@ fn parse_date<S: AsRef<str>>(
         return Ok(ParsedDateTime::InRange(zoned));
     }
 
-    match parse_datetime::parse_datetime_at_date(now.clone(), input_str) {
+    let input_str = convert_to_iso(input_str).unwrap_or(input_str.to_string());
+
+    match parse_datetime::parse_datetime_at_date(now.clone(), &input_str) {
         // Convert to system timezone for display
         // (parse_datetime returns a value in the input's timezone)
         Ok(ParsedDateTime::InRange(date)) => {
@@ -1248,11 +1276,10 @@ fn parse_date<S: AsRef<str>>(
             Ok(ParsedDateTime::InRange(result))
         }
         Ok(ParsedDateTime::Extended(date)) if allow_extended => Ok(ParsedDateTime::Extended(date)),
-        Ok(ParsedDateTime::Extended(_)) => Err((
-            input_str.into(),
-            parse_datetime::ParseDateTimeError::InvalidInput,
-        )),
-        Err(e) => Err((input_str.into(), e)),
+        Ok(ParsedDateTime::Extended(_)) => {
+            Err((input_str, parse_datetime::ParseDateTimeError::InvalidInput))
+        }
+        Err(e) => Err((input_str, e)),
     }
 }
 
