@@ -860,11 +860,11 @@ impl MetadataExt for Metadata {
     }
 
     fn atime(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
+        #[cfg(all(not(target_pointer_width = "64"), not(target_os = "netbsd")))]
         {
             self.stat.st_atime.into()
         }
-        #[cfg(not(target_pointer_width = "32"))]
+        #[cfg(any(target_pointer_width = "64", target_os = "netbsd"))]
         {
             self.stat.st_atime
         }
@@ -873,16 +873,23 @@ impl MetadataExt for Metadata {
     fn atime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_atimensec
+            #[cfg(not(target_pointer_width = "64"))]
+            {
+                self.stat.st_atimensec.into()
+            }
+            #[cfg(target_pointer_width = "64")]
+            {
+                self.stat.st_atimensec
+            }
         }
 
         #[cfg(not(target_os = "netbsd"))]
         {
-            #[cfg(target_pointer_width = "32")]
+            #[cfg(not(target_pointer_width = "64"))]
             {
                 self.stat.st_atime_nsec.into()
             }
-            #[cfg(not(target_pointer_width = "32"))]
+            #[cfg(target_pointer_width = "64")]
             {
                 self.stat.st_atime_nsec
             }
@@ -890,11 +897,11 @@ impl MetadataExt for Metadata {
     }
 
     fn mtime(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
+        #[cfg(all(not(target_pointer_width = "64"), not(target_os = "netbsd")))]
         {
             self.stat.st_mtime.into()
         }
-        #[cfg(not(target_pointer_width = "32"))]
+        #[cfg(any(target_pointer_width = "64", target_os = "netbsd"))]
         {
             self.stat.st_mtime
         }
@@ -903,16 +910,22 @@ impl MetadataExt for Metadata {
     fn mtime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_mtimensec
+            #[cfg(not(target_pointer_width = "64"))]
+            {
+                self.stat.st_mtimensec.into()
+            }
+            #[cfg(target_pointer_width = "64")]
+            {
+                self.stat.st_mtimensec
+            }
         }
-
         #[cfg(not(target_os = "netbsd"))]
         {
-            #[cfg(target_pointer_width = "32")]
+            #[cfg(not(target_pointer_width = "64"))]
             {
                 self.stat.st_mtime_nsec.into()
             }
-            #[cfg(not(target_pointer_width = "32"))]
+            #[cfg(target_pointer_width = "64")]
             {
                 self.stat.st_mtime_nsec
             }
@@ -920,11 +933,11 @@ impl MetadataExt for Metadata {
     }
 
     fn ctime(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
+        #[cfg(all(not(target_pointer_width = "64"), not(target_os = "netbsd")))]
         {
             self.stat.st_ctime.into()
         }
-        #[cfg(not(target_pointer_width = "32"))]
+        #[cfg(any(target_pointer_width = "64", target_os = "netbsd"))]
         {
             self.stat.st_ctime
         }
@@ -933,16 +946,22 @@ impl MetadataExt for Metadata {
     fn ctime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_ctimensec
+            #[cfg(not(target_pointer_width = "64"))]
+            {
+                self.stat.st_ctimensec.into()
+            }
+            #[cfg(target_pointer_width = "64")]
+            {
+                self.stat.st_ctimensec
+            }
         }
-
         #[cfg(not(target_os = "netbsd"))]
         {
-            #[cfg(target_pointer_width = "32")]
+            #[cfg(not(target_pointer_width = "64"))]
             {
                 self.stat.st_ctime_nsec.into()
             }
-            #[cfg(not(target_pointer_width = "32"))]
+            #[cfg(target_pointer_width = "64")]
             {
                 self.stat.st_ctime_nsec
             }
