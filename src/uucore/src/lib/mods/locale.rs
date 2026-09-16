@@ -862,6 +862,18 @@ pub use {translate, translate_text};
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn embedded_locales_are_escaped_not_raw() {
+        // `.ftl` content is untrusted: translations sync into the tree from a
+        // public translation platform. A raw string ends at `"#`, so content
+        // holding that pair would close the literal and be compiled as Rust.
+        let generated = include_str!(concat!(env!("OUT_DIR"), "/embedded_locales.rs"));
+        assert!(
+            !generated.contains("Some(r\""),
+            "locale table uses a raw string; content containing `\"#` becomes code"
+        );
+    }
     use std::env;
     use std::fs;
     use std::path::PathBuf;
