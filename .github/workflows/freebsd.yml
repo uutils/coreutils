@@ -35,7 +35,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.5.5
+      uses: vmactions/freebsd-vm@v1.5.6
       with:
         usesh: true
         sync: rsync
