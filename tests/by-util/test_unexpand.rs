@@ -318,10 +318,22 @@ fn test_tabs_shortcut_with_too_large_size() {
     new_ucmd!().arg(arg).fails().stderr_contains(expected_error);
 }
 
+fn target_max_tab() -> usize {
+    if std::env::var("UUTESTS_WASM_RUNNER").is_ok()
+        || cfg!(wasi_runner)
+        || cfg!(target_pointer_width = "32")
+    {
+        u32::MAX as usize
+    } else {
+        usize::MAX
+    }
+}
+
 #[test]
 fn test_extended_tabstop_increment_overflow() {
-    // `--tabs=N,+M` with N near usize::MAX must be rejected, not overflow the N+M stop.
-    let arg = format!("--tabs={},+1", usize::MAX);
+    let max_tab = target_max_tab();
+    // `--tabs=N,+M` with N near max_tab must be rejected, not overflow the N+M stop.
+    let arg = format!("--tabs={max_tab},+1");
     new_ucmd!()
         .arg(arg)
         .fails()
@@ -330,23 +342,33 @@ fn test_extended_tabstop_increment_overflow() {
 
 #[test]
 fn test_tabstop_near_max_does_not_overflow() {
+    let max_tab = target_max_tab();
+
     new_ucmd!()
-        .arg(format!("-t{}", usize::MAX))
+        .arg(format!("-t{max_tab}"))
         .pipe_in("a\tb")
         .succeeds()
         .stdout_is("a\tb");
 
     new_ucmd!()
-        .arg(format!("-t{}", usize::MAX - 1))
+        .arg(format!("-t{}", max_tab - 1))
         .pipe_in("a\tb")
         .succeeds()
         .stdout_is("a\tb");
 
     new_ucmd!()
-        .arg(format!("--tabs={}", usize::MAX))
+        .arg(format!("--tabs={max_tab}"))
         .pipe_in("    a")
         .succeeds()
         .stdout_is("    a");
+
+    if max_tab != u32::MAX as usize {
+        new_ucmd!()
+            .arg(format!("-t{}", u32::MAX))
+            .pipe_in("a\tb")
+            .succeeds()
+            .stdout_is("a\tb");
+    }
 }
 
 #[test]

@@ -374,13 +374,12 @@ fn write_tabs(
     // This conditional establishes the following:
     // We never turn a single space before a non-blank into
     // a tab, unless it's at the start of the line.
-    let ai = print_state.leading || amode;
-    if (ai
-        && print_state.pctype != CharType::Tab
-        && print_state.col > print_state.scol.saturating_add(1))
-        || (print_state.col > print_state.scol
-            && (print_state.leading || ai && print_state.pctype == CharType::Tab))
-    {
+    let has_pending = print_state.col > print_state.scol;
+    let multi_space = print_state.col > print_state.scol.saturating_add(1);
+    let tab_preceded = print_state.pctype == CharType::Tab;
+    let can_convert = print_state.leading || (amode && (tab_preceded || multi_space));
+
+    if has_pending && can_convert {
         while print_state.scol < print_state.col {
             let Some(nts) = next_tabstop(tab_config, print_state.scol) else {
                 break;
