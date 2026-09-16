@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use super::PathData;
 use lscolors::{Indicator, LsColors, Style};
 use rustc_hash::FxHashMap;
@@ -540,7 +541,7 @@ pub(crate) fn color_name(
         let has_capabilities = style_manager
             .colors
             .has_explicit_style_for(Indicator::Capabilities)
-            && uucore::fsxattr::has_security_cap_acl(&path.p_buf);
+            && uucore::fsxattr::has_security_cap_acl(&path.p_buf, path.must_dereference);
 
         // If the file has capabilities, use a specific style for `ca` (capabilities)
         if has_capabilities {

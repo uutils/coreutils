@@ -33,7 +33,6 @@ jiff = { workspace = true, optional = true, features = [
   "tzdb-concatenated",
 ] }
 libc = { workspace = true, optional = true }
-openssl = { workspace = true, optional = true }
 os_display = { workspace = true }
 rustc-hash = { workspace = true }
 rustix = { workspace = true, optional = true }
@@ -130,6 +129,12 @@ windows-sys = { workspace = true, optional = true, default-features = false, fea
   "Win32_System_Threading",
   "Win32_System_WindowsProgramming",
 ] }
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+openssl = { workspace = true, features = ["vendored"], optional = true }
+# vendored openssl with MSVC needs complex setup...
+[target.'cfg(target_env = "msvc")'.dependencies]
+openssl = { workspace = true, features = ["aws-lc"], optional = true }
 
 [target.'cfg(target_os = "openbsd")'.dependencies]
 utmp-classic = { workspace = true, optional = true }

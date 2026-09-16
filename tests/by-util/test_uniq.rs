@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore nabcd badoption schar
+
 use uucore::posix::OBSOLETE;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;

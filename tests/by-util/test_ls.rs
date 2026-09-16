@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
 // spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE NOTCAPABLE
 #![allow(
@@ -2623,6 +2624,16 @@ fn test_ls_order_time() {
 
     let result = scene.ucmd().arg("--sort=time").arg("-r").succeeds();
     result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
+
+    // Long format selects the displayed time without enabling time sorting.
+    let name_order = Regex::new(r"(?s)test-1\n.*test-2\n.*test-3\n.*test-4\n").unwrap();
+    for (time, format) in itertools::iproduct!(["-u", "-c"], ["-g", "--format=long", "--dired"]) {
+        scene
+            .ucmd()
+            .args(&[time, format])
+            .succeeds()
+            .stdout_matches(&name_order);
+    }
 
     let args: [&[&str]; 10] = [
         &["-t", "-u"],
@@ -7279,6 +7290,44 @@ fn test_acl_display_symlink() {
     let first = iter.next().unwrap();
 
     assert!(iter.all(|i| i == first));
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+#[test]
+fn test_acl_display_symlink_without_dereference() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let dir_name = "dir";
+    let link_name = "link";
+    at.mkdir(dir_name);
+
+    match Command::new("setfacl")
+        .args(["-d", "-m", "u:bin:rwx", &at.plus_as_string(dir_name)])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: setfacl failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfacl failed with {e}");
+            return;
+        }
+    }
+
+    at.symlink_dir(dir_name, link_name);
+
+    scene
+        .ucmd()
+        .arg("-ld")
+        .arg(link_name)
+        .succeeds()
+        .stdout_does_not_contain("+");
 }
 
 #[test]

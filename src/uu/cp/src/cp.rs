@@ -2,8 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (ToDO) copydir fiemap linkgs lstat nlink nlinks pathbuf reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
-// spell-checker:ignore RDONLY futimens utimensat
+// spell-checker:ignore RDONLY futimens utimensat unioned
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -271,7 +272,13 @@ impl PartialOrd for Preserve {
 impl Ord for Preserve {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            (Self::No { .. }, Self::No { .. }) => Ordering::Equal,
+            // Explicit `--no-preserve` ranks higher than implicit defaults so `union()` retains it.
+            (
+                Self::No { explicit: exp_self },
+                Self::No {
+                    explicit: exp_other,
+                },
+            ) => exp_self.cmp(exp_other),
             (Self::Yes { .. }, Self::No { .. }) => Ordering::Greater,
             (Self::No { .. }, Self::Yes { .. }) => Ordering::Less,
             (
@@ -3202,5 +3209,27 @@ mod tests {
                 xattr: Preserve::No { explicit: true }
             }
         );
+    }
+
+    #[test]
+    fn test_preserve_ord() {
+        assert!(Preserve::No { explicit: true } > Preserve::No { explicit: false });
+        assert!(Preserve::Yes { required: false } > Preserve::No { explicit: true });
+        assert!(Preserve::Yes { required: true } > Preserve::Yes { required: false });
+    }
+
+    #[test]
+    fn test_attributes_union_retains_explicit_no() {
+        let explicit_no_mode = Attributes {
+            mode: Preserve::No { explicit: true },
+            ..Attributes::NONE
+        };
+        let timestamps_yes = Attributes {
+            timestamps: Preserve::Yes { required: true },
+            ..Attributes::NONE
+        };
+        let unioned = explicit_no_mode.union(&timestamps_yes);
+        assert_eq!(unioned.mode, Preserve::No { explicit: true });
+        assert_eq!(unioned.timestamps, Preserve::Yes { required: true });
     }
 }

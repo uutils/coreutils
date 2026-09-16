@@ -6,24 +6,26 @@
 // spell-checker:ignore sigwait KTIME timeval itimerval setitimer itimer timerid
 // spell-checker:ignore sigevent sigev sigval itimerspec signo clockid sevp
 
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use libc::pid_t;
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use nix::sys::signal::{self as nix_signal, SigHandler};
 use nix::sys::signal::{SigSet, Signal};
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use nix::unistd::Pid;
 use rustix::process::Signal as RixSignal;
 use std::io;
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use std::process::Child;
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use std::time::{Duration, Instant};
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use timer::Timer;
 
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use super::{ChildExt, TimeoutRet};
 
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 impl ChildExt for Child {
     fn send_signal(&mut self, signal: usize) -> io::Result<()> {
         let pid = Pid::from_raw(self.id() as pid_t);
@@ -120,7 +122,7 @@ pub fn unblock_signal(signal: RixSignal) -> io::Result<()> {
 /// Ensures there is no overflow on time_t operations. Some BSDs (notably XNU)
 /// will return EINVAL otherwise; POSIX only defines it up to 10e8, so we cap
 /// it on all targets we do not trust to support the full integer range.
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 const MAX_KTIME_T: Duration = if cfg!(target_os = "linux") {
     Duration::from_secs(9_223_372_036)
 } else {
@@ -133,6 +135,7 @@ const MAX_KTIME_T: Duration = if cfg!(target_os = "linux") {
 #[cfg(not(any(
     target_vendor = "apple",
     target_os = "fuchsia",
+    target_os = "haiku",
     target_os = "openbsd",
     windows
 )))]
@@ -150,22 +153,31 @@ mod timer {
         pub(super) fn new() -> io::Result<Self> {
             use std::mem::MaybeUninit;
 
-            // SAFETY: we must zero the reserved, private bits and other fields.
+            // We must zero the reserved, private bits and other fields.
             // We cannot use nix or rustix because they don't support it in Redox.
-            let mut sev: libc::sigevent = unsafe { MaybeUninit::zeroed().assume_init() };
-            sev.sigev_notify = libc::SIGEV_SIGNAL;
-            sev.sigev_signo = libc::SIGALRM;
+            let mut sev = MaybeUninit::<libc::sigevent>::zeroed();
 
-            // SAFETY: On cygwin, it's a u64; otherwise, a ptr with exposed provenance.
-            let mut timer_id = unsafe { MaybeUninit::zeroed().assume_init() };
+            unsafe {
+                (*sev.as_mut_ptr()).sigev_notify = libc::SIGEV_SIGNAL;
+                (*sev.as_mut_ptr()).sigev_signo = libc::SIGALRM;
+            }
+
+            // On cygwin, it's a u64; otherwise, a ptr with exposed provenance.
+            let mut timer_id = MaybeUninit::zeroed();
             // SAFETY: All values are properly initialized.
-            if unsafe { libc::timer_create(libc::CLOCK_MONOTONIC, &raw mut sev, &raw mut timer_id) }
-                == -1
+            if unsafe {
+                libc::timer_create(
+                    libc::CLOCK_MONOTONIC,
+                    sev.as_mut_ptr(),
+                    timer_id.as_mut_ptr(),
+                )
+            } == -1
             {
                 return Err(io::Error::last_os_error());
             }
 
-            Ok(Self(timer_id))
+            // SAFETY: `timer_create` returned success and initialized timer_id.
+            Ok(Self(unsafe { timer_id.assume_init() }))
         }
 
         pub(super) fn arm(&mut self, timeout: Duration) -> Result<(), io::Error> {
@@ -288,7 +300,7 @@ mod timer {
     }
 }
 
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 impl Timer {
     fn timed_sigwait(&mut self, timeout: Duration) -> io::Result<Option<Signal>> {
         self.arm(timeout)?;

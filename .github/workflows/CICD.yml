@@ -108,10 +108,6 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
-        components: clippy
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
@@ -125,7 +121,7 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
-        sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu libselinux1-dev
+        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -264,7 +260,7 @@ jobs:
         ## `cargo update` testing
         # * convert any errors/warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
         for dir in "." "fuzz"; do
-          ( cd "$dir" && cargo fetch --locked --quiet --target $(rustc --print host-tuple)) || { echo "::error file=$dir/Cargo.lock::'$dir/Cargo.lock' file requires update (use \`cd '$dir' && cargo +${{ env.RUST_MIN_SRV }} update\`)" ; exit 1 ; }
+          ( cd "$dir" && cargo fetch --locked --quiet --target host-tuple) || { echo "::error file=$dir/Cargo.lock::'$dir/Cargo.lock' file requires update (use \`cd '$dir' && cargo +${{ env.RUST_MIN_SRV }} update\`)" ; exit 1 ; }
         done
 
   build_rust_stable:
@@ -397,7 +393,7 @@ jobs:
           # msvc and gnu works on the same target. So publishing msvc is enough.
           - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows, skip-publish: true }
           # todo: enable static openssl via vcpkg for performance
-          - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows, pgo: PGO }
+          - { os: windows-latest , target: x86_64-pc-windows-msvc , features: "feat_os_windows,openssl", pgo: PGO }
           # No `pgo` here: on aarch64-pc-windows-msvc the instrumented binary
           # writes .profraw files whose name table llvm-profdata rejects with
           # "symbol name is empty", so every profile is unusable. Upstream bugs:
@@ -556,9 +552,6 @@ jobs:
             sudo apt-get -y update
             sudo apt-get -y install fuse3 libfuse-dev
           ;;
-        esac
-        case '${{ matrix.job.os }}' in
-          macos-latest) brew install coreutils ;; # needed for testing
         esac
         case '${{ matrix.job.os }}' in
           ubuntu-*)
@@ -807,10 +800,6 @@ jobs:
       shell: bash
       run: |
         ## Install/setup prerequisites
-        case '${{ matrix.job.os }}' in
-          macos-latest) brew install coreutils ;; # needed for testing
-        esac
-
         case '${{ matrix.job.os }}' in
           ubuntu-latest)
             # selinux and systemd headers needed to build tests

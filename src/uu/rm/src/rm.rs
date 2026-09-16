@@ -135,8 +135,9 @@ fn remove_dir_with_feedback(path: &Path, options: &Options) -> bool {
 pub enum InteractiveMode {
     /// Never prompt
     Never,
-    /// Prompt once before removing more than three files, or when removing
-    /// recursively.
+    /// Ask for confirmation a single time, covering the whole operation, when
+    /// the request looks broad: a recursive removal, or more than three
+    /// operands.
     Once,
     /// Prompt before every removal
     Always,
@@ -460,12 +461,10 @@ pub fn uu_app() -> Command {
                 .help(translate!("rm-help-progress"))
                 .action(ArgAction::SetTrue),
         )
-        // From the GNU source code:
-        // This is solely for testing.
-        // Do not document.
-        // It is relatively difficult to ensure that there is a tty on stdin.
-        // Since rm acts differently depending on that, without this option,
-        // it'd be harder to test the parts of rm that depend on that setting.
+        // Hidden, and meant only for the test suite: handing the process a real
+        // tty on stdin is awkward to arrange, and the prompting paths behave
+        // differently once it has one, so this switch stands in for that state
+        // and makes those paths reachable from a test.
         // In contrast with Arg::long, Arg::alias does not strip leading
         // hyphens. Therefore it supports 3 leading hyphens.
         .arg(
