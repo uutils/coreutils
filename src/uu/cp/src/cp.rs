@@ -1825,10 +1825,12 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
         // When -Z is used, skip copying security.selinux xattr so that
         // the default context can be set instead of preserving from source
         copy_xattrs_skip_selinux(source, dest)
-    } else if metadata.is_file() {
+    } else if metadata.is_file() && fs::symlink_metadata(source)?.is_file() {
         // Use file descriptor-based operations for regular files to avoid TOCTOU races.
         // Directories cannot be opened with write mode for xattr operations
         // Symlinks (especially dangling ones) cannot be opened via File::open
+        // The source must be regular too: opening a FIFO here blocks until a
+        // writer appears, and a device would have side effects on open.
         let source_file = File::open(source)?;
         let dest_file = OpenOptions::new().write(true).open(dest)?;
         copy_xattrs_fd(&source_file, &dest_file)
@@ -2514,6 +2516,26 @@ fn handle_copy_mode(
             }
         }
         CopyMode::AttrOnly => {
+            // The destination must have the source's type. Creating a regular
+            // file for a FIFO or a device both gets the type wrong and, for a
+            // FIFO, makes the later xattr copy open it and block forever with
+            // no writer.
+            #[cfg(unix)]
+            {
+                let ft = source_metadata.file_type();
+                if ft.is_fifo() {
+                    return copy_fifo(dest, options.overwrite, options.debug)
+                        .map(|()| PerformedAction::Copied);
+                }
+                if ft.is_socket() {
+                    return copy_socket(dest, options.overwrite, options.debug)
+                        .map(|()| PerformedAction::Copied);
+                }
+                if ft.is_char_device() || ft.is_block_device() {
+                    return copy_node(dest, source_metadata, options.overwrite, options.debug)
+                        .map(|()| PerformedAction::Copied);
+                }
+            }
             OpenOptions::new()
                 .write(true)
                 .truncate(false)
