@@ -14,7 +14,6 @@ pub mod variable_parser;
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
-use ini::Ini;
 use native_int_str::{
     Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation,
     from_native_int_representation_owned, get_single_native_int_value,
@@ -34,6 +33,7 @@ use std::env;
 #[cfg(unix)]
 use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
+#[cfg(not(unix))]
 use std::io;
 use std::io::Write as _;
 use std::io::stderr;
@@ -91,7 +91,6 @@ mod options {
     pub const IGNORE_ENVIRONMENT: &str = "ignore-environment";
     pub const CHDIR: &str = "chdir";
     pub const NULL: &str = "null";
-    pub const FILE: &str = "file";
     pub const UNSET: &str = "unset";
     pub const DEBUG: &str = "debug";
     pub const SPLIT_STRING: &str = "split-string";
@@ -106,7 +105,6 @@ struct Options<'a> {
     ignore_env: bool,
     line_ending: LineEnding,
     running_directory: Option<&'a OsStr>,
-    files: Vec<&'a OsStr>,
     unsets: Vec<&'a OsStr>,
     sets: Vec<(Cow<'a, OsStr>, Cow<'a, OsStr>)>,
     program: Vec<&'a OsStr>,
@@ -313,34 +311,6 @@ fn signal_is_valid(sig: usize) -> bool {
     true
 }
 
-fn load_config_file(opts: &mut Options) -> UResult<()> {
-    // NOTE: config files are parsed using an INI parser b/c it's available and compatible with ".env"-style files
-    //   ... * but support for actual INI files, although working, is not intended, nor claimed
-    for &file in &opts.files {
-        let conf = if file == "-" {
-            let stdin = io::stdin();
-            let mut stdin_locked = stdin.lock();
-            Ini::read_from(&mut stdin_locked)
-        } else {
-            Ini::load_from_file(file)
-        };
-
-        let conf =
-            conf.map_err(|e| USimpleError::new(1, format!("{}: {e}", file.maybe_quote())))?;
-
-        for (_, prop) in &conf {
-            // ignore all INI section lines (treat them as comments)
-            for (key, value) in prop {
-                unsafe {
-                    env::set_var(key, value);
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
 pub fn uu_app() -> Command {
     Command::new("env")
         .version(uucore::crate_version!())
@@ -373,16 +343,6 @@ pub fn uu_app() -> Command {
                 .long(options::NULL)
                 .help(translate!("env-help-null"))
                 .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILE)
-                .short('f')
-                .long(options::FILE)
-                .value_name("PATH")
-                .value_hint(clap::ValueHint::FilePath)
-                .value_parser(ValueParser::os_string())
-                .action(ArgAction::Append)
-                .help(translate!("env-help-file")),
         )
         .arg(
             Arg::new(options::UNSET)
@@ -616,13 +576,8 @@ impl EnvAppData {
         let mut process_flags = true;
         let mut expecting_arg = false;
         // Leave out split-string since it's a special case below
-        let flags_with_args = [
-            options::ARGV0,
-            options::CHDIR,
-            options::FILE,
-            options::UNSET,
-        ];
-        let short_flags_with_args = ['a', 'C', 'f', 'u'];
+        let flags_with_args = [options::ARGV0, options::CHDIR, options::UNSET];
+        let short_flags_with_args = ['a', 'C', 'u'];
         let mut consumed_split_payload_arg: Option<usize> = None;
         for (n, arg) in original_args.iter().enumerate() {
             if consumed_split_payload_arg == Some(n) {
@@ -821,7 +776,7 @@ impl EnvAppData {
             self.do_input_debug_printing = Some(false);
         }
 
-        let mut opts = make_options(
+        let opts = make_options(
             &matches,
             #[cfg(all(unix, not(target_os = "fuchsia")))]
             &signal_apply_all,
@@ -831,9 +786,6 @@ impl EnvAppData {
         //       easily handle the case where no command is given
 
         apply_removal_of_all_env_vars(&opts);
-
-        // load .env-style config file prior to those given on the command-line
-        load_config_file(&mut opts)?;
 
         apply_unset_env_vars(&opts)?;
 
@@ -1011,10 +963,6 @@ fn make_options<'a>(
     let running_directory = matches
         .get_one::<OsString>("chdir")
         .map(OsString::as_os_str);
-    let files = match matches.get_many::<OsString>("file") {
-        Some(v) => v.map(OsString::as_os_str).collect(),
-        None => Vec::new(),
-    };
     let unsets = match matches.get_many::<OsString>("unset") {
         Some(v) => v.map(OsString::as_os_str).collect(),
         None => Vec::new(),
@@ -1036,7 +984,6 @@ fn make_options<'a>(
         ignore_env,
         line_ending,
         running_directory,
-        files,
         unsets,
         sets: vec![],
         program: vec![],

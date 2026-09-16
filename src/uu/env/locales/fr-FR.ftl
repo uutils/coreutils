@@ -6,7 +6,6 @@ env-after-help = Un simple - implique -i. Si aucune COMMANDE, afficher l'environ
 env-help-ignore-environment = commencer avec un environnement vide
 env-help-chdir = changer le répertoire de travail vers RÉP
 env-help-null = terminer chaque ligne de sortie avec un octet 0 plutôt qu'un retour à la ligne (valide uniquement lors de l'affichage de l'environnement)
-env-help-file = lire et définir les variables à partir d'un fichier de configuration de style ".env" (avant toute suppression et/ou définition)
 env-help-unset = supprimer la variable de l'environnement
 env-help-debug = afficher des informations détaillées pour chaque étape de traitement
 env-help-split-string = traiter et diviser S en arguments séparés ; utilisé pour passer plusieurs arguments sur les lignes shebang
