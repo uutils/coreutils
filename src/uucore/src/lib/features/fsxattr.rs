@@ -6,6 +6,9 @@
 // spell-checker:ignore getxattr posix_acl_default posix_acl_access ENOTSUP EOPNOTSUPP renamer
 
 //! Set of functions to manage xattr on files and dirs
+use crate::display::Quotable;
+use crate::error::strip_errno;
+use crate::show_error;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use std::ffi::{OsStr, OsString};
@@ -16,7 +19,7 @@ use std::path::Path;
 /// True if the error is `ENOTSUP` / `EOPNOTSUPP` (same errno on Linux,
 /// distinct on the BSDs).
 #[cfg(unix)]
-fn is_xattr_unsupported(err: &std::io::Error) -> bool {
+pub fn is_xattr_unsupported(err: &std::io::Error) -> bool {
     matches!(
         err.raw_os_error(),
         Some(e) if e == libc::ENOTSUP || e == libc::EOPNOTSUPP
@@ -24,20 +27,55 @@ fn is_xattr_unsupported(err: &std::io::Error) -> bool {
 }
 
 #[cfg(not(unix))]
-fn is_xattr_unsupported(_err: &std::io::Error) -> bool {
+pub fn is_xattr_unsupported(_err: &std::io::Error) -> bool {
     false
 }
 
+/// Report a per-attribute failure on stderr and record it so the copy loop
+/// can keep working on the remaining attributes and still fail afterwards.
+///
+/// `ENOTSUP` / `EOPNOTSUPP` mean the filesystem simply has no xattr support
+/// and are recorded but not reported: best-effort callers map them to `Ok`
+/// through the `*_ignore_unsupported` wrappers and must stay quiet.
+fn record_xattr_failure(
+    attr_name: &OsStr,
+    reading: bool,
+    err: std::io::Error,
+    pending_error: &mut Option<std::io::Error>,
+) {
+    if !is_xattr_unsupported(&err) {
+        let action = if reading {
+            "cannot read attribute"
+        } else {
+            "setting attribute"
+        };
+        show_error!("{action} {}: {}", attr_name.quote(), strip_errno(&err));
+    }
+    if pending_error.is_none() {
+        *pending_error = Some(err);
+    }
+}
+
 /// Copies extended attributes (xattrs) from one path to another.
-/// All errors propagate, including `ENOTSUP` / `EOPNOTSUPP`; for
+///
+/// A failed attribute is reported on stderr and does not stop the other
+/// attributes from being copied; the first such failure is propagated at
+/// the end. `ENOTSUP` / `EOPNOTSUPP` are recorded but not reported; for
 /// best-effort callers see [`copy_xattrs_ignore_unsupported`].
 pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
+    let mut pending_error = None;
     for attr_name in xattr::list(&source)? {
-        if let Some(value) = xattr::get(&source, &attr_name)? {
-            xattr::set(&dest, &attr_name, &value)?;
+        match xattr::get(&source, &attr_name) {
+            Ok(Some(value)) => {
+                if let Err(err) = xattr::set(&dest, &attr_name, &value) {
+                    record_xattr_failure(&attr_name, false, err, &mut pending_error);
+                }
+            }
+            Ok(None) => {}
+            Err(err) => record_xattr_failure(&attr_name, true, err, &mut pending_error),
         }
     }
-    Ok(())
+    pending_error.map_or(Ok(()), Err)
 }
 
 /// Like [`copy_xattrs`], but maps `ENOTSUP` / `EOPNOTSUPP` to `Ok(())`
@@ -52,15 +90,25 @@ pub fn copy_xattrs_ignore_unsupported<P: AsRef<Path>>(source: P, dest: P) -> std
 /// Copies xattrs between two open file descriptors. Pins both inodes so
 /// list/get/set calls cannot be redirected by a concurrent renamer, unlike
 /// the path-based [`copy_xattrs`].
+///
+/// Failures are handled like in [`copy_xattrs`]: each one is reported and
+/// the remaining attributes are still copied.
 #[cfg(unix)]
 pub fn copy_xattrs_fd(source: &std::fs::File, dest: &std::fs::File) -> std::io::Result<()> {
     use xattr::FileExt;
+    let mut pending_error = None;
     for attr_name in source.list_xattr()? {
-        if let Some(value) = source.get_xattr(&attr_name)? {
-            dest.set_xattr(&attr_name, &value)?;
+        match source.get_xattr(&attr_name) {
+            Ok(Some(value)) => {
+                if let Err(err) = dest.set_xattr(&attr_name, &value) {
+                    record_xattr_failure(&attr_name, false, err, &mut pending_error);
+                }
+            }
+            Ok(None) => {}
+            Err(err) => record_xattr_failure(&attr_name, true, err, &mut pending_error),
         }
     }
-    Ok(())
+    pending_error.map_or(Ok(()), Err)
 }
 
 /// Like [`copy_xattrs_fd`], but maps `ENOTSUP` / `EOPNOTSUPP` to `Ok(())`.
@@ -76,16 +124,27 @@ pub fn copy_xattrs_fd_ignore_unsupported(
 }
 
 /// Like `copy_xattrs`, but skips the security.selinux attribute.
+///
+/// Failures are handled like in [`copy_xattrs`]: each one is reported and
+/// the remaining attributes are still copied.
 #[cfg(unix)]
 pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
+    let mut pending_error = None;
     for attr_name in xattr::list(&source)? {
-        if attr_name.as_bytes() != b"security.selinux"
-            && let Some(value) = xattr::get(&source, &attr_name)?
-        {
-            xattr::set(&dest, &attr_name, &value)?;
+        if attr_name.as_bytes() == b"security.selinux" {
+            continue;
+        }
+        match xattr::get(&source, &attr_name) {
+            Ok(Some(value)) => {
+                if let Err(err) = xattr::set(&dest, &attr_name, &value) {
+                    record_xattr_failure(&attr_name, false, err, &mut pending_error);
+                }
+            }
+            Ok(None) => {}
+            Err(err) => record_xattr_failure(&attr_name, true, err, &mut pending_error),
         }
     }
-    Ok(())
+    pending_error.map_or(Ok(()), Err)
 }
 
 /// Copies only the POSIX ACL xattrs (`system.posix_acl_access` and
@@ -155,6 +214,9 @@ pub fn retrieve_xattrs_fd(source: &std::fs::File) -> std::io::Result<FxHashMap<O
 
 /// Applies extended attributes (xattrs) to a given file or directory.
 ///
+/// Failures are handled like in [`copy_xattrs`]: each one is reported and
+/// the remaining attributes are still applied.
+///
 /// # Arguments
 ///
 /// * `dest` - A reference to the path of the file or directory.
@@ -167,16 +229,19 @@ pub fn apply_xattrs<P: AsRef<Path>>(
     dest: P,
     xattrs: FxHashMap<OsString, Vec<u8>>,
 ) -> std::io::Result<()> {
+    let mut pending_error = None;
     for (attr, value) in xattrs {
-        xattr::set(&dest, &attr, &value)?;
+        if let Err(err) = xattr::set(&dest, &attr, &value) {
+            record_xattr_failure(&attr, false, err, &mut pending_error);
+        }
     }
-    Ok(())
+    pending_error.map_or(Ok(()), Err)
 }
 
 /// Applies extended attributes (xattrs) to a given file using a file descriptor.
 ///
-/// This version avoids TOCTOU races by operating on an open file descriptor
-/// rather than a path, ensuring all operations target the same inode.
+/// Failures are handled like in [`copy_xattrs`]: each one is reported and
+/// the remaining attributes are still applied.
 ///
 /// # Arguments
 ///
@@ -192,10 +257,13 @@ pub fn apply_xattrs_fd(
     xattrs: FxHashMap<OsString, Vec<u8>>,
 ) -> std::io::Result<()> {
     use xattr::FileExt;
+    let mut pending_error = None;
     for (attr, value) in xattrs {
-        dest.set_xattr(&attr, &value)?;
+        if let Err(err) = dest.set_xattr(&attr, &value) {
+            record_xattr_failure(&attr, false, err, &mut pending_error);
+        }
     }
-    Ok(())
+    pending_error.map_or(Ok(()), Err)
 }
 
 /// Like [`apply_xattrs_fd`], but maps `ENOTSUP` / `EOPNOTSUPP` to `Ok(())`.
@@ -367,6 +435,78 @@ mod tests {
 
         let copied = xattr::get(&dest_path, test_attr).unwrap().unwrap();
         assert_eq!(copied, test_value);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_copy_xattrs_continues_after_failure() {
+        use std::path::PathBuf;
+        use std::process::Command;
+
+        // tmpfs accepts large user-xattr values while most disk filesystems
+        // cap them near the block size. Put the source on /dev/shm and the
+        // destination on the build filesystem so the first attribute fails to
+        // copy while the source holds it fine; skip when this machine cannot
+        // produce that layout.
+        let pid = std::process::id();
+        let source_dir = PathBuf::from(format!("/dev/shm/xattr_copy_fail_{pid}"));
+        let dest_dir = std::env::temp_dir().join(format!("xattr_copy_fail_{pid}"));
+        if std::fs::create_dir(&source_dir).is_err() || std::fs::create_dir(&dest_dir).is_err() {
+            return; // skip: no usable /dev/shm or temp dir
+        }
+
+        let mut usable_size = None;
+        for size in [9_100, 40_000] {
+            let value = "y".repeat(size);
+            let source_probe = source_dir.join(format!("probe_{size}"));
+            let dest_probe = dest_dir.join(format!("probe_{size}"));
+            std::fs::write(&source_probe, "x").ok();
+            std::fs::write(&dest_probe, "x").ok();
+            let src_accepts = Command::new("setfattr")
+                .args(["-n", "user.huge", "-v", &value])
+                .arg(&source_probe)
+                .status()
+                .is_ok_and(|s| s.success());
+            let dest_rejects = !Command::new("setfattr")
+                .args(["-n", "user.huge", "-v", &value])
+                .arg(&dest_probe)
+                .status()
+                .is_ok_and(|s| s.success());
+            std::fs::remove_file(&source_probe).ok();
+            std::fs::remove_file(&dest_probe).ok();
+            if src_accepts && dest_rejects {
+                usable_size = Some(size);
+                break;
+            }
+        }
+        let Some(size) = usable_size else {
+            std::fs::remove_dir_all(&source_dir).ok();
+            std::fs::remove_dir_all(&dest_dir).ok();
+            return; // skip: this filesystem combination cannot fail the copy
+        };
+
+        // user.big is set first so it comes first in list order: when it
+        // fails, user.small must still make it to the destination.
+        let source = source_dir.join("source");
+        let dest = dest_dir.join("dest");
+        std::fs::write(&source, "data").unwrap();
+        std::fs::write(&dest, "data").unwrap();
+        let big_value = "y".repeat(size);
+        xattr::set(&source, "user.big", big_value.as_bytes()).unwrap();
+        xattr::set(&source, "user.small", b"12345678").unwrap();
+        let source_list = xattr::list(&source).unwrap().collect::<Vec<_>>();
+        assert_eq!(source_list[0], OsString::from("user.big"));
+
+        let result = copy_xattrs(&source, &dest);
+        assert!(result.is_err(), "the failed attribute must fail the copy");
+
+        let copied_small = xattr::get(&dest, "user.small").unwrap();
+        assert_eq!(copied_small.as_deref(), Some(b"12345678".as_slice()));
+        let copied_big = xattr::get(&dest, "user.big").unwrap();
+        assert_eq!(copied_big, None);
+
+        std::fs::remove_dir_all(&source_dir).ok();
+        std::fs::remove_dir_all(&dest_dir).ok();
     }
 
     #[test]

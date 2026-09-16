@@ -9444,7 +9444,7 @@ fn test_cp_xattr_failure_keeps_dest_contents() {
         .arg(&source)
         .arg(&out)
         .fails()
-        .stderr_contains("setting attributes");
+        .stderr_contains("setting attribute 'user.huge'");
     assert_eq!(std_fs::read_to_string(&out).unwrap(), "kept content");
 
     // A read-only source propagates its mode to the destination; the failure
@@ -9457,7 +9457,7 @@ fn test_cp_xattr_failure_keeps_dest_contents() {
         .arg(&source)
         .arg(&out_ro)
         .fails()
-        .stderr_contains("setting attributes");
+        .stderr_contains("setting attribute 'user.huge'");
     assert_eq!(std_fs::read_to_string(&out_ro).unwrap(), "kept content");
     assert_eq!(
         std_fs::metadata(&out_ro).unwrap().mode() & 0o777,

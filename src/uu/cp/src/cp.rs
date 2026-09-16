@@ -87,6 +87,12 @@ pub enum CpError {
     #[error("{}", translate!("cp-error-not-all-files-copied"))]
     NotAllFilesCopied,
 
+    /// Extended-attribute copying failed, but every failure was already
+    /// reported per-attribute when it happened (see `uucore::fsxattr`).
+    /// Only the exit code is still needed, so nothing more gets printed.
+    #[error("")]
+    XattrErrorsReported,
+
     /// Simple [`walkdir::Error`] wrapper
     #[error("{0}")]
     WalkDirErr(#[from] walkdir::Error),
@@ -1423,9 +1429,12 @@ fn show_error_if_needed(error: &CpError) {
         CpError::NotAllFilesCopied => {
             // Need to return an error code
         }
-        CpError::Skipped(_) => {
+        CpError::Skipped(_) | CpError::XattrErrorsReported => {
             // touch a b && echo "n"|cp -i a b && echo $?
             // should return an error
+            // XattrErrorsReported: each failing attribute was already
+            // reported on stderr by `copy_xattrs*`; only the exit code
+            // matters now.
         }
         // Format IoErrContext using strip_errno to remove "(os error N)" suffix
         // for GNU-compatible output
@@ -1858,11 +1867,20 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
     }
 
     // If copying xattrs failed, propagate that error now with context.
+    //
+    // `copy_xattrs*` already reported each failing attribute on stderr, so
+    // only an ENOTSUP-based failure (destination filesystem without xattr
+    // support) still needs the context added here. Anything else fails
+    // silently, keeping a single diagnostic per failing attribute.
     copy_xattrs_result.map_err(|e| {
-        CpError::IoErrContext(
-            e,
-            translate!("cp-error-setting-attributes", "path" => dest.quote()),
-        )
+        if uucore::fsxattr::is_xattr_unsupported(&e) {
+            CpError::IoErrContext(
+                e,
+                translate!("cp-error-setting-attributes", "path" => dest.quote()),
+            )
+        } else {
+            CpError::XattrErrorsReported
+        }
     })?;
 
     Ok(())
