@@ -426,59 +426,18 @@ impl FsUsage {
     #[cfg(unix)]
     #[allow(clippy::unnecessary_cast)]
     pub fn new(statvfs: StatFs) -> Self {
-        {
-            #[cfg(all(
-                not(any(target_os = "freebsd", target_os = "openbsd")),
-                target_pointer_width = "64"
-            ))]
-            return Self {
-                blocksize: statvfs.block_size() as u64,
-                blocks: statvfs.f_blocks,
-                bfree: statvfs.f_bfree,
-                bavail: statvfs.f_bavail,
-                bavail_top_bit_set: ((statvfs.f_bavail) & (1u64.rotate_right(1))) != 0,
-                files: statvfs.f_files,
-                ffree: statvfs.f_ffree,
-            };
-            #[cfg(all(
-                not(any(target_os = "freebsd", target_os = "openbsd")),
-                not(target_pointer_width = "64")
-            ))]
-            return Self {
-                blocksize: statvfs.block_size() as u64,
-                blocks: statvfs.f_blocks.into(),
-                bfree: statvfs.f_bfree.into(),
-                bavail: statvfs.f_bavail.into(),
-                bavail_top_bit_set: ((statvfs.f_bavail as u64) & (1u64.rotate_right(1))) != 0,
-                files: statvfs.f_files.into(),
-                ffree: statvfs.f_ffree.into(),
-            };
-            #[cfg(target_os = "freebsd")]
-            return Self {
-                // FreeBSD's `struct statfs` has no fragment size; `f_bsize`
-                // is the block size the counts are expressed in.
-                blocksize: statvfs.f_bsize,
-                blocks: statvfs.f_blocks,
-                bfree: statvfs.f_bfree,
-                bavail: statvfs.f_bavail.try_into().unwrap(),
-                bavail_top_bit_set: ((TryInto::<u64>::try_into(statvfs.f_bavail).unwrap())
-                    & (1u64.rotate_right(1)))
-                    != 0,
-                files: statvfs.f_files,
-                ffree: statvfs.f_ffree.try_into().unwrap(),
-            };
-            #[cfg(target_os = "openbsd")]
-            return Self {
-                blocksize: statvfs.f_bsize.into(),
-                blocks: statvfs.f_blocks,
-                bfree: statvfs.f_bfree,
-                bavail: statvfs.f_bavail.try_into().unwrap(),
-                bavail_top_bit_set: ((TryInto::<u64>::try_into(statvfs.f_bavail).unwrap())
-                    & (1u64.rotate_right(1)))
-                    != 0,
-                files: statvfs.f_files,
-                ffree: statvfs.f_ffree,
-            };
+        // The count fields are unsigned on most platforms, but some are
+        // signed (`i64`) on FreeBSD and OpenBSD, so cast everything uniformly.
+        // `bavail_top_bit_set` records the sign bit so a negative `f_bavail`
+        // can be detected.
+        Self {
+            blocksize: statvfs.block_size() as u64,
+            blocks: statvfs.f_blocks as u64,
+            bfree: statvfs.f_bfree as u64,
+            bavail: statvfs.f_bavail as u64,
+            bavail_top_bit_set: (statvfs.f_bavail as u64) & (1u64.rotate_right(1)) != 0,
+            files: statvfs.f_files as u64,
+            ffree: statvfs.f_ffree as u64,
         }
     }
 }
@@ -498,6 +457,7 @@ pub trait FsMeta {
 }
 
 #[cfg(unix)]
+#[allow(clippy::unnecessary_cast)]
 impl FsMeta for StatFs {
     /// The block size the `f_blocks`, `f_bfree` and `f_bavail` counts are
     /// expressed in.
@@ -508,7 +468,6 @@ impl FsMeta for StatFs {
     /// from the counts by 256. `f_frsize` is zero on pre-2.6 kernels, so fall
     /// back to `f_bsize` there.
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    #[allow(clippy::unnecessary_cast)]
     fn block_size(&self) -> i64 {
         if self.f_frsize == 0 {
             self.f_bsize as i64
@@ -517,90 +476,27 @@ impl FsMeta for StatFs {
         }
     }
 
+    /// On other platforms the block size is reported by `f_bsize`. (FreeBSD's
+    /// `struct statfs` has no fragment size field.)
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
     fn block_size(&self) -> i64 {
-        #[cfg(all(
-            not(target_env = "musl"),
-            not(target_vendor = "apple"),
-            not(target_os = "aix"),
-            not(target_os = "freebsd"),
-            not(target_os = "netbsd"),
-            not(target_os = "openbsd"),
-            not(target_os = "illumos"),
-            not(target_os = "solaris"),
-            not(target_os = "redox"),
-            not(target_arch = "s390x"),
-            not(target_os = "cygwin"),
-            target_pointer_width = "64"
-        ))]
-        return self.f_bsize;
-        #[cfg(all(
-            not(target_env = "musl"),
-            not(target_os = "freebsd"),
-            not(target_os = "netbsd"),
-            not(target_os = "redox"),
-            not(target_os = "cygwin"),
-            any(
-                target_arch = "s390x",
-                target_vendor = "apple",
-                target_os = "openbsd",
-                not(target_pointer_width = "64")
-            )
-        ))]
-        return self.f_bsize.into();
-        #[cfg(any(
-            target_env = "musl",
-            target_os = "aix",
-            target_os = "freebsd",
-            target_os = "netbsd",
-            target_os = "illumos",
-            target_os = "solaris",
-            target_os = "redox",
-            target_os = "cygwin",
-        ))]
-        return self.f_bsize.try_into().unwrap();
+        self.f_bsize as i64
     }
+
     fn total_blocks(&self) -> u64 {
-        #[cfg(target_pointer_width = "64")]
-        return self.f_blocks;
-        #[cfg(not(target_pointer_width = "64"))]
-        return self.f_blocks.into();
+        self.f_blocks as u64
     }
     fn free_blocks(&self) -> u64 {
-        #[cfg(target_pointer_width = "64")]
-        return self.f_bfree;
-        #[cfg(not(target_pointer_width = "64"))]
-        return self.f_bfree.into();
+        self.f_bfree as u64
     }
     fn avail_blocks(&self) -> u64 {
-        #[cfg(all(
-            not(target_os = "freebsd"),
-            not(target_os = "openbsd"),
-            target_pointer_width = "64"
-        ))]
-        return self.f_bavail;
-        #[cfg(all(
-            not(target_os = "freebsd"),
-            not(target_os = "openbsd"),
-            not(target_pointer_width = "64")
-        ))]
-        return self.f_bavail.into();
-        #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
-        return self.f_bavail.try_into().unwrap();
+        self.f_bavail as u64
     }
     fn total_file_nodes(&self) -> u64 {
-        #[cfg(target_pointer_width = "64")]
-        return self.f_files;
-        #[cfg(not(target_pointer_width = "64"))]
-        return self.f_files.into();
+        self.f_files as u64
     }
     fn free_file_nodes(&self) -> u64 {
-        #[cfg(all(not(target_os = "freebsd"), target_pointer_width = "64"))]
-        return self.f_ffree;
-        #[cfg(all(not(target_os = "freebsd"), not(target_pointer_width = "64")))]
-        return self.f_ffree.into();
-        #[cfg(target_os = "freebsd")]
-        return self.f_ffree.try_into().unwrap();
+        self.f_ffree as u64
     }
     #[cfg(any(
         target_vendor = "apple",
@@ -609,32 +505,7 @@ impl FsMeta for StatFs {
         target_os = "freebsd"
     ))]
     fn fs_type(&self) -> i64 {
-        #[cfg(all(
-            not(any(target_env = "musl", target_env = "ohos")),
-            not(target_vendor = "apple"),
-            not(target_os = "android"),
-            not(target_os = "freebsd"),
-            not(target_arch = "s390x"),
-            target_pointer_width = "64"
-        ))]
-        return self.f_type;
-        #[cfg(all(
-            not(any(target_env = "musl", target_env = "ohos")),
-            any(
-                target_vendor = "apple",
-                all(target_os = "android", target_pointer_width = "32"),
-                target_os = "freebsd",
-                target_arch = "s390x",
-                not(target_pointer_width = "64")
-            )
-        ))]
-        return self.f_type.into();
-        #[cfg(any(
-            target_env = "musl",
-            target_env = "ohos",
-            all(target_os = "android", target_pointer_width = "64"),
-        ))]
-        return self.f_type.try_into().unwrap();
+        self.f_type as i64
     }
     #[cfg(not(any(
         target_vendor = "apple",
@@ -648,28 +519,12 @@ impl FsMeta for StatFs {
     }
 
     /// The preferred transfer size, which on Linux is `f_bsize`.
-    #[cfg(any(target_os = "aix", target_os = "linux", target_os = "android"))]
-    #[allow(clippy::unnecessary_cast)]
-    fn io_size(&self) -> u64 {
-        self.f_bsize as u64
-    }
     #[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "netbsd"))]
-    #[allow(clippy::unnecessary_cast)]
     fn io_size(&self) -> u64 {
-        #[cfg(target_os = "freebsd")]
-        return self.f_iosize;
-        #[cfg(not(target_os = "freebsd"))]
-        return self.f_iosize as u64;
+        self.f_iosize as u64
     }
     // XXX: dunno if this is right
-    #[cfg(not(any(
-        target_vendor = "apple",
-        target_os = "aix",
-        target_os = "freebsd",
-        target_os = "linux",
-        target_os = "android",
-        target_os = "netbsd"
-    )))]
+    #[cfg(not(any(target_vendor = "apple", target_os = "freebsd", target_os = "netbsd")))]
     fn io_size(&self) -> u64 {
         self.f_bsize as u64
     }
@@ -701,7 +556,6 @@ impl FsMeta for StatFs {
         target_os = "android",
         target_os = "openbsd"
     )))]
-    #[allow(clippy::unnecessary_cast)]
     fn fsid(&self) -> u64 {
         self.f_fsid as u64
     }
@@ -714,26 +568,8 @@ impl FsMeta for StatFs {
     fn namelen(&self) -> u64 {
         1024
     }
-    #[cfg(any(
-        target_os = "aix",
-        target_os = "freebsd",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
-    #[allow(clippy::unnecessary_cast)]
-    fn namelen(&self) -> u64 {
-        self.f_namemax as u64 // spell-checker:disable-line
-    }
     // XXX: should everything just use statvfs?
-    #[cfg(not(any(
-        target_vendor = "apple",
-        target_os = "aix",
-        target_os = "freebsd",
-        target_os = "linux",
-        target_os = "android",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    )))]
+    #[cfg(not(any(target_vendor = "apple", target_os = "linux", target_os = "android")))]
     fn namelen(&self) -> u64 {
         self.f_namemax as u64 // spell-checker:disable-line
     }
@@ -1074,6 +910,20 @@ mod tests {
 
         assert_eq!(statfs.block_size(), 4096);
         assert_eq!(FsUsage::new(statfs).blocksize, 4096);
+    }
+
+    /// `f_bavail` is signed on FreeBSD and OpenBSD and may be negative. The
+    /// cast must preserve the sign bit so consumers can detect it instead of
+    /// panicking.
+    #[test]
+    #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+    fn test_negative_bavail_sets_top_bit() {
+        let mut statfs: StatFs = unsafe { mem::zeroed() };
+        statfs.f_bavail = -1;
+
+        let usage = FsUsage::new(statfs);
+        assert!(usage.bavail_top_bit_set);
+        assert_eq!(usage.bavail, u64::MAX);
     }
 
     #[test]
