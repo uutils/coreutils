@@ -10,7 +10,7 @@
 // Available on Unix
 //
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
-// spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR
+// spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
 // spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot
 // spell-checker:ignore LARGEFILE
 
@@ -466,22 +466,25 @@ impl DirFd {
         Ok(())
     }
 
-    /// Open a file for writing relative to this directory
-    /// Creates the file if it doesn't exist, truncates if it does
+    /// Create a file for writing relative to this directory
+    /// Fails with `EEXIST` if the name already exists
     pub fn open_file_at(&self, name: &OsStr) -> io::Result<fs::File> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-        // O_NOFOLLOW: `openat` anchors the *directory*, not the final component,
-        // so without it a symlink planted at `name` is still followed and its
-        // target truncated. Callers reach here right after unlinking `name`,
-        // which is precisely the window an attacker races.
+        // Callers reach here right after unlinking `name`, which is precisely
+        // the window an attacker races. O_NOFOLLOW alone only refuses a symlink
+        // planted in it; a hard link to a victim file would still be opened and
+        // truncated, then chowned and chmoded by the caller's finalization.
+        // O_EXCL refuses both. Mode 0o600 rather than the umask-derived 0o666,
+        // so no other user can read the content while it is being written —
+        // same reasoning as `safe_copy::DEST_INITIAL_MODE` (issue #10011).
         let flags = OFlag::O_CREAT
+            | OFlag::O_EXCL
             | OFlag::O_WRONLY
-            | OFlag::O_TRUNC
             | OFlag::O_CLOEXEC
             | OFlag::O_NOFOLLOW
             | LARGEFILE;
-        let mode = Mode::from_bits_truncate(0o666); // Default file permissions
+        let mode = Mode::from_bits_truncate(0o600);
 
         let fd: OwnedFd = openat(self.fd.as_fd(), name_cstr.as_c_str(), flags, mode)
             .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
@@ -1360,20 +1363,28 @@ mod tests {
     }
 
     #[test]
-    fn test_open_file_at_truncates_existing() {
-        use std::io::Write;
-
+    fn test_open_file_at_refuses_existing() {
+        // Including a hard link an attacker planted after the caller's unlink:
+        // without O_EXCL the victim would be truncated and overwritten.
         let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("existing.txt");
-        fs::write(&file_path, "old content that is longer").unwrap();
+        let victim = temp_dir.path().join("victim");
+        fs::write(&victim, "SECRET").unwrap();
+        fs::hard_link(&victim, temp_dir.path().join("planted")).unwrap();
 
         let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
-        let mut file = dir_fd.open_file_at(OsStr::new("existing.txt")).unwrap();
-        file.write_all(b"new").unwrap();
-        drop(file);
+        let err = dir_fd.open_file_at(OsStr::new("planted")).unwrap_err();
 
-        let content = fs::read_to_string(&file_path).unwrap();
-        assert_eq!(content, "new");
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read_to_string(&victim).unwrap(), "SECRET");
+    }
+
+    #[test]
+    fn test_open_file_at_uses_restrictive_mode() {
+        let temp_dir = TempDir::new().unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+
+        let file = dir_fd.open_file_at(OsStr::new("secret")).unwrap();
+        assert_eq!(file.metadata().unwrap().mode() & 0o777, 0o600);
     }
 
     #[test]
