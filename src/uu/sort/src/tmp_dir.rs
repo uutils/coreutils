@@ -211,3 +211,46 @@ fn remove_tmp_dir(path: &Path) -> std::io::Result<()> {
     }
     std::fs::remove_dir(path)
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::TmpDirWrapper;
+    use std::os::unix::fs::PermissionsExt;
+
+    fn mode(path: &std::path::Path) -> u32 {
+        std::fs::metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    /// Restores the process umask on drop, so a panic in the test cannot leak the
+    /// value into the rest of the binary.
+    struct UmaskGuard(libc::mode_t);
+
+    impl UmaskGuard {
+        fn set(mask: libc::mode_t) -> Self {
+            // SAFETY: umask(2) has no failure mode; it returns the previous value.
+            Self(unsafe { libc::umask(mask) })
+        }
+    }
+
+    impl Drop for UmaskGuard {
+        fn drop(&mut self) {
+            unsafe { libc::umask(self.0) };
+        }
+    }
+
+    #[test]
+    fn tmp_files_are_private_regardless_of_umask() {
+        // Pin a permissive umask: under 0077 the umask alone would produce 0700 and
+        // 0600, so the assertions would hold for a broken implementation too. The
+        // guard restores it, and the only other test here that creates files sets
+        // the modes it cares about explicitly.
+        let _umask = UmaskGuard::set(0o022);
+
+        let parent = tempfile::tempdir().unwrap();
+        let mut wrapper = TmpDirWrapper::new(parent.path().to_owned());
+        let (_file, path) = wrapper.next_file().unwrap();
+
+        assert_eq!(mode(path.parent().unwrap()), 0o700);
+        assert_eq!(mode(&path), 0o600);
+    }
+}
