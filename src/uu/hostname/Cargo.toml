@@ -19,7 +19,7 @@ path = "src/hostname.rs"
 test = false
 doctest = false
 
-[dependencies]
+[target.'cfg(any(all(unix, not(any(target_os = "aix", target_os = "redox"))), windows))'.dependencies]
 clap = { workspace = true }
 hostname = { workspace = true, features = ["set"] }
 uucore = { workspace = true, features = ["wide"] }
@@ -28,10 +28,12 @@ fluent = { workspace = true }
 [[bin]]
 name = "hostname"
 path = "src/main.rs"
+required-features = ["uucore/default"]
 
 [[bench]]
 name = "hostname_bench"
 harness = false
+required-features = ["uucore/default"]
 
 [dev-dependencies]
 divan = { workspace = true }
