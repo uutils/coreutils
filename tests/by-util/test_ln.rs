@@ -168,6 +168,30 @@ fn test_force_replace_never_leaves_the_destination_name_free() {
     }
 }
 
+/// Replacing a destination that is already a link to the same inode leaves
+/// `rename` with nothing to do, and the temporary must not survive that.
+#[test]
+// Android's app-private filesystem refuses hard links.
+#[cfg(all(unix, not(any(target_os = "redox", target_os = "android"))))]
+fn test_force_replace_same_inode_leaves_no_temp_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.hard_link("a", "b");
+
+    scene.ucmd().args(&["--force", "a", "b"]).succeeds();
+
+    let leftovers: Vec<_> = std::fs::read_dir(at.as_string())
+        .unwrap()
+        .filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().into_owned()))
+        .filter(|name| name != "a" && name != "b")
+        .collect();
+    assert!(
+        leftovers.is_empty(),
+        "forced replace left a temporary behind: {leftovers:?}"
+    );
+}
+
 #[test]
 fn test_symlink_overwrite_force_overrides_interactive() {
     let (at, mut ucmd) = at_and_ucmd!();

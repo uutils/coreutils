@@ -1134,6 +1134,123 @@ pub fn get_filename(file: &Path) -> Option<&str> {
     file.file_name().and_then(|filename| filename.to_str())
 }
 
+/// Atomically replace `dest` with a new link to `target` — symbolic if
+/// `symbolic` is set, hard otherwise.
+///
+/// Never unlinks `dest` first, which would briefly free the name for another
+/// user to claim. Try the create; if the name is taken, build the link under a
+/// random temporary name in the same directory and `renameat(2)` it over.
+///
+/// # Errors
+///
+/// Returns an error if the link cannot be created, if the parent directory
+/// cannot be opened, or if no unique temporary name is available.
+pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> {
+    #[cfg(all(unix, not(target_os = "redox")))]
+    {
+        use rustix::fs::{AtFlags, CWD, Mode, OFlags, openat, renameat, unlinkat};
+        use std::ffi::OsStr;
+        use std::io::Read;
+        use std::os::unix::ffi::OsStrExt;
+
+        // GNU's template is `CuXXXXXX`: a 2-char prefix plus 6 random chars
+        // from a 62-char alphabet. The ~3% modulo bias per slot is irrelevant
+        // for an 8-char unguessability budget.
+        const ALPHABET: &[u8; 62] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+        match link_at(target, CWD, dest.as_os_str(), symbolic) {
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
+            res => return res,
+        }
+
+        let parent = dest
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        let basename = dest
+            .file_name()
+            .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid link path"))?;
+        let dir = openat(
+            CWD,
+            parent,
+            OFlags::DIRECTORY | OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+            Mode::empty(),
+        )?;
+        let mut urandom = fs::File::open("/dev/urandom")?;
+
+        for _ in 0..32 {
+            let mut name = *b"Cu------";
+            let mut raw = [0u8; 6];
+            urandom.read_exact(&mut raw)?;
+            for (slot, byte) in name[2..].iter_mut().zip(raw) {
+                *slot = ALPHABET[byte as usize % ALPHABET.len()];
+            }
+            let tmp = OsStr::from_bytes(&name);
+
+            match link_at(target, &dir, tmp, symbolic) {
+                Ok(()) => {
+                    let renamed = renameat(&dir, tmp, &dir, basename);
+                    // Renaming onto an existing link to the same inode is a
+                    // no-op, which leaves the temp behind.
+                    let _ = unlinkat(&dir, tmp, AtFlags::empty());
+                    return renamed.map_err(Into::into);
+                }
+                Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Err(Error::new(
+            ErrorKind::AlreadyExists,
+            "no unique temporary name available in the destination directory",
+        ))
+    }
+    #[cfg(not(all(unix, not(target_os = "redox"))))]
+    {
+        // No atomic replace available here; this leaves the window described
+        // above, accepted only where the platform offers nothing better.
+        match create_link_std(target, dest, symbolic) {
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                fs::remove_file(dest)?;
+                create_link_std(target, dest, symbolic)
+            }
+            res => res,
+        }
+    }
+}
+
+/// `symlinkat`/`linkat` relative to an open directory.
+#[cfg(all(unix, not(target_os = "redox")))]
+fn link_at<Fd: AsFd>(target: &Path, dir: Fd, name: &OsStr, symbolic: bool) -> IOResult<()> {
+    use rustix::fs::{AtFlags, CWD, linkat, symlinkat};
+
+    if symbolic {
+        symlinkat(target, dir, name).map_err(Into::into)
+    } else {
+        // `AtFlags::empty()` matches `std::fs::hard_link`: not dereferenced.
+        linkat(CWD, target, dir, name, AtFlags::empty()).map_err(Into::into)
+    }
+}
+
+#[cfg(not(all(unix, not(target_os = "redox"))))]
+fn create_link_std(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> {
+    if !symbolic {
+        return fs::hard_link(target, dest);
+    }
+    #[cfg(windows)]
+    {
+        if target.is_dir() {
+            std::os::windows::fs::symlink_dir(target, dest)
+        } else {
+            std::os::windows::fs::symlink_file(target, dest)
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        rustix::fs::symlinkat(target, rustix::fs::CWD, dest).map_err(Into::into)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -1500,125 +1617,5 @@ mod tests {
 
         assert!(path_is_root_dir(&link, true));
         assert!(!path_is_root_dir(&link, false));
-    }
-}
-
-/// Atomically replace `dest` with a new link to `target` — symbolic if
-/// `symbolic` is set, hard otherwise.
-///
-/// Never unlinks `dest` first. That gap would leave the name unoccupied, and
-/// in a directory another user can write to it is a privilege boundary: the
-/// sticky bit stops them removing a root-owned entry, but not from creating
-/// one the instant a privileged process removes it for them. Instead try the
-/// create, and only if the name is taken build the replacement under an
-/// unguessable temporary name in the same directory and `renameat(2)` it over
-/// `dest`, which is atomic. Mirrors GNU's `force-link.c`.
-///
-/// # Errors
-///
-/// Returns an error if the link cannot be created, if the parent directory
-/// cannot be opened, or if no unique temporary name is available.
-pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> {
-    #[cfg(all(unix, not(target_os = "redox")))]
-    {
-        use rustix::fs::{AtFlags, CWD, Mode, OFlags, openat, renameat, unlinkat};
-        use std::ffi::OsStr;
-        use std::io::Read;
-        use std::os::unix::ffi::OsStrExt;
-
-        // GNU's template is `CuXXXXXX`: a 2-char prefix plus 6 random chars
-        // from a 62-char alphabet. The ~3% modulo bias per slot is irrelevant
-        // for an 8-char unguessability budget.
-        const ALPHABET: &[u8; 62] =
-            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-
-        match link_at(target, CWD, dest.as_os_str(), symbolic) {
-            Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
-            res => return res,
-        }
-
-        let parent = dest
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or_else(|| Path::new("."));
-        let basename = dest
-            .file_name()
-            .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid link path"))?;
-        let dir = openat(
-            CWD,
-            parent,
-            OFlags::DIRECTORY | OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
-            Mode::empty(),
-        )?;
-        let mut urandom = fs::File::open("/dev/urandom")?;
-
-        for _ in 0..32 {
-            let mut name = *b"Cu------";
-            let mut raw = [0u8; 6];
-            urandom.read_exact(&mut raw)?;
-            for (slot, byte) in name[2..].iter_mut().zip(raw) {
-                *slot = ALPHABET[byte as usize % ALPHABET.len()];
-            }
-            let tmp = OsStr::from_bytes(&name);
-
-            match link_at(target, &dir, tmp, symbolic) {
-                Ok(()) => {
-                    return renameat(&dir, tmp, &dir, basename).map_err(|e| {
-                        let _ = unlinkat(&dir, tmp, AtFlags::empty());
-                        e.into()
-                    });
-                }
-                Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
-                Err(e) => return Err(e),
-            }
-        }
-        Err(Error::new(
-            ErrorKind::AlreadyExists,
-            "no unique temporary name available in the destination directory",
-        ))
-    }
-    #[cfg(not(all(unix, not(target_os = "redox"))))]
-    {
-        // No atomic replace available here; this leaves the window described
-        // above, accepted only where the platform offers nothing better.
-        match create_link_std(target, dest, symbolic) {
-            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                fs::remove_file(dest)?;
-                create_link_std(target, dest, symbolic)
-            }
-            res => res,
-        }
-    }
-}
-
-/// `symlinkat`/`linkat` relative to an open directory.
-#[cfg(all(unix, not(target_os = "redox")))]
-fn link_at<Fd: AsFd>(target: &Path, dir: Fd, name: &OsStr, symbolic: bool) -> IOResult<()> {
-    use rustix::fs::{AtFlags, CWD, linkat, symlinkat};
-
-    if symbolic {
-        symlinkat(target, dir, name).map_err(Into::into)
-    } else {
-        // `AtFlags::empty()` matches `std::fs::hard_link`: not dereferenced.
-        linkat(CWD, target, dir, name, AtFlags::empty()).map_err(Into::into)
-    }
-}
-
-#[cfg(not(all(unix, not(target_os = "redox"))))]
-fn create_link_std(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> {
-    if !symbolic {
-        return fs::hard_link(target, dest);
-    }
-    #[cfg(windows)]
-    {
-        if target.is_dir() {
-            std::os::windows::fs::symlink_dir(target, dest)
-        } else {
-            std::os::windows::fs::symlink_file(target, dest)
-        }
-    }
-    #[cfg(not(windows))]
-    {
-        std::os::unix::fs::symlink(target, dest)
     }
 }
