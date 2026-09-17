@@ -3297,3 +3297,15 @@ fn test_write_error() {
         .fails_with_code(1)
         .stderr_is("date: write error: No space left on device\n");
 }
+
+#[test]
+#[ignore = "GNU compat: see uutils/coreutils#14648"]
+fn test_date_allow_missing_year() {
+    new_ucmd!().arg("01.01. 03:00 p.m.").succeeds();
+}
+
+#[test]
+#[ignore = "GNU compat: see uutils/coreutils#14649"]
+fn test_date_allow_spaces_after_month() {
+    new_ucmd!().arg("01.01.    2008 03:00 p.m.").succeeds();
+}
