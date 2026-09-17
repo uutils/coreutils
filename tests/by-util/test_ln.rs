@@ -119,6 +119,7 @@ fn test_symlink_overwrite_force() {
 #[test]
 // Android's app-private filesystem refuses hard links.
 #[cfg(all(unix, not(any(target_os = "redox", target_os = "android"))))]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_force_replace_never_leaves_the_destination_name_free() {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
