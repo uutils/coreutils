@@ -215,6 +215,8 @@ jobs:
           export CARGO_TERM_COLOR=always
           # Avoid filling disk space
           export RUSTFLAGS="-C strip=symbols"
+          # vendored OpenSSL takes many times to build. Use system one (LibreSSL is supported).
+          export OPENSSL_NO_VENDOR=1 OPENSSL_DIR=/usr
           # Use cargo test since nextest might not support OpenBSD
           if (test -z "\$FAULT"); then
             echo "::group::cargo test (workspace)"
