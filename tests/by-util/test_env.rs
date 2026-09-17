@@ -492,14 +492,29 @@ fn test_env0_from_exec_preserves_env() {
     let scene = TestScenario::new(util_name!());
     let contents = "FOO=1\0FOO=2\0";
     scene.fixtures.write("env0", contents);
-    scene
+    let out = scene
         .ucmd()
         .args(&["-i", "--env0-from", "env0"])
         .arg(uutests::util::get_tests_binary())
         .args(&[util_name!(), "--null"])
         .succeeds()
         .no_stderr()
-        .stdout_is_bytes(contents.as_bytes());
+        .stdout()
+        .to_vec();
+    // The exec'd process may pick up extra entries injected by the OS (e.g.
+    // macOS) or by a coverage runtime, so assert the `--env0-from` entries
+    // are all present instead of matching the output exactly.
+    let expected: Vec<&[u8]> = contents
+        .as_bytes()
+        .split(|&b| b == 0)
+        .filter(|part| !part.is_empty())
+        .collect();
+    for entry in &expected {
+        assert!(
+            out.split(|&b| b == 0).any(|part| part == *entry),
+            "output {out:?} is missing entry {entry:?}"
+        );
+    }
 }
 
 #[cfg(target_os = "linux")]
