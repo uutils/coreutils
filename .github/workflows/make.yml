@@ -312,14 +312,13 @@ jobs:
       # which causes subsequent fork() calls to fail with EAGAIN (exit code 254).
       shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
       run: |
-        pacman -Sy --noconfirm --needed base-devel libopenssl make openssl-devel pkgconf rust
+        pacman -Sy --noconfirm --needed base-devel libopenssl make openssl-devel rust
       env:
         CHERE_INVOKING: 1
     - name: "`(x86_64-pc-cygwin) make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n`"
       shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
       run: |
         set -x
-        export OPENSSL_NO_VENDOR=1
         export CARGOFLAGS="--features openssl"
         DESTDIR=/tmp/c make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
         # Check that cksum is linked with openssl (e.g. msys-crypto-*.dll)
@@ -338,7 +337,9 @@ jobs:
         mv target/release-small/deps/stdbuf.dll -t /tmp/c/usr/local/bin
         bsdtar -caf x86_64-pc-cygwin.tar.zst -C /tmp/c/usr/local bin
       env:
-        CHERE_INVOKING: 1
+        CHERE_INVOKING: "1"
+        OPENSSL_DIR: "/usr"
+        OPENSSL_NO_VENDOR: "1"
         RUST_BACKTRACE: "1"
     - name: Publish
       uses: softprops/action-gh-release@v3
