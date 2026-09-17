@@ -610,7 +610,7 @@ fn extract_quoting_style(
 
         match mode {
             ProgramMode::Dir | ProgramMode::Vdir => (QuotingStyle::C_NO_QUOTES, None),
-            ProgramMode::Ls if !options.get_flag(options::DIRED) && stdout().is_terminal() => {
+            ProgramMode::Ls if stdout().is_terminal() => {
                 (QuotingStyle::SHELL_ESCAPE.show_control(show_control), None)
             }
             ProgramMode::Ls => (QuotingStyle::Literal { show_control }, None),
