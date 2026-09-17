@@ -147,7 +147,17 @@ pub use crate::features::wide;
 #[cfg(feature = "fsext")]
 pub use crate::features::fsext;
 
-#[cfg(all(unix, feature = "fsxattr"))]
+#[cfg(all(
+    feature = "fsxattr",
+    any(
+        target_os = "freebsd",
+        target_os = "hurd",
+        target_os = "linux",
+        target_os = "android",
+        target_os = "macos",
+        target_os = "netbsd"
+    )
+))]
 pub use crate::features::fsxattr;
 
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
