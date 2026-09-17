@@ -1383,26 +1383,28 @@ fn parse_path_args(
     Ok((paths, target))
 }
 
-/// Check if an error is ENOTSUP/EOPNOTSUPP (operation not supported).
-/// This is used to suppress xattr errors on filesystems that don't support them.
 fn is_enotsup_error(error: &CpError) -> bool {
-    #[cfg(unix)]
-    const EOPNOTSUPP: i32 = libc::EOPNOTSUPP;
-    #[cfg(not(unix))]
-    const EOPNOTSUPP: i32 = 95;
-
     match error {
         CpError::IoErr(e) | CpError::IoErrContext(e, _) | CpError::SelinuxContextIoErr(e, _) => {
-            let raw = e.raw_os_error();
-            // WASI's sandbox has no chmod/chown syscalls at all (not merely an
-            // unsupported combination of flags), so `fs::set_permissions` and
-            // friends always fail with ENOSYS there. Treat that the same as
-            // EOPNOTSUPP for optional preservation.
-            #[cfg(target_os = "wasi")]
-            if raw == Some(libc::ENOSYS) {
+            if e.kind() == io::ErrorKind::Unsupported {
                 return true;
             }
-            raw == Some(EOPNOTSUPP)
+            #[cfg(unix)]
+            if matches!(
+                e.raw_os_error(),
+                Some(code) if code == libc::ENOTSUP || code == libc::EOPNOTSUPP || code == libc::ENOSYS
+            ) {
+                return true;
+            }
+            #[cfg(target_os = "wasi")]
+            if e.raw_os_error() == Some(libc::ENOSYS) {
+                return true;
+            }
+            #[cfg(not(any(unix, target_os = "wasi")))]
+            if matches!(e.raw_os_error(), Some(95)) {
+                return true;
+            }
+            false
         }
         _ => false,
     }
@@ -3169,7 +3171,7 @@ fn disk_usage_directory(p: &Path) -> io::Result<u64> {
 #[cfg(test)]
 mod tests {
 
-    use crate::{Attributes, Preserve, aligned_ancestors, localize_to_target};
+    use super::*;
     use std::path::Path;
 
     #[test]
@@ -3260,5 +3262,23 @@ mod tests {
         let unioned = explicit_no_mode.union(&timestamps_yes);
         assert_eq!(unioned.mode, Preserve::No { explicit: true });
         assert_eq!(unioned.timestamps, Preserve::Yes { required: true });
+    }
+
+    #[test]
+    fn test_is_enotsup_error() {
+        let unsupported_err =
+            CpError::IoErr(io::Error::new(io::ErrorKind::Unsupported, "unsupported"));
+        assert!(is_enotsup_error(&unsupported_err));
+
+        let other_err = CpError::IoErr(io::Error::new(io::ErrorKind::NotFound, "not found"));
+        assert!(!is_enotsup_error(&other_err));
+
+        #[cfg(unix)]
+        {
+            for errno in [libc::ENOTSUP, libc::EOPNOTSUPP, libc::ENOSYS] {
+                let err = CpError::IoErr(io::Error::from_raw_os_error(errno));
+                assert!(is_enotsup_error(&err));
+            }
+        }
     }
 }

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore getxattr posix_acl_default posix_acl_access ENOTSUP EOPNOTSUPP renamer
+// spell-checker:ignore getxattr posix_acl_default posix_acl_access ENOTSUP EOPNOTSUPP ENOSYS renamer
 
 //! Set of functions to manage xattr on files and dirs
 use itertools::Itertools;
@@ -13,19 +13,18 @@ use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
-/// True if the error is `ENOTSUP` / `EOPNOTSUPP` (same errno on Linux,
-/// distinct on the BSDs).
 #[cfg(unix)]
 fn is_xattr_unsupported(err: &std::io::Error) -> bool {
-    matches!(
-        err.raw_os_error(),
-        Some(e) if e == libc::ENOTSUP || e == libc::EOPNOTSUPP
-    )
+    err.kind() == std::io::ErrorKind::Unsupported
+        || matches!(
+            err.raw_os_error(),
+            Some(e) if e == libc::ENOTSUP || e == libc::EOPNOTSUPP || e == libc::ENOSYS
+        )
 }
 
 #[cfg(not(unix))]
-fn is_xattr_unsupported(_err: &std::io::Error) -> bool {
-    false
+fn is_xattr_unsupported(err: &std::io::Error) -> bool {
+    err.kind() == std::io::ErrorKind::Unsupported
 }
 
 /// Copies extended attributes (xattrs) from one path to another.
@@ -498,5 +497,23 @@ mod tests {
                 .unwrap(),
             test_value
         );
+    }
+
+    #[test]
+    fn test_is_xattr_unsupported() {
+        let unsupported =
+            std::io::Error::new(std::io::ErrorKind::Unsupported, "unsupported platform");
+        assert!(is_xattr_unsupported(&unsupported));
+
+        let other = std::io::Error::new(std::io::ErrorKind::NotFound, "not found");
+        assert!(!is_xattr_unsupported(&other));
+
+        #[cfg(unix)]
+        {
+            for errno in [libc::ENOTSUP, libc::EOPNOTSUPP, libc::ENOSYS] {
+                let err = std::io::Error::from_raw_os_error(errno);
+                assert!(is_xattr_unsupported(&err));
+            }
+        }
     }
 }
