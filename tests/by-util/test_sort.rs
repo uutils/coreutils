@@ -3550,6 +3550,18 @@ e f 5436 down data path1 path2 path3 path4 path5\n";
 }
 
 #[test]
+fn test_empty_input_empty_output() {
+    // check for inconsistency #11958
+    let input = "test test test";
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("file", input);
+
+    ucmd.args(&["-o", "file"]).pipe_in("").succeeds();
+    assert_eq!(at.read("file"), "");
+}
+
+#[test]
 fn test_consistent_sorting_with_i18n_collate() {
     // Regression test for issue #11980
     // Lexicographic fallback sorting for equal sorting keys for 01 and 0_1
