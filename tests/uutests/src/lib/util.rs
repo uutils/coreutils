@@ -998,7 +998,13 @@ pub fn get_root_path() -> &'static str {
 /// # Returns
 ///
 /// `true` if both paths have the same set of extended attributes, `false` otherwise.
-#[cfg(all(unix, not(any(target_vendor = "apple", target_os = "openbsd"))))]
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "android",
+    target_os = "netbsd"
+))]
 pub fn compare_xattrs<P: AsRef<Path>>(path1: P, path2: P) -> bool {
     let get_sorted_xattrs = |path: P| {
         xattr::list(path)
@@ -3614,7 +3620,13 @@ mod tests {
         }
     }
 
-    #[cfg(all(unix, not(any(target_vendor = "apple", target_os = "openbsd"))))]
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "hurd",
+        target_os = "linux",
+        target_os = "android",
+        target_os = "netbsd"
+    ))]
     #[test]
     fn test_compare_xattrs() {
         use tempfile::tempdir;
