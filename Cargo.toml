@@ -344,7 +344,6 @@ dns-lookup = { version = "4.0.0" }
 dunce = "1.0.4"
 filetime = "0.2.29"
 foldhash = "0.2.0"
-gcd = "2.3"
 glob = "0.3.1"
 half = "2.4.1"
 hashbrown = '0.17.1'
@@ -372,6 +371,7 @@ nix = { version = "0.31.3", default-features = false }
 nom = "8.0.0"
 notify = { version = "8.2.0", features = ["macos_kqueue"] }
 num-bigint = "0.4.4"
+num-integer = "0.1.47"
 num-prime = "0.5.0"
 num-traits = "0.2.19"
 fancy-regex = { version = "0.19.2", default-features = false, features = [
