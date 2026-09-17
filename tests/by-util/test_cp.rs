@@ -3870,6 +3870,8 @@ fn test_cp_link_backup() {
 /// forever, since nothing ever writes to it. GNU creates the FIFO and returns.
 #[test]
 #[cfg(unix)]
+// TODO remove when https://github.com/Stebalien/xattr/issues/121 is fixed
+#[cfg(not(target_os = "openbsd"))]
 #[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
 fn test_cp_attributes_only_fifo_keeps_type_and_returns() {
     for recursive in ["-a", "-R"] {
