@@ -17,8 +17,8 @@
 # 10) Create the release on github https://github.com/uutils/coreutils/releases/new
 # 11) Make sure we have good release notes
 
-FROM="0.11.0"
-TO="0.12.0"
+FROM="0.12.0"
+TO="0.13.0"
 
 MANIFESTS=$(ls -1d Cargo.toml src/uu/*/Cargo.toml src/uu/stdbuf/src/libstdbuf/Cargo.toml src/uucore/Cargo.toml src/uucore_procs/Cargo.toml tests/uutests/Cargo.toml fuzz/uufuzz/Cargo.toml)
 
