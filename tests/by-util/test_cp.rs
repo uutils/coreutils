@@ -1072,6 +1072,60 @@ fn test_cp_recursive_dir_applies_umask() {
     assert_eq!(at.metadata("d/dir").permissions().mode() & 0o777, 0o700);
 }
 
+// The umask alone never covers setuid/setgid, so a non-preserving `cp -r`
+// must clear them on the directories it creates. The sticky bit survives.
+#[test]
+#[cfg(unix)]
+fn test_cp_recursive_dir_drops_setuid_setgid() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("tree");
+    for (name, mode) in [
+        ("tree/setgid", 0o2731u32),
+        ("tree/setuid", 0o4713),
+        ("tree/sticky", 0o1735),
+    ] {
+        at.mkdir(name);
+        at.set_mode(name, mode);
+    }
+
+    scene
+        .ucmd()
+        .umask(0o026)
+        .args(&["-r", "tree", "plain"])
+        .succeeds();
+
+    assert_eq!(
+        at.metadata("plain/setgid").permissions().mode() & 0o7777,
+        0o711
+    );
+    assert_eq!(
+        at.metadata("plain/setuid").permissions().mode() & 0o7777,
+        0o711
+    );
+    assert_eq!(
+        at.metadata("plain/sticky").permissions().mode() & 0o7777,
+        0o1711
+    );
+
+    // An explicit preserve keeps the mode as-is, umask and special bits alike.
+    scene
+        .ucmd()
+        .umask(0o026)
+        .args(&["-r", "--preserve=mode", "tree", "kept"])
+        .succeeds();
+
+    assert_eq!(
+        at.metadata("kept/setgid").permissions().mode() & 0o7777,
+        0o2731
+    );
+    assert_eq!(
+        at.metadata("kept/setuid").permissions().mode() & 0o7777,
+        0o4713
+    );
+}
+
 // When --reflink=always fails, GNU cp removes a destination it created
 // itself but keeps a pre-existing (truncated) one. Only observable on
 // filesystems without clone support; when the clone succeeds there is
