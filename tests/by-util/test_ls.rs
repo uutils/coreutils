@@ -5666,6 +5666,31 @@ fn test_ls_dired_order_format() {
 }
 
 #[test]
+fn test_ls_dired_offsets_follow_quoted_dir_headers() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("a b");
+    at.touch("a b/x");
+    at.mkdir("it's");
+    at.touch("it's/y");
+
+    // Quoting lengthens the directory headers; both offset lists must follow
+    // the rendered header rather than the raw path.
+    let result = scene
+        .ucmd()
+        .args(&[
+            "--dired",
+            "-R",
+            "--quoting-style=shell-escape",
+            "a b",
+            "it's",
+        ])
+        .succeeds();
+    assert_eq!(dired_names(result.stdout_str()), ["x", "y"]);
+    assert_eq!(subdired_names(result.stdout_str()), ["'a b'", "\"it's\""]);
+}
+
+#[test]
 fn test_ls_dired_and_zero_are_incompatible() {
     let scene = TestScenario::new(util_name!());
 
@@ -5917,10 +5942,19 @@ fn test_ls_dired_symlink_name_only() {
 
 /// Extracts the file names delimited by the //DIRED// byte offsets.
 fn dired_names(output: &str) -> Vec<String> {
+    names_at_offsets(output, "//DIRED//")
+}
+
+/// Extracts the directory headers delimited by the //SUBDIRED// byte offsets.
+fn subdired_names(output: &str) -> Vec<String> {
+    names_at_offsets(output, "//SUBDIRED//")
+}
+
+fn names_at_offsets(output: &str, tag: &str) -> Vec<String> {
     let dired_line = output
         .lines()
-        .find(|&line| line.starts_with("//DIRED//"))
-        .unwrap();
+        .find(|&line| line.starts_with(tag))
+        .unwrap_or_else(|| panic!("no {tag} line in the output"));
     let positions: Vec<usize> = dired_line
         .split_whitespace()
         .skip(1)
