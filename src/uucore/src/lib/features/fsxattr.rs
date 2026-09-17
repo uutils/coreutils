@@ -485,24 +485,27 @@ mod tests {
             return; // skip: this filesystem combination cannot fail the copy
         };
 
-        // user.big is set first so it comes first in list order: when it
-        // fails, user.small must still make it to the destination.
+        // Set small attributes around the failing big attribute so that
+        // regardless of filesystem listing order (alphabetical, insertion,
+        // or reverse-insertion), at least one surviving attribute is
+        // processed after the failing one.
         let source = source_dir.join("source");
         let dest = dest_dir.join("dest");
         std::fs::write(&source, "data").unwrap();
         std::fs::write(&dest, "data").unwrap();
         let big_value = "y".repeat(size);
-        xattr::set(&source, "user.big", big_value.as_bytes()).unwrap();
-        xattr::set(&source, "user.small", b"12345678").unwrap();
-        let source_list = xattr::list(&source).unwrap().collect::<Vec<_>>();
-        assert_eq!(source_list[0], OsString::from("user.big"));
+        xattr::set(&source, "user.a_small", b"12345678").unwrap();
+        xattr::set(&source, "user.m_big", big_value.as_bytes()).unwrap();
+        xattr::set(&source, "user.z_small", b"87654321").unwrap();
 
         let result = copy_xattrs(&source, &dest);
         assert!(result.is_err(), "the failed attribute must fail the copy");
 
-        let copied_small = xattr::get(&dest, "user.small").unwrap();
-        assert_eq!(copied_small.as_deref(), Some(b"12345678".as_slice()));
-        let copied_big = xattr::get(&dest, "user.big").unwrap();
+        let copied_a = xattr::get(&dest, "user.a_small").unwrap();
+        assert_eq!(copied_a.as_deref(), Some(b"12345678".as_slice()));
+        let copied_z = xattr::get(&dest, "user.z_small").unwrap();
+        assert_eq!(copied_z.as_deref(), Some(b"87654321".as_slice()));
+        let copied_big = xattr::get(&dest, "user.m_big").unwrap();
         assert_eq!(copied_big, None);
 
         std::fs::remove_dir_all(&source_dir).ok();
