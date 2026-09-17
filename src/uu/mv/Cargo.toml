@@ -26,12 +26,14 @@ uucore = { workspace = true, features = [
   "backup-control",
   "buf-copy",
   "fs",
-  "fsxattr",
   "perms",
   "safe-copy",
   "update-control",
 ] }
 fluent = { workspace = true }
+
+[target.'cfg(any(target_os = "freebsd", target_os = "hurd", target_os = "linux", target_os = "android", target_os = "netbsd"))'.dependencies]
+uucore = { workspace = true, features = ["fsxattr"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
