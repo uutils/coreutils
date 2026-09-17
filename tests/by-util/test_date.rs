@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 //
 // spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST MESZ KST uueuu ueuu vasárnap június január distros
 // spell-checker: ignore: uppercases
@@ -626,7 +627,7 @@ fn test_date_for_no_permission_file() {
 
 #[test]
 fn test_date_for_dir_as_file() {
-    let result = new_ucmd!().arg("--file").arg("/").fails();
+    let result = new_ucmd!().arg("--file").arg("/").fails_with_code(1);
     result.no_stdout();
     assert_eq!(
         result.stderr_str().trim(),
@@ -684,18 +685,47 @@ fn test_date_stdin_invalid_utf8_line() {
 
 #[test]
 fn test_date_for_file_mtime() {
+    use std::time::{Duration, UNIX_EPOCH};
+
     let (at, mut ucmd) = at_and_ucmd!();
-    let file = "reference_file";
-    at.touch(file);
-    std::thread::sleep(std::time::Duration::from_millis(100));
-    let result = ucmd.arg("--reference").arg(file).arg("+%s%N").succeeds();
-    let mtime = at.metadata(file).modified().unwrap();
-    let mtime_nanos = mtime
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos()
-        .to_string();
-    assert_eq!(result.stdout_str().trim(), &mtime_nanos[..]);
+
+    let reference_file = "reference_file";
+    let f = at.make_file(reference_file);
+    let modification_date = UNIX_EPOCH.checked_add(Duration::from_secs(1234)).unwrap();
+    f.set_modified(modification_date).unwrap();
+
+    ucmd.arg("--reference")
+        .arg(reference_file)
+        .arg("+%s")
+        .succeeds()
+        .stdout_only("1234\n");
+}
+
+#[test]
+fn test_date_multiple_references() {
+    use std::time::{Duration, UNIX_EPOCH};
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let create_file = |name: &str, secs: u64| {
+        let f = at.make_file(name);
+        let date = UNIX_EPOCH.checked_add(Duration::from_secs(secs)).unwrap();
+        f.set_modified(date).unwrap();
+    };
+
+    create_file("a", 1111);
+    create_file("b", 2222);
+
+    // last ref "wins"
+    for (refs, expected) in [(["a", "b"], "2222\n"), (["b", "a"], "1111\n")] {
+        scene
+            .ucmd()
+            .args(&["--reference", refs[0], "--reference", refs[1]])
+            .arg("+%s")
+            .succeeds()
+            .stdout_only(expected);
+    }
 }
 
 #[test]

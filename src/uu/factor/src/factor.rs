@@ -17,7 +17,7 @@ use memchr::memchr3_iter;
 use num_bigint::BigUint;
 use num_prime::nt_funcs::{factorize64, factorize128, factors};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
+use uucore::error::{FromIo, UResult, USimpleError, set_exit_code, strip_errno};
 use uucore::translate;
 use uucore::{format_usage, show_error, show_if_err};
 
@@ -85,14 +85,14 @@ fn parse_num(slice: &[u8]) -> UResult<Number> {
     match num.parse::<u64>() {
         Ok(x) => return Ok(Number::U64(x)),
         // If overflown, attempt a greater width
-        Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {}
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => {}
         Err(_) => return Err(err_invalid(num)),
     }
 
     match num.parse::<u128>() {
         Ok(x) => return Ok(Number::U128(x)),
         // If overflown, attempt a greater width
-        Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {}
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => {}
         Err(_) => return Err(err_invalid(num)),
     }
 
@@ -189,7 +189,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
                 Err(e) => {
                     set_exit_code(1);
-                    show_error!("{}", translate!("factor-error-reading-input", "error" => e));
+                    show_error!(
+                        "{}",
+                        translate!("factor-error-reading-input", "error" => strip_errno(&e))
+                    );
                     return Ok(());
                 }
             }

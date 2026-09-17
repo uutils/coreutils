@@ -17,7 +17,6 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-fs_extra = { workspace = true }
 indicatif = { workspace = true }
 libc = { workspace = true }
 nix = { workspace = true, features = ["fs"] }

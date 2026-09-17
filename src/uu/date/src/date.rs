@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz unparseable
+// spell-checker:ignore ohos OHOS tzdata
 
 mod format_modifiers;
 mod locale;
@@ -108,14 +109,7 @@ enum DateError {
     SettingDateNotSupportedRedox,
 }
 
-impl UError for DateError {
-    fn code(&self) -> i32 {
-        match self {
-            Self::ExpectedFileGotDirectory { .. } => 2,
-            _ => 1,
-        }
-    }
-}
+impl UError for DateError {}
 
 /// Settings for this program, parsed from the command line
 struct Settings {
@@ -760,6 +754,7 @@ pub fn uu_app() -> Command {
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::AnyPath)
                 .conflicts_with_all([OPT_DATE, OPT_FILE, OPT_RESOLUTION])
+                .overrides_with(OPT_REFERENCE)
                 .help(translate!("date-help-reference")),
         )
         .arg(

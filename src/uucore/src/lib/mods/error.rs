@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 //! All utils return exit with an exit code. Usually, the following scheme is used:
 //! * `0`: succeeded
 //! * `1`: minor problems
@@ -470,8 +471,11 @@ impl Display for UIoError {
 /// use std::io::{Error, ErrorKind};
 /// use uucore::error::strip_errno;
 ///
-/// let err = Error::from_raw_os_error(2);
-/// assert_eq!(strip_errno(&err), "No such file or directory");
+/// #[cfg(unix)]
+/// {
+///     let err = Error::from_raw_os_error(2);
+///     assert_eq!(strip_errno(&err), "No such file or directory");
+/// }
 ///
 /// // Errors without an errno are returned unchanged.
 /// let err = Error::new(ErrorKind::Other, "custom failure");

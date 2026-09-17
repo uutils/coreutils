@@ -7,14 +7,15 @@
 
 // spell-checker:ignore DATETIME getmntinfo subsecond (fs) cifs smbfs
 
+#[cfg(windows)]
+mod windows;
+
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
 const LINUX_MTAB: &str = "/etc/mtab";
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
 const LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
 #[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 static MOUNT_OPT_BIND: &str = "bind";
-#[cfg(windows)]
-static EXIT_ERR: i32 = 1;
 
 #[cfg(any(
     target_vendor = "apple",
@@ -24,17 +25,10 @@ static EXIT_ERR: i32 = 1;
 ))]
 use crate::os_str_from_bytes;
 
-#[cfg(not(any(windows, target_os = "wasi")))]
+#[cfg(unix)]
 use std::ffi::OsStr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
-#[cfg(windows)]
-use windows_sys::Win32::{
-    Foundation::{ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE, MAX_PATH},
-    Storage::FileSystem::{
-        FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetVolumePathNamesForVolumeNameW,
-    },
-};
 
 #[cfg(unix)]
 use core::ffi::CStr;
@@ -44,12 +38,10 @@ use libc::{
 };
 #[cfg(unix)]
 use std::ffi::CString;
-#[cfg(not(target_os = "wasi"))]
+#[cfg(unix)]
 use std::io::Error as IOError;
 #[cfg(unix)]
 use std::mem;
-#[cfg(windows)]
-use std::path::Path;
 use std::time::SystemTime;
 #[cfg(unix)]
 use std::time::UNIX_EPOCH;
@@ -164,7 +156,7 @@ pub fn metadata_get_time(md: &Metadata, md_time: MetadataTimeField) -> Option<Sy
 // should be OsString.
 #[derive(Debug, Clone)]
 pub struct MountInfo {
-    /// Stores `volume_name` in windows platform and `dev_id` in unix platform
+    /// Device id on Unix, NT filesystem path on Windows.
     pub dev_id: String,
     pub dev_name: String,
     pub fs_type: String,
@@ -243,80 +235,6 @@ impl MountInfo {
             dummy,
         })
     }
-
-    #[cfg(windows)]
-    fn new(volume_name_buf: &[u16]) -> Option<Self> {
-        use super::nt;
-        let nul = volume_name_buf.iter().position(|&c| c == 0)?;
-        let dev_id = String::from_utf16_lossy(&volume_name_buf[..nul]);
-        if !dev_id.starts_with("\\\\?\\") || !dev_id.ends_with('\\') {
-            return None;
-        }
-
-        let handle = nt::open_file(
-            Path::new(&dev_id),
-            nt::SYNCHRONIZE,
-            nt::FILE_SYNCHRONOUS_IO_NONALERT | nt::FILE_DIRECTORY_FILE,
-        )
-        .ok()?;
-
-        let dev_name = nt::query_nt_path(&handle)
-            .ok()?
-            .to_string_lossy()
-            .trim_end_matches('\\')
-            .to_owned();
-        let fs_type = nt::query_filesystem_name(&handle).unwrap_or_default();
-
-        let remote = unsafe {
-            nt::query_volume_information::<nt::FILE_FS_DEVICE_INFORMATION>(
-                &handle,
-                nt::FileFsDeviceInformation,
-            )
-        }
-        .is_ok_and(|info| info.Characteristics & nt::FILE_REMOTE_DEVICE != 0);
-
-        let mount_dir: String = unsafe {
-            // TODO: Once we're on Rust 1.93 we could use MaybeUninit<u16>
-            // here and extract the range with assume_init_ref() below.
-            let mut buf = [0u16; MAX_PATH as usize];
-            let mut len = 0u32;
-            if 0 == GetVolumePathNamesForVolumeNameW(
-                volume_name_buf.as_ptr(),
-                buf.as_mut_ptr(),
-                MAX_PATH,
-                &raw mut len,
-            ) {
-                return None;
-            }
-
-            // The buffer contains a double-null-terminated list,
-            // which this turns into a comma separated string.
-            buf[..len as usize]
-                .split(|&c| c == 0)
-                .filter(|s| !s.is_empty())
-                .fold(String::new(), |mut acc, str| {
-                    if !acc.is_empty() {
-                        acc.push_str(", ");
-                    }
-                    acc.extend(
-                        char::decode_utf16(str.iter().copied())
-                            .map(|r| r.unwrap_or(char::REPLACEMENT_CHARACTER)),
-                    );
-                    acc
-                })
-        };
-
-        Some(Self {
-            dev_id,
-            dev_name,
-            fs_type,
-            mount_root: OsString::new(),
-            mount_dir: mount_dir.into(),
-            mount_option: String::new(),
-            remote,
-            dummy: false,
-        })
-    }
 }
 
 #[cfg(any(
@@ -343,7 +261,7 @@ impl From<StatFs> for MountInfo {
             // spell-checker:disable-next-line
             CStr::from_ptr(statfs.f_mntonname.as_ptr()).to_bytes()
         };
-        let mount_dir = os_str_from_bytes(mount_dir_bytes).unwrap().into_owned();
+        let mount_dir = os_str_from_bytes(mount_dir_bytes).unwrap().to_owned();
 
         let dev_id = mount_dev_id(&mount_dir);
         let dummy = is_dummy_filesystem(&fs_type, "");
@@ -362,7 +280,7 @@ impl From<StatFs> for MountInfo {
     }
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
     // spell-checker:disable
     match fs_type {
@@ -409,8 +327,7 @@ use crate::error::UResult;
     target_vendor = "apple",
     target_os = "freebsd",
     target_os = "netbsd",
-    target_os = "openbsd",
-    windows
+    target_os = "openbsd"
 ))]
 use crate::error::USimpleError;
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
@@ -433,7 +350,16 @@ use std::ptr;
 use std::slice;
 
 /// Read file system list.
-#[cfg_attr(target_os = "wasi", allow(clippy::unnecessary_wraps))]
+#[cfg_attr(
+    any(
+        target_os = "aix",
+        target_os = "redox",
+        target_os = "illumos",
+        target_os = "solaris",
+        target_os = "wasi"
+    ),
+    expect(clippy::unnecessary_wraps)
+)]
 pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
     {
@@ -470,40 +396,7 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     }
     #[cfg(windows)]
     {
-        let mut volume_name_buf = [0u16; MAX_PATH as usize];
-        // As recommended in the MS documentation, retrieve the first volume before the others
-        let find_handle =
-            unsafe { FindFirstVolumeW(volume_name_buf.as_mut_ptr(), volume_name_buf.len() as u32) };
-        if INVALID_HANDLE_VALUE == find_handle {
-            let os_err = IOError::last_os_error();
-            let msg = format!("FindFirstVolumeW failed: {os_err}");
-            return Err(USimpleError::new(EXIT_ERR, msg));
-        }
-        let mut mounts = Vec::<MountInfo>::new();
-        loop {
-            if let Some(m) = MountInfo::new(&volume_name_buf) {
-                mounts.push(m);
-            }
-            if 0 == unsafe {
-                FindNextVolumeW(
-                    find_handle,
-                    volume_name_buf.as_mut_ptr(),
-                    volume_name_buf.len() as u32,
-                )
-            } {
-                let err = IOError::last_os_error();
-                if err.raw_os_error() != Some(ERROR_NO_MORE_FILES as i32) {
-                    unsafe { FindVolumeClose(find_handle) };
-                    let msg = format!("FindNextVolumeW failed: {err}");
-                    return Err(USimpleError::new(EXIT_ERR, msg));
-                }
-                break;
-            }
-        }
-        unsafe {
-            FindVolumeClose(find_handle);
-        }
-        Ok(mounts)
+        windows::read_fs_list()
     }
     #[cfg(any(
         target_os = "aix",
@@ -587,40 +480,6 @@ impl FsUsage {
                 ffree: statvfs.f_ffree,
             };
         }
-    }
-    #[cfg(windows)]
-    pub fn new(path: &Path) -> UResult<Self> {
-        use super::nt;
-
-        let handle = nt::open_file(
-            path,
-            nt::SYNCHRONIZE,
-            nt::FILE_SYNCHRONOUS_IO_NONALERT
-                | nt::FILE_DIRECTORY_FILE
-                | nt::FILE_OPEN_FOR_FREE_SPACE_QUERY,
-        )?;
-
-        let info: nt::FILE_FS_FULL_SIZE_INFORMATION =
-            unsafe { nt::query_volume_information(&handle, nt::FileFsFullSizeInformation)? };
-        let bytes_per_cluster = info.SectorsPerAllocationUnit as u64 * info.BytesPerSector as u64;
-        let avail = info.CallerAvailableAllocationUnits as u64;
-
-        Ok(Self {
-            // f_bsize      File system block size.
-            blocksize: bytes_per_cluster,
-            // f_blocks - Total number of blocks on the file system, in units of f_frsize.
-            // frsize =     Fundamental file system block size (fragment size).
-            blocks: info.TotalAllocationUnits as u64,
-            //  Total number of free blocks.
-            bfree: info.ActualAvailableAllocationUnits as u64,
-            //  Total number of free blocks available to non-privileged processes.
-            bavail: avail,
-            bavail_top_bit_set: (avail & (1u64.rotate_right(1))) != 0,
-            // Total number of file nodes (inodes) on the file system.
-            files: 0, // Not available on windows
-            // Total number of free file nodes (inodes).
-            ffree: 0, // Meaningless on Windows
-        })
     }
 }
 
@@ -789,7 +648,7 @@ impl FsMeta for StatFs {
     }
 
     /// The preferred transfer size, which on Linux is `f_bsize`.
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(any(target_os = "aix", target_os = "linux", target_os = "android"))]
     #[allow(clippy::unnecessary_cast)]
     fn io_size(&self) -> u64 {
         self.f_bsize as u64
@@ -805,6 +664,7 @@ impl FsMeta for StatFs {
     // XXX: dunno if this is right
     #[cfg(not(any(
         target_vendor = "apple",
+        target_os = "aix",
         target_os = "freebsd",
         target_os = "linux",
         target_os = "android",
@@ -854,7 +714,12 @@ impl FsMeta for StatFs {
     fn namelen(&self) -> u64 {
         1024
     }
-    #[cfg(any(target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))]
+    #[cfg(any(
+        target_os = "aix",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
     #[allow(clippy::unnecessary_cast)]
     fn namelen(&self) -> u64 {
         self.f_namemax as u64 // spell-checker:disable-line
@@ -862,6 +727,7 @@ impl FsMeta for StatFs {
     // XXX: should everything just use statvfs?
     #[cfg(not(any(
         target_vendor = "apple",
+        target_os = "aix",
         target_os = "freebsd",
         target_os = "linux",
         target_os = "android",
@@ -1211,7 +1077,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(unix, not(target_os = "redox")))]
+    #[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
     // spell-checker:ignore (word) binfmt
     fn test_binfmt_misc_is_dummy() {
         use super::is_dummy_filesystem;

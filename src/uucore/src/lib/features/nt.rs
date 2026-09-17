@@ -24,7 +24,8 @@ pub use windows_sys::Wdk::System::SystemServices::{
     FILE_FS_DEVICE_INFORMATION, FILE_FS_FULL_SIZE_INFORMATION, FILE_REMOTE_DEVICE,
 };
 use windows_sys::Win32::Foundation::{
-    HANDLE, MAX_PATH, NTSTATUS, OBJ_CASE_INSENSITIVE, RtlNtStatusToDosError, UNICODE_STRING,
+    HANDLE, MAX_PATH, NTSTATUS, OBJ_CASE_INSENSITIVE, RtlNtStatusToDosError, STATUS_NAME_TOO_LONG,
+    UNICODE_STRING,
 };
 pub use windows_sys::Win32::Storage::FileSystem::{
     FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, SYNCHRONIZE,
@@ -68,10 +69,14 @@ impl Drop for UnicodeString {
     }
 }
 
-/// Opens a file or directory via `NtOpenFile`.
+/// Opens a file or directory using a Win32 path.
 ///
 /// The file is opened with full share access (`READ | WRITE | DELETE`).
-pub fn open_file(path: &Path, desired_access: u32, open_options: u32) -> io::Result<NtHandle> {
+pub fn open_file_win32(
+    path: &Path,
+    desired_access: u32,
+    open_options: u32,
+) -> io::Result<NtHandle> {
     let wide: Vec<u16> = path.to_wide_null();
     let mut nt_path = UnicodeString::empty();
     let status = unsafe {
@@ -86,10 +91,33 @@ pub fn open_file(path: &Path, desired_access: u32, open_options: u32) -> io::Res
         return Err(nt_status_to_io_error(status));
     }
 
+    open_file_impl(&nt_path.0, desired_access, open_options)
+}
+
+/// Opens a file or directory using an absolute NT path.
+///
+/// The file is opened with full share access (`READ | WRITE | DELETE`).
+pub fn open_file_nt(path: &Path, desired_access: u32, open_options: u32) -> io::Result<NtHandle> {
+    let mut wide = path.to_wide();
+    let length = u16::try_from(size_of_val(wide.as_slice()))
+        .map_err(|_| nt_status_to_io_error(STATUS_NAME_TOO_LONG))?;
+    let nt_path = UNICODE_STRING {
+        Length: length,
+        MaximumLength: length,
+        Buffer: wide.as_mut_ptr(),
+    };
+    open_file_impl(&nt_path, desired_access, open_options)
+}
+
+fn open_file_impl(
+    nt_path: &UNICODE_STRING,
+    desired_access: u32,
+    open_options: u32,
+) -> io::Result<NtHandle> {
     let attr = OBJECT_ATTRIBUTES {
         Length: size_of::<OBJECT_ATTRIBUTES>() as u32,
         RootDirectory: ptr::null_mut(),
-        ObjectName: &raw const nt_path.0,
+        ObjectName: nt_path,
         Attributes: OBJ_CASE_INSENSITIVE,
         SecurityDescriptor: ptr::null_mut(),
         SecurityQualityOfService: ptr::null_mut(),

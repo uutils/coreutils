@@ -12,6 +12,7 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::Write as FmtWrite;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::ops::Range;
 use std::path::Path;
 
 use clap::{Arg, ArgAction, Command, value_parser};
@@ -214,7 +215,7 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
     {
         // TODO: The regex crate used here is not fully compatible with GNU's regex implementation.
         // For example, it does not support backreferences.
-        // In the future, we might want to switch to the onig crate (like expr does) for better compatibility.
+        // In the future, we might want to switch to the fancy-regex crate for better compatibility.
 
         // Verify regex is valid and doesn't match empty string
         let re = Regex::new(&regex).map_err(|error| {
@@ -418,179 +419,190 @@ fn get_reference(
     }
 }
 
-fn assert_str_integrity(s: &[char], beg: usize, end: usize) {
-    assert!(beg <= end);
-    assert!(end <= s.len());
+/// A line of text, addressed by character rather than by byte.
+///
+/// ptx measures every field width in characters, so the text arrives already
+/// decoded and each method below works on character indices. Fields are carved
+/// out as ranges rather than strings because the caller needs to know how much
+/// text was left over on either side: that, and not the field contents, is what
+/// decides whether a truncation mark is printed.
+struct Line<'a>(&'a [char]);
+
+impl Line<'_> {
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn text(&self, range: Range<usize>) -> String {
+        self.0[range].iter().collect()
+    }
+
+    fn is_space(&self, index: usize) -> bool {
+        self.0[index].is_whitespace()
+    }
+
+    /// How many bytes `range` takes once encoded back to UTF-8.
+    fn byte_len(&self, range: Range<usize>) -> usize {
+        self.0[range].iter().map(|c| c.len_utf8()).sum()
+    }
+
+    /// `range` with whitespace dropped from both ends. A range holding nothing
+    /// but whitespace collapses to an empty range at `range.start`, so a field
+    /// made of whitespace alone contributes nothing and takes up no width.
+    fn trim(&self, range: Range<usize>) -> Range<usize> {
+        let Range { mut start, mut end } = range;
+        while start < end && self.is_space(start) {
+            start += 1;
+        }
+        while range.start < end && self.is_space(end - 1) {
+            end -= 1;
+        }
+        // The two loops cross each other on an all-whitespace range; pull
+        // `start` back so the result is an empty range rather than an inverted
+        // one, which would panic when used to slice the line.
+        start.min(end)..end
+    }
+
+    /// Move `range.start` forward past a word it cuts in half, so a field never
+    /// opens on a word fragment. A start that already sits on a boundary, or at
+    /// the beginning of the line, stays put.
+    fn align_start_to_word(&self, range: Range<usize>) -> Range<usize> {
+        let Range { mut start, end } = range;
+        if start == end || start == 0 || self.is_space(start) || self.is_space(start - 1) {
+            return range;
+        }
+        while start < end && !self.is_space(start) {
+            start += 1;
+        }
+        start..end
+    }
+
+    /// The mirror of [`Self::align_start_to_word`]: pull `range.end` back off a
+    /// word it cuts in half. An end at the end of the line stays put, since
+    /// nothing was cut there.
+    fn align_end_to_word(&self, range: Range<usize>) -> Range<usize> {
+        let Range { start, mut end } = range;
+        if start == end || end == self.len() || self.is_space(end - 1) || self.is_space(end) {
+            return range;
+        }
+        while start < end && !self.is_space(end - 1) {
+            end -= 1;
+        }
+        start..end
+    }
+
+    /// At most `width` characters taken from the right-hand end of `range`, on
+    /// whole words and without surrounding whitespace. Fields left of the
+    /// keyword grow leftwards from a fixed right edge, so this is how they are
+    /// filled.
+    fn window_ending_at(&self, range: Range<usize>, width: usize) -> Range<usize> {
+        let end = self.trim(range).end;
+        let start = end.saturating_sub(width);
+        self.trim(self.align_start_to_word(start..end))
+    }
+
+    /// At most `width` characters taken from the left-hand end of `range`, on
+    /// whole words. The start is left exactly where the caller asked for it —
+    /// the after field butts against the keyword, so whitespace there is part
+    /// of the output and must survive.
+    fn window_starting_at(&self, range: Range<usize>, width: usize) -> Range<usize> {
+        let start = range.start;
+        let end = cmp::min(range.end, start + width);
+        let end = self.align_end_to_word(start..end).end;
+        start..self.trim(start..end).end
+    }
 }
 
-fn trim_broken_word_left(s: &[char], beg: usize, end: usize) -> usize {
-    assert_str_integrity(s, beg, end);
-    if beg == end || beg == 0 || s[beg].is_whitespace() || s[beg - 1].is_whitespace() {
-        return beg;
-    }
-    let mut b = beg;
-    while b < end && !s[b].is_whitespace() {
-        b += 1;
-    }
-    b
+/// The keyword of an index entry and the four context fields laid out around
+/// it, in the order `tail before KEYWORD after head`: `before` and `after` hold
+/// the context adjacent to the keyword, while `tail` and `head` take the text
+/// that wraps around the ends of the line when the keyword sits near one of
+/// them. Only one of the two wrap-around fields is ever non-empty.
+struct Chunks {
+    head: String,
+    before: String,
+    keyword: String,
+    after: String,
+    tail: String,
 }
 
-fn trim_broken_word_right(s: &[char], beg: usize, end: usize) -> usize {
-    assert_str_integrity(s, beg, end);
-    if beg == end || end == s.len() || s[end - 1].is_whitespace() || s[end].is_whitespace() {
-        return end;
-    }
-    let mut e = end;
-    while beg < e && !s[e - 1].is_whitespace() {
-        e -= 1;
-    }
-    e
-}
+impl Chunks {
+    /// Lay out `keyword` and the text on either side of it within the
+    /// configured line width.
+    ///
+    /// The widths have to agree with GNU's, because where the keyword sits in
+    /// the line is part of ptx's output: half the line width for the context on
+    /// either side, less the gap between fields, less the truncation marker at
+    /// each end and the keyword itself. That layout leaves the arithmetic very
+    /// little room to differ.
+    fn new(config: &Config, all_before: &[char], keyword: String, all_after: &[char]) -> Self {
+        let before_text = Line(all_before);
+        let after_text = Line(all_after);
 
-fn trim_idx(s: &[char], beg: usize, end: usize) -> (usize, usize) {
-    assert_str_integrity(s, beg, end);
-    let mut b = beg;
-    let mut e = end;
-    while b < e && s[b].is_whitespace() {
-        b += 1;
-    }
-    while beg < e && s[e - 1].is_whitespace() {
-        e -= 1;
-    }
-    (b, e)
-}
+        let half_line_size = config.line_width / 2;
+        let max_before_size = half_line_size.saturating_sub(config.gap_size);
+        let max_after_size = half_line_size
+            .saturating_sub(2 * config.trunc_str.chars().count() + keyword.chars().count() + 1);
 
-fn get_output_chunks(
-    all_before: &[char],
-    keyword: &str,
-    all_after: &[char],
-    config: &Config,
-) -> (String, String, String, String) {
-    // Chunk size logics are mostly copied from the GNU ptx source.
-    // https://github.com/MaiZure/coreutils-8.3/blob/master/src/ptx.c#L1234
-    let half_line_size = config.line_width / 2;
-    let max_before_size = cmp::max(half_line_size as isize - config.gap_size as isize, 0) as usize;
+        // The two fields next to the keyword, each reaching as far into the
+        // context as its half of the line allows.
+        let before = before_text.window_ending_at(0..before_text.len(), max_before_size);
+        let after = after_text.window_starting_at(0..after_text.len(), max_after_size);
 
-    let keyword_len = keyword.chars().count();
-    let trunc_len = config.trunc_str.chars().count();
-    let max_after_size = cmp::max(
-        half_line_size as isize - (2 * trunc_len) as isize - keyword_len as isize - 1,
-        0,
-    ) as usize;
+        // Whatever the adjacent field left unused on its half of the line is
+        // what the wrap-around field on the opposite side may occupy.
+        let max_tail_size = max_before_size
+            .saturating_sub(before.len())
+            .saturating_sub(config.gap_size);
+        let tail_start = after_text.trim(after.end..after_text.len()).start;
+        let mut tail = after_text.window_starting_at(tail_start..after_text.len(), max_tail_size);
 
-    // Allocate plenty space for all the chunks.
-    let mut head = String::with_capacity(half_line_size);
-    let mut before = String::with_capacity(half_line_size);
-    let mut after = String::with_capacity(half_line_size);
-    let mut tail = String::with_capacity(half_line_size);
-
-    // the before chunk
-
-    // trim whitespace away from all_before to get the index where the before chunk should end.
-    let (_, before_end) = trim_idx(all_before, 0, all_before.len());
-
-    // the minimum possible begin index of the before_chunk is the end index minus the length.
-    let before_beg = cmp::max(before_end as isize - max_before_size as isize, 0) as usize;
-    // in case that falls in the middle of a word, trim away the word.
-    let before_beg = trim_broken_word_left(all_before, before_beg, before_end);
-
-    // trim away white space.
-    let (before_beg, before_end) = trim_idx(all_before, before_beg, before_end);
-
-    // and get the string.
-    let before_str: String = all_before[before_beg..before_end].iter().collect();
-    before.push_str(&before_str);
-    assert!(max_before_size >= before.chars().count());
-
-    // the after chunk
-
-    // must be no longer than the minimum between the max size and the total available string.
-    let after_end = cmp::min(max_after_size, all_after.len());
-    // in case that falls in the middle of a word, trim away the word.
-    let after_end = trim_broken_word_right(all_after, 0, after_end);
-
-    // trim away white space.
-    let (_, after_end) = trim_idx(all_after, 0, after_end);
-
-    // and get the string
-    let after_str: String = all_after[0..after_end].iter().collect();
-    after.push_str(&after_str);
-    assert!(max_after_size >= after.chars().count());
-
-    // the tail chunk
-
-    // max size of the tail chunk = max size of left half - space taken by before chunk - gap size.
-    let max_tail_size = cmp::max(
-        max_before_size as isize - before.chars().count() as isize - config.gap_size as isize,
-        0,
-    ) as usize;
-
-    // the tail chunk takes text starting from where the after chunk ends (with whitespace trimmed).
-    let (tail_beg, _) = trim_idx(all_after, after_end, all_after.len());
-
-    // end = begin + max length
-    let tail_end = cmp::min(all_after.len(), tail_beg + max_tail_size);
-    // in case that falls in the middle of a word, trim away the word.
-    let tail_end = trim_broken_word_right(all_after, tail_beg, tail_end);
-
-    // trim away whitespace again.
-    let (tail_beg, mut tail_end) = trim_idx(all_after, tail_beg, tail_end);
-    // Fix: Manually trim trailing char (like "a") that are preceded by a space.
-    // This handles cases like "is a" which are not correctly trimmed by the
-    // preceding functions.
-    if tail_end >= 2
-        && (tail_end - 2) > tail_beg
-        && all_after[tail_end - 2].is_whitespace()
-        && !all_after[tail_end - 1].is_whitespace()
-    {
-        tail_end -= 1;
-        (_, tail_end) = trim_idx(all_after, tail_beg, tail_end);
-    }
-
-    // and get the string
-    let tail_str: String = all_after[tail_beg..tail_end].iter().collect();
-    tail.push_str(&tail_str);
-
-    // the head chunk
-
-    // max size of the head chunk = max size of right half - space taken by after chunk - gap size.
-    let max_head_size = cmp::max(
-        max_after_size as isize - after.len() as isize - config.gap_size as isize,
-        0,
-    ) as usize;
-
-    // the head chunk takes text from before the before chunk
-    let (_, head_end) = trim_idx(all_before, 0, before_beg);
-
-    // begin = end - max length
-    let head_beg = cmp::max(head_end as isize - max_head_size as isize, 0) as usize;
-    // in case that falls in the middle of a word, trim away the word.
-    let head_beg = trim_broken_word_left(all_before, head_beg, head_end);
-
-    // trim away white space again.
-    let (head_beg, head_end) = trim_idx(all_before, head_beg, head_end);
-
-    // and get the string.
-    let head_str: String = all_before[head_beg..head_end].iter().collect();
-    head.push_str(&head_str);
-    //The TeX mode does not output truncation characters.
-    if config.format != OutFormat::Tex {
-        // put right context truncation string if needed
-        if after_end != all_after.len() && tail_beg == tail_end {
-            after.push_str(&config.trunc_str);
-        } else if after_end != all_after.len() && tail_end != all_after.len() {
-            tail.push_str(&config.trunc_str);
+        // A one-character word at the very end survives the alignment above,
+        // because the character before it is a space and so reads as a word
+        // boundary. Drop it, so a tail does not trail off mid-phrase.
+        if tail.len() > 2 && after_text.is_space(tail.end - 2) && !after_text.is_space(tail.end - 1)
+        {
+            tail = after_text.trim(tail.start..tail.end - 1);
         }
 
-        // put left context truncation string if needed
-        if before_beg != 0 && head_beg == head_end {
-            before = format!("{}{before}", config.trunc_str);
-        } else if before_beg != 0 && head_beg != 0 {
-            head = format!("{}{head}", config.trunc_str);
-        }
-    }
+        // Sizing the head against the after field's *byte* length is not
+        // deliberate: every other width here counts characters. The two agree
+        // on ASCII input, so the discrepancy only shows on wider characters.
+        let max_head_size = max_after_size
+            .saturating_sub(after_text.byte_len(after.clone()))
+            .saturating_sub(config.gap_size);
+        let head = before_text.window_ending_at(0..before.start, max_head_size);
 
-    (tail, before, after, head)
+        let mut chunks = Self {
+            head: before_text.text(head.clone()),
+            before: before_text.text(before.clone()),
+            keyword,
+            after: after_text.text(after.clone()),
+            tail: after_text.text(tail.clone()),
+        };
+
+        // TeX output carries no truncation marks.
+        if config.format != OutFormat::Tex {
+            // A mark goes on the outermost field that actually lost text, so
+            // that it appears at the edge of the line rather than in its middle.
+            if after.end != after_text.len() {
+                if tail.is_empty() {
+                    chunks.after.push_str(&config.trunc_str);
+                } else if tail.end != after_text.len() {
+                    chunks.tail.push_str(&config.trunc_str);
+                }
+            }
+            if before.start != 0 {
+                if head.is_empty() {
+                    chunks.before.insert_str(0, &config.trunc_str);
+                } else if head.start != 0 {
+                    chunks.head.insert_str(0, &config.trunc_str);
+                }
+            }
+        }
+
+        chunks
+    }
 }
 
 /// Escape special characters for TeX.
@@ -623,22 +635,31 @@ fn format_tex_line(
 ) -> String {
     let mut output = String::new();
     write!(output, "\\{} ", config.macro_name).unwrap();
-    let (tail, before, keyword, after, head) =
-        prepare_line_chunks(config, word_ref, line, chars_line, reference);
+    let chunks = prepare_line_chunks(config, word_ref, line, chars_line, reference);
     write!(
         output,
         "{{{0}}}{{{1}}}{{{2}}}{{{3}}}{{{4}}}",
-        format_tex_field(&tail),
-        format_tex_field(&before),
-        format_tex_field(&keyword),
-        format_tex_field(&after),
-        format_tex_field(&head),
+        format_tex_field(&chunks.tail),
+        format_tex_field(&chunks.before),
+        format_tex_field(&chunks.keyword),
+        format_tex_field(&chunks.after),
+        format_tex_field(&chunks.head),
     )
     .unwrap();
     if config.auto_ref || config.input_ref {
         write!(output, "{{{}}}", format_tex_field(reference)).unwrap();
     }
     output
+}
+
+/// Put `first` and `second` side by side, separated by a space when neither is
+/// empty, so an absent field costs no padding.
+fn join_fields(first: String, second: String) -> String {
+    match (first.is_empty(), second.is_empty()) {
+        (true, _) => second,
+        (_, true) => first,
+        _ => format!("{first} {second}"),
+    }
 }
 
 fn format_dumb_line(
@@ -648,27 +669,18 @@ fn format_dumb_line(
     chars_line: &[char],
     reference: &str,
 ) -> String {
-    let (tail, before, keyword, after, head) =
-        prepare_line_chunks(config, word_ref, line, chars_line, reference);
+    let Chunks {
+        head,
+        before,
+        keyword,
+        after,
+        tail,
+    } = prepare_line_chunks(config, word_ref, line, chars_line, reference);
 
-    // Calculate the position for the left part
-    // The left part consists of tail (if present) + space + before
-    let left_part = if tail.is_empty() {
-        before
-    } else if before.is_empty() {
-        tail
-    } else {
-        format!("{tail} {before}")
-    };
-
-    // Calculate the position for the right part
-    let right_part = if head.is_empty() {
-        after
-    } else if after.is_empty() {
-        head
-    } else {
-        format!("{after} {head}")
-    };
+    // Left of the keyword the wrap-around field comes first, right of it last;
+    // a space joins them only when both are present.
+    let left_part = join_fields(tail, before);
+    let right_part = join_fields(after, head);
 
     // Calculate the width for the left half (before the keyword)
     let half_width = cmp::max(config.line_width / 2, config.gap_size);
@@ -723,16 +735,15 @@ fn format_roff_line(
 ) -> String {
     let mut output = String::new();
     write!(output, ".{}", config.macro_name).unwrap();
-    let (tail, before, keyword, after, head) =
-        prepare_line_chunks(config, word_ref, line, chars_line, reference);
+    let chunks = prepare_line_chunks(config, word_ref, line, chars_line, reference);
     write!(
         output,
         " \"{}\" \"{}\" \"{}{}\" \"{}\"",
-        format_roff_field(&tail),
-        format_roff_field(&before),
-        format_roff_field(&keyword),
-        format_roff_field(&after),
-        format_roff_field(&head)
+        format_roff_field(&chunks.tail),
+        format_roff_field(&chunks.before),
+        format_roff_field(&chunks.keyword),
+        format_roff_field(&chunks.after),
+        format_roff_field(&chunks.head)
     )
     .unwrap();
     if config.auto_ref || config.input_ref {
@@ -741,14 +752,14 @@ fn format_roff_line(
     output
 }
 
-/// Extract and prepare text chunks for formatting in both TeX and roff output
+/// Split `line` around the keyword `word_ref` points at and lay the pieces out.
 fn prepare_line_chunks(
     config: &Config,
     word_ref: &WordRef,
     line: &str,
     chars_line: &[char],
     reference: &str,
-) -> (String, String, String, String, String) {
+) -> Chunks {
     let char_position_end = word_ref.char_start
         + line[word_ref.position..word_ref.position_end]
             .chars()
@@ -768,10 +779,7 @@ fn prepare_line_chunks(
     let keyword = line[word_ref.position..word_ref.position_end].to_string();
     let all_after = &chars_line[char_position_end..];
 
-    // Get formatted output chunks
-    let (tail, before, after, head) = get_output_chunks(all_before, &keyword, all_after, config);
-
-    (tail, before, keyword, after, head)
+    Chunks::new(config, all_before, keyword, all_after)
 }
 
 fn write_traditional_output(
@@ -1086,4 +1094,131 @@ pub fn uu_app() -> Command {
                 .help(translate!("ptx-help-width"))
                 .value_name("NUMBER"),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Chunks, Config, Line, OutFormat};
+
+    fn chars(s: &str) -> Vec<char> {
+        s.chars().collect()
+    }
+
+    #[test]
+    fn trim_drops_only_the_outer_whitespace() {
+        let text = chars("  pear  plum  ");
+        let line = Line(&text);
+        assert_eq!(line.trim(0..14), 2..12);
+        // Trimming a window already free of whitespace leaves it alone.
+        assert_eq!(line.trim(2..12), 2..12);
+        // A window holding nothing but whitespace collapses onto its own
+        // start, rather than inverting into a range that cannot be sliced.
+        assert_eq!(line.trim(12..14), 12..12);
+        assert_eq!(line.trim(0..2), 0..0);
+    }
+
+    #[test]
+    fn align_start_skips_a_word_it_would_split() {
+        let text = chars("pear plum quince");
+        let line = Line(&text);
+        // Index 2 sits inside "pear", so the window opens at the space that
+        // ends it; a later trim moves it onto "plum".
+        assert_eq!(line.align_start_to_word(2..16), 4..16);
+        // A start already on a boundary, or at the very beginning, stays put.
+        assert_eq!(line.align_start_to_word(5..16), 5..16);
+        assert_eq!(line.align_start_to_word(0..16), 0..16);
+    }
+
+    #[test]
+    fn align_end_drops_a_word_it_would_split() {
+        let text = chars("pear plum quince");
+        let line = Line(&text);
+        // Index 12 sits inside "quince", so the window closes on the space
+        // that precedes it.
+        assert_eq!(line.align_end_to_word(0..12), 0..10);
+        // An end at the end of the line cut nothing and is kept.
+        assert_eq!(line.align_end_to_word(0..16), 0..16);
+    }
+
+    #[test]
+    fn windows_take_whole_words_from_the_requested_side() {
+        let text = chars("pear plum quince ");
+        let line = Line(&text);
+        // Seven characters from the right end reach back into "plum", which is
+        // therefore dropped; the trailing space goes with it.
+        assert_eq!(line.text(line.window_ending_at(0..17, 7)), "quince");
+        // Ten from the left end reach into "quince", so it is dropped too.
+        assert_eq!(line.text(line.window_starting_at(0..17, 10)), "pear plum");
+        // A width wide enough for everything returns the whole trimmed line.
+        assert_eq!(
+            line.text(line.window_ending_at(0..17, 99)),
+            "pear plum quince"
+        );
+    }
+
+    #[test]
+    fn window_starting_at_keeps_leading_whitespace() {
+        let text = chars(" pear plum");
+        let line = Line(&text);
+        // The after field butts against the keyword, so the space that
+        // separates them belongs to the field.
+        assert_eq!(line.text(line.window_starting_at(0..10, 5)), " pear");
+    }
+
+    #[test]
+    fn a_wide_line_needs_no_truncation_marks() {
+        let config = Config {
+            line_width: 60,
+            ..Config::default()
+        };
+        let chunks = Chunks::new(
+            &config,
+            &chars("pear plum "),
+            "nut".to_owned(),
+            &chars(" cake tart pie"),
+        );
+        assert_eq!(chunks.before, "pear plum");
+        assert_eq!(chunks.keyword, "nut");
+        assert_eq!(chunks.after, " cake tart pie");
+        // Nothing wrapped around the ends of the line.
+        assert!(chunks.head.is_empty());
+        assert!(chunks.tail.is_empty());
+    }
+
+    #[test]
+    fn a_narrow_line_marks_the_text_it_dropped() {
+        let config = Config {
+            line_width: 20,
+            ..Config::default()
+        };
+        let chunks = Chunks::new(
+            &config,
+            &chars("pear plum "),
+            "nut".to_owned(),
+            &chars(" cake tart pie"),
+        );
+        // "pear" did not fit, so the before field opens with the mark.
+        assert_eq!(chunks.before, "/plum");
+        // No word at all fit to the right of the keyword.
+        assert_eq!(chunks.after, "/");
+        assert!(chunks.head.is_empty());
+        assert!(chunks.tail.is_empty());
+    }
+
+    #[test]
+    fn tex_output_carries_no_truncation_marks() {
+        let config = Config {
+            line_width: 20,
+            format: OutFormat::Tex,
+            ..Config::default()
+        };
+        let chunks = Chunks::new(
+            &config,
+            &chars("pear plum "),
+            "nut".to_owned(),
+            &chars(" cake tart pie"),
+        );
+        assert_eq!(chunks.before, "plum");
+        assert!(chunks.after.is_empty());
+    }
 }

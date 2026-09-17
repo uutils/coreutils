@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // features ~ feature-gated modules (core/bundler file)
 //
 // spell-checker:ignore (features) extendedbigdecimal logind
@@ -35,7 +36,7 @@ pub mod extendedbigdecimal;
 pub mod fast_inc;
 #[cfg(feature = "format")]
 pub mod format;
-#[cfg(all(feature = "fs", not(target_os = "haiku")))]
+#[cfg(feature = "fs")]
 pub mod fs;
 #[cfg(feature = "fsext")]
 pub mod fsext;
@@ -111,6 +112,7 @@ pub mod selinux;
         target_os = "android",
         target_os = "cygwin",
         target_os = "freebsd",
+        target_os = "hurd",
         target_os = "illumos",
         target_os = "linux",
         target_os = "netbsd",
@@ -125,12 +127,14 @@ pub mod smack;
 #[cfg(feature = "feat_systemd_logind")]
 pub mod systemd_logind;
 #[cfg(all(
-    unix,
-    not(target_os = "android"),
-    not(target_os = "fuchsia"),
-    not(target_os = "openbsd"),
-    not(target_os = "redox"),
-    feature = "utmpx"
+    feature = "utmpx",
+    any(
+        target_vendor = "apple",
+        target_os = "cygwin",
+        target_os = "freebsd",
+        target_os = "linux",
+        target_os = "netbsd"
+    )
 ))]
 pub mod utmpx;
 // ** windows-only

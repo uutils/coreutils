@@ -21,7 +21,6 @@ path = "src/lib/lib.rs"
 [dependencies]
 ariadne = { workspace = true, optional = true }
 base64-simd = { workspace = true, optional = true }
-bstr = { workspace = true, optional = true }
 clap = { workspace = true }
 data-encoding = { workspace = true, optional = true }
 data-encoding-macro = { workspace = true, optional = true }
@@ -34,7 +33,6 @@ jiff = { workspace = true, optional = true, features = [
   "tzdb-concatenated",
 ] }
 libc = { workspace = true, optional = true }
-openssl = { workspace = true, optional = true }
 os_display = { workspace = true }
 rustc-hash = { workspace = true }
 rustix = { workspace = true, optional = true }
@@ -47,7 +45,6 @@ uucore_procs = { workspace = true }
 z85 = { workspace = true, optional = true }
 
 # Benchmark dependencies (optional)
-divan = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
 
 digest = { workspace = true, optional = true }
@@ -94,10 +91,15 @@ tempfile = { workspace = true }
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 selinux = { workspace = true, optional = true }
 
+[target.'cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))'.dependencies]
+bstr = { workspace = true, optional = true }
+
+[target.'cfg(any(target_vendor = "apple", target_os = "cygwin", target_os = "freebsd", target_os = "linux", target_os = "netbsd"))'.dependencies]
+dns-lookup = { workspace = true, optional = true }
+
 [target.'cfg(unix)'.dependencies]
 # utmpx is unix-only, so its dependencies must not be pulled into other targets
 # (the uptime feature enables utmpx and now builds on windows too).
-dns-lookup = { workspace = true, optional = true }
 time = { workspace = true, optional = true, features = [
   "formatting",
   "local-offset",
@@ -120,7 +122,10 @@ windows-sys = { workspace = true, optional = true, default-features = false, fea
   "Win32_Security",
   "Win32_Storage_FileSystem",
   "Win32_Foundation",
+  "Win32_Globalization",
+  "Win32_NetworkManagement_WNet",
   "Win32_System_Console",
+  "Win32_System_Diagnostics_Debug",
   "Win32_System_IO",
   "Win32_System_Ioctl",
   "Win32_System_JobObjects",
@@ -129,6 +134,12 @@ windows-sys = { workspace = true, optional = true, default-features = false, fea
   "Win32_System_Threading",
   "Win32_System_WindowsProgramming",
 ] }
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+openssl = { workspace = true, features = ["vendored"], optional = true }
+# vendored openssl with MSVC needs complex setup...
+[target.'cfg(target_env = "msvc")'.dependencies]
+openssl = { workspace = true, features = ["aws-lc"], optional = true }
 
 [target.'cfg(target_os = "openbsd")'.dependencies]
 utmp-classic = { workspace = true, optional = true }
@@ -141,7 +152,7 @@ colors = []
 diagnostics = ["dep:ariadne"]
 checksum = ["base64-simd", "quoting-style", "rustix/fs", "sum"]
 encoding = ["data-encoding", "data-encoding-macro", "z85", "base64-simd"]
-entries = ["libc", "rustix/fs"]
+entries = ["libc", "rustix/fs", "rustix/process"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
 fast-inc = []
 fs = ["dunce", "libc", "rustix/fs", "windows-sys"]
@@ -161,7 +172,7 @@ format = [
 ]
 i18n-all = ["i18n-charmap", "i18n-collator", "i18n-decimal", "i18n-datetime"]
 i18n-charmap = ["i18n-common"]
-i18n-common = ["icu_locale"]
+i18n-common = ["icu_locale", "windows-sys"]
 i18n-collator = ["i18n-common", "icu_collator"]
 i18n-decimal = ["i18n-common", "icu_decimal", "icu_provider"]
 i18n-datetime = [
@@ -184,7 +195,7 @@ proc-info = ["tty", "walkdir"]
 quoting-style = ["i18n-common"]
 ranges = []
 ringbuffer = []
-safe-copy = []
+safe-copy = ["rustix/fs"]
 safe-traversal = ["libc", "nix/fs", "nix/dir", "nix/user"]
 selinux = ["dep:selinux"]
 smack = ["xattr"]
@@ -216,7 +227,7 @@ wide = []
 tty = []
 time = ["jiff"]
 uptime = ["jiff", "libc", "rustix/time", "utmp-classic", "utmpx", "windows-sys"]
-benchmark = ["divan", "itertools", "tempfile"]
+benchmark = ["itertools", "tempfile"]
 
 [lints]
 workspace = true

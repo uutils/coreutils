@@ -1,7 +1,7 @@
 name: Code Quality
 
 # spell-checker:ignore (people) juliangruber pell reactivecircus taiki-e taplo
-# spell-checker:ignore (misc) TERMUX noaudio pkill swiftshader esac sccache pcoreutils shopt subshell dequote libsystemd oniguruma sysroot wasi wasip
+# spell-checker:ignore (misc) TERMUX noaudio pkill swiftshader esac sccache pcoreutils shopt subshell dequote libsystemd wasi wasip
 
 on:
   pull_request:
@@ -197,6 +197,10 @@ jobs:
     name: Style/Empty assertions check
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - name: Fail if empty stdout/stderr assertions are found
         shell: bash
         run: |

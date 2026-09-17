@@ -342,6 +342,31 @@ fn test_conflicting_arg() {
 }
 
 #[test]
+#[cfg(windows)]
+fn test_windows_path_separator_round_trip() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("subdir");
+    scene.fixtures.write("subdir/file.txt", "abc");
+
+    let result = scene
+        .ucmd()
+        .args(&["--text", "subdir\\file.txt"])
+        .succeeds();
+
+    result
+        .no_stderr()
+        .stdout_is("900150983cd24fb0d6963f7d28e17f72  subdir/file.txt\n");
+
+    scene
+        .ucmd()
+        .args(&["--check", "--strict"])
+        .pipe_in(result.stdout_str())
+        .succeeds()
+        .no_stderr()
+        .stdout_is("subdir/file.txt: OK\n");
+}
+
+#[test]
 #[cfg_attr(windows, ignore = "Disabled on windows")]
 fn test_with_escape_filename() {
     let scene = TestScenario::new(util_name!());
@@ -392,6 +417,17 @@ fn test_check_empty_line() {
         .arg(at.subdir.join("in.md5"))
         .succeeds()
         .stderr_contains("WARNING: 1 line is improperly formatted");
+}
+
+#[test]
+#[cfg(windows)]
+fn test_check_invalid_utf8_reports_read_error() {
+    new_ucmd!()
+        .args(&["--check", "-"])
+        .pipe_in(b"invalid\xff\n")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("md5sum: -: read error\n");
 }
 
 #[test]

@@ -1,6 +1,6 @@
 name: OpenBSD
 
-# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc sccache nextest copyback logind bindgen libclang
+# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc sccache nextest copyback logind
 
 env:
   # * style job configuration
@@ -47,7 +47,7 @@ jobs:
         prepare: |
           # Clean up disk space before installing packages
           df -h
-          pkg_add curl sudo-- jq coreutils bash rust rust-clippy rust-rustfmt llvm-- python3
+          pkg_add curl sudo-- jq coreutils bash rust rust-clippy rust-rustfmt python3
           rm -rf /usr/share/relink/* /usr/X11R6/* /usr/share/doc/* /usr/share/man/* &
           # Clean up package cache after installation
           pkg_delete -a &
@@ -148,7 +148,7 @@ jobs:
         sync: rsync
         copyback: false
         mem: 6144
-        # Install rust and build dependencies from OpenBSD packages (llvm provides libclang for bindgen)
+        # Install rust and build dependencies
         prepare: |
           # Clean up disk space before installing packages
           df -h
@@ -157,7 +157,7 @@ jobs:
           rsync -a --delete empty/ /usr/X11R6/
           rsync -a --delete empty/ /usr/share/doc/
           rsync -a --delete empty/ /usr/share/man/
-          pkg_add curl gmake sudo-- jq rust llvm--
+          pkg_add curl gmake sudo-- jq rust
           # Clean up package cache after installation
           pkg_delete -a
           df -h

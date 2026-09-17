@@ -192,6 +192,17 @@ pub(crate) enum Files {
     Normal,
 }
 
+/// Which listing program is constructing this [`Config`].
+///
+/// `ls` defaults depend on whether stdout is a terminal. `dir` and `vdir`
+/// default to a fixed format and escape quoting.
+#[derive(Clone, Copy)]
+enum ProgramMode {
+    Ls,
+    Dir,
+    Vdir,
+}
+
 pub struct Config {
     // Dir and vdir needs access to this field
     pub format: Format,
@@ -233,11 +244,16 @@ pub struct Config {
 
 /// Extracts the format to display the information based on the options provided.
 ///
+/// When no format option is given, `mode` selects the program default: `ls`
+/// depends on whether stdout is a terminal; `dir` is columns; `vdir` is long.
+/// A `None` option id means that default, so `-1` and `--zero` can still
+/// override it.
+///
 /// # Returns
 ///
 /// A tuple containing the Format variant and an Option containing a &'static str
 /// which corresponds to the option used to define the format.
-fn extract_format(options: &clap::ArgMatches) -> (Format, Option<&'static str>) {
+fn extract_format(options: &clap::ArgMatches, mode: ProgramMode) -> (Format, Option<&'static str>) {
     if let Some(format_) = options.get_one::<String>(options::FORMAT) {
         (
             match format_.as_str() {
@@ -259,10 +275,18 @@ fn extract_format(options: &clap::ArgMatches) -> (Format, Option<&'static str>) 
         (Format::Commas, Some(options::format::COMMAS))
     } else if options.get_flag(options::format::COLUMNS) {
         (Format::Columns, Some(options::format::COLUMNS))
-    } else if stdout().is_terminal() {
-        (Format::Columns, None)
     } else {
-        (Format::OneLine, None)
+        match mode {
+            ProgramMode::Dir => (Format::Columns, None),
+            ProgramMode::Vdir => (Format::Long, None),
+            ProgramMode::Ls => {
+                if stdout().is_terminal() {
+                    (Format::Columns, None)
+                } else {
+                    (Format::OneLine, None)
+                }
+            }
+        }
     }
 }
 
@@ -301,7 +325,7 @@ fn extract_files(options: &clap::ArgMatches) -> Files {
 /// # Returns
 ///
 /// A Sort variant representing the sorting method to use.
-fn extract_sort(options: &clap::ArgMatches) -> Sort {
+fn extract_sort(options: &clap::ArgMatches, format: &Format) -> Sort {
     let get_last_index = |flag: &str| -> usize {
         if options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine) {
             options.index_of(flag).unwrap_or(0)
@@ -332,7 +356,7 @@ fn extract_sort(options: &clap::ArgMatches) -> Sort {
     match max_sort_index {
         0 => {
             // No sort flags specified, use default behavior
-            if !options.get_flag(options::format::LONG)
+            if *format != Format::Long
                 && (options.get_flag(options::time::ACCESS)
                     || options.get_flag(options::time::CHANGE)
                     || options.get_one::<String>(options::TIME).is_some())
@@ -555,6 +579,7 @@ fn match_quoting_style_name(
 fn extract_quoting_style(
     options: &clap::ArgMatches,
     show_control: bool,
+    mode: ProgramMode,
 ) -> (QuotingStyle, Option<LocaleQuoting>) {
     let opt_quoting_style = options.get_one::<String>(QUOTING_STYLE);
 
@@ -569,8 +594,6 @@ fn extract_quoting_style(
         (QuotingStyle::C_NO_QUOTES, None)
     } else if options.get_flag(options::quoting::C) {
         (QuotingStyle::C_DOUBLE, None)
-    } else if options.get_flag(options::DIRED) {
-        (QuotingStyle::Literal { show_control }, None)
     } else {
         // If set, the QUOTING_STYLE environment variable specifies a default style.
         if let Ok(style) = std::env::var("QUOTING_STYLE") {
@@ -584,12 +607,12 @@ fn extract_quoting_style(
             );
         }
 
-        // By default, `ls` uses Shell escape quoting style when writing to a terminal file
-        // descriptor and Literal otherwise.
-        if stdout().is_terminal() {
-            (QuotingStyle::SHELL_ESCAPE.show_control(show_control), None)
-        } else {
-            (QuotingStyle::Literal { show_control }, None)
+        match mode {
+            ProgramMode::Dir | ProgramMode::Vdir => (QuotingStyle::C_NO_QUOTES, None),
+            ProgramMode::Ls if !options.get_flag(options::DIRED) && stdout().is_terminal() => {
+                (QuotingStyle::SHELL_ESCAPE.show_control(show_control), None)
+            }
+            ProgramMode::Ls => (QuotingStyle::Literal { show_control }, None),
         }
     }
 }
@@ -682,10 +705,30 @@ fn parse_tab_size(size_str: &str) -> Result<usize, LsError> {
 }
 
 impl Config {
-    #[allow(clippy::cognitive_complexity)]
     pub fn from(options: &clap::ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Self> {
+        Self::from_with_program_mode(options, diag_args, ProgramMode::Ls)
+    }
+
+    /// Construct a configuration with dir's default column format and escape quoting.
+    pub fn from_dir(options: &clap::ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Self> {
+        Self::from_with_program_mode(options, diag_args, ProgramMode::Dir)
+    }
+
+    /// Construct a configuration with vdir's default long format and escape quoting.
+    pub fn from_vdir(options: &clap::ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Self> {
+        Self::from_with_program_mode(options, diag_args, ProgramMode::Vdir)
+    }
+
+    #[allow(clippy::cognitive_complexity)]
+    fn from_with_program_mode(
+        options: &clap::ArgMatches,
+        diag_args: Option<&[OsString]>,
+        mode: ProgramMode,
+    ) -> UResult<Self> {
         let context = options.get_flag(options::CONTEXT);
-        let (mut format, opt) = extract_format(options);
+        let (mut format, opt) = extract_format(options, mode);
+        // -1 and --zero override a default long format, but not an explicit one.
+        let mut explicit_long = format == Format::Long && opt.is_some();
         let files = extract_files(options);
 
         // The -o, -n and -g options are tricky. They cannot override with each
@@ -696,14 +739,14 @@ impl Config {
         // when switching to a different format option in-between like this:
         // -ogCl or "-og --format=vertical --format=long".
         //
-        // -1 has a similar issue: it does nothing if the format is long. This
-        // actually makes it distinct from the --format=singe-column option,
+        // -1 has a similar issue: it does nothing if long format was explicitly
+        // requested. This makes it distinct from the --format=singe-column option,
         // which always applies.
         //
         // The idea here is to not let these options override with the other
         // options, but manually whether they have an index that's greater than
         // the other format options. If so, we set the appropriate format.
-        if format != Format::Long {
+        if !explicit_long {
             let idx = opt
                 .and_then(|opt| options.indices_of(opt).map(|x| x.max().unwrap()))
                 .unwrap_or(0);
@@ -725,6 +768,7 @@ impl Config {
             .any(|i| i >= idx)
             {
                 format = Format::Long;
+                explicit_long = true;
             } else if let Some(mut indices) = options.indices_of(options::format::ONE_LINE)
                 && options.value_source(options::format::ONE_LINE)
                     == Some(clap::parser::ValueSource::CommandLine)
@@ -734,7 +778,6 @@ impl Config {
             }
         }
 
-        let sort = extract_sort(options);
         let time = extract_time(options);
         let mut needs_color = extract_color(options);
         let hyperlink = extract_hyperlink(options);
@@ -806,18 +849,14 @@ impl Config {
         let mut show_control = if options.get_flag(options::HIDE_CONTROL_CHARS) {
             false
         } else {
-            options.get_flag(options::SHOW_CONTROL_CHARS) || !stdout().is_terminal()
+            options.get_flag(options::SHOW_CONTROL_CHARS)
+                || !matches!(mode, ProgramMode::Ls)
+                || !stdout().is_terminal()
         };
 
-        let (mut quoting_style, mut locale_quoting) = extract_quoting_style(options, show_control);
+        let (mut quoting_style, mut locale_quoting) =
+            extract_quoting_style(options, show_control, mode);
         let indicator_style = extract_indicator_style(options);
-        // Only parse the value to "--time-style" if it will become relevant.
-        let dired = options.get_flag(options::DIRED);
-        let (time_format_recent, time_format_older) = if format == Format::Long || dired {
-            parse_time_style(options)?
-        } else {
-            Default::default()
-        };
 
         let mut ignore_patterns: Vec<Pattern> = Vec::new();
 
@@ -898,7 +937,7 @@ impl Config {
                 .max()
                 .unwrap_or(0)
         {
-            format = if format == Format::Long {
+            format = if explicit_long {
                 format
             } else {
                 Format::OneLine
@@ -953,6 +992,7 @@ impl Config {
             None
         };
 
+        let dired = options.get_flag(options::DIRED);
         if dired || is_dired_arg_present() {
             // --dired implies --format=long
             // if we have --dired --hyperlink, we don't show dired but we still want to see the
@@ -962,6 +1002,15 @@ impl Config {
         if dired && options.get_flag(options::ZERO) {
             return Err(Box::new(LsError::DiredAndZeroAreIncompatible));
         }
+
+        let sort = extract_sort(options, &format);
+
+        // Only parse the time style after the final output format is known.
+        let (time_format_recent, time_format_older) = if format == Format::Long {
+            parse_time_style(options)?
+        } else {
+            Default::default()
+        };
 
         let dereference = if options.get_flag(options::dereference::ALL) {
             Dereference::All

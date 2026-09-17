@@ -44,7 +44,6 @@ lscolors
 mdbook
 memchr
 multifilereader
-onig
 ouroboros
 peekreader
 quickcheck

@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (words) dirfd subdirs openat FDCWD rwxr
 
 use std::fs::{OpenOptions, Permissions, metadata, set_permissions};
@@ -626,6 +627,31 @@ fn test_chmod_recursive_reference_does_not_follow_inner_symlink() {
         0o600
     );
     assert_eq!(at.metadata("tree").permissions().mode() & 0o7777, 0o745);
+}
+
+#[test]
+fn test_chmod_recursive_symlink_option_like_mode() {
+    // A symlink met inside the tree during `chmod -R` must be left alone.
+    // When using an option-like mode (e.g. `-w`), umask sensitivity checks
+    // must not trigger for symlinks inside the tree.
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir_all("d/sub");
+    at.set_mode("d", 0o755);
+    at.set_mode("d/sub", 0o755);
+    at.touch("d/sub/target");
+    at.set_mode("d/sub/target", 0o644);
+    // Verbatim reproducer from Launchpad #2167122: ln -s target d/sub/link
+    at.relative_symlink_file("target", "d/sub/link");
+
+    ucmd.umask(0o022).arg("-R").arg("-w").arg("d").succeeds();
+
+    assert_eq!(at.metadata("d").permissions().mode() & 0o7777, 0o555);
+    assert_eq!(at.metadata("d/sub").permissions().mode() & 0o7777, 0o555);
+    assert_eq!(
+        at.metadata("d/sub/target").permissions().mode() & 0o7777,
+        0o444
+    );
 }
 
 #[test]
@@ -1579,13 +1605,13 @@ fn test_chmod_non_utf8_paths() {
 
 #[test]
 fn test_chmod_operator_only_still_calls_syscall() {
-    use uucore::process::geteuid;
+    use rustix::process::geteuid;
 
     // An operator with no permission letters ('+', '-', '=') leaves the mode
     // bits unchanged, yet chmod must still issue the chmod(2) call so that a
     // lack of permission is reported instead of silently succeeding. As a
     // non-root user, '/' (owned by root) is a file we cannot chmod.
-    if geteuid() == 0 {
+    if geteuid().is_root() {
         return;
     }
     if metadata("/").map_or(0, |m| m.uid()) != 0 {

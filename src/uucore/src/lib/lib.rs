@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 //! library ~ (core/bundler file)
 // #![deny(missing_docs)] //TODO: enable this
 //
@@ -54,7 +55,7 @@ pub use crate::features::extendedbigdecimal;
 pub use crate::features::fast_inc;
 #[cfg(feature = "format")]
 pub use crate::features::format;
-#[cfg(all(feature = "fs", not(target_os = "haiku")))]
+#[cfg(feature = "fs")]
 pub use crate::features::fs;
 #[cfg(feature = "hardware")]
 pub use crate::features::hardware;
@@ -118,6 +119,7 @@ pub use crate::features::safe_traversal;
         target_os = "android",
         target_os = "cygwin",
         target_os = "freebsd",
+        target_os = "hurd",
         target_os = "illumos",
         target_os = "linux",
         target_os = "netbsd",
@@ -128,12 +130,14 @@ pub use crate::features::safe_traversal;
 ))]
 pub use crate::features::signals;
 #[cfg(all(
-    unix,
-    not(target_os = "android"),
-    not(target_os = "fuchsia"),
-    not(target_os = "openbsd"),
-    not(target_os = "redox"),
-    feature = "utmpx"
+    feature = "utmpx",
+    any(
+        target_vendor = "apple",
+        target_os = "cygwin",
+        target_os = "freebsd",
+        target_os = "linux",
+        target_os = "netbsd"
+    )
 ))]
 pub use crate::features::utmpx;
 // ** windows-only
@@ -495,8 +499,7 @@ pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<'_, [u8]> {
     }
 }
 
-/// Converts a `&[u8]` to an `&OsStr`,
-/// or parses it as UTF-8 into an [`OsString`] on non-unix platforms.
+/// Converts a `&[u8]` to an `&OsStr`.
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
@@ -504,14 +507,14 @@ pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<'_, [u8]> {
     any(unix, all(target_os = "wasi", target_env = "p1")),
     expect(clippy::unnecessary_wraps)
 )]
-pub fn os_str_from_bytes(bytes: &[u8]) -> error::UResult<Cow<'_, OsStr>> {
+pub fn os_str_from_bytes(bytes: &[u8]) -> error::UResult<&OsStr> {
     #[cfg(any(unix, all(target_os = "wasi", target_env = "p1")))]
-    return Ok(Cow::Borrowed(OsStr::from_bytes(bytes)));
+    return Ok(OsStr::from_bytes(bytes));
 
     #[cfg(not(any(unix, all(target_os = "wasi", target_env = "p1"))))]
-    Ok(Cow::Owned(OsString::from(str::from_utf8(bytes).map_err(
-        |_| error::UUsageError::new(1, "Unable to transform bytes into OsStr"),
-    )?)))
+    Ok(OsStr::new(str::from_utf8(bytes).map_err(|_| {
+        error::UUsageError::new(1, "Unable to transform bytes into OsStr")
+    })?))
 }
 
 /// Converts a `Vec<u8>` into an `OsString`, parsing as UTF-8 on non-unix platforms.
@@ -556,15 +559,15 @@ pub fn os_string_to_vec(s: OsString) -> error::UResult<Vec<u8>> {
 
 /// Equivalent to `std::BufRead::lines` which outputs each line as a `Vec<u8>`,
 /// which avoids panicking on non UTF-8 input.
-pub fn read_byte_lines<R: std::io::Read>(
+fn read_byte_lines<R: std::io::Read>(
     mut buf_reader: BufReader<R>,
-) -> impl Iterator<Item = std::io::Result<Vec<u8>>> {
+) -> impl Iterator<Item = error::UResult<Vec<u8>>> {
     iter::from_fn(move || {
         let mut buf = Vec::with_capacity(256);
 
         match buf_reader.read_until(b'\n', &mut buf) {
             Ok(0) => None,
-            Err(e) => Some(Err(e)),
+            Err(e) => Some(Err(e.into())),
             Ok(_) => {
                 // Trim (\r)\n
                 if buf.ends_with(b"\n") {
@@ -580,14 +583,14 @@ pub fn read_byte_lines<R: std::io::Read>(
     })
 }
 
-/// Equivalent to `std::BufRead::lines` which outputs each line as an `OsString`
-/// This won't panic on non UTF-8 characters on Unix,
-/// but it still will on Windows.
+/// Equivalent to `std::BufRead::lines` which outputs each line as an `OsString`.
+///
+/// On platforms where `OsString` cannot contain arbitrary bytes,
+/// non-UTF8 inputs are reported as an error.
 pub fn read_os_string_lines<R: std::io::Read>(
     buf_reader: BufReader<R>,
-) -> impl Iterator<Item = std::io::Result<OsString>> {
-    read_byte_lines(buf_reader)
-        .map(|byte_line_res| byte_line_res.map(|bl| os_string_from_vec(bl).expect("UTF-8 error")))
+) -> impl Iterator<Item = error::UResult<OsString>> {
+    read_byte_lines(buf_reader).map(|byte_line_res| byte_line_res.and_then(os_string_from_vec))
 }
 
 /// Prompt the user with a formatted string and returns `true` if they reply `'y'` or `'Y'`
@@ -773,6 +776,17 @@ mod tests {
         let os_str = OsStr::from_bytes(&source[..]);
         test_invalid_utf8_args_lossy(os_str);
         test_invalid_utf8_args_ignore(os_str);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn invalid_utf8_line_returns_invalid_data() {
+        let input = BufReader::new(&b"valid\ninvalid \xff\n"[..]);
+        let mut lines = read_os_string_lines(input);
+
+        assert_eq!(lines.next().unwrap().unwrap(), OsStr::new("valid"));
+        assert!(lines.next().unwrap().is_err());
+        assert!(lines.next().is_none());
     }
 
     #[test]

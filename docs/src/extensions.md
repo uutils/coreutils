@@ -50,10 +50,6 @@ GNU `env` allows the empty string to be used as an environment variable name.
 This is unsupported by uutils, which will show a warning for any such
 assignment.
 
- `env` has an additional `-f`/`--file` flag that can
-parse `.env` files and set variables accordingly. This feature is adopted from `dotenv` style
-packages.
-
 ## `expand`
 
 `expand` offers the `-U`/`--no-utf8` option to interpret input files as 8-bit ASCII instead of UTF-8.

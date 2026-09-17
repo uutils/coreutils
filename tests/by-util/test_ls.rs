@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
 // spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE NOTCAPABLE
 #![allow(
@@ -2530,6 +2531,57 @@ fn test_ls_time_recent_future() {
 }
 
 #[test]
+fn test_ls_order_time_breaks_ties_by_name() {
+    // Every other sort in this utility falls back on the name, and GNU ls does
+    // the same for -t. Without the fallback, entries sharing a timestamp come
+    // out in whatever order the directory happened to be read in.
+    use filetime::{FileTime, set_file_times};
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let names = ["zulu", "alpha", "Mike", "bravo"];
+    for name in names {
+        at.touch(name);
+        at.append(name, "x");
+    }
+    let same = FileTime::from_unix_time(1_700_000_000, 0);
+    for name in names {
+        set_file_times(at.plus_as_string(name), same, same).unwrap();
+    }
+
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .arg("-t")
+        .succeeds()
+        .stdout_only("Mike\nalpha\nbravo\nzulu\n");
+
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .arg("-tr")
+        .succeeds()
+        .stdout_only("zulu\nbravo\nalpha\nMike\n");
+
+    // The tie is broken with the same order the name sort uses, so a UTF-8
+    // locale puts `alpha` before `Mike` where the C locale does the reverse.
+    #[cfg(unix)]
+    {
+        use uutests::util::is_locale_available;
+        let locale = "en_US.UTF-8";
+        if is_locale_available(locale) {
+            scene
+                .ucmd()
+                .env("LC_ALL", locale)
+                .arg("-t")
+                .succeeds()
+                .stdout_only("alpha\nbravo\nMike\nzulu\n");
+        }
+    }
+}
+
+#[test]
 fn test_ls_order_time() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2572,6 +2624,16 @@ fn test_ls_order_time() {
 
     let result = scene.ucmd().arg("--sort=time").arg("-r").succeeds();
     result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
+
+    // Long format selects the displayed time without enabling time sorting.
+    let name_order = Regex::new(r"(?s)test-1\n.*test-2\n.*test-3\n.*test-4\n").unwrap();
+    for (time, format) in itertools::iproduct!(["-u", "-c"], ["-g", "--format=long", "--dired"]) {
+        scene
+            .ucmd()
+            .args(&[time, format])
+            .succeeds()
+            .stdout_matches(&name_order);
+    }
 
     let args: [&[&str]; 10] = [
         &["-t", "-u"],
@@ -5852,6 +5914,118 @@ fn test_ls_dired_symlink_name_only() {
     assert_eq!(filenames, vec!["link", "target"]);
 }
 
+/// Extracts the file names delimited by the //DIRED// byte offsets.
+fn dired_names(output: &str) -> Vec<String> {
+    let dired_line = output
+        .lines()
+        .find(|&line| line.starts_with("//DIRED//"))
+        .unwrap();
+    let positions: Vec<usize> = dired_line
+        .split_whitespace()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect();
+    assert_eq!(positions.len() % 2, 0);
+    positions
+        .chunks(2)
+        .map(|chunk| String::from_utf8(output.as_bytes()[chunk[0]..chunk[1]].to_vec()).unwrap())
+        .collect()
+}
+
+#[test]
+fn test_ls_dired_name_boundaries() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("d");
+    at.touch("d/target");
+    at.relative_symlink_file("target", "d/link");
+    at.mkdir("d/sub");
+    at.touch("d/with space");
+
+    let quoted = ["link", "sub", "target", "'with space'"];
+    let literal = ["link", "sub", "target", "with space"];
+    // The quoting style is spelled out in every case: it decides both how the
+    // names are rendered and whether they get padded, so leaving it to the
+    // default would make the expectations depend on stdout being a terminal.
+    let cases: [(&[&str], [&str; 4]); 4] = [
+        // The color escapes wrapped around a name are not part of it,
+        (&["--quoting-style=literal", "--color=always"], literal),
+        // neither is the indicator character appended by -F,
+        (&["--quoting-style=literal", "-F", "--color=never"], literal),
+        (
+            &["--quoting-style=literal", "-F", "--color=always"],
+            literal,
+        ),
+        // nor the space padding unquoted names to align with quoted ones.
+        (&["--quoting-style=shell-escape"], quoted),
+    ];
+
+    for (args, expected) in cases {
+        let result = scene
+            .ucmd()
+            .arg("--dired")
+            .arg("-l")
+            .args(args)
+            .arg("d")
+            .succeeds();
+        assert_eq!(dired_names(result.stdout_str()), expected, "with {args:?}");
+    }
+}
+
+#[test]
+fn test_ls_dired_leading_info_offsets() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("bay");
+    at.touch("bay/quill");
+    at.touch("bay/parchment");
+
+    // -i and -s prepend an inode / block-size column to every long line; those
+    // bytes shift the names and must be reflected in the //DIRED// offsets.
+    for args in [&["-i"][..], &["-s"][..], &["-i", "-s"][..]] {
+        let result = scene
+            .ucmd()
+            .arg("--dired")
+            .arg("-l")
+            .arg("--quoting-style=literal")
+            .args(args)
+            .arg("bay")
+            .succeeds();
+        assert_eq!(
+            dired_names(result.stdout_str()),
+            ["parchment", "quill"],
+            "with {args:?}"
+        );
+    }
+}
+
+#[test]
+fn test_ls_dired_normal_style_offsets() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("d");
+    at.touch("d/note");
+    at.mkdir("d/box");
+
+    // A `no` style makes ls emit a reset before the very first line; those
+    // bytes count towards the //DIRED// offsets like any other output.
+    let result = scene
+        .ucmd()
+        .env("LS_COLORS", "no=35:di=36")
+        .arg("--dired")
+        .arg("-l")
+        .arg("--quoting-style=literal")
+        .arg("--color=always")
+        .arg("d")
+        .succeeds();
+
+    assert!(result.stdout_str().starts_with("\x1b["));
+    assert_eq!(dired_names(result.stdout_str()), ["box", "note"]);
+}
+
 #[test]
 fn test_ls_dired_complex() {
     let scene = TestScenario::new(util_name!());
@@ -6634,7 +6808,7 @@ fn test_acl_padding_not_inflated() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let uid = uucore::process::getuid();
+    let uid = rustix::process::getuid().as_raw();
     let names = ["file1", "file2", "file3", "file4", "file5"];
     for name in &names {
         at.touch(name);
@@ -7116,6 +7290,44 @@ fn test_acl_display_symlink() {
     let first = iter.next().unwrap();
 
     assert!(iter.all(|i| i == first));
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+#[test]
+fn test_acl_display_symlink_without_dereference() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let dir_name = "dir";
+    let link_name = "link";
+    at.mkdir(dir_name);
+
+    match Command::new("setfacl")
+        .args(["-d", "-m", "u:bin:rwx", &at.plus_as_string(dir_name)])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: setfacl failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfacl failed with {e}");
+            return;
+        }
+    }
+
+    at.symlink_dir(dir_name, link_name);
+
+    scene
+        .ucmd()
+        .arg("-ld")
+        .arg(link_name)
+        .succeeds()
+        .stdout_does_not_contain("+");
 }
 
 #[test]
@@ -7750,6 +7962,58 @@ fn test_write_error() {
         .set_stdout(dev_full)
         .fails_with_code(2)
         .stderr_is("ls: write error: No space left on device\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_dired_write_error() {
+    let ts = TestScenario::new(util_name!());
+
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+
+    // Nothing is buffered for a failing operand, so the trailer is the first
+    // thing written: it must report the error rather than panic.
+    ts.ucmd()
+        .args(&["--dired", "nonexistent"])
+        .set_stdout(dev_full)
+        .fails_with_code(2)
+        .stderr_is(concat!(
+            "ls: cannot access 'nonexistent': No such file or directory\n",
+            "ls: write error: No space left on device\n",
+        ));
+}
+
+#[cfg(unix)]
+#[test]
+fn test_ls_long_stat_failure_is_reported() {
+    use rustix::process::geteuid;
+    use std::os::unix::fs::PermissionsExt;
+
+    // root bypasses the directory search permission check this relies on
+    if geteuid().is_root() {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/file");
+    at.symlink_file("/", "dir/link");
+    // readable but not searchable: read_dir() succeeds while stat() on the
+    // entries fails with EACCES
+    at.set_mode("dir", 0o600);
+
+    ucmd.args(&["-l", "dir"])
+        .fails_with_code(1)
+        .stdout_contains("? file")
+        .stdout_contains("? link")
+        .stderr_contains("cannot access 'dir/file': Permission denied")
+        .stderr_contains("cannot access 'dir/link': Permission denied");
+
+    // restore so that the test directory can be cleaned up
+    std::fs::set_permissions(at.plus("dir"), std::fs::Permissions::from_mode(0o700)).unwrap();
 }
 
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]

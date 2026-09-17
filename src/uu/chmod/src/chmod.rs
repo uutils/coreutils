@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's
 
+#![cfg(unix)]
+
 use clap::{Arg, ArgAction, Command};
 use std::collections::HashSet;
 use std::ffi::OsString;
@@ -20,7 +22,7 @@ use uucore::fs::{FileInformation, display_permissions_unix, path_is_root_dir};
 use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
 
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
 use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 use uucore::{format_usage, show, show_error};
 
@@ -416,7 +418,7 @@ impl Chmoder {
     }
 
     /// Handle symlinks during directory traversal based on traversal mode
-    #[cfg(not(unix))]
+    #[cfg(target_os = "aix")]
     fn handle_symlink_during_traversal(
         &self,
         path: &Path,
@@ -551,7 +553,7 @@ impl Chmoder {
     }
 
     // Non-safe traversal implementation for platforms without safe_traversal support
-    #[cfg(any(not(unix), target_os = "redox"))]
+    #[cfg(any(target_os = "aix", target_os = "hurd", target_os = "redox"))]
     fn walk_dir_with_context(
         &self,
         file_path: &Path,
@@ -581,10 +583,10 @@ impl Chmoder {
             // don't stat the same directory twice. If it's already on the current path,
             // it's a cycle.
             let dir_info = FileInformation::from_path(file_path, true).ok();
-            if let Some(info) = &dir_info {
-                if !ancestors.insert(info.clone()) {
-                    return r;
-                }
+            if let Some(info) = &dir_info
+                && !ancestors.insert(info.clone())
+            {
+                return r;
             }
 
             // We buffer all paths in this dir to not keep too many fd's open during recursion
@@ -593,14 +595,11 @@ impl Chmoder {
             for dir_entry in file_path.read_dir()? {
                 match dir_entry {
                     Ok(entry) => paths_in_this_dir.push(entry.path()),
-                    Err(err) => {
-                        r = r.and(Err(err.into()));
-                        continue;
-                    }
+                    Err(err) => r = r.and(Err(err.into())),
                 }
             }
             for path in paths_in_this_dir {
-                #[cfg(not(unix))]
+                #[cfg(target_os = "aix")]
                 {
                     if path.is_symlink() {
                         r = self
@@ -612,7 +611,7 @@ impl Chmoder {
                             .and(r);
                     }
                 }
-                #[cfg(target_os = "redox")]
+                #[cfg(any(target_os = "hurd", target_os = "redox"))]
                 {
                     r = self
                         .walk_dir_with_context(path.as_path(), false, ancestors)
@@ -629,7 +628,7 @@ impl Chmoder {
         r
     }
 
-    #[cfg(all(unix, not(target_os = "redox")))]
+    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
     fn walk_dir_with_context(
         &self,
         file_path: &Path,
@@ -671,7 +670,7 @@ impl Chmoder {
         r
     }
 
-    #[cfg(all(unix, not(target_os = "redox")))]
+    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
     fn safe_traverse_dir(
         &self,
         dir_fd: &DirFd,
@@ -769,7 +768,7 @@ impl Chmoder {
         r
     }
 
-    #[cfg(all(unix, not(target_os = "redox")))]
+    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
     fn handle_symlink_during_safe_recursion(
         &self,
         path: &Path,
@@ -812,7 +811,7 @@ impl Chmoder {
         }
     }
 
-    #[cfg(all(unix, not(target_os = "redox")))]
+    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
     fn safe_chmod_file(
         &self,
         file_path: &Path,
@@ -841,7 +840,7 @@ impl Chmoder {
         Ok(())
     }
 
-    #[cfg(not(unix))]
+    #[cfg(target_os = "aix")]
     fn handle_symlink_during_recursion(
         &self,
         path: &Path,
@@ -890,9 +889,10 @@ impl Chmoder {
             if self.verbose {
                 Self::print_neither_changed(file.into())?;
             }
-        } else {
-            self.change_file(fperm, self.fmode.unwrap_or(new_mode), file)?;
+            return Ok(());
         }
+
+        self.change_file(fperm, self.fmode.unwrap_or(new_mode), file)?;
 
         // A bare mode such as `-w` is umask-relative, so the umask can keep permissions that
         // the user asked to drop. GNU reports that as an error, but only when the mode was

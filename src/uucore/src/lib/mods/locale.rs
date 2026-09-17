@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:disable
 
 use crate::error::UError;
@@ -186,8 +187,15 @@ static CHECKSUM_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 static UTIL_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 thread_local! {
     #[cfg_attr(
-        target_os = "android",
-        expect(
+        any(
+            target_os = "android",
+            target_os = "haiku",
+            target_os = "illumos",
+            all(target_os = "linux", target_env = "ohos"),
+            target_os = "openbsd",
+            target_os = "solaris",
+            all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))),
+        allow(
             clippy::missing_const_for_thread_local,
             reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
         )
@@ -196,8 +204,15 @@ thread_local! {
     /// Built on the first lookup that misses every ordinary bundle; `None`
     /// when there are no error strings to be found at all.
     #[cfg_attr(
-        target_os = "android",
-        expect(
+        any(
+            target_os = "android",
+            target_os = "haiku",
+            target_os = "illumos",
+            all(target_os = "linux", target_env = "ohos"),
+            target_os = "openbsd",
+            target_os = "solaris",
+            all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))),
+        allow(
             clippy::missing_const_for_thread_local,
             reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
         )
@@ -524,10 +539,7 @@ pub fn exact_fluent_integer(s: &str) -> Option<i64> {
     // Fluent stores numbers as f64, which represents integers exactly only up
     // to 2^53. Anything beyond that has to travel as a string.
     const MAX_EXACT: i64 = 1 << 53;
-    match s.parse::<i64>() {
-        Ok(n) if (-MAX_EXACT..=MAX_EXACT).contains(&n) => Some(n),
-        _ => None,
-    }
+    s.parse::<i64>().ok().filter(|n| n.abs() <= MAX_EXACT)
 }
 
 /// Whether `s` is a plain decimal integer literal, with an optional sign.
@@ -594,8 +606,15 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     // Avoid duplicated and high-cost localizer setup
     thread_local! {
         #[cfg_attr(
-            target_os = "android",
-            expect(
+            any(
+                target_os = "android",
+                target_os = "haiku",
+                target_os = "illumos",
+                all(target_os = "linux", target_env = "ohos"),
+                target_os = "openbsd",
+                target_os = "solaris",
+                all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))),
+            allow(
                 clippy::missing_const_for_thread_local,
                 reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
             )
@@ -843,6 +862,18 @@ pub use {translate, translate_text};
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn embedded_locales_are_escaped_not_raw() {
+        // `.ftl` content is untrusted: translations sync into the tree from a
+        // public translation platform. A raw string ends at `"#`, so content
+        // holding that pair would close the literal and be compiled as Rust.
+        let generated = include_str!(concat!(env!("OUT_DIR"), "/embedded_locales.rs"));
+        assert!(
+            !generated.contains("Some(r\""),
+            "locale table uses a raw string; content containing `\"#` becomes code"
+        );
+    }
     use std::env;
     use std::fs;
     use std::path::PathBuf;

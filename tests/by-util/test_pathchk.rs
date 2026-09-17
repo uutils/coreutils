@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 #[cfg(unix)]
@@ -171,7 +172,23 @@ fn test_posix_all() {
         .no_stdout();
 
     // fail on empty path
-    new_ucmd!().args(&["-p", "-P", ""]).fails().no_stdout();
+    new_ucmd!()
+        .args(&["-p", "-P", ""])
+        .fails()
+        .stderr_only("pathchk: empty file name\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_empty_path_portability_message() {
+    // In every portability mode (-p, -P, --portability) GNU reports an empty
+    // file name with the program-name prefix and before any filesystem check.
+    for flag in ["-p", "-P", "--portability"] {
+        new_ucmd!()
+            .args(&[flag, ""])
+            .fails()
+            .stderr_only("pathchk: empty file name\n");
+    }
 }
 
 #[test]

@@ -84,7 +84,7 @@ unsafe extern "C" {
 pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<rustix::process::RawGid>> {
     let groups = rustix::process::getgroups()
         .map(|g| g.into_iter().map(rustix::fs::Gid::as_raw).collect())?;
-    let egid = arg_id.unwrap_or_else(crate::features::process::getegid);
+    let egid = arg_id.unwrap_or_else(|| rustix::process::getegid().as_raw());
     Ok(sort_groups(groups, egid))
 }
 
@@ -336,9 +336,11 @@ pub fn grp2gid(name: &str) -> IOResult<gid_t> {
 
 #[cfg(test)]
 mod test {
+    #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
     use super::*;
 
     #[test]
+    #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
     fn test_sort_groups() {
         assert_eq!(sort_groups(vec![1, 2, 3], 4), vec![4, 1, 2, 3]);
         assert_eq!(sort_groups(vec![1, 2, 3], 3), vec![3, 1, 2]);
@@ -348,6 +350,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
     fn test_entries_get_groups_gnu() {
         if let Ok(mut groups) = rustix::process::getgroups().map(|g| {
             g.into_iter()

@@ -296,8 +296,8 @@ fn test_non_unicode_names() {
         .expect("Only unix platforms can test non-unicode names");
 
     at.mkdir("some-dir1");
-    at.touch(&target1);
-    at.touch(&target2);
+    at.touch(target1);
+    at.touch(target2);
 
     ucmd.args(&[target1, target2]).succeeds().stdout_is_bytes(
         [

@@ -184,7 +184,7 @@ fn test_unit_size_hyphen_leading_as_separate_arg() {
     for opt in ["--from-unit", "--to-unit"] {
         new_ucmd!()
             .args(&[opt, "-1"])
-            .pipe_in("5\n")
+            .pipe_in("")
             .fails()
             .stderr_contains("invalid unit size: '-1'");
     }
@@ -196,7 +196,7 @@ fn test_unit_hyphen_leading_as_separate_arg() {
     for opt in ["--from", "--to"] {
         new_ucmd!()
             .args(&[opt, "-x"])
-            .pipe_in("5\n")
+            .pipe_in("")
             .fails()
             .stderr_contains("invalid argument '-x' for '--");
     }

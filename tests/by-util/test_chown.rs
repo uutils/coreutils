@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist cuuser groupname notexisting passgrp
 #[cfg(all(unix, not(target_os = "openbsd")))]
 use std::os::unix::fs::MetadataExt;
@@ -1037,8 +1038,8 @@ fn test_chown_symlink_two_links_same_dir() {
 #[cfg(target_os = "linux")]
 #[test]
 fn verbose_missing_file_write_error_is_reported_not_panic() {
+    use rustix::process::geteuid;
     use std::fs::OpenOptions;
-    use uucore::process::geteuid;
 
     let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
     new_ucmd!()
