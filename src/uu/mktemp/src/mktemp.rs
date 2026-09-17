@@ -8,7 +8,7 @@
 use clap::builder::{TypedValueParser, ValueParserFactory};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use uucore::display::{Quotable, println_verbatim};
-use uucore::error::{FromIo, UError, UResult, UUsageError};
+use uucore::error::{FromIo, UError, UResult};
 use uucore::format_usage;
 use uucore::translate;
 
@@ -381,7 +381,7 @@ impl ValueParserFactory for OptionalPathBufParser {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args: Vec<_> = args.collect();
+    let args = uucore::clap_localization::prepare_args(&uu_app(), args);
     let matches = uu_app().try_get_matches_from(&args).map_err(|e| {
         use clap::error::{ContextKind, ContextValue, ErrorKind};
         use uucore::clap_localization::handle_clap_error_with_exit_code;
@@ -393,7 +393,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     k == ContextKind::InvalidArg && v == &ContextValue::String("[template]".into())
                 }) =>
             {
-                UUsageError::new(1, translate!("mktemp-error-too-many-templates"))
+                Box::new(MkTempError::TooManyTemplates) as Box<dyn UError>
             }
             _ => e.into(),
         }
@@ -402,16 +402,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Parse command-line options into a format suitable for the
     // application logic.
     let options = Options::from(&matches);
-
-    if env::var_os("POSIXLY_CORRECT").is_some() {
-        // If POSIXLY_CORRECT was set, template MUST be the last argument.
-        if matches.contains_id(ARG_TEMPLATE) {
-            // Template argument was provided, check if was the last one.
-            if args.last().unwrap() != &options.template {
-                return Err(Box::new(MkTempError::TooManyTemplates));
-            }
-        }
-    }
 
     let dry_run = options.dry_run;
     let suppress_file_err = options.quiet;

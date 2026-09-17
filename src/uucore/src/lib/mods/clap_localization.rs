@@ -473,7 +473,8 @@ where
     I: IntoIterator<Item = T>,
     T: Into<OsString> + Clone,
 {
-    cmd.try_get_matches_from(itr).map_err(|e| {
+    let args = prepare_args(&cmd, itr);
+    cmd.try_get_matches_from(args).map_err(|e| {
         if e.exit_code() == 0 {
             e.into() // Preserve help/version
         } else {
@@ -482,6 +483,135 @@ where
             USimpleError::new(code, "")
         }
     })
+}
+
+fn opt_takes_value(arg: &clap::Arg) -> bool {
+    if !arg.get_action().takes_values() {
+        return false;
+    }
+    if let Some(num_args) = arg.get_num_args()
+        && num_args.min_values() == 0
+    {
+        return false;
+    }
+    true
+}
+
+fn find_long_opt<'a>(cmd: &'a Command, name: &str) -> Option<&'a clap::Arg> {
+    for arg in cmd.get_arguments() {
+        if arg.get_long() == Some(name) {
+            return Some(arg);
+        }
+        if let Some(aliases) = arg.get_all_aliases()
+            && aliases.contains(&name)
+        {
+            return Some(arg);
+        }
+    }
+    let matches: Vec<_> = cmd
+        .get_arguments()
+        .filter(|a| {
+            a.get_long().is_some_and(|l| l.starts_with(name))
+                || a.get_all_aliases()
+                    .is_some_and(|aliases| aliases.iter().any(|l| l.starts_with(name)))
+        })
+        .collect();
+    if matches.len() == 1 {
+        return Some(matches[0]);
+    }
+    None
+}
+
+fn find_short_opt(cmd: &Command, c: char) -> Option<&clap::Arg> {
+    for arg in cmd.get_arguments() {
+        if arg.get_short() == Some(c) {
+            return Some(arg);
+        }
+        if let Some(aliases) = arg.get_short_and_visible_aliases()
+            && aliases.contains(&c)
+        {
+            return Some(arg);
+        }
+        if let Some(aliases) = arg.get_all_short_aliases()
+            && aliases.contains(&c)
+        {
+            return Some(arg);
+        }
+    }
+    None
+}
+
+pub fn prepare_args<I, T>(cmd: &Command, itr: I) -> Vec<OsString>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<OsString>,
+{
+    let mut args: Vec<OsString> = itr.into_iter().map(Into::into).collect();
+    if std::env::var_os("POSIXLY_CORRECT").is_none() {
+        return args;
+    }
+    let cmd_name = cmd.get_name();
+    if cmd_name == "join" || cmd_name == "pr" {
+        return args;
+    }
+    if args.len() <= 1 {
+        return args;
+    }
+
+    let mut i = 1;
+    while i < args.len() {
+        let Ok(arg_bytes) = crate::os_str_as_bytes(args[i].as_os_str()) else {
+            args.insert(i, OsString::from("--"));
+            return args;
+        };
+
+        if arg_bytes == b"--" {
+            return args;
+        }
+
+        if arg_bytes == b"-" || !arg_bytes.starts_with(b"-") {
+            args.insert(i, OsString::from("--"));
+            return args;
+        }
+
+        if arg_bytes.starts_with(b"--") {
+            let opt_bytes = &arg_bytes[2..];
+            if opt_bytes.contains(&b'=') {
+                i += 1;
+            } else if let Ok(opt_str) = std::str::from_utf8(opt_bytes) {
+                let takes_val = find_long_opt(cmd, opt_str).is_some_and(opt_takes_value);
+                if takes_val && i + 1 < args.len() {
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            } else {
+                i += 1;
+            }
+        } else {
+            let short_bytes = &arg_bytes[1..];
+            let mut consumed_next = false;
+            if let Ok(short_str) = std::str::from_utf8(short_bytes) {
+                let chars: Vec<char> = short_str.chars().collect();
+                for (idx, &c) in chars.iter().enumerate() {
+                    if let Some(arg) = find_short_opt(cmd, c)
+                        && opt_takes_value(arg)
+                    {
+                        if idx + 1 == chars.len() && i + 1 < args.len() {
+                            consumed_next = true;
+                        }
+                        break;
+                    }
+                }
+            }
+            if consumed_next {
+                i += 2;
+            } else {
+                i += 1;
+            }
+        }
+    }
+    args
 }
 
 /// Handles a clap error directly with a custom exit code.
@@ -733,6 +863,111 @@ mod tests {
             } else {
                 env::set_var("LANG", original_lang);
             }
+        }
+    }
+
+    #[test]
+    fn test_prepare_args_posixly_correct() {
+        use std::env;
+        let cmd = Command::new("test")
+            .arg(
+                Arg::new("verbose")
+                    .short('v')
+                    .long("verbose")
+                    .action(clap::ArgAction::SetTrue),
+            )
+            .arg(Arg::new("width").short('w').long("width").value_name("NUM"))
+            .arg(
+                Arg::new("files")
+                    .action(clap::ArgAction::Append)
+                    .num_args(1..),
+            );
+
+        unsafe {
+            env::remove_var("POSIXLY_CORRECT");
+        }
+        let args = vec!["test", "file", "-v"];
+        let prepared = prepare_args(&cmd, args.clone());
+        assert_eq!(
+            prepared,
+            args.iter().map(OsString::from).collect::<Vec<_>>()
+        );
+
+        unsafe {
+            env::set_var("POSIXLY_CORRECT", "1");
+        }
+        let prepared = prepare_args(&cmd, vec!["test", "file", "-v"]);
+        assert_eq!(
+            prepared,
+            vec![
+                OsString::from("test"),
+                OsString::from("--"),
+                OsString::from("file"),
+                OsString::from("-v")
+            ]
+        );
+
+        let prepared = prepare_args(&cmd, vec!["test", "-w", "80", "file", "-v"]);
+        assert_eq!(
+            prepared,
+            vec![
+                OsString::from("test"),
+                OsString::from("-w"),
+                OsString::from("80"),
+                OsString::from("--"),
+                OsString::from("file"),
+                OsString::from("-v")
+            ]
+        );
+
+        let prepared = prepare_args(&cmd, vec!["test", "-w80", "file", "-v"]);
+        assert_eq!(
+            prepared,
+            vec![
+                OsString::from("test"),
+                OsString::from("-w80"),
+                OsString::from("--"),
+                OsString::from("file"),
+                OsString::from("-v")
+            ]
+        );
+
+        let prepared = prepare_args(&cmd, vec!["test", "--width=80", "file", "-v"]);
+        assert_eq!(
+            prepared,
+            vec![
+                OsString::from("test"),
+                OsString::from("--width=80"),
+                OsString::from("--"),
+                OsString::from("file"),
+                OsString::from("-v")
+            ]
+        );
+
+        let prepared = prepare_args(&cmd, vec!["test", "--", "file", "-v"]);
+        assert_eq!(
+            prepared,
+            vec![
+                OsString::from("test"),
+                OsString::from("--"),
+                OsString::from("file"),
+                OsString::from("-v")
+            ]
+        );
+
+        let join_cmd = Command::new("join");
+        let prepared_join = prepare_args(&join_cmd, vec!["join", "file", "-v"]);
+        assert_eq!(
+            prepared_join,
+            vec![
+                OsString::from("join"),
+                OsString::from("file"),
+                OsString::from("-v")
+            ]
+        );
+
+        unsafe {
+            env::remove_var("POSIXLY_CORRECT");
         }
     }
 }

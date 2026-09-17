@@ -2913,4 +2913,17 @@ du: invalid suffix in --block-size argument '1fb'
             .fails_with_code(1)
             .stderr_is("du: invalid suffix in --block-size argument '1fb'\n");
     }
+
+    #[test]
+    fn test_posixly_correct_options_after_operands() {
+        let (at, mut ucmd) = uutests::at_and_ucmd!();
+        at.mkdir("dir");
+
+        ucmd.env("POSIXLY_CORRECT", "1")
+            .arg("dir")
+            .arg("-s")
+            .fails()
+            .code_is(1)
+            .stderr_contains("-s");
+    }
 }
