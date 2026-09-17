@@ -50,7 +50,7 @@ use std::mem::zeroed;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
 use uucore::display::{OsWrite, Quotable, print_all_env_vars};
-use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, strip_errno};
+use uucore::error::{ExitCode, FromIo, UError, UResult, USimpleError, UUsageError, strip_errno};
 use uucore::line_ending::LineEnding;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::signals::{
@@ -404,9 +404,7 @@ fn read_env0_entries(file: &OsStr) -> UResult<EnvEntries> {
             .read_to_end(&mut data)
             .map_err(|e| USimpleError::new(1, format!("{}: {e}", file.maybe_quote())))?;
     } else {
-        data = fs::read(file).map_err(|e| {
-            USimpleError::new(1, format!("{}: {}", file.maybe_quote(), strip_errno(&e)))
-        })?;
+        data = fs::read(file).map_err_context(|| file.maybe_quote().to_string())?;
     }
 
     if !data.is_empty() && *data.last().unwrap() != 0 {
