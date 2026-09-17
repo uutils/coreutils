@@ -1276,8 +1276,7 @@ checksum = "e712f64ec3850b98572bffac52e2c6f282b29fe6c5fa6d42334b30be438d95c1"
 [[package]]
 name = "hostname"
 version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "617aaa3557aef3810a6369d0a99fac8a080891b68bd9f9812a1eeda0c0730cbd"
+source = "git+https://github.com/xtqqczze/djc-hostname.git?branch=target-aix#79b3e480f43a286cf493e45471e43546ab534f6b"
 dependencies = [
  "cfg-if",
  "libc",
