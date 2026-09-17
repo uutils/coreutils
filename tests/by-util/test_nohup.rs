@@ -83,6 +83,38 @@ fn test_nohup_with_pseudo_terminal_emulation_on_stdin_stdout_stderr_get_replaced
 // When stdin is not a TTY (e.g., a pipe), nohup preserves it.
 // This behavior is already tested indirectly through other tests.
 
+// When stdin is a terminal, the replacement must be unreadable so that a
+// command which mistakenly reads from it gets an error instead of a silent
+// EOF (GNU opens /dev/null write-only). Since nohup execs the command, the
+// exit status is the command's own.
+#[test]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "linux",
+    target_os = "android",
+    target_os = "freebsd",
+    target_os = "openbsd"
+))]
+fn test_nohup_replaced_stdin_is_not_readable() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    ts.ucmd()
+        .terminal_simulation(true)
+        .arg("cat")
+        .fails_with_code(1)
+        .stderr_contains("nohup: ignoring input and appending output to 'nohup.out'");
+
+    sleep(std::time::Duration::from_millis(10));
+
+    // cat's error message goes to stderr, which nohup redirected into nohup.out
+    let content = std::fs::read_to_string(at.plus_as_string("nohup.out")).unwrap();
+    assert!(
+        content.contains("Bad file descriptor"),
+        "expected a read error from cat in nohup.out, got: {content:?}"
+    );
+}
+
 // Test that nohup creates nohup.out in current directory
 #[test]
 #[cfg(any(
