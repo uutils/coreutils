@@ -27,7 +27,6 @@ use uucore::{
 use crate::{
     LsError,
     colors::{LsColorsParseError, validate_ls_colors_env},
-    dired::is_dired_arg_present,
     display::{Format, IndicatorStyle, LocaleQuoting, LongFormat},
     options::QUOTING_STYLE,
 };
@@ -743,6 +742,11 @@ impl Config {
         // requested. This makes it distinct from the --format=singe-column option,
         // which always applies.
         //
+        // --dired (-D) implies long format the same way -g, -o and -n do: it
+        // wins over earlier format options, loses to later ones, and a -1
+        // after it has no effect. Whether dired output is actually emitted is
+        // decided below, once the final format is known.
+        //
         // The idea here is to not let these options override with the other
         // options, but manually whether they have an index that's greater than
         // the other format options. If so, we set the appropriate format.
@@ -755,6 +759,7 @@ impl Config {
                 options::format::LONG_NO_GROUP,
                 options::format::LONG_NUMERIC_UID_GID,
                 options::FULL_TIME,
+                options::DIRED,
             ]
             .iter()
             .filter_map(|opt| {
@@ -992,13 +997,13 @@ impl Config {
             None
         };
 
-        let dired = options.get_flag(options::DIRED);
-        if dired || is_dired_arg_present() {
-            // --dired implies --format=long
-            // if we have --dired --hyperlink, we don't show dired but we still want to see the
-            // long format
-            format = Format::Long;
-        }
+        // Hyperlinks enabled after the last --dired cancel the dired output,
+        // and a --dired after --hyperlink disables them again. Dired output
+        // also requires the final format to be long: a later -C, -x, -m or
+        // --format= cancels it.
+        let dired_idx = get_last(options::DIRED);
+        let hyperlink = hyperlink && get_last(options::HYPERLINK) > dired_idx;
+        let dired = dired_idx > 0 && format == Format::Long && !hyperlink;
         if dired && options.get_flag(options::ZERO) {
             return Err(Box::new(LsError::DiredAndZeroAreIncompatible));
         }
