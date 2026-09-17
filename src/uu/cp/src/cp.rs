@@ -35,7 +35,7 @@ use uucore::error::{UError, UResult, UUsageError, set_exit_code, strip_errno};
 use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, are_hardlinks_to_same_file, canonicalize,
     get_filename, is_symlink_loop, normalize_path, path_ends_with_terminator,
-    paths_refer_to_same_file,
+    paths_refer_to_same_file, replace_link,
 };
 use uucore::{backup_control, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
@@ -1825,10 +1825,12 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
         // When -Z is used, skip copying security.selinux xattr so that
         // the default context can be set instead of preserving from source
         copy_xattrs_skip_selinux(source, dest)
-    } else if metadata.is_file() {
+    } else if metadata.is_file() && fs::symlink_metadata(source)?.is_file() {
         // Use file descriptor-based operations for regular files to avoid TOCTOU races.
         // Directories cannot be opened with write mode for xattr operations
         // Symlinks (especially dangling ones) cannot be opened via File::open
+        // The source must be regular too: opening a FIFO here blocks until a
+        // writer appears, and a device would have side effects on open.
         let source_file = File::open(source)?;
         let dest_file = OpenOptions::new().write(true).open(dest)?;
         copy_xattrs_fd(&source_file, &dest_file)
@@ -2407,6 +2409,7 @@ fn handle_copy_mode(
 ) -> CopyResult<PerformedAction> {
     match options.copy_mode {
         CopyMode::Link => {
+            let mut force = false;
             if dest.exists() {
                 let backup_path =
                     backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
@@ -2414,16 +2417,19 @@ fn handle_copy_mode(
                     backup_dest(dest, &backup_path, dest.is_symlink())?;
                     fs::remove_file(dest)?;
                 }
-                if options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
-                    fs::remove_file(dest)?;
-                }
+                force = options.overwrite == OverwriteMode::Clobber(ClobberMode::Force);
             }
-            if options.dereference(source_in_command_line) && source.is_symlink() {
-                let resolved =
-                    canonicalize(source, MissingHandling::Missing, ResolveMode::Physical).unwrap();
-                fs::hard_link(resolved, dest)
+            let src = if options.dereference(source_in_command_line) && source.is_symlink() {
+                canonicalize(source, MissingHandling::Missing, ResolveMode::Physical).unwrap()
             } else {
-                fs::hard_link(source, dest)
+                source.to_path_buf()
+            };
+            // Replace atomically rather than unlinking first: the gap would
+            // let another user claim `dest` under a name the caller trusts.
+            if force {
+                replace_link(&src, dest, false)
+            } else {
+                fs::hard_link(&src, dest)
             }
             .map_err(|e| {
                 CpError::IoErrContext(
@@ -2445,10 +2451,13 @@ fn handle_copy_mode(
             )?;
         }
         CopyMode::SymLink => {
+            // Atomic replace, for the same reason as CopyMode::Link above.
             if dest.exists() && options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
-                fs::remove_file(dest)?;
+                replace_link(source, dest, true)?;
+                symlinked_files.insert(FileInformation::from_path(dest, false)?);
+            } else {
+                symlink_file(source, dest, symlinked_files)?;
             }
-            symlink_file(source, dest, symlinked_files)?;
         }
         CopyMode::Update => {
             if dest.exists() {
@@ -2514,6 +2523,26 @@ fn handle_copy_mode(
             }
         }
         CopyMode::AttrOnly => {
+            // The destination must have the source's type. Creating a regular
+            // file for a FIFO or a device both gets the type wrong and, for a
+            // FIFO, makes the later xattr copy open it and block forever with
+            // no writer.
+            #[cfg(unix)]
+            {
+                let ft = source_metadata.file_type();
+                if ft.is_fifo() {
+                    return copy_fifo(dest, options.overwrite, options.debug)
+                        .map(|()| PerformedAction::Copied);
+                }
+                if ft.is_socket() {
+                    return copy_socket(dest, options.overwrite, options.debug)
+                        .map(|()| PerformedAction::Copied);
+                }
+                if ft.is_char_device() || ft.is_block_device() {
+                    return copy_node(dest, source_metadata, options.overwrite, options.debug)
+                        .map(|()| PerformedAction::Copied);
+                }
+            }
             OpenOptions::new()
                 .write(true)
                 .truncate(false)
