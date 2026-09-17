@@ -1962,7 +1962,10 @@ pub(crate) fn copy_attributes(
                     perms.set_mode(mode);
                 }
                 if apply_umask_to_mode {
-                    perms.set_mode(perms.mode() & !uucore::mode::get_umask());
+                    // The umask never covers setuid/setgid, so clear them
+                    // explicitly: a non-preserving copy must not carry the
+                    // source's set-user/group-ID bits into the new directory.
+                    perms.set_mode(perms.mode() & !0o6000 & !uucore::mode::get_umask());
                 }
                 perms
             };
