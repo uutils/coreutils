@@ -40,7 +40,7 @@ env:
 jobs:
   native:
     name: Run GNU tests (native)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04 # some strace? test needs newer glibc
     steps:
     #### Get the code
     - name: Checkout code (uutils)
