@@ -21,7 +21,6 @@ pub(super) fn read_fs_list() -> UResult<Vec<MountInfo>> {
     let mut mounts = Vec::new();
     for volume in sys::volumes()? {
         let paths = sys::volume_mount_paths(&volume).unwrap_or_default();
-
         let mut mount = MountInfo::from_mount_dir(OsString::from(&volume));
 
         if paths.is_empty() {
