@@ -173,7 +173,6 @@ pub fn uu_app() -> Command {
                 options::format::LONG,
                 options::format::ACROSS,
                 options::format::COLUMNS,
-                options::DIRED,
             ]),
     )
     .arg(
@@ -249,8 +248,7 @@ pub fn uu_app() -> Command {
             .long(options::DIRED)
             .short('D')
             .help(translate!("ls-help-generate-dired-output"))
-            .action(ArgAction::SetTrue)
-            .overrides_with(options::HYPERLINK),
+            .action(ArgAction::SetTrue),
     )
     .arg(
         Arg::new(options::HYPERLINK)
@@ -265,8 +263,7 @@ pub fn uu_app() -> Command {
             .num_args(0..=1)
             .default_missing_value("always")
             .default_value("never")
-            .value_name("WHEN")
-            .overrides_with(options::DIRED),
+            .value_name("WHEN"),
     )
     // The next four arguments do not override with the other format
     // options, see the comment in Config::from for the reason.
