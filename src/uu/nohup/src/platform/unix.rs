@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) SIGHUP cproc vprocmgr homeout
 
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::{Error, IsTerminal as _};
 use std::os::unix::{fs::OpenOptionsExt as _, process::CommandExt as _};
 use std::process::Command;
@@ -69,7 +69,12 @@ pub(crate) fn set_output_file_mode(opt: &mut OpenOptions) {
 fn replace_fds() -> UResult<()> {
     use rustix::stdio::{dup2_stderr, dup2_stdin, dup2_stdout, stdout};
     if std::io::stdin().is_terminal() {
-        let new_stdin = File::open(std::path::Path::new("/dev/null"))
+        // Open /dev/null write-only so the substitute stdin is unreadable, as
+        // GNU does: a command that mistakenly reads from it gets an error
+        // instead of a silent EOF.
+        let new_stdin = OpenOptions::new()
+            .write(true)
+            .open("/dev/null")
             .map_err(|e| PlatformError::CannotReplace("STDIN", e))?;
         dup2_stdin(&new_stdin).map_err(|e| PlatformError::CannotReplace("STDIN", e.into()))?;
     }
