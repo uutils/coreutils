@@ -162,11 +162,13 @@ enum SizeOrDeviceId {
 /// dir1:               <- This as well
 /// file11
 /// ```
+/// Returns the number of bytes the rendered name occupies, which `--dired`
+/// needs to place the header in `//SUBDIRED//`.
 pub fn show_dir_name(
     path_data: &PathData,
     out: &mut BufWriter<Stdout>,
     config: &Config,
-) -> std::io::Result<()> {
+) -> std::io::Result<usize> {
     let escaped_name = escape_dir_name_with_locale(path_data.path().as_os_str(), config);
 
     let name = if config.hyperlink && !config.dired {
@@ -176,7 +178,8 @@ pub fn show_dir_name(
     };
 
     write_os_str(out, &name)?;
-    write!(out, ":")
+    write!(out, ":")?;
+    Ok(name.len())
 }
 
 fn escape_with_locale<F>(name: &OsStr, config: &Config, fallback: F) -> OsString
