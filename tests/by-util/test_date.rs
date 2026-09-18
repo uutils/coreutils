@@ -11,7 +11,7 @@ use std::cmp::Ordering;
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
-#[cfg(all(unix, not(target_vendor = "apple")))]
+#[cfg(unix)]
 use rustix::process::geteuid;
 use uutests::util::TestScenario;
 #[cfg(unix)]
@@ -511,7 +511,7 @@ fn test_date_format_literal() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_vendor = "apple")))]
+#[cfg(unix)]
 fn test_date_set_valid() {
     if geteuid().is_root() {
         new_ucmd!()
@@ -523,7 +523,7 @@ fn test_date_set_valid() {
 }
 
 #[test]
-#[cfg(any(windows, all(unix, not(target_vendor = "apple"))))]
+#[cfg(any(windows, unix))]
 fn test_date_set_invalid() {
     let result = new_ucmd!().arg("--set").arg("123abcd").fails();
     result.no_stdout();
@@ -549,7 +549,7 @@ fn test_date_error_echoes_input_verbatim() {
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android"))))]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_date_set_permissions_error() {
     if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
         let result = new_ucmd!()
@@ -562,7 +562,7 @@ fn test_date_set_permissions_error() {
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android"))))]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_date_set_hyphen_prefixed_values() {
     // test -s flag accepts hyphen-prefixed values like "-3 days"
     if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
@@ -582,22 +582,7 @@ fn test_date_set_hyphen_prefixed_values() {
 }
 
 #[test]
-#[cfg(target_vendor = "apple")]
-fn test_date_set_mac_unavailable() {
-    let result = new_ucmd!()
-        .arg("--set")
-        .arg("2020-03-11 21:45:00+08:00")
-        .fails();
-    result.no_stdout();
-    assert!(
-        result
-            .stderr_str()
-            .starts_with("date: setting the date is not supported by macOS")
-    );
-}
-
-#[test]
-#[cfg(all(unix, not(target_vendor = "apple")))]
+#[cfg(unix)]
 fn test_date_set_valid_2() {
     if geteuid().is_root() {
         new_ucmd!()
@@ -746,7 +731,7 @@ fn test_date_multiple_references() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_vendor = "apple")))]
+#[cfg(unix)]
 fn test_date_set_valid_3() {
     if geteuid().is_root() {
         new_ucmd!()
@@ -758,7 +743,7 @@ fn test_date_set_valid_3() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_vendor = "apple")))]
+#[cfg(unix)]
 fn test_date_set_valid_4() {
     if geteuid().is_root() {
         new_ucmd!()
