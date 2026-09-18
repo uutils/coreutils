@@ -116,7 +116,6 @@ struct Settings {
     utc: bool,
     format: Format,
     date_source: DateSource,
-    set_to: Option<Zoned>,
     debug: bool,
 }
 
@@ -424,29 +423,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    let set_to = match matches.get_one::<String>(OPT_SET) {
-        None => None,
-        Some(input) => match parse_date(input, &now, DebugOptions::new(debug_mode, true), false) {
-            Ok(ParsedDateTime::InRange(date)) => Some(date),
+    if let Some(input) = matches.get_one::<String>(OPT_SET) {
+        match parse_date(input, &now, DebugOptions::new(debug_mode, true), false) {
+            Ok(ParsedDateTime::InRange(date)) => {
+                return set_system_datetime(convert_for_set(date, utc));
+            }
             Ok(ParsedDateTime::Extended(_)) | Err(_) => {
                 return Err(Box::new(DateError::InvalidDate {
                     date: input.clone(),
                 }));
             }
-        },
-    };
+        }
+    }
 
     let settings = Settings {
         utc,
         format,
         date_source,
-        set_to,
         debug: debug_mode,
     };
-
-    if let Some(date) = settings.set_to {
-        return set_system_datetime(convert_for_set(date, settings.utc));
-    }
 
     let allow_extended = matches!(settings.format, Format::Default);
     let output_time_zone = now.time_zone().clone();
