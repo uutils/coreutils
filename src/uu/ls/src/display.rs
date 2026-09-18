@@ -33,7 +33,12 @@ use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions};
 
 #[cfg(unix)]
 use uucore::entries;
-#[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android"))))]
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "netbsd"
+))]
 use uucore::fsxattr::has_acl;
 #[cfg(unix)]
 use uucore::libc::{dev_t, major, minor};
@@ -978,10 +983,20 @@ fn display_item_long(
     }
 
     if let Some(md) = item.metadata() {
-        #[cfg(any(not(unix), target_vendor = "apple", target_os = "android"))]
+        #[cfg(not(any(
+            target_os = "freebsd",
+            target_os = "hurd",
+            target_os = "linux",
+            target_os = "netbsd"
+        )))]
         // TODO: See how Mac should work here
         let is_acl_set = false;
-        #[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android"))))]
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "hurd",
+            target_os = "linux",
+            target_os = "netbsd"
+        ))]
         let is_acl_set = has_acl(item.path(), item.must_dereference);
         state
             .display_buf
@@ -1375,10 +1390,20 @@ fn calculate_padding_collection(
             // the permissions column by one to reserve space for the `+`/`.`
             // indicator.
             {
-                #[cfg(any(not(unix), target_vendor = "apple", target_os = "android"))]
+                #[cfg(not(any(
+                    target_os = "freebsd",
+                    target_os = "hurd",
+                    target_os = "linux",
+                    target_os = "netbsd"
+                )))]
                 // TODO: See how Mac should work here
                 let is_acl_set = false;
-                #[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android"))))]
+                #[cfg(any(
+                    target_os = "freebsd",
+                    target_os = "hurd",
+                    target_os = "linux",
+                    target_os = "netbsd"
+                ))]
                 let is_acl_set = has_acl(item.path(), item.must_dereference);
                 if context_len > 1 || is_acl_set {
                     padding_collections.permissions = PERMISSIONS_WIDTH + 1;

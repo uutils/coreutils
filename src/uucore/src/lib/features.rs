@@ -95,7 +95,17 @@ pub mod safe_traversal;
 #[cfg(all(target_os = "linux", feature = "tty"))]
 pub mod tty;
 
-#[cfg(all(unix, feature = "fsxattr"))]
+#[cfg(all(
+    feature = "fsxattr",
+    any(
+        target_os = "freebsd",
+        target_os = "hurd",
+        target_os = "linux",
+        target_os = "android",
+        target_os = "macos",
+        target_os = "netbsd"
+    )
+))]
 pub mod fsxattr;
 #[cfg(feature = "hardware")]
 pub mod hardware;
