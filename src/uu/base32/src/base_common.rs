@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::encoding::{
@@ -31,6 +31,7 @@ pub const WRAP_DEFAULT: usize = 76;
 
 // Fixed to 8 KiB (equivalent to `std::sys::io::DEFAULT_BUF_SIZE` on most targets)
 pub const DEFAULT_BUF_SIZE: usize = 8 * 1024;
+const BASE16_OUTPUT_BUFFER_SIZE: usize = 32 * 1024;
 
 pub struct Config {
     pub decode: bool,
@@ -194,6 +195,22 @@ pub fn handle_input<R: BufRead>(input: &mut R, format: Format, config: Config) -
             supports_fast_decode_and_encode_ref,
             config.ignore_garbage,
         ),
+        // Batch Base16's small encoded chunks to reduce write syscalls
+        (Format::Base16, false) => {
+            let mut output = BufWriter::with_capacity(BASE16_OUTPUT_BUFFER_SIZE, &mut stdout_lock);
+            let result = fast_encode::fast_encode_stream(
+                input,
+                &mut output,
+                supports_fast_decode_and_encode_ref,
+                config.wrap_cols,
+            );
+
+            match (result, output.flush()) {
+                (res, Ok(())) => res,
+                (Ok(_), Err(err)) => Err(err.into()),
+                (Err(original), Err(_)) => Err(original),
+            }
+        }
         (_, false) => fast_encode::fast_encode_stream(
             input,
             &mut stdout_lock,
