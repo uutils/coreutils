@@ -32,6 +32,7 @@ tr-error-missing-equivalence-class-char = missing equivalence class character '[
 tr-error-multiple-char-repeat-in-set2 = only one [c*] repeat construct may appear in string2
 tr-error-char-repeat-in-set1 = the [c*] repeat construct may not appear in string1
 tr-error-invalid-repeat-count = invalid repeat count { $count } in [c*n] construct
+tr-error-memory-exhausted = memory exhausted
 tr-error-empty-set2-when-not-truncating = when not truncating set1, string2 must be non-empty
 tr-error-class-except-lower-upper-in-set2 = when translating, the only character classes that may appear in set2 are 'upper' and 'lower'
 tr-error-class-in-set2-not-matched = when translating, every 'upper'/'lower' in set2 must be matched by a 'upper'/'lower' in the same position in set1
