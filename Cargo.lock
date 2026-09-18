@@ -3888,6 +3888,7 @@ name = "uu_od"
 version = "0.13.0"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "half",
  "libc",
