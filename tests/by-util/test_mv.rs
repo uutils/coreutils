@@ -10,6 +10,8 @@ use rstest::rstest;
 use std::io::Write;
 #[cfg(not(windows))]
 use std::path::Path;
+#[cfg(target_os = "linux")]
+use std::path::PathBuf;
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
 use uutests::new_ucmd;
@@ -3227,6 +3229,217 @@ fn test_mv_cross_device_dir_xattr_preserved() {
         String::from_utf8_lossy(&out.stderr)
     );
     assert_eq!(out.stdout, b"dirvalue");
+}
+
+/// Size of an attribute value that the `/dev/shm` (tmpfs) filesystem accepts
+/// while the given destination directory rejects it, plus the value itself.
+/// This is what makes the first xattr fail on the destination but not on the
+/// source. Returns `None` when this machine's filesystem combination cannot
+/// produce that failure, in which case the test should be skipped.
+#[cfg(target_os = "linux")]
+fn tmpfs_to_target_failing_xattr_value(dest_dir: &Path) -> Option<String> {
+    use std::process::Command;
+
+    for size in [9_100, 40_000] {
+        let value = "y".repeat(size);
+        let source_probe = Path::new("/dev/shm").join(format!("xattr_probe_{size}"));
+        let dest_probe = dest_dir.join(format!("probe_{size}"));
+        std::fs::write(&source_probe, "x").ok();
+        std::fs::write(&dest_probe, "x").ok();
+        let source_accepts = Command::new("setfattr")
+            .args(["-n", "user.huge", "-v", &value])
+            .arg(&source_probe)
+            .status()
+            .is_ok_and(|s| s.success());
+        let dest_rejects = !Command::new("setfattr")
+            .args(["-n", "user.huge", "-v", &value])
+            .arg(&dest_probe)
+            .status()
+            .is_ok_and(|s| s.success());
+        std::fs::remove_file(&source_probe).ok();
+        std::fs::remove_file(&dest_probe).ok();
+        if source_accepts && dest_rejects {
+            return Some(value);
+        }
+    }
+    None
+}
+
+/// A failed xattr on a cross-device move must not stop the remaining
+/// attributes from being copied: surviving attributes must still make it even
+/// though `user.m_big` is rejected by the destination fs. The move
+/// itself succeeds, GNU reports the failure on stderr and exits 0.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_xattr_partial_failure_keeps_remaining() {
+    use std::process::Command;
+
+    let pid = std::process::id();
+    let source_dir = Path::new("/dev/shm").join(format!("mv_xattr_partial_{pid}"));
+    let dest_dir =
+        PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("mv_xattr_partial_{pid}"));
+    if std::fs::create_dir(&source_dir).is_err() || std::fs::create_dir(&dest_dir).is_err() {
+        return; // skip: no usable /dev/shm or target/tmp
+    }
+    let Some(big_value) = tmpfs_to_target_failing_xattr_value(&dest_dir) else {
+        std::fs::remove_dir_all(&source_dir).ok();
+        std::fs::remove_dir_all(&dest_dir).ok();
+        return; // skip: this filesystem combination cannot produce the failure
+    };
+
+    // Set small attributes around the failing big attribute so that
+    // regardless of filesystem listing order (alphabetical, insertion,
+    // or reverse-insertion), at least one surviving attribute is
+    // processed after the failing one.
+    let source = source_dir.join("src");
+    std::fs::write(&source, "data").unwrap();
+    Command::new("setfattr")
+        .args(["-n", "user.a_small", "-v", "12345678"])
+        .arg(&source)
+        .status()
+        .unwrap();
+    Command::new("setfattr")
+        .args(["-n", "user.m_big", "-v", &big_value])
+        .arg(&source)
+        .status()
+        .unwrap();
+    Command::new("setfattr")
+        .args(["-n", "user.z_small", "-v", "87654321"])
+        .arg(&source)
+        .status()
+        .unwrap();
+
+    let dest = dest_dir.join("dst");
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .arg(&source)
+        .arg(&dest)
+        .succeeds()
+        .stderr_contains("setting attribute 'user.m_big'");
+    assert!(
+        !source.exists(),
+        "the source must be removed even when an xattr fails"
+    );
+
+    let small_a_out = Command::new("getfattr")
+        .args(["-n", "user.a_small", "--only-values", "--absolute-names"])
+        .arg(&dest)
+        .output()
+        .expect("getfattr failed");
+    assert!(
+        small_a_out.status.success(),
+        "user.a_small was lost on the destination: {}",
+        String::from_utf8_lossy(&small_a_out.stderr)
+    );
+    assert_eq!(small_a_out.stdout, b"12345678");
+
+    let small_z_out = Command::new("getfattr")
+        .args(["-n", "user.z_small", "--only-values", "--absolute-names"])
+        .arg(&dest)
+        .output()
+        .expect("getfattr failed");
+    assert!(
+        small_z_out.status.success(),
+        "user.z_small was lost on the destination: {}",
+        String::from_utf8_lossy(&small_z_out.stderr)
+    );
+    assert_eq!(small_z_out.stdout, b"87654321");
+
+    let big_out = Command::new("getfattr")
+        .args(["-n", "user.m_big", "--only-values", "--absolute-names"])
+        .arg(&dest)
+        .output()
+        .expect("getfattr failed");
+    assert!(
+        !big_out.status.success(),
+        "user.m_big should have been rejected by the destination fs"
+    );
+
+    std::fs::remove_dir_all(&source_dir).ok();
+    std::fs::remove_dir_all(&dest_dir).ok();
+}
+
+/// The same partial-failure behavior must apply to a cross-device directory
+/// move: the directory's own surviving xattrs are preserved even when the
+/// failing `user.m_big` is rejected.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_dir_xattr_partial_failure_completes() {
+    use std::process::Command;
+
+    let pid = std::process::id();
+    let source_dir = Path::new("/dev/shm").join(format!("mv_dir_xattr_partial_{pid}"));
+    let dest_dir =
+        PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("mv_dir_xattr_partial_{pid}"));
+    if std::fs::create_dir(&source_dir).is_err() || std::fs::create_dir(&dest_dir).is_err() {
+        return; // skip: no usable /dev/shm or target/tmp
+    }
+    let Some(big_value) = tmpfs_to_target_failing_xattr_value(&dest_dir) else {
+        std::fs::remove_dir_all(&source_dir).ok();
+        std::fs::remove_dir_all(&dest_dir).ok();
+        return; // skip: this filesystem combination cannot produce the failure
+    };
+
+    std::fs::write(source_dir.join("f.txt"), "content").unwrap();
+    Command::new("setfattr")
+        .args(["-n", "user.a_small", "-v", "12345678"])
+        .arg(&source_dir)
+        .status()
+        .unwrap();
+    Command::new("setfattr")
+        .args(["-n", "user.m_big", "-v", &big_value])
+        .arg(&source_dir)
+        .status()
+        .unwrap();
+    Command::new("setfattr")
+        .args(["-n", "user.z_small", "-v", "87654321"])
+        .arg(&source_dir)
+        .status()
+        .unwrap();
+
+    let dest = dest_dir.join("dst_dir");
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .arg(&source_dir)
+        .arg(&dest)
+        .succeeds()
+        .stderr_contains("setting attribute 'user.m_big'");
+    assert!(
+        !source_dir.exists(),
+        "the source directory must be removed even when an xattr fails"
+    );
+    assert!(
+        dest.join("f.txt").exists(),
+        "directory contents must survive"
+    );
+
+    let small_a_out = Command::new("getfattr")
+        .args(["-n", "user.a_small", "--only-values", "--absolute-names"])
+        .arg(&dest)
+        .output()
+        .expect("getfattr failed");
+    assert!(
+        small_a_out.status.success(),
+        "directory user.a_small xattr was lost: {}",
+        String::from_utf8_lossy(&small_a_out.stderr)
+    );
+    assert_eq!(small_a_out.stdout, b"12345678");
+
+    let small_z_out = Command::new("getfattr")
+        .args(["-n", "user.z_small", "--only-values", "--absolute-names"])
+        .arg(&dest)
+        .output()
+        .expect("getfattr failed");
+    assert!(
+        small_z_out.status.success(),
+        "directory user.z_small xattr was lost: {}",
+        String::from_utf8_lossy(&small_z_out.stderr)
+    );
+    assert_eq!(small_z_out.stdout, b"87654321");
+
+    std::fs::remove_dir_all(&dest_dir).ok();
 }
 
 /// Cross-device mv of a symlink onto an existing file must replace the
