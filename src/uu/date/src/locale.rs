@@ -5,6 +5,9 @@
 
 //! Locale detection for time format preferences
 
+/// Format used when the locale does not provide a date/time format.
+const POSIX_DEFAULT_FORMAT: &str = "%a %b %e %X %Z %Y";
+
 // nl_langinfo is available on glibc (Linux), Apple platforms, and BSDs
 // but not on Android, Redox or other minimal Unix systems
 
@@ -47,19 +50,17 @@ cfg_langinfo! {
 
     /// Returns the default date format string for the current locale.
     ///
-    /// The format respects locale preferences for time display (12-hour vs 24-hour),
-    /// component ordering, and numeric formatting conventions. Ensures timezone
-    /// information is included in the output.
+    /// This is the locale's `date_fmt`/`d_t_fmt` used verbatim, so the output
+    /// matches what `date +"$(locale date_fmt)"` produces.
     pub fn get_locale_default_format() -> &'static str {
         DEFAULT_FORMAT_CACHE.get_or_init(|| {
             // Try to get locale format string
             if let Some(format) = get_locale_format_string() {
-                let format_with_tz = ensure_timezone_in_format(&format);
-                return Box::leak(format_with_tz.into_boxed_str());
+                return Box::leak(format.into_boxed_str());
             }
 
-            // Fallback: use 24-hour format as safe default
-            "%a %b %e %X %Z %Y"
+            // Fallback: use the POSIX locale format
+            POSIX_DEFAULT_FORMAT
         })
     }
 
@@ -83,25 +84,6 @@ cfg_langinfo! {
             CStr::from_ptr(d_t_fmt_ptr).to_str().ok().filter(|f| !f.is_empty()).map(ToOwned::to_owned)
         }
     }
-
-    /// Ensures the format string includes timezone (%Z)
-    fn ensure_timezone_in_format(format: &str) -> String {
-        if format.contains("%Z") {
-            return format.to_string();
-        }
-
-        // Try to insert %Z before year specifier (%Y or %y)
-        if let Some(pos) = format.find("%Y").or_else(|| format.find("%y")) {
-            let mut result = String::with_capacity(format.len() + 3);
-            result.push_str(&format[..pos]);
-            result.push_str("%Z ");
-            result.push_str(&format[pos..]);
-            result
-        } else {
-            // No year found, append %Z at the end
-            format.to_string() + " %Z"
-        }
-    }
 }
 
 /// On platforms without nl_langinfo support, use 24-hour format by default
@@ -112,7 +94,7 @@ cfg_langinfo! {
     target_os = "redox"
 ))]
 pub fn get_locale_default_format() -> &'static str {
-    "%a %b %e %X %Z %Y"
+    POSIX_DEFAULT_FORMAT
 }
 
 #[cfg(test)]
@@ -165,12 +147,6 @@ mod tests {
             assert!(
                 expanded.contains("2024") || expanded.contains("24"),
                 "Expanded format should contain year, got: {expanded}"
-            );
-
-            // Keep literal %Z check - this is enforced by ensure_timezone_in_format()
-            assert!(
-                format.contains("%Z"),
-                "Format string must contain %Z timezone (enforced by ensure_timezone_in_format)"
             );
         }
 
@@ -291,13 +267,16 @@ mod tests {
         }
 
         #[test]
-        fn test_timezone_included_in_format() {
-            // The implementation should ensure %Z is present
+        fn test_format_is_locale_verbatim() {
+            // The locale format must be used as-is: no timezone specifier is
+            // injected, otherwise `date` and `date +"$(locale date_fmt)"`
+            // would disagree for locales whose format has no %Z.
             let format = get_locale_default_format();
-            assert!(
-                format.contains("%Z") || format.contains("%z"),
-                "Format should contain timezone indicator: {format}"
-            );
+            let Some(locale_format) = get_locale_format_string() else {
+                assert_eq!(format, POSIX_DEFAULT_FORMAT);
+                return;
+            };
+            assert_eq!(format, locale_format);
         }
     }
 }
