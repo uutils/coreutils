@@ -143,6 +143,19 @@ fn test_sync_fdatasync_error_handling() {
         .stderr_contains("error opening");
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_sync_file_operands_fsync_each_file() {
+    // Regression test: `sync FILE` (no -d/-f flags) must fsync each file
+    // like GNU coreutils, not fall back to a global sync() that ignores
+    // the operands. /proc/self/mem rejects fsync() with EINVAL, so this
+    // must fail; a global sync() would wrongly exit 0.
+    new_ucmd!()
+        .arg("/dev/null")
+        .fails_with_code(1)
+        .stderr_contains("error syncing");
+}
+
 #[cfg(target_vendor = "apple")]
 #[test]
 fn test_sync_syncfs_error_handling_macos() {
