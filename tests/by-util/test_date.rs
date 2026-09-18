@@ -531,6 +531,24 @@ fn test_date_set_invalid() {
 }
 
 #[test]
+fn test_date_error_echoes_input_verbatim() {
+    // Error messages echo what the user typed: numeric-looking input must
+    // not be reformatted as a Fluent number (#14669, #14670).
+    for input in ["1e9", "+1e-2", "+9.e-0", "9.", "-0"] {
+        new_ucmd!()
+            .arg("-d")
+            .arg(input)
+            .fails()
+            .stderr_is(format!("date: invalid date '{input}'\n"));
+    }
+    // Same for the missing '+' message, which echoes the argument too.
+    new_ucmd!()
+        .args(&["--date", "1996-01-31", "1e9"])
+        .fails_with_code(1)
+        .stderr_contains("the argument 1e9 lacks a leading '+'");
+}
+
+#[test]
 #[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android"))))]
 fn test_date_set_permissions_error() {
     if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
