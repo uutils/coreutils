@@ -487,3 +487,37 @@ fn test_invalid_utf8_input_is_not_an_error() {
         .succeeds()
         .no_stderr();
 }
+
+#[test]
+fn test_gap_size_above_isize_max_rejected() {
+    // isize::MAX + 1: must fail with a clear error, not panic with overflow (#13184).
+    new_ucmd!()
+        .args(&["-g", "9223372036854775808"])
+        .fails()
+        .stderr_contains("invalid gap width: '9223372036854775808'");
+}
+
+#[test]
+fn test_gap_size_at_isize_max_accepted() {
+    // isize::MAX itself is the largest value GNU ptx accepts; must not panic.
+    new_ucmd!()
+        .args(&["-g", "9223372036854775807"])
+        .pipe_in("hello world\n")
+        .succeeds();
+}
+
+#[test]
+fn test_line_width_above_isize_max_rejected() {
+    new_ucmd!()
+        .args(&["-w", "9223372036854775808"])
+        .fails()
+        .stderr_contains("invalid line width: '9223372036854775808'");
+}
+
+#[test]
+fn test_line_width_at_isize_max_accepted() {
+    new_ucmd!()
+        .args(&["-w", "9223372036854775807"])
+        .pipe_in("hello world\n")
+        .succeeds();
+}
