@@ -2,9 +2,8 @@ more-about = Display the contents of a text file
 more-usage = more [OPTIONS] FILE...
 
 # Error messages
-more-error-is-directory = {$path} is a directory.
-more-error-cannot-open-no-such-file = cannot open {$path}: No such file or directory
-more-error-cannot-open-io-error = cannot open {$path}: {$error}
+more-error-is-directory = {$path}: Is a directory
+more-error-cannot-open = cannot open {$path}: {$error}
 more-error-bad-usage = bad usage
 more-error-cannot-seek-to-line = Cannot seek to line number {$line}
 more-error-pattern-not-found = Pattern not found
