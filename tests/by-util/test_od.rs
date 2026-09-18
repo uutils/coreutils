@@ -442,6 +442,23 @@ fn test_width() {
 }
 
 #[test]
+fn test_large_width_ascii_dump() {
+    // A line is padded up to the full width before the ascii dump, so the
+    // output for a single byte is 4 * WIDTH + 21 characters wide. Checks that
+    // such a line comes out intact; the memory behavior at widths that cannot
+    // be buffered at all is covered by the GNU test suite (od/big-w.sh).
+    const WIDTH: usize = 4_000_000;
+
+    let mut cmd = new_ucmd!();
+    let result = cmd
+        .args(&[format!("-w{WIDTH}"), "-tcz".into()])
+        .run_piped_stdin(&b"x"[..]);
+    let stdout = result.success().stdout_str();
+    assert_eq!(stdout.len(), 4 * WIDTH + 21);
+    assert!(stdout.ends_with("  >x<\n0000001\n"));
+}
+
+#[test]
 fn test_invalid_width() {
     let input: [u8; 4] = [0x00, 0x00, 0x00, 0x00];
     let expected_output = unindent(
