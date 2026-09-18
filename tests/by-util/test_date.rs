@@ -3378,3 +3378,51 @@ fn test_format_percent_before_non_utf8_byte() {
         .succeeds()
         .stdout_only_bytes(b"w%\xd0z\n".to_vec());
 }
+
+#[test]
+#[cfg(unix)]
+fn test_format_with_gb18030_bytes() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    // A realistic legacy-charset format: GB18030 年 (0xC4EA), 月 (0xD4C2) and
+    // 日 (0xC8D5) around the specifiers, as zh_CN.gb18030 spells it.
+    let format = OsString::from_vec(b"+%Y\xc4\xea%-m\xd4\xc2%-d\xc8\xd5".to_vec());
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("2031-07-23T04:05:06")
+        .arg(format)
+        .succeeds()
+        .stdout_only_bytes(b"2031\xc4\xea7\xd4\xc223\xc8\xd5\n".to_vec());
+}
+
+#[test]
+#[cfg(unix)]
+fn test_non_utf8_operands_are_octal_escaped() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    // Bytes that don't decode must be reported in octal, not as U+FFFD, on
+    // each of the three paths that print back an operand.
+    let cases: [(&[&[u8]], &str); 3] = [
+        (&[b"gr\xf6n"], "invalid date 'gr\\366n'"),
+        (&[b"+%Y", b"\xf1ao"], "extra operand '\\361ao'"),
+        (
+            &[b"-d", b"2031-07-23", b"%Y\xd8"],
+            "the argument %Y\\330 lacks a leading '+'",
+        ),
+    ];
+
+    for (args, expected) in cases {
+        let args: Vec<OsString> = args
+            .iter()
+            .map(|a| OsString::from_vec(a.to_vec()))
+            .collect();
+        new_ucmd!()
+            .args(&args)
+            .fails()
+            .code_is(1)
+            .stderr_contains(expected);
+    }
+}
