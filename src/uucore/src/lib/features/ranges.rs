@@ -245,7 +245,7 @@ impl Range {
     ///
     /// Is guaranteed to return only disjoint ranges in a sorted order.
     pub fn merge(mut ranges: Vec<Self>) -> Vec<Self> {
-        ranges.sort();
+        ranges.sort_unstable_by_key(|r| r.low);
         ranges.dedup_by(|a, b| {
             if a.low <= b.high {
                 b.high = max(b.high, a.high);
