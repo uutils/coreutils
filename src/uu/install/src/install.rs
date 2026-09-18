@@ -374,7 +374,9 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
     let specified_mode: Option<u32> = if matches.contains_id(OPT_MODE) {
         let x = matches.get_one::<String>(OPT_MODE).ok_or(1)?;
         Some(uucore::mode::parse(x, considering_dir, 0).map_err(|err| {
-            let message = translate!("install-error-invalid-mode", "error" => err.to_string());
+            // GNU always says the same thing regardless of what specifically
+            // went wrong, and does not add a "Try --help" hint here.
+            let message = translate!("install-error-invalid-mode", "mode" => x.clone());
             // When the diagnostic is rendered it is already on stderr; exit quietly.
             if !diag_args.is_some_and(|args| err.render_mode_value(args, x, 0, &message)) {
                 show_error!("{message}");

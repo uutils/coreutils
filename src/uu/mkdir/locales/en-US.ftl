@@ -15,6 +15,7 @@ mkdir-error-file-exists = { $path }: File exists
 mkdir-error-failed-to-create-tree = failed to create whole tree
 mkdir-error-cannot-set-permissions = cannot set permissions { $path }
 mkdir-error-cannot-create-directory = cannot create directory '{ $path }': { $error }
+mkdir-error-invalid-mode = invalid mode '{ $mode }'
 
 # Verbose output
 mkdir-verbose-created-directory = { $util_name }: created directory { $path }
