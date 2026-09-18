@@ -3343,3 +3343,38 @@ fn test_date_allow_missing_year() {
 fn test_date_allow_spaces_after_month() {
     new_ucmd!().arg("01.01.    2008 03:00 p.m.").succeeds();
 }
+
+#[test]
+#[cfg(unix)]
+fn test_format_with_non_utf8_bytes() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    // Bytes that are not valid UTF-8 carry no conversion specifier, so they
+    // must reach the output untouched, just like any other literal text.
+    let format = OsString::from_vec(b"+\xc5[%Y]\xa7%%\xe4".to_vec());
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("2031-07-23T04:05:06")
+        .arg(format)
+        .succeeds()
+        .stdout_only_bytes(b"\xc5[2031]\xa7%\xe4\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_format_percent_before_non_utf8_byte() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    // A '%' whose specifier is an invalid byte is printed as-is.
+    let format = OsString::from_vec(b"+w%\xd0z".to_vec());
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("2031-07-23T04:05:06")
+        .arg(format)
+        .succeeds()
+        .stdout_only_bytes(b"w%\xd0z\n");
+}
