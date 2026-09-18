@@ -102,9 +102,6 @@ enum DateError {
     CannotSetDate { path: String, error: String },
     #[error("{}", translate!("date-error-invalid-format", "format" => .format, "error" => .error))]
     InvalidFormat { format: String, error: String },
-    #[cfg(target_vendor = "apple")]
-    #[error("{}", translate!("date-error-setting-date-not-supported-macos"))]
-    SettingDateNotSupportedMacOs,
     #[cfg(target_os = "redox")]
     #[error("{}", translate!("date-error-setting-date-not-supported-redox"))]
     SettingDateNotSupportedRedox,
@@ -760,13 +757,9 @@ pub fn uu_app() -> Command {
                 .value_name("STRING")
                 .allow_hyphen_values(true)
                 .help({
-                    #[cfg(not(any(target_vendor = "apple", target_os = "redox")))]
+                    #[cfg(not(target_os = "redox"))]
                     {
                         translate!("date-help-set")
-                    }
-                    #[cfg(target_vendor = "apple")]
-                    {
-                        translate!("date-help-set-macos")
                     }
                     #[cfg(target_os = "redox")]
                     {
@@ -1305,17 +1298,12 @@ fn convert_for_set(date: Zoned, utc: bool) -> Zoned {
     }
 }
 
-#[cfg(target_vendor = "apple")]
-fn set_system_datetime(_date: Zoned) -> UResult<()> {
-    Err(Box::new(DateError::SettingDateNotSupportedMacOs))
-}
-
 #[cfg(target_os = "redox")]
 fn set_system_datetime(_date: Zoned) -> UResult<()> {
     Err(Box::new(DateError::SettingDateNotSupportedRedox))
 }
 
-#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "redox")))]
+#[cfg(all(unix, not(target_os = "redox")))]
 /// System call to set date (unix).
 /// See here for more:
 /// `<https://doc.rust-lang.org/libc/i686-unknown-linux-gnu/libc/fn.clock_settime.html>`
