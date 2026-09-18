@@ -22,6 +22,7 @@ fmt-error-goal-greater-than-width = GOAL cannot be greater than WIDTH.
 fmt-error-invalid-width = invalid width: {$width}
 fmt-error-width-out-of-range = invalid width: '{$width}': Numerical result out of range
 fmt-error-invalid-tabwidth = Invalid TABWIDTH specification: {$tabwidth}
+fmt-error-tabwidth-out-of-range = invalid tab width: '{$tabwidth}': Numerical result out of range
 fmt-error-first-option-width = invalid option -- {$option}; -WIDTH is recognized only when it is the first
   option; use -w N instead
   Try 'fmt --help' for more information.
