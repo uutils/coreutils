@@ -580,6 +580,7 @@ fn test_suppress_duplicates() {
         .arg("-w4")
         .arg("-O")
         .arg("-x")
+        .arg("--endian=little")
         .run_piped_stdin(&input[..])
         .success()
         .stdout_only(expected_output);
@@ -1272,6 +1273,7 @@ fn test_od_options_after_filename() {
         .arg("-An")
         .arg("-t")
         .arg("x2")
+        .arg("--endian=little")
         .succeeds()
         .stdout_only(" 1c68 fdbb\n");
 }
