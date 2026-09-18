@@ -72,9 +72,6 @@ jobs:
           sudo -i -u ${TEST_USER} bash << EOF
           set -e
           whoami
-          # Rust is installed from packages, no need for rustup
-          # Set up PATH for cargo
-          export PATH="/usr/local/bin:$PATH"
           ## VARs setup
           cd "${WORKSPACE}"
           unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
@@ -185,12 +182,8 @@ jobs:
           whoami
           # Increase max open files (512 by default)
           ulimit -n 1024
-          # Rust is installed from packages, no need for rustup
-          # Set up PATH for cargo
-          export PATH="/usr/local/bin:$PATH"
-          # Install nextest
-          mkdir -p ~/.cargo/bin
-          # Note: nextest might not have OpenBSD builds, so we'll use regular cargo test
+          # todo: install nextest if official OpenBSD package was provided
+          # Use regular cargo test currently
           ## Info
           echo "::group::environment"
           echo "CI='${CI}'"
@@ -210,7 +203,6 @@ jobs:
           cd "${WORKSPACE}"
           unset FAULT
           # openbsd is very slow. Omit duplicated cargo build and do test only
-          export PATH=~/.cargo/bin:${PATH}
           export RUST_BACKTRACE=1
           export CARGO_TERM_COLOR=always
           # Avoid filling disk space
