@@ -643,6 +643,19 @@ fn test_date_for_file() {
 }
 
 #[test]
+fn test_date_file_empty_lines_are_midnight() {
+    // Empty, whitespace-only, and lone `-` lines mean midnight today,
+    // like GNU, not the current time (#14498).
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("dates", "\n   \n-\n");
+    ucmd.arg("--file")
+        .arg("dates")
+        .arg("+%H:%M")
+        .succeeds()
+        .stdout_is("00:00\n00:00\n00:00\n");
+}
+
+#[test]
 fn test_date_file_invalid_utf8_line() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_date_file_invalid_utf8";
