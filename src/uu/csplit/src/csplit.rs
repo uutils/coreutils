@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore rustdoc
+
 #![allow(rustdoc::private_intra_doc_links)]
 
 use std::borrow::Borrow;
