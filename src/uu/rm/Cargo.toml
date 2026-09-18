@@ -15,7 +15,7 @@ readme.workspace = true
 path = "src/rm.rs"
 doctest = false
 
-[dependencies]
+[target.'cfg(any(unix, windows, target_os = "wasi"))'.dependencies]
 thiserror = { workspace = true }
 clap = { workspace = true }
 uucore = { workspace = true, features = ["fs", "parser", "quoting-style"] }
@@ -31,8 +31,9 @@ libc = { workspace = true }
 [[bin]]
 name = "rm"
 path = "src/main.rs"
+required-features = ["uucore/default"]
 
-[dev-dependencies]
+[target.'cfg(any(unix, windows, target_os = "wasi"))'.dev-dependencies]
 divan = { workspace = true }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
@@ -43,3 +44,4 @@ workspace = true
 [[bench]]
 name = "rm_bench"
 harness = false
+required-features = ["uucore/default"]
