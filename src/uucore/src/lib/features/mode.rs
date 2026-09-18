@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//! Set of functions to parse modes
-
 // spell-checker:ignore (vars) fperm srwx
+
+//! Set of functions to parse modes
 
 use std::fmt::{self, Display};
 use std::ops::Range;
