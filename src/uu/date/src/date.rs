@@ -27,6 +27,7 @@ use uucore::error::{UError, UResult, USimpleError, strip_errno};
 #[cfg(feature = "i18n-datetime")]
 use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
 use uucore::translate;
+use uucore::translate_text;
 use uucore::{format_usage, show};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
@@ -91,9 +92,9 @@ enum DateError {
     Write(std::io::Error),
     #[error("{}", translate!("date-error-extra-operand", "operand" => .operand))]
     ExtraOperand { operand: String },
-    #[error("{}", translate!("date-error-invalid-date", "date" => .date))]
+    #[error("{}", translate_text!("date-error-invalid-date", "date" => .date))]
     InvalidDate { date: String },
-    #[error("{}", translate!("date-error-format-missing-plus", "arg" => .arg))]
+    #[error("{}", translate_text!("date-error-format-missing-plus", "arg" => .arg))]
     FormatMissingPlus { arg: String },
     #[error("{}", translate!("date-error-expected-file-got-directory", "path" => .path))]
     ExpectedFileGotDirectory { path: String },
