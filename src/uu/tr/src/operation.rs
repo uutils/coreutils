@@ -318,9 +318,10 @@ impl Sequence {
             })
             .collect();
 
-        // For every upper/lower in set2, there must be an upper/lower in set1 at the same position. The position is calculated by expanding everything before the upper/lower in both sets
+        // For every upper/lower in set2, there must be an upper/lower in set1 at the same position. The position is calculated by expanding everything before the upper/lower in both sets.
+        // Only when translating: with -d, set2 is the squeeze set and lines up with nothing.
         for (set2_pos, set2_item) in set2.iter().enumerate() {
-            if matches!(set2_item, Self::Class(_)) {
+            if translating && matches!(set2_item, Self::Class(_)) {
                 let mut set2_part_solved_len = 0;
                 if set2_pos >= 1 {
                     set2_part_solved_len =
@@ -329,7 +330,10 @@ impl Sequence {
 
                 let mut class_matches = false;
                 for (set1_pos, set1_item) in set1.iter().enumerate() {
-                    if matches!(set1_item, Self::Class(_)) {
+                    // Only an 'upper'/'lower' in set1 can line up with one in
+                    // set2: any other class there leaves the mapping
+                    // undefined, so GNU rejects it.
+                    if matches!(set1_item, Self::Class(Class::Upper | Class::Lower)) {
                         let mut set1_part_solved_len = 0;
                         if set1_pos >= 1 {
                             set1_part_solved_len =
@@ -401,10 +405,12 @@ impl Sequence {
                 } else {
                     set1_solved.truncate(set2_solved.len());
                 }
-            } else if matches!(
-                set2.last().copied(),
-                Some(Self::Class(Class::Upper | Class::Lower))
-            ) {
+            } else if translating
+                && matches!(
+                    set2.last().copied(),
+                    Some(Self::Class(Class::Upper | Class::Lower))
+                )
+            {
                 return Err(SequenceError::whole_set(
                     BadSequence::Set1LongerSet2EndsInClass,
                     1,
