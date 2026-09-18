@@ -517,13 +517,20 @@ fn test_date_format_unknown_specifiers_stay_literal() {
     new_ucmd!().arg("+%f").succeeds().stdout_is("%f\n");
     new_ucmd!().arg("+%Q").succeeds().stdout_is("%Q\n");
     new_ucmd!().arg("+%:f").succeeds().stdout_is("%:f\n");
-    new_ucmd!().arg("+%Y-%m-%d %f").succeeds().stdout_matches(
-        &Regex::new(r"^\d{4}-\d{2}-\d{2} %f\n$").unwrap(),
-    );
+    new_ucmd!()
+        .arg("+%Y-%m-%d %f")
+        .succeeds()
+        .stdout_matches(&Regex::new(r"^\d{4}-\d{2}-\d{2} %f\n$").unwrap());
     // GNU applies its width/flag quirks to the literal text.
     new_ucmd!().arg("+%-f").succeeds().stdout_is("%-f\n");
-    new_ucmd!().arg("+%10f").succeeds().stdout_is("      %10f\n");
-    new_ucmd!().arg("+%010f").succeeds().stdout_is("00000%010f\n");
+    new_ucmd!()
+        .arg("+%10f")
+        .succeeds()
+        .stdout_is("      %10f\n");
+    new_ucmd!()
+        .arg("+%010f")
+        .succeeds()
+        .stdout_is("00000%010f\n");
     new_ucmd!().arg("+%^f").succeeds().stdout_is("%^F\n");
     new_ucmd!().arg("+% f").succeeds().stdout_is("% f\n");
     new_ucmd!().arg("+%%f").succeeds().stdout_is("%f\n");
