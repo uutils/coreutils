@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (words) ints (linux) Nofile dfgi abmon avril
+
 #![allow(clippy::cast_possible_wrap)]
 
 use std::env;

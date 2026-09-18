@@ -3,10 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore dont SIGBUS SIGSEGV sigsegv sigbus infd
+
 use rstest::rstest;
 
 use uucore::display::Quotable;
-// spell-checker:ignore dont SIGBUS SIGSEGV sigsegv sigbus infd
 use uutests::new_ucmd;
 
 #[cfg(unix)]
