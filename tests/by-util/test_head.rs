@@ -1228,18 +1228,28 @@ fn test_accepted_multiplier_suffixes() {
 
 #[test]
 fn test_header_quotes_names_needing_it() {
-    // A name with a space and one with a tab must come back quoted, an
-    // ordinary one must not.
+    // A name with a space must come back quoted, an ordinary one must not.
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.write("plain", "p\n");
     at.write("two words", "w\n");
+
+    ts.ucmd()
+        .args(&["-n1", "plain", "two words"])
+        .succeeds()
+        .stdout_only("==> plain <==\np\n\n==> 'two words' <==\nw\n");
+}
+
+// Windows rejects control characters in file names, so this one is unix-only.
+#[test]
+#[cfg(unix)]
+fn test_header_quotes_name_with_control_char() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
     at.write("tab\there", "t\n");
 
     ts.ucmd()
-        .args(&["-n1", "plain", "two words", "tab\there"])
+        .args(&["-v", "-n1", "tab\there"])
         .succeeds()
-        .stdout_only(
-            "==> plain <==\np\n\n==> 'two words' <==\nw\n\n==> 'tab'$'\\t''here' <==\nt\n",
-        );
+        .stdout_only("==> 'tab'$'\\t''here' <==\nt\n");
 }
