@@ -5,11 +5,13 @@
 
 // spell-checker:ignore (ToDO) delim mkdelim pairable
 
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, StdinLock, Write, stderr, stdin};
 use std::path::Path;
+use std::rc::Rc;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
@@ -72,14 +74,24 @@ fn line_cmp(a: &[u8], b: &[u8], use_locale: bool) -> Ordering {
     }
 }
 
+/// The standard input, shared by every operand that names it.
+type SharedStdin = Rc<RefCell<StdinLock<'static>>>;
+
 enum Input {
-    Stdin(StdinLock<'static>),
+    Stdin(SharedStdin),
     FileIn(BufReader<File>),
 }
 
 impl Input {
-    fn stdin() -> Self {
-        Self::Stdin(stdin().lock())
+    /// Both operands may name standard input, and then they read one stream
+    /// between them, taking lines from it in turn. Locking it a second time
+    /// would deadlock instead.
+    fn stdin(shared: &mut Option<SharedStdin>) -> Self {
+        Self::Stdin(
+            shared
+                .get_or_insert_with(|| Rc::new(RefCell::new(stdin().lock())))
+                .clone(),
+        )
     }
 
     fn from_file(f: File) -> Self {
@@ -101,7 +113,7 @@ impl LineReader {
         let line_ending = self.line_ending.into();
 
         let result = match &mut self.input {
-            Input::Stdin(r) => r.read_until(line_ending, buf),
+            Input::Stdin(r) => r.borrow_mut().read_until(line_ending, buf),
             Input::FileIn(r) => r.read_until(line_ending, buf),
         };
 
@@ -286,9 +298,13 @@ fn comm(
     }
 }
 
-fn open_file(name: &OsString, line_ending: LineEnding) -> io::Result<LineReader> {
+fn open_file(
+    name: &OsString,
+    line_ending: LineEnding,
+    shared_stdin: &mut Option<SharedStdin>,
+) -> io::Result<LineReader> {
     if name == "-" {
-        Ok(LineReader::new(Input::stdin(), line_ending))
+        Ok(LineReader::new(Input::stdin(shared_stdin), line_ending))
     } else {
         // some platforms shows different read error
         // try to override the error message, but failure of it is not serious
@@ -312,9 +328,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
     let filename1 = matches.get_one::<OsString>(options::FILE_1).unwrap();
     let filename2 = matches.get_one::<OsString>(options::FILE_2).unwrap();
-    let mut f1 = open_file(filename1, line_ending)
+    let mut shared_stdin = None;
+    let mut f1 = open_file(filename1, line_ending, &mut shared_stdin)
         .map_err_context(|| filename1.maybe_quote().to_string())?;
-    let mut f2 = open_file(filename2, line_ending)
+    let mut f2 = open_file(filename2, line_ending, &mut shared_stdin)
         .map_err_context(|| filename2.maybe_quote().to_string())?;
 
     // Due to default_value(), there must be at least one value here, thus unwrap() must not panic.
