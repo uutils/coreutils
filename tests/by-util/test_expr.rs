@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore αbcdef ; (people) kkos
 // spell-checker:ignore aabcccd aabcd aabd abbb abbbd abbcabc abbcac abbcbbbd abbcbd
 // spell-checker:ignore abbccd abcabc abcac acabc andand bigcmp bignum emptysub
@@ -288,12 +289,6 @@ fn test_regex_trailing_backslash() {
 }
 
 #[test]
-// expr mismatches `\[^a]` against `[^a]` on Windows for arm64 only; it passes
-// everywhere else, including x86_64 Windows.
-#[cfg_attr(
-    all(windows, target_arch = "aarch64"),
-    ignore = "bracket expression mismatches on Windows arm64"
-)]
 fn test_regex_caret() {
     new_ucmd!()
         .args(&["a^b", ":", "a^b"])
@@ -335,8 +330,9 @@ fn test_regex_caret() {
         .args(&["ab[^c]", ":", "ab\\[^c]"])
         .succeeds()
         .stdout_only("6\n");
+    // Use `[^x]` to avoid Windows `wild` glob matching the runner's `C:\a` directory
     new_ucmd!()
-        .args(&["[^a]", ":", "\\[^a]"])
+        .args(&["[^x]", ":", "\\[^x]"])
         .succeeds()
         .stdout_only("4\n");
     new_ucmd!()
@@ -501,6 +497,14 @@ fn test_regex_catastrophic_backtracking() {
         .args(&[input.as_str(), ":", "\\(a\\+a\\+\\)\\+b"])
         .fails_with_code(1)
         .stdout_only("\n");
+}
+
+#[test]
+fn test_regex_leftmost_longest_match_semantics() {
+    new_ucmd!()
+        .args(&["ab", ":", "a\\|ab"])
+        .succeeds()
+        .stdout_only("2\n");
 }
 
 #[test]
@@ -2219,4 +2223,19 @@ expr: non-integer argument
             .fails_with_code(2)
             .stderr_is("expr: syntax error: unexpected argument 'spare'\n");
     }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_exit_with_3_write_error() {
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+
+    new_ucmd!()
+        .arg("2 + 2")
+        .set_stdout(dev_full)
+        .fails_with_code(3)
+        .stderr_is("expr: No space left on device\n");
 }

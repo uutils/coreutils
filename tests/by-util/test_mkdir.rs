@@ -79,7 +79,7 @@ fn test_mkdir_non_unicode() {
 
     let target = uucore::os_str_from_bytes(b"some-\xc0-dir-\xf3")
         .expect("Only unix platforms can test non-unicode names");
-    ucmd.arg(&target).succeeds();
+    ucmd.arg(target).succeeds();
 
     assert!(at.dir_exists(target));
 }
@@ -406,7 +406,7 @@ fn test_mkdir_acl_inheritance_with_restrictive_mask() {
 
     // Verify the child itself has an ACL (indicated by presence of xattr)
     assert!(
-        uucore::fsxattr::has_acl(at.plus("parent/child")),
+        uucore::fsxattr::has_acl(at.plus("parent/child"), true),
         "Child directory should have inherited ACL entries"
     );
 }

@@ -54,28 +54,8 @@ highlight = "all"
 # introduces it.
 # spell-checker: disable
 skip = [
-  # various crates
-  { name = "windows-sys", version = "0.59.0" },
-  # various crates
+  # notify
   { name = "windows-sys", version = "0.60.2" },
-  # parking_lot_core
-  { name = "windows-targets", version = "0.52.6" },
-  # windows-targets
-  { name = "windows_aarch64_gnullvm", version = "0.52.6" },
-  # windows-targets
-  { name = "windows_aarch64_msvc", version = "0.52.6" },
-  # windows-targets
-  { name = "windows_i686_gnu", version = "0.52.6" },
-  # windows-targets
-  { name = "windows_i686_gnullvm", version = "0.52.6" },
-  # windows-targets
-  { name = "windows_i686_msvc", version = "0.52.6" },
-  # windows-targets
-  { name = "windows_x86_64_gnu", version = "0.52.6" },
-  # windows-targets
-  { name = "windows_x86_64_gnullvm", version = "0.52.6" },
-  # windows-targets
-  { name = "windows_x86_64_msvc", version = "0.52.6" },
   # ansi-width
   { name = "unicode-width", version = "0.1.13" },
   # filedescriptor, utmp-classic
@@ -88,7 +68,7 @@ skip = [
   { name = "itertools", version = "0.14.0" },
   # ordered-multimap
   { name = "hashbrown", version = "0.14.5" },
-  # lru (via num-prime), string-interner
+  # lru (via num-prime)
   { name = "hashbrown", version = "0.16.1" },
   # cexpr (via bindgen)
   { name = "nom", version = "7.1.3" },

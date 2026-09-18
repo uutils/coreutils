@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 //! Determine the strategy for breaking up the input (file or stdin) into chunks
 //! based on the command line options
 

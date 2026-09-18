@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore plass samp FFFD
+
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use uutests::new_ucmd;
@@ -337,6 +338,56 @@ fn prefix_equal_skip_prefix_equal_two() {
             .arg("prefixed-one-word-per-line.txt")
             .succeeds()
             .stdout_is_fixture("prefixed-one-word-per-line_p=_P=2.txt");
+    }
+}
+
+#[test]
+fn prefix_ignores_leading_whitespace_without_exact_prefix() {
+    for prefix_args in [vec!["-p", "> "], vec!["--prefix", "> "]] {
+        new_ucmd!()
+            .args(&prefix_args)
+            .pipe_in("  > alpha\n  > beta\n")
+            .succeeds()
+            .stdout_only("  > alpha beta\n");
+    }
+}
+
+#[test]
+fn exact_prefix_requires_the_prefix_to_start_the_line() {
+    for prefix_args in [
+        vec!["-x", "-p", "> "],
+        vec!["--exact-prefix", "--prefix", "> "],
+    ] {
+        new_ucmd!()
+            .args(&prefix_args)
+            .pipe_in("  > alpha\n  > beta\n")
+            .succeeds()
+            .stdout_only("  > alpha\n  > beta\n");
+    }
+}
+
+#[test]
+fn skip_prefix_ignores_leading_whitespace_without_exact_skip_prefix() {
+    for prefix_args in [vec!["-P", "#"], vec!["--skip-prefix", "#"]] {
+        new_ucmd!()
+            .args(&prefix_args)
+            .pipe_in("  # note\n  # more\n")
+            .succeeds()
+            .stdout_only("  # note\n  # more\n");
+    }
+}
+
+#[test]
+fn exact_skip_prefix_requires_the_prefix_to_start_the_line() {
+    for prefix_args in [
+        vec!["-X", "-P", "#"],
+        vec!["--exact-skip-prefix", "--skip-prefix", "#"],
+    ] {
+        new_ucmd!()
+            .args(&prefix_args)
+            .pipe_in("  # note\n  # more\n")
+            .succeeds()
+            .stdout_only("  # note # more\n");
     }
 }
 

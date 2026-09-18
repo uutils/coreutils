@@ -6,23 +6,25 @@
 // spell-checker:ignore TAOCP indegree
 // spell-checker:ignore (libs) interner
 
+mod error;
+mod interner;
+mod parser;
+
 use clap::{Arg, ArgAction, Command};
 use rustc_hash::FxHashMap;
 use std::collections::VecDeque;
 use std::collections::hash_map::Entry;
 use std::ffi::OsString;
+use std::fmt;
 use std::fs::File;
+use std::fs::OpenOptions;
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
-use string_interner::StringInterner;
-use string_interner::backend::BucketBackend;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::{format_usage, show, translate};
 
-// short types for switching interning behavior on the fly.
-type Sym = string_interner::symbol::SymbolUsize;
-type Interner = StringInterner<BucketBackend<Sym>, rustc_hash::FxBuildHasher>;
+use crate::error::{Error, ReadError};
+use crate::interner::{ByteInterner, Sym};
 
 mod options {
     pub const FILE: &str = "file";
@@ -51,27 +53,60 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Create the directed graph from pairs of tokens in the input data.
     let mut g = Graph::new(input.to_string_lossy().to_string());
+
     if input == "-" {
         process_input(io::stdin().lock(), &mut g)?;
     } else {
+        let mut options: OpenOptions;
         // some platforms cannot catch this as read error. Needs additional cost by stat
         #[cfg(windows)]
         {
+            use std::os::windows::fs::OpenOptionsExt;
+            use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_SEQUENTIAL_SCAN;
             let input = std::path::Path::new(input);
             if input.is_dir() {
-                return Err(TsortError::IsDir(input.to_string_lossy().to_string()).into());
+                return Err(
+                    Error::Read(ReadError::IsDir(input.to_string_lossy().to_string())).into(),
+                );
             }
+            // advise the OS we will access the data sequentially if possible (windows)
+            options = File::options()
+                .custom_flags(FILE_FLAG_SEQUENTIAL_SCAN)
+                .clone();
         }
-        let file = File::open(input).map_err_context(|| input.maybe_quote().to_string())?;
-        // advise the OS we will access the data sequentially if possible
-        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+        #[cfg(not(windows))]
+        {
+            options = File::options();
+        }
+        let file = options
+            .read(true)
+            .open(input)
+            .map_err_context(|| input.maybe_quote().to_string())?;
+
+        // advise the OS we will access the data sequentially if possible (unix)
+        #[cfg(all(
+            any(unix, target_os = "wasi"),
+            not(any(
+                target_vendor = "apple",
+                target_os = "netbsd",
+                target_os = "openbsd",
+                target_os = "dragonfly",
+                target_os = "espidf",
+                target_os = "haiku",
+                target_os = "horizon",
+                target_os = "redox",
+                target_os = "solaris",
+                target_os = "vita",
+            ))
+        ))]
         let _ = rustix::fs::fadvise(&file, 0, None, rustix::fs::Advice::Sequential);
 
         let reader = BufReader::new(file);
         process_input(reader, &mut g)?;
     }
 
-    g.run_tsort()
+    g.run_tsort()?;
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
@@ -99,66 +134,54 @@ pub fn uu_app() -> Command {
         )
 }
 
-#[derive(Debug, Error)]
-enum TsortError {
-    /// The input file is actually a directory.
-    #[error("{input}: {message}", input = .0.maybe_quote(), message = translate!("tsort-error-is-dir"))]
-    IsDir(String),
+// Auxiliary struct, just for printing loop nodes via show! macro.
+//
+// Diagnostics go through Display, so invalid UTF-8 bytes are represented
+// lossily here.
+#[derive(Debug)]
+struct LoopNode<'a>(&'a [u8]);
 
-    /// The number of tokens in the input data is odd.
-    ///
-    /// The length of the list of edges must be even because each edge has two
-    /// components: a source node and a target node.
-    #[error("{input}: {message}", input = .0.maybe_quote(), message = translate!("tsort-error-odd"))]
-    NumTokensOdd(String),
-
-    /// The graph contains a cycle.
-    #[error("{input}: {message}", input = .0, message = translate!("tsort-error-loop"))]
-    Loop(String),
-
-    /// Wrapper for bubbling up IO errors
-    #[error("{0}")]
-    IO(#[from] io::Error),
+impl fmt::Display for LoopNode<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", String::from_utf8_lossy(self.0))
+    }
 }
 
-// Auxiliary struct, just for printing loop nodes via show! macro
-#[derive(Debug, Error)]
-#[error("{0}")]
-struct LoopNode<'a>(&'a str);
+impl std::error::Error for LoopNode<'_> {}
 
-impl UError for TsortError {}
+impl UError for Error {}
 impl UError for LoopNode<'_> {}
 
-fn process_input<R: BufRead>(reader: R, graph: &mut Graph) -> Result<(), TsortError> {
+fn process_input<R: BufRead>(reader: R, graph: &mut Graph) -> Result<(), Error> {
     let mut pending: Option<Sym> = None;
 
     // Input is considered to be in the format
     // From1 To1 From2 To2 ...
-    // with tokens separated by whitespaces
+    // with tokens separated by whitespaces (<SPACE>, \t, or \n).
+    //
+    // Tokens are kept as raw bytes so invalid UTF-8 can be preserved.
 
-    for line in reader.lines() {
-        let line = line.map_err(|e| {
-            if e.kind() == io::ErrorKind::IsADirectory {
-                TsortError::IsDir(graph.name())
-            } else {
-                e.into()
-            }
-        })?;
-        for token in line.split_whitespace() {
-            // Intern the token and get a Sym
-            let token_sym = graph.interner.get_or_intern(token);
+    let result = parser::for_each_token(reader, |token| {
+        let token_sym = graph.interner.get_or_intern(token);
 
-            if let Some(from) = pending.take() {
-                graph.add_edge(from, token_sym);
-            } else {
-                pending = Some(token_sym);
-            }
+        if let Some(from) = pending.take() {
+            graph.add_edge(from, token_sym);
+        } else {
+            pending = Some(token_sym);
         }
-    }
-    if pending.is_some() {
-        return Err(TsortError::NumTokensOdd(graph.name()));
+    });
+
+    if let Err(e) = result {
+        if e.kind() == io::ErrorKind::IsADirectory {
+            return Err(ReadError::IsDir(graph.name()).into());
+        }
+        return Err(ReadError::Io(e).into());
     }
 
+    if pending.is_some() {
+        return Err(ReadError::NumTokensOdd(graph.name()).into());
+    }
+    graph.interner.finish_interning();
     Ok(())
 }
 
@@ -191,29 +214,25 @@ impl Node {
 }
 
 struct Graph {
-    name_sym: Sym,
+    name: String,
     nodes: FxHashMap<Sym, Node>,
-    interner: Interner,
+    interner: ByteInterner,
 }
 
 impl Graph {
     fn new(name: String) -> Self {
-        let mut interner = Interner::with_hasher(rustc_hash::FxBuildHasher);
-        let name_sym = interner.get_or_intern(name);
         Self {
-            name_sym,
-            interner,
+            name,
             nodes: FxHashMap::default(),
+            interner: ByteInterner::default(),
         }
     }
 
     fn name(&self) -> String {
-        self.interner
-            .resolve(self.name_sym)
-            .expect("symbol should be interned")
-            .to_owned()
+        self.name.clone()
     }
-    fn get_node_name(&self, node_sym: Sym) -> &str {
+
+    fn get_node_name(&self, node_sym: Sym) -> &[u8] {
         self.interner
             .resolve(node_sym)
             .expect("symbol should be interned")
@@ -221,8 +240,10 @@ impl Graph {
 
     fn add_edge(&mut self, from: Sym, to: Sym) {
         let from_node = self.nodes.entry(from).or_default();
+
         if from != to {
             from_node.add_successor(to);
+
             let to_node = self.nodes.entry(to).or_default();
             to_node.predecessor_count += 1;
         }
@@ -237,6 +258,7 @@ impl Graph {
                 .successor_tokens,
             v,
         );
+
         self.nodes
             .get_mut(&v)
             .expect("node is part of the graph")
@@ -244,7 +266,7 @@ impl Graph {
     }
 
     /// Implementation of algorithm T from TAOCP (Don. Knuth), vol. 1.
-    fn run_tsort(&mut self) -> UResult<()> {
+    fn run_tsort(&mut self) -> Result<(), Error> {
         let mut independent_nodes_queue: VecDeque<Sym> = self
             .nodes
             .iter()
@@ -257,14 +279,20 @@ impl Graph {
             })
             .collect();
 
-        // Sort by resolved string for deterministic output
+        // Sort by name for deterministic output.
         independent_nodes_queue
             .make_contiguous()
             .sort_unstable_by(|a, b| self.get_node_name(*a).cmp(self.get_node_name(*b)));
+
         let mut out = BufWriter::new(io::stdout().lock());
+
         while !self.nodes.is_empty() {
             let v = self.find_next_node(&mut independent_nodes_queue);
-            writeln!(out, "{}", self.get_node_name(v))?;
+
+            // Write the node exactly as it appeared in the input, followed by a newline
+            out.write_all(self.get_node_name(v)).map_err(Error::Write)?;
+            writeln!(out).map_err(Error::Write)?;
+
             if let Some(node_to_process) = self.nodes.remove(&v) {
                 for successor_name in node_to_process.successor_tokens.into_iter().rev() {
                     // we reverse to match GNU tsort order
@@ -272,15 +300,20 @@ impl Graph {
                         .nodes
                         .get_mut(&successor_name)
                         .expect("node is part of the graph");
+
                     successor_node.predecessor_count -= 1;
+
                     if successor_node.predecessor_count == 0 {
                         independent_nodes_queue.push_back(successor_name);
                     }
                 }
             }
         }
+
+        out.flush().map_err(Error::Write)?;
         Ok(())
     }
+
     pub fn indegree(&self, sym: Sym) -> Option<usize> {
         self.nodes.get(&sym).map(|data| data.predecessor_count)
     }
@@ -309,25 +342,32 @@ impl Graph {
 
     fn find_and_break_cycle(&mut self, frontier: &mut VecDeque<Sym>) {
         let cycle = self.detect_cycle();
-        show!(TsortError::Loop(self.name()));
+
+        show!(Error::Loop(self.name()));
+
         for &sym in &cycle {
             show!(LoopNode(self.get_node_name(sym)));
         }
+
         let u = *cycle.last().expect("cycle must be non-empty");
         let v = cycle[0];
+
         self.remove_edge(u, v);
+
         if self.indegree(v).expect("node is part of the graph") == 0 {
             frontier.push_back(v);
         }
     }
 
     fn detect_cycle(&self) -> Vec<Sym> {
-        // Sort by resolved string for deterministic output
+        // Sort by name for deterministic output.
         let mut nodes: Vec<_> = self.nodes.keys().copied().collect();
+
         nodes.sort_unstable_by(|a, b| self.get_node_name(*a).cmp(self.get_node_name(*b)));
 
         let mut visited = FxHashMap::default();
         let mut stack = Vec::with_capacity(self.nodes.len());
+
         for &node in &nodes {
             if self.dfs(node, &mut visited, &mut stack) {
                 let (loop_entry, _) = stack.pop().expect("loop is not empty");
@@ -339,6 +379,7 @@ impl Graph {
                     .collect();
             }
         }
+
         unreachable!("detect_cycle is expected to be called only on graphs with cycles");
     }
 
@@ -354,6 +395,7 @@ impl Graph {
                 .get(&node)
                 .map_or(&[], |n: &Node| &n.successor_tokens),
         ));
+
         let state = *visited.entry(node).or_insert(VisitedState::Opened);
 
         if state == VisitedState::Closed {
@@ -374,6 +416,7 @@ impl Graph {
                 Entry::Vacant(v) => {
                     // first visit of the node
                     v.insert(VisitedState::Opened);
+
                     stack.push((
                         next_node,
                         self.nodes
@@ -381,10 +424,12 @@ impl Graph {
                             .map_or(&[], |n| &n.successor_tokens),
                     ));
                 }
+
                 Entry::Occupied(o) => {
                     if *o.get() == VisitedState::Opened {
-                        // We have found a node that was already visited by another iteration => loop completed
-                        // the stack may contain unrelated nodes. This allows narrowing the loop down.
+                        // We have found a node that was already visited by another
+                        // iteration => loop completed. The stack may contain
+                        // unrelated nodes. This allows narrowing the loop down.
                         stack.push((next_node, &[]));
                         return true;
                     }

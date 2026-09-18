@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore datetime
 
 use std::ops::Range;
@@ -201,7 +202,7 @@ fn write_padded_bytes<W: Write>(
     precision: Precision,
 ) -> io::Result<()> {
     let display_bytes = match precision {
-        Precision::Number(p) if p < bytes.len() => &bytes[..p],
+        Precision::Number(p) => bytes.get(..p).unwrap_or(bytes),
         _ => bytes,
     };
 

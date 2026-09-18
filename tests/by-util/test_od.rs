@@ -948,6 +948,21 @@ fn test_skip_bytes_error() {
         .failure();
 }
 
+// The skip is measured over all the inputs joined together, and the message
+// says so, matching GNU od.
+#[test]
+fn test_skip_bytes_past_end_message() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "abc");
+    at.write("b", "de");
+    ucmd.arg("-j6")
+        .arg("a")
+        .arg("b")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_only("od: cannot skip past end of combined input\n");
+}
+
 // A seekable special file such as /dev/null can be skipped past its (empty)
 // end without error, matching GNU od.
 #[cfg(unix)]

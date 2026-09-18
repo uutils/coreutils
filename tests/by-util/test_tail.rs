@@ -7,6 +7,7 @@
 // spell-checker:ignore (libs) kqueue ELOOP EISDIR
 // spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
 // spell-checker:ignore (cmd) taskkill
+
 #![allow(
     clippy::unicode_not_nfc,
     clippy::cast_lossless,
@@ -16,17 +17,11 @@
 use pretty_assertions::assert_eq;
 use rand::distr::Alphanumeric;
 use rstest::rstest;
-#[cfg(all(
-    not(target_vendor = "apple"),
-    not(target_os = "android"),
-    not(target_os = "freebsd"),
-    not(windows)
-))]
+#[cfg(all(not(target_os = "android"), not(target_os = "freebsd"), not(windows)))]
 use rustix::process::{Pid, Signal, kill_process};
 use std::char::from_digit;
 use std::fs::File;
 use std::io::Write;
-#[cfg(not(target_vendor = "apple"))]
 use std::io::{Seek, SeekFrom};
 #[cfg(all(
     not(target_vendor = "apple"),
@@ -106,7 +101,6 @@ fn test_stdin_explicit() {
 }
 
 #[test]
-#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_file() {
     // $ echo foo > f
 
@@ -160,7 +154,6 @@ fn test_stdin_redirect_file_follow() {
 }
 
 #[test]
-#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_offset() {
     // Test following a file from the middle
 
@@ -174,7 +167,6 @@ fn test_stdin_redirect_offset() {
 }
 
 #[test]
-#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_offset2() {
     // like test_stdin_redirect_offset but with multiple files
 
@@ -1246,6 +1238,30 @@ fn test_obsolete_syntax_zero_lines_file() {
         .no_output();
 }
 
+/// Test for obsolete syntax `tail +0`: like `+1`, print the whole input.
+#[test]
+fn test_obsolete_syntax_positive_zero_lines() {
+    for arg in ["+0", "+00", "+0l"] {
+        new_ucmd!()
+            .args(&[arg])
+            .pipe_in("a\nb\nc\nd\ne\n")
+            .succeeds()
+            .no_stderr()
+            .stdout_is("a\nb\nc\nd\ne\n");
+    }
+}
+
+/// Test for obsolete syntax `tail +0c`: like `+1c`, print the whole input.
+#[test]
+fn test_obsolete_syntax_positive_zero_bytes() {
+    new_ucmd!()
+        .args(&["+0c"])
+        .pipe_in("a\nb\nc\nd\ne\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_is("a\nb\nc\nd\ne\n");
+}
+
 /// Test for reading all lines, specified by `tail -n +0`.
 #[test]
 fn test_positive_zero_lines() {
@@ -2206,12 +2222,27 @@ fn test_follow_name_truncate1() {
     let backup = "backup";
 
     let expected_stdout = at.read(FOLLOW_NAME_EXP);
+    // `expected_stdout` starts with tail's initial static output (the last 10 lines);
+    // everything after that only appears once the truncate/restore below are observed.
+    let initial_stdout = &expected_stdout[..expected_stdout.find("END(25)\n").unwrap() + 8];
     let expected_stderr = format!("{}: {source}: file truncated\n", ts.util_name);
 
     let args = ["--follow=name", source];
     let mut p = ts.ucmd().args(&args).run_no_wait();
     let delay = 1000;
     p.make_assertion().is_alive();
+
+    // Wait for tail's initial read of `source` to finish before mutating it below.
+    // Watch registration happens before this initial output is printed, so once it
+    // appears the truncate/restore below are guaranteed to be observed as events.
+    // A fixed delay isn't enough here: a slow-starting child process (observed on
+    // macOS CI, see #12335) can otherwise race ahead of tail's own startup.
+    for _ in 0..500 {
+        if p.stdout_all() == initial_stdout {
+            break;
+        }
+        p.delay(10);
+    }
 
     at.copy(source, backup);
     p.delay(delay);
@@ -2951,7 +2982,6 @@ fn test_fifo() {
 /// Without non-blocking FIFO open, tail would block forever waiting for a writer.
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
@@ -5109,7 +5139,6 @@ fn test_obsolete_encoding_windows() {
 }
 
 #[test]
-#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_following_with_pid() {
     use std::process::Command;

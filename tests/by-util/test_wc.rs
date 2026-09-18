@@ -3,12 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars ioerrdir
+
 #[cfg(unix)]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::vec_of_size;
 
-// spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars ioerrdir
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
@@ -296,8 +297,8 @@ fn test_non_unicode_names() {
         .expect("Only unix platforms can test non-unicode names");
 
     at.mkdir("some-dir1");
-    at.touch(&target1);
-    at.touch(&target2);
+    at.touch(target1);
+    at.touch(target2);
 
     ucmd.args(&[target1, target2]).succeeds().stdout_is_bytes(
         [

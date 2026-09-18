@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
+
 // spell-checker:ignore mydir hardlinked tmpfs notty unwriteable myfolder SRCDATA DSTDATA REALDATA
 // spell-checker:ignore dirattr dirvalue setfattr getfattr
 
@@ -464,6 +464,36 @@ fn test_mv_replace_symlink_with_file() {
     assert!(!at.is_symlink("symlink"));
     assert!(!at.file_exists("b"));
     assert!(at.file_exists("a"));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_file_to_broken_symlink_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("file");
+    at.symlink_file("missing-target", "broken");
+
+    ucmd.arg("file").arg("broken").succeeds().no_stderr();
+
+    assert!(at.file_exists("broken"));
+    assert!(!at.is_symlink("broken"));
+    assert!(!at.file_exists("file"));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_file_to_broken_symlink_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("file");
+    at.symlink_dir("missing-target", "broken");
+
+    ucmd.arg("file").arg("broken").succeeds().no_stderr();
+
+    assert!(at.file_exists("broken"));
+    assert!(!at.is_symlink("broken"));
+    assert!(!at.file_exists("file"));
 }
 
 #[test]

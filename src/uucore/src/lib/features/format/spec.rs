@@ -6,7 +6,7 @@
 // spell-checker:ignore (vars) intmax ptrdiff padlen
 
 use super::{
-    ExtendedBigDecimal, FormatChar, FormatError, OctalParsing, check_precision,
+    EscapeSet, ExtendedBigDecimal, FormatChar, FormatError, OctalParsing, check_precision,
     num_format::{
         self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
         UnsignedIntVariant,
@@ -387,7 +387,11 @@ impl Spec {
                 let os_str = args.next_string(*position);
                 let bytes = os_str_as_bytes(os_str)?;
 
-                for c in parse_escape_only(bytes, OctalParsing::ThreeDigits) {
+                for c in parse_escape_only(
+                    bytes,
+                    OctalParsing::ThreeDigits,
+                    EscapeSet::WithUnicodeAndQuote,
+                ) {
                     match c?.write(&mut writer).map_err(FormatError::IoError)? {
                         ControlFlow::Continue(()) => {}
                         ControlFlow::Break(()) => {

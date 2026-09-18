@@ -195,10 +195,11 @@ impl Parser {
     ///
     ///   EXPR → TERM | EXPR BOOLOP EXPR
     fn expr(&mut self) -> ParseResult<()> {
-        if !self.peek_is_boolop() {
+        let has_term = !self.peek_is_boolop();
+        if has_term {
             self.term()?;
         }
-        self.maybe_boolop()?;
+        self.maybe_boolop(has_term)?;
         Ok(())
     }
 
@@ -344,7 +345,7 @@ impl Parser {
                     _ => {
                         // bang is literal; parsing continues with op
                         self.literal(Symbol::Bang.into_literal())?;
-                        self.maybe_boolop()?;
+                        self.maybe_boolop(true)?;
                     }
                 }
             }
@@ -379,16 +380,28 @@ impl Parser {
 
     /// Peek at the next token and parse it as a BOOLOP or string literal,
     /// as appropriate.
-    fn maybe_boolop(&mut self) -> ParseResult<()> {
+    ///
+    /// `has_left_operand` tells whether an expression was already parsed for
+    /// the BOOLOP to apply to, which decides what a BOOLOP at the end of the
+    /// stream means.
+    fn maybe_boolop(&mut self, has_left_operand: bool) -> ParseResult<()> {
         if self.peek_is_boolop() {
             let symbol = self.next_token();
 
-            // BoolOp by itself interpreted as Literal
             if let Symbol::None = self.peek() {
+                if has_left_operand {
+                    // The BOOLOP joins the expression so far to nothing.
+                    return Err(ParseError::at_token(
+                        ParseErrorKind::MissingArgument(format!("{symbol}")),
+                        self.last_pos(),
+                    ));
+                }
+                // With no operand on either side it is an ordinary string:
+                // `test -a` is the length test of the string "-a".
                 self.literal(symbol.into_literal())?;
             } else {
                 self.boolop(symbol)?;
-                self.maybe_boolop()?;
+                self.maybe_boolop(true)?;
             }
         }
         Ok(())

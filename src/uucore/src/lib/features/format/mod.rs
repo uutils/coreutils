@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore extendedbigdecimal
 
 //! `printf`-style formatting
@@ -37,7 +38,7 @@ pub mod human;
 pub mod num_format;
 mod spec;
 
-pub use self::escape::{EscapedChar, OctalParsing};
+pub use self::escape::{EscapeSet, EscapedChar, OctalParsing};
 use crate::extendedbigdecimal::ExtendedBigDecimal;
 pub use argument::{FormatArgument, FormatArguments};
 
@@ -274,9 +275,13 @@ pub fn parse_spec_and_escape(
             let start = fmt.len() - current.len();
             current = rest;
             Some(
-                parse_escape_code(&mut current, OctalParsing::default())
-                    .map(FormatItem::Char)
-                    .map_err(|e| e.spanned(start..fmt.len() - current.len())),
+                parse_escape_code(
+                    &mut current,
+                    OctalParsing::default(),
+                    EscapeSet::WithUnicodeAndQuote,
+                )
+                .map(FormatItem::Char)
+                .map_err(|e| e.spanned(start..fmt.len() - current.len())),
             )
         }
         [c, rest @ ..] => {
@@ -318,13 +323,18 @@ pub fn parse_spec_only(
 pub fn parse_escape_only(
     fmt: &[u8],
     zero_octal_parsing: OctalParsing,
+    escape_set: EscapeSet,
 ) -> impl Iterator<Item = Result<EscapedChar, FormatError>> + '_ {
     let mut current = fmt;
     std::iter::from_fn(move || match current {
         [] => None,
         [b'\\', rest @ ..] => {
             current = rest;
-            Some(parse_escape_code(&mut current, zero_octal_parsing))
+            Some(parse_escape_code(
+                &mut current,
+                zero_octal_parsing,
+                escape_set,
+            ))
         }
         [c, rest @ ..] => {
             current = rest;

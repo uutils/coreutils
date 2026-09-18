@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore nusr
+
 use uutests::new_ucmd;
 use uutests::path_concat;
 use uutests::util::{TestScenario, get_root_path};
@@ -212,6 +214,14 @@ fn test_realpath_existing() {
 #[test]
 fn test_realpath_existing_error() {
     new_ucmd!().arg("-e").arg(GIBBERISH).fails();
+}
+
+#[test]
+fn test_realpath_existing_error_quiet() {
+    new_ucmd!()
+        .args(&["-q", "-e", GIBBERISH])
+        .fails_with_code(1)
+        .no_output();
 }
 
 #[test]

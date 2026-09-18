@@ -143,14 +143,13 @@ the pure-Rust digest crates, enable the `openssl` feature:
 cargo build --release --features openssl
 ```
 By default OpenSSL is built from source and statically linked into the
-binary (mirroring how `expr` links `oniguruma`), so no runtime dependency
-on system libcrypto/libssl is added. To link dynamically against the system
-libcrypto instead, set `OPENSSL_NO_VENDOR=1` at build time.
+binary, so no runtime dependency on system libcrypto/libssl is added. To link
+dynamically against the system libcrypto instead, set `OPENSSL_NO_VENDOR=1` at build time.
+MinGW (Windows) needs `OPENSSL_STATIC=0` too for dynamic linkage.
 
-The speedup is largest on CPUs without SHA-NI hardware acceleration. The
-feature is a no-op on Windows (the pure-Rust implementations are always used
-there) and is automatically bypassed at runtime for any algorithm libcrypto
-refuses (for example, MD5 in strict FIPS mode).
+The speedup is largest on CPUs without SHA-NI hardware acceleration.
+`aws-lc` backend is used on MSVC. Setting `AWS_LC_SYS_NO_JITTER_ENTROPY=1`
+at build time is recommended to reduce size of binary.
 
 If you don't want to build every utility available on your platform into the
 final binary, you can also specify which ones you want to build manually. For
