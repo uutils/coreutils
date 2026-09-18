@@ -533,3 +533,13 @@ fn test_repeated_delimiter_takes_the_last() {
         .succeeds()
         .stdout_is("a:b\n");
 }
+
+#[test]
+fn test_delimiter_beginning_with_hyphen() {
+    // A delimiter list may start with a hyphen; GNU reads `-d -1` as "-1".
+    new_ucmd!()
+        .args(&["-d", "-1", "-"])
+        .pipe_in("a\nb\nc\nd\n")
+        .succeeds()
+        .stdout_is("a\nb\nc\nd\n");
+}
