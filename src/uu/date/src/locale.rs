@@ -6,19 +6,28 @@
 //! Locale detection for time format preferences
 
 /// Format used when the locale does not provide a date/time format.
-const POSIX_DEFAULT_FORMAT: &str = "%a %b %e %X %Z %Y";
+const POSIX_DEFAULT_FORMAT: &[u8] = b"%a %b %e %X %Z %Y";
 
-// nl_langinfo is available on glibc (Linux), Apple platforms, and BSDs
-// but not on Android, Redox or other minimal Unix systems
+// `_DATE_FMT` is the only langinfo item that spells the full date line the way
+// `date` prints it, timezone included. It is a glibc extension, so everywhere
+// else (Android, the BSDs, macOS, Redox, non-unix) we use the POSIX format:
+// `D_T_FMT` would be locale-aware but has no timezone, which `date` must print.
 
-// Macro to reduce cfg duplication across the module
+// Macro to reduce cfg duplication across the module; `cfg_langinfo!(else ...)`
+// gates the items for the platforms that do not have `_DATE_FMT`.
 macro_rules! cfg_langinfo {
-    ($($item:item)*) => {
+    (else $($item:item)*) => {
         $(
-            #[cfg(all(unix, not(target_os = "android"), not(target_os = "cygwin"), not(target_os = "redox")))]
+            #[cfg(not(all(target_os = "linux", not(target_env = "musl"))))]
             $item
         )*
-    }
+    };
+    ($($item:item)*) => {
+        $(
+            #[cfg(all(target_os = "linux", not(target_env = "musl")))]
+            $item
+        )*
+    };
 }
 
 cfg_langinfo! {
@@ -30,15 +39,12 @@ cfg_langinfo! {
 
     /// glibc's `_DATE_FMT` has been stable for the last 12 years
     /// being added upstream to libc TODO: update to libc
-    #[cfg(any(target_os = "linux", target_os = "cygwin"))]
     const DATE_FMT: libc::nl_item = 0x2006c;
-    #[cfg(not(any(target_os = "linux", target_os = "cygwin")))]
-    const DATE_FMT: libc::nl_item = libc::D_T_FMT;
 }
 
 cfg_langinfo! {
     /// Cached locale date/time format string
-    static DEFAULT_FORMAT_CACHE: OnceLock<&'static str> = OnceLock::new();
+    static DEFAULT_FORMAT_CACHE: OnceLock<&'static [u8]> = OnceLock::new();
 
     /// Mutex to serialize setlocale() calls during tests.
     ///
@@ -51,12 +57,13 @@ cfg_langinfo! {
     /// Returns the default date format string for the current locale.
     ///
     /// This is the locale's `date_fmt`/`d_t_fmt` used verbatim, so the output
-    /// matches what `date +"$(locale date_fmt)"` produces.
-    pub fn get_locale_default_format() -> &'static str {
+    /// matches what `date +"$(locale date_fmt)"` produces. It is returned as
+    /// bytes because legacy charsets (e.g. `zh_TW.euctw`) are not UTF-8.
+    pub fn get_locale_default_format() -> &'static [u8] {
         DEFAULT_FORMAT_CACHE.get_or_init(|| {
             // Try to get locale format string
             if let Some(format) = get_locale_format_string() {
-                return Box::leak(format.into_boxed_str());
+                return Box::leak(format.into_boxed_slice());
             }
 
             // Fallback: use the POSIX locale format
@@ -65,7 +72,7 @@ cfg_langinfo! {
     }
 
     /// Retrieves the date/time format string from the system locale
-    fn get_locale_format_string() -> Option<String> {
+    fn get_locale_format_string() -> Option<Vec<u8>> {
         // In tests, acquire mutex to prevent race conditions with setlocale()
         // which is process-global and not thread-safe
         #[cfg(test)]
@@ -81,43 +88,60 @@ cfg_langinfo! {
                 return None;
             }
 
-            CStr::from_ptr(d_t_fmt_ptr).to_str().ok().filter(|f| !f.is_empty()).map(ToOwned::to_owned)
+            let format = CStr::from_ptr(d_t_fmt_ptr).to_bytes();
+            (!format.is_empty()).then(|| format.to_vec())
         }
     }
 }
 
-/// On platforms without nl_langinfo support, use 24-hour format by default
-#[cfg(any(
-    not(unix),
-    target_os = "android",
-    target_os = "cygwin",
-    target_os = "redox"
-))]
-pub fn get_locale_default_format() -> &'static str {
-    POSIX_DEFAULT_FORMAT
+cfg_langinfo! { else
+    /// On platforms without `_DATE_FMT`, fall back to the POSIX format
+    pub fn get_locale_default_format() -> &'static [u8] {
+        POSIX_DEFAULT_FORMAT
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::POSIX_DEFAULT_FORMAT;
+
+    /// `date` with no format has to print the timezone, so the fallback used
+    /// wherever the locale offers no date format must carry %Z.
+    #[test]
+    fn test_posix_default_format_has_timezone() {
+        assert!(POSIX_DEFAULT_FORMAT.windows(2).any(|pair| pair == b"%Z"));
+    }
+
+    cfg_langinfo! { else
+        /// Platforms without glibc's `_DATE_FMT` get the POSIX format, not
+        /// `D_T_FMT`, which would drop the timezone.
+        #[test]
+        fn test_default_format_without_date_fmt() {
+            assert_eq!(super::get_locale_default_format(), POSIX_DEFAULT_FORMAT);
+        }
+    }
+
     cfg_langinfo! {
         use super::*;
 
-        /// Helper function to expand a format string with a known test date
+        /// Expands a format string with a fixed test date (Monday, January 15,
+        /// 2024, 14:30:45 UTC), so format strings can be validated by their
+        /// output rather than by looking for literal format codes.
         ///
-        /// Uses a fixed test date: Monday, January 15, 2024, 14:30:45 UTC
-        /// This allows us to validate format strings by checking their expanded output
-        /// rather than looking for literal format codes.
-        fn expand_format_with_test_date(format: &str) -> String {
+        /// Returns `None` when the format cannot be expanded: a legacy-charset
+        /// locale (e.g. `zh_CN.GB18030`) hands us bytes that are not UTF-8, and
+        /// callers must skip rather than assert on an empty expansion.
+        fn expand_format_with_test_date(format: &[u8]) -> Option<String> {
             use jiff::civil::date;
             use jiff::fmt::strtime;
 
+            let format = std::str::from_utf8(format).ok()?;
+
             // Create test timestamp: Monday, January 15, 2024, 14:30:45 UTC
-            let Ok(test_date) = date(2024, 1, 15).at(14, 30, 45, 0).in_tz("UTC") else {
-                return String::new();
-            };
+            let test_date = date(2024, 1, 15).at(14, 30, 45, 0).in_tz("UTC").ok()?;
 
             // Expand the format string with the test date
-            strtime::format(format, &test_date).unwrap_or_default()
+            strtime::format(format, &test_date).ok()
         }
 
         #[test]
@@ -130,7 +154,9 @@ mod tests {
         fn test_default_format_contains_valid_codes() {
             let format = get_locale_default_format();
 
-            let expanded = expand_format_with_test_date(format);
+            let Some(expanded) = expand_format_with_test_date(format) else {
+                return;
+            };
 
             // Verify expanded output contains expected components
             // Test date: Monday, January 15, 2024, 14:30:45
@@ -158,7 +184,9 @@ mod tests {
             // The format should not be empty
             assert!(!format.is_empty(), "Locale format should not be empty");
 
-            let expanded = expand_format_with_test_date(format);
+            let Some(expanded) = expand_format_with_test_date(format) else {
+                return;
+            };
 
             // Verify expanded output contains date components
             // Test date: Monday, January 15, 2024
