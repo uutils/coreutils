@@ -261,6 +261,15 @@ INSTALLEES_WITH_EXTRA_LOCALE = \
 	$(INSTALLEES) \
 	$(if $(findstring sum, $(INSTALLEES)),checksum_common, )
 install-locales:
+	@# Install common locales shared by all utilities
+	@if [ -d "$(BASEDIR)/src/uucore/locales" ]; then \
+		$(INSTALL) -d "$(DESTDIR)$(DATAROOTDIR)/locales/uucore"; \
+		for locale_file in "$(BASEDIR)"/src/uucore/locales/*.ftl; do \
+			if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
+				$(INSTALL) -m 644 "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/uucore/"; \
+			fi; \
+		done; \
+	fi
 	@# Install lazy error locales shared by all utilities
 	@if [ -d "$(BASEDIR)/src/uucore/locales/errors" ]; then \
 		$(INSTALL) -d "$(DESTDIR)$(DATAROOTDIR)/locales/uucore/errors"; \
