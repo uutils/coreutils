@@ -6,6 +6,7 @@
 // spell-checker:ignore getxattr posix_acl_default posix_acl_access ENOTSUP EOPNOTSUPP renamer
 
 //! Set of functions to manage xattr on files and dirs
+
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use std::ffi::{OsStr, OsString};

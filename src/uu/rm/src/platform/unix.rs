@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// Unix-specific implementations for the rm utility
-
 // spell-checker:ignore fstatat unlinkat statx behaviour automount
+
+// Unix-specific implementations for the rm utility
 
 use indicatif::ProgressBar;
 use std::ffi::{OsStr, OsString};

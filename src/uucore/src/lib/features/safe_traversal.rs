@@ -3,16 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//
-// Safe directory traversal using openat() and related syscalls
-// This module provides TOCTOU-safe filesystem operations for recursive traversal
-//
-// Available on Unix
-//
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
 // spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot
 // spell-checker:ignore LARGEFILE
+
+// Safe directory traversal using openat() and related syscalls
+// This module provides TOCTOU-safe filesystem operations for recursive traversal
+//
+// Available on Unix
 
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;

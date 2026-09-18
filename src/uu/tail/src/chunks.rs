@@ -3,12 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore (ToDO) filehandle BUFSIZ
+
 //! Iterating over a file by chunks, either starting at the end of the file with [`ReverseChunks`]
 //! or at the end of piped stdin with [`LinesChunk`] or [`BytesChunk`].
 //!
 //! Use [`ReverseChunks::new`] to create a new iterator over chunks of bytes from the file.
-
-// spell-checker:ignore (ToDO) filehandle BUFSIZ
 
 use std::collections::VecDeque;
 use std::fs::File;

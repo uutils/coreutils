@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//! Set of functions to manage file systems
-
 // spell-checker:ignore DATETIME getmntinfo subsecond (fs) cifs smbfs
+
+//! Set of functions to manage file systems
 
 #[cfg(windows)]
 mod windows;

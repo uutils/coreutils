@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//! Common functions to manage permissions
-
 // spell-checker:ignore (jargon) TOCTOU fchownat fchown
+
+//! Common functions to manage permissions
 
 use crate::display::Quotable;
 use crate::error::{UResult, USimpleError, strip_errno};

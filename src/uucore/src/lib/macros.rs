@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore sourcepath targetpath rustdoc
+
 //! Macros for the uucore utilities.
 //!
 //! This module bundles all macros used across the uucore utilities. These
@@ -30,8 +32,6 @@
 //!     [`crate::show_if_err!`]
 //!   - From custom messages: [`crate::show_error!`]
 //! - Print warnings: [`crate::show_warning!`]
-
-// spell-checker:ignore sourcepath targetpath rustdoc
 
 use std::sync::atomic::AtomicBool;
 
