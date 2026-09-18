@@ -3,12 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit NOFILE
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit Nofile
 
 use rand::{RngExt as _, SeedableRng, rng};
 use regex::Regex;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use rlimit::Resource;
+use rustix::process::Resource;
 #[cfg(not(windows))]
 use std::env;
 #[cfg(target_os = "linux")]
@@ -1701,7 +1701,7 @@ fn test_round_robin() {
 fn test_round_robin_limited_file_descriptors() {
     new_ucmd!()
         .args(&["-n", "r/40", "onehundredlines.txt"])
-        .limit(Resource::NOFILE, 9, 9)
+        .limit(Resource::Nofile, 9, 9)
         .succeeds();
 }
 
