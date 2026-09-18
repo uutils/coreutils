@@ -190,6 +190,13 @@ impl FileInformation {
         #[cfg(target_os = "haiku")]
         return self.0.st_ino.try_into().unwrap();
     }
+
+    pub fn dev(&self) -> u64 {
+        #[cfg(any(unix, target_os = "wasi"))]
+        return self.0.st_dev as _;
+        #[cfg(windows)]
+        return self.0.dwVolumeSerialNumber as _;
+    }
 }
 
 #[cfg(any(unix, target_os = "wasi"))]
