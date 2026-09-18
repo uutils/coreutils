@@ -5,6 +5,7 @@
 
 // spell-checker:ignore sigwait KTIME timeval itimerval setitimer itimer timerid
 // spell-checker:ignore sigevent sigev sigval itimerspec signo clockid sevp
+// spell-checker:ignore SIGXCPU SIGXFSZ SIGVTALRM SIGPROF
 
 #[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use libc::pid_t;
@@ -86,6 +87,7 @@ impl ChildExt for Child {
                     } // otherwise waits again
                 }
                 Ok(Some(Signal::SIGTERM)) if ignore_term => {} // waits again
+                Ok(Some(Signal::SIGTTIN | Signal::SIGTTOU)) => {} // waits again
                 Ok(Some(signal)) => break Ok(TimeoutRet::Interrupted(signal as usize)),
                 Err(e) => break Err(e),
             }
@@ -107,6 +109,12 @@ pub fn timeout_signal_set() -> SigSet {
     set.add(Signal::SIGUSR1);
     set.add(Signal::SIGUSR2);
     set.add(Signal::SIGCHLD);
+    set.add(Signal::SIGTTIN);
+    set.add(Signal::SIGTTOU);
+    set.add(Signal::SIGXCPU);
+    set.add(Signal::SIGXFSZ);
+    set.add(Signal::SIGVTALRM);
+    set.add(Signal::SIGPROF);
     set
 }
 
