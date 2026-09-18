@@ -21,6 +21,7 @@ use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
 #[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
+use std::sync::LazyLock;
 
 use rand::{
     RngExt as _, SeedableRng as _,
@@ -403,7 +404,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // application logic.
     let options = Options::from(&matches);
 
-    if env::var_os("POSIXLY_CORRECT").is_some() {
+    if *IS_POSIXLY_CORRECT {
         // If POSIXLY_CORRECT was set, template MUST be the last argument.
         if matches.contains_id(ARG_TEMPLATE) {
             // Template argument was provided, check if was the last one.
@@ -675,6 +676,9 @@ pub fn mktemp(options: &Options) -> UResult<PathBuf> {
         exec(&tmpdir, &prefix, rand, &suffix, options.directory)
     }
 }
+
+static IS_POSIXLY_CORRECT: LazyLock<bool> =
+    LazyLock::new(|| env::var_os("POSIXLY_CORRECT").is_some());
 
 #[cfg(test)]
 mod tests {
