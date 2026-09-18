@@ -5484,11 +5484,20 @@ fn test_header_quotes_names_needing_it() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("plain", "p\n");
     at.write("two words", "w\n");
+
+    ucmd.args(&["-n1", "plain", "two words"])
+        .succeeds()
+        .stdout_only("==> plain <==\np\n\n==> 'two words' <==\nw\n");
+}
+
+// Windows rejects control characters in file names, so this one is unix-only.
+#[test]
+#[cfg(unix)]
+fn test_header_quotes_name_with_control_char() {
+    let (at, mut ucmd) = at_and_ucmd!();
     at.write("tab\there", "t\n");
 
-    ucmd.args(&["-n1", "plain", "two words", "tab\there"])
+    ucmd.args(&["-v", "-n1", "tab\there"])
         .succeeds()
-        .stdout_only(
-            "==> plain <==\np\n\n==> 'two words' <==\nw\n\n==> 'tab'$'\\t''here' <==\nt\n",
-        );
+        .stdout_only("==> 'tab'$'\\t''here' <==\nt\n");
 }
