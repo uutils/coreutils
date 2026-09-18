@@ -9,7 +9,11 @@ use itertools::Itertools as _;
 use std::cmp;
 use std::ffi::OsString;
 use std::io::{self, Write};
-use uucore::{Args, error::strip_errno};
+use uucore::{Args, allocation, error::strip_errno};
+
+#[global_allocator]
+static UU_ALLOCATOR: allocation::UuAllocator =
+    allocation::UuAllocator::new(&allocation::COREUTILS_ALLOC_ERROR_CONFIG);
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -113,13 +117,17 @@ fn main() {
             _ => {}
         }
 
-        if let Some(&(uumain, _)) = utils.get(util) {
+        if let Some((&alloc_error_program, &(uumain, _, alloc_error_config))) =
+            utils.get_entry(util)
+        {
+            allocation::activate(alloc_error_program, alloc_error_config);
             // TODO: plug the deactivation of the translation
             // and load the English strings directly at compilation time in the
             // binary to avoid the load of the flt
             // Could be something like:
             // #[cfg(not(feature = "only_english"))]
             validation::setup_localization_or_exit(util);
+            allocation::localize_message();
             exit(uumain(vec![util_os].into_iter().chain(args)));
         }
         // GNU coreutils --help string shows help for coreutils

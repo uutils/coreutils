@@ -42,7 +42,14 @@ pub fn exit(code: i32) -> ! {
 /// Gets all available utilities including "coreutils"
 #[allow(clippy::type_complexity)]
 pub fn get_all_utilities<T: Args>(
-    util_map: &phf::OrderedMap<&'static str, (fn(T) -> i32, fn() -> clap::Command)>,
+    util_map: &phf::OrderedMap<
+        &'static str,
+        (
+            fn(T) -> i32,
+            fn() -> clap::Command,
+            &'static uucore::allocation::AllocErrorConfig,
+        ),
+    >,
 ) -> Vec<&'static str> {
     std::iter::once("coreutils")
         .chain(util_map.keys().copied())

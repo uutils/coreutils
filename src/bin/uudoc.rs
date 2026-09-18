@@ -29,8 +29,8 @@ use textwrap::{fill, indent, termwidth};
 use zip::ZipArchive;
 
 use coreutils::validation;
-use uucore::Args;
 use uucore::locale::get_message;
+use uucore::{Args, allocation};
 
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
@@ -112,7 +112,7 @@ fn usage<T: Args>(utils: &UtilityMap<T>) {
 /// Generates the coreutils app for the utility map
 fn gen_coreutils_app<T: Args>(util_map: &UtilityMap<T>) -> Command {
     let mut command = Command::new("coreutils");
-    for (name, (_, sub_app)) in util_map {
+    for (name, (_, sub_app, _)) in util_map {
         // Recreate a small subcommand with only the relevant info
         // (name & short description)
         let about = sub_app()
@@ -321,7 +321,7 @@ fn main() -> io::Result<()> {
     };
 
     let mut utils = utils.entries().collect::<Vec<_>>();
-    utils.sort();
+    utils.sort_by_key(|(name, _)| *name);
 
     println!("Writing util per platform table");
     {
@@ -361,7 +361,7 @@ fn main() -> io::Result<()> {
     }
 
     println!("Writing to utils");
-    for (&name, (_, command)) in utils {
+    for (&name, (_, command, _)) in utils {
         let (utils_name, usage_name, command) = match name {
             "[" => {
                 continue;
