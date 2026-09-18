@@ -88,13 +88,7 @@ fn test_nohup_with_pseudo_terminal_emulation_on_stdin_stdout_stderr_get_replaced
 // EOF (GNU opens /dev/null write-only). Since nohup execs the command, the
 // exit status is the command's own.
 #[test]
-#[cfg(any(
-    target_vendor = "apple",
-    target_os = "linux",
-    target_os = "android",
-    target_os = "freebsd",
-    target_os = "openbsd"
-))]
+#[cfg(unix)]
 fn test_nohup_replaced_stdin_is_not_readable() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
