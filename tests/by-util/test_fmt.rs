@@ -134,6 +134,25 @@ fn test_fmt_width_too_big() {
 }
 
 #[test]
+fn test_fmt_tab_width_too_big() {
+    for param in ["-T", "--tab-width"] {
+        new_ucmd!()
+            .args(&["one-word-per-line.txt", param, "2501"])
+            .fails_with_code(1)
+            .stderr_is("fmt: invalid tab width: '2501': Numerical result out of range\n");
+    }
+}
+
+#[test]
+fn test_fmt_tab_width_at_max() {
+    for param in ["-T", "--tab-width"] {
+        new_ucmd!()
+            .args(&["one-word-per-line.txt", param, "2500"])
+            .succeeds();
+    }
+}
+
+#[test]
 fn test_fmt_invalid_width() {
     for param in ["-w", "--width"] {
         new_ucmd!()
