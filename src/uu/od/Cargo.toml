@@ -25,7 +25,9 @@ libc.workspace = true
 rustix = { workspace = true, features = ["stdio"] }
 
 [dev-dependencies]
+divan = { workspace = true }
 tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
 
 [lints]
 workspace = true
@@ -33,3 +35,7 @@ workspace = true
 [[bin]]
 name = "od"
 path = "src/main.rs"
+
+[[bench]]
+name = "od_bench"
+harness = false
