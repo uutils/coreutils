@@ -28,9 +28,20 @@ echo "path_UUTILS='${path_UUTILS}'"
 echo "path_GNU='${path_GNU}'"
 
 # Use GNU nproc for *BSD
-NPROC=$(command -v ${path_GNU}/src/nproc||command -v nproc)
-MAKEFLAGS="${MAKEFLAGS} -j ${NPROC}"
+if NPROC_COMMAND=$(command -v "${path_GNU}/src/nproc" || command -v nproc); then
+    JOBS=$("${NPROC_COMMAND}")
+else
+    JOBS=2
+fi
+case "${JOBS}" in
+    '' | 0* | *[!0-9]*)
+        echo "Error: invalid make job count: '${JOBS}'" >&2
+        exit 1
+        ;;
+esac
+MAKEFLAGS="${MAKEFLAGS:+${MAKEFLAGS} }-j${JOBS}"
 export MAKEFLAGS
+echo "GNU test make job count: ${JOBS}"
 ###
 
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
