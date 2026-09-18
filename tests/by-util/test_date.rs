@@ -3,7 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//
 // spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST MESZ KST uueuu ueuu vasárnap június január distros
 // spell-checker: ignore: uppercases
 
@@ -3296,4 +3295,16 @@ fn test_write_error() {
         .set_stdout(dev_full)
         .fails_with_code(1)
         .stderr_is("date: write error: No space left on device\n");
+}
+
+#[test]
+#[ignore = "GNU compat: see uutils/coreutils#14648"]
+fn test_date_allow_missing_year() {
+    new_ucmd!().arg("01.01. 03:00 p.m.").succeeds();
+}
+
+#[test]
+#[ignore = "GNU compat: see uutils/coreutils#14649"]
+fn test_date_allow_spaces_after_month() {
+    new_ucmd!().arg("01.01.    2008 03:00 p.m.").succeeds();
 }

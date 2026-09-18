@@ -17,7 +17,13 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{fmt, io};
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "netbsd"
+))]
 use uucore::fsxattr::{copy_acls, copy_xattrs_fd, copy_xattrs_skip_selinux};
 use uucore::translate;
 
@@ -1802,7 +1808,13 @@ pub(crate) fn set_selinux_context(path: &Path, context: Option<&String>) -> Copy
 /// or if xattr copying fails.
 ///
 /// Uses file descriptor-based operations to avoid TOCTOU races during xattr copying.
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "netbsd"
+))]
 fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyResult<()> {
     use std::fs::File;
     use uucore::fsxattr::copy_xattrs;
@@ -1957,7 +1969,13 @@ pub(crate) fn copy_attributes(
             // (which are intentionally excluded from the default -p set per
             // issue #9704). Best-effort: ignore failures on filesystems that
             // do not support ACL xattrs.
-            #[cfg(all(unix, not(target_os = "android")))] // todo: support acl for other targets
+            #[cfg(any(
+                target_os = "freebsd",
+                target_os = "hurd",
+                target_os = "linux",
+                target_os = "macos",
+                target_os = "netbsd"
+            ))]
             copy_acls(source, dest);
         }
 
@@ -2020,11 +2038,23 @@ pub(crate) fn copy_attributes(
     })?;
 
     handle_preserve(attributes.xattr, || -> CopyResult<()> {
-        #[cfg(all(unix, not(target_os = "android")))]
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "hurd",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "netbsd"
+        ))]
         {
             copy_extended_attrs(source, dest, skip_selinux_xattr)?;
         }
-        #[cfg(not(all(unix, not(target_os = "android"))))]
+        #[cfg(not(any(
+            target_os = "freebsd",
+            target_os = "hurd",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "netbsd"
+        )))]
         #[allow(unused_variables)]
         {
             // The documentation for GNU cp states:

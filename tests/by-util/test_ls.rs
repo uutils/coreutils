@@ -4,7 +4,8 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE NOTCAPABLE
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons Nofile NOTCAPABLE
+
 #![allow(
     clippy::similar_names,
     clippy::too_many_lines,
@@ -13,7 +14,7 @@
 
 use regex::Regex;
 #[cfg(unix)]
-use rlimit::Resource;
+use rustix::process::Resource;
 #[cfg(not(target_os = "openbsd"))]
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
@@ -7854,7 +7855,7 @@ fn test_ls_recursive_no_fd_leak() {
         .ucmd()
         .arg("-R")
         .arg("1")
-        .limit(Resource::NOFILE, 20, 20)
+        .limit(Resource::Nofile, 20, 20)
         .succeeds()
         .no_stderr();
 }

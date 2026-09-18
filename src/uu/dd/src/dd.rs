@@ -48,7 +48,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use clap::{Arg, Command};
-use gcd::Gcd;
+use num_integer::Integer;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
 #[cfg(unix)]
@@ -1462,7 +1462,7 @@ fn read_helper<'a>(
 // the least common multiple is a good representation of these interests.
 // https://en.wikipedia.org/wiki/Least_common_multiple#Using_the_greatest_common_divisor
 fn calc_bsize(ibs: usize, obs: usize) -> usize {
-    let gcd = Gcd::gcd(ibs, obs);
+    let gcd = ibs.gcd(&obs);
     // calculate the lcm from gcd; saturate so an oversized product fails at
     // allocation instead of panicking here
     (ibs / gcd).saturating_mul(obs)
