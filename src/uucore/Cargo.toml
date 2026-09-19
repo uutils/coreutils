@@ -35,7 +35,6 @@ jiff = { workspace = true, optional = true, features = [
 libc = { workspace = true, optional = true }
 os_display = { workspace = true }
 rustc-hash = { workspace = true }
-rustix = { workspace = true, optional = true }
 # Not optional: os_display already pulls unicode-width into every uucore build,
 # so making it a direct dependency here is free and keeps char_width available
 # on all targets (a feature-gated optional dep failed to activate on wasm).
@@ -88,16 +87,24 @@ thiserror = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 
+[target.'cfg(any(target_os = "freebsd", target_os = "hurd", target_os = "linux", target_os = "android", target_os = "macos", target_os = "netbsd"))'.dependencies]
+xattr = { version = "1.3.1", optional = true }
+
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 selinux = { workspace = true, optional = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))'.dependencies]
 bstr = { workspace = true, optional = true }
 
+[target.'cfg(any(target_vendor = "apple", target_os = "cygwin", target_os = "freebsd", target_os = "linux", target_os = "netbsd"))'.dependencies]
+dns-lookup = { workspace = true, optional = true }
+
+[target.'cfg(any(unix, windows, target_os = "wasi"))'.dependencies]
+rustix = { workspace = true, optional = true }
+
 [target.'cfg(unix)'.dependencies]
 # utmpx is unix-only, so its dependencies must not be pulled into other targets
 # (the uptime feature enables utmpx and now builds on windows too).
-dns-lookup = { workspace = true, optional = true }
 time = { workspace = true, optional = true, features = [
   "formatting",
   "local-offset",
@@ -105,7 +112,6 @@ time = { workspace = true, optional = true, features = [
 ] }
 nix = { workspace = true, optional = true }
 walkdir = { workspace = true, optional = true }
-xattr = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true, optional = true }
@@ -150,7 +156,7 @@ encoding = ["data-encoding", "data-encoding-macro", "z85", "base64-simd"]
 entries = ["libc", "rustix/fs", "rustix/process"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
 fast-inc = []
-fs = ["dunce", "libc", "rustix/fs", "windows-sys"]
+fs = ["dunce", "libc", "rustix/fs", "rustix/std", "windows-sys"]
 fsext = ["libc", "windows-sys", "bstr", "wide"]
 fsxattr = ["xattr", "itertools", "libc"]
 hardware = []
@@ -190,7 +196,7 @@ proc-info = ["tty", "walkdir"]
 quoting-style = ["i18n-common"]
 ranges = []
 ringbuffer = []
-safe-copy = []
+safe-copy = ["rustix/fs"]
 safe-traversal = ["libc", "nix/fs", "nix/dir", "nix/user"]
 selinux = ["dep:selinux"]
 smack = ["xattr"]

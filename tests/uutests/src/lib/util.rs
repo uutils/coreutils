@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 //spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
-//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV sigbus tmpfs mksocket
+//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit Fsize SIGBUS SIGSEGV sigbus tmpfs mksocket
 //spell-checker: ignore (ToDO) ttyname
 
 #![allow(dead_code)]
@@ -25,7 +25,7 @@ use nix::sys;
 use nix::sys::stat::{self, SFlag};
 use pretty_assertions::assert_eq;
 #[cfg(unix)]
-use rlimit::setrlimit;
+use rustix::process::{Resource, Rlimit, setrlimit};
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::ffi::{OsStr, OsString};
@@ -998,7 +998,13 @@ pub fn get_root_path() -> &'static str {
 /// # Returns
 ///
 /// `true` if both paths have the same set of extended attributes, `false` otherwise.
-#[cfg(all(unix, not(any(target_vendor = "apple", target_os = "openbsd"))))]
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "android",
+    target_os = "netbsd"
+))]
 pub fn compare_xattrs<P: AsRef<Path>>(path1: P, path2: P) -> bool {
     let get_sorted_xattrs = |path: P| {
         xattr::list(path)
@@ -1537,7 +1543,7 @@ pub struct UCommand {
     stderr: Option<Stdio>,
     bytes_into_stdin: Option<Vec<u8>>,
     #[cfg(unix)]
-    limits: Vec<(rlimit::Resource, u64, u64)>,
+    limits: Vec<(Resource, u64, u64)>,
     stderr_to_stdout: bool,
     timeout: Option<Duration>,
     #[cfg(unix)]
@@ -1700,12 +1706,7 @@ impl UCommand {
     }
 
     #[cfg(unix)]
-    pub fn limit(
-        &mut self,
-        resource: rlimit::Resource,
-        soft_limit: u64,
-        hard_limit: u64,
-    ) -> &mut Self {
+    pub fn limit(&mut self, resource: Resource, soft_limit: u64, hard_limit: u64) -> &mut Self {
         self.limits.push((resource, soft_limit, hard_limit));
         self
     }
@@ -2046,7 +2047,13 @@ impl UCommand {
             let limits_copy = self.limits.clone();
             let closure = move || -> Result<()> {
                 for &(resource, soft_limit, hard_limit) in &limits_copy {
-                    setrlimit(resource, soft_limit, hard_limit)?;
+                    setrlimit(
+                        resource,
+                        Rlimit {
+                            current: Some(soft_limit),
+                            maximum: Some(hard_limit),
+                        },
+                    )?;
                 }
                 Ok(())
             };
@@ -3614,7 +3621,13 @@ mod tests {
         }
     }
 
-    #[cfg(all(unix, not(any(target_vendor = "apple", target_os = "openbsd"))))]
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "hurd",
+        target_os = "linux",
+        target_os = "android",
+        target_os = "netbsd"
+    ))]
     #[test]
     fn test_compare_xattrs() {
         use tempfile::tempdir;
@@ -3659,11 +3672,7 @@ mod tests {
         let ts = TestScenario::new("util");
         ts.cmd("sh")
             .args(&["-c", "ulimit -Sf; ulimit -Hf"])
-            .limit(
-                rlimit::Resource::FSIZE,
-                8 * unit_size_bytes,
-                16 * unit_size_bytes,
-            )
+            .limit(Resource::Fsize, 8 * unit_size_bytes, 16 * unit_size_bytes)
             .succeeds()
             .no_stderr()
             .stdout_is("8\n16\n");
