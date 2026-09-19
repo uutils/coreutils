@@ -65,6 +65,7 @@ numfmt-error-delimiter-must-be-single-character = the delimiter must be a single
 numfmt-error-invalid-number-empty = invalid number: ''
 numfmt-error-invalid-specific-suffix = invalid suffix in input { $input }: { $suffix }
 numfmt-error-invalid-suffix = invalid suffix in input: { $input }
+numfmt-error-write = write error
 numfmt-error-invalid-number = invalid number: { $input }
 numfmt-error-missing-i-suffix = missing 'i' suffix in input: '{ $number }{ $suffix }' (e.g Ki/Mi/Gi)
 numfmt-error-rejecting-suffix = rejecting suffix in input: '{ $number }{ $suffix }' (consider using --from)
