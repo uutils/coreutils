@@ -382,13 +382,33 @@ pub fn set_utility_is_second_arg() {
 // So if we want only the first arg or so it's overkill. We cache it.
 #[cfg(windows)]
 static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| wild::args_os().collect());
-#[cfg(not(windows))]
+#[cfg(all(not(windows), not(target_os = "wasi")))]
 static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| std::env::args_os().collect());
 
+#[cfg(any(test, target_os = "wasi"))]
+fn with_wasi_argv_fallback(mut argv: Vec<OsString>) -> Vec<OsString> {
+    if argv.is_empty() {
+        argv.push(OsString::from("uu"));
+    }
+    argv
+}
+
+// `std::env::args_os()` can be empty on wasi when the component is not invoked as a CLI
+// command — for instance when it is embedded as a library and the host passes no argv at all.
+// `UTIL_NAME`/`EXECUTION_PHRASE` and their callers index `ARGV[0]`, which panics on an empty
+// vec, and a panic here aborts the whole component. Guarantee at least one element so those
+// globals resolve to a stable fallback name instead.
+#[cfg(all(not(windows), target_os = "wasi"))]
+static ARGV: LazyLock<Vec<OsString>> =
+    LazyLock::new(|| with_wasi_argv_fallback(std::env::args_os().collect()));
+
 static UTIL_NAME: LazyLock<String> = LazyLock::new(|| {
-    let base_index = usize::from(get_utility_is_second_arg());
+    // Clamp every index into `ARGV`: on wasip2 the vec may be shorter than the multicall layout
+    // assumes (see the ARGV comment above), and an out-of-bounds index aborts the component.
+    let last = ARGV.len().saturating_sub(1);
+    let base_index = usize::from(get_utility_is_second_arg()).min(last);
     let is_man = usize::from(ARGV[base_index].eq("manpage"));
-    let argv_index = base_index + is_man;
+    let argv_index = (base_index + is_man).min(last);
 
     // Strip directory path to show only utility name
     // (e.g., "mkdir" instead of "./target/debug/mkdir")
@@ -732,6 +752,17 @@ mod tests {
             OsString::from("สวัสดี"), // spell-checker:disable-line
             os_str.to_os_string(),
         ]
+    }
+
+    #[test]
+    fn wasi_argv_fallback_prevents_empty_argv() {
+        assert_eq!(
+            with_wasi_argv_fallback(Vec::new()),
+            vec![OsString::from("uu")]
+        );
+
+        let argv = vec![OsString::from("env"), OsString::from("--version")];
+        assert_eq!(with_wasi_argv_fallback(argv.clone()), argv);
     }
 
     #[cfg(any(unix, target_os = "redox"))]

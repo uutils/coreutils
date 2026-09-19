@@ -15,11 +15,52 @@
 use std::ffi::OsString;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
-#[cfg(target_os = "wasi")]
+#[cfg(all(target_os = "wasi", target_env = "p1"))]
 use std::os::wasi::ffi::{OsStrExt, OsStringExt};
 #[cfg(windows)]
 use std::os::windows::prelude::*;
 use std::{borrow::Cow, ffi::OsStr};
+#[cfg(all(target_os = "wasi", not(target_env = "p1")))]
+use wasip2_ffi::{OsStrExt, OsStringExt};
+
+// On wasm32-wasip2 `std::os::wasi::ffi` is behind the unstable `wasip2` library feature, so the
+// byte views come from the stable encoded-bytes API instead. The component model defines every
+// string the host hands a guest as UTF-8, so on this target the encoded bytes *are* the bytes, and
+// the reverse direction can go through `str` without `unsafe` — the same approach as
+// `uucore::os_str_from_bytes` / `os_string_from_vec` on this target.
+#[cfg(all(target_os = "wasi", not(target_env = "p1")))]
+mod wasip2_ffi {
+    use std::ffi::{OsStr, OsString};
+
+    pub trait OsStrExt {
+        fn as_bytes(&self) -> &[u8];
+    }
+
+    impl OsStrExt for OsStr {
+        fn as_bytes(&self) -> &[u8] {
+            self.as_encoded_bytes()
+        }
+    }
+
+    pub trait OsStringExt {
+        fn from_vec(vec: Vec<u8>) -> Self;
+        fn into_vec(self) -> Vec<u8>;
+    }
+
+    impl OsStringExt for OsString {
+        fn from_vec(vec: Vec<u8>) -> Self {
+            match String::from_utf8(vec) {
+                Ok(s) => s.into(),
+                // Cannot have come from the host; keep going rather than abort the component.
+                Err(e) => String::from_utf8_lossy(e.as_bytes()).into_owned().into(),
+            }
+        }
+
+        fn into_vec(self) -> Vec<u8> {
+            self.into_encoded_bytes()
+        }
+    }
+}
 
 #[cfg(not(windows))]
 use u8 as NativeIntCharU;
@@ -153,12 +194,19 @@ pub fn from_native_int_representation(input: Cow<'_, NativeIntStr>) -> Cow<'_, O
         Cow::Owned(OsString::from_wide(&input))
     }
 
-    #[cfg(not(windows))]
+    #[cfg(any(unix, all(target_os = "wasi", target_env = "p1")))]
     {
         match input {
             Cow::Borrowed(borrow) => Cow::Borrowed(OsStr::from_bytes(borrow)),
             Cow::Owned(own) => Cow::Owned(OsString::from_vec(own)),
         }
+    }
+
+    // wasip2: bytes → `OsStr` goes through `str` (see `wasip2_ffi`), so a borrowed input has to
+    // become an owned one.
+    #[cfg(all(target_os = "wasi", not(target_env = "p1")))]
+    {
+        Cow::Owned(OsString::from_vec(input.into_owned()))
     }
 }
 
@@ -310,5 +358,32 @@ impl<'a> NativeStr<'a> {
                 slice.map(Cow::Owned)
             }
         }
+    }
+}
+
+#[cfg(all(test, target_os = "wasi", not(target_env = "p1")))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wasip2_encoded_bytes_round_trip() {
+        let source = OsString::from("NAME=Grüße");
+
+        let borrowed = to_native_int_representation(&source);
+        assert_eq!(&*borrowed, "NAME=Grüße".as_bytes());
+        let converted = from_native_int_representation(borrowed);
+        assert_eq!(&*converted, source.as_os_str());
+
+        let owned: Cow<'static, NativeIntStr> = NCvt::convert(source.clone());
+        assert_eq!(
+            from_native_int_representation_owned(owned.into_owned()),
+            source
+        );
+    }
+
+    #[test]
+    fn wasip2_invalid_encoded_bytes_are_lossy() {
+        let converted = from_native_int_representation_owned(vec![b'f', b'o', 0x80, b'o']);
+        assert_eq!(converted, OsString::from("fo\u{fffd}o"));
     }
 }
