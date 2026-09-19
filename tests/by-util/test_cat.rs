@@ -215,10 +215,11 @@ fn test_piped_to_dev_full() {
 
             s.ucmd()
                 .set_stdout(dev_full)
+                .args(&["-", "/dev/zero"])
                 .pipe_in_fixture("alpha.txt")
                 .ignore_stdin_write_error()
                 .fails()
-                .stderr_contains("No space left on device");
+                .stderr_is("cat: write error: No space left on device\n");
         }
     }
 }
