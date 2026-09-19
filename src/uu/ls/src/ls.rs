@@ -1078,29 +1078,23 @@ impl LsOutput for TextOutput<'_> {
         config: &Config,
         is_first: bool,
     ) -> UResult<()> {
-        if is_first {
-            if config.dired {
-                dired::indent(&mut self.state.out)?;
-            }
-            show_dir_name(path_data, &mut self.state.out, config)?;
-            writeln!(self.state.out)?;
-            if config.dired {
-                let dir_len = path_data.path().as_os_str().len();
-                dired::calculate_subdired(&mut self.dired, dir_len);
-                dired::add_dir_name(&mut self.dired, dir_len);
-            }
-        } else {
+        if !is_first {
             writeln!(self.state.out)?;
             if config.dired {
                 self.dired.line_offset += 1; // account for the blank line before recursive directory headings
                 self.dired.padding = 0;
-                dired::indent(&mut self.state.out)?;
-                let dir_name_size = path_data.path().as_os_str().len();
-                dired::calculate_subdired(&mut self.dired, dir_name_size);
-                dired::add_dir_name(&mut self.dired, dir_name_size);
             }
-            show_dir_name(path_data, &mut self.state.out, config)?;
-            writeln!(self.state.out)?;
+        }
+        if config.dired {
+            dired::indent(&mut self.state.out)?;
+        }
+        let name_len = show_dir_name(path_data, &mut self.state.out, config)?;
+        writeln!(self.state.out)?;
+        if config.dired {
+            // The header is rendered with the quoting style in force, so the
+            // offsets must follow the rendered name, not the raw path.
+            dired::calculate_subdired(&mut self.dired, name_len);
+            dired::add_dir_name(&mut self.dired, name_len);
         }
         Ok(())
     }

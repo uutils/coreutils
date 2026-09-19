@@ -650,10 +650,13 @@ fn print_terminal_size(
 
     // BSDs and Linux (not ppc/big-endian ppc64) use a u32 for the baud rate, so we can simply
     // print it.
-    #[cfg(any(target_os = "linux", bsd))]
-    #[cfg(all(
-        not(target_arch = "powerpc"),
-        not(all(target_arch = "powerpc64", target_endian = "big"))
+    #[cfg(any(
+        bsd,
+        all(
+            target_os = "linux",
+            not(target_arch = "powerpc"),
+            not(all(target_arch = "powerpc64", target_endian = "big"))
+        )
     ))]
     printer.print(&translate!("stty-output-speed", "speed" => speed));
 
