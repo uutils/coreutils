@@ -957,3 +957,17 @@ fn test_cat_eintr_handling() {
     // Verify that the interruption was encountered and handled
     assert_eq!(*interrupt_count.lock().unwrap(), 1);
 }
+
+#[test]
+fn test_posixly_correct_options_after_operands() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("data.txt", "hello\n");
+
+    ucmd.env("POSIXLY_CORRECT", "1")
+        .arg("data.txt")
+        .arg("-n")
+        .fails()
+        .code_is(1)
+        .stdout_is("hello\n")
+        .stderr_contains("-n");
+}

@@ -8098,4 +8098,18 @@ ls: invalid --block-size argument '1fb'
             .fails_with_code(2)
             .stderr_is("ls: invalid --block-size argument '1fb'\n");
     }
+
+    #[test]
+    fn test_posixly_correct_options_after_operands() {
+        let (at, mut ucmd) = uutests::at_and_ucmd!();
+        at.touch("file");
+
+        ucmd.env("POSIXLY_CORRECT", "1")
+            .arg("file")
+            .arg("-l")
+            .fails()
+            .code_is(2)
+            .stdout_is("file\n")
+            .stderr_contains("-l");
+    }
 }

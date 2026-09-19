@@ -655,6 +655,7 @@ fn map_clap_errors(clap_error: Error) -> Box<dyn UError> {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, skip_fields_old, skip_chars_old) = handle_obsolete(args);
+    let args = uucore::clap_localization::prepare_args(&uu_app(), args);
 
     let matches = match uu_app().try_get_matches_from(args) {
         Ok(matches) => matches,
