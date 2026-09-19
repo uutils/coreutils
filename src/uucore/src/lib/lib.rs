@@ -3,10 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//! library ~ (core/bundler file)
-// #![deny(missing_docs)] //TODO: enable this
-//
 // spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind
+
+//! library ~ (core/bundler file)
+
+// #![deny(missing_docs)] //TODO: enable this
 
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
@@ -26,7 +27,7 @@ pub use uucore_procs::*;
 pub use crate::mods::clap_localization;
 pub use crate::mods::display;
 pub use crate::mods::error;
-#[cfg(feature = "fs")]
+#[cfg(all(feature = "fs", any(unix, windows, target_os = "wasi")))]
 pub use crate::mods::io;
 pub use crate::mods::line_ending;
 pub use crate::mods::locale;
@@ -55,7 +56,7 @@ pub use crate::features::extendedbigdecimal;
 pub use crate::features::fast_inc;
 #[cfg(feature = "format")]
 pub use crate::features::format;
-#[cfg(feature = "fs")]
+#[cfg(all(feature = "fs", any(unix, windows, target_os = "wasi")))]
 pub use crate::features::fs;
 #[cfg(feature = "hardware")]
 pub use crate::features::hardware;

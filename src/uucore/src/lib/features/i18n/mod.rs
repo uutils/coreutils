@@ -76,12 +76,11 @@ pub fn get_locale_from_os() -> (Locale, UEncoding) {
         WideCharToMultiByte,
     };
 
-    /// assume_init_ref is only stable starting Rust 1.93.
-    /// We cannot use it in the current MSRV of 1.88.
+    /// TODO(MSRV>=1.93): remove in favor of `slice::assume_init_ref`
     ///
     /// # Safety
     ///
-    /// Same as the official `assume_init_ref`.
+    /// Same as the official [`slice::assume_init_ref`](https://doc.rust-lang.org/1.93.0/std/primitive.slice.html#method.assume_init_ref).
     #[allow(clippy::ref_as_ptr)]
     unsafe fn assume_init_ref<T>(s: &[MaybeUninit<T>]) -> &[T] {
         unsafe { &*(s as *const [MaybeUninit<T>] as *const [T]) }

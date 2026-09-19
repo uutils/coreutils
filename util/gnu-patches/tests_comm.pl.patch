@@ -1,7 +1,7 @@
-Index: gnu/tests/misc/comm.pl
+Index: gnu/tests/comm/comm.pl
 ===================================================================
---- gnu.orig/tests/misc/comm.pl
-+++ gnu/tests/misc/comm.pl
+--- gnu.orig/tests/comm/comm.pl
++++ gnu/tests/comm/comm.pl
 @@ -73,18 +73,24 @@ my @Tests =
 
     # invalid missing command line argument (1)
