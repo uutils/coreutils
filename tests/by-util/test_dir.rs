@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use regex::Regex;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -30,6 +31,55 @@ fn test_default_output() {
         .ucmd()
         .succeeds()
         .stdout_does_not_match(&Regex::new("[rwx-]{10}.*some-file1$").unwrap());
+}
+
+#[test]
+fn test_default_format_overrides() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("file");
+    for (flag, expected) in [("-1", "file\n"), ("--zero", "file\0")] {
+        scene.ucmd().arg(flag).succeeds().stdout_only(expected);
+    }
+    for flag in ["--full-time", "--dired"] {
+        scene.ucmd().arg(flag).succeeds().stdout_contains("total 0");
+    }
+}
+
+#[test]
+fn test_quoting_defaults() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("a b");
+    scene.ucmd().succeeds().stdout_only("a\\ b\n");
+    scene.ucmd().arg("--zero").succeeds().stdout_only("a b\0");
+    scene
+        .ucmd()
+        .env("QUOTING_STYLE", "literal")
+        .succeeds()
+        .stdout_only("a b\n");
+    scene
+        .ucmd()
+        .env("QUOTING_STYLE", "literal")
+        .arg("-b")
+        .succeeds()
+        .stdout_only("a\\ b\n");
+    scene
+        .ucmd()
+        .arg("--dired")
+        .succeeds()
+        .stdout_contains(" a\\ b\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_literal_quoting_on_terminal() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("a\nb");
+    scene
+        .ucmd()
+        .env("QUOTING_STYLE", "literal")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("a\r\nb\r\n");
 }
 
 #[test]
@@ -82,4 +132,45 @@ fn test_version() {
         .succeeds()
         .no_stderr()
         .stdout_is(format!("dir {}\n", uucore::crate_version!()));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("file");
+
+    scene
+        .ucmd()
+        .arg("file")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("dir: write error: No space left on device\n");
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit_of_block_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .arg("--block-size=1fb")
+            .fails_with_code(2);
+        let stderr = result.stderr_as_displayed();
+
+        // The report names the utility as it was called, not `ls`.
+        assert!(stderr.contains("dir:1:"), "{stderr}");
+        assert!(stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .arg("--block-size=1fb")
+            .fails_with_code(2)
+            .stderr_is("dir: invalid --block-size argument '1fb'\n");
+    }
 }

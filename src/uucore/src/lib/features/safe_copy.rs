@@ -20,8 +20,6 @@
 //!   final permissions via `set_permissions` (issue #10011). The same
 //!   `nofollow` flag refuses to truncate through a symlink that may have
 //!   been swapped in at the destination path.
-//! * [`safe_copy_file`] composes the two for callers that just want a
-//!   secure replacement for `std::fs::copy`.
 
 use std::fs::File;
 use std::io;
@@ -79,32 +77,6 @@ pub fn create_dest_restrictive<P: AsRef<Path>>(path: P, nofollow: bool) -> io::R
     }
     let fd: OwnedFd = open(path.as_ref(), flags, Mode::RUSR.union(Mode::WUSR))?;
     Ok(File::from(fd))
-}
-
-/// Like [`std::fs::copy`] but uses [`open_source`] and
-/// [`create_dest_restrictive`]. The same `nofollow` flag is applied to
-/// both ends, so an attacker-planted symlink at either path returns
-/// `ELOOP` instead of being followed.
-///
-/// Intentionally does *not* preserve source permissions on the
-/// destination — doing so would widen the destination's mode mid-copy
-/// and reopen the race that `DEST_INITIAL_MODE` closes. The caller is
-/// expected to call `set_permissions` later, once content has been
-/// fully written.
-///
-/// On error from `io::copy`, a partial destination file may remain on
-/// disk (truncated to whatever was written before the failure, or empty
-/// if the failure was in `create_dest_restrictive`). Cleanup of `dest`
-/// on `Err` is the caller's responsibility — symmetric with
-/// [`std::fs::copy`].
-pub fn safe_copy_file<P: AsRef<Path>, Q: AsRef<Path>>(
-    source: P,
-    dest: Q,
-    nofollow: bool,
-) -> io::Result<u64> {
-    let mut src = open_source(source, nofollow)?;
-    let mut dst = create_dest_restrictive(dest, nofollow)?;
-    io::copy(&mut src, &mut dst)
 }
 
 #[cfg(test)]
@@ -211,54 +183,5 @@ mod tests {
             Some(rustix::io::Errno::LOOP.raw_os_error())
         );
         assert_eq!(std::fs::read(&victim).unwrap(), b"do not truncate me");
-    }
-
-    #[test]
-    fn safe_copy_file_copies_bytes_and_keeps_dest_restrictive() {
-        let dir = tempdir().unwrap();
-        let src = dir.path().join("src");
-        let dst = dir.path().join("dst");
-        File::create(&src).unwrap().write_all(b"payload").unwrap();
-
-        let n = safe_copy_file(&src, &dst, false).unwrap();
-        assert_eq!(n, b"payload".len() as u64);
-        let mode = std::fs::metadata(&dst).unwrap().mode() & 0o777;
-        assert_eq!(mode, DEST_INITIAL_MODE);
-        assert_eq!(std::fs::read(&dst).unwrap(), b"payload");
-    }
-
-    #[test]
-    fn safe_copy_file_nofollow_rejects_symlink_source() {
-        let dir = tempdir().unwrap();
-        let target = dir.path().join("target");
-        let link = dir.path().join("link");
-        let dst = dir.path().join("dst");
-        File::create(&target).unwrap().write_all(b"x").unwrap();
-        symlink(&target, &link).unwrap();
-
-        let err = safe_copy_file(&link, &dst, true).unwrap_err();
-        assert_eq!(
-            err.raw_os_error(),
-            Some(rustix::io::Errno::LOOP.raw_os_error())
-        );
-        assert!(!dst.exists(), "dst should not be created on error");
-    }
-
-    #[test]
-    fn safe_copy_file_nofollow_rejects_symlink_dest() {
-        let dir = tempdir().unwrap();
-        let src = dir.path().join("src");
-        let victim = dir.path().join("victim");
-        let dst = dir.path().join("dst");
-        File::create(&src).unwrap().write_all(b"payload").unwrap();
-        std::fs::write(&victim, b"keep").unwrap();
-        symlink(&victim, &dst).unwrap();
-
-        let err = safe_copy_file(&src, &dst, true).unwrap_err();
-        assert_eq!(
-            err.raw_os_error(),
-            Some(rustix::io::Errno::LOOP.raw_os_error())
-        );
-        assert_eq!(std::fs::read(&victim).unwrap(), b"keep");
     }
 }

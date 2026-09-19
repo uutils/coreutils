@@ -13,9 +13,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [features]
 feat_systemd_logind = ["uucore/feat_systemd_logind"]
 
@@ -27,6 +24,9 @@ doctest = false
 clap = { workspace = true }
 uucore = { workspace = true, features = ["utmpx", "entries"] }
 fluent = { workspace = true }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "pinky"

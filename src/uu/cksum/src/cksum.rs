@@ -129,7 +129,7 @@ pub fn uu_app() -> Command {
         .with_raw()
         .with_check_and_opts()
         .with_base64()
-        .with_text(false)
+        .with_text()
         .with_binary()
         .with_zero()
         .with_debug()

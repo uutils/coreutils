@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
+
 // spell-checker:ignore regfile parentdir
 
 use uutests::util::{TestScenario, get_root_path};
@@ -20,7 +20,7 @@ fn test_no_args() {
     new_ucmd!()
         .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("readlink: missing operand");
+        .stderr_contains("the following required arguments were not provided"); // clap provided message
 }
 
 #[test]

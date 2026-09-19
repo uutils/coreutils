@@ -41,3 +41,12 @@ tr-error-complement-more-than-one-unique = when translating with complemented ch
   string2 must map all characters in the domain to one
 tr-error-backwards-range = range-endpoints of '{ $start }-{ $end }' are in reverse collating sequence order
 tr-error-multiple-char-in-equivalence = { $chars }: equivalence class operand must be a single character
+
+# Diagnostic labels: what the caret points at in a set
+tr-diag-label-backwards-range = did you mean '{ $suggestion }'?
+tr-diag-label-set1-longer-set2-ends-in-class = this set is longer than SET2
+tr-diag-label-complement-more-than-one-unique = only one character may be complemented to
+tr-diag-help-char-class = classes are alnum, alpha, blank, cntrl, digit, graph, lower, print, punct, space, upper and xdigit
+tr-diag-help-equivalence = [=c=] stands for every character equivalent to c
+tr-diag-help-repeat = [c*N] repeats c N times, [c*] pads SET2 to the length of SET1
+tr-diag-help-backwards-range = a range goes from the lower character to the higher one, as in a-z

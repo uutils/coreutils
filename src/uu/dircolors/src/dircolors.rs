@@ -163,52 +163,42 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             })?
     };
 
-    let result;
-    if files.is_empty() {
-        writeln!(stdout(), "{}", generate_ls_colors(&out_format, ":"))?;
-        return Ok(());
-    } else if files.len() > 1 {
-        return Err(UUsageError::new(
-            1,
-            translate!("dircolors-error-extra-operand", "operand" => files[1].quote()),
-        ));
-    } else if files[0] == "-" {
-        let fin = BufReader::new(std::io::stdin());
-        // For example, for echo "owt 40;33"|dircolors -b -
-        result = parse(
-            fin.lines().map_while(Result::ok),
-            &out_format,
-            &files[0].to_string_lossy(),
-        );
-    } else {
-        let path = Path::new(&files[0]);
-        if path.is_dir() {
-            return Err(USimpleError::new(
-                2,
-                translate!("dircolors-error-expected-file-got-directory", "path" => path.quote()),
-            ));
+    match files.as_slice() {
+        [] => {
+            writeln!(stdout(), "{}", generate_ls_colors(&out_format, ":"))?;
+            Ok(())
         }
-        match File::open(path) {
-            Ok(f) => {
-                let fin = BufReader::new(f);
-                result = parse(
+        [_file_arg, extra, ..] => Err(UUsageError::new(
+            1,
+            translate!("dircolors-error-extra-operand", "operand" => extra.quote()),
+        )),
+        [file_arg] => {
+            let result = if *file_arg == "-" {
+                let fin = BufReader::new(std::io::stdin());
+                // For example, for echo "owt 40;33"|dircolors -b -
+                parse(fin.lines().map_while(Result::ok), &out_format, "-")
+            } else {
+                let path = Path::new(&file_arg);
+                if path.is_dir() {
+                    return Err(USimpleError::new(
+                        2,
+                        translate!("dircolors-error-expected-file-got-directory", "path" => path.quote()),
+                    ));
+                }
+                let file = File::open(path)
+                    .map_err(|e| USimpleError::new(1, format!("{}: {e}", path.maybe_quote())))?;
+                let fin = BufReader::new(file);
+                parse(
                     fin.lines().map_while(Result::ok),
                     &out_format,
                     &path.to_string_lossy(),
-                );
-            }
-            Err(e) => {
-                return Err(USimpleError::new(1, format!("{}: {e}", path.maybe_quote())));
-            }
-        }
-    }
+                )
+            };
 
-    match result {
-        Ok(s) => {
-            writeln!(stdout(), "{s}")?;
+            let string = result.map_err(|s| USimpleError::new(1, s))?;
+            writeln!(stdout(), "{string}")?;
             Ok(())
         }
-        Err(s) => Err(USimpleError::new(1, s)),
     }
 }
 
@@ -261,7 +251,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-pub trait StrUtils {
+trait StrUtils {
     /// Remove comments and trim whitespace
     fn purify(&self) -> &Self;
     /// Like `split_whitespace()` but only produce 2 parts
@@ -310,7 +300,8 @@ impl StrUtils for str {
     }
 
     fn fnmatch(&self, pat: &str) -> bool {
-        parse_glob::from_str(pat).unwrap().matches(self)
+        // An invalid glob never matches (GNU ignores it); don't unwrap the Err.
+        parse_glob::from_str(pat).is_ok_and(|glob| glob.matches(self))
     }
 }
 
@@ -533,5 +524,25 @@ mod tests {
         assert_eq!(Some(OutputFmt::Shell), guess_syntax("/asd/bar"));
         assert_eq!(Some(OutputFmt::Shell), guess_syntax("foo"));
         assert_eq!(None, guess_syntax(""));
+    }
+
+    #[test]
+    fn test_purify() {
+        let s = "  asd#zcv #hk\t\n  ";
+        assert_eq!("asd#zcv", s.purify());
+    }
+
+    #[test]
+    fn test_fnmatch() {
+        let s = "con256asd";
+        assert!(s.fnmatch("*[2][3-6][5-9]?sd")); // spell-checker:disable-line
+    }
+
+    #[test]
+    fn test_split_two() {
+        let s = "zxc \t\nqwe jlk    hjl"; // spell-checker:disable-line
+        let (k, v) = s.split_two();
+        assert_eq!("zxc", k);
+        assert_eq!("qwe jlk    hjl", v);
     }
 }

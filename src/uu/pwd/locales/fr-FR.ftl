@@ -5,6 +5,9 @@ pwd-usage = pwd [OPTION]...
 pwd-help-logical = utiliser PWD de l'environnement, même s'il contient des liens symboliques
 pwd-help-physical = éviter tous les liens symboliques
 
+# Messages d'avertissement
+pwd-ignoring-non-option-arguments = arguments non-option ignorés
+
 # Messages d'erreur
 pwd-error-failed-to-get-current-directory = échec de l'obtention du répertoire actuel
 pwd-error-failed-to-print-current-directory = échec de l'affichage du répertoire actuel

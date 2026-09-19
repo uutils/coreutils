@@ -15,6 +15,7 @@ use crate::checksum::{
 };
 use crate::error::{FromIo, UResult, USimpleError};
 use crate::line_ending::LineEnding;
+use crate::quoting_style::locale_aware_shell_escape;
 use crate::sum::DigestOutput;
 use crate::{show, translate};
 
@@ -242,16 +243,8 @@ where
             return Err(Box::new(ChecksumError::RawMultipleFiles));
         }
 
-        let filepath = Path::new(filename);
         let stdin_buf;
         let file_buf;
-        if filepath.is_dir() {
-            show!(USimpleError::new(
-                1,
-                translate!("error-is-a-directory", "file" => filepath.display())
-            ));
-            continue;
-        }
 
         // Handle the file input
         let mut file = io::BufReader::with_capacity(
@@ -260,6 +253,17 @@ where
                 stdin_buf = io::stdin();
                 Box::new(stdin_buf) as Box<dyn io::Read>
             } else {
+                let filepath = Path::new(filename);
+                if filepath.is_dir() {
+                    show!(USimpleError::new(
+                        1,
+                        translate!(
+                            "error-is-a-directory",
+                            "file" => locale_aware_shell_escape(filepath)
+                        )
+                    ));
+                    continue;
+                }
                 file_buf = match File::open(filepath) {
                     Ok(file) => {
                         #[cfg(any(
@@ -271,7 +275,7 @@ where
                         file
                     }
                     Err(err) => {
-                        show!(err.map_err_context(|| filepath.to_string_lossy().into()));
+                        show!(err.map_err_context(|| locale_aware_shell_escape(filepath)));
                         continue;
                     }
                 };

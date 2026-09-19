@@ -72,29 +72,14 @@ impl NumInfo {
             }
             first_char = false;
 
-            if matches!(
-                parse_settings.thousands_separator,
-                Some(c) if c == char
-            ) {
+            if parse_settings.thousands_separator == Some(char) {
                 continue;
             }
 
             if Self::is_invalid_char(char, &mut had_decimal_pt, parse_settings) {
                 return if let Some(start) = start {
-                    let has_si_unit = parse_settings.accept_si_units
-                        && matches!(
-                            char,
-                            b'K' | b'k'
-                                | b'M'
-                                | b'G'
-                                | b'T'
-                                | b'P'
-                                | b'E'
-                                | b'Z'
-                                | b'Y'
-                                | b'R'
-                                | b'Q'
-                        );
+                    let has_si_unit =
+                        parse_settings.accept_si_units && b"kKMGTPEZYRQ".contains(&char);
                     (
                         Self { exponent, sign },
                         start..if has_si_unit { idx + 1 } else { idx },
@@ -178,22 +163,13 @@ impl NumInfo {
 }
 
 fn get_unit(unit: Option<u8>) -> u8 {
-    if let Some(unit) = unit {
-        match unit {
-            b'K' | b'k' => 1,
-            b'M' => 2,
-            b'G' => 3,
-            b'T' => 4,
-            b'P' => 5,
-            b'E' => 6,
-            b'Z' => 7,
-            b'Y' => 8,
-            b'R' => 9,
-            b'Q' => 10,
-            _ => 0,
-        }
-    } else {
-        0
+    match unit {
+        Some(b'k') => 1,
+        Some(u) => b"KMGTPEZYRQ"
+            .iter()
+            .position(|&c| c == u)
+            .map_or(0, |pos| (pos + 1) as u8),
+        None => 0,
     }
 }
 

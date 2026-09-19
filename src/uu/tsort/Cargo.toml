@@ -12,9 +12,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/tsort.rs"
 test = false
@@ -23,12 +20,16 @@ doctest = false
 [dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
-string-interner = { workspace = true }
+hashbrown = { workspace = true }
+memchr = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true }
 rustc-hash = { workspace = true }
 
-[target.'cfg(unix)'.dependencies]
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
+
+[target.'cfg(any(unix, target_os = "wasi"))'.dependencies]
 rustix = { workspace = true, features = ["fs"] }
 
 [[bin]]
@@ -38,6 +39,9 @@ path = "src/main.rs"
 [dev-dependencies]
 divan = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
+
+[lints]
+workspace = true
 
 [[bench]]
 name = "tsort_bench"

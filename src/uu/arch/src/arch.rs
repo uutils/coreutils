@@ -14,10 +14,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let uts =
-        PlatformInfo::new().map_err(|_e| USimpleError::new(1, translate!("cannot-get-system")))?;
-
-    writeln!(stdout(), "{}", uts.machine().to_string_lossy().trim())?;
-    Ok(())
+        PlatformInfo::new().map_err(|_| USimpleError::new(1, translate!("cannot-get-system")))?;
+    // machine is a valid unicode
+    let machine = uts.machine().as_encoded_bytes().trim_ascii();
+    let mut out = stdout();
+    out.write_all(machine)?;
+    Ok(out.write_all(b"\n")?)
 }
 
 pub fn uu_app() -> Command {

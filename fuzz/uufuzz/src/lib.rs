@@ -15,12 +15,11 @@ use rustix::stdio::{dup2_stderr, dup2_stdin, dup2_stdout};
 use std::env::temp_dir;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::pipe;
-use std::io::{Seek, SeekFrom, Write};
+use std::io::{self, Seek, SeekFrom, Write, pipe};
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
 use std::sync::{Once, atomic::AtomicBool};
-use std::{io, thread};
+use std::thread;
 
 pub mod pretty_print;
 
@@ -41,7 +40,7 @@ pub struct CommandResult {
 static CHECK_GNU: Once = Once::new();
 static IS_GNU: AtomicBool = AtomicBool::new(false);
 
-pub fn is_gnu_cmd(cmd_path: &str) -> Result<(), std::io::Error> {
+pub fn is_gnu_cmd(cmd_path: &str) -> io::Result<()> {
     CHECK_GNU.call_once(|| {
         let version_output = Command::new(cmd_path).arg("--version").output().unwrap();
 
@@ -69,58 +68,16 @@ where
     F: FnOnce(std::vec::IntoIter<OsString>) -> i32 + Send + 'static,
 {
     // Duplicate the stdout and stderr file descriptors to restore later
-    let original_stdout_fd_owned = match dup(std::io::stdout()) {
-        Ok(fd) => fd,
-        Err(_) => {
-            return CommandResult {
-                stdout: "".to_string(),
-                stderr: "Failed to duplicate STDOUT_FILENO".to_string(),
-                exit_code: -1,
-            };
-        }
-    };
-
-    let original_stderr_fd_owned = match dup(std::io::stderr()) {
-        Ok(fd) => fd,
-        Err(_) => {
-            return CommandResult {
-                stdout: "".to_string(),
-                stderr: "Failed to duplicate STDERR_FILENO".to_string(),
-                exit_code: -1,
-            };
-        }
-    };
+    let original_stdout_fd_owned = dup(io::stdout()).expect("Failed to duplicate STDOUT_FILENO");
+    let original_stderr_fd_owned = dup(io::stderr()).expect("Failed to duplicate STDERR_FILENO");
 
     println!("Running test {:?}", &args[0..]);
-    let (read_pipe_stdout, write_pipe_stdout) = match pipe() {
-        Ok(fds) => fds,
-        Err(_) => {
-            return CommandResult {
-                stdout: "".to_string(),
-                stderr: "Failed to create pipes".to_string(),
-                exit_code: -1,
-            };
-        }
-    };
-    let (read_pipe_stderr, write_pipe_stderr) = match pipe() {
-        Ok(fds) => fds,
-        Err(_) => {
-            return CommandResult {
-                stdout: "".to_string(),
-                stderr: "Failed to create pipes".to_string(),
-                exit_code: -1,
-            };
-        }
-    };
+    let (read_pipe_stdout, write_pipe_stdout) = pipe().expect("Failed to create pipes");
+    let (read_pipe_stderr, write_pipe_stderr) = pipe().expect("Failed to create pipes");
 
     // Redirect stdout and stderr to their respective pipes
-    if dup2_stdout(&write_pipe_stdout).is_err() || dup2_stderr(&write_pipe_stderr).is_err() {
-        return CommandResult {
-            stdout: "".to_string(),
-            stderr: "Failed to redirect STDOUT_FILENO or STDERR_FILENO".to_string(),
-            exit_code: -1,
-        };
-    }
+    dup2_stdout(&write_pipe_stdout).expect("Failed to redirect STDOUT_FILENO");
+    dup2_stderr(&write_pipe_stderr).expect("Failed to redirect STDERR_FILENO");
 
     // Handle stdin redirection if needed
     let original_stdin_fd_owned = if let Some(input_str) = pipe_input {
@@ -130,25 +87,10 @@ where
         input_file.seek(SeekFrom::Start(0)).unwrap();
 
         // Redirect stdin to read from the in-memory file
-        let stdin_fd = match dup(std::io::stdin()) {
-            Ok(fd) => fd,
-            Err(_) => {
-                return CommandResult {
-                    stdout: "".to_string(),
-                    stderr: "Failed to duplicate STDIN".to_string(),
-                    exit_code: -1,
-                };
-            }
-        };
+        let stdin_fd = dup(io::stdin()).expect("Failed to duplicate STDIN");
 
         // Redirect stdin to read from the in-memory file
-        if dup2_stdin(&input_file).is_err() {
-            return CommandResult {
-                stdout: "".to_string(),
-                stderr: "Failed to set up stdin redirection".to_string(),
-                exit_code: -1,
-            };
-        }
+        dup2_stdin(&input_file).expect("Failed to set up stdin redirection");
 
         Some(stdin_fd)
     } else {
@@ -176,14 +118,8 @@ where
     });
 
     // Restore the original stdin if it was modified
-    if let Some(fd) = original_stdin_fd_owned
-        && dup2_stdin(&fd).is_err()
-    {
-        return CommandResult {
-            stdout: "".to_string(),
-            stderr: "Failed to restore the original STDIN".to_string(),
-            exit_code: -1,
-        };
+    if let Some(fd) = original_stdin_fd_owned {
+        dup2_stdin(&fd).expect("Failed to restore the original STDIN");
     }
 
     CommandResult {
@@ -204,10 +140,8 @@ fn read_from_fd(fd: impl std::os::fd::AsFd) -> String {
 
     loop {
         match read(&fd, &mut read_buffer) {
+            Ok(0) => break,
             Ok(bytes_read) => {
-                if bytes_read == 0 {
-                    break;
-                }
                 captured_output.extend_from_slice(&read_buffer[..bytes_read]);
             }
             Err(_) => {
@@ -227,16 +161,14 @@ pub fn run_gnu_cmd(
     pipe_input: Option<&str>,
 ) -> Result<CommandResult, CommandResult> {
     if check_gnu {
-        match is_gnu_cmd(cmd_path) {
-            Ok(_) => {} // if the check passes, do nothing
-            Err(e) => {
-                // Convert the io::Error into the function's error type
-                return Err(CommandResult {
-                    stdout: String::new(),
-                    stderr: e.to_string(),
-                    exit_code: -1,
-                });
-            }
+        // if the check passes, do nothing
+        if let Err(e) = is_gnu_cmd(cmd_path) {
+            // Convert the io::Error into the function's error type
+            return Err(CommandResult {
+                stdout: String::new(),
+                stderr: e.to_string(),
+                exit_code: -1,
+            });
         }
     }
 
@@ -415,7 +347,7 @@ pub fn generate_random_string(max_length: usize) -> String {
 }
 
 #[allow(dead_code)]
-pub fn generate_random_file() -> Result<String, std::io::Error> {
+pub fn generate_random_file() -> io::Result<String> {
     let mut rng = rand::rng();
     let file_name: String = (0..10)
         .map(|_| rng.random_range(b'a'..=b'z') as char)
@@ -505,12 +437,10 @@ mod tests {
         let result = run_gnu_cmd("echo", &args, false, None);
 
         // Should succeed (echo --version might not be standard but echo should exist)
-        match result {
-            Ok(_) => {} // Command succeeded
-            Err(err_result) => {
-                // Command failed but at least ran
-                assert_ne!(err_result.exit_code, -1); // -1 would indicate the command couldn't be found
-            }
+
+        if let Err(e) = result {
+            // Command failed but at least ran
+            assert_ne!(e.exit_code, -1); // -1 would indicate the command couldn't be found
         }
     }
 
@@ -519,29 +449,20 @@ mod tests {
         let args: Vec<OsString> = vec![];
         let pipe_input = "hello world";
         let result = run_gnu_cmd("cat", &args, false, Some(pipe_input));
-
-        match result {
-            Ok(cmd_result) => {
-                assert_eq!(cmd_result.stdout.trim(), "hello world");
-            }
-            Err(_) => {
-                // cat might not be available in test environment, that's ok
-            }
+        // cat might not be available in test environment, that's ok
+        if let Ok(cmd_result) = result {
+            assert_eq!(cmd_result.stdout.trim(), "hello world");
         }
     }
 
     #[test]
     fn test_generate_random_file() {
         let result = generate_random_file();
-        match result {
-            Ok(file_path) => {
-                assert!(!file_path.is_empty());
-                // Clean up - try to remove the file
-                let _ = std::fs::remove_file(&file_path);
-            }
-            Err(_) => {
-                // File creation might fail due to permissions, that's acceptable for this test
-            }
+        // File creation might fail due to permissions, that's acceptable for this test
+        if let Ok(path) = result {
+            assert!(!path.is_empty());
+            // Clean up - try to remove the file
+            let _ = std::fs::remove_file(&path);
         }
     }
 }

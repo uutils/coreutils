@@ -51,7 +51,7 @@ def load_sizes(path):
         data = json.load(f)
 
     if not isinstance(data, dict):
-        raise ValueError(f"Unexpected JSON structure in {path}")
+        raise TypeError(f"Unexpected JSON structure in {path}")
 
     # date-keyed wrapper used in tracking JSON
     if data and all(isinstance(v, dict) and "sizes" in v for v in data.values()):

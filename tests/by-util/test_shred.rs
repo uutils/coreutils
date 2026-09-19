@@ -293,6 +293,18 @@ fn test_random_source_regular_file() {
 }
 
 #[test]
+fn test_random_source_open_error_includes_cause() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("target");
+
+    ucmd.arg("--random-source=missing")
+        .arg("target")
+        .fails()
+        .stderr_only("shred: missing: No such file or directory\n");
+}
+
+#[test]
 fn test_random_source_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -350,7 +362,7 @@ fn test_shred_non_utf8_paths() {
 }
 
 #[test]
-fn test_gnu_shred_passes_20() {
+fn test_shred_twenty_passes_with_known_random_source() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     let us_data = vec![0x55; 102_400]; // 100K of 'U' bytes
@@ -359,8 +371,7 @@ fn test_gnu_shred_passes_20() {
     let file = "f";
     at.write(file, "1"); // Single byte file
 
-    // Test 20 passes with deterministic random source
-    // This should produce the exact same sequence as GNU shred
+    // Run with a deterministic random source so the pass sequence is reproducible
     let result = ucmd
         .arg("-v")
         .arg("-u")
@@ -370,7 +381,6 @@ fn test_gnu_shred_passes_20() {
         .arg(file)
         .succeeds();
 
-    // Verify the exact pass sequence matches GNU's behavior
     let expected_passes = [
         "pass 1/20 (random)",
         "pass 2/20 (ffffff)",
@@ -408,7 +418,7 @@ fn test_gnu_shred_passes_20() {
 }
 
 #[test]
-fn test_gnu_shred_passes_different_counts() {
+fn test_shred_nineteen_passes_first_and_last_are_random() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     let us_data = vec![0x55; 102_400];
@@ -433,4 +443,118 @@ fn test_gnu_shred_passes_different_counts() {
     // First and last should be random
     result.stderr_contains("pass 1/19 (random)");
     result.stderr_contains("pass 19/19 (random)");
+}
+
+#[test]
+fn test_shred_trailing_slash_on_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    scene
+        .ucmd()
+        .arg("a/")
+        .fails()
+        .stderr_contains("Not a directory");
+}
+
+#[test]
+fn test_shred_trailing_slash_on_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("d");
+    scene
+        .ucmd()
+        .arg("d/")
+        .fails()
+        .stderr_contains("Is a directory");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_shred_inaccessible_file_reports_real_error() {
+    // A file whose parent directory lacks search permission must not be
+    // misreported as "No such file or directory": `Path::exists()` and
+    // `Path::is_file()` collapse the permission error into `false`.
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::PermissionsExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("locked");
+    at.touch("locked/file");
+    set_permissions(at.plus_as_string("locked"), Permissions::from_mode(0o000)).unwrap();
+
+    let result = scene.ucmd().arg("locked/file").fails();
+    result.stderr_contains("Permission denied");
+    assert!(
+        !result.stderr_str().contains("No such file"),
+        "shred misreported an inaccessible file as missing: {}",
+        result.stderr_str()
+    );
+
+    // Restore search permission so the fixture directory can be cleaned up.
+    set_permissions(at.plus_as_string("locked"), Permissions::from_mode(0o755)).unwrap();
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("wipe_me");
+
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["-s", "4vv", "wipe_me"])
+            .fails_with_code(1);
+
+        // The number parsed; only the unit did not.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+shred: invalid file size: '4vv'
+   ╭─[ shred:1:11 ]
+   │
+ 1 │ shred -s 4vv wipe_me
+   │           ─┬
+   │            ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+
+        // The file must be left alone when the size does not parse.
+        assert!(at.file_exists("wipe_me"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_a_size_with_no_number() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("wipe_me");
+
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["--size=vv", "wipe_me"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // Nothing usable was read, so the whole value is underlined.
+        assert!(stderr.contains("shred:1:14"), "{stderr}");
+        assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("wipe_me");
+
+        ucmd.args(&["-s", "4vv", "wipe_me"])
+            .fails_with_code(1)
+            .stderr_is("shred: invalid file size: '4vv'\n");
+    }
 }

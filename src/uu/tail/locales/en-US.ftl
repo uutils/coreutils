@@ -58,6 +58,7 @@ tail-status-has-appeared-following-new-file = { $file } has appeared;  following
 tail-status-has-been-replaced-following-new-file = { $file } has been replaced;  following new file
 tail-status-file-truncated = { $file }: file truncated
 tail-status-replaced-with-untailable-file = { $file } has been replaced with an untailable file
+tail-status-replaced-with-untailable-symlink = { $file } has been replaced with an untailable symbolic link
 tail-status-replaced-with-untailable-file-giving-up = { $file } has been replaced with an untailable file; giving up on this name
 tail-status-directory-containing-watched-file-removed = directory containing watched file was removed
 tail-status-backend-cannot-be-used-reverting-to-polling = { $backend } cannot be used, reverting to polling

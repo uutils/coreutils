@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/uniq.rs"
 test = false
@@ -27,6 +24,9 @@ fluent = { workspace = true }
 [dev-dependencies]
 divan = { workspace = true }
 uucore = { workspace = true, features = ["benchmark", "parser"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "uniq"

@@ -8,7 +8,7 @@
 use std::ffi::{OsStr, OsString};
 use std::iter::Peekable;
 
-use super::error::{ParseError, ParseResult};
+use super::error::{ParseError, ParseErrorKind, ParseResult};
 
 use uucore::display::Quotable;
 
@@ -130,7 +130,11 @@ impl std::fmt::Display for Symbol {
 ///
 #[derive(Debug)]
 struct Parser {
+    /// Only `next_raw` may advance this iterator, so that `pos` stays in sync.
+    /// Lookahead must go through `peek` or a `clone` of the iterator.
     tokens: Peekable<std::vec::IntoIter<OsString>>,
+    /// Index of the next token to be consumed.
+    pos: usize,
     pub stack: Vec<Symbol>,
 }
 
@@ -139,20 +143,38 @@ impl Parser {
     fn new(tokens: Vec<OsString>) -> Self {
         Self {
             tokens: tokens.into_iter().peekable(),
+            pos: 0,
             stack: vec![],
         }
     }
 
+    /// Consume the next token from the input stream, tracking its position.
+    fn next_raw(&mut self) -> Option<OsString> {
+        let token = self.tokens.next();
+        if token.is_some() {
+            self.pos += 1;
+        }
+        token
+    }
+
     /// Fetch the next token from the input stream as a Symbol.
     fn next_token(&mut self) -> Symbol {
-        Symbol::new(self.tokens.next())
+        Symbol::new(self.next_raw())
+    }
+
+    /// Index of the token most recently consumed.
+    fn last_pos(&self) -> usize {
+        self.pos.saturating_sub(1)
     }
 
     /// Consume the next token & verify that it matches the provided value.
     fn expect(&mut self, value: &str) -> ParseResult<()> {
         match self.next_token() {
             Symbol::Literal(s) if s == value => Ok(()),
-            _ => Err(ParseError::Expected(value.quote().to_string())),
+            _ => Err(ParseError::at_token(
+                ParseErrorKind::Expected(value.quote().to_string()),
+                self.last_pos(),
+            )),
         }
     }
 
@@ -173,10 +195,11 @@ impl Parser {
     ///
     ///   EXPR → TERM | EXPR BOOLOP EXPR
     fn expr(&mut self) -> ParseResult<()> {
-        if !self.peek_is_boolop() {
+        let has_term = !self.peek_is_boolop();
+        if has_term {
             self.term()?;
         }
-        self.maybe_boolop()?;
+        self.maybe_boolop(has_term)?;
         Ok(())
     }
 
@@ -224,14 +247,12 @@ impl Parser {
             .collect();
 
         match peek3.as_slice() {
-            // case 1: lparen is a literal when followed by nothing
-            [] => {
-                self.literal(Symbol::LParen.into_literal())?;
-                Ok(())
-            }
-
             // case 2: error if end of stream is `( <any_token>`
-            [symbol] => Err(ParseError::MissingArgument(format!("{symbol}"))),
+            // `symbol` was only peeked at, so it sits at the current position
+            [symbol] => Err(ParseError::at_token(
+                ParseErrorKind::MissingArgument(format!("{symbol}")),
+                self.pos,
+            )),
 
             // case 3: `( uop <any_token> )` → parenthesized unary operation;
             //         this case ensures we don’t get confused by `( -f ) )`
@@ -268,10 +289,11 @@ impl Parser {
                 Ok(())
             }
 
+            // case 1: lparen is a literal when followed by nothing
             // case 7: if earlier cases didn’t match, `( op <any_token>…`
             //         indicates binary comparison of literal lparen with
             //         anything _except_ ")" (case 4)
-            [Symbol::Op(_), _] | [Symbol::Op(_), _, _] => {
+            [] | [Symbol::Op(_), _] | [Symbol::Op(_), _, _] => {
                 self.literal(Symbol::LParen.into_literal())?;
                 Ok(())
             }
@@ -323,7 +345,7 @@ impl Parser {
                     _ => {
                         // bang is literal; parsing continues with op
                         self.literal(Symbol::Bang.into_literal())?;
-                        self.maybe_boolop()?;
+                        self.maybe_boolop(true)?;
                     }
                 }
             }
@@ -358,16 +380,28 @@ impl Parser {
 
     /// Peek at the next token and parse it as a BOOLOP or string literal,
     /// as appropriate.
-    fn maybe_boolop(&mut self) -> ParseResult<()> {
+    ///
+    /// `has_left_operand` tells whether an expression was already parsed for
+    /// the BOOLOP to apply to, which decides what a BOOLOP at the end of the
+    /// stream means.
+    fn maybe_boolop(&mut self, has_left_operand: bool) -> ParseResult<()> {
         if self.peek_is_boolop() {
             let symbol = self.next_token();
 
-            // BoolOp by itself interpreted as Literal
             if let Symbol::None = self.peek() {
+                if has_left_operand {
+                    // The BOOLOP joins the expression so far to nothing.
+                    return Err(ParseError::at_token(
+                        ParseErrorKind::MissingArgument(format!("{symbol}")),
+                        self.last_pos(),
+                    ));
+                }
+                // With no operand on either side it is an ordinary string:
+                // `test -a` is the length test of the string "-a".
                 self.literal(symbol.into_literal())?;
             } else {
                 self.boolop(symbol)?;
-                self.maybe_boolop()?;
+                self.maybe_boolop(true)?;
             }
         }
         Ok(())
@@ -413,7 +447,10 @@ impl Parser {
 
             match self.next_token() {
                 Symbol::None => {
-                    return Err(ParseError::MissingArgument(format!("{op}")));
+                    return Err(ParseError::at_token(
+                        ParseErrorKind::MissingArgument(format!("{op}")),
+                        self.last_pos(),
+                    ));
                 }
                 token => self.stack.push(token.into_literal()),
             }
@@ -428,8 +465,11 @@ impl Parser {
     fn parse(&mut self) -> ParseResult<()> {
         self.expr()?;
 
-        match self.tokens.next() {
-            Some(token) => Err(ParseError::ExtraArgument(token.quote().to_string())),
+        match self.next_raw() {
+            Some(token) => Err(ParseError::at_token(
+                ParseErrorKind::ExtraArgument(token.quote().to_string()),
+                self.last_pos(),
+            )),
             None => Ok(()),
         }
     }

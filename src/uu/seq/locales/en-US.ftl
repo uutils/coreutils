@@ -18,3 +18,6 @@ seq-error-format-and-equal-width = format string may not be specified when print
 # Parse error types
 seq-parse-error-type-float = floating point
 seq-parse-error-type-nan = 'not-a-number'
+
+# Diagnostics
+seq-diag-help-format = a format holds exactly one float conversion: %f, %e, %g or %a, as in -f%.3f
