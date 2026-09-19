@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz unparseable
-// spell-checker:ignore ohos OHOS tzdata
+// spell-checker:ignore ohos OHOS tzdata tzdb tzif zoneinfo
 
 mod format_modifiers;
 mod locale;
@@ -16,6 +16,7 @@ use jiff::{Timestamp, Zoned};
 use parse_datetime::{ExtendedDateTime, ParsedDateTime};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stderr};
 use std::path::PathBuf;
@@ -37,7 +38,7 @@ use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 /// OHOS helper: pass through the system time zone ID returned by
 /// TimeService (OH_TimeService_GetTimeZone, e.g. "Asia/Shanghai") and
 /// resolve it against the embedded IANA tzdata (jiff-tzdb) so that
-/// historial DST rules and transitions are preserved. jiff's
+/// historical DST rules and transitions are preserved. jiff's
 /// `try_system()` is useless on OHOS because both `/etc/localtime` and
 /// the zoneinfo dirs are absent.
 #[cfg(target_env = "ohos")]
@@ -341,7 +342,7 @@ fn parse_military_timezone_with_offset(s: &str) -> Option<(i32, DayDelta)> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let date_source = if let Some(date_os) = matches.get_one::<std::ffi::OsString>(OPT_DATE) {
+    let date_source = if let Some(date_os) = matches.get_one::<OsString>(OPT_DATE) {
         // Convert OsString to String, handling invalid UTF-8 with GNU-compatible error
         let date = date_os.to_str().ok_or_else(|| {
             let bytes = date_os.as_encoded_bytes();
@@ -349,12 +350,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             USimpleError::new(1, format!("invalid date '{escaped_str}'"))
         })?;
         DateSource::Human(date.into())
-    } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
-        match file.as_ref() {
-            "-" => DateSource::Stdin,
+    } else if let Some(file) = matches.get_one::<OsString>(OPT_FILE) {
+        match file.as_encoded_bytes() {
+            b"-" => DateSource::Stdin,
             _ => DateSource::File(file.into()),
         }
-    } else if let Some(file) = matches.get_one::<String>(OPT_REFERENCE) {
+    } else if let Some(file) = matches.get_one::<OsString>(OPT_REFERENCE) {
         DateSource::FileMtime(file.into())
     } else if matches.get_flag(OPT_RESOLUTION) {
         DateSource::Resolution
@@ -685,7 +686,7 @@ pub fn uu_app() -> Command {
                 .value_name("STRING")
                 .allow_hyphen_values(true)
                 .overrides_with(OPT_DATE)
-                .value_parser(clap::value_parser!(std::ffi::OsString))
+                .value_parser(clap::value_parser!(OsString))
                 .help(translate!("date-help-date")),
         )
         .arg(
@@ -694,6 +695,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_FILE)
                 .value_name("DATEFILE")
                 .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString))
                 .conflicts_with(OPT_DATE)
                 .help(translate!("date-help-file")),
         )
@@ -746,6 +748,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_REFERENCE)
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::AnyPath)
+                .value_parser(clap::value_parser!(OsString))
                 .conflicts_with_all([OPT_DATE, OPT_FILE, OPT_RESOLUTION])
                 .overrides_with(OPT_REFERENCE)
                 .help(translate!("date-help-reference")),
