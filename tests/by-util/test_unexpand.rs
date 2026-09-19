@@ -3,7 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//
 // spell-checker:ignore contenta edgecase behaviour tcaf
 
 use uutests::{at_and_ucmd, new_ucmd};
@@ -314,7 +313,7 @@ fn test_tabs_with_invalid_chars() {
 #[test]
 fn test_tabs_shortcut_with_too_large_size() {
     let arg = format!("-{}", u128::MAX);
-    let expected_error = "tab stop value is too large";
+    let expected_error = "tab stop is too large";
 
     new_ucmd!().arg(arg).fails().stderr_contains(expected_error);
 }
@@ -326,7 +325,7 @@ fn test_extended_tabstop_increment_overflow() {
     new_ucmd!()
         .arg(arg)
         .fails()
-        .stderr_contains("tab stop value is too large");
+        .stderr_contains("tab stop is too large");
 }
 
 #[test]

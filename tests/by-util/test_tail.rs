@@ -7,6 +7,7 @@
 // spell-checker:ignore (libs) kqueue ELOOP EISDIR
 // spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
 // spell-checker:ignore (cmd) taskkill
+
 #![allow(
     clippy::unicode_not_nfc,
     clippy::cast_lossless,
@@ -1235,6 +1236,30 @@ fn test_obsolete_syntax_zero_lines_file() {
         .args(&["-0", "foobar.txt"])
         .succeeds()
         .no_output();
+}
+
+/// Test for obsolete syntax `tail +0`: like `+1`, print the whole input.
+#[test]
+fn test_obsolete_syntax_positive_zero_lines() {
+    for arg in ["+0", "+00", "+0l"] {
+        new_ucmd!()
+            .args(&[arg])
+            .pipe_in("a\nb\nc\nd\ne\n")
+            .succeeds()
+            .no_stderr()
+            .stdout_is("a\nb\nc\nd\ne\n");
+    }
+}
+
+/// Test for obsolete syntax `tail +0c`: like `+1c`, print the whole input.
+#[test]
+fn test_obsolete_syntax_positive_zero_bytes() {
+    new_ucmd!()
+        .args(&["+0c"])
+        .pipe_in("a\nb\nc\nd\ne\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_is("a\nb\nc\nd\ne\n");
 }
 
 /// Test for reading all lines, specified by `tail -n +0`.

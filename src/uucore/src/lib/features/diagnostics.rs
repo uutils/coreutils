@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore étage replacen
+
 //! Render an error against the argument list it came from.
 //!
 //! Utilities whose arguments *are* the expression they evaluate — `test`, `expr`
@@ -33,8 +35,6 @@
 //!    │ Help: a range goes from the lower character to the higher one, as in a-z
 //! ───╯
 //! ```
-
-// spell-checker:ignore étage replacen
 
 use std::borrow::Cow;
 use std::env;

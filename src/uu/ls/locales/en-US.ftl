@@ -18,7 +18,7 @@ ls-error-general-io = general io error: {$error}
 ls-error-cannot-access-no-such-file = cannot access {$path}: No such file or directory
 ls-error-cannot-access-operation-not-permitted = cannot access {$path}: Operation not permitted
 ls-error-cannot-open-directory-permission-denied = cannot open directory {$path}: Permission denied
-ls-error-cannot-open-file-permission-denied = cannot open file {$path}: Permission denied
+ls-error-cannot-access-permission-denied = cannot access {$path}: Permission denied
 ls-error-cannot-open-directory-bad-descriptor = cannot open directory {$path}: Bad file descriptor
 ls-error-unknown-io-error = unknown io error: {$path}, '{$error}'
 ls-error-invalid-block-size = invalid --block-size argument {$size}
@@ -133,8 +133,8 @@ ls-invalid-quoting-style = {$program}: Ignoring invalid value of environment var
 ls-invalid-columns-width = ignoring invalid width in environment variable COLUMNS: {$width}
 ls-invalid-ignore-pattern = Invalid pattern for ignore: {$pattern}
 ls-invalid-hide-pattern = Invalid pattern for hide: {$pattern}
-ls-warning-unrecognized-ls-colors-prefix = unrecognized prefix: {$prefix}
-ls-warning-unparsable-ls-colors = unparsable value for LS_COLORS environment variable
+ls-error-unrecognized-ls-colors-prefix = unrecognized prefix: {$prefix}
+ls-error-unparsable-ls-colors = unparsable value for LS_COLORS environment variable
 ls-total = total {$size}
 
 # Security context warnings
