@@ -586,7 +586,7 @@ fn test_invalid_substr() {
     wasi_runner,
     ignore = "WASI: usize is 32-bit, the host usize::MAX does not parse"
 )]
-fn test_substr_large_length_capacity_overflow_issue12574() {
+fn test_substr_large_length_capacity_overflow() {
     new_ucmd!()
         .args(&["substr", "abc", "1", &usize::MAX.to_string()])
         .succeeds()
