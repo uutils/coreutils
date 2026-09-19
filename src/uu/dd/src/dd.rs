@@ -661,9 +661,13 @@ impl Dest {
     }
 
     #[cfg_attr(not(unix), allow(unused_variables))]
-    fn seek(&mut self, n: u64, obs: usize) -> io::Result<u64> {
+    /// If the seek operation is skipped, then this returns Ok(None), instead of the current offset.
+    fn seek(&mut self, n: u64, obs: usize) -> io::Result<Option<u64>> {
+        if n == 0 {
+            return Ok(None);
+        }
         match self {
-            Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
+            Self::Stdout(stdout) => Ok(Some(io::copy(&mut io::repeat(0).take(n), stdout)?)),
             Self::File(f, _) => {
                 #[cfg(unix)]
                 if let Ok(Some(len)) = try_get_len_of_block_device(f)
@@ -676,17 +680,17 @@ impl Dest {
                         translate!("dd-error-cannot-seek-invalid", "output" => "standard output")
                     );
                     set_exit_code(1);
-                    return Ok(len);
+                    return Ok(Some(len));
                 }
-                f.seek(SeekFrom::Current(n.try_into().unwrap()))
+                Ok(Some(f.seek(SeekFrom::Current(n.try_into().unwrap()))?))
             }
             #[cfg(unix)]
             Self::Fifo(f) => {
                 // Seeking in a named pipe means *reading* from the pipe.
-                uucore::io::read_and_discard(f, n, obs)
+                Ok(Some(uucore::io::read_and_discard(f, n, obs)?))
             }
             #[cfg(unix)]
-            Self::Sink => Ok(0),
+            Self::Sink => Ok(None),
         }
     }
 
