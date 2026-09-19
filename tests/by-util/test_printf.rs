@@ -1649,6 +1649,14 @@ fn test_q_string_control_chars_with_quotes() {
         .stdout_only("''$'\\001'\\'''$'\\001'");
 }
 
+#[test]
+fn test_precision_greater_than_65535() {
+    new_ucmd!()
+        .args(&["%.100000f", "1"])
+        .succeeds()
+        .stdout_is("1");
+}
+
 // Output with no trailing newline stays in the buffer until the process exits,
 // so the failure is only visible when it is flushed.
 #[test]
