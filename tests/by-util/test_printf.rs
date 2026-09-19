@@ -93,6 +93,16 @@ fn escaped_unicode_invalid() {
 }
 
 #[test]
+fn escaped_unicode_out_of_range() {
+    for arg in [r"[\U00110000]", r"[\UFFFFFFFF]"] {
+        new_ucmd!()
+            .arg(arg)
+            .succeeds()
+            .stdout_only(format!("{arg}"));
+    }
+}
+
+#[test]
 fn escaped_percent_sign() {
     new_ucmd!()
         .args(&["hello%% world"])
@@ -111,6 +121,82 @@ fn sub_b_string_handle_escapes() {
         .args(&["hello %b", "\\tworld"])
         .succeeds()
         .stdout_only("hello \tworld");
+}
+
+#[test]
+fn sub_b_string_missing_hex() {
+    for arg in [
+        r"\x",
+        r"\u",
+        r"\U",
+        r"\uabc",
+        r"\Uabcd",
+        r"\uABCZ|TAIL",
+        r"\U0000004Z|TAIL",
+    ] {
+        new_ucmd!()
+            .args(&["%b", arg])
+            .fails_with_code(1)
+            .stderr_only("printf: missing hexadecimal number in escape\n");
+    }
+}
+
+#[test]
+fn sub_b_string_prefix_preserved_on_error() {
+    new_ucmd!()
+        .args(&["%s|%b", "first", r"bad\x"])
+        .fails_with_code(1)
+        .stdout_is("first|bad")
+        .stderr_is("printf: missing hexadecimal number in escape\n");
+
+    new_ucmd!()
+        .args(&["%b", "C:\\users\\file"])
+        .fails_with_code(1)
+        .stdout_is("C:")
+        .stderr_is("printf: missing hexadecimal number in escape\n");
+
+    new_ucmd!()
+        .args(&["%b", r"x\unit"])
+        .fails_with_code(1)
+        .stdout_is("x")
+        .stderr_is("printf: missing hexadecimal number in escape\n");
+
+    new_ucmd!()
+        .args(&["%b", r"prefix\ud800"])
+        .fails_with_code(1)
+        .stdout_is("prefix")
+        .stderr_is("printf: invalid universal character name \\ud800\n");
+
+    new_ucmd!()
+        .args(&["%b", r"prefix\U0000D8F9"])
+        .fails_with_code(1)
+        .stdout_is("prefix")
+        .stderr_is("printf: invalid universal character name \\U0000D8F9\n");
+}
+
+#[test]
+fn sub_b_string_out_of_range_unicode() {
+    for arg in [
+        r"[\U00110000]",
+        r"[\UFFFFFFFF]",
+        r"\U00110000",
+        r"\UFFFFFFFF",
+    ] {
+        new_ucmd!()
+            .args(&["%b", arg])
+            .succeeds()
+            .stdout_only(format!("{arg}"));
+    }
+}
+
+#[test]
+fn sub_b_string_invalid_unicode() {
+    for arg in [r"\ud800", r"\ud9d0", r"\U0000D8F9"] {
+        new_ucmd!()
+            .args(&["%b", arg])
+            .fails_with_code(1)
+            .stderr_only(format!("printf: invalid universal character name {arg}\n"));
+    }
 }
 
 #[test]
