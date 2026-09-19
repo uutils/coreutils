@@ -69,7 +69,8 @@ fn find_valid_number_with_suffix(s: &str, unit: Unit) -> Option<&str> {
 
     match (potential_suffix, potential_i) {
         (Some(suffix), Some('i')) if accepts_i && RawSuffix::try_from(&suffix).is_ok() => {
-            Some(&s[..numeric_part.len() + suffix.len_utf8() + 'i'.len_utf8()])
+            let suffix_len = suffix.len_utf8() + 1;
+            Some(&s[..numeric_part.len() + suffix_len])
         }
         (Some(suffix), _) if RawSuffix::try_from(&suffix).is_ok() => {
             Some(&s[..numeric_part.len() + suffix.len_utf8()])
@@ -94,7 +95,7 @@ fn valid_end_with_unit_separator(
     RawSuffix::try_from(&first_char).ok()?;
 
     let is_iec = chars.next() == Some('i') && matches!(unit, Unit::Auto | Unit::Iec(true));
-    let suffix_len = 1 + usize::from(is_iec);
+    let suffix_len = first_char.len_utf8() + usize::from(is_iec);
 
     Some(valid_part.len() + unit_separator.len() + suffix_len)
 }
