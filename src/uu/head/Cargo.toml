@@ -25,6 +25,7 @@ uucore = { workspace = true, features = [
   "ringbuffer",
   "lines",
   "fs",
+  "quoting-style",
 ] }
 fluent = { workspace = true }
 

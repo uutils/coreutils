@@ -23,6 +23,7 @@ use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::parser::parse_signed_num::number_offset;
 use uucore::parser::parse_size::ParseSizeError;
+use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use uucore::show;
 use uucore::translate;
 
@@ -453,7 +454,11 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 if !first {
                     writeln!(stdout)?;
                 }
-                writeln!(stdout, "{}", translate!("head-header-stdin"))?;
+                let name = locale_aware_escape_name(
+                    translate!("head-name-stdin").as_ref(),
+                    QuotingStyle::SHELL_ESCAPE,
+                );
+                writeln!(stdout, "==> {} <==", name.to_string_lossy())?;
             }
             let stdin = io::stdin();
 
@@ -504,7 +509,10 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                         writeln!(stdout)?;
                     }
                     write!(stdout, "==> ")?;
-                    print_verbatim(file)?;
+                    print_verbatim(locale_aware_escape_name(
+                        file.as_ref(),
+                        QuotingStyle::SHELL_ESCAPE,
+                    ))?;
                     writeln!(stdout, " <==")?;
                     first = false;
                 }

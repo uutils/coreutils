@@ -28,4 +28,4 @@ head-error-writing-stdout = error writing 'standard output': {$err}
 head-error-cannot-open = cannot open {$name} for reading
 
 # Output headers
-head-header-stdin = ==> standard input <==
+head-name-stdin = standard input
