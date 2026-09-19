@@ -5666,6 +5666,91 @@ fn test_ls_dired_order_format() {
 }
 
 #[test]
+fn test_ls_dired_format_precedence_is_positional() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("a");
+
+    // A later format option wins over --dired ...
+    for format in ["-C", "--format=single-column"] {
+        scene
+            .ucmd()
+            .args(&["--dired", format, "a"])
+            .succeeds()
+            .stdout_only("a\n");
+    }
+    // ... and a later --dired wins over the format option.
+    let result = scene.ucmd().args(&["-C", "--dired", "a"]).succeeds();
+    assert_eq!(dired_names(result.stdout_str()), ["a"]);
+
+    // -1 after --dired has no effect, exactly as after -l.
+    let result = scene.ucmd().args(&["--dired", "-1", "a"]).succeeds();
+    assert_eq!(dired_names(result.stdout_str()), ["a"]);
+
+    // A later long-format option restores both the long listing and dired.
+    let result = scene.ucmd().args(&["--dired", "-C", "-g", "a"]).succeeds();
+    assert_eq!(dired_names(result.stdout_str()), ["a"]);
+}
+
+#[test]
+fn test_ls_dired_position_vs_hyperlink() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("a");
+
+    // A --hyperlink option after --dired does not move --dired: with
+    // hyperlinks left disabled, both the long format and the dired output
+    // survive an earlier -C ...
+    let result = scene
+        .ucmd()
+        .args(&["-C", "--dired", "--hyperlink=never", "a"])
+        .succeeds();
+    assert_eq!(dired_names(result.stdout_str()), ["a"]);
+    // ... and with hyperlinks enabled, only the dired output is cancelled.
+    scene
+        .ucmd()
+        .args(&["-C", "--dired", "--hyperlink", "a"])
+        .succeeds()
+        .stdout_matches(&Regex::new(r"^-([r-][w-][xt-]){3}").unwrap())
+        .stdout_contains("file://")
+        .stdout_does_not_contain("//DIRED//");
+}
+
+#[test]
+fn test_ls_dired_lookalike_operand() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("-D");
+
+    // An operand that merely looks like the option is not the option.
+    scene
+        .ucmd()
+        .args(&["--zero", "--", "-D"])
+        .succeeds()
+        .stdout_only("-D\0");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_ls_dired_terminal_keeps_default_quoting() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("a b");
+    at.touch("a b/x");
+
+    // On a terminal the default quoting style is shell-escape, with or without
+    // --dired, and the offsets cover the quoted names, directory headers
+    // included.
+    let result = scene
+        .ucmd()
+        .args(&["--dired", "-R", "a b"])
+        .terminal_simulation(true)
+        .succeeds();
+    // The pty turns every \n into \r\n, which the offsets do not account for.
+    let stdout = result.stdout_str().replace("\r\n", "\n");
+    assert_eq!(dired_names(&stdout), ["x"]);
+    assert_eq!(subdired_names(&stdout), ["'a b'"]);
+    assert!(stdout.contains("//DIRED-OPTIONS// --quoting-style=shell-escape"));
+}
+
+#[test]
 fn test_ls_dired_offsets_follow_quoted_dir_headers() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5693,14 +5778,20 @@ fn test_ls_dired_offsets_follow_quoted_dir_headers() {
 #[test]
 fn test_ls_dired_and_zero_are_incompatible() {
     let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("a");
 
     scene
         .ucmd()
-        .arg("--dired")
-        .arg("-l")
-        .arg("--zero")
+        .args(&["--dired", "-l", "--zero"])
         .fails_with_code(2)
         .stderr_contains("--dired and --zero are incompatible");
+
+    // A later non-long format cancels dired, so --zero is allowed.
+    scene
+        .ucmd()
+        .args(&["--dired", "-C", "--zero", "a"])
+        .succeeds()
+        .stdout_only("a\0");
 }
 
 #[test]
