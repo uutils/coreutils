@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (words) helloworld nodir objdump n'source nconfined testdir
 
 use rustix::process::{getegid, geteuid};
@@ -3160,4 +3161,32 @@ fn test_install_d_parallel_mkdir_race() {
             assert!(at.file_exists(format!("o{round}/q/f{k}")));
         }
     }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_target_without_splice_support() {
+    // Does eCryptfs not support splice on some kernel?
+    use std::process::Command;
+    if Command::new("strace")
+        .args(["-e", "inject=splice:error=EINVAL:when=2", "true"])
+        .output()
+        .is_err()
+    {
+        return; // missing strace
+    }
+    let coreutils = uutests::util::get_tests_binary();
+    Command::new("strace")
+        .args([
+            "-e",
+            "inject=splice:error=EINVAL:when=2",
+            coreutils,
+            "install",
+            coreutils,
+            "target_file",
+        ])
+        .output()
+        .unwrap();
+    // properly copied with fallback from splice?
+    assert!(uucore::fs::are_files_identical(coreutils, "target_file").unwrap());
 }

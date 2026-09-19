@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) unwritable GHSA
+
 use std::fmt::Write;
 
 use uutests::at_and_ucmd;

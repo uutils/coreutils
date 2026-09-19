@@ -372,11 +372,12 @@ fn embed_locale_file(
             embedded_file,
             "        // Locale for {component} ({locale})"
         )?;
-        // Determine if we need a hash. If content contains ", we need r#""#
-        let delimiter = if content.contains('"') { "#" } else { "" };
+        // Never a raw string: `r#"..."#` ends at `"#`, so content holding that
+        // pair closes the literal and the rest is compiled as Rust. `{:?}`
+        // escapes every quote and has no terminator the content can reach.
         writeln!(
             embedded_file,
-            "        \"{locale_key}\" => Some(r{delimiter}\"{content}\"{delimiter}),"
+            "        {locale_key:?} => Some({content:?}),"
         )?;
 
         // Tell Cargo to rerun if this file changes

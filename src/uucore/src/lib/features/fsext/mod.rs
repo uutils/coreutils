@@ -3,9 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore DATETIME getmntinfo subsecond (fs) cifs smbfs
+
 //! Set of functions to manage file systems
 
-// spell-checker:ignore DATETIME getmntinfo subsecond (fs) cifs smbfs
+#[cfg(windows)]
+mod windows;
 
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
 const LINUX_MTAB: &str = "/etc/mtab";
@@ -13,10 +16,6 @@ const LINUX_MTAB: &str = "/etc/mtab";
 const LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
 #[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 static MOUNT_OPT_BIND: &str = "bind";
-#[cfg(windows)]
-const MAX_PATH: usize = 266;
-#[cfg(windows)]
-static EXIT_ERR: i32 = 1;
 
 #[cfg(any(
     target_vendor = "apple",
@@ -25,39 +24,11 @@ static EXIT_ERR: i32 = 1;
     target_os = "openbsd"
 ))]
 use crate::os_str_from_bytes;
-#[cfg(windows)]
-use crate::show_warning;
 
-#[cfg(not(target_os = "wasi"))]
+#[cfg(unix)]
 use std::ffi::OsStr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
-#[cfg(windows)]
-use std::os::windows::ffi::OsStrExt;
-#[cfg(windows)]
-use windows_sys::Win32::{
-    Foundation::{ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE},
-    Storage::FileSystem::{
-        FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDiskFreeSpaceW, GetDriveTypeW,
-        GetVolumeInformationW, GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
-    },
-    System::WindowsProgramming::DRIVE_REMOTE,
-};
-
-#[cfg(windows)]
-#[allow(non_snake_case)]
-fn LPWSTR2String(buf: &[u16]) -> String {
-    let len = buf.iter().position(|&n| n == 0).unwrap();
-    String::from_utf16(&buf[..len]).unwrap()
-}
-
-#[cfg(windows)]
-fn to_nul_terminated_wide_string(s: impl AsRef<OsStr>) -> Vec<u16> {
-    s.as_ref()
-        .encode_wide()
-        .chain(Some(0))
-        .collect::<Vec<u16>>()
-}
 
 #[cfg(unix)]
 use core::ffi::CStr;
@@ -67,12 +38,10 @@ use libc::{
 };
 #[cfg(unix)]
 use std::ffi::CString;
-#[cfg(not(target_os = "wasi"))]
+#[cfg(unix)]
 use std::io::Error as IOError;
 #[cfg(unix)]
 use std::mem;
-#[cfg(windows)]
-use std::path::Path;
 use std::time::SystemTime;
 #[cfg(unix)]
 use std::time::UNIX_EPOCH;
@@ -187,7 +156,7 @@ pub fn metadata_get_time(md: &Metadata, md_time: MetadataTimeField) -> Option<Sy
 // should be OsString.
 #[derive(Debug, Clone)]
 pub struct MountInfo {
-    /// Stores `volume_name` in windows platform and `dev_id` in unix platform
+    /// Device id on unix, volume serial number on Windows.
     pub dev_id: String,
     pub dev_name: String,
     pub fs_type: String,
@@ -266,79 +235,6 @@ impl MountInfo {
             dummy,
         })
     }
-
-    #[cfg(windows)]
-    fn new(mut volume_name: String) -> Option<Self> {
-        let mut dev_name_buf = [0u16; MAX_PATH];
-        volume_name.pop();
-        unsafe {
-            QueryDosDeviceW(
-                OsStr::new(&volume_name)
-                    .encode_wide()
-                    .chain(Some(0))
-                    .skip(4)
-                    .collect::<Vec<u16>>()
-                    .as_ptr(),
-                dev_name_buf.as_mut_ptr(),
-                dev_name_buf.len() as u32,
-            )
-        };
-        volume_name.push('\\');
-        let dev_name = LPWSTR2String(&dev_name_buf);
-
-        let mut mount_root_buf = [0u16; MAX_PATH];
-        let success = unsafe {
-            let volume_name = to_nul_terminated_wide_string(&volume_name);
-            GetVolumePathNamesForVolumeNameW(
-                volume_name.as_ptr(),
-                mount_root_buf.as_mut_ptr(),
-                mount_root_buf.len() as u32,
-                ptr::null_mut(),
-            )
-        };
-        if 0 == success {
-            // TODO: support the case when `GetLastError()` returns `ERROR_MORE_DATA`
-            return None;
-        }
-        // TODO: This should probably call `OsString::from_wide`, but unclear if
-        // terminating zeros need to be striped first.
-        let mount_root = LPWSTR2String(&mount_root_buf);
-
-        let mut fs_type_buf = [0u16; MAX_PATH];
-        let success = unsafe {
-            let mount_root = to_nul_terminated_wide_string(&mount_root);
-            GetVolumeInformationW(
-                mount_root.as_ptr(),
-                ptr::null_mut(),
-                0,
-                ptr::null_mut(),
-                ptr::null_mut(),
-                ptr::null_mut(),
-                fs_type_buf.as_mut_ptr(),
-                fs_type_buf.len() as u32,
-            )
-        };
-        let fs_type = if 0 == success {
-            None
-        } else {
-            Some(LPWSTR2String(&fs_type_buf))
-        };
-        let remote = DRIVE_REMOTE
-            == unsafe {
-                let mount_root = to_nul_terminated_wide_string(&mount_root);
-                GetDriveTypeW(mount_root.as_ptr())
-            };
-        Some(Self {
-            dev_id: volume_name,
-            dev_name,
-            fs_type: fs_type.unwrap_or_default(),
-            mount_root: mount_root.into(), // TODO: We should figure out how to keep an OsString here.
-            mount_dir: OsString::new(),
-            mount_option: String::new(),
-            remote,
-            dummy: false,
-        })
-    }
 }
 
 #[cfg(any(
@@ -365,7 +261,7 @@ impl From<StatFs> for MountInfo {
             // spell-checker:disable-next-line
             CStr::from_ptr(statfs.f_mntonname.as_ptr()).to_bytes()
         };
-        let mount_dir = os_str_from_bytes(mount_dir_bytes).unwrap().into_owned();
+        let mount_dir = os_str_from_bytes(mount_dir_bytes).unwrap().to_owned();
 
         let dev_id = mount_dev_id(&mount_dir);
         let dummy = is_dummy_filesystem(&fs_type, "");
@@ -431,8 +327,7 @@ use crate::error::UResult;
     target_vendor = "apple",
     target_os = "freebsd",
     target_os = "netbsd",
-    target_os = "openbsd",
-    windows
+    target_os = "openbsd"
 ))]
 use crate::error::USimpleError;
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
@@ -443,8 +338,7 @@ use std::io::{BufRead, BufReader};
     target_vendor = "apple",
     target_os = "freebsd",
     target_os = "netbsd",
-    target_os = "openbsd",
-    windows
+    target_os = "openbsd"
 ))]
 use std::ptr;
 #[cfg(any(
@@ -456,7 +350,16 @@ use std::ptr;
 use std::slice;
 
 /// Read file system list.
-#[cfg_attr(target_os = "wasi", allow(clippy::unnecessary_wraps))]
+#[cfg_attr(
+    any(
+        target_os = "aix",
+        target_os = "redox",
+        target_os = "illumos",
+        target_os = "solaris",
+        target_os = "wasi"
+    ),
+    expect(clippy::unnecessary_wraps)
+)]
 pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
     {
@@ -493,44 +396,7 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     }
     #[cfg(windows)]
     {
-        let mut volume_name_buf = [0u16; MAX_PATH];
-        // As recommended in the MS documentation, retrieve the first volume before the others
-        let find_handle =
-            unsafe { FindFirstVolumeW(volume_name_buf.as_mut_ptr(), volume_name_buf.len() as u32) };
-        if INVALID_HANDLE_VALUE == find_handle {
-            let os_err = IOError::last_os_error();
-            let msg = format!("FindFirstVolumeW failed: {os_err}");
-            return Err(USimpleError::new(EXIT_ERR, msg));
-        }
-        let mut mounts = Vec::<MountInfo>::new();
-        loop {
-            let volume_name = LPWSTR2String(&volume_name_buf);
-            if !volume_name.starts_with("\\\\?\\") || !volume_name.ends_with('\\') {
-                show_warning!("A bad path was skipped: {volume_name}");
-                continue;
-            }
-            if let Some(m) = MountInfo::new(volume_name) {
-                mounts.push(m);
-            }
-            if 0 == unsafe {
-                FindNextVolumeW(
-                    find_handle,
-                    volume_name_buf.as_mut_ptr(),
-                    volume_name_buf.len() as u32,
-                )
-            } {
-                let err = IOError::last_os_error();
-                if err.raw_os_error() != Some(ERROR_NO_MORE_FILES as i32) {
-                    let msg = format!("FindNextVolumeW failed: {err}");
-                    return Err(USimpleError::new(EXIT_ERR, msg));
-                }
-                break;
-            }
-        }
-        unsafe {
-            FindVolumeClose(find_handle);
-        }
-        Ok(mounts)
+        windows::read_fs_list()
     }
     #[cfg(any(
         target_os = "aix",
@@ -614,61 +480,6 @@ impl FsUsage {
                 ffree: statvfs.f_ffree,
             };
         }
-    }
-    #[cfg(windows)]
-    pub fn new(path: &Path) -> UResult<Self> {
-        let mut root_path = [0u16; MAX_PATH];
-        let success = unsafe {
-            let path = to_nul_terminated_wide_string(path);
-            GetVolumePathNamesForVolumeNameW(
-                //path_utf8.as_ptr(),
-                path.as_ptr(),
-                root_path.as_mut_ptr(),
-                root_path.len() as u32,
-                ptr::null_mut(),
-            )
-        };
-        if 0 == success {
-            let msg = format!(
-                "GetVolumePathNamesForVolumeNameW failed: {}",
-                IOError::last_os_error()
-            );
-            return Err(USimpleError::new(EXIT_ERR, msg));
-        }
-
-        let mut sectors_per_cluster = 0;
-        let mut bytes_per_sector = 0;
-        let mut number_of_free_clusters = 0;
-        let mut total_number_of_clusters = 0;
-
-        unsafe {
-            let path = to_nul_terminated_wide_string(path);
-            GetDiskFreeSpaceW(
-                path.as_ptr(),
-                &raw mut sectors_per_cluster,
-                &raw mut bytes_per_sector,
-                &raw mut number_of_free_clusters,
-                &raw mut total_number_of_clusters,
-            );
-        }
-
-        let bytes_per_cluster = sectors_per_cluster as u64 * bytes_per_sector as u64;
-        Ok(Self {
-            // f_bsize      File system block size.
-            blocksize: bytes_per_cluster,
-            // f_blocks - Total number of blocks on the file system, in units of f_frsize.
-            // frsize =     Fundamental file system block size (fragment size).
-            blocks: total_number_of_clusters as u64,
-            //  Total number of free blocks.
-            bfree: number_of_free_clusters as u64,
-            //  Total number of free blocks available to non-privileged processes.
-            bavail: 0,
-            bavail_top_bit_set: ((bytes_per_sector as u64) & (1u64.rotate_right(1))) != 0,
-            // Total number of file nodes (inodes) on the file system.
-            files: 0, // Not available on windows
-            // Total number of free file nodes (inodes).
-            ffree: 0, // Meaningless on Windows
-        })
     }
 }
 
@@ -837,7 +648,7 @@ impl FsMeta for StatFs {
     }
 
     /// The preferred transfer size, which on Linux is `f_bsize`.
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(any(target_os = "aix", target_os = "linux", target_os = "android"))]
     #[allow(clippy::unnecessary_cast)]
     fn io_size(&self) -> u64 {
         self.f_bsize as u64
@@ -853,6 +664,7 @@ impl FsMeta for StatFs {
     // XXX: dunno if this is right
     #[cfg(not(any(
         target_vendor = "apple",
+        target_os = "aix",
         target_os = "freebsd",
         target_os = "linux",
         target_os = "android",
@@ -902,7 +714,12 @@ impl FsMeta for StatFs {
     fn namelen(&self) -> u64 {
         1024
     }
-    #[cfg(any(target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))]
+    #[cfg(any(
+        target_os = "aix",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
     #[allow(clippy::unnecessary_cast)]
     fn namelen(&self) -> u64 {
         self.f_namemax as u64 // spell-checker:disable-line
@@ -910,6 +727,7 @@ impl FsMeta for StatFs {
     // XXX: should everything just use statvfs?
     #[cfg(not(any(
         target_vendor = "apple",
+        target_os = "aix",
         target_os = "freebsd",
         target_os = "linux",
         target_os = "android",
