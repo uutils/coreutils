@@ -3,10 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore Nofile nonewline cmdline setrlimit ELOOP
+// spell-checker:ignore NOFILE nonewline cmdline setrlimit ELOOP
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use rustix::process::Resource;
+use rlimit::Resource;
 #[cfg(unix)]
 use std::fs::File;
 use std::fs::OpenOptions;
@@ -135,7 +135,7 @@ fn test_closes_file_descriptors() {
             "alpha.txt",
             "alpha.txt",
         ])
-        .limit(Resource::Nofile, 9, 9)
+        .limit(Resource::NOFILE, 9, 9)
         .succeeds();
 }
 
