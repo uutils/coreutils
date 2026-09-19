@@ -54,8 +54,74 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     writeln!(embedded_file, "    }}")?;
     writeln!(embedded_file, "}}")?;
 
+    generate_error_locale_ids(&mut embedded_file)?;
+
     embedded_file.flush()?;
     Ok(())
+}
+
+/// Generate the lookup telling whether an id belongs to the error-only strings.
+///
+/// Reaching those strings costs a parse of the whole resource, so it is only
+/// worth doing for an id the resource actually defines. Which ids those are is
+/// known at compile time, so the check itself costs nothing.
+///
+/// # Errors
+///
+/// Returns an error if `CARGO_MANIFEST_DIR` is not set, if the resource exists
+/// but cannot be read, or if writing to `embedded_file` fails.
+fn generate_error_locale_ids(embedded_file: &mut File) -> Result<(), Box<dyn std::error::Error>> {
+    use std::fs;
+
+    let path = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?).join("locales/errors/en-US.ftl");
+    let content = if path.is_file() {
+        println!("cargo:rerun-if-changed={}", path.display());
+        fs::read_to_string(&path)?
+    } else {
+        String::new()
+    };
+    let ids = message_ids(&content);
+
+    writeln!(embedded_file)?;
+    writeln!(
+        embedded_file,
+        "/// Whether the error-only strings define `id`."
+    )?;
+    writeln!(embedded_file, "fn is_error_locale_id(id: &str) -> bool {{")?;
+    if ids.is_empty() {
+        writeln!(embedded_file, "    let _ = id;")?;
+        writeln!(embedded_file, "    false")?;
+    } else {
+        writeln!(embedded_file, "    matches!(")?;
+        writeln!(embedded_file, "        id,")?;
+        for (i, id) in ids.iter().enumerate() {
+            let separator = if i == 0 { ' ' } else { '|' };
+            writeln!(embedded_file, "        {separator} \"{id}\"")?;
+        }
+        writeln!(embedded_file, "    )")?;
+    }
+    writeln!(embedded_file, "}}")?;
+
+    Ok(())
+}
+
+/// The ids of the messages `content` defines, in the order they appear.
+fn message_ids(content: &str) -> Vec<&str> {
+    content
+        .lines()
+        .filter_map(|line| {
+            let id = line.split_once('=')?.0.trim_end();
+            // A message starts in the first column: an indented line continues
+            // the message before it, and a leading '-' makes it a term, which
+            // no lookup ever asks for by name.
+            id.starts_with(|c: char| c.is_ascii_alphanumeric())
+                .then_some(id)
+                .filter(|id| {
+                    id.chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+                })
+        })
+        .collect()
 }
 
 /// Get the project root directory
@@ -459,6 +525,25 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn message_ids_are_the_ones_starting_a_line() {
+        let content = concat!(
+            "# a comment = not a message\n",
+            "\n",
+            "first-id = a value\n",
+            "second-id = a value with an = in it\n",
+            "    a continuation = still the second value\n",
+            "-a-term = not asked for by name\n",
+            "third_id = another value\n",
+        );
+
+        assert_eq!(
+            message_ids(content),
+            vec!["first-id", "second-id", "third_id"]
+        );
+        assert!(message_ids("").is_empty());
+    }
 
     #[test]
     fn consumer_lock_file_found_above_target_dir() {

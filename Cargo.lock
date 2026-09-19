@@ -3535,7 +3535,6 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
- "fancy-regex",
  "fluent",
  "num-bigint",
  "num-traits",
@@ -4500,6 +4499,7 @@ dependencies = [
  "digest 0.11.3",
  "dns-lookup",
  "dunce",
+ "fancy-regex",
  "fluent",
  "fluent-syntax",
  "glob",
