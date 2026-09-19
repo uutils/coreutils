@@ -1076,6 +1076,10 @@ fn test_cp_recursive_dir_applies_umask() {
 // must clear them on the directories it creates. The sticky bit survives.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: directory modes/umask are not faithfully reproduced"
+)]
 fn test_cp_recursive_dir_drops_setuid_setgid() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
