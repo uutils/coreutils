@@ -413,20 +413,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let res = mktemp(&options);
-
-    let res = if options.quiet {
-        // Mapping all UErrors to ExitCodes prevents the errors from being printed
-        res.map_err(|e| e.code().into())
-    } else {
-        res
-    };
-    let path = res?;
+    let path = mktemp(&options)?;
     if let Err(e) = println_verbatim(&path) {
         // The caller never learns the name, so leaving the file behind would
         // litter the temporary directory with something nothing can clean up.
-        if !dry_run {
-            let _ = if make_dir {
+        if !options.dry_run {
+            let _ = if options.directory {
                 fs::remove_dir(&path)
             } else {
                 fs::remove_file(&path)
@@ -654,10 +646,18 @@ pub fn mktemp(options: &Options) -> UResult<PathBuf> {
     } = Params::from(options.clone())?;
 
     // Create the temporary file or directory, or simulate creating it.
-    if options.dry_run {
+    let res = if options.dry_run {
         Ok(dry_exec(&tmpdir, &prefix, rand, &suffix))
     } else {
         exec(&tmpdir, &prefix, rand, &suffix, options.directory)
+    };
+
+    if options.quiet {
+        // Only creation failures are silenced; a bad template is still reported.
+        // Mapping the UError to an ExitCode prevents the error from being printed.
+        res.map_err(|e| e.code().into())
+    } else {
+        res
     }
 }
 
