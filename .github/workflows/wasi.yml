@@ -78,3 +78,11 @@ jobs:
           test_tail:: test_tee:: test_test:: test_touch:: test_tr:: \
           test_true:: test_truncate:: \
           test_unexpand:: test_unlink:: test_wc:: test_yes::
+    - name: Test env conversions and argv fallback on WASI Preview 2
+      if: matrix.job.target == 'wasm32-wasip2'
+      env:
+        CARGO_TARGET_WASM32_WASIP2_RUNNER: wasmtime
+      run: |
+        cargo test --target wasm32-wasip2 --no-default-features -p uu_env
+        cargo test --target wasm32-wasip2 --no-default-features -p uucore --lib \
+          wasi_argv_fallback_prevents_empty_argv

@@ -360,3 +360,30 @@ impl<'a> NativeStr<'a> {
         }
     }
 }
+
+#[cfg(all(test, target_os = "wasi", not(target_env = "p1")))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wasip2_encoded_bytes_round_trip() {
+        let source = OsString::from("NAME=Grüße");
+
+        let borrowed = to_native_int_representation(&source);
+        assert_eq!(&*borrowed, "NAME=Grüße".as_bytes());
+        let converted = from_native_int_representation(borrowed);
+        assert_eq!(&*converted, source.as_os_str());
+
+        let owned: Cow<'static, NativeIntStr> = NCvt::convert(source.clone());
+        assert_eq!(
+            from_native_int_representation_owned(owned.into_owned()),
+            source
+        );
+    }
+
+    #[test]
+    fn wasip2_invalid_encoded_bytes_are_lossy() {
+        let converted = from_native_int_representation_owned(vec![b'f', b'o', 0x80, b'o']);
+        assert_eq!(converted, OsString::from("fo\u{fffd}o"));
+    }
+}

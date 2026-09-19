@@ -369,20 +369,23 @@ pub fn set_utility_is_second_arg() {
 static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| wild::args_os().collect());
 #[cfg(all(not(windows), not(target_os = "wasi")))]
 static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| std::env::args_os().collect());
+
+#[cfg(any(test, target_os = "wasi"))]
+fn with_wasi_argv_fallback(mut argv: Vec<OsString>) -> Vec<OsString> {
+    if argv.is_empty() {
+        argv.push(OsString::from("uu"));
+    }
+    argv
+}
+
 // `std::env::args_os()` can be empty on wasi when the component is not invoked as a CLI
 // command — for instance when it is embedded as a library and the host passes no argv at all.
 // `UTIL_NAME`/`EXECUTION_PHRASE` and their callers index `ARGV[0]`, which panics on an empty
 // vec, and a panic here aborts the whole component. Guarantee at least one element so those
 // globals resolve to a stable fallback name instead.
 #[cfg(all(not(windows), target_os = "wasi"))]
-static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| {
-    let argv: Vec<OsString> = std::env::args_os().collect();
-    if argv.is_empty() {
-        vec![OsString::from("uu")]
-    } else {
-        argv
-    }
-});
+static ARGV: LazyLock<Vec<OsString>> =
+    LazyLock::new(|| with_wasi_argv_fallback(std::env::args_os().collect()));
 
 static UTIL_NAME: LazyLock<String> = LazyLock::new(|| {
     // Clamp every index into `ARGV`: on wasip2 the vec may be shorter than the multicall layout
@@ -734,6 +737,17 @@ mod tests {
             OsString::from("สวัสดี"), // spell-checker:disable-line
             os_str.to_os_string(),
         ]
+    }
+
+    #[test]
+    fn wasi_argv_fallback_prevents_empty_argv() {
+        assert_eq!(
+            with_wasi_argv_fallback(Vec::new()),
+            vec![OsString::from("uu")]
+        );
+
+        let argv = vec![OsString::from("env"), OsString::from("--version")];
+        assert_eq!(with_wasi_argv_fallback(argv.clone()), argv);
     }
 
     #[cfg(any(unix, target_os = "redox"))]
