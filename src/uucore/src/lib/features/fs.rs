@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//! Set of functions to manage regular files, special files, and links.
-
 // spell-checker:ignore backport Ioctl absolutized linkat symlinkat renameat unlinkat openat urandom NOFOLLOW CLOEXEC RDONLY
+
+//! Set of functions to manage regular files, special files, and links.
 
 #[cfg(all(unix, not(target_os = "haiku")))]
 pub use libc::{major, makedev, minor};
@@ -126,69 +126,25 @@ impl FileInformation {
     }
 
     pub fn number_of_links(&self) -> u64 {
-        #[cfg(all(
-            unix,
-            not(target_vendor = "apple"),
-            not(target_os = "aix"),
-            not(target_os = "android"),
-            not(target_os = "freebsd"),
-            not(target_os = "haiku"),
-            not(target_os = "netbsd"),
-            not(target_os = "openbsd"),
-            not(target_os = "illumos"),
-            not(target_os = "solaris"),
-            not(target_os = "cygwin"),
-            not(target_arch = "aarch64"),
-            not(target_arch = "riscv64"),
-            not(target_arch = "loongarch64"),
-            not(target_arch = "sparc64"),
-            target_pointer_width = "64"
-        ))]
-        return self.0.st_nlink;
-        #[cfg(target_os = "wasi")]
-        return self.0.st_nlink;
-        #[cfg(all(
-            unix,
-            not(target_os = "haiku"),
-            any(
-                target_vendor = "apple",
-                target_os = "android",
-                target_os = "netbsd",
-                target_os = "openbsd",
-                target_os = "illumos",
-                target_os = "solaris",
-                target_os = "cygwin",
-                target_arch = "aarch64",
-                target_arch = "riscv64",
-                target_arch = "loongarch64",
-                target_arch = "sparc64",
-                not(target_pointer_width = "64")
-            )
-        ))]
-        return self.0.st_nlink.into();
-        #[cfg(target_os = "freebsd")]
-        return self.0.st_nlink;
-        #[cfg(any(target_os = "aix", target_os = "haiku"))]
-        return self.0.st_nlink.try_into().unwrap();
+        #[cfg(any(unix, target_os = "wasi"))]
+        {
+            #[cfg(any(target_os = "aix", target_os = "haiku"))]
+            return self.0.st_nlink.try_into().unwrap();
+            #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
+            #[allow(clippy::useless_conversion)]
+            return self.0.st_nlink.into();
+        }
         #[cfg(windows)]
         return self.0.nNumberOfLinks as u64;
     }
 
     #[cfg(any(unix, target_os = "wasi"))]
     pub fn inode(&self) -> u64 {
-        #[cfg(all(
-            not(any(target_os = "haiku", target_os = "netbsd")),
-            target_pointer_width = "64"
-        ))]
-        return self.0.st_ino;
-        #[cfg(all(
-            not(target_os = "haiku"),
-            any(target_os = "netbsd", not(target_pointer_width = "64"))
-        ))]
-        #[allow(clippy::useless_conversion)]
-        return self.0.st_ino.into();
         #[cfg(target_os = "haiku")]
         return self.0.st_ino.try_into().unwrap();
+        #[cfg(not(target_os = "haiku"))]
+        #[allow(clippy::useless_conversion)]
+        return self.0.st_ino.into();
     }
 }
 
