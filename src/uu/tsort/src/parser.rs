@@ -28,7 +28,7 @@ where
         while pos < buf.len() {
             if pending.is_empty() {
                 // Skip whitespace before the next token.
-                while pos < buf.len() && is_delimiter(buf[pos]) {
+                while buf.get(pos).is_some_and(|&b| is_delimiter(b)) {
                     pos += 1;
                 }
 
