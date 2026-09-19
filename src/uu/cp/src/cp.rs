@@ -17,7 +17,13 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{fmt, io};
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "netbsd"
+))]
 use uucore::fsxattr::{copy_acls, copy_xattrs_fd, copy_xattrs_skip_selinux};
 use uucore::translate;
 
@@ -1802,7 +1808,13 @@ pub(crate) fn set_selinux_context(path: &Path, context: Option<&String>) -> Copy
 /// or if xattr copying fails.
 ///
 /// Uses file descriptor-based operations to avoid TOCTOU races during xattr copying.
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "netbsd"
+))]
 fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyResult<()> {
     use std::fs::File;
     use uucore::fsxattr::copy_xattrs;
@@ -1880,6 +1892,11 @@ pub(crate) fn copy_attributes(
         attributes.mode
     };
 
+    // A created directory only defaults to copying the source mode; unlike an
+    // explicit preserve (-p/-a), GNU applies the umask to it.
+    let apply_umask_to_mode =
+        dest_is_freshly_created_dir && !matches!(attributes.mode, Preserve::Yes { .. });
+
     // Track whether `chown` to the source's uid succeeded. If it did not
     // (typical case: non-root user copying a root-owned setuid file), the
     // mode preservation below must strip setuid/setgid so the destination
@@ -1944,6 +1961,12 @@ pub(crate) fn copy_attributes(
                     let mode = perms.mode() & !0o6000;
                     perms.set_mode(mode);
                 }
+                if apply_umask_to_mode {
+                    // The umask never covers setuid/setgid, so clear them
+                    // explicitly: a non-preserving copy must not carry the
+                    // source's set-user/group-ID bits into the new directory.
+                    perms.set_mode(perms.mode() & !0o6000 & !uucore::mode::get_umask());
+                }
                 perms
             };
             #[cfg(not(unix))]
@@ -1957,7 +1980,13 @@ pub(crate) fn copy_attributes(
             // (which are intentionally excluded from the default -p set per
             // issue #9704). Best-effort: ignore failures on filesystems that
             // do not support ACL xattrs.
-            #[cfg(all(unix, not(target_os = "android")))] // todo: support acl for other targets
+            #[cfg(any(
+                target_os = "freebsd",
+                target_os = "hurd",
+                target_os = "linux",
+                target_os = "macos",
+                target_os = "netbsd"
+            ))]
             copy_acls(source, dest);
         }
 
@@ -2020,11 +2049,23 @@ pub(crate) fn copy_attributes(
     })?;
 
     handle_preserve(attributes.xattr, || -> CopyResult<()> {
-        #[cfg(all(unix, not(target_os = "android")))]
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "hurd",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "netbsd"
+        ))]
         {
             copy_extended_attrs(source, dest, skip_selinux_xattr)?;
         }
-        #[cfg(not(all(unix, not(target_os = "android"))))]
+        #[cfg(not(any(
+            target_os = "freebsd",
+            target_os = "hurd",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "netbsd"
+        )))]
         #[allow(unused_variables)]
         {
             // The documentation for GNU cp states:

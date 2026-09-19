@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//
+// spell-checker:ignore (words) Tomasz Miąsko rntfv FFFD varname
+
 // This file is based on work from Tomasz Miąsko who published it as "shell_words" crate,
 // licensed under the Apache License, Version 2.0 <LICENSE-APACHE>
 // or the MIT license <LICENSE-MIT>, at your option.
@@ -15,7 +16,6 @@
 //! Apart from the grammar differences, there is a new feature integrated: $VARIABLE expansion.
 //!
 //! [GNU env] <https://www.gnu.org/software/coreutils/manual/html_node/env-invocation.html#g_t_002dS_002f_002d_002dsplit_002dstring-syntax>
-// spell-checker:ignore (words) Tomasz Miąsko rntfv FFFD varname
 
 #![forbid(unsafe_code)]
 
