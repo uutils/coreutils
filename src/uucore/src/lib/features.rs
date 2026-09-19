@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// features ~ feature-gated modules (core/bundler file)
-//
 // spell-checker:ignore (features) extendedbigdecimal logind
+
+// features ~ feature-gated modules (core/bundler file)
 
 #[cfg(feature = "backup-control")]
 pub mod backup_control;
@@ -36,7 +36,7 @@ pub mod extendedbigdecimal;
 pub mod fast_inc;
 #[cfg(feature = "format")]
 pub mod format;
-#[cfg(feature = "fs")]
+#[cfg(all(feature = "fs", any(unix, windows, target_os = "wasi")))]
 pub mod fs;
 #[cfg(feature = "fsext")]
 pub mod fsext;

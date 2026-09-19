@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore bsdutils toybox
+
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use uutests::at_and_ucmd;

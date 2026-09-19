@@ -23,7 +23,6 @@ mod prn_float;
 mod prn_int;
 
 use std::cmp;
-use std::fmt::Write;
 use std::io::{BufReader, Read};
 
 use crate::byteorder_io::ByteOrder;
@@ -695,6 +694,33 @@ fn extract_strings_from_input(
     }
 }
 
+/// Writes `n` spaces to `writer` without allocating a string for them.
+///
+/// The padding in front of an ascii dump grows with `-w`, which accepts huge
+/// values, so it has to be written in chunks rather than materialized.
+fn write_spaces(writer: &mut impl std::io::Write, n: usize) -> std::io::Result<()> {
+    const SPACES: [u8; 512] = [b' '; 512];
+
+    let mut remaining = n;
+    while remaining != 0 {
+        let chunk = cmp::min(remaining, SPACES.len());
+        writer.write_all(&SPACES[..chunk])?;
+        remaining -= chunk;
+    }
+    Ok(())
+}
+
+/// Writes `s` to `writer`, adding its width in characters to `line_width`.
+fn write_field(
+    writer: &mut impl std::io::Write,
+    s: &str,
+    line_width: &mut usize,
+) -> std::io::Result<()> {
+    writer.write_all(s.as_bytes())?;
+    *line_width += s.chars().count();
+    Ok(())
+}
+
 /// Outputs a single line of input, into one or more lines human readable output.
 fn write_bytes(
     writer: &mut impl std::io::Write,
@@ -704,52 +730,6 @@ fn write_bytes(
 ) -> std::io::Result<()> {
     let mut first = true; // First line of a multi-format raster.
     for f in output_info.spaced_formatters_iter() {
-        let mut output_text = String::new();
-
-        let mut b = 0;
-        while b < input_decoder.length() {
-            write!(
-                output_text,
-                "{:>width$}",
-                "",
-                width = f.spacing[b % output_info.byte_size_block]
-            )
-            .unwrap();
-
-            match f.formatter_item_info.formatter {
-                FormatWriter::IntWriter(func) => {
-                    let p = input_decoder.read_uint(b, f.formatter_item_info.byte_size);
-                    output_text.push_str(&func(p));
-                }
-                FormatWriter::FloatWriter(func) => {
-                    let p = input_decoder.read_float(b, f.formatter_item_info.byte_size);
-                    output_text.push_str(&func(p));
-                }
-                FormatWriter::LongDoubleWriter(func) => {
-                    let p = input_decoder.read_long_double(b);
-                    output_text.push_str(&func(p));
-                }
-                FormatWriter::BFloatWriter(func) => {
-                    let p = input_decoder.read_bfloat(b);
-                    output_text.push_str(&func(p));
-                }
-                FormatWriter::MultibyteWriter(func) => {
-                    output_text.push_str(&func(input_decoder.get_full_buffer(b)));
-                }
-            }
-
-            b += f.formatter_item_info.byte_size;
-        }
-
-        if f.add_ascii_dump {
-            let missing_spacing = output_info
-                .print_width_line
-                .saturating_sub(output_text.chars().count());
-            output_text.extend(std::iter::repeat_n(' ', missing_spacing));
-            output_text.push_str("  ");
-            output_text.push_str(&format_ascii_dump(input_decoder.get_buffer(0)));
-        }
-
         if first {
             write!(writer, "{prefix}")?; // print offset
             // if printing in multiple formats offset is printed only once
@@ -757,9 +737,54 @@ fn write_bytes(
         } else {
             // this takes the space of the file offset on subsequent
             // lines of multi-format rasters.
-            write!(writer, "{:>width$}", "", width = prefix.chars().count())?;
+            write_spaces(writer, prefix.chars().count())?;
         }
-        writeln!(writer, "{output_text}")?;
+
+        // The formatted fields are written out as they are produced: a line
+        // holds up to `-w` bytes of input, so buffering it would allocate
+        // several times the width, which can be huge.
+        let mut line_width = 0;
+        let mut b = 0;
+        while b < input_decoder.length() {
+            let spacing = f.spacing[b % output_info.byte_size_block];
+            write_spaces(writer, spacing)?;
+            line_width += spacing;
+
+            match f.formatter_item_info.formatter {
+                FormatWriter::IntWriter(func) => {
+                    let p = input_decoder.read_uint(b, f.formatter_item_info.byte_size);
+                    write_field(writer, &func(p), &mut line_width)?;
+                }
+                FormatWriter::FloatWriter(func) => {
+                    let p = input_decoder.read_float(b, f.formatter_item_info.byte_size);
+                    write_field(writer, &func(p), &mut line_width)?;
+                }
+                FormatWriter::LongDoubleWriter(func) => {
+                    let p = input_decoder.read_long_double(b);
+                    write_field(writer, &func(p), &mut line_width)?;
+                }
+                FormatWriter::BFloatWriter(func) => {
+                    let p = input_decoder.read_bfloat(b);
+                    write_field(writer, &func(p), &mut line_width)?;
+                }
+                FormatWriter::MultibyteWriter(func) => {
+                    write_field(
+                        writer,
+                        &func(input_decoder.get_full_buffer(b)),
+                        &mut line_width,
+                    )?;
+                }
+            }
+
+            b += f.formatter_item_info.byte_size;
+        }
+
+        if f.add_ascii_dump {
+            let missing_spacing = output_info.print_width_line.saturating_sub(line_width);
+            write_spaces(writer, missing_spacing + 2)?;
+            write!(writer, "{}", format_ascii_dump(input_decoder.get_buffer(0)))?;
+        }
+        writeln!(writer)?;
     }
     Ok(())
 }
