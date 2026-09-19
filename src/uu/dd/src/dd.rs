@@ -699,7 +699,23 @@ impl Dest {
         let Self::File(f, _) = self else {
             return Ok(());
         };
-        let pos = f.stream_position()?;
+
+        // `stream_position` can fail with ESPIPE on special outputs, when
+        // the file itself is not seekable. We'd ignore this particular error.
+        let maybe_pos = match f.stream_position() {
+            Ok(pos) => Ok(Some(pos)),
+            Err(e) => {
+                if e.kind() == io::ErrorKind::NotSeekable {
+                    Ok(None)
+                } else {
+                    Err(e)
+                }
+            }
+        }?;
+        let Some(pos) = maybe_pos else {
+            return Ok(());
+        };
+
         // `set_len()` can fail with EINVAL on special outputs such as
         // `/dev/null`; GNU ignores that. But on a regular file a
         // truncate failure (e.g. ENOSPC, read-only fs) means silent data
