@@ -3,8 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) filefrag rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile subvolume uufs xattrs ELOOP
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) filefrag rlimit Rlim Nofile clob btrfs neve ROOTDIR USERDIR outfile subvolume uufs xattrs ELOOP
 // spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx dstlink mcstransd
+
 #[cfg(unix)]
 use rstest::rstest;
 use uucore::display::Quotable;
@@ -1053,6 +1054,80 @@ fn test_cp_umask_stripping_owner_write_bit_reflink_never() {
             0o444
         );
     }
+}
+
+// Regression for #14549: `cp -r` (without preserve) must apply the umask to
+// directories it creates, matching GNU, instead of copying the source's mode.
+#[test]
+#[cfg(unix)]
+fn test_cp_recursive_dir_applies_umask() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("src");
+    at.mkdir("src/dir");
+    at.set_mode("src/dir", 0o777);
+
+    ucmd.umask(0o077).args(&["-r", "src", "d"]).succeeds();
+
+    // 0o777 & ~0o077 = 0o700, not the source's raw 0o777.
+    assert_eq!(at.metadata("d/dir").permissions().mode() & 0o777, 0o700);
+}
+
+// The umask alone never covers setuid/setgid, so a non-preserving `cp -r`
+// must clear them on the directories it creates. The sticky bit survives.
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: directory modes/umask are not faithfully reproduced"
+)]
+fn test_cp_recursive_dir_drops_setuid_setgid() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("tree");
+    for (name, mode) in [
+        ("tree/setgid", 0o2731u32),
+        ("tree/setuid", 0o4713),
+        ("tree/sticky", 0o1735),
+    ] {
+        at.mkdir(name);
+        at.set_mode(name, mode);
+    }
+
+    scene
+        .ucmd()
+        .umask(0o026)
+        .args(&["-r", "tree", "plain"])
+        .succeeds();
+
+    assert_eq!(
+        at.metadata("plain/setgid").permissions().mode() & 0o7777,
+        0o711
+    );
+    assert_eq!(
+        at.metadata("plain/setuid").permissions().mode() & 0o7777,
+        0o711
+    );
+    assert_eq!(
+        at.metadata("plain/sticky").permissions().mode() & 0o7777,
+        0o1711
+    );
+
+    // An explicit preserve keeps the mode as-is, umask and special bits alike.
+    scene
+        .ucmd()
+        .umask(0o026)
+        .args(&["-r", "--preserve=mode", "tree", "kept"])
+        .succeeds();
+
+    assert_eq!(
+        at.metadata("kept/setgid").permissions().mode() & 0o7777,
+        0o2731
+    );
+    assert_eq!(
+        at.metadata("kept/setuid").permissions().mode() & 0o7777,
+        0o4713
+    );
 }
 
 // When --reflink=always fails, GNU cp removes a destination it created
@@ -3114,7 +3189,7 @@ fn test_cp_reflink_insufficient_permission() {
 #[cfg(target_os = "linux")]
 #[test]
 fn test_closes_file_descriptors() {
-    use rlimit::Resource;
+    use rustix::process::Resource;
 
     let pid = std::process::id();
     let fd_path = format!("/proc/{pid}/fd");
@@ -3134,7 +3209,7 @@ fn test_closes_file_descriptors() {
         .arg("--reflink=auto")
         .arg("dir_with_10_files/")
         .arg("dir_with_10_files_new/")
-        .limit(Resource::NOFILE, limit_fd, limit_fd)
+        .limit(Resource::Nofile, limit_fd, limit_fd)
         .succeeds();
 }
 
@@ -3862,6 +3937,32 @@ fn test_cp_link_backup() {
 
     assert!(at.file_exists("file2~"));
     assert_eq!(at.read("file2"), "Hello, World!\n");
+}
+
+/// `--attributes-only` must still give the destination the source's type.
+/// It used to create a regular file for any source, which both got the type
+/// wrong and made the later xattr copy `open()` the source FIFO -- blocking
+/// forever, since nothing ever writes to it. GNU creates the FIFO and returns.
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
+fn test_cp_attributes_only_fifo_keeps_type_and_returns() {
+    for recursive in ["-a", "-R"] {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkfifo("fifo");
+
+        scene
+            .ucmd()
+            .args(&[recursive, "--attributes-only", "fifo", "copy"])
+            .succeeds()
+            .no_stderr();
+
+        assert!(
+            at.is_fifo("copy"),
+            "--attributes-only {recursive} did not create a FIFO"
+        );
+    }
 }
 
 #[test]
@@ -7542,6 +7643,59 @@ fn test_preserve_attrs_overriding_2() {
     }
 }
 
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
+fn test_no_preserve_mode_with_later_preserve() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("src");
+    at.set_mode("src", 0o755);
+
+    // 1. cp --no-preserve=mode src dst1 -> mode should not have execute bit (default umask strips permissions)
+    scene
+        .ucmd()
+        .args(&["--no-preserve=mode", "src", "dst1"])
+        .succeeds();
+    let dst1_mode = at.metadata("dst1").mode() & 0o777;
+    assert_ne!(dst1_mode & 0o111, 0o111);
+
+    // 2. cp --no-preserve=mode --preserve=timestamps src dst2 -> mode should match dst1 (--no-preserve=mode not forgotten)
+    scene
+        .ucmd()
+        .args(&["--no-preserve=mode", "--preserve=timestamps", "src", "dst2"])
+        .succeeds();
+    let dst2_mode = at.metadata("dst2").mode() & 0o777;
+    assert_eq!(dst1_mode, dst2_mode);
+
+    // 3. cp --no-preserve=all --preserve=timestamps src dst3 -> mode should match dst1
+    scene
+        .ucmd()
+        .args(&["--no-preserve=all", "--preserve=timestamps", "src", "dst3"])
+        .succeeds();
+    let dst3_mode = at.metadata("dst3").mode() & 0o777;
+    assert_eq!(dst1_mode, dst3_mode);
+
+    // 4. cp --preserve=timestamps --no-preserve=mode src dst4 -> mode should match dst1
+    scene
+        .ucmd()
+        .args(&["--preserve=timestamps", "--no-preserve=mode", "src", "dst4"])
+        .succeeds();
+    let dst4_mode = at.metadata("dst4").mode() & 0o777;
+    assert_eq!(dst1_mode, dst4_mode);
+
+    // 5. cp --no-preserve=mode --preserve=mode src dst5 -> mode should be preserved (0o755) because later flag wins
+    scene
+        .ucmd()
+        .args(&["--no-preserve=mode", "--preserve=mode", "src", "dst5"])
+        .succeeds();
+    let dst5_mode = at.metadata("dst5").mode() & 0o777;
+    assert_eq!(dst5_mode, 0o755);
+}
+
 /// Test the behavior of preserving permissions when copying through a symlink
 #[test]
 #[cfg(unix)]
@@ -8570,6 +8724,41 @@ fn test_cp_current_directory_to_new_directory() {
     assert!(at.file_exists("new_dest_dir/file2.txt"));
     assert!(at.dir_exists("new_dest_dir/subdir"));
     assert!(at.file_exists("new_dest_dir/subdir/file3.txt"));
+}
+
+// Regression test for Launchpad #2167118:
+// When copying current directory (.), files or directories inside it that share
+// the same name as the current directory itself must not be stripped to empty paths.
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: relative '..' path canonicalization differs, causing a false self-copy detection"
+)]
+fn test_cp_current_directory_with_entry_matching_parent_basename() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("demo");
+    at.touch("demo/file");
+    at.touch("demo/demo"); // file has the same name as parent directory
+
+    // Copy current directory (.) to a new directory (reproducer from LP #2167118)
+    ucmd.current_dir(at.plus("demo"))
+        .args(&["-R", ".", "../out"])
+        .succeeds();
+
+    assert!(at.file_exists("out/file"));
+    assert!(at.file_exists("out/demo"));
+
+    // Also test copying to an already existing destination directory
+    at.mkdir("existing_out");
+    let mut ucmd2 = uutests::new_ucmd!();
+    ucmd2
+        .current_dir(at.plus("demo"))
+        .args(&["-R", ".", "../existing_out"])
+        .succeeds();
+
+    assert!(at.file_exists("existing_out/file"));
+    assert!(at.file_exists("existing_out/demo"));
 }
 
 // Test copying current directory (.) with verbose output.

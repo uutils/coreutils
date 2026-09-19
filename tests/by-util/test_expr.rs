@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore αbcdef ; (people) kkos
 // spell-checker:ignore aabcccd aabcd aabd abbb abbbd abbcabc abbcac abbcbbbd abbcbd
 // spell-checker:ignore abbccd abcabc abcac acabc andand bigcmp bignum emptysub
@@ -499,6 +500,14 @@ fn test_regex_catastrophic_backtracking() {
 }
 
 #[test]
+fn test_regex_leftmost_longest_match_semantics() {
+    new_ucmd!()
+        .args(&["ab", ":", "a\\|ab"])
+        .succeeds()
+        .stdout_only("2\n");
+}
+
+#[test]
 fn test_substr() {
     new_ucmd!()
         .args(&["substr", "abc", "1", "1"])
@@ -570,6 +579,18 @@ fn test_invalid_substr() {
         .args(&["substr", "abc", "0", &(usize::MAX.to_string() + "0")])
         .fails_with_code(1)
         .stdout_only("\n");
+}
+
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: usize is 32-bit, the host usize::MAX does not parse"
+)]
+fn test_substr_large_length_capacity_overflow() {
+    new_ucmd!()
+        .args(&["substr", "abc", "1", &usize::MAX.to_string()])
+        .succeeds()
+        .stdout_only("abc\n");
 }
 
 #[test]

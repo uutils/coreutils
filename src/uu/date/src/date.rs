@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz unparseable
+// spell-checker:ignore ohos OHOS tzdata tzdb tzif zoneinfo
 
 mod format_modifiers;
 mod locale;
@@ -15,6 +16,7 @@ use jiff::{Timestamp, Zoned};
 use parse_datetime::{ExtendedDateTime, ParsedDateTime};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stderr};
 use std::path::PathBuf;
@@ -26,6 +28,7 @@ use uucore::error::{UError, UResult, USimpleError, strip_errno};
 #[cfg(feature = "i18n-datetime")]
 use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
 use uucore::translate;
+use uucore::translate_text;
 use uucore::{format_usage, show};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
@@ -35,7 +38,7 @@ use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 /// OHOS helper: pass through the system time zone ID returned by
 /// TimeService (OH_TimeService_GetTimeZone, e.g. "Asia/Shanghai") and
 /// resolve it against the embedded IANA tzdata (jiff-tzdb) so that
-/// historial DST rules and transitions are preserved. jiff's
+/// historical DST rules and transitions are preserved. jiff's
 /// `try_system()` is useless on OHOS because both `/etc/localtime` and
 /// the zoneinfo dirs are absent.
 #[cfg(target_env = "ohos")]
@@ -90,9 +93,9 @@ enum DateError {
     Write(std::io::Error),
     #[error("{}", translate!("date-error-extra-operand", "operand" => .operand))]
     ExtraOperand { operand: String },
-    #[error("{}", translate!("date-error-invalid-date", "date" => .date))]
+    #[error("{}", translate_text!("date-error-invalid-date", "date" => .date))]
     InvalidDate { date: String },
-    #[error("{}", translate!("date-error-format-missing-plus", "arg" => .arg))]
+    #[error("{}", translate_text!("date-error-format-missing-plus", "arg" => .arg))]
     FormatMissingPlus { arg: String },
     #[error("{}", translate!("date-error-expected-file-got-directory", "path" => .path))]
     ExpectedFileGotDirectory { path: String },
@@ -100,9 +103,6 @@ enum DateError {
     CannotSetDate { path: String, error: String },
     #[error("{}", translate!("date-error-invalid-format", "format" => .format, "error" => .error))]
     InvalidFormat { format: String, error: String },
-    #[cfg(target_vendor = "apple")]
-    #[error("{}", translate!("date-error-setting-date-not-supported-macos"))]
-    SettingDateNotSupportedMacOs,
     #[cfg(target_os = "redox")]
     #[error("{}", translate!("date-error-setting-date-not-supported-redox"))]
     SettingDateNotSupportedRedox,
@@ -115,7 +115,6 @@ struct Settings {
     utc: bool,
     format: Format,
     date_source: DateSource,
-    set_to: Option<Zoned>,
     debug: bool,
 }
 
@@ -343,7 +342,7 @@ fn parse_military_timezone_with_offset(s: &str) -> Option<(i32, DayDelta)> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let date_source = if let Some(date_os) = matches.get_one::<std::ffi::OsString>(OPT_DATE) {
+    let date_source = if let Some(date_os) = matches.get_one::<OsString>(OPT_DATE) {
         // Convert OsString to String, handling invalid UTF-8 with GNU-compatible error
         let date = date_os.to_str().ok_or_else(|| {
             let bytes = date_os.as_encoded_bytes();
@@ -351,12 +350,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             USimpleError::new(1, format!("invalid date '{escaped_str}'"))
         })?;
         DateSource::Human(date.into())
-    } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
-        match file.as_ref() {
-            "-" => DateSource::Stdin,
+    } else if let Some(file) = matches.get_one::<OsString>(OPT_FILE) {
+        match file.as_encoded_bytes() {
+            b"-" => DateSource::Stdin,
             _ => DateSource::File(file.into()),
         }
-    } else if let Some(file) = matches.get_one::<String>(OPT_REFERENCE) {
+    } else if let Some(file) = matches.get_one::<OsString>(OPT_REFERENCE) {
         DateSource::FileMtime(file.into())
     } else if matches.get_flag(OPT_RESOLUTION) {
         DateSource::Resolution
@@ -423,29 +422,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    let set_to = match matches.get_one::<String>(OPT_SET) {
-        None => None,
-        Some(input) => match parse_date(input, &now, DebugOptions::new(debug_mode, true), false) {
-            Ok(ParsedDateTime::InRange(date)) => Some(date),
+    if let Some(input) = matches.get_one::<String>(OPT_SET) {
+        match parse_date(input, &now, DebugOptions::new(debug_mode, true), false) {
+            Ok(ParsedDateTime::InRange(date)) => {
+                return set_system_datetime(convert_for_set(date, utc));
+            }
             Ok(ParsedDateTime::Extended(_)) | Err(_) => {
                 return Err(Box::new(DateError::InvalidDate {
                     date: input.clone(),
                 }));
             }
-        },
-    };
+        }
+    }
 
     let settings = Settings {
         utc,
         format,
         date_source,
-        set_to,
         debug: debug_mode,
     };
-
-    if let Some(date) = settings.set_to {
-        return set_system_datetime(convert_for_set(date, settings.utc));
-    }
 
     let allow_extended = matches!(settings.format, Format::Default);
     let output_time_zone = now.time_zone().clone();
@@ -691,7 +686,7 @@ pub fn uu_app() -> Command {
                 .value_name("STRING")
                 .allow_hyphen_values(true)
                 .overrides_with(OPT_DATE)
-                .value_parser(clap::value_parser!(std::ffi::OsString))
+                .value_parser(clap::value_parser!(OsString))
                 .help(translate!("date-help-date")),
         )
         .arg(
@@ -700,6 +695,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_FILE)
                 .value_name("DATEFILE")
                 .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString))
                 .conflicts_with(OPT_DATE)
                 .help(translate!("date-help-file")),
         )
@@ -752,7 +748,9 @@ pub fn uu_app() -> Command {
                 .long(OPT_REFERENCE)
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::AnyPath)
+                .value_parser(clap::value_parser!(OsString))
                 .conflicts_with_all([OPT_DATE, OPT_FILE, OPT_RESOLUTION])
+                .overrides_with(OPT_REFERENCE)
                 .help(translate!("date-help-reference")),
         )
         .arg(
@@ -762,13 +760,9 @@ pub fn uu_app() -> Command {
                 .value_name("STRING")
                 .allow_hyphen_values(true)
                 .help({
-                    #[cfg(not(any(target_vendor = "apple", target_os = "redox")))]
+                    #[cfg(not(target_os = "redox"))]
                     {
                         translate!("date-help-set")
-                    }
-                    #[cfg(target_vendor = "apple")]
-                    {
-                        translate!("date-help-set-macos")
                     }
                     #[cfg(target_os = "redox")]
                     {
@@ -1307,17 +1301,12 @@ fn convert_for_set(date: Zoned, utc: bool) -> Zoned {
     }
 }
 
-#[cfg(target_vendor = "apple")]
-fn set_system_datetime(_date: Zoned) -> UResult<()> {
-    Err(Box::new(DateError::SettingDateNotSupportedMacOs))
-}
-
 #[cfg(target_os = "redox")]
 fn set_system_datetime(_date: Zoned) -> UResult<()> {
     Err(Box::new(DateError::SettingDateNotSupportedRedox))
 }
 
-#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "redox")))]
+#[cfg(all(unix, not(target_os = "redox")))]
 /// System call to set date (unix).
 /// See here for more:
 /// `<https://doc.rust-lang.org/libc/i686-unknown-linux-gnu/libc/fn.clock_settime.html>`

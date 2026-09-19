@@ -7,7 +7,7 @@ use clap::Command;
 use std::ffi::OsString;
 use std::path::Path;
 use uu_ls::{Config, options};
-use uucore::{error::UResult, format_usage, quoting_style::QuotingStyle, translate};
+use uucore::{error::UResult, format_usage, translate};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -18,23 +18,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (matches, diag_args) =
         uucore::clap_localization::handle_clap_result_with_diagnostics(command, args.collect(), 2)?;
 
-    let mut default_quoting_style = false;
-
-    // If no quoting option was given, use dir's default quoting style.
-
-    if !matches.contains_id(options::QUOTING_STYLE)
-        && !matches.get_flag(options::quoting::C)
-        && !matches.get_flag(options::quoting::ESCAPE)
-        && !matches.get_flag(options::quoting::LITERAL)
-    {
-        default_quoting_style = true;
-    }
-
-    let mut config = Config::from_dir(&matches, diag_args.as_deref())?;
-
-    if default_quoting_style {
-        config.quoting_style = QuotingStyle::C_NO_QUOTES;
-    }
+    let config = Config::from_dir(&matches, diag_args.as_deref())?;
 
     let locs = matches
         .get_many::<OsString>(options::PATHS)

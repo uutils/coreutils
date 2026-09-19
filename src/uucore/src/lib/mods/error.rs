@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore uioerror rustdoc
+
 //! All utils return exit with an exit code. Usually, the following scheme is used:
 //! * `0`: succeeded
 //! * `1`: minor problems
@@ -51,8 +54,6 @@
 //! * [`USimpleError`] may be used in small utils with simple error handling.
 //! * Using [`ExitCode`] is not recommended but can be useful for converting utils to use
 //!   [`UResult`].
-
-// spell-checker:ignore uioerror rustdoc
 
 use std::{
     cell::Cell,
