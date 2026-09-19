@@ -5665,6 +5665,29 @@ fn test_ls_dired_order_format() {
         .stdout_contains("//DIRED//");
 }
 
+#[cfg(unix)]
+#[test]
+fn test_ls_dired_terminal_keeps_default_quoting() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("a b");
+    at.touch("a b/x");
+
+    // On a terminal the default quoting style is shell-escape, with or without
+    // --dired, and the offsets cover the quoted names, directory headers
+    // included.
+    let result = scene
+        .ucmd()
+        .args(&["--dired", "-R", "a b"])
+        .terminal_simulation(true)
+        .succeeds();
+    // The pty turns every \n into \r\n, which the offsets do not account for.
+    let stdout = result.stdout_str().replace("\r\n", "\n");
+    assert_eq!(dired_names(&stdout), ["x"]);
+    assert_eq!(subdired_names(&stdout), ["'a b'"]);
+    assert!(stdout.contains("//DIRED-OPTIONS// --quoting-style=shell-escape"));
+}
+
 #[test]
 fn test_ls_dired_offsets_follow_quoted_dir_headers() {
     let scene = TestScenario::new(util_name!());
