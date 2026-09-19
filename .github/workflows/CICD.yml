@@ -876,7 +876,7 @@ jobs:
           - { os: ubuntu-latest, features: "md5sum,sha1sum,sha224sum,sha256sum,sha384sum,sha512sum,cksum,openssl" }
           # macOS: vendored only — system libcrypto needs OPENSSL_DIR
           # pointing at Homebrew, which isn't worth wiring up for a smoke test.
-          # todo: check Windows (MinGW's system openssl)
+          # MinGW(UCRT): done at make.yml as actual consumer is MSYS2 only
     steps:
     - uses: actions/checkout@v7
       with:
