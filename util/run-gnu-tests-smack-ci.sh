@@ -101,9 +101,9 @@ for TEST_PATH in $QEMU_TESTS; do
     rm -rf "$WORK" "$WORK.gz"
     cp -a "$QEMU_DIR/rootfs" "$WORK"
 
-    # Hardlink utilities for SMACK/ROOTFS tests
+    # symlink utilities for SMACK/ROOTFS tests
     for U in $("$REPO_DIR/target/${PROFILE}/coreutils" --list); do
-        ln -f "$REPO_DIR/target/${PROFILE}/coreutils" "$WORK/bin/$U"
+        ln -sf "$REPO_DIR/target/${PROFILE}/coreutils" "$WORK/bin/$U"
     done
 
     # Set test script path and user
