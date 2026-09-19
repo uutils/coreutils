@@ -164,6 +164,110 @@ pub fn format_with_modifiers_if_present(
     Some(format_with_modifiers(date, format_string, config))
 }
 
+/// Escape conversion specifiers that jiff renders but GNU `date` leaves literal.
+///
+/// jiff implements a few strftime extensions unknown to GNU, notably `%f`
+/// (fractional seconds) and `%Q` (timezone abbreviation). Without this
+/// rewrite, `date +%f` prints the nanoseconds instead of `%f` (issue #14600).
+/// `%%` escapes are preserved and every other specifier is left untouched
+/// for jiff to render, so this must run before jiff (or the modifier path
+/// above) sees the format string.
+///
+/// Each `%[flags][width][:]{0,3}[fQ]` is rewritten to a `%%`-escaped literal
+/// reproducing GNU's output for unknown conversions: space padding by
+/// default, with `0` and `+` selecting zero padding and `_` selecting space
+/// padding (last flag wins), `-` suppressing padding, and `^` forcing the
+/// conversion letter to uppercase. (` ` is not a flag in the grammar below, so
+/// space-flag forms pass through to jiff, which renders them literally
+/// just like GNU.)
+///
+/// # Errors
+///
+/// Returns `FieldWidthTooLarge` if a padded width exceeds `MAX_FORMAT_WIDTH`,
+/// exactly like the modifier path.
+pub fn escape_jiff_only_specifiers(fmt: &str) -> Result<String, FormatError> {
+    if !fmt.contains('f') && !fmt.contains('Q') {
+        return Ok(fmt.to_string());
+    }
+
+    let bytes = fmt.as_bytes();
+    let mut out = String::with_capacity(fmt.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'%' {
+            // Pass-through: copy a single UTF-8 code point unchanged.
+            let ch_len = fmt[i..].chars().next().map_or(1, char::len_utf8);
+            out.push_str(&fmt[i..i + ch_len]);
+            i += ch_len;
+            continue;
+        }
+        // Keep `%%` intact: a letter after a literal percent is plain text.
+        if bytes.get(i + 1) == Some(&b'%') {
+            out.push_str("%%");
+            i += 2;
+            continue;
+        }
+        match parse_format_spec(&fmt[i..]) {
+            Some(parsed) if matches!(parsed.spec.chars().last(), Some('f' | 'Q')) => {
+                out.push_str(&gnu_unknown_literal(&fmt[i..i + parsed.len], &parsed)?);
+                i += parsed.len;
+            }
+            _ => {
+                out.push('%');
+                i += 1;
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Render GNU's output for one unknown `%[flags][width][:]{0,3}[fQ]`
+/// conversion (`raw`) as a `%%`-escaped literal for jiff to copy through.
+fn gnu_unknown_literal(raw: &str, parsed: &ParsedSpec<'_>) -> Result<String, FormatError> {
+    // Last pad-affecting flag wins: `-` suppresses padding, `_` selects
+    // spaces, `0`/`+` select zeros; the default is space padding.
+    let mut pad: Option<char> = Some(' ');
+    for flag in parsed.flags.chars() {
+        match flag {
+            '-' => pad = None,
+            '_' => pad = Some(' '),
+            '0' | '+' => pad = Some('0'),
+            _ => {}
+        }
+    }
+
+    let mut letter = parsed.spec.as_bytes().last().copied().unwrap_or(b'f');
+    if parsed.flags.contains('^') {
+        letter = letter.to_ascii_uppercase();
+    }
+    // Rebuild the literal tail byte-for-byte (`%`, flags, original width
+    // digits, colons, letter), e.g. `%010f` or `%::Q`.
+    let tail = format!(
+        "%{}{}{}",
+        parsed.flags,
+        &raw[1 + parsed.flags.len()..raw.len() - parsed.spec.len()],
+        &parsed.spec[..parsed.spec.len() - 1],
+    );
+    let mut literal = String::with_capacity(tail.len() + 3);
+    literal.push_str(&tail);
+    literal.push(letter as char);
+
+    if let (Some(pad), Some(width)) = (pad, parsed.width) {
+        if width > MAX_FORMAT_WIDTH {
+            return Err(field_width_too_large(width, parsed.spec));
+        }
+        let missing = width.saturating_sub(literal.len());
+        if missing > 0 {
+            let mut padded = String::with_capacity(literal.len() + missing);
+            padded.extend(std::iter::repeat_n(pad, missing));
+            padded.push_str("%%");
+            padded.push_str(&literal[1..]);
+            return Ok(padded);
+        }
+    }
+    Ok(format!("%%{}", &literal[1..]))
+}
+
 /// Quick check: does the format string contain any GNU modifier
 /// (a flag or width) on a `%`-spec, ignoring `%%` literals?
 ///
@@ -1069,5 +1173,75 @@ mod tests {
         for (input, expected) in cases {
             assert_eq!(has_gnu_modifiers(input), *expected, "input = {input:?}");
         }
+    }
+
+    #[test]
+    fn test_escape_jiff_only_specifiers() {
+        // (input, expected rewrite); expected outputs match GNU `date`.
+        let cases: &[(&str, &str)] = &[
+            // ---- bare specifiers ----
+            ("%f", "%%f"),
+            ("%Q", "%%Q"),
+            // ---- everything else passes through untouched ----
+            ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"),
+            ("%q", "%q"),   // lowercase quarter is known to GNU, not escaped
+            ("%%f", "%%f"), // literal percent: the `f` is plain text
+            ("%%Q", "%%Q"),
+            ("100%f", "100%%f"),
+            ("no percent here", "no percent here"),
+            ("", ""),
+            // ---- flags select padding, last one wins ----
+            ("%-f", "%%-f"),
+            ("% f", "% f"), // ` ` is not a flag: passes through, jiff renders it literally
+            ("%_f", "%%_f"),
+            ("%#f", "%%#f"),
+            ("%+f", "%%+f"),
+            ("%0_10f", "    %%0_10f"),
+            ("%_010f", "0000%%_010f"),
+            ("%-010f", "0000%%-010f"),
+            // ---- `^` forces the letter to uppercase ----
+            ("%^f", "%%^F"),
+            ("%^Q", "%%^Q"),
+            ("%^10f", "     %%^10F"),
+            // ---- width pads the literal ----
+            ("%10f", "      %%10f"),
+            ("%010f", "00000%%010f"),
+            ("%3f", "%%3f"),
+            ("%10Q", "      %%10Q"),
+            // ---- colon variants are unknown to GNU too ----
+            ("%:f", "%%:f"),
+            ("%::f", "%%::f"),
+            ("%:::Q", "%%:::Q"),
+            // ---- modifiers on other specs are not ours to touch ----
+            ("%10Y", "%10Y"),
+            ("%Om", "%Om"),
+            ("%Of", "%Of"), // `O` is not a flag; strip_o_modifier owns this
+            // ---- mixed strings ----
+            ("%Y-%m-%d %f", "%Y-%m-%d %%f"),
+            ("%%%f", "%%%%f"),
+            ("a%fb", "a%%fb"),
+        ];
+
+        for (input, expected) in cases {
+            assert_eq!(
+                escape_jiff_only_specifiers(input).unwrap(),
+                *expected,
+                "input = {input:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_escape_jiff_only_specifiers_width_too_large() {
+        let err = escape_jiff_only_specifiers("%100000f").unwrap_err();
+        assert!(matches!(
+            err,
+            FormatError::FieldWidthTooLarge { width: 100_000, .. }
+        ));
+        // No padding requested: huge widths stay literal, like GNU.
+        assert_eq!(
+            escape_jiff_only_specifiers("%-100000f").unwrap(),
+            "%%-100000f"
+        );
     }
 }

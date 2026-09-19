@@ -833,10 +833,16 @@ fn substitute_epoch_seconds(fmt: &str, date: &Zoned) -> String {
 /// literally, so strip it before jiff sees the format string.
 ///
 /// The `O` is only dropped when it actually modifies something, that is,
-/// when a specifier letter follows it. A dangling `%O` (at the end of the
-/// string, or followed by a non-letter) stays literal, as does any `O`
-/// that merely follows the `%%` escape.
+/// when a specifier letter GNU knows follows it. `%Of`/`%OQ` address
+/// conversions GNU itself leaves literal, so the `O` is kept there (jiff
+/// then emits the whole sequence literally, matching GNU). A dangling `%O`
+/// (at the end of the string, or followed by a non-letter) stays literal,
+/// as does any `O` that merely follows the `%%` escape.
 fn strip_o_modifier(fmt: &str) -> String {
+    // Conversion letters GNU does not implement: `%O` cannot modify them,
+    // the whole sequence stays literal.
+    const GNU_UNKNOWN: &[char] = &['f', 'Q'];
+
     if !fmt.contains("%O") {
         return fmt.to_string();
     }
@@ -852,7 +858,10 @@ fn strip_o_modifier(fmt: &str) -> String {
             Some('O') => {
                 let mut lookahead = chars.clone();
                 lookahead.next();
-                if lookahead.peek().is_some_and(char::is_ascii_alphabetic) {
+                if lookahead
+                    .peek()
+                    .is_some_and(|c| c.is_ascii_alphabetic() && !GNU_UNKNOWN.contains(c))
+                {
                     chars.next();
                 }
                 out.push('%');
@@ -962,7 +971,12 @@ fn format_date_with_locale_aware_months(
     // negative infinity (e.g. `@-1.5` → `-2`, not `-1`). Every other field jiff
     // produces already agrees with GNU, so only `%s` needs correcting; rewrite it
     // to the floored epoch second before jiff sees the format string.
-    let fmt_owned = strip_o_modifier(&substitute_epoch_seconds(fmt, date));
+    // Likewise, jiff implements `%f`/`%Q` while GNU leaves them literal, so
+    // escape those before jiff (or the modifier path below) sees the string.
+    let fmt_owned = format_modifiers::escape_jiff_only_specifiers(&strip_o_modifier(
+        &substitute_epoch_seconds(fmt, date),
+    ))
+    .map_err(|e| e.to_string())?;
     let fmt = fmt_owned.as_str();
 
     // Check if format string has GNU modifiers (width/flags) and format if present
@@ -1367,6 +1381,20 @@ fn set_system_datetime(date: Zoned) -> UResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_strip_o_modifier() {
+        // `O` modifying a GNU-known conversion is a no-op: strip it.
+        assert_eq!(strip_o_modifier("%Om"), "%m");
+        assert_eq!(strip_o_modifier("%Od %H:%M"), "%d %H:%M");
+        // `f`/`Q` are unknown to GNU, so `%O` cannot modify them: keep the
+        // sequence literal (jiff then renders it literally, like GNU).
+        assert_eq!(strip_o_modifier("%Of"), "%Of");
+        assert_eq!(strip_o_modifier("%OQ"), "%OQ");
+        // Dangling `%O` and `%%O` stay literal.
+        assert_eq!(strip_o_modifier("%O"), "%O");
+        assert_eq!(strip_o_modifier("%%Om"), "%%Om");
+    }
 
     #[test]
     fn test_parse_military_timezone_with_offset() {
