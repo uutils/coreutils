@@ -974,15 +974,15 @@ impl Config {
 
         if needs_color && let Err(err) = validate_ls_colors_env() {
             if let LsColorsParseError::UnrecognizedPrefix(prefix) = &err {
-                show_warning!(
+                show_error!(
                     "{}",
                     translate!(
-                        "ls-warning-unrecognized-ls-colors-prefix",
+                        "ls-error-unrecognized-ls-colors-prefix",
                         "prefix" => prefix.quote()
                     )
                 );
             }
-            show_warning!("{}", translate!("ls-warning-unparsable-ls-colors"));
+            show_error!("{}", translate!("ls-error-unparsable-ls-colors"));
             needs_color = false;
         }
 

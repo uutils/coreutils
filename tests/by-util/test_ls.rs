@@ -7034,6 +7034,35 @@ fn test_ls_color_empty_style() {
 }
 
 #[test]
+fn test_ls_bad_ls_colors_is_an_error_not_a_warning() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("marker");
+
+    // A stray entry without '=' makes the whole variable unparsable; the
+    // diagnostic is an error, so it must not carry a "warning: " prefix.
+    scene
+        .ucmd()
+        .env("LS_COLORS", "di=1;35:stray")
+        .arg("--color=always")
+        .arg("marker")
+        .succeeds()
+        .stdout_is("marker\n")
+        .stderr_is("ls: unparsable value for LS_COLORS environment variable\n");
+
+    scene
+        .ucmd()
+        .env("LS_COLORS", "qq=1;35:stray")
+        .arg("--color=always")
+        .arg("marker")
+        .succeeds()
+        .stdout_is("marker\n")
+        .stderr_is(
+            "ls: unrecognized prefix: 'qq'\nls: unparsable value for LS_COLORS environment variable\n",
+        );
+}
+
+#[test]
 fn test_ls_color_clear_to_eol() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
