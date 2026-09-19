@@ -61,9 +61,11 @@ static TEST_MOUNT_MOUNTPOINT: &str = "mount";
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
 static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
-#[cfg(all(
-    unix,
-    not(any(target_vendor = "apple", target_os = "android", target_os = "openbsd"))
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "netbsd"
 ))]
 use uutests::util::compare_xattrs;
 
@@ -5480,9 +5482,11 @@ fn test_cp_no_such() {
         .stderr_is("cp: 'no-such/' is not a directory\n");
 }
 
-#[cfg(all(
-    unix,
-    not(any(target_vendor = "apple", target_os = "android", target_os = "openbsd"))
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "netbsd"
 ))]
 #[test]
 #[cfg_attr(
@@ -7935,9 +7939,11 @@ fn test_cp_no_file() {
 }
 
 #[test]
-#[cfg(all(
-    unix,
-    not(any(target_vendor = "apple", target_os = "android", target_os = "openbsd"))
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "netbsd"
 ))]
 fn test_cp_preserve_xattr_readonly_source() {
     use std::process::Command;
