@@ -8,9 +8,9 @@ Index: gnu/tests/misc/getopt_vs_usage.sh
 --- gnu.orig/tests/misc/getopt_vs_usage.sh
 +++ gnu/tests/misc/getopt_vs_usage.sh
 @@ -18,6 +18,8 @@
- 
+
  . "${srcdir=.}/tests/init.sh";
- 
+
 +skip_ 'options are covered individually by our own tests'
 +
  getopts() {
