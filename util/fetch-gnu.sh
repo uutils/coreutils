@@ -1,17 +1,13 @@
 #!/bin/bash -e
-ver="9.11"
+ver="9.12"
 repo=https://github.com/coreutils/coreutils
 curl -L "${repo}/releases/download/v${ver}/coreutils-${ver}.tar.xz" | tar --strip-components=1 -xJf -
 
 # TODO stop backporting tests from master at GNU coreutils > $ver
 backport=(
-  cat/splice.sh # split tests
-  dd/fail-ftruncate-fstat.sh # remove LD_PRELOAD
-  dd/stderr.sh # replace GNU/test binary by uutils/test
-  misc/close-stdout.sh # fix hardcoded pathes to GNU executables
-  misc/uname-labeled.sh # uname -A/--all-labeled, added after $ver
-  nproc/nproc-quota.sh # remove LD_PRELOAD
-  misc/empty-backup-suffix.sh
+  # https://github.com/coreutils/coreutils/issues/355
+  env/env.sh
+  env/printenv.sh
 )
 for f in "${backport[@]}"
   do curl -L ${repo}/raw/refs/heads/master/tests/$f > tests/$f
