@@ -161,7 +161,6 @@ fsext = ["libc", "windows-sys", "bstr", "wide"]
 fsxattr = ["xattr", "itertools", "libc"]
 hardware = []
 lines = []
-feat_systemd_logind = ["utmpx", "libc"]
 format = [
   "bigdecimal",
   "extendedbigdecimal",
@@ -216,6 +215,7 @@ sum = [
   "crc-fast",
   "data-encoding",
 ]
+systemd_logind = ["utmpx", "libc"]
 # Use OpenSSL (libcrypto) for md5/sha1/sha2-family digests instead of the
 # pure-Rust crates. This dramatically speeds up checksum utilities on CPUs
 # without SHA-NI by using OpenSSL's optimized assembly implementations.

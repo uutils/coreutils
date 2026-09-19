@@ -73,13 +73,13 @@ feat_diagnostics = ["uucore/diagnostics"]
 ## Optional feature for stdbuf
 # "feat_external_libstdbuf" == use an external libstdbuf.so for stdbuf instead of embedding it
 feat_external_libstdbuf = ["stdbuf/feat_external_libstdbuf"]
-# "feat_systemd_logind" == enable feat_systemd_logind support for utmpx replacement
+# "feat_systemd_logind" == enable systemd_logind support for utmpx replacement
 feat_systemd_logind = [
-  "pinky/feat_systemd_logind",
-  "uptime/feat_systemd_logind",
-  "users/feat_systemd_logind",
-  "uucore/feat_systemd_logind",
-  "who/feat_systemd_logind",
+  "pinky/systemd_logind",
+  "uptime/systemd_logind",
+  "users/systemd_logind",
+  "uucore/systemd_logind",
+  "who/systemd_logind",
 ]
 # "feat_selinux" == enable support for SELinux Security Context (by using `--features feat_selinux`)
 # NOTE:
