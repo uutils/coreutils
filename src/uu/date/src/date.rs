@@ -350,9 +350,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             USimpleError::new(1, format!("invalid date '{escaped_str}'"))
         })?;
         DateSource::Human(date.into())
-    } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
-        match file.as_ref() {
-            "-" => DateSource::Stdin,
+    } else if let Some(file) = matches.get_one::<OsString>(OPT_FILE) {
+        match file.as_encoded_bytes() {
+            b"-" => DateSource::Stdin,
             _ => DateSource::File(file.into()),
         }
     } else if let Some(file) = matches.get_one::<OsString>(OPT_REFERENCE) {
@@ -695,6 +695,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_FILE)
                 .value_name("DATEFILE")
                 .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString))
                 .conflicts_with(OPT_DATE)
                 .help(translate!("date-help-file")),
         )
