@@ -561,7 +561,6 @@ dependencies = [
  "pretty_assertions",
  "rand 0.10.2",
  "regex",
- "rlimit",
  "rstest",
  "rstest_reuse",
  "rustc-hash",
@@ -2555,15 +2554,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba39f3699c378cd8970968dcbff9c43159ea4cfbd88d43c00b22f2ef10a435d2"
 
 [[package]]
-name = "rlimit"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f35ee2729c56bb610f6dba436bf78135f728b7373bdffae2ec815b2d3eb98cc3"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "roff"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3888,6 +3878,7 @@ name = "uu_od"
 version = "0.13.0"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "half",
  "libc",
@@ -4571,7 +4562,7 @@ dependencies = [
  "pretty_assertions",
  "rand 0.10.2",
  "regex",
- "rlimit",
+ "rustix",
  "tempfile",
  "uucore",
  "xattr",
