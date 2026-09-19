@@ -594,13 +594,12 @@ fn test_date_set_valid_2() {
 }
 
 #[test]
-fn test_date_for_invalid_file() {
-    let result = new_ucmd!().arg("--file").arg("invalid_file").fails();
-    result.no_stdout();
-    assert_eq!(
-        result.stderr_str().trim(),
-        "date: invalid_file: No such file or directory",
-    );
+fn test_date_for_non_existing_file() {
+    new_ucmd!()
+        .arg("--file")
+        .arg("non_existing_file")
+        .fails()
+        .stderr_only("date: non_existing_file: No such file or directory\n");
 }
 
 #[test]
@@ -619,30 +618,28 @@ fn test_date_for_no_permission_file() {
         .unwrap();
     file.set_permissions(std::fs::Permissions::from_mode(0o222))
         .unwrap();
-    let result = ucmd.arg("--file").arg(FILE).fails();
-    result.no_stdout();
-    assert_eq!(
-        result.stderr_str().trim(),
-        format!("date: {FILE}: Permission denied")
-    );
+
+    ucmd.arg("--file")
+        .arg(FILE)
+        .fails()
+        .stderr_only(format!("date: {FILE}: Permission denied\n"));
 }
 
 #[test]
 fn test_date_for_dir_as_file() {
-    let result = new_ucmd!().arg("--file").arg("/").fails_with_code(1);
-    result.no_stdout();
-    assert_eq!(
-        result.stderr_str().trim(),
-        "date: expected file, got directory '/'",
-    );
+    new_ucmd!()
+        .arg("--file")
+        .arg("/")
+        .fails_with_code(1)
+        .stderr_only("date: expected file, got directory '/'\n");
 }
 
 #[test]
-fn test_date_for_file() {
+fn test_date_for_empty_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_date_for_file";
     at.touch(file);
-    ucmd.arg("--file").arg(file).succeeds();
+    ucmd.arg("--file").arg(file).succeeds().no_output();
 }
 
 #[test]
