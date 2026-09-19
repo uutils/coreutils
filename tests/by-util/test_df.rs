@@ -1148,3 +1148,52 @@ fn test_df_masked_proc_fallback() {
         }
     }
 }
+
+/// A device must be listed once, at the best mount point, even when a better
+/// one shows up after a worse one has already been picked.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_df_one_entry_per_device_when_better_mount_comes_last() {
+    use std::process::Command;
+
+    // Needs user + mount namespaces to build a throwaway mount table.
+    if !Command::new("unshare")
+        .args(["-rm", "true"])
+        .status()
+        .is_ok_and(|s| s.success())
+    {
+        return;
+    }
+
+    let df_path = TestScenario::new("df").bin_path.clone();
+    // A scratch tmpfs holds the deep mount point; the device under test is
+    // first mounted there, then bind-mounted at a shallower path. df must
+    // prefer the shallow one and drop the deep one it had already picked.
+    let script = [
+        "mount -t tmpfs dfscratch /mnt",
+        "mkdir -p /mnt/one/two/three",
+        "mount -t tmpfs dfprobe /mnt/one/two/three",
+        "mount --bind /mnt/one/two/three /media",
+        &format!("{} df --output=source,target", df_path.display()),
+    ]
+    .join(" && ");
+
+    let output = Command::new("unshare")
+        .args(["-rm", "sh", "-c"])
+        .arg(script)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "df failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let probe: Vec<&str> = stdout
+        .lines()
+        .filter(|line| line.starts_with("dfprobe "))
+        .collect();
+    assert_eq!(probe.len(), 1, "expected a single entry, got: {stdout}");
+    assert!(probe[0].ends_with(" /media"), "got: {}", probe[0]);
+}
