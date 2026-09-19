@@ -17,14 +17,18 @@ use crate::translate;
 
 /// A mode string that does not parse, and the part of it that is at fault.
 ///
-/// `span` is a byte range inside the mode string that was handed to the parser,
-/// so that a caller can point a caret at the one clause — often the one
-/// character — that broke it.
+/// `span` is a byte range inside the clause that broke the parse, so that a
+/// caller can point a caret at the offending characters. `clause_start` is
+/// where that clause begins inside the whole mode string, which the parser
+/// knows but a caller may not; together they let the caret find its spot.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModeError {
     pub message: String,
     pub span: Range<usize>,
     pub kind: ModeErrorKind,
+    /// Offset of the clause that failed inside the mode string handed to the
+    /// parser. Zero for a bare mode, which is its own single clause.
+    pub clause_start: usize,
 }
 
 /// What went wrong, for callers that want to say more than the message does.
@@ -36,6 +40,11 @@ pub enum ModeErrorKind {
     MissingOperator,
     /// A numeric mode that is not octal, or is out of range.
     InvalidNumber,
+    /// A digit-bearing clause inside a symbolic list, where GNU only accepts
+    /// a bare octal as the whole mode string.
+    NumericClauseInList,
+    /// An empty clause in a comma-separated list.
+    EmptyClause,
 }
 
 impl ModeError {
@@ -44,6 +53,7 @@ impl ModeError {
             message,
             span,
             kind,
+            clause_start: 0,
         }
     }
 
@@ -135,8 +145,11 @@ impl ModeError {
     /// convention in [`crate::diagnostics`].
     fn describe(&self) -> (Option<String>, Option<String>) {
         let label = match self.kind {
-            // The message already names the expected operators.
-            ModeErrorKind::InvalidOperator => None,
+            // The message already says what the clause is and how the grammar
+            // treats it; a label would only repeat it.
+            ModeErrorKind::InvalidOperator
+            | ModeErrorKind::NumericClauseInList
+            | ModeErrorKind::EmptyClause => None,
             ModeErrorKind::MissingOperator => Some("mode-diag-label-missing-operator"),
             ModeErrorKind::InvalidNumber => Some("mode-diag-label-invalid-number"),
         };
@@ -317,17 +330,25 @@ fn parse_change(mode: &str, fperm: u32, considering_dir: bool) -> (u32, usize) {
     (srwx, pos)
 }
 
-/// Modify a file mode based on a user-supplied string.
-/// Supports comma-separated mode strings like "ug+rwX,o+rX" (same as chmod).
-pub fn parse_chmod(
+/// Apply a mode string to `current_mode`, returning both the result and the
+/// mode the same clauses would have produced with umask 0 — what the user
+/// asked for before the umask curtailed it, which drives chmod's diagnostic.
+fn parse_chmod_inner(
     current_mode: u32,
     mode_string: &str,
     considering_dir: bool,
     umask: u32,
-) -> Result<u32, ModeError> {
-    let mut new_mode: u32 = current_mode;
+) -> Result<(u32, u32), ModeError> {
+    // A digit makes GNU read the whole string as one bare numeric mode, which
+    // is only valid without commas; everything else is a list of symbolic
+    // clauses, and no clause in such a list may be numeric or empty.
+    if !mode_string.contains(',') && mode_string.chars().any(|c| c.is_ascii_digit()) {
+        let mode = parse_numeric(current_mode, mode_string, considering_dir)?;
+        return Ok((mode, mode));
+    }
 
-    // Split by commas and process each mode part sequentially
+    let mut new_mode = current_mode;
+    let mut naive_mode = current_mode;
     let mut offset = 0;
     for raw_part in mode_string.split(',') {
         let start = offset + (raw_part.len() - raw_part.trim_start().len());
@@ -336,18 +357,65 @@ pub fn parse_chmod(
 
         let mode_part = raw_part.trim();
         if mode_part.is_empty() {
-            continue;
+            return Err(ModeError {
+                clause_start: start,
+                ..ModeError::new(
+                    format!("invalid mode ({raw_part})"),
+                    0..0,
+                    ModeErrorKind::EmptyClause,
+                )
+            });
+        }
+        if mode_part.chars().any(|c| c.is_ascii_digit()) {
+            return Err(ModeError {
+                clause_start: start,
+                ..ModeError::new(
+                    format!("invalid mode ({mode_part})"),
+                    0..mode_part.len(),
+                    ModeErrorKind::NumericClauseInList,
+                )
+            });
         }
 
-        new_mode = if mode_part.chars().any(|c| c.is_ascii_digit()) {
-            parse_numeric(new_mode, mode_part, considering_dir)
-        } else {
-            parse_symbolic(new_mode, mode_part, umask, considering_dir)
-        }
-        .map_err(|err| err.shift(start))?;
+        new_mode = parse_symbolic(new_mode, mode_part, umask, considering_dir).map_err(|err| {
+            ModeError {
+                clause_start: start,
+                ..err
+            }
+        })?;
+        // The umask only masks bits, so the same clause parses with umask 0:
+        // it yields the mode the user asked for, before the umask curtailed it.
+        naive_mode = parse_symbolic(naive_mode, mode_part, 0, considering_dir)
+            .expect("the clause parsed above with the caller's umask");
     }
+    Ok((new_mode, naive_mode))
+}
 
-    Ok(new_mode)
+/// Modify a file mode based on a user-supplied string.
+///
+/// GNU accepts either a bare numeric (octal) mode, optionally with a leading
+/// `+`, `-` or `=`, or a comma-separated list of symbolic clauses such as
+/// "ug+rwX,o+rX". A numeric mode can only be the whole string: a list whose
+/// clause contains a digit, or that has an empty clause, is rejected.
+pub fn parse_chmod(
+    current_mode: u32,
+    mode_string: &str,
+    considering_dir: bool,
+    umask: u32,
+) -> Result<u32, ModeError> {
+    parse_chmod_inner(current_mode, mode_string, considering_dir, umask).map(|(mode, _)| mode)
+}
+
+/// Like [`parse_chmod`], but also returns the mode the symbolic clauses would
+/// have produced with umask 0, which callers such as chmod need to report a
+/// mode curtailed by the umask.
+pub fn parse_chmod_with_naive(
+    current_mode: u32,
+    mode_string: &str,
+    considering_dir: bool,
+    umask: u32,
+) -> Result<(u32, u32), ModeError> {
+    parse_chmod_inner(current_mode, mode_string, considering_dir, umask)
 }
 
 /// Takes a user-supplied string and tries to parse to u32 mode bitmask.
@@ -425,8 +493,6 @@ mod tests {
 
         // Numeric mode with - operator (starting from 0, so nothing to remove)
         assert_eq!(parse("-4", false, 0).unwrap(), 0);
-        // But if we first set a mode, then remove bits
-        assert_eq!(parse("644,-4", false, 0).unwrap(), 0o640);
     }
 
     #[test]
@@ -462,18 +528,26 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_mixed_numeric_and_symbolic() {
-        // Mix of numeric and symbolic modes
-        assert_eq!(parse("644,u+x", false, 0).unwrap(), 0o744);
-        assert_eq!(parse("u+rw,755", false, 0).unwrap(), 0o755);
+    fn test_parse_rejects_numeric_clause_in_list() {
+        // GNU only accepts a bare octal as the whole mode; a comma-separated
+        // list must consist entirely of symbolic clauses.
+        assert!(parse("644,u+x", false, 0).is_err());
+        assert!(parse("u+x,644", false, 0).is_err());
+        assert!(parse("a-w,644", false, 0).is_err());
+        assert!(parse("644,644", false, 0).is_err());
+        assert!(parse("g+s,755", false, 0).is_err());
+        assert!(parse("755,g+s", false, 0).is_err());
     }
 
     #[test]
-    fn test_parse_empty_string() {
-        // Empty string should return 0
-        assert_eq!(parse("", false, 0).unwrap(), 0);
-        assert_eq!(parse("   ", false, 0).unwrap(), 0);
-        assert_eq!(parse(",,", false, 0).unwrap(), 0);
+    fn test_parse_rejects_empty_clauses() {
+        // GNU rejects an empty mode and any list with an empty clause in it.
+        assert!(parse("", false, 0).is_err());
+        assert!(parse("   ", false, 0).is_err());
+        assert!(parse(",,", false, 0).is_err());
+        assert!(parse("644,", false, 0).is_err());
+        assert!(parse(",644", false, 0).is_err());
+        assert!(parse("u+x,,g+x", false, 0).is_err());
     }
 
     #[test]
@@ -512,18 +586,19 @@ mod tests {
     fn test_parse_complex_combinations() {
         // Complex real-world examples
         assert_eq!(parse("u=rwx,g=rx,o=r", false, 0).unwrap(), 0o754);
-        // To test removal, we need to first set permissions, then remove them
-        assert_eq!(parse("644,a-w", false, 0).unwrap(), 0o444);
-        assert_eq!(parse("644,g-r", false, 0).unwrap(), 0o604);
+        // Symbolic clauses apply in order, so a later one can remove bits
+        // that an earlier one added.
+        assert_eq!(parse("a=rw,u-w", false, 0).unwrap(), 0o466);
+        assert_eq!(parse("a=rw,g-r", false, 0).unwrap(), 0o626);
     }
 
     #[test]
     fn test_parse_sequential_application() {
-        // Test that comma-separated modes are applied sequentially
-        // First set to 644, then add execute for user
-        assert_eq!(parse("644,u+x", false, 0).unwrap(), 0o744);
+        // Test that comma-separated symbolic clauses are applied sequentially
+        // (a numeric clause in a list is rejected, so relative effects chain).
+        assert_eq!(parse("u+w,g+r", false, 0).unwrap(), 0o240);
 
-        // First add user write, then set to 755 (should override)
-        assert_eq!(parse("u+w,755", false, 0).unwrap(), 0o755);
+        // A later clause overrides the bits an earlier one set
+        assert_eq!(parse("u=rw,u+x", false, 0).unwrap(), 0o700);
     }
 }

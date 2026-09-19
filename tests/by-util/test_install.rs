@@ -305,6 +305,50 @@ fn test_install_mode_comma_separated_directory() {
 }
 
 #[test]
+fn test_install_mode_rejects_octal_clause_in_list() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("source_file");
+    at.mkdir("target_dir");
+    for mode in [
+        "--mode=644,u+x",
+        "--mode=u+x,644",
+        "--mode=a-w,644",
+        "--mode=644,644",
+        "--mode=g+s,755",
+        "--mode=755,g+s",
+    ] {
+        scene
+            .ucmd()
+            .args(&["source_file", "target_dir"])
+            .arg(mode)
+            .fails();
+    }
+}
+
+#[test]
+fn test_install_mode_rejects_empty_mode() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("source_file");
+    at.mkdir("target_dir");
+    for mode in [
+        "--mode=",
+        "--mode=  ",
+        "--mode=,,",
+        "--mode=644,",
+        "--mode=,644",
+        "--mode=u+x,,g+x",
+    ] {
+        scene
+            .ucmd()
+            .args(&["source_file", "target_dir"])
+            .arg(mode)
+            .fails();
+    }
+}
+
+#[test]
 fn test_install_mode_symbolic_ignore_umask() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "target_dir";
