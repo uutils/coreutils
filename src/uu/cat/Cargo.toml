@@ -20,7 +20,13 @@ clap = { workspace = true }
 fluent = { workspace = true }
 memchr = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["fast-inc", "fs", "pipes", "signals"] }
+uucore = { workspace = true, features = [
+  "fast-inc",
+  "fs",
+  "pipes",
+  "signals",
+  "stdio",
+] }
 
 [dev-dependencies]
 divan = { workspace = true }
