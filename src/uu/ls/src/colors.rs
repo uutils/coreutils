@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use super::PathData;
 use lscolors::{Indicator, LsColors, Style};
 use rustc_hash::FxHashMap;
@@ -534,7 +535,12 @@ pub(crate) fn color_name(
     wrap: bool,
 ) -> OsString {
     // Check if the file has capabilities
-    #[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android"))))]
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "hurd",
+        target_os = "linux",
+        target_os = "netbsd"
+    ))]
     {
         // Skip checking capabilities if LS_COLORS=ca=:
         let has_capabilities = style_manager

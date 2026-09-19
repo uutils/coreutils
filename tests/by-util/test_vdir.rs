@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use regex::Regex;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -111,6 +112,30 @@ fn test_literal_quoting_on_terminal() {
         .terminal_simulation(true)
         .succeeds()
         .stdout_contains(" a\r\nb\r\n");
+}
+
+#[test]
+fn test_time_selection_preserves_name_sort() {
+    let scene = TestScenario::new(util_name!());
+    for (name, seconds) in [("a", 978_307_200), ("b", 1_009_843_200)] {
+        scene.fixtures.touch(name);
+        filetime::set_file_atime(
+            scene.fixtures.plus(name),
+            filetime::FileTime::from_unix_time(seconds, 0),
+        )
+        .unwrap();
+    }
+    let name_order = Regex::new(r"(?s)2001 a\n.*2002 b\n").unwrap();
+    let zero_output = Regex::new(r"\Ab\x00a\x00\z").unwrap();
+    for (time, zero) in itertools::iproduct!(["-u", "--time=atime"], [false, true]) {
+        scene
+            .ucmd()
+            .args(&[time, "--time-style=+%Y", "a", "b"])
+            .args(if zero { &["--zero"] } else { &[] })
+            .succeeds()
+            .no_stderr()
+            .stdout_matches(if zero { &zero_output } else { &name_order });
+    }
 }
 
 #[test]

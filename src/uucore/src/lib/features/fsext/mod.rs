@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//! Set of functions to manage file systems
-
 // spell-checker:ignore DATETIME getmntinfo subsecond (fs) cifs smbfs
+
+//! Set of functions to manage file systems
 
 #[cfg(windows)]
 mod windows;
@@ -350,7 +350,16 @@ use std::ptr;
 use std::slice;
 
 /// Read file system list.
-#[cfg_attr(target_os = "wasi", allow(clippy::unnecessary_wraps))]
+#[cfg_attr(
+    any(
+        target_os = "aix",
+        target_os = "redox",
+        target_os = "illumos",
+        target_os = "solaris",
+        target_os = "wasi"
+    ),
+    expect(clippy::unnecessary_wraps)
+)]
 pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
     {
@@ -639,7 +648,7 @@ impl FsMeta for StatFs {
     }
 
     /// The preferred transfer size, which on Linux is `f_bsize`.
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(any(target_os = "aix", target_os = "linux", target_os = "android"))]
     #[allow(clippy::unnecessary_cast)]
     fn io_size(&self) -> u64 {
         self.f_bsize as u64
@@ -655,6 +664,7 @@ impl FsMeta for StatFs {
     // XXX: dunno if this is right
     #[cfg(not(any(
         target_vendor = "apple",
+        target_os = "aix",
         target_os = "freebsd",
         target_os = "linux",
         target_os = "android",
@@ -704,7 +714,12 @@ impl FsMeta for StatFs {
     fn namelen(&self) -> u64 {
         1024
     }
-    #[cfg(any(target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))]
+    #[cfg(any(
+        target_os = "aix",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
     #[allow(clippy::unnecessary_cast)]
     fn namelen(&self) -> u64 {
         self.f_namemax as u64 // spell-checker:disable-line
@@ -712,6 +727,7 @@ impl FsMeta for StatFs {
     // XXX: should everything just use statvfs?
     #[cfg(not(any(
         target_vendor = "apple",
+        target_os = "aix",
         target_os = "freebsd",
         target_os = "linux",
         target_os = "android",

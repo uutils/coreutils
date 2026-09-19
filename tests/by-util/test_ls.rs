@@ -2,8 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE NOTCAPABLE
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons Nofile NOTCAPABLE
+
 #![allow(
     clippy::similar_names,
     clippy::too_many_lines,
@@ -12,7 +14,7 @@
 
 use regex::Regex;
 #[cfg(unix)]
-use rlimit::Resource;
+use rustix::process::Resource;
 #[cfg(not(target_os = "openbsd"))]
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
@@ -2623,6 +2625,16 @@ fn test_ls_order_time() {
 
     let result = scene.ucmd().arg("--sort=time").arg("-r").succeeds();
     result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
+
+    // Long format selects the displayed time without enabling time sorting.
+    let name_order = Regex::new(r"(?s)test-1\n.*test-2\n.*test-3\n.*test-4\n").unwrap();
+    for (time, format) in itertools::iproduct!(["-u", "-c"], ["-g", "--format=long", "--dired"]) {
+        scene
+            .ucmd()
+            .args(&[time, format])
+            .succeeds()
+            .stdout_matches(&name_order);
+    }
 
     let args: [&[&str]; 10] = [
         &["-t", "-u"],
@@ -5654,6 +5666,31 @@ fn test_ls_dired_order_format() {
 }
 
 #[test]
+fn test_ls_dired_offsets_follow_quoted_dir_headers() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("a b");
+    at.touch("a b/x");
+    at.mkdir("it's");
+    at.touch("it's/y");
+
+    // Quoting lengthens the directory headers; both offset lists must follow
+    // the rendered header rather than the raw path.
+    let result = scene
+        .ucmd()
+        .args(&[
+            "--dired",
+            "-R",
+            "--quoting-style=shell-escape",
+            "a b",
+            "it's",
+        ])
+        .succeeds();
+    assert_eq!(dired_names(result.stdout_str()), ["x", "y"]);
+    assert_eq!(subdired_names(result.stdout_str()), ["'a b'", "\"it's\""]);
+}
+
+#[test]
 fn test_ls_dired_and_zero_are_incompatible() {
     let scene = TestScenario::new(util_name!());
 
@@ -5905,10 +5942,19 @@ fn test_ls_dired_symlink_name_only() {
 
 /// Extracts the file names delimited by the //DIRED// byte offsets.
 fn dired_names(output: &str) -> Vec<String> {
+    names_at_offsets(output, "//DIRED//")
+}
+
+/// Extracts the directory headers delimited by the //SUBDIRED// byte offsets.
+fn subdired_names(output: &str) -> Vec<String> {
+    names_at_offsets(output, "//SUBDIRED//")
+}
+
+fn names_at_offsets(output: &str, tag: &str) -> Vec<String> {
     let dired_line = output
         .lines()
-        .find(|&line| line.starts_with("//DIRED//"))
-        .unwrap();
+        .find(|&line| line.starts_with(tag))
+        .unwrap_or_else(|| panic!("no {tag} line in the output"));
     let positions: Vec<usize> = dired_line
         .split_whitespace()
         .skip(1)
@@ -6988,6 +7034,35 @@ fn test_ls_color_empty_style() {
 }
 
 #[test]
+fn test_ls_bad_ls_colors_is_an_error_not_a_warning() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("marker");
+
+    // A stray entry without '=' makes the whole variable unparsable; the
+    // diagnostic is an error, so it must not carry a "warning: " prefix.
+    scene
+        .ucmd()
+        .env("LS_COLORS", "di=1;35:stray")
+        .arg("--color=always")
+        .arg("marker")
+        .succeeds()
+        .stdout_is("marker\n")
+        .stderr_is("ls: unparsable value for LS_COLORS environment variable\n");
+
+    scene
+        .ucmd()
+        .env("LS_COLORS", "qq=1;35:stray")
+        .arg("--color=always")
+        .arg("marker")
+        .succeeds()
+        .stdout_is("marker\n")
+        .stderr_is(
+            "ls: unrecognized prefix: 'qq'\nls: unparsable value for LS_COLORS environment variable\n",
+        );
+}
+
+#[test]
 fn test_ls_color_clear_to_eol() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -7843,7 +7918,7 @@ fn test_ls_recursive_no_fd_leak() {
         .ucmd()
         .arg("-R")
         .arg("1")
-        .limit(Resource::NOFILE, 20, 20)
+        .limit(Resource::Nofile, 20, 20)
         .succeeds()
         .no_stderr();
 }
@@ -7973,6 +8048,36 @@ fn test_dired_write_error() {
             "ls: cannot access 'nonexistent': No such file or directory\n",
             "ls: write error: No space left on device\n",
         ));
+}
+
+#[cfg(unix)]
+#[test]
+fn test_ls_long_stat_failure_is_reported() {
+    use rustix::process::geteuid;
+    use std::os::unix::fs::PermissionsExt;
+
+    // root bypasses the directory search permission check this relies on
+    if geteuid().is_root() {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/file");
+    at.symlink_file("/", "dir/link");
+    // readable but not searchable: read_dir() succeeds while stat() on the
+    // entries fails with EACCES
+    at.set_mode("dir", 0o600);
+
+    ucmd.args(&["-l", "dir"])
+        .fails_with_code(1)
+        .stdout_contains("? file")
+        .stdout_contains("? link")
+        .stderr_contains("cannot access 'dir/file': Permission denied")
+        .stderr_contains("cannot access 'dir/link': Permission denied");
+
+    // restore so that the test directory can be cleaned up
+    std::fs::set_permissions(at.plus("dir"), std::fs::Permissions::from_mode(0o700)).unwrap();
 }
 
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]

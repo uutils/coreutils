@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use std::fmt::Display;
 use std::iter::Peekable;
 // `Range` alone is the field range from uucore, so byte ranges are named apart.

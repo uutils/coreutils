@@ -10,3 +10,7 @@ linker = "aarch64-linux-gnu-gcc"
 rustflags = ["-C", "target-feature=+crt-static"]
 [target.'cfg(target_env = "msvc")']
 rustflags = ["-C", "target-feature=+crt-static"]
+
+[env]
+# aws-lc is used only for checksum. Reduce binary size
+AWS_LC_SYS_NO_JITTER_ENTROPY = "1"

@@ -325,7 +325,7 @@ fn extract_files(options: &clap::ArgMatches) -> Files {
 /// # Returns
 ///
 /// A Sort variant representing the sorting method to use.
-fn extract_sort(options: &clap::ArgMatches) -> Sort {
+fn extract_sort(options: &clap::ArgMatches, format: &Format) -> Sort {
     let get_last_index = |flag: &str| -> usize {
         if options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine) {
             options.index_of(flag).unwrap_or(0)
@@ -356,7 +356,7 @@ fn extract_sort(options: &clap::ArgMatches) -> Sort {
     match max_sort_index {
         0 => {
             // No sort flags specified, use default behavior
-            if !options.get_flag(options::format::LONG)
+            if *format != Format::Long
                 && (options.get_flag(options::time::ACCESS)
                     || options.get_flag(options::time::CHANGE)
                     || options.get_one::<String>(options::TIME).is_some())
@@ -778,7 +778,6 @@ impl Config {
             }
         }
 
-        let sort = extract_sort(options);
         let time = extract_time(options);
         let mut needs_color = extract_color(options);
         let hyperlink = extract_hyperlink(options);
@@ -975,15 +974,15 @@ impl Config {
 
         if needs_color && let Err(err) = validate_ls_colors_env() {
             if let LsColorsParseError::UnrecognizedPrefix(prefix) = &err {
-                show_warning!(
+                show_error!(
                     "{}",
                     translate!(
-                        "ls-warning-unrecognized-ls-colors-prefix",
+                        "ls-error-unrecognized-ls-colors-prefix",
                         "prefix" => prefix.quote()
                     )
                 );
             }
-            show_warning!("{}", translate!("ls-warning-unparsable-ls-colors"));
+            show_error!("{}", translate!("ls-error-unparsable-ls-colors"));
             needs_color = false;
         }
 
@@ -1003,6 +1002,8 @@ impl Config {
         if dired && options.get_flag(options::ZERO) {
             return Err(Box::new(LsError::DiredAndZeroAreIncompatible));
         }
+
+        let sort = extract_sort(options, &format);
 
         // Only parse the time style after the final output format is known.
         let (time_format_recent, time_format_older) = if format == Format::Long {
