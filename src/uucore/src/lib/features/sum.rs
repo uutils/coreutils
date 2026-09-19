@@ -467,8 +467,7 @@ macro_rules! impl_digest_shake {
 // backed by OpenSSL's libcrypto, which provides hand-tuned assembly
 // implementations (AVX2, SSSE3, etc.) that are substantially faster than the
 // pure-Rust crates on CPUs without SHA-NI.
-#[cfg(not(feature = "openssl"))]
-pub struct Md5(md5::Md5);
+pub struct Md5(md_5::Md5);
 #[cfg(not(feature = "openssl"))]
 pub struct Sha1(sha1::Sha1);
 #[cfg(not(feature = "openssl"))]
@@ -480,7 +479,6 @@ pub struct Sha384(sha2::Sha384);
 #[cfg(not(feature = "openssl"))]
 pub struct Sha512(sha2::Sha512);
 
-#[cfg(not(feature = "openssl"))]
 impl_digest_common!(Md5, 128);
 #[cfg(not(feature = "openssl"))]
 impl_digest_common!(Sha1, 160);
@@ -553,8 +551,6 @@ macro_rules! impl_digest_openssl {
     };
 }
 
-#[cfg(feature = "openssl")]
-impl_digest_openssl!(Md5, 128, openssl::hash::MessageDigest::md5(), md5::Md5);
 #[cfg(feature = "openssl")]
 impl_digest_openssl!(Sha1, 160, openssl::hash::MessageDigest::sha1(), sha1::Sha1);
 #[cfg(feature = "openssl")]

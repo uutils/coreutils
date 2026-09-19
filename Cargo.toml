@@ -416,7 +416,7 @@ z85 = "3.0.5"
 zip = { version = "8.0.0", default-features = false, features = ["deflate"] }
 
 hex = "0.4.3"
-md-5 = { version = "0.11.0", default-features = false, features = ["alloc"] }
+md-5 = { git = "https://github.com/RustCrypto/hashes", rev = "981bd7cc56077995c67bf20a215cdfefc7b6a29b", package = "md-5", features = ["alloc"] }
 sha1 = { version = "0.11.0", default-features = false, features = ["alloc"] }
 sha2 = { version = "0.11.0", default-features = false, features = ["alloc"] }
 sha3 = { version = "0.12.0", default-features = false, features = ["alloc"] }
