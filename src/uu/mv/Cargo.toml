@@ -18,7 +18,6 @@ doctest = false
 [dependencies]
 clap = { workspace = true }
 indicatif = { workspace = true }
-libc = { workspace = true }
 nix = { workspace = true, features = ["fs"] }
 rustc-hash = { workspace = true }
 thiserror = { workspace = true }
@@ -43,7 +42,6 @@ windows-sys = { workspace = true, features = [
 ] }
 
 [target.'cfg(unix)'.dependencies]
-libc = { workspace = true }
 rustix = { workspace = true, features = ["fs"] }
 
 [features]
