@@ -14,8 +14,9 @@ readme.workspace = true
 [lib]
 path = "src/install.rs"
 
-[dependencies]
+[target.'cfg(unix)'.dependencies]
 clap = { workspace = true }
+rustix = { workspace = true, features = ["process"] }
 thiserror = { workspace = true }
 uucore = { workspace = true, default-features = true, features = [
   "backup-control",
@@ -35,9 +36,6 @@ uucore = { workspace = true, features = ["safe-traversal"] }
 rustix = { workspace = true, features = ["fs"] }
 selinux = { workspace = true, optional = true }
 
-[target.'cfg(unix)'.dependencies]
-rustix = { workspace = true, features = ["process"] }
-
 [features]
 diagnostics = ["uucore/diagnostics"]
 selinux = ["dep:selinux", "uucore/selinux"]
@@ -48,3 +46,4 @@ workspace = true
 [[bin]]
 name = "install"
 path = "src/main.rs"
+required-features = ["uucore/default"]
