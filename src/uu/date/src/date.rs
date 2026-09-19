@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz unparseable
-// spell-checker:ignore ohos OHOS tzdata
+// spell-checker:ignore ohos OHOS tzdata tzdb tzif zoneinfo
 
 mod format_modifiers;
 mod locale;
@@ -37,7 +37,7 @@ use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 /// OHOS helper: pass through the system time zone ID returned by
 /// TimeService (OH_TimeService_GetTimeZone, e.g. "Asia/Shanghai") and
 /// resolve it against the embedded IANA tzdata (jiff-tzdb) so that
-/// historial DST rules and transitions are preserved. jiff's
+/// historical DST rules and transitions are preserved. jiff's
 /// `try_system()` is useless on OHOS because both `/etc/localtime` and
 /// the zoneinfo dirs are absent.
 #[cfg(target_env = "ohos")]
