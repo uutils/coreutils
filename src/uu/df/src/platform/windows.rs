@@ -23,7 +23,7 @@ pub(crate) fn sync() {}
 
 /// Usage of the filesystem at `mount_info`, `None` if it cannot be queried.
 pub(crate) fn fs_usage(mount_info: &MountInfo) -> Option<FsUsage> {
-    FsUsage::new(Path::new(&mount_info.mount_dir)).ok()
+    FsUsage::new(Path::new(&mount_info.dev_id)).ok()
 }
 
 /// Find and create the filesystem from the given mount.
@@ -54,7 +54,7 @@ where
     absolute.metadata().map_err(|_| FsError::InvalidPath)?;
     let longest = mounts
         .iter()
-        .filter(|m| absolute.starts_with(&m.mount_dir))
+        .filter(|m| !m.mount_dir.is_empty() && absolute.starts_with(&m.mount_dir))
         .max_by_key(|m| m.mount_dir.len());
     let mount_info = if let Some(mount_info) = longest {
         mount_info.clone()
