@@ -643,6 +643,20 @@ fn test_date_for_empty_file() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
+fn test_date_for_file_with_non_utf8_path() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file = std::ffi::OsStr::from_bytes(b"file_\xFF\xFE.txt");
+    std::fs::File::create(at.plus(file)).unwrap();
+
+    ucmd.arg("--file").arg(file).succeeds().no_output();
+}
+
+#[test]
 fn test_date_file_invalid_utf8_line() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_date_file_invalid_utf8";
