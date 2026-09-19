@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (path) eacces inacc rm-r4 unlinkat fstatat rootlink
 
+#![cfg(any(unix, windows, target_os = "wasi"))]
+
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, Command, parser::ValueSource};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -28,7 +30,10 @@ use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
 
 mod platform;
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(all(
+    unix,
+    not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))
+))]
 use platform::{safe_remove_dir_recursive, safe_remove_empty_dir, safe_remove_file};
 
 #[derive(Debug, Error)]
@@ -632,7 +637,7 @@ fn is_readable_metadata(metadata: &Metadata) -> bool {
 }
 
 /// Whether the given file or directory is readable.
-#[cfg(any(not(unix), target_os = "redox"))]
+#[cfg(any(not(unix), target_os = "aix", target_os = "hurd", target_os = "redox"))]
 fn is_readable(_path: &Path) -> bool {
     true
 }
@@ -678,14 +683,17 @@ fn remove_dir_recursive(
         return false;
     }
 
-    // Use secure traversal on Unix (except Redox) for all recursive directory removals
-    #[cfg(all(unix, not(target_os = "redox")))]
+    // Use secure traversal on supported platforms for all recursive directory removals
+    #[cfg(all(
+        unix,
+        not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))
+    ))]
     {
         safe_remove_dir_recursive(path, options, progress_bar)
     }
 
-    // Fallback for non-Unix, Redox, or use fs::remove_dir_all for very long paths
-    #[cfg(any(not(unix), target_os = "redox"))]
+    // Fallback on not-supported platforms, or use fs::remove_dir_all for very long paths
+    #[cfg(any(not(unix), target_os = "aix", target_os = "hurd", target_os = "redox"))]
     {
         if path.to_str().is_some_and(|s| s.len() > 1000) {
             match fs::remove_dir_all(path) {
@@ -845,8 +853,11 @@ fn remove_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>
         return true;
     }
 
-    // Use safe traversal on Unix (except Redox) for empty directory removal
-    #[cfg(all(unix, not(target_os = "redox")))]
+    // Use safe traversal on supported platforms for empty directory removal
+    #[cfg(all(
+        unix,
+        not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))
+    ))]
     {
         if let Some(result) = safe_remove_empty_dir(path, options, progress_bar) {
             return result;
@@ -869,15 +880,18 @@ fn remove_file(path: &Path, options: &Options, progress_bar: Option<&ProgressBar
             pb.inc(1);
         }
 
-        // Use safe traversal on Unix (except Redox) for individual file removal
-        #[cfg(all(unix, not(target_os = "redox")))]
+        // Use safe traversal on supported platforms for individual file removal
+        #[cfg(all(
+            unix,
+            not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))
+        ))]
         {
             if let Some(result) = safe_remove_file(path, options, progress_bar) {
                 return result;
             }
         }
 
-        // Fallback method for non-Unix, Redox, or when safe traversal is unavailable
+        // Fallback method on non-supported platforms, or when safe traversal is unavailable
         match fs::remove_file(path) {
             Ok(_) => {
                 report_verbose_write_error(verbose_removed_file(path, options));
