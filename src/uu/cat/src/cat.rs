@@ -80,6 +80,8 @@ enum CatError {
     /// Wrapper around `io::Error`
     #[error("{}", strip_errno(.0))]
     Io(#[from] io::Error),
+    #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
+    Write(io::Error),
     /// Unknown file type; it's not a regular file, socket, etc.
     #[error("{}", translate!("cat-error-unknown-filetype", "ft_debug" => .ft_debug))]
     UnknownFiletype {
@@ -98,6 +100,16 @@ enum CatError {
 }
 
 type CatResult<T> = Result<T, CatError>;
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl From<uucore::pipes::PipeError> for CatError {
+    fn from(error: uucore::pipes::PipeError) -> Self {
+        match error {
+            uucore::pipes::PipeError::Read(error) => Self::Io(error),
+            uucore::pipes::PipeError::Write(error) => Self::Write(error),
+        }
+    }
+}
 
 #[derive(PartialEq)]
 enum NumberingMode {
@@ -403,7 +415,14 @@ where
 
     for path in files {
         if let Err(err) = cat_path(path, options, &mut state) {
-            error_messages.push(format!("{}: {err}", path.maybe_quote()));
+            let is_write_error = matches!(&err, CatError::Write(_));
+            error_messages.push(match &err {
+                CatError::Write(_) => err.to_string(),
+                _ => format!("{}: {err}", path.maybe_quote()),
+            });
+            if is_write_error {
+                break;
+            }
         }
     }
     if state.skipped_carriage_return {
@@ -499,11 +518,15 @@ fn print_unbuffered<R: FdReadable>(
             Ok(n) => {
                 stdout
                     .write_all(&buf[..n])
-                    .inspect_err(handle_broken_pipe)?;
+                    .inspect_err(handle_broken_pipe)
+                    .map_err(CatError::Write)?;
                 // cannot use rustix::io on Windows
                 // really bad workaround for unbuffered write <https://github.com/uutils/coreutils/issues/12188>
                 #[cfg(not(any(unix, target_os = "wasi")))]
-                stdout.flush().inspect_err(handle_broken_pipe)?;
+                stdout
+                    .flush()
+                    .inspect_err(handle_broken_pipe)
+                    .map_err(CatError::Write)?;
             }
             Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e.into()),
             _ => {}
