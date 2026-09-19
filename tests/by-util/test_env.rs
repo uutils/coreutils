@@ -2186,3 +2186,98 @@ env: no terminating quote in -S string at position 18 for quote '''
             .stderr_is("env: no terminating quote in -S string at position 18 for quote '''\n");
     }
 }
+
+#[test]
+fn test_env0_from_basic() {
+    new_ucmd!()
+        .args(&["-i", "--env0-from=-"])
+        .pipe_in("A=1\0B=2\0")
+        .succeeds()
+        .stdout_is("A=1\nB=2\n");
+}
+
+#[test]
+fn test_env0_from_preserve_duplicates() {
+    new_ucmd!()
+        .args(&["-i", "--env0-from=-"])
+        .pipe_in("DUP=1\0DUP=2\0")
+        .succeeds()
+        .stdout_is("DUP=1\nDUP=2\n");
+}
+
+#[test]
+fn test_env0_from_nonstandard_entries() {
+    new_ucmd!()
+        .args(&["-i", "-0", "--env0-from=-"])
+        .pipe_in("NOEQUAL\0=STARTEQUAL\0\0A=B\0")
+        .succeeds()
+        .stdout_is("NOEQUAL\0=STARTEQUAL\0\0A=B\0");
+}
+
+#[test]
+fn test_env0_from_unset_and_override() {
+    new_ucmd!()
+        .args(&["-i", "--env0-from=-", "-u", "DUP"])
+        .pipe_in("DUP=1\0DUP=2\0OTHER=3\0")
+        .succeeds()
+        .stdout_is("OTHER=3\n");
+
+    new_ucmd!()
+        .args(&["-i", "--env0-from=-", "DUP=4"])
+        .pipe_in("DUP=1\0DUP=2\0")
+        .succeeds()
+        .stdout_is("DUP=4\nDUP=2\n");
+}
+
+#[test]
+fn test_env0_from_empty_file() {
+    let tmp = tempfile::NamedTempFile::new().unwrap();
+    new_ucmd!()
+        .arg("-i")
+        .arg(format!("--env0-from={}", tmp.path().display()))
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
+fn test_env0_from_missing_trailing_nul() {
+    new_ucmd!()
+        .args(&["-i", "--env0-from=-"])
+        .pipe_in("A=1\0B=2")
+        .fails_with_code(125)
+        .stderr_is("env: -: file must end with a NUL byte\n");
+}
+
+#[test]
+fn test_env0_from_nonexistent_file() {
+    new_ucmd!()
+        .arg("--env0-from=/nonexistent_file_12345")
+        .fails_with_code(125)
+        .stderr_contains("cannot read '/nonexistent_file_12345'");
+}
+
+#[test]
+fn test_env0_from_with_command() {
+    new_ucmd!()
+        .args(&["-i", "--env0-from=-", "echo", "hello"])
+        .pipe_in("FOO=BAR\0")
+        .succeeds()
+        .stdout_is("hello\n");
+}
+
+#[test]
+fn test_env0_from_multiple_last_wins() {
+    let mut tmp1 = tempfile::NamedTempFile::new().unwrap();
+    std::io::Write::write_all(&mut tmp1, b"A=1\0").unwrap();
+    let mut tmp2 = tempfile::NamedTempFile::new().unwrap();
+    std::io::Write::write_all(&mut tmp2, b"B=2\0").unwrap();
+
+    new_ucmd!()
+        .args(&[
+            "-i",
+            &format!("--env0-from={}", tmp1.path().display()),
+            &format!("--env0-from={}", tmp2.path().display()),
+        ])
+        .succeeds()
+        .stdout_is("B=2\n");
+}
