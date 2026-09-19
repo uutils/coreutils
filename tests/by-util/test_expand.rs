@@ -2,9 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore (ToDO) taaaa tbbbb tcccc
+
 use uucore::display::Quotable;
 use uutests::new_ucmd;
-// spell-checker:ignore (ToDO) taaaa tbbbb tcccc
 
 #[test]
 fn test_invalid_arg() {
@@ -274,12 +276,12 @@ fn test_tabs_with_too_large_size() {
 )]
 #[test]
 fn test_large_tab_stop_without_tabs_does_not_allocate() {
-    use rlimit::Resource;
+    use rustix::process::Resource;
 
     const AS_LIMIT: u64 = 200 * 1024 * 1024;
 
     new_ucmd!()
-        .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
+        .limit(Resource::As, AS_LIMIT, AS_LIMIT)
         .arg("--tabs=267672676527678256")
         .pipe_in("hello\n")
         .succeeds()

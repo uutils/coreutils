@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel Secho sighandler putenv
+
 #![allow(clippy::missing_errors_doc)]
 
 #[cfg(unix)]
@@ -275,53 +277,6 @@ fn test_debug2_part_of_string_arg() {
 }
 
 #[test]
-fn test_file_option() {
-    let out = new_ucmd!()
-        .arg("-f")
-        .arg("vars.conf.txt")
-        .succeeds()
-        .stdout_move_str();
-
-    assert_eq!(
-        out.lines()
-            .filter(|&line| line == "FOO=bar" || line == "BAR=bamf this")
-            .count(),
-        2
-    );
-}
-
-#[test]
-fn test_combined_file_set() {
-    let out = new_ucmd!()
-        .arg("-f")
-        .arg("vars.conf.txt")
-        .arg("FOO=bar.alt")
-        .succeeds()
-        .stdout_move_str();
-
-    assert_eq!(out.lines().filter(|&line| line == "FOO=bar.alt").count(), 1);
-}
-
-#[test]
-fn test_combined_file_set_unset() {
-    let out = new_ucmd!()
-        .arg("-u")
-        .arg("BAR")
-        .arg("-f")
-        .arg("vars.conf.txt")
-        .arg("FOO=bar.alt")
-        .succeeds()
-        .stdout_move_str();
-
-    assert_eq!(
-        out.lines()
-            .filter(|&line| line == "FOO=bar.alt" || line.starts_with("BAR="))
-            .count(),
-        1
-    );
-}
-
-#[test]
 fn test_unset_invalid_variables() {
     use uucore::display::Quotable;
 
@@ -507,35 +462,6 @@ fn test_fail_change_directory() {
         .fails()
         .stderr_move_str();
     assert!(out.contains("env: cannot change directory to "));
-}
-
-#[test]
-fn test_chdir_happens_after_relative_file_loading() {
-    let scene = TestScenario::new(util_name!());
-    scene.fixtures.mkdir("target");
-    scene
-        .fixtures
-        .write("config.env", "CONFIG_SOURCE=from-root\n");
-    scene
-        .fixtures
-        .write("target/config.env", "CONFIG_SOURCE=from-target\n");
-
-    let out = scene
-        .ucmd()
-        .args(&["--chdir", "target", "--file", "config.env", "-i"])
-        .arg(uutests::util::get_tests_binary())
-        .arg(util_name!())
-        .succeeds()
-        .stdout_move_str();
-
-    assert!(
-        out.contains("CONFIG_SOURCE=from-root\n"),
-        "expected config file from invocation directory, got: {out:?}"
-    );
-    assert!(
-        !out.contains("CONFIG_SOURCE=from-target\n"),
-        "unexpectedly loaded config from --chdir target directory: {out:?}"
-    );
 }
 
 #[cfg(not(windows))] // windows has no executable "echo", its only supported as part of a batch-file

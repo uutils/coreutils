@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore udev pcent iuse itotal iused ipcent binfmt
+
 #![allow(
     clippy::similar_names,
     clippy::cast_possible_truncation,

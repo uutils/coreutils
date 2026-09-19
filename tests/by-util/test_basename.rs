@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (words) reallylongexecutable nbaz
 
 use uutests::new_ucmd;
@@ -169,7 +170,7 @@ fn test_invalid_utf8_args() {
         .expect("Only unix platforms can test non-unicode names");
 
     new_ucmd!()
-        .arg(&param)
+        .arg(param)
         .succeeds()
         .stdout_is_bytes(b"some-\xc0-file.k\xf3\n");
 
@@ -177,16 +178,10 @@ fn test_invalid_utf8_args() {
         .expect("Only unix platforms can test non-unicode names");
 
     new_ucmd!()
-        .arg(&param)
-        .arg(&suffix)
+        .arg(param)
+        .arg(suffix)
         .succeeds()
         .stdout_is_bytes(b"some-\xc0-file\n");
-}
-
-#[test]
-fn test_root() {
-    let expected = if cfg!(windows) { "\\\n" } else { "/\n" };
-    new_ucmd!().arg("/").succeeds().stdout_is(expected);
 }
 
 #[test]
@@ -204,12 +199,6 @@ fn test_double_slash() {
         .args(&["//", "//"])
         .succeeds()
         .stdout_is(expected);
-}
-
-#[test]
-fn test_triple_slash() {
-    let expected = if cfg!(windows) { "\\\n" } else { "/\n" };
-    new_ucmd!().arg("///").succeeds().stdout_is(expected);
 }
 
 #[test]

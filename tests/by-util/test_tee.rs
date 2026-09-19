@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore nopipe
+
 #![allow(clippy::borrow_as_ptr)]
 
 use uutests::{at_and_ucmd, new_ucmd};
@@ -13,8 +16,6 @@ use std::time::Duration;
 // tests for basic tee functionality.
 // inspired by:
 // https://github.com/coreutils/coreutils/tests/misc/tee.sh
-
-// spell-checker:ignore nopipe
 
 #[test]
 #[cfg(unix)]

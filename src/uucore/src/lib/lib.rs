@@ -2,10 +2,12 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//! library ~ (core/bundler file)
-// #![deny(missing_docs)] //TODO: enable this
-//
+
 // spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind
+
+//! library ~ (core/bundler file)
+
+// #![deny(missing_docs)] //TODO: enable this
 
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
@@ -25,7 +27,7 @@ pub use uucore_procs::*;
 pub use crate::mods::clap_localization;
 pub use crate::mods::display;
 pub use crate::mods::error;
-#[cfg(feature = "fs")]
+#[cfg(all(feature = "fs", any(unix, windows, target_os = "wasi")))]
 pub use crate::mods::io;
 pub use crate::mods::line_ending;
 pub use crate::mods::locale;
@@ -54,7 +56,7 @@ pub use crate::features::extendedbigdecimal;
 pub use crate::features::fast_inc;
 #[cfg(feature = "format")]
 pub use crate::features::format;
-#[cfg(all(feature = "fs", not(target_os = "haiku")))]
+#[cfg(all(feature = "fs", any(unix, windows, target_os = "wasi")))]
 pub use crate::features::fs;
 #[cfg(feature = "hardware")]
 pub use crate::features::hardware;
@@ -118,6 +120,7 @@ pub use crate::features::safe_traversal;
         target_os = "android",
         target_os = "cygwin",
         target_os = "freebsd",
+        target_os = "hurd",
         target_os = "illumos",
         target_os = "linux",
         target_os = "netbsd",
@@ -128,12 +131,14 @@ pub use crate::features::safe_traversal;
 ))]
 pub use crate::features::signals;
 #[cfg(all(
-    unix,
-    not(target_os = "android"),
-    not(target_os = "fuchsia"),
-    not(target_os = "openbsd"),
-    not(target_os = "redox"),
-    feature = "utmpx"
+    feature = "utmpx",
+    any(
+        target_vendor = "apple",
+        target_os = "cygwin",
+        target_os = "freebsd",
+        target_os = "linux",
+        target_os = "netbsd"
+    )
 ))]
 pub use crate::features::utmpx;
 // ** windows-only
@@ -143,7 +148,17 @@ pub use crate::features::wide;
 #[cfg(feature = "fsext")]
 pub use crate::features::fsext;
 
-#[cfg(all(unix, feature = "fsxattr"))]
+#[cfg(all(
+    feature = "fsxattr",
+    any(
+        target_os = "freebsd",
+        target_os = "hurd",
+        target_os = "linux",
+        target_os = "android",
+        target_os = "macos",
+        target_os = "netbsd"
+    )
+))]
 pub use crate::features::fsxattr;
 
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -495,8 +510,7 @@ pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<'_, [u8]> {
     }
 }
 
-/// Converts a `&[u8]` to an `&OsStr`,
-/// or parses it as UTF-8 into an [`OsString`] on non-unix platforms.
+/// Converts a `&[u8]` to an `&OsStr`.
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
@@ -504,14 +518,14 @@ pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<'_, [u8]> {
     any(unix, all(target_os = "wasi", target_env = "p1")),
     expect(clippy::unnecessary_wraps)
 )]
-pub fn os_str_from_bytes(bytes: &[u8]) -> error::UResult<Cow<'_, OsStr>> {
+pub fn os_str_from_bytes(bytes: &[u8]) -> error::UResult<&OsStr> {
     #[cfg(any(unix, all(target_os = "wasi", target_env = "p1")))]
-    return Ok(Cow::Borrowed(OsStr::from_bytes(bytes)));
+    return Ok(OsStr::from_bytes(bytes));
 
     #[cfg(not(any(unix, all(target_os = "wasi", target_env = "p1"))))]
-    Ok(Cow::Owned(OsString::from(str::from_utf8(bytes).map_err(
-        |_| error::UUsageError::new(1, "Unable to transform bytes into OsStr"),
-    )?)))
+    Ok(OsStr::new(str::from_utf8(bytes).map_err(|_| {
+        error::UUsageError::new(1, "Unable to transform bytes into OsStr")
+    })?))
 }
 
 /// Converts a `Vec<u8>` into an `OsString`, parsing as UTF-8 on non-unix platforms.

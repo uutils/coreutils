@@ -2,7 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
 
 // spell-checker:ignore (ToDO) adFfmprt, kmerge
 
@@ -139,6 +138,16 @@ struct NumberingMode {
     first_number: usize,
 }
 
+impl Default for NumberingMode {
+    fn default() -> Self {
+        Self {
+            width: 5,
+            separator: TAB.to_string(),
+            first_number: 1,
+        }
+    }
+}
+
 #[derive(Debug)]
 struct ExpandTabsOptions {
     input_char: char,
@@ -150,32 +159,6 @@ impl Default for ExpandTabsOptions {
         Self {
             width: 8,
             input_char: TAB,
-        }
-    }
-}
-
-impl Default for NumberingMode {
-    fn default() -> Self {
-        Self {
-            width: 5,
-            separator: TAB.to_string(),
-            first_number: 1,
-        }
-    }
-}
-
-impl From<FromUtf8Error> for PrError {
-    fn from(err: FromUtf8Error) -> Self {
-        Self::EncounteredErrors {
-            msg: err.to_string(),
-        }
-    }
-}
-
-impl From<Utf8Error> for PrError {
-    fn from(err: Utf8Error) -> Self {
-        Self::EncounteredErrors {
-            msg: err.to_string(),
         }
     }
 }
@@ -193,6 +176,22 @@ enum PrError {
 
     #[error("pr: {path}: {}", strip_errno(error))]
     ReadPath { path: PathBuf, error: io::Error },
+}
+
+impl From<FromUtf8Error> for PrError {
+    fn from(err: FromUtf8Error) -> Self {
+        Self::EncounteredErrors {
+            msg: err.to_string(),
+        }
+    }
+}
+
+impl From<Utf8Error> for PrError {
+    fn from(err: Utf8Error) -> Self {
+        Self::EncounteredErrors {
+            msg: err.to_string(),
+        }
+    }
 }
 
 pub fn uu_app() -> Command {
@@ -429,7 +428,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 /// Rewrite arguments before clap parsing, preserving legacy numeric operands.
 fn recreate_arguments(args: &[String]) -> Vec<String> {
     let num_regex = Regex::new(r"^[^-]\d*$").unwrap();
-    let n_regex = Regex::new(r"^-n\s*$").unwrap();
     // `-e` ends a cluster of short flags that take no value of their own, as in `-tre`.
     // Options that do take a value are excluded so that `-se` keeps meaning `-s e`.
     let e_regex = Regex::new(r"^-[dtTrFfabmJ]*e$").unwrap();
@@ -437,8 +435,8 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
     let num_option = args
         .iter()
         .take_while(|arg| arg.as_str() != "--")
-        .find_position(|x| n_regex.is_match(x.trim()));
-    if let Some((pos, _value)) = num_option
+        .position(|x| x.trim() == "-n");
+    if let Some(pos) = num_option
         && let Some(num_val_opt) = args.get(pos + 1)
         && !num_regex.is_match(num_val_opt)
     {
