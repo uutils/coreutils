@@ -1771,6 +1771,18 @@ mod tests {
         assert!(dst.truncate().is_ok());
     }
 
+    // seek(0, obs) should not fail for special outputs (e.g. `/dev/null`)
+    #[cfg(unix)]
+    #[test]
+    fn test_seek_zero_should_not_fail_for_special_file() {
+        use crate::{Density, Dest};
+        use std::fs::OpenOptions;
+
+        let f = OpenOptions::new().write(true).open("/dev/null").unwrap();
+        let mut dst = Dest::File(f, Density::Dense);
+        assert!(dst.seek(0, 512).is_ok());
+    }
+
     #[test]
     fn test_nocreat_causes_failure_when_ofile_doesnt_exist() {
         let args = &["conv=nocreat", "of=not-a-real.file"];
