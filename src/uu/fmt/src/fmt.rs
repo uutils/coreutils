@@ -35,6 +35,8 @@ enum FmtError {
     WidthOutOfRange(usize),
     #[error("{}", translate!("fmt-error-invalid-tabwidth", "tabwidth" => .0.quote()))]
     InvalidTabWidth(String),
+    #[error("{}", translate!("fmt-error-tabwidth-out-of-range", "tabwidth" => .0))]
+    TabWidthOutOfRange(usize),
     #[error("{}", translate!("fmt-error-first-option-width", "option" => .0))]
     FirstOptionWidth(char),
     #[error("{}", translate!("fmt-error-read"))]
@@ -50,6 +52,7 @@ impl From<FmtError> for Box<dyn uucore::error::UError> {
 }
 
 const MAX_WIDTH: usize = 2500;
+const MAX_TAB_WIDTH: usize = 2500;
 const DEFAULT_GOAL: usize = 70;
 const DEFAULT_WIDTH: usize = 75;
 // by default, goal is 93% of width
@@ -168,7 +171,10 @@ impl FmtOptions {
         let tabwidth = tabwidth_str
             .parse::<usize>()
             .map_err(|_| FmtError::InvalidTabWidth(tabwidth_str.to_owned()))?
-            .clamp(1, usize::MAX);
+            .max(1);
+        if tabwidth > MAX_TAB_WIDTH {
+            return Err(FmtError::TabWidthOutOfRange(tabwidth).into());
+        }
 
         Ok(Self {
             crown,
