@@ -7,8 +7,8 @@
 
 //! Utilities for formatting numbers in various formats
 
-use bigdecimal::BigDecimal;
 use bigdecimal::num_bigint::ToBigInt;
+use bigdecimal::{BigDecimal, RoundingMode};
 use num_traits::Signed;
 use num_traits::Zero;
 use std::cmp::min;
@@ -431,7 +431,27 @@ fn format_float_decimal(
             return format!("{bd:.0}.");
         }
     }
-    format!("{bd:.precision$}")
+    let rounded = bd.with_scale_round(precision as i64, RoundingMode::default());
+    let (digits, scale) = rounded.as_bigint_and_scale();
+    debug_assert_eq!(scale, precision as i64);
+
+    let digits = digits.to_str_radix(10);
+    if precision == 0 {
+        return digits;
+    }
+
+    let mut output = String::with_capacity(precision.saturating_add(2));
+    if digits.len() <= precision {
+        output.push_str("0.");
+        output.extend(std::iter::repeat_n('0', precision - digits.len()));
+        output.push_str(&digits);
+    } else {
+        let decimal_point = digits.len() - precision;
+        output.push_str(&digits[..decimal_point]);
+        output.push('.');
+        output.push_str(&digits[decimal_point..]);
+    }
+    output
 }
 
 /// Converts a `&BigDecimal` to a scientific-like `X.XX * 10^e`.
@@ -483,11 +503,14 @@ fn format_float_scientific(
     };
 
     if BigDecimal::zero().eq(bd) {
-        return if force_decimal == ForceDecimal::Yes && precision == 0 {
-            format!("0.{exp_char}+00")
-        } else {
-            format!("{:.precision$}{exp_char}+00", 0.0)
-        };
+        let mut output = String::from("0");
+        if precision > 0 || force_decimal == ForceDecimal::Yes {
+            output.push('.');
+        }
+        output.extend(std::iter::repeat_n('0', precision));
+        output.push(exp_char);
+        output.push_str("+00");
+        return output;
     }
 
     let (digits, exponent) = bd_to_string_exp_with_prec(bd, precision + 1);
@@ -521,13 +544,13 @@ fn format_float_shortest(
     let precision = precision.max(1);
 
     if BigDecimal::zero().eq(bd) {
-        return match (force_decimal, precision) {
-            (ForceDecimal::Yes, 1) => "0.".into(),
-            (ForceDecimal::Yes, _) => {
-                format!("{:.*}", precision - 1, 0.0)
-            }
-            (ForceDecimal::No, _) => "0".into(),
-        };
+        if force_decimal == ForceDecimal::No {
+            return "0".into();
+        }
+
+        let mut output = String::from("0.");
+        output.extend(std::iter::repeat_n('0', precision - 1));
+        return output;
     }
 
     let mut output = String::with_capacity(precision);
@@ -623,11 +646,16 @@ fn format_float_hexadecimal(
     if BigDecimal::zero().eq(bd) {
         // To print 0, we don't ever need any digits after the decimal point, so default to
         // that if precision is not specified.
-        return if force_decimal == ForceDecimal::Yes && precision.unwrap_or(0) == 0 {
-            format!("0x0.{exp_char}+0")
-        } else {
-            format!("0x{:.*}{exp_char}+0", precision.unwrap_or(0), 0.0)
-        };
+        let zero_precision = precision.unwrap_or(0);
+        let mut output = String::from(prefix);
+        output.push('0');
+        if zero_precision > 0 || force_decimal == ForceDecimal::Yes {
+            output.push('.');
+        }
+        output.extend(std::iter::repeat_n('0', zero_precision));
+        output.push(exp_char);
+        output.push_str("+0");
+        return output;
     }
 
     // Convert to the form frac10 * 10^exp
@@ -1283,6 +1311,15 @@ mod test {
         let s = fmt(&format, 255u64);
         assert_eq!(s.len(), 100_000);
         assert!(s.ends_with("0ff"));
+    }
+
+    #[test]
+    fn format_float_large_precision() {
+        let format = Format::<Float, &ExtendedBigDecimal>::parse("%.70000f").unwrap();
+        let s = fmt(&format, &1u32.into());
+        assert_eq!(s.len(), 70_002);
+        assert!(s.starts_with("1."));
+        assert!(s[2..].chars().all(|c| c == '0'));
     }
 
     #[test]
