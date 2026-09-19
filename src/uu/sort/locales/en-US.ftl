@@ -12,8 +12,10 @@ sort-after-help = The key format is FIELD[.CHAR][OPTIONS][,FIELD[.CHAR]][OPTIONS
 
 # Error messages
 sort-open-failed = open failed: {$path}: {$error}
+sort-truncate-failed = failed to truncate: {$path}: {$error}
 sort-parse-key-error = failed to parse key {$key}: {$msg}
 sort-cannot-read = cannot read: {$path}: {$error}
+sort-read-failed = read failed: {$error}
 sort-open-tmp-file-failed = failed to open temporary file: {$error}
 sort-compress-prog-execution-failed = could not run compress program '{$prog}': {$error}
 sort-compress-prog-terminated-abnormally = {$prog} terminated abnormally

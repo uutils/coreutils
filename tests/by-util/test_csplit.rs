@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use glob::glob;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -48,6 +49,39 @@ fn test_line_numbers_suppress_matched_final_empty_elided_with_z() {
     assert_eq!(at.read("xx00"), "1\n");
     assert_eq!(at.read("xx01"), "3\n");
     assert_eq!(at.read("xx02"), "5\n");
+}
+
+#[test]
+fn test_up_to_match_suppress_matched_final_empty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--suppress-matched", "-", "2", "/a/"])
+        .pipe_in("1\n2\n3\n4\na\n")
+        .succeeds()
+        .stdout_only("2\n4\n0\n");
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 3);
+    assert_eq!(at.read("xx00"), "1\n");
+    assert_eq!(at.read("xx01"), "3\n4\n");
+    assert_eq!(at.read("xx02"), "");
+}
+
+#[test]
+fn test_up_to_match_offset_final_empty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-", "/a/+1"])
+        .pipe_in("1\na\n")
+        .succeeds()
+        .stdout_only("4\n0\n");
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 2);
+    assert_eq!(at.read("xx00"), "1\na\n");
+    assert_eq!(at.read("xx01"), "");
 }
 
 #[test]
@@ -1446,6 +1480,20 @@ fn precision_format() {
 }
 
 #[test]
+fn suffix_format_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading suffix format passed as its own argument (not
+    // attached with `-b-%02d`/`=`) must not be mistaken for a new,
+    // unrecognized flag.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "10", "--suffix-format", "-%02d"])
+        .succeeds()
+        .stdout_only("18\n123\n");
+
+    assert_eq!(at.read("xx-00"), generate(1, 10));
+    assert_eq!(at.read("xx-01"), generate(10, 51));
+}
+
+#[test]
 fn zero_precision_format() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "10", "--suffix-format", "%.0d"])
@@ -1629,4 +1677,18 @@ fn test_create_error_reports_filename() {
     ucmd.args(&["input", "2"])
         .fails()
         .stderr_is("csplit: xx00: Permission denied\n");
+}
+
+#[test]
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
+fn test_csplit_dev_full_stdout() {
+    use std::fs::OpenOptions;
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    new_ucmd!()
+        .args(&["/etc/hosts", "1"])
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_is("csplit: No space left on device\n");
 }

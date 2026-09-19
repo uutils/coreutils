@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (ToDO) multifile curr fnames fname xfrd fillloop mockstream
 
 use std::fs::File;
@@ -118,7 +119,7 @@ impl MultifileReader<'_> {
                             // print an error at the time that the file is needed,
                             // then move to the next file
                             let error_msg = match e.kind() {
-                                #[cfg(target_os = "windows")]
+                                #[cfg(windows)]
                                 io::ErrorKind::NotFound => "No such file or directory",
                                 _ => &strip_errno(&e),
                             };

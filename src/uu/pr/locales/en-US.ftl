@@ -57,7 +57,7 @@ pr-help-across =
                   across the page in a  round-robin  order (for example, when column is 2, the
                   first input line heads column 1, the second heads column 2, the third is the
                   second line in column 1, and so on).
-pr-help-column =
+pr-help-columns =
   Produce multi-column output that is arranged in column columns
                   (the default shall be 1) and is written down each column  in  the order in which
                   the text is received from the input file. This option should not be used with -m.

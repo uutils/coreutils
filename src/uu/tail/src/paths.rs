@@ -84,11 +84,11 @@ impl Input {
                 // on dev/fd/0 (or /dev/stdin) will fail (NotFound),
                 // so we treat stdin as a pipe here
                 // https://github.com/rust-lang/rust/issues/95239
-                #[cfg(target_os = "macos")]
+                #[cfg(target_vendor = "apple")]
                 {
                     None
                 }
-                #[cfg(not(target_os = "macos"))]
+                #[cfg(not(target_vendor = "apple"))]
                 {
                     PathBuf::from(text::FD0).canonicalize().ok()
                 }
@@ -236,13 +236,13 @@ pub fn path_is_tailable(path: &Path) -> bool {
 }
 
 #[inline]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 pub fn stdin_is_bad_fd() -> bool {
     uucore::signals::stdin_was_closed()
 }
 
 #[inline]
-#[cfg(not(unix))]
+#[cfg(not(all(unix, not(target_os = "fuchsia"))))]
 pub fn stdin_is_bad_fd() -> bool {
     false
 }

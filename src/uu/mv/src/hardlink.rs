@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore hardlinked
 
 //! Hardlink preservation utilities for mv operations
@@ -121,7 +122,7 @@ impl HardlinkTracker {
     ) -> Option<PathBuf> {
         use std::os::unix::fs::MetadataExt;
 
-        let metadata = match source.metadata() {
+        let metadata = match source.symlink_metadata() {
             Ok(meta) => meta,
             Err(e) => {
                 // Gracefully handle metadata errors by logging and continuing without hardlink tracking
@@ -219,8 +220,8 @@ impl HardlinkGroupScanner {
             // Recursively scan directory contents
             self.scan_directory_recursive(path)?;
         } else {
-            let metadata = path.metadata()?;
-            if metadata.nlink() > 1 {
+            let metadata = path.symlink_metadata()?;
+            if metadata.is_file() && metadata.nlink() > 1 {
                 let key = (metadata.dev(), metadata.ino());
                 self.hardlink_groups
                     .entry(key)
@@ -243,8 +244,8 @@ impl HardlinkGroupScanner {
             if path.is_dir() {
                 self.scan_directory_recursive(&path)?;
             } else {
-                let metadata = path.metadata()?;
-                if metadata.nlink() > 1 {
+                let metadata = path.symlink_metadata()?;
+                if metadata.is_file() && metadata.nlink() > 1 {
                     let key = (metadata.dev(), metadata.ino());
                     self.hardlink_groups.entry(key).or_default().push(path);
                 }

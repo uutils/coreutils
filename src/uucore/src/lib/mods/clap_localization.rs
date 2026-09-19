@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (path) osrelease myutil
 
 //! Helper clap functions to localize error handling and options
@@ -211,7 +212,7 @@ impl<'a> ErrorFormatter<'a> {
                 );
                 // Include validation error if present
                 match err.source() {
-                    Some(source) if matches!(err.kind(), ErrorKind::ValueValidation) => {
+                    Some(source) if err.kind() == ErrorKind::ValueValidation => {
                         let _ = writeln!(stderr(), "{error_msg}: {source}");
                     }
                     _ => eprintln!("{error_msg}"),
@@ -219,7 +220,7 @@ impl<'a> ErrorFormatter<'a> {
             }
 
             // Show possible values for InvalidValue errors
-            if matches!(err.kind(), ErrorKind::InvalidValue)
+            if err.kind() == ErrorKind::InvalidValue
                 && let Some(valid_values) = err
                     .get(ContextKind::ValidValue)
                     .filter(|v| !v.to_string().is_empty())
@@ -239,7 +240,7 @@ impl<'a> ErrorFormatter<'a> {
         // But if a utility explicitly requests a high exit code (>= 125), respect it
         // This allows utilities like runcon (125) to override the default while preserving
         // the standard behavior for utilities using normal error codes (1, 2, etc.)
-        if matches!(err.kind(), ErrorKind::InvalidValue) && exit_code < 125 {
+        if err.kind() == ErrorKind::InvalidValue && exit_code < 125 {
             1 // Force exit code 1 for InvalidValue unless using special exit codes
         } else {
             exit_code // Respect the requested exit code for special cases
@@ -399,8 +400,8 @@ where
     handle_clap_result_with_exit_code(cmd, itr, 1)
 }
 
-/// Parses the command line as [`handle_clap_result`] does, keeping a copy of
-/// it for a caret diagnostic first.
+/// Parses the command line as [`handle_clap_result_with_exit_code`] does,
+/// keeping a copy of it for a caret diagnostic first.
 ///
 /// Parsing consumes the argument list, and a caret echoes it as it was typed,
 /// so the copy has to be taken before — which is what this saves every caller
@@ -412,6 +413,7 @@ where
 ///
 /// * `cmd` - The clap `Command` to parse arguments against
 /// * `args` - The command line, program name included
+/// * `exit_code` - The exit code to use when parsing fails
 ///
 /// # Returns
 ///
@@ -421,9 +423,13 @@ where
 pub fn handle_clap_result_with_diagnostics(
     cmd: Command,
     args: Vec<OsString>,
+    exit_code: i32,
 ) -> UResult<(ArgMatches, Option<Vec<OsString>>)> {
     let diag_args = crate::diagnostics::capture(&args);
-    Ok((handle_clap_result(cmd, args)?, diag_args))
+    Ok((
+        handle_clap_result_with_exit_code(cmd, args, exit_code)?,
+        diag_args,
+    ))
 }
 
 /// Handles clap command parsing with a custom exit code for errors.

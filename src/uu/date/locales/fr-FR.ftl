@@ -88,7 +88,6 @@ date-help-rfc-3339 = afficher la date/heure au format RFC 3339.
 date-help-debug = annoter la date analysée et avertir des usages douteux sur stderr
 date-help-reference = afficher l'heure de dernière modification du FICHIER
 date-help-set = définir l'heure décrite par CHAÎNE
-date-help-set-macos = définir l'heure décrite par CHAÎNE (pas encore disponible sur mac)
 date-help-set-redox = définir l'heure décrite par CHAÎNE (pas encore disponible sur redox)
 date-help-universal = afficher ou définir le Temps Universel Coordonné (UTC)
 
@@ -96,7 +95,6 @@ date-error-invalid-date = date invalide '{$date}'
 date-error-invalid-format = format invalide '{$format}' ({$error})
 date-error-expected-file-got-directory = fichier attendu, répertoire obtenu {$path}
 date-error-date-overflow = débordement de date '{$date}'
-date-error-setting-date-not-supported-macos = la définition de la date n'est pas prise en charge par macOS
 date-error-setting-date-not-supported-redox = la définition de la date n'est pas prise en charge par Redox
 date-error-cannot-set-date = impossible de définir la date
 date-error-extra-operand = opérande supplémentaire '{$operand}'

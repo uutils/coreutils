@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore rootlink dotdot rootfile deleteme keepme topfile
+
+// spell-checker:ignore rootlink dotdot rootfile deleteme keepme topfile mkdirat RDONLY FDCWD SIGSEGV rootbind submounts rprivate rbind overlayfs ENAMETOOLONG
+
 #![allow(clippy::stable_sort_primitive)]
 
 use std::process::Stdio;
@@ -1278,6 +1280,79 @@ fn test_rm_recursive_long_path_safe_traversal() {
     assert!(!at.dir_exists("rm_deep"));
 }
 
+/// A hierarchy thousands of levels deep used to make `rm -r` recurse until the
+/// stack ran out, which killed it with SIGSEGV and left the tree in place.
+///
+/// Linux only: building and removing 32768 levels is slow enough elsewhere to
+/// run out of patience before it runs out of stack, and should the removal
+/// fail, tearing the tree down again falls to `fs::remove_dir_all`, whose own
+/// recursion then overflows the test harness's stack.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_rm_recursive_very_deep_hierarchy() {
+    const DEPTH: u32 = 32 * 1024;
+
+    use std::time::Duration;
+
+    use nix::errno::Errno;
+    use nix::fcntl::{OFlag, openat};
+    use nix::sys::stat::{Mode, mkdirat};
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // The path of the deepest directory is far longer than PATH_MAX, so it has
+    // to be built one level at a time with openat/mkdirat.
+    at.mkdir("deep");
+    let flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY;
+    let mut fd = openat(nix::fcntl::AT_FDCWD, &at.plus("deep"), flags, Mode::empty()).unwrap();
+    // The recursion only ran out of stack around 5000 levels unoptimized and
+    // 20000 optimized, so a shallower tree would not test anything. Some
+    // filesystems resolve the whole path internally and refuse to go past
+    // PATH_MAX, which caps the depth near 2000: there is nothing to test on
+    // those, so give up rather than pretend.
+    let mut depth = 0;
+    while depth < DEPTH {
+        match mkdirat(&fd, "a", Mode::from_bits_truncate(0o755)) {
+            Ok(()) => {}
+            Err(Errno::ENAMETOOLONG) => break,
+            Err(e) => panic!("mkdirat at depth {depth} failed: {e}"),
+        }
+        fd = match openat(&fd, "a", flags, Mode::empty()) {
+            Ok(fd) => fd,
+            Err(Errno::ENAMETOOLONG) => break,
+            Err(e) => panic!("openat at depth {depth} failed: {e}"),
+        };
+        depth += 1;
+    }
+
+    // Release the deepest descriptor, so nothing holds the tree open while rm
+    // walks it.
+    drop(fd);
+
+    if depth < DEPTH {
+        println!("this filesystem stops nesting at {depth} levels; skipping");
+        // Still tear the tree down here: the harness cleanup recurses too.
+        ts.ucmd()
+            .arg("-rf")
+            .arg("deep")
+            .timeout(Duration::from_secs(240))
+            .succeeds();
+        return;
+    }
+
+    // 32768 levels are 65536 metadata operations; the default 30s is not much
+    // once the binary under test is built with coverage instrumentation.
+    ts.ucmd()
+        .arg("-rf")
+        .arg("deep")
+        .timeout(Duration::from_secs(240))
+        .succeeds()
+        .no_output();
+
+    assert!(!at.dir_exists("deep"));
+}
+
 #[cfg(all(not(windows), feature = "chmod"))]
 #[test]
 fn test_rm_directory_not_executable() {
@@ -1509,6 +1584,78 @@ fn test_preserve_root_symlink_removal_without_trailing_slash() {
     ucmd.arg("--preserve-root").arg("rootlink").succeeds();
 
     assert!(!at.symlink_exists("rootlink"));
+}
+
+/// `--preserve-root` must refuse a bind mount of `/`.
+///
+/// A bind mount of `/` is an ordinary directory - not a symlink, not a cycle -
+/// so `canonicalize()` yields the mountpoint and every name-based check waves it
+/// through. Only `(st_dev, st_ino)` identifies it, and that is what the failsafe
+/// compares.
+///
+/// The mount is of the real root, so nothing here may be able to delete anything
+/// even with the guard gone: `-i` reads stdin at EOF and so answers "no" to the
+/// first "descend into directory?" prompt, before any unlink. **Never make this
+/// `-rf`.** The mount itself lives in a throwaway user + mount namespace.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_preserve_root_bind_mount_of_root() {
+    use std::process::Command;
+
+    let ts = TestScenario::new(util_name!());
+
+    // Unprivileged user namespaces are disabled in some kernels and sandboxes.
+    let can_unshare = Command::new("unshare")
+        .args(["--user", "--map-root-user", "--mount", "true"])
+        .status()
+        .is_ok_and(|status| status.success());
+    if !can_unshare {
+        println!("TEST SKIPPED: no unprivileged mount namespace available");
+        return;
+    }
+
+    // Mount point lives in this test's own temp dir, so parallel runs cannot
+    // collide and it goes away with the scenario.
+    let mount_point = ts.fixtures.plus_as_string("rootbind");
+
+    // `mount --bind /` is refused inside a user namespace because of locked
+    // submounts; --make-rprivate + --rbind produces the same (st_dev, st_ino).
+    // The mount setup can still be blocked (e.g. `mount(2)` denied in a cross
+    // container even though `unshare` starts); if it fails, exit 99 so the test
+    // skips instead of failing for the wrong reason.
+    let script = format!(
+        "mkdir -p {mp}
+         {{ mount --make-rprivate / && mount --rbind / {mp}; }} \
+             || {{ echo MOUNT_SETUP_FAILED >&2; exit 99; }}
+         exec {bin} rm -ri --preserve-root {mp} < /dev/null",
+        mp = shell_quote(&mount_point),
+        bin = shell_quote(&ts.bin_path.to_string_lossy())
+    );
+    let output = Command::new("unshare")
+        .args(["--user", "--map-root-user", "--mount", "sh", "-c", &script])
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("LANGUAGE", "C")
+        .output()
+        .expect("failed to spawn unshare");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if output.status.code() == Some(99) || stderr.contains("MOUNT_SETUP_FAILED") {
+        println!("TEST SKIPPED: could not set up a bind mount in the namespace: {stderr}");
+        return;
+    }
+    assert!(
+        stderr.contains("it is dangerous to operate recursively on")
+            && stderr.contains("(same as '/')"),
+        "--preserve-root did not refuse a bind mount of /: {stderr}"
+    );
+    assert!(!output.status.success());
+}
+
+/// Wrap `s` in single quotes for `sh -c`, escaping any single quote in it.
+#[cfg(target_os = "linux")]
+fn shell_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
 }
 
 /// Test that literal "/" is still properly protected.

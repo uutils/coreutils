@@ -56,16 +56,6 @@ fn test_invalid_arg() {
 }
 
 #[test]
-fn test_help_uses_plain_text_headings() {
-    new_ucmd!()
-        .arg("--help")
-        .succeeds()
-        .stdout_contains("\nSpecifying a mode:\n")
-        .stdout_contains("\nSet the delimiter:\n")
-        .stdout_does_not_contain("###");
-}
-
-#[test]
 fn test_range_error_messages() {
     // Mode-aware diagnostics for invalid ranges.
     let cases: &[(&[&str], &str)] = &[

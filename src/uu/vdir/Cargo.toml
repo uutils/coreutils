@@ -21,6 +21,9 @@ clap = { workspace = true, features = ["env"] }
 uucore = { workspace = true, features = ["entries", "fs", "quoting-style"] }
 uu_ls = { workspace = true }
 
+[features]
+diagnostics = ["uucore/diagnostics"]
+
 [lints]
 workspace = true
 

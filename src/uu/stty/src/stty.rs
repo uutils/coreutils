@@ -14,6 +14,8 @@
 // spell-checker:ignore notaflag notacombo notabaud
 // spell-checker:ignore baudrate TCGETS
 
+#![cfg(unix)]
+
 mod flags;
 
 use crate::flags::AllFlags;
@@ -648,10 +650,13 @@ fn print_terminal_size(
 
     // BSDs and Linux (not ppc/big-endian ppc64) use a u32 for the baud rate, so we can simply
     // print it.
-    #[cfg(any(target_os = "linux", bsd))]
-    #[cfg(all(
-        not(target_arch = "powerpc"),
-        not(all(target_arch = "powerpc64", target_endian = "big"))
+    #[cfg(any(
+        bsd,
+        all(
+            target_os = "linux",
+            not(target_arch = "powerpc"),
+            not(all(target_arch = "powerpc64", target_endian = "big"))
+        )
     ))]
     printer.print(&translate!("stty-output-speed", "speed" => speed));
 
@@ -1252,6 +1257,11 @@ fn get_sane_control_char(cc_index: S) -> u8 {
         S::VEOL => 0,
         S::VEOL2 => 0,
         S::VMIN => 1,
+        #[cfg(not(any(
+            all(target_os = "linux", target_arch = "sparc64"),
+            target_os = "illumos",
+            target_os = "solaris"
+        )))]
         S::VTIME => 0,
         #[cfg(target_os = "linux")]
         S::VSWTC => 0,

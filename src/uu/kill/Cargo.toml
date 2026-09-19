@@ -15,13 +15,13 @@ readme.workspace = true
 path = "src/kill.rs"
 doctest = false
 
-[dependencies]
+[target.'cfg(not(target_os = "fuchsia"))'.dependencies]
 clap = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["process", "signals"] }
 fluent = { workspace = true }
 
-[target.'cfg(unix)'.dependencies]
+[target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
 libc = { workspace = true }
 rustix = { workspace = true, features = ["process"] }
 

@@ -2,9 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use clap::{Arg, ArgAction, Command};
 use std::io::{self, Write as _};
-use uucore::{crate_version, translate};
+use uucore::error::strip_errno;
+use uucore::{crate_version, show_error, translate};
 
 // uucore::main does not support no-result
 pub fn uumain(mut args: impl uucore::Args) -> i32 {
@@ -25,7 +27,7 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
     if let Err(e) = res
         && e.kind() != io::ErrorKind::BrokenPipe
     {
-        let _ = writeln!(io::stderr(), "false: {}", uucore::error::strip_errno(&e));
+        show_error!("{}", strip_errno(&e));
     }
     1
 }

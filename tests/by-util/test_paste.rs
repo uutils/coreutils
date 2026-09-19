@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore bsdutils toybox
+
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use uutests::at_and_ucmd;
@@ -164,6 +165,19 @@ const EXAMPLE_DATA: &[TestData] = &[
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[test]
+fn test_delimiter_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading delimiter value passed as its own argument (not
+    // attached with `-d-x`/`=`) must not be mistaken for a new,
+    // unrecognized flag.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f1", "a\nb\n");
+    at.write("f2", "1\n2\n");
+    ucmd.args(&["-d", "-x", "f1", "f2"])
+        .succeeds()
+        .stdout_is("a-1\nb-2\n");
 }
 
 #[test]
@@ -509,4 +523,14 @@ fn test_dev_zero_closed_pipe() {
         .set_stdout(make_broken_pipe())
         .run()
         .fails_silently();
+}
+
+#[test]
+fn test_repeated_delimiter_takes_the_last() {
+    // GNU lets a later -d override an earlier one rather than erroring.
+    new_ucmd!()
+        .args(&["-d", ",", "-d", ":", "-s", "-"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is("a:b\n");
 }

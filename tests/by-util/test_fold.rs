@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore fullwidth refgh tefgh nefgh unflushed
 
 use bytecount::count;
@@ -816,6 +817,36 @@ fn test_bytewise_fold_at_word_boundary_only_whitespace_preserve_final_newline() 
         .pipe_in("    \n")
         .succeeds()
         .stdout_is("  \n  \n");
+}
+
+#[test]
+fn test_bytewise_fold_line_of_exactly_width_is_not_folded() {
+    // A line that is exactly `width` bytes long already fits, so -s must not
+    // break it at its last blank.
+    new_ucmd!()
+        .args(&["-w7", "-s", "-b"])
+        .pipe_in("aaa bbb\nccc ddd\n")
+        .succeeds()
+        .stdout_is("aaa bbb\nccc ddd\n");
+}
+
+#[test]
+fn test_bytewise_fold_remainder_of_exactly_width_is_not_folded() {
+    // Same, for what is left of a line after a width-driven fold.
+    new_ucmd!()
+        .args(&["-w7", "-s", "-b"])
+        .pipe_in("aaa bbb ccc\n")
+        .succeeds()
+        .stdout_is("aaa \nbbb ccc\n");
+}
+
+#[test]
+fn test_bytewise_fold_line_longer_than_width_still_folds() {
+    new_ucmd!()
+        .args(&["-w7", "-s", "-b"])
+        .pipe_in("aaa bbbb\n")
+        .succeeds()
+        .stdout_is("aaa \nbbbb\n");
 }
 
 #[test]

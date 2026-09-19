@@ -31,7 +31,6 @@ uucore = { workspace = true, features = [
   "format",
   "fs",
   "fsext",
-  "fsxattr",
   "i18n-collator",
   "parser-size",
   "parser-glob",
@@ -41,6 +40,9 @@ uucore = { workspace = true, features = [
 ] }
 uutils_term_grid = { workspace = true }
 fluent = { workspace = true }
+
+[target.'cfg(any(target_os = "freebsd", target_os = "hurd", target_os = "linux", target_os = "netbsd"))'.dependencies]
+uucore = { workspace = true, features = ["fsxattr"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 selinux = { workspace = true, optional = true }
@@ -63,7 +65,8 @@ name = "ls_bench"
 harness = false
 
 [features]
-feat_selinux = ["selinux", "uucore/selinux"]
+diagnostics = ["uucore/diagnostics"]
+selinux = ["dep:selinux", "uucore/selinux"]
 smack = ["uucore/smack"]
 
 [lints]

@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:disable
 
 use crate::error::UError;
@@ -186,8 +187,15 @@ static CHECKSUM_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 static UTIL_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 thread_local! {
     #[cfg_attr(
-        target_os = "android",
-        expect(
+        any(
+            target_os = "android",
+            target_os = "haiku",
+            target_os = "illumos",
+            all(target_os = "linux", target_env = "ohos"),
+            target_os = "openbsd",
+            target_os = "solaris",
+            all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))),
+        allow(
             clippy::missing_const_for_thread_local,
             reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
         )
@@ -196,8 +204,15 @@ thread_local! {
     /// Built on the first lookup that misses every ordinary bundle; `None`
     /// when there are no error strings to be found at all.
     #[cfg_attr(
-        target_os = "android",
-        expect(
+        any(
+            target_os = "android",
+            target_os = "haiku",
+            target_os = "illumos",
+            all(target_os = "linux", target_env = "ohos"),
+            target_os = "openbsd",
+            target_os = "solaris",
+            all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))),
+        allow(
             clippy::missing_const_for_thread_local,
             reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
         )
@@ -518,6 +533,25 @@ pub fn get_message_with_args(id: &str, ftl_args: FluentArgs) -> String {
     get_message_internal(id, Some(ftl_args))
 }
 
+/// The value as an `i64` when Fluent can represent it exactly, else `None`.
+#[doc(hidden)]
+pub fn exact_fluent_integer(s: &str) -> Option<i64> {
+    // Fluent stores numbers as f64, which represents integers exactly only up
+    // to 2^53. Anything beyond that has to travel as a string.
+    const MAX_EXACT: i64 = 1 << 53;
+    s.parse::<i64>().ok().filter(|n| n.abs() <= MAX_EXACT)
+}
+
+/// Whether `s` is a plain decimal integer literal, with an optional sign.
+///
+/// Used by [`translate!`] to tell an integer that Fluent cannot hold exactly
+/// from a genuine float, so the former can bypass Fluent's number type.
+#[doc(hidden)]
+pub fn is_integer_literal(s: &str) -> bool {
+    let digits = s.strip_prefix(['-', '+']).unwrap_or(s);
+    !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
+}
+
 /// Function to detect system locale from environment variables
 fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
     let locale_str = std::env::var("LANG")
@@ -572,8 +606,15 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     // Avoid duplicated and high-cost localizer setup
     thread_local! {
         #[cfg_attr(
-            target_os = "android",
-            expect(
+            any(
+                target_os = "android",
+                target_os = "haiku",
+                target_os = "illumos",
+                all(target_os = "linux", target_env = "ohos"),
+                target_os = "openbsd",
+                target_os = "solaris",
+                all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))),
+            allow(
                 clippy::missing_const_for_thread_local,
                 reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
             )
@@ -796,8 +837,13 @@ macro_rules! translate {
             let mut args = fluent::FluentArgs::new();
             $(
                 let value_str = $value.to_string();
-                if let Ok(num_val) = value_str.parse::<i64>() {
+                if let Some(num_val) = $crate::locale::exact_fluent_integer(&value_str) {
                     args.set($key, num_val);
+                } else if $crate::locale::is_integer_literal(&value_str) {
+                    // An integer Fluent cannot hold exactly. Its number type is
+                    // f64-backed, so setting it as a number would round it; keep
+                    // the exact decimal string instead.
+                    args.set($key, value_str);
                 } else if let Ok(float_val) = value_str.parse::<f64>() {
                     args.set($key, float_val);
                 } else {
@@ -816,10 +862,43 @@ pub use {translate, translate_text};
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn embedded_locales_are_escaped_not_raw() {
+        // `.ftl` content is untrusted: translations sync into the tree from a
+        // public translation platform. A raw string ends at `"#`, so content
+        // holding that pair would close the literal and be compiled as Rust.
+        let generated = include_str!(concat!(env!("OUT_DIR"), "/embedded_locales.rs"));
+        assert!(
+            !generated.contains("Some(r\""),
+            "locale table uses a raw string; content containing `\"#` becomes code"
+        );
+    }
     use std::env;
     use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
+
+    #[test]
+    fn integers_beyond_f64_precision_stay_exact() {
+        // Fluent's number type is f64-backed, so values past 2^53 must travel
+        // as strings to survive intact.
+        assert_eq!(exact_fluent_integer("3"), Some(3));
+        assert_eq!(exact_fluent_integer("-3"), Some(-3));
+        assert_eq!(exact_fluent_integer("9007199254740992"), Some(1 << 53));
+        assert_eq!(exact_fluent_integer("9007199254740993"), None);
+        assert_eq!(exact_fluent_integer("-9007199254740993"), None);
+        assert_eq!(exact_fluent_integer("18446744073709551615"), None);
+        assert_eq!(exact_fluent_integer("1.5"), None);
+
+        assert!(is_integer_literal("18446744073709551615"));
+        assert!(is_integer_literal("-7"));
+        assert!(is_integer_literal("+7"));
+        assert!(!is_integer_literal("1.5"));
+        assert!(!is_integer_literal(""));
+        assert!(!is_integer_literal("-"));
+        assert!(!is_integer_literal("12a"));
+    }
 
     /// Test-specific helper function to create a bundle from test directory only
     #[cfg(test)]

@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore nabcd badoption schar
+
 use uucore::posix::OBSOLETE;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -1219,4 +1220,22 @@ fn test_failed_write_is_reported() {
         .set_stdout(std::fs::File::create("/dev/full").unwrap())
         .fails()
         .stderr_is("uniq: write error: No space left on device\n");
+}
+
+#[test]
+fn test_repeated_skip_fields_takes_the_last() {
+    // GNU lets a later -f override an earlier one rather than erroring.
+    new_ucmd!()
+        .args(&["-f", "1", "-f", "2"])
+        .pipe_in("x y a\nz w a\n")
+        .succeeds()
+        .stdout_is("x y a\n");
+}
+
+#[test]
+fn test_nonexistent_input_file_error_matches_gnu() {
+    new_ucmd!()
+        .arg("nosuchfile.txt")
+        .fails_with_code(1)
+        .stderr_only("uniq: nosuchfile.txt: No such file or directory\n");
 }

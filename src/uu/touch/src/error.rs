@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (misc) uioerror
+
 use filetime::FileTime;
 use std::path::PathBuf;
 use thiserror::Error;
@@ -13,7 +14,7 @@ use uucore::translate;
 
 #[derive(Debug, Error)]
 pub enum TouchError {
-    #[error("{}", translate!("touch-error-unable-to-parse-date", "date" => .0.clone()))]
+    #[error("{}", translate!("touch-error-unable-to-parse-date", "date" => .0))]
     InvalidDateFormat(String),
 
     /// The source time couldn't be converted to a [`jiff::Zoned`]
@@ -25,7 +26,7 @@ pub enum TouchError {
     ReferenceFileInaccessible(PathBuf, std::io::Error),
 
     /// An error getting a path to stdout on Windows
-    #[error("{}", translate!("touch-error-windows-stdout-path-failed", "code" => .0.clone()))]
+    #[error("{}", translate!("touch-error-windows-stdout-path-failed", "code" => .0))]
     WindowsStdoutPathError(String),
 
     /// A feature that is not available on the current platform

@@ -12,8 +12,10 @@ sort-after-help = Le format de clé est CHAMP[.CAR][OPTIONS][,CHAMP[.CAR]][OPTIO
 
 # Messages d'erreur
 sort-open-failed = échec d'ouverture : {$path} : {$error}
+sort-truncate-failed = échec de troncature : {$path} : {$error}
 sort-parse-key-error = échec d'analyse de la clé {$key} : {$msg}
 sort-cannot-read = impossible de lire : {$path} : {$error}
+sort-read-failed = échec de lecture : {$error}
 sort-open-tmp-file-failed = échec d'ouverture du fichier temporaire : {$error}
 sort-compress-prog-execution-failed = impossible d'exécuter le programme de compression '{$prog}' : {$error}
 sort-compress-prog-terminated-abnormally = {$prog} s'est terminé anormalement

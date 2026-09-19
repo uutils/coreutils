@@ -13,10 +13,10 @@ use memmap2::Mmap;
 use std::ffi::{OsStr, OsString};
 use std::io::{BufWriter, Read, Write, stdin, stdout};
 use std::{fs::File, path::Path};
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::error::UError;
 use uucore::error::UResult;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::error::set_exit_code;
 use uucore::{format_usage, show};
 
@@ -339,7 +339,7 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &OsStr) -> 
         let buf;
 
         let data: &[u8] = if filename == "-" {
-            #[cfg(unix)]
+            #[cfg(all(unix, not(target_os = "fuchsia")))]
             if uucore::signals::stdin_was_closed() {
                 let e: Box<dyn UError> = TacError::ReadError(
                     OsString::from("-"),

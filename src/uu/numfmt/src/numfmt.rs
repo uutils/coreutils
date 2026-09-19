@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore behavior
 
 use crate::errors::NumfmtError;
@@ -577,6 +578,7 @@ pub fn uu_app() -> Command {
                 .long(DELIMITER)
                 .value_name("X")
                 .value_parser(ValueParser::os_string())
+                .allow_hyphen_values(true)
                 .help(translate!("numfmt-help-delimiter")),
         )
         .arg(
@@ -599,34 +601,39 @@ pub fn uu_app() -> Command {
                 .long(FROM)
                 .help(translate!("numfmt-help-from"))
                 .value_name("UNIT")
-                .default_value(FROM_DEFAULT),
+                .default_value(FROM_DEFAULT)
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(FROM_UNIT)
                 .long(FROM_UNIT)
                 .help(translate!("numfmt-help-from-unit"))
                 .value_name("N")
-                .default_value(FROM_UNIT_DEFAULT),
+                .default_value(FROM_UNIT_DEFAULT)
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(TO)
                 .long(TO)
                 .help(translate!("numfmt-help-to"))
                 .value_name("UNIT")
-                .default_value(TO_DEFAULT),
+                .default_value(TO_DEFAULT)
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(TO_UNIT)
                 .long(TO_UNIT)
                 .help(translate!("numfmt-help-to-unit"))
                 .value_name("N")
-                .default_value(TO_UNIT_DEFAULT),
+                .default_value(TO_UNIT_DEFAULT)
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(PADDING)
                 .long(PADDING)
                 .help(translate!("numfmt-help-padding"))
-                .value_name("N"),
+                .value_name("N")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(HEADER)
@@ -650,19 +657,22 @@ pub fn uu_app() -> Command {
                     "from-zero",
                     "towards-zero",
                     "nearest",
-                ])),
+                ]))
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(SUFFIX)
                 .long(SUFFIX)
                 .help(translate!("numfmt-help-suffix"))
-                .value_name("SUFFIX"),
+                .value_name("SUFFIX")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(UNIT_SEPARATOR)
                 .long(UNIT_SEPARATOR)
                 .help(translate!("numfmt-help-unit-separator"))
-                .value_name("STRING"),
+                .value_name("STRING")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(INVALID)
@@ -670,7 +680,8 @@ pub fn uu_app() -> Command {
                 .help(translate!("numfmt-help-invalid"))
                 .default_value("abort")
                 .value_parser(["abort", "fail", "warn", "ignore"])
-                .value_name("INVALID"),
+                .value_name("INVALID")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(ZERO_TERMINATED)

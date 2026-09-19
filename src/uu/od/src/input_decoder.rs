@@ -95,9 +95,7 @@ impl MemoryDecoder<'_> {
     /// Set a part of the internal buffer to zero.
     /// access to the whole buffer is possible, not just to the valid data.
     pub fn zero_out_buffer(&mut self, start: usize, end: usize) {
-        for i in start..end {
-            self.data[i] = 0;
-        }
+        self.data[start..end].fill(0);
     }
 
     /// Returns the current length of the buffer. (ie. how much valid data it contains.)

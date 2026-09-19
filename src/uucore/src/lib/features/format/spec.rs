@@ -6,7 +6,7 @@
 // spell-checker:ignore (vars) intmax ptrdiff padlen
 
 use super::{
-    ExtendedBigDecimal, FormatChar, FormatError, OctalParsing, check_precision,
+    EscapeSet, ExtendedBigDecimal, FormatChar, FormatError, OctalParsing, check_precision,
     num_format::{
         self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
         UnsignedIntVariant,
@@ -343,7 +343,8 @@ impl Spec {
         &self,
         mut writer: impl Write,
         args: &mut FormatArguments,
-    ) -> Result<(), FormatError> {
+    ) -> Result<ControlFlow<()>, FormatError> {
+        let mut control_flow = ControlFlow::Continue(());
         match self {
             Self::Char {
                 width,
@@ -387,11 +388,17 @@ impl Spec {
                 let bytes = os_str_as_bytes(os_str)?;
                 let mut parsed = Vec::<u8>::new();
 
-                for c in parse_escape_only(bytes, OctalParsing::ThreeDigits) {
+                for c in parse_escape_only(
+                    bytes,
+                    OctalParsing::ThreeDigits,
+                    EscapeSet::WithUnicodeAndQuote,
+                ) {
                     match c.write(&mut parsed)? {
                         ControlFlow::Continue(()) => {}
                         ControlFlow::Break(()) => {
-                            // TODO: This should break the _entire execution_ of printf
+                            // A `\c` inside the argument stops output for the
+                            // rest of the printf invocation, not just this spec.
+                            control_flow = ControlFlow::Break(());
                             break;
                         }
                     }
@@ -496,7 +503,8 @@ impl Spec {
                 .fmt(writer, &f)
                 .map_err(FormatError::IoError)
             }
-        }
+        }?;
+        Ok(control_flow)
     }
 }
 

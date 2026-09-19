@@ -442,6 +442,23 @@ fn test_width() {
 }
 
 #[test]
+fn test_large_width_ascii_dump() {
+    // A line is padded up to the full width before the ascii dump, so the
+    // output for a single byte is 4 * WIDTH + 21 characters wide. Checks that
+    // such a line comes out intact; the memory behavior at widths that cannot
+    // be buffered at all is covered by the GNU test suite (od/big-w.sh).
+    const WIDTH: usize = 4_000_000;
+
+    let mut cmd = new_ucmd!();
+    let result = cmd
+        .args(&[format!("-w{WIDTH}"), "-tcz".into()])
+        .run_piped_stdin(&b"x"[..]);
+    let stdout = result.success().stdout_str();
+    assert_eq!(stdout.len(), 4 * WIDTH + 21);
+    assert!(stdout.ends_with("  >x<\n0000001\n"));
+}
+
+#[test]
 fn test_invalid_width() {
     let input: [u8; 4] = [0x00, 0x00, 0x00, 0x00];
     let expected_output = unindent(
@@ -580,6 +597,7 @@ fn test_suppress_duplicates() {
         .arg("-w4")
         .arg("-O")
         .arg("-x")
+        .arg("--endian=little")
         .run_piped_stdin(&input[..])
         .success()
         .stdout_only(expected_output);
@@ -948,6 +966,21 @@ fn test_skip_bytes_error() {
         .failure();
 }
 
+// The skip is measured over all the inputs joined together, and the message
+// says so, matching GNU od.
+#[test]
+fn test_skip_bytes_past_end_message() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "abc");
+    at.write("b", "de");
+    ucmd.arg("-j6")
+        .arg("a")
+        .arg("b")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_only("od: cannot skip past end of combined input\n");
+}
+
 // A seekable special file such as /dev/null can be skipped past its (empty)
 // end without error, matching GNU od.
 #[cfg(unix)]
@@ -1257,6 +1290,7 @@ fn test_od_options_after_filename() {
         .arg("-An")
         .arg("-t")
         .arg("x2")
+        .arg("--endian=little")
         .succeeds()
         .stdout_only(" 1c68 fdbb\n");
 }
@@ -1401,7 +1435,7 @@ fn test_hex_lowercase() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 #[cfg_attr(wasi_runner, ignore)]
 fn test_is_a_directory() {
     let scene = TestScenario::new(util_name!());
@@ -1496,5 +1530,19 @@ od: invalid suffix in -N argument '3zz'
             .args(&["-N", "3zz", "/dev/null"])
             .fails_with_code(1)
             .stderr_is("od: invalid suffix in -N argument '3zz'\n");
+    }
+}
+
+#[test]
+fn test_hyphen_leading_byte_count_is_reported_as_invalid() {
+    // GNU hands the argument after the option to that option even when it
+    // starts with a hyphen, so it is reported as an invalid argument rather
+    // than as an unknown option.
+    for opt in ["-N", "-j"] {
+        new_ucmd!()
+            .args(&[opt, "-1"])
+            .pipe_in("")
+            .fails()
+            .stderr_contains(format!("invalid {opt} argument '-1'"));
     }
 }

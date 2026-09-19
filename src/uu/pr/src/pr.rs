@@ -2,7 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
 
 // spell-checker:ignore (ToDO) adFfmprt, kmerge
 
@@ -54,7 +53,7 @@ mod options {
     pub const PAGE_WIDTH: &str = "page-width";
     pub const ACROSS: &str = "across";
     pub const COLUMN_DOWN: &str = "column-down";
-    pub const COLUMN: &str = "column";
+    pub const COLUMNS: &str = "columns";
     pub const COLUMN_CHAR_SEPARATOR: &str = "separator";
     pub const COLUMN_STRING_SEPARATOR: &str = "sep-string";
     pub const MERGE: &str = "merge";
@@ -139,6 +138,16 @@ struct NumberingMode {
     first_number: usize,
 }
 
+impl Default for NumberingMode {
+    fn default() -> Self {
+        Self {
+            width: 5,
+            separator: TAB.to_string(),
+            first_number: 1,
+        }
+    }
+}
+
 #[derive(Debug)]
 struct ExpandTabsOptions {
     input_char: char,
@@ -150,32 +159,6 @@ impl Default for ExpandTabsOptions {
         Self {
             width: 8,
             input_char: TAB,
-        }
-    }
-}
-
-impl Default for NumberingMode {
-    fn default() -> Self {
-        Self {
-            width: 5,
-            separator: TAB.to_string(),
-            first_number: 1,
-        }
-    }
-}
-
-impl From<FromUtf8Error> for PrError {
-    fn from(err: FromUtf8Error) -> Self {
-        Self::EncounteredErrors {
-            msg: err.to_string(),
-        }
-    }
-}
-
-impl From<Utf8Error> for PrError {
-    fn from(err: Utf8Error) -> Self {
-        Self::EncounteredErrors {
-            msg: err.to_string(),
         }
     }
 }
@@ -193,6 +176,22 @@ enum PrError {
 
     #[error("pr: {path}: {}", strip_errno(error))]
     ReadPath { path: PathBuf, error: io::Error },
+}
+
+impl From<FromUtf8Error> for PrError {
+    fn from(err: FromUtf8Error) -> Self {
+        Self::EncounteredErrors {
+            msg: err.to_string(),
+        }
+    }
+}
+
+impl From<Utf8Error> for PrError {
+    fn from(err: Utf8Error) -> Self {
+        Self::EncounteredErrors {
+            msg: err.to_string(),
+        }
+    }
 }
 
 pub fn uu_app() -> Command {
@@ -280,7 +279,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FORM_FEED)
                 .short('F')
-                .short_alias('f')
+                .visible_short_alias('f')
                 .long(options::FORM_FEED)
                 .help(translate!("pr-help-form-feed"))
                 .action(ArgAction::SetTrue),
@@ -314,10 +313,10 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::COLUMN)
-                .long(options::COLUMN)
-                .help(translate!("pr-help-column"))
-                .value_name("column"),
+            Arg::new(options::COLUMNS)
+                .long(options::COLUMNS)
+                .help(translate!("pr-help-columns"))
+                .value_name("columns"),
         )
         .arg(
             Arg::new(options::COLUMN_CHAR_SEPARATOR)
@@ -354,6 +353,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::JOIN_LINES)
                 .short('J')
+                .long(options::JOIN_LINES)
                 .help(translate!("pr-help-join-lines"))
                 .action(ArgAction::SetTrue),
         )
@@ -428,7 +428,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 /// Rewrite arguments before clap parsing, preserving legacy numeric operands.
 fn recreate_arguments(args: &[String]) -> Vec<String> {
     let num_regex = Regex::new(r"^[^-]\d*$").unwrap();
-    let n_regex = Regex::new(r"^-n\s*$").unwrap();
     // `-e` ends a cluster of short flags that take no value of their own, as in `-tre`.
     // Options that do take a value are excluded so that `-se` keeps meaning `-s e`.
     let e_regex = Regex::new(r"^-[dtTrFfabmJ]*e$").unwrap();
@@ -436,8 +435,8 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
     let num_option = args
         .iter()
         .take_while(|arg| arg.as_str() != "--")
-        .find_position(|x| n_regex.is_match(x.trim()));
-    if let Some((pos, _value)) = num_option
+        .position(|x| x.trim() == "-n");
+    if let Some(pos) = num_option
         && let Some(num_val_opt) = args.get(pos + 1)
         && !num_regex.is_match(num_val_opt)
     {
@@ -540,15 +539,13 @@ fn parse_usize(
     matches.get_one::<String>(opt).map(|i| {
         let raw = i.as_str();
         match raw.parse::<usize>() {
-            Ok(n) if n <= MAX_INT_VALUE => Ok(n),
+            Ok(n @ ..=MAX_INT_VALUE) => Ok(n),
             Ok(_) => Err(PrError::EncounteredErrors {
                 msg: value_too_large(too_large_error_message, raw),
             }),
-            Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
-                Err(PrError::EncounteredErrors {
-                    msg: value_too_large(too_large_error_message, raw),
-                })
-            }
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => Err(PrError::EncounteredErrors {
+                msg: value_too_large(too_large_error_message, raw),
+            }),
             Err(_) => {
                 let option = format!("-{opt}");
                 Err(PrError::EncounteredErrors {
@@ -588,7 +585,7 @@ fn build_options(
 
     let is_merge_mode = matches.get_flag(options::MERGE);
 
-    if is_merge_mode && matches.contains_id(options::COLUMN) {
+    if is_merge_mode && matches.contains_id(options::COLUMNS) {
         return Err(PrError::EncounteredErrors {
             msg: translate!("pr-error-column-merge-conflict"),
         });
@@ -652,7 +649,7 @@ fn build_options(
 
             if matches!(
                 &parse_result,
-                Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow)
+                Err(e) if *e.kind() == IntErrorKind::PosOverflow
             ) {
                 return Err(invalid_too_large(i));
             }
@@ -667,16 +664,14 @@ fn build_options(
             };
 
             let width = match parse_result {
-                Ok(res) if res > MAX_INT_VALUE => return Err(invalid_too_large(i)),
-                Ok(res) => res,
+                Ok(res @ ..=MAX_INT_VALUE) => res,
+                Ok(_) => return Err(invalid_too_large(i)),
                 Err(_) => {
                     let digits = i.get(1..).unwrap_or_default();
                     match digits.parse::<usize>() {
-                        Ok(res) if res > MAX_INT_VALUE => {
-                            return Err(invalid_too_large(digits));
-                        }
-                        Ok(res) => res,
-                        Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
+                        Ok(res @ ..=MAX_INT_VALUE) => res,
+                        Ok(_) => return Err(invalid_too_large(digits)),
+                        Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
                             return Err(invalid_too_large(digits));
                         }
                         Err(_) => NumberingMode::default().width,
@@ -943,36 +938,34 @@ fn build_options(
         .column
         .as_deref()
         .map(|unparsed_num| match unparsed_num.parse::<usize>() {
-            Ok(n) if n > MAX_INT_VALUE => Err(PrError::EncounteredErrors {
+            Ok(n @ ..=MAX_INT_VALUE) => Ok(n),
+            Ok(_) => Err(PrError::EncounteredErrors {
                 msg: value_too_large("invalid number of columns", unparsed_num),
             }),
-            Ok(n) => Ok(n),
-            Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
-                Err(PrError::EncounteredErrors {
-                    msg: value_too_large("invalid number of columns", unparsed_num),
-                })
-            }
-            Err(_e) => Err(PrError::EncounteredErrors {
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => Err(PrError::EncounteredErrors {
+                msg: value_too_large("invalid number of columns", unparsed_num),
+            }),
+            Err(_) => Err(PrError::EncounteredErrors {
                 msg: format!("invalid {} argument {}", "-", unparsed_num.quote()),
             }),
         });
     let start_column_option = match res {
         Some(Ok(0)) => {
             return Err(PrError::EncounteredErrors {
-                msg: "invalid --column argument '0'".to_string(),
+                msg: "invalid --columns argument '0'".to_string(),
             });
         }
         Some(res) => Some(res?),
         None => None,
     };
 
-    // --column has more priority than -column
+    // --columns has more priority than -column
 
     let column_option_value =
-        match parse_usize(matches, options::COLUMN, "invalid number of columns") {
+        match parse_usize(matches, options::COLUMNS, "invalid number of columns") {
             Some(Ok(0)) => {
                 return Err(PrError::EncounteredErrors {
-                    msg: "invalid --column argument '0'".to_string(),
+                    msg: "invalid --columns argument '0'".to_string(),
                 });
             }
             Some(res) => Some(res?),
@@ -991,8 +984,8 @@ fn build_options(
         // Parse as i32 to match GNU pr's behavior
         // Store the count. Spaces are streamed at print time to avoid huge allocations.
         Some(raw) => match raw.parse::<i32>() {
-            Ok(n) if n >= 0 => n as usize,
-            Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
+            Ok(n @ 0..) => n as usize,
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
                 return Err(PrError::EncounteredErrors {
                     msg: value_too_large("'-o MARGIN' invalid line offset", raw),
                 });
@@ -1178,7 +1171,7 @@ fn get_pages(
             // TODO Optimization opportunity: don't bother pushing
             // lines and pages if we aren't going to display it.
             if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-                pages.push((page_num, page.clone()));
+                pages.push((page_num, std::mem::take(&mut page)));
             }
             page_num += 1;
             page.clear();
@@ -1202,7 +1195,7 @@ fn get_pages(
             // and clear the `page` buffer for the next iteration.
             if page.len() >= lines_needed_per_page {
                 if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-                    pages.push((page_num, page.clone()));
+                    pages.push((page_num, std::mem::take(&mut page)));
                 }
                 page_num += 1;
                 page.clear();
@@ -1218,7 +1211,7 @@ fn get_pages(
 
     // Consider all trailing lines as the last page.
     if !page.is_empty() && start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-        pages.push((page_num, page.clone()));
+        pages.push((page_num, std::mem::take(&mut page)));
     }
 
     (pages, page_num + 1)
@@ -1248,8 +1241,7 @@ fn group_lines(num_files: usize, lines: Vec<FileLine>) -> Vec<(usize, Vec<FileLi
                 current_group.push(file_line);
             }
             Some(key) => {
-                result.push((key, current_group.clone()));
-                current_group.clear();
+                result.push((key, std::mem::take(&mut current_group)));
                 current_key = Some(group_key(num_files, &file_line));
                 current_group.push(file_line);
             }
