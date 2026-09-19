@@ -180,7 +180,7 @@ jobs:
 
   selinux:
     name: Run GNU tests (SELinux)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest # using VM's glibc
     steps:
     #### Get the code
     - name: Checkout code (uutils)
@@ -292,7 +292,7 @@ jobs:
 
   qemu:
     name: Run GNU tests (SMACK/ROOTFS)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest # using Arch glibc
     steps:
     - name: Checkout code (uutils)
       uses: actions/checkout@v7.0.1
@@ -336,7 +336,7 @@ jobs:
       actions: read  # to download this run's own result artifacts
       contents: read  # for actions/checkout to fetch code, and to read the reference branch
     name: Aggregate GNU test results
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
     - name: Initialize workflow variables
       id: vars
@@ -606,7 +606,7 @@ jobs:
       actions: read  # to download this run's own result artifacts
       contents: write  # to push to the reference branch
     name: Publish reference GNU test results
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     ## Only one run may publish at a time.  The step below reads the currently
     ## published run id and then force-pushes; two overlapping runs could
     ## interleave those, letting an older one overwrite a newer reference.
