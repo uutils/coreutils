@@ -15,6 +15,26 @@ use crate::units::{
     DisplayableSuffix, RawSuffix, Result, Suffix, Unit, iec_bases_f64, si_bases_f64,
 };
 
+/// What can go wrong while writing a formatted line: either the line itself is
+/// not convertible (which `--invalid` decides what to do with), or the output
+/// could not be written at all (which is always fatal).
+pub enum WriteError {
+    Io(std::io::Error),
+    Invalid(String),
+}
+
+impl From<std::io::Error> for WriteError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
+impl From<String> for WriteError {
+    fn from(message: String) -> Self {
+        Self::Invalid(message)
+    }
+}
+
 fn find_numeric_beginning(s: &str) -> Option<&str> {
     let dec_sep = locale_decimal_separator();
     let mut seen_dec = false;
@@ -912,7 +932,7 @@ pub fn write_formatted_with_delimiter<W: std::io::Write + ?Sized>(
     input: &[u8],
     options: &NumfmtOptions,
     eol: Option<u8>,
-) -> Result<()> {
+) -> std::result::Result<(), WriteError> {
     let delimiter = options.delimiter.as_deref().unwrap();
 
     for (n, field) in (1..).zip(split_bytes(input, delimiter)) {
@@ -920,7 +940,7 @@ pub fn write_formatted_with_delimiter<W: std::io::Write + ?Sized>(
 
         // add delimiter before second and subsequent fields
         if n > 1 {
-            writer.write_all(delimiter).unwrap();
+            writer.write_all(delimiter)?;
         }
 
         if field_selected {
@@ -929,15 +949,15 @@ pub fn write_formatted_with_delimiter<W: std::io::Write + ?Sized>(
                 .map_err(|_| translate!("numfmt-error-invalid-number", "input" => escape_line(field).quote()))?
                 .trim_start();
             let formatted = format_string(field_str, options, None)?;
-            writer.write_all(formatted.as_bytes()).unwrap();
+            writer.write_all(formatted.as_bytes())?;
         } else {
             // add unselected field without conversion
-            writer.write_all(field).unwrap();
+            writer.write_all(field)?;
         }
     }
 
     if let Some(eol) = eol {
-        writer.write_all(&[eol]).unwrap();
+        writer.write_all(&[eol])?;
     }
 
     Ok(())
@@ -948,7 +968,7 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
     s: &str,
     options: &NumfmtOptions,
     eol: Option<u8>,
-) -> Result<()> {
+) -> std::result::Result<(), WriteError> {
     for (n, (prefix, field)) in (1..).zip(WhitespaceSplitter {
         s: Some(s),
         options,
@@ -960,7 +980,7 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
 
             // add delimiter before second and subsequent fields
             let prefix = if n > 1 {
-                writer.write_all(b" ").unwrap();
+                writer.write_all(b" ")?;
                 &prefix[prefix.chars().next().map_or(0, char::len_utf8)..]
             } else {
                 prefix
@@ -973,23 +993,23 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
             };
 
             let formatted = format_string(field, options, implicit_padding)?;
-            writer.write_all(formatted.as_bytes()).unwrap();
+            writer.write_all(formatted.as_bytes())?;
         } else {
             // the -z option converts an initial \n into a space
             let prefix = if options.zero_terminated && prefix.starts_with('\n') {
-                writer.write_all(b" ").unwrap();
+                writer.write_all(b" ")?;
                 &prefix[1..]
             } else {
                 prefix
             };
             // add unselected field without conversion
-            writer.write_all(prefix.as_bytes()).unwrap();
-            writer.write_all(field.as_bytes()).unwrap();
+            writer.write_all(prefix.as_bytes())?;
+            writer.write_all(field.as_bytes())?;
         }
     }
 
     if let Some(eol) = eol {
-        writer.write_all(&[eol]).unwrap();
+        writer.write_all(&[eol])?;
     }
 
     Ok(())
