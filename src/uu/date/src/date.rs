@@ -1270,7 +1270,7 @@ fn get_clock_resolution() -> Timestamp {
     Timestamp::constant(timespec.tv_sec as _, timespec.tv_nsec as _)
 }
 
-#[cfg(all(unix, target_os = "redox"))]
+#[cfg(target_os = "redox")]
 fn get_clock_resolution() -> Timestamp {
     // Redox OS does not support the posix clock_getres function, however
     // internally it uses a resolution of 1ns to represent timestamps.
