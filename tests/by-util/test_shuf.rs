@@ -16,6 +16,33 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_getrandom_fail() {
+    // getrandom is missing from legacy kernel
+    use std::process::Command;
+    let (_, _ucmd) = at_and_ucmd!();
+
+    let Ok(out) = Command::new("strace")
+        .args([
+            "-o",
+            "/dev/null",
+            "-e",
+            "inject=getrandom:error=EAGAIN",
+            uutests::util::get_tests_binary(),
+            "shuf",
+            "-i",
+            "1234-1235",
+        ])
+        .output()
+    else {
+        return; // missing strace
+    };
+    assert!(out.status.success());
+    assert!(String::from_utf8_lossy(&out.stdout).contains("1234"));
+}
+
+#[test]
 fn test_output_is_random_permutation() {
     let input_seq = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     let input = input_seq
