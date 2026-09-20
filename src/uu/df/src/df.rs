@@ -48,6 +48,7 @@ static OPT_HUMAN_READABLE_BINARY: &str = "human-readable-binary";
 static OPT_HUMAN_READABLE_DECIMAL: &str = "human-readable-decimal";
 static OPT_INODES: &str = "inodes";
 static OPT_KILO: &str = "kilo";
+static OPT_MEGA: &str = "mega";
 static OPT_LOCAL: &str = "local";
 static OPT_NO_SYNC: &str = "no-sync";
 static OPT_OUTPUT: &str = "output";
@@ -562,7 +563,7 @@ pub fn uu_app() -> Command {
                 .short('B')
                 .long(OPT_BLOCKSIZE_LONG)
                 .value_name("SIZE")
-                .overrides_with_all([OPT_KILO, OPT_BLOCKSIZE])
+                .overrides_with_all([OPT_KILO, OPT_MEGA, OPT_BLOCKSIZE])
                 .help(translate!("df-help-block-size")),
         )
         .arg(
@@ -600,7 +601,14 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_KILO)
                 .short('k')
                 .help(translate!("df-help-kilo"))
-                .overrides_with_all([OPT_BLOCKSIZE, OPT_KILO])
+                .overrides_with_all([OPT_BLOCKSIZE, OPT_KILO, OPT_MEGA])
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(OPT_MEGA)
+                .short('m')
+                .help(translate!("df-help-mega"))
+                .overrides_with_all([OPT_BLOCKSIZE, OPT_KILO, OPT_MEGA])
                 .action(ArgAction::SetTrue),
         )
         .arg(
