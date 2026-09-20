@@ -27,12 +27,16 @@ stat-after-help = Séquences de format valides pour les fichiers (sans `--file-s
     -`%U` : nom d'utilisateur du propriétaire
     -`%w` : heure de création du fichier, lisible ; - si inconnue
     -`%W` : heure de création du fichier, secondes depuis l'Époque ; 0 si inconnue
+    -`%:W` : heure de création du fichier, nanosecondes ; ou 0
     -`%x` : heure du dernier accès, lisible
     -`%X` : heure du dernier accès, secondes depuis l'Époque
+    -`%:X` : heure du dernier accès, nanosecondes
     -`%y` : heure de la dernière modification de données, lisible
     -`%Y` : heure de la dernière modification de données, secondes depuis l'Époque
+    -`%:Y` : heure de la dernière modification de données, nanosecondes
     -`%z` : heure du dernier changement de statut, lisible
     -`%Z` : heure du dernier changement de statut, secondes depuis l'Époque
+    -`%:Z` : heure du dernier changement de statut, nanosecondes
 
   Séquences de format valides pour les systèmes de fichiers :
 

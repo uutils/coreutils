@@ -27,12 +27,16 @@ stat-after-help = Valid format sequences for files (without `--file-system`):
     -`%U`: user name of owner
     -`%w`: time of file birth, human-readable; - if unknown
     -`%W`: time of file birth, seconds since Epoch; 0 if unknown
+    -`%:W`: time of file birth, nanoseconds; or 0
     -`%x`: time of last access, human-readable
     -`%X`: time of last access, seconds since Epoch
+    -`%:X`: time of last access, nanoseconds
     -`%y`: time of last data modification, human-readable
     -`%Y`: time of last data modification, seconds since Epoch
+    -`%:Y`: time of last data modification, nanoseconds
     -`%z`: time of last status change, human-readable
     -`%Z`: time of last status change, seconds since Epoch
+    -`%:Z`: time of last status change, nanoseconds
 
   Valid format sequences for file systems:
 
