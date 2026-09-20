@@ -495,3 +495,16 @@ fn test_invalid_regex_error_message() {
         .fails_with_code(1)
         .stderr_is("ptx: Invalid regexp: unclosed character class\n");
 }
+
+#[test]
+fn test_nullable_word_regexp_no_empty_matches() {
+    let expected = concat!(
+        "                                       aa bb cc\n",
+        "                                  aa   bb cc\n"
+    );
+    new_ucmd!()
+        .args(&["-W", "[ab]{0,}"])
+        .pipe_in("aa bb cc\n")
+        .succeeds()
+        .stdout_only(expected);
+}

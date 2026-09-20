@@ -359,6 +359,9 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
             // match words with given regex
             for mat in reg.find_iter(line) {
                 let (mut beg, end) = (mat.start(), mat.end());
+                if beg == end {
+                    continue;
+                }
 
                 // GNU-compatible default behavior:
                 // with default regexp, keyword must start at first alphabetic char.

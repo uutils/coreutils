@@ -1597,10 +1597,12 @@ fn test_directory_input_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("test_directory");
 
+    // The split that was in progress is still reported, as GNU does.
     #[cfg(unix)]
     ucmd.args(&["test_directory", "1"])
         .fails_with_code(1)
-        .stderr_only("csplit: read error: Is a directory\n");
+        .stdout_is("0\n")
+        .stderr_is("csplit: read error: Is a directory\n");
     #[cfg(windows)]
     ucmd.args(&["test_directory", "1"])
         .fails_with_code(1)
@@ -1691,4 +1693,27 @@ fn test_csplit_dev_full_stdout() {
         .set_stdout(dev_full)
         .fails_with_code(1)
         .stderr_is("csplit: No space left on device\n");
+}
+
+#[test]
+fn test_empty_regex_matches_every_line() {
+    // An empty regex between the delimiters is valid and matches at once, so
+    // the split happens before the very first line.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("letters", "delta\necho\nfoxtrot\n");
+
+    ucmd.args(&["letters", "//"])
+        .succeeds()
+        .stdout_only("0\n19\n");
+    assert_eq!(at.read("xx00"), "");
+    assert_eq!(at.read("xx01"), "delta\necho\nfoxtrot\n");
+}
+
+#[test]
+fn test_empty_skip_to_regex_is_accepted() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("letters", "delta\necho\nfoxtrot\n");
+
+    ucmd.args(&["letters", "%%"]).succeeds().stdout_only("19\n");
+    assert_eq!(at.read("xx00"), "delta\necho\nfoxtrot\n");
 }
