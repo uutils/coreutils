@@ -1341,6 +1341,7 @@ impl Stater {
 
     fn do_stat(&self, file: &OsStr, stdin_is_fifo: bool) -> UResult<i32> {
         let display_name = file.to_string_lossy();
+        let quoted_name = file.quote();
         let file = if cfg!(unix) && display_name == "-" {
             if self.show_fs {
                 show_error!("{}", StatError::StdinFilesystemMode);
@@ -1369,7 +1370,7 @@ impl Stater {
                     show_error!(
                         "{}",
                         StatError::CannotReadFilesystemInfo {
-                            file: display_name.quote().to_string(),
+                            file: quoted_name.to_string(),
                             error
                         }
                     );
@@ -1413,7 +1414,7 @@ impl Stater {
                     show_error!(
                         "{}",
                         StatError::CannotStatx {
-                            file: display_name.quote().to_string(),
+                            file: quoted_name.to_string(),
                             error: strip_errno(&e)
                         }
                     );

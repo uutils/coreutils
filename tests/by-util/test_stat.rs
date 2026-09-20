@@ -881,3 +881,18 @@ stat: '%.3': invalid directive
             .stderr_is("stat: '%.3': invalid directive\n");
     }
 }
+
+#[test]
+fn test_error_message_preserves_non_utf8_filename() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let name = OsStr::from_bytes(b"missing-\xff");
+    for args in [vec![], vec!["-L"], vec!["-f"]] {
+        new_ucmd!()
+            .args(&args)
+            .arg(name)
+            .fails_with_code(1)
+            .stderr_contains("$'missing-\\xFF'");
+    }
+}
