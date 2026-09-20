@@ -6,6 +6,8 @@
 // spell-checker:ignore (paths) gnutest ronna quetta unitless
 
 use uutests::new_ucmd;
+#[cfg(unix)]
+use uutests::util::is_locale_available;
 
 #[test]
 fn test_invalid_arg() {
@@ -1715,6 +1717,39 @@ fn test_locale_fr_rejects_period() {
         .args(&["--format=%.3f", "1.5"])
         .fails()
         .stderr_contains("invalid");
+}
+
+// https://github.com/uutils/coreutils/issues/13937
+// fa_IR uses U+066B (two bytes) as decimal separator; a suffix after a
+// multibyte separator used to be sliced at a byte offset and panic.
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+fn test_locale_multibyte_separator_with_suffix() {
+    if !is_locale_available("fa_IR.UTF-8") {
+        println!("test skipped: fa_IR.UTF-8 locale not available");
+        return;
+    }
+    new_ucmd!()
+        .env("LC_ALL", "fa_IR.UTF-8")
+        .args(&["--from=si", "3\u{66b}7\u{20ac}M"])
+        .fails_with_code(2)
+        .stderr_contains("invalid suffix");
+    new_ucmd!()
+        .env("LC_ALL", "fa_IR.UTF-8")
+        .args(&["--from=si", "8\u{66b}25Gz"])
+        .fails_with_code(2)
+        .stderr_contains("'8\u{66b}25Gz': 'z'");
+    new_ucmd!()
+        .env("LC_ALL", "fa_IR.UTF-8")
+        .args(&["--from=iec-i", "6\u{66b}5Ki"])
+        .succeeds()
+        .stdout_only("6656\n");
+    new_ucmd!()
+        .env("LC_ALL", "fa_IR.UTF-8")
+        .args(&["--from=si", "--to=iec-i", "2\u{66b}5K"])
+        .succeeds()
+        .stdout_only("2\u{66b}5Ki\n");
 }
 
 #[test]
