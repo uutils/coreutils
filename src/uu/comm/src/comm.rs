@@ -9,11 +9,9 @@ use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, StdinLock, Write, stderr, stdin};
-use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
-use uucore::fs::{are_files_identical, paths_refer_to_same_file};
 use uucore::i18n::collator::{
     AlternateHandling, CollatorOptions, locale_cmp, should_use_locale_collation, try_init_collator,
 };
@@ -51,10 +49,18 @@ impl FileNumber {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+enum CheckOrder {
+    Never,
+    Always,
+    IfDiffer,
+}
+
 struct OrderChecker {
     last_line: Vec<u8>,
     file_num: FileNumber,
-    check_order: bool,
+    mode: CheckOrder,
+    files_differ: bool,
     has_error: bool,
     use_locale: bool,
 }
@@ -114,17 +120,28 @@ impl LineReader {
 }
 
 impl OrderChecker {
-    fn new(file_num: FileNumber, check_order: bool, use_locale: bool) -> Self {
+    fn new(file_num: FileNumber, mode: CheckOrder, use_locale: bool) -> Self {
         Self {
             last_line: Vec::new(),
             file_num,
-            check_order,
+            mode,
+            files_differ: false,
             has_error: false,
             use_locale,
         }
     }
 
     fn verify_order(&mut self, current_line: &[u8]) -> bool {
+        if self.mode == CheckOrder::Never {
+            self.last_line = current_line.to_vec();
+            return true;
+        }
+
+        if self.mode == CheckOrder::IfDiffer && !self.files_differ {
+            self.last_line = current_line.to_vec();
+            return true;
+        }
+
         if self.last_line.is_empty() {
             self.last_line = current_line.to_vec();
             return true;
@@ -141,7 +158,7 @@ impl OrderChecker {
         }
 
         self.last_line = current_line.to_vec();
-        is_ordered || !self.check_order
+        is_ordered || self.mode != CheckOrder::Always
     }
 }
 
@@ -184,19 +201,17 @@ fn comm(
     let mut total_col_2 = 0;
     let mut total_col_3 = 0;
 
-    let check_order = opts.get_flag(options::CHECK_ORDER);
-    let no_check_order = opts.get_flag(options::NO_CHECK_ORDER);
-
-    // Determine if we should perform order checking
-    let should_check_order = !no_check_order
-        && (check_order
-            || !(paths_refer_to_same_file(filename1.as_os_str(), filename2.as_os_str(), true)
-                || are_files_identical(Path::new(filename1), Path::new(filename2))
-                    .unwrap_or(false)));
+    let mode = if opts.get_flag(options::CHECK_ORDER) {
+        CheckOrder::Always
+    } else if opts.get_flag(options::NO_CHECK_ORDER) {
+        CheckOrder::Never
+    } else {
+        CheckOrder::IfDiffer
+    };
 
     let use_locale = should_use_locale_collation();
-    let mut checker1 = OrderChecker::new(FileNumber::One, check_order, use_locale);
-    let mut checker2 = OrderChecker::new(FileNumber::Two, check_order, use_locale);
+    let mut checker1 = OrderChecker::new(FileNumber::One, mode, use_locale);
+    let mut checker2 = OrderChecker::new(FileNumber::Two, mode, use_locale);
     let mut input_error = false;
 
     while na != 0 || nb != 0 {
@@ -208,7 +223,9 @@ fn comm(
 
         match ord {
             Ordering::Less => {
-                if should_check_order && !checker1.verify_order(ra) {
+                checker1.files_differ = true;
+                checker2.files_differ = true;
+                if mode != CheckOrder::Never && !checker1.verify_order(ra) {
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_1) {
@@ -223,7 +240,9 @@ fn comm(
                 total_col_1 += 1;
             }
             Ordering::Greater => {
-                if should_check_order && !checker2.verify_order(rb) {
+                checker1.files_differ = true;
+                checker2.files_differ = true;
+                if mode != CheckOrder::Never && !checker2.verify_order(rb) {
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_2) {
@@ -236,7 +255,8 @@ fn comm(
                 total_col_2 += 1;
             }
             Ordering::Equal => {
-                if should_check_order && (!checker1.verify_order(ra) || !checker2.verify_order(rb))
+                if mode != CheckOrder::Never
+                    && (!checker1.verify_order(ra) || !checker2.verify_order(rb))
                 {
                     break;
                 }
@@ -256,7 +276,8 @@ fn comm(
         }
 
         // Track if we've seen any order errors
-        if (checker1.has_error || checker2.has_error) && !input_error && !check_order {
+        if (checker1.has_error || checker2.has_error) && !input_error && mode != CheckOrder::Always
+        {
             input_error = true;
         }
     }
@@ -275,7 +296,7 @@ fn comm(
         .flush()
         .map_err_context(|| translate!("comm-error-write"))?;
 
-    if should_check_order && (checker1.has_error || checker2.has_error) {
+    if mode != CheckOrder::Never && (checker1.has_error || checker2.has_error) {
         // Print the input error message once at the end
         if input_error {
             let _ = writeln!(stderr(), "{}", translate!("comm-error-input-not-sorted"));
