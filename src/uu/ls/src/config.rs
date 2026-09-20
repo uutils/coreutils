@@ -596,14 +596,20 @@ fn extract_quoting_style(
         (QuotingStyle::C_DOUBLE, None)
     } else {
         // If set, the QUOTING_STYLE environment variable specifies a default style.
-        if let Ok(style) = std::env::var("QUOTING_STYLE") {
-            if let Some(pair) = match_quoting_style_name(style.as_str(), show_control) {
+        // Value may not be valid UTF-8.
+        if let Some(os_style) = std::env::var_os("QUOTING_STYLE") {
+            let style = os_style.to_string_lossy();
+            if let Some(pair) = match_quoting_style_name(&style, show_control) {
                 return pair;
             }
             let _ = writeln!(
                 io::stderr(),
                 "{}",
-                translate!("ls-invalid-quoting-style", "program" => std::env::args().next().unwrap_or_else(|| "ls".to_string()), "style" => style)
+                translate!(
+                    "ls-invalid-quoting-style",
+                    "program" => std::env::args().next().unwrap_or_else(|| "ls".to_string()),
+                    "style" => style
+                )
             );
         }
 
