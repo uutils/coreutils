@@ -6,7 +6,7 @@
 // spell-checker:ignore (jargon) xattributes
 
 #![allow(clippy::missing_errors_doc, clippy::similar_names)]
-#![cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#![cfg(selinux)]
 
 use std::ffi::CString;
 use std::path::Path;
