@@ -226,6 +226,10 @@ sed -i "s|cannot create regular file 'no-such/': Not a directory|'no-such/' is n
 # Our message is better
 sed -i "s|warning: unrecognized escape|warning: incomplete hex escape|" tests/stat/stat-printf.pl
 
+# Our message is better:
+# clap provides allowed range for --parallel for given invalid value
+sed -i '/^# Invalid --parallel arguments\./,+4d' tests/sort/sort.pl
+
 # Remove dup of /usr/bin/ and /usr/local/bin/ when executed several times
 grep -rlE '/usr/bin/\s?/usr/bin' init.cfg tests/* | xargs -r "${SED}" -Ei 's|/usr/bin/\s?/usr/bin/|/usr/bin/|g'
 grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r "${SED}" -Ei 's|/usr/local/bin/\s?/usr/local/bin/|/usr/local/bin/|g'
