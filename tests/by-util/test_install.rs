@@ -15,7 +15,7 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
 use uucore::error::strip_errno;
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 use uucore::selinux::get_getfattr_output;
 use uutests::util::{TestScenario, is_ci, run_ucmd_as_root};
 use uutests::{at_and_ucmd, new_ucmd, util_name};
@@ -2585,7 +2585,7 @@ fn test_install_no_target_basic() {
 
 #[test]
 fn test_context_without_selinux() {
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    #[cfg(selinux)]
     if uucore::selinux::is_selinux_enabled() {
         println!("Test skipped: SELinux is enabled");
         return;
@@ -2663,7 +2663,7 @@ fn test_selinux() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_selinux_invalid_args() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("Test skipped: SELinux is not enabled");
@@ -2695,7 +2695,7 @@ fn test_selinux_invalid_args() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_selinux_default_context() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("Test skipped: SELinux is not enabled");
