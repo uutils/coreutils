@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (jargon) xattributes
 
-#![cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#![cfg(selinux)]
 
 use uutests::new_ucmd;
 
@@ -97,7 +97,7 @@ fn invalid() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn plain_context() {
     let ctx = "unconfined_u:unconfined_r:unconfined_t:s0-s0";
     new_ucmd!().args(&[ctx, "/bin/true"]).succeeds();
@@ -116,7 +116,7 @@ fn plain_context() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn custom_context() {
     let t_ud = "unconfined_t";
     let u_ud = "unconfined_u";

@@ -11,7 +11,7 @@
 use libc::mode_t;
 #[cfg(not(windows))]
 use std::os::unix::fs::PermissionsExt;
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 use uucore::selinux::get_getfattr_output;
 #[cfg(not(windows))]
 use uutests::at_and_ucmd;
@@ -535,7 +535,7 @@ fn test_empty_argument() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_selinux() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -559,7 +559,7 @@ fn test_selinux() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_selinux_invalid() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
