@@ -2284,16 +2284,44 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.ignore_non_printing = ignore_non_printing;
     settings.ignore_case = ignore_case;
 
-    // WASI doesn't support threads, so we ignore the corresponding option
-    #[cfg(not(target_os = "wasi"))]
-    {
-        let threads = matches
-            .get_one::<u64>(options::PARALLEL)
-            .copied()
-            .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get() as u64));
-        let _ = rayon::ThreadPoolBuilder::new()
-            .num_threads(threads as usize)
-            .build_global();
+    if let Some(n_threads_str) = matches.get_one::<String>(options::PARALLEL) {
+        let threads = match n_threads_str.parse::<u64>() {
+            Ok(0) => {
+                return Err(UUsageError::new(
+                    2,
+                    translate!("sort-parallel-must-be-nonzero"),
+                ));
+            }
+            Ok(val) => val,
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
+                return Err(UUsageError::new(
+                    2,
+                    translate!("sort-parallel-arg-too-large", "arg" => n_threads_str),
+                ));
+            }
+            Err(_) => {
+                return Err(UUsageError::new(
+                    2,
+                    translate!("sort-invalid-parallel-arg", "arg" => n_threads_str),
+                ));
+            }
+        };
+        #[cfg(not(target_os = "wasi"))]
+        {
+            let _ = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads as usize)
+                .build_global();
+        }
+        #[cfg(target_os = "wasi")]
+        let _ = threads;
+    } else {
+        #[cfg(not(target_os = "wasi"))]
+        {
+            let threads = std::thread::available_parallelism().map_or(1, |n| n.get() as u64);
+            let _ = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads as usize)
+                .build_global();
+        }
     }
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
@@ -2703,7 +2731,6 @@ pub fn uu_app() -> Command {
         Arg::new(options::PARALLEL)
             .long(options::PARALLEL)
             .help(translate!("sort-help-parallel"))
-            .value_parser(clap::value_parser!(u64).range(1..))
             .value_name("NUM_THREADS"),
     )
     .arg(

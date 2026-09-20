@@ -198,9 +198,26 @@ fn test_version_empty_lines() {
 
 #[test]
 fn test_parallel_invalid() {
-    // clap provided stderr
-    new_ucmd!().arg("--parallel=0").fails().code_is(2);
-    new_ucmd!().arg("--parallel=NaN").fails().code_is(2);
+    new_ucmd!()
+        .arg("--parallel=0")
+        .fails()
+        .code_is(2)
+        .stderr_contains("number in parallel must be nonzero");
+    new_ucmd!()
+        .arg("--parallel=NaN")
+        .fails()
+        .code_is(2)
+        .stderr_contains("invalid --parallel argument 'NaN'");
+    new_ucmd!()
+        .arg("--parallel=-1")
+        .fails()
+        .code_is(2)
+        .stderr_contains("invalid --parallel argument '-1'");
+    new_ucmd!()
+        .arg("--parallel=18446744073709551616")
+        .fails()
+        .code_is(2)
+        .stderr_contains("--parallel argument '18446744073709551616' too large");
 }
 
 #[test]
