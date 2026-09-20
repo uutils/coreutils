@@ -46,7 +46,7 @@ jobs:
         CARGO_TARGET_WASM32_WASIP2_RUNNER: wasmtime
       run: |
         # Get all utilities and exclude ones that don't compile for ${{ matrix.job.target }}
-        EXCLUDE="df|du|env|more|tac"
+        EXCLUDE="df|du|env|more"
         UTILS=$(./util/show-utils.sh | tr ' ' '\n' | grep -vE "^($EXCLUDE)$" | sed 's/^/-p uu_/' | tr '\n' ' ')
         cargo test --target ${{ matrix.job.target }} --no-default-features $UTILS
     - name: Run integration tests via wasmtime
