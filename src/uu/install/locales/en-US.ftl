@@ -51,6 +51,7 @@ install-error-mutually-exclusive-compare-strip = Options --compare and --strip a
 install-error-missing-file-operand = missing file operand
 install-error-missing-destination-operand = missing destination file operand after { $path }
 install-error-failed-to-remove = Failed to remove existing file { $path }. Error: { $error }
+install-error-will-not-overwrite-just-created = will not overwrite just-created { $dest } with { $source }
 
 # Warning messages
 install-warning-compare-ignored = the --compare (-C) option is ignored when you specify a mode with non-permission bits

@@ -3190,3 +3190,19 @@ fn test_install_target_without_splice_support() {
     // properly copied with fallback from splice?
     assert!(uucore::fs::are_files_identical(coreutils, "target_file").unwrap());
 }
+
+#[test]
+fn test_install_will_not_overwrite_just_created() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+    at.write("a/f", "a");
+    at.write("b/f", "b");
+
+    ucmd.args(&["a/f", "b/f", "c/"])
+        .fails()
+        .stderr_contains("will not overwrite just-created 'c/f' with 'b/f'");
+
+    assert_eq!(at.read("c/f"), "a");
+}
