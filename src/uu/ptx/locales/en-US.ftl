@@ -31,3 +31,5 @@ ptx-error-write-failed = write failed
 ptx-error-extra-operand = extra operand { $operand }
 ptx-error-empty-regexp = A regular expression cannot match a length zero string
 ptx-error-invalid-regexp = Invalid regexp: { $error }
+ptx-error-invalid-gap-size = invalid gap width: '{ $value }'
+ptx-error-invalid-line-width = invalid line width: '{ $value }'
