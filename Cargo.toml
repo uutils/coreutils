@@ -333,7 +333,7 @@ bytecount = "0.6.8"
 cfg_aliases = "0.2.2"
 clap = { version = "4.5", features = ["wrap_help", "cargo", "color"] }
 clap_complete = "4.4"
-clap_mangen = "0.3"
+clap_mangen = "0.3.3"
 crossterm = { version = "0.29.0", default-features = false }
 ctor = "1.0.0"
 ctrlc = { version = "3.5.2", features = ["termination"] }
