@@ -226,6 +226,7 @@ pub struct Config {
     pub(crate) width: u16,
     // Dir and vdir needs access to this field
     pub quoting_style: QuotingStyle,
+    pub(crate) show_control_chars: bool,
     pub(crate) locale_quoting: Option<LocaleQuoting>,
     pub(crate) indicator_style: Option<IndicatorStyle>,
     pub(crate) time_format_recent: String, // Time format for recent dates
@@ -1055,6 +1056,7 @@ impl Config {
             block_size,
             width,
             quoting_style,
+            show_control_chars: options.get_flag(options::SHOW_CONTROL_CHARS),
             locale_quoting,
             indicator_style,
             time_format_recent,

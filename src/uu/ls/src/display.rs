@@ -48,7 +48,8 @@ use uucore::{
     fs::display_permissions,
     fsext::metadata_get_time,
     i18n::{UEncoding, get_ctype_encoding},
-    os_str_as_bytes_lossy,
+    line_ending::LineEnding,
+    os_str_as_bytes_lossy, os_string_from_vec,
     quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
     show,
     time::{FormatSystemTimeFallback, format_system_time},
@@ -198,7 +199,51 @@ fn escape_dir_name_with_locale(name: &OsStr, config: &Config) -> OsString {
 }
 
 fn escape_name_with_locale(name: &OsStr, config: &Config) -> OsString {
-    escape_with_locale(name, config, locale_aware_escape_name)
+    let comma_separated =
+        config.format == Format::Commas && os_str_as_bytes_lossy(name).contains(&b',');
+    let style = match config.quoting_style {
+        QuotingStyle::Shell {
+            escape,
+            show_control,
+            ..
+        } if comma_separated => QuotingStyle::Shell {
+            escape,
+            always_quote: true,
+            show_control,
+        },
+        style => style,
+    };
+
+    let escaped = escape_with_locale(name, config, |name, _| {
+        locale_aware_escape_name(name, style)
+    });
+
+    let escaped =
+        if comma_separated && config.locale_quoting.is_none() && style == QuotingStyle::C_NO_QUOTES
+        {
+            escaped.to_string_lossy().replace(',', "\\,").into()
+        } else {
+            escaped
+        };
+
+    if config.format == Format::Commas
+        && config.line_ending == LineEnding::Newline
+        && !config.show_control_chars
+        && config.width != 0
+    {
+        let bytes = os_str_as_bytes_lossy(&escaped);
+        if bytes.contains(&b'\n') {
+            return os_string_from_vec(
+                bytes
+                    .iter()
+                    .map(|&byte| if byte == b'\n' { b'?' } else { byte })
+                    .collect(),
+            )
+            .expect("escaped names are valid on the target platform");
+        }
+    }
+
+    escaped
 }
 
 fn locale_quote(name: &OsStr, style: LocaleQuoting) -> OsString {
@@ -463,7 +508,7 @@ pub fn display_items(
             names_vec.push(cell.into());
         }
 
-        let mut names = names_vec.into_iter();
+        let mut names = names_vec.into_iter().peekable();
 
         match config.format {
             Format::Columns => {
@@ -492,10 +537,12 @@ pub fn display_items(
                     write_os_str(&mut state.out, &name.displayed)?;
                     current_col = ansi_width(&name.displayed.to_string_lossy()) as u16 + 2;
                 }
-                for name in names {
+                while let Some(name) = names.next() {
                     let name_width = ansi_width(&name.displayed.to_string_lossy()) as u16;
-                    // If the width is 0 we print one single line
-                    if config.width != 0 && current_col + name_width + 1 > config.width {
+                    if config.width != 0
+                        && current_col + name_width + u16::from(names.peek().is_some())
+                            > config.width
+                    {
                         current_col = name_width + 2;
                         writeln!(state.out, ",")?;
                     } else {
