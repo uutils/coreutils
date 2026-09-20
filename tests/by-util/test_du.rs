@@ -2708,6 +2708,30 @@ fn test_du_repeated_t() {
 }
 
 #[test]
+fn test_du_negative_max_depth_is_rejected() {
+    // A negative depth must reach du's own parser instead of being taken for
+    // an option by the argument parser.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("deep");
+    at.mkdir("deep/deeper");
+
+    for depth in ["-7", "-1"] {
+        ts.ucmd()
+            .args(&["-d", depth, "deep"])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains(format!("du: invalid maximum depth '{depth}'"));
+    }
+
+    ts.ucmd()
+        .args(&["--max-depth=-3", "deep"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("du: invalid maximum depth '-3'");
+}
+
+#[test]
 fn test_du_repeated_v() {
     new_ucmd!().args(&["-s", "-v", "-v"]).succeeds();
 }

@@ -801,7 +801,12 @@ enum DuError {
     InvalidGlob(PatternError),
 }
 
-impl UError for DuError {}
+impl UError for DuError {
+    fn usage(&self) -> bool {
+        // GNU points at --help for a bad --max-depth argument.
+        matches!(self, Self::InvalidMaxDepthArg(_))
+    }
+}
 
 /// Read a file and return each line in a vector of String
 fn file_as_vec(filename: impl AsRef<Path>) -> UResult<Vec<String>> {
@@ -1387,6 +1392,8 @@ pub fn uu_app() -> Command {
                 .long("max-depth")
                 .value_name("N")
                 .help(translate!("du-help-max-depth"))
+                // Accept a negative depth so it is rejected by us, not by clap.
+                .allow_hyphen_values(true)
                 .overrides_with(options::MAX_DEPTH),
         )
         .arg(
