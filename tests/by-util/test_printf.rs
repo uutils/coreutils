@@ -95,10 +95,7 @@ fn escaped_unicode_invalid() {
 #[test]
 fn escaped_unicode_out_of_range() {
     for arg in [r"[\U00110000]", r"[\UFFFFFFFF]"] {
-        new_ucmd!()
-            .arg(arg)
-            .succeeds()
-            .stdout_only(format!("{arg}"));
+        new_ucmd!().arg(arg).succeeds().stdout_only(arg);
     }
 }
 
@@ -182,10 +179,7 @@ fn sub_b_string_out_of_range_unicode() {
         r"\U00110000",
         r"\UFFFFFFFF",
     ] {
-        new_ucmd!()
-            .args(&["%b", arg])
-            .succeeds()
-            .stdout_only(format!("{arg}"));
+        new_ucmd!().args(&["%b", arg]).succeeds().stdout_only(arg);
     }
 }
 
