@@ -711,6 +711,7 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::FilePath)
                 .value_parser(clap::value_parser!(OsString))
                 .conflicts_with(OPT_DATE)
+                .overrides_with(OPT_FILE)
                 .help(translate!("date-help-file")),
         )
         .arg(

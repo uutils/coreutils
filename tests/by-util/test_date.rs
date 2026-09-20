@@ -657,6 +657,26 @@ fn test_date_for_file_with_non_utf8_path() {
 }
 
 #[test]
+fn test_date_multiple_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a", "2022-02-22");
+    at.write("b", "1999-09-19");
+
+    for (files, expected) in [
+        (["a", "b"], "Sun Sep 19 00:00:00 UTC 1999\n"),
+        (["b", "a"], "Tue Feb 22 00:00:00 UTC 2022\n"),
+    ] {
+        scene
+            .ucmd()
+            .args(&["-u", "--file", files[0], "--file", files[1]])
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
 fn test_date_file_invalid_utf8_line() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_date_file_invalid_utf8";
