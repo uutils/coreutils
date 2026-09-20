@@ -23,11 +23,8 @@ use std::{borrow::Cow, ffi::OsStr};
 #[cfg(all(target_os = "wasi", not(target_env = "p1")))]
 use wasip2_ffi::{OsStrExt, OsStringExt};
 
-// On wasm32-wasip2 `std::os::wasi::ffi` is behind the unstable `wasip2` library feature, so the
-// byte views come from the stable encoded-bytes API instead. The component model defines every
-// string the host hands a guest as UTF-8, so on this target the encoded bytes *are* the bytes, and
-// the reverse direction can go through `str` without `unsafe` — the same approach as
-// `uucore::os_str_from_bytes` / `os_string_from_vec` on this target.
+// WASI Preview 2 uses stable encoded-byte APIs because `std::os::wasi::ffi` is unstable.
+// Component-model strings are UTF-8, so decoding through `str` preserves host values.
 #[cfg(all(target_os = "wasi", not(target_env = "p1")))]
 mod wasip2_ffi {
     use std::ffi::{OsStr, OsString};

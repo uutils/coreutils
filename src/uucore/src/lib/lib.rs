@@ -393,11 +393,7 @@ fn with_wasi_argv_fallback(mut argv: Vec<OsString>) -> Vec<OsString> {
     argv
 }
 
-// `std::env::args_os()` can be empty on wasi when the component is not invoked as a CLI
-// command — for instance when it is embedded as a library and the host passes no argv at all.
-// `UTIL_NAME`/`EXECUTION_PHRASE` and their callers index `ARGV[0]`, which panics on an empty
-// vec, and a panic here aborts the whole component. Guarantee at least one element so those
-// globals resolve to a stable fallback name instead.
+// WASI embeddings may omit argv; provide a stable utility-name fallback.
 #[cfg(all(not(windows), target_os = "wasi"))]
 static ARGV: LazyLock<Vec<OsString>> =
     LazyLock::new(|| with_wasi_argv_fallback(std::env::args_os().collect()));
