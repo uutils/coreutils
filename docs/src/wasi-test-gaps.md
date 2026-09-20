@@ -1,9 +1,3 @@
-# WASI integration test gaps
-
-Tests annotated with `#[cfg_attr(wasi_runner, ignore = "...")]` are skipped when running integration tests against a WASI binary via wasmtime. This document tracks the reasons so that gaps in WASI support are visible in one place.
-
-To find all annotated tests: `grep -rn 'wasi_runner, ignore' tests/`
-
 ## Tools not yet covered by integration tests
 
 arch, b2sum, cat, cksum, cp, csplit, date, dir, dircolors, fmt, join, ls, md5sum, mkdir, mv, nproc, pathchk, pr, printenv, ptx, pwd, readlink, realpath, rm, rmdir, seq, sha1sum, sha224sum, sha256sum, sha384sum, sha512sum, shred, sleep, sort, split, tail, touch, tsort, uname, uniq, vdir, yes

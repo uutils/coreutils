@@ -17,7 +17,7 @@
 use pretty_assertions::assert_eq;
 use rand::distr::Alphanumeric;
 use rstest::rstest;
-#[cfg(all(not(target_os = "android"), not(target_os = "freebsd"), not(windows)))]
+#[cfg(all(not(target_os = "android"), not(target_os = "freebsd"), unix))]
 use rustix::process::{Pid, Signal, kill_process};
 use std::char::from_digit;
 use std::fs::File;
@@ -28,7 +28,7 @@ use std::io::{Seek, SeekFrom};
     not(target_os = "android"),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
-    not(windows)
+    unix
 ))]
 use std::path::Path;
 use std::process::Stdio;
@@ -38,7 +38,7 @@ use tail::chunks::BUFFER_SIZE as CHUNK_BUFFER_SIZE;
     not(target_os = "android"),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
-    not(windows)
+    unix
 ))]
 use tail::text;
 use uutests::at_and_ucmd;
@@ -242,7 +242,7 @@ fn test_nc_0_wo_follow2() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_n0_with_follow() {
     let (at, mut ucmd) = at_and_ucmd!();
     let test_file = "test.txt";
@@ -531,7 +531,7 @@ fn test_null_default() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_single() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -560,7 +560,7 @@ fn test_follow_single() {
 }
 
 #[test]
-#[cfg(wasi_runner)]
+#[cfg(target_os = "wasi")]
 fn test_follow_file_unsupported() {
     new_ucmd!()
         .arg("-f")
@@ -573,7 +573,7 @@ fn test_follow_file_unsupported() {
 /// Test for following when bytes are written that are not valid UTF-8.
 #[test]
 #[cfg(not(windows))] // FIXME: test times out
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_non_utf8_bytes() {
     // Tail the test file and start following it.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -631,7 +631,7 @@ fn test_permission_denied_is_not_reported_as_not_found() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut child = ucmd
@@ -667,7 +667,7 @@ fn test_follow_multiple() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_name_multiple() {
     // spell-checker:disable-next-line
     for argument in ["--follow=name", "--follo=nam", "--f=n"] {
@@ -713,7 +713,7 @@ fn test_follow_name_multiple() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_multiple_untailable() {
     // $ tail -f DIR1 DIR2
     // ==> DIR1 <==
@@ -798,7 +798,7 @@ fn test_follow_invalid_pid() {
     not(target_os = "freebsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_with_pid() {
     use std::process::Command;
 
@@ -996,7 +996,7 @@ fn test_multiple_input_files_missing() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_missing() {
     // Ensure that --follow=name does not imply --retry.
     // Ensure that --follow={descriptor,name} (without --retry) does *not wait* for the
@@ -1065,7 +1065,7 @@ fn test_dir() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_dir_follow() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1085,7 +1085,7 @@ fn test_dir_follow() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_dir_follow_retry() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1417,7 +1417,6 @@ fn test_num_with_undocumented_sign_bytes() {
 
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_bytes_for_funny_unix_files() {
     // Test tail with byte count
     let ts = TestScenario::new(util_name!());
@@ -1479,7 +1478,7 @@ fn test_retry_missing_file_error() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_retry_follow_name_waits_for_creation() {
     // Test tail --retry behavior
     // Ensure that `tail --retry --follow=name` waits for the file to appear.
@@ -1525,7 +1524,7 @@ fn test_retry_follow_name_waits_for_creation() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_retry_descriptor_detects_truncation() {
     // Test tail --retry behavior
     // Ensure that `tail --retry --follow=descriptor` waits for the file to appear.
@@ -1585,7 +1584,7 @@ fn test_retry_descriptor_detects_truncation() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_retry_descriptor_gives_up_on_untailable() {
     // Test tail --retry behavior
     // Ensure that `tail --follow=descriptor --retry` exits when the file appears untailable.
@@ -1627,7 +1626,7 @@ fn test_retry_descriptor_gives_up_on_untailable() {
 // >X
 #[test]
 #[cfg(all(not(windows), not(target_os = "android")))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_descriptor_no_retry_skips_late_file() {
     // Test tail --retry behavior
     // Ensure that --follow=descriptor (without --retry) does *not* try
@@ -1677,7 +1676,7 @@ fn test_descriptor_no_retry_skips_late_file() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_capital_f_recovers_after_dir_swap() {
     // Test tail --retry behavior
     // Ensure that `tail -F` retries when the file is initially untailable.
@@ -1751,7 +1750,6 @@ fn test_capital_f_recovers_after_dir_swap() {
 #[test]
 #[cfg(unix)]
 #[cfg(not(target_os = "android"))]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_replaced_by_symlink_is_untailable() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1810,7 +1808,7 @@ fn test_follow_name_replaced_by_symlink_is_untailable() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_retry8() {
     // Ensure that inotify will switch to polling mode if directory
     // of the watched file was initially missing and later created.
@@ -1880,7 +1878,7 @@ fn test_retry8() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_retry9() {
     // Test inotify behavior when directory is recreated
     // Ensure that inotify will switch to polling mode if directory
@@ -1963,7 +1961,7 @@ fn test_retry9() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_descriptor_vs_rename1() {
     // Test file descriptor behavior vs rename
     // $ ((rm -f A && touch A && sleep 1 && echo -n "A\n" >> A && sleep 1 && \
@@ -2028,7 +2026,7 @@ fn test_follow_descriptor_vs_rename1() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_descriptor_vs_rename2() {
     // Ensure the headers are correct for --verbose.
     // NOTE: GNU's tail does not update the header from FILE_A to FILE_C after `mv FILE_A FILE_C`
@@ -2082,7 +2080,7 @@ fn test_follow_descriptor_vs_rename2() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_name_shows_headers_on_creation() {
     // Test -F flag with file headers
     // Ensure tail -F distinguishes output with the
@@ -2149,7 +2147,7 @@ fn test_follow_name_shows_headers_on_creation() {
 
 #[test]
 #[cfg(all(not(windows), not(target_os = "android")))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_name_remove() {
     // This test triggers a remove event while `tail --follow=name file` is running.
     // ((sleep 2 && rm file &)>/dev/null 2>&1 &) ; tail --follow=name file
@@ -2210,7 +2208,7 @@ fn test_follow_name_remove() {
 
 #[test]
 #[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_name_truncate1() {
     // This test triggers a truncate event while `tail --follow=name file` is running.
     // $ cp file backup && head file > file && sleep 1 && cp backup file
@@ -2263,7 +2261,7 @@ fn test_follow_name_truncate1() {
 
 #[test]
 #[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_name_truncate2() {
     fn wait_for_output(
         child: &mut uutests::util::UChild,
@@ -2323,7 +2321,7 @@ fn test_follow_name_truncate2() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_name_truncate3() {
     // Opening an empty file in truncate mode should not trigger a truncate event while
     // `tail --follow=name file` is running.
@@ -2360,7 +2358,7 @@ fn test_follow_name_truncate3() {
     not(windows),
     not(feature = "selinux") // flaky
 ))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_name_truncate4() {
     // Truncating a file with the same content it already has should not trigger a truncate event
 
@@ -2396,7 +2394,7 @@ fn test_follow_name_truncate4() {
 
 #[test]
 #[cfg(not(windows))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_detects_file_truncation() {
     // Test tail behavior on file truncation
     // Ensure all logs are output upon file truncation
@@ -2456,7 +2454,7 @@ fn test_follow_detects_file_truncation() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_name_move_create1() {
     // This test triggers a move/create event while `tail --follow=name file` is running.
     // ((sleep 2 && mv file backup && sleep 2 && cp backup file &)>/dev/null 2>&1 &) ; tail --follow=name file
@@ -2513,7 +2511,7 @@ fn test_follow_name_move_create1() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_name_hash_table_stress() {
     // Test inotify hash table under heavy file churn by watching 9 files simultaneously.
     // Exercises an abort-inducing flaw in inotify-enabled tail -F
@@ -2594,7 +2592,7 @@ fn test_follow_name_hash_table_stress() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_name_move1() {
     // This test triggers a move event while `tail --follow=name file` is running.
     // ((sleep 2 && mv file backup &)>/dev/null 2>&1 &) ; tail --follow=name file
@@ -2657,7 +2655,7 @@ fn test_follow_name_move1() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_name_move2() {
     // Like test_follow_name_move1, but move to a name that's already monitored.
 
@@ -2746,7 +2744,7 @@ fn test_follow_name_move2() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_name_move_retry1() {
     // Similar to test_follow_name_move1 but with `--retry` (`-F`)
     // This test triggers two move/rename events while `tail --follow=name --retry file` is running.
@@ -2807,7 +2805,7 @@ fn test_follow_name_move_retry1() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_name_rename_chain() {
     // Test -F flag behavior across file renames
     // Similar to test_follow_name_move2 (move to a name that's already monitored)
@@ -2908,7 +2906,7 @@ fn test_follow_name_rename_chain() {
 
 #[test]
 #[cfg(not(windows))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_inotify_only_regular() {
     // The GNU test inotify-only-regular.sh uses strace to ensure that `tail -f`
     // doesn't make inotify syscalls and only uses inotify for regular files or fifos.
@@ -2982,12 +2980,12 @@ fn test_fifo() {
 /// Without non-blocking FIFO open, tail would block forever waiting for a writer.
 #[test]
 #[cfg(all(
+    unix,
     not(target_os = "android"),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
     not(windows)
 ))]
-#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
 fn test_fifo_with_pid() {
     use std::process::{Command, Stdio};
 
@@ -4147,7 +4145,7 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
     // too) which cannot write to the pipe because tail finished before echo was able to write to
     // the pipe. Seems that windows `cmd` (like posix shells) ignores pipes when a fifo is present.
     // This is actually the wished behavior and the test therefore succeeds.
-    #[cfg(windows)]
+    #[cfg(not(unix))]
     let expected = "==> standard input <==\n\
         fifo data\n\
         ==> data <==\n\
@@ -4161,7 +4159,7 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
         file data\n\
         ==> standard input <==\n";
 
-    #[cfg(windows)]
+    #[cfg(not(unix))]
     let cmd = ["cmd", "/C"];
     #[cfg(unix)]
     let cmd = ["sh", "-c"];
@@ -4308,7 +4306,6 @@ fn test_args_when_settings_check_warnings_follow_retry() {
 /// TODO: Write similar tests for windows
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_args_when_settings_check_warnings_follow_indefinitely_then_warning() {
     let scene = TestScenario::new(util_name!());
 
@@ -4433,7 +4430,6 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_warning() {
 
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4748,7 +4744,7 @@ fn test_follow_when_file_and_symlink_are_pointing_to_same_file_and_append_data()
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4809,7 +4805,7 @@ fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
     not(target_os = "openbsd"),
     not(feature = "selinux") // flaky
 ))]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_stays_same_size() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5083,7 +5079,7 @@ fn test_tail_obsolete_error_cases() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_tail_obsolete_f_flag() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5105,7 +5101,6 @@ fn test_tail_obsolete_f_flag() {
 
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_obsolete_encoding_unix() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -5139,7 +5134,7 @@ fn test_obsolete_encoding_windows() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_following_with_pid() {
     use std::process::Command;
 
@@ -5216,10 +5211,6 @@ fn test_when_piped_input_then_no_broken_pipe() {
 
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: closed stdout reports a generic I/O error rather than BrokenPipe"
-)]
 fn test_when_output_closed_then_no_broken_pipe() {
     let (at, mut cmd) = at_and_ucmd!();
     at.make_file("input").set_len(10_000_000).unwrap();
@@ -5287,7 +5278,6 @@ fn test_failed_write_is_reported_on_seekable_input() {
 
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_dev_zero() {
     new_ucmd!()
         .args(&["-c", "1", "/dev/zero"])
@@ -5332,7 +5322,6 @@ fn test_follow_pipe_f() {
 
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_stdout_pipe_close() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("f", "line1\nline2\n");
@@ -5348,7 +5337,7 @@ fn test_follow_stdout_pipe_close() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_os = "wasi"))]
 fn test_debug_flag_with_polling() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -5369,7 +5358,6 @@ fn test_debug_flag_with_polling() {
 
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_debug_flag_with_inotify() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -5387,7 +5375,6 @@ fn test_debug_flag_with_inotify() {
 
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_dangling_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("target", "link");
@@ -5402,7 +5389,6 @@ fn test_follow_dangling_symlink() {
 
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_symlink_target_change() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("t1", "A\n");
@@ -5434,7 +5420,7 @@ fn test_no_skip_after_error() {
 }
 
 #[cfg(unix)]
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(feature = "feat_diagnostics")]
 mod diagnostics {
     use super::*;
 

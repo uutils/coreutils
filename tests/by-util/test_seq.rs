@@ -1175,7 +1175,7 @@ fn test_equalize_widths_corner_cases() {
         .stdout_is("1.0625\n2.06252\n");
 }
 
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(all(feature = "feat_diagnostics", not(target_os = "wasi")))]
 mod diagnostics {
     use super::*;
 

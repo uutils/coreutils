@@ -2089,7 +2089,7 @@ fn test_env_disallow_double_underscore_all() {
 }
 
 #[cfg(unix)]
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(feature = "feat_diagnostics")]
 mod diagnostics {
     use super::*;
 

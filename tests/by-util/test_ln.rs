@@ -97,6 +97,7 @@ fn test_symlink_do_not_overwrite() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_symlink_overwrite_force() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_symlink_overwrite_force_a";
@@ -119,7 +120,6 @@ fn test_symlink_overwrite_force() {
 #[test]
 // Android's app-private filesystem refuses hard links.
 #[cfg(all(unix, not(any(target_os = "redox", target_os = "android"))))]
-#[cfg_attr(wasi_runner, ignore)]
 fn test_force_replace_never_leaves_the_destination_name_free() {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -194,6 +194,7 @@ fn test_force_replace_same_inode_leaves_no_temp_file() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_symlink_overwrite_force_overrides_interactive() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_symlink_overwrite_force_a";
@@ -276,6 +277,7 @@ fn test_symlink_interactive_overrides_force() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_symlink_simple_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_symlink_simple_backup";
@@ -300,6 +302,7 @@ fn test_symlink_simple_backup() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_symlink_custom_backup_suffix() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_symlink_custom_backup_suffix";
@@ -352,6 +355,7 @@ fn test_symlink_suffix_without_backup_option() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_symlink_custom_backup_suffix_hyphen_value() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_symlink_custom_backup_suffix";
@@ -379,6 +383,7 @@ fn test_symlink_custom_backup_suffix_hyphen_value() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_symlink_backup_numbering() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_symlink_backup_numbering";
@@ -404,6 +409,7 @@ fn test_symlink_backup_numbering() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_symlink_existing_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_symlink_existing_backup";
@@ -462,10 +468,6 @@ fn test_symlink_target_dir() {
 
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: non-utf8 arguments cannot be passed through the spawned test harness"
-)]
 fn test_symlink_target_dir_non_utf8_source_name() {
     use std::ffi::OsStr;
     use std::fs;
@@ -632,7 +634,7 @@ fn test_symlink_implicit_target_dir() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+#[cfg(not(target_os = "wasi"))]
 fn test_symlink_to_dir_2args() {
     let (at, mut ucmd) = at_and_ucmd!();
     let filename = "test_symlink_to_dir_2args_file";
@@ -897,6 +899,7 @@ fn test_relative_target_with_no_parent() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_relative_dst_already_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file1");
@@ -906,10 +909,7 @@ fn test_relative_dst_already_symlink() {
 }
 
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: read_link on absolute paths fails under wasmtime via spawned test harness"
-)]
+#[cfg(not(target_os = "wasi"))]
 fn test_relative_src_already_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file1");
@@ -994,6 +994,7 @@ fn test_backup_force() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_hard_logical() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "file1";
@@ -1011,6 +1012,7 @@ fn test_hard_logical() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_hard_logical_non_exit_fail() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1155,7 +1157,6 @@ fn test_ln_seen_file() {
 
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_ln_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1234,6 +1235,7 @@ fn test_ln_backup_no_path_traversal() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_ln_no_dereference_symbolic() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

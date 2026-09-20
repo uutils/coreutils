@@ -10,7 +10,7 @@
     not(target_os = "android"),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
-    not(windows)
+    unix
 ))]
 use std::io::Read;
 use uutests::new_ucmd;
@@ -441,7 +441,7 @@ fn test_presume_input_pipe_5_chars() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no subprocess spawning")]
+#[cfg(not(target_os = "wasi"))]
 fn test_all_but_last_bytes_large_file_piped() {
     // Validate print-all-but-last-n-bytes with a large piped-in (i.e. non-seekable) file.
     let scene = TestScenario::new(util_name!());
@@ -510,7 +510,7 @@ fn test_all_but_last_lines_large_file_presume_input_pipe() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no subprocess spawning")]
+#[cfg(not(target_os = "wasi"))]
 fn test_all_but_last_lines_large_file() {
     // Create our fixtures on the fly. We need the input file to be at least double
     // the size of BUF_SIZE as specified in head.rs. Go for something a bit bigger
@@ -581,13 +581,9 @@ fn test_all_but_last_lines_large_file() {
     not(target_os = "android"),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
-    not(windows)
+    unix
 ))]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: stdin file position not preserved through wasmtime"
-)]
 fn test_validate_stdin_offset_lines() {
     // A handful of unix-only tests to validate behavior when reading from stdin on a seekable
     // file. GNU-compatibility requires that the stdin file be left such that if another
@@ -684,14 +680,9 @@ fn test_validate_stdin_offset_lines() {
     not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd"),
-    not(windows)
+    unix
 ))]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: stdin file position not preserved through wasmtime"
-)]
 fn test_validate_stdin_offset_bytes() {
     // A handful of unix-only tests to validate behavior when reading from stdin on a seekable
     // file. GNU-compatibility requires that the stdin file be left such that if another
@@ -814,10 +805,9 @@ fn test_validate_stdin_offset_bytes() {
     not(target_os = "android"),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
-    not(windows)
+    unix
 ))]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_read_backwards_bytes_proc_fs_version() {
     let ts = TestScenario::new(util_name!());
 
@@ -831,10 +821,9 @@ fn test_read_backwards_bytes_proc_fs_version() {
     not(target_os = "android"),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
-    not(windows)
+    unix
 ))]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_read_backwards_bytes_proc_fs_modules() {
     let ts = TestScenario::new(util_name!());
 
@@ -852,10 +841,9 @@ fn test_read_backwards_bytes_proc_fs_modules() {
     not(target_os = "android"),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
-    not(windows)
+    unix
 ))]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_read_backwards_lines_proc_fs_modules() {
     let ts = TestScenario::new(util_name!());
 
@@ -873,10 +861,9 @@ fn test_read_backwards_lines_proc_fs_modules() {
     not(target_os = "android"),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
-    not(windows)
+    unix
 ))]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/sys) not visible")]
 fn test_read_backwards_bytes_sys_kernel_profiling() {
     let ts = TestScenario::new(util_name!());
     // in case the kernel was not built with profiling support, e.g. WSL
@@ -950,7 +937,6 @@ fn test_write_to_dev_full() {
 
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_head_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1060,7 +1046,6 @@ fn test_unreadable_file_prints_no_header() {
 /// the filename write rather than at the next checked one.
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/dev) not visible")]
 fn test_verbose_header_write_error_long_filename() {
     use std::fs::File;
 
@@ -1120,7 +1105,7 @@ fn test_head_follows_symlink_to_regular_file() {
 }
 
 #[cfg(unix)]
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(feature = "feat_diagnostics")]
 mod diagnostics {
     use super::*;
 

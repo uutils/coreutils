@@ -833,7 +833,7 @@ fn test_no_such_directory_message() {
         .stderr_is("stat: cannot statx 'a': No such file or directory\n");
 }
 
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(all(feature = "feat_diagnostics", not(target_os = "wasi")))]
 mod diagnostics {
     use super::*;
 

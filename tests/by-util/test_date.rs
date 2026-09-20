@@ -644,7 +644,6 @@ fn test_date_for_empty_file() {
 
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_date_for_file_with_non_utf8_path() {
     use std::os::unix::ffi::OsStrExt;
 
@@ -716,7 +715,6 @@ fn test_date_for_file_mtime() {
 
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_date_reference_is_non_utf8_path() {
     use std::os::unix::ffi::OsStrExt;
     use std::time::{Duration, UNIX_EPOCH};
@@ -3320,7 +3318,6 @@ fn test_nanoseconds_width_prefix_ignored_issue12001() {
 
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore)]
 fn test_write_error() {
     use std::fs::OpenOptions;
 

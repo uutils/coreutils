@@ -1682,7 +1682,7 @@ fn test_create_error_reports_filename() {
 }
 
 #[test]
-#[cfg(all(target_os = "linux", not(wasi_runner)))]
+#[cfg(target_os = "linux")]
 fn test_csplit_dev_full_stdout() {
     use std::fs::OpenOptions;
 

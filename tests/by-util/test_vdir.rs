@@ -190,7 +190,7 @@ fn test_version() {
         .stdout_is(format!("vdir {}\n", uucore::crate_version!()));
 }
 
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(all(feature = "feat_diagnostics", not(target_os = "wasi")))]
 mod diagnostics {
     use super::*;
 

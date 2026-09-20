@@ -23,9 +23,9 @@ use std::path::PathBuf;
 #[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "freebsd"),))]
 use std::process::Command;
 use std::process::Stdio;
-#[cfg(not(windows))]
+#[cfg(unix)]
 use std::thread::sleep;
-#[cfg(not(windows))]
+#[cfg(unix)]
 use std::time::Duration;
 use tempfile::tempfile;
 
@@ -1095,7 +1095,7 @@ fn test_random_73k_test_obs_lt_not_a_multiple_ibs() {
         .stdout_is_fixture_bytes("random-5828891cb1230748e146f34223bbd3b5.test");
 }
 
-#[cfg(not(windows))]
+#[cfg(unix)]
 #[test]
 fn test_random_73k_test_lazy_fullblock() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1498,7 +1498,7 @@ fn test_bytes_suffix_recursive() {
 }
 
 /// Test for "conv=sync" with a slow reader.
-#[cfg(not(windows))]
+#[cfg(unix)]
 #[test]
 fn test_sync_delayed_reader() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2335,7 +2335,7 @@ fn test_stats_are_reported_when_a_write_fails() {
     assert_eq!(at.metadata("capped.bin").len(), CAP);
 }
 
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(all(feature = "feat_diagnostics", not(target_os = "wasi")))]
 mod diagnostics {
     use super::*;
 

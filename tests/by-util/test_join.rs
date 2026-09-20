@@ -772,7 +772,7 @@ fn test_incompatible_fields_reports_exact_field_number() {
         .stderr_contains(format!("incompatible join fields {expected_above}, 5"));
 }
 
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(all(feature = "feat_diagnostics", not(target_os = "wasi")))]
 mod diagnostics {
     use super::*;
 

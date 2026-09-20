@@ -13,12 +13,11 @@ const NO_ARGS: &[&str] = &[];
 fn run(args: &[impl AsRef<OsStr>], expected: &[u8]) {
     let result = new_ucmd!().args(args).run_stdout_starts_with(expected);
 
-    // On Unix systems (not WASI), yes should be terminated by SIGPIPE when the pipe closes.
-    // On WASI and Windows, there are no signals, so just check the process succeeded.
-    #[cfg(all(unix, not(wasi_runner)))]
+    // On Unix systems, yes should be terminated by SIGPIPE when the pipe closes.
+    #[cfg(unix)]
     result.signal_name_is("PIPE");
-
-    #[cfg(any(not(unix), wasi_runner))]
+    // no signals, so just check the process succeeded.
+    #[cfg(not(unix))]
     result.success();
 }
 
@@ -33,33 +32,33 @@ fn test_version() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore)]
+#[cfg(not(target_os = "wasi"))]
 fn test_simple() {
     run(NO_ARGS, b"y\ny\ny\ny\n");
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore)]
+#[cfg(not(target_os = "wasi"))]
 fn test_args() {
     run(&["a", "bar", "c"], b"a bar c\na bar c\na ba");
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore)]
+#[cfg(not(target_os = "wasi"))]
 fn test_long_output() {
     run(NO_ARGS, "y\n".repeat(512 * 1024).as_bytes());
 }
 
 /// Test with an output that seems likely to get mangled in case of incomplete writes.
 #[test]
-#[cfg_attr(wasi_runner, ignore)]
+#[cfg(not(target_os = "wasi"))]
 fn test_long_odd_output() {
     run(&["abcdef"], "abcdef\n".repeat(1024 * 1024).as_bytes());
 }
 
 /// Test with an input that doesn't fit in the standard buffer.
 #[test]
-#[cfg_attr(wasi_runner, ignore)]
+#[cfg(not(target_os = "wasi"))]
 fn test_long_input() {
     #[cfg(not(windows))]
     const TIMES: usize = 14000;
@@ -77,7 +76,6 @@ fn test_long_input() {
 /// can cause a deadlock
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-#[cfg_attr(wasi_runner, ignore)]
 fn test_long_line_exceeds_pipe_capacity() {
     // A single argv string is capped at ~128 KiB by the kernel, so use many
     // args joined by spaces to build a >1 MiB line instead of one huge arg.
@@ -89,7 +87,6 @@ fn test_long_line_exceeds_pipe_capacity() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
-#[cfg_attr(wasi_runner, ignore)]
 fn test_piped_to_dev_full() {
     use std::fs::OpenOptions;
 
@@ -111,8 +108,6 @@ fn test_piped_to_dev_full() {
 
 #[test]
 #[cfg(unix)]
-// WASI runners (wasmtime) require UTF-8 arguments, so skip this test when testing WASI binaries
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_non_utf8() {
     use std::os::unix::ffi::OsStrExt;
 

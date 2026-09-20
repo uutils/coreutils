@@ -558,7 +558,7 @@ fn test_stdbuf_reports_signalled_command() {
 }
 
 #[cfg(unix)]
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(feature = "feat_diagnostics")]
 mod diagnostics {
     use super::*;
 

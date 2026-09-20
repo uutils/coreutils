@@ -9,7 +9,7 @@
 
 #[cfg(not(windows))]
 use libc::mode_t;
-#[cfg(not(windows))]
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
@@ -1084,7 +1084,7 @@ fn test_mkdir_inside_inexistent_dir() {
 
 // The mode is only parsed where a mode means something.
 #[cfg(unix)]
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(feature = "feat_diagnostics")]
 mod diagnostics {
     use super::*;
     #[test]

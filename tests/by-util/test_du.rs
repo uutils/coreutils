@@ -956,7 +956,7 @@ fn test_du_h_precision() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+#[cfg(not(target_os = "wasi"))]
 fn test_du_h_locale_decimal_separator() {
     for (locale, expected) in [("fr_FR.UTF-8", "8,4K"), ("C", "8.4K")] {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -2832,7 +2832,7 @@ fn test_du_repeated_time_style() {
     result.stdout_only("0\t2016-06-16 00:00:00.000000000 +0000\tdate_test\n");
 }
 
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(all(feature = "feat_diagnostics", not(target_os = "wasi")))]
 mod diagnostics {
     use super::*;
 

@@ -1357,7 +1357,6 @@ fn test_zero_terminated_embedded_newline() {
 
 #[cfg(unix)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_non_utf8_delimiter() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1685,7 +1684,7 @@ fn test_format_value_below_large_threshold_ok() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+#[cfg(not(target_os = "wasi"))] // locale env vars not propagated
 fn test_locale_fr_output() {
     // Output uses the locale separator
     new_ucmd!()
@@ -1696,7 +1695,7 @@ fn test_locale_fr_output() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+#[cfg(not(target_os = "wasi"))] // locale env vars not propagated
 fn test_locale_fr_input_comma() {
     // fr_FR should take '1,5' as a number
     new_ucmd!()
@@ -1707,7 +1706,7 @@ fn test_locale_fr_input_comma() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+#[cfg(not(target_os = "wasi"))] // locale env vars not propagated
 fn test_locale_fr_rejects_period() {
     // '.' isn't valid in fr_FR, should bail
     new_ucmd!()
@@ -1821,7 +1820,7 @@ fn test_header_detached() {
         .stdout_is("1\n2\n");
 }
 
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(all(feature = "feat_diagnostics", not(target_os = "wasi")))]
 mod diagnostics {
     use super::*;
 
@@ -2355,7 +2354,7 @@ numfmt: invalid unit size: '0x'
 }
 
 #[cfg(unix)]
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(feature = "feat_diagnostics")]
 mod field_diagnostics {
     use super::*;
 

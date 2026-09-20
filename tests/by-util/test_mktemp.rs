@@ -14,7 +14,9 @@ use uucore::display::Quotable;
 
 #[cfg(not(windows))]
 use std::path::MAIN_SEPARATOR;
+#[cfg(not(target_os = "wasi"))]
 use std::path::PathBuf;
+#[cfg(not(target_os = "wasi"))]
 use tempfile::tempdir;
 
 #[cfg(unix)]
@@ -29,7 +31,7 @@ static TEST_TEMPLATE6: &str = "tempXXXlate";
 static TEST_TEMPLATE7: &str = "XXXtemplate";
 #[cfg(unix)]
 static TEST_TEMPLATE8: &str = "tempXXXl/ate";
-#[cfg(windows)]
+#[cfg(not(unix))]
 static TEST_TEMPLATE8: &str = "tempXXXl\\ate";
 static TEST_TEMPLATE9: &str = "XXX_XX";
 
@@ -119,7 +121,7 @@ fn test_mktemp_mktemp() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+#[cfg(not(target_os = "wasi"))] // host paths not visible
 fn test_mktemp_mktemp_t() {
     let scene = TestScenario::new(util_name!());
 
@@ -401,7 +403,7 @@ fn test_mktemp_suffix() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+#[cfg(not(target_os = "wasi"))] // host paths not visible
 fn test_mktemp_tmpdir() {
     let scene = TestScenario::new(util_name!());
     let dir = tempdir().unwrap();
@@ -465,7 +467,7 @@ fn test_mktemp_tmpdir() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+#[cfg(not(target_os = "wasi"))] // host paths not visible
 fn test_mktemp_empty_tmpdir() {
     let scene = TestScenario::new(util_name!());
     let pathname = scene.fixtures.as_string();
@@ -486,7 +488,7 @@ fn test_mktemp_empty_tmpdir() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+#[cfg(not(target_os = "wasi"))] // host paths not visible
 fn test_mktemp_tmpdir_one_arg() {
     let scene = TestScenario::new(util_name!());
 
@@ -500,7 +502,7 @@ fn test_mktemp_tmpdir_one_arg() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+#[cfg(not(target_os = "wasi"))] // host paths not visible
 fn test_mktemp_directory_tmpdir() {
     let scene = TestScenario::new(util_name!());
 
@@ -605,11 +607,6 @@ fn test_respect_template_directory() {
 
 #[cfg(unix)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: path_create_directory has no mode parameter and chmod returns ENOSYS, \
-              so directories can't be created with restricted permissions"
-)]
 fn test_directory_permissions() {
     let (at, mut ucmd) = at_and_ucmd!();
     let result = ucmd.args(&["-d", "XXX"]).succeeds();
@@ -880,7 +877,7 @@ fn test_nonexistent_tmpdir_env_var() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+#[cfg(not(target_os = "wasi"))] // host paths not visible
 fn test_empty_tmpdir_env_var() {
     #[cfg(not(any(windows, target_os = "android")))]
     {
@@ -979,13 +976,13 @@ fn test_nonexistent_dir_prefix() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+#[cfg(not(target_os = "wasi"))] // host paths not visible
 fn test_default_missing_value() {
     new_ucmd!().arg("-d").arg("--tmpdir").succeeds();
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+#[cfg(not(target_os = "wasi"))] // host paths not visible
 fn test_default_issue_4821_t_tmpdir() {
     let scene = TestScenario::new(util_name!());
     let pathname = scene.fixtures.as_string();
@@ -1001,7 +998,7 @@ fn test_default_issue_4821_t_tmpdir() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+#[cfg(not(target_os = "wasi"))] // host paths not visible
 fn test_default_issue_4821_t_tmpdir_p() {
     let scene = TestScenario::new(util_name!());
     let pathname = scene.fixtures.as_string();
@@ -1018,7 +1015,7 @@ fn test_default_issue_4821_t_tmpdir_p() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+#[cfg(not(target_os = "wasi"))] // host paths not visible
 fn test_t_ensure_tmpdir_has_higher_priority_than_p() {
     let scene = TestScenario::new(util_name!());
     let pathname = scene.fixtures.as_string();
@@ -1116,7 +1113,6 @@ fn test_missing_short_tmpdir_flag() {
 
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
 fn test_non_utf8_template() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1131,7 +1127,6 @@ fn test_non_utf8_template() {
 
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
 fn test_non_utf8_tmpdir_path() {
     use std::os::unix::ffi::OsStrExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1146,7 +1141,6 @@ fn test_non_utf8_tmpdir_path() {
 
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
 fn test_non_utf8_tmpdir_long_option() {
     use std::os::unix::ffi::OsStrExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1166,7 +1160,6 @@ fn test_non_utf8_tmpdir_long_option() {
 
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
 fn test_invalid_utf8_suffix() {
     use std::os::unix::ffi::OsStrExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1187,7 +1180,6 @@ fn test_invalid_utf8_suffix() {
 
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
 fn test_non_utf8_tmpdir_directory_creation() {
     use std::os::unix::ffi::OsStrExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1204,7 +1196,6 @@ fn test_non_utf8_tmpdir_directory_creation() {
 
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mktemp_hidden_file_single_dot() {
     let scene = TestScenario::new(util_name!());
     let dir = tempdir().unwrap();

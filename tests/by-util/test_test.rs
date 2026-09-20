@@ -401,8 +401,7 @@ fn test_float_inequality_is_error() {
 }
 
 #[test]
-#[cfg(not(windows))]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
+#[cfg(unix)]
 fn test_invalid_utf8_integer_compare() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -463,7 +462,7 @@ fn test_file_is_itself() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+#[cfg(not(target_os = "wasi"))]
 // Disabled for android, since the temp dir doesn't allow creating hard links
 #[cfg(not(target_os = "android"))]
 fn test_hard_link_is_same_file() {
@@ -508,7 +507,7 @@ fn test_file_is_newer_than_non_existing_file() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+#[cfg(not(target_os = "wasi"))]
 fn test_same_device_inode() {
     let scenario = TestScenario::new(util_name!());
     let at = &scenario.fixtures;
@@ -587,8 +586,7 @@ fn test_file_is_readable() {
 }
 
 #[test]
-#[cfg(not(windows))]
-#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
+#[cfg(unix)]
 fn test_file_is_not_readable() {
     let scenario = TestScenario::new(util_name!());
     let mut ucmd = scenario.ucmd();
@@ -601,7 +599,7 @@ fn test_file_is_not_readable() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
+#[cfg(not(target_os = "wasi"))]
 fn test_file_is_writable() {
     new_ucmd!().args(&["-w", "regular_file"]).succeeds();
 }
@@ -645,8 +643,7 @@ fn test_file_is_not_executable() {
 }
 
 #[test]
-#[cfg(not(windows))]
-#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
+#[cfg(unix)]
 fn test_file_is_executable() {
     let scenario = TestScenario::new(util_name!());
     let mut chmod = scenario.cmd("chmod");
@@ -708,7 +705,7 @@ fn test_file_is_executable_from_pathext_windows() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
+#[cfg(not(target_os = "wasi"))]
 fn test_directory_is_executable() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
@@ -836,7 +833,7 @@ fn test_nonexistent_file_is_not_symlink() {
 // Only the superuser is allowed to set the sticky bit on files on FreeBSD/OpenBSD.
 // Windows has no concept of sticky bit
 #[cfg(not(any(windows, target_os = "freebsd", target_os = "openbsd")))]
-#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
+#[cfg(not(target_os = "wasi"))]
 fn test_file_is_sticky() {
     let scenario = TestScenario::new(util_name!());
     let mut ucmd = scenario.ucmd();
@@ -932,7 +929,7 @@ fn test_parenthesized_right_parenthesis_as_literal() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no uid/gid")]
+#[cfg(not(target_os = "wasi"))]
 fn test_file_owned_by_euid() {
     new_ucmd!().args(&["-O", "regular_file"]).succeeds();
 }
@@ -945,8 +942,7 @@ fn test_nonexistent_file_not_owned_by_euid() {
 }
 
 #[test]
-#[cfg(not(windows))]
-#[cfg_attr(wasi_runner, ignore = "WASI: no uid/gid")]
+#[cfg(unix)]
 fn test_file_not_owned_by_euid() {
     new_ucmd!()
         .args(&["-f", "/bin/sh", "-a", "!", "-O", "/bin/sh"])
@@ -954,8 +950,7 @@ fn test_file_not_owned_by_euid() {
 }
 
 #[test]
-#[cfg(not(windows))]
-#[cfg_attr(wasi_runner, ignore = "WASI: no uid/gid")]
+#[cfg(unix)]
 fn test_file_owned_by_egid() {
     // On some platforms (mostly the BSDs) the test fixture files copied to the
     // /tmp directory will have a different gid than the current egid (due to
@@ -986,8 +981,7 @@ fn test_nonexistent_file_not_owned_by_egid() {
 }
 
 #[test]
-#[cfg(not(windows))]
-#[cfg_attr(wasi_runner, ignore = "WASI: no uid/gid")]
+#[cfg(unix)]
 fn test_file_not_owned_by_egid() {
     let target_file = if cfg!(target_os = "freebsd") {
         // The coreutils test runner user has a primary group id of "wheel",
@@ -1348,7 +1342,7 @@ fn test_unary_op_as_literal_in_three_arg_form() {
     new_ucmd!().args(&["-f", "=", "a", "-o", "b"]).succeeds();
 }
 
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(all(feature = "feat_diagnostics", not(target_os = "wasi")))]
 mod diagnostics {
     use super::*;
 

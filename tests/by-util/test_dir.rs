@@ -148,7 +148,7 @@ fn test_write_error() {
         .stderr_is("dir: write error: No space left on device\n");
 }
 
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(all(feature = "feat_diagnostics", not(target_os = "wasi")))]
 mod diagnostics {
     use super::*;
 

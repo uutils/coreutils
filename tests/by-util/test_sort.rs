@@ -1361,7 +1361,6 @@ fn test_merge_write_error_does_not_panic() {
 // It used to print `sort: Input/output error (os error 5)`.
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore)]
 fn test_read_error_message() {
     // Reading /proc/self/mem from offset 0 fails with EIO.
     let result = new_ucmd!().arg("/proc/self/mem").fails_with_code(2);
@@ -3626,7 +3625,7 @@ fn test_sort_locale_punctuation() {
     }
 }
 
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(all(feature = "feat_diagnostics", not(target_os = "wasi")))]
 mod diagnostics {
     use super::*;
 

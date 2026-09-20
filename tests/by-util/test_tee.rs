@@ -9,6 +9,7 @@
 
 use uutests::{at_and_ucmd, new_ucmd};
 
+#[cfg(not(target_os = "wasi"))]
 use regex::Regex;
 use std::process::Stdio;
 use std::time::Duration;
@@ -126,7 +127,7 @@ fn test_tee_multiple_append_flags() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+#[cfg(not(target_os = "wasi"))]
 fn test_readonly() {
     let (at, mut ucmd) = at_and_ucmd!();
     let content_tee = "hello";
@@ -148,7 +149,7 @@ fn test_readonly() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no pipe/signal support")]
+#[cfg(not(target_os = "wasi"))]
 fn test_tee_output_not_buffered() {
     // POSIX says: The tee utility shall not buffer output
 
@@ -252,7 +253,7 @@ fn test_tee_continues_after_short_read() {
     handle.join().unwrap();
 }
 
-#[cfg(all(target_os = "linux", not(wasi_runner)))]
+#[cfg(target_os = "linux")]
 mod linux_only {
     use uutests::util::{AtPath, CmdResult, UCommand};
 

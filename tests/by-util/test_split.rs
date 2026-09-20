@@ -9,7 +9,7 @@ use rand::{RngExt as _, SeedableRng, rng};
 use regex::Regex;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::process::Resource;
-#[cfg(not(windows))]
+#[cfg(unix)]
 use std::env;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
@@ -2169,7 +2169,7 @@ fn test_write_error_on_full_device() {
     assert!(!at.file_exists("xab"));
 }
 
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(all(feature = "feat_diagnostics", not(target_os = "wasi")))]
 mod diagnostics {
     use super::*;
 

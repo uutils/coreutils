@@ -1720,7 +1720,7 @@ fn test_chmod_symlink_two_links_same_dir() {
     // cSpell:enable
 }
 
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(all(feature = "feat_diagnostics", not(target_os = "wasi")))]
 mod diagnostics {
     use super::*;
     #[cfg(unix)]

@@ -1436,8 +1436,7 @@ fn mb_input() {
 }
 
 #[test]
-#[cfg(target_family = "unix")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
+#[cfg(unix)]
 fn mb_invalid_unicode() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1525,8 +1524,7 @@ fn positional_format_specifiers() {
 }
 
 #[test]
-#[cfg(target_family = "unix")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
+#[cfg(unix)]
 fn non_utf_8_input() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1672,7 +1670,7 @@ fn test_empty_output_succeeds_on_full_device() {
         .no_output();
 }
 
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(all(feature = "feat_diagnostics", not(target_os = "wasi")))]
 mod diagnostics {
     #[cfg(unix)]
     use super::*;

@@ -655,7 +655,7 @@ fn test_comm_eintr_handling() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
+#[cfg(not(target_os = "wasi"))]
 fn test_output_lossy_utf8() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -681,7 +681,6 @@ fn test_output_lossy_utf8() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_comm_anonymous_pipes() {
     use std::{io::Write, os::fd::AsRawFd, process};
 
@@ -720,7 +719,6 @@ fn test_comm_anonymous_pipes() {
 
 #[test]
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_read_error() {
     new_ucmd!()
         .arg("/proc/self/mem")
@@ -737,7 +735,6 @@ fn test_read_error() {
 
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
 fn test_locale_collation() {
     // In a UTF-8 locale the collation puts `a1` before `a-b` and the byte order
     // puts them the other way round. Reading a file `sort` produced with a byte

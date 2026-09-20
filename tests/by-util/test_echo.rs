@@ -7,8 +7,8 @@
 
 use regex::Regex;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util::UCommand;
+#[cfg(not(target_os = "wasi"))]
+use uutests::util::{TestScenario, UCommand};
 
 #[test]
 fn test_default() {
@@ -658,7 +658,7 @@ fn multibyte_escape_unicode() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
+#[cfg(not(target_os = "wasi"))]
 fn non_utf_8_hex_round_trip() {
     new_ucmd!()
         .args(&["-e", r"\xFF"])
@@ -682,8 +682,7 @@ fn nine_bit_octal() {
 }
 
 #[test]
-#[cfg(target_family = "unix")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
+#[cfg(unix)]
 fn non_utf_8() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -738,7 +737,7 @@ fn test_cmd_result_stdout_check_and_stdout_str_check() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no subprocess spawning")]
+#[cfg(not(target_os = "wasi"))]
 fn test_cmd_result_stderr_check_and_stderr_str_check() {
     let ts = TestScenario::new("echo");
 

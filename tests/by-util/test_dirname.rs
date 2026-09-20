@@ -73,7 +73,6 @@ fn test_empty() {
 
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_dirname_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -179,7 +178,6 @@ fn test_trailing_dot_emoji() {
 
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_trailing_dot_non_utf8() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;

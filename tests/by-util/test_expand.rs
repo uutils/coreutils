@@ -270,10 +270,6 @@ fn test_tabs_with_too_large_size() {
 }
 
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI runner target is not suitable for this address-space-limit regression test"
-)]
 #[test]
 fn test_large_tab_stop_without_tabs_does_not_allocate() {
     use rustix::process::Resource;
@@ -444,7 +440,6 @@ fn test_nonexisting_file() {
 
 #[test]
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_read_error() {
     new_ucmd!()
         .arg("/proc/self/mem")
@@ -454,7 +449,6 @@ fn test_read_error() {
 
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_expand_non_utf8_paths() {
     use std::os::unix::ffi::OsStringExt;
     use uutests::at_and_ucmd;

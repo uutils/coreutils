@@ -1054,7 +1054,7 @@ fn test_uchild_when_run_no_wait_with_a_blocking_command() {
         .with_current_output()
         .stdout_is("rm: descend into directory 'a'? ");
 
-    #[cfg(windows)]
+    #[cfg(not(unix))]
     let expected = "rm: descend into directory 'a'? \
                     rm: remove regular empty file 'a\\empty'? ";
     #[cfg(unix)]
@@ -1067,7 +1067,7 @@ fn test_uchild_when_run_no_wait_with_a_blocking_command() {
         .with_all_output()
         .stdout_is(expected);
 
-    #[cfg(windows)]
+    #[cfg(not(unix))]
     let expected = "removed 'a\\empty'\nrm: remove directory 'a'? ";
     #[cfg(unix)]
     let expected = "removed 'a/empty'\nrm: remove directory 'a'? ";

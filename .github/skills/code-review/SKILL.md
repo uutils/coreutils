@@ -87,7 +87,6 @@ patches: assistants can reproduce GPL sources verbatim.
 - Tests must be original (see the provenance rule above) and pick values that are
   clearly distinct from GNU's fixtures.
 - Use `.no_output()` rather than `.no_stdout().no_stderr()`.
-- Anything that can't run under WASI needs `#[cfg_attr(wasi_runner, ignore)]`.
 - If a GNU test was failing while the Rust suite passed, the PR should add a Rust
   test so the gap can't reopen.
 

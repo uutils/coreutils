@@ -21,7 +21,7 @@ use libc::mode_t;
 use nix::pty::OpenptyResult;
 #[cfg(unix)]
 use nix::sys;
-#[cfg(not(windows))]
+#[cfg(unix)]
 use nix::sys::stat::{self, SFlag};
 use pretty_assertions::assert_eq;
 #[cfg(unix)]
@@ -1204,7 +1204,7 @@ impl AtPath {
         File::create(self.plus(file)).unwrap();
     }
 
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     pub fn mkfifo(&self, fifo: &str) {
         // rustix::fs::mkfifoat is linux only
         use nix::sys::stat::Mode;
@@ -1222,13 +1222,13 @@ impl AtPath {
         UnixListener::bind(full_path).expect("Socket file creation failed.");
     }
 
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     pub fn is_fifo(&self, fifo: &str) -> bool {
         stat::stat(&self.plus(fifo))
             .is_ok_and(|s| SFlag::from_bits_truncate(s.st_mode).contains(SFlag::S_IFIFO))
     }
 
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     pub fn is_char_device(&self, char_dev: &str) -> bool {
         stat::stat(&self.plus(char_dev))
             .is_ok_and(|s| SFlag::from_bits_truncate(s.st_mode).contains(SFlag::S_IFCHR))
@@ -1246,6 +1246,7 @@ impl AtPath {
         hard_link(self.plus(original), self.plus(link)).unwrap();
     }
 
+    #[cfg(not(target_os = "wasi"))]
     pub fn symlink_file(&self, original: &str, link: &str) {
         log_info(
             "symlink",
@@ -1258,6 +1259,7 @@ impl AtPath {
         symlink_file(self.plus(original), self.plus(link)).unwrap();
     }
 
+    #[cfg(not(target_os = "wasi"))]
     pub fn relative_symlink_file(&self, original: &str, link: &str) {
         #[cfg(windows)]
         let original = original.replace('/', MAIN_SEPARATOR_STR);
@@ -1268,6 +1270,7 @@ impl AtPath {
         symlink_file(original, self.plus(link)).unwrap();
     }
 
+    #[cfg(not(target_os = "wasi"))]
     pub fn symlink_dir(&self, original: &str, link: &str) {
         log_info(
             "symlink",
@@ -1280,6 +1283,7 @@ impl AtPath {
         symlink_dir(self.plus(original), self.plus(link)).unwrap();
     }
 
+    #[cfg(not(target_os = "wasi"))]
     pub fn relative_symlink_dir(&self, original: &str, link: &str) {
         #[cfg(windows)]
         let original = original.replace('/', MAIN_SEPARATOR_STR);
@@ -1383,7 +1387,7 @@ impl AtPath {
     ///
     /// This function panics if there is an error loading the metadata
     /// or setting the permissions of the file.
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     pub fn set_mode(&self, filename: &str, mode: u32) {
         let path = self.plus(filename);
         let mut perms = fs::metadata(&path).unwrap().permissions();

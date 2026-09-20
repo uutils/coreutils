@@ -243,7 +243,7 @@ fn test_mkfifo_permission_unchanged_when_failed() {
 
 // The mode is only parsed where a mode means something.
 #[cfg(unix)]
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(feature = "feat_diagnostics")]
 mod diagnostics {
     use super::*;
     #[test]

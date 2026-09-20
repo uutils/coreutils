@@ -497,7 +497,7 @@ fn test_shred_inaccessible_file_reports_real_error() {
     set_permissions(at.plus_as_string("locked"), Permissions::from_mode(0o755)).unwrap();
 }
 
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(all(feature = "feat_diagnostics", not(target_os = "wasi")))]
 mod diagnostics {
     use super::*;
 

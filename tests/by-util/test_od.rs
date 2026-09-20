@@ -929,7 +929,6 @@ fn test_skip_bytes_prints_after_consuming_multiple_inputs() {
 
 #[cfg(target_os = "linux")]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_skip_bytes_proc_file_without_seeking() {
     let proc_path = Path::new("/proc/version");
     if !proc_path.exists() {
@@ -985,10 +984,6 @@ fn test_skip_bytes_past_end_message() {
 // end without error, matching GNU od.
 #[cfg(unix)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: /dev/null is not a seekable device"
-)]
 fn test_skip_bytes_past_end_of_seekable_device() {
     new_ucmd!()
         .arg("-j1")
@@ -1007,10 +1002,7 @@ fn test_skip_bytes_past_end_no_offset() {
 }
 
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: stdin file position not preserved through wasmtime"
-)]
+#[cfg(not(target_os = "wasi"))]
 fn test_read_bytes() {
     let scene = TestScenario::new(util_name!());
     let fixtures = &scene.fixtures;
@@ -1435,8 +1427,7 @@ fn test_hex_lowercase() {
 }
 
 #[test]
-#[cfg(not(windows))]
-#[cfg_attr(wasi_runner, ignore)]
+#[cfg(unix)]
 fn test_is_a_directory() {
     let scene = TestScenario::new(util_name!());
     let fixtures = &scene.fixtures;
@@ -1468,7 +1459,7 @@ fn test_od_strings_with_n_flag() {
         .stdout_only("0000000 foo\n0000004 bar\n");
 }
 
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(all(feature = "feat_diagnostics", not(target_os = "wasi")))]
 mod diagnostics {
     use super::*;
 

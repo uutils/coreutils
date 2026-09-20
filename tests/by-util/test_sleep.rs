@@ -192,7 +192,7 @@ fn test_sleep_when_single_input_exceeds_max_duration_then_no_error() {
         .with_current_output()
         .signal_is(9) // make sure it was us who terminated the process
         .no_output();
-    #[cfg(windows)]
+    #[cfg(not(unix))]
     child
         .delay(100)
         .kill()

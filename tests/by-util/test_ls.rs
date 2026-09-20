@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStrExt;
-#[cfg(not(windows))]
+#[cfg(unix)]
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
@@ -1503,6 +1503,7 @@ fn test_ls_long_symlink_color() {
 /// tests whether the specific color of the target and the `dangling_symlink` are equal and checks
 /// whether checks whether ls outputs the correct path for the symlink and the file it points to and applies the color code to it.
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_ls_long_dangling_symlink_color() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1541,6 +1542,7 @@ fn test_ls_long_dangling_symlink_color() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle3`.
 fn test_ls_dangling_symlink_or_and_missing_colors() {
     let ts = TestScenario::new(util_name!());
@@ -1606,6 +1608,7 @@ fn test_ls_symlink_to_dir_with_mi_colors() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle4`.
 fn test_ls_dangling_symlink_ln_or_priority() {
     let ts = TestScenario::new(util_name!());
@@ -1635,6 +1638,7 @@ fn test_ls_dangling_symlink_ln_or_priority() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle5`.
 fn test_ls_dangling_symlink_ln_and_missing_colors() {
     let ts = TestScenario::new(util_name!());
@@ -1664,6 +1668,7 @@ fn test_ls_dangling_symlink_ln_and_missing_colors() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle7`.
 fn test_ls_dangling_symlink_blank_or_still_emits_reset() {
     let ts = TestScenario::new(util_name!());
@@ -1686,6 +1691,7 @@ fn test_ls_dangling_symlink_blank_or_still_emits_reset() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle9`.
 fn test_ls_dangling_symlink_blank_or_in_directory_listing() {
     let ts = TestScenario::new(util_name!());
@@ -1709,6 +1715,7 @@ fn test_ls_dangling_symlink_blank_or_in_directory_listing() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle8`.
 fn test_ls_dangling_symlink_uses_ln_when_or_blank() {
     let ts = TestScenario::new(util_name!());
@@ -1731,6 +1738,7 @@ fn test_ls_dangling_symlink_uses_ln_when_or_blank() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle6`.
 fn test_ls_directory_dangling_symlink_uses_ln_when_or_blank() {
     let ts = TestScenario::new(util_name!());
@@ -1966,6 +1974,7 @@ fn test_ls_oneline() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_ls_deref() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2823,7 +2832,7 @@ fn test_ls_recursive_1() {
     at.touch("a/1/II");
     #[cfg(unix)]
     let out = "a:\n1\n2\n3\n\na/1:\nI\nII\n\na/2:\n\na/3:\n\nb:\n\nc:\n";
-    #[cfg(windows)]
+    #[cfg(not(unix))]
     let out = "a:\n1\n2\n3\n\na\\1:\nI\nII\n\na\\2:\n\na\\3:\n\nb:\n\nc:\n";
     scene
         .ucmd()
@@ -2850,7 +2859,7 @@ fn test_ls_recursive_all_with_version_sort_does_not_walk_up() {
 
     #[cfg(unix)]
     let out = "a/b:\n.\n..\nc\n\na/b/c:\n.\n..\n";
-    #[cfg(windows)]
+    #[cfg(not(unix))]
     let out = "a/b:\n.\n..\nc\n\na/b\\c:\n.\n..\n";
     scene
         .ucmd()
@@ -3592,7 +3601,7 @@ fn test_ls_inode() {
 }
 
 #[test]
-#[cfg(not(windows))]
+#[cfg(unix)]
 fn test_ls_indicator_style() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -3689,7 +3698,7 @@ fn test_ls_indicator_style() {
 }
 
 #[test]
-#[cfg(not(windows))]
+#[cfg(unix)]
 fn test_ls_indicator_style_symlink_target_long() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -3795,7 +3804,7 @@ fn test_ls_indicator_style_slash_symlink_target_long() {
 // Essentially the same test as above, but only test symlinks and directories,
 // not pipes or sockets.
 #[test]
-#[cfg(not(unix))]
+#[cfg(unix)]
 fn test_ls_indicator_style() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4718,6 +4727,7 @@ fn test_ls_ignore_negation() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_ls_directory() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4748,6 +4758,7 @@ fn test_ls_directory() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_ls_deref_command_line() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4814,6 +4825,7 @@ fn test_ls_deref_command_line() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_ls_deref_command_line_dir() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5032,6 +5044,7 @@ fn test_ls_path() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_ls_dangling_symlinks() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5113,6 +5126,7 @@ fn test_ls_dangling_symlinks() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_ls_long_self_referential_dir_lists_contents() {
     // `ls -l` for a directory referenced via `.` (e.g. run from inside a symlinked
     // directory) must list its contents, not show a `. -> target` link entry. On
@@ -5415,6 +5429,7 @@ fn test_ls_quoting_color() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_ls_dereference_looped_symlinks_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -5427,6 +5442,7 @@ fn test_ls_dereference_looped_symlinks_recursive() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_dereference_dangling_color() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.relative_symlink_file("wat", "nonexistent");
@@ -5441,6 +5457,7 @@ fn test_dereference_dangling_color() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_dereference_symlink_dir_color() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir1");
@@ -5457,6 +5474,7 @@ fn test_dereference_symlink_dir_color() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_dereference_symlink_file_color() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir1");
@@ -5474,6 +5492,7 @@ fn test_dereference_symlink_file_color() {
 
 /// Symlink chain target should be colored by final target type, not as symlink (#8934).
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_symlink_chain_target_color() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
@@ -5489,6 +5508,7 @@ fn test_symlink_chain_target_color() {
 
 /// Symlink target should be colored by extension (e.g., .tar.gz shows as archive color).
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_symlink_target_extension_color() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("archive.tar.gz");
@@ -5925,6 +5945,7 @@ fn test_ls_dired_simple() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_ls_dired_symlink_name_only() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5999,6 +6020,7 @@ fn names_at_offsets(output: &str, tag: &str) -> Vec<String> {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_ls_dired_name_boundaries() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -8111,7 +8133,7 @@ fn test_ls_long_stat_failure_is_reported() {
     std::fs::set_permissions(at.plus("dir"), std::fs::Permissions::from_mode(0o700)).unwrap();
 }
 
-#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+#[cfg(all(feature = "feat_diagnostics", not(target_os = "wasi")))]
 mod diagnostics {
     use super::*;
 
