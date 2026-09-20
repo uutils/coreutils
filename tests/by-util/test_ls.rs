@@ -8250,3 +8250,57 @@ ls: invalid --block-size argument '1fb'
             .stderr_is("ls: invalid --block-size argument '1fb'\n");
     }
 }
+
+#[test]
+fn test_time_style_unambiguous_prefixes() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("test");
+    for style in ["full-iso", "long-iso", "iso", "locale"] {
+        let expected = scene
+            .ucmd()
+            .args(&["-l", "--time-style", style, "test"])
+            .succeeds()
+            .stdout_str()
+            .to_owned();
+        let min_len = if style.starts_with("lo") { 3 } else { 1 };
+        for len in min_len..=style.len() {
+            for prefix in ["", "posix-"] {
+                let value = format!("{prefix}{}", &style[..len]);
+                scene
+                    .ucmd()
+                    .args(&["-l", "--time-style", &value, "test"])
+                    .succeeds()
+                    .stdout_is(&expected);
+                scene
+                    .ucmd()
+                    .env("TIME_STYLE", &value)
+                    .args(&["-l", "test"])
+                    .succeeds()
+                    .stdout_is(&expected);
+            }
+        }
+    }
+}
+
+#[test]
+fn test_time_style_ambiguous_and_invalid_prefixes() {
+    for value in [
+        "l",
+        "lo",
+        "posix-l",
+        "posix-lo",
+        "posix-",
+        "full-isox",
+        "Locale",
+    ] {
+        new_ucmd!()
+            .args(&["-l", "--time-style", value])
+            .fails()
+            .code_is(2);
+        new_ucmd!()
+            .env("TIME_STYLE", value)
+            .arg("-l")
+            .fails()
+            .code_is(2);
+    }
+}
