@@ -1003,6 +1003,37 @@ fn test_ls_commas() {
             .succeeds()
             .stdout_only("test-commas-1, test-commas-2, test-commas-3,\ntest-commas-4\n");
     }
+
+    at.touch("a");
+    at.touch("bb");
+    at.touch("c");
+    for (args, expected) in [
+        (vec!["-m", "-w5", "a", "bb"], "a, bb\n"),
+        (vec!["-m", "-w5", "a", "bb", "c"], "a,\nbb, c\n"),
+    ] {
+        scene.ucmd().args(&args).succeeds().stdout_only(expected);
+    }
+
+    #[cfg(unix)]
+    {
+        at.touch("com,ma");
+        for (style, expected) in [("shell", "'com,ma'"), ("escape", "com\\,ma")] {
+            scene
+                .ucmd()
+                .env("LC_ALL", "C")
+                .args(&["-m", &format!("--quoting-style={style}"), "com,ma"])
+                .succeeds()
+                .stdout_only(format!("{expected}\n"));
+        }
+
+        at.touch("n\nl");
+        for (args, expected) in [
+            (vec!["-m", "n\nl"], "n?l\n"),
+            (vec!["-m", "--show-control-chars", "n\nl"], "n\nl\n"),
+        ] {
+            scene.ucmd().args(&args).succeeds().stdout_only(expected);
+        }
+    }
 }
 
 #[test]
