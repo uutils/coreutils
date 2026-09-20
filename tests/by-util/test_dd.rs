@@ -1985,6 +1985,26 @@ fn test_iflag_directory_fails_when_file_is_piped_via_std_in() {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_nocache_on_a_pipe_is_silent_at_eof() {
+    new_ucmd!()
+        .args(&["iflag=nocache", "oflag=nocache", "status=none"])
+        .pipe_in("")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_nocache_on_a_pipe_is_silent_while_copying() {
+    new_ucmd!()
+        .args(&["iflag=nocache", "oflag=nocache", "status=none"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("abc");
+}
+
+#[test]
 fn test_stdin_stdout_not_rewound_even_when_connected_to_seekable_file() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;

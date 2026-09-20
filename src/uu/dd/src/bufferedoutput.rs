@@ -41,8 +41,8 @@ impl<'a> BufferedOutput<'a> {
         Ok(Self { inner, buf })
     }
 
-    pub(crate) fn discard_cache(&self, offset: u64, len: u64) {
-        self.inner.discard_cache(offset, len);
+    pub(crate) fn discard_cache(&self, offset: u64, len: u64) -> std::io::Result<()> {
+        self.inner.discard_cache(offset, len)
     }
 
     /// Flush the partial block stored in the internal buffer.
