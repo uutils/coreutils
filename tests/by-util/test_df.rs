@@ -641,6 +641,16 @@ fn test_block_size_1024() {
 }
 
 #[test]
+fn test_block_size_1m_option_with_output() {
+    for args in [["-m", "--output=size"], ["--output=size", "-m"]] {
+        let output = new_ucmd!().args(&args).succeeds().stdout_str_lossy();
+        let header = output.lines().next().unwrap().trim();
+
+        assert_eq!(header, "1M-blocks");
+    }
+}
+
+#[test]
 fn test_block_size_with_suffix() {
     fn get_header(block_size: &str) -> String {
         let output = new_ucmd!()
