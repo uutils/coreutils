@@ -794,3 +794,17 @@ fn test_comm_write_error_dev_full() {
         .fails()
         .stderr_is("comm: write error: No space left on device\n");
 }
+
+#[test]
+fn test_identical_unsorted_prefix_no_error() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("f1", "b\na\nc\n");
+    at.write("f2", "b\na\nd\n");
+    scene
+        .ucmd()
+        .args(&["f1", "f2"])
+        .succeeds()
+        .stdout_is("\t\tb\n\t\ta\nc\n\td\n")
+        .no_stderr();
+}
