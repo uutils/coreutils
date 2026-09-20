@@ -1111,6 +1111,16 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                 &field
             };
 
+            // Resolve only unique prefixes, leaving ambiguous or invalid values
+            // unchanged so they produce the existing time-style error.
+            let mut styles = ["full-iso", "long-iso", "iso", "locale"]
+                .into_iter()
+                .filter(|style| style.starts_with(field));
+            let field = match (styles.next(), styles.next()) {
+                (Some(style), None) => style,
+                _ => field,
+            };
+
             match field {
                 "full-iso" => ok((format::FULL_ISO, None)),
                 "long-iso" => ok((format::LONG_ISO, None)),
