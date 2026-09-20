@@ -158,6 +158,12 @@ where
     } else {
         ret
     };
+    // GNU still reports the bytes written to the split that was in progress
+    // when the failure happened.
+    if ret.is_err() && !split_writer.split_finished {
+        let _ = split_writer.finish_split();
+    }
+
     // delete files on error by default
     if ret.is_err() && !options.keep_files {
         split_writer.delete_all_splits()?;
@@ -246,6 +252,8 @@ struct SplitWriter<'a> {
     size: usize,
     /// flag to indicate that no content should be written to a split
     dev_null: bool,
+    /// whether the current split has already been accounted for
+    split_finished: bool,
 }
 
 impl Drop for SplitWriter<'_> {
@@ -270,6 +278,7 @@ impl SplitWriter<'_> {
             current_writer: None,
             size: 0,
             dev_null: false,
+            split_finished: true,
         }
     }
 
@@ -287,6 +296,7 @@ impl SplitWriter<'_> {
         self.counter += 1;
         self.size = 0;
         self.dev_null = false;
+        self.split_finished = false;
         Ok(())
     }
 
@@ -322,6 +332,7 @@ impl SplitWriter<'_> {
     ///
     /// Returns an error if flushing the writer fails.
     fn finish_split(&mut self) -> Result<(), CsplitError> {
+        self.split_finished = true;
         if !self.dev_null {
             // Flush the writer to ensure all data is written and errors are detected
             if let Some(ref mut writer) = self.current_writer {
