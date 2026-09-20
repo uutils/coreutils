@@ -10,7 +10,7 @@ use rstest::rstest;
 use std::io::Write;
 #[cfg(not(windows))]
 use std::path::Path;
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 use uucore::selinux::get_getfattr_output;
 use uutests::new_ucmd;
 #[cfg(unix)]
@@ -2968,7 +2968,7 @@ fn test_mv_cross_device_dir_refuses_symlink_at_recreated_dest() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_mv_selinux_context() {
     let test_cases = [
         ("-Z", None),

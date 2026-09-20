@@ -778,7 +778,7 @@ fn test_precision_splits_multibyte_char_in_value() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_stat_selinux() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;

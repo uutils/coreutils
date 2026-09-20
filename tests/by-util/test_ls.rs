@@ -5164,7 +5164,7 @@ fn test_ls_long_self_referential_dir_lists_contents() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_ls_context1() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -5179,7 +5179,7 @@ fn test_ls_context1() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_ls_context2() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -5195,7 +5195,7 @@ fn test_ls_context2() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_ls_context_long() {
     if !uucore::selinux::is_selinux_enabled() {
         return;
@@ -5214,7 +5214,7 @@ fn test_ls_context_long() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_ls_context_format() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -5244,7 +5244,7 @@ fn test_ls_context_format() {
 }
 
 /// Helper function to validate `SELinux` context format
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn validate_selinux_context(context: &str) {
     assert!(
         context.contains(':'),
@@ -5259,7 +5259,7 @@ fn validate_selinux_context(context: &str) {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_ls_selinux_context_format() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -5292,7 +5292,7 @@ fn test_ls_selinux_context_format() {
 }
 
 #[test]
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn test_ls_selinux_context_indicator() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
