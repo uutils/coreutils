@@ -1244,7 +1244,9 @@ fn test_ln_no_dereference_symbolic() {
         .ucmd()
         .args(&["-n", "x", "b"])
         .fails()
-        .stderr_contains("Already exists");
+        .stderr_contains("failed to create hard link 'b'")
+        // strerror(EEXIST), as GNU prints it
+        .stderr_contains("File exists");
     assert!(!at.file_exists("a/x"));
     #[cfg(not(target_os = "android"))]
     {
