@@ -21,7 +21,6 @@ fn test_invalid_arg() {
 fn test_getrandom_fail() {
     // getrandom is missing from legacy kernel
     use std::process::Command;
-    let (_, _ucmd) = at_and_ucmd!();
 
     let Ok(out) = Command::new("strace")
         .args([
