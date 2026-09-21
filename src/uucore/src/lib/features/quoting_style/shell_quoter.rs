@@ -107,8 +107,22 @@ pub(super) struct EscapedShellQuoter<'a> {
 }
 
 impl<'a> EscapedShellQuoter<'a> {
-    pub fn new(reference: &'a [u8], always_quote: bool, dirname: bool, size_hint: usize) -> Self {
-        let (quotes, must_quote) = initial_quoting(reference, dirname, always_quote, true);
+    pub fn new(
+        reference: &'a [u8],
+        always_quote: bool,
+        dirname: bool,
+        size_hint: usize,
+        encoding: crate::i18n::UEncoding,
+    ) -> Self {
+        let (mut quotes, must_quote) = initial_quoting(reference, dirname, always_quote, true);
+        let invalid = match encoding {
+            crate::i18n::UEncoding::Ascii => !reference.is_ascii(),
+            crate::i18n::UEncoding::Utf8 => std::str::from_utf8(reference).is_err(),
+        };
+        // Dollar-quoted byte escapes cannot be nested in double quotes.
+        if invalid {
+            quotes = Quotes::Single;
+        }
         Self {
             reference,
             quotes,
