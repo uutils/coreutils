@@ -1675,6 +1675,31 @@ fn succeeds_with_numbers_larger_than_u256() {
         );
 }
 
+// A 301-bit product of ten primes just above 2^30. This used to come back as
+// "Factorization incomplete. Remainders exists." because the Pollard's rho
+// budget underneath was shared by the whole factorization rather than by each
+// cofactor, so everything past the fourth split was given up on.
+#[test]
+fn factors_many_primes_of_similar_size_completely() {
+    const N: &str = "2037036890754971402431340509217469262474509779036256996849055359081480084266333562576864437";
+    new_ucmd!().arg(N).succeeds().stdout_is(format!(
+        "{N}: 1073741827 1073741831 1073741833 1073741839 1073741843 \
+         1073741857 1073741891 1073741909 1073741939 1073741953\n"
+    ));
+}
+
+// A prime power is the one shape Pollard's rho cannot split on its own: it
+// needs about sqrt(p) iterations on p^k. This is 34359738421^7.
+#[test]
+fn factors_a_wide_prime_power() {
+    const N: &str = "56539106683390492137844827055225747632151249167945695848217966183182073341";
+    new_ucmd!()
+        .arg("-h")
+        .arg(N)
+        .succeeds()
+        .stdout_is(format!("{N}: 34359738421^7\n"));
+}
+
 #[test]
 fn handles_non_unicode_data() {
     let input = b"\0 \xFF\0\xFF\xAA\0\xAA\x44 a&#2\n6 9\x003\xC024\t2\t\t4\x000+4\xFF \xF7\xC1";
