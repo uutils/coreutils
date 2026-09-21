@@ -1675,6 +1675,74 @@ fn test_date_military_timezone_with_offset_and_date() {
     }
 }
 
+/// The `%c` specifier stands for the locale's `D_T_FMT`, so its rendering has
+/// to match what that very format string produces. Deriving the expectation
+/// from the locale keeps the test independent of the distribution's locale
+/// data, and it is exactly the property that was broken: `%c` used to fall
+/// back to the POSIX format whatever the locale said.
+#[test]
+#[cfg(unix)]
+fn test_date_c_specifier_uses_locale_datetime_format() {
+    let locale = "en_US.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+
+    let Some(d_t_fmt) = locale_keyword(locale, "d_t_fmt") else {
+        return;
+    };
+
+    let render = |format: &str| {
+        new_ucmd!()
+            .env("LC_ALL", locale)
+            .env("TZ", "UTC")
+            .args(&["-d", "2023-11-14T23:13:20", &format!("+{format}")])
+            .succeeds()
+            .stdout_move_str()
+    };
+
+    assert_eq!(render("%c"), render(&d_t_fmt));
+}
+
+/// In the C locale `D_T_FMT` is the POSIX format, so `%c` keeps its plain
+/// rendering. This one needs no locale to be installed.
+#[test]
+fn test_date_c_specifier_in_c_locale() {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .args(&["-d", "2023-11-14T23:13:20", "+%c"])
+        .succeeds()
+        .stdout_only("Tue Nov 14 23:13:20 2023\n");
+}
+
+/// Expanding `%c` must not swallow an escaped percent sign.
+#[test]
+fn test_date_escaped_percent_before_c() {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .args(&["-d", "2023-11-14T23:13:20", "+%%c"])
+        .succeeds()
+        .stdout_only("%c\n");
+}
+
+/// Reads one keyword out of `locale(1)`, e.g. `d_t_fmt`. `None` when the
+/// command is missing or answers nothing usable.
+#[cfg(unix)]
+fn locale_keyword(locale: &str, keyword: &str) -> Option<String> {
+    let output = std::process::Command::new("locale")
+        .env("LC_ALL", locale)
+        .arg(keyword)
+        .output()
+        .ok()?;
+    let value = String::from_utf8(output.stdout)
+        .ok()?
+        .trim_end()
+        .to_string();
+    (!value.is_empty()).then_some(value)
+}
+
 // Locale-aware hour formatting tests
 #[test]
 #[cfg(unix)]

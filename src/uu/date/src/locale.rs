@@ -46,6 +46,9 @@ cfg_langinfo! {
     /// Cached locale date/time format string
     static DEFAULT_FORMAT_CACHE: OnceLock<&'static [u8]> = OnceLock::new();
 
+    /// Cached locale `D_T_FMT`, the format `%c` stands for.
+    static DATETIME_FORMAT_CACHE: OnceLock<Option<&'static str>> = OnceLock::new();
+
     /// Mutex to serialize setlocale() calls during tests.
     ///
     /// setlocale() is process-global, so parallel tests that call it can
@@ -73,6 +76,26 @@ cfg_langinfo! {
 
     /// Retrieves the date/time format string from the system locale
     fn get_locale_format_string() -> Option<Vec<u8>> {
+        query_nl_langinfo(DATE_FMT)
+    }
+
+    /// Returns the locale's combined date and time format (`D_T_FMT`), which
+    /// is what `%c` stands for.
+    ///
+    /// `None` when the locale supplies no format, or when that format is not
+    /// valid UTF-8, as happens with legacy charsets such as `zh_TW.euctw`.
+    /// Callers then leave `%c` to its POSIX rendering.
+    pub fn get_locale_datetime_format() -> Option<&'static str> {
+        *DATETIME_FORMAT_CACHE.get_or_init(|| {
+            let format = String::from_utf8(query_nl_langinfo(libc::D_T_FMT)?).ok()?;
+            Some(&*Box::leak(format.into_boxed_str()))
+        })
+    }
+
+    /// Reads one `nl_langinfo` item for the locale named by the environment.
+    ///
+    /// Returns bytes because legacy charsets (e.g. `zh_TW.euctw`) are not UTF-8.
+    fn query_nl_langinfo(item: libc::nl_item) -> Option<Vec<u8>> {
         // In tests, acquire mutex to prevent race conditions with setlocale()
         // which is process-global and not thread-safe
         #[cfg(test)]
@@ -82,14 +105,13 @@ cfg_langinfo! {
             // Set locale from environment variables
             libc::setlocale(libc::LC_TIME, c"".as_ptr());
 
-            // Get the date/time format string
-            let d_t_fmt_ptr = libc::nl_langinfo(DATE_FMT);
-            if d_t_fmt_ptr.is_null() {
+            let item_ptr = libc::nl_langinfo(item);
+            if item_ptr.is_null() {
                 return None;
             }
 
-            let format = CStr::from_ptr(d_t_fmt_ptr).to_bytes();
-            (!format.is_empty()).then(|| format.to_vec())
+            let value = CStr::from_ptr(item_ptr).to_bytes();
+            (!value.is_empty()).then(|| value.to_vec())
         }
     }
 }
@@ -98,6 +120,15 @@ cfg_langinfo! { else
     /// On platforms without `_DATE_FMT`, fall back to the POSIX format
     pub fn get_locale_default_format() -> &'static [u8] {
         POSIX_DEFAULT_FORMAT
+    }
+
+    /// Without a langinfo query, `%c` keeps the POSIX rendering jiff gives it.
+    ///
+    /// `D_T_FMT` is POSIX, unlike the `_DATE_FMT` extension above, so the
+    /// other Unix platforms could answer this too; wiring them up needs a
+    /// machine to check them on.
+    pub fn get_locale_datetime_format() -> Option<&'static str> {
+        None
     }
 }
 
