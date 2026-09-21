@@ -9,7 +9,7 @@
 
 #[cfg(all(unix, not(target_os = "haiku")))]
 pub use libc::{major, makedev, minor};
-use std::collections::HashSet;
+use rustc_hash::FxHashSet;
 use std::collections::VecDeque;
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -359,7 +359,7 @@ pub fn canonicalize<P: AsRef<Path>>(
     let mut parts: VecDeque<OwningComponent> = path.components().map(Into::into).collect();
     let mut result = PathBuf::new();
     let mut followed_symlinks = 0;
-    let mut visited_files = HashSet::new();
+    let mut visited_files = FxHashSet::default();
     while let Some(part) = parts.pop_front() {
         match part {
             OwningComponent::Prefix(s) => {
@@ -755,7 +755,7 @@ pub fn make_path_relative_to<P1: AsRef<Path>, P2: AsRef<Path>>(path: P1, to: P2)
 ///
 /// * `bool` - Returns `true` if a symlink loop is detected, `false` otherwise.
 pub fn is_symlink_loop(path: &Path) -> bool {
-    let mut visited_symlinks = HashSet::new();
+    let mut visited_symlinks = FxHashSet::default();
     let mut current_path = path.to_path_buf();
 
     while let (Ok(metadata), Ok(link)) = (
