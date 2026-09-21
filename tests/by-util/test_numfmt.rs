@@ -2395,7 +2395,7 @@ mod field_diagnostics {
     }
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
 fn test_write_error_is_reported_and_fatal() {
     // A full output device must be diagnosed, not panic, whatever --invalid says.
