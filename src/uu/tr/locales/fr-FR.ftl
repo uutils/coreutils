@@ -2,7 +2,41 @@ tr-about = Traduire ou supprimer des caractères
 tr-usage = tr [OPTION]... ENSEMBLE1 [ENSEMBLE2]
 tr-after-help = Traduire, compresser et/ou supprimer des caractères de l'entrée standard, en écrivant vers la sortie standard.
 
+  Un ENSEMBLE est une chaîne de caractères. La plupart des caractères se représentent eux-mêmes ; les séquences suivantes non :
+
+    - `\NNN`: caractère de valeur octale NNN, un à trois chiffres
+    - `\\`: une barre oblique inverse
+    - `\a`: sonnerie
+    - `\b`: retour arrière
+    - `\f`: saut de page
+    - `\n`: saut de ligne
+    - `\r`: retour chariot
+    - `\t`: tabulation horizontale
+    - `\v`: tabulation verticale
+    - `CAR1-CAR2`: tous les caractères de CAR1 à CAR2, par ordre croissant
+    - `[CAR*]`: dans ENSEMBLE2, des copies de CAR jusqu'à la longueur d'ENSEMBLE1
+    - `[CAR*RÉPÉTITION]`: RÉPÉTITION copies de CAR ; en octal si commence par 0
+    - `[=CAR=]`: tous les caractères équivalents à CAR
+
+  Une classe de caractères représente tous les caractères qu'elle contient :
+
+    - `[:alnum:]`: lettres et chiffres
+    - `[:alpha:]`: lettres
+    - `[:blank:]`: espaces horizontales
+    - `[:cntrl:]`: caractères de contrôle
+    - `[:digit:]`: chiffres
+    - `[:graph:]`: caractères imprimables, espace exclue
+    - `[:lower:]`: lettres minuscules
+    - `[:print:]`: caractères imprimables, espace incluse
+    - `[:punct:]`: caractères de ponctuation
+    - `[:space:]`: espaces horizontales et verticales
+    - `[:upper:]`: lettres majuscules
+    - `[:xdigit:]`: chiffres hexadécimaux
+
+  Les caractères sont traduits lorsqu'ENSEMBLE2 est fourni et que --delete ne l'est pas. ENSEMBLE2 est alors étendu à la longueur d'ENSEMBLE1 en répétant son dernier caractère, et ce qui dépasse la longueur d'ENSEMBLE1 est ignoré ; --truncate-set1 raccourcit plutôt ENSEMBLE1 à la longueur d'ENSEMBLE2. Parmi les classes de caractères, seules `[:lower:]` et `[:upper:]` peuvent figurer dans ENSEMBLE2, et en placer une face à l'autre dans ENSEMBLE1 convertit la casse. La compression s'applique au dernier ENSEMBLE fourni, après toute traduction ou suppression.
+
 # Messages d'aide
+tr-help-sets = ENSEMBLE1, et ENSEMBLE2 lors d'une traduction ; voir plus bas ce qu'un ENSEMBLE peut contenir
 tr-help-complement = utiliser le complément d'ENSEMBLE1
 tr-help-delete = supprimer les caractères dans ENSEMBLE1, ne pas traduire
 tr-help-squeeze = remplacer chaque séquence d'un caractère répété qui est listé dans le dernier ENSEMBLE spécifié, avec une seule occurrence de ce caractère

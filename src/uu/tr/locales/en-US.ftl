@@ -2,7 +2,41 @@ tr-about = Translate or delete characters
 tr-usage = tr [OPTION]... SET1 [SET2]
 tr-after-help = Translate, squeeze, and/or delete characters from standard input, writing to standard output.
 
+  A SET is a string of characters. Most characters stand for themselves; these sequences do not:
+
+    - `\NNN`: character with octal value NNN, one to three digits
+    - `\\`: a backslash
+    - `\a`: bell
+    - `\b`: backspace
+    - `\f`: form feed
+    - `\n`: newline
+    - `\r`: carriage return
+    - `\t`: horizontal tab
+    - `\v`: vertical tab
+    - `CHAR1-CHAR2`: all characters from CHAR1 to CHAR2, ascending
+    - `[CHAR*]`: in SET2, copies of CHAR up to the length of SET1
+    - `[CHAR*REPEAT]`: REPEAT copies of CHAR; octal if leading 0
+    - `[=CHAR=]`: every character equivalent to CHAR
+
+  A character class stands for every character it holds:
+
+    - `[:alnum:]`: letters and digits
+    - `[:alpha:]`: letters
+    - `[:blank:]`: horizontal whitespace
+    - `[:cntrl:]`: control characters
+    - `[:digit:]`: digits
+    - `[:graph:]`: printable characters, space excluded
+    - `[:lower:]`: lowercase letters
+    - `[:print:]`: printable characters, space included
+    - `[:punct:]`: punctuation characters
+    - `[:space:]`: horizontal and vertical whitespace
+    - `[:upper:]`: uppercase letters
+    - `[:xdigit:]`: hexadecimal digits
+
+  Characters are translated when SET2 is given and --delete is not. SET2 is then extended to the length of SET1 by repeating its last character, and anything past the length of SET1 is ignored; --truncate-set1 shortens SET1 to the length of SET2 instead. Of the character classes, only `[:lower:]` and `[:upper:]` may appear in SET2, and facing one with the other in SET1 converts case. Squeezing applies to the last SET given, after any translation or deletion.
+
 # Help messages
+tr-help-sets = SET1, and SET2 when translating; see below for what a SET may hold
 tr-help-complement = use the complement of SET1
 tr-help-delete = delete characters in SET1, do not translate
 tr-help-squeeze = replace each sequence of a repeated character that is listed in the last specified SET, with a single occurrence of that character
