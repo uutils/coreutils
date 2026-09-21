@@ -2938,3 +2938,42 @@ du: invalid suffix in --block-size argument '1fb'
             .stderr_is("du: invalid suffix in --block-size argument '1fb'\n");
     }
 }
+
+#[test]
+fn test_du_block_size_suffix() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .args(&["-B", "KiB", "f"])
+        .succeeds()
+        .stdout_contains("KiB\tf");
+
+    scene
+        .ucmd()
+        .args(&["-B", "M", "f"])
+        .succeeds()
+        .stdout_contains("M\tf");
+
+    scene
+        .ucmd()
+        .args(&["-B", "1KiB", "f"])
+        .succeeds()
+        .stdout_does_not_contain("KiB");
+
+    scene
+        .ucmd()
+        .env("BLOCK_SIZE", "KiB")
+        .arg("f")
+        .succeeds()
+        .stdout_contains("KiB\tf");
+
+    scene
+        .ucmd()
+        .env("DU_BLOCK_SIZE", "MB")
+        .arg("f")
+        .succeeds()
+        .stdout_contains("MB\tf");
+}
