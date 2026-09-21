@@ -1011,7 +1011,7 @@ fn test_chown_symlink_two_links_same_dir() {
     let user_name = String::from(result.stdout_str().trim());
     assert!(!user_name.is_empty());
 
-    // cSpell:disable
+    // spell-checker:disable
     at.mkdir_all("base/realdir");
     at.touch("base/realdir/file");
     at.symlink_dir("base/realdir", "base/link1");
@@ -1034,7 +1034,7 @@ fn test_chown_symlink_two_links_same_dir() {
                 "ownership of 'base/link2/file' retained as {user_name}"
             ));
     }
-    // cSpell:enable
+    // spell-checker:enable
 }
 
 #[cfg(target_os = "linux")]

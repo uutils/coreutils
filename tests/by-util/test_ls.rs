@@ -6621,7 +6621,7 @@ fn test_ls_hyperlink() {
     }
 }
 
-// spell-checker: disable
+// spell-checker:disable
 #[test]
 fn test_ls_hyperlink_encode_link() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -6659,7 +6659,7 @@ fn test_ls_hyperlink_encode_link() {
             .contains("sp%20ace\x1b\\sp ace\x1b]8;;\x1b\\")
     );
 }
-// spell-checker: enable
+// spell-checker:enable
 
 #[test]
 fn test_ls_hyperlink_dirs() {
@@ -7203,7 +7203,7 @@ fn test_ls_color_clear_to_eol() {
         .arg("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo")
         .succeeds();
     // check that the wrapped name contains clear to end of line code
-    // cspell:disable-next-line
+    // spell-checker:disable-next-line
     result.stdout_contains("\x1b[0m\x1b[31;42mzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo\x1b[0m\x1b[K");
 }
 
@@ -7230,12 +7230,12 @@ fn test_suffix_case_sensitivity() {
         .arg("file2.Z")
         .succeeds();
     result.stdout_contains(
-        /* cSpell:disable */
+        // spell-checker:disable
         "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
                 \x1b[01;35mIMG2.JPG\x1b[0m\n\
                 \x1b[01;31mfile1.z\x1b[0m\n\
                 \x1b[01;31mfile2.Z\x1b[0m",
-        /* cSpell:enable */
+        // spell-checker:enable
     );
 
     // *.jpg is specified more than once with different cases and style, so
@@ -7250,11 +7250,11 @@ fn test_suffix_case_sensitivity() {
         .arg("img3.JpG")
         .succeeds();
     result.stdout_contains(
-        /* cSpell:disable */
+        // spell-checker:disable
         "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
                 \x1b[01;35;46mIMG2.JPG\x1b[0m\n\
                 img3.JpG",
-        /* cSpell:enable */
+        // spell-checker:enable
     );
 
     // *.jpg is specified more than once with different cases but style is same, so
@@ -7269,11 +7269,11 @@ fn test_suffix_case_sensitivity() {
         .arg("img3.JpG")
         .succeeds();
     result.stdout_contains(
-        /* cSpell:disable */
+        // spell-checker:disable
         "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
                 \x1b[01;35mIMG2.JPG\x1b[0m\n\
                 \x1b[01;35mimg3.JpG\x1b[0m",
-        /* cSpell:enable */
+        // spell-checker:enable
     );
 
     // last *.jpg gets more priority resulting in same style across
@@ -7288,11 +7288,11 @@ fn test_suffix_case_sensitivity() {
         .arg("img3.JpG")
         .succeeds();
     result.stdout_contains(
-        /* cSpell:disable */
+        // spell-checker:disable
         "\x1b[0m\x1b[01;35;46mimg1.jpg\x1b[0m\n\
                 \x1b[01;35;46mIMG2.JPG\x1b[0m\n\
                 \x1b[01;35;46mimg3.JpG\x1b[0m",
-        /* cSpell:enable */
+        // spell-checker:enable
     );
 
     // last *.jpg gets more priority resulting in different style across
@@ -7307,11 +7307,11 @@ fn test_suffix_case_sensitivity() {
         .arg("img3.JpG")
         .succeeds();
     result.stdout_contains(
-        /* cSpell:disable */
+        // spell-checker:disable
         "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
                 \x1b[01;35;46mIMG2.JPG\x1b[0m\n\
                 img3.JpG",
-        /* cSpell:enable */
+        // spell-checker:enable
     );
 }
 

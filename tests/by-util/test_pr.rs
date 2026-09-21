@@ -1117,7 +1117,7 @@ fn test_simple_expand_tab_with_both_arguments() {
     }
 }
 
-/* cSpell:disable */
+// spell-checker:disable
 #[test]
 fn test_invalid_expand_tab_arguments() {
     let test_file_path = "empty_test_file";
@@ -1144,7 +1144,7 @@ fn test_invalid_expand_tab_arguments() {
             .stderr_contains(format!("pr: '-e' extra characters or invalid number in the argument: ‘{error_msg_field}’\nTry 'pr --help' for more information."));
     }
 }
-/* cSpell:enable */
+// spell-checker:enable
 
 #[test]
 fn test_expand_tab_does_not_consume_next_argument() {

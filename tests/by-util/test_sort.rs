@@ -2616,7 +2616,7 @@ fn test_g_float_hex() {
         .stdout_is(output);
 }
 
-/* spell-checker: disable */
+// spell-checker:disable
 #[test]
 fn test_french_translations() {
     // Test that French translations work for clap error messages
@@ -3837,4 +3837,4 @@ sort: invalid suffix in --buffer-size argument '8zz'
     }
 }
 
-/* spell-checker: enable */
+// spell-checker:enable
