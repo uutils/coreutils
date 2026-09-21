@@ -1,5 +1,8 @@
 on: pull_request
 
+permissions:
+   contents: read
+
 jobs:
    safe-install:
      runs-on: ubuntu-latest
