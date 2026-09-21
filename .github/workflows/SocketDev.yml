@@ -1,4 +1,5 @@
-on: push
+on: pull_request
+
 jobs:
    safe-install:
      runs-on: ubuntu-latest
