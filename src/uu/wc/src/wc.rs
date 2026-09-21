@@ -304,9 +304,9 @@ fn is_stdin_small_file() -> bool {
     )
 }
 
-#[cfg(not(unix))]
 /// Windows presents a piped stdin as a "normal file" with a length equal to however many bytes
 /// have been buffered at the time it's checked. To be safe, we must never assume it's a file.
+#[cfg(not(unix))]
 fn is_stdin_small_file() -> bool {
     false
 }

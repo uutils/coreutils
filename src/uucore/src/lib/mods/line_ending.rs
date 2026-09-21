@@ -19,8 +19,8 @@ use std::fmt::Display;
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum LineEnding {
-    #[default]
     /// Newline character (`\n`)
+    #[default]
     Newline = b'\n',
 
     /// Null character (`\0`)
