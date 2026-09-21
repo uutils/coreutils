@@ -307,9 +307,13 @@ fn test_du_suffix_only_block_size() {
     for (arg, env, expected) in [
         (Some("-BM"), None, "1M"),
         (Some("-B1M"), None, "1"),
+        (Some("-B'M"), None, "1M"),
+        (Some("-B'1M"), None, "1"),
         (None, Some(("DU_BLOCK_SIZE", "M")), "1M"),
         (None, Some(("BLOCK_SIZE", "KB")), "1kB"),
         (None, Some(("BLOCKSIZE", "MiB")), "1MiB"),
+        (None, Some(("DU_BLOCK_SIZE", "'KiB")), "1KiB"),
+        (None, Some(("DU_BLOCK_SIZE", "'1KiB")), "1"),
         (None, Some(("DU_BLOCK_SIZE", "1M")), "1"),
     ] {
         let mut cmd = ts.ucmd();
@@ -324,6 +328,43 @@ fn test_du_suffix_only_block_size() {
             .succeeds()
             .stdout_only(format!("{expected}\t{file}\n"));
     }
+}
+
+#[test]
+fn test_du_block_size_locale_grouping() {
+    let ts = TestScenario::new(util_name!());
+    let file = "file";
+    let fpath = ts.fixtures.plus(file);
+    std::fs::File::create(&fpath)
+        .expect("cannot create test file")
+        .set_len(100_000_000)
+        .expect("cannot set file size");
+
+    for (block_size, expected) in [("'KiB", "97\u{202f}657KiB"), ("'1KiB", "97\u{202f}657")] {
+        ts.ucmd()
+            .arg("--apparent-size")
+            .arg(format!("--block-size={block_size}"))
+            .arg(file)
+            .env("LC_ALL", "fr_FR.UTF-8")
+            .succeeds()
+            .stdout_only(format!("{expected}\t{file}\n"));
+    }
+
+    ts.ucmd()
+        .arg("--apparent-size")
+        .arg(file)
+        .env("BLOCK_SIZE", "'KiB")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .succeeds()
+        .stdout_only(format!("97\u{202f}657KiB\t{file}\n"));
+
+    ts.ucmd()
+        .arg("--apparent-size")
+        .arg("--block-size='KiB")
+        .arg(file)
+        .env("LC_ALL", "fr_FR")
+        .succeeds()
+        .stdout_only_bytes(&b"97\xa0657KiB\tfile\n"[..]);
 }
 
 #[test]
