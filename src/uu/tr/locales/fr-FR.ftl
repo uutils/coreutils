@@ -15,21 +15,21 @@ tr-after-help = Traduire, compresser et/ou supprimer des caractères de l'entré
     - `\v`: tabulation verticale
     - `CAR1-CAR2`: tous les caractères de CAR1 à CAR2, par ordre croissant
     - `[CAR*]`: dans ENSEMBLE2, des copies de CAR jusqu'à la longueur d'ENSEMBLE1
-    - `[CAR*RÉPÉTITION]`: RÉPÉTITION copies de CAR ; en octal si commence par 0
+    - `[CAR*RÉPÉTITION]`: RÉPÉTITION copies de CAR ; octale si elle débute par 0
     - `[=CAR=]`: tous les caractères équivalents à CAR
 
   Une classe de caractères représente tous les caractères qu'elle contient :
 
     - `[:alnum:]`: lettres et chiffres
     - `[:alpha:]`: lettres
-    - `[:blank:]`: espaces horizontales
+    - `[:blank:]`: espaces horizontaux
     - `[:cntrl:]`: caractères de contrôle
     - `[:digit:]`: chiffres
-    - `[:graph:]`: caractères imprimables, espace exclue
+    - `[:graph:]`: caractères imprimables, espace exclu
     - `[:lower:]`: lettres minuscules
-    - `[:print:]`: caractères imprimables, espace incluse
+    - `[:print:]`: caractères imprimables, espace inclus
     - `[:punct:]`: caractères de ponctuation
-    - `[:space:]`: espaces horizontales et verticales
+    - `[:space:]`: espaces horizontaux et verticaux
     - `[:upper:]`: lettres majuscules
     - `[:xdigit:]`: chiffres hexadécimaux
 
