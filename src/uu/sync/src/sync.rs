@@ -18,7 +18,7 @@ pub mod options {
 
 static ARG_FILES: &str = "files";
 
-#[cfg(unix)]
+#[cfg(not(windows))]
 mod platform {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     use std::fs::{File, OpenOptions};
@@ -38,6 +38,8 @@ mod platform {
         reason = "fn sig must match on all platforms"
     )]
     pub fn do_sync() -> UResult<()> {
+        // maximize compatibility of scripts by noop on targets global sync is impossible
+        #[cfg(unix)]
         rustix::fs::sync();
         Ok(())
     }
@@ -75,16 +77,6 @@ mod platform {
             )?;
         }
         Ok(())
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    pub fn do_syncfs(files: &[String]) -> UResult<()> {
-        do_sync_with(files, rustix::fs::syncfs)
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    pub fn do_fdatasync(files: &[String]) -> UResult<()> {
-        do_sync_with(files, rustix::fs::fdatasync)
     }
 }
 
@@ -248,11 +240,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if files.is_empty() {
             sync()?;
         } else {
-            #[cfg(any(target_os = "linux", target_os = "android", windows))]
             syncfs(&files)?;
         }
     } else if matches.get_flag(options::DATA) {
-        #[cfg(any(target_os = "linux", target_os = "android"))]
+        // FIXME: sync_data() fails with permission denied even f.write(true) is used on Windows
+        #[cfg(not(windows))]
         fdatasync(&files)?;
     } else {
         sync()?;
@@ -261,6 +253,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    #[cfg(any(target_os = "linux", target_os = "android", windows))]
+    let syncfs = translate!("sync-help-file-system");
+    #[cfg(not(any(target_os = "linux", target_os = "android", windows)))]
+    let syncfs = translate!("sync-help-files");
     Command::new("sync")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template("sync"))
@@ -272,7 +268,7 @@ pub fn uu_app() -> Command {
                 .short('f')
                 .long(options::FILE_SYSTEM)
                 .conflicts_with(options::DATA)
-                .help(translate!("sync-help-file-system"))
+                .help(syncfs)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -294,12 +290,46 @@ fn sync() -> UResult<()> {
     platform::do_sync()
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", windows))]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn syncfs(files: &[String]) -> UResult<()> {
+    platform::do_sync_with(files, rustix::fs::syncfs)
+}
+
+#[cfg(windows)]
 fn syncfs(files: &[String]) -> UResult<()> {
     platform::do_syncfs(files)
 }
 
+// compromise: sync files only, not FS containing the files
+#[cfg(not(any(target_os = "linux", target_os = "android", windows)))]
+fn syncfs(files: &[String]) -> UResult<()> {
+    do_sync_with_regular_file(files, |f| f.sync_all())
+}
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn fdatasync(files: &[String]) -> UResult<()> {
-    platform::do_fdatasync(files)
+    platform::do_sync_with(files, rustix::fs::fdatasync)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android", windows)))]
+fn fdatasync(files: &[String]) -> UResult<()> {
+    do_sync_with_regular_file(files, |f| f.sync_data())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android", windows)))]
+fn do_sync_with_regular_file<F>(files: &[String], op: F) -> UResult<()>
+where
+    F: Fn(std::fs::File) -> std::io::Result<()>,
+{
+    use uucore::error::FromIo;
+    for path in files {
+        let mut f = std::fs::OpenOptions::new();
+        f.read(true);
+        // FIXME: sync_data() fails with permission denied even f.write(true) is used on Windows
+        #[cfg(windows)]
+        f.write(true);
+        op(f.open(path)?)
+            .map_err_context(|| translate!("sync-error-syncing-file", "file" => path.quote()))?;
+    }
+    Ok(())
 }
