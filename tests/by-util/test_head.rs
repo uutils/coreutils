@@ -6,11 +6,11 @@
 // spell-checker:ignore (words) bogusfile emptyfile abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstu
 
 #[cfg(all(
-    not(target_os = "windows"),
-    not(target_os = "macos"),
+    not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 use std::io::Read;
 use uutests::new_ucmd;
@@ -312,7 +312,7 @@ fn test_obsolete_extras() {
         .args(&["-5zv"])
         .pipe_in("1\x002\x003\x004\x005\x006")
         .succeeds()
-        .stdout_is("==> standard input <==\n1\x002\x003\x004\x005\0");
+        .stdout_is("==> 'standard input' <==\n1\x002\x003\x004\x005\0");
 }
 
 #[test]
@@ -332,7 +332,7 @@ fn test_multiple_files_with_stdin() {
         .stdout_is(
             "==> emptyfile.txt <==
 
-==> standard input <==
+==> 'standard input' <==
 hello
 
 ==> emptyfile.txt <==
@@ -577,11 +577,11 @@ fn test_all_but_last_lines_large_file() {
 }
 
 #[cfg(all(
-    not(target_os = "windows"),
-    not(target_os = "macos"),
+    not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 #[test]
 #[cfg_attr(
@@ -681,11 +681,11 @@ fn test_validate_stdin_offset_lines() {
 }
 
 #[cfg(all(
-    not(target_os = "windows"),
-    not(target_os = "macos"),
+    not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 #[test]
 #[cfg_attr(
@@ -810,11 +810,11 @@ fn test_validate_stdin_offset_bytes() {
 }
 
 #[cfg(all(
-    not(target_os = "windows"),
-    not(target_os = "macos"),
+    not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
@@ -827,11 +827,11 @@ fn test_read_backwards_bytes_proc_fs_version() {
 }
 
 #[cfg(all(
-    not(target_os = "windows"),
-    not(target_os = "macos"),
+    not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
@@ -848,11 +848,11 @@ fn test_read_backwards_bytes_proc_fs_modules() {
 }
 
 #[cfg(all(
-    not(target_os = "windows"),
-    not(target_os = "macos"),
+    not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
@@ -869,11 +869,11 @@ fn test_read_backwards_lines_proc_fs_modules() {
 }
 
 #[cfg(all(
-    not(target_os = "windows"),
-    not(target_os = "macos"),
+    not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/sys) not visible")]
@@ -1180,4 +1180,76 @@ head: invalid number of bytes: '1fb'
             .fails_with_code(1)
             .stderr_is("head: invalid number of bytes: '1fb'\n");
     }
+}
+
+#[test]
+fn test_invalid_count_keeps_its_leading_zeros() {
+    // Leading zeros are stripped only so the count is read as decimal rather
+    // than octal. That is internal, so GNU still names the argument as typed.
+    new_ucmd!()
+        .args(&["-c", "0fb", "/dev/null"])
+        .fails_with_code(1)
+        .stderr_is("head: invalid number of bytes: '0fb'\n");
+    new_ucmd!()
+        .args(&["-n", "00x", "/dev/null"])
+        .fails_with_code(1)
+        .stderr_is("head: invalid number of lines: '00x'\n");
+}
+
+#[test]
+fn test_lowercase_multiplier_suffixes_rejected() {
+    // GNU accepts a lowercase suffix only for "k" and "m"; every other
+    // multiplier must be uppercase. "b" is bare-only (no B/iB/D form).
+    for suffix in ["g", "t", "p", "e", "z", "y", "r", "q"] {
+        new_ucmd!()
+            .args(&["-c", &format!("2{suffix}")])
+            .fails_with_code(1)
+            .stderr_is(format!("head: invalid number of bytes: '2{suffix}'\n"));
+        new_ucmd!()
+            .args(&["-n", &format!("2{suffix}")])
+            .fails_with_code(1)
+            .stderr_is(format!("head: invalid number of lines: '2{suffix}'\n"));
+    }
+}
+
+#[test]
+fn test_accepted_multiplier_suffixes() {
+    for suffix in [
+        "b", "k", "m", "K", "M", "G", "T", "P", "E", "Z", "Y", "R", "Q", "kB", "KiB", "kD", "MiB",
+        "GB",
+    ] {
+        new_ucmd!()
+            .args(&["-c", &format!("1{suffix}")])
+            .pipe_in("x")
+            .ignore_stdin_write_error()
+            .succeeds();
+    }
+}
+
+#[test]
+fn test_header_quotes_names_needing_it() {
+    // A name with a space must come back quoted, an ordinary one must not.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("plain", "p\n");
+    at.write("two words", "w\n");
+
+    ts.ucmd()
+        .args(&["-n1", "plain", "two words"])
+        .succeeds()
+        .stdout_only("==> plain <==\np\n\n==> 'two words' <==\nw\n");
+}
+
+// Windows rejects control characters in file names, so this one is unix-only.
+#[test]
+#[cfg(unix)]
+fn test_header_quotes_name_with_control_char() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("tab\there", "t\n");
+
+    ts.ucmd()
+        .args(&["-v", "-n1", "tab\there"])
+        .succeeds()
+        .stdout_only("==> 'tab'$'\\t''here' <==\nt\n");
 }

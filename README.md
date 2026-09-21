@@ -45,9 +45,13 @@ are treated as bugs.
 
 Our key objectives include:
 - Matching GNU's output (stdout and error code) exactly
-- Better error messages
+- Better error messages: at a terminal, a parse error is shown as a
+  compiler-style report with a caret under the argument at fault, where GNU
+  prints a single line (see [error diagnostics](docs/src/extensions-errors.md));
+  scripts and pipes still get the plain GNU message
 - Providing comprehensive internationalization support (UTF-8)
-- Improved performances
+- Continuously improving performance; significant slowdowns relative to other coreutils implementations
+  are treated as bugs
 - [Extensions](docs/src/extensions.md) when relevant (example: --progress)
 
 uutils aims to work on as many platforms as possible, to be able to use the same
@@ -139,14 +143,13 @@ the pure-Rust digest crates, enable the `openssl` feature:
 cargo build --release --features openssl
 ```
 By default OpenSSL is built from source and statically linked into the
-binary (mirroring how `expr` links `oniguruma`), so no runtime dependency
-on system libcrypto/libssl is added. To link dynamically against the system
-libcrypto instead, set `OPENSSL_NO_VENDOR=1` at build time.
+binary, so no runtime dependency on system libcrypto/libssl is added. To link
+dynamically against the system libcrypto instead, set `OPENSSL_NO_VENDOR=1` at build time.
+MinGW (Windows) needs `OPENSSL_STATIC=0` too for dynamic linkage.
 
-The speedup is largest on CPUs without SHA-NI hardware acceleration. The
-feature is a no-op on Windows (the pure-Rust implementations are always used
-there) and is automatically bypassed at runtime for any algorithm libcrypto
-refuses (for example, MD5 in strict FIPS mode).
+The speedup is largest on CPUs without SHA-NI hardware acceleration.
+`aws-lc` backend is used on MSVC. Setting `AWS_LC_SYS_NO_JITTER_ENTROPY=1`
+at build time is recommended to reduce size of binary.
 
 If you don't want to build every utility available on your platform into the
 final binary, you can also specify which ones you want to build manually. For

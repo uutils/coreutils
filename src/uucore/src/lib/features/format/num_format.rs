@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore bigdecimal prec cppreference bignums
+
 //! Utilities for formatting numbers in various formats
 
 use bigdecimal::BigDecimal;
@@ -413,6 +415,9 @@ fn format_float_non_finite(e: &ExtendedBigDecimal, case: Case) -> String {
     s
 }
 
+/// Largest precision `format!` accepts; beyond it the formatter panics.
+const MAX_FMT_PRECISION: usize = u16::MAX as usize;
+
 fn format_float_decimal(
     bd: &BigDecimal,
     precision: Option<usize>,
@@ -429,6 +434,19 @@ fn format_float_decimal(
             return format!("{bd:.0}.");
         }
     }
+    // `format!` stores width and precision as `u16` and panics above that, so
+    // write the digits we have and pad the remainder with zeros ourselves.
+    if precision > MAX_FMT_PRECISION {
+        let digits = usize::try_from(bd.fractional_digit_count().max(0)).unwrap_or(usize::MAX);
+        let written = digits.min(MAX_FMT_PRECISION);
+        let mut s = format!("{bd:.written$}");
+        if written == 0 {
+            s.push('.');
+        }
+        s.extend(std::iter::repeat_n('0', precision - written));
+        return s;
+    }
+
     format!("{bd:.precision$}")
 }
 
@@ -749,6 +767,18 @@ fn strip_fractional_zeroes_and_dot(s: &mut String) {
     }
 }
 
+fn write_padding(writer: &mut impl Write, byte: u8, mut len: usize) -> std::io::Result<()> {
+    // One KiB keeps stack use small while amortizing writes for large field widths.
+    const BUFFER_SIZE: usize = 1024;
+    let buffer = [byte; BUFFER_SIZE];
+
+    while len >= BUFFER_SIZE {
+        writer.write_all(&buffer)?;
+        len -= BUFFER_SIZE;
+    }
+    writer.write_all(&buffer[..len])
+}
+
 fn write_output(
     mut writer: impl Write,
     sign_indicator: String,
@@ -769,17 +799,18 @@ fn write_output(
     // Check if the width is too large for formatting
     super::check_width(remaining_width)?;
 
+    let padding = width.saturating_sub(sign_indicator.len().saturating_add(s.len()));
+
     match alignment {
-        NumberAlignment::Left => write!(writer, "{sign_indicator}{s:<remaining_width$}"),
+        NumberAlignment::Left => {
+            writer.write_all(sign_indicator.as_bytes())?;
+            writer.write_all(s.as_bytes())?;
+            write_padding(&mut writer, b' ', padding)
+        }
         NumberAlignment::RightSpace => {
-            let is_sign = sign_indicator.starts_with('-') || sign_indicator.starts_with('+'); // When sign_indicator is in ['-', '+']
-            if is_sign && remaining_width > 0 {
-                // Make sure sign_indicator is just next to number, e.g. "% +5.1f" 1 ==> $ +1.0
-                let s = sign_indicator + s.as_str();
-                write!(writer, "{s:>width$}", width = remaining_width + 1) // Since we now add sign_indicator and s together, plus 1
-            } else {
-                write!(writer, "{sign_indicator}{s:>remaining_width$}")
-            }
+            write_padding(&mut writer, b' ', padding)?;
+            writer.write_all(sign_indicator.as_bytes())?;
+            writer.write_all(s.as_bytes())
         }
         NumberAlignment::RightZero => {
             // Add the padding after "0x" for hexadecimals
@@ -788,8 +819,10 @@ fn write_output(
             } else {
                 ("", s.as_str())
             };
-            let remaining_width = remaining_width.saturating_sub(prefix.len());
-            write!(writer, "{sign_indicator}{prefix}{rest:0>remaining_width$}")
+            writer.write_all(sign_indicator.as_bytes())?;
+            writer.write_all(prefix.as_bytes())?;
+            write_padding(&mut writer, b'0', padding)?;
+            writer.write_all(rest.as_bytes())
         }
     }
 }
@@ -838,6 +871,29 @@ mod test {
         let f = |x| format_float_non_finite(x, Case::Uppercase);
         assert_eq!(f(&ExtendedBigDecimal::Nan), "NAN");
         assert_eq!(f(&ExtendedBigDecimal::Infinity), "INF");
+    }
+
+    #[test]
+    fn decimal_float_precision_beyond_formatter_limit() {
+        use super::format_float_decimal;
+        // A precision above u16::MAX cannot go through `format!` directly.
+        let f = |x: &str, precision| {
+            format_float_decimal(
+                &BigDecimal::from_str(x).unwrap(),
+                Some(precision),
+                ForceDecimal::No,
+            )
+        };
+
+        let s = f("3.25", 70_123);
+        assert_eq!(s.len(), 70_125);
+        assert!(s.starts_with("3.25"));
+        assert!(s[4..].bytes().all(|b| b == b'0'));
+
+        let s = f("7", 65_536);
+        assert_eq!(s.len(), 65_538);
+        assert!(s.starts_with("7."));
+        assert!(s[2..].bytes().all(|b| b == b'0'));
     }
 
     #[test]

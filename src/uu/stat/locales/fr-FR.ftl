@@ -73,6 +73,7 @@ stat-word-block = Bloc
 stat-word-size = Taille
 stat-word-fundamental = Fondamentale
 stat-word-block-size = taille bloc
+stat-word-block-size-capitalized = Taille bloc
 stat-word-blocks = Blocs
 stat-word-total = Total
 stat-word-free = Libres

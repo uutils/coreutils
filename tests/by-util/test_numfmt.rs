@@ -144,6 +144,74 @@ fn test_negative_padding() {
 }
 
 #[test]
+fn test_negative_padding_as_separate_arg() {
+    // A negative padding value passed as its own argument (not attached
+    // with `=`) must not be mistaken for a new, unrecognized flag.
+    new_ucmd!()
+        .args(&["--from=si", "--padding", "-8"])
+        .pipe_in("1K\n1.1M\n0.1G")
+        .succeeds()
+        .stdout_is("1000    \n1100000 \n100000000");
+}
+
+#[test]
+fn test_suffix_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading suffix value passed as its own argument (not
+    // attached with `=`) must not be mistaken for a new, unrecognized
+    // flag.
+    new_ucmd!()
+        .args(&["--suffix", "-x"])
+        .pipe_in("5\n")
+        .succeeds()
+        .stdout_is("5-x\n");
+}
+
+#[test]
+fn test_delimiter_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading delimiter value passed as its own argument (not
+    // attached with `-d-x`/`=`) must not be mistaken for a new,
+    // unrecognized flag.
+    new_ucmd!()
+        .args(&["-d", "-x", "--field=1"])
+        .fails()
+        .stderr_contains("the delimiter must be a single character");
+}
+
+#[test]
+fn test_unit_size_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading unit size passed as its own argument must reach
+    // our own validation instead of being read as an unknown flag.
+    for opt in ["--from-unit", "--to-unit"] {
+        new_ucmd!()
+            .args(&[opt, "-1"])
+            .pipe_in("")
+            .fails()
+            .stderr_contains("invalid unit size: '-1'");
+    }
+}
+
+#[test]
+fn test_unit_hyphen_leading_as_separate_arg() {
+    // Same for the --from/--to units.
+    for opt in ["--from", "--to"] {
+        new_ucmd!()
+            .args(&[opt, "-x"])
+            .pipe_in("")
+            .fails()
+            .stderr_contains("invalid argument '-x' for '--");
+    }
+}
+
+#[test]
+fn test_unit_separator_hyphen_leading_as_separate_arg() {
+    new_ucmd!()
+        .args(&["--to=si", "--unit-separator", "-"])
+        .pipe_in("1000\n")
+        .succeeds()
+        .stdout_is("1.0-k\n");
+}
+
+#[test]
 fn test_header() {
     new_ucmd!()
         .args(&["--from=si", "--header=2"])
@@ -1044,6 +1112,41 @@ fn test_format_with_zero_padding_and_suffix() {
         .args(&["--format=%06f", "1234 ?"])
         .succeeds()
         .stdout_is("001234 ?\n");
+}
+
+// GNU zero-pads the number only: "Optional zero (%010f) width will zero pad
+// the number". The unit from --to and the --suffix text stay outside the width.
+#[test]
+fn test_format_with_zero_padding_excludes_unit_suffix() {
+    let cases = [
+        (vec!["--format=%05.1f", "--to=si", "1234567"], "001.3M"),
+        (vec!["--format=%06.1f", "--to=si", "1234"], "0001.3k"),
+        (
+            vec!["--format=%08.1f", "--to=iec-i", "1234567"],
+            "000001.2Mi",
+        ),
+        (
+            vec!["--format=%08.1f", "--to=si", "--", "-1234567"],
+            "-00001.3M",
+        ),
+        (vec!["--format=%03.1f", "--to=si", "1234567"], "1.3M"),
+        (
+            vec!["--format=%05.1f", "--to=si", "--suffix=B", "1234567"],
+            "001.3MB",
+        ),
+        (vec!["--format=%05.1f", "--suffix=B", "1.5"], "001.5B"),
+        (
+            vec!["--format=%08.1f", "--to=si", "--padding=12", "1234567"],
+            "   000001.3M",
+        ),
+    ];
+
+    for (args, expected) in cases {
+        new_ucmd!()
+            .args(&args)
+            .succeeds()
+            .stdout_only(format!("{expected}\n"));
+    }
 }
 
 #[test]
@@ -2289,5 +2392,19 @@ mod field_diagnostics {
             .args(&["--field=0", "--to=si", "1"])
             .fails_with_code(1)
             .stderr_contains("range '0' was invalid: fields and positions are numbered from 1");
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_write_error_is_reported_and_fatal() {
+    // A full output device must be diagnosed, not panic, whatever --invalid says.
+    for extra in [&["--to=si"][..], &["--invalid=ignore"][..]] {
+        let mut ucmd = new_ucmd!();
+        ucmd.args(extra)
+            .pipe_in("81920\n4096\n1024\n")
+            .set_stdout(std::fs::File::create("/dev/full").unwrap())
+            .fails_with_code(1)
+            .stderr_is("numfmt: write error: No space left on device\n");
     }
 }

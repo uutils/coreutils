@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore itotal iused iavail ipcent pcent tmpfs squashfs lofs sysfs
+
 mod blocks;
 mod columns;
 mod filesystem;
@@ -12,6 +14,7 @@ mod table;
 use blocks::HumanReadable;
 use clap::builder::ValueParser;
 use table::HeaderMode;
+use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError, get_exit_code};
 use uucore::fsext::{MountInfo, read_fs_list};
@@ -35,11 +38,17 @@ use crate::table::Table;
 static OPT_HELP: &str = "help";
 static OPT_ALL: &str = "all";
 static OPT_BLOCKSIZE: &str = "blocksize";
+/// The long name of [`OPT_BLOCKSIZE`], which its clap id does not spell.
+///
+/// The caret report looks the option up on the command line by this name, so
+/// the `Arg` and the report have to agree on it.
+static OPT_BLOCKSIZE_LONG: &str = "block-size";
 static OPT_TOTAL: &str = "total";
 static OPT_HUMAN_READABLE_BINARY: &str = "human-readable-binary";
 static OPT_HUMAN_READABLE_DECIMAL: &str = "human-readable-decimal";
 static OPT_INODES: &str = "inodes";
 static OPT_KILO: &str = "kilo";
+static OPT_MEGA: &str = "mega";
 static OPT_LOCAL: &str = "local";
 static OPT_NO_SYNC: &str = "no-sync";
 static OPT_OUTPUT: &str = "output";
@@ -114,8 +123,8 @@ impl Default for Options {
 
 impl Options {
     /// Convert command-line arguments into [`Options`].
-    pub fn from_matches(matches: &ArgMatches) -> UResult<Self> {
-        Ok(Self::from(matches).map_err(DfError::OptionsError)?)
+    pub fn from_matches(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Self> {
+        Self::from(matches, diag_args)
     }
 
     /// Whether -a, -l, -t, or -x options require the mount table.
@@ -128,15 +137,15 @@ impl Options {
 enum OptionsError {
     // TODO This needs to vary based on whether `--block-size`
     // or `-B` were provided.
-    #[error("{}", translate!("df-error-block-size-too-large", "size" => .0.clone()))]
+    #[error("{}", translate!("df-error-block-size-too-large", "size" => .0))]
     BlockSizeTooLarge(String),
     // TODO This needs to vary based on whether `--block-size`
     // or `-B` were provided.,
-    #[error("{}", translate!("df-error-invalid-block-size", "size" => .0.clone()))]
+    #[error("{}", translate!("df-error-invalid-block-size", "size" => .0))]
     InvalidBlockSize(String),
     // TODO This needs to vary based on whether `--block-size`
     // or `-B` were provided.
-    #[error("{}", translate!("df-error-invalid-suffix", "size" => .0.clone()))]
+    #[error("{}", translate!("df-error-invalid-suffix", "size" => .0))]
     InvalidSuffix(String),
 
     /// An error getting the columns to display in the output table.
@@ -153,9 +162,46 @@ enum OptionsError {
     FilesystemTypeBothSelectedAndExcluded(Vec<String>),
 }
 
+/// The error for a `--block-size` that could not be parsed, with a caret under
+/// the part of it that is at fault.
+///
+/// # Arguments
+///
+/// * `error` - What the size parser rejected the value with.
+/// * `matches` - The parsed command line, for the value as it was typed.
+/// * `diag_args` - The arguments as typed, or `None` when they were not kept.
+fn block_size_error(
+    error: &ParseSizeError,
+    matches: &ArgMatches,
+    diag_args: Option<&[OsString]>,
+) -> Box<dyn UError> {
+    // Only `-B`/`--block-size` reaches the parser with a value to point at:
+    // `read_block_size` parses a size only under `contains_id(OPT_BLOCKSIZE)`,
+    // and the `DF_BLOCK_SIZE` fallbacks go through `found()`, which drops an
+    // invalid value silently. So the value the caret points at is always there.
+    let size = matches
+        .get_one::<String>(OPT_BLOCKSIZE)
+        .expect("a block size error can only come from --block-size");
+    let options_error = match error {
+        ParseSizeError::InvalidSuffix(s) => OptionsError::InvalidSuffix(s.clone()),
+        ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(size.clone()),
+        ParseSizeError::ParseFailure(s) | ParseSizeError::PhysicalMem(s) => {
+            OptionsError::InvalidBlockSize(s.clone())
+        }
+    };
+    let message = options_error.to_string();
+    error.size_value_error(
+        diag_args,
+        &OptionValue::new(size, 'B', OPT_BLOCKSIZE_LONG),
+        0,
+        &message,
+        DfError::OptionsError(options_error),
+    )
+}
+
 impl Options {
     /// Convert command-line arguments into [`Options`].
-    fn from(matches: &ArgMatches) -> Result<Self, OptionsError> {
+    fn from(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Self> {
         let include: Option<Vec<_>> = matches
             .get_many::<OsString>(OPT_TYPE)
             .map(|v| v.map(|s| s.to_string_lossy().to_string()).collect());
@@ -166,22 +212,18 @@ impl Options {
         if let (Some(include), Some(exclude)) = (&include, &exclude)
             && let Some(types) = Self::get_intersected_types(include, exclude)
         {
-            return Err(OptionsError::FilesystemTypeBothSelectedAndExcluded(types));
+            return Err(DfError::OptionsError(
+                OptionsError::FilesystemTypeBothSelectedAndExcluded(types),
+            )
+            .into());
         }
 
         Ok(Self {
             show_local_fs: matches.get_flag(OPT_LOCAL),
             show_all_fs: matches.get_flag(OPT_ALL),
             sync: matches.get_flag(OPT_SYNC),
-            block_size: read_block_size(matches).map_err(|e| match e {
-                ParseSizeError::InvalidSuffix(s) => OptionsError::InvalidSuffix(s),
-                ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(
-                    matches.get_one::<String>(OPT_BLOCKSIZE).unwrap().to_owned(),
-                ),
-                ParseSizeError::ParseFailure(s) | ParseSizeError::PhysicalMem(s) => {
-                    OptionsError::InvalidBlockSize(s)
-                }
-            })?,
+            block_size: read_block_size(matches)
+                .map_err(|error| block_size_error(&error, matches, diag_args))?,
             header_mode: {
                 if matches.get_flag(OPT_HUMAN_READABLE_BINARY)
                     || matches.get_flag(OPT_HUMAN_READABLE_DECIMAL)
@@ -209,7 +251,8 @@ impl Options {
             include,
             exclude,
             show_total: matches.get_flag(OPT_TOTAL),
-            columns: Column::from_matches(matches).map_err(OptionsError::ColumnError)?,
+            columns: Column::from_matches(matches)
+                .map_err(|e| DfError::OptionsError(OptionsError::ColumnError(e)))?,
         })
     }
 
@@ -247,25 +290,26 @@ fn is_included(mi: &MountInfo, opt: &Options) -> bool {
 /// The "lt" in the function name is in analogy to the
 /// [`std::cmp::PartialOrd::lt`].
 fn mount_info_lt(m1: &MountInfo, m2: &MountInfo) -> bool {
-    // let "real" devices with '/' in the name win.
+    // A source naming an actual device node outranks one that does not,
+    // so a pseudo-filesystem name never displaces a path under /dev.
     if m1.dev_name.starts_with('/') && !m2.dev_name.starts_with('/') {
         return false;
     }
 
     let m1_nearer_root = m1.mount_dir.len() < m2.mount_dir.len();
-    // With bind mounts, prefer items nearer the root of the source
-    let m2_below_root = !m1.mount_root.is_empty()
-        && !m2.mount_root.is_empty()
-        && m1.mount_root.len() > m2.mount_root.len();
-    // let points towards the root of the device win.
+    // A bind mount whose source subtree is shorter exposes more of the
+    // device, which makes it the more representative entry of the two.
+    let m2_below_root = !m2.mount_root.is_empty() && m1.mount_root.len() > m2.mount_root.len();
+    // Otherwise the shallower mount point is the better description of
+    // the device, unless the deeper one covers more of the source.
     if m1_nearer_root && !m2_below_root {
         return false;
     }
 
-    // let an entry over-mounted on a new device win, but only when
-    // matching an existing mnt point, to avoid problematic
-    // replacement when given inaccurate mount lists, seen with some
-    // chroot environments for example.
+    // What is left is one entry mounted over another. Treat the covering
+    // entry as the live one, but only where both share a mount point: a
+    // mount table that reports stale or duplicated rows (chroots are a
+    // common source) would otherwise evict an entry it never covered.
     !(m1.dev_name != m2.dev_name && m1.mount_dir == m2.mount_dir)
 }
 
@@ -471,13 +515,19 @@ pub fn df(paths: Option<&[&Path]>, opt: &Options) -> UResult<()> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    // The arguments are kept for the caret in SIZE diagnostics, which echoes
+    // the command line.
+    let (matches, diag_args) = uucore::clap_localization::handle_clap_result_with_diagnostics(
+        uu_app(),
+        args.collect(),
+        1,
+    )?;
 
     if let Some(result) = platform::maybe_unsupported_options(&matches) {
         return result;
     }
 
-    let opt = Options::from_matches(&matches)?;
+    let opt = Options::from_matches(&matches, diag_args.as_deref())?;
     let paths: Option<Vec<&Path>> = matches
         .get_many::<OsString>(OPT_PATHS)
         .map(|paths| paths.map(Path::new).collect());
@@ -511,9 +561,9 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_BLOCKSIZE)
                 .short('B')
-                .long("block-size")
+                .long(OPT_BLOCKSIZE_LONG)
                 .value_name("SIZE")
-                .overrides_with_all([OPT_KILO, OPT_BLOCKSIZE])
+                .overrides_with_all([OPT_KILO, OPT_MEGA, OPT_BLOCKSIZE])
                 .help(translate!("df-help-block-size")),
         )
         .arg(
@@ -551,7 +601,14 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_KILO)
                 .short('k')
                 .help(translate!("df-help-kilo"))
-                .overrides_with_all([OPT_BLOCKSIZE, OPT_KILO])
+                .overrides_with_all([OPT_BLOCKSIZE, OPT_KILO, OPT_MEGA])
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(OPT_MEGA)
+                .short('m')
+                .help(translate!("df-help-mega"))
+                .overrides_with_all([OPT_BLOCKSIZE, OPT_KILO, OPT_MEGA])
                 .action(ArgAction::SetTrue),
         )
         .arg(

@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore reflink
+
 use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
 use std::os::unix::ffi::OsStrExt;
@@ -32,9 +34,7 @@ pub(crate) fn copy_on_write(
     nofollow: bool,
 ) -> CopyResult<CopyDebug> {
     if sparse_mode != SparseMode::Auto {
-        return Err(translate!("cp-error-sparse-not-supported")
-            .to_string()
-            .into());
+        return Err(translate!("cp-error-sparse-not-supported").into());
     }
     let mut copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unknown,

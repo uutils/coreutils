@@ -8,7 +8,6 @@
 use crate::paths::Input;
 use crate::{Quotable, parse, platform};
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
-use same_file::Handle;
 use std::ffi::OsString;
 use std::io::{IsTerminal, Write};
 use std::time::Duration;
@@ -60,10 +59,12 @@ pub enum FilterMode {
 
 impl FilterMode {
     fn from_obsolete_args(args: &parse::ObsoleteArgs) -> Self {
-        let signum = if args.plus {
-            Signum::Positive(args.num)
-        } else {
-            Signum::Negative(args.num)
+        // Normalise zero as `parse_num` does: `Positive(0)` underflows at `count - 1`.
+        let signum = match (args.num, args.plus) {
+            (0, true) => Signum::PlusZero,
+            (0, false) => Signum::MinusZero,
+            (n, true) => Signum::Positive(n),
+            (n, false) => Signum::Negative(n),
         };
         if args.lines {
             Self::Lines(signum, b'\n')
@@ -252,7 +253,7 @@ impl Settings {
             settings.sleep_sec = parse_time::from_str(source, false).map_err(|_| {
                 UUsageError::new(
                     1,
-                    translate!("tail-error-invalid-number-of-seconds", "source" => source.clone()),
+                    translate!("tail-error-invalid-number-of-seconds", "source" => source),
                 )
             })?;
         }
@@ -345,15 +346,15 @@ impl Settings {
         // as `tty` (but no otherwise blocking stdin), then we print a warning that `--follow`
         // cannot be applied under these circumstances and is therefore ineffective.
         if self.follow.is_some() && self.has_stdin() {
+            #[cfg(unix)]
+            let stdin_is_regular = rustix::fs::fstat(std::io::stdin())
+                .is_ok_and(|stat| stat.st_mode & libc::S_IFMT == libc::S_IFREG);
+            #[cfg(not(unix))]
+            let stdin_is_regular = true;
             let blocking_stdin = self.pid.unwrap_or_default() == 0
                 && self.follow == Some(FollowMode::Descriptor)
                 && self.num_inputs() == 1
-                && Handle::stdin().is_ok_and(|handle| {
-                    handle
-                        .as_file()
-                        .metadata()
-                        .is_ok_and(|meta| !meta.is_file())
-                });
+                && !stdin_is_regular;
 
             if !blocking_stdin && std::io::stdin().is_terminal() {
                 show_warning!("{}", translate!("tail-warning-following-stdin-ineffective"));
@@ -475,9 +476,9 @@ pub fn uu_app() -> Command {
     let polling_help = translate!("tail-help-polling-linux");
     #[cfg(all(unix, not(target_os = "linux")))]
     let polling_help = translate!("tail-help-polling-unix");
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     let polling_help = translate!("tail-help-polling-windows");
-    #[cfg(not(any(unix, target_os = "windows")))]
+    #[cfg(not(any(unix, windows)))]
     let polling_help = translate!("tail-help-polling-unix");
 
     Command::new("tail")

@@ -133,7 +133,7 @@ impl Display for BadSequence {
             Self::MultipleCharInEquivalence(s) => write!(
                 f,
                 "{}",
-                translate!("tr-error-multiple-char-in-equivalence", "chars" => s.clone())
+                translate!("tr-error-multiple-char-in-equivalence", "chars" => s)
             ),
         }
     }
@@ -885,12 +885,12 @@ where
 /// Platform-specific flush operation
 #[inline]
 pub fn flush_output<W: Write>(output: &mut W) -> UResult<()> {
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     return output
         .flush()
         .map_err_context(|| translate!("tr-error-write-error"));
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     match output.flush() {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {

@@ -47,7 +47,8 @@ fn parse_tab_num(word: &str, allow_zero: bool) -> Result<usize, ParseError> {
 }
 
 fn parse_tabstops(s: &str) -> Result<TabConfig, ParseError> {
-    let words = s.split(',');
+    // GNU accepts a blank (space or tab) or a comma as tab-list separators.
+    let words = s.split([' ', '\t', ',']);
 
     let mut nums = Vec::new();
     let mut increment_size: Option<usize> = None;
@@ -296,7 +297,7 @@ impl Read for Input {
 
 fn open(path: &OsString) -> UResult<BufReader<Input>> {
     // some platforms show different read error
-    #[cfg(any(target_os = "wasi", target_os = "windows"))]
+    #[cfg(any(target_os = "wasi", windows))]
     {
         let filename = std::path::Path::new(path);
         if filename.is_dir() {

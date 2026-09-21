@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore uioerror rustdoc
+
 //! All utils return exit with an exit code. Usually, the following scheme is used:
 //! * `0`: succeeded
 //! * `1`: minor problems
@@ -51,8 +54,6 @@
 //! * [`USimpleError`] may be used in small utils with simple error handling.
 //! * Using [`ExitCode`] is not recommended but can be useful for converting utils to use
 //!   [`UResult`].
-
-// spell-checker:ignore uioerror rustdoc
 
 use std::{
     cell::Cell,
@@ -424,7 +425,9 @@ impl Display for UIoError {
                 AddrInUse => "Address in use",
                 AddrNotAvailable => "Address not available",
                 BrokenPipe => "Broken pipe",
-                AlreadyExists => "Already exists",
+                // strerror(EEXIST); GNU prints "File exists", not the Rust
+                // ErrorKind name.
+                AlreadyExists => "File exists",
                 WouldBlock => "Would block",
                 InvalidInput => "Invalid input",
                 InvalidData => "Invalid data",
@@ -470,8 +473,11 @@ impl Display for UIoError {
 /// use std::io::{Error, ErrorKind};
 /// use uucore::error::strip_errno;
 ///
-/// let err = Error::from_raw_os_error(2);
-/// assert_eq!(strip_errno(&err), "No such file or directory");
+/// #[cfg(unix)]
+/// {
+///     let err = Error::from_raw_os_error(2);
+///     assert_eq!(strip_errno(&err), "No such file or directory");
+/// }
 ///
 /// // Errors without an errno are returned unchanged.
 /// let err = Error::new(ErrorKind::Other, "custom failure");

@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (ToDO) Sdivide ading
 
 use jiff::{Timestamp, ToSpan};
@@ -558,13 +559,13 @@ fn test_large_page_width_does_not_panic() {
 #[cfg(target_os = "linux")]
 #[test]
 fn test_offset_large_value_does_not_abort_under_memory_limit() {
-    use rlimit::Resource;
+    use rustix::process::Resource;
     use std::process::Stdio;
 
     const AS_LIMIT: u64 = 200 * 1024 * 1024;
 
     new_ucmd!()
-        .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
+        .limit(Resource::As, AS_LIMIT, AS_LIMIT)
         .set_stdout(Stdio::null())
         .args(&["-t", "-o", "999999999"])
         .pipe_in("hi\n")

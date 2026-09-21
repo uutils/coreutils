@@ -87,7 +87,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
     // utmpxname() returns an -1 , when filename doesn't end with 'x' or its too long.
     // Reference: `<https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/utmpxname.3.html>`
 
-    #[cfg(target_os = "macos")]
+    #[cfg(target_vendor = "apple")]
     {
         use std::os::unix::ffi::OsStrExt;
         let bytes = file_path.as_os_str().as_bytes();

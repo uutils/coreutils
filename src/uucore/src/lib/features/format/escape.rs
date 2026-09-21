@@ -26,6 +26,27 @@ pub enum OctalParsing {
     ThreeDigits = 3,
 }
 
+/// Which escape sequences `parse_escape_code` recognizes.
+///
+/// `printf` recognizes three sequences that `echo -e` does not: `\"`, and the
+/// four- and eight-digit code point escapes `\u` and `\U`. Every other
+/// sequence is shared by both, so this only selects whether those three are
+/// interpreted or left exactly as written.
+#[derive(Clone, Copy)]
+pub enum EscapeSet {
+    /// Interpret `\"`, `\u` and `\U` on top of the shared sequences.
+    WithUnicodeAndQuote,
+    /// Only the shared sequences. `\"`, `\u` and `\U` are not escape sequences
+    /// and are emitted with their backslash, like any other unknown escape.
+    WithoutUnicodeAndQuote,
+}
+
+impl EscapeSet {
+    fn has_unicode_and_quote(self) -> bool {
+        matches!(self, Self::WithUnicodeAndQuote)
+    }
+}
+
 #[derive(Clone, Copy)]
 enum Base {
     Oct(OctalParsing),
@@ -121,6 +142,7 @@ pub enum EscapeError {
 pub fn parse_escape_code(
     rest: &mut &[u8],
     zero_octal_parsing: OctalParsing,
+    escape_set: EscapeSet,
 ) -> Result<EscapedChar, FormatError> {
     if let [c, new_rest @ ..] = rest {
         // This is for the \NNN syntax for octal sequences.
@@ -135,7 +157,7 @@ pub fn parse_escape_code(
         *rest = new_rest;
         match c {
             b'\\' => Ok(EscapedChar::Byte(b'\\')),
-            b'"' => Ok(EscapedChar::Byte(b'"')),
+            b'"' if escape_set.has_unicode_and_quote() => Ok(EscapedChar::Byte(b'"')),
             b'a' => Ok(EscapedChar::Byte(b'\x07')),
             b'b' => Ok(EscapedChar::Byte(b'\x08')),
             b'c' => Ok(EscapedChar::End),
@@ -155,14 +177,14 @@ pub fn parse_escape_code(
             b'0' => Ok(EscapedChar::Byte(
                 parse_code(rest, Base::Oct(zero_octal_parsing)).unwrap_or(b'\0'),
             )),
-            b'u' => match parse_unicode(rest, 4) {
+            b'u' if escape_set.has_unicode_and_quote() => match parse_unicode(rest, 4) {
                 Ok(c) => Ok(EscapedChar::Char(c)),
                 Err(EscapeError::MissingHexadecimalNumber) => Err(FormatError::MissingHex(None)),
                 Err(EscapeError::InvalidCharacters(chars)) => {
                     Err(FormatError::InvalidCharacter('u', chars, None))
                 }
             },
-            b'U' => match parse_unicode(rest, 8) {
+            b'U' if escape_set.has_unicode_and_quote() => match parse_unicode(rest, 8) {
                 Ok(c) => Ok(EscapedChar::Char(c)),
                 Err(EscapeError::MissingHexadecimalNumber) => Err(FormatError::MissingHex(None)),
                 Err(EscapeError::InvalidCharacters(chars)) => {

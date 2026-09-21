@@ -60,13 +60,12 @@ fn post_process_manpage(manpage: String, date: &str) -> String {
     let lines: Vec<&str> = result.lines().map(str::trim_end).collect();
     let mut fixed_lines: Vec<&str> = Vec::with_capacity(lines.len());
 
-    for i in 0..lines.len() {
-        let line = lines[i];
-
+    for (i, &line) in lines.iter().enumerate() {
         if line == ".br" {
-            let preceded_by_empty_line = i > 0 && lines[i - 1].is_empty();
-            let followed_by_empty_line = i + 1 < lines.len() && lines[i + 1].is_empty();
-            let followed_by_br = i + 1 < lines.len() && lines[i + 1] == ".br";
+            let preceded_by_empty_line = lines.get(i - 1).is_some_and(|l| l.is_empty());
+            let line_next = lines.get(i + 1);
+            let followed_by_empty_line = line_next.is_some_and(|l| l.is_empty());
+            let followed_by_br = line_next == Some(&".br");
 
             if preceded_by_empty_line || followed_by_empty_line || followed_by_br {
                 // skip this ".br"
@@ -273,6 +272,7 @@ fn main() -> io::Result<()> {
         * [Contributing](CONTRIBUTING.md)\n\
         \t* [Development](DEVELOPMENT.md)\n\
         \t* [Code of Conduct](CODE_OF_CONDUCT.md)\n\
+        \t* [Localization](l10n.md)\n\
         * [GNU test coverage](test_coverage.md)\n\
         * [Extensions](extensions.md)\n\
         \t* [Error diagnostics](extensions-errors.md)\n\

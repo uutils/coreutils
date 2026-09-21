@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -111,7 +112,7 @@ fn test_uname_operating_system() {
         .arg("--operating-system")
         .succeeds()
         .stdout_is("Redox\n");
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
         let result = new_ucmd!().arg("--operating-system").succeeds();
         println!("{:?}", result.stdout_str());

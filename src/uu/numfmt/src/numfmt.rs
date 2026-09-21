@@ -2,10 +2,13 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore behavior
 
 use crate::errors::NumfmtError;
-use crate::format::{escape_line, write_formatted_with_delimiter, write_formatted_with_whitespace};
+use crate::format::{
+    WriteError, escape_line, write_formatted_with_delimiter, write_formatted_with_whitespace,
+};
 use crate::options::{
     DEBUG, DELIMITER, FIELD, FIELD_DEFAULT, FORMAT, FROM, FROM_DEFAULT, FROM_UNIT,
     FROM_UNIT_DEFAULT, FormatOptions, GROUPING, HEADER, HEADER_DEFAULT, INVALID, InvalidModes,
@@ -19,7 +22,7 @@ use std::io::{BufRead, BufWriter, IsTerminal, Write, stderr};
 use std::str::FromStr;
 
 use uucore::display::Quotable;
-use uucore::error::UResult;
+use uucore::error::{FromIo, UResult};
 use uucore::i18n::decimal::locale_grouping_separator;
 use uucore::parser::parse_size::{IEC_BASES, SI_BASES};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
@@ -73,7 +76,8 @@ fn format_and_write(
                     Err(format!(
                         "invalid suffix in input: '{}'",
                         String::from_utf8_lossy(line)
-                    ))
+                    )
+                    .into())
                 } else {
                     write_formatted_with_whitespace(dest, s, options, eol)
                 }
@@ -81,8 +85,18 @@ fn format_and_write(
             Err(_) => Err(translate!(
                 "numfmt-error-invalid-number",
                 "input" => escape_line(line).quote()
-            )),
+            )
+            .into()),
         }
+    };
+
+    // A failure to write is fatal, whatever --invalid says.
+    let result = match result {
+        Ok(()) => Ok(()),
+        Err(WriteError::Io(error)) => {
+            return Err::<bool, _>(error).map_err_context(|| translate!("numfmt-error-write"));
+        }
+        Err(WriteError::Invalid(message)) => Err(message),
     };
 
     if let Err(msg) = result {
@@ -99,15 +113,21 @@ fn format_and_write(
             InvalidModes::Ignore => {}
         }
         // On error, echo the original line unchanged.
-        writer.write_all(input_line)?;
+        writer
+            .write_all(input_line)
+            .map_err_context(|| translate!("numfmt-error-write"))?;
         if let Some(eol) = eol {
-            writer.write_all(&[eol])?;
+            writer
+                .write_all(&[eol])
+                .map_err_context(|| translate!("numfmt-error-write"))?;
         }
         return Ok(true);
     }
 
     if buffer_output {
-        writer.write_all(&buf)?;
+        writer
+            .write_all(&buf)
+            .map_err_context(|| translate!("numfmt-error-write"))?;
     }
     Ok(false)
 }
@@ -133,7 +153,7 @@ fn with_stdout<T>(body: impl FnOnce(&mut dyn Write) -> UResult<T>) -> UResult<T>
 fn finish<T>(result: UResult<T>, writer: &mut impl Write) -> UResult<T> {
     let flushed = writer
         .flush()
-        .map_err(|e| NumfmtError::IoError(e.to_string()));
+        .map_err_context(|| translate!("numfmt-error-write"));
     let value = result?;
     flushed?;
     Ok(value)
@@ -577,6 +597,7 @@ pub fn uu_app() -> Command {
                 .long(DELIMITER)
                 .value_name("X")
                 .value_parser(ValueParser::os_string())
+                .allow_hyphen_values(true)
                 .help(translate!("numfmt-help-delimiter")),
         )
         .arg(
@@ -599,34 +620,39 @@ pub fn uu_app() -> Command {
                 .long(FROM)
                 .help(translate!("numfmt-help-from"))
                 .value_name("UNIT")
-                .default_value(FROM_DEFAULT),
+                .default_value(FROM_DEFAULT)
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(FROM_UNIT)
                 .long(FROM_UNIT)
                 .help(translate!("numfmt-help-from-unit"))
                 .value_name("N")
-                .default_value(FROM_UNIT_DEFAULT),
+                .default_value(FROM_UNIT_DEFAULT)
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(TO)
                 .long(TO)
                 .help(translate!("numfmt-help-to"))
                 .value_name("UNIT")
-                .default_value(TO_DEFAULT),
+                .default_value(TO_DEFAULT)
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(TO_UNIT)
                 .long(TO_UNIT)
                 .help(translate!("numfmt-help-to-unit"))
                 .value_name("N")
-                .default_value(TO_UNIT_DEFAULT),
+                .default_value(TO_UNIT_DEFAULT)
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(PADDING)
                 .long(PADDING)
                 .help(translate!("numfmt-help-padding"))
-                .value_name("N"),
+                .value_name("N")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(HEADER)
@@ -650,19 +676,22 @@ pub fn uu_app() -> Command {
                     "from-zero",
                     "towards-zero",
                     "nearest",
-                ])),
+                ]))
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(SUFFIX)
                 .long(SUFFIX)
                 .help(translate!("numfmt-help-suffix"))
-                .value_name("SUFFIX"),
+                .value_name("SUFFIX")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(UNIT_SEPARATOR)
                 .long(UNIT_SEPARATOR)
                 .help(translate!("numfmt-help-unit-separator"))
-                .value_name("STRING"),
+                .value_name("STRING")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(INVALID)
@@ -670,7 +699,8 @@ pub fn uu_app() -> Command {
                 .help(translate!("numfmt-help-invalid"))
                 .default_value("abort")
                 .value_parser(["abort", "fail", "warn", "ignore"])
-                .value_name("INVALID"),
+                .value_name("INVALID")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(ZERO_TERMINATED)

@@ -14,28 +14,30 @@ pub mod variable_parser;
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
-use ini::Ini;
 use native_int_str::{
     Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation,
     from_native_int_representation_owned, get_single_native_int_value,
 };
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 use nix::libc;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 use nix::sys::signal::{SigSet, SigmaskHow, Signal, sigprocmask};
 #[cfg(unix)]
 use nix::unistd::execvp;
 use std::borrow::Cow;
+#[cfg(all(unix, not(target_os = "fuchsia")))]
+use std::collections::BTreeMap;
 #[cfg(unix)]
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::env;
 #[cfg(unix)]
 use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
+#[cfg(not(unix))]
 use std::io;
 use std::io::Write as _;
 use std::io::stderr;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 use std::mem::zeroed;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -43,7 +45,7 @@ use std::os::unix::ffi::OsStrExt;
 use uucore::display::{Quotable, print_all_env_vars};
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, strip_errno};
 use uucore::line_ending::LineEnding;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::signals::{
     realtime_signal_bounds, signal_by_name_or_value, signal_name_by_value,
     signal_number_upper_bound,
@@ -57,7 +59,7 @@ use thiserror::Error;
 pub enum EnvError {
     #[error("{}", translate!("env-error-missing-closing-quote", "position" => .0, "quote" => .1))]
     EnvMissingClosingQuote(usize, char),
-    #[error("{}", translate!("env-error-invalid-backslash-at-end", "position" => .0, "context" => .1.clone()))]
+    #[error("{}", translate!("env-error-invalid-backslash-at-end", "position" => .0, "context" => .1))]
     EnvInvalidBackslashAtEndOfStringInMinusS(usize, String),
     #[error("{}", translate!("env-error-backslash-c-not-allowed", "position" => .0))]
     EnvBackslashCNotAllowedInDoubleQuotes(usize),
@@ -69,7 +71,7 @@ pub enum EnvError {
     EnvParsingOfMissingVariable(usize),
     #[error("{}", translate!("env-error-only-braced-variable", "position" => .0))]
     EnvParsingOfVariableOnlyBracedName(usize),
-    #[error("{}", translate!("env-error-unexpected-number", "position" => .0, "char" => .1.clone()))]
+    #[error("{}", translate!("env-error-unexpected-number", "position" => .0, "char" => .1))]
     EnvParsingOfVariableUnexpectedNumber(usize, String),
     #[error("")]
     EnvReachedEnd,
@@ -89,7 +91,6 @@ mod options {
     pub const IGNORE_ENVIRONMENT: &str = "ignore-environment";
     pub const CHDIR: &str = "chdir";
     pub const NULL: &str = "null";
-    pub const FILE: &str = "file";
     pub const UNSET: &str = "unset";
     pub const DEBUG: &str = "debug";
     pub const SPLIT_STRING: &str = "split-string";
@@ -104,18 +105,17 @@ struct Options<'a> {
     ignore_env: bool,
     line_ending: LineEnding,
     running_directory: Option<&'a OsStr>,
-    files: Vec<&'a OsStr>,
     unsets: Vec<&'a OsStr>,
     sets: Vec<(Cow<'a, OsStr>, Cow<'a, OsStr>)>,
     program: Vec<&'a OsStr>,
     argv0: Option<&'a OsStr>,
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     ignore_signal: SignalRequest,
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     default_signal: SignalRequest,
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     block_signal: SignalRequest,
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     list_signal_handling: bool,
 }
 
@@ -145,7 +145,7 @@ fn parse_program_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> 
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 fn parse_signal_value(signal_name: &str) -> UResult<usize> {
     let signal_name_upcase = signal_name.to_uppercase();
     let optional_signal_value = signal_by_name_or_value(&signal_name_upcase);
@@ -165,7 +165,7 @@ fn parse_signal_value(signal_name: &str) -> UResult<usize> {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 fn parse_signal_opt(target: &mut SignalRequest, opt: &OsStr) -> UResult<()> {
     if opt.is_empty() {
         return Ok(());
@@ -190,14 +190,14 @@ fn parse_signal_opt(target: &mut SignalRequest, opt: &OsStr) -> UResult<()> {
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 #[derive(Default, Debug)]
 struct SignalRequest {
     apply_all: bool,
     signals: BTreeSet<usize>,
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 impl SignalRequest {
     fn is_empty(&self) -> bool {
         !self.apply_all && self.signals.is_empty()
@@ -229,7 +229,7 @@ impl SignalRequest {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 #[derive(Copy, Clone)]
 enum SignalActionKind {
     Default,
@@ -237,20 +237,20 @@ enum SignalActionKind {
     Block,
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 #[derive(Copy, Clone)]
 struct SignalActionRecord {
     kind: SignalActionKind,
     explicit: bool,
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 #[derive(Default)]
 struct SignalActionLog {
     records: BTreeMap<usize, SignalActionRecord>,
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 impl SignalActionLog {
     fn record(&mut self, sig_value: usize, kind: SignalActionKind, explicit: bool) {
         self.records
@@ -265,7 +265,7 @@ impl SignalActionLog {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 fn build_signal_request(
     matches: &clap::ArgMatches,
     option: &str,
@@ -296,7 +296,7 @@ fn build_signal_request(
     Ok(request)
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 fn signal_is_valid(sig: usize) -> bool {
     if Signal::try_from(sig as i32).is_err() {
         // nix::sys::signal does not know about real-time signals, so check that
@@ -309,34 +309,6 @@ fn signal_is_valid(sig: usize) -> bool {
     }
 
     true
-}
-
-fn load_config_file(opts: &mut Options) -> UResult<()> {
-    // NOTE: config files are parsed using an INI parser b/c it's available and compatible with ".env"-style files
-    //   ... * but support for actual INI files, although working, is not intended, nor claimed
-    for &file in &opts.files {
-        let conf = if file == "-" {
-            let stdin = io::stdin();
-            let mut stdin_locked = stdin.lock();
-            Ini::read_from(&mut stdin_locked)
-        } else {
-            Ini::load_from_file(file)
-        };
-
-        let conf =
-            conf.map_err(|e| USimpleError::new(1, format!("{}: {e}", file.maybe_quote())))?;
-
-        for (_, prop) in &conf {
-            // ignore all INI section lines (treat them as comments)
-            for (key, value) in prop {
-                unsafe {
-                    env::set_var(key, value);
-                }
-            }
-        }
-    }
-
-    Ok(())
 }
 
 pub fn uu_app() -> Command {
@@ -371,16 +343,6 @@ pub fn uu_app() -> Command {
                 .long(options::NULL)
                 .help(translate!("env-help-null"))
                 .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILE)
-                .short('f')
-                .long(options::FILE)
-                .value_name("PATH")
-                .value_hint(clap::ValueHint::FilePath)
-                .value_parser(ValueParser::os_string())
-                .action(ArgAction::Append)
-                .help(translate!("env-help-file")),
         )
         .arg(
             Arg::new(options::UNSET)
@@ -590,7 +552,7 @@ struct EnvAppData {
 struct ParsedArguments {
     original_args: Vec<OsString>,
     matches: clap::ArgMatches,
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     signal_apply_all: BTreeSet<&'static str>,
 }
 
@@ -614,13 +576,8 @@ impl EnvAppData {
         let mut process_flags = true;
         let mut expecting_arg = false;
         // Leave out split-string since it's a special case below
-        let flags_with_args = [
-            options::ARGV0,
-            options::CHDIR,
-            options::FILE,
-            options::UNSET,
-        ];
-        let short_flags_with_args = ['a', 'C', 'f', 'u'];
+        let flags_with_args = [options::ARGV0, options::CHDIR, options::UNSET];
+        let short_flags_with_args = ['a', 'C', 'u'];
         let mut consumed_split_payload_arg: Option<usize> = None;
         for (n, arg) in original_args.iter().enumerate() {
             if consumed_split_payload_arg == Some(n) {
@@ -797,7 +754,7 @@ impl EnvAppData {
         Ok(ParsedArguments {
             original_args,
             matches,
-            #[cfg(unix)]
+            #[cfg(all(unix, not(target_os = "fuchsia")))]
             signal_apply_all,
         })
     }
@@ -806,7 +763,7 @@ impl EnvAppData {
         let ParsedArguments {
             original_args,
             matches,
-            #[cfg(unix)]
+            #[cfg(all(unix, not(target_os = "fuchsia")))]
             signal_apply_all,
         } = self.parse_arguments(original_args)?;
 
@@ -819,9 +776,9 @@ impl EnvAppData {
             self.do_input_debug_printing = Some(false);
         }
 
-        let mut opts = make_options(
+        let opts = make_options(
             &matches,
-            #[cfg(unix)]
+            #[cfg(all(unix, not(target_os = "fuchsia")))]
             &signal_apply_all,
         )?;
 
@@ -830,14 +787,11 @@ impl EnvAppData {
 
         apply_removal_of_all_env_vars(&opts);
 
-        // load .env-style config file prior to those given on the command-line
-        load_config_file(&mut opts)?;
-
         apply_unset_env_vars(&opts)?;
 
         apply_specified_env_vars(&opts);
 
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "fuchsia")))]
         {
             let mut signal_action_log = SignalActionLog::default();
             apply_signal_action(
@@ -1002,17 +956,13 @@ fn apply_removal_of_all_env_vars(opts: &Options<'_>) {
 #[cfg_attr(not(unix), allow(clippy::elidable_lifetime_names))]
 fn make_options<'a>(
     matches: &'a clap::ArgMatches,
-    #[cfg(unix)] signal_apply_all: &BTreeSet<&'static str>,
+    #[cfg(all(unix, not(target_os = "fuchsia")))] signal_apply_all: &BTreeSet<&'static str>,
 ) -> UResult<Options<'a>> {
     let ignore_env = matches.get_flag("ignore-environment");
     let line_ending = LineEnding::from_zero_flag(matches.get_flag("null"));
     let running_directory = matches
         .get_one::<OsString>("chdir")
         .map(OsString::as_os_str);
-    let files = match matches.get_many::<OsString>("file") {
-        Some(v) => v.map(OsString::as_os_str).collect(),
-        None => Vec::new(),
-    };
     let unsets = match matches.get_many::<OsString>("unset") {
         Some(v) => v.map(OsString::as_os_str).collect(),
         None => Vec::new(),
@@ -1021,31 +971,30 @@ fn make_options<'a>(
         .get_one::<OsString>("argv0")
         .map(OsString::as_os_str);
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     let ignore_signal = build_signal_request(matches, options::IGNORE_SIGNAL, signal_apply_all)?;
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     let default_signal = build_signal_request(matches, options::DEFAULT_SIGNAL, signal_apply_all)?;
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     let block_signal = build_signal_request(matches, options::BLOCK_SIGNAL, signal_apply_all)?;
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     let list_signal_handling = matches.get_flag(options::LIST_SIGNAL_HANDLING);
 
     let mut opts = Options {
         ignore_env,
         line_ending,
         running_directory,
-        files,
         unsets,
         sets: vec![],
         program: vec![],
         argv0,
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "fuchsia")))]
         ignore_signal,
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "fuchsia")))]
         default_signal,
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "fuchsia")))]
         block_signal,
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "fuchsia")))]
         list_signal_handling,
     };
 
@@ -1153,7 +1102,7 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 fn apply_signal_action<F>(
     request: &SignalRequest,
     log: &mut SignalActionLog,
@@ -1185,7 +1134,7 @@ where
     })
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 fn ignore_signal(sig: usize) -> UResult<()> {
     // SAFETY: This is safe because we write the handler for each signal only once, and therefore "the current handler is the default", as the documentation requires it.
     // nix::sys::signal::Signal does not cover real-time signals, so we need to call
@@ -1203,7 +1152,7 @@ fn ignore_signal(sig: usize) -> UResult<()> {
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 fn reset_signal(sig: usize) -> UResult<()> {
     // nix::sys::signal::Signal does not cover real-time signals, so we need to call
     // libc::signal directly.
@@ -1220,7 +1169,7 @@ fn reset_signal(sig: usize) -> UResult<()> {
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 fn sigset_from_signal_value(sig: usize) -> UResult<SigSet> {
     // nix::sys::signal::Signal does not cover real time signals, so we need to build
     // sigset_t manually using libc.
@@ -1253,7 +1202,7 @@ fn sigset_from_signal_value(sig: usize) -> UResult<SigSet> {
     Ok(unsafe { SigSet::from_sigset_t_unchecked(sigset) })
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 fn block_signal(sig: usize) -> UResult<()> {
     let set = sigset_from_signal_value(sig)?;
 
@@ -1270,7 +1219,7 @@ fn block_signal(sig: usize) -> UResult<()> {
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 fn list_signal_handling(log: &SignalActionLog) {
     for (&sig_value, record) in &log.records {
         if !record.explicit {

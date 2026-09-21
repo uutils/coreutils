@@ -90,6 +90,7 @@ stat-word-block = Block
 stat-word-size = Size
 stat-word-fundamental = Fundamental
 stat-word-block-size = block size
+stat-word-block-size-capitalized = Block size
 stat-word-blocks = Blocks
 stat-word-total = Total
 stat-word-free = Free

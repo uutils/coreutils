@@ -15,6 +15,26 @@ use crate::units::{
     DisplayableSuffix, RawSuffix, Result, Suffix, Unit, iec_bases_f64, si_bases_f64,
 };
 
+/// What can go wrong while writing a formatted line: either the line itself is
+/// not convertible (which `--invalid` decides what to do with), or the output
+/// could not be written at all (which is always fatal).
+pub enum WriteError {
+    Io(std::io::Error),
+    Invalid(String),
+}
+
+impl From<std::io::Error> for WriteError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
+impl From<String> for WriteError {
+    fn from(message: String) -> Self {
+        Self::Invalid(message)
+    }
+}
+
 fn find_numeric_beginning(s: &str) -> Option<&str> {
     let dec_sep = locale_decimal_separator();
     let mut seen_dec = false;
@@ -762,6 +782,18 @@ fn pad_string(s: &str, width: usize, fill: char, right_align: bool) -> String {
     result
 }
 
+/// Split a scaled value into its numeric part and the unit suffix that trails
+/// it (`k`, `Mi`, ...).
+///
+/// A value with no digits at all, such as `inf`, has no numeric part to pad, so
+/// it is returned whole and is padded as before.
+fn split_number_and_units(s: &str) -> (&str, &str) {
+    match s.rfind(|c: char| c.is_ascii_digit()) {
+        Some(last_digit) => s.split_at(last_digit + 1),
+        None => (s, ""),
+    }
+}
+
 fn format_string(
     source: &str,
     options: &NumfmtOptions,
@@ -816,11 +848,30 @@ fn format_string(
     let padded_number = match padding {
         0 => number_with_suffix,
         p if p > 0 && options.format.zero_padding => {
-            let zero_padded = if let Some(unsigned) = number_with_suffix.strip_prefix(['-', '+']) {
-                let sign = &number_with_suffix[..1];
-                format!("{sign}{}", pad_string(unsigned, p as usize - 1, '0', true))
+            // GNU zero-pads the number itself: "Optional zero (%010f) width
+            // will zero pad the number". A unit suffix from --to and the
+            // --suffix text sit outside the width, unlike space padding,
+            // which applies to the whole output.
+            // The --suffix text is user-supplied and may itself contain
+            // digits, so peel it off before locating the number.
+            let (scaled, user_suffix) = match &options.suffix {
+                Some(suffix) => number_with_suffix
+                    .strip_suffix(suffix.as_str())
+                    .map_or((number_with_suffix.as_str(), ""), |rest| {
+                        (rest, suffix.as_str())
+                    }),
+                None => (number_with_suffix.as_str(), ""),
+            };
+            let (number, unit) = split_number_and_units(scaled);
+            let trailing = format!("{unit}{user_suffix}");
+            let zero_padded = if let Some(unsigned) = number.strip_prefix(['-', '+']) {
+                let sign = &number[..1];
+                format!(
+                    "{sign}{}{trailing}",
+                    pad_string(unsigned, (p as usize).saturating_sub(1), '0', true)
+                )
             } else {
-                pad_string(&number_with_suffix, p as usize, '0', true)
+                format!("{}{trailing}", pad_string(number, p as usize, '0', true))
             };
 
             match implicit_padding.unwrap_or(options.padding) {
@@ -881,7 +932,7 @@ pub fn write_formatted_with_delimiter<W: std::io::Write + ?Sized>(
     input: &[u8],
     options: &NumfmtOptions,
     eol: Option<u8>,
-) -> Result<()> {
+) -> std::result::Result<(), WriteError> {
     let delimiter = options.delimiter.as_deref().unwrap();
 
     for (n, field) in (1..).zip(split_bytes(input, delimiter)) {
@@ -889,7 +940,7 @@ pub fn write_formatted_with_delimiter<W: std::io::Write + ?Sized>(
 
         // add delimiter before second and subsequent fields
         if n > 1 {
-            writer.write_all(delimiter).unwrap();
+            writer.write_all(delimiter)?;
         }
 
         if field_selected {
@@ -898,15 +949,15 @@ pub fn write_formatted_with_delimiter<W: std::io::Write + ?Sized>(
                 .map_err(|_| translate!("numfmt-error-invalid-number", "input" => escape_line(field).quote()))?
                 .trim_start();
             let formatted = format_string(field_str, options, None)?;
-            writer.write_all(formatted.as_bytes()).unwrap();
+            writer.write_all(formatted.as_bytes())?;
         } else {
             // add unselected field without conversion
-            writer.write_all(field).unwrap();
+            writer.write_all(field)?;
         }
     }
 
     if let Some(eol) = eol {
-        writer.write_all(&[eol]).unwrap();
+        writer.write_all(&[eol])?;
     }
 
     Ok(())
@@ -917,7 +968,7 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
     s: &str,
     options: &NumfmtOptions,
     eol: Option<u8>,
-) -> Result<()> {
+) -> std::result::Result<(), WriteError> {
     for (n, (prefix, field)) in (1..).zip(WhitespaceSplitter {
         s: Some(s),
         options,
@@ -929,7 +980,7 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
 
             // add delimiter before second and subsequent fields
             let prefix = if n > 1 {
-                writer.write_all(b" ").unwrap();
+                writer.write_all(b" ")?;
                 &prefix[prefix.chars().next().map_or(0, char::len_utf8)..]
             } else {
                 prefix
@@ -942,23 +993,23 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
             };
 
             let formatted = format_string(field, options, implicit_padding)?;
-            writer.write_all(formatted.as_bytes()).unwrap();
+            writer.write_all(formatted.as_bytes())?;
         } else {
             // the -z option converts an initial \n into a space
             let prefix = if options.zero_terminated && prefix.starts_with('\n') {
-                writer.write_all(b" ").unwrap();
+                writer.write_all(b" ")?;
                 &prefix[1..]
             } else {
                 prefix
             };
             // add unselected field without conversion
-            writer.write_all(prefix.as_bytes()).unwrap();
-            writer.write_all(field.as_bytes()).unwrap();
+            writer.write_all(prefix.as_bytes())?;
+            writer.write_all(field.as_bytes())?;
         }
     }
 
     if let Some(eol) = eol {
-        writer.write_all(&[eol]).unwrap();
+        writer.write_all(&[eol])?;
     }
 
     Ok(())

@@ -46,14 +46,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // pattern API on OsStr
     let sets: Vec<_> = matches
         .get_many::<OsString>(options::SETS)
-        .into_iter()
-        .flatten()
+        .ok_or_else(|| UUsageError::new(1, translate!("tr-error-missing-operand")))?
         .map(ToOwned::to_owned)
         .collect();
-
-    if sets.is_empty() {
-        return Err(UUsageError::new(1, translate!("tr-error-missing-operand")));
-    }
 
     let sets_len = sets.len();
 

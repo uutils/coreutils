@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ttyname hostnames runlevel mesg wtmp statted boottime deadprocs initspawn clockchange curr pidstr exitstr hoststr
+// spell-checker:ignore (ToDO) ttyname hostnames runlevel mesg wtmp
 
 use crate::options;
 use crate::uu_app;
@@ -25,6 +25,94 @@ fn get_long_usage() -> String {
     translate!("who-long-usage", "default_file" => utmpx::DEFAULT_FILE)
 }
 
+/// Which kinds of accounting record are worth reporting.
+#[derive(Default)]
+struct Selection {
+    /// The record left by the last system boot.
+    boot: bool,
+    /// The records of processes that have since exited.
+    exited: bool,
+    /// The login processes still waiting for someone to sign in.
+    login_slots: bool,
+    /// The processes that init spawned.
+    init_children: bool,
+    /// The record left by the most recent clock adjustment.
+    clock_change: bool,
+    /// The record holding the current runlevel.
+    runlevel: bool,
+    /// Ordinary user sessions.
+    sessions: bool,
+}
+
+impl Selection {
+    /// True when no selecting option was given at all, including `--users`.
+    /// Such an invocation falls back to reporting user sessions.
+    fn is_default(&self) -> bool {
+        !(self.boot
+            || self.exited
+            || self.login_slots
+            || self.init_children
+            || self.clock_change
+            || self.runlevel
+            || self.sessions)
+    }
+}
+
+/// Which columns each row carries.
+#[derive(Default)]
+struct Layout {
+    /// Prepend a header row naming the columns.
+    header: bool,
+    /// The column reporting whether the terminal accepts messages: `+` when it
+    /// does, `-` when it does not, `?` when the terminal cannot be queried.
+    write_state: bool,
+    /// How long the terminal has been quiet.
+    idle: bool,
+    /// How the process ended and with what status.
+    exit: bool,
+    /// Drop everything but the name, line and time columns.
+    terse: bool,
+}
+
+/// The events that are reported from something other than a live session.
+#[derive(Clone, Copy)]
+enum Event {
+    Boot,
+    ClockChange,
+    #[cfg(target_os = "linux")]
+    Runlevel,
+    LoginSlot,
+    InitChild,
+    Exited,
+}
+
+/// One output line, before the columns are padded out.
+struct Row<'a> {
+    user: &'a str,
+    write_state: char,
+    line: &'a str,
+    time: &'a str,
+    idle: &'a str,
+    pid: &'a str,
+    note: &'a str,
+    exit: &'a str,
+}
+
+impl Default for Row<'_> {
+    fn default() -> Self {
+        Self {
+            user: "",
+            write_state: ' ',
+            line: "",
+            time: "",
+            idle: "",
+            pid: "",
+            note: "",
+            exit: "",
+        }
+    }
+}
+
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches =
         uucore::clap_localization::handle_clap_result(uu_app().after_help(get_long_usage()), args)?;
@@ -34,83 +122,43 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    // If true, attempt to canonicalize hostnames via a DNS lookup.
-    let do_lookup = matches.get_flag(options::LOOKUP);
-
-    // If true, display only a list of usernames and count of
-    // the users logged on.
-    // Ignored for 'who am i'.
-    let short_list = matches.get_flag(options::COUNT);
-
     let all = matches.get_flag(options::ALL);
+    let flag = |name: &str| all || matches.get_flag(name);
 
-    // If true, display a line at the top describing each field.
-    let include_heading = matches.get_flag(options::HEADING);
+    let mut select = Selection {
+        boot: flag(options::BOOT),
+        exited: flag(options::DEAD),
+        login_slots: flag(options::LOGIN),
+        init_children: flag(options::PROCESS),
+        clock_change: flag(options::TIME),
+        runlevel: flag(options::RUNLEVEL),
+        sessions: matches.get_flag(options::USERS),
+    };
 
-    // If true, display a '+' for each user if mesg y, a '-' if mesg n,
-    // or a '?' if their tty cannot be statted.
-    let include_mesg = all || matches.get_flag(options::MESG);
+    // With no selecting option the report falls back to user sessions, and the
+    // narrower row shape that goes with them.
+    let defaulted = select.is_default();
+    select.sessions |= all || defaulted;
 
-    // If true, display the last boot time.
-    let need_boottime = all || matches.get_flag(options::BOOT);
-
-    // If true, display dead processes.
-    let need_deadprocs = all || matches.get_flag(options::DEAD);
-
-    // If true, display processes waiting for user login.
-    let need_login = all || matches.get_flag(options::LOGIN);
-
-    // If true, display processes started by init.
-    let need_initspawn = all || matches.get_flag(options::PROCESS);
-
-    // If true, display the last clock change.
-    let need_clockchange = all || matches.get_flag(options::TIME);
-
-    // If true, display the current runlevel.
-    let need_runlevel = all || matches.get_flag(options::RUNLEVEL);
-
-    let use_defaults = !(all
-        || need_boottime
-        || need_deadprocs
-        || need_login
-        || need_initspawn
-        || need_runlevel
-        || need_clockchange
-        || matches.get_flag(options::USERS));
-
-    // If true, display user processes.
-    let need_users = all || matches.get_flag(options::USERS) || use_defaults;
-
-    // If true, display the hours:minutes since each user has touched
-    // the keyboard, or "." if within the last minute, or "old" if
-    // not within the last day.
-    let include_idle = need_deadprocs || need_login || need_runlevel || need_users;
-
-    // If true, display process termination & exit status.
-    let include_exit = need_deadprocs;
-
-    // If true, display only name, line, and time fields.
-    let short_output = !include_exit && use_defaults;
-
-    // If true, display info only for the controlling tty.
-    let my_line_only = matches.get_flag(options::ONLY_HOSTNAME_USER) || files.len() == 2;
+    let layout = Layout {
+        header: matches.get_flag(options::HEADING),
+        write_state: flag(options::MESG),
+        // The idle column is only meaningful for records tied to a terminal.
+        idle: select.exited || select.login_slots || select.runlevel || select.sessions,
+        exit: select.exited,
+        terse: !select.exited && defaulted,
+    };
 
     let mut who = Who {
-        do_lookup,
-        short_list,
-        short_output,
-        include_idle,
-        include_heading,
-        include_mesg,
-        include_exit,
-        need_boottime,
-        need_deadprocs,
-        need_login,
-        need_initspawn,
-        need_clockchange,
-        need_runlevel,
-        need_users,
-        my_line_only,
+        // Resolve each recorded host to its canonical name before printing it.
+        resolve_hosts: matches.get_flag(options::LOOKUP),
+        // Print just the login names followed by a total, instead of one row
+        // per record. Carries no meaning in the `who am i` form.
+        names_only: matches.get_flag(options::COUNT),
+        // Report only the session attached to the invoking terminal.
+        own_terminal_only: matches.get_flag(options::ONLY_HOSTNAME_USER) || files.len() == 2,
+        select,
+        layout,
         args: files,
     };
 
@@ -119,41 +167,28 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 struct Who {
-    do_lookup: bool,
-    short_list: bool,
-    short_output: bool,
-    include_idle: bool,
-    include_heading: bool,
-    include_mesg: bool,
-    include_exit: bool,
-    need_boottime: bool,
-    need_deadprocs: bool,
-    need_login: bool,
-    need_initspawn: bool,
-    need_clockchange: bool,
-    need_runlevel: bool,
-    need_users: bool,
-    my_line_only: bool,
+    resolve_hosts: bool,
+    names_only: bool,
+    own_terminal_only: bool,
+    select: Selection,
+    layout: Layout,
     args: Vec<String>,
 }
 
-fn idle_string<'a>(when: i64, boottime: i64) -> Cow<'a, str> {
+/// Render how long a terminal has been quiet: `hours:minutes`, `.` when under a
+/// minute, and the localized `old` past a day or before the given boot time.
+fn format_idle<'a>(when: i64, since_boot: i64) -> Cow<'a, str> {
     thread_local! {
         static NOW: time::OffsetDateTime = time::OffsetDateTime::now_local().unwrap();
     }
     NOW.with(|n| {
         let now = n.unix_timestamp();
-        if boottime < when && now - 24 * 3600 < when && when <= now {
-            let seconds_idle = now - when;
-            if seconds_idle < 60 {
+        if since_boot < when && now - 24 * 3600 < when && when <= now {
+            let quiet_for = now - when;
+            if quiet_for < 60 {
                 "  .  ".into()
             } else {
-                format!(
-                    "{:02}:{:02}",
-                    seconds_idle / 3600,
-                    (seconds_idle % 3600) / 60
-                )
-                .into()
+                format!("{:02}:{:02}", quiet_for / 3600, (quiet_for % 3600) / 60).into()
             }
         } else {
             translate!("who-idle-old").into()
@@ -161,10 +196,10 @@ fn idle_string<'a>(when: i64, boottime: i64) -> Cow<'a, str> {
     })
 }
 
-fn time_string(ut: &UtmpxRecord) -> String {
+fn format_timestamp(ut: &UtmpxRecord) -> String {
     const FORMAT_DESCRIPTION_VERSION: usize = 2;
 
-    let time_format: Vec<time::format_description::FormatItem> = if ["LC_ALL", "LC_TIME", "LANG"]
+    let pattern: Vec<time::format_description::FormatItem> = if ["LC_ALL", "LC_TIME", "LANG"]
         .into_iter()
         .find_map(std::env::var_os)
         .as_deref()
@@ -182,7 +217,7 @@ fn time_string(ut: &UtmpxRecord) -> String {
         )
         .unwrap()
     };
-    ut.login_time().format(&time_format).unwrap()
+    ut.login_time().format(&pattern).unwrap()
 }
 
 fn current_tty() -> String {
@@ -192,287 +227,244 @@ fn current_tty() -> String {
 }
 
 impl Who {
-    #[allow(clippy::cognitive_complexity)]
     fn exec(&mut self) -> UResult<()> {
-        #[cfg(target_os = "linux")]
-        let run_level_chk = |record: i16| record == utmpx::RUN_LVL;
-        #[cfg(not(target_os = "linux"))]
-        let run_level_chk = |_| false;
-
         let f = if self.args.len() == 1 {
             self.args[0].as_ref()
         } else {
             utmpx::DEFAULT_FILE
         };
-        if self.short_list {
-            let users = utmpx::Utmpx::iter_all_records_from(f)
-                .filter(UtmpxRecord::is_user_process)
-                .map(|ut| ut.user())
-                .collect::<Vec<_>>();
-            // `println!` panics on a write error; the rest of this file surfaces
-            // it through `?` instead so the caller can report it and exit
-            // non-zero, matching GNU (#13388).
-            writeln!(stdout(), "{}", users.join(" "))?;
-            writeln!(
-                stdout(),
-                "{}",
-                translate!("who-user-count", "count" => users.len())
-            )?;
-        } else {
-            let records = utmpx::Utmpx::iter_all_records_from(f);
-
-            if self.include_heading {
-                self.print_heading()?;
-            }
-            let cur_tty = if self.my_line_only {
-                current_tty()
-            } else {
-                String::new()
-            };
-
-            for ut in records {
-                if !self.my_line_only || cur_tty == ut.tty_device() {
-                    if self.need_users && ut.is_user_process() {
-                        self.print_user(&ut)?;
-                    } else {
-                        match ut.record_type() {
-                            rt if self.need_runlevel && run_level_chk(rt) => {
-                                if cfg!(target_os = "linux") {
-                                    self.print_runlevel(&ut)?;
-                                }
-                            }
-                            x if x == utmpx::BOOT_TIME && self.need_boottime => {
-                                self.print_boottime(&ut)?;
-                            }
-                            x if x == utmpx::NEW_TIME && self.need_clockchange => {
-                                self.print_clockchange(&ut)?;
-                            }
-                            x if x == utmpx::INIT_PROCESS && self.need_initspawn => {
-                                self.print_initspawn(&ut)?;
-                            }
-                            x if x == utmpx::LOGIN_PROCESS && self.need_login => {
-                                self.print_login(&ut)?;
-                            }
-                            x if x == utmpx::DEAD_PROCESS && self.need_deadprocs => {
-                                self.print_deadprocs(&ut)?;
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-
-                if ut.record_type() == utmpx::BOOT_TIME {}
-            }
-        }
-        Ok(())
-    }
-
-    #[inline]
-    fn print_runlevel(&self, ut: &UtmpxRecord) -> UResult<()> {
-        let last = (ut.pid() / 256) as u8 as char;
-        let curr = (ut.pid() % 256) as u8 as char;
-        let runlevel_line = translate!("who-runlevel", "level" => curr);
-        let comment =
-            translate!("who-runlevel-last", "last" => (if last == 'N' { 'S' } else { 'N' }));
-
-        self.print_line(
-            "",
-            ' ',
-            &runlevel_line,
-            &time_string(ut),
-            "",
-            "",
-            if last.is_control() { "" } else { &comment },
-            "",
-        )?;
-        Ok(())
-    }
-
-    #[inline]
-    fn print_clockchange(&self, ut: &UtmpxRecord) -> UResult<()> {
-        self.print_line(
-            "",
-            ' ',
-            &translate!("who-clock-change"),
-            &time_string(ut),
-            "",
-            "",
-            "",
-            "",
-        )?;
-        Ok(())
-    }
-
-    #[inline]
-    fn print_login(&self, ut: &UtmpxRecord) -> UResult<()> {
-        let comment = translate!("who-login-id", "id" => ut.terminal_suffix());
-        let pidstr = format!("{}", ut.pid());
-        self.print_line(
-            &translate!("who-login"),
-            ' ',
-            &ut.tty_device(),
-            &time_string(ut),
-            "",
-            &pidstr,
-            &comment,
-            "",
-        )?;
-        Ok(())
-    }
-
-    #[inline]
-    fn print_deadprocs(&self, ut: &UtmpxRecord) -> UResult<()> {
-        let comment = translate!("who-login-id", "id" => ut.terminal_suffix());
-        let pidstr = format!("{}", ut.pid());
-        let e = ut.exit_status();
-        let exitstr = translate!("who-dead-exit-status", "term" => e.0, "exit" => e.1);
-        self.print_line(
-            "",
-            ' ',
-            &ut.tty_device(),
-            &time_string(ut),
-            "",
-            &pidstr,
-            &comment,
-            &exitstr,
-        )?;
-        Ok(())
-    }
-
-    #[inline]
-    fn print_initspawn(&self, ut: &UtmpxRecord) -> UResult<()> {
-        let comment = translate!("who-login-id", "id" => ut.terminal_suffix());
-        let pidstr = format!("{}", ut.pid());
-        self.print_line(
-            "",
-            ' ',
-            &ut.tty_device(),
-            &time_string(ut),
-            "",
-            &pidstr,
-            &comment,
-            "",
-        )?;
-        Ok(())
-    }
-
-    #[inline]
-    fn print_boottime(&self, ut: &UtmpxRecord) -> UResult<()> {
-        self.print_line(
-            "",
-            ' ',
-            &translate!("who-system-boot"),
-            &time_string(ut),
-            "",
-            "",
-            "",
-            "",
-        )?;
-        Ok(())
-    }
-
-    fn print_user(&self, ut: &UtmpxRecord) -> UResult<()> {
-        let mut p = PathBuf::from("/dev");
-        p.push(ut.tty_device().as_str());
-        let mesg;
-        let last_change;
-        if let Ok(meta) = p.metadata() {
-            #[cfg(all(
-                not(target_os = "android"),
-                not(target_os = "freebsd"),
-                not(target_vendor = "apple")
-            ))]
-            let iwgrp = S_IWGRP;
-            #[cfg(any(target_os = "android", target_os = "freebsd", target_vendor = "apple"))]
-            let iwgrp = S_IWGRP as u32;
-            mesg = if meta.mode() & iwgrp == 0 { '-' } else { '+' };
-            last_change = meta.atime();
-        } else {
-            mesg = '?';
-            last_change = 0;
+        if self.names_only {
+            return self.emit_names(f);
         }
 
-        let idle = if last_change == 0 {
-            "  ?".into()
+        let records = utmpx::Utmpx::iter_all_records_from(f);
+
+        if self.layout.header {
+            self.emit_header()?;
+        }
+        let cur_tty = if self.own_terminal_only {
+            current_tty()
         } else {
-            idle_string(last_change, 0)
+            String::new()
         };
 
-        let s = if self.do_lookup {
+        for ut in records {
+            if self.own_terminal_only && cur_tty != ut.tty_device() {
+                continue;
+            }
+            if self.select.sessions && ut.is_user_process() {
+                self.emit_session(&ut)?;
+            } else if let Some(event) = self.event_for(&ut) {
+                self.emit_event(&ut, event)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The `-q` report: every login name on one line, then the total.
+    fn emit_names(&self, path: &str) -> UResult<()> {
+        let users = utmpx::Utmpx::iter_all_records_from(path)
+            .filter(UtmpxRecord::is_user_process)
+            .map(|ut| ut.user())
+            .collect::<Vec<_>>();
+        // `println!` panics on a write error; the rest of this file surfaces
+        // it through `?` instead so the caller can report it and exit
+        // non-zero, matching GNU (#13388).
+        writeln!(stdout(), "{}", users.join(" "))?;
+        writeln!(
+            stdout(),
+            "{}",
+            translate!("who-user-count", "count" => users.len())
+        )?;
+        Ok(())
+    }
+
+    /// Map a record to the event it stands for, or `None` when that kind was
+    /// not selected.
+    fn event_for(&self, ut: &UtmpxRecord) -> Option<Event> {
+        let rt = ut.record_type();
+
+        #[cfg(target_os = "linux")]
+        if self.select.runlevel && rt == utmpx::RUN_LVL {
+            return Some(Event::Runlevel);
+        }
+
+        match rt {
+            utmpx::BOOT_TIME if self.select.boot => Some(Event::Boot),
+            utmpx::NEW_TIME if self.select.clock_change => Some(Event::ClockChange),
+            utmpx::INIT_PROCESS if self.select.init_children => Some(Event::InitChild),
+            utmpx::LOGIN_PROCESS if self.select.login_slots => Some(Event::LoginSlot),
+            utmpx::DEAD_PROCESS if self.select.exited => Some(Event::Exited),
+            _ => None,
+        }
+    }
+
+    fn emit_event(&self, ut: &UtmpxRecord, event: Event) -> UResult<()> {
+        let time = format_timestamp(ut);
+        let pid = format!("{}", ut.pid());
+        let note = translate!("who-login-id", "id" => ut.terminal_suffix());
+
+        // Held outside the match so the borrows below outlive it.
+        #[cfg(target_os = "linux")]
+        let runlevel_line;
+        #[cfg(target_os = "linux")]
+        let runlevel_note;
+        let exit;
+
+        let row = match event {
+            Event::Boot => Row {
+                line: &translate!("who-system-boot"),
+                time: &time,
+                ..Row::default()
+            },
+            Event::ClockChange => Row {
+                line: &translate!("who-clock-change"),
+                time: &time,
+                ..Row::default()
+            },
+            #[cfg(target_os = "linux")]
+            Event::Runlevel => {
+                let last = (ut.pid() / 256) as u8 as char;
+                let level = (ut.pid() % 256) as u8 as char;
+                runlevel_line = translate!("who-runlevel", "level" => level);
+                runlevel_note = translate!("who-runlevel-last", "last" => (if last == 'N' { 'S' } else { 'N' }));
+                Row {
+                    line: &runlevel_line,
+                    time: &time,
+                    note: if last.is_control() {
+                        ""
+                    } else {
+                        &runlevel_note
+                    },
+                    ..Row::default()
+                }
+            }
+            Event::LoginSlot => Row {
+                user: &translate!("who-login"),
+                line: &ut.tty_device(),
+                time: &time,
+                pid: &pid,
+                note: &note,
+                ..Row::default()
+            },
+            Event::InitChild => Row {
+                line: &ut.tty_device(),
+                time: &time,
+                pid: &pid,
+                note: &note,
+                ..Row::default()
+            },
+            Event::Exited => {
+                let e = ut.exit_status();
+                exit = translate!("who-dead-exit-status", "term" => e.0, "exit" => e.1);
+                Row {
+                    line: &ut.tty_device(),
+                    time: &time,
+                    pid: &pid,
+                    note: &note,
+                    exit: &exit,
+                    ..Row::default()
+                }
+            }
+        };
+
+        self.emit_row(&row)
+    }
+
+    fn emit_session(&self, ut: &UtmpxRecord) -> UResult<()> {
+        let mut p = PathBuf::from("/dev");
+        p.push(ut.tty_device().as_str());
+        // A terminal that cannot be stat'ed reports an unknown write state and
+        // an unknown idle time rather than failing the whole listing.
+        let (write_state, last_touched) = match p.metadata() {
+            Ok(meta) => {
+                #[cfg(all(
+                    not(target_vendor = "apple"),
+                    not(target_os = "android"),
+                    not(target_os = "freebsd")
+                ))]
+                let iwgrp = S_IWGRP;
+                #[cfg(any(target_vendor = "apple", target_os = "android", target_os = "freebsd"))]
+                let iwgrp = S_IWGRP as u32;
+                let state = if meta.mode() & iwgrp == 0 { '-' } else { '+' };
+                (state, meta.atime())
+            }
+            Err(_) => ('?', 0),
+        };
+
+        let idle = if last_touched == 0 {
+            "  ?".into()
+        } else {
+            format_idle(last_touched, 0)
+        };
+
+        let host = if self.resolve_hosts {
             ut.canon_host().map_err_context(|| {
                 let host = ut.host();
                 translate!("who-canonicalize-error", "host" => host.split(':').next().unwrap_or(&host).quote())
-                .to_string()
             })?
         } else {
             ut.host()
         };
-        let hoststr = if s.is_empty() { s } else { format!("({s})") };
+        let note = if host.is_empty() {
+            host
+        } else {
+            format!("({host})")
+        };
 
-        self.print_line(
-            ut.user().as_ref(),
-            mesg,
-            ut.tty_device().as_ref(),
-            time_string(ut).as_str(),
-            idle.as_ref(),
-            format!("{}", ut.pid()).as_str(),
-            hoststr.as_str(),
-            "",
-        )?;
+        self.emit_row(&Row {
+            user: &ut.user(),
+            write_state,
+            line: &ut.tty_device(),
+            time: &format_timestamp(ut),
+            idle: &idle,
+            pid: &format!("{}", ut.pid()),
+            note: &note,
+            exit: "",
+        })?;
 
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn print_line(
-        &self,
-        user: &str,
-        state: char,
-        line: &str,
-        time: &str,
-        idle: &str,
-        pid: &str,
-        comment: &str,
-        exit: &str,
-    ) -> UResult<()> {
+    fn emit_row(&self, row: &Row) -> UResult<()> {
+        // Width of "%b %e %H:%M" under LC_ALL=C.
+        const TIME_WIDTH: usize = 3 + 2 + 2 + 1 + 2;
+
         let mut buf = String::with_capacity(64);
-        let msg = vec![' ', state].into_iter().collect::<String>();
-
-        write!(buf, "{user:<8}").unwrap();
-        if self.include_mesg {
-            buf.push_str(&msg);
+        write!(buf, "{:<8}", row.user).unwrap();
+        if self.layout.write_state {
+            buf.push(' ');
+            buf.push(row.write_state);
         }
-        write!(buf, " {line:<12}").unwrap();
-        // "%b %e %H:%M" (LC_ALL=C)
-        let time_size = 3 + 2 + 2 + 1 + 2;
-        write!(buf, " {time:<time_size$}").unwrap();
+        write!(buf, " {:<12}", row.line).unwrap();
+        write!(buf, " {:<TIME_WIDTH$}", row.time).unwrap();
 
-        if !self.short_output {
-            if self.include_idle {
-                write!(buf, " {idle:<6}").unwrap();
+        if !self.layout.terse {
+            if self.layout.idle {
+                write!(buf, " {:<6}", row.idle).unwrap();
             }
-            write!(buf, " {pid:>10}").unwrap();
+            write!(buf, " {:>10}", row.pid).unwrap();
         }
-        write!(buf, " {comment:<8}").unwrap();
-        if self.include_exit {
-            write!(buf, " {exit:<12}").unwrap();
+        write!(buf, " {:<8}", row.note).unwrap();
+        if self.layout.exit {
+            write!(buf, " {:<12}", row.exit).unwrap();
         }
         writeln!(stdout(), "{}", buf.trim_end())?;
         Ok(())
     }
 
     #[inline]
-    fn print_heading(&self) -> UResult<()> {
-        self.print_line(
-            &translate!("who-heading-name"),
-            ' ',
-            &translate!("who-heading-line"),
-            &translate!("who-heading-time"),
-            &translate!("who-heading-idle"),
-            &translate!("who-heading-pid"),
-            &translate!("who-heading-comment"),
-            &translate!("who-heading-exit"),
-        )?;
+    fn emit_header(&self) -> UResult<()> {
+        self.emit_row(&Row {
+            user: &translate!("who-heading-name"),
+            write_state: ' ',
+            line: &translate!("who-heading-line"),
+            time: &translate!("who-heading-time"),
+            idle: &translate!("who-heading-idle"),
+            pid: &translate!("who-heading-pid"),
+            note: &translate!("who-heading-comment"),
+            exit: &translate!("who-heading-exit"),
+        })?;
         Ok(())
     }
 }

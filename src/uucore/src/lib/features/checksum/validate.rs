@@ -18,7 +18,7 @@ use crate::checksum::{
     AlgoKind, BlakeLength, ChecksumError, HashLength, ReadingMode, ShaLength, SizedAlgoKind,
     digest_reader, parse_blake_length, unescape_filename,
 };
-use crate::error::{FromIo, UError, UIoError, UResult, USimpleError, strip_errno};
+use crate::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use crate::sum::{self, Blake2b, Blake3, DigestOutput};
 use crate::{
@@ -594,7 +594,7 @@ fn get_file_to_check(
 /// Returns a reader to the list of checksums
 fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
     let file = File::open(filename).map_err(|e| match e.kind() {
-        #[cfg(any(target_os = "wasi", target_os = "windows"))]
+        #[cfg(any(target_os = "wasi", windows))]
         io::ErrorKind::NotFound => io::Error::other(format!(
             "{}: {}",
             filename.maybe_quote(),
@@ -603,7 +603,7 @@ fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
         _ => io::Error::other(format!("{}: {}", filename.maybe_quote(), strip_errno(&e))),
     })?;
     // some platforms shows different read error
-    #[cfg(any(target_os = "wasi", target_os = "windows"))]
+    #[cfg(any(target_os = "wasi", windows))]
     if file.metadata().is_ok_and(|m| m.is_dir()) {
         return Err(io::Error::other(
             translate!("error-is-a-directory", "file" => filename.maybe_quote()),
@@ -685,7 +685,7 @@ fn compute_and_check_digest_from_file(
     let real_filename_to_check = os_str_from_bytes(&filename_to_check_unescaped)?;
 
     // Open the input file
-    let file_to_check = get_file_to_check(&real_filename_to_check, opts)?;
+    let file_to_check = get_file_to_check(real_filename_to_check, opts)?;
     let mut file_reader = BufReader::new(file_to_check);
 
     // Read the file and calculate the checksum
@@ -699,14 +699,14 @@ fn compute_and_check_digest_from_file(
             Ok(result) => result,
             Err(err) => {
                 show!(err.map_err_context(|| {
-                    locale_aware_escape_name(&real_filename_to_check, QuotingStyle::SHELL_ESCAPE)
+                    locale_aware_escape_name(real_filename_to_check, QuotingStyle::SHELL_ESCAPE)
                         .to_string_lossy()
                         .to_string()
                 }));
 
                 let _ = write_file_report(
                     io::stdout(),
-                    &real_filename_to_check,
+                    real_filename_to_check,
                     FileChecksumResult::CantOpen,
                     opts.verbose,
                 );
@@ -722,7 +722,7 @@ fn compute_and_check_digest_from_file(
     };
     let _ = write_file_report(
         io::stdout(),
-        &real_filename_to_check,
+        real_filename_to_check,
         FileChecksumResult::from_bool(checksum_correct),
         opts.verbose,
     );
@@ -791,7 +791,12 @@ fn process_non_algo_based_line(
     // bits except when dealing with blake2b, sha2 and sha3, where we will
     // detect the length.
     let algo_len = match cli_algo_kind {
-        ak::Blake2b | ak::Blake3 => Some(HashLength::from_bytes(expected_checksum.len())),
+        // An over-length digest makes this a malformed line for GNU, not a
+        // fatal error.
+        algo @ (ak::Blake2b | ak::Blake3) => Some(
+            parse_blake_length(algo, BlakeLength::Int(expected_checksum.len() * 8))
+                .map_err(|_| LineCheckError::ImproperlyFormatted)?,
+        ),
         ak::Sha2 | ak::Sha3 => {
             // multiplication by 8 to get the number of bits
             Some(
@@ -884,11 +889,8 @@ fn process_checksum_file(
     let mut last_algo = None;
 
     for (i, line_res) in read_os_string_lines(reader).enumerate() {
-        let line = line_res.map_err(|e| {
-            USimpleError::new(
-                UIoError::from(e).code(),
-                format!("{}: read error", filename_input.maybe_quote()),
-            )
+        let line = line_res.map_err(|_| {
+            USimpleError::new(1, format!("{}: read error", filename_input.maybe_quote()))
         })?;
 
         let line_result = process_checksum_line(

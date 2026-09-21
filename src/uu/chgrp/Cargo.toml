@@ -16,7 +16,7 @@ path = "src/chgrp.rs"
 test = false
 doctest = false
 
-[dependencies]
+[target.'cfg(unix)'.dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["entries", "fs", "perms"] }
 fluent = { workspace = true }
@@ -27,3 +27,4 @@ workspace = true
 [[bin]]
 name = "chgrp"
 path = "src/main.rs"
+required-features = ["uucore/default"]

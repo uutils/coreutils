@@ -2,15 +2,16 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
+
+// spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
+// spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
+// spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot
+// spell-checker:ignore LARGEFILE
+
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
 //
 // Available on Unix
-//
-// spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
-// spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR
-// spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot
 
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;
@@ -134,6 +135,17 @@ pub struct DirFd {
     fd: OwnedFd,
 }
 
+/// `O_LARGEFILE`, or nothing where the platform has no such flag.
+///
+/// The libc `open`/`openat` bindings do not add it the way glibc's large-file
+/// entry points do, so on 32-bit Linux the kernel rejects anything whose
+/// metadata overflows the 32-bit ranges with `EOVERFLOW`. The flag is 0 on
+/// 64-bit, so adding it unconditionally costs nothing there.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const LARGEFILE: OFlag = OFlag::O_LARGEFILE;
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+const LARGEFILE: OFlag = OFlag::empty();
+
 impl DirFd {
     /// Open a directory and return a file descriptor
     ///
@@ -141,7 +153,7 @@ impl DirFd {
     /// * `path` - The path to the directory to open
     /// * `symlink_behavior` - Whether to follow symlinks when opening
     pub fn open(path: &Path, symlink_behavior: SymlinkBehavior) -> io::Result<Self> {
-        let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
+        let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC | LARGEFILE;
         if !symlink_behavior.should_follow() {
             flags |= OFlag::O_NOFOLLOW;
         }
@@ -162,7 +174,7 @@ impl DirFd {
     pub fn open_subdir(&self, name: &OsStr, symlink_behavior: SymlinkBehavior) -> io::Result<Self> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-        let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
+        let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC | LARGEFILE;
         if !symlink_behavior.should_follow() {
             flags |= OFlag::O_NOFOLLOW;
         }
@@ -453,21 +465,25 @@ impl DirFd {
         Ok(())
     }
 
-    /// Open a file for writing relative to this directory
-    /// Creates the file if it doesn't exist, truncates if it does
+    /// Create a file for writing relative to this directory
+    /// Fails with `EEXIST` if the name already exists
     pub fn open_file_at(&self, name: &OsStr) -> io::Result<fs::File> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-        // O_NOFOLLOW: `openat` anchors the *directory*, not the final component,
-        // so without it a symlink planted at `name` is still followed and its
-        // target truncated. Callers reach here right after unlinking `name`,
-        // which is precisely the window an attacker races.
+        // Callers reach here right after unlinking `name`, which is precisely
+        // the window an attacker races. O_NOFOLLOW alone only refuses a symlink
+        // planted in it; a hard link to a victim file would still be opened and
+        // truncated, then chowned and chmoded by the caller's finalization.
+        // O_EXCL refuses both. Mode 0o600 rather than the umask-derived 0o666,
+        // so no other user can read the content while it is being written —
+        // same reasoning as `safe_copy::DEST_INITIAL_MODE` (issue #10011).
         let flags = OFlag::O_CREAT
+            | OFlag::O_EXCL
             | OFlag::O_WRONLY
-            | OFlag::O_TRUNC
             | OFlag::O_CLOEXEC
-            | OFlag::O_NOFOLLOW;
-        let mode = Mode::from_bits_truncate(0o666); // Default file permissions
+            | OFlag::O_NOFOLLOW
+            | LARGEFILE;
+        let mode = Mode::from_bits_truncate(0o600);
 
         let fd: OwnedFd = openat(self.fd.as_fd(), name_cstr.as_c_str(), flags, mode)
             .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
@@ -592,10 +608,16 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
                 )),
             }
         }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            parent_fd.mkdir_at(name, mode)?;
-            parent_fd.open_subdir(name, SymlinkBehavior::NoFollow)
-        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => match parent_fd.mkdir_at(name, mode) {
+            Ok(()) => parent_fd.open_subdir(name, SymlinkBehavior::NoFollow),
+            // Another process created `name` between the stat and the mkdir
+            // (issue #12355). Open what it created; O_NOFOLLOW keeps a symlink
+            // that raced into the name from being followed.
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                parent_fd.open_subdir(name, SymlinkBehavior::NoFollow)
+            }
+            Err(e) => Err(e),
+        },
         Err(e) => Err(e),
     }
 }
@@ -840,11 +862,11 @@ impl MetadataExt for Metadata {
     }
 
     fn atime(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
+        #[cfg(all(not(target_pointer_width = "64"), not(target_os = "netbsd")))]
         {
             self.stat.st_atime.into()
         }
-        #[cfg(not(target_pointer_width = "32"))]
+        #[cfg(any(target_pointer_width = "64", target_os = "netbsd"))]
         {
             self.stat.st_atime
         }
@@ -853,16 +875,23 @@ impl MetadataExt for Metadata {
     fn atime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_atimensec
+            #[cfg(not(target_pointer_width = "64"))]
+            {
+                self.stat.st_atimensec.into()
+            }
+            #[cfg(target_pointer_width = "64")]
+            {
+                self.stat.st_atimensec
+            }
         }
 
         #[cfg(not(target_os = "netbsd"))]
         {
-            #[cfg(target_pointer_width = "32")]
+            #[cfg(not(target_pointer_width = "64"))]
             {
                 self.stat.st_atime_nsec.into()
             }
-            #[cfg(not(target_pointer_width = "32"))]
+            #[cfg(target_pointer_width = "64")]
             {
                 self.stat.st_atime_nsec
             }
@@ -870,11 +899,11 @@ impl MetadataExt for Metadata {
     }
 
     fn mtime(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
+        #[cfg(all(not(target_pointer_width = "64"), not(target_os = "netbsd")))]
         {
             self.stat.st_mtime.into()
         }
-        #[cfg(not(target_pointer_width = "32"))]
+        #[cfg(any(target_pointer_width = "64", target_os = "netbsd"))]
         {
             self.stat.st_mtime
         }
@@ -883,16 +912,22 @@ impl MetadataExt for Metadata {
     fn mtime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_mtimensec
+            #[cfg(not(target_pointer_width = "64"))]
+            {
+                self.stat.st_mtimensec.into()
+            }
+            #[cfg(target_pointer_width = "64")]
+            {
+                self.stat.st_mtimensec
+            }
         }
-
         #[cfg(not(target_os = "netbsd"))]
         {
-            #[cfg(target_pointer_width = "32")]
+            #[cfg(not(target_pointer_width = "64"))]
             {
                 self.stat.st_mtime_nsec.into()
             }
-            #[cfg(not(target_pointer_width = "32"))]
+            #[cfg(target_pointer_width = "64")]
             {
                 self.stat.st_mtime_nsec
             }
@@ -900,11 +935,11 @@ impl MetadataExt for Metadata {
     }
 
     fn ctime(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
+        #[cfg(all(not(target_pointer_width = "64"), not(target_os = "netbsd")))]
         {
             self.stat.st_ctime.into()
         }
-        #[cfg(not(target_pointer_width = "32"))]
+        #[cfg(any(target_pointer_width = "64", target_os = "netbsd"))]
         {
             self.stat.st_ctime
         }
@@ -913,16 +948,22 @@ impl MetadataExt for Metadata {
     fn ctime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_ctimensec
+            #[cfg(not(target_pointer_width = "64"))]
+            {
+                self.stat.st_ctimensec.into()
+            }
+            #[cfg(target_pointer_width = "64")]
+            {
+                self.stat.st_ctimensec
+            }
         }
-
         #[cfg(not(target_os = "netbsd"))]
         {
-            #[cfg(target_pointer_width = "32")]
+            #[cfg(not(target_pointer_width = "64"))]
             {
                 self.stat.st_ctime_nsec.into()
             }
-            #[cfg(not(target_pointer_width = "32"))]
+            #[cfg(target_pointer_width = "64")]
             {
                 self.stat.st_ctime_nsec
             }
@@ -1020,6 +1061,33 @@ mod tests {
                 .open_subdir(OsStr::new("real"), SymlinkBehavior::NoFollow)
                 .is_ok()
         );
+    }
+
+    /// A directory fd must end up with the same open-file status flags as one
+    /// `std::fs::File` would produce, `O_LARGEFILE` included. On 32-bit Linux a
+    /// missing `O_LARGEFILE` makes the kernel reject directories whose metadata
+    /// overflows the 32-bit ranges with EOVERFLOW.
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_dirfd_open_status_flags_match_std() {
+        use nix::fcntl::{FcntlArg, fcntl};
+
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir(temp_dir.path().join("nested")).unwrap();
+
+        let reference = fs::File::open(temp_dir.path().join("nested")).unwrap();
+        // F_GETFL reports O_DIRECTORY back for a directory fd; std opens the
+        // same directory as a plain file, so add it to the expected flags.
+        let expected = fcntl(&reference, FcntlArg::F_GETFL).unwrap() | libc::O_DIRECTORY;
+
+        let parent = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        let direct = DirFd::open(&temp_dir.path().join("nested"), SymlinkBehavior::Follow).unwrap();
+        let sub = parent
+            .open_subdir(OsStr::new("nested"), SymlinkBehavior::Follow)
+            .unwrap();
+
+        assert_eq!(fcntl(&direct.fd, FcntlArg::F_GETFL).unwrap(), expected);
+        assert_eq!(fcntl(&sub.fd, FcntlArg::F_GETFL).unwrap(), expected);
     }
 
     #[test]
@@ -1233,6 +1301,9 @@ mod tests {
         if let Err(e) = result {
             // Should be InvalidInput for null byte error
             assert_eq!(e.kind(), io::ErrorKind::InvalidInput);
+            // Reported as PathContainsNull, not as a raw EINVAL coming back
+            // from the openat call itself.
+            assert_eq!(e.raw_os_error(), None);
         }
     }
 
@@ -1291,20 +1362,28 @@ mod tests {
     }
 
     #[test]
-    fn test_open_file_at_truncates_existing() {
-        use std::io::Write;
-
+    fn test_open_file_at_refuses_existing() {
+        // Including a hard link an attacker planted after the caller's unlink:
+        // without O_EXCL the victim would be truncated and overwritten.
         let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("existing.txt");
-        fs::write(&file_path, "old content that is longer").unwrap();
+        let victim = temp_dir.path().join("victim");
+        fs::write(&victim, "SECRET").unwrap();
+        fs::hard_link(&victim, temp_dir.path().join("planted")).unwrap();
 
         let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
-        let mut file = dir_fd.open_file_at(OsStr::new("existing.txt")).unwrap();
-        file.write_all(b"new").unwrap();
-        drop(file);
+        let err = dir_fd.open_file_at(OsStr::new("planted")).unwrap_err();
 
-        let content = fs::read_to_string(&file_path).unwrap();
-        assert_eq!(content, "new");
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read_to_string(&victim).unwrap(), "SECRET");
+    }
+
+    #[test]
+    fn test_open_file_at_uses_restrictive_mode() {
+        let temp_dir = TempDir::new().unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+
+        let file = dir_fd.open_file_at(OsStr::new("secret")).unwrap();
+        assert_eq!(file.metadata().unwrap().mode() & 0o777, 0o600);
     }
 
     #[test]

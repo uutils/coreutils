@@ -2,12 +2,13 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit NOFILE
+
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit Nofile
 
 use rand::{RngExt as _, SeedableRng, rng};
 use regex::Regex;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use rlimit::Resource;
+use rustix::process::Resource;
 #[cfg(not(windows))]
 use std::env;
 #[cfg(target_os = "linux")]
@@ -1290,6 +1291,20 @@ fn test_number_by_lines_fewer_bytes_than_chunks_elide() {
     assert!(!at.plus("xac").exists());
 }
 
+/// A huge chunk count must not overflow the skipped-chunk counter.
+///
+/// With far more chunks than input bytes, all of the trailing chunks are
+/// zero-sized and get skipped in one go. Counting them used to overflow and
+/// panic in a build with overflow checks enabled.
+#[test]
+fn test_number_by_lines_kth_huge_number_of_chunks() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "a");
+    ucmd.args(&["-n", "l/1/9999999999", "in"])
+        .succeeds()
+        .stdout_only("a");
+}
+
 #[test]
 #[cfg(unix)]
 fn test_number_by_lines_kth_dev_null() {
@@ -1686,7 +1701,7 @@ fn test_round_robin() {
 fn test_round_robin_limited_file_descriptors() {
     new_ucmd!()
         .args(&["-n", "r/40", "onehundredlines.txt"])
-        .limit(Resource::NOFILE, 9, 9)
+        .limit(Resource::Nofile, 9, 9)
         .succeeds();
 }
 

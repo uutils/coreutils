@@ -19,7 +19,7 @@ use crate::cli::{Options, OutputErrorMode, options};
 
 #[cfg(target_os = "linux")]
 use uucore::signals::ensure_stdout_not_broken;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::signals::{disable_pipe_errors, ignore_interrupts};
 
 #[uucore::main]
@@ -57,11 +57,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 fn tee(options: &Options) -> Result<(), ()> {
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     if options.ignore_interrupts {
         ignore_interrupts().map_err(|_| ())?;
     }
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     if options.output_error.is_some() {
         disable_pipe_errors().map_err(|_| ())?;
     }

@@ -2,10 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore NOFILE nonewline cmdline setrlimit ELOOP
+
+// spell-checker:ignore Nofile nonewline cmdline setrlimit ELOOP
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use rlimit::Resource;
+use rustix::process::Resource;
 #[cfg(unix)]
 use std::fs::File;
 use std::fs::OpenOptions;
@@ -134,7 +135,7 @@ fn test_closes_file_descriptors() {
             "alpha.txt",
             "alpha.txt",
         ])
-        .limit(Resource::NOFILE, 9, 9)
+        .limit(Resource::Nofile, 9, 9)
         .succeeds();
 }
 
@@ -649,7 +650,7 @@ fn test_write_to_self() {
         .arg("first_file")
         .arg("first_file")
         .arg("second_file")
-        .fails_with_code(2)
+        .fails_with_code(1)
         .stderr_only("cat: first_file: input file is output file\ncat: first_file: input file is output file\n");
 
     assert_eq!(
@@ -727,6 +728,15 @@ fn test_error_loop() {
     ucmd.arg("1")
         .fails()
         .stderr_is("cat: 1: Too many levels of symbolic links\n");
+}
+
+#[test]
+fn test_exit_code_is_one_regardless_of_error_count() {
+    // cat's exit code must always be 1 when errors occur, matching GNU cat.
+    // Counting is problematic, since process exit codes are truncated mod 256 by the OS
+    let missing_files: Vec<String> = (0..256).map(|i| format!("missing-{i}")).collect();
+
+    new_ucmd!().args(&missing_files).fails_with_code(1);
 }
 
 #[test]

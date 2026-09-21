@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command, value_parser};
-use rustix::fs::Mode;
+use rustix::fs::{Mode, RawMode};
 use rustix::process::umask;
 use std::ffi::OsString;
 use uucore::display::Quotable;
@@ -82,7 +82,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // attacker could use to swap the FIFO for a symlink between
         // mkfifo and chmod (issue #10020).
         let prev_umask = umask(Mode::empty());
-        let mkfifo_result = create_fifo(f.as_str(), mode);
+        let mkfifo_result = create_fifo(f.as_str(), mode as RawMode);
         umask(prev_umask);
 
         if let Err(e) = mkfifo_result {
@@ -154,13 +154,13 @@ pub fn uu_app() -> Command {
 // libc's path-based `mkfifo` there. Both rely on the caller having cleared
 // the umask so the requested mode is applied atomically (see issue #10020).
 #[cfg(not(target_vendor = "apple"))]
-fn create_fifo(path: &str, mode: u32) -> std::io::Result<()> {
+fn create_fifo(path: &str, mode: RawMode) -> std::io::Result<()> {
     use rustix::fs;
     fs::mkfifoat(fs::CWD, path, Mode::from_bits_truncate(mode)).map_err(Into::into)
 }
 
 #[cfg(target_vendor = "apple")]
-fn create_fifo(path: &str, mode: u32) -> std::io::Result<()> {
+fn create_fifo(path: &str, mode: RawMode) -> std::io::Result<()> {
     use std::ffi::CString;
     let c_path =
         CString::new(path).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;

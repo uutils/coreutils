@@ -46,7 +46,7 @@ const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf
 
 #[cfg(all(
     not(feature = "feat_external_libstdbuf"),
-    any(target_os = "cygwin", target_os = "windows")
+    any(target_os = "cygwin", windows)
 ))]
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.dll"));
 
@@ -91,7 +91,7 @@ enum ProgramOptionsError {
     LineBufferingStdinMeaningless,
     #[error("{}", translate!("stdbuf-error-invalid-mode", "error" => _0.error.to_string()))]
     InvalidMode(Box<ModeError>),
-    #[error("{}", translate!("stdbuf-error-value-too-large", "value" => _0.clone()))]
+    #[error("{}", translate!("stdbuf-error-value-too-large", "value" => _0))]
     ValueTooLarge(String),
 }
 

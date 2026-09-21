@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat biguint
+
 use std::ffi::{OsStr, OsString};
 use std::io::{BufWriter, Write, stdout};
 
@@ -29,7 +31,7 @@ mod numberparse;
 use crate::error::SeqError;
 use crate::number::PreciseNumber;
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::signals;
 use uucore::translate;
 
@@ -228,7 +230,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // unless SIGPIPE was explicitly ignored, in which case it should fail.
             let err = err.map_err_context(|| "write error".into());
             uucore::show_error!("{err}");
-            #[cfg(unix)]
+            #[cfg(all(unix, not(target_os = "fuchsia")))]
             if signals::sigpipe_was_ignored() {
                 uucore::error::set_exit_code(1);
             }

@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore badoption CTYPE
+
 use clap::{
     Arg, ArgAction, ArgMatches, Command, builder::ValueParser, error::ContextKind, error::Error,
     error::ErrorKind,
@@ -712,6 +714,8 @@ pub fn uu_app() -> Command {
         .about(translate!("uniq-about"))
         .override_usage(format_usage(&translate!("uniq-usage")))
         .infer_long_args(true)
+        // GNU lets a later -f/-s/-w override an earlier one.
+        .args_override_self(true)
         .after_help(translate!("uniq-after-help"));
     uucore::clap_localization::configure_localized_command(cmd)
         .arg(
@@ -835,9 +839,7 @@ fn get_delimiter(matches: &ArgMatches) -> Delimiters {
 fn open_input_file(in_file_name: Option<&OsStr>) -> UResult<Box<dyn BufRead>> {
     Ok(match in_file_name {
         Some(path) if path != "-" => {
-            let in_file = File::open(path).map_err_context(
-                || translate!("uniq-error-could-not-open", "path" => path.maybe_quote()),
-            )?;
+            let in_file = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
             Box::new(BufReader::with_capacity(OUTPUT_BUFFER_CAPACITY, in_file))
         }
         _ => Box::new(stdin().lock()),
@@ -848,9 +850,7 @@ fn open_input_file(in_file_name: Option<&OsStr>) -> UResult<Box<dyn BufRead>> {
 fn open_output_file(out_file_name: Option<&OsStr>) -> UResult<Box<dyn Write>> {
     Ok(match out_file_name {
         Some(path) if path != "-" => {
-            let out_file = File::create(path).map_err_context(
-                || translate!("uniq-error-could-not-open", "path" => path.maybe_quote()),
-            )?;
+            let out_file = File::create(path).map_err_context(|| path.maybe_quote().to_string())?;
             Box::new(BufWriter::with_capacity(OUTPUT_BUFFER_CAPACITY, out_file))
         }
         _ => Box::new(BufWriter::with_capacity(

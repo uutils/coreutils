@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) ints (linux) NOFILE dfgi abmon avril
+// spell-checker:ignore (words) ints (linux) Nofile dfgi abmon avril
+
 #![allow(clippy::cast_possible_wrap)]
 
 use std::env;
@@ -323,6 +324,56 @@ fn test_numeric_sort_rejects_leading_plus_sign() {
         .pipe_in("+1\n+10\n+2\n")
         .succeeds()
         .stdout_is("+1\n+10\n+2\n");
+}
+
+#[test]
+fn test_numeric_sort_uses_the_key_not_the_whole_line() {
+    // `-n` compares a number parsed from the line as a whole, which only
+    // stands for the key when the key is the whole line.
+
+    // Character offset: the key is "9" and "1", so 21 comes first. Comparing
+    // the lines instead puts 19 first.
+    new_ucmd!()
+        .args(&["-n", "-k1.2"])
+        .pipe_in("19\n21\n")
+        .succeeds()
+        .stdout_is("21\n19\n");
+
+    // Field: with '.' as the separator the key is "9" and "1" again, while
+    // both lines parse as numbers on their own.
+    new_ucmd!()
+        .args(&["-n", "-t.", "-k2"])
+        .pipe_in("1.9\n2.1\n")
+        .succeeds()
+        .stdout_is("2.1\n1.9\n");
+
+    // A key that reverses on its own: the shortcut only knows the global
+    // ordering, so it has to go the long way.
+    new_ucmd!()
+        .args(&["-n", "-k1r"])
+        .pipe_in("19\n21\n3\n")
+        .succeeds()
+        .stdout_is("3\n21\n19\n");
+
+    // Equal keys fall back to comparing the lines byte by byte, not
+    // numerically.
+    new_ucmd!()
+        .args(&["-n", "-k1.2"])
+        .pipe_in("1\n10\n2\n20\n3\n")
+        .succeeds()
+        .stdout_is("1\n10\n2\n20\n3\n");
+
+    // The whole-line cases keep working.
+    new_ucmd!()
+        .arg("-n")
+        .pipe_in("19\n21\n3\n")
+        .succeeds()
+        .stdout_is("3\n19\n21\n");
+    new_ucmd!()
+        .args(&["-n", "-k1"])
+        .pipe_in("19\n21\n3\n")
+        .succeeds()
+        .stdout_is("3\n19\n21\n");
 }
 
 #[test]
@@ -687,7 +738,13 @@ fn test_month_default2() {
 /// Query the system for abbreviated month names via `locale abmon`.
 /// Returns a vector of 12 month abbreviations in order (Jan..Dec),
 /// or None if the command fails or returns unexpected output.
-#[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 fn get_system_abmon(locale: &str) -> Option<Vec<String>> {
     let output = Command::new("locale")
         .env("LC_ALL", locale)
@@ -710,7 +767,13 @@ fn get_system_abmon(locale: &str) -> Option<Vec<String>> {
 }
 
 /// Build shuffled input and sorted expected output from month names.
-#[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 fn month_sort_input_expected(months: &[String]) -> (String, String) {
     // Shuffled order: May, Dec, Jan, Jun, Feb, Mar, Apr, Jul, Aug, Sep, Oct, Nov
     let shuffle_order = [4, 11, 0, 5, 1, 2, 3, 6, 7, 8, 9, 10];
@@ -732,16 +795,28 @@ fn test_month_sort_french_locale() {
         return;
     }
     // spell-checker:disable
-    // On macOS/OpenBSD, abbreviated month names vary across OS versions (different CLDR data),
+    // On BSD-like, abbreviated month names vary across OS versions (different CLDR data),
     // so we query the system dynamically. On other platforms, glibc values are stable.
-    #[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+    #[cfg(any(
+        target_vendor = "apple",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
     let (input, expected) = {
         let Some(months) = get_system_abmon(locale) else {
             return;
         };
         month_sort_input_expected(&months)
     };
-    #[cfg(not(any(target_vendor = "apple", target_os = "openbsd")))]
+    #[cfg(not(any(
+        target_vendor = "apple",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
     let (input, expected) = (
         "mai\ndéc.\njanv.\njuin\nfévr.\nmars\navril\njuil.\naoût\nsept.\noct.\nnov.\n".to_string(),
         "janv.\nfévr.\nmars\navril\nmai\njuin\njuil.\naoût\nsept.\noct.\nnov.\ndéc.\n".to_string(),
@@ -763,14 +838,26 @@ fn test_month_sort_hungarian_locale() {
         return;
     }
     // spell-checker:disable
-    #[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+    #[cfg(any(
+        target_vendor = "apple",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
     let (input, expected) = {
         let Some(months) = get_system_abmon(locale) else {
             return;
         };
         month_sort_input_expected(&months)
     };
-    #[cfg(not(any(target_vendor = "apple", target_os = "openbsd")))]
+    #[cfg(not(any(
+        target_vendor = "apple",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
     let (input, expected) = (
         "máj\ndec\njan\njún\nfebr\nmárc\nápr\njúl\naug\nszept\nokt\nnov\n".to_string(),
         "jan\nfebr\nmárc\nápr\nmáj\njún\njúl\naug\nszept\nokt\nnov\ndec\n".to_string(),
@@ -797,14 +884,26 @@ fn test_month_sort_french_embedded_blanks() {
     // Pick three locale months (indices 2=March, 3=April, 5=June) and verify
     // that inserting blanks into April's name causes a non-match.
     // On glibc these are "mars", "avril", "juin"; on other systems they vary.
-    #[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+    #[cfg(any(
+        target_vendor = "apple",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
     let months = {
         let Some(m) = get_system_abmon(locale) else {
             return;
         };
         m
     };
-    #[cfg(not(any(target_vendor = "apple", target_os = "openbsd")))]
+    #[cfg(not(any(
+        target_vendor = "apple",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
     let months = vec![
         "janv.", "févr.", "mars", "avril", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.",
         "déc.",
@@ -845,8 +944,14 @@ fn test_month_sort_japanese_locale() {
     if !is_locale_available(locale) {
         return;
     }
-    // On macOS/OpenBSD, abbreviated month names may differ, so query dynamically.
-    #[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+    // On BSD-like, abbreviated month names may differ, so query dynamically.
+    #[cfg(any(
+        target_vendor = "apple",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
     let (input, expected) = {
         let Some(months) = get_system_abmon(locale) else {
             return;
@@ -854,7 +959,13 @@ fn test_month_sort_japanese_locale() {
         month_sort_input_expected(&months)
     };
     // Japanese abbreviated months are numeric (1月..12月) on glibc
-    #[cfg(not(any(target_vendor = "apple", target_os = "openbsd")))]
+    #[cfg(not(any(
+        target_vendor = "apple",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
     let (input, expected) = (
         "5月\n12月\n1月\n6月\n2月\n3月\n4月\n7月\n8月\n9月\n10月\n11月\n".to_string(),
         "1月\n2月\n3月\n4月\n5月\n6月\n7月\n8月\n9月\n10月\n11月\n12月\n".to_string(),
@@ -1341,6 +1452,30 @@ fn test_check() {
 }
 
 #[test]
+fn test_check_disorder_echoes_line_verbatim() {
+    // The line reported in a "disorder" diagnostic is the raw offending input line.
+    // It must never be reinterpreted/reformatted as a number, even though it looks
+    // like one (GNU sort echoes it verbatim too).
+    new_ucmd!()
+        .args(&["-n", "-c"])
+        .pipe_in("2\n1.10\n")
+        .fails()
+        .stderr_only("sort: -:2: disorder: 1.10\n");
+
+    new_ucmd!()
+        .args(&["-n", "-c"])
+        .pipe_in("5\nnan\n")
+        .fails()
+        .stderr_only("sort: -:2: disorder: nan\n");
+
+    new_ucmd!()
+        .args(&["-g", "-c"])
+        .pipe_in("1e10\n1e5\n")
+        .fails()
+        .stderr_only("sort: -:2: disorder: 1e5\n");
+}
+
+#[test]
 fn test_check_silent() {
     for silent_arg in [
         "-C",
@@ -1610,14 +1745,14 @@ fn test_merge_batch_size() {
 // #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(target_os = "linux")]
 fn test_merge_batch_size_with_limit() {
-    use rlimit::Resource;
+    use rustix::process::Resource;
     // Currently need...
     // 3 descriptors for stdin, stdout, stderr
     // 2 descriptors for CTRL+C handling logic (to be reworked at some point)
     // 2 descriptors for the input files (i.e. batch-size of 2).
     let limit_fd = 3 + 2 + 2;
     new_ucmd!()
-        .limit(Resource::NOFILE, limit_fd, limit_fd)
+        .limit(Resource::Nofile, limit_fd, limit_fd)
         .arg("--batch-size=2")
         .arg("-m")
         .arg("--unique")
@@ -1635,13 +1770,13 @@ fn test_merge_batch_size_with_limit() {
 // TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
 #[cfg(target_os = "linux")]
 fn test_batch_size_above_fd_limit_is_rejected() {
-    use rlimit::Resource;
+    use rustix::process::Resource;
     // Only stdin, stdout and stderr are unavailable for merge inputs, so the
     // largest acceptable --batch-size is the soft limit minus 3, here 27 - 3.
     let limit_fd = 27;
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("gamma.txt", "delta\nalpha\n");
-    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
+    ucmd.limit(Resource::Nofile, limit_fd, limit_fd)
         .arg("--batch-size=31")
         .arg("gamma.txt")
         .fails_with_code(2)
@@ -1653,12 +1788,12 @@ fn test_batch_size_above_fd_limit_is_rejected() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_batch_size_at_fd_limit_is_accepted() {
-    use rlimit::Resource;
+    use rustix::process::Resource;
     let limit_fd = 27;
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("gamma.txt", "delta\nalpha\n");
     // 24 is the largest value the limit above allows, and sorting must still happen.
-    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
+    ucmd.limit(Resource::Nofile, limit_fd, limit_fd)
         .arg("--batch-size=24")
         .arg("gamma.txt")
         .succeeds()
@@ -1668,7 +1803,7 @@ fn test_batch_size_at_fd_limit_is_accepted() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_merge_more_files_than_fd_limit() {
-    use rlimit::Resource;
+    use rustix::process::Resource;
     let (at, mut ucmd) = at_and_ucmd!();
     // 40 single-line files cannot all be open at once with a soft limit of 24,
     // so sort has to merge them in several batches through temporary files.
@@ -1684,8 +1819,33 @@ fn test_merge_more_files_than_fd_limit() {
         writeln!(expected, "{i:02}").unwrap();
     }
     let limit_fd = 24;
-    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
+    ucmd.limit(Resource::Nofile, limit_fd, limit_fd)
         .arg("-m")
+        .args(&names)
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_more_files_than_fd_limit() {
+    use rustix::process::Resource;
+    let (at, mut ucmd) = at_and_ucmd!();
+    // The inputs are read one after another, so sorting must not need more open
+    // file descriptors than the soft limit allows, no matter how many inputs there are.
+    let count = 40;
+    let mut names = Vec::new();
+    for i in 0..count {
+        let name = format!("fdlimit_{i:02}.txt");
+        at.write(&name, &format!("{:02}\n", count - 1 - i));
+        names.push(name);
+    }
+    let mut expected = String::new();
+    for i in 0..count {
+        writeln!(expected, "{i:02}").unwrap();
+    }
+    let limit_fd = 24;
+    ucmd.limit(Resource::Nofile, limit_fd, limit_fd)
         .args(&names)
         .succeeds()
         .stdout_only(expected);
@@ -1796,6 +1956,18 @@ fn test_verifies_input_files() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_verifies_input_files_without_opening_them() {
+    // Opening a FIFO blocks until a writer shows up, so if the input check opened
+    // the inputs, the missing second file would never be reported.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("FIFO");
+    ucmd.args(&["FIFO", "nonexistent_file"])
+        .fails_with_code(2)
+        .stderr_only("sort: cannot read: nonexistent_file: No such file or directory\n");
+}
+
+#[test]
 fn test_separator_null() {
     new_ucmd!()
         .args(&["-k1,1", "-k3,3", "-t", "\\0"])
@@ -1820,7 +1992,7 @@ fn test_separator_attached_equals_double() {
     // `-t==` selects the two-character separator `==`, which GNU rejects.
     new_ucmd!()
         .args(&["-t==", "-k", "2"])
-        .pipe_in("a=b=c\n")
+        .pipe_in("")
         .fails()
         .stderr_contains("separator must be exactly one character long: '=='");
 }
@@ -1830,7 +2002,7 @@ fn test_separator_attached_equals_multi_char() {
     // `-t=a` selects the two-character separator `=a`, which GNU rejects.
     new_ucmd!()
         .args(&["-t=a", "-k", "2"])
-        .pipe_in("a=b=c\n")
+        .pipe_in("")
         .fails()
         .stderr_contains("separator must be exactly one character long: '=a'");
 }
@@ -1846,6 +2018,40 @@ fn test_output_is_input() {
     ucmd.args(&["-m", "-u", "-o", "file", "file", "file", "file"])
         .succeeds();
     assert_eq!(at.read("file"), input);
+}
+
+#[test]
+fn test_output_file_is_truncated() {
+    // The output file is opened without O_TRUNC (so it can also be an input),
+    // then truncated before writing: no leftover bytes may survive the sort.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(
+        "shrinking",
+        "zzz-leftover-one\nzzz-leftover-two\nzzz-leftover-three\n",
+    );
+
+    ucmd.args(&["-o", "shrinking"])
+        .pipe_in("kiwi\napple\n")
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("shrinking"), "apple\nkiwi\n");
+}
+
+#[test]
+fn test_merge_output_file_is_truncated() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("pears", "damson\nquince\n");
+    at.write(
+        "merged",
+        "zzz-leftover-one\nzzz-leftover-two\nzzz-leftover-three\n",
+    );
+
+    ucmd.args(&["-m", "-o", "merged", "pears"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("merged"), "damson\nquince\n");
 }
 
 #[test]
@@ -1927,6 +2133,51 @@ fn test_tmp_files_deleted_on_sigint() {
     child.wait().unwrap().code_is(2);
     // `sort` should have deleted the temporary directory again.
     assert!(read_dir(at.plus("tmp_dir")).unwrap().next().is_none());
+}
+
+#[test]
+#[cfg(unix)]
+fn test_tmp_files_are_private() {
+    use rustix::process::{Pid, Signal, kill_process};
+    use std::os::unix::fs::PermissionsExt as _;
+    use std::{fs::read_dir, time::Duration};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("scratch");
+    let input = (0..200_000)
+        .map(|i| (i * 7919 % 200_003).to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    at.write("unsorted.txt", &input);
+    // A one byte buffer forces `sort` to spill its chunks to disk immediately.
+    let child = ucmd
+        .args(&["unsorted.txt", "-S", "1", "-T", "scratch"])
+        .umask(0o002)
+        .run_no_wait();
+
+    let mut modes = Vec::new();
+    for i in 0..6 {
+        std::thread::sleep(Duration::from_millis(50 << i));
+        if let Some(dir) = read_dir(at.plus("scratch")).unwrap().flatten().next() {
+            modes = read_dir(dir.path())
+                .unwrap()
+                .flatten()
+                .map(|f| f.metadata().unwrap().permissions().mode() & 0o777)
+                .collect();
+            if !modes.is_empty() {
+                assert_eq!(dir.metadata().unwrap().permissions().mode() & 0o777, 0o700);
+                break;
+            }
+        }
+    }
+    assert!(!modes.is_empty(), "sort did not spill any chunk to disk");
+    assert!(
+        modes.iter().all(|&m| m == 0o600),
+        "chunks are readable: {modes:?}"
+    );
+
+    kill_process(Pid::from_raw(child.id() as i32).unwrap(), Signal::INT).unwrap();
+    child.wait().unwrap().code_is(2);
 }
 
 #[test]
@@ -2175,7 +2426,7 @@ fn test_files0_from_two_entries_trailing_nul() {
 
 #[test]
 // Test files0-from with non-UTF-8 filenames
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_files0_from_non_utf8_content() {
     use std::os::unix::ffi::OsStringExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3297,6 +3548,18 @@ e f 5436 down data path1 path2 path3 path4 path5\n";
         .pipe_in(input)
         .succeeds()
         .stdout_is(input);
+}
+
+#[test]
+fn test_empty_input_empty_output() {
+    // check for inconsistency #11958
+    let input = "test test test";
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("file", input);
+
+    ucmd.args(&["-o", "file"]).pipe_in("").succeeds();
+    assert_eq!(at.read("file"), "");
 }
 
 #[test]

@@ -43,6 +43,36 @@ fn binary_name_protection() {
         .stdout_contains("coreutils");
 }
 
+// missing /proc/self/fd on Android?
+#[test]
+#[cfg(all(feature = "true", target_os = "linux", target_env = "gnu"))]
+fn binary_name_execfn_fallback() {
+    use std::os::{fd::AsRawFd, unix::process::CommandExt};
+    use std::process::Command;
+    let ts = TestScenario::new("true");
+    let fd = rustix::fs::memfd_create("a", rustix::fs::MemfdFlags::empty()).unwrap();
+    let mut file = std::fs::File::from(fd);
+    let mut source = std::fs::File::open(&ts.bin_path).unwrap();
+    std::io::copy(&mut source, &mut file).unwrap();
+    let raw_fd = file.as_raw_fd();
+
+    // memfd has AT_EXECFN as below. Fallback to argv[0]
+    let res1 = Command::new(format!("/proc/self/fd/{raw_fd}"))
+        .arg0("true")
+        .output()
+        .unwrap()
+        .status
+        .success();
+    // fexecve uses /dev/fd which is symlink to /proc/self/fd/N
+    let res2 = Command::new(format!("/dev/fd/{raw_fd}"))
+        .arg0("true")
+        .output()
+        .unwrap()
+        .status
+        .success();
+    assert!(res1 && res2);
+}
+
 #[test]
 fn test_coreutils_help_ignore_args() {
     let scenario = TestScenario::new("help_ignoring_args");

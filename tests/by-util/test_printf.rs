@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore fffffffffffffffc DFFF
+
 use uutests::new_ucmd;
 
 #[test]
@@ -674,6 +675,16 @@ fn stop_after_additional_escape() {
 }
 
 #[test]
+fn stop_after_additional_escape_in_b_string() {
+    // A `\c` inside a %b argument must stop the entire invocation, not just
+    // that argument's own expansion.
+    new_ucmd!()
+        .args(&["A%bB\\n", "x\\cy"])
+        .succeeds()
+        .stdout_only("Ax");
+}
+
+#[test]
 fn sub_float_leading_zeroes() {
     new_ucmd!()
         .args(&["%010f", "1"])
@@ -852,6 +863,40 @@ fn partial_char() {
         .stderr_is(
             "printf: warning: bc: character(s) following character constant have been ignored\n",
         );
+}
+
+#[test]
+fn partial_char_posixly_correct() {
+    // GNU suppresses the "character(s) following character constant" warning
+    // when POSIXLY_CORRECT is set. Only the presence of the variable matters,
+    // its value is irrelevant.
+    for value in ["1", "", "0"] {
+        for arg in ["'AB", "'ABC", "\"AB", "'-1"] {
+            new_ucmd!()
+                .args(&["%d", arg])
+                .env("POSIXLY_CORRECT", value)
+                .succeeds()
+                .no_stderr();
+        }
+    }
+
+    // Without POSIXLY_CORRECT the warning is still emitted.
+    for (arg, rest) in [("'AB", "B"), ("'ABC", "BC"), ("\"AB", "B"), ("'-1", "1")] {
+        new_ucmd!().args(&["%d", arg]).succeeds().stderr_is(format!(
+            "printf: warning: {rest}: character(s) following character constant have been ignored\n"
+        ));
+    }
+}
+
+#[test]
+fn value_not_completely_converted_ignores_posixly_correct() {
+    // POSIXLY_CORRECT only silences the character-constant warning; the
+    // unrelated "value not completely converted" error is unaffected.
+    new_ucmd!()
+        .args(&["%d", "42abc"])
+        .env("POSIXLY_CORRECT", "1")
+        .fails_with_code(1)
+        .stderr_contains("value not completely converted");
 }
 
 #[test]
@@ -1391,7 +1436,7 @@ fn mb_input() {
 }
 
 #[test]
-#[cfg(target_family = "unix")]
+#[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn mb_invalid_unicode() {
     use std::ffi::OsStr;
@@ -1480,7 +1525,7 @@ fn positional_format_specifiers() {
 }
 
 #[test]
-#[cfg(target_family = "unix")]
+#[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn non_utf_8_input() {
     use std::ffi::OsStr;
@@ -1551,6 +1596,18 @@ fn test_large_width_format() {
             .stderr_contains("write error")
             .no_stdout();
     }
+}
+
+#[test]
+fn test_numeric_field_width_above_u16_max() {
+    const WIDTH: usize = 65_536;
+
+    let result = new_ucmd!().args(&["%65536d", "5"]).succeeds();
+    let stdout = result.stdout();
+
+    assert_eq!(stdout.len(), WIDTH);
+    assert!(stdout[..WIDTH - 1].iter().all(|&byte| byte == b' '));
+    assert_eq!(stdout[WIDTH - 1], b'5');
 }
 
 #[test]
@@ -1769,4 +1826,68 @@ printf: %z: invalid conversion specification
             .fails_with_code(1)
             .stderr_only("printf: %5.2c: invalid conversion specification\n");
     }
+}
+
+#[test]
+fn leading_double_dash_ends_the_options() {
+    new_ucmd!()
+        .args(&["--", "%s\n", "a"])
+        .succeeds()
+        .stdout_only("a\n");
+}
+
+#[test]
+fn double_dash_after_the_format_is_an_argument() {
+    new_ucmd!()
+        .args(&["%s\n", "--"])
+        .succeeds()
+        .stdout_only("--\n");
+
+    new_ucmd!()
+        .args(&["%s %s\n", "--", "--"])
+        .succeeds()
+        .stdout_only("-- --\n");
+
+    // Only the first `--` terminates the options; the second one is data.
+    new_ucmd!()
+        .args(&["--", "%s\n", "--"])
+        .succeeds()
+        .stdout_only("--\n");
+}
+
+#[test]
+fn double_dash_as_the_format_is_printed_literally() {
+    new_ucmd!()
+        .args(&["--", "--", "x"])
+        .succeeds()
+        .stdout_is("--")
+        .stderr_contains("warning: ignoring excess arguments, starting with 'x'");
+}
+
+#[test]
+fn help_and_version_past_the_format_are_arguments() {
+    new_ucmd!()
+        .args(&["%s", "--help"])
+        .succeeds()
+        .stdout_only("--help");
+
+    new_ucmd!()
+        .args(&["%s", "--version"])
+        .succeeds()
+        .stdout_only("--version");
+
+    new_ucmd!()
+        .args(&["--", "--help"])
+        .succeeds()
+        .stdout_only("--help");
+}
+
+#[test]
+fn test_precision_above_formatter_limit() {
+    // A precision larger than u16::MAX must still be honoured in full.
+    let result = new_ucmd!().args(&["%.70123f", "3.25"]).succeeds();
+    let out = result.stdout_str();
+    assert_eq!(out.len(), 70_125);
+    assert!(out.starts_with("3.25"));
+    assert!(out[4..].bytes().all(|b| b == b'0'));
 }
