@@ -28,7 +28,7 @@ use std::time::SystemTime;
 use nix::dir::Dir;
 use nix::fcntl::{OFlag, openat};
 use nix::libc;
-use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat, mkdirat};
+use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstat, fstatat, mkdirat};
 use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
 use os_display::Quotable;
 
@@ -146,6 +146,43 @@ const LARGEFILE: OFlag = OFlag::O_LARGEFILE;
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 const LARGEFILE: OFlag = OFlag::empty();
 
+/// Flag that opens a directory as an anchor for `*at` calls without read access.
+///
+/// `mkdirat` and `openat` need write and execute on the anchor directory, but
+/// opening it `O_RDONLY` also demands read, which fails on write-only
+/// directories where GNU succeeds. `O_PATH` (Linux) and `O_SEARCH` (POSIX
+/// 2008) both yield a descriptor that anchors `*at` calls without reading.
+/// Such a descriptor cannot list directory entries.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const SEARCH_ONLY: Option<OFlag> = Some(OFlag::O_PATH);
+#[cfg(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris"
+))]
+const SEARCH_ONLY: Option<OFlag> = Some(OFlag::O_SEARCH);
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris"
+)))]
+const SEARCH_ONLY: Option<OFlag> = None;
+
+/// Whether this platform can anchor `*at` calls on a directory it may not read.
+///
+/// Where it cannot, creating an entry inside a write-only directory fails with
+/// `EACCES` instead of succeeding the way `mkdir` does (OpenBSD, for example,
+/// has neither `O_PATH` nor `O_SEARCH`).
+pub const SEARCH_ONLY_SUPPORTED: bool = SEARCH_ONLY.is_some();
+
 impl DirFd {
     /// Open a directory and return a file descriptor
     ///
@@ -164,6 +201,44 @@ impl DirFd {
             }
         })?;
         Ok(Self { fd })
+    }
+
+    /// Open a directory to anchor `*at` calls, following symlinks.
+    ///
+    /// Falls back to a search-only descriptor when the directory denies read
+    /// access, so that creating entries in a write-only directory works the
+    /// way it does with `mkdir`. The returned descriptor is only guaranteed to
+    /// support `*at` calls; it may not be able to list directory entries.
+    ///
+    /// Only symlink-following opens get the fallback. `O_PATH` ignores both
+    /// `O_DIRECTORY` and `O_NOFOLLOW`, so a search-only descriptor cannot
+    /// carry the "this must not be a symlink" guarantee that the traversal
+    /// relies on elsewhere.
+    pub fn open_anchor(path: &Path) -> io::Result<Self> {
+        let denied = match Self::open(path, SymlinkBehavior::Follow) {
+            Err(e) if e.kind() == io::ErrorKind::PermissionDenied => e,
+            result => return result,
+        };
+        let Some(search_only) = SEARCH_ONLY else {
+            return Err(denied);
+        };
+
+        let flags = search_only | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC | LARGEFILE;
+        let fd = nix::fcntl::open(path, flags, Mode::empty()).map_err(|_| denied)?;
+        let this = Self { fd };
+
+        // Linux honours neither O_DIRECTORY nor O_NOFOLLOW together with
+        // O_PATH, so a regular file opens just as happily as a directory here.
+        // Check what we actually got.
+        let stat = fstat(&this.fd).map_err(|e| SafeTraversalError::StatFailed {
+            path: path.into(),
+            source: io::Error::from_raw_os_error(e as i32),
+        })?;
+        if (stat.st_mode as libc::mode_t) & libc::S_IFMT == libc::S_IFDIR {
+            Ok(this)
+        } else {
+            Err(io::Error::from_raw_os_error(libc::ENOTDIR))
+        }
     }
 
     /// Open a subdirectory relative to this directory
@@ -225,7 +300,7 @@ impl DirFd {
 
     /// Get raw stat data for this directory
     pub fn fstat(&self) -> io::Result<FileStat> {
-        let stat = nix::sys::stat::fstat(&self.fd).map_err(|e| SafeTraversalError::StatFailed {
+        let stat = fstat(&self.fd).map_err(|e| SafeTraversalError::StatFailed {
             path: translate!("safe-traversal-current-directory").into(),
             source: io::Error::from_raw_os_error(e as i32),
         })?;
@@ -651,7 +726,7 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
 #[cfg(unix)]
 pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
     let (existing_ancestor, components_to_create) = find_existing_ancestor(path)?;
-    let mut dir_fd = DirFd::open(&existing_ancestor, SymlinkBehavior::Follow)?;
+    let mut dir_fd = DirFd::open_anchor(&existing_ancestor)?;
 
     for component in &components_to_create {
         dir_fd = open_or_create_subdir(&dir_fd, component.as_os_str(), mode)?;
@@ -988,6 +1063,7 @@ mod tests {
     use super::*;
     use std::fs;
     use std::os::unix::fs::MetadataExt;
+    use std::os::unix::fs::PermissionsExt;
     use std::os::unix::fs::symlink;
     use std::os::unix::io::IntoRawFd;
     use tempfile::TempDir;
@@ -1411,6 +1487,26 @@ mod tests {
         let dir_fd = create_dir_all_safe(&nested_path, 0o755).unwrap();
         assert!(dir_fd.as_raw_fd() >= 0);
         assert!(nested_path.is_dir());
+    }
+
+    #[test]
+    fn test_create_dir_all_safe_in_write_only_dir() {
+        if Uid::effective().is_root() {
+            // root ignores the permission bits this test depends on
+            return;
+        }
+        let temp_dir = TempDir::new().unwrap();
+        let write_only = temp_dir.path().join("wx");
+        fs::create_dir(&write_only).unwrap();
+        fs::set_permissions(&write_only, fs::Permissions::from_mode(0o300)).unwrap();
+
+        // mkdir needs write and execute, not read: an unreadable parent must
+        // not stop us, the way it does not stop GNU.
+        let nested = write_only.join("a/b");
+        create_dir_all_safe(&nested, 0o755).unwrap();
+
+        fs::set_permissions(&write_only, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(nested.is_dir());
     }
 
     #[test]

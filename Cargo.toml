@@ -370,6 +370,7 @@ uucore = { workspace = true, features = [
   "entries",
   "pipes",
   "process",
+  "safe-traversal",
   "signals",
   "utmpx",
 ] }
