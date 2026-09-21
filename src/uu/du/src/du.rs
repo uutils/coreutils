@@ -27,6 +27,8 @@ use uucore::diagnostics::OptionValue;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
+use uucore::i18n::decimal::locale_grouping_separator;
+use uucore::i18n::{UEncoding, get_numeric_locale};
 use uucore::line_ending::LineEnding;
 #[cfg(all(unix, not(target_os = "redox")))]
 use uucore::safe_traversal::{DirFd, SymlinkBehavior};
@@ -307,7 +309,8 @@ fn read_block_size(
 ) -> UResult<(u64, Option<String>)> {
     let vars = ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"];
     if let Some(s) = s {
-        parse_size_u64(s)
+        let parsed = s.strip_prefix('\'').unwrap_or(s);
+        parse_size_u64(parsed)
             .and_then(|bytes| {
                 // A block size of zero is rejected here rather than by the
                 // caller, so that it goes through the caret path like every
@@ -328,28 +331,38 @@ fn read_block_size(
                     USimpleError::new(1, message.clone()),
                 )
             })
-    } else if let Some(bytes) = parse_block_size::block_size_from_env(&vars).found() {
-        let suffix = vars
-            .into_iter()
-            .find_map(|var| env::var(var).ok())
-            .and_then(|value| suffix_from_parsed_block_size(&value));
-        Ok((bytes, suffix))
     } else {
+        for var in vars {
+            if let Ok(value) = env::var(var) {
+                let parsed = value.strip_prefix('\'').unwrap_or(&value);
+                return match parse_size_u64(parsed) {
+                    Ok(bytes) if bytes != 0 => Ok((bytes, suffix_from_parsed_block_size(&value))),
+                    _ => Ok((parse_block_size::default_block_size(), None)),
+                };
+            }
+        }
         Ok((parse_block_size::default_block_size(), None))
     }
 }
 
 fn suffix_from_parsed_block_size(s: &str) -> Option<String> {
+    let grouping = s.starts_with('\'');
+    let s = s.strip_prefix('\'').unwrap_or(s);
     let mut chars = s.chars();
     let unit = chars.next()?.to_ascii_uppercase();
     if !unit.is_ascii_alphabetic() || unit == 'B' {
-        return None;
+        return grouping.then(|| "'".to_string());
     }
 
-    Some(match chars.as_str() {
+    let suffix = match chars.as_str() {
         "" | "D" => unit.to_string(),
         "B" if unit == 'K' => "kB".to_string(),
         suffix => format!("{unit}{suffix}"),
+    };
+    Some(if grouping {
+        format!("'{suffix}")
+    } else {
+        suffix
     })
 }
 
@@ -871,6 +884,36 @@ struct StatPrintInfo {
     depth: usize,
 }
 
+/// Add the locale grouping requested by a leading apostrophe in SIZE.
+fn format_block_count(blocks: u64, grouping: bool) -> Vec<u8> {
+    if !grouping {
+        return blocks.to_string().into_bytes();
+    }
+
+    let digits = blocks.to_string();
+    let separator = locale_grouping_separator();
+    if separator.is_empty() || digits.len() < 4 {
+        return digits.into_bytes();
+    }
+
+    let separator = if get_numeric_locale().1 == UEncoding::Ascii && separator == "\u{202f}" {
+        &b"\xa0"[..]
+    } else {
+        separator.as_bytes()
+    };
+    let first_group = match digits.len() % 3 {
+        0 => 3,
+        n => n,
+    };
+    let mut grouped = Vec::with_capacity(digits.len() + separator.len());
+    grouped.extend_from_slice(&digits.as_bytes()[..first_group]);
+    for chunk in digits.as_bytes()[first_group..].chunks(3) {
+        grouped.extend_from_slice(separator);
+        grouped.extend_from_slice(chunk);
+    }
+    grouped
+}
+
 impl StatPrinter {
     fn choose_size(&self, stat: &Stat) -> u64 {
         if self.inodes {
@@ -911,45 +954,49 @@ impl StatPrinter {
         }
 
         if self.total {
-            write!(
-                stdout(),
-                "{}\t{}{}",
-                self.convert_size(grand_total),
-                self.total_text,
-                self.line_ending
-            )?;
+            stdout().write_all(&self.convert_size(grand_total))?;
+            write!(stdout(), "\t{}{}", self.total_text, self.line_ending)?;
         }
 
         Ok(())
     }
 
-    fn convert_size(&self, size: u64) -> String {
+    fn convert_size(&self, size: u64) -> Vec<u8> {
         match &self.size_format {
             SizeFormat::HumanDecimal => uucore::format::human::human_readable(
                 size,
                 uucore::format::human::SizeFormat::Decimal,
-            ),
+            )
+            .into_bytes(),
             SizeFormat::HumanBinary => uucore::format::human::human_readable(
                 size,
                 uucore::format::human::SizeFormat::Binary,
-            ),
+            )
+            .into_bytes(),
             SizeFormat::BlockSize(block_size, suffix) => {
                 if self.inodes {
                     // we ignore block size (-B) with --inodes
-                    size.to_string()
+                    format_block_count(size, suffix.as_deref().is_some_and(|s| s.starts_with('\'')))
                 } else {
                     let blocks = size.div_ceil(*block_size);
-                    match suffix {
-                        Some(suffix) => format!("{blocks}{suffix}"),
-                        None => blocks.to_string(),
+                    let mut blocks = format_block_count(
+                        blocks,
+                        suffix.as_deref().is_some_and(|s| s.starts_with('\'')),
+                    );
+                    if let Some(suffix) = suffix {
+                        blocks.extend_from_slice(
+                            suffix.strip_prefix('\'').unwrap_or(suffix).as_bytes(),
+                        );
                     }
+                    blocks
                 }
             }
         }
     }
 
     fn print_stat(&self, stat: &Stat, size: u64) -> UResult<()> {
-        write!(stdout(), "{}\t", self.convert_size(size))?;
+        stdout().write_all(&self.convert_size(size))?;
+        write!(stdout(), "\t")?;
 
         if self.time.is_some() {
             if let Some(time) = stat.latest_time {
