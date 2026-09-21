@@ -297,6 +297,8 @@ pub struct USimpleError {
 
 impl USimpleError {
     /// Create a new `USimpleError` with a given exit code and message.
+    #[cold]
+    #[inline(never)]
     #[allow(clippy::new_ret_no_self)]
     pub fn new<S: Into<String>>(code: i32, message: S) -> Box<dyn UError> {
         Box::new(Self {
@@ -332,6 +334,8 @@ pub struct UUsageError {
 
 impl UUsageError {
     /// Create a new `UUsageError` with a given exit code and message.
+    #[cold]
+    #[inline(never)]
     #[allow(clippy::new_ret_no_self)]
     pub fn new<S: Into<String>>(code: i32, message: S) -> Box<dyn UError> {
         Box::new(Self {
@@ -678,6 +682,8 @@ pub struct ExitCode(pub i32);
 
 impl ExitCode {
     /// Create a new `ExitCode` with a given exit code.
+    #[cold]
+    #[inline(never)]
     #[allow(clippy::new_ret_no_self)]
     pub fn new(code: i32) -> Box<dyn UError> {
         Box::new(Self(code))

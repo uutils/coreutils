@@ -618,6 +618,8 @@ fn handle_extract_obs_skip_chars(
 /// Unfortunately these overrides are necessary, since several GNU tests
 /// for `uniq` hardcode and require the exact wording of the error message
 /// and it is not compatible with how Clap formats and displays those error messages.
+#[cold]
+#[inline(never)]
 fn map_clap_errors(clap_error: Error) -> Box<dyn UError> {
     let footer = translate!("uniq-error-try-help");
     let override_arg_conflict = translate!("uniq-error-group-mutually-exclusive") + "\n" + &footer;

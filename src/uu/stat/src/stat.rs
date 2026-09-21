@@ -140,6 +140,8 @@ impl DirectiveError {
     /// * `option` - The format as typed and the option it was given to, or
     ///   `None` for a format stat built itself, which is not on the command
     ///   line and has nothing to point at.
+    #[cold]
+    #[inline(never)]
     fn to_error(
         &self,
         diag_args: Option<&[OsString]>,

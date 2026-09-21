@@ -650,6 +650,8 @@ fn incompatible_options_message(opts: &str) -> String {
     )
 }
 
+#[cold]
+#[inline(never)]
 fn incompatible_options_error(opts: &str) -> Box<dyn UError> {
     USimpleError::new(2, incompatible_options_message(opts))
 }

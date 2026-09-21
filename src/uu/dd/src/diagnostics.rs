@@ -32,6 +32,8 @@ use crate::parseargs::ParseError;
 ///   when they were not kept.
 /// * `operand` - The `KEY=VALUE` operand at fault, as typed.
 /// * `error` - What the parser made of it.
+#[cold]
+#[inline(never)]
 pub fn operand_error(
     diag_args: Option<&[OsString]>,
     operand: &str,
