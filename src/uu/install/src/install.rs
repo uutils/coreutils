@@ -505,22 +505,15 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
             //
             // NOTE: the GNU "install" sets the expected mode only for the
             // target directory. All created ancestor directories will have
-            // the default mode. Hence it is safe to create the whole chain
-            // with the default mode and then only modify the target's dir mode.
-            #[cfg(unix)]
-            {
-                // 0o777 is what `fs::create_dir_all` requests; the kernel
-                // applies the umask on top of it.
-                if let Err(e) = create_dir_all_safe(&path_to_create, 0o777) {
-                    show!(InstallError::CreateDirFailed(e.path, e.error));
-                    continue;
-                }
-            }
-            #[cfg(not(unix))]
-            if let Err(e) = fs::create_dir_all(&path_to_create)
-                .map_err(|e| InstallError::CreateDirFailed(path_to_create.to_path_buf(), e))
-            {
-                show!(e);
+            // the default mode. Hence it is safe to use fs::create_dir_all
+            // and then only modify the target's dir mode.
+            //
+            // This stays path-based on purpose. Anchoring the walk to
+            // directory fds needs read permission on each existing ancestor,
+            // while mkdir only needs write and execute, so an fd walk fails on
+            // write-only directories where GNU succeeds.
+            if let Err(e) = fs::create_dir_all(&path_to_create) {
+                show!(InstallError::CreateDirFailed(path_to_create.clone(), e));
                 continue;
             }
 

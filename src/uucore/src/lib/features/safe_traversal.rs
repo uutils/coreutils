@@ -613,6 +613,26 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
     }
 }
 
+/// Pick the path a GNU utility would name for a failed directory creation.
+///
+/// GNU reports the component whose creation failed, unless the parent cannot be
+/// searched at all - then the parent is the real obstacle and gets named. That
+/// is the difference between `install -d r--/x`, which reports `r--`, and
+/// `install -d r-x/x`, which reports `r-x/x`.
+#[cfg(unix)]
+fn blame(failed: PathBuf) -> PathBuf {
+    let Some(parent) = failed.parent().filter(|p| !p.as_os_str().is_empty()) else {
+        return failed;
+    };
+    let searchable = CString::new(parent.as_os_str().as_bytes())
+        .is_ok_and(|c| unsafe { libc::access(c.as_ptr(), libc::X_OK) } == 0);
+    if searchable {
+        failed
+    } else {
+        parent.to_path_buf()
+    }
+}
+
 /// Safely create all parent directories for a path using directory file descriptors.
 /// This prevents symlink race conditions by anchoring all operations to directory fds.
 ///
@@ -652,20 +672,14 @@ pub fn create_dir_all_safe(path: &Path, mode: u32) -> Result<DirFd, CreateDirErr
         for _ in index + 1..components_to_create.len() {
             failed.pop();
         }
-        failed
+        blame(failed)
     };
 
-    // Failing to descend into the existing ancestor is blamed on the ancestor
-    // when it is part of the requested path, and on the first component we
-    // would have created when it is the implicit "." or "/" - the caller never
-    // named the current directory, so GNU does not name it either.
     let mut dir_fd = DirFd::open(&existing_ancestor, SymlinkBehavior::Follow).map_err(|error| {
-        let path = if path.starts_with(&existing_ancestor) {
-            existing_ancestor.clone()
-        } else {
-            failing_prefix(0)
-        };
-        CreateDirError { path, error }
+        CreateDirError {
+            path: failing_prefix(0),
+            error,
+        }
     })?;
 
     for (index, component) in components_to_create.iter().enumerate() {
