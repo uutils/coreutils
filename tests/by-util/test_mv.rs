@@ -2095,6 +2095,41 @@ mod inter_partition_copying {
         );
     }
 
+    // A cross-device move onto an existing regular file must replace that name
+    // with a fresh inode created O_EXCL, not truncate whatever the name
+    // pointed at. Here the destination name is a hard link to a victim; the
+    // victim's contents must survive the overwrite.
+    #[test]
+    pub(crate) fn test_mv_inter_partition_existing_dest_replaced() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.write("src", "src contents");
+
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        let victim = other_fs_tempdir.path().join("victim");
+        write(&victim, "victim contents").expect("Unable to write victim");
+        let dest = other_fs_tempdir.path().join("dest");
+        fs::hard_link(&victim, &dest).expect("Unable to hard link dest to victim");
+
+        scene
+            .ucmd()
+            .arg("src")
+            .arg(dest.to_str().unwrap())
+            .succeeds();
+
+        assert_eq!(
+            fs::read_to_string(&dest).expect("destination should be readable"),
+            "src contents"
+        );
+        assert_eq!(
+            fs::read_to_string(&victim).expect("victim should be readable"),
+            "victim contents",
+            "the hard link's target must not be truncated"
+        );
+    }
+
     // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
     #[test]
     pub(crate) fn test_mv_unlinks_dest_symlink() {

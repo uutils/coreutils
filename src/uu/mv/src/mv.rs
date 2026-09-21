@@ -1434,9 +1434,9 @@ fn rename_file_fallback(
         }
     }
 
-    // Open src/dst with O_NOFOLLOW and keep the fds alive across copy,
-    // chown, xattr, and chmod so a concurrent path-swap can't redirect any
-    // step to a different inode.
+    // Open the source with O_NOFOLLOW, create the destination exclusively,
+    // and keep both descriptors alive across copy, xattr, chown, and chmod so
+    // a concurrent path-swap cannot redirect any step to a different inode.
     #[cfg(unix)]
     {
         use std::fs::Permissions;
@@ -1449,8 +1449,10 @@ fn rename_file_fallback(
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?
             .mode()
             & 0o7777;
-        let mut dst_file = create_dest_restrictive(to, /* nofollow */ true)
-            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+        let mut dst_file = create_dest_restrictive(
+            to, /* nofollow */ true, /* exclusive */ true,
+        )
+        .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
         uucore::buf_copy::copy_fast(&mut &src_file, &mut dst_file)
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
 
@@ -1472,7 +1474,7 @@ fn rename_file_fallback(
         // `mv`, and re-applying setuid/setgid would hand them a binary running
         // as themselves that used to run as someone else. GNU strips the bits
         // in that case and so do we.
-        let ownership_preserved = preserve_ownership(from, to).unwrap_or(false);
+        let ownership_preserved = preserve_ownership_fd(&src_file, &dst_file).unwrap_or(false);
         let dest_mode = if ownership_preserved {
             src_mode
         } else {
@@ -1531,6 +1533,38 @@ fn preserve_ownership(from: &Path, to: &Path) -> io::Result<bool> {
         )
         .is_err()
         {
+            return Ok(false);
+        }
+    }
+
+    Ok(true)
+}
+
+/// [`preserve_ownership`] on the already-open source and destination
+/// descriptors, via `fchown`.
+///
+/// A cross-device copy holds both descriptors open across the content copy,
+/// yet the chown used to re-resolve the destination by path, so a concurrent
+/// path-swap could redirect it to an inode the copy never touched. `fchown`
+/// acts on the inode behind `to`, which is the one the caller created and
+/// wrote. Returns the same "did the destination keep the source's uid/gid"
+/// answer as the path-based variant.
+#[cfg(unix)]
+fn preserve_ownership_fd(from: &fs::File, to: &fs::File) -> io::Result<bool> {
+    use rustix::fs::{Gid, Uid, fchown};
+    use std::os::unix::fs::MetadataExt;
+
+    let source_meta = from.metadata()?;
+    let uid = source_meta.uid();
+    let gid = source_meta.gid();
+
+    let dest_meta = to.metadata()?;
+
+    // Only chown if ownership actually differs
+    if uid != dest_meta.uid() || gid != dest_meta.gid() {
+        // Silently ignore errors: non-root users typically cannot chown to
+        // arbitrary uid, matching GNU mv behavior which also uses best-effort.
+        if fchown(to, Some(Uid::from_raw(uid)), Some(Gid::from_raw(gid))).is_err() {
             return Ok(false);
         }
     }
