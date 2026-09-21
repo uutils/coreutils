@@ -8296,11 +8296,13 @@ fn test_time_style_ambiguous_and_invalid_prefixes() {
         new_ucmd!()
             .args(&["-l", "--time-style", value])
             .fails()
-            .code_is(2);
+            .code_is(2)
+            .stderr_contains("invalid --time-style argument");
         new_ucmd!()
             .env("TIME_STYLE", value)
             .arg("-l")
             .fails()
-            .code_is(2);
+            .code_is(2)
+            .stderr_contains("invalid --time-style argument");
     }
 }
