@@ -1254,7 +1254,17 @@ fn parse_dates_from_reader<R: Read + 'static>(
             bytes.pop();
         }
         match String::from_utf8(bytes) {
-            Ok(s) => parse_date(s, now, dbg_opts, allow_extended),
+            Ok(s) => {
+                let trimmed = s.trim();
+                if trimmed.is_empty() || trimmed == "-" {
+                    // GNU treats empty lines (and a lone "-", like `-d`) in
+                    // `--file`/stdin input as midnight today, not the
+                    // current time (issue #14498).
+                    Ok(ParsedDateTime::InRange(midnight_today(now)))
+                } else {
+                    parse_date(s, now, dbg_opts, allow_extended)
+                }
+            }
             // Report lines with invalid UTF-8 (with non-printable bytes
             // octal-escaped like GNU) instead of silently stopping the input
             Err(e) => Err((
@@ -1263,6 +1273,18 @@ fn parse_dates_from_reader<R: Read + 'static>(
             )),
         }
     }))
+}
+
+/// Midnight at the start of `now`'s civil date, in its time zone.
+///
+/// Empty (whitespace-only or lone `-`) lines in `--file`/stdin input mean
+/// midnight today for GNU `date`, mirroring the `-d` handling above. Falls
+/// back to `now` itself on zones whose midnight does not exist.
+fn midnight_today(now: &Zoned) -> Zoned {
+    now.date()
+        .at(0, 0, 0, 0)
+        .to_zoned(now.time_zone().clone())
+        .unwrap_or_else(|_| now.clone())
 }
 
 /// Parse a string into either an in-range [`Zoned`] value or an extended date.
