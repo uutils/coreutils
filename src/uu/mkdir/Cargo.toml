@@ -21,9 +21,6 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["fs", "fsxattr", "mode"] }
 fluent = { workspace = true }
 
-[target.'cfg(unix)'.dependencies]
-rustix = { workspace = true, features = ["process", "fs"] }
-
 [features]
 diagnostics = ["uucore/diagnostics"]
 selinux = ["uucore/selinux"]

@@ -359,10 +359,41 @@ pub fn parse(mode_string: &str, considering_dir: bool, umask: u32) -> Result<u32
 static UMASK_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[cfg(any(unix, windows))]
-fn lock_umask() -> std::sync::MutexGuard<'static, ()> {
-    UMASK_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+thread_local! {
+    /// Set while this thread holds `UMASK_LOCK`, which is not reentrant.
+    static UMASK_LOCK_HELD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Guards the process-wide umask against concurrent changes.
+///
+/// Reentrant acquisition deadlocks, so it is a debug assertion: a closure
+/// passed to [`with_umask`] or [`with_umask_from_current`] must not call any
+/// umask helper of this module.
+#[cfg(any(unix, windows))]
+struct UmaskLock(
+    #[expect(dead_code, reason = "held for its Drop")] std::sync::MutexGuard<'static, ()>,
+);
+
+#[cfg(any(unix, windows))]
+impl UmaskLock {
+    fn acquire() -> Self {
+        debug_assert!(
+            !UMASK_LOCK_HELD.get(),
+            "reentrant umask helper call would deadlock"
+        );
+        let guard = UMASK_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        UMASK_LOCK_HELD.set(true);
+        Self(guard)
+    }
+}
+
+#[cfg(any(unix, windows))]
+impl Drop for UmaskLock {
+    fn drop(&mut self) {
+        UMASK_LOCK_HELD.set(false);
+    }
 }
 
 pub fn get_umask() -> u32 {
@@ -375,7 +406,7 @@ pub fn get_umask() -> u32 {
     {
         use rustix::fs::Mode;
         use rustix::process::umask;
-        let _lock = lock_umask();
+        let _lock = UmaskLock::acquire();
 
         let mask = umask(Mode::empty());
         let _ = umask(mask);
@@ -384,7 +415,7 @@ pub fn get_umask() -> u32 {
 
     #[cfg(windows)]
     {
-        let _lock = lock_umask();
+        let _lock = UmaskLock::acquire();
 
         // SAFETY: umask always succeeds and doesn't operate on memory. Races are
         // possible but it can't violate Rust's guarantees.
@@ -407,12 +438,22 @@ fn mode_from_umask(mask: u32) -> rustix::fs::Mode {
 }
 
 #[cfg(unix)]
+#[allow(clippy::unnecessary_cast)] // no-op where RawMode is already u32
+fn umask_from_mode(mode: rustix::fs::Mode) -> u32 {
+    mode.bits() as u32
+}
+
+#[cfg(unix)]
 struct UmaskGuard(rustix::fs::Mode);
 
 #[cfg(unix)]
 impl UmaskGuard {
     fn set(mask: u32) -> Self {
         Self(rustix::process::umask(mode_from_umask(mask)))
+    }
+
+    fn previous(&self) -> u32 {
+        umask_from_mode(self.0)
     }
 }
 
@@ -429,8 +470,28 @@ impl Drop for UmaskGuard {
 /// Calls through this module are serialized because the umask is process-wide.
 #[cfg(unix)]
 pub fn with_umask<T>(mask: u32, operation: impl FnOnce() -> T) -> T {
-    let _lock = lock_umask();
+    let _lock = UmaskLock::acquire();
     let _guard = UmaskGuard::set(mask);
+    operation()
+}
+
+/// Run an operation with a temporary umask derived from the current value.
+///
+/// Reading, deriving, setting, and restoring the umask are serialized as one
+/// operation. `select` and `operation` must not call the umask helpers of this
+/// module: the lock is not reentrant, and a reentrant call is debug-asserted
+/// against because it would otherwise deadlock.
+#[cfg(unix)]
+pub fn with_umask_from_current<T>(
+    select: impl FnOnce(u32) -> u32,
+    operation: impl FnOnce() -> T,
+) -> T {
+    let _lock = UmaskLock::acquire();
+    let guard = UmaskGuard::set(0);
+    let mask = select(guard.previous());
+    rustix::process::umask(mode_from_umask(mask));
+    // `guard` drops before `_lock`, so the umask is restored before another
+    // caller can acquire the lock.
     operation()
 }
 
@@ -574,23 +635,50 @@ mod tests {
         assert_eq!(parse("u+w,755", false, 0).unwrap(), 0o755);
     }
 
+    /// Re-runs one test in a child process, so that its process-wide umask
+    /// changes cannot disturb the tests running in parallel here.
+    ///
+    /// Returns `true` in the parent, where the assertions have to be skipped.
+    #[cfg(unix)]
+    fn ran_in_child(test_name: &str) -> bool {
+        const CHILD_ENV: &str = "UUTEST_MODE_UMASK_CHILD";
+
+        if std::env::var_os(CHILD_ENV).is_some() {
+            return false;
+        }
+
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .env(CHILD_ENV, "1")
+            .arg(test_name)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // The filter must have selected exactly this test, or the child would
+        // report success without running anything.
+        assert!(
+            output.status.success() && stdout.contains("1 passed"),
+            "child test failed\nstdout: {stdout}\nstderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        true
+    }
+
+    /// Reads the umask without going through the helpers under test.
+    #[cfg(unix)]
+    fn raw_umask() -> libc::mode_t {
+        // SAFETY: umask has no memory-safety preconditions, and the callers run
+        // in a dedicated child process so the process-wide change is isolated.
+        unsafe {
+            let mask = libc::umask(0);
+            libc::umask(mask);
+            mask
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn test_with_umask_serializes_overlapping_calls() {
-        const CHILD_ENV: &str = "UUTEST_MODE_CONCURRENT_UMASK_CHILD";
-
-        if std::env::var_os(CHILD_ENV).is_none() {
-            let output = std::process::Command::new(std::env::current_exe().unwrap())
-                .env(CHILD_ENV, "1")
-                .arg("test_with_umask_serializes_overlapping_calls")
-                .output()
-                .unwrap();
-            assert!(
-                output.status.success(),
-                "child test failed\nstdout: {}\nstderr: {}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
+        if ran_in_child("test_with_umask_serializes_overlapping_calls") {
             return;
         }
 
@@ -631,5 +719,37 @@ mod tests {
         // SAFETY: same as above; this also restores the child's original mask.
         let observed_umask = unsafe { libc::umask(original_umask) };
         assert_eq!(observed_umask, 0o077);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_with_umask_from_current_derives_mask_and_restores_it() {
+        if ran_in_child("test_with_umask_from_current_derives_mask_and_restores_it") {
+            return;
+        }
+
+        // SAFETY: same as in `raw_umask`.
+        unsafe { libc::umask(0o027) };
+
+        let mut selected_from = None;
+        let during_operation = super::with_umask_from_current(
+            |current| {
+                selected_from = Some(current);
+                current & !0o070
+            },
+            raw_umask,
+        );
+
+        assert_eq!(selected_from, Some(0o027));
+        assert_eq!(during_operation, 0o007);
+        assert_eq!(raw_umask(), 0o027);
+    }
+
+    /// Without the debug assertion this call deadlocks instead of failing.
+    #[cfg(all(unix, debug_assertions))]
+    #[test]
+    #[should_panic(expected = "reentrant umask helper call would deadlock")]
+    fn test_reentrant_umask_helper_is_rejected() {
+        super::with_umask(0o022, super::get_umask);
     }
 }
