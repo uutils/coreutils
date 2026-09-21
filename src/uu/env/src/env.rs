@@ -555,6 +555,8 @@ struct ParsedArguments {
 }
 
 impl EnvAppData {
+    #[cold]
+    #[inline(never)]
     fn make_error_no_such_file_or_dir(&self, prog: &OsStr) -> Box<dyn UError> {
         uucore::show_error!(
             "{}",
