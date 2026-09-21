@@ -519,6 +519,7 @@ pub fn display_items(
                     &mut state.out,
                     quoted,
                     config.tab_size,
+                    config.line_ending,
                 )?;
             }
             Format::Across => {
@@ -529,6 +530,7 @@ pub fn display_items(
                     &mut state.out,
                     quoted,
                     config.tab_size,
+                    config.line_ending,
                 )?;
             }
             Format::Commas => {
@@ -544,7 +546,10 @@ pub fn display_items(
                             > config.width
                     {
                         current_col = name_width + 2;
-                        writeln!(state.out, ",")?;
+                        // Using write! instead of writeln! because config.line_ending already formats
+                        // as either '\n' or '\0'. Using writeln! would emit an unwanted trailing newline
+                        // (producing ",\n\n" or ",\0\n").
+                        write!(state.out, ",{}", config.line_ending)?;
                     } else {
                         current_col += name_width + 2;
                         write!(state.out, ", ")?;
@@ -569,6 +574,90 @@ pub fn display_items(
     Ok(())
 }
 
+/// Writes `count` spaces in fixed-size stack buffer chunks to avoid heap allocations.
+fn write_spaces(out: &mut impl Write, count: usize) -> std::io::Result<()> {
+    const SPACES: [u8; 64] = [b' '; 64];
+    let mut remaining = count;
+    while remaining > 0 {
+        let chunk = remaining.min(SPACES.len());
+        out.write_all(&SPACES[..chunk])?;
+        remaining -= chunk;
+    }
+    Ok(())
+}
+
+/// Formats and streams grid rows directly to `out`, terminating each row with `line_ending`.
+///
+/// We avoid formatting the Grid to an intermediate String and replacing '\n' with '\0',
+/// because filenames under literal quoting can legitimately contain embedded newline bytes.
+/// A blind string replacement would corrupt those filenames. Streaming each cell preserves
+/// its exact byte contents while properly delimiting each row with `line_ending`.
+fn write_grid(
+    out: &mut impl Write,
+    names: &[String],
+    grid: &Grid<&str>,
+    direction: Direction,
+    tab_size: usize,
+    line_ending: LineEnding,
+) -> UResult<()> {
+    let num_rows = grid.row_count();
+    let col_widths = grid.column_widths();
+    let num_cols = col_widths.len();
+    if num_rows == 0 || num_cols == 0 {
+        return Ok(());
+    }
+
+    for y in 0..num_rows {
+        let mut cursor: usize = 0;
+        for (x, &col_width) in col_widths.iter().enumerate() {
+            let (current, offset) = match direction {
+                Direction::LeftToRight => (y * num_cols + x, 1),
+                Direction::TopToBottom => (y + num_rows * x, num_rows),
+            };
+
+            if current >= names.len() {
+                break;
+            }
+
+            let last_in_row = x == num_cols - 1;
+            let contents = &names[current];
+            let width = ansi_width(contents);
+            let padding_size = col_width.saturating_sub(width);
+
+            out.write_all(contents.as_bytes())?;
+
+            if last_in_row || current + offset >= names.len() {
+                break;
+            }
+
+            if tab_size == 0 {
+                write_spaces(out, padding_size)?;
+                write_spaces(out, DEFAULT_SEPARATOR_SIZE)?;
+            } else {
+                cursor += width;
+                let total_spaces = padding_size + DEFAULT_SEPARATOR_SIZE;
+                let closest_tab = tab_size - (cursor % tab_size);
+
+                if closest_tab > total_spaces {
+                    write_spaces(out, total_spaces)?;
+                } else {
+                    let rest_spaces = total_spaces - closest_tab;
+                    let tabs = 1 + (rest_spaces / tab_size);
+                    let spaces = rest_spaces % tab_size;
+                    for _ in 0..tabs {
+                        out.write_all(b"\t")?;
+                    }
+                    write_spaces(out, spaces)?;
+                }
+
+                cursor += total_spaces;
+            }
+        }
+        out.write_all(&[line_ending as u8])?;
+    }
+    Ok(())
+}
+
 fn display_grid(
     names: impl Iterator<Item = DisplayWithQuote>,
     width: u16,
@@ -576,6 +665,7 @@ fn display_grid(
     out: &mut BufWriter<Stdout>,
     quoted: bool,
     tab_size: usize,
+    line_ending: LineEnding,
 ) -> UResult<()> {
     if width == 0 {
         // If the width is 0 we print one single line
@@ -588,7 +678,8 @@ fn display_grid(
             write_os_str(out, &name.displayed)?;
         }
         if printed_something {
-            writeln!(out)?;
+            // Using write! rather than writeln! as line_ending already formats as either '\n' or '\0'.
+            write!(out, "{line_ending}")?;
         }
     } else {
         let names: Vec<String> = {
@@ -618,6 +709,10 @@ fn display_grid(
                 .collect()
         };
 
+        if names.is_empty() {
+            return Ok(());
+        }
+
         // Since tab_size=0 means no \t, use Spaces separator for optimization.
         let filling = match tab_size {
             0 => Filling::Spaces(DEFAULT_SEPARATOR_SIZE),
@@ -628,14 +723,22 @@ fn display_grid(
         };
 
         let grid = Grid::new(
-            names,
+            names.iter().map(String::as_str).collect(),
             GridOptions {
                 filling,
                 direction,
                 width: width as usize,
             },
         );
-        write!(out, "{grid}")?;
+
+        match line_ending {
+            LineEnding::Newline => {
+                write!(out, "{grid}")?;
+            }
+            LineEnding::Nul => {
+                write_grid(out, &names, &grid, direction, tab_size, line_ending)?;
+            }
+        }
     }
     Ok(())
 }
