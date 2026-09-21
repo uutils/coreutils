@@ -3446,3 +3446,31 @@ fn test_non_utf8_operands_are_octal_escaped() {
             .stderr_contains(expected);
     }
 }
+
+#[test]
+fn test_date_multiple_output_formats() {
+    for option in ["--iso-8601=date", "-R", "--rfc-3339=ns"] {
+        new_ucmd!()
+            .args(&["-u", "-d", "@0", option, "+%s"])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("multiple output formats specified");
+    }
+}
+
+#[test]
+fn test_date_standard_output_format_last_wins() {
+    let formats = [
+        ("-I", "1970-01-01\n"),
+        ("-R", "Thu, 01 Jan 1970 00:00:00 +0000\n"),
+        ("--rfc-3339=seconds", "1970-01-01 00:00:00+00:00\n"),
+    ];
+    for (first, _) in formats {
+        for (last, expected) in formats {
+            new_ucmd!()
+                .args(&["-u", "-d", "@0", first, last])
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
+}
