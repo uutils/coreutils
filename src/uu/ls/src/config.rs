@@ -930,50 +930,28 @@ impl Config {
             options::quoting::LITERAL,
         ];
         let get_last = |flag: &str| -> usize {
-            if options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine) {
-                options.index_of(flag).unwrap_or(0)
-            } else {
-                0
-            }
+            (options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine))
+                .then(|| options.index_of(flag))
+                .flatten()
+                .unwrap_or(0)
         };
-        if get_last(options::ZERO)
-            > zero_formats_opts
-                .into_iter()
-                .map(get_last)
-                .max()
-                .unwrap_or(0)
-        {
-            format = if explicit_long {
-                format
-            } else {
-                Format::OneLine
-            };
+        let zero_idx = get_last(options::ZERO);
+        let last_of =
+            |flag_list: &[&str]| flag_list.iter().copied().map(get_last).max().unwrap_or(0);
+
+        if zero_idx > last_of(&zero_formats_opts) && !explicit_long {
+            format = Format::OneLine;
         }
-        if get_last(options::ZERO)
-            > zero_colors_opts
-                .into_iter()
-                .map(get_last)
-                .max()
-                .unwrap_or(0)
-        {
+
+        if zero_idx > last_of(&zero_colors_opts) {
             needs_color = false;
         }
-        if get_last(options::ZERO)
-            > zero_show_control_opts
-                .into_iter()
-                .map(get_last)
-                .max()
-                .unwrap_or(0)
-        {
+
+        if zero_idx > last_of(&zero_show_control_opts) {
             show_control = true;
         }
-        if get_last(options::ZERO)
-            > zero_quoting_style_opts
-                .into_iter()
-                .map(get_last)
-                .max()
-                .unwrap_or(0)
-        {
+
+        if zero_idx > last_of(&zero_quoting_style_opts) {
             quoting_style = QuotingStyle::Literal { show_control };
             locale_quoting = None;
         }
