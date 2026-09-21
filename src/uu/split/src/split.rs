@@ -246,8 +246,8 @@ struct Settings {
     io_blksize: Option<u64>,
 }
 
-#[derive(Debug, Error)]
 /// An error when parsing settings from command-line arguments.
+#[derive(Debug, Error)]
 enum SettingsError {
     /// Invalid chunking strategy.
     #[error("{0}")]

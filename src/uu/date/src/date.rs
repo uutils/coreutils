@@ -1351,7 +1351,6 @@ fn get_clock_resolution() -> Timestamp {
     unimplemented!("getting clock resolution not implemented (unsupported target)");
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
 /// Returns the resolution of the system’s realtime clock.
 ///
 /// # Panics
@@ -1359,6 +1358,7 @@ fn get_clock_resolution() -> Timestamp {
 /// Panics if `clock_getres` fails. On a POSIX-compliant system this should not occur,
 /// as `CLOCK_REALTIME` is required to be supported.
 /// Failure would indicate a non-conforming or otherwise broken implementation.
+#[cfg(all(unix, not(target_os = "redox")))]
 fn get_clock_resolution() -> Timestamp {
     use rustix::time::{ClockId, clock_getres};
 
@@ -1404,12 +1404,12 @@ fn set_system_datetime(_date: Zoned) -> UResult<()> {
     Err(Box::new(DateError::SettingDateNotSupportedRedox))
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
 /// System call to set date (unix).
 /// See here for more:
 /// `<https://doc.rust-lang.org/libc/i686-unknown-linux-gnu/libc/fn.clock_settime.html>`
 /// `<https://linux.die.net/man/3/clock_settime>`
 /// `<https://www.gnu.org/software/libc/manual/html_node/Time-Types.html>`
+#[cfg(all(unix, not(target_os = "redox")))]
 fn set_system_datetime(date: Zoned) -> UResult<()> {
     use rustix::time::{ClockId, Timespec, clock_settime};
 
@@ -1424,11 +1424,11 @@ fn set_system_datetime(date: Zoned) -> UResult<()> {
         .map_err_context(|| translate!("date-error-cannot-set-date"))
 }
 
-#[cfg(windows)]
 /// System call to set date (Windows).
 /// See here for more:
 /// * <https://docs.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-setsystemtime>
 /// * <https://docs.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-systemtime>
+#[cfg(windows)]
 fn set_system_datetime(date: Zoned) -> UResult<()> {
     let system_time = SYSTEMTIME {
         wYear: date.year() as u16,

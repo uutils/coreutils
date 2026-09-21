@@ -1486,8 +1486,8 @@ impl TestScenario {
         Ok(())
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
     /// Unmounts the temporary filesystem if it is currently mounted.
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
     pub fn umount_temp_fs(&mut self) {
         if let Some(mount_point) = self.tmp_fs_mountpoint.as_ref() {
             self.cmd("umount").arg(mount_point).succeeds();
@@ -1711,8 +1711,8 @@ impl UCommand {
         self
     }
 
-    #[cfg(unix)]
     /// The umask is a value that restricts the permissions of newly created files and directories.
+    #[cfg(unix)]
     pub fn umask(&mut self, umask: mode_t) -> &mut Self {
         self.umask = Some(umask);
         self

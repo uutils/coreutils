@@ -1540,8 +1540,8 @@ fn test_ls_long_dangling_symlink_color() {
     assert_eq!(target_color, "34");
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle3`.
+#[test]
 fn test_ls_dangling_symlink_or_and_missing_colors() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1605,8 +1605,8 @@ fn test_ls_symlink_to_dir_with_mi_colors() {
     assert_eq!(captures.name("target").unwrap().as_str(), "1;34");
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle4`.
+#[test]
 fn test_ls_dangling_symlink_ln_or_priority() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1634,8 +1634,8 @@ fn test_ls_dangling_symlink_ln_or_priority() {
     assert_eq!(captures.name("target").unwrap().as_str(), "35");
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle5`.
+#[test]
 fn test_ls_dangling_symlink_ln_and_missing_colors() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1663,8 +1663,8 @@ fn test_ls_dangling_symlink_ln_and_missing_colors() {
     assert_eq!(captures.name("target").unwrap().as_str(), "35");
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle7`.
+#[test]
 fn test_ls_dangling_symlink_blank_or_still_emits_reset() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1685,8 +1685,8 @@ fn test_ls_dangling_symlink_blank_or_still_emits_reset() {
     );
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle9`.
+#[test]
 fn test_ls_dangling_symlink_blank_or_in_directory_listing() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1708,8 +1708,8 @@ fn test_ls_dangling_symlink_blank_or_in_directory_listing() {
     );
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle8`.
+#[test]
 fn test_ls_dangling_symlink_uses_ln_when_or_blank() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1730,8 +1730,8 @@ fn test_ls_dangling_symlink_uses_ln_when_or_blank() {
     );
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle6`.
+#[test]
 fn test_ls_directory_dangling_symlink_uses_ln_when_or_blank() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -3390,10 +3390,10 @@ mod quoting {
         );
     }
 
-    #[cfg(not(any(target_vendor = "apple", windows, target_os = "openbsd")))]
-    #[test]
     /// This test creates files with an UTF-8 encoded name and verify that it
     /// gets escaped depending on the used locale.
+    #[cfg(not(any(target_vendor = "apple", windows, target_os = "openbsd")))]
+    #[test]
     fn test_locale_aware_quoting() {
         let cases: &[(&[u8], _, _, &[&str])] = &[
             (
