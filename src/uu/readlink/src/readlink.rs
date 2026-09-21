@@ -76,6 +76,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(LineEnding::from_zero_flag(use_zero))
     };
 
+    // An operand that cannot be resolved does not stop the ones after it; the
+    // failure only decides the exit status once every operand has been tried.
+    let mut failed = false;
     for p in &files {
         let path_result = if res_mode == ResolveMode::None {
             fs::read_link(p)
@@ -88,8 +91,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 show(&path, line_ending).map_err_context(String::new)?;
             }
             Err(err) => {
+                failed = true;
                 if !verbose {
-                    return Err(1.into());
+                    continue;
                 }
 
                 let message = if err.raw_os_error() == Some(EINVAL) {
@@ -99,11 +103,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         .to_string()
                 };
                 show_error!("{message}");
-                return Err(1.into());
             }
         }
     }
-    Ok(())
+    if failed { Err(1.into()) } else { Ok(()) }
 }
 
 pub fn uu_app() -> Command {
