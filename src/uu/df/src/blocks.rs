@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 //! Types for representing and displaying block sizes.
+
 use crate::{OPT_BLOCKSIZE, OPT_KILO, OPT_MEGA, OPT_PORTABILITY};
 use clap::ArgMatches;
 use std::fmt;
