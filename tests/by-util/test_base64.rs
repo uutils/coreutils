@@ -256,7 +256,7 @@ fn test_no_repeated_trailing_newline() {
         .pipe_in("The quick brown fox jumps over the lazy dog.")
         .succeeds()
         .stdout_only(
-            // cSpell:disable
+            // spell-checker:disable
             "\
 VGhlIHF1aW
 NrIGJyb3du
@@ -265,7 +265,7 @@ IGZveCBqdW
 IHRoZSBsYX
 p5IGRvZy4=
 ",
-            // cSpell:enable
+            // spell-checker:enable
         );
 }
 
@@ -278,13 +278,13 @@ fn test_wrap_default() {
         .pipe_in(PIPE_IN)
         .succeeds()
         .stdout_only(
-            // cSpell:disable
+            // spell-checker:disable
             "\
 VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJy
 b3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJyb3duIGZveCBqdW1w
 cyBvdmVyIHRoZSBsYXp5IGRvZy4=
 ",
-            // cSpell:enable
+            // spell-checker:enable
         );
 }
 

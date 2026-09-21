@@ -358,7 +358,7 @@ fn test_cmd_result_signal_when_kill_then_signal() {
 
 #[cfg(unix)]
 #[rstest]
-#[case::signal_only_part_of_name("IGKILL")] // spell-checker: disable-line
+#[case::signal_only_part_of_name("IGKILL")] // spell-checker:disable-line
 #[case::signal_just_sig("SIG")]
 #[case::signal_value_too_high("100")]
 #[case::signal_value_negative("-1")]
