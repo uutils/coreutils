@@ -644,23 +644,34 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
 #[cfg(unix)]
 pub fn create_dir_all_safe(path: &Path, mode: u32) -> Result<DirFd, CreateDirError> {
     let (existing_ancestor, components_to_create) = find_existing_ancestor(path);
-    let mut dir_fd = DirFd::open(&existing_ancestor, SymlinkBehavior::Follow).map_err(|error| {
-        CreateDirError {
-            path: existing_ancestor.clone(),
-            error,
+
+    // `components_to_create` is the tail of `path`, so dropping the components
+    // that were not reached yields the prefix that failed.
+    let failing_prefix = |index: usize| {
+        let mut failed = path.to_path_buf();
+        for _ in index + 1..components_to_create.len() {
+            failed.pop();
         }
+        failed
+    };
+
+    // Failing to descend into the existing ancestor is blamed on the ancestor
+    // when it is part of the requested path, and on the first component we
+    // would have created when it is the implicit "." or "/" - the caller never
+    // named the current directory, so GNU does not name it either.
+    let mut dir_fd = DirFd::open(&existing_ancestor, SymlinkBehavior::Follow).map_err(|error| {
+        let path = if path.starts_with(&existing_ancestor) {
+            existing_ancestor.clone()
+        } else {
+            failing_prefix(0)
+        };
+        CreateDirError { path, error }
     })?;
 
     for (index, component) in components_to_create.iter().enumerate() {
         dir_fd = open_or_create_subdir(&dir_fd, component.as_os_str(), mode).map_err(|error| {
-            // `components_to_create` is the tail of `path`, so dropping the
-            // components that were not reached yields the failing prefix.
-            let mut failed = path.to_path_buf();
-            for _ in index + 1..components_to_create.len() {
-                failed.pop();
-            }
             CreateDirError {
-                path: failed,
+                path: failing_prefix(index),
                 error,
             }
         })?;
