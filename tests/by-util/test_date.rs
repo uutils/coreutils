@@ -3446,3 +3446,13 @@ fn test_non_utf8_operands_are_octal_escaped() {
             .stderr_contains(expected);
     }
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_date_file_read_error() {
+    new_ucmd!()
+        .args(&["-f", "/proc/self/mem"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("/proc/self/mem: read error: Input/output error");
+}

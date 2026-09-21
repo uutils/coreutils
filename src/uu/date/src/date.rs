@@ -110,6 +110,12 @@ enum DateError {
 
 impl UError for DateError {}
 
+#[derive(Debug)]
+enum DateInputError {
+    InvalidDate(String),
+    Read(std::io::Error),
+}
+
 /// Settings for this program, parsed from the command line
 struct Settings {
     utc: bool,
@@ -573,7 +579,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 parse(input, true)
             };
 
-            let iter = std::iter::once(date);
+            let iter =
+                std::iter::once(date.map_err(|(input, _)| DateInputError::InvalidDate(input)));
             Box::new(iter)
         }
         DateSource::Stdin => parse_dates_from_reader(
@@ -672,12 +679,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     }
                 }
             }
-            Err((input, _err)) => {
+            Err(DateInputError::InvalidDate(input)) => {
                 let _ = stdout.flush();
 
                 show!(DateError::InvalidDate {
                     date: input.clone()
                 });
+            }
+            Err(DateInputError::Read(error)) => {
+                stdout.flush().map_err(DateError::Write)?;
+                let path = match &settings.date_source {
+                    DateSource::File(path) => path.as_os_str().maybe_quote().to_string(),
+                    _ => "-".to_string(),
+                };
+                return Err(uucore::error::USimpleError::new(
+                    1,
+                    translate!("date-error-read", "path" => path, "error" => strip_errno(&error)),
+                ));
             }
         }
     }
@@ -1245,24 +1263,31 @@ fn parse_dates_from_reader<R: Read + 'static>(
     now: &Zoned,
     dbg_opts: DebugOptions,
     allow_extended: bool,
-) -> Box<
-    dyn Iterator<Item = Result<ParsedDateTime, (String, parse_datetime::ParseDateTimeError)>> + '_,
-> {
-    let lines = BufReader::new(reader).split(b'\n');
-    Box::new(lines.map_while(Result::ok).map(move |mut bytes| {
+) -> Box<dyn Iterator<Item = Result<ParsedDateTime, DateInputError>> + '_> {
+    let mut lines = BufReader::new(reader).split(b'\n');
+    let mut failed = false;
+    Box::new(std::iter::from_fn(move || {
+        if failed {
+            return None;
+        }
+        let mut bytes = match lines.next()? {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                failed = true;
+                return Some(Err(DateInputError::Read(error)));
+            }
+        };
         // Strip a trailing '\r' (CRLF input; GNU's lexer ignores it too)
         if bytes.last() == Some(&b'\r') {
             bytes.pop();
         }
-        match String::from_utf8(bytes) {
-            Ok(s) => parse_date(s, now, dbg_opts, allow_extended),
-            // Report lines with invalid UTF-8 (with non-printable bytes
-            // octal-escaped like GNU) instead of silently stopping the input
-            Err(e) => Err((
-                escape_invalid_bytes(e.as_bytes()),
-                parse_datetime::ParseDateTimeError::InvalidInput,
-            )),
-        }
+        Some(match String::from_utf8(bytes) {
+            Ok(s) => parse_date(s, now, dbg_opts, allow_extended)
+                .map_err(|(input, _)| DateInputError::InvalidDate(input)),
+            Err(e) => Err(DateInputError::InvalidDate(escape_invalid_bytes(
+                e.as_bytes(),
+            ))),
+        })
     }))
 }
 
@@ -1456,6 +1481,32 @@ fn set_system_datetime(date: Zoned) -> UResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_reader_reports_error_after_complete_lines() {
+        struct FailingReader;
+        impl Read for FailingReader {
+            fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("read failed"))
+            }
+        }
+
+        let reader = std::io::Cursor::new(b"@0\r\ninvalid\n@1\n").chain(FailingReader);
+        let now = Timestamp::UNIX_EPOCH.to_zoned(TimeZone::UTC);
+        let results: Vec<_> =
+            parse_dates_from_reader(reader, &now, DebugOptions::new(false, false), false)
+                .take(5)
+                .collect();
+        assert_eq!(results.len(), 4);
+        assert!(results[0].is_ok());
+        assert!(
+            matches!(&results[1], Err(DateInputError::InvalidDate(input)) if input == "invalid")
+        );
+        assert!(results[2].is_ok());
+        assert!(
+            matches!(&results[3], Err(DateInputError::Read(error)) if error.to_string() == "read failed")
+        );
+    }
 
     #[test]
     fn test_parse_military_timezone_with_offset() {
