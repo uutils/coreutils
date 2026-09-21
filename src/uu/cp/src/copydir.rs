@@ -11,7 +11,7 @@
 
 #[cfg(windows)]
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::convert::identity;
 use std::env;
 use std::fs::{self, exists};

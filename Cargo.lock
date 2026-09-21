@@ -3370,6 +3370,7 @@ dependencies = [
  "indicatif",
  "libc",
  "nix",
+ "rustc-hash",
  "rustix",
  "selinux",
  "tempfile",

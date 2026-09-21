@@ -31,6 +31,7 @@ uucore = { workspace = true, features = [
   "update-control",
 ] }
 walkdir = { workspace = true }
+rustc-hash = { workspace = true }
 indicatif = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }

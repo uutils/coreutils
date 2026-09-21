@@ -7,7 +7,7 @@
 // spell-checker:ignore RDONLY futimens utimensat unioned
 
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxBuildHasher, FxHashMap as HashMap, FxHashSet as HashSet};
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::{self, Metadata, OpenOptions, Permissions};
@@ -1449,8 +1449,8 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
     verify_target_type(target, target_type)?;
 
     let mut non_fatal_errors = false;
-    let mut seen_sources = HashSet::with_capacity(sources.len());
-    let mut symlinked_files = HashSet::new();
+    let mut seen_sources = HashSet::with_capacity_and_hasher(sources.len(), FxBuildHasher);
+    let mut symlinked_files = HashSet::default();
 
     // to remember the copied files for further usage.
     // the FileInformation implemented the Hash trait by using
@@ -1459,11 +1459,13 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
     // the combination of a file's inode number and device number is unique throughout all the file systems.
     //
     // key is the source file's information and the value is the destination filepath.
-    let mut copied_files: HashMap<FileInformation, PathBuf> = HashMap::with_capacity(sources.len());
+    let mut copied_files: HashMap<FileInformation, PathBuf> =
+        HashMap::with_capacity_and_hasher(sources.len(), FxBuildHasher);
     // remember the copied destinations for further usage.
     // we can't use copied_files as it is because the key is the source file's information.
-    let mut copied_destinations: HashSet<PathBuf> = HashSet::with_capacity(sources.len());
-    let mut created_parent_dirs: HashSet<PathBuf> = HashSet::new();
+    let mut copied_destinations: HashSet<PathBuf> =
+        HashSet::with_capacity_and_hasher(sources.len(), FxBuildHasher);
+    let mut created_parent_dirs: HashSet<PathBuf> = HashSet::default();
 
     let progress_bar = if options.progress_bar {
         let pb = ProgressBar::new(disk_usage(sources, options.recursive)?)
