@@ -23,7 +23,7 @@ install-help-unprivileged = ne pas nécessiter de privilèges élevés pour chan
 
 # Messages d'erreur
 install-error-dir-needs-arg = { $util_name } avec -d nécessite au moins un argument.
-install-error-create-dir-failed = échec de la création de { $path }
+install-error-create-dir-failed = échec de la création de { $path } : { $error }
 install-error-chmod-failed = échec du chmod { $path }
 install-error-chmod-failed-detailed = { $path } : échec du chmod avec l'erreur { $error }
 install-error-chown-failed = échec du chown { $path } : { $error }

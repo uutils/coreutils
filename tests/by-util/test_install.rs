@@ -2868,13 +2868,18 @@ fn test_install_d_dangling_symlink_in_path_errors() {
 
     at.write("file.txt", "hello");
 
-    // install -D file.txt dangling/subdir/file.txt should fail
+    // install -D file.txt dangling/subdir/file.txt should fail, naming the
+    // dangling component, like GNU does.
     scene
         .ucmd()
         .args(&["-D", "-m", "644"])
         .arg(at.plus("file.txt"))
         .arg(at.plus("dangling/subdir/file.txt"))
-        .fails();
+        .fails()
+        .stderr_contains(format!(
+            "cannot create directory '{}': File exists",
+            at.plus_as_string("dangling")
+        ));
 
     // The dangling symlink must not have been replaced with a real directory
     assert!(
@@ -2885,6 +2890,59 @@ fn test_install_d_dangling_symlink_in_path_errors() {
         !at.plus("nonexistent").exists(),
         "The symlink target must not have been created"
     );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_directory_dangling_symlink_errors() {
+    // `install -d` must not follow a dangling symlink and create its target.
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    symlink("nonexistent", at.plus("dangling")).unwrap();
+
+    for target in ["dangling", "dangling/sub", "dangling/a/b/c"] {
+        scene
+            .ucmd()
+            .args(&["-d", target])
+            .fails()
+            .stderr_only("install: cannot create directory 'dangling': File exists\n");
+
+        assert!(
+            at.plus("dangling").is_symlink(),
+            "Dangling symlink must not be replaced with a real directory"
+        );
+        assert!(
+            !at.plus("nonexistent").exists(),
+            "The symlink target must not have been created"
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_leading_dir_on_non_directory_errors() {
+    // A plain file in the middle of the path: the failing component is named,
+    // with the errno of descending into it.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("regular");
+    at.write("file.txt", "hello");
+
+    scene
+        .ucmd()
+        .args(&["-D", "file.txt", "regular/sub/file.txt"])
+        .fails()
+        .stderr_only("install: cannot create directory 'regular': Not a directory\n");
+
+    scene
+        .ucmd()
+        .args(&["-d", "regular/sub"])
+        .fails()
+        .stderr_only("install: cannot create directory 'regular': Not a directory\n");
 }
 
 #[test]
