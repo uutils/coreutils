@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// cSpell:ignore ilog wc wc's
+// spell-checker:ignore ilog wc wc's
 
 mod count_fast;
 mod countable;

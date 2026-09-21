@@ -1097,7 +1097,7 @@ fn make_format_string(settings: &Settings) -> &[u8] {
 /// (e.g., EDT always means UTC-4, even in winter when New York observes EST).
 /// Offset is in seconds to support half-hour zones like IST (UTC+5:30).
 /// All other timezones (JST, CET, etc.) are dynamically resolved from IANA database.
-/* spell-checker: disable */
+// spell-checker:disable
 static FIXED_OFFSET_ABBREVIATIONS: &[(&str, i32)] = &[
     ("UTC", 0),
     ("GMT", 0),
@@ -1125,7 +1125,7 @@ static FIXED_OFFSET_ABBREVIATIONS: &[(&str, i32)] = &[
     // Asian timezones
     ("KST", 32400), // UTC+9 Korean Standard Time
 ];
-/* spell-checker: enable */
+// spell-checker:enable
 
 /// Lazy-loaded timezone abbreviation lookup map built from IANA database.
 static TZ_ABBREV_CACHE: OnceLock<HashMap<String, String>> = OnceLock::new();
