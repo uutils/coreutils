@@ -1019,6 +1019,42 @@ pub fn compare_xattrs<P: AsRef<Path>>(path1: P, path2: P) -> bool {
     get_sorted_xattrs(path1) == get_sorted_xattrs(path2)
 }
 
+/// Size and content of an extended attribute value that `/dev/shm` (tmpfs) accepts
+/// while the given destination directory rejects it.
+///
+/// This produces a mismatch where an attribute can be set on a tmpfs source but
+/// fails to copy onto the destination filesystem. Returns `None` when this
+/// machine's filesystem combination cannot produce that failure, in which case
+/// the test should be skipped.
+#[cfg(target_os = "linux")]
+pub fn tmpfs_to_target_failing_xattr_value<P: AsRef<Path>>(dest_dir: P) -> Option<String> {
+    use std::process::Command;
+
+    for size in [9_100, 40_000] {
+        let value = "y".repeat(size);
+        let source_probe = Path::new("/dev/shm").join(format!("xattr_probe_{size}"));
+        let dest_probe = dest_dir.as_ref().join(format!("probe_{size}"));
+        fs::write(&source_probe, "x").ok();
+        fs::write(&dest_probe, "x").ok();
+        let source_accepts = Command::new("setfattr")
+            .args(["-n", "user.huge", "-v", &value])
+            .arg(&source_probe)
+            .status()
+            .is_ok_and(|s| s.success());
+        let dest_rejects = !Command::new("setfattr")
+            .args(["-n", "user.huge", "-v", &value])
+            .arg(&dest_probe)
+            .status()
+            .is_ok_and(|s| s.success());
+        remove_file(&source_probe).ok();
+        remove_file(&dest_probe).ok();
+        if source_accepts && dest_rejects {
+            return Some(value);
+        }
+    }
+    None
+}
+
 /// Object-oriented path struct that represents and operates on
 /// paths relative to the directory it was constructed for.
 #[derive(Clone)]

@@ -1146,12 +1146,8 @@ fn rename_dir_fallback(
         display_manager,
     );
 
-    // Apply xattrs using a file descriptor to avoid TOCTOU races, ignoring
-    // ENOTSUP/EOPNOTSUPP (filesystem without xattr support, which is expected
-    // for cross-device moves).
-    //
-    // The fd is opened read-only: a directory cannot be opened for writing, and
-    // fsetxattr checks write permission on the inode, not the open mode.
+    // Apply xattrs using a read-only fd. Per-attribute failures are reported
+    // on stderr by apply_xattrs_fd_* and do not fail the move.
     #[cfg(any(
         target_os = "freebsd",
         target_os = "hurd",
@@ -1162,7 +1158,7 @@ fn rename_dir_fallback(
     {
         use std::fs::File;
         let dest = File::open(to)?;
-        fsxattr::apply_xattrs_fd_ignore_unsupported(&dest, xattrs)?;
+        let _ = fsxattr::apply_xattrs_fd_ignore_unsupported(&dest, xattrs);
     }
 
     result?;
