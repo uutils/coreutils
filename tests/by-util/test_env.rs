@@ -2186,3 +2186,64 @@ env: no terminating quote in -S string at position 18 for quote '''
             .stderr_is("env: no terminating quote in -S string at position 18 for quote '''\n");
     }
 }
+
+#[test]
+#[cfg(unix)]
+fn test_exec_non_utf8_binary_not_found() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let non_utf8_prog = OsString::from_vec(b"\xFF".to_vec());
+    new_ucmd!()
+        .arg(&non_utf8_prog)
+        .fails_with_code(127)
+        .stderr_is("env: $'\\xFF': No such file or directory\nenv: use -[v]S to pass options in shebang lines\n");
+
+    new_ucmd!()
+        .args(&[OsString::from("-S"), non_utf8_prog])
+        .fails_with_code(127)
+        .stderr_is("env: $'\\xFF': No such file or directory\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_exec_directory_permission_denied() {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkdir("test_dir");
+
+    ts.ucmd()
+        .arg("./test_dir")
+        .fails_with_code(126)
+        .stderr_is("env: './test_dir': Permission denied\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_exec_file_with_slash_not_a_directory() {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.touch("test_file");
+
+    ts.ucmd()
+        .arg("test_file/")
+        .fails_with_code(126)
+        .stderr_contains("env: 'test_file/':");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_exec_non_utf8_directory_permission_denied() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let ts = TestScenario::new(util_name!());
+    let non_utf8_dir = OsString::from_vec(b"dir_\xFF".to_vec());
+    let mut dir_path = OsString::from("./");
+    dir_path.push(&non_utf8_dir);
+
+    ts.fixtures.mkdir(&non_utf8_dir);
+
+    ts.ucmd()
+        .arg(&dir_path)
+        .fails_with_code(126)
+        .stderr_is("env: $'./dir_\\xFF': Permission denied\n");
+}
