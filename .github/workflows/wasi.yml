@@ -84,5 +84,6 @@ jobs:
         CARGO_TARGET_WASM32_WASIP2_RUNNER: wasmtime
       run: |
         cargo test --target wasm32-wasip2 --no-default-features -p uu_env
+        cargo check --target wasm32-wasip2 --no-default-features -p uucore --features fs
         cargo test --target wasm32-wasip2 --no-default-features -p uucore --lib \
           wasi_argv_fallback_prevents_empty_argv
