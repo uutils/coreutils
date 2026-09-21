@@ -54,8 +54,6 @@ jobs:
       env:
         RUSTFLAGS: ${{ matrix.job.rust-flags }}
       run: |
-        # Build the WASI binary
-        cargo build --target ${{ matrix.job.target }} --no-default-features --features feat_wasm
         # Run host-compiled integration tests against the WASI binary.
         # Tests incompatible with WASI are annotated with
         # #[cfg_attr(wasi_runner, ignore)] in the test source files.
