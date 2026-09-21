@@ -7,6 +7,9 @@
 
 //! Set of functions to manage xattr on files and dirs
 
+use crate::display::Quotable;
+use crate::error::strip_errno;
+use crate::show_error;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use std::ffi::{OsStr, OsString};
@@ -17,7 +20,7 @@ use std::path::Path;
 /// True if the error is `ENOTSUP` / `EOPNOTSUPP` (same errno on Linux,
 /// distinct on the BSDs).
 #[cfg(unix)]
-fn is_xattr_unsupported(err: &std::io::Error) -> bool {
+pub fn is_xattr_unsupported(err: &std::io::Error) -> bool {
     matches!(
         err.raw_os_error(),
         Some(e) if e == libc::ENOTSUP || e == libc::EOPNOTSUPP
@@ -25,20 +28,64 @@ fn is_xattr_unsupported(err: &std::io::Error) -> bool {
 }
 
 #[cfg(not(unix))]
-fn is_xattr_unsupported(_err: &std::io::Error) -> bool {
+pub fn is_xattr_unsupported(_err: &std::io::Error) -> bool {
     false
 }
 
-/// Copies extended attributes (xattrs) from one path to another.
-/// All errors propagate, including `ENOTSUP` / `EOPNOTSUPP`; for
-/// best-effort callers see [`copy_xattrs_ignore_unsupported`].
-pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
-    for attr_name in xattr::list(&source)? {
-        if let Some(value) = xattr::get(&source, &attr_name)? {
-            xattr::set(&dest, &attr_name, &value)?;
+/// Report a per-attribute failure on stderr (except unsupported fs errnos)
+/// and record it to return after continuing the copy loop.
+fn record_xattr_failure(
+    attr_name: &OsStr,
+    reading: bool,
+    err: std::io::Error,
+    pending_error: &mut Option<std::io::Error>,
+) {
+    if !is_xattr_unsupported(&err) {
+        if reading {
+            show_error!(
+                "{}",
+                crate::translate!(
+                    "fsxattr-error-cannot-read-attribute",
+                    "attribute" => attr_name.quote(),
+                    "error" => strip_errno(&err)
+                )
+            );
+        } else {
+            show_error!(
+                "{}",
+                crate::translate!(
+                    "fsxattr-error-setting-attribute",
+                    "attribute" => attr_name.quote(),
+                    "error" => strip_errno(&err)
+                )
+            );
         }
     }
-    Ok(())
+    if pending_error.is_none() {
+        *pending_error = Some(err);
+    }
+}
+
+/// Copies extended attributes (xattrs) from one path to another.
+///
+/// A failed attribute is reported on stderr and does not stop the other
+/// attributes from being copied; the first such failure is propagated at
+/// the end. `ENOTSUP` / `EOPNOTSUPP` are recorded but not reported; for
+/// best-effort callers see [`copy_xattrs_ignore_unsupported`].
+pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
+    let mut pending_error = None;
+    for attr_name in xattr::list(&source)? {
+        match xattr::get(&source, &attr_name) {
+            Ok(Some(value)) => {
+                if let Err(err) = xattr::set(&dest, &attr_name, &value) {
+                    record_xattr_failure(&attr_name, false, err, &mut pending_error);
+                }
+            }
+            Ok(None) => {}
+            Err(err) => record_xattr_failure(&attr_name, true, err, &mut pending_error),
+        }
+    }
+    pending_error.map_or(Ok(()), Err)
 }
 
 /// Like [`copy_xattrs`], but maps `ENOTSUP` / `EOPNOTSUPP` to `Ok(())`
@@ -53,15 +100,25 @@ pub fn copy_xattrs_ignore_unsupported<P: AsRef<Path>>(source: P, dest: P) -> std
 /// Copies xattrs between two open file descriptors. Pins both inodes so
 /// list/get/set calls cannot be redirected by a concurrent renamer, unlike
 /// the path-based [`copy_xattrs`].
+///
+/// Failures are handled like in [`copy_xattrs`]: each one is reported and
+/// the remaining attributes are still copied.
 #[cfg(unix)]
 pub fn copy_xattrs_fd(source: &std::fs::File, dest: &std::fs::File) -> std::io::Result<()> {
     use xattr::FileExt;
+    let mut pending_error = None;
     for attr_name in source.list_xattr()? {
-        if let Some(value) = source.get_xattr(&attr_name)? {
-            dest.set_xattr(&attr_name, &value)?;
+        match source.get_xattr(&attr_name) {
+            Ok(Some(value)) => {
+                if let Err(err) = dest.set_xattr(&attr_name, &value) {
+                    record_xattr_failure(&attr_name, false, err, &mut pending_error);
+                }
+            }
+            Ok(None) => {}
+            Err(err) => record_xattr_failure(&attr_name, true, err, &mut pending_error),
         }
     }
-    Ok(())
+    pending_error.map_or(Ok(()), Err)
 }
 
 /// Like [`copy_xattrs_fd`], but maps `ENOTSUP` / `EOPNOTSUPP` to `Ok(())`.
@@ -77,16 +134,27 @@ pub fn copy_xattrs_fd_ignore_unsupported(
 }
 
 /// Like `copy_xattrs`, but skips the security.selinux attribute.
+///
+/// Failures are handled like in [`copy_xattrs`]: each one is reported and
+/// the remaining attributes are still copied.
 #[cfg(unix)]
 pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
+    let mut pending_error = None;
     for attr_name in xattr::list(&source)? {
-        if attr_name.as_bytes() != b"security.selinux"
-            && let Some(value) = xattr::get(&source, &attr_name)?
-        {
-            xattr::set(&dest, &attr_name, &value)?;
+        if attr_name.as_bytes() == b"security.selinux" {
+            continue;
+        }
+        match xattr::get(&source, &attr_name) {
+            Ok(Some(value)) => {
+                if let Err(err) = xattr::set(&dest, &attr_name, &value) {
+                    record_xattr_failure(&attr_name, false, err, &mut pending_error);
+                }
+            }
+            Ok(None) => {}
+            Err(err) => record_xattr_failure(&attr_name, true, err, &mut pending_error),
         }
     }
-    Ok(())
+    pending_error.map_or(Ok(()), Err)
 }
 
 /// Copies only the POSIX ACL xattrs (`system.posix_acl_access` and
@@ -156,6 +224,9 @@ pub fn retrieve_xattrs_fd(source: &std::fs::File) -> std::io::Result<FxHashMap<O
 
 /// Applies extended attributes (xattrs) to a given file or directory.
 ///
+/// Failures are handled like in [`copy_xattrs`]: each one is reported and
+/// the remaining attributes are still applied.
+///
 /// # Arguments
 ///
 /// * `dest` - A reference to the path of the file or directory.
@@ -168,16 +239,19 @@ pub fn apply_xattrs<P: AsRef<Path>>(
     dest: P,
     xattrs: FxHashMap<OsString, Vec<u8>>,
 ) -> std::io::Result<()> {
+    let mut pending_error = None;
     for (attr, value) in xattrs {
-        xattr::set(&dest, &attr, &value)?;
+        if let Err(err) = xattr::set(&dest, &attr, &value) {
+            record_xattr_failure(&attr, false, err, &mut pending_error);
+        }
     }
-    Ok(())
+    pending_error.map_or(Ok(()), Err)
 }
 
 /// Applies extended attributes (xattrs) to a given file using a file descriptor.
 ///
-/// This version avoids TOCTOU races by operating on an open file descriptor
-/// rather than a path, ensuring all operations target the same inode.
+/// Failures are handled like in [`copy_xattrs`]: each one is reported and
+/// the remaining attributes are still applied.
 ///
 /// # Arguments
 ///
@@ -193,10 +267,13 @@ pub fn apply_xattrs_fd(
     xattrs: FxHashMap<OsString, Vec<u8>>,
 ) -> std::io::Result<()> {
     use xattr::FileExt;
+    let mut pending_error = None;
     for (attr, value) in xattrs {
-        dest.set_xattr(&attr, &value)?;
+        if let Err(err) = dest.set_xattr(&attr, &value) {
+            record_xattr_failure(&attr, false, err, &mut pending_error);
+        }
     }
-    Ok(())
+    pending_error.map_or(Ok(()), Err)
 }
 
 /// Like [`apply_xattrs_fd`], but maps `ENOTSUP` / `EOPNOTSUPP` to `Ok(())`.

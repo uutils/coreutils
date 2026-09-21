@@ -88,3 +88,7 @@ mode-error-invalid-operator = opérateur invalide (+, - ou = attendu, mais { $op
 mode-diag-label-missing-operator = cette clause indique qui, mais pas quoi changer
 mode-diag-label-invalid-number = n'est pas un mode octal
 mode-diag-help-syntax = un mode est soit octal, comme 644, soit des clauses comme u+rwx,go-w
+
+# Messages d'attributs étendus (xattr)
+fsxattr-error-cannot-read-attribute = impossible de lire l'attribut { $attribute } : { $error }
+fsxattr-error-setting-attribute = définition de l'attribut { $attribute } : { $error }

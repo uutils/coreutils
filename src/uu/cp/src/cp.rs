@@ -87,6 +87,10 @@ pub enum CpError {
     #[error("{}", translate!("cp-error-not-all-files-copied"))]
     NotAllFilesCopied,
 
+    /// Xattr copying already reported each failure; only the exit code is needed.
+    #[error("")]
+    XattrErrorsReported,
+
     /// Simple [`walkdir::Error`] wrapper
     #[error("{0}")]
     WalkDirErr(#[from] walkdir::Error),
@@ -1417,16 +1421,10 @@ fn is_enotsup_error(error: &CpError) -> bool {
 /// When handling errors, we don't always want to show them to the user. This function handles that.
 fn show_error_if_needed(error: &CpError) {
     match error {
-        // When using --no-clobber, we don't want to show
-        // an error message
-        #[expect(clippy::match_same_arms)] // needs comment
-        CpError::NotAllFilesCopied => {
-            // Need to return an error code
-        }
-        CpError::Skipped(_) => {
-            // touch a b && echo "n"|cp -i a b && echo $?
-            // should return an error
-        }
+        // NotAllFilesCopied: Need to return an error code
+        // Skipped: touch a b && echo "n"|cp -i a b && echo $? should return an error
+        // XattrErrorsReported: each failing attribute was already reported on stderr by `copy_xattrs*`
+        CpError::NotAllFilesCopied | CpError::Skipped(_) | CpError::XattrErrorsReported => {}
         // Format IoErrContext using strip_errno to remove "(os error N)" suffix
         // for GNU-compatible output
         CpError::IoErrContext(io_err, context) | CpError::SelinuxContextIoErr(io_err, context) => {
@@ -1857,12 +1855,16 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
         fs::set_permissions(dest, revert_perms)?;
     }
 
-    // If copying xattrs failed, propagate that error now with context.
+    // `copy_xattrs*` already reported each failure; add context only when xattrs are unsupported.
     copy_xattrs_result.map_err(|e| {
-        CpError::IoErrContext(
-            e,
-            translate!("cp-error-setting-attributes", "path" => dest.quote()),
-        )
+        if uucore::fsxattr::is_xattr_unsupported(&e) {
+            CpError::IoErrContext(
+                e,
+                translate!("cp-error-setting-attributes", "path" => dest.quote()),
+            )
+        } else {
+            CpError::XattrErrorsReported
+        }
     })?;
 
     Ok(())
