@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::{Pattern, PatternError};
-use rustc_hash::FxHashSet as HashSet;
+use rustc_hash::FxHashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, DirEntry, File, Metadata};
@@ -353,7 +353,7 @@ fn safe_du(
     path: &Path,
     options: &TraversalOptions,
     depth: usize,
-    seen_inodes: &mut HashSet<FileInfo>,
+    seen_inodes: &mut FxHashSet<FileInfo>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
     parent_fd: Option<&DirFd>,
     initial_stat: Option<io::Result<Stat>>,
@@ -610,15 +610,15 @@ fn du_regular(
     mut my_stat: Stat,
     options: &TraversalOptions,
     depth: usize,
-    seen_inodes: &mut HashSet<FileInfo>,
+    seen_inodes: &mut FxHashSet<FileInfo>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
-    ancestors: Option<&mut HashSet<FileInfo>>,
+    ancestors: Option<&mut FxHashSet<FileInfo>>,
     symlink_depth: Option<usize>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
     // Maximum symlink depth to prevent infinite loops
     const MAX_SYMLINK_DEPTH: usize = 40;
 
-    let mut default_ancestors = HashSet::default();
+    let mut default_ancestors = FxHashSet::default();
     let ancestors = ancestors.unwrap_or(&mut default_ancestors);
     let symlink_depth = symlink_depth.unwrap_or(0);
 
@@ -1174,7 +1174,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let printing_thread = thread::spawn(move || stat_printer.print_stats(&rx));
 
     // Check existence of path provided in argument
-    let mut seen_inodes: HashSet<FileInfo> = HashSet::default();
+    let mut seen_inodes: FxHashSet<FileInfo> = FxHashSet::default();
 
     'loop_file: for path in files {
         // Skip if we don't want to ignore anything
