@@ -313,7 +313,13 @@ mod tests {
             );
         }
 
+        /// musl's `setlocale` accepts any locale name and never returns NULL,
+        /// so the failure this asserts cannot be observed there.
         #[test]
+        #[cfg_attr(
+            target_env = "musl",
+            ignore = "musl setlocale accepts any locale name"
+        )]
         fn test_setlocale_failure_is_reported() {
             let _lock = LOCALE_MUTEX.lock().unwrap();
             let original_lc_all = std::env::var_os("LC_ALL");
