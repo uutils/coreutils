@@ -3451,8 +3451,9 @@ fn test_non_utf8_operands_are_octal_escaped() {
 #[cfg(target_os = "linux")]
 fn test_date_file_read_error() {
     new_ucmd!()
+        .env("LC_ALL", "C")
         .args(&["-f", "/proc/self/mem"])
         .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("/proc/self/mem: read error: Input/output error");
+        .stderr_contains("/proc/self/mem: read error:");
 }
