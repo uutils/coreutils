@@ -11,7 +11,7 @@ use std::ops::Range as ByteRange;
 use std::str::{CharIndices, FromStr};
 
 use crate::units::Unit;
-use uucore::quoting_style::{Quotes, QuotingStyle, locale_aware_escape_name};
+use uucore::quoting_style::{CQuotes, QuotingStyle, locale_aware_escape_name};
 use uucore::ranges::Range;
 use uucore::translate;
 
@@ -33,7 +33,7 @@ fn quote_format(s: &str) -> String {
     locale_aware_escape_name(
         OsStr::new(s),
         QuotingStyle::C {
-            quotes: Quotes::Single,
+            quotes: Some(CQuotes::SINGLE),
         },
     )
     .to_string_lossy()
