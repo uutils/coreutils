@@ -607,7 +607,7 @@ fn extract_quoting_style(
     } else {
         // If set, the QUOTING_STYLE environment variable specifies a default style.
         if let Ok(style) = std::env::var("QUOTING_STYLE") {
-            if let Some(pair) = match_quoting_style_name(style.as_str(), show_control) {
+            if let Some((style, locale, name)) = match_quoting_style_name(style.as_str(), show_control) {
                 return (style, locale, name.to_string());
             }
             let _ = writeln!(
