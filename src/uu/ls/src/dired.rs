@@ -40,7 +40,7 @@ use crate::{Config, LsError};
 use std::fmt;
 use std::io::{BufWriter, Stdout, Write};
 use uucore::error::UResult;
-use uucore::quoting_style::{Quotes, QuotingStyle};
+use uucore::quoting_style::QuotingStyle;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BytePosition {
@@ -144,9 +144,7 @@ fn dired_quoting_style_name(config: &Config) -> &'static str {
     }
     match config.quoting_style {
         QuotingStyle::Literal { .. } => "literal",
-        QuotingStyle::C {
-            quotes: Quotes::None,
-        } => "escape",
+        QuotingStyle::C { quotes: None } => "escape",
         // `Quotes::Single` is never produced by ls's own option parsing
         // (only reachable through `locale_quoting`, handled above), but
         // `c` is the closest canonical name if that ever changes.
