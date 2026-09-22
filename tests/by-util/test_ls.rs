@@ -8261,29 +8261,30 @@ fn test_ls_custom_time_style_recent_and_older() {
         .set_modified(std::time::UNIX_EPOCH)
         .unwrap();
 
-    for (style, recent, older) in [
+    for (style, expected_recent, expected_older) in [
         ("+OLD\nNEW", "NEW", "OLD"),
         ("+\nNEW", "NEW", ""),
         ("+OLD\n", "", "OLD"),
         ("+SAME", "SAME", "SAME"),
     ] {
         for use_env in [false, true] {
-            for (file, expected) in [("recent", recent), ("older", older)] {
+            for (file, expected) in [("recent", expected_recent), ("older", expected_older)] {
                 let mut cmd = scene.ucmd();
-                cmd.arg("-l");
+                cmd.arg("-ln");
                 if use_env {
                     cmd.env("TIME_STYLE", style);
                 } else {
                     cmd.arg(format!("--time-style={style}"));
                 }
                 let result = cmd.arg(file).succeeds();
-                assert!(
-                    result
-                        .stdout_str()
-                        .ends_with(&format!(" {expected} {file}\n")),
-                    "unexpected output: {}",
-                    result.stdout_str()
-                );
+                let fields: Vec<_> = result.stdout_str().split_ascii_whitespace().collect();
+                assert_eq!(fields.last(), Some(&file), "unexpected output: {fields:?}");
+                if expected.is_empty() {
+                    assert_eq!(fields.len(), 6, "unexpected output: {fields:?}");
+                } else {
+                    assert_eq!(fields.len(), 7, "unexpected output: {fields:?}");
+                    assert_eq!(fields[5], expected, "unexpected output: {fields:?}");
+                }
             }
         }
     }
