@@ -3646,6 +3646,16 @@ fn test_locale_empty_env_vars_hungarian_lc_collate() {
             .succeeds()
             .stdout_is(output);
     }
+
+    // check that LC_ALL, LC_COLLATE, LANG being all empty implies
+    // that locale falls back to C locale
+    new_ucmd!()
+        .env("LC_ALL", "")
+        .env("LC_COLLATE", "")
+        .env("LANG", "")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(input);
 }
 
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
