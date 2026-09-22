@@ -692,7 +692,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let _ = stdout.flush();
                 return Err(Box::new(DateError::Read {
                     path,
-                    error: strip_errno(&error).clone(),
+                    error: strip_errno(&error),
                 }));
             }
         }
@@ -1289,7 +1289,7 @@ fn parse_dates_from_reader<R: Read + 'static>(
         if *failed {
             None
         } else {
-            *failed = matches!(result, Err(DateInputError::Read { .. }));
+            *failed = matches!(&result, Err(DateInputError::Read { .. }));
             Some(result)
         }
     }))
