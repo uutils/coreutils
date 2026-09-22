@@ -225,6 +225,7 @@ pub struct Config {
     pub(crate) width: u16,
     // Dir and vdir needs access to this field
     pub quoting_style: QuotingStyle,
+    pub quoting_style_name: String,
     pub(crate) show_control_chars: bool,
     pub(crate) locale_quoting: Option<LocaleQuoting>,
     pub(crate) indicator_style: Option<IndicatorStyle>,
@@ -511,6 +512,7 @@ struct QuotingStyleSpec {
     style: QuotingStyle,
     fixed_control: bool,
     locale: Option<LocaleQuoting>,
+    name: &'static str,
 }
 
 impl QuotingStyleSpec {
@@ -519,39 +521,47 @@ impl QuotingStyleSpec {
             style,
             fixed_control: false,
             locale: None,
+            name: "",
         }
     }
 
-    fn with_locale(style: QuotingStyle, locale: LocaleQuoting) -> Self {
+    fn with_name(mut self, name: &'static str) -> Self {
+        self.name = name;
+        self
+    }
+
+    fn with_locale(style: QuotingStyle, locale: LocaleQuoting, name: &'static str) -> Self {
         Self {
             style,
             fixed_control: true,
             locale: Some(locale),
+            name,
         }
     }
 }
 fn match_quoting_style_name(
     style: &str,
     show_control: bool,
-) -> Option<(QuotingStyle, Option<LocaleQuoting>)> {
+) -> Option<(QuotingStyle, Option<LocaleQuoting>, &'static str)> {
     let spec = match style {
         "literal" => QuotingStyleSpec::new(QuotingStyle::Literal {
             show_control: false,
         }),
-        "shell" => QuotingStyleSpec::new(QuotingStyle::SHELL),
-        "shell-always" => QuotingStyleSpec::new(QuotingStyle::SHELL_QUOTE),
-        "shell-escape" => QuotingStyleSpec::new(QuotingStyle::SHELL_ESCAPE),
-        "shell-escape-always" => QuotingStyleSpec::new(QuotingStyle::SHELL_ESCAPE_QUOTE),
-        "c" => QuotingStyleSpec::new(QuotingStyle::C_DOUBLE),
-        "escape" => QuotingStyleSpec::new(QuotingStyle::C_NO_QUOTES),
+        "shell" => QuotingStyleSpec::new(QuotingStyle::SHELL).with_name("shell"),
+        "shell-always" => QuotingStyleSpec::new(QuotingStyle::SHELL_QUOTE).with_name("shell-always"),
+        "shell-escape" => QuotingStyleSpec::new(QuotingStyle::SHELL_ESCAPE).with_name("shell-escape"),
+        "shell-escape-always" => QuotingStyleSpec::new(QuotingStyle::SHELL_ESCAPE_QUOTE).with_name("shell-escape-always"),
+        "c" => QuotingStyleSpec::new(QuotingStyle::C_DOUBLE).with_name("c"),
+        "escape" => QuotingStyleSpec::new(QuotingStyle::C_NO_QUOTES).with_name("escape"),
         "locale" => QuotingStyleSpec {
             style: QuotingStyle::Literal {
                 show_control: false,
             },
             fixed_control: true,
             locale: Some(LocaleQuoting::Single),
+            name: "locale",
         },
-        "clocale" => QuotingStyleSpec::with_locale(QuotingStyle::C_DOUBLE, LocaleQuoting::Double),
+        "clocale" => QuotingStyleSpec::with_locale(QuotingStyle::C_DOUBLE, LocaleQuoting::Double, "clocale"),
         _ => return None,
     };
 
@@ -561,7 +571,7 @@ fn match_quoting_style_name(
         spec.style.show_control(show_control)
     };
 
-    Some((style, spec.locale))
+    Some((style, spec.locale, spec.name))
 }
 
 /// Extracts the quoting style to use based on the options provided.
@@ -580,25 +590,25 @@ fn extract_quoting_style(
     options: &clap::ArgMatches,
     show_control: bool,
     mode: ProgramMode,
-) -> (QuotingStyle, Option<LocaleQuoting>) {
+) -> (QuotingStyle, Option<LocaleQuoting>, String) {
     let opt_quoting_style = options.get_one::<String>(QUOTING_STYLE);
 
     if let Some(style) = opt_quoting_style {
         match match_quoting_style_name(style, show_control) {
-            Some(pair) => pair,
+            Some((style, locale, name)) => (style, locale, name.to_string()),
             None => unreachable!("Should have been caught by Clap"),
         }
     } else if options.get_flag(options::quoting::LITERAL) {
-        (QuotingStyle::Literal { show_control }, None)
+        (QuotingStyle::Literal { show_control }, None, "literal".to_string())
     } else if options.get_flag(options::quoting::ESCAPE) {
-        (QuotingStyle::C_NO_QUOTES, None)
+        (QuotingStyle::C_NO_QUOTES, None, "escape".to_string())
     } else if options.get_flag(options::quoting::C) {
-        (QuotingStyle::C_DOUBLE, None)
+        (QuotingStyle::C_DOUBLE, None, "c".to_string())
     } else {
         // If set, the QUOTING_STYLE environment variable specifies a default style.
         if let Ok(style) = std::env::var("QUOTING_STYLE") {
             if let Some(pair) = match_quoting_style_name(style.as_str(), show_control) {
-                return pair;
+                return (style, locale, name.to_string());
             }
             let _ = writeln!(
                 io::stderr(),
@@ -608,11 +618,11 @@ fn extract_quoting_style(
         }
 
         match mode {
-            ProgramMode::Dir | ProgramMode::Vdir => (QuotingStyle::C_NO_QUOTES, None),
+            ProgramMode::Dir | ProgramMode::Vdir => (QuotingStyle::C_NO_QUOTES, None, "escape".to_string()),
             ProgramMode::Ls if stdout().is_terminal() => {
-                (QuotingStyle::SHELL_ESCAPE.show_control(show_control), None)
+                (QuotingStyle::SHELL_ESCAPE.show_control(show_control), None, "shell-escape".to_string())
             }
-            ProgramMode::Ls => (QuotingStyle::Literal { show_control }, None),
+            ProgramMode::Ls => (QuotingStyle::Literal { show_control }, None, "literal".to_string()),
         }
     }
 }
@@ -860,7 +870,7 @@ impl Config {
                 || !stdout().is_terminal()
         };
 
-        let (mut quoting_style, mut locale_quoting) =
+        let (mut quoting_style, mut locale_quoting, mut quoting_style_name) =
             extract_quoting_style(options, show_control, mode);
         let indicator_style = extract_indicator_style(options);
 
@@ -975,6 +985,7 @@ impl Config {
                 .unwrap_or(0)
         {
             quoting_style = QuotingStyle::Literal { show_control };
+            quoting_style_name = "literal".to_string();
             locale_quoting = None;
         }
 
@@ -1061,6 +1072,7 @@ impl Config {
             block_size,
             width,
             quoting_style,
+            quoting_style_name,
             show_control_chars: options.get_flag(options::SHOW_CONTROL_CHARS),
             locale_quoting,
             indicator_style,
