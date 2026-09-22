@@ -3473,4 +3473,24 @@ fn test_date_standard_output_format_last_wins() {
                 .stdout_is(expected);
         }
     }
+
+    for (first, last, expected) in [
+        (
+            "--iso-8601=date",
+            "--iso-8601=seconds",
+            "1970-01-01T00:00:00+00:00\n",
+        ),
+        ("--iso-8601=seconds", "--iso-8601=date", "1970-01-01\n"),
+        (
+            "--rfc-3339=date",
+            "--rfc-3339=ns",
+            "1970-01-01 00:00:00.000000000+00:00\n",
+        ),
+        ("--rfc-3339=ns", "--rfc-3339=date", "1970-01-01\n"),
+    ] {
+        new_ucmd!()
+            .args(&["-u", "-d", "@0", first, last])
+            .succeeds()
+            .stdout_is(expected);
+    }
 }
