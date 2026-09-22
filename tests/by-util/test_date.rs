@@ -2217,15 +2217,23 @@ fn test_date_format_big_x_locale_aware() {
         .succeeds()
         .stdout_is("08:17:48\n");
 
-    if locale_available!("fr_FR.UTF-8", "French %X") {
+    if locale_available!("en_US.UTF-8", "en_US %X") {
+        // glibc's en_US T_FMT is "%r", so the time differs from the C locale.
+        // macOS uses "%H:%M:%S" for it, like C.
+        let expected = if cfg!(target_os = "macos") {
+            "08:17:48\n"
+        } else {
+            "08:17:48 AM\n"
+        };
+
         new_ucmd!()
             .env("TZ", "UTC")
-            .env("LC_ALL", "fr_FR.UTF-8")
+            .env("LC_ALL", "en_US.UTF-8")
             .arg("-d")
             .arg("1997-01-19 08:17:48")
             .arg("+%X")
             .succeeds()
-            .stdout_is("08:17:48\n");
+            .stdout_is(expected);
     }
 }
 
