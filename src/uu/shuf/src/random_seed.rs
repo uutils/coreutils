@@ -66,7 +66,7 @@ impl SeededRng {
         let mut hasher = Sha3_256::new();
         hasher.update(seed.as_bytes());
         let seed = hasher.finalize();
-        let seed = seed.as_slice().try_into().unwrap();
+        let seed = seed.into();
         Self(Box::new(ChaCha12Rng::from_seed(seed)))
     }
 
@@ -97,10 +97,10 @@ impl SeededRng {
         *range.start() + offset
     }
 
-    pub fn choose_from_slice<T: Copy>(&mut self, vals: &[T]) -> T {
-        assert!(!vals.is_empty());
-        let idx = self.generate_at_most(vals.len() as u64 - 1) as usize;
-        vals[idx]
+    pub fn choose_from_slice<T: Copy>(&mut self, vals: &[T]) -> Option<T> {
+        let max_index = vals.len().checked_sub(1)?;
+        let idx = self.generate_at_most(max_index as u64) as usize;
+        vals.get(idx).copied()
     }
 
     pub fn shuffle<'a, T>(&mut self, vals: &'a mut [T], amount: usize) -> &'a mut [T] {
