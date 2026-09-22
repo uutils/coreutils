@@ -126,7 +126,7 @@ pub fn print_dired_output(
     writeln!(
         out,
         "//DIRED-OPTIONS// --quoting-style={}",
-        config.quoting_style
+        config.quoting_style_name
     )
     .map_err(LsError::WriteError)?;
     Ok(())
