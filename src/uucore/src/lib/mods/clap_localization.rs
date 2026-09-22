@@ -727,12 +727,10 @@ mod tests {
             assert_eq!(get_message("common-tip"), "conseil");
         }
 
-        unsafe {
-            if original_lang.is_empty() {
-                env::remove_var("LANG");
-            } else {
-                env::set_var("LANG", original_lang);
-            }
+        if original_lang.is_empty() {
+            unsafe { env::remove_var("LANG") };
+        } else {
+            unsafe { env::set_var("LANG", original_lang) };
         }
     }
 }

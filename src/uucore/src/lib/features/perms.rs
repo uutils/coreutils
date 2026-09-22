@@ -73,13 +73,11 @@ impl Default for Verbosity {
 /// Actually perform the change of owner on a path
 fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IOResult<()> {
     let path = path.as_ref();
-    let s = CString::new(path.as_os_str().as_bytes()).unwrap();
-    let ret = unsafe {
-        if follow {
-            libc::chown(s.as_ptr(), uid, gid)
-        } else {
-            libc::lchown(s.as_ptr(), uid, gid)
-        }
+    let path = CString::new(path.as_os_str().as_bytes()).unwrap();
+    let ret = if follow {
+        unsafe { libc::chown(path.as_ptr(), uid, gid) }
+    } else {
+        unsafe { libc::lchown(path.as_ptr(), uid, gid) }
     };
     if ret == 0 {
         Ok(())

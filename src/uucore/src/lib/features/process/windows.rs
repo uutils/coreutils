@@ -116,7 +116,9 @@ pub mod sys {
     pub fn create_job_object() -> io::Result<OwnedHandle> {
         // SAFETY: null attributes and name are documented as valid; the
         // returned handle is owned by us.
-        unsafe { cvt_created_handle(CreateJobObjectW(std::ptr::null(), std::ptr::null())) }
+        let handle = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+
+        unsafe { cvt_created_handle(handle) }
     }
 
     /// Assign the process behind `process` to the job behind `job`.
@@ -154,10 +156,15 @@ pub mod sys {
     /// [`query_job_process_ids`] is undocumented.
     pub fn is_process_in_job() -> io::Result<bool> {
         let mut in_job: BOOL = FALSE;
-        // SAFETY: the current-process pseudo-handle is always valid, a null
-        // job handle is documented as "any job", and `in_job` is an out-param
-        // valid for the duration of the call.
-        cvt(unsafe { IsProcessInJob(GetCurrentProcess(), std::ptr::null_mut(), &raw mut in_job) })?;
+
+        // SAFETY: the current-process pseudo-handle is always valid
+        let process = unsafe { GetCurrentProcess() };
+
+        // SAFETY: a null job handle is documented as "any job", and `in_job`
+        // is an out-param valid for the duration of the call
+        let result = unsafe { IsProcessInJob(process, std::ptr::null_mut(), &raw mut in_job) };
+
+        cvt(result)?;
         Ok(in_job != FALSE)
     }
 
@@ -238,9 +245,13 @@ pub mod sys {
     /// reported here as the POSIX ESRCH analog. `ERROR_ACCESS_DENIED` stays raw:
     /// its kind already renders "Permission denied", like unix EPERM.
     pub fn open_process(pid: u32, desired_access: u32) -> io::Result<OwnedHandle> {
+        let handle = unsafe { OpenProcess(desired_access, FALSE, pid) };
+
         // SAFETY: OpenProcess returns null on failure, otherwise a fresh
         // handle owned by us — the `cvt_created_handle` contract.
-        unsafe { cvt_created_handle(OpenProcess(desired_access, FALSE, pid)) }.map_err(|error| {
+        let result = unsafe { cvt_created_handle(handle) };
+
+        result.map_err(|error| {
             if error.raw_os_error() == Some(ERROR_INVALID_PARAMETER as i32) {
                 super::no_such_process()
             } else {
@@ -256,10 +267,13 @@ pub mod sys {
     /// through `GetLastError`.
     pub fn enable_debug_privilege() -> io::Result<()> {
         let mut token: HANDLE = std::ptr::null_mut();
-        // SAFETY: the pseudo-handle is always valid; `token` is an out-param.
-        cvt(unsafe {
-            OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &raw mut token)
-        })?;
+
+        // SAFETY: the pseudo-handle is always valid
+        let process = unsafe { GetCurrentProcess() };
+
+        // SAEFTY: `token` is an out-param.
+        cvt(unsafe { OpenProcessToken(process, TOKEN_ADJUST_PRIVILEGES, &raw mut token) })?;
+
         // SAFETY: OpenProcessToken succeeded, so `token` is a fresh owned handle.
         let token = unsafe { OwnedHandle::from_raw_handle(token) };
 
@@ -292,14 +306,9 @@ pub mod sys {
     pub fn create_manual_reset_event() -> io::Result<OwnedHandle> {
         // SAFETY: null attributes and name are documented as valid; the
         // returned handle is owned by us.
-        unsafe {
-            cvt_created_handle(CreateEventW(
-                std::ptr::null(),
-                TRUE,
-                FALSE,
-                std::ptr::null(),
-            ))
-        }
+        let handle = unsafe { CreateEventW(std::ptr::null(), TRUE, FALSE, std::ptr::null()) };
+
+        unsafe { cvt_created_handle(handle) }
     }
 
     /// Signal a (manual-reset or auto-reset) event.
@@ -325,16 +334,13 @@ pub mod sys {
     }
 
     fn create_waitable_timer_with(flags: u32) -> io::Result<OwnedHandle> {
-        // SAFETY: null attributes and name are documented as valid; the
-        // returned handle is owned by us.
-        unsafe {
-            cvt_created_handle(CreateWaitableTimerExW(
-                std::ptr::null(),
-                std::ptr::null(),
-                flags,
-                TIMER_ALL_ACCESS,
-            ))
-        }
+        // SAFETY: null attributes and name are documented as valid
+        let handle = unsafe {
+            CreateWaitableTimerExW(std::ptr::null(), std::ptr::null(), flags, TIMER_ALL_ACCESS)
+        };
+
+        // SAFETY: the returned handle is owned by us
+        unsafe { cvt_created_handle(handle) }
     }
 
     /// Arm `timer` to fire once after `ticks_100ns` (in 100 ns units).

@@ -123,13 +123,19 @@ mod sys {
 
     pub fn open_process_token(access: TOKEN_ACCESS_MASK) -> io::Result<OwnedHandle> {
         let mut handle: HANDLE = ptr::null_mut();
+
         // SAFETY: GetCurrentProcess returns a pseudo handle that needs no
         // closing, and `handle` is a valid out pointer.
-        if unsafe { OpenProcessToken(GetCurrentProcess(), access, &raw mut handle) } == 0 {
+        let result = unsafe { OpenProcessToken(GetCurrentProcess(), access, &raw mut handle) };
+
+        if result == 0 {
             return Err(io::Error::last_os_error());
         }
+
         // SAFETY: OpenProcessToken succeeded, so `handle` is a fresh owned handle.
-        Ok(unsafe { OwnedHandle::from_raw_handle(handle) })
+        let handle = unsafe { OwnedHandle::from_raw_handle(handle) };
+
+        Ok(handle)
     }
 
     pub fn duplicate_token(
