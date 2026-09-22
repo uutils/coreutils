@@ -3,87 +3,29 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) cvar exitstatus cmdline kworker getsid getpid
-// spell-checker:ignore (sys/unix) WIFSIGNALED ESRCH
-// spell-checker:ignore pgrep pwait snice getpgrp
 // spell-checker:ignore sigwait KTIME timeval itimerval setitimer itimer timerid
 // spell-checker:ignore sigevent sigev sigval itimerspec signo clockid sevp
 
-use libc::{gid_t, pid_t, uid_t};
-#[cfg(not(target_os = "redox"))]
-use nix::errno::Errno;
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
+use libc::pid_t;
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use nix::sys::signal::{self as nix_signal, SigHandler};
 use nix::sys::signal::{SigSet, Signal};
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use nix::unistd::Pid;
 use rustix::process::Signal as RixSignal;
 use std::io;
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use std::process::Child;
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use std::time::{Duration, Instant};
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use timer::Timer;
 
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use super::{ChildExt, TimeoutRet};
 
-/// `geteuid()` returns the effective user ID of the calling process.
-pub fn geteuid() -> uid_t {
-    nix::unistd::geteuid().as_raw()
-}
-
-/// `getpgrp()` returns the process group ID of the calling process.
-/// It is a trivial wrapper over nix::unistd::getpgrp.
-pub fn getpgrp() -> pid_t {
-    nix::unistd::getpgrp().as_raw()
-}
-
-/// `getegid()` returns the effective group ID of the calling process.
-pub fn getegid() -> gid_t {
-    nix::unistd::getegid().as_raw()
-}
-
-/// `getgid()` returns the real group ID of the calling process.
-pub fn getgid() -> gid_t {
-    nix::unistd::getgid().as_raw()
-}
-
-/// `getuid()` returns the real user ID of the calling process.
-pub fn getuid() -> uid_t {
-    rustix::process::getuid().as_raw()
-}
-
-/// `getpid()` returns the pid of the calling process.
-pub fn getpid() -> pid_t {
-    nix::unistd::getpid().as_raw()
-}
-
-/// `getsid()` returns the session ID of the process with process ID pid.
-///
-/// If pid is 0, getsid() returns the session ID of the calling process.
-///
-/// # Error
-///
-/// - [Errno::EPERM] A process with process ID pid exists, but it is not in the same session as the calling process, and the implementation considers this an error.
-/// - [Errno::ESRCH] No process with process ID pid was found.
-///
-///
-/// # Platform
-///
-/// This function only support standard POSIX implementation platform,
-/// so some system such as redox doesn't supported.
-#[cfg(not(target_os = "redox"))]
-pub fn getsid(pid: i32) -> Result<pid_t, Errno> {
-    let pid = if pid == 0 {
-        None
-    } else {
-        Some(Pid::from_raw(pid))
-    };
-    nix::unistd::getsid(pid).map(Pid::as_raw)
-}
-
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 impl ChildExt for Child {
     fn send_signal(&mut self, signal: usize) -> io::Result<()> {
         let pid = Pid::from_raw(self.id() as pid_t);
@@ -180,7 +122,7 @@ pub fn unblock_signal(signal: RixSignal) -> io::Result<()> {
 /// Ensures there is no overflow on time_t operations. Some BSDs (notably XNU)
 /// will return EINVAL otherwise; POSIX only defines it up to 10e8, so we cap
 /// it on all targets we do not trust to support the full integer range.
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 const MAX_KTIME_T: Duration = if cfg!(target_os = "linux") {
     Duration::from_secs(9_223_372_036)
 } else {
@@ -193,6 +135,7 @@ const MAX_KTIME_T: Duration = if cfg!(target_os = "linux") {
 #[cfg(not(any(
     target_vendor = "apple",
     target_os = "fuchsia",
+    target_os = "haiku",
     target_os = "openbsd",
     windows
 )))]
@@ -210,36 +153,44 @@ mod timer {
         pub(super) fn new() -> io::Result<Self> {
             use std::mem::MaybeUninit;
 
-            // SAFETY: we must zero the reserved, private bits and other fields.
+            // We must zero the reserved, private bits and other fields.
             // We cannot use nix or rustix because they don't support it in Redox.
-            let mut sev: libc::sigevent = unsafe { MaybeUninit::zeroed().assume_init() };
-            sev.sigev_notify = libc::SIGEV_SIGNAL;
-            sev.sigev_signo = libc::SIGALRM;
+            let mut sev = MaybeUninit::<libc::sigevent>::zeroed();
 
-            // SAFETY: On cygwin, it's a u64; otherwise, a ptr with exposed provenance.
-            let mut timer_id = unsafe { MaybeUninit::zeroed().assume_init() };
+            unsafe {
+                (*sev.as_mut_ptr()).sigev_notify = libc::SIGEV_SIGNAL;
+                (*sev.as_mut_ptr()).sigev_signo = libc::SIGALRM;
+            }
+
+            // On cygwin, it's a u64; otherwise, a ptr with exposed provenance.
+            let mut timer_id = MaybeUninit::zeroed();
             // SAFETY: All values are properly initialized.
-            if unsafe { libc::timer_create(libc::CLOCK_MONOTONIC, &raw mut sev, &raw mut timer_id) }
-                == -1
+            if unsafe {
+                libc::timer_create(
+                    libc::CLOCK_MONOTONIC,
+                    sev.as_mut_ptr(),
+                    timer_id.as_mut_ptr(),
+                )
+            } == -1
             {
                 return Err(io::Error::last_os_error());
             }
 
-            Ok(Self(timer_id))
+            // SAFETY: `timer_create` returned success and initialized timer_id.
+            Ok(Self(unsafe { timer_id.assume_init() }))
         }
 
         pub(super) fn arm(&mut self, timeout: Duration) -> Result<(), io::Error> {
             let timeout = timeout.min(MAX_KTIME_T).max(Duration::from_micros(1));
-            let time = libc::itimerspec {
-                it_interval: libc::timespec {
-                    tv_sec: 0,
-                    tv_nsec: 0,
-                },
-                it_value: libc::timespec {
-                    tv_sec: timeout.as_secs() as _,
-                    tv_nsec: timeout.subsec_nanos() as _,
-                },
+            // `timespec` has private padding members on time64 targets, so its
+            // fields cannot be listed in a struct literal; start from the
+            // zeroed default and fill in the ones we care about.
+            let mut time = libc::itimerspec {
+                it_interval: libc::timespec::default(),
+                it_value: libc::timespec::default(),
             };
+            time.it_value.tv_sec = timeout.as_secs() as _;
+            time.it_value.tv_nsec = timeout.subsec_nanos() as _;
 
             // SAFETY: All values are properly initialized.
             if unsafe { libc::timer_settime(self.0, 0, &raw const time, null_mut()) } == -1 {
@@ -348,7 +299,7 @@ mod timer {
     }
 }
 
-#[cfg(not(target_os = "fuchsia"))]
+#[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 impl Timer {
     fn timed_sigwait(&mut self, timeout: Duration) -> io::Result<Option<Signal>> {
         self.arm(timeout)?;
@@ -365,27 +316,5 @@ impl Timer {
         } else {
             Ok(Some(Signal::try_from(sig)?))
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    #[cfg(not(target_os = "redox"))]
-    fn test_getsid() {
-        use super::{getpid, getsid};
-
-        assert_eq!(
-            getsid(getpid()).expect("getsid(getpid)"),
-            // zero is a special value for SID.
-            // https://pubs.opengroup.org/onlinepubs/9699919799/functions/getsid.html
-            getsid(0).expect("getsid(0)")
-        );
-
-        // SID never be 0.
-        assert!(getsid(getpid()).expect("getsid(getpid)") > 0);
-
-        // This might caused tests failure but the probability is low.
-        assert!(getsid(999_999).is_err());
     }
 }

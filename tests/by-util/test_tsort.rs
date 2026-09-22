@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 #![allow(clippy::cast_possible_wrap)]
 
 use uutests::at_and_ucmd;
@@ -250,4 +251,48 @@ fn test_nonexistent_file_error_includes_filename() {
         .arg("nosuchfile.txt")
         .fails_with_code(1)
         .stderr_only("tsort: nosuchfile.txt: No such file or directory\n");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_write_error() {
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("input", "a d\n");
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    ucmd.arg("input")
+        .set_stdout(dev_full)
+        .fails()
+        .stderr_contains("write error")
+        .stderr_contains("No space left on device");
+}
+
+#[test]
+fn test_invalid_utf8_input() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // Equivalent to:
+    //
+    // hrllo
+    // awuyues
+    // apple
+    // iphone
+    // iphone
+    // a
+    // \xff
+    // \xff
+
+    std::fs::write(
+        at.plus("a"),
+        b"hrllo\nawuyues\napple\niphone\niphone\na\n\xff\n\xff\n",
+    )
+    .unwrap();
+
+    ucmd.arg("a")
+        .succeeds()
+        .stdout_only_bytes(b"apple\nhrllo\n\xff\niphone\nawuyues\na\n");
 }

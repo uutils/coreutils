@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use clap::{Arg, ArgAction, Command};
 use std::io::{self, Write as _};
 use uucore::error::strip_errno;
@@ -9,6 +10,16 @@ use uucore::{crate_version, show_error, translate};
 
 // uucore::main does not support no-result
 pub fn uumain(mut args: impl uucore::Args) -> i32 {
+    #[cold]
+    #[inline(never)]
+    fn cold_error(e: io::Error) -> i32 {
+        if e.kind() != io::ErrorKind::BrokenPipe {
+            show_error!("{}", strip_errno(&e));
+            return 1;
+        }
+        1
+    }
+
     // skip binary name
     let (Some(flag), None) = (args.nth(1), args.next()) else {
         return 1;
@@ -23,12 +34,10 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
         return 1;
     };
 
-    if let Err(e) = res
-        && e.kind() != io::ErrorKind::BrokenPipe
-    {
-        show_error!("{}", strip_errno(&e));
+    match res {
+        Ok(()) => 1,
+        Err(e) => cold_error(e),
     }
-    1
 }
 
 pub fn uu_app() -> Command {

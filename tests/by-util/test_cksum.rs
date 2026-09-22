@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont checkfile
 
 use rstest::rstest;
@@ -40,6 +41,22 @@ fn sha_fixture_name(algo: &str, len: u32, prefix: &str, suffix: &str) -> String 
         "sha2" => format!("{prefix}sha{len}{suffix}"),
         _ => format!("{prefix}sha3_{len}{suffix}"),
     }
+}
+
+#[test]
+#[cfg(feature = "openssl")]
+fn test_openssl_link() {
+    let Ok(out) = std::process::Command::new("ldd")
+        .arg(uutests::util::get_tests_binary())
+        .output()
+    else {
+        return; // missing ldd
+    };
+    let dynamic = String::from_utf8_lossy(&out.stdout).contains("crypto"); // covering MSYS/MinGW too
+    assert_eq!(
+        std::env::var("OPENSSL_NO_VENDOR") == Ok("1".to_string()),
+        dynamic
+    );
 }
 
 #[test]
@@ -1674,6 +1691,20 @@ fn test_md5_bits() {
         .arg("f")
         .fails()
         .stderr_contains("f: no properly formatted checksum lines found");
+}
+
+#[test]
+fn test_blake2b_check_digest_too_long() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // The referenced file must exist: the digest length is only used once the
+    // line is accepted and the file is about to be hashed.
+    at.write("f1", "content\n");
+    // 65 bytes, above the 64 bytes BLAKE2b maximum.
+    at.write("sums", &format!("{}  f1\n", "a".repeat(130)));
+
+    ucmd.args(&["-a", "blake2b", "-c", "sums"])
+        .fails_with_code(1)
+        .stderr_contains("sums: no properly formatted checksum lines found");
 }
 
 #[test]

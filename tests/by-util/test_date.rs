@@ -2,16 +2,16 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
-// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST MESZ KST uueuu ueuu vasárnap június január distros
-// spell-checker: ignore: uppercases
+
+// spell-checker:ignore AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST MESZ KST uueuu ueuu vasárnap június január distros
+// spell-checker:ignore uppercases
 
 use std::cmp::Ordering;
 
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
-#[cfg(all(unix, not(target_vendor = "apple")))]
+#[cfg(unix)]
 use rustix::process::geteuid;
 use uutests::util::TestScenario;
 #[cfg(unix)]
@@ -511,7 +511,7 @@ fn test_date_format_literal() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_vendor = "apple")))]
+#[cfg(unix)]
 fn test_date_set_valid() {
     if geteuid().is_root() {
         new_ucmd!()
@@ -523,7 +523,7 @@ fn test_date_set_valid() {
 }
 
 #[test]
-#[cfg(any(windows, all(unix, not(target_vendor = "apple"))))]
+#[cfg(any(windows, unix))]
 fn test_date_set_invalid() {
     let result = new_ucmd!().arg("--set").arg("123abcd").fails();
     result.no_stdout();
@@ -531,7 +531,25 @@ fn test_date_set_invalid() {
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android"))))]
+fn test_date_error_echoes_input_verbatim() {
+    // Error messages echo what the user typed: numeric-looking input must
+    // not be reformatted as a Fluent number (#14669, #14670).
+    for input in ["1e9", "+1e-2", "+9.e-0", "9.", "-0"] {
+        new_ucmd!()
+            .arg("-d")
+            .arg(input)
+            .fails()
+            .stderr_is(format!("date: invalid date '{input}'\n"));
+    }
+    // Same for the missing '+' message, which echoes the argument too.
+    new_ucmd!()
+        .args(&["--date", "1996-01-31", "1e9"])
+        .fails_with_code(1)
+        .stderr_contains("the argument 1e9 lacks a leading '+'");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_date_set_permissions_error() {
     if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
         let result = new_ucmd!()
@@ -544,7 +562,7 @@ fn test_date_set_permissions_error() {
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android"))))]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_date_set_hyphen_prefixed_values() {
     // test -s flag accepts hyphen-prefixed values like "-3 days"
     if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
@@ -564,22 +582,7 @@ fn test_date_set_hyphen_prefixed_values() {
 }
 
 #[test]
-#[cfg(target_vendor = "apple")]
-fn test_date_set_mac_unavailable() {
-    let result = new_ucmd!()
-        .arg("--set")
-        .arg("2020-03-11 21:45:00+08:00")
-        .fails();
-    result.no_stdout();
-    assert!(
-        result
-            .stderr_str()
-            .starts_with("date: setting the date is not supported by macOS")
-    );
-}
-
-#[test]
-#[cfg(all(unix, not(target_vendor = "apple")))]
+#[cfg(unix)]
 fn test_date_set_valid_2() {
     if geteuid().is_root() {
         new_ucmd!()
@@ -591,13 +594,12 @@ fn test_date_set_valid_2() {
 }
 
 #[test]
-fn test_date_for_invalid_file() {
-    let result = new_ucmd!().arg("--file").arg("invalid_file").fails();
-    result.no_stdout();
-    assert_eq!(
-        result.stderr_str().trim(),
-        "date: invalid_file: No such file or directory",
-    );
+fn test_date_for_non_existing_file() {
+    new_ucmd!()
+        .arg("--file")
+        .arg("non_existing_file")
+        .fails()
+        .stderr_only("date: non_existing_file: No such file or directory\n");
 }
 
 #[test]
@@ -616,30 +618,62 @@ fn test_date_for_no_permission_file() {
         .unwrap();
     file.set_permissions(std::fs::Permissions::from_mode(0o222))
         .unwrap();
-    let result = ucmd.arg("--file").arg(FILE).fails();
-    result.no_stdout();
-    assert_eq!(
-        result.stderr_str().trim(),
-        format!("date: {FILE}: Permission denied")
-    );
+
+    ucmd.arg("--file")
+        .arg(FILE)
+        .fails()
+        .stderr_only(format!("date: {FILE}: Permission denied\n"));
 }
 
 #[test]
 fn test_date_for_dir_as_file() {
-    let result = new_ucmd!().arg("--file").arg("/").fails();
-    result.no_stdout();
-    assert_eq!(
-        result.stderr_str().trim(),
-        "date: expected file, got directory '/'",
-    );
+    new_ucmd!()
+        .arg("--file")
+        .arg("/")
+        .fails_with_code(1)
+        .stderr_only("date: expected file, got directory '/'\n");
 }
 
 #[test]
-fn test_date_for_file() {
+fn test_date_for_empty_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_date_for_file";
     at.touch(file);
-    ucmd.arg("--file").arg(file).succeeds();
+    ucmd.arg("--file").arg(file).succeeds().no_output();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
+fn test_date_for_file_with_non_utf8_path() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file = std::ffi::OsStr::from_bytes(b"file_\xFF\xFE.txt");
+    std::fs::File::create(at.plus(file)).unwrap();
+
+    ucmd.arg("--file").arg(file).succeeds().no_output();
+}
+
+#[test]
+fn test_date_multiple_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a", "2022-02-22");
+    at.write("b", "1999-09-19");
+
+    for (files, expected) in [
+        (["a", "b"], "Sun Sep 19 00:00:00 UTC 1999\n"),
+        (["b", "a"], "Tue Feb 22 00:00:00 UTC 2022\n"),
+    ] {
+        scene
+            .ucmd()
+            .args(&["-u", "--file", files[0], "--file", files[1]])
+            .succeeds()
+            .stdout_only(expected);
+    }
 }
 
 #[test]
@@ -684,22 +718,72 @@ fn test_date_stdin_invalid_utf8_line() {
 
 #[test]
 fn test_date_for_file_mtime() {
+    use std::time::{Duration, UNIX_EPOCH};
+
     let (at, mut ucmd) = at_and_ucmd!();
-    let file = "reference_file";
-    at.touch(file);
-    std::thread::sleep(std::time::Duration::from_millis(100));
-    let result = ucmd.arg("--reference").arg(file).arg("+%s%N").succeeds();
-    let mtime = at.metadata(file).modified().unwrap();
-    let mtime_nanos = mtime
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos()
-        .to_string();
-    assert_eq!(result.stdout_str().trim(), &mtime_nanos[..]);
+
+    let reference_file = "reference_file";
+    let f = at.make_file(reference_file);
+    let modification_date = UNIX_EPOCH.checked_add(Duration::from_secs(1234)).unwrap();
+    f.set_modified(modification_date).unwrap();
+
+    ucmd.arg("--reference")
+        .arg(reference_file)
+        .arg("+%s")
+        .succeeds()
+        .stdout_only("1234\n");
 }
 
 #[test]
-#[cfg(all(unix, not(target_vendor = "apple")))]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
+fn test_date_reference_is_non_utf8_path() {
+    use std::os::unix::ffi::OsStrExt;
+    use std::time::{Duration, UNIX_EPOCH};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let reference_file = std::ffi::OsStr::from_bytes(b"reference_\xFF\xFE.txt");
+    let f = std::fs::File::create(at.plus(reference_file)).unwrap();
+    let modification_date = UNIX_EPOCH.checked_add(Duration::from_secs(1234)).unwrap();
+    f.set_modified(modification_date).unwrap();
+
+    ucmd.arg("--reference")
+        .arg(reference_file)
+        .arg("+%s")
+        .succeeds()
+        .stdout_only("1234\n");
+}
+
+#[test]
+fn test_date_multiple_references() {
+    use std::time::{Duration, UNIX_EPOCH};
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let create_file = |name: &str, secs: u64| {
+        let f = at.make_file(name);
+        let date = UNIX_EPOCH.checked_add(Duration::from_secs(secs)).unwrap();
+        f.set_modified(date).unwrap();
+    };
+
+    create_file("a", 1111);
+    create_file("b", 2222);
+
+    // last ref "wins"
+    for (refs, expected) in [(["a", "b"], "2222\n"), (["b", "a"], "1111\n")] {
+        scene
+            .ucmd()
+            .args(&["--reference", refs[0], "--reference", refs[1]])
+            .arg("+%s")
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+#[cfg(unix)]
 fn test_date_set_valid_3() {
     if geteuid().is_root() {
         new_ucmd!()
@@ -711,7 +795,7 @@ fn test_date_set_valid_3() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_vendor = "apple")))]
+#[cfg(unix)]
 fn test_date_set_valid_4() {
     if geteuid().is_root() {
         new_ucmd!()
@@ -846,9 +930,9 @@ fn test_invalid_date_string() {
 
     new_ucmd!()
         .arg("-d")
-        // cSpell:disable
+        // spell-checker:disable
         .arg("this fooday")
-        // cSpell:enable
+        // spell-checker:enable
         .fails()
         .no_stdout()
         .stderr_contains("invalid date");
@@ -3266,4 +3350,99 @@ fn test_write_error() {
         .set_stdout(dev_full)
         .fails_with_code(1)
         .stderr_is("date: write error: No space left on device\n");
+}
+
+#[test]
+#[ignore = "GNU compat: see uutils/coreutils#14648"]
+fn test_date_allow_missing_year() {
+    new_ucmd!().arg("01.01. 03:00 p.m.").succeeds();
+}
+
+#[test]
+#[ignore = "GNU compat: see uutils/coreutils#14649"]
+fn test_date_allow_spaces_after_month() {
+    new_ucmd!().arg("01.01.    2008 03:00 p.m.").succeeds();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_format_with_non_utf8_bytes() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    // Bytes that are not valid UTF-8 carry no conversion specifier, so they
+    // must reach the output untouched, just like any other literal text.
+    let format = OsString::from_vec(b"+\xc5[%Y]\xa7%%\xe4".to_vec());
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("2031-07-23T04:05:06")
+        .arg(format)
+        .succeeds()
+        .stdout_only_bytes(b"\xc5[2031]\xa7%\xe4\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_format_percent_before_non_utf8_byte() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    // A '%' whose specifier is an invalid byte is printed as-is.
+    let format = OsString::from_vec(b"+w%\xd0z".to_vec());
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("2031-07-23T04:05:06")
+        .arg(format)
+        .succeeds()
+        .stdout_only_bytes(b"w%\xd0z\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_format_with_gb18030_bytes() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    // A realistic legacy-charset format: GB18030 年 (0xC4EA), 月 (0xD4C2) and
+    // 日 (0xC8D5) around the specifiers, as zh_CN.gb18030 spells it.
+    let format = OsString::from_vec(b"+%Y\xc4\xea%-m\xd4\xc2%-d\xc8\xd5".to_vec());
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("2031-07-23T04:05:06")
+        .arg(format)
+        .succeeds()
+        .stdout_only_bytes(b"2031\xc4\xea7\xd4\xc223\xc8\xd5\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_non_utf8_operands_are_octal_escaped() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    // Bytes that don't decode must be reported in octal, not as U+FFFD, on
+    // each of the three paths that print back an operand.
+    let cases: [(&[&[u8]], &str); 3] = [
+        (&[b"gr\xf6n"], "invalid date 'gr\\366n'"),
+        (&[b"+%Y", b"\xf1ao"], "extra operand '\\361ao'"),
+        (
+            &[b"-d", b"2031-07-23", b"%Y\xd8"],
+            "the argument %Y\\330 lacks a leading '+'",
+        ),
+    ];
+
+    for (args, expected) in cases {
+        let args: Vec<OsString> = args
+            .iter()
+            .map(|a| OsString::from_vec(a.to_vec()))
+            .collect();
+        new_ucmd!()
+            .args(&args)
+            .fails()
+            .code_is(1)
+            .stderr_contains(expected);
+    }
 }

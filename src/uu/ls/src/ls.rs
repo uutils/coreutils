@@ -20,7 +20,6 @@ use std::cell::RefCell;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::{
     cell::OnceCell,
-    cmp::Reverse,
     ffi::{OsStr, OsString},
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
     io::{BufWriter, ErrorKind, Stdout, Write, stdout},
@@ -79,7 +78,7 @@ enum LsError {
             _ => if .0.is_dir() {
                 translate!("ls-error-cannot-open-directory-permission-denied", "path" => .0.quote())
             } else {
-                translate!("ls-error-cannot-open-file-permission-denied", "path" => .0.quote())
+                translate!("ls-error-cannot-access-permission-denied", "path" => .0.quote())
             },
         },
         _ => if 9 == .1.raw_os_error().unwrap_or(1) {
@@ -174,7 +173,6 @@ pub fn uu_app() -> Command {
                 options::format::LONG,
                 options::format::ACROSS,
                 options::format::COLUMNS,
-                options::DIRED,
             ]),
     )
     .arg(
@@ -250,8 +248,7 @@ pub fn uu_app() -> Command {
             .long(options::DIRED)
             .short('D')
             .help(translate!("ls-help-generate-dired-output"))
-            .action(ArgAction::SetTrue)
-            .overrides_with(options::HYPERLINK),
+            .action(ArgAction::SetTrue),
     )
     .arg(
         Arg::new(options::HYPERLINK)
@@ -266,8 +263,7 @@ pub fn uu_app() -> Command {
             .num_args(0..=1)
             .default_missing_value("always")
             .default_value("never")
-            .value_name("WHEN")
-            .overrides_with(options::DIRED),
+            .value_name("WHEN"),
     )
     // The next four arguments do not override with the other format
     // options, see the comment in Config::from for the reason.
@@ -910,13 +906,18 @@ impl<'a> PathData<'a> {
     fn metadata(&self) -> Option<&Metadata> {
         self.md
             .get_or_init(|| {
-                if !self.must_dereference
+                // Prefer the metadata cached by `read_dir` when we don't have to
+                // dereference: it is cheaper than a fresh `stat()` call. Errors are
+                // reported below, just like for the non-cached path.
+                let md = if !self.must_dereference
                     && let Some(dir_entry) = RefCell::take(&self.de)
                 {
-                    return dir_entry.metadata().ok();
-                }
+                    dir_entry.metadata()
+                } else {
+                    get_metadata_with_deref_opt(self.path(), self.must_dereference)
+                };
 
-                match get_metadata_with_deref_opt(self.path(), self.must_dereference) {
+                match md {
                     Err(err) => {
                         // FIXME: A bit tricky to propagate the result here
                         let mut out: std::io::StdoutLock<'static> = stdout().lock();
@@ -1074,29 +1075,23 @@ impl LsOutput for TextOutput<'_> {
         config: &Config,
         is_first: bool,
     ) -> UResult<()> {
-        if is_first {
-            if config.dired {
-                dired::indent(&mut self.state.out)?;
-            }
-            show_dir_name(path_data, &mut self.state.out, config)?;
-            writeln!(self.state.out)?;
-            if config.dired {
-                let dir_len = path_data.path().as_os_str().len();
-                dired::calculate_subdired(&mut self.dired, dir_len);
-                dired::add_dir_name(&mut self.dired, dir_len);
-            }
-        } else {
+        if !is_first {
             writeln!(self.state.out)?;
             if config.dired {
                 self.dired.line_offset += 1; // account for the blank line before recursive directory headings
                 self.dired.padding = 0;
-                dired::indent(&mut self.state.out)?;
-                let dir_name_size = path_data.path().as_os_str().len();
-                dired::calculate_subdired(&mut self.dired, dir_name_size);
-                dired::add_dir_name(&mut self.dired, dir_name_size);
             }
-            show_dir_name(path_data, &mut self.state.out, config)?;
-            writeln!(self.state.out)?;
+        }
+        if config.dired {
+            dired::indent(&mut self.state.out)?;
+        }
+        let name_len = show_dir_name(path_data, &mut self.state.out, config)?;
+        writeln!(self.state.out)?;
+        if config.dired {
+            // The header is rendered with the quoting style in force, so the
+            // offsets must follow the rendered name, not the raw path.
+            dired::calculate_subdired(&mut self.dired, name_len);
+            dired::add_dir_name(&mut self.dired, name_len);
         }
         Ok(())
     }
@@ -1127,7 +1122,7 @@ impl LsOutput for TextOutput<'_> {
         Ok(())
     }
 
-    fn initialize(&mut self, _config: &Config) -> UResult<()> {
+    fn initialize(&mut self, config: &Config) -> UResult<()> {
         if let Some(style_manager) = self
             .state
             .style_manager
@@ -1136,6 +1131,11 @@ impl LsOutput for TextOutput<'_> {
         {
             let to_write = style_manager.reset(true);
             write!(self.state.out, "{to_write}")?;
+            if config.dired {
+                // This reset is written before any listing, so the --dired
+                // offsets have to start after it.
+                self.dired.line_offset += to_write.len();
+            }
         }
         Ok(())
     }
@@ -1477,13 +1477,30 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
 }
 
 fn sort_entries(entries: &mut [PathData], config: &Config) {
-    match config.sort {
-        Sort::Time => entries.sort_unstable_by_key(|k| {
-            Reverse(
-                k.metadata()
-                    .and_then(|md| metadata_get_time(md, config.time))
-                    .unwrap_or(UNIX_EPOCH),
+    // The order the name sort uses. Sorting by time falls back on it so that
+    // entries sharing a timestamp come out in a fixed order rather than in
+    // whatever order the directory was read in, which is what GNU ls does and
+    // what every other arm of this match already does.
+    let use_locale = uucore::i18n::collator::should_use_locale_collation();
+    let name_cmp = |a: &PathData, b: &PathData| {
+        if use_locale {
+            uucore::i18n::collator::locale_cmp(
+                os_str_as_bytes_lossy(a.display_name()).as_ref(),
+                os_str_as_bytes_lossy(b.display_name()).as_ref(),
             )
+        } else {
+            a.display_name().cmp(b.display_name())
+        }
+    };
+
+    match config.sort {
+        Sort::Time => entries.sort_unstable_by(|a, b| {
+            let time = |p: &PathData| {
+                p.metadata()
+                    .and_then(|md| metadata_get_time(md, config.time))
+                    .unwrap_or(UNIX_EPOCH)
+            };
+            time(b).cmp(&time(a)).then_with(|| name_cmp(a, b))
         }),
         Sort::Size => {
             entries.sort_unstable_by(|a, b| {
@@ -1494,18 +1511,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             });
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => {
-            if uucore::i18n::collator::should_use_locale_collation() {
-                entries.sort_unstable_by(|a, b| {
-                    uucore::i18n::collator::locale_cmp(
-                        os_str_as_bytes_lossy(a.display_name()).as_ref(),
-                        os_str_as_bytes_lossy(b.display_name()).as_ref(),
-                    )
-                });
-            } else {
-                entries.sort_unstable_by(|a, b| a.display_name().cmp(b.display_name()));
-            }
-        }
+        Sort::Name => entries.sort_unstable_by(name_cmp),
         Sort::Version => entries.sort_unstable_by(|a, b| {
             version_cmp(
                 os_str_as_bytes_lossy(a.file_name()).as_ref(),

@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore itotal iused iavail ipcent pcent tmpfs squashfs lofs sysfs
+
 mod blocks;
 mod columns;
 mod filesystem;
@@ -46,6 +48,7 @@ static OPT_HUMAN_READABLE_BINARY: &str = "human-readable-binary";
 static OPT_HUMAN_READABLE_DECIMAL: &str = "human-readable-decimal";
 static OPT_INODES: &str = "inodes";
 static OPT_KILO: &str = "kilo";
+static OPT_MEGA: &str = "mega";
 static OPT_LOCAL: &str = "local";
 static OPT_NO_SYNC: &str = "no-sync";
 static OPT_OUTPUT: &str = "output";
@@ -287,25 +290,26 @@ fn is_included(mi: &MountInfo, opt: &Options) -> bool {
 /// The "lt" in the function name is in analogy to the
 /// [`std::cmp::PartialOrd::lt`].
 fn mount_info_lt(m1: &MountInfo, m2: &MountInfo) -> bool {
-    // let "real" devices with '/' in the name win.
+    // A source naming an actual device node outranks one that does not,
+    // so a pseudo-filesystem name never displaces a path under /dev.
     if m1.dev_name.starts_with('/') && !m2.dev_name.starts_with('/') {
         return false;
     }
 
     let m1_nearer_root = m1.mount_dir.len() < m2.mount_dir.len();
-    // With bind mounts, prefer items nearer the root of the source
-    let m2_below_root = !m1.mount_root.is_empty()
-        && !m2.mount_root.is_empty()
-        && m1.mount_root.len() > m2.mount_root.len();
-    // let points towards the root of the device win.
+    // A bind mount whose source subtree is shorter exposes more of the
+    // device, which makes it the more representative entry of the two.
+    let m2_below_root = !m2.mount_root.is_empty() && m1.mount_root.len() > m2.mount_root.len();
+    // Otherwise the shallower mount point is the better description of
+    // the device, unless the deeper one covers more of the source.
     if m1_nearer_root && !m2_below_root {
         return false;
     }
 
-    // let an entry over-mounted on a new device win, but only when
-    // matching an existing mnt point, to avoid problematic
-    // replacement when given inaccurate mount lists, seen with some
-    // chroot environments for example.
+    // What is left is one entry mounted over another. Treat the covering
+    // entry as the live one, but only where both share a mount point: a
+    // mount table that reports stale or duplicated rows (chroots are a
+    // common source) would otherwise evict an entry it never covered.
     !(m1.dev_name != m2.dev_name && m1.mount_dir == m2.mount_dir)
 }
 
@@ -559,7 +563,7 @@ pub fn uu_app() -> Command {
                 .short('B')
                 .long(OPT_BLOCKSIZE_LONG)
                 .value_name("SIZE")
-                .overrides_with_all([OPT_KILO, OPT_BLOCKSIZE])
+                .overrides_with_all([OPT_KILO, OPT_MEGA, OPT_BLOCKSIZE])
                 .help(translate!("df-help-block-size")),
         )
         .arg(
@@ -597,7 +601,14 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_KILO)
                 .short('k')
                 .help(translate!("df-help-kilo"))
-                .overrides_with_all([OPT_BLOCKSIZE, OPT_KILO])
+                .overrides_with_all([OPT_BLOCKSIZE, OPT_KILO, OPT_MEGA])
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(OPT_MEGA)
+                .short('m')
+                .help(translate!("df-help-mega"))
+                .overrides_with_all([OPT_BLOCKSIZE, OPT_KILO, OPT_MEGA])
                 .action(ArgAction::SetTrue),
         )
         .arg(

@@ -7,6 +7,7 @@
 // spell-checker:ignore (libs) kqueue ELOOP EISDIR
 // spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
 // spell-checker:ignore (cmd) taskkill
+
 #![allow(
     clippy::unicode_not_nfc,
     clippy::cast_lossless,
@@ -16,17 +17,11 @@
 use pretty_assertions::assert_eq;
 use rand::distr::Alphanumeric;
 use rstest::rstest;
-#[cfg(all(
-    not(target_vendor = "apple"),
-    not(target_os = "android"),
-    not(target_os = "freebsd"),
-    not(windows)
-))]
+#[cfg(all(not(target_os = "android"), not(target_os = "freebsd"), not(windows)))]
 use rustix::process::{Pid, Signal, kill_process};
 use std::char::from_digit;
 use std::fs::File;
 use std::io::Write;
-#[cfg(not(target_vendor = "apple"))]
 use std::io::{Seek, SeekFrom};
 #[cfg(all(
     not(target_vendor = "apple"),
@@ -106,7 +101,6 @@ fn test_stdin_explicit() {
 }
 
 #[test]
-#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_file() {
     // $ echo foo > f
 
@@ -129,7 +123,7 @@ fn test_stdin_redirect_file() {
         .set_stdin(File::open(at.plus("f")).unwrap())
         .arg("-v")
         .succeeds()
-        .stdout_only("==> standard input <==\nfoo");
+        .stdout_only("==> 'standard input' <==\nfoo");
 }
 
 #[test]
@@ -160,7 +154,6 @@ fn test_stdin_redirect_file_follow() {
 }
 
 #[test]
-#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_offset() {
     // Test following a file from the middle
 
@@ -174,7 +167,6 @@ fn test_stdin_redirect_offset() {
 }
 
 #[test]
-#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_offset2() {
     // like test_stdin_redirect_offset but with multiple files
 
@@ -190,7 +182,7 @@ fn test_stdin_redirect_offset2() {
         .args(&["k", "-", "l", "m"])
         .succeeds()
         .stdout_only(
-            "==> k <==\n1\n2\n\n==> standard input <==\n2\n\n==> l <==\n3\n4\n\n==> m <==\n5\n6\n",
+            "==> k <==\n1\n2\n\n==> 'standard input' <==\n2\n\n==> l <==\n3\n4\n\n==> m <==\n5\n6\n",
         );
 }
 
@@ -1246,6 +1238,30 @@ fn test_obsolete_syntax_zero_lines_file() {
         .no_output();
 }
 
+/// Test for obsolete syntax `tail +0`: like `+1`, print the whole input.
+#[test]
+fn test_obsolete_syntax_positive_zero_lines() {
+    for arg in ["+0", "+00", "+0l"] {
+        new_ucmd!()
+            .args(&[arg])
+            .pipe_in("a\nb\nc\nd\ne\n")
+            .succeeds()
+            .no_stderr()
+            .stdout_is("a\nb\nc\nd\ne\n");
+    }
+}
+
+/// Test for obsolete syntax `tail +0c`: like `+1c`, print the whole input.
+#[test]
+fn test_obsolete_syntax_positive_zero_bytes() {
+    new_ucmd!()
+        .args(&["+0c"])
+        .pipe_in("a\nb\nc\nd\ne\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_is("a\nb\nc\nd\ne\n");
+}
+
 /// Test for reading all lines, specified by `tail -n +0`.
 #[test]
 fn test_positive_zero_lines() {
@@ -2206,12 +2222,27 @@ fn test_follow_name_truncate1() {
     let backup = "backup";
 
     let expected_stdout = at.read(FOLLOW_NAME_EXP);
+    // `expected_stdout` starts with tail's initial static output (the last 10 lines);
+    // everything after that only appears once the truncate/restore below are observed.
+    let initial_stdout = &expected_stdout[..expected_stdout.find("END(25)\n").unwrap() + 8];
     let expected_stderr = format!("{}: {source}: file truncated\n", ts.util_name);
 
     let args = ["--follow=name", source];
     let mut p = ts.ucmd().args(&args).run_no_wait();
     let delay = 1000;
     p.make_assertion().is_alive();
+
+    // Wait for tail's initial read of `source` to finish before mutating it below.
+    // Watch registration happens before this initial output is printed, so once it
+    // appears the truncate/restore below are guaranteed to be observed as events.
+    // A fixed delay isn't enough here: a slow-starting child process (observed on
+    // macOS CI, see #12335) can otherwise race ahead of tail's own startup.
+    for _ in 0..500 {
+        if p.stdout_all() == initial_stdout {
+            break;
+        }
+        p.delay(10);
+    }
 
     at.copy(source, backup);
     p.delay(delay);
@@ -2951,7 +2982,6 @@ fn test_fifo() {
 /// Without non-blocking FIFO open, tail would block forever waiting for a writer.
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
@@ -3975,7 +4005,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
     at.write("data", "file data");
     at.write("fifo", "fifo data");
 
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
                 fifo data\n\
                 ==> empty <==\n";
     scene
@@ -3985,7 +4015,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .succeeds()
         .stdout_only(expected);
 
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
                 \n\
                 ==> empty <==\n";
     scene
@@ -3997,7 +4027,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
 
     let expected = "==> empty <==\n\
                 \n\
-                ==> standard input <==\n";
+                ==> 'standard input' <==\n";
     scene
         .ucmd()
         .args(&["-c", "+0", "empty", "-"])
@@ -4007,7 +4037,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
 
     let expected = "==> empty <==\n\
                 \n\
-                ==> standard input <==\n\
+                ==> 'standard input' <==\n\
                 fifo data";
     scene
         .ucmd()
@@ -4016,7 +4046,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .succeeds()
         .stdout_only(expected);
 
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
                 pipe data\n\
                 ==> data <==\n\
                 file data";
@@ -4029,7 +4059,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
 
     let expected = "==> data <==\n\
                 file data\n\
-                ==> standard input <==\n\
+                ==> 'standard input' <==\n\
                 pipe data";
     scene
         .ucmd()
@@ -4038,9 +4068,9 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .succeeds()
         .stdout_only(expected);
 
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
                 pipe data\n\
-                ==> standard input <==\n";
+                ==> 'standard input' <==\n";
     scene
         .ucmd()
         .args(&["-c", "+0", "-", "-"])
@@ -4048,9 +4078,9 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .succeeds()
         .stdout_only(expected);
 
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
                 fifo data\n\
-                ==> standard input <==\n";
+                ==> 'standard input' <==\n";
     scene
         .ucmd()
         .args(&["-c", "+0", "-", "-"])
@@ -4069,11 +4099,11 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
     at.write("data", "file data");
     at.write("fifo", "fifo data");
 
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
                 \n\
                 ==> empty <==\n\
                 \n\
-                ==> standard input <==\n";
+                ==> 'standard input' <==\n";
 
     scene
         .ucmd()
@@ -4082,11 +4112,11 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
         .succeeds()
         .stdout_only(expected);
 
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
                 \n\
                 ==> empty <==\n\
                 \n\
-                ==> standard input <==\n";
+                ==> 'standard input' <==\n";
     scene
         .ucmd()
         .args(&["-c", "+0", "-", "empty", "-"])
@@ -4095,11 +4125,11 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
         .succeeds()
         .stdout_only(expected);
 
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
                 pipe data\n\
                 ==> data <==\n\
                 file data\n\
-                ==> standard input <==\n";
+                ==> 'standard input' <==\n";
     scene
         .ucmd()
         .args(&["-c", "+0", "-", "data", "-"])
@@ -4118,18 +4148,18 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
     // the pipe. Seems that windows `cmd` (like posix shells) ignores pipes when a fifo is present.
     // This is actually the wished behavior and the test therefore succeeds.
     #[cfg(windows)]
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
         fifo data\n\
         ==> data <==\n\
         file data\n\
-        ==> standard input <==\n\
+        ==> 'standard input' <==\n\
         (The process tried to write to a nonexistent pipe.\r\n)?";
     #[cfg(unix)]
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
         fifo data\n\
         ==> data <==\n\
         file data\n\
-        ==> standard input <==\n";
+        ==> 'standard input' <==\n";
 
     #[cfg(windows)]
     let cmd = ["cmd", "/C"];
@@ -4146,11 +4176,11 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
         .succeeds()
         .stdout_only(expected);
 
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
                 fifo data\n\
                 ==> data <==\n\
                 file data\n\
-                ==> standard input <==\n";
+                ==> 'standard input' <==\n";
     scene
         .ucmd()
         .args(&["-c", "+0", "-", "data", "-"])
@@ -4285,7 +4315,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_warning() {
     let file_data = "file data\n";
     scene.fixtures.write("data", file_data);
 
-    let expected_stdout = "==> standard input <==\n";
+    let expected_stdout = "==> 'standard input' <==\n";
     let expected_stderr = "tail: warning: following standard input indefinitely is ineffective\n";
 
     // `tail -f - data` (without any redirect) would also print this warning in a terminal but we're
@@ -4310,7 +4340,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_warning() {
         .stdout_is(expected_stdout);
 
     let expected_stdout = "tail: warning: following standard input indefinitely is ineffective\n\
-                                 ==> standard input <==\n";
+                                 ==> 'standard input' <==\n";
     // same like above but this time the order of the output matters and we're redirecting stderr to
     // stdout
     // tail -f - data < /dev/ptmx
@@ -4332,7 +4362,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_warning() {
         "tail: warning: following standard input indefinitely is ineffective\n\
         ==> data <==\n\
         {file_data}\n\
-        ==> standard input <==\n"
+        ==> 'standard input' <==\n"
     );
     // tail -f data - < /dev/ptmx
     let mut child = scene
@@ -4350,7 +4380,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_warning() {
         .stdout_only(expected_stdout);
 
     let expected_stdout = "tail: warning: following standard input indefinitely is ineffective\n\
-                                 ==> standard input <==\n";
+                                 ==> 'standard input' <==\n";
     // tail -f - - < /dev/ptmx
     let mut child = scene
         .ucmd()
@@ -4367,7 +4397,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_warning() {
         .stdout_only(expected_stdout);
 
     let expected_stdout = "tail: warning: following standard input indefinitely is ineffective\n\
-                                 ==> standard input <==\n";
+                                 ==> 'standard input' <==\n";
     // tail -f - - data < /dev/ptmx
     let mut child = scene
         .ucmd()
@@ -4384,7 +4414,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_warning() {
         .stdout_only(expected_stdout);
 
     let expected_stdout = "tail: warning: following standard input indefinitely is ineffective\n\
-                                 ==> standard input <==\n";
+                                 ==> 'standard input' <==\n";
     // tail --pid=100000 -f - data < /dev/ptmx
     let mut child = scene
         .ucmd()
@@ -4422,7 +4452,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
 
     let pipe_data = "pipe data";
     let expected_stdout = format!(
-        "==> standard input <==\n\
+        "==> 'standard input' <==\n\
         {pipe_data}\n\
         ==> {file_name} <==\n\
         {file_data}"
@@ -4445,7 +4475,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
     // Fails currently on macos with
     // Diff < left / right > :
     // <tail: cannot open 'standard input' for reading: No such file or directory
-    // >==> standard input <==
+    // >==> 'standard input' <==
     // >fifo data
     // >
     //  ==> data <==
@@ -4453,7 +4483,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
     #[cfg(not(target_vendor = "apple"))]
     {
         let expected_stdout = format!(
-            "==> standard input <==\n\
+            "==> 'standard input' <==\n\
         {fifo_data}\n\
         ==> {file_name} <==\n\
         {file_data}"
@@ -4473,7 +4503,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
             .stdout_only(expected_stdout);
 
         let expected_stdout = format!(
-            "==> standard input <==\n\
+            "==> 'standard input' <==\n\
         {fifo_data}\n\
         ==> {file_name} <==\n\
         {file_data}"
@@ -5109,7 +5139,6 @@ fn test_obsolete_encoding_windows() {
 }
 
 #[test]
-#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_following_with_pid() {
     use std::process::Command;
@@ -5447,4 +5476,28 @@ fn test_invalid_count_keeps_its_leading_zeros() {
         .args(&["-c-0fb", "/dev/null"])
         .fails_with_code(1)
         .stderr_is("tail: invalid number of bytes: '0fb'\n");
+}
+
+#[test]
+fn test_header_quotes_names_needing_it() {
+    // Same quoting rules as head: only names that need it are quoted.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("plain", "p\n");
+    at.write("two words", "w\n");
+
+    ucmd.args(&["-n1", "plain", "two words"])
+        .succeeds()
+        .stdout_only("==> plain <==\np\n\n==> 'two words' <==\nw\n");
+}
+
+// Windows rejects control characters in file names, so this one is unix-only.
+#[test]
+#[cfg(unix)]
+fn test_header_quotes_name_with_control_char() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("tab\there", "t\n");
+
+    ucmd.args(&["-v", "-n1", "tab\there"])
+        .succeeds()
+        .stdout_only("==> 'tab'$'\\t''here' <==\nt\n");
 }

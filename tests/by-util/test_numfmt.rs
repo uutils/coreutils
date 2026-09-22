@@ -184,7 +184,7 @@ fn test_unit_size_hyphen_leading_as_separate_arg() {
     for opt in ["--from-unit", "--to-unit"] {
         new_ucmd!()
             .args(&[opt, "-1"])
-            .pipe_in("5\n")
+            .pipe_in("")
             .fails()
             .stderr_contains("invalid unit size: '-1'");
     }
@@ -196,7 +196,7 @@ fn test_unit_hyphen_leading_as_separate_arg() {
     for opt in ["--from", "--to"] {
         new_ucmd!()
             .args(&[opt, "-x"])
-            .pipe_in("5\n")
+            .pipe_in("")
             .fails()
             .stderr_contains("invalid argument '-x' for '--");
     }
@@ -2392,5 +2392,19 @@ mod field_diagnostics {
             .args(&["--field=0", "--to=si", "1"])
             .fails_with_code(1)
             .stderr_contains("range '0' was invalid: fields and positions are numbered from 1");
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_write_error_is_reported_and_fatal() {
+    // A full output device must be diagnosed, not panic, whatever --invalid says.
+    for extra in [&["--to=si"][..], &["--invalid=ignore"][..]] {
+        let mut ucmd = new_ucmd!();
+        ucmd.args(extra)
+            .pipe_in("81920\n4096\n1024\n")
+            .set_stdout(std::fs::File::create("/dev/full").unwrap())
+            .fails_with_code(1)
+            .stderr_is("numfmt: write error: No space left on device\n");
     }
 }

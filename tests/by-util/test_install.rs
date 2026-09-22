@@ -2,8 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (words) helloworld nodir objdump n'source nconfined testdir
 
+use rustix::process::{getegid, geteuid};
 use std::env::current_exe;
 use std::fs;
 #[cfg(target_os = "linux")]
@@ -12,7 +14,6 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
 use uucore::error::strip_errno;
-use uucore::process::{getegid, geteuid};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
 use uutests::at_and_ucmd;
@@ -409,7 +410,7 @@ fn test_install_target_new_file_with_group() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
     let dir = "target_dir";
-    let gid = getegid();
+    let gid = getegid().as_raw();
 
     at.touch(file);
     at.mkdir(dir);
@@ -436,7 +437,7 @@ fn test_install_target_new_file_with_owner() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
     let dir = "target_dir";
-    let uid = geteuid();
+    let uid = geteuid().as_raw();
 
     at.touch(file);
     at.mkdir(dir);
@@ -582,8 +583,8 @@ fn test_multiple_mode_arguments_override_not_error() {
     let dir = "source_dir";
 
     let file = "source_file";
-    let gid = getegid();
-    let uid = geteuid();
+    let gid = getegid().as_raw();
+    let uid = geteuid().as_raw();
 
     at.touch(file);
     at.mkdir(dir);
@@ -805,7 +806,15 @@ fn test_install_and_strip() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.write("strip", STRIP_PROGRAM);
+    // Write the strip script and sync to disk to avoid ETXTBSY race on some
+    // platforms (observed on ARM64 Linux CI runners).
+    let strip_path = at.plus("strip");
+    {
+        use std::io::Write;
+        let mut f = fs::File::create(&strip_path).unwrap();
+        f.write_all(STRIP_PROGRAM.as_bytes()).unwrap();
+        f.sync_all().unwrap();
+    }
     at.set_mode("strip", 0o755);
     at.write("source", "file contents");
     let path = format!(
@@ -846,7 +855,15 @@ fn test_install_and_strip_with_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.write("strip-program", STRIP_PROGRAM);
+    // Write the strip script and sync to disk to avoid ETXTBSY race on some
+    // platforms (observed on ARM64 Linux CI runners).
+    let strip_path = at.plus("strip-program");
+    {
+        use std::io::Write;
+        let mut f = fs::File::create(&strip_path).unwrap();
+        f.write_all(STRIP_PROGRAM.as_bytes()).unwrap();
+        f.sync_all().unwrap();
+    }
     at.set_mode("strip-program", 0o755);
     at.write("source", "file contents");
 
@@ -2645,7 +2662,7 @@ fn test_install_non_utf8_paths() {
 #[test]
 fn test_install_failed_chown_does_not_leave_setuid() {
     // Only meaningful when the chown can actually fail.
-    if geteuid() == 0 {
+    if geteuid().is_root() {
         return;
     }
 
@@ -2703,7 +2720,7 @@ fn test_install_setuid_mode_applied_without_chown() {
 #[test]
 fn test_install_unprivileged_option_u_skips_chown() {
     // This test only makes sense when not running as root.
-    if geteuid() == 0 {
+    if geteuid().is_root() {
         return;
     }
 
@@ -2729,7 +2746,7 @@ fn test_install_unprivileged_option_u_skips_chown() {
         .no_stderr();
 
     assert!(at.file_exists(dst_ok));
-    assert_eq!(at.metadata(dst_ok).uid(), geteuid());
+    assert_eq!(at.metadata(dst_ok).uid(), geteuid().as_raw());
 }
 
 #[test]
@@ -3113,4 +3130,79 @@ mod diagnostics {
         assert!(stderr.starts_with("install: "), "{stderr}");
         assert!(!stderr.contains(":1:"), "{stderr}");
     }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_d_parallel_mkdir_race() {
+    // Regression test for issue #12355: concurrent `install -D` invocations
+    // that share parent directories must all succeed instead of one losing
+    // the stat/mkdir race and failing with `cannot create directory`.
+    const PARALLEL: usize = 32;
+    const ROUNDS: usize = 10;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("s");
+
+    for round in 0..ROUNDS {
+        let mut children = Vec::with_capacity(PARALLEL);
+        for k in 0..PARALLEL {
+            let mut cmd = scene.ucmd();
+            cmd.arg("-D").arg("s").arg(format!("o{round}/q/f{k}"));
+            children.push(cmd.run_no_wait());
+        }
+
+        for child in children {
+            child.wait().unwrap().success().no_stderr();
+        }
+
+        for k in 0..PARALLEL {
+            assert!(at.file_exists(format!("o{round}/q/f{k}")));
+        }
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_target_without_splice_support() {
+    // Does eCryptfs not support splice on some kernel?
+    use std::process::Command;
+    if Command::new("strace")
+        .args(["-e", "inject=splice:error=EINVAL:when=2", "true"])
+        .output()
+        .is_err()
+    {
+        return; // missing strace
+    }
+    let coreutils = uutests::util::get_tests_binary();
+    Command::new("strace")
+        .args([
+            "-e",
+            "inject=splice:error=EINVAL:when=2",
+            coreutils,
+            "install",
+            coreutils,
+            "target_file",
+        ])
+        .output()
+        .unwrap();
+    // properly copied with fallback from splice?
+    assert!(uucore::fs::are_files_identical(coreutils, "target_file").unwrap());
+}
+
+#[test]
+fn test_install_will_not_overwrite_just_created() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+    at.write("a/f", "a");
+    at.write("b/f", "b");
+
+    ucmd.args(&["a/f", "b/f", "c/"])
+        .fails()
+        .stderr_contains("will not overwrite just-created 'c/f' with 'b/f'");
+
+    assert_eq!(at.read("c/f"), "a");
 }

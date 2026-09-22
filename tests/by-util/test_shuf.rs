@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) unwritable GHSA
+
 use std::fmt::Write;
 
 use uutests::at_and_ucmd;
@@ -12,6 +13,32 @@ use uutests::new_ucmd;
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_getrandom_fail() {
+    // getrandom is missing from legacy kernel
+    use std::process::Command;
+
+    let Ok(out) = Command::new("strace")
+        .args([
+            "-o",
+            "/dev/null",
+            "-e",
+            "inject=getrandom:error=EAGAIN",
+            uutests::util::get_tests_binary(),
+            "shuf",
+            "-i",
+            "1234-1235",
+        ])
+        .output()
+    else {
+        return; // missing strace
+    };
+    assert!(out.status.success());
+    assert!(String::from_utf8_lossy(&out.stdout).contains("1234"));
 }
 
 #[test]

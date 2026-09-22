@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore udev pcent iuse itotal iused ipcent binfmt
+
 #![allow(
     clippy::similar_names,
     clippy::cast_possible_truncation,
@@ -636,6 +638,16 @@ fn test_block_size_1024() {
     assert_eq!(get_header(128_000), "128kB-blocks");
     assert_eq!(get_header(1000 * 1024), "1.1MB-blocks");
     assert_eq!(get_header(1_000_000_000_000), "1TB-blocks");
+}
+
+#[test]
+fn test_block_size_1m_option_with_output() {
+    for args in [["-m", "--output=size"], ["--output=size", "-m"]] {
+        let output = new_ucmd!().args(&args).succeeds().stdout_str_lossy();
+        let header = output.lines().next().unwrap().trim();
+
+        assert_eq!(header, "1M-blocks");
+    }
 }
 
 #[test]

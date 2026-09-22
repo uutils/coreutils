@@ -2,10 +2,12 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore dont SIGBUS SIGSEGV sigsegv sigbus infd
+
 use rstest::rstest;
 
 use uucore::display::Quotable;
-// spell-checker:ignore dont SIGBUS SIGSEGV sigsegv sigbus infd
 use uutests::new_ucmd;
 
 #[cfg(unix)]
@@ -356,7 +358,7 @@ fn test_cmd_result_signal_when_kill_then_signal() {
 
 #[cfg(unix)]
 #[rstest]
-#[case::signal_only_part_of_name("IGKILL")] // spell-checker: disable-line
+#[case::signal_only_part_of_name("IGKILL")] // spell-checker:disable-line
 #[case::signal_just_sig("SIG")]
 #[case::signal_value_too_high("100")]
 #[case::signal_value_negative("-1")]

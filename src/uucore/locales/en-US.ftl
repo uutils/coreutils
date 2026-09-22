@@ -7,6 +7,7 @@ common-tip = tip
 common-usage = Usage
 common-help = help
 common-version = version
+common-read-error = read error
 common-write-error = write error
 
 # Common clap error messages
@@ -31,7 +32,8 @@ error-permission-denied = Permission denied
 error-file-not-found = No such file or directory
 error-no-such-process = No such process
 error-invalid-argument = Invalid argument
-error-is-a-directory = { $file }: Is a directory
+error-is-a-directory-text = Is a directory
+error-is-a-directory = { $file }: { error-is-a-directory-text }
 
 # Common actions
 action-copying = copying
@@ -93,3 +95,8 @@ mode-error-invalid-operator = invalid operator (expected +, -, or =, but found {
 mode-diag-label-missing-operator = this clause says who, but not what to change
 mode-diag-label-invalid-number = not an octal mode
 mode-diag-help-syntax = a mode is either octal, as in 644, or clauses such as u+rwx,go-w
+
+# Shared recursive chown/chgrp/chmod diagnostics (uucore::perms)
+perms-cannot-access = cannot access { $file }: { $error }
+perms-cannot-access-replaced = cannot access { $file }: replaced while it was being processed
+perms-too-many-symlink-levels = Too many levels of symbolic links

@@ -23,6 +23,7 @@ use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::parser::parse_signed_num::number_offset;
 use uucore::parser::parse_size::ParseSizeError;
+use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use uucore::show;
 use uucore::translate;
 
@@ -84,6 +85,7 @@ impl Default for Mode {
 /// The message is built where it always was; the rest is what a caret needs:
 /// the value as typed, the option it was given to, and what the size parser
 /// made of it.
+#[derive(Debug)]
 pub struct SizeError {
     pub message: String,
     option: OptionValue,
@@ -172,7 +174,7 @@ fn arg_iterate<'a>(
     }
 }
 
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, PartialEq)]
 struct HeadOptions {
     pub quiet: bool,
     pub verbose: bool,
@@ -183,22 +185,21 @@ struct HeadOptions {
 }
 
 impl HeadOptions {
-    ///Construct options from matches
+    /// Construct options from matches
     pub fn get_from(matches: &ArgMatches) -> Result<Self, SizeError> {
-        let mut options = Self::default();
-
-        options.quiet = matches.get_flag(options::QUIET);
-        options.verbose = matches.get_flag(options::VERBOSE);
-        options.line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
-        options.presume_input_pipe = matches.get_flag(options::PRESUME_INPUT_PIPE);
-
-        options.mode = Mode::from(matches)?;
-        // #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")] <https://github.com/rust-lang/rust/issues/15701>
-        options.files = matches
-            .get_many::<OsString>(options::FILES)
-            .unwrap()
-            .cloned()
-            .collect();
+        let options = Self {
+            quiet: matches.get_flag(options::QUIET),
+            verbose: matches.get_flag(options::VERBOSE),
+            line_ending: LineEnding::from_zero_flag(matches.get_flag(options::ZERO)),
+            presume_input_pipe: matches.get_flag(options::PRESUME_INPUT_PIPE),
+            mode: Mode::from(matches)?,
+            // #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")] <https://github.com/rust-lang/rust/issues/15701>
+            files: matches
+                .get_many::<OsString>(options::FILES)
+                .unwrap()
+                .cloned()
+                .collect(),
+        };
 
         Ok(options)
     }
@@ -453,7 +454,11 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 if !first {
                     writeln!(stdout)?;
                 }
-                writeln!(stdout, "{}", translate!("head-header-stdin"))?;
+                let name = locale_aware_escape_name(
+                    translate!("head-name-stdin").as_ref(),
+                    QuotingStyle::SHELL_ESCAPE,
+                );
+                writeln!(stdout, "==> {} <==", name.to_string_lossy())?;
             }
             let stdin = io::stdin();
 
@@ -504,7 +509,10 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                         writeln!(stdout)?;
                     }
                     write!(stdout, "==> ")?;
-                    print_verbatim(file)?;
+                    print_verbatim(locale_aware_escape_name(
+                        file.as_ref(),
+                        QuotingStyle::SHELL_ESCAPE,
+                    ))?;
                     writeln!(stdout, " <==")?;
                     first = false;
                 }
@@ -650,13 +658,14 @@ mod tests {
 
     #[test]
     fn test_options_correct_defaults() {
-        let opts = HeadOptions::default();
+        let matches = uu_app().get_matches();
+        let opts = HeadOptions::get_from(&matches).unwrap();
 
         assert!(!opts.verbose);
         assert!(!opts.quiet);
         assert_eq!(opts.line_ending, LineEnding::Newline);
         assert_eq!(opts.mode, Mode::FirstLines(10));
-        assert!(opts.files.is_empty());
+        assert_eq!(opts.files, vec!(OsString::from("-")));
     }
 
     fn arg_outputs(src: &str) -> Result<String, ()> {

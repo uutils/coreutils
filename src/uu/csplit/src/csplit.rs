@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore rustdoc
+
 #![allow(rustdoc::private_intra_doc_links)]
 
 use std::borrow::Borrow;
@@ -123,9 +125,15 @@ where
     let mut input_iter = InputSplitter::new(enumerated_input_lines);
     let mut split_writer = SplitWriter::new(options);
     let patterns_vec: Vec<patterns::Pattern> = patterns::get_patterns(patterns)?;
-    let all_up_to_line = patterns_vec
-        .iter()
-        .all(|p| matches!(p, patterns::Pattern::UpToLine(_, _)));
+    // A `{*}` regex only stops once it no longer matches, and by then it has
+    // consumed the rest of the input.
+    let repeats_forever = patterns_vec.iter().any(|p| {
+        matches!(
+            p,
+            patterns::Pattern::UpToMatch(_, _, patterns::ExecutePattern::Always)
+                | patterns::Pattern::SkipToMatch(_, _, patterns::ExecutePattern::Always)
+        )
+    });
     let ret = do_csplit(&mut split_writer, patterns_vec, &mut input_iter);
 
     // consume the rest, unless there was an error
@@ -139,9 +147,9 @@ where
                 split_writer.writeln(&line?)?;
             }
             split_writer.finish_split()
-        } else if all_up_to_line && options.suppress_matched {
-            // GNU semantics for integer patterns with --suppress-matched:
-            // even if no remaining input, create a final (possibly empty) split
+        } else if !repeats_forever {
+            // GNU semantics: even if no remaining input, create a final
+            // (possibly empty) split
             split_writer.new_writer()?;
             split_writer.finish_split()
         } else {
@@ -150,6 +158,12 @@ where
     } else {
         ret
     };
+    // GNU still reports the bytes written to the split that was in progress
+    // when the failure happened.
+    if ret.is_err() && !split_writer.split_finished {
+        let _ = split_writer.finish_split();
+    }
+
     // delete files on error by default
     if ret.is_err() && !options.keep_files {
         split_writer.delete_all_splits()?;
@@ -238,6 +252,8 @@ struct SplitWriter<'a> {
     size: usize,
     /// flag to indicate that no content should be written to a split
     dev_null: bool,
+    /// whether the current split has already been accounted for
+    split_finished: bool,
 }
 
 impl Drop for SplitWriter<'_> {
@@ -262,6 +278,7 @@ impl SplitWriter<'_> {
             current_writer: None,
             size: 0,
             dev_null: false,
+            split_finished: true,
         }
     }
 
@@ -279,6 +296,7 @@ impl SplitWriter<'_> {
         self.counter += 1;
         self.size = 0;
         self.dev_null = false;
+        self.split_finished = false;
         Ok(())
     }
 
@@ -314,6 +332,7 @@ impl SplitWriter<'_> {
     ///
     /// Returns an error if flushing the writer fails.
     fn finish_split(&mut self) -> Result<(), CsplitError> {
+        self.split_finished = true;
         if !self.dev_null {
             // Flush the writer to ensure all data is written and errors are detected
             if let Some(ref mut writer) = self.current_writer {

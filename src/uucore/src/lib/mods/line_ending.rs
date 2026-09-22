@@ -2,9 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 //! Provides consistent newline/zero terminator handling for `-z`/`--zero` flags.
 //!
 //! See the [`LineEnding`] struct for more information.
+
 use std::fmt::Display;
 
 /// Line ending of either `\n` or `\0`

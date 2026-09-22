@@ -8,8 +8,10 @@
 mod mode;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use rustix::process::{getegid, geteuid};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use selinux::SecurityContext;
+use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fmt::Debug;
 use std::fs::{self, metadata};
@@ -25,7 +27,6 @@ use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
 use uucore::fs::{are_files_identical, dir_strip_dot_for_creation};
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
-use uucore::process::{getegid, geteuid};
 #[cfg(unix)]
 use uucore::safe_traversal::{DirFd, SymlinkBehavior, create_dir_all_safe};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -134,6 +135,9 @@ enum InstallError {
 
     #[error("{}", translate!("install-error-not-permitted", "path" => .0.quote()))]
     NotPermitted(PathBuf),
+
+    #[error("{}", translate!("install-error-will-not-overwrite-just-created", "dest" => .0.quote(), "source" => .1.quote()))]
+    WillNotOverwriteJustCreated(PathBuf, PathBuf),
 }
 
 impl UError for InstallError {
@@ -832,6 +836,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
     if !target_dir.is_dir() {
         return Err(InstallError::TargetDirIsntDir(target_dir.to_path_buf()).into());
     }
+    let mut installed_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
     for sourcepath in files {
         let source_metadata = match metadata_for_source(sourcepath) {
             Ok(metadata) => metadata,
@@ -851,7 +856,17 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         let filename = sourcepath.components().next_back().unwrap();
         targetpath.push(filename);
 
-        show_if_err!(copy(sourcepath, &targetpath, b));
+        if installed_destinations.contains(&targetpath) && b.backup_mode != BackupMode::Numbered {
+            let err = InstallError::WillNotOverwriteJustCreated(targetpath, sourcepath.clone());
+            show!(err);
+            continue;
+        }
+
+        let res = copy(sourcepath, &targetpath, b);
+        if res.is_ok() {
+            installed_destinations.insert(targetpath);
+        }
+        show_if_err!(res);
     }
     // If the exit code was set, or show! has been called at least once
     // (which sets the exit code as well), function execution will end after
@@ -1218,7 +1233,7 @@ fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
     use std::os::unix::fs::MetadataExt;
 
     // Check if the destination file's owner differs from the effective user ID
-    if to_meta.uid() != geteuid() {
+    if to_meta.uid() != geteuid().as_raw() {
         return true;
     }
 
@@ -1230,7 +1245,7 @@ fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
         .parent()
         .and_then(|parent| metadata(parent).ok())
         .filter(|parent_meta| parent_meta.mode() & 0o2000 != 0)
-        .map_or(getegid(), |parent_meta| parent_meta.gid());
+        .map_or(getegid().as_raw(), |parent_meta| parent_meta.gid());
 
     to_meta.gid() != expected_gid
 }

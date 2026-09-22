@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (methods) hexdigest funcs nprimes cmdline
+
 #![allow(
     clippy::similar_names,
     clippy::cast_possible_truncation,
@@ -1699,4 +1700,24 @@ fn invalid_cmdline_arg_continues() {
         .fails_with_code(1)
         .stdout_is("4: 2 2\n")
         .stderr_is("factor: 'a' is not a valid positive integer\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_stdin_clean_error_message() {
+    use std::fs;
+    use uutests::util::TestScenario;
+    use uutests::util_name;
+
+    let scene = TestScenario::new(util_name!());
+    let dir = scene.fixtures.plus("directory");
+    fs::create_dir_all(&dir).unwrap();
+
+    let dir_as_file = fs::File::open(&dir).unwrap();
+
+    scene
+        .ucmd()
+        .set_stdin(dir_as_file)
+        .fails()
+        .stderr_is("factor: error reading input: Is a directory\n");
 }

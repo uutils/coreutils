@@ -18,7 +18,7 @@ use crate::checksum::{
     AlgoKind, BlakeLength, ChecksumError, HashLength, ReadingMode, ShaLength, SizedAlgoKind,
     digest_reader, parse_blake_length, unescape_filename,
 };
-use crate::error::{FromIo, UError, UIoError, UResult, USimpleError, strip_errno};
+use crate::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use crate::sum::{self, Blake2b, Blake3, DigestOutput};
 use crate::{
@@ -685,7 +685,7 @@ fn compute_and_check_digest_from_file(
     let real_filename_to_check = os_str_from_bytes(&filename_to_check_unescaped)?;
 
     // Open the input file
-    let file_to_check = get_file_to_check(&real_filename_to_check, opts)?;
+    let file_to_check = get_file_to_check(real_filename_to_check, opts)?;
     let mut file_reader = BufReader::new(file_to_check);
 
     // Read the file and calculate the checksum
@@ -699,14 +699,14 @@ fn compute_and_check_digest_from_file(
             Ok(result) => result,
             Err(err) => {
                 show!(err.map_err_context(|| {
-                    locale_aware_escape_name(&real_filename_to_check, QuotingStyle::SHELL_ESCAPE)
+                    locale_aware_escape_name(real_filename_to_check, QuotingStyle::SHELL_ESCAPE)
                         .to_string_lossy()
                         .to_string()
                 }));
 
                 let _ = write_file_report(
                     io::stdout(),
-                    &real_filename_to_check,
+                    real_filename_to_check,
                     FileChecksumResult::CantOpen,
                     opts.verbose,
                 );
@@ -722,7 +722,7 @@ fn compute_and_check_digest_from_file(
     };
     let _ = write_file_report(
         io::stdout(),
-        &real_filename_to_check,
+        real_filename_to_check,
         FileChecksumResult::from_bool(checksum_correct),
         opts.verbose,
     );
@@ -791,7 +791,12 @@ fn process_non_algo_based_line(
     // bits except when dealing with blake2b, sha2 and sha3, where we will
     // detect the length.
     let algo_len = match cli_algo_kind {
-        ak::Blake2b | ak::Blake3 => Some(HashLength::from_bytes(expected_checksum.len())),
+        // An over-length digest makes this a malformed line for GNU, not a
+        // fatal error.
+        algo @ (ak::Blake2b | ak::Blake3) => Some(
+            parse_blake_length(algo, BlakeLength::Int(expected_checksum.len() * 8))
+                .map_err(|_| LineCheckError::ImproperlyFormatted)?,
+        ),
         ak::Sha2 | ak::Sha3 => {
             // multiplication by 8 to get the number of bits
             Some(
@@ -884,11 +889,8 @@ fn process_checksum_file(
     let mut last_algo = None;
 
     for (i, line_res) in read_os_string_lines(reader).enumerate() {
-        let line = line_res.map_err(|e| {
-            USimpleError::new(
-                UIoError::from(e).code(),
-                format!("{}: read error", filename_input.maybe_quote()),
-            )
+        let line = line_res.map_err(|_| {
+            USimpleError::new(1, format!("{}: read error", filename_input.maybe_quote()))
         })?;
 
         let line_result = process_checksum_line(
@@ -1024,8 +1026,8 @@ mod tests {
     fn test_algo_based_parser() {
         #[allow(clippy::type_complexity)]
         let test_cases: &[(&[u8], Option<(&[u8], Option<&[u8]>, &[u8], &[u8])>)] = &[
+            // spell-checker:disable
             (b"SHA256 (example.txt) = d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2", Some((b"SHA256", None, b"example.txt", b"d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2"))),
-            // cspell:disable
             (b"BLAKE2b-512 (file) = abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef", Some((b"BLAKE2b", Some(b"512"), b"file", b"abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef"))),
             (b" MD5 (test) = 9e107d9d372bb6826bd81d3542a419d6", Some((b"MD5", None, b"test", b"9e107d9d372bb6826bd81d3542a419d6"))),
             (b"SHA-1 (anotherfile) = a9993e364706816aba3e25717850c26c9cd0d89d", Some((b"SHA", Some(b"1"), b"anotherfile", b"a9993e364706816aba3e25717850c26c9cd0d89d"))),
@@ -1044,9 +1046,9 @@ mod tests {
             (b"(filename) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
             (b"filename) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
             (b"filename = fds65dsf46as5df4d6f54asds5d7f7g9", None),
+            // spell-checker:enable
         ];
 
-        // cspell:enable
         for (input, expected) in test_cases {
             let line_info = LineFormat::parse_algo_based(input);
             match expected {

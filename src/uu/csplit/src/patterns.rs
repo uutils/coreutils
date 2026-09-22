@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (regex) SKIPTO UPTO ; (vars) ntimes
 
 use std::ops::Range;
@@ -105,8 +106,9 @@ pub fn get_patterns(args: &[&str]) -> Result<Vec<Pattern>, CsplitError> {
 
 fn extract_patterns(args: &[&str]) -> Result<Vec<Pattern>, CsplitError> {
     let mut patterns = Vec::with_capacity(args.len());
+    // An empty regex between the delimiters is allowed and matches every line.
     let to_match_reg =
-        Regex::new(r"^(/(?P<UPTO>.+)/|%(?P<SKIPTO>.+)%)(?P<OFFSET>[\+-]?[0-9]+)?$").unwrap();
+        Regex::new(r"^(/(?P<UPTO>.*)/|%(?P<SKIPTO>.*)%)(?P<OFFSET>[\+-]?[0-9]+)?$").unwrap();
     let execute_ntimes_reg = Regex::new(r"^\{(?P<TIMES>[0-9]+)|\*\}$").unwrap();
     let mut iter = args.iter().copied().peekable();
 

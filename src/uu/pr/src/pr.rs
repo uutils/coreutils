@@ -2,7 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
 
 // spell-checker:ignore (ToDO) adFfmprt, kmerge
 
@@ -139,6 +138,16 @@ struct NumberingMode {
     first_number: usize,
 }
 
+impl Default for NumberingMode {
+    fn default() -> Self {
+        Self {
+            width: 5,
+            separator: TAB.to_string(),
+            first_number: 1,
+        }
+    }
+}
+
 #[derive(Debug)]
 struct ExpandTabsOptions {
     input_char: char,
@@ -150,32 +159,6 @@ impl Default for ExpandTabsOptions {
         Self {
             width: 8,
             input_char: TAB,
-        }
-    }
-}
-
-impl Default for NumberingMode {
-    fn default() -> Self {
-        Self {
-            width: 5,
-            separator: TAB.to_string(),
-            first_number: 1,
-        }
-    }
-}
-
-impl From<FromUtf8Error> for PrError {
-    fn from(err: FromUtf8Error) -> Self {
-        Self::EncounteredErrors {
-            msg: err.to_string(),
-        }
-    }
-}
-
-impl From<Utf8Error> for PrError {
-    fn from(err: Utf8Error) -> Self {
-        Self::EncounteredErrors {
-            msg: err.to_string(),
         }
     }
 }
@@ -193,6 +176,22 @@ enum PrError {
 
     #[error("pr: {path}: {}", strip_errno(error))]
     ReadPath { path: PathBuf, error: io::Error },
+}
+
+impl From<FromUtf8Error> for PrError {
+    fn from(err: FromUtf8Error) -> Self {
+        Self::EncounteredErrors {
+            msg: err.to_string(),
+        }
+    }
+}
+
+impl From<Utf8Error> for PrError {
+    fn from(err: Utf8Error) -> Self {
+        Self::EncounteredErrors {
+            msg: err.to_string(),
+        }
+    }
 }
 
 pub fn uu_app() -> Command {
@@ -429,7 +428,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 /// Rewrite arguments before clap parsing, preserving legacy numeric operands.
 fn recreate_arguments(args: &[String]) -> Vec<String> {
     let num_regex = Regex::new(r"^[^-]\d*$").unwrap();
-    let n_regex = Regex::new(r"^-n\s*$").unwrap();
     // `-e` ends a cluster of short flags that take no value of their own, as in `-tre`.
     // Options that do take a value are excluded so that `-se` keeps meaning `-s e`.
     let e_regex = Regex::new(r"^-[dtTrFfabmJ]*e$").unwrap();
@@ -437,8 +435,8 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
     let num_option = args
         .iter()
         .take_while(|arg| arg.as_str() != "--")
-        .find_position(|x| n_regex.is_match(x.trim()));
-    if let Some((pos, _value)) = num_option
+        .position(|x| x.trim() == "-n");
+    if let Some(pos) = num_option
         && let Some(num_val_opt) = args.get(pos + 1)
         && !num_regex.is_match(num_val_opt)
     {
@@ -541,15 +539,13 @@ fn parse_usize(
     matches.get_one::<String>(opt).map(|i| {
         let raw = i.as_str();
         match raw.parse::<usize>() {
-            Ok(n) if n <= MAX_INT_VALUE => Ok(n),
+            Ok(n @ ..=MAX_INT_VALUE) => Ok(n),
             Ok(_) => Err(PrError::EncounteredErrors {
                 msg: value_too_large(too_large_error_message, raw),
             }),
-            Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
-                Err(PrError::EncounteredErrors {
-                    msg: value_too_large(too_large_error_message, raw),
-                })
-            }
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => Err(PrError::EncounteredErrors {
+                msg: value_too_large(too_large_error_message, raw),
+            }),
             Err(_) => {
                 let option = format!("-{opt}");
                 Err(PrError::EncounteredErrors {
@@ -653,7 +649,7 @@ fn build_options(
 
             if matches!(
                 &parse_result,
-                Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow)
+                Err(e) if *e.kind() == IntErrorKind::PosOverflow
             ) {
                 return Err(invalid_too_large(i));
             }
@@ -668,16 +664,14 @@ fn build_options(
             };
 
             let width = match parse_result {
-                Ok(res) if res > MAX_INT_VALUE => return Err(invalid_too_large(i)),
-                Ok(res) => res,
+                Ok(res @ ..=MAX_INT_VALUE) => res,
+                Ok(_) => return Err(invalid_too_large(i)),
                 Err(_) => {
                     let digits = i.get(1..).unwrap_or_default();
                     match digits.parse::<usize>() {
-                        Ok(res) if res > MAX_INT_VALUE => {
-                            return Err(invalid_too_large(digits));
-                        }
-                        Ok(res) => res,
-                        Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
+                        Ok(res @ ..=MAX_INT_VALUE) => res,
+                        Ok(_) => return Err(invalid_too_large(digits)),
+                        Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
                             return Err(invalid_too_large(digits));
                         }
                         Err(_) => NumberingMode::default().width,
@@ -944,16 +938,14 @@ fn build_options(
         .column
         .as_deref()
         .map(|unparsed_num| match unparsed_num.parse::<usize>() {
-            Ok(n) if n > MAX_INT_VALUE => Err(PrError::EncounteredErrors {
+            Ok(n @ ..=MAX_INT_VALUE) => Ok(n),
+            Ok(_) => Err(PrError::EncounteredErrors {
                 msg: value_too_large("invalid number of columns", unparsed_num),
             }),
-            Ok(n) => Ok(n),
-            Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
-                Err(PrError::EncounteredErrors {
-                    msg: value_too_large("invalid number of columns", unparsed_num),
-                })
-            }
-            Err(_e) => Err(PrError::EncounteredErrors {
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => Err(PrError::EncounteredErrors {
+                msg: value_too_large("invalid number of columns", unparsed_num),
+            }),
+            Err(_) => Err(PrError::EncounteredErrors {
                 msg: format!("invalid {} argument {}", "-", unparsed_num.quote()),
             }),
         });
@@ -992,8 +984,8 @@ fn build_options(
         // Parse as i32 to match GNU pr's behavior
         // Store the count. Spaces are streamed at print time to avoid huge allocations.
         Some(raw) => match raw.parse::<i32>() {
-            Ok(n) if n >= 0 => n as usize,
-            Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
+            Ok(n @ 0..) => n as usize,
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
                 return Err(PrError::EncounteredErrors {
                     msg: value_too_large("'-o MARGIN' invalid line offset", raw),
                 });

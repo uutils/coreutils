@@ -4,7 +4,7 @@
 
 # spell-checker:ignore (paths) abmon deref discrim eacces getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
 # spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) greadlink gsed multihardlink texinfo CARGOFLAGS
-# spell-checker:ignore openat TOCTOU CFLAGS tmpfs gnproc
+# spell-checker:ignore openat TOCTOU CFLAGS tmpfs gnproc autoreconf
 
 set -e
 
@@ -122,6 +122,7 @@ if test -f gnu-built; then
     echo "'rm -f $(pwd)/{gnu-built,src/getlimits}' to force the build"
     echo "Note: the customization of the tests will still happen"
 else
+    autoreconf
     # Disable useless checks
     sed -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
     # Stop manpage generation for cleaner log
@@ -225,6 +226,10 @@ sed -i "s|cannot create regular file 'no-such/': Not a directory|'no-such/' is n
 # Our message is better
 sed -i "s|warning: unrecognized escape|warning: incomplete hex escape|" tests/stat/stat-printf.pl
 
+# Our message is better:
+# clap provides allowed range for --parallel for given invalid value
+sed -i '/^# Invalid --parallel arguments\./,+4d' tests/sort/sort.pl
+
 # Remove dup of /usr/bin/ and /usr/local/bin/ when executed several times
 grep -rlE '/usr/bin/\s?/usr/bin' init.cfg tests/* | xargs -r "${SED}" -Ei 's|/usr/bin/\s?/usr/bin/|/usr/bin/|g'
 grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r "${SED}" -Ei 's|/usr/local/bin/\s?/usr/local/bin/|/usr/local/bin/|g'
@@ -289,10 +294,6 @@ sed -i "s|# Independent of whether SELinux|return 0\n  #|g" init.cfg
 # The check to verify if it works is based on the GNU coreutils version
 # making it too restrictive for us
 sed -i "s|\$PACKAGE_VERSION|[0-9]*|g" tests/rm/fail-2eperm.sh tests/mv/sticky-to-xpart.sh init.cfg
-
-# usage_vs_refs.sh checks that all options appear in GNU's texi docs.
-# we have some extra options
-sed -i '1s/^/Exit 77\n/' tests/misc/usage_vs_refs.sh
 
 # usage_vs_getopt.sh is heavily modified as it runs all the binaries
 # with the option -/ is used, clap is returning a better error than GNU's. Adjust the GNU test

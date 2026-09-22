@@ -11,8 +11,8 @@ use uucore::os_string_to_vec;
 use uucore::translate;
 use uucore::{
     display::Quotable,
-    error::{UError, UResult},
-    format_usage,
+    error::{UError, UResult, strip_errno},
+    format_usage, show_error,
 };
 
 mod diagnostics;
@@ -146,7 +146,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 uucore::error::quiet_if_reported(reported, e)
             })?;
             stdout().write_all(&res)?;
-            stdout().write_all(b"\n")?;
+            if let Err(e) = stdout().write_all(b"\n") {
+                show_error!("{}", strip_errno(&e));
+                return Err(3.into());
+            }
             if !is_truthy(&res.into()) {
                 return Err(1.into());
             }

@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 //! A fixed-size ring buffer.
+
 use std::collections::VecDeque;
 
 /// A fixed-size ring buffer backed by a `VecDeque`.

@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
+
 // spell-checker:ignore fstatat openat dirfd
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
@@ -801,7 +801,12 @@ enum DuError {
     InvalidGlob(PatternError),
 }
 
-impl UError for DuError {}
+impl UError for DuError {
+    fn usage(&self) -> bool {
+        // GNU points at --help for a bad --max-depth argument.
+        matches!(self, Self::InvalidMaxDepthArg(_))
+    }
+}
 
 /// Read a file and return each line in a vector of String
 fn file_as_vec(filename: impl AsRef<Path>) -> UResult<Vec<String>> {
@@ -989,7 +994,7 @@ fn read_files_from(file_name: &OsStr) -> io::Result<Vec<PathBuf>> {
             // relies on inode-based deduplication during traversal (which is
             // disabled by --count-links). Deduplicating by name would, e.g.,
             // collapse repeated missing files into a single error.
-            paths.push(PathBuf::from(&*uucore::os_str_from_bytes(&path).unwrap()));
+            paths.push(PathBuf::from(uucore::os_str_from_bytes(&path).unwrap()));
         }
     }
 
@@ -1387,6 +1392,8 @@ pub fn uu_app() -> Command {
                 .long("max-depth")
                 .value_name("N")
                 .help(translate!("du-help-max-depth"))
+                // Accept a negative depth so it is rejected by us, not by clap.
+                .allow_hyphen_values(true)
                 .overrides_with(options::MAX_DEPTH),
         )
         .arg(

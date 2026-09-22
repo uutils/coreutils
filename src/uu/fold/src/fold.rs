@@ -70,14 +70,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Ok(0) => {
                 return Err(USimpleError::new(
                     1,
-                    translate!("fold-error-width-zero", "width" => inp_width.quote()),
+                    translate!("fold-error-width-out-of-range", "width" => inp_width.quote()),
                 ));
             }
             Ok(parsed_width) => parsed_width,
             Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
                 return Err(USimpleError::new(
                     1,
-                    translate!("fold-error-width-overflow", "width" => inp_width.quote()),
+                    translate!("fold-error-width-out-of-range", "width" => inp_width.quote()),
                 ));
             }
             Err(_) => {

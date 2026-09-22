@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (words) dirfd subdirs openat FDCWD rwxr
 
 use std::fs::{OpenOptions, Permissions, metadata, set_permissions};
@@ -565,13 +566,16 @@ fn test_chmod_preserve_root() {
 
 #[test]
 fn test_chmod_preserve_root_with_paths_that_resolve_to_root() {
+    // Only a bare "/" is reported as such; any other spelling of the root
+    // directory is named as the user wrote it, followed by "(same as '/')".
+    // "//" also checks we compare the raw operand, since Path("//") == Path("/").
     new_ucmd!()
         .arg("-R")
         .arg("--preserve-root")
         .arg("755")
-        .arg("/../")
+        .arg("//")
         .fails_with_code(1)
-        .stderr_contains("chmod: it is dangerous to operate recursively on '/'");
+        .stderr_contains("chmod: it is dangerous to operate recursively on '//' (same as '/')");
 }
 
 #[test]
@@ -623,6 +627,31 @@ fn test_chmod_recursive_reference_does_not_follow_inner_symlink() {
         0o600
     );
     assert_eq!(at.metadata("tree").permissions().mode() & 0o7777, 0o745);
+}
+
+#[test]
+fn test_chmod_recursive_symlink_option_like_mode() {
+    // A symlink met inside the tree during `chmod -R` must be left alone.
+    // When using an option-like mode (e.g. `-w`), umask sensitivity checks
+    // must not trigger for symlinks inside the tree.
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir_all("d/sub");
+    at.set_mode("d", 0o755);
+    at.set_mode("d/sub", 0o755);
+    at.touch("d/sub/target");
+    at.set_mode("d/sub/target", 0o644);
+    // Verbatim reproducer from Launchpad #2167122: ln -s target d/sub/link
+    at.relative_symlink_file("target", "d/sub/link");
+
+    ucmd.umask(0o022).arg("-R").arg("-w").arg("d").succeeds();
+
+    assert_eq!(at.metadata("d").permissions().mode() & 0o7777, 0o555);
+    assert_eq!(at.metadata("d/sub").permissions().mode() & 0o7777, 0o555);
+    assert_eq!(
+        at.metadata("d/sub/target").permissions().mode() & 0o7777,
+        0o444
+    );
 }
 
 #[test]
@@ -1576,13 +1605,13 @@ fn test_chmod_non_utf8_paths() {
 
 #[test]
 fn test_chmod_operator_only_still_calls_syscall() {
-    use uucore::process::geteuid;
+    use rustix::process::geteuid;
 
     // An operator with no permission letters ('+', '-', '=') leaves the mode
     // bits unchanged, yet chmod must still issue the chmod(2) call so that a
     // lack of permission is reported instead of silently succeeding. As a
     // non-root user, '/' (owned by root) is a file we cannot chmod.
-    if geteuid() == 0 {
+    if geteuid().is_root() {
         return;
     }
     if metadata("/").map_or(0, |m| m.uid()) != 0 {
@@ -1645,13 +1674,13 @@ fn test_chmod_symlink_cycles() {
     at.set_mode("a/b", 0o755);
     at.set_mode("a/b/c", 0o755);
 
+    // spell-checker:disable
     scene
         .ucmd()
         .arg("-vRL")
         .arg("+r")
         .arg("a")
         .run()
-        // cSpell:disable
         .stdout_contains_line("mode of 'a' retained as 0755 (rwxr-xr-x)")
         .stdout_contains_line("mode of 'a/b' retained as 0755 (rwxr-xr-x)")
         .stdout_contains_line("mode of 'a/b/c' retained as 0755 (rwxr-xr-x)")
@@ -1659,7 +1688,7 @@ fn test_chmod_symlink_cycles() {
         .stdout_does_not_contain("mode of 'a/b/c/d/b' retained as 0755 (rwxr-xr-x)")
         .stdout_does_not_contain("mode of 'a/b/c/d/b/c' retained as 0755 (rwxr-xr-x)")
         .stdout_does_not_contain("mode of 'a/b/c/d/b/c/d' retained as 0755 (rwxr-xr-x)");
-    // cSpell:enable
+    // spell-checker:enable
 }
 
 #[test]
@@ -1671,7 +1700,7 @@ fn test_chmod_symlink_two_links_same_dir() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    // cSpell:disable
+    // spell-checker:disable
     at.mkdir_all("base/realdir");
     at.touch("base/realdir/file");
     at.symlink_dir("base/realdir", "base/link1");
@@ -1688,7 +1717,7 @@ fn test_chmod_symlink_two_links_same_dir() {
         .stdout_contains("mode of 'base/realdir/file'")
         .stdout_contains("mode of 'base/link1/file'")
         .stdout_contains("mode of 'base/link2/file'");
-    // cSpell:enable
+    // spell-checker:enable
 }
 
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]

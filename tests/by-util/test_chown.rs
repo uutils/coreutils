@@ -2,12 +2,15 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist cuuser groupname notexisting passgrp
+
 #[cfg(all(unix, not(target_os = "openbsd")))]
 use std::os::unix::fs::MetadataExt;
 use uutests::util::{CmdResult, TestScenario, is_ci, run_ucmd_as_root};
 use uutests::util_name;
 use uutests::{at_and_ucmd, new_ucmd};
+
 // Apparently some CI environments have configuration issues, e.g. with 'whoami' and 'id'.
 // If we are running inside the CI and "needle" is in "stderr" skipping this test is
 // considered okay. If we are not inside the CI this calls assert!(result.success).
@@ -1008,7 +1011,7 @@ fn test_chown_symlink_two_links_same_dir() {
     let user_name = String::from(result.stdout_str().trim());
     assert!(!user_name.is_empty());
 
-    // cSpell:disable
+    // spell-checker:disable
     at.mkdir_all("base/realdir");
     at.touch("base/realdir/file");
     at.symlink_dir("base/realdir", "base/link1");
@@ -1031,14 +1034,14 @@ fn test_chown_symlink_two_links_same_dir() {
                 "ownership of 'base/link2/file' retained as {user_name}"
             ));
     }
-    // cSpell:enable
+    // spell-checker:enable
 }
 
 #[cfg(target_os = "linux")]
 #[test]
 fn verbose_missing_file_write_error_is_reported_not_panic() {
+    use rustix::process::geteuid;
     use std::fs::OpenOptions;
-    use uucore::process::geteuid;
 
     let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
     new_ucmd!()

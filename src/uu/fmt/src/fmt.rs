@@ -54,6 +54,8 @@ const DEFAULT_GOAL: usize = 70;
 const DEFAULT_WIDTH: usize = 75;
 // by default, goal is 93% of width
 const DEFAULT_GOAL_TO_WIDTH_RATIO: usize = 93;
+// When only --goal is given, GNU sets the maximum width to goal + 10.
+const DEFAULT_GOAL_WIDTH_SLACK: usize = 10;
 
 mod options {
     pub const CROWN_MARGIN: &str = "crown-margin";
@@ -108,8 +110,8 @@ impl FmtOptions {
             tagged = false;
         }
 
-        let xprefix = matches.contains_id(options::EXACT_PREFIX);
-        let xanti_prefix = matches.contains_id(options::SKIP_PREFIX);
+        let xprefix = matches.get_flag(options::EXACT_PREFIX);
+        let xanti_prefix = matches.get_flag(options::EXACT_SKIP_PREFIX);
 
         let prefix = matches.get_one::<String>(options::PREFIX).map(String::from);
         let anti_prefix = matches
@@ -149,7 +151,7 @@ impl FmtOptions {
                 if g > DEFAULT_WIDTH {
                     return Err(FmtError::GoalGreaterThanWidth.into());
                 }
-                let w = (g * 100 / DEFAULT_GOAL_TO_WIDTH_RATIO).max(g + 3);
+                let w = g + DEFAULT_GOAL_WIDTH_SLACK;
                 (w, g)
             }
             (None, None) => (DEFAULT_WIDTH, DEFAULT_GOAL),

@@ -3,8 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) filefrag rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile subvolume uufs xattrs ELOOP
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) filefrag rlimit Rlim Nofile clob btrfs neve ROOTDIR USERDIR outfile subvolume uufs xattrs ELOOP
 // spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx dstlink mcstransd
+
 #[cfg(unix)]
 use rstest::rstest;
 use uucore::display::Quotable;
@@ -89,6 +90,10 @@ macro_rules! assert_metadata_eq {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev, /private) not visible"
+)]
 fn test_cp_stream_to_full() {
     let (_, mut ucmd) = at_and_ucmd!();
     ucmd.arg("/dev/zero")
@@ -307,6 +312,10 @@ fn test_cp_multiple_files_with_nonexistent_file() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: an empty path argument resolves to a directory instead of ENOENT"
+)]
 fn test_cp_multiple_files_with_empty_file_name() {
     #[cfg(windows)]
     let error_msg = "The system cannot find the path specified";
@@ -797,6 +806,10 @@ fn test_cp_arg_interactive_verbose_clobber() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_f_i_verbose_non_writeable_destination_y() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -815,6 +828,10 @@ fn test_cp_f_i_verbose_non_writeable_destination_y() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_f_i_verbose_non_writeable_destination_empty() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -846,6 +863,10 @@ fn test_cp_arg_link() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: same-file hard link detection not supported"
+)]
 fn test_cp_arg_link_with_dest_hardlink_to_source() {
     use std::os::linux::fs::MetadataExt;
 
@@ -865,6 +886,10 @@ fn test_cp_arg_link_with_dest_hardlink_to_source() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: same-file hard link detection not supported"
+)]
 fn test_cp_arg_link_with_same_file() {
     use std::os::linux::fs::MetadataExt;
 
@@ -931,6 +956,10 @@ fn test_cp_arg_symlink() {
 // tree. GNU cp leaves the target untouched.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_recursive_symlink_preserves_target_mode() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1006,6 +1035,7 @@ fn test_cp_umask_stripping_owner_write_bit() {
 // fallback, so pin the plain and sparse copy paths explicitly.
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_umask_stripping_owner_write_bit_reflink_never() {
     for sparse in ["--sparse=auto", "--sparse=always"] {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -1026,12 +1056,90 @@ fn test_cp_umask_stripping_owner_write_bit_reflink_never() {
     }
 }
 
+// Regression for #14549: `cp -r` (without preserve) must apply the umask to
+// directories it creates, matching GNU, instead of copying the source's mode.
+#[test]
+#[cfg(unix)]
+fn test_cp_recursive_dir_applies_umask() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("src");
+    at.mkdir("src/dir");
+    at.set_mode("src/dir", 0o777);
+
+    ucmd.umask(0o077).args(&["-r", "src", "d"]).succeeds();
+
+    // 0o777 & ~0o077 = 0o700, not the source's raw 0o777.
+    assert_eq!(at.metadata("d/dir").permissions().mode() & 0o777, 0o700);
+}
+
+// The umask alone never covers setuid/setgid, so a non-preserving `cp -r`
+// must clear them on the directories it creates. The sticky bit survives.
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: directory modes/umask are not faithfully reproduced"
+)]
+fn test_cp_recursive_dir_drops_setuid_setgid() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("tree");
+    for (name, mode) in [
+        ("tree/setgid", 0o2731u32),
+        ("tree/setuid", 0o4713),
+        ("tree/sticky", 0o1735),
+    ] {
+        at.mkdir(name);
+        at.set_mode(name, mode);
+    }
+
+    scene
+        .ucmd()
+        .umask(0o026)
+        .args(&["-r", "tree", "plain"])
+        .succeeds();
+
+    assert_eq!(
+        at.metadata("plain/setgid").permissions().mode() & 0o7777,
+        0o711
+    );
+    assert_eq!(
+        at.metadata("plain/setuid").permissions().mode() & 0o7777,
+        0o711
+    );
+    assert_eq!(
+        at.metadata("plain/sticky").permissions().mode() & 0o7777,
+        0o1711
+    );
+
+    // An explicit preserve keeps the mode as-is, umask and special bits alike.
+    scene
+        .ucmd()
+        .umask(0o026)
+        .args(&["-r", "--preserve=mode", "tree", "kept"])
+        .succeeds();
+
+    assert_eq!(
+        at.metadata("kept/setgid").permissions().mode() & 0o7777,
+        0o2731
+    );
+    assert_eq!(
+        at.metadata("kept/setuid").permissions().mode() & 0o7777,
+        0o4713
+    );
+}
+
 // When --reflink=always fails, GNU cp removes a destination it created
 // itself but keeps a pre-existing (truncated) one. Only observable on
 // filesystems without clone support; when the clone succeeds there is
 // nothing to clean up.
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: --reflink is only supported on linux and macOS"
+)]
 fn test_cp_reflink_always_failure_dest_cleanup() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1057,6 +1165,10 @@ fn test_cp_reflink_always_failure_dest_cleanup() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev, /private) not visible"
+)]
 fn test_cp_reflink_always_failure() {
     let scene = TestScenario::new(util_name!());
     scene
@@ -1196,6 +1308,10 @@ fn test_cp_arg_backup() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_arg_backup_with_dest_a_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let source = "source";
@@ -1217,6 +1333,10 @@ fn test_cp_arg_backup_with_dest_a_symlink() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_arg_backup_with_dest_a_symlink_to_source() {
     let (at, mut ucmd) = at_and_ucmd!();
     let source = "source";
@@ -1832,6 +1952,10 @@ fn test_cp_parents_dest_not_directory() {
 
 #[test]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_parents_with_permissions_copy_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1873,6 +1997,10 @@ fn test_cp_parents_with_permissions_copy_file() {
 
 #[test]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_parents_with_permissions_copy_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1916,12 +2044,20 @@ fn test_cp_parents_with_permissions_copy_dir() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev, /private) not visible"
+)]
 fn test_cp_writable_special_file_permissions() {
     new_ucmd!().arg("/dev/null").arg("/dev/zero").succeeds();
 }
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev, /private) not visible"
+)]
 fn test_cp_issue_1665() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg("/dev/null").arg("foo").succeeds();
@@ -1931,6 +2067,10 @@ fn test_cp_issue_1665() {
 
 #[test]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_preserve_no_args() {
     let (at, mut ucmd) = at_and_ucmd!();
     let src_file = "a";
@@ -1959,6 +2099,10 @@ fn test_cp_preserve_no_args() {
 
 #[test]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_preserve_no_args_before_opts() {
     let (at, mut ucmd) = at_and_ucmd!();
     let src_file = "a";
@@ -1986,6 +2130,10 @@ fn test_cp_preserve_no_args_before_opts() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_preserve_all() {
     for argument in ["--preserve=all", "--preserve=al"] {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -2170,6 +2318,10 @@ fn test_cp_preserve_links_case_1() {
 #[test]
 // android platform will causing stderr = cp: Permission denied (os error 13)
 #[cfg(not(target_os = "android"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_preserve_links_case_2() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2201,6 +2353,10 @@ fn test_cp_preserve_links_case_2() {
 #[test]
 // android platform will causing stderr = cp: Permission denied (os error 13)
 #[cfg(not(target_os = "android"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_preserve_links_case_3() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2366,6 +2522,10 @@ fn test_cp_no_preserve_mode() {
 // For now, disable the test on Windows. Symlinks aren't well support on Windows.
 // It works on Unix for now and it works locally when run from a powershell
 #[cfg(not(windows))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_deref_folder_to_folder() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2464,6 +2624,10 @@ fn test_cp_deref_folder_to_folder() {
 // For now, disable the test on Windows. Symlinks aren't well support on Windows.
 // It works on Unix for now and it works locally when run from a powershell
 #[cfg(not(windows))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_no_deref_folder_to_folder() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2560,6 +2724,10 @@ fn test_cp_no_deref_folder_to_folder() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: ACL/xattr syscalls are not implemented, so --archive's attribute preservation fails"
+)]
 fn test_cp_archive() {
     let (at, mut ucmd) = at_and_ucmd!();
     let previous = std::time::SystemTime::now() - Duration::from_secs(3600);
@@ -2596,6 +2764,10 @@ fn test_cp_archive() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_archive_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2742,8 +2914,70 @@ fn test_cp_no_preserve_timestamps() {
     assert!(res.as_secs() < 3605);
 }
 
+// `filetime::FileTime::from_last_{access,modification}_time` panics on WASI
+// (the crate has no WASI-specific backend). `cp --preserve=timestamps` must
+// instead read timestamps via `Metadata::accessed`/`modified` there. See
+// `source_times` in src/uu/cp/src/cp.rs.
+#[test]
+#[cfg(wasi_runner)]
+fn test_cp_preserve_timestamps_wasi() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let previous = std::time::SystemTime::now() - Duration::from_secs(3600);
+    // set the file creation/modification an hour ago
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus(TEST_HELLO_WORLD_SOURCE))
+        .unwrap();
+    file.set_times(
+        std::fs::FileTimes::new()
+            .set_accessed(previous)
+            .set_modified(previous),
+    )
+    .unwrap();
+
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("--preserve=timestamps")
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+
+    let src_mtime = std::fs::metadata(at.subdir.join(TEST_HELLO_WORLD_SOURCE))
+        .unwrap()
+        .modified()
+        .unwrap();
+    let dst_mtime = std::fs::metadata(at.subdir.join(TEST_HOW_ARE_YOU_SOURCE))
+        .unwrap()
+        .modified()
+        .unwrap();
+    assert_eq!(src_mtime, dst_mtime);
+}
+
+// WASI has no chmod syscall at all, so `fs::set_permissions` always fails
+// with ENOSYS there. A plain recursive copy tries to match a freshly
+// created destination directory's mode to the source's as a best-effort
+// (not explicitly requested) preservation; `cp` must treat ENOSYS the same
+// as EOPNOTSUPP and skip it silently instead of erroring out. See
+// `is_enotsup_error` in src/uu/cp/src/cp.rs.
+#[test]
+#[cfg(wasi_runner)]
+fn test_cp_preserve_mode_optional_wasi() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("src");
+    at.touch("src/file");
+
+    ucmd.args(&["-r", "src", "dst"]).succeeds().no_stderr();
+
+    assert!(at.dir_exists("dst"));
+    assert!(at.file_exists("dst/file"));
+}
+
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev, /private) not visible"
+)]
 fn test_cp_target_file_dev_null() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file1 = "/dev/null";
@@ -2955,7 +3189,7 @@ fn test_cp_reflink_insufficient_permission() {
 #[cfg(target_os = "linux")]
 #[test]
 fn test_closes_file_descriptors() {
-    use rlimit::Resource;
+    use rustix::process::Resource;
 
     let pid = std::process::id();
     let fd_path = format!("/proc/{pid}/fd");
@@ -2975,12 +3209,13 @@ fn test_closes_file_descriptors() {
         .arg("--reflink=auto")
         .arg("dir_with_10_files/")
         .arg("dir_with_10_files_new/")
-        .limit(Resource::NOFILE, limit_fd, limit_fd)
+        .limit(Resource::Nofile, limit_fd, limit_fd)
         .succeeds();
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_sparse_never_empty() {
     const BUFFER_SIZE: usize = 4096 * 4;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3001,6 +3236,7 @@ fn test_cp_sparse_never_empty() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_sparse_always_empty() {
     const BUFFER_SIZE: usize = 4096 * 4;
     for argument in ["--sparse=always", "--sparse=alway", "--sparse=al"] {
@@ -3021,6 +3257,7 @@ fn test_cp_sparse_always_empty() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_sparse_always_non_empty() {
     const BUFFER_SIZE: usize = 4096 * 16 + 3;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3234,6 +3471,33 @@ fn test_cp_reflink_always_windows() {
     }
 }
 
+// `--reflink=auto` means "clone if possible, else plain copy" (GNU); WASI has
+// no reflink support, so `copy_on_write` (src/uu/cp/src/platform/other.rs)
+// must fall back to a plain copy rather than fail.
+#[cfg(wasi_runner)]
+#[test]
+fn test_cp_reflink_auto_wasi() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("src", "hello");
+
+    ucmd.args(&["--reflink=auto", "src", "dst"]).succeeds();
+
+    assert_eq!(at.read("dst"), "hello");
+}
+
+// `--reflink=always` (and bare `--reflink`, which defaults to `always`) must
+// still fail on WASI: cloning was explicitly required but is unsupported.
+#[cfg(wasi_runner)]
+#[test]
+fn test_cp_reflink_always_wasi() {
+    for argument in ["--reflink=always", "--reflink"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("src", "hello");
+
+        ucmd.args(&[argument, "src", "dst"]).fails();
+    }
+}
+
 // `--debug` must report the sparse detection that actually happened: `zeros`
 // when the sparse copy ran (the test temp dir is NTFS, which supports it).
 #[cfg(windows)]
@@ -3252,6 +3516,10 @@ fn test_cp_debug_sparse_always_windows() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(feature = "truncate")]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: --reflink is only supported on linux and macOS"
+)]
 fn test_cp_reflink_always_override() {
     const DISK: &str = "disk.img";
     const ROOTDIR: &str = "disk_root/";
@@ -3331,6 +3599,10 @@ fn test_cp_reflink_always_override() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_copy_dir_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
@@ -3342,6 +3614,10 @@ fn test_copy_dir_symlink() {
 #[test]
 #[cfg(not(target_os = "freebsd"))] // FIXME: fix this test for FreeBSD
 #[cfg(feature = "ln")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_copy_dir_with_symlinks() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
@@ -3360,6 +3636,10 @@ fn test_copy_dir_with_symlinks() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_copy_symlink_force() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
@@ -3374,6 +3654,10 @@ fn test_copy_symlink_force() {
 #[test]
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_no_preserve_mode() {
     use std::os::unix::prelude::MetadataExt;
 
@@ -3404,6 +3688,10 @@ fn test_no_preserve_mode() {
 #[test]
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_preserve_mode() {
     use std::os::unix::prelude::MetadataExt;
 
@@ -3477,6 +3765,10 @@ fn test_copy_through_dangling_symlink() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_copy_through_dangling_symlink_posixly_correct() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
@@ -3492,6 +3784,10 @@ fn test_copy_through_dangling_symlink_posixly_correct() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_copy_through_dangling_symlink_no_dereference() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("no-such-file", "dangle");
@@ -3503,6 +3799,10 @@ fn test_copy_through_dangling_symlink_no_dereference() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_symlink_overwrite_detection() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -3559,6 +3859,10 @@ fn test_cp_dangling_symlink_inside_directory() {
 /// Test for copying a dangling symbolic link and its permissions.
 #[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))] // FIXME: fix this test for FreeBSD/OpenBSD
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     let (at, mut ucmd) = at_and_ucmd!();
     //               target name    link name
@@ -3635,8 +3939,35 @@ fn test_cp_link_backup() {
     assert_eq!(at.read("file2"), "Hello, World!\n");
 }
 
+/// `--attributes-only` must still give the destination the source's type.
+/// It used to create a regular file for any source, which both got the type
+/// wrong and made the later xattr copy `open()` the source FIFO -- blocking
+/// forever, since nothing ever writes to it. GNU creates the FIFO and returns.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
+fn test_cp_attributes_only_fifo_keeps_type_and_returns() {
+    for recursive in ["-a", "-R"] {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkfifo("fifo");
+
+        scene
+            .ucmd()
+            .args(&[recursive, "--attributes-only", "fifo", "copy"])
+            .succeeds()
+            .no_stderr();
+
+        assert!(
+            at.is_fifo("copy"),
+            "--attributes-only {recursive} did not create a FIFO"
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
 fn test_cp_fifo() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("fifo");
@@ -3657,6 +3988,7 @@ fn test_cp_fifo() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
 fn test_cp_fifo_preserve_timestamps() {
     // Preserving timestamps must not open the FIFO: opening a FIFO with no
     // writer blocks forever. If this regresses, the test hangs instead of
@@ -3716,6 +4048,10 @@ fn test_cp_recursive_char_device(#[case] flag: &str) {
 #[case::recursive("-R")]
 #[case::archive("-a")]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev, /private) not visible"
+)]
 fn test_cp_recursive_char_device_no_permission(#[case] flag: &str) {
     new_ucmd!()
         .args(&[flag, "/dev/null", "null2"])
@@ -3725,6 +4061,10 @@ fn test_cp_recursive_char_device_no_permission(#[case] flag: &str) {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev, /private) not visible"
+)]
 fn test_cp_recursive_char_device_copy_contents() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-R", "--copy-contents", "/dev/null", "null2"])
@@ -3736,6 +4076,10 @@ fn test_cp_recursive_char_device_copy_contents() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev, /private) not visible"
+)]
 fn test_cp_char_device() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["/dev/null", "null2"]).succeeds().no_stderr();
@@ -3802,6 +4146,7 @@ fn test_cp_block_device_no_permission() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no Unix domain socket support")]
 fn test_cp_socket() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mksocket("socket");
@@ -3836,6 +4181,10 @@ fn find_other_group(_current: u32) -> Option<u32> {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_r_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     // Specifically test copying a link in a subdirectory, as the internal path
@@ -4014,6 +4363,10 @@ fn test_copy_same_symlink_no_dereference_dangling() {
 // TODO: enable for Android, when #3477 solved
 #[cfg(not(any(windows, target_os = "android", target_os = "openbsd")))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_parents_2_dirs() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir_all("a/b/c");
@@ -4170,6 +4523,10 @@ fn test_cp_mode_hardlink_no_dereference() {
 
 #[cfg(not(any(windows, target_os = "android")))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_remove_destination_with_destination_being_a_hardlink_to_source() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
@@ -4231,6 +4588,10 @@ fn test_remove_destination_symbolic_link_loop() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_symbolic_link_loop() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("loop", "loop");
@@ -4271,6 +4632,10 @@ fn test_copy_nested_directory_to_itself_disallowed() {
 /// Test for preserving permissions when copying a directory.
 #[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_copy_dir_preserve_permissions() {
     // Create a directory that has some non-default permissions.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -4297,6 +4662,10 @@ fn test_copy_dir_preserve_permissions() {
 /// cp should preserve attributes of subdirectories when copying recursively.
 #[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_copy_dir_preserve_subdir_permissions() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a1");
@@ -4319,6 +4688,10 @@ fn test_copy_dir_preserve_subdir_permissions() {
 /// read-only mode, causing EPERM when copying files into it.
 #[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_copy_dir_preserve_readonly_source_with_files() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("src");
@@ -4338,6 +4711,10 @@ fn test_copy_dir_preserve_readonly_source_with_files() {
 /// the face of an inaccessible file in that directory.
 #[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_copy_dir_preserve_permissions_inaccessible_file() {
     // Create a directory that has some non-default permissions and
     // contains an inaccessible file.
@@ -4394,6 +4771,10 @@ fn test_same_file_force() {
 /// Test that copying file to itself with forced backup succeeds.
 #[cfg(not(windows))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_same_file_force_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("f");
@@ -4406,6 +4787,7 @@ fn test_same_file_force_backup() {
 /// Test for copying the contents of a FIFO as opposed to the FIFO object itself.
 #[cfg(unix)]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
 fn test_copy_contents_fifo() {
     let scenario = TestScenario::new(util_name!());
     let at = &scenario.fixtures;
@@ -4431,6 +4813,7 @@ fn test_copy_contents_fifo() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_reflink_never_sparse_always() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -4458,6 +4841,10 @@ fn test_reflink_never_sparse_always() {
 /// Test for preserving attributes of a hard link in a directory.
 #[test]
 #[cfg(not(any(target_os = "android", target_os = "openbsd")))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_preserve_hardlink_attributes_in_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -4514,6 +4901,10 @@ fn test_symbolic_link_file() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_src_base_dot() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4537,6 +4928,10 @@ fn non_utf8_name(suffix: &str) -> OsString {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: requires valid UTF-8 paths, so the non-UTF-8 error is expected"
+)]
 fn test_non_utf8_src() {
     let (at, mut ucmd) = at_and_ucmd!();
     let src = non_utf8_name("src");
@@ -4547,6 +4942,10 @@ fn test_non_utf8_src() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: requires valid UTF-8 paths, so the non-UTF-8 error is expected"
+)]
 fn test_non_utf8_dest() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dest = non_utf8_name("dest");
@@ -4558,6 +4957,10 @@ fn test_non_utf8_dest() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: requires valid UTF-8 paths, so the non-UTF-8 error is expected"
+)]
 fn test_non_utf8_target() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dest = non_utf8_name("dest");
@@ -4572,6 +4975,10 @@ fn test_non_utf8_target() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_archive_on_directory_ending_dot() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir1");
@@ -4583,6 +4990,10 @@ fn test_cp_archive_on_directory_ending_dot() {
 
 #[test]
 #[cfg(any(windows, target_vendor = "apple", target_os = "linux"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: --debug reports 'unsupported' instead of 'unknown' for this platform"
+)]
 fn test_cp_debug_default() {
     #[cfg(target_vendor = "apple")]
     let expected = "copy offload: unknown, reflink: unsupported, sparse detection: unsupported";
@@ -4605,6 +5016,10 @@ fn test_cp_debug_default() {
 
 #[test]
 #[cfg(any(windows, target_vendor = "apple", target_os = "linux"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: --debug reports 'unsupported' instead of 'unknown' for this platform"
+)]
 fn test_cp_debug_multiple_default() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4634,6 +5049,7 @@ fn test_cp_debug_multiple_default() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_sparse_reflink() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4666,6 +5082,7 @@ fn test_cp_debug_no_update() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_sparse_always() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4682,6 +5099,7 @@ fn test_cp_debug_sparse_always() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_sparse_never() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4697,6 +5115,10 @@ fn test_cp_debug_sparse_never() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: --debug reports 'unsupported' instead of 'unknown' for this platform"
+)]
 fn test_cp_debug_sparse_auto() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4729,6 +5151,10 @@ fn test_cp_debug_sparse_auto() {
 
 #[test]
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: --debug reports 'unsupported' instead of 'unknown' for this platform"
+)]
 fn test_cp_debug_reflink_auto() {
     #[cfg(target_vendor = "apple")]
     let expected = "copy offload: unknown, reflink: unsupported, sparse detection: unsupported";
@@ -4750,6 +5176,7 @@ fn test_cp_debug_reflink_auto() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_sparse_always_reflink_auto() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4794,6 +5221,10 @@ fn test_cp_dest_no_permissions() {
 /// Test readonly destination behavior with reflink options
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: --reflink is only supported on linux and macOS"
+)]
 fn test_cp_readonly_dest_with_reflink() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4937,6 +5368,10 @@ fn test_cp_attributes_only_dest_open_error() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev, /private) not visible"
+)]
 fn test_cp_cannot_create_regular_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("source.txt", "hello");
@@ -4948,6 +5383,10 @@ fn test_cp_cannot_create_regular_file() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev, /private) not visible"
+)]
 fn test_cp_cannot_create_regular_file_attributes_only() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("source.txt", "hello");
@@ -5046,6 +5485,10 @@ fn test_cp_no_such() {
     not(any(target_vendor = "apple", target_os = "android", target_os = "openbsd"))
 ))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: absolute host tmpdir path is outside the mapped guest root, so cp cannot stat it"
+)]
 fn test_acl_preserve() {
     use std::process::Command;
 
@@ -5086,15 +5529,17 @@ fn test_acl_preserve() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_reflink_never_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
+    let page_size = rustix::param::page_size();
     at.write("a", "hello");
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
         .unwrap();
-    f.set_len(10000).unwrap();
+    f.set_len((page_size as u64) * 4).unwrap();
 
     ts.ucmd()
         .arg("--debug")
@@ -5111,6 +5556,7 @@ fn test_cp_debug_reflink_never_with_hole() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_reflink_never_empty_file_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -5136,15 +5582,17 @@ fn test_cp_debug_reflink_never_empty_file_with_hole() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_default_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.touch("a");
+    let page_size = rustix::param::page_size();
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
         .unwrap();
-    f.set_len(10000).unwrap();
+    f.set_len((page_size as u64) * 4).unwrap();
 
     at.append_bytes("a", "hello".as_bytes());
 
@@ -5162,6 +5610,7 @@ fn test_cp_debug_default_with_hole() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_default_less_than_512_bytes() {
     let ts = TestScenario::new(util_name!());
 
@@ -5185,6 +5634,7 @@ fn test_cp_debug_default_less_than_512_bytes() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_default_without_hole() {
     let ts = TestScenario::new(util_name!());
 
@@ -5205,6 +5655,7 @@ fn test_cp_debug_default_without_hole() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_default_empty_file_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -5231,15 +5682,17 @@ fn test_cp_debug_default_empty_file_with_hole() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_reflink_never_sparse_always_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
+    let page_size = rustix::param::page_size();
     at.write("a", "hello");
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
         .unwrap();
-    f.set_len(10000).unwrap();
+    f.set_len((page_size as u64) * 4).unwrap();
 
     ts.ucmd()
         .arg("--debug")
@@ -5257,6 +5710,7 @@ fn test_cp_debug_reflink_never_sparse_always_with_hole() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_reflink_never_sparse_always_without_hole() {
     let ts = TestScenario::new(util_name!());
     let empty_bytes = [0_u8; 10000];
@@ -5282,6 +5736,7 @@ fn test_cp_debug_reflink_never_sparse_always_without_hole() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_reflink_never_sparse_always_empty_file_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -5304,6 +5759,10 @@ fn test_cp_debug_reflink_never_sparse_always_empty_file_with_hole() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: /sys and /proc virtual files are not exposed to the sandbox"
+)]
 fn test_cp_default_virtual_file() {
     // This file has existed at least since 2008, so we assume that it is present on "all" Linux kernels.
     // https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-profiling
@@ -5327,6 +5786,7 @@ fn test_cp_default_virtual_file() {
 }
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_reflink_auto_sparse_always_non_sparse_file_with_long_zero_sequence() {
     let ts = TestScenario::new(util_name!());
 
@@ -5353,6 +5813,7 @@ fn test_cp_debug_reflink_auto_sparse_always_non_sparse_file_with_long_zero_seque
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_sparse_never_empty_sparse_file() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -5369,6 +5830,7 @@ fn test_cp_debug_sparse_never_empty_sparse_file() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_reflink_never_sparse_always_non_sparse_file_with_long_zero_sequence() {
     let ts = TestScenario::new(util_name!());
 
@@ -5396,6 +5858,10 @@ fn test_cp_debug_reflink_never_sparse_always_non_sparse_file_with_long_zero_sequ
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: /sys and /proc virtual files are not exposed to the sandbox"
+)]
 fn test_cp_debug_sparse_always_sparse_virtual_file() {
     // This file has existed at least since 2008, so we assume that it is present on "all" Linux kernels.
     // https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-profiling
@@ -5420,6 +5886,7 @@ fn test_cp_debug_sparse_always_sparse_virtual_file() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_reflink_never_less_than_512_bytes() {
     let ts = TestScenario::new(util_name!());
 
@@ -5442,6 +5909,7 @@ fn test_cp_debug_reflink_never_less_than_512_bytes() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_reflink_never_sparse_never_empty_file_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -5464,16 +5932,18 @@ fn test_cp_debug_reflink_never_sparse_never_empty_file_with_hole() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_reflink_never_file_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.touch("a");
+    let page_size = rustix::param::page_size();
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
         .unwrap();
-    f.set_len(10000).unwrap();
-    at.append_bytes("a", "hello".as_bytes());
+    f.set_len((page_size as u64) * 4).unwrap();
+    at.append_bytes("a", b"hello");
 
     ts.ucmd()
         .arg("--debug")
@@ -5487,6 +5957,7 @@ fn test_cp_debug_reflink_never_file_with_hole() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_sparse_never_less_than_512_bytes() {
     let ts = TestScenario::new(util_name!());
 
@@ -5510,6 +5981,7 @@ fn test_cp_debug_sparse_never_less_than_512_bytes() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_sparse_never_without_hole() {
     let ts = TestScenario::new(util_name!());
 
@@ -5532,6 +6004,7 @@ fn test_cp_debug_sparse_never_without_hole() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_sparse_never_empty_file_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -5554,15 +6027,17 @@ fn test_cp_debug_sparse_never_empty_file_with_hole() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_sparse_never_file_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
+    let page_size = rustix::param::page_size();
     at.touch("a");
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
         .unwrap();
-    f.set_len(10000).unwrap();
+    f.set_len((page_size as u64) * 4).unwrap();
     at.append_bytes("a", "hello".as_bytes());
 
     ts.ucmd()
@@ -5577,6 +6052,10 @@ fn test_cp_debug_sparse_never_file_with_hole() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: /sys and /proc virtual files are not exposed to the sandbox"
+)]
 fn test_cp_debug_default_sparse_virtual_file() {
     // This file has existed at least since 2008, so we assume that it is present on "all" Linux kernels.
     // https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-profiling
@@ -5600,6 +6079,10 @@ fn test_cp_debug_default_sparse_virtual_file() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: /sys and /proc virtual files are not exposed to the sandbox"
+)]
 fn test_cp_debug_sparse_never_zero_sized_virtual_file() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd()
@@ -5618,6 +6101,10 @@ fn test_cp_debug_sparse_never_zero_sized_virtual_file() {
 // --debug tests above only look at the reported strategy, not the bytes.
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: /sys and /proc virtual files are not exposed to the sandbox"
+)]
 fn test_cp_zero_sized_virtual_file_contents() {
     let expected = std::fs::read_to_string("/proc/version").unwrap();
     assert!(!expected.is_empty());
@@ -5641,6 +6128,10 @@ fn test_cp_zero_sized_virtual_file_contents() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: /sys and /proc virtual files are not exposed to the sandbox"
+)]
 fn test_cp_debug_default_zero_sized_virtual_file() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd()
@@ -5653,6 +6144,7 @@ fn test_cp_debug_default_zero_sized_virtual_file() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
 fn test_cp_debug_reflink_never_without_hole() {
     let ts = TestScenario::new(util_name!());
     let filler_bytes = [0_u8; 1000];
@@ -5670,6 +6162,10 @@ fn test_cp_debug_reflink_never_without_hole() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_force_remove_destination_attributes_only_with_symlink() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5739,6 +6235,10 @@ mod same_file {
     // the following tests tries to copy a file to the symlink of the same file with
     // various options
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_file_to_symlink() {
         for option in ["-d", "-f", "-df"] {
             let scene = TestScenario::new(util_name!());
@@ -5774,6 +6274,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_file_to_symlink_with_backup_option() {
         for option in ["-b", "-bd", "-bf", "-bdf"] {
             let scene = TestScenario::new(util_name!());
@@ -5795,6 +6299,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_file_to_symlink_with_link_option() {
         for option in ["-l", "-dl"] {
             let scene = TestScenario::new(util_name!());
@@ -5814,6 +6322,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_file_to_symlink_with_options_link_and_force() {
         for option in ["-fl", "-dfl"] {
             let scene = TestScenario::new(util_name!());
@@ -5831,6 +6343,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_file_to_symlink_with_options_backup_and_link() {
         for option in ["-bl", "-bdl", "-bfl", "-bdfl"] {
             let scene = TestScenario::new(util_name!());
@@ -5851,6 +6367,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_file_to_symlink_with_options_symlink() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -5868,6 +6388,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_file_to_symlink_with_options_symlink_and_force() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -5885,6 +6409,10 @@ mod same_file {
     // the following tests tries to copy a symlink to the file that symlink points to with
     // various options
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_symlink_to_file() {
         for option in ["-d", "-f", "-df", "--rem"] {
             let scene = TestScenario::new(util_name!());
@@ -5904,6 +6432,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_symlink_to_file_with_option_backup() {
         for option in ["-b", "-bf"] {
             let scene = TestScenario::new(util_name!());
@@ -5922,6 +6454,10 @@ mod same_file {
         }
     }
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_symlink_to_file_with_option_backup_without_deref() {
         for option in ["-bd", "-bdf"] {
             let scene = TestScenario::new(util_name!());
@@ -5943,6 +6479,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_symlink_to_file_with_options_link() {
         for option in ["-l", "-dl", "-fl", "-bl", "-bfl"] {
             let scene = TestScenario::new(util_name!());
@@ -5961,6 +6501,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_symlink_to_file_with_option_symlink() {
         for option in ["-s", "-sf"] {
             let scene = TestScenario::new(util_name!());
@@ -6012,6 +6556,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_file_to_file_with_options_backup_and_no_deref() {
         for option in ["-bf", "-bdf"] {
             let scene = TestScenario::new(util_name!());
@@ -6030,6 +6578,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_file_to_file_with_options_link() {
         for option in ["-l", "-dl", "-fl", "-dfl", "-bl", "-bdl"] {
             let scene = TestScenario::new(util_name!());
@@ -6047,6 +6599,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_file_to_file_with_options_link_and_backup_and_force() {
         for option in ["-bfl", "-bdfl"] {
             let scene = TestScenario::new(util_name!());
@@ -6083,6 +6639,10 @@ mod same_file {
     // the following tests tries to copy a symlink that points to a file to a symlink
     // that points to the same file with various options
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_symlink_to_symlink_with_option_no_deref() {
         for option in ["-d", "-df"] {
             let scene = TestScenario::new(util_name!());
@@ -6101,6 +6661,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_symlink_to_symlink_with_option_force() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -6121,6 +6685,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_symlink_to_symlink_with_option_rem() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -6138,6 +6706,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_symlink_to_symlink_with_option_backup() {
         for option in ["-b", "-bf"] {
             let scene = TestScenario::new(util_name!());
@@ -6159,6 +6731,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_symlink_to_symlink_with_option_backup_and_no_deref() {
         for option in ["-bd", "-bdf"] {
             let scene = TestScenario::new(util_name!());
@@ -6178,6 +6754,10 @@ mod same_file {
         }
     }
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_symlink_to_symlink_with_option_link() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -6198,6 +6778,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_symlink_to_symlink_with_option_force_link() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -6215,6 +6799,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_symlink_to_symlink_with_option_backup_and_link() {
         for option in ["-bl", "-bfl"] {
             let scene = TestScenario::new(util_name!());
@@ -6236,6 +6824,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_symlink_to_symlink_with_option_symlink() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -6256,6 +6848,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_symlink_to_symlink_with_option_symlink_and_force() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -6319,6 +6915,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_file_to_hardlink_with_option_rem() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -6335,6 +6935,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_file_to_hardlink_with_option_backup() {
         for option in ["-b", "-bd", "-bf", "-bdf"] {
             let scene = TestScenario::new(util_name!());
@@ -6352,6 +6956,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_file_to_hardlink_with_option_link() {
         for option in ["-l", "-dl", "-fl", "-dfl", "-bl", "-bdl", "-bfl", "-bdfl"] {
             let scene = TestScenario::new(util_name!());
@@ -6388,6 +6996,10 @@ mod same_file {
     // the following tests tries to copy symlink to a hardlink of the same symlink with
     // various options
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_hard_link_of_symlink_to_symlink() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -6409,6 +7021,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_force() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -6430,6 +7046,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_no_deref() {
         for option in ["-d", "-df"] {
             let scene = TestScenario::new(util_name!());
@@ -6452,6 +7072,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_rem() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -6473,6 +7097,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_backup() {
         for option in ["-b", "-bf"] {
             let scene = TestScenario::new(util_name!());
@@ -6499,6 +7127,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_backup_and_no_deref() {
         for option in ["-bd", "-bdf"] {
             let scene = TestScenario::new(util_name!());
@@ -6524,6 +7156,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_link() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -6545,6 +7181,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_link_and_no_deref() {
         for option in ["-dl", "-dfl"] {
             let scene = TestScenario::new(util_name!());
@@ -6567,6 +7207,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_link_and_force() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -6587,6 +7231,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_link_and_backup() {
         for option in ["-bl", "-bfl"] {
             let scene = TestScenario::new(util_name!());
@@ -6634,6 +7282,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_symlink() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -6655,6 +7307,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_symlink_and_force() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -6675,6 +7331,10 @@ mod same_file {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_hardlink_of_symlink_to_hardlink_of_same_symlink_with_option_no_deref() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -6749,6 +7409,10 @@ mod link_deref {
 
     // Dereferencing should fail for dangling symlink.
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_cp_dang_link_as_source_with_link() {
         for option in ["", "-L", "-H"] {
             for r in [false, true] {
@@ -6773,6 +7437,10 @@ mod link_deref {
 
     // Dereferencing should fail for the 'dir_link' without -R.
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_cp_dir_link_as_source_with_link() {
         for option in ["", "-L", "-H"] {
             let scene = TestScenario::new(util_name!());
@@ -6792,6 +7460,10 @@ mod link_deref {
 
     // cp --link -R 'dir_link' should create a new directory.
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_cp_dir_link_as_source_with_link_and_r() {
         for option in ["", "-L", "-H"] {
             let scene = TestScenario::new(util_name!());
@@ -6808,6 +7480,10 @@ mod link_deref {
 
     //cp --link 'file_link' should create a hard link to the target.
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+    )]
     fn test_cp_file_link_as_source_with_link() {
         for option in ["", "-L", "-H"] {
             for r in [false, true] {
@@ -6840,6 +7516,10 @@ mod link_deref {
 #[test]
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_dir_perm_race_with_preserve_mode_and_ownership() {
     const SRC_DIR: &str = "src";
     const DEST_DIR: &str = "dest";
@@ -6895,6 +7575,10 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
 #[test]
 // when -d and -a are overridden with --preserve or --no-preserve make sure that it only
 // overrides attributes not other flags like -r or --no_deref implied in -a and -d.
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_preserve_attrs_overriding_1() {
     const FILE: &str = "file";
     const SYMLINK: &str = "symlink";
@@ -6914,6 +7598,10 @@ fn test_preserve_attrs_overriding_1() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_preserve_attrs_overriding_2() {
     const FILE1: &str = "file1";
     const FILE2: &str = "file2";
@@ -6960,9 +7648,66 @@ fn test_preserve_attrs_overriding_2() {
     }
 }
 
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
+fn test_no_preserve_mode_with_later_preserve() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("src");
+    at.set_mode("src", 0o755);
+
+    // 1. cp --no-preserve=mode src dst1 -> mode should not have execute bit (default umask strips permissions)
+    scene
+        .ucmd()
+        .args(&["--no-preserve=mode", "src", "dst1"])
+        .succeeds();
+    let dst1_mode = at.metadata("dst1").mode() & 0o777;
+    assert_ne!(dst1_mode & 0o111, 0o111);
+
+    // 2. cp --no-preserve=mode --preserve=timestamps src dst2 -> mode should match dst1 (--no-preserve=mode not forgotten)
+    scene
+        .ucmd()
+        .args(&["--no-preserve=mode", "--preserve=timestamps", "src", "dst2"])
+        .succeeds();
+    let dst2_mode = at.metadata("dst2").mode() & 0o777;
+    assert_eq!(dst1_mode, dst2_mode);
+
+    // 3. cp --no-preserve=all --preserve=timestamps src dst3 -> mode should match dst1
+    scene
+        .ucmd()
+        .args(&["--no-preserve=all", "--preserve=timestamps", "src", "dst3"])
+        .succeeds();
+    let dst3_mode = at.metadata("dst3").mode() & 0o777;
+    assert_eq!(dst1_mode, dst3_mode);
+
+    // 4. cp --preserve=timestamps --no-preserve=mode src dst4 -> mode should match dst1
+    scene
+        .ucmd()
+        .args(&["--preserve=timestamps", "--no-preserve=mode", "src", "dst4"])
+        .succeeds();
+    let dst4_mode = at.metadata("dst4").mode() & 0o777;
+    assert_eq!(dst1_mode, dst4_mode);
+
+    // 5. cp --no-preserve=mode --preserve=mode src dst5 -> mode should be preserved (0o755) because later flag wins
+    scene
+        .ucmd()
+        .args(&["--no-preserve=mode", "--preserve=mode", "src", "dst5"])
+        .succeeds();
+    let dst5_mode = at.metadata("dst5").mode() & 0o777;
+    assert_eq!(dst5_mode, 0o755);
+}
+
 /// Test the behavior of preserving permissions when copying through a symlink
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_symlink_permissions() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -6985,6 +7730,10 @@ fn test_cp_symlink_permissions() {
 /// Test the behavior of preserving permissions of parents when copying through a symlink
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_parents_symlink_permissions_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -7036,6 +7785,10 @@ fn test_cp_recursive_dest_subdir_symlink_not_followed() {
 /// destination -- only entries discovered inside the tree are refused.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_recursive_target_dir_symlink_still_allowed() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -7053,6 +7806,10 @@ fn test_cp_recursive_target_dir_symlink_still_allowed() {
 /// a symlink when source is a dir.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_parents_symlink_permissions_dir() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -7075,6 +7832,10 @@ fn test_cp_parents_symlink_permissions_dir() {
 /// Test the behavior of copying a file to a destination with parents using absolute paths.
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev, /private) not visible"
+)]
 fn test_cp_parents_absolute_path() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -7263,6 +8024,10 @@ fn test_cp_preserve_xattr_readonly_source() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_archive_preserves_directory_permissions() {
     // Test for issue #8407
     let (at, mut ucmd) = at_and_ucmd!();
@@ -7304,6 +8069,10 @@ fn test_cp_archive_preserves_directory_permissions() {
 #[test]
 #[cfg(unix)]
 #[cfg_attr(target_vendor = "apple", ignore = "Flaky on MacOS, see #8453")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev, /private) not visible"
+)]
 fn test_cp_from_stdin() {
     let (at, mut ucmd) = at_and_ucmd!();
     let target = "target";
@@ -7372,6 +8141,10 @@ fn test_cp_update_none_interactive_prompt_no() {
 /// only unix has `/dev/fd/0`
 #[cfg(unix)]
 #[cfg_attr(target_vendor = "apple", ignore = "Flaky on MacOS, see #8453")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev, /private) not visible"
+)]
 #[test]
 fn test_cp_from_stream() {
     let target = "target";
@@ -7399,6 +8172,10 @@ fn test_cp_from_stream() {
 /// only unix has `/dev/fd/0`
 #[cfg(unix)]
 #[cfg_attr(target_vendor = "apple", ignore = "Flaky on MacOS, see #8453")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev, /private) not visible"
+)]
 #[test]
 fn test_cp_from_stream_permission() {
     let target = "target";
@@ -7840,6 +8617,10 @@ fn test_cp_preserve_context_root() {
 #[rstest]
 #[case::existing_target(true)]
 #[case::new_target(false)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: wasmtime cannot exec the binary via a raw shell from a deleted cwd"
+)]
 fn test_cp_absolute_paths_from_deleted_cwd(#[case] target_exists: bool) {
     use std::process::Command;
 
@@ -7885,6 +8666,10 @@ fn test_cp_absolute_paths_from_deleted_cwd(#[case] target_exists: bool) {
 // to an existing directory, ensuring the directory name is properly
 // stripped from the descendant path.
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: relative '..' path canonicalization differs, causing a false self-copy detection"
+)]
 fn test_cp_current_directory_to_existing_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -7917,6 +8702,10 @@ fn test_cp_current_directory_to_existing_directory() {
 // Test copying current directory (.) to a new directory.
 // This should create the new directory and copy contents.
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: relative '..' path canonicalization differs, causing a false self-copy detection"
+)]
 fn test_cp_current_directory_to_new_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -7942,9 +8731,48 @@ fn test_cp_current_directory_to_new_directory() {
     assert!(at.file_exists("new_dest_dir/subdir/file3.txt"));
 }
 
+// Regression test for Launchpad #2167118:
+// When copying current directory (.), files or directories inside it that share
+// the same name as the current directory itself must not be stripped to empty paths.
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: relative '..' path canonicalization differs, causing a false self-copy detection"
+)]
+fn test_cp_current_directory_with_entry_matching_parent_basename() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("demo");
+    at.touch("demo/file");
+    at.touch("demo/demo"); // file has the same name as parent directory
+
+    // Copy current directory (.) to a new directory (reproducer from LP #2167118)
+    ucmd.current_dir(at.plus("demo"))
+        .args(&["-R", ".", "../out"])
+        .succeeds();
+
+    assert!(at.file_exists("out/file"));
+    assert!(at.file_exists("out/demo"));
+
+    // Also test copying to an already existing destination directory
+    at.mkdir("existing_out");
+    let mut ucmd2 = uutests::new_ucmd!();
+    ucmd2
+        .current_dir(at.plus("demo"))
+        .args(&["-R", ".", "../existing_out"])
+        .succeeds();
+
+    assert!(at.file_exists("existing_out/file"));
+    assert!(at.file_exists("existing_out/demo"));
+}
+
 // Test copying current directory (.) with verbose output.
 // This ensures the verbose output shows the correct paths.
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: relative '..' path canonicalization differs, causing a false self-copy detection"
+)]
 fn test_cp_current_directory_verbose() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -7980,6 +8808,10 @@ fn test_cp_current_directory_verbose() {
 // This ensures attributes are preserved when copying the current directory.
 #[test]
 #[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: relative '..' path canonicalization differs, causing a false self-copy detection"
+)]
 fn test_cp_current_directory_preserve_attributes() {
     use std::os::unix::prelude::MetadataExt;
 
@@ -8084,6 +8916,10 @@ fn test_cp_current_directory_to_itself_disallowed() {
 // Test copying current directory (.) with symlinks.
 // This ensures symlinks are handled correctly when copying the current directory.
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: relative '..' path canonicalization differs, causing a false self-copy detection"
+)]
 fn test_cp_current_directory_with_symlinks() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -8113,6 +8949,10 @@ fn test_cp_current_directory_with_symlinks() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_no_dereference_symlink_with_parents() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -8133,6 +8973,10 @@ fn test_cp_no_dereference_symlink_with_parents() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_recursive_no_dereference_symlink_to_directory() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -8235,6 +9079,10 @@ fn test_cp_recurse_verbose_output() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_recurse_verbose_output_with_symlink() {
     let source_dir = "source_dir";
     let target_dir = "target_dir";
@@ -8264,6 +9112,10 @@ fn test_cp_recurse_verbose_output_with_symlink() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_recurse_verbose_output_with_symlink_already_exists() {
     let source_dir = "source_dir";
     let target_dir = "target_dir";
@@ -8297,6 +9149,10 @@ fn test_cp_recurse_verbose_output_with_symlink_already_exists() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_hlp_flag_ordering() {
     // GNU cp: "If more than one of -H, -L, and -P is specified, only the final one takes effect"
     let (at, mut ucmd) = at_and_ucmd!();
@@ -8318,6 +9174,10 @@ fn test_cp_hlp_flag_ordering() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_archive_deref_flag_ordering() {
     // (flags, expect_symlink): last flag wins; a/d imply -P, H/L dereference
     for (flags, expect_symlink) in [
@@ -8343,6 +9203,10 @@ fn test_cp_archive_deref_flag_ordering() {
 /// https://github.com/uutils/coreutils/issues/13207
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_archive_deref_preserves_recursive() {
     for flags in ["-afL", "-aLf", "-aHL", "-adL"] {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -8360,6 +9224,10 @@ fn test_cp_archive_deref_preserves_recursive() {
 /// -aL should preserve file permissions (--preserve=all from -a).
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_archive_deref_preserves_mode() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("srcdir");
@@ -8398,6 +9266,10 @@ fn test_cp_no_deref_preserve_with_deref_keeps_hardlinks() {
 /// while -a preserves them (last-flag-wins for dereference).
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_archive_deref_symlinks_inside_dir() {
     use std::os::unix::fs::symlink;
     let scene = TestScenario::new(util_name!());
@@ -8431,6 +9303,10 @@ fn test_cp_archive_deref_symlinks_inside_dir() {
 /// -aH: inner symlinks preserved (a wins for recursive), CLI symlinks followed (H wins for CLI).
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_archive_cli_deref_inner_preserved() {
     use std::os::unix::fs::symlink;
     let scene = TestScenario::new(util_name!());
@@ -8457,6 +9333,10 @@ fn test_cp_archive_cli_deref_inner_preserved() {
 /// Precedence: repeating the same flag should take the last position.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_archive_deref_repeated_flag_last_wins() {
     use std::os::unix::fs::symlink;
     let scene = TestScenario::new(util_name!());
@@ -8672,6 +9552,10 @@ fn test_cp_xattr_failure_keeps_dest_contents() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_preserve_directory_permissions_by_default() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -8829,6 +9713,10 @@ fn test_cp_preserve_context_with_z_fails() {
 // is exercised by GNU's test suite; documenting here as future coverage.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
 fn test_cp_preserve_setuid_when_chown_succeeds() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("src");
@@ -8846,6 +9734,10 @@ fn test_cp_preserve_setuid_when_chown_succeeds() {
 
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: requires valid UTF-8 paths, so the non-UTF-8 error is expected"
+)]
 fn test_cp_recursive_non_utf8_source() {
     use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
     let (at, mut ucmd) = at_and_ucmd!();
@@ -8893,6 +9785,10 @@ fn test_cp_final_mode_unchanged_after_restrictive_create() {
 // change drops `O_NOFOLLOW` from the source open under `-P`.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_no_dereference_copies_symlink_as_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("target", "secret target contents");
@@ -8910,6 +9806,10 @@ fn test_cp_no_dereference_copies_symlink_as_symlink() {
 // O_NOFOLLOW to the dest open broke this and surfaced as ELOOP.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
 fn test_cp_d_overwrites_existing_symlink_dest() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("f");
@@ -8931,6 +9831,10 @@ fn test_cp_d_overwrites_existing_symlink_dest() {
 // non-Linux CI do not flag spurious failures.
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: ACL/xattr syscalls are not implemented, so -p's attribute preservation fails"
+)]
 fn test_cp_p_preserves_posix_acls() {
     use std::process::Command;
 

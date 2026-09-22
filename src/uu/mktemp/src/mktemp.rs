@@ -142,7 +142,13 @@ impl Options {
                 } else if matches.get_flag(OPT_T) || matches.contains_id(OPT_TMPDIR) {
                     // If --tmpdir is given without an argument, or -t is given
                     // export in TMPDIR
-                    Some(env::temp_dir())
+                    #[cfg(target_os = "wasi")]
+                    // WASI's `std::env::temp_dir()` unconditionally panics
+                    let default_tmp_dir = env::var_os(TMPDIR_ENV_VAR)
+                        .map_or_else(|| PathBuf::from(FALLBACK_TMPDIR), PathBuf::from);
+                    #[cfg(not(target_os = "wasi"))]
+                    let default_tmp_dir = env::temp_dir();
+                    Some(default_tmp_dir)
                 } else {
                     None
                 };
@@ -407,37 +413,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let dry_run = options.dry_run;
-    let suppress_file_err = options.quiet;
-    let make_dir = options.directory;
-
-    // Parse file path parameters from the command-line options.
-    let Params {
-        directory: tmpdir,
-        prefix,
-        num_rand_chars: rand,
-        suffix,
-    } = Params::from(options)?;
-
-    // Create the temporary file or directory, or simulate creating it.
-    let res = if dry_run {
-        Ok(dry_exec(&tmpdir, &prefix, rand, &suffix))
-    } else {
-        exec(&tmpdir, &prefix, rand, &suffix, make_dir)
-    };
-
-    let res = if suppress_file_err {
-        // Mapping all UErrors to ExitCodes prevents the errors from being printed
-        res.map_err(|e| e.code().into())
-    } else {
-        res
-    };
-    let path = res?;
+    let path = mktemp(&options)?;
     if let Err(e) = println_verbatim(&path) {
         // The caller never learns the name, so leaving the file behind would
         // litter the temporary directory with something nothing can clean up.
-        if !dry_run {
-            let _ = if make_dir {
+        if !options.dry_run {
+            let _ = if options.directory {
                 fs::remove_dir(&path)
             } else {
                 fs::remove_file(&path)
@@ -531,7 +512,7 @@ fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> PathBuf {
     SmallRng::try_from_rng(&mut rngs::SysRng)
         .unwrap_or_else(|_| {
             //rand::rng panics if getrandom failed
-            SmallRng::seed_from_u64(bytes.as_ptr() as usize as u64)
+            SmallRng::seed_from_u64(bytes.as_ptr() as u64)
         })
         .fill(bytes);
     for byte in bytes {
@@ -639,6 +620,13 @@ fn exec(dir: &Path, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> 
 fn get_tmpdir_env_or_default() -> PathBuf {
     match env::var_os(TMPDIR_ENV_VAR) {
         Some(val) if val.is_empty() => PathBuf::from(FALLBACK_TMPDIR),
+        // WASI's `std::env::temp_dir()` unconditionally panics,
+        // so read `TMPDIR` directly.
+        #[cfg(target_os = "wasi")]
+        Some(val) => PathBuf::from(val),
+        #[cfg(target_os = "wasi")]
+        None => PathBuf::from(FALLBACK_TMPDIR),
+        #[cfg(not(target_os = "wasi"))]
         _ => env::temp_dir(),
     }
 }
@@ -646,6 +634,8 @@ fn get_tmpdir_env_or_default() -> PathBuf {
 /// Create a temporary file or directory
 ///
 /// Behavior is determined by the `options` parameter, see [`Options`] for details.
+///
+/// The function is public so it can be used by nushell and others.
 pub fn mktemp(options: &Options) -> UResult<PathBuf> {
     // Parse file path parameters from the command-line options.
     let Params {
@@ -656,10 +646,18 @@ pub fn mktemp(options: &Options) -> UResult<PathBuf> {
     } = Params::from(options.clone())?;
 
     // Create the temporary file or directory, or simulate creating it.
-    if options.dry_run {
+    let res = if options.dry_run {
         Ok(dry_exec(&tmpdir, &prefix, rand, &suffix))
     } else {
         exec(&tmpdir, &prefix, rand, &suffix, options.directory)
+    };
+
+    if options.quiet {
+        // Only creation failures are silenced; a bad template is still reported.
+        // Mapping the UError to an ExitCode prevents the error from being printed.
+        res.map_err(|e| e.code().into())
+    } else {
+        res
     }
 }
 
