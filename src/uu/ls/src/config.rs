@@ -548,9 +548,15 @@ fn match_quoting_style_name(
             show_control: false,
         }),
         "shell" => QuotingStyleSpec::new(QuotingStyle::SHELL).with_name("shell"),
-        "shell-always" => QuotingStyleSpec::new(QuotingStyle::SHELL_QUOTE).with_name("shell-always"),
-        "shell-escape" => QuotingStyleSpec::new(QuotingStyle::SHELL_ESCAPE).with_name("shell-escape"),
-        "shell-escape-always" => QuotingStyleSpec::new(QuotingStyle::SHELL_ESCAPE_QUOTE).with_name("shell-escape-always"),
+        "shell-always" => {
+            QuotingStyleSpec::new(QuotingStyle::SHELL_QUOTE).with_name("shell-always")
+        }
+        "shell-escape" => {
+            QuotingStyleSpec::new(QuotingStyle::SHELL_ESCAPE).with_name("shell-escape")
+        }
+        "shell-escape-always" => {
+            QuotingStyleSpec::new(QuotingStyle::SHELL_ESCAPE_QUOTE).with_name("shell-escape-always")
+        }
         "c" => QuotingStyleSpec::new(QuotingStyle::C_DOUBLE).with_name("c"),
         "escape" => QuotingStyleSpec::new(QuotingStyle::C_NO_QUOTES).with_name("escape"),
         "locale" => QuotingStyleSpec {
@@ -561,7 +567,9 @@ fn match_quoting_style_name(
             locale: Some(LocaleQuoting::Single),
             name: "locale",
         },
-        "clocale" => QuotingStyleSpec::with_locale(QuotingStyle::C_DOUBLE, LocaleQuoting::Double, "clocale"),
+        "clocale" => {
+            QuotingStyleSpec::with_locale(QuotingStyle::C_DOUBLE, LocaleQuoting::Double, "clocale")
+        }
         _ => return None,
     };
 
@@ -599,7 +607,11 @@ fn extract_quoting_style(
             None => unreachable!("Should have been caught by Clap"),
         }
     } else if options.get_flag(options::quoting::LITERAL) {
-        (QuotingStyle::Literal { show_control }, None, "literal".to_string())
+        (
+            QuotingStyle::Literal { show_control },
+            None,
+            "literal".to_string(),
+        )
     } else if options.get_flag(options::quoting::ESCAPE) {
         (QuotingStyle::C_NO_QUOTES, None, "escape".to_string())
     } else if options.get_flag(options::quoting::C) {
@@ -607,7 +619,9 @@ fn extract_quoting_style(
     } else {
         // If set, the QUOTING_STYLE environment variable specifies a default style.
         if let Ok(style) = std::env::var("QUOTING_STYLE") {
-            if let Some((style, locale, name)) = match_quoting_style_name(style.as_str(), show_control) {
+            if let Some((style, locale, name)) =
+                match_quoting_style_name(style.as_str(), show_control)
+            {
                 return (style, locale, name.to_string());
             }
             let _ = writeln!(
@@ -618,11 +632,19 @@ fn extract_quoting_style(
         }
 
         match mode {
-            ProgramMode::Dir | ProgramMode::Vdir => (QuotingStyle::C_NO_QUOTES, None, "escape".to_string()),
-            ProgramMode::Ls if stdout().is_terminal() => {
-                (QuotingStyle::SHELL_ESCAPE.show_control(show_control), None, "shell-escape".to_string())
+            ProgramMode::Dir | ProgramMode::Vdir => {
+                (QuotingStyle::C_NO_QUOTES, None, "escape".to_string())
             }
-            ProgramMode::Ls => (QuotingStyle::Literal { show_control }, None, "literal".to_string()),
+            ProgramMode::Ls if stdout().is_terminal() => (
+                QuotingStyle::SHELL_ESCAPE.show_control(show_control),
+                None,
+                "shell-escape".to_string(),
+            ),
+            ProgramMode::Ls => (
+                QuotingStyle::Literal { show_control },
+                None,
+                "literal".to_string(),
+            ),
         }
     }
 }

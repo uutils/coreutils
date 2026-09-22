@@ -8251,7 +8251,6 @@ ls: invalid --block-size argument '1fb'
     }
 }
 
-
 #[test]
 fn test_dired_reports_canonical_quoting_style() {
     let styles = [
@@ -8277,8 +8276,7 @@ fn test_dired_reports_canonical_quoting_style() {
         } else {
             cmd.arg(format!("--quoting-style={option}"));
         }
-        cmd.succeeds().stdout_contains(format!(
-            "//DIRED-OPTIONS// --quoting-style={expected}\n"
-        ));
+        cmd.succeeds()
+            .stdout_contains(format!("//DIRED-OPTIONS// --quoting-style={expected}\n"));
     }
 }
