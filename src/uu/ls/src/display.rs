@@ -519,6 +519,7 @@ pub fn display_items(
                     &mut state.out,
                     quoted,
                     config.tab_size,
+                    config.line_ending,
                 )?;
             }
             Format::Across => {
@@ -529,6 +530,7 @@ pub fn display_items(
                     &mut state.out,
                     quoted,
                     config.tab_size,
+                    config.line_ending,
                 )?;
             }
             Format::Commas => {
@@ -544,7 +546,7 @@ pub fn display_items(
                             > config.width
                     {
                         current_col = name_width + 2;
-                        writeln!(state.out, ",")?;
+                        write!(state.out, ",{}", config.line_ending)?;
                     } else {
                         current_col += name_width + 2;
                         write!(state.out, ", ")?;
@@ -576,6 +578,7 @@ fn display_grid(
     out: &mut BufWriter<Stdout>,
     quoted: bool,
     tab_size: usize,
+    line_ending: LineEnding,
 ) -> UResult<()> {
     if width == 0 {
         // If the width is 0 we print one single line
@@ -588,7 +591,7 @@ fn display_grid(
             write_os_str(out, &name.displayed)?;
         }
         if printed_something {
-            writeln!(out)?;
+            write!(out, "{line_ending}")?;
         }
     } else {
         let names: Vec<String> = {
@@ -627,15 +630,134 @@ fn display_grid(
             },
         };
 
+        let cells: Vec<&str> = names.iter().map(String::as_str).collect();
         let grid = Grid::new(
-            names,
+            cells,
             GridOptions {
                 filling,
                 direction,
                 width: width as usize,
             },
         );
-        write!(out, "{grid}")?;
+        // The grid's Display implementation ends every row with a newline,
+        // so write the rows ourselves to end them with `line_ending` instead.
+        write_grid_rows(
+            out,
+            &names,
+            grid.column_widths(),
+            grid.row_count(),
+            direction,
+            tab_size,
+            line_ending,
+        )?;
+    }
+    Ok(())
+}
+
+// The row walk below (row/column indexing, padding and tab arithmetic) is
+// adapted from the `Display` implementation of the `uutils_term_grid` crate
+// (https://github.com/uutils/uutils-term-grid), which is licensed as follows:
+//
+// MIT License
+//
+// Copyright (c) 2018 Benjamin Sago
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+/// Write the grid's rows, ending every row with `line_ending`.
+///
+/// The grid decides how the cells fit into columns; this walks the rows in
+/// the same order its Display implementation would and writes each cell
+/// padded to its column width, so that the row terminator is written at an
+/// explicit row boundary rather than rewritten after the fact.
+fn write_grid_rows(
+    out: &mut BufWriter<Stdout>,
+    cells: &[String],
+    column_widths: &[usize],
+    num_rows: usize,
+    direction: Direction,
+    tab_size: usize,
+    line_ending: LineEnding,
+) -> UResult<()> {
+    if cells.is_empty() {
+        return Ok(());
+    }
+
+    // The separator the grid is filled with, built like the `Filling` above.
+    let separator = " ".repeat(DEFAULT_SEPARATOR_SIZE);
+    let filling_width = DEFAULT_SEPARATOR_SIZE;
+
+    // A buffer of spaces to pad cells with, sliced to the needed size.
+    let padding = " ".repeat(column_widths.iter().copied().max().unwrap_or(0) + filling_width);
+
+    for y in 0..num_rows {
+        // Current position on the line, used to place tab stops.
+        let mut cursor = 0;
+        for x in 0..column_widths.len() {
+            // Position of this cell in `cells`, and the offset to the next
+            // cell of the row.
+            let (current, offset) = match direction {
+                Direction::LeftToRight => (y * column_widths.len() + x, 1),
+                Direction::TopToBottom => (y + num_rows * x, num_rows),
+            };
+
+            // Abandon a line mid-way through if that's where the cells end.
+            if current >= cells.len() {
+                break;
+            }
+
+            out.write_all(cells[current].as_bytes())?;
+
+            // In case this entry was the last on the current line, there is
+            // no need to measure it or print the separator and padding.
+            let last_in_row = x == column_widths.len() - 1;
+            if last_in_row || current + offset >= cells.len() {
+                break;
+            }
+
+            let width = ansi_width(&cells[current]);
+            let padding_size = column_widths[x] - width;
+
+            if tab_size == 0 {
+                out.write_all(&padding.as_bytes()[..padding_size])?;
+                out.write_all(separator.as_bytes())?;
+            } else {
+                // Move the cursor to the end of the current contents and pad
+                // with tabs whenever the padding reaches a tab stop.
+                cursor += width;
+                let total_spaces = padding_size + filling_width;
+                let closest_tab = tab_size - (cursor % tab_size);
+
+                if closest_tab > total_spaces {
+                    out.write_all(&padding.as_bytes()[..total_spaces])?;
+                } else {
+                    let rest_spaces = total_spaces - closest_tab;
+                    let tabs = 1 + rest_spaces / tab_size;
+                    let spaces = rest_spaces % tab_size;
+                    out.write_all("\t".repeat(tabs).as_bytes())?;
+                    out.write_all(&padding.as_bytes()[..spaces])?;
+                }
+
+                cursor += total_spaces;
+            }
+        }
+        write!(out, "{line_ending}")?;
     }
     Ok(())
 }
