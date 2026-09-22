@@ -2251,3 +2251,18 @@ fn test_exit_with_3_write_error() {
         .fails_with_code(3)
         .stderr_is("expr: No space left on device\n");
 }
+
+#[test]
+fn test_version_flag() {
+    new_ucmd!().arg("--v").succeeds().stdout_is(format!(
+        "{} {}\n",
+        uutests::util_name!(),
+        uucore::crate_version!()
+    ));
+
+    new_ucmd!().arg("--version").succeeds().stdout_is(format!(
+        "{} {}\n",
+        uutests::util_name!(),
+        uucore::crate_version!()
+    ));
+}
