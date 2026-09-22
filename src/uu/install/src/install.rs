@@ -59,7 +59,7 @@ pub struct Behavior {
     strip: bool,
     strip_program: String,
     create_leading: bool,
-    target_dir: Option<String>,
+    target_dir: Option<OsString>,
     no_target_dir: bool,
     preserve_context: bool,
     context: Option<String>,
@@ -295,7 +295,8 @@ pub fn uu_app() -> Command {
                 .long(OPT_TARGET_DIRECTORY)
                 .help(translate!("install-help-target-directory"))
                 .value_name("DIRECTORY")
-                .value_hint(clap::ValueHint::DirPath),
+                .value_hint(clap::ValueHint::DirPath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(OPT_NO_TARGET_DIRECTORY)
@@ -391,7 +392,7 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
 
     let backup_mode =
         backup_control::determine_backup_mode(std::env::var("VERSION_CONTROL").ok(), matches)?;
-    let target_dir = matches.get_one::<String>(OPT_TARGET_DIRECTORY).cloned();
+    let target_dir = matches.get_one::<OsString>(OPT_TARGET_DIRECTORY).cloned();
     let no_target_dir = matches.get_flag(OPT_NO_TARGET_DIRECTORY);
     if target_dir.is_some() && no_target_dir {
         show_error!("{}", translate!("install-error-mutually-exclusive-target"));
