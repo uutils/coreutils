@@ -1,4 +1,5 @@
 # spell-checker:ignore dpkg
+
 [package]
 name = "uu_stdbuf"
 description = "stdbuf ~ (uutils) run COMMAND with modified standard stream buffering"
