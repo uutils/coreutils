@@ -5,7 +5,7 @@
 
 use std::char::from_digit;
 
-use super::Quotes;
+use super::c_quoter::CQuotes;
 use super::shell_quoter::ShellQuotes;
 
 // PR#6559 : Remove `]{}` from special shell chars.
@@ -120,9 +120,13 @@ impl EscapedChar {
         }
     }
 
-    pub(super) fn new_c(c: char, quotes: Quotes, dirname: bool) -> Self {
+    /// Escape a character for C or locale quoting style.
+    pub(super) fn new_c(c: char, quotes: Option<CQuotes>, dirname: bool) -> Self {
         use EscapeState::*;
         let init_state = match c {
+            // When using locale quoting style, only escape the closing
+            // character, not the opening one.
+            c if quotes.is_some_and(|q| q.closing == c) => Backslash(c),
             '\x07' => Backslash('a'),
             '\x08' => Backslash('b'),
             '\t' => Backslash('t'),
@@ -131,18 +135,7 @@ impl EscapedChar {
             '\x0C' => Backslash('f'),
             '\r' => Backslash('r'),
             '\\' => Backslash('\\'),
-            '\'' => match quotes {
-                Quotes::Single => Backslash('\''),
-                _ => Char('\''),
-            },
-            '"' => match quotes {
-                Quotes::Double => Backslash('"'),
-                _ => Char('"'),
-            },
-            ' ' if !dirname => match quotes {
-                Quotes::None => Backslash(' '),
-                _ => Char(' '),
-            },
+            ' ' if !dirname && quotes.is_none() => Backslash(' '),
             ':' if dirname => Backslash(':'),
             _ if c.is_control() => Octal(EscapeOctal::from_char(c)),
             _ => Char(c),
