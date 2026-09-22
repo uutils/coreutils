@@ -1,4 +1,4 @@
-# spell-checker:ignore bigdecimal extendedbigdecimal
+# spell-checker:ignore extendedbigdecimal
 
 [package]
 name = "uu_seq"
