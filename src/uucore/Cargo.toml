@@ -1,4 +1,4 @@
-# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal tzdb zoneinfo logind libcrypto
+# spell-checker:ignore (features) extendedbigdecimal tzdb zoneinfo logind libcrypto
 
 [package]
 name = "uucore"
