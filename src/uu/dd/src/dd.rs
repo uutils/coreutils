@@ -1664,6 +1664,10 @@ mod tests {
     fn copy_buffer_does_not_touch_its_pages() {
         use crate::AlignedBuf;
 
+        const CHILD_ENV: &str = "UUTEST_DD_COPY_BUFFER_CHILD";
+        const BSIZE: usize = 4 << 30;
+        const SLACK_KIB: u64 = 64 << 10;
+
         fn peak_rss_kib() -> u64 {
             std::fs::read_to_string("/proc/self/status")
                 .unwrap()
@@ -1673,20 +1677,39 @@ mod tests {
                 .unwrap()
         }
 
-        // Larger than anything else this test binary allocates, so the reading
-        // below cannot be attributed to another test.
-        const BSIZE: usize = 4 << 30;
-        const SLACK_KIB: u64 = 64 << 10;
+        // `VmHWM` is per process, and the kernel reports it as the maximum of
+        // the stored watermark and the *current* RSS, refreshing the watermark
+        // only at some points. A reading can therefore be inflated by another
+        // test thread's live pages and a later one can come out lower, which
+        // made the growth below underflow. Measure in a child process running
+        // this test alone.
+        if std::env::var_os(CHILD_ENV).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .env(CHILD_ENV, "1")
+                .arg("copy_buffer_does_not_touch_its_pages")
+                .arg("--test-threads=1")
+                .output()
+                .unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            // The filter has to have selected exactly this test, or the child
+            // reports success without measuring anything.
+            assert!(
+                output.status.success() && stdout.contains("1 passed"),
+                "child test failed\nstdout: {stdout}\nstderr: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
 
         let before = peak_rss_kib();
         let buf = AlignedBuf::new(BSIZE).unwrap();
         let after = peak_rss_kib();
 
         assert_eq!(buf.as_bytes().len(), BSIZE);
+        let growth = after.saturating_sub(before);
         assert!(
-            after - before < SLACK_KIB,
-            "a {BSIZE}-byte copy buffer raised peak RSS by {} KiB",
-            after - before
+            growth < SLACK_KIB,
+            "a {BSIZE}-byte copy buffer raised peak RSS by {growth} KiB"
         );
     }
 
