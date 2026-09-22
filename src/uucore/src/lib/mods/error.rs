@@ -368,8 +368,8 @@ impl UError for UUsageError {
 /// The messages displayed by [`UIoError`] should match the error messages displayed by GNU
 /// coreutils.
 ///
-/// There are two ways to construct this type: with [`UIoError::new`] or by calling the
-/// [`FromIo::map_err_context`] method on a [`std::io::Result`] or [`std::io::Error`].
+/// This type is constructed by calling the [`FromIo::map_err_context`] method on a
+/// [`std::io::Result`] or [`std::io::Error`].
 /// ```
 /// use uucore::{
 ///     display::Quotable,
@@ -379,31 +379,12 @@ impl UError for UUsageError {
 /// use std::path::Path;
 /// let path = Path::new("test.txt");
 ///
-/// // Manual construction
-/// let e: Box<dyn UError> = UIoError::new(
-///     std::io::ErrorKind::NotFound,
-///     format!("cannot access {}", path.quote())
-/// );
-/// let res: UResult<()> = Err(e.into());
-///
-/// // Converting from an `std::io::Error`.
 /// let res: UResult<File> = File::open(path).map_err_context(|| format!("cannot access {}", path.quote()));
 /// ```
 #[derive(Debug)]
 pub struct UIoError {
     context: Option<String>,
     inner: std::io::Error,
-}
-
-impl UIoError {
-    /// Create a new `UIoError` with a given exit code and message.
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new<S: Into<String>>(kind: std::io::ErrorKind, context: S) -> Box<dyn UError> {
-        Box::new(Self {
-            context: Some(context.into()),
-            inner: kind.into(),
-        })
-    }
 }
 
 impl UError for UIoError {}
@@ -595,73 +576,6 @@ impl From<nix::Error> for Box<dyn UError> {
         Box::new(u_error) as Self
     }
 }
-
-/// Shorthand to construct [`UIoError`]-instances.
-///
-/// This macro serves as a convenience call to quickly construct instances of
-/// [`UIoError`]. It takes:
-///
-/// - An instance of [`std::io::Error`]
-/// - A `format!`-compatible string and
-/// - An arbitrary number of arguments to the format string
-///
-/// In exactly this order. It is equivalent to the more verbose code seen in the
-/// example.
-///
-/// # Examples
-///
-/// ```
-/// use uucore::error::UIoError;
-/// use uucore::uio_error;
-///
-/// let io_err = std::io::Error::new(
-///     std::io::ErrorKind::PermissionDenied, "fix me please!"
-/// );
-///
-/// let uio_err = UIoError::new(
-///     io_err.kind(),
-///     format!("Error code: {}", 2)
-/// );
-///
-/// let other_uio_err = uio_error!(io_err, "Error code: {}", 2);
-///
-/// // prints "fix me please!: Permission denied"
-/// println!("{uio_err}");
-/// // prints "Error code: 2: Permission denied"
-/// println!("{other_uio_err}");
-/// ```
-///
-/// The [`std::fmt::Display`] impl of [`UIoError`] will then ensure that an
-/// appropriate error message relating to the actual error kind of the
-/// [`std::io::Error`] is appended to whatever error message is defined in
-/// addition (as secondary argument).
-///
-/// If you want to show only the error message for the [`std::io::ErrorKind`]
-/// that's contained in [`UIoError`], pass the second argument as empty string:
-///
-/// ```
-/// use uucore::error::UIoError;
-/// use uucore::uio_error;
-///
-/// let io_err = std::io::Error::new(
-///     std::io::ErrorKind::PermissionDenied, "fix me please!"
-/// );
-///
-/// let other_uio_err = uio_error!(io_err, "");
-///
-/// // prints: ": Permission denied"
-/// println!("{other_uio_err}");
-/// ```
-//#[macro_use]
-#[macro_export]
-macro_rules! uio_error(
-    ($err:expr, $($args:tt)+) => ({
-        UIoError::new(
-            $err.kind(),
-            format!($($args)+)
-        )
-    })
-);
 
 /// A special error type that does not print any message when returned from
 /// `uumain`. Especially useful for porting utilities to using [`UResult`].
