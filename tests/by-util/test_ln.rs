@@ -193,6 +193,22 @@ fn test_force_replace_same_inode_leaves_no_temp_file() {
     );
 }
 
+/// The destination can sit inside a directory reached through a symlink, as
+/// when the target argument is a symlink to a directory. The replace must
+/// follow it the same way the first create attempt does.
+#[test]
+#[cfg(unix)]
+fn test_force_replace_in_symlinked_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("real");
+    at.symlink_dir("real", "dirlink");
+    at.symlink_file("old", "real/link");
+
+    ucmd.args(&["-s", "-f", "new", "dirlink/link"]).succeeds();
+
+    assert_eq!(at.resolve_link("real/link"), "new");
+}
+
 #[test]
 fn test_symlink_overwrite_force_overrides_interactive() {
     let (at, mut ucmd) = at_and_ucmd!();
