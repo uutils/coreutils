@@ -283,6 +283,15 @@ impl Output {
             None => None,
         }
     }
+
+    /// Error context for a failed write to this output, naming the file or standard output.
+    fn write_failed_context(&self) -> impl Fn() -> String + use<> {
+        let output_name = self
+            .as_output_name()
+            .unwrap_or(OsStr::new("standard output"))
+            .to_owned();
+        move || translate!("sort-error-write-failed", "output" => output_name.maybe_quote())
+    }
 }
 
 #[derive(Clone)]
@@ -3303,15 +3312,10 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
     settings: &GlobalSettings,
     output: Output,
 ) -> UResult<()> {
-    let output_name = output
-        .as_output_name()
-        .unwrap_or(OsStr::new("standard output"))
-        .to_owned();
-    let ctx = || translate!("sort-error-write-failed", "output" => output_name.maybe_quote());
-
+    let ctx = output.write_failed_context();
     let mut writer = output.into_write()?;
     for line in iter {
-        line.write(&mut writer, settings).map_err_context(ctx)?;
+        line.write(&mut writer, settings).map_err_context(&ctx)?;
     }
     writer.flush().map_err_context(ctx)?;
     Ok(())
