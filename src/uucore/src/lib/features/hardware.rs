@@ -143,17 +143,10 @@ impl CpuFeatures {
     }
 
     fn detect_impl() -> Self {
-        let set = [
-            (HardwareFeature::Avx512, detect_avx512 as fn() -> bool),
-            (HardwareFeature::Avx2, detect_avx2),
-            (HardwareFeature::PclMul, detect_pclmul),
-            (HardwareFeature::Vmull, detect_vmull),
-            (HardwareFeature::Sse2, detect_sse2),
-            (HardwareFeature::Asimd, detect_asimd),
-        ]
-        .into_iter()
-        .filter_map(|(feat, detect)| detect().then_some(feat))
-        .collect();
+        let set = FEATURE_DETECTORS
+            .iter()
+            .filter_map(|(feat, detect)| detect().then_some(*feat))
+            .collect();
 
         Self { set }
     }
@@ -239,6 +232,33 @@ impl HasHardwareFeatures for SimdPolicy {
 
 // Platform-specific feature detection
 
+/// A feature this architecture can have, with its detector.
+type FeatureDetector = (HardwareFeature, fn() -> bool);
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+const FEATURE_DETECTORS: &[FeatureDetector] = &[
+    (HardwareFeature::Avx512, detect_avx512),
+    (HardwareFeature::Avx2, detect_avx2),
+    (HardwareFeature::PclMul, detect_pclmul),
+    (HardwareFeature::Sse2, detect_sse2),
+];
+
+// bytecount's aarch64 SIMD code, used by wc, is only built for little-endian
+// targets, so skip these detectors on big-endian targets.
+#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
+const FEATURE_DETECTORS: &[FeatureDetector] = &[
+    (HardwareFeature::Vmull, detect_vmull),
+    (HardwareFeature::Asimd, detect_asimd),
+];
+
+// No hardware feature detectors are currently supported on this target.
+#[cfg(not(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    all(target_arch = "aarch64", target_endian = "little")
+)))]
+const FEATURE_DETECTORS: &[FeatureDetector] = &[];
+
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn detect_avx512() -> bool {
     if cfg!(target_os = "android") {
@@ -247,11 +267,6 @@ fn detect_avx512() -> bool {
         std::arch::is_x86_feature_detected!("avx512f")
             && std::arch::is_x86_feature_detected!("avx512bw")
     }
-}
-
-#[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
-fn detect_avx512() -> bool {
-    false
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -263,11 +278,6 @@ fn detect_avx2() -> bool {
     }
 }
 
-#[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
-fn detect_avx2() -> bool {
-    false
-}
-
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn detect_pclmul() -> bool {
     if cfg!(target_os = "android") {
@@ -275,11 +285,6 @@ fn detect_pclmul() -> bool {
     } else {
         std::arch::is_x86_feature_detected!("pclmulqdq")
     }
-}
-
-#[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
-fn detect_pclmul() -> bool {
-    false
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -291,11 +296,6 @@ fn detect_sse2() -> bool {
     }
 }
 
-#[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
-fn detect_sse2() -> bool {
-    false
-}
-
 #[cfg(all(target_arch = "aarch64", target_endian = "little"))]
 fn detect_asimd() -> bool {
     if cfg!(target_os = "android") {
@@ -305,21 +305,11 @@ fn detect_asimd() -> bool {
     }
 }
 
-#[cfg(not(all(target_arch = "aarch64", target_endian = "little")))]
-fn detect_asimd() -> bool {
-    false
-}
-
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
 fn detect_vmull() -> bool {
     // VMULL is part of ARM NEON/ASIMD
     // For now, we use ASIMD as a proxy
     detect_asimd()
-}
-
-#[cfg(not(target_arch = "aarch64"))]
-fn detect_vmull() -> bool {
-    false
 }
 
 // GLIBC_TUNABLES parsing
