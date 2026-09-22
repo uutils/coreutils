@@ -1,5 +1,3 @@
-# spell-checker:ignore bigdecimal foldhash
-
 [package]
 name = "uu_sort"
 description = "sort ~ (uutils) sort input lines"

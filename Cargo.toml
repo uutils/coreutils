@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime foldhash serde kqueue libcrypto libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner getauxval hashbrown tzdb
+# spell-checker:ignore kqueue libcrypto libselinux startswith unnested logind cfgs
 
 [package]
 name = "coreutils"
