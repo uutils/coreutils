@@ -1079,7 +1079,10 @@ fn copy_special_file_at(
     } else {
         libc::S_IFCHR
     } as libc::mode_t;
-    // `mknodat` is available on Android where `mkfifoat` is not.
+    // `mknodat` is available on Android where `mkfifoat` is not, and rustix
+    // does not expose it on Apple targets.
+    // SAFETY: `name_cstr` is a valid NUL-terminated string that outlives the
+    // call, and `dir_fd` is an open directory descriptor.
     let result = unsafe {
         libc::mknodat(
             dir_fd.as_raw_fd(),
@@ -1118,13 +1121,11 @@ fn copy_special_file(_from: &Path, metadata: &fs::Metadata, to: &Path) -> io::Re
 /// create it cannot destroy an existing destination.
 #[cfg(all(unix, not(target_os = "redox")))]
 fn rename_special_fallback(from: &Path, to: &Path, metadata: &fs::Metadata) -> io::Result<()> {
-    use std::ffi::{CString, OsString};
-    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
 
     let (dir_fd, basename) = open_destination_parent(to)?;
     let (src_parent_fd, src_basename) = open_source_parent(from)?;
-    let basename_cstr = CString::new(basename.as_bytes())
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid destination name"))?;
     let mut urandom = fs::File::open("/dev/urandom")?;
 
     for _ in 0..32 {
@@ -1132,21 +1133,11 @@ fn rename_special_fallback(from: &Path, to: &Path, metadata: &fs::Metadata) -> i
 
         match copy_special_file_at(metadata, &dir_fd, &tmp_name) {
             Ok(()) => {
-                let tmp_cstr = CString::new(tmp_name.as_bytes()).map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidInput, "invalid temporary name")
-                })?;
-                let result = unsafe {
-                    libc::renameat(
-                        dir_fd.as_raw_fd(),
-                        tmp_cstr.as_ptr(),
-                        dir_fd.as_raw_fd(),
-                        basename_cstr.as_ptr(),
-                    )
-                };
-                if result != 0 {
-                    let error = io::Error::last_os_error();
+                if let Err(error) =
+                    rustix::fs::renameat(&dir_fd, &tmp_name, &dir_fd, basename.as_os_str())
+                {
                     let _ = dir_fd.unlink_at(&tmp_name, false);
-                    return Err(error);
+                    return Err(error.into());
                 }
                 return src_parent_fd.unlink_at(&src_basename, false);
             }
@@ -1687,14 +1678,9 @@ fn preserve_ownership_fd(from: &fs::File, to: &fs::File) -> bool {
     };
 
     if source_meta.uid() != destination_meta.uid() || source_meta.gid() != destination_meta.gid() {
-        let result = unsafe {
-            libc::fchown(
-                to.as_raw_fd(),
-                source_meta.uid() as libc::uid_t,
-                source_meta.gid() as libc::gid_t,
-            )
-        };
-        if result != 0 {
+        let owner = rustix::fs::Uid::from_raw(source_meta.uid());
+        let group = rustix::fs::Gid::from_raw(source_meta.gid());
+        if rustix::fs::fchown(to, Some(owner), Some(group)).is_err() {
             return false;
         }
     }
