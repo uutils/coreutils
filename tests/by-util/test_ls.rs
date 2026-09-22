@@ -1157,6 +1157,123 @@ fn test_ls_zero() {
 }
 
 #[test]
+fn test_ls_zero_format_orderings() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(at.plus_as_string("a"));
+    at.touch(at.plus_as_string("b"));
+
+    // A format flag after --zero keeps the grid format, so the terminator
+    // must still come from --zero.
+    scene
+        .ucmd()
+        .args(&["--zero", "-C", "-w", "80", "a", "b"])
+        .succeeds()
+        .stdout_only("a  b\x00");
+
+    scene
+        .ucmd()
+        .args(&["--zero", "-x", "-w", "80", "a", "b"])
+        .succeeds()
+        .stdout_only("a  b\x00");
+
+    // A format flag before --zero is reset to one name per line.
+    scene
+        .ucmd()
+        .args(&["-C", "--zero", "a", "b"])
+        .succeeds()
+        .stdout_only("a\x00b\x00");
+
+    scene
+        .ucmd()
+        .args(&["-x", "--zero", "a", "b"])
+        .succeeds()
+        .stdout_only("a\x00b\x00");
+
+    // The single line printed for a zero width is terminated as well.
+    scene
+        .ucmd()
+        .args(&["--zero", "-C", "-w", "0", "a", "b"])
+        .succeeds()
+        .stdout_only("a  b\x00");
+
+    // Without --zero the newline terminator is kept.
+    scene
+        .ucmd()
+        .args(&["-C", "-w", "80", "a", "b"])
+        .succeeds()
+        .stdout_only("a  b\n");
+}
+
+#[test]
+fn test_ls_zero_grid_rows_and_comma_wraps() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    for name in ["aaa", "bbb", "ccc", "ddd", "eee", "fff"] {
+        at.touch(at.plus_as_string(name));
+    }
+
+    // Every row of a wrapped grid is NUL-terminated, not only the last one.
+    scene
+        .ucmd()
+        .args(&["--zero", "-C", "-w", "12"])
+        .succeeds()
+        .stdout_only("aaa  ddd\x00bbb  eee\x00ccc  fff\x00");
+
+    scene
+        .ucmd()
+        .args(&["--zero", "-x", "-w", "12"])
+        .succeeds()
+        .stdout_only("aaa  bbb\x00ccc  ddd\x00eee  fff\x00");
+
+    // Line wraps of the comma format are NUL-terminated as well.
+    scene
+        .ucmd()
+        .args(&["--zero", "-m", "-w", "12"])
+        .succeeds()
+        .stdout_only("aaa, bbb,\x00ccc, ddd,\x00eee, fff\x00");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ls_zero_columns_newline_names() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(at.plus_as_string("end\n"));
+    at.touch(at.plus_as_string("nl\nmid"));
+
+    // Names containing newlines are printed verbatim: only the row
+    // terminators become NUL bytes.
+    scene
+        .ucmd()
+        .args(&["--zero", "-C", "-w", "5"])
+        .succeeds()
+        .stdout_only("end\n\x00nl\nmid\x00");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ls_zero_columns_filename_newline() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(at.plus_as_string("\n"));
+
+    // A name that is a single newline must be printed as-is; only the row
+    // terminator comes from --zero.
+    scene
+        .ucmd()
+        .args(&["--zero", "-C", "-w", "80"])
+        .succeeds()
+        .stdout_only("\n\x00");
+
+    scene
+        .ucmd()
+        .args(&["--zero", "-x", "-w", "80"])
+        .succeeds()
+        .stdout_only("\n\x00");
+}
+
+#[test]
 fn test_ls_commas_trailing() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
