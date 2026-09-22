@@ -29,7 +29,7 @@ use uucore::error::{UError, UResult, strip_errno};
 use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
 use uucore::translate;
 use uucore::translate_text;
-use uucore::{format_usage, show};
+use uucore::{format_usage, show, show_if_err};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
@@ -430,25 +430,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    if let Some(input) = matches.get_one::<String>(OPT_SET) {
-        match parse_date(input, &now, DebugOptions::new(debug_mode, true), false) {
-            Ok(ParsedDateTime::InRange(date)) => {
-                return set_system_datetime(convert_for_set(date, utc));
-            }
-            Ok(ParsedDateTime::Extended(_)) | Err(_) => {
-                return Err(Box::new(DateError::InvalidDate {
-                    date: input.clone(),
-                }));
-            }
-        }
-    }
-
     let settings = Settings {
         utc,
         format,
         date_source,
         debug: debug_mode,
     };
+
+    // GNU `date` echoes the resulting date for `-s` whether or not the clock
+    // could actually be set (issue #14677); only a parse failure skips it.
+    if let Some(input) = matches.get_one::<String>(OPT_SET) {
+        let mut stdout = BufWriter::new(std::io::stdout().lock());
+        return set_and_echo(input, &now, &settings, &mut stdout, set_system_datetime);
+    }
 
     let allow_extended = matches!(settings.format, Format::Default);
     let output_time_zone = now.time_zone().clone();
@@ -635,29 +629,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let config = Config::new().custom(PosixCustom::new()).lenient(true);
     for date in dates {
         match date {
-            Ok(date) => {
-                let skip_localization =
-                    matches!(settings.format, Format::Rfc5322 | Format::Rfc3339(_));
-                let formatted = match date {
-                    ParsedDateTime::InRange(date) => {
-                        let date = if settings.utc {
-                            date.with_time_zone(TimeZone::UTC)
-                        } else {
-                            date
-                        };
-                        format_chunks(&chunks, |fmt| {
-                            format_date_with_locale_aware_months(
-                                &date,
-                                fmt,
-                                &config,
-                                skip_localization,
-                            )
-                        })
-                    }
-                    ParsedDateTime::Extended(date) => {
-                        format_extended_default(&date, &chunks, &config, &output_time_zone)
-                    }
-                };
+            Ok(ParsedDateTime::InRange(date)) => {
+                write_formatted_date(
+                    &mut stdout,
+                    date,
+                    format_string,
+                    &chunks,
+                    &config,
+                    &settings,
+                )?;
+            }
+            Ok(ParsedDateTime::Extended(date)) => {
+                let formatted = format_extended_default(&date, &chunks, &config, &output_time_zone);
                 match formatted {
                     Ok(bytes) => {
                         stdout.write_all(&bytes).map_err(DateError::Write)?;
@@ -949,6 +932,90 @@ fn format_chunks(
         }
     }
     Ok(output)
+}
+
+/// Write one in-range date, newline-terminated, using the normal display
+/// formatting.
+///
+/// Shared by the ordinary display loop and the `-s`/`--set` echo (GNU `date`
+/// prints the newly set date, issue #14677) so both render identically: the
+/// date is re-zoned to UTC for display when `-u` was given, month and day
+/// names are localized unless the format is an RFC one, and write errors map
+/// to `DateError::Write` like the loop.
+fn write_formatted_date<W: Write>(
+    writer: &mut W,
+    date: Zoned,
+    format_string: &[u8],
+    chunks: &[FormatChunk<'_>],
+    config: &Config<PosixCustom>,
+    settings: &Settings,
+) -> UResult<()> {
+    let skip_localization = matches!(settings.format, Format::Rfc5322 | Format::Rfc3339(_));
+    let date = if settings.utc {
+        date.with_time_zone(TimeZone::UTC)
+    } else {
+        date
+    };
+    match format_chunks(chunks, |fmt| {
+        format_date_with_locale_aware_months(&date, fmt, config, skip_localization)
+    }) {
+        Ok(bytes) => {
+            writer.write_all(&bytes).map_err(DateError::Write)?;
+            writer.write_all(b"\n").map_err(DateError::Write)?;
+            Ok(())
+        }
+        Err(e) => {
+            let _ = writer.flush();
+            Err(Box::new(DateError::InvalidFormat {
+                format: String::from_utf8_lossy(format_string).into_owned(),
+                error: e,
+            }))
+        }
+    }
+}
+
+/// Handle `-s`/`--set`: set the clock, then echo the parsed date.
+///
+/// GNU `date` attempts the set first and reports its failure before
+/// displaying anything, so the diagnostic survives even when the date write
+/// then fails or kills the process (SIGPIPE under `RUST_SIGPIPE=default`);
+/// the date is shown whether or not the set succeeded, and a write failure
+/// is reported separately afterwards (measured on coreutils 9.12: a failed
+/// set leaves the date on stdout with the error on stderr and exit 1; with
+/// stdout on a closed pipe the set error is still emitted before the fatal
+/// write). Diagnostics go through `show_if_err!`, which also records the
+/// non-zero exit status; `writer` and `set` are parameters so tests can
+/// capture the output and stub the privileged half.
+fn set_and_echo<W: Write>(
+    input: &str,
+    now: &Zoned,
+    settings: &Settings,
+    writer: &mut W,
+    set: impl FnOnce(Zoned) -> UResult<()>,
+) -> UResult<()> {
+    match parse_date(input, now, DebugOptions::new(settings.debug, true), false) {
+        Ok(ParsedDateTime::InRange(date)) => {
+            let set_result = set(convert_for_set(date.clone(), settings.utc));
+
+            show_if_err!(set_result);
+
+            let format_string = make_format_string(settings);
+            let chunks = split_format(format_string);
+            let config = Config::new().custom(PosixCustom::new()).lenient(true);
+            let echo_result =
+                write_formatted_date(writer, date, format_string, &chunks, &config, settings)
+                    .and_then(|()| {
+                        writer
+                            .flush()
+                            .map_err(|e| Box::new(DateError::Write(e)) as Box<dyn UError>)
+                    });
+            show_if_err!(echo_result);
+            Ok(())
+        }
+        Ok(ParsedDateTime::Extended(_)) | Err(_) => Err(Box::new(DateError::InvalidDate {
+            date: input.to_owned(),
+        })),
+    }
 }
 
 fn format_extended_default(
@@ -1550,5 +1617,171 @@ mod tests {
         assert_eq!(strip_parenthesized_comments("a(b(c)d)e"), "ae"); // Nested balanced
         assert_eq!(strip_parenthesized_comments("a(b(c)d"), "a"); // Nested unbalanced
         assert_eq!(strip_parenthesized_comments("a(b)c(d)e(f"), "ace"); // Multiple groups, last unmatched
+    }
+
+    /// Run one date through the shared writer used by the display loop and
+    /// the `-s` echo, returning what it produced.
+    fn write_date_with_settings(date: Zoned, settings: Settings) -> String {
+        let format_string = make_format_string(&settings);
+        let chunks = split_format(format_string);
+        let config = Config::new().custom(PosixCustom::new()).lenient(true);
+        let mut out = Vec::new();
+        write_formatted_date(&mut out, date, format_string, &chunks, &config, &settings).unwrap();
+        String::from_utf8(out).unwrap()
+    }
+
+    #[test]
+    fn test_write_formatted_date_custom_format() {
+        // Specifiers that no locale rewrites, so the test is locale-independent.
+        let date: Zoned = "2020-03-12T05:30:00+00:00[UTC]".parse().unwrap();
+        let settings = Settings {
+            utc: false,
+            format: Format::Custom(b"%F %T %Z".to_vec()),
+            date_source: DateSource::Now,
+            debug: false,
+        };
+        assert_eq!(
+            write_date_with_settings(date, settings),
+            "2020-03-12 05:30:00 UTC\n"
+        );
+    }
+
+    #[test]
+    fn test_write_formatted_date_rfc5322_not_localized() {
+        let date: Zoned = "2020-03-12T05:30:00+00:00[UTC]".parse().unwrap();
+        let settings = Settings {
+            utc: false,
+            format: Format::Rfc5322,
+            date_source: DateSource::Now,
+            debug: false,
+        };
+        assert_eq!(
+            write_date_with_settings(date, settings),
+            "Thu, 12 Mar 2020 05:30:00 +0000\n"
+        );
+    }
+
+    #[test]
+    fn test_write_formatted_date_utc_rezones_for_display() {
+        // Parsed at +08:00; `-u` echoes the same instant in UTC.
+        let date: Zoned = "2020-03-12T13:30:00+08:00[+08:00]".parse().unwrap();
+        let settings = Settings {
+            utc: true,
+            format: Format::Custom(b"%F %T %:z".to_vec()),
+            date_source: DateSource::Now,
+            debug: false,
+        };
+        assert_eq!(
+            write_date_with_settings(date, settings),
+            "2020-03-12 05:30:00 +00:00\n"
+        );
+    }
+
+    #[test]
+    fn test_set_and_echo_writes_date_when_set_succeeds() {
+        let now: Zoned = "2025-06-01T12:00:00+00:00[UTC]".parse().unwrap();
+        let settings = Settings {
+            utc: false,
+            format: Format::Custom(b"%F %T %Z".to_vec()),
+            date_source: DateSource::Now,
+            debug: false,
+        };
+        let mut out = Vec::new();
+        set_and_echo("2026-01-01", &now, &settings, &mut out, |_| Ok(())).unwrap();
+        assert_eq!(String::from_utf8(out).unwrap(), "2026-01-01 00:00:00 UTC\n");
+    }
+
+    #[test]
+    fn test_set_and_echo_writes_date_when_set_fails() {
+        // GNU prints the date even when the clock cannot be set; the set
+        // failure is reported (and the exit status recorded) rather than
+        // returned.
+        let now: Zoned = "2025-06-01T12:00:00+00:00[UTC]".parse().unwrap();
+        let settings = Settings {
+            utc: false,
+            format: Format::Custom(b"%F %T %Z".to_vec()),
+            date_source: DateSource::Now,
+            debug: false,
+        };
+        let mut out = Vec::new();
+        let result = set_and_echo("2026-01-01", &now, &settings, &mut out, |_| {
+            Err(Box::new(DateError::CannotSetDate {
+                path: String::new(),
+                error: "Operation not permitted".to_string(),
+            }))
+        });
+        assert!(result.is_ok());
+        assert_eq!(uucore::error::get_exit_code(), 1);
+        assert_eq!(String::from_utf8(out).unwrap(), "2026-01-01 00:00:00 UTC\n");
+    }
+
+    #[test]
+    fn test_set_and_echo_invalid_date_writes_nothing() {
+        let now: Zoned = "2025-06-01T12:00:00+00:00[UTC]".parse().unwrap();
+        let settings = Settings {
+            utc: false,
+            format: Format::Default,
+            date_source: DateSource::Now,
+            debug: false,
+        };
+        let mut out = Vec::new();
+        let result = set_and_echo("123abcd", &now, &settings, &mut out, |_| Ok(()));
+        assert!(result.is_err());
+        assert!(out.is_empty());
+    }
+
+    /// A writer whose every operation fails, like stdout on a full disk or a
+    /// pipe with no reader.
+    struct BrokenWriter;
+    impl Write for BrokenWriter {
+        fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe))
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe))
+        }
+    }
+
+    #[test]
+    fn test_set_and_echo_output_failure_does_not_skip_set() {
+        let now: Zoned = "2025-06-01T12:00:00+00:00[UTC]".parse().unwrap();
+        let settings = Settings {
+            utc: false,
+            format: Format::Custom(b"%F %T %Z".to_vec()),
+            date_source: DateSource::Now,
+            debug: false,
+        };
+        let mut setter_ran = false;
+        let result = set_and_echo("2026-01-01", &now, &settings, &mut BrokenWriter, |_| {
+            setter_ran = true;
+            Ok(())
+        });
+        assert!(setter_ran, "the set must run even when the output fails");
+        assert!(result.is_ok());
+        assert_eq!(uucore::error::get_exit_code(), 1);
+    }
+
+    #[test]
+    fn test_set_and_echo_reports_both_set_and_write_failures() {
+        // Like a non-root `date -s` writing to a full disk: GNU reports the
+        // set error and then the write error; the exit status stays non-zero.
+        let now: Zoned = "2025-06-01T12:00:00+00:00[UTC]".parse().unwrap();
+        let settings = Settings {
+            utc: false,
+            format: Format::Custom(b"%F %T %Z".to_vec()),
+            date_source: DateSource::Now,
+            debug: false,
+        };
+        let mut setter_ran = false;
+        let result = set_and_echo("2026-01-01", &now, &settings, &mut BrokenWriter, |_| {
+            setter_ran = true;
+            Err(Box::new(DateError::CannotSetDate {
+                path: String::new(),
+                error: "Operation not permitted".to_string(),
+            }))
+        });
+        assert!(setter_ran);
+        assert!(result.is_ok());
+        assert_eq!(uucore::error::get_exit_code(), 1);
     }
 }
