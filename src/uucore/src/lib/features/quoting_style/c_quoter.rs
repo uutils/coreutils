@@ -3,11 +3,32 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use super::{EscapedChar, Quoter, Quotes};
+use super::{EscapedChar, Quoter};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CQuotes {
+    pub(super) opening: char,
+    pub(super) closing: char,
+}
+
+impl CQuotes {
+    pub const DOUBLE: Self = Self {
+        opening: '"',
+        closing: '"',
+    };
+
+    pub(super) fn opening_as_utf8(self, buf: &mut [u8]) -> &[u8] {
+        self.opening.encode_utf8(buf).as_bytes()
+    }
+
+    pub(super) fn closing_as_utf8(self, buf: &mut [u8]) -> &[u8] {
+        self.closing.encode_utf8(buf).as_bytes()
+    }
+}
 
 pub(super) struct CQuoter {
-    /// The type of quotes to use.
-    quotes: Quotes,
+    /// The type of quotes to use, if any.
+    quotes: Option<CQuotes>,
 
     dirname: bool,
 
@@ -15,12 +36,12 @@ pub(super) struct CQuoter {
 }
 
 impl CQuoter {
-    pub fn new(quotes: Quotes, dirname: bool, size_hint: usize) -> Self {
+    pub(super) fn new(quotes: Option<CQuotes>, dirname: bool, size_hint: usize) -> Self {
         let mut buffer = Vec::with_capacity(size_hint);
-        match quotes {
-            Quotes::None => (),
-            Quotes::Single => buffer.push(b'\''),
-            Quotes::Double => buffer.push(b'"'),
+
+        if let Some(quotes) = quotes {
+            let mut quote_buf = [0; 4];
+            buffer.extend_from_slice(quotes.opening_as_utf8(&mut quote_buf));
         }
 
         Self {
@@ -46,12 +67,15 @@ impl Quoter for CQuoter {
         }
     }
 
-    fn finalize(mut self: Box<Self>) -> Vec<u8> {
-        match self.quotes {
-            Quotes::None => (),
-            Quotes::Single => self.buffer.push(b'\''),
-            Quotes::Double => self.buffer.push(b'"'),
+    fn finalize(self: Box<Self>) -> Vec<u8> {
+        let Self {
+            quotes, mut buffer, ..
+        } = *self;
+        if let Some(quotes) = quotes {
+            let mut quote_buf = [0; 4];
+            buffer.extend_from_slice(quotes.closing_as_utf8(&mut quote_buf));
         }
-        self.buffer
+
+        buffer
     }
 }

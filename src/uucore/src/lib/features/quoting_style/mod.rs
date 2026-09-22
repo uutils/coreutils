@@ -9,7 +9,7 @@ use std::ffi::{OsStr, OsString};
 use std::fmt;
 
 use crate::i18n::{self, UEncoding};
-use crate::quoting_style::c_quoter::CQuoter;
+use crate::quoting_style::c_quoter::{CQuoter};
 use crate::quoting_style::literal_quoter::LiteralQuoter;
 use crate::quoting_style::shell_quoter::{EscapedShellQuoter, NonEscapedShellQuoter};
 
@@ -19,6 +19,8 @@ pub use escaped_char::{EscapeState, EscapedChar};
 mod c_quoter;
 mod literal_quoter;
 mod shell_quoter;
+
+pub use c_quoter::CQuotes;
 
 /// The quoting style to use when escaping a name.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -41,7 +43,7 @@ pub enum QuotingStyle {
     /// Used in, e.g., `ls --quote-name`.
     C {
         /// The type of quotes to use.
-        quotes: Quotes,
+        quotes: Option<CQuotes>,
     },
 
     /// Do not escape the string.
@@ -78,12 +80,10 @@ impl QuotingStyle {
         show_control: false,
     };
 
-    pub const C_NO_QUOTES: Self = Self::C {
-        quotes: Quotes::None,
-    };
+    pub const C_NO_QUOTES: Self = Self::C { quotes: None };
 
     pub const C_DOUBLE: Self = Self::C {
-        quotes: Quotes::Double,
+        quotes: Some(CQuotes::DOUBLE),
     };
 
     /// Set the `show_control` field of the quoting style.
@@ -124,20 +124,6 @@ trait Quoter {
 
     /// Apply post-processing on the constructed buffer and return it.
     fn finalize(self: Box<Self>) -> Vec<u8>;
-}
-
-/// The type of quotes to use when escaping a name as a C string.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Quotes {
-    /// Do not use quotes.
-    None,
-
-    /// Use single quotes.
-    Single,
-
-    /// Use double quotes.
-    Double,
-    // TODO: Locale
 }
 
 /// Escape a name according to the given quoting style.
@@ -263,21 +249,11 @@ impl fmt::Display for QuotingStyle {
     }
 }
 
-impl fmt::Display for Quotes {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            Self::None => f.write_str("None"),
-            Self::Single => f.write_str("Single"),
-            Self::Double => f.write_str("Double"),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::{
         i18n::UEncoding,
-        quoting_style::{Quotes, QuotingStyle, escape_name_inner},
+        quoting_style::{QuotingStyle, escape_name_inner},
     };
 
     // spell-checker:ignore (tests/words) one\'two one'two
@@ -1085,12 +1061,5 @@ mod tests {
             show_control: false,
         };
         assert_eq!(format!("{style}"), "literal");
-    }
-
-    #[test]
-    fn test_quotes_display() {
-        assert_eq!(format!("{}", Quotes::None), "None");
-        assert_eq!(format!("{}", Quotes::Single), "Single");
-        assert_eq!(format!("{}", Quotes::Double), "Double");
     }
 }
