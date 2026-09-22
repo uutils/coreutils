@@ -8250,3 +8250,35 @@ ls: invalid --block-size argument '1fb'
             .stderr_is("ls: invalid --block-size argument '1fb'\n");
     }
 }
+
+
+#[test]
+fn test_dired_reports_canonical_quoting_style() {
+    let styles = [
+        ("literal", "literal"),
+        ("shell", "shell"),
+        ("shell-always", "shell-always"),
+        ("shell-escape", "shell-escape"),
+        ("shell-escape-always", "shell-escape-always"),
+        ("c", "c"),
+        ("escape", "escape"),
+        ("locale", "locale"),
+        ("clocale", "clocale"),
+        ("-N", "literal"),
+        ("-Q", "c"),
+        ("-b", "escape"),
+    ];
+
+    for (option, expected) in styles {
+        let mut cmd = new_ucmd!();
+        cmd.arg("--dired");
+        if option.starts_with('-') {
+            cmd.arg(option);
+        } else {
+            cmd.arg(format!("--quoting-style={option}"));
+        }
+        cmd.succeeds().stdout_contains(format!(
+            "//DIRED-OPTIONS// --quoting-style={expected}\n"
+        ));
+    }
+}
