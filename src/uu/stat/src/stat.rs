@@ -9,7 +9,7 @@ use std::ops::Range;
 use uucore::diagnostics::OptionValue;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::i18n::get_ctype_encoding;
-use uucore::quoting_style::{Quotes, QuotingStyle, escape_name};
+use uucore::quoting_style::{CQuotes, QuotingStyle, escape_name};
 use uucore::translate;
 
 use clap::builder::ValueParser;
@@ -257,7 +257,7 @@ fn parse_quoting_style(style: &str) -> Option<QuotingStyle> {
         "c" | "clocale" => QuotingStyle::C_DOUBLE,
         "escape" => QuotingStyle::C_NO_QUOTES,
         "locale" => QuotingStyle::C {
-            quotes: Quotes::Single,
+            quotes: Some(CQuotes::SINGLE)
         },
         _ => return None,
     })
