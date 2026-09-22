@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use super::{EscapeState, EscapedChar, Quoter, Quotes};
+use crate::i18n::UEncoding;
 
 // These are characters with special meaning in the shell (e.g. bash). The
 // first const contains characters that only have a special meaning when they
@@ -112,16 +113,18 @@ impl<'a> EscapedShellQuoter<'a> {
         always_quote: bool,
         dirname: bool,
         size_hint: usize,
-        encoding: crate::i18n::UEncoding,
+        encoding: UEncoding,
     ) -> Self {
         let (mut quotes, must_quote) = initial_quoting(reference, dirname, always_quote, true);
-        let invalid = match encoding {
-            crate::i18n::UEncoding::Ascii => !reference.is_ascii(),
-            crate::i18n::UEncoding::Utf8 => std::str::from_utf8(reference).is_err(),
-        };
         // Dollar-quoted byte escapes cannot be nested in double quotes.
-        if invalid {
-            quotes = Quotes::Single;
+        if quotes == Quotes::Double {
+            let invalid = match encoding {
+                UEncoding::Ascii => !reference.is_ascii(),
+                UEncoding::Utf8 => std::str::from_utf8(reference).is_err(),
+            };
+            if invalid {
+                quotes = Quotes::Single;
+            }
         }
         Self {
             reference,

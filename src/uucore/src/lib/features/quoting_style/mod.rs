@@ -341,17 +341,10 @@ mod tests {
 
     #[test]
     fn test_invalid_bytes_with_single_quote() {
-        for encoding in [UEncoding::Ascii, UEncoding::Utf8] {
-            assert_eq!(
-                escape_name_inner(
-                    b"missing-'\xff",
-                    QuotingStyle::SHELL_ESCAPE_QUOTE,
-                    false,
-                    encoding
-                ),
-                b"'missing-'\\'''$'\\377'"
-            );
-        }
+        check_names_raw_both(
+            b"missing-'\xff",
+            &[(b"'missing-'\\'''$'\\377'", "shell-escape-always")],
+        );
     }
 
     #[test]
