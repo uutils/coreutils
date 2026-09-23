@@ -113,6 +113,7 @@ whoami
 # * vars/errno
 errno
 EACCES
+EAGAIN
 EBADF
 EBUSY
 EEXIST
