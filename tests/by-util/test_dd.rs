@@ -176,6 +176,19 @@ fn test_huge_obs_reports_memory_error_instead_of_aborting() {
 }
 
 #[test]
+// A petabyte `cbs` does not fit in a 32-bit `usize`.
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+fn test_huge_cbs_pads_without_allocating() {
+    // Regression test for #14814: a valid but huge `cbs` used to abort; like GNU,
+    // the padding is written as it goes, until /dev/full refuses it.
+    new_ucmd!()
+        .args(&["conv=block", "cbs=1PB", "of=/dev/full"])
+        .pipe_in("x\n")
+        .fails_with_code(1)
+        .stderr_contains("No space left on device");
+}
+
+#[test]
 fn test_stdin_stdout() {
     let input = build_ascii_block(521);
     let output = String::from_utf8(input.clone()).unwrap();
@@ -800,6 +813,26 @@ fn test_partial_records_out() {
 }
 
 #[test]
+fn test_block_record_across_reads() {
+    // With ibs=2, each record spans several reads.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "1234\n56\n123456789\n78");
+    ucmd.args(&["if=in", "conv=block", "cbs=6", "ibs=2", "obs=2"])
+        .succeeds()
+        .stdout_is("1234  56    12345678    ")
+        .stderr_contains("1 truncated record");
+}
+
+#[test]
+fn test_block_keeps_trailing_record_of_spaces() {
+    new_ucmd!()
+        .args(&["conv=block", "cbs=4"])
+        .pipe_in("ab\n  ")
+        .succeeds()
+        .stdout_is("ab      ");
+}
+
+#[test]
 fn test_block_cbs16() {
     new_ucmd!()
         .args(&["conv=block", "cbs=16"])
@@ -1274,6 +1307,24 @@ fn test_block_sync() {
         // blocks:    1    2    3
         .stdout_is("012  abcde     ")
         .stderr_is("2+1 records in\n0+1 records out\n1 truncated record\n");
+}
+
+#[test]
+fn test_block_sync_small_ibs() {
+    // With ibs=3, "cdefg" spans two reads, and the last read "h" is padded
+    // with spaces by sync before being blocked.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "ab\ncdefg\nh");
+    ucmd.args(&[
+        "if=in",
+        "ibs=3",
+        "cbs=4",
+        "conv=block,sync",
+        "status=noxfer",
+    ])
+    .succeeds()
+    .stdout_is("ab  cdefh   ")
+    .stderr_is("3+1 records in\n0+1 records out\n1 truncated record\n");
 }
 
 #[test]
@@ -2298,6 +2349,30 @@ fn test_count_bytes_with_expanding_block_conv() {
     assert!(!output.contains(&b'Z'));
 }
 
+/// Ignores SIGXFSZ until dropped, even if an assertion panics.
+///
+/// The child inherits the ignored SIGXFSZ, so exceeding RLIMIT_FSIZE shows
+/// up as a short write() instead of killing the process.
+#[cfg(all(unix, not(target_vendor = "apple")))]
+struct SigxfszGuard(libc::sighandler_t);
+
+#[cfg(all(unix, not(target_vendor = "apple")))]
+impl SigxfszGuard {
+    fn ignore() -> Self {
+        // SAFETY: signal() with SIG_IGN is async-signal-safe and `drop` puts
+        // the old handler back.
+        Self(unsafe { libc::signal(libc::SIGXFSZ, libc::SIG_IGN) })
+    }
+}
+
+#[cfg(all(unix, not(target_vendor = "apple")))]
+impl Drop for SigxfszGuard {
+    fn drop(&mut self) {
+        // SAFETY: restoring the disposition saved in `ignore`.
+        unsafe { libc::signal(libc::SIGXFSZ, self.0) };
+    }
+}
+
 // A failed copy still has to report what it transferred, including complete
 // and partial records.
 #[test]
@@ -2305,22 +2380,9 @@ fn test_count_bytes_with_expanding_block_conv() {
 fn test_stats_are_reported_when_a_write_fails() {
     use rustix::process::Resource;
 
-    // Restores the previous SIGXFSZ disposition even if an assertion panics.
-    struct SigxfszGuard(libc::sighandler_t);
-    impl Drop for SigxfszGuard {
-        fn drop(&mut self) {
-            // SAFETY: restoring the disposition saved below.
-            unsafe { libc::signal(libc::SIGXFSZ, self.0) };
-        }
-    }
-
     const CAP: u64 = 768 * 1024;
 
-    // The child inherits the ignored SIGXFSZ, so exceeding RLIMIT_FSIZE shows
-    // up as a short write() instead of killing the process.
-    // SAFETY: signal() with SIG_IGN is async-signal-safe and the guard puts
-    // the old handler back.
-    let _sigxfsz = SigxfszGuard(unsafe { libc::signal(libc::SIGXFSZ, libc::SIG_IGN) });
+    let _sigxfsz = SigxfszGuard::ignore();
 
     let (at, mut ucmd) = at_and_ucmd!();
     let result = ucmd
@@ -2332,6 +2394,30 @@ fn test_stats_are_reported_when_a_write_fails() {
     // second one is cut short at 256 KiB, and the third write fails.
     result.stderr_contains("1+1 records out");
     result.stderr_contains("786432 bytes");
+    assert_eq!(at.metadata("capped.bin").len(), CAP);
+}
+
+// `conv=block` writes a huge record in several pieces: those written before
+// the error still count.
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+fn test_block_stats_are_reported_when_a_write_fails() {
+    use rustix::process::Resource;
+
+    const CAP: u64 = 200 * 1024;
+
+    let _sigxfsz = SigxfszGuard::ignore();
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd
+        .args(&["conv=block", "cbs=1M", "obs=64K", "of=capped.bin"])
+        .pipe_in("x\n")
+        .limit(Resource::Fsize, CAP, CAP)
+        .fails();
+
+    // Three 64 KiB pieces are written in full, and the fourth one is cut short.
+    result.stderr_contains("3+1 records out");
+    result.stderr_contains("204800 bytes");
     assert_eq!(at.metadata("capped.bin").len(), CAP);
 }
 
