@@ -39,6 +39,7 @@ mod wasip2_ffi {
 
     impl OsStrExt for OsStr {
         fn from_bytes(bytes: &[u8]) -> &Self {
+            // SAFETY: WASI `OsStr` is a byte string; this is `std::os::wasi::ffi::OsStrExt::from_bytes`.
             unsafe { Self::from_encoded_bytes_unchecked(bytes) }
         }
 
@@ -54,6 +55,7 @@ mod wasip2_ffi {
 
     impl OsStringExt for OsString {
         fn from_vec(vec: Vec<u8>) -> Self {
+            // SAFETY: as above; this is `std::os::wasi::ffi::OsStringExt::from_vec`.
             unsafe { Self::from_encoded_bytes_unchecked(vec) }
         }
 
