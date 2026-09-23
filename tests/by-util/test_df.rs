@@ -482,27 +482,35 @@ fn test_total() {
 
 #[test]
 fn test_total_rounds_up_once() {
-    // With a block size larger than the filesystem, the one row rounds up to a
-    // single block and so does the total: it is rounded once from the summed
-    // bytes, as GNU df (9.11) does, not summed from the rounded-up rows.
+    // With a block size larger than the filesystem, each of the two rows
+    // rounds up to a single block, but the total is rounded once from the
+    // summed bytes, as GNU df (9.11) does, so it is 1 and not 2.
     let output = new_ucmd!()
         .args(&[
             "--total",
             "--output=size",
             "--block-size=10000000000000000000",
             ".",
+            ".",
         ])
         .succeeds()
         .stdout_str_lossy();
     let values: Vec<&str> = output.lines().skip(1).map(str::trim).collect();
-    assert_eq!(values, vec!["1", "1"]);
+    assert_eq!(values, vec!["1", "1", "1"]);
 }
 
 #[test]
 fn test_total_human_readable_with_large_block_size() {
-    // Used to multiply the rounded total back by the block size and overflow.
+    // Used to multiply the summed rounded-up rows (2 here) back by the block
+    // size, which overflowed.
     new_ucmd!()
-        .args(&["--total", "-h", "--block-size=10000000000000000000", "."])
+        .args(&[
+            "--total",
+            "-h",
+            "--block-size=10000000000000000000",
+            ".",
+            ".",
+        ])
         .succeeds();
 }
 
