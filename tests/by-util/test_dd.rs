@@ -2130,7 +2130,7 @@ fn test_iso8859_1_case_conversion() {
         .and_then(|output| String::from_utf8(output.stdout).ok())
         .is_some_and(|locales| {
             locales
-                .split("\n")
+                .split('\n')
                 .any(|locale| locale == "fr_FR" || locale == "fr_FR.ISO-8859-1")
         });
 
