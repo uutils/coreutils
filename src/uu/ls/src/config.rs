@@ -1132,10 +1132,10 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                 _ if field.starts_with('+') => {
                     // The non-recent format comes first, followed by the recent format.
                     let mut it = field[1..].split('\n');
-                    let older = it.next().unwrap_or_default();
+                    let first = it.next().unwrap_or_default();
                     match (it.next(), it.next()) {
-                        (None, None) => ok((older, None)),
-                        (Some(recent), None) => ok((recent, Some(older))),
+                        (None, None) => ok((first, None)),
+                        (Some(recent), None) => ok((recent, Some(first))),
                         (_, Some(_)) => Err(LsError::TimeStyleParseError(String::from(field))),
                     }
                 }
