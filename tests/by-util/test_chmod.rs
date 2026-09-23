@@ -74,6 +74,30 @@ fn run_tests(tests: Vec<TestCase>) {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_chmod_getrandom_unnecessary() {
+    use std::process::Command;
+    // `getrandom(2)` returns `EAGAIN` when the OS cannot provide random data immediately
+    let Ok(out) = Command::new("strace")
+        .args([
+            "-o",
+            "/dev/null",
+            "-e",
+            "inject=getrandom:error=EAGAIN",
+            uutests::util::get_tests_binary(),
+            "chmod",
+            "-R",
+            "777",
+            "/dev/null",
+        ])
+        .output()
+    else {
+        return; // missing strace
+    };
+    assert_eq!(out.status.code(), Some(1)); // no panic
+}
+
+#[test]
 #[allow(clippy::unreadable_literal)]
 fn test_chmod_octal() {
     let tests = vec![
