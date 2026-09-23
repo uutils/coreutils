@@ -720,20 +720,47 @@ jobs:
           docs.tar.zst
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    - name: Publish latest commit
-      uses: softprops/action-gh-release@v3
+    - name: Upload package artifact
       if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.job.skip-publish != true && matrix.job.check-only != true
+      uses: actions/upload-artifact@v7
       with:
-        tag_name: latest-commit
-        body: |
-          commit: ${{ github.sha }}
-        draft: false
-        prerelease: true
-        files: |
+        name: latest-commit-${{ matrix.job.target }}
+        path: |
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
           docs.tar.zst
+        if-no-files-found: ignore
+
+  publish-latest-commit:
+    name: Publish latest commit
+    needs: [ build ]
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    concurrency:
+      group: publish-latest-commit
+      cancel-in-progress: false
+    steps:
+    - name: Download package artifacts
+      uses: actions/download-artifact@v8
+      with:
+        pattern: latest-commit-*
+        path: publish
+        merge-multiple: true
+    - name: Recreate latest-commit release
+      continue-on-error: true
+      shell: bash
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        if [ -z "$(ls -A publish 2>/dev/null)" ]; then
+          echo "::warning ::No package artifacts found to publish."
+          exit 0
+        fi
+        gh release delete latest-commit --cleanup-tag --yes || true
+        gh release create latest-commit --prerelease \
+          --title "latest-commit" --notes "commit: ${{ github.sha }}" \
+          publish/* || echo "::warning ::Failed to update latest-commit release (repository may enforce immutable releases)."
 
   coverage:
     name: Code Coverage
