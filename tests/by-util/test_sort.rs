@@ -1761,14 +1761,14 @@ fn test_merge_batch_size() {
 // #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(target_os = "linux")]
 fn test_merge_batch_size_with_limit() {
-    use rustix::process::Resource;
+    use rlimit::Resource;
     // Currently need...
     // 3 descriptors for stdin, stdout, stderr
     // 2 descriptors for CTRL+C handling logic (to be reworked at some point)
     // 2 descriptors for the input files (i.e. batch-size of 2).
     let limit_fd = 3 + 2 + 2;
     new_ucmd!()
-        .limit(Resource::Nofile, limit_fd, limit_fd)
+        .limit(Resource::NOFILE, limit_fd, limit_fd)
         .arg("--batch-size=2")
         .arg("-m")
         .arg("--unique")
@@ -1786,13 +1786,13 @@ fn test_merge_batch_size_with_limit() {
 // TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
 #[cfg(target_os = "linux")]
 fn test_batch_size_above_fd_limit_is_rejected() {
-    use rustix::process::Resource;
+    use rlimit::Resource;
     // Only stdin, stdout and stderr are unavailable for merge inputs, so the
     // largest acceptable --batch-size is the soft limit minus 3, here 27 - 3.
     let limit_fd = 27;
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("gamma.txt", "delta\nalpha\n");
-    ucmd.limit(Resource::Nofile, limit_fd, limit_fd)
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
         .arg("--batch-size=31")
         .arg("gamma.txt")
         .fails_with_code(2)
@@ -1804,12 +1804,12 @@ fn test_batch_size_above_fd_limit_is_rejected() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_batch_size_at_fd_limit_is_accepted() {
-    use rustix::process::Resource;
+    use rlimit::Resource;
     let limit_fd = 27;
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("gamma.txt", "delta\nalpha\n");
     // 24 is the largest value the limit above allows, and sorting must still happen.
-    ucmd.limit(Resource::Nofile, limit_fd, limit_fd)
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
         .arg("--batch-size=24")
         .arg("gamma.txt")
         .succeeds()
@@ -1819,7 +1819,7 @@ fn test_batch_size_at_fd_limit_is_accepted() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_merge_more_files_than_fd_limit() {
-    use rustix::process::Resource;
+    use rlimit::Resource;
     let (at, mut ucmd) = at_and_ucmd!();
     // 40 single-line files cannot all be open at once with a soft limit of 24,
     // so sort has to merge them in several batches through temporary files.
@@ -1835,7 +1835,7 @@ fn test_merge_more_files_than_fd_limit() {
         writeln!(expected, "{i:02}").unwrap();
     }
     let limit_fd = 24;
-    ucmd.limit(Resource::Nofile, limit_fd, limit_fd)
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
         .arg("-m")
         .args(&names)
         .succeeds()
@@ -1845,7 +1845,7 @@ fn test_merge_more_files_than_fd_limit() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_more_files_than_fd_limit() {
-    use rustix::process::Resource;
+    use rlimit::Resource;
     let (at, mut ucmd) = at_and_ucmd!();
     // The inputs are read one after another, so sorting must not need more open
     // file descriptors than the soft limit allows, no matter how many inputs there are.
@@ -1861,7 +1861,7 @@ fn test_more_files_than_fd_limit() {
         writeln!(expected, "{i:02}").unwrap();
     }
     let limit_fd = 24;
-    ucmd.limit(Resource::Nofile, limit_fd, limit_fd)
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
         .args(&names)
         .succeeds()
         .stdout_only(expected);

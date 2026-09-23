@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED Fsize SIGXFSZ sighandler
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED FSIZE SIGXFSZ sighandler
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -2378,7 +2378,7 @@ impl Drop for SigxfszGuard {
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_stats_are_reported_when_a_write_fails() {
-    use rustix::process::Resource;
+    use rlimit::Resource;
 
     const CAP: u64 = 768 * 1024;
 
@@ -2387,7 +2387,7 @@ fn test_stats_are_reported_when_a_write_fails() {
     let (at, mut ucmd) = at_and_ucmd!();
     let result = ucmd
         .args(&["if=/dev/zero", "of=capped.bin", "bs=512K", "count=3"])
-        .limit(Resource::Fsize, CAP, CAP)
+        .limit(Resource::FSIZE, CAP, CAP)
         .fails();
 
     // Under a 768 KiB cap, the first 512 KiB block is written in full, the
