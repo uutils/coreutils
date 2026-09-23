@@ -4242,6 +4242,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
+ "hashbrown 0.17.1",
  "libc",
  "memchr",
  "notify",
