@@ -609,22 +609,24 @@ fn test_date_set_valid_2() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_date_set_echo_honors_format_and_utc() {
-    if geteuid().is_root() {
+    // The echo is printed even when the set fails (GNU does the same), so
+    // the format and `-u` handling can be checked without privileges.
+    if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
         // The echo goes through the user's format string.
         new_ucmd!()
             .args(&["--set", "2020-03-12 13:30:00+08:00", "+%F %T %Z"])
             .env("LC_ALL", "C")
             .env("TZ", "UTC0")
-            .succeeds()
+            .fails()
             .stdout_is("2020-03-12 05:30:00 UTC\n");
         // `-u` echoes in UTC regardless of the local zone.
         new_ucmd!()
             .args(&["-u", "--set", "2020-03-12 13:30:00+08:00"])
             .env("LC_ALL", "C")
             .env("TZ", "Europe/Helsinki") // spell-checker:disable-line
-            .succeeds()
+            .fails()
             .stdout_is("Thu Mar 12 05:30:00 UTC 2020\n");
     }
 }
