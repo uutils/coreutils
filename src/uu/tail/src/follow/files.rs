@@ -9,7 +9,7 @@ use crate::args::Settings;
 use crate::chunks::BytesChunkBuffer;
 use crate::paths::{HeaderPrinter, PathExtTail};
 use crate::text;
-use std::collections::HashMap;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::collections::hash_map::Keys;
 use std::fs::{File, Metadata};
 use std::io::{BufRead, BufReader, BufWriter, Write, stdout};
@@ -18,11 +18,11 @@ use uucore::error::UResult;
 
 /// Data structure to keep a handle on files to follow.
 /// `last` always holds the path/key of the last file that was printed from.
-/// The keys of the [`HashMap`] can point to an existing file path (normal case),
+/// The keys of the [`FxHashMap`] can point to an existing file path (normal case),
 /// or stdin ("-"), or to a non-existing path (--retry).
-/// For existing files, all keys in the [`HashMap`] are absolute Paths.
+/// For existing files, all keys in the [`FxHashMap`] are absolute Paths.
 pub struct FileHandling {
-    map: HashMap<PathBuf, PathData>,
+    map: FxHashMap<PathBuf, PathData>,
     last: Option<PathBuf>,
     header_printer: HeaderPrinter,
 }
@@ -30,13 +30,13 @@ pub struct FileHandling {
 impl FileHandling {
     pub fn from(settings: &Settings) -> Self {
         Self {
-            map: HashMap::with_capacity(settings.inputs.len()),
+            map: FxHashMap::with_capacity_and_hasher(settings.inputs.len(), FxBuildHasher),
             last: None,
             header_printer: HeaderPrinter::new(settings.verbose, false),
         }
     }
 
-    /// Wrapper for [`HashMap::insert`] using [`Path::canonicalize`]
+    /// Wrapper for [`FxHashMap::insert`] using [`Path::canonicalize`]
     pub fn insert(&mut self, k: &Path, v: PathData, update_last: bool) {
         let k = Self::canonicalize_path(k);
         if update_last {
@@ -45,17 +45,17 @@ impl FileHandling {
         let _ = self.map.insert(k, v);
     }
 
-    /// Wrapper for [`HashMap::remove`] using [`Path::canonicalize`]
+    /// Wrapper for [`FxHashMap::remove`] using [`Path::canonicalize`]
     pub fn remove(&mut self, k: &Path) -> PathData {
         self.map.remove(&Self::canonicalize_path(k)).unwrap()
     }
 
-    /// Wrapper for [`HashMap::get`] using [`Path::canonicalize`]
+    /// Wrapper for [`FxHashMap::get`] using [`Path::canonicalize`]
     pub fn get(&self, k: &Path) -> &PathData {
         self.map.get(&Self::canonicalize_path(k)).unwrap()
     }
 
-    /// Wrapper for [`HashMap::get_mut`] using [`Path::canonicalize`]
+    /// Wrapper for [`FxHashMap::get_mut`] using [`Path::canonicalize`]
     pub fn get_mut(&mut self, k: &Path) -> &mut PathData {
         self.map.get_mut(&Self::canonicalize_path(k)).unwrap()
     }
