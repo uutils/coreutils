@@ -388,7 +388,7 @@ static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| std::env::args_os().coll
 #[cfg(any(test, target_os = "wasi"))]
 fn with_wasi_argv_fallback(mut argv: Vec<OsString>) -> Vec<OsString> {
     if argv.is_empty() {
-        argv.push(OsString::from("uu"));
+        argv.push(OsString::from("coreutils"));
     }
     argv
 }
@@ -399,8 +399,7 @@ static ARGV: LazyLock<Vec<OsString>> =
     LazyLock::new(|| with_wasi_argv_fallback(std::env::args_os().collect()));
 
 static UTIL_NAME: LazyLock<String> = LazyLock::new(|| {
-    // Clamp every index into `ARGV`: on wasip2 the vec may be shorter than the multicall layout
-    // assumes (see the ARGV comment above), and an out-of-bounds index aborts the component.
+    // `ARGV` may be shorter than the multicall layout assumes (e.g. the WASI fallback).
     let last = ARGV.len().saturating_sub(1);
     let base_index = usize::from(get_utility_is_second_arg()).min(last);
     let is_man = usize::from(ARGV[base_index].eq("manpage"));
@@ -754,7 +753,7 @@ mod tests {
     fn wasi_argv_fallback_prevents_empty_argv() {
         assert_eq!(
             with_wasi_argv_fallback(Vec::new()),
-            vec![OsString::from("uu")]
+            vec![OsString::from("coreutils")]
         );
 
         let argv = vec![OsString::from("env"), OsString::from("--version")];

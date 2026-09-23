@@ -3,10 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore (words) Grüße
+
 // This module contains classes and functions for dealing with the differences
 // between operating systems regarding the lossless processing of OsStr/OsString.
 // In contrast to existing crates with similar purpose, this module does not use any
-// `unsafe` features or functions.
+// `unsafe` features or functions, except to stand in for std APIs that are still
+// unstable on WASI Preview 2 (see `wasip2_ffi`).
 // Due to a suboptimal design aspect of OsStr/OsString on windows, we need to
 // encode/decode to wide chars on windows operating system.
 // This prevents borrowing from OsStr on windows. Anyway, if optimally used,#
@@ -23,17 +26,22 @@ use std::{borrow::Cow, ffi::OsStr};
 #[cfg(all(target_os = "wasi", not(target_env = "p1")))]
 use wasip2_ffi::{OsStrExt, OsStringExt};
 
-// WASI Preview 2 uses stable encoded-byte APIs because `std::os::wasi::ffi` is unstable.
-// Component-model strings are UTF-8, so decoding through `str` preserves host values.
+// `std::os::wasi::ffi` is still unstable on WASI Preview 2, so provide the same traits here.
+// On WASI an `OsStr` is a plain byte string, so these conversions keep every byte.
 #[cfg(all(target_os = "wasi", not(target_env = "p1")))]
 mod wasip2_ffi {
     use std::ffi::{OsStr, OsString};
 
     pub trait OsStrExt {
+        fn from_bytes(bytes: &[u8]) -> &Self;
         fn as_bytes(&self) -> &[u8];
     }
 
     impl OsStrExt for OsStr {
+        fn from_bytes(bytes: &[u8]) -> &Self {
+            unsafe { Self::from_encoded_bytes_unchecked(bytes) }
+        }
+
         fn as_bytes(&self) -> &[u8] {
             self.as_encoded_bytes()
         }
@@ -46,11 +54,7 @@ mod wasip2_ffi {
 
     impl OsStringExt for OsString {
         fn from_vec(vec: Vec<u8>) -> Self {
-            match String::from_utf8(vec) {
-                Ok(s) => s.into(),
-                // Cannot have come from the host; keep going rather than abort the component.
-                Err(e) => String::from_utf8_lossy(e.as_bytes()).into_owned().into(),
-            }
+            unsafe { Self::from_encoded_bytes_unchecked(vec) }
         }
 
         fn into_vec(self) -> Vec<u8> {
@@ -191,19 +195,12 @@ pub fn from_native_int_representation(input: Cow<'_, NativeIntStr>) -> Cow<'_, O
         Cow::Owned(OsString::from_wide(&input))
     }
 
-    #[cfg(any(unix, all(target_os = "wasi", target_env = "p1")))]
+    #[cfg(not(windows))]
     {
         match input {
             Cow::Borrowed(borrow) => Cow::Borrowed(OsStr::from_bytes(borrow)),
             Cow::Owned(own) => Cow::Owned(OsString::from_vec(own)),
         }
-    }
-
-    // wasip2: bytes → `OsStr` goes through `str` (see `wasip2_ffi`), so a borrowed input has to
-    // become an owned one.
-    #[cfg(all(target_os = "wasi", not(target_env = "p1")))]
-    {
-        Cow::Owned(OsString::from_vec(input.into_owned()))
     }
 }
 
@@ -379,8 +376,11 @@ mod tests {
     }
 
     #[test]
-    fn wasip2_invalid_encoded_bytes_are_lossy() {
-        let converted = from_native_int_representation_owned(vec![b'f', b'o', 0x80, b'o']);
-        assert_eq!(converted, OsString::from("fo\u{fffd}o"));
+    fn wasip2_non_utf8_bytes_are_kept() {
+        let bytes = vec![b'f', b'o', 0x80, b'o'];
+        let converted = from_native_int_representation_owned(bytes.clone());
+        assert_eq!(converted.as_encoded_bytes(), bytes.as_slice());
+        let borrowed = from_native_int_representation(Cow::Borrowed(&bytes));
+        assert_eq!(borrowed.as_encoded_bytes(), bytes.as_slice());
     }
 }
