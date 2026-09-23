@@ -37,9 +37,7 @@ jobs:
       with:
         key: "${{ matrix.job.target }}"
     - name: Install wasmtime
-      run: |
-        curl https://wasmtime.dev/install.sh -sSf | bash
-        echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
+      uses: taiki-e/install-action@wasmtime
     - name: Run unit tests
       env:
         CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime
