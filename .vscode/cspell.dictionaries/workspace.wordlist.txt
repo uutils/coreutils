@@ -308,6 +308,7 @@ LPWSTR
 ULONG
 ULONGLONG
 UNLEN
+MSYSTEM
 WCHAR
 WSADATA
 errhandlingapi
@@ -381,6 +382,8 @@ wasm
 wasip
 statx
 Statx
+ucrt
+UCRT
 
 # * stty terminal flags
 brkint
