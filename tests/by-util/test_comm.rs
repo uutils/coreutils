@@ -808,3 +808,17 @@ fn test_identical_unsorted_prefix_no_error() {
         .stdout_is("\t\tb\n\t\ta\nc\n\td\n")
         .no_stderr();
 }
+
+#[test]
+fn test_identical_unsorted_prefix_check_order_fails() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("f1", "b\na\nc\n");
+    at.write("f2", "b\na\nd\n");
+    scene
+        .ucmd()
+        .args(&["--check-order", "f1", "f2"])
+        .fails()
+        .stdout_is("\t\tb\n")
+        .stderr_is("comm: file 1 is not in sorted order\n");
+}

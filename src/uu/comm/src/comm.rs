@@ -60,7 +60,6 @@ struct OrderChecker {
     last_line: Vec<u8>,
     file_num: FileNumber,
     mode: CheckOrder,
-    files_differ: bool,
     has_error: bool,
     use_locale: bool,
 }
@@ -125,19 +124,13 @@ impl OrderChecker {
             last_line: Vec::new(),
             file_num,
             mode,
-            files_differ: false,
             has_error: false,
             use_locale,
         }
     }
 
-    fn verify_order(&mut self, current_line: &[u8]) -> bool {
-        if self.mode == CheckOrder::Never {
-            self.last_line = current_line.to_vec();
-            return true;
-        }
-
-        if self.mode == CheckOrder::IfDiffer && !self.files_differ {
+    fn verify_order(&mut self, current_line: &[u8], files_differ: bool) -> bool {
+        if self.mode == CheckOrder::IfDiffer && !files_differ {
             self.last_line = current_line.to_vec();
             return true;
         }
@@ -212,6 +205,7 @@ fn comm(
     let use_locale = should_use_locale_collation();
     let mut checker1 = OrderChecker::new(FileNumber::One, mode, use_locale);
     let mut checker2 = OrderChecker::new(FileNumber::Two, mode, use_locale);
+    let mut files_differ = false;
     let mut input_error = false;
 
     while na != 0 || nb != 0 {
@@ -221,11 +215,13 @@ fn comm(
             (_, _) => line_cmp(ra, rb, use_locale),
         };
 
+        if ord != Ordering::Equal {
+            files_differ = true;
+        }
+
         match ord {
             Ordering::Less => {
-                checker1.files_differ = true;
-                checker2.files_differ = true;
-                if mode != CheckOrder::Never && !checker1.verify_order(ra) {
+                if mode != CheckOrder::Never && !checker1.verify_order(ra, files_differ) {
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_1) {
@@ -240,9 +236,7 @@ fn comm(
                 total_col_1 += 1;
             }
             Ordering::Greater => {
-                checker1.files_differ = true;
-                checker2.files_differ = true;
-                if mode != CheckOrder::Never && !checker2.verify_order(rb) {
+                if mode != CheckOrder::Never && !checker2.verify_order(rb, files_differ) {
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_2) {
@@ -256,7 +250,8 @@ fn comm(
             }
             Ordering::Equal => {
                 if mode != CheckOrder::Never
-                    && (!checker1.verify_order(ra) || !checker2.verify_order(rb))
+                    && (!checker1.verify_order(ra, files_differ)
+                        || !checker2.verify_order(rb, files_differ))
                 {
                     break;
                 }
