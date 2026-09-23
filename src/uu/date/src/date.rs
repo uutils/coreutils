@@ -6,6 +6,8 @@
 // spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz unparseable
 // spell-checker:ignore ohos OHOS tzdata tzdb tzif zoneinfo
 
+#![warn(clippy::multiple_unsafe_ops_per_block)]
+
 mod format_modifiers;
 mod locale;
 
