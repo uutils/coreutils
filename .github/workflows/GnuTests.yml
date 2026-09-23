@@ -210,8 +210,7 @@ jobs:
 
     - name: Install dependencies in VM
       run: |
-        lima sudo dnf -y install --nodocs autoconf bison gperf gcc gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel automake patch quilt
-        lima rustup-init -y --profile=minimal --default-toolchain stable
+        lima sudo dnf -y install --nodocs autoconf bison cargo clippy gperf gcc gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rust clang-devel automake patch quilt
     - name: Copy the sources to VM
       run: |
         rsync -a -e ssh . lima-default:~/work/
