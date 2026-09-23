@@ -197,6 +197,21 @@ fn test_recursive() {
     assert!(!at.file_exists(file_b));
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_recursive_large_sparse_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "large_sparse_dir";
+    let file = "large_sparse_dir/file";
+
+    at.mkdir(dir);
+    at.make_file(file).set_len(1u64 << 31).unwrap();
+
+    ucmd.arg("-r").arg(dir).succeeds().no_stderr();
+
+    assert!(!at.dir_exists(dir));
+}
+
 #[test]
 fn test_one_file_system_same_device() {
     // Cross-device skipping needs a mount point (root privileges), so here we

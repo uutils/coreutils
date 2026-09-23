@@ -6,7 +6,7 @@
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
 // spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot
-// spell-checker:ignore LARGEFILE
+// spell-checker:ignore LARGEFILE EOVERFLOW getdents
 
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
@@ -16,21 +16,28 @@
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;
 
-use std::ffi::{CString, OsStr, OsString};
+use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fs;
 use std::io;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::mem::MaybeUninit;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 use nix::dir::Dir;
 use nix::fcntl::{OFlag, openat};
 use nix::libc;
-use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat, mkdirat};
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+use nix::sys::stat::fstatat;
+use nix::sys::stat::{FchmodatFlags, Mode, fchmodat, mkdirat};
 use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
 use os_display::Quotable;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use rustix::fs::{RawDir, fstat, statat};
 
 use crate::translate;
 
@@ -111,12 +118,55 @@ impl From<SafeTraversalError> for io::Error {
     }
 }
 
-// Helper function to read directory entries using nix
-fn read_dir_entries(fd: &OwnedFd) -> io::Result<Vec<OsString>> {
+/// Use rustix's `Stat` on Linux and Android, whose inode and size fields
+/// are 64 bits wide on every architecture, including the 32-bit targets
+/// where the plain libc entry points overflow them. Use nix's `FileStat`
+/// elsewhere.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub type FileStat = rustix::fs::Stat;
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+pub use nix::sys::stat::FileStat;
+
+// RawDir refills this buffer as needed; 8 KiB follows rustix's examples.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const READ_DIR_BUF_SIZE: usize = 8192;
+
+// Helper function to read directory entries using rustix.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn read_dir_entries(fd: impl AsFd) -> io::Result<Vec<OsString>> {
+    let mut buffer = [MaybeUninit::<u8>::uninit(); READ_DIR_BUF_SIZE];
+    let result = (|| -> io::Result<Vec<OsString>> {
+        let mut dir = RawDir::new(fd.as_fd(), &mut buffer);
+        let mut entries = Vec::new();
+        while let Some(entry_result) = dir.next() {
+            let entry = entry_result?;
+            let name = OsStr::from_bytes(entry.file_name().to_bytes());
+            if name != "." && name != ".." {
+                entries.push(name.to_os_string());
+            }
+        }
+        Ok(entries)
+    })();
+
+    // Rewind directory position.
+    let rewind = rustix::fs::seek(fd, rustix::fs::SeekFrom::Start(0));
+    match result {
+        Ok(entries) => {
+            rewind?;
+            Ok(entries)
+        }
+        Err(e) => Err(e),
+    }
+}
+
+// Helper function to read directory entries using nix.
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn read_dir_entries(fd: impl AsFd) -> io::Result<Vec<OsString>> {
     let mut entries = Vec::new();
 
     // Duplicate the fd for Dir (it takes ownership)
-    let dup_fd = nix::unistd::dup(fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+    let dup_fd =
+        nix::unistd::dup(fd.as_fd()).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
     let mut dir = Dir::from_fd(dup_fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
     for entry_result in dir.iter() {
         let entry = entry_result.map_err(|e| io::Error::from_raw_os_error(e as i32))?;
@@ -128,6 +178,42 @@ fn read_dir_entries(fd: &OwnedFd) -> io::Result<Vec<OsString>> {
     }
 
     Ok(entries)
+}
+
+fn fstatat_fd(
+    fd: impl AsFd,
+    name: &CStr,
+    symlink_behavior: SymlinkBehavior,
+) -> io::Result<FileStat> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        let flags = if symlink_behavior.should_follow() {
+            rustix::fs::AtFlags::empty()
+        } else {
+            rustix::fs::AtFlags::SYMLINK_NOFOLLOW
+        };
+        statat(fd, name, flags).map_err(Into::into)
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    {
+        let flags = if symlink_behavior.should_follow() {
+            nix::fcntl::AtFlags::empty()
+        } else {
+            nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW
+        };
+        fstatat(fd, name, flags).map_err(|e| io::Error::from_raw_os_error(e as i32))
+    }
+}
+
+fn fstat_fd(fd: impl AsFd) -> io::Result<FileStat> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        fstat(fd).map_err(Into::into)
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    {
+        nix::sys::stat::fstat(fd).map_err(|e| io::Error::from_raw_os_error(e as i32))
+    }
 }
 
 /// A directory file descriptor that enables safe traversal
@@ -192,16 +278,10 @@ impl DirFd {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
 
-        let flags = if symlink_behavior.should_follow() {
-            nix::fcntl::AtFlags::empty()
-        } else {
-            nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW
-        };
-
-        let stat = fstatat(&self.fd, name_cstr.as_c_str(), flags).map_err(|e| {
+        let stat = fstatat_fd(&self.fd, name_cstr.as_c_str(), symlink_behavior).map_err(|e| {
             SafeTraversalError::StatFailed {
                 path: name.into(),
-                source: io::Error::from_raw_os_error(e as i32),
+                source: e,
             }
         })?;
 
@@ -225,9 +305,9 @@ impl DirFd {
 
     /// Get raw stat data for this directory
     pub fn fstat(&self) -> io::Result<FileStat> {
-        let stat = nix::sys::stat::fstat(&self.fd).map_err(|e| SafeTraversalError::StatFailed {
+        let stat = fstat_fd(&self.fd).map_err(|e| SafeTraversalError::StatFailed {
             path: translate!("safe-traversal-current-directory").into(),
-            source: io::Error::from_raw_os_error(e as i32),
+            source: e,
         })?;
         Ok(stat)
     }
@@ -418,7 +498,7 @@ impl DirFd {
     /// race because the fd pins the inode.
     ///
     #[cfg(target_os = "linux")]
-    fn chmod_at_via_opath(&self, name: &core::ffi::CStr, mode: u32) -> io::Result<()> {
+    fn chmod_at_via_opath(&self, name: &CStr, mode: u32) -> io::Result<()> {
         // Same reason as in chmod_at: rustix's linux_raw backend would make
         // these raw syscalls, invisible to LD_PRELOAD wrappers.
         use std::os::unix::fs::PermissionsExt;
@@ -680,7 +760,7 @@ pub struct FileInfo {
 }
 
 impl FileInfo {
-    pub fn from_stat(stat: &libc::stat) -> Self {
+    pub fn from_stat(stat: &FileStat) -> Self {
         // Allow unnecessary cast because st_dev and st_ino have different types on different platforms
         #[allow(clippy::unnecessary_cast)]
         Self {
@@ -861,111 +941,72 @@ impl MetadataExt for Metadata {
         self.stat.st_size as u64
     }
 
+    #[allow(clippy::useless_conversion)]
     fn atime(&self) -> i64 {
-        #[cfg(all(not(target_pointer_width = "64"), not(target_os = "netbsd")))]
-        {
-            self.stat.st_atime.into()
-        }
-        #[cfg(any(target_pointer_width = "64", target_os = "netbsd"))]
-        {
-            self.stat.st_atime
-        }
+        self.stat.st_atime.into()
     }
 
     fn atime_nsec(&self) -> i64 {
+        // st_atime_nsec type varies by platform and rustix backend (u32, u64, i64)
         #[cfg(target_os = "netbsd")]
         {
-            #[cfg(not(target_pointer_width = "64"))]
+            #[allow(clippy::unnecessary_cast)]
             {
-                self.stat.st_atimensec.into()
-            }
-            #[cfg(target_pointer_width = "64")]
-            {
-                self.stat.st_atimensec
+                self.stat.st_atimensec as i64
             }
         }
 
         #[cfg(not(target_os = "netbsd"))]
         {
-            #[cfg(not(target_pointer_width = "64"))]
+            #[allow(clippy::unnecessary_cast)]
             {
-                self.stat.st_atime_nsec.into()
-            }
-            #[cfg(target_pointer_width = "64")]
-            {
-                self.stat.st_atime_nsec
+                self.stat.st_atime_nsec as i64
             }
         }
     }
 
+    #[allow(clippy::useless_conversion)]
     fn mtime(&self) -> i64 {
-        #[cfg(all(not(target_pointer_width = "64"), not(target_os = "netbsd")))]
-        {
-            self.stat.st_mtime.into()
-        }
-        #[cfg(any(target_pointer_width = "64", target_os = "netbsd"))]
-        {
-            self.stat.st_mtime
-        }
+        self.stat.st_mtime.into()
     }
 
     fn mtime_nsec(&self) -> i64 {
+        // st_mtime_nsec type varies by platform and rustix backend (u32, u64, i64)
         #[cfg(target_os = "netbsd")]
         {
-            #[cfg(not(target_pointer_width = "64"))]
+            #[allow(clippy::unnecessary_cast)]
             {
-                self.stat.st_mtimensec.into()
-            }
-            #[cfg(target_pointer_width = "64")]
-            {
-                self.stat.st_mtimensec
+                self.stat.st_mtimensec as i64
             }
         }
         #[cfg(not(target_os = "netbsd"))]
         {
-            #[cfg(not(target_pointer_width = "64"))]
+            #[allow(clippy::unnecessary_cast)]
             {
-                self.stat.st_mtime_nsec.into()
-            }
-            #[cfg(target_pointer_width = "64")]
-            {
-                self.stat.st_mtime_nsec
+                self.stat.st_mtime_nsec as i64
             }
         }
     }
 
+    #[allow(clippy::useless_conversion)]
     fn ctime(&self) -> i64 {
-        #[cfg(all(not(target_pointer_width = "64"), not(target_os = "netbsd")))]
-        {
-            self.stat.st_ctime.into()
-        }
-        #[cfg(any(target_pointer_width = "64", target_os = "netbsd"))]
-        {
-            self.stat.st_ctime
-        }
+        self.stat.st_ctime.into()
     }
 
     fn ctime_nsec(&self) -> i64 {
+        // st_ctime_nsec type varies by platform and rustix backend (u32, u64, i64)
         #[cfg(target_os = "netbsd")]
         {
-            #[cfg(not(target_pointer_width = "64"))]
+            #[allow(clippy::unnecessary_cast)]
             {
-                self.stat.st_ctimensec.into()
-            }
-            #[cfg(target_pointer_width = "64")]
-            {
-                self.stat.st_ctimensec
+                self.stat.st_ctimensec as i64
             }
         }
         #[cfg(not(target_os = "netbsd"))]
         {
-            #[cfg(not(target_pointer_width = "64"))]
+            #[allow(clippy::unnecessary_cast)]
             {
-                self.stat.st_ctime_nsec.into()
-            }
-            #[cfg(target_pointer_width = "64")]
-            {
-                self.stat.st_ctime_nsec
+                self.stat.st_ctime_nsec as i64
             }
         }
     }
@@ -1138,6 +1179,25 @@ mod tests {
         assert_eq!(stat_nofollow.st_mode & libc::S_IFMT, libc::S_IFLNK);
     }
 
+    /// A size of 2^31 overflows the plain 32-bit stat flavor, so this
+    /// fails on 32-bit targets unless the wide one is used.
+    #[test]
+    #[allow(clippy::unnecessary_cast)]
+    fn test_dirfd_stat_and_fstat_large_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let file = fs::File::create(temp_dir.path().join("large")).unwrap();
+        let overflow_size = 1u64 << 31;
+        file.set_len(overflow_size).unwrap();
+        let fstat_size = fstat_fd(file).unwrap().st_size as u64;
+        assert_eq!(fstat_size, overflow_size);
+
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        let stat = dir_fd
+            .stat_at(OsStr::new("large"), SymlinkBehavior::Follow)
+            .unwrap();
+        assert_eq!(stat.st_size as u64, overflow_size);
+    }
+
     #[test]
     fn test_dirfd_fstat() {
         let temp_dir = TempDir::new().unwrap();
@@ -1162,6 +1222,31 @@ mod tests {
         assert_eq!(entries.len(), 2);
         assert!(entries.contains(&OsString::from("file1")));
         assert!(entries.contains(&OsString::from("file2")));
+
+        let entries_again = dir_fd.read_dir().unwrap();
+        assert_eq!(entries_again.len(), 2);
+        assert!(entries_again.contains(&OsString::from("file1")));
+        assert!(entries_again.contains(&OsString::from("file2")));
+    }
+
+    #[test]
+    fn test_dirfd_read_dir_refills_buffer() {
+        let temp_dir = TempDir::new().unwrap();
+        // Enough entries of enough length that a single 8 KiB getdents64
+        // batch cannot hold them all, so the buffer-refill path is covered.
+        let expected: std::collections::HashSet<OsString> = (0..500)
+            .map(|i| {
+                let name = format!("entry_with_a_rather_long_name_{i:03}");
+                fs::write(temp_dir.path().join(&name), "x").unwrap();
+                OsString::from(name)
+            })
+            .collect();
+
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        let entries: std::collections::HashSet<OsString> =
+            dir_fd.read_dir().unwrap().into_iter().collect();
+
+        assert_eq!(entries, expected);
     }
 
     #[test]
