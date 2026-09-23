@@ -21,6 +21,7 @@ doctest = false
 clap = { workspace = true }
 fluent = { workspace = true }
 memchr = { workspace = true }
+rustc-hash = { workspace = true }
 uucore = { workspace = true, features = [
   "fs",
   "parser-size",
