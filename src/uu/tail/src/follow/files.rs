@@ -9,7 +9,8 @@ use crate::args::Settings;
 use crate::chunks::BytesChunkBuffer;
 use crate::paths::{HeaderPrinter, PathExtTail};
 use crate::text;
-use std::collections::HashMap;
+use rustc_hash::FxBuildHasher;
+use rustc_hash::FxHashMap;
 use std::collections::hash_map::Keys;
 use std::fs::{File, Metadata};
 use std::io::{BufRead, BufReader, BufWriter, Write, stdout};
@@ -22,7 +23,7 @@ use uucore::error::UResult;
 /// or stdin ("-"), or to a non-existing path (--retry).
 /// For existing files, all keys in the [`HashMap`] are absolute Paths.
 pub struct FileHandling {
-    map: HashMap<PathBuf, PathData>,
+    map: FxHashMap<PathBuf, PathData>,
     last: Option<PathBuf>,
     header_printer: HeaderPrinter,
 }
@@ -30,7 +31,7 @@ pub struct FileHandling {
 impl FileHandling {
     pub fn from(settings: &Settings) -> Self {
         Self {
-            map: HashMap::with_capacity(settings.inputs.len()),
+            map: FxHashMap::with_capacity_and_hasher(settings.inputs.len(), FxBuildHasher),
             last: None,
             header_printer: HeaderPrinter::new(settings.verbose, false),
         }
