@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (ToDO) COMFOLLOW Chowner RFILE RFILE's derefer dgid nonblank nonprint nonprinting
 
+#![cfg(unix)]
+
 use uucore::display::Quotable;
 use uucore::entries;
 use uucore::error::{FromIo, UResult, USimpleError};

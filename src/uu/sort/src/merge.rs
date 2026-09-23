@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 //! Merge already sorted files.
 //!
 //! We achieve performance by splitting the tasks of sorting and writing, and reading and parsing between two threads.
@@ -13,9 +14,10 @@
 
 use std::{
     cmp::Ordering,
+    collections::BinaryHeap,
     ffi::{OsStr, OsString},
     fs::{self, File},
-    io::{BufWriter, Read, Write},
+    io::{self, BufWriter, Read, Write},
     iter,
     path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
@@ -24,7 +26,6 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use compare::Compare;
 use uucore::error::{FromIo, UResult};
 
 use crate::{
@@ -51,8 +52,13 @@ fn replace_output_file_in_input_files(
                 if let Some(copy) = &copy {
                     *file = copy.clone().into_os_string();
                 } else {
-                    let (_file, copy_path) = tmp_dir.next_file()?;
-                    fs::copy(&output_path, &copy_path)
+                    // Write through the descriptor `next_file` just opened rather
+                    // than `fs::copy`, which would put the source's permission bits
+                    // on the temporary file and undo the 0600 it was created with.
+                    let (mut copy_file, copy_path) = tmp_dir.next_file()?;
+                    let mut source = File::open(&output_path)
+                        .map_err(|error| SortError::OpenTmpFileFailed { error })?;
+                    io::copy(&mut source, &mut copy_file)
                         .map_err(|error| SortError::OpenTmpFileFailed { error })?;
                     *file = copy_path.clone().into_os_string();
                     copy = Some(copy_path);
@@ -221,15 +227,13 @@ fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
                 file_number,
                 line_idx: 0,
                 receiver,
+                settings,
             });
         }
     }
 
     Ok(FileMerger {
-        heap: binary_heap_plus::BinaryHeap::from_vec_cmp(
-            mergeable_files,
-            FileComparator { settings },
-        ),
+        heap: BinaryHeap::from(mergeable_files),
         request_sender,
         prev: None,
         reader_join_handle,
@@ -277,11 +281,45 @@ fn reader(
     Ok(())
 }
 /// The struct on the main thread representing an input file
-pub struct MergeableFile {
+pub struct MergeableFile<'a> {
     current_chunk: Rc<Chunk>,
     line_idx: usize,
     receiver: Receiver<Chunk>,
     file_number: usize,
+    settings: &'a GlobalSettings,
+}
+
+impl PartialEq for MergeableFile<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for MergeableFile<'_> {}
+
+impl PartialOrd for MergeableFile<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for MergeableFile<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let mut cmp = compare_by(
+            &self.current_chunk.lines()[self.line_idx],
+            &other.current_chunk.lines()[other.line_idx],
+            self.settings,
+            self.current_chunk.line_data(),
+            other.current_chunk.line_data(),
+        );
+        if cmp == Ordering::Equal {
+            // To make sorting stable, we need to consider the file number as well,
+            // as lines from a file with a lower number are to be considered "earlier".
+            cmp = self.file_number.cmp(&other.file_number);
+        }
+        // BinaryHeap is a max heap. We use it as a min heap, so we need to reverse the ordering.
+        cmp.reverse()
+    }
 }
 
 /// A struct to keep track of the previous line we encountered.
@@ -295,7 +333,7 @@ struct PreviousLine {
 
 /// Merges files together. This is **not** an iterator because of lifetime problems.
 struct FileMerger<'a> {
-    heap: binary_heap_plus::BinaryHeap<MergeableFile, FileComparator<'a>>,
+    heap: BinaryHeap<MergeableFile<'a>>,
     request_sender: Sender<(usize, RecycledChunk)>,
     prev: Option<PreviousLine>,
     reader_join_handle: JoinHandle<UResult<()>>,
@@ -304,7 +342,7 @@ struct FileMerger<'a> {
 impl FileMerger<'_> {
     /// Write the merged contents to the output file.
     fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
-        let mut out = output.into_write();
+        let mut out = output.into_write()?;
         self.write_all_to(settings, &mut out)
     }
 
@@ -355,7 +393,7 @@ impl FileMerger<'_> {
         &mut self,
         writer: &mut impl Write,
         settings: &GlobalSettings,
-    ) -> std::io::Result<bool> {
+    ) -> io::Result<bool> {
         if let Some(file) = self.heap.peek() {
             let prev = self.prev.replace(PreviousLine {
                 chunk: file.current_chunk.clone(),
@@ -408,30 +446,6 @@ impl FileMerger<'_> {
             }
         }
         Ok(!self.heap.is_empty())
-    }
-}
-
-/// Compares files by their current line.
-struct FileComparator<'a> {
-    settings: &'a GlobalSettings,
-}
-
-impl Compare<MergeableFile> for FileComparator<'_> {
-    fn compare(&self, a: &MergeableFile, b: &MergeableFile) -> Ordering {
-        let mut cmp = compare_by(
-            &a.current_chunk.lines()[a.line_idx],
-            &b.current_chunk.lines()[b.line_idx],
-            self.settings,
-            a.current_chunk.line_data(),
-            b.current_chunk.line_data(),
-        );
-        if cmp == Ordering::Equal {
-            // To make sorting stable, we need to consider the file number as well,
-            // as lines from a file with a lower number are to be considered "earlier".
-            cmp = a.file_number.cmp(&b.file_number);
-        }
-        // BinaryHeap is a max heap. We use it as a min heap, so we need to reverse the ordering.
-        cmp.reverse()
     }
 }
 
@@ -629,5 +643,35 @@ impl<R: Read + Send> MergeInput for PlainMergeInput<R> {
     }
     fn as_read(&mut self) -> &mut Self::InnerRead {
         &mut self.inner
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    /// When the output file is also an input it is copied to a temporary file
+    /// first. That copy must stay private to the owner: `fs::copy` would carry the
+    /// source's 0644 over and undo what `next_file` created the file with.
+    #[test]
+    fn output_copy_keeps_the_tmp_file_private() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("out");
+        fs::write(&out, b"a\n").unwrap();
+        fs::set_permissions(&out, fs::Permissions::from_mode(0o644)).unwrap();
+
+        let mut tmp_dir = TmpDirWrapper::new(dir.path().to_owned());
+        let mut files = vec![out.clone().into_os_string()];
+        replace_output_file_in_input_files(&mut files, Some(out.as_os_str()), &mut tmp_dir)
+            .unwrap();
+
+        let copy = Path::new(&files[0]);
+        assert_ne!(copy, out, "the input was not replaced by a copy");
+        assert_eq!(
+            fs::metadata(copy).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(fs::read(copy).unwrap(), b"a\n");
     }
 }

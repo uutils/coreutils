@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore extendedbigdecimal
 
 //! `printf`-style formatting
@@ -37,7 +38,7 @@ pub mod human;
 pub mod num_format;
 mod spec;
 
-pub use self::escape::{EscapedChar, OctalParsing};
+pub use self::escape::{EscapeSet, EscapedChar, OctalParsing};
 use crate::extendedbigdecimal::ExtendedBigDecimal;
 pub use argument::{FormatArgument, FormatArguments};
 
@@ -45,6 +46,7 @@ use self::{escape::parse_escape_code, num_format::Formatter};
 use crate::{
     NonUtf8OsStrError,
     error::{UError, strip_errno},
+    translate, translate_text,
 };
 pub use spec::Spec;
 use std::{
@@ -52,14 +54,15 @@ use std::{
     fmt::Display,
     io::{Write, stdout},
     marker::PhantomData,
-    ops::ControlFlow,
+    ops::{ControlFlow, Range},
 };
 
 use os_display::Quotable;
 
 #[derive(Debug)]
 pub enum FormatError {
-    SpecError(Vec<u8>),
+    /// The spec that failed to parse and its byte range in the format string.
+    SpecError(Vec<u8>, Range<usize>),
     IoError(std::io::Error),
     NoMoreArguments,
     InvalidArgument(FormatArgument),
@@ -70,11 +73,49 @@ pub enum FormatError {
     /// The format specifier ends with a %, as in `%f%`.
     EndsWithPercent(Vec<u8>),
     /// The escape sequence `\x` appears without a literal hexadecimal value.
-    MissingHex,
+    /// Carries its byte range in the format string, when it came from one.
+    MissingHex(Option<Range<usize>>),
     /// The hexadecimal characters represent a code point that cannot represent a
     /// Unicode character (e.g., a surrogate code point)
-    InvalidCharacter(char, Vec<u8>),
+    /// Carries its byte range in the format string, when it came from one.
+    InvalidCharacter(char, Vec<u8>, Option<Range<usize>>),
     InvalidEncoding(NonUtf8OsStrError),
+}
+
+impl FormatError {
+    /// Attach the byte range of the token that raised a parse-time error.
+    ///
+    /// Escape errors are constructed where only the escape itself is in
+    /// sight; the format parser knows where that escape sat and fills the
+    /// span in here. Errors parsed out of other text — a `%b` argument, an
+    /// `echo` operand — keep `None`.
+    fn spanned(self, span: Range<usize>) -> Self {
+        match self {
+            Self::MissingHex(_) => Self::MissingHex(Some(span)),
+            Self::InvalidCharacter(c, digits, _) => Self::InvalidCharacter(c, digits, Some(span)),
+            other => other,
+        }
+    }
+}
+
+/// The error for a spec [`Spec::parse`] rejected, carrying the byte range it
+/// occupies in `fmt`.
+///
+/// The range runs from the `%` that [`Spec::parse`] had already consumed to the
+/// end of what it rejected. The caller passes where that `%` is rather than
+/// letting this work it out from `slice`, which would go wrong for a `slice`
+/// that is not a subslice of `fmt`.
+///
+/// # Arguments
+///
+/// * `fmt` - The whole format string.
+/// * `percent` - The offset in `fmt` of the `%` this spec starts with.
+/// * `slice` - The subslice of `fmt` the failed parse returned.
+fn spec_error(fmt: &[u8], percent: usize, slice: &[u8]) -> FormatError {
+    let start = slice.as_ptr() as usize - fmt.as_ptr() as usize;
+    debug_assert!(start <= fmt.len() && start + slice.len() <= fmt.len());
+    debug_assert!(percent < start);
+    FormatError::SpecError(slice.to_vec(), percent..start + slice.len())
 }
 
 impl Error for FormatError {}
@@ -94,39 +135,38 @@ impl From<NonUtf8OsStrError> for FormatError {
 
 impl Display for FormatError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::SpecError(s) => write!(
-                f,
-                "%{}: invalid conversion specification",
-                String::from_utf8_lossy(s)
-            ),
-            Self::TooManySpecs(s) => write!(
-                f,
-                "format '{}' has too many % directives",
-                String::from_utf8_lossy(s)
-            ),
-            Self::NeedAtLeastOneSpec(s) => write!(
-                f,
-                "format '{}' has no % directive",
-                String::from_utf8_lossy(s)
-            ),
-            Self::EndsWithPercent(s) => {
-                write!(f, "format {} ends in %", String::from_utf8_lossy(s).quote())
+        // Everything quoted below is text the user typed and has to come back
+        // unchanged, hence translate_text! rather than translate!.
+        let message = match self {
+            Self::SpecError(s, _) => {
+                translate_text!("format-error-invalid-spec", "spec" => String::from_utf8_lossy(s))
             }
-            Self::InvalidPrecision(precision) => write!(f, "invalid precision: '{precision}'"),
+            Self::TooManySpecs(s) => {
+                translate_text!("format-error-too-many-specs", "format" => String::from_utf8_lossy(s))
+            }
+            Self::NeedAtLeastOneSpec(s) => {
+                translate_text!("format-error-no-spec", "format" => String::from_utf8_lossy(s))
+            }
+            Self::EndsWithPercent(s) => {
+                translate_text!("format-error-ends-with-percent", "format" => String::from_utf8_lossy(s).quote())
+            }
+            Self::InvalidPrecision(precision) => {
+                translate_text!("format-error-invalid-precision", "precision" => precision)
+            }
             // TODO: Error message below needs some work
-            Self::WrongSpecType => write!(f, "wrong % directive type was given"),
-            Self::IoError(e) => write!(f, "write error: {}", strip_errno(e)),
-            Self::NoMoreArguments => write!(f, "no more arguments"),
-            Self::InvalidArgument(_) => write!(f, "invalid argument"),
-            Self::MissingHex => write!(f, "missing hexadecimal number in escape"),
-            Self::InvalidCharacter(escape_char, digits) => write!(
-                f,
-                "invalid universal character name \\{escape_char}{}",
-                String::from_utf8_lossy(digits)
+            Self::WrongSpecType => translate!("format-error-wrong-spec-type"),
+            Self::IoError(e) => translate_text!("format-error-write", "error" => strip_errno(e)),
+            Self::NoMoreArguments => translate!("format-error-no-more-arguments"),
+            Self::InvalidArgument(_) => translate!("format-error-invalid-argument"),
+            Self::MissingHex(_) => translate!("format-error-missing-hex"),
+            Self::InvalidCharacter(escape_char, digits, _) => translate_text!(
+                "format-error-invalid-universal-character",
+                "escape" => escape_char,
+                "digits" => String::from_utf8_lossy(digits)
             ),
-            Self::InvalidEncoding(no) => no.fmt(f),
-        }
+            Self::InvalidEncoding(no) => return no.fmt(f),
+        };
+        f.write_str(&message)
     }
 }
 
@@ -205,10 +245,9 @@ impl<C: FormatChar> FormatItem<C> {
         args: &mut FormatArguments,
     ) -> Result<ControlFlow<()>, FormatError> {
         match self {
-            Self::Spec(spec) => spec.write(writer, args)?,
-            Self::Char(c) => return c.write(writer).map_err(FormatError::IoError),
+            Self::Spec(spec) => spec.write(writer, args),
+            Self::Char(c) => c.write(writer).map_err(FormatError::IoError),
         }
-        Ok(ControlFlow::Continue(()))
     }
 }
 
@@ -224,16 +263,26 @@ pub fn parse_spec_and_escape(
             Some(Ok(FormatItem::Char(EscapedChar::Byte(b'%'))))
         }
         [b'%', rest @ ..] => {
+            let percent = fmt.len() - current.len();
             current = rest;
             let spec = match Spec::parse(&mut current) {
                 Ok(spec) => spec,
-                Err(slice) => return Some(Err(FormatError::SpecError(slice.to_vec()))),
+                Err(slice) => return Some(Err(spec_error(fmt, percent, slice))),
             };
             Some(Ok(FormatItem::Spec(spec)))
         }
         [b'\\', rest @ ..] => {
+            let start = fmt.len() - current.len();
             current = rest;
-            Some(parse_escape_code(&mut current, OctalParsing::default()).map(FormatItem::Char))
+            Some(
+                parse_escape_code(
+                    &mut current,
+                    OctalParsing::default(),
+                    EscapeSet::WithUnicodeAndQuote,
+                )
+                .map(FormatItem::Char)
+                .map_err(|e| e.spanned(start..fmt.len() - current.len())),
+            )
         }
         [c, rest @ ..] => {
             current = rest;
@@ -255,10 +304,11 @@ pub fn parse_spec_only(
             Some(Ok(FormatItem::Char(b'%')))
         }
         [b'%', rest @ ..] => {
+            let percent = fmt.len() - current.len();
             current = rest;
             let spec = match Spec::parse(&mut current) {
                 Ok(spec) => spec,
-                Err(slice) => return Some(Err(FormatError::SpecError(slice.to_vec()))),
+                Err(slice) => return Some(Err(spec_error(fmt, percent, slice))),
             };
             Some(Ok(FormatItem::Spec(spec)))
         }
@@ -273,6 +323,7 @@ pub fn parse_spec_only(
 pub fn parse_escape_only(
     fmt: &[u8],
     zero_octal_parsing: OctalParsing,
+    escape_set: EscapeSet,
 ) -> impl Iterator<Item = EscapedChar> + '_ {
     let mut current = fmt;
     std::iter::from_fn(move || match current {
@@ -280,7 +331,7 @@ pub fn parse_escape_only(
         [b'\\', rest @ ..] => {
             current = rest;
             Some(
-                parse_escape_code(&mut current, zero_octal_parsing)
+                parse_escape_code(&mut current, zero_octal_parsing, escape_set)
                     .unwrap_or(EscapedChar::Backslash(b'x')),
             )
         }

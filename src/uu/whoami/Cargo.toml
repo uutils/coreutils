@@ -18,10 +18,13 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["entries", "process"] }
+uucore = { workspace = true, features = ["entries"] }
 fluent = { workspace = true }
 
-[target.'cfg(target_os = "windows")'.dependencies]
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["process"] }
+
+[target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
   "Win32_NetworkManagement_NetManagement",
   "Win32_System_WindowsProgramming",

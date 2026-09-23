@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
+
 // spell-checker:ignore contenta edgecase behaviour tcaf
 
 use uutests::{at_and_ucmd, new_ucmd};
@@ -271,6 +271,18 @@ fn test_comma_separated_tabs_shortcut() {
 }
 
 #[test]
+fn test_blank_separated_tabs() {
+    // GNU accepts a space or a tab as a tab-list separator, just like a comma.
+    for sep in [" ", "\t"] {
+        new_ucmd!()
+            .args(&["-a", "-t", &format!("3{sep}9")])
+            .pipe_in("a  b     c")
+            .succeeds()
+            .stdout_is("a\tb\tc");
+    }
+}
+
+#[test]
 fn test_tabs_cannot_be_zero() {
     new_ucmd!()
         .arg("--tabs=0")
@@ -301,7 +313,7 @@ fn test_tabs_with_invalid_chars() {
 #[test]
 fn test_tabs_shortcut_with_too_large_size() {
     let arg = format!("-{}", u128::MAX);
-    let expected_error = "tab stop value is too large";
+    let expected_error = "tab stop is too large";
 
     new_ucmd!().arg(arg).fails().stderr_contains(expected_error);
 }
@@ -313,7 +325,7 @@ fn test_extended_tabstop_increment_overflow() {
     new_ucmd!()
         .arg(arg)
         .fails()
-        .stderr_contains("tab stop value is too large");
+        .stderr_contains("tab stop is too large");
 }
 
 #[test]
@@ -398,7 +410,7 @@ fn unexpand_wide_multibyte_char_width() {
 
 #[test]
 fn test_blanks_ext1() {
-    // Test case from GNU test suite: blanks-ext1
+    // Test unexpand with extended blank handling (blanks-ext1)
     // ['blanks-ext1', '-t', '3,+6', {IN=> "\t      "}, {OUT=> "\t\t"}],
     new_ucmd!()
         .args(&["-t", "3,+6"])
@@ -409,7 +421,7 @@ fn test_blanks_ext1() {
 
 #[test]
 fn test_blanks_ext2() {
-    // Test case from GNU test suite: blanks-ext2
+    // Test unexpand with extended blank handling (blanks-ext2)
     // ['blanks-ext2', '-t', '3,/9', {IN=> "\t      "}, {OUT=> "\t\t"}],
     new_ucmd!()
         .args(&["-t", "3,/9"])

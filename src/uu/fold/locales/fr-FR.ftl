@@ -4,5 +4,6 @@ fold-bytes-help = compter en octets plutôt qu'en colonnes (les caractères de c
 fold-characters-help = compter en caractères plutôt qu'en colonnes d'affichage
 fold-spaces-help = couper les lignes aux limites de mots plutôt qu'à une largeur fixe
 fold-width-help = définir WIDTH comme largeur de ligne maximale au lieu de 80
-fold-error-illegal-width = valeur de largeur illégale
+fold-error-illegal-width = nombre de colonnes invalide : { $width }
+fold-error-width-out-of-range = nombre de colonnes invalide : { $width } : Le résultat numérique est en dehors de l'intervalle
 fold-error-readline = échec de lecture de la ligne

@@ -44,7 +44,6 @@ lscolors
 mdbook
 memchr
 multifilereader
-onig
 ouroboros
 peekreader
 quickcheck
@@ -374,6 +373,7 @@ setpipe
 
 # * other
 auxv
+btrfs
 getlimits
 weblate
 algs

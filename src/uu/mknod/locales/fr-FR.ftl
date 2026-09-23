@@ -8,9 +8,9 @@ mknod-after-help = Les arguments obligatoires pour les options longues le sont a
   il est interprété comme hexadécimal ; sinon, s'il commence par 0, comme octal ;
   sinon, comme décimal. TYPE peut être :
 
-  - b créer un fichier spécial bloc (mis en mémoire tampon)
-  - c, u créer un fichier spécial caractère (non mis en mémoire tampon)
-  - p créer un FIFO
+    - b créer un fichier spécial bloc (mis en mémoire tampon)
+    - c, u créer un fichier spécial caractère (non mis en mémoire tampon)
+    - p créer un FIFO
 
   NOTE : votre shell peut avoir sa propre version de mknod, qui remplace généralement
   la version décrite ici. Veuillez vous référer à la documentation de votre shell

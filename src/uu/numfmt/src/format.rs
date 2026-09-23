@@ -15,6 +15,26 @@ use crate::units::{
     DisplayableSuffix, RawSuffix, Result, Suffix, Unit, iec_bases_f64, si_bases_f64,
 };
 
+/// What can go wrong while writing a formatted line: either the line itself is
+/// not convertible (which `--invalid` decides what to do with), or the output
+/// could not be written at all (which is always fatal).
+pub enum WriteError {
+    Io(std::io::Error),
+    Invalid(String),
+}
+
+impl From<std::io::Error> for WriteError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
+impl From<String> for WriteError {
+    fn from(message: String) -> Self {
+        Self::Invalid(message)
+    }
+}
+
 fn find_numeric_beginning(s: &str) -> Option<&str> {
     let dec_sep = locale_decimal_separator();
     let mut seen_dec = false;
@@ -100,6 +120,65 @@ fn valid_end_with_unit_separator(
     Some(valid_part.len() + unit_separator.len() + suffix_len)
 }
 
+/// Length of the leading part of `s` that reads as a number, suffix included.
+fn valid_prefix_len(s: &str, unit: Unit, unit_separator: &str) -> usize {
+    let Some(number_prefix) = find_valid_number_with_suffix(s, unit) else {
+        return 0;
+    };
+
+    // When a unit separator is in use, the valid part may extend beyond the
+    // contiguous number+suffix found by find_valid_number_with_suffix.
+    // For example "5 K Field2" with unit_separator=" " has number_prefix="5" but
+    // the real valid prefix is "5 K"; the trailing " Field2" is the garbage.
+    if !unit_separator.is_empty() && number_prefix == find_numeric_beginning(s).unwrap_or("") {
+        valid_end_with_unit_separator(s, number_prefix, unit, unit_separator)
+            .unwrap_or(number_prefix.len())
+    } else {
+        number_prefix.len()
+    }
+}
+
+/// Byte range of the part of a refused `input` a caret should point at: what
+/// follows the number that could be read, or the whole of it when there is
+/// none. Surrounding whitespace, reproduced rather than converted, is left out.
+pub fn invalid_span(input: &str, options: &NumfmtOptions) -> std::ops::Range<usize> {
+    let start = input.len() - input.trim_start().len();
+    let mut end = input.trim_end().len();
+
+    // Whitespace only: there is no number to point past, and the two offsets
+    // above have crossed — `start` is the whole length, `end` is zero.
+    if start >= end {
+        return 0..input.len();
+    }
+
+    // A declared --suffix is stripped before parsing, so it is not at fault.
+    if let Some(suffix) = &options.suffix
+        && !suffix.is_empty()
+        && let Some(stripped) = input[start..end].strip_suffix(suffix.as_str())
+    {
+        end = start + stripped.len();
+    }
+
+    let valid = valid_prefix_len(
+        &input[start..end],
+        options.transform.from,
+        &options.unit_separator,
+    );
+    start + valid..end.max(start + valid)
+}
+
+/// Whether `input` begins with something that reads as a number, so that advice
+/// about what may follow one is only given where there is one. A lone sign or
+/// decimal separator is the leading part of a number, but not yet a number.
+pub fn holds_number(input: &str) -> bool {
+    find_numeric_beginning(input.trim_start()).is_some_and(|number| {
+        number
+            .replace(locale_decimal_separator(), ".")
+            .parse::<f64>()
+            .is_ok()
+    })
+}
+
 fn detailed_error_message(s: &str, unit: Unit, unit_separator: &str) -> Option<String> {
     if s.is_empty() {
         return Some(translate!("numfmt-error-invalid-number-empty"));
@@ -117,19 +196,7 @@ fn detailed_error_message(s: &str, unit: Unit, unit_separator: &str) -> Option<S
         return Some(translate!("numfmt-error-invalid-number", "input" => s.quote()));
     }
 
-    // When a unit separator is in use, the valid part may extend beyond the
-    // contiguous number+suffix found by find_valid_number_with_suffix.
-    // For example "5 K Field2" with unit_separator=" " has number_prefix="5" but
-    // the real valid prefix is "5 K"; the trailing " Field2" is the garbage.
-    let valid_end =
-        if !unit_separator.is_empty() && number_prefix == find_numeric_beginning(s).unwrap_or("") {
-            valid_end_with_unit_separator(s, number_prefix, unit, unit_separator)
-                .unwrap_or(number_prefix.len())
-        } else {
-            number_prefix.len()
-        };
-
-    let valid_part = &s[..valid_end];
+    let valid_part = &s[..valid_prefix_len(s, unit, unit_separator)];
 
     if valid_part != s && valid_part.parse::<f64>().is_ok() {
         return match s.chars().nth(valid_part.len()) {
@@ -157,6 +224,14 @@ fn parse_number_part(s: &str, input: &str) -> Result<ParsedNumber> {
     let dec_sep = locale_decimal_separator();
     if s.ends_with(dec_sep) {
         return Err(translate!("numfmt-error-invalid-number", "input" => input.quote()));
+    }
+
+    // GNU rejects a leading '+' and scientific notation, which Rust's parsers accept.
+    if s.starts_with('+') {
+        return Err(translate!("numfmt-error-invalid-number", "input" => input.quote()));
+    }
+    if s.bytes().any(|b| b == b'e' || b == b'E') {
+        return Err(translate!("numfmt-error-invalid-suffix", "input" => input.quote()));
     }
 
     if let Ok(n) = s.parse::<i128>() {
@@ -606,6 +681,30 @@ fn format_gnu_scientific(v: f64) -> String {
     }
 }
 
+/// Format `value` with `precision` decimals, exactly as `{:.precision$}` would.
+///
+/// Most of what numfmt prints is a whole number — `348M`, `1024` — and the
+/// general float formatter reaches for a big-integer expansion of the value to
+/// get its last digit right. When the value is an integer the answer needs no
+/// expansion, so take the short way and let the rest fall through.
+fn format_float(value: f64, precision: usize) -> String {
+    // Past 2^53 an f64 no longer holds every integer, and the two routes would
+    // not agree on what to print.
+    const EXACT_INTEGERS_UP_TO: f64 = 9_007_199_254_740_992.0;
+
+    if precision == 0 && value.is_finite() && value.abs() < EXACT_INTEGERS_UP_TO {
+        // Both routes round halves to even; they part only on the sign of a
+        // negative value that rounds to zero, which `{:.0}` keeps.
+        let rounded = value.round_ties_even();
+        if rounded == 0.0 && value.is_sign_negative() {
+            return "-0".to_string();
+        }
+        return (rounded as i64).to_string();
+    }
+
+    format!("{value:.precision$}")
+}
+
 fn transform_to(
     s: ParsedNumber,
     opts: &TransformOptions,
@@ -630,22 +729,24 @@ fn transform_to(
         }
     };
     Ok(match s {
-        None if opts.to == Unit::None && precision <= u16::MAX.into() => localize(format!(
-            "{:.precision$}",
+        None if opts.to == Unit::None && precision <= u16::MAX.into() => localize(format_float(
             round_with_precision(i2, round_method, precision),
+            precision,
         )),
         None if is_precision_specified && precision <= u16::MAX.into() => {
             let i2 = round_with_precision(i2, round_method, 0);
-            localize(format!("{i2:.precision$}"))
+            localize(format_float(i2, precision))
         }
-        None => localize(format!("{i2:.0}")),
+        None => localize(format_float(i2, 0)),
         Some(s) if precision > 0 && precision <= u16::MAX.into() => localize(format!(
             "{i2:.precision$}{unit_separator}{}",
             DisplayableSuffix(s, opts.to),
         )),
-        Some(s) if is_precision_specified => {
-            format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to))
-        }
+        Some(s) if is_precision_specified => format!(
+            "{}{unit_separator}{}",
+            format_float(i2, 0),
+            DisplayableSuffix(s, opts.to)
+        ),
         Some(s) if i2.abs() < 10.0 => {
             // single digit before the decimal, like 1.5K
             localize(format!(
@@ -653,9 +754,11 @@ fn transform_to(
                 DisplayableSuffix(s, opts.to)
             ))
         }
-        Some(s) => {
-            format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to))
-        }
+        Some(s) => format!(
+            "{}{unit_separator}{}",
+            format_float(i2, 0),
+            DisplayableSuffix(s, opts.to)
+        ),
     })
 }
 
@@ -677,6 +780,18 @@ fn pad_string(s: &str, width: usize, fill: char, right_align: bool) -> String {
         result.extend(std::iter::repeat_n(fill, pad));
     }
     result
+}
+
+/// Split a scaled value into its numeric part and the unit suffix that trails
+/// it (`k`, `Mi`, ...).
+///
+/// A value with no digits at all, such as `inf`, has no numeric part to pad, so
+/// it is returned whole and is padded as before.
+fn split_number_and_units(s: &str) -> (&str, &str) {
+    match s.rfind(|c: char| c.is_ascii_digit()) {
+        Some(last_digit) => s.split_at(last_digit + 1),
+        None => (s, ""),
+    }
 }
 
 fn format_string(
@@ -733,11 +848,30 @@ fn format_string(
     let padded_number = match padding {
         0 => number_with_suffix,
         p if p > 0 && options.format.zero_padding => {
-            let zero_padded = if let Some(unsigned) = number_with_suffix.strip_prefix(['-', '+']) {
-                let sign = &number_with_suffix[..1];
-                format!("{sign}{}", pad_string(unsigned, p as usize - 1, '0', true))
+            // GNU zero-pads the number itself: "Optional zero (%010f) width
+            // will zero pad the number". A unit suffix from --to and the
+            // --suffix text sit outside the width, unlike space padding,
+            // which applies to the whole output.
+            // The --suffix text is user-supplied and may itself contain
+            // digits, so peel it off before locating the number.
+            let (scaled, user_suffix) = match &options.suffix {
+                Some(suffix) => number_with_suffix
+                    .strip_suffix(suffix.as_str())
+                    .map_or((number_with_suffix.as_str(), ""), |rest| {
+                        (rest, suffix.as_str())
+                    }),
+                None => (number_with_suffix.as_str(), ""),
+            };
+            let (number, unit) = split_number_and_units(scaled);
+            let trailing = format!("{unit}{user_suffix}");
+            let zero_padded = if let Some(unsigned) = number.strip_prefix(['-', '+']) {
+                let sign = &number[..1];
+                format!(
+                    "{sign}{}{trailing}",
+                    pad_string(unsigned, (p as usize).saturating_sub(1), '0', true)
+                )
             } else {
-                pad_string(&number_with_suffix, p as usize, '0', true)
+                format!("{}{trailing}", pad_string(number, p as usize, '0', true))
             };
 
             match implicit_padding.unwrap_or(options.padding) {
@@ -798,7 +932,7 @@ pub fn write_formatted_with_delimiter<W: std::io::Write + ?Sized>(
     input: &[u8],
     options: &NumfmtOptions,
     eol: Option<u8>,
-) -> Result<()> {
+) -> std::result::Result<(), WriteError> {
     let delimiter = options.delimiter.as_deref().unwrap();
 
     for (n, field) in (1..).zip(split_bytes(input, delimiter)) {
@@ -806,7 +940,7 @@ pub fn write_formatted_with_delimiter<W: std::io::Write + ?Sized>(
 
         // add delimiter before second and subsequent fields
         if n > 1 {
-            writer.write_all(delimiter).unwrap();
+            writer.write_all(delimiter)?;
         }
 
         if field_selected {
@@ -815,15 +949,15 @@ pub fn write_formatted_with_delimiter<W: std::io::Write + ?Sized>(
                 .map_err(|_| translate!("numfmt-error-invalid-number", "input" => escape_line(field).quote()))?
                 .trim_start();
             let formatted = format_string(field_str, options, None)?;
-            writer.write_all(formatted.as_bytes()).unwrap();
+            writer.write_all(formatted.as_bytes())?;
         } else {
             // add unselected field without conversion
-            writer.write_all(field).unwrap();
+            writer.write_all(field)?;
         }
     }
 
     if let Some(eol) = eol {
-        writer.write_all(&[eol]).unwrap();
+        writer.write_all(&[eol])?;
     }
 
     Ok(())
@@ -834,7 +968,7 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
     s: &str,
     options: &NumfmtOptions,
     eol: Option<u8>,
-) -> Result<()> {
+) -> std::result::Result<(), WriteError> {
     for (n, (prefix, field)) in (1..).zip(WhitespaceSplitter {
         s: Some(s),
         options,
@@ -846,7 +980,7 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
 
             // add delimiter before second and subsequent fields
             let prefix = if n > 1 {
-                writer.write_all(b" ").unwrap();
+                writer.write_all(b" ")?;
                 &prefix[prefix.chars().next().map_or(0, char::len_utf8)..]
             } else {
                 prefix
@@ -859,23 +993,23 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
             };
 
             let formatted = format_string(field, options, implicit_padding)?;
-            writer.write_all(formatted.as_bytes()).unwrap();
+            writer.write_all(formatted.as_bytes())?;
         } else {
             // the -z option converts an initial \n into a space
             let prefix = if options.zero_terminated && prefix.starts_with('\n') {
-                writer.write_all(b" ").unwrap();
+                writer.write_all(b" ")?;
                 &prefix[1..]
             } else {
                 prefix
             };
             // add unselected field without conversion
-            writer.write_all(prefix.as_bytes()).unwrap();
-            writer.write_all(field.as_bytes()).unwrap();
+            writer.write_all(prefix.as_bytes())?;
+            writer.write_all(field.as_bytes())?;
         }
     }
 
     if let Some(eol) = eol {
-        writer.write_all(&[eol]).unwrap();
+        writer.write_all(&[eol])?;
     }
 
     Ok(())
@@ -884,6 +1018,41 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_format_float_matches_the_general_formatter() {
+        // The short route must be indistinguishable from `{:.precision$}`,
+        // including the halves, the signed zero and the values that leave the
+        // range where an f64 holds every integer.
+        for value in [
+            0.0,
+            -0.0,
+            -0.4,
+            0.5,
+            1.5,
+            2.5,
+            -1.5,
+            -2.5,
+            -0.5,
+            348.123_456,
+            1023.999,
+            9_007_199_254_740_992.0,
+            9_007_199_254_740_994.0,
+            -9_007_199_254_740_994.0,
+            1e300,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NAN,
+        ] {
+            for precision in [0, 1, 2, 6] {
+                assert_eq!(
+                    format_float(value, precision),
+                    format!("{value:.precision$}"),
+                    "value {value}, precision {precision}"
+                );
+            }
+        }
+    }
 
     #[test]
     #[allow(clippy::cognitive_complexity)]

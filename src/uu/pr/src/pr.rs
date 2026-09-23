@@ -2,7 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
 
 // spell-checker:ignore (ToDO) adFfmprt, kmerge
 
@@ -54,7 +53,7 @@ mod options {
     pub const PAGE_WIDTH: &str = "page-width";
     pub const ACROSS: &str = "across";
     pub const COLUMN_DOWN: &str = "column-down";
-    pub const COLUMN: &str = "column";
+    pub const COLUMNS: &str = "columns";
     pub const COLUMN_CHAR_SEPARATOR: &str = "separator";
     pub const COLUMN_STRING_SEPARATOR: &str = "sep-string";
     pub const MERGE: &str = "merge";
@@ -139,6 +138,16 @@ struct NumberingMode {
     first_number: usize,
 }
 
+impl Default for NumberingMode {
+    fn default() -> Self {
+        Self {
+            width: 5,
+            separator: TAB.to_string(),
+            first_number: 1,
+        }
+    }
+}
+
 #[derive(Debug)]
 struct ExpandTabsOptions {
     input_char: char,
@@ -150,32 +159,6 @@ impl Default for ExpandTabsOptions {
         Self {
             width: 8,
             input_char: TAB,
-        }
-    }
-}
-
-impl Default for NumberingMode {
-    fn default() -> Self {
-        Self {
-            width: 5,
-            separator: TAB.to_string(),
-            first_number: 1,
-        }
-    }
-}
-
-impl From<FromUtf8Error> for PrError {
-    fn from(err: FromUtf8Error) -> Self {
-        Self::EncounteredErrors {
-            msg: err.to_string(),
-        }
-    }
-}
-
-impl From<Utf8Error> for PrError {
-    fn from(err: Utf8Error) -> Self {
-        Self::EncounteredErrors {
-            msg: err.to_string(),
         }
     }
 }
@@ -193,6 +176,22 @@ enum PrError {
 
     #[error("pr: {path}: {}", strip_errno(error))]
     ReadPath { path: PathBuf, error: io::Error },
+}
+
+impl From<FromUtf8Error> for PrError {
+    fn from(err: FromUtf8Error) -> Self {
+        Self::EncounteredErrors {
+            msg: err.to_string(),
+        }
+    }
+}
+
+impl From<Utf8Error> for PrError {
+    fn from(err: Utf8Error) -> Self {
+        Self::EncounteredErrors {
+            msg: err.to_string(),
+        }
+    }
 }
 
 pub fn uu_app() -> Command {
@@ -238,6 +237,8 @@ pub fn uu_app() -> Command {
                 .long(options::NUMBER_LINES)
                 .help(translate!("pr-help-number-lines"))
                 .allow_hyphen_values(true)
+                // GNU pr makes -n optional (defaults to width 5, tab).
+                .num_args(0..=1)
                 .value_name("[char][width]"),
         )
         .arg(
@@ -278,7 +279,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FORM_FEED)
                 .short('F')
-                .short_alias('f')
+                .visible_short_alias('f')
                 .long(options::FORM_FEED)
                 .help(translate!("pr-help-form-feed"))
                 .action(ArgAction::SetTrue),
@@ -312,10 +313,10 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::COLUMN)
-                .long(options::COLUMN)
-                .help(translate!("pr-help-column"))
-                .value_name("column"),
+            Arg::new(options::COLUMNS)
+                .long(options::COLUMNS)
+                .help(translate!("pr-help-columns"))
+                .value_name("columns"),
         )
         .arg(
             Arg::new(options::COLUMN_CHAR_SEPARATOR)
@@ -352,6 +353,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::JOIN_LINES)
                 .short('J')
+                .long(options::JOIN_LINES)
                 .help(translate!("pr-help-join-lines"))
                 .action(ArgAction::SetTrue),
         )
@@ -426,14 +428,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 /// Rewrite arguments before clap parsing, preserving legacy numeric operands.
 fn recreate_arguments(args: &[String]) -> Vec<String> {
     let num_regex = Regex::new(r"^[^-]\d*$").unwrap();
-    let n_regex = Regex::new(r"^-n\s*$").unwrap();
-    let e_regex = Regex::new(r"^-e").unwrap();
+    // `-e` ends a cluster of short flags that take no value of their own, as in `-tre`.
+    // Options that do take a value are excluded so that `-se` keeps meaning `-s e`.
+    let e_regex = Regex::new(r"^-[dtTrFfabmJ]*e$").unwrap();
     let mut arguments = args.to_owned();
     let num_option = args
         .iter()
         .take_while(|arg| arg.as_str() != "--")
-        .find_position(|x| n_regex.is_match(x.trim()));
-    if let Some((pos, _value)) = num_option
+        .position(|x| x.trim() == "-n");
+    if let Some(pos) = num_option
         && let Some(num_val_opt) = args.get(pos + 1)
         && !num_regex.is_match(num_val_opt)
     {
@@ -442,16 +445,15 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
         arguments.insert(pos + 2, could_be_file);
     }
 
-    // To ensure not to accidentally delete the next argument after a short flag for -e we insert
-    // the default values for the -e flag is '-e' is present without direct arguments.
+    // `-e` takes an optional attached argument, which clap cannot express, so it is filled in
+    // here. Without it clap would report a missing value for `-tre`, or swallow the following
+    // argument, usually a file name, for a bare `-e`.
     let expand_tabs_option = arguments
         .iter()
         .take_while(|arg| arg.as_str() != "--")
         .find_position(|x| e_regex.is_match(x.trim()));
-    if let Some((pos, value)) = expand_tabs_option
-        && value.trim().len() <= 2
-    {
-        arguments[pos] = "-e\t8".to_string();
+    if let Some((pos, value)) = expand_tabs_option {
+        arguments[pos] = format!("{}\t8", value.trim());
     }
 
     // Remove only whole-token legacy operands before clap parsing.
@@ -537,15 +539,13 @@ fn parse_usize(
     matches.get_one::<String>(opt).map(|i| {
         let raw = i.as_str();
         match raw.parse::<usize>() {
-            Ok(n) if n <= MAX_INT_VALUE => Ok(n),
+            Ok(n @ ..=MAX_INT_VALUE) => Ok(n),
             Ok(_) => Err(PrError::EncounteredErrors {
                 msg: value_too_large(too_large_error_message, raw),
             }),
-            Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
-                Err(PrError::EncounteredErrors {
-                    msg: value_too_large(too_large_error_message, raw),
-                })
-            }
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => Err(PrError::EncounteredErrors {
+                msg: value_too_large(too_large_error_message, raw),
+            }),
             Err(_) => {
                 let option = format!("-{opt}");
                 Err(PrError::EncounteredErrors {
@@ -585,7 +585,7 @@ fn build_options(
 
     let is_merge_mode = matches.get_flag(options::MERGE);
 
-    if is_merge_mode && matches.contains_id(options::COLUMN) {
+    if is_merge_mode && matches.contains_id(options::COLUMNS) {
         return Err(PrError::EncounteredErrors {
             msg: translate!("pr-error-column-merge-conflict"),
         });
@@ -649,7 +649,7 @@ fn build_options(
 
             if matches!(
                 &parse_result,
-                Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow)
+                Err(e) if *e.kind() == IntErrorKind::PosOverflow
             ) {
                 return Err(invalid_too_large(i));
             }
@@ -664,16 +664,14 @@ fn build_options(
             };
 
             let width = match parse_result {
-                Ok(res) if res > MAX_INT_VALUE => return Err(invalid_too_large(i)),
-                Ok(res) => res,
+                Ok(res @ ..=MAX_INT_VALUE) => res,
+                Ok(_) => return Err(invalid_too_large(i)),
                 Err(_) => {
                     let digits = i.get(1..).unwrap_or_default();
                     match digits.parse::<usize>() {
-                        Ok(res) if res > MAX_INT_VALUE => {
-                            return Err(invalid_too_large(digits));
-                        }
-                        Ok(res) => res,
-                        Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
+                        Ok(res @ ..=MAX_INT_VALUE) => res,
+                        Ok(_) => return Err(invalid_too_large(digits)),
+                        Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
                             return Err(invalid_too_large(digits));
                         }
                         Err(_) => NumberingMode::default().width,
@@ -866,7 +864,10 @@ fn build_options(
         });
     }
 
-    let page_length_le_ht = page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
+    // `pr --help` states the rule twice: a page length of 10 or less implies
+    // `-t`. At exactly 10 the old `<` left the header and trailer in place and
+    // subtracted them from the page, so the page had no room for content at all.
+    let page_length_le_ht = page_length <= (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
 
     let display_header_and_trailer = !page_length_le_ht
         && !matches.get_flag(options::OMIT_HEADER)
@@ -937,36 +938,34 @@ fn build_options(
         .column
         .as_deref()
         .map(|unparsed_num| match unparsed_num.parse::<usize>() {
-            Ok(n) if n > MAX_INT_VALUE => Err(PrError::EncounteredErrors {
+            Ok(n @ ..=MAX_INT_VALUE) => Ok(n),
+            Ok(_) => Err(PrError::EncounteredErrors {
                 msg: value_too_large("invalid number of columns", unparsed_num),
             }),
-            Ok(n) => Ok(n),
-            Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
-                Err(PrError::EncounteredErrors {
-                    msg: value_too_large("invalid number of columns", unparsed_num),
-                })
-            }
-            Err(_e) => Err(PrError::EncounteredErrors {
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => Err(PrError::EncounteredErrors {
+                msg: value_too_large("invalid number of columns", unparsed_num),
+            }),
+            Err(_) => Err(PrError::EncounteredErrors {
                 msg: format!("invalid {} argument {}", "-", unparsed_num.quote()),
             }),
         });
     let start_column_option = match res {
         Some(Ok(0)) => {
             return Err(PrError::EncounteredErrors {
-                msg: "invalid --column argument '0'".to_string(),
+                msg: "invalid --columns argument '0'".to_string(),
             });
         }
         Some(res) => Some(res?),
         None => None,
     };
 
-    // --column has more priority than -column
+    // --columns has more priority than -column
 
     let column_option_value =
-        match parse_usize(matches, options::COLUMN, "invalid number of columns") {
+        match parse_usize(matches, options::COLUMNS, "invalid number of columns") {
             Some(Ok(0)) => {
                 return Err(PrError::EncounteredErrors {
-                    msg: "invalid --column argument '0'".to_string(),
+                    msg: "invalid --columns argument '0'".to_string(),
                 });
             }
             Some(res) => Some(res?),
@@ -985,8 +984,8 @@ fn build_options(
         // Parse as i32 to match GNU pr's behavior
         // Store the count. Spaces are streamed at print time to avoid huge allocations.
         Some(raw) => match raw.parse::<i32>() {
-            Ok(n) if n >= 0 => n as usize,
-            Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
+            Ok(n @ 0..) => n as usize,
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
                 return Err(PrError::EncounteredErrors {
                     msg: value_too_large("'-o MARGIN' invalid line offset", raw),
                 });
@@ -1172,7 +1171,7 @@ fn get_pages(
             // TODO Optimization opportunity: don't bother pushing
             // lines and pages if we aren't going to display it.
             if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-                pages.push((page_num, page.clone()));
+                pages.push((page_num, std::mem::take(&mut page)));
             }
             page_num += 1;
             page.clear();
@@ -1196,7 +1195,7 @@ fn get_pages(
             // and clear the `page` buffer for the next iteration.
             if page.len() >= lines_needed_per_page {
                 if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-                    pages.push((page_num, page.clone()));
+                    pages.push((page_num, std::mem::take(&mut page)));
                 }
                 page_num += 1;
                 page.clear();
@@ -1212,7 +1211,7 @@ fn get_pages(
 
     // Consider all trailing lines as the last page.
     if !page.is_empty() && start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-        pages.push((page_num, page.clone()));
+        pages.push((page_num, std::mem::take(&mut page)));
     }
 
     (pages, page_num + 1)
@@ -1242,8 +1241,7 @@ fn group_lines(num_files: usize, lines: Vec<FileLine>) -> Vec<(usize, Vec<FileLi
                 current_group.push(file_line);
             }
             Some(key) => {
-                result.push((key, current_group.clone()));
-                current_group.clear();
+                result.push((key, std::mem::take(&mut current_group)));
                 current_key = Some(group_key(num_files, &file_line));
                 current_group.push(file_line);
             }
@@ -1396,14 +1394,37 @@ fn to_table(
 ///
 /// This function should be applied when there are fewer lines than the
 /// total number of cells in the table.
+///
+/// The lines are spread over the columns the way `pr` fills a page it cannot
+/// fill completely: every column takes the ceiling of what is still unplaced
+/// divided by the number of columns left to fill, so the leftmost columns are
+/// the long ones and no line is left over.
 fn to_table_short_file(
     content_lines_per_page: usize,
     columns: usize,
     lines: &[FileLine],
 ) -> Vec<Vec<Option<&FileLine>>> {
-    let num_rows = lines.len() / columns;
+    let mut bounds = Vec::with_capacity(columns + 1);
+    bounds.push(0);
+    let mut placed = 0;
+    for column in 0..columns {
+        placed += (lines.len() - placed).div_ceil(columns - column);
+        bounds.push(placed);
+    }
+
+    let num_rows = (0..columns)
+        .map(|j| bounds[j + 1] - bounds[j])
+        .max()
+        .unwrap_or(0);
     let mut table: Vec<Vec<_>> = (0..num_rows)
-        .map(|i| (0..columns).map(|j| lines.get(num_rows * j + i)).collect())
+        .map(|i| {
+            (0..columns)
+                .map(|j| {
+                    let index = bounds[j] + i;
+                    (index < bounds[j + 1]).then(|| &lines[index])
+                })
+                .collect()
+        })
         .collect();
     // Fill the rest with Nones.
     for _ in num_rows..content_lines_per_page {
@@ -1474,19 +1495,28 @@ fn write_columns(
     // cells, where each row will be printed as a single line in the
     // output.
     let merge = options.merge_files_print.is_some();
-    let table = if !merge && (lines.len() < (content_lines_per_page * columns)) {
-        to_table_short_file(content_lines_per_page, columns, lines)
+    let table = if merge {
+        to_table_merged(content_lines_per_page, columns, filled_lines)
     } else if across_mode {
         to_table_across(content_lines_per_page, columns, lines)
-    } else if merge {
-        to_table_merged(content_lines_per_page, columns, filled_lines)
+    } else if lines.len() < (content_lines_per_page * columns) {
+        to_table_short_file(content_lines_per_page, columns, lines)
     } else {
         to_table(content_lines_per_page, columns, lines)
     };
 
     let blank_line = FileLine::default();
     for row in table {
-        let indexes = row.len();
+        // On a page that is not completely filled the last row stops part way
+        // through, and its final cell must not be followed by a column
+        // separator. Merging prints an empty cell for every column instead, so
+        // there the row always spans the full width.
+        let indexes = if merge {
+            row.len()
+        } else {
+            row.iter().take_while(|cell| cell.is_some()).count()
+        };
+        let mut cells_written = 0;
         for (i, cell) in row.iter().enumerate() {
             let line_to_print = match cell {
                 None if options.merge_files_print.is_some() => &blank_line,
@@ -1502,8 +1532,15 @@ fn write_columns(
                 get_line_for_printing(options, line_to_print, columns, i, line_width, indexes)
                     .as_bytes(),
             )?;
+            cells_written += 1;
         }
-        if not_found_break && (feed_line_present || !options.display_header_and_trailer) {
+        // The last row of a partly filled page has content in its leading
+        // columns and nothing in the rest, so it still needs to be terminated.
+        // Only a row without any content at all means the page ran out.
+        if cells_written == 0
+            && not_found_break
+            && (feed_line_present || !options.display_header_and_trailer)
+        {
             break;
         }
         writer.write_all(line_separator)?;

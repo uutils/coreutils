@@ -4,7 +4,7 @@ name: make
 # spell-checker:ignore (jargon) deps softprops toolchain
 # spell-checker:ignore (people) dawidd
 # spell-checker:ignore (shell/tools) bsdtar nextest pacman sccache zstd
-# spell-checker:ignore (misc) bindir busytest defconfig dynamicbase DESTDIR manpages multisize noconfirm runtest testsuite toybox uutils
+# spell-checker:ignore (misc) bindir busytest defconfig dynamicbase DESTDIR libopenssl manpages multisize noconfirm runtest testsuite toybox uutils
 
 env:
   PROJECT_NAME: coreutils
@@ -182,14 +182,14 @@ jobs:
               --arg multisize "$SIZE_MULTI" \
               '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
     - name: Download the previous individual size result
-      uses: dawidd6/action-download-artifact@v21
+      uses: dawidd6/action-download-artifact@v24
       with:
         workflow: make.yml
         name: individual-size-result
         repo: uutils/coreutils
         path: dl
     - name: Download the previous size result
-      uses: dawidd6/action-download-artifact@v21
+      uses: dawidd6/action-download-artifact@v24
       with:
         workflow: make.yml
         name: size-result
@@ -311,20 +311,24 @@ jobs:
       # Upgrading it mid-session changes the shared memory layout (60344 -> 59320),
       # which causes subsequent fork() calls to fail with EAGAIN (exit code 254).
       shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
+      # test Cygwin & MinGW(UCRT) instead of pre-installed Rust.
       run: |
-        pacman -Sy --noconfirm --needed make rust base-devel
+        pacman -Sy --noconfirm --needed base-devel libopenssl make openssl-devel pkgconf rust \
+          mingw-w64-ucrt-x86_64-openssl mingw-w64-ucrt-x86_64-rust
       env:
         CHERE_INVOKING: 1
     - name: "`(x86_64-pc-cygwin) make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n`"
       shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
       run: |
         set -x
+        export CARGOFLAGS="--features openssl"
         DESTDIR=/tmp/c make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
-        # Check that utils are built with given profile
-        ./target/release-small/true
+        # Check that cksum is linked with openssl (e.g. msys-crypto-*.dll)
+        # Also check that utils are built with given profile
+        ldd target/release-small/cksum | grep crypto
         # Check that the progs have prefix
         test -f /tmp/c/usr/local/bin/uu-tty
-        test -f /tmp/c/usr/local/libexec/uu-coreutils/libstdbuf.*
+        test -f /tmp/c/usr/local/libexec/uu-coreutils/libstdbuf.dll
         # Check that the manpage is not present
         ! test -f /tmp/c/usr/local/share/man/man1/uu-whoami.1
         # Check that the completion is not present
@@ -336,6 +340,7 @@ jobs:
         bsdtar -caf x86_64-pc-cygwin.tar.zst -C /tmp/c/usr/local bin
       env:
         CHERE_INVOKING: 1
+        OPENSSL_NO_VENDOR: "1"
         RUST_BACKTRACE: "1"
     - name: Publish
       uses: softprops/action-gh-release@v3
@@ -345,17 +350,24 @@ jobs:
         draft: false
         prerelease: true
         files: |
-          x86_64-pc-cygwin.tar.zst
+          individual-x86_64-pc-cygwin.tar.zst
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    - name: "`make install`"
-      shell: bash
+    - name: "`make install` (MinGW UCRT)"
+      shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
+      env:
+        CHERE_INVOKING: 1
+        MSYSTEM: "UCRT64"
+        OPENSSL_DIR: "/ucrt64"
+        OPENSSL_NO_VENDOR: "1"
+        OPENSSL_STATIC: "0"
       run: |
         set -x
+        export CARGOFLAGS="--features openssl"
         # Check that we exclude unix programs to avoid build failure
         # Windows's stdbuf depends on Cygwin's libstdbuf. So make should not try to install libstdbuf
         make install DESTDIR=/tmp/w PREFIX=/tmp/usr MULTICALL=y COMPLETIONS=n MANPAGES=n LOCALES=n \
-         SKIP_UTILS="arch b2sum base32 base64 basename basenc cat cksum comm cp csplit cut date dd df dir dircolors dirname du echo env expand expr factor false fmt fold head hostname join link ln ls md5sum mkdir mktemp more mv nl nproc numfmt od paste pathchk pr printenv printf ptx pwd readlink realpath rm rmdir seq sha1sum sha224sum sha256sum sha384sum sha512sum shred shuf sleep sort split sum sync tac tail tee test touch tr true truncate tsort tty uname unexpand uniq unlink vdir wc whoami yes"
+         SKIP_UTILS="arch b2sum base32 base64 basename basenc cat comm cp csplit cut date dd df dir dircolors dirname du echo env expand expr factor false fmt fold head hostname hostid join link ln ls md5sum mkdir mktemp more mv nl nproc numfmt od paste pathchk pr printenv printf ptx pwd readlink realpath rm rmdir seq sha1sum sha224sum sha256sum sha384sum sha512sum shred shuf sleep sort split sum sync tac tail tee test touch tr true truncate tsort tty uname unexpand uniq unlink vdir wc whoami yes"
         target/release/coreutils.exe stdbuf --version
 
   test_busybox:

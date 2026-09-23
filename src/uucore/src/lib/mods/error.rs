@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore uioerror rustdoc
+
 //! All utils return exit with an exit code. Usually, the following scheme is used:
 //! * `0`: succeeded
 //! * `1`: minor problems
@@ -51,8 +54,6 @@
 //! * [`USimpleError`] may be used in small utils with simple error handling.
 //! * Using [`ExitCode`] is not recommended but can be useful for converting utils to use
 //!   [`UResult`].
-
-// spell-checker:ignore uioerror rustdoc
 
 use std::{
     cell::Cell,
@@ -424,7 +425,9 @@ impl Display for UIoError {
                 AddrInUse => "Address in use",
                 AddrNotAvailable => "Address not available",
                 BrokenPipe => "Broken pipe",
-                AlreadyExists => "Already exists",
+                // strerror(EEXIST); GNU prints "File exists", not the Rust
+                // ErrorKind name.
+                AlreadyExists => "File exists",
                 WouldBlock => "Would block",
                 InvalidInput => "Invalid input",
                 InvalidData => "Invalid data",
@@ -470,8 +473,11 @@ impl Display for UIoError {
 /// use std::io::{Error, ErrorKind};
 /// use uucore::error::strip_errno;
 ///
-/// let err = Error::from_raw_os_error(2);
-/// assert_eq!(strip_errno(&err), "No such file or directory");
+/// #[cfg(unix)]
+/// {
+///     let err = Error::from_raw_os_error(2);
+///     assert_eq!(strip_errno(&err), "No such file or directory");
+/// }
 ///
 /// // Errors without an errno are returned unchanged.
 /// let err = Error::new(ErrorKind::Other, "custom failure");
@@ -678,6 +684,45 @@ impl ExitCode {
     }
 }
 
+/// The error to return once its message may already have reached stderr.
+///
+/// A utility that renders its own report — a caret diagnostic, a warning it
+/// printed itself — has already said everything the error would say, and
+/// returning the error too would print the message twice. This keeps the exit
+/// code without the second message: the code is taken from the error itself,
+/// so both paths always agree on it.
+///
+/// # Arguments
+///
+/// * `reported` - Whether the message has already been written to stderr.
+/// * `error` - The error that would otherwise be printed.
+///
+/// # Returns
+///
+/// A bare [`ExitCode`] carrying `error`'s code when `reported`, and `error`
+/// itself otherwise. An error that asks for a usage hint still gets one: the
+/// hint is not part of the message the report replaced.
+///
+/// # Examples
+///
+/// ```
+/// use uucore::error::{USimpleError, quiet_if_reported};
+///
+/// let reported = false; // e.g. a caret diagnostic could not be rendered
+/// let error = quiet_if_reported(reported, USimpleError::new(2, "bad key".to_string()));
+/// assert_eq!(error.code(), 2);
+/// ```
+pub fn quiet_if_reported<E: Into<Box<dyn UError>>>(reported: bool, error: E) -> Box<dyn UError> {
+    let error = error.into();
+    if !reported {
+        return error;
+    }
+    if error.usage() {
+        return UUsageError::new(error.code(), String::new());
+    }
+    ExitCode::new(error.code())
+}
+
 impl Error for ExitCode {}
 
 impl Display for ExitCode {
@@ -797,6 +842,34 @@ impl Display for ClapErrorWrapper {
 
 #[cfg(test)]
 mod tests {
+    use super::{USimpleError, UUsageError, quiet_if_reported};
+
+    /// A quieted error keeps its code but says nothing: the report already did.
+    #[test]
+    fn a_reported_error_carries_only_its_code() {
+        let error = quiet_if_reported(true, USimpleError::new(3, "bad size".to_string()));
+        assert_eq!(error.code(), 3);
+        assert_eq!(error.to_string(), "");
+        assert!(!error.usage());
+    }
+
+    /// Quieting a usage error must not swallow its "Try --help" hint, or the
+    /// output would depend on whether a caret happened to be drawn.
+    #[test]
+    fn a_reported_usage_error_still_asks_for_the_hint() {
+        let error = quiet_if_reported(true, UUsageError::new(125, "bad mode".to_string()));
+        assert_eq!(error.code(), 125);
+        assert_eq!(error.to_string(), "");
+        assert!(error.usage());
+    }
+
+    #[test]
+    fn an_unreported_error_is_left_alone() {
+        let error = quiet_if_reported(false, UUsageError::new(125, "bad mode".to_string()));
+        assert_eq!(error.to_string(), "bad mode");
+        assert!(error.usage());
+    }
+
     #[test]
     #[cfg(unix)]
     fn test_nix_error_conversion() {

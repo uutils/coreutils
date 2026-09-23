@@ -149,3 +149,41 @@ samply record -r 10000 target/profiling/ls -lR /var .git .git .git > /dev/null
    ```bash
    hyperfine --export-markdown file.md [...]
    ```
+
+## Profile-Guided Optimization
+
+Our released binaries are built with PGO, driven by `util/build-pgo.sh` (Linux,
+macOS and Windows alike). When comparing against a release build, keep in mind
+that a plain `cargo build --release` is *not* what we ship. To reproduce it:
+
+```bash
+rustup component add llvm-tools
+./util/build-pgo.sh --features unix
+# -> target/coreutils-pgo/<target>/release/coreutils
+```
+
+See [packaging](packaging.md#profile-guided-optimization-pgo) for the details
+and the options.
+
+How much it buys varies a lot by utility. Measured on x86_64 with `hyperfine`
+against a plain `cargo build --release`, the text-processing utilities gain the
+most, while utilities dominated by syscalls or by a single hand-tuned loop
+barely move:
+
+| Workload | Change |
+| -------- | ------ |
+| `cat -n`, `uniq -c`, `nl`, `fold -w` | -22% to -29% |
+| `sort`, `sort -n` | -17% |
+| `wc`, `sort -k` | -11% to -15% |
+| `ls -lR`, `head` | -4% to -8% |
+| `cut`, `seq`, `sha256sum`, `base64`, process startup | no change |
+
+Two things to keep in mind when benchmarking a PGO build:
+
+- The workloads in `util/build-pgo.sh` are what the profile is trained on. A
+  utility or a mode that is not exercised there gets no benefit, and measuring
+  one tells you little about the utilities that are.
+- Wall-clock and instruction counts can disagree, since PGO changes code layout
+  as well as the code itself. `wc` gets 15% faster while executing *more*
+  instructions. If you use `valgrind --tool=cachegrind` for a noise-free
+  comparison, confirm the result with `hyperfine` before believing it.

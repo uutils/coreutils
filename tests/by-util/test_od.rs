@@ -266,7 +266,7 @@ fn test_tf_explicit_float_still_uses_4_bytes() {
         .arg("-tfF")
         .run_piped_stdin(&input[..])
         .success()
-        .stdout_only("       1.0000000       2.0000000\n");
+        .stdout_only("               1               2\n");
 }
 
 #[test]
@@ -363,7 +363,7 @@ fn test_f32() {
     ]; // 0x807f0000 -1.1663108E-38
     let expected_output = unindent(
         "
-            0000000      -1.2345679        12345678  -9.8765427e+37              -0
+            0000000      -1.2345679        12345678   -9.876543e+37              -0
             0000020             NaN           1e-40  -1.1663108e-38
             0000034
             ",
@@ -392,7 +392,7 @@ fn test_f64() {
         "
             0000000        12345678912345678                        0
             0000020 -2.2250738585072014e-308                   5e-324
-            0000040      -2.0000000000000000
+            0000040                       -2
             0000050
             ",
     );
@@ -439,6 +439,23 @@ fn test_width() {
         .run_piped_stdin(&input[..])
         .success()
         .stdout_only(expected_output);
+}
+
+#[test]
+fn test_large_width_ascii_dump() {
+    // A line is padded up to the full width before the ascii dump, so the
+    // output for a single byte is 4 * WIDTH + 21 characters wide. Checks that
+    // such a line comes out intact; the memory behavior at widths that cannot
+    // be buffered at all is covered by the GNU test suite (od/big-w.sh).
+    const WIDTH: usize = 4_000_000;
+
+    let mut cmd = new_ucmd!();
+    let result = cmd
+        .args(&[format!("-w{WIDTH}"), "-tcz".into()])
+        .run_piped_stdin(&b"x"[..]);
+    let stdout = result.success().stdout_str();
+    assert_eq!(stdout.len(), 4 * WIDTH + 21);
+    assert!(stdout.ends_with("  >x<\n0000001\n"));
 }
 
 #[test]
@@ -580,6 +597,7 @@ fn test_suppress_duplicates() {
         .arg("-w4")
         .arg("-O")
         .arg("-x")
+        .arg("--endian=little")
         .run_piped_stdin(&input[..])
         .success()
         .stdout_only(expected_output);
@@ -591,8 +609,8 @@ fn test_big_endian() {
 
     let expected_output = unindent(
         "
-        0000000             -2.0000000000000000
-                     -2.0000000               0
+        0000000                              -2
+                             -2               0
                        c0000000        00000000
                    c000    0000    0000    0000
         0000010
@@ -651,7 +669,7 @@ fn test_alignment_Fx() {
 
     let expected_output = unindent(
         "
-        0000000      -2.0000000000000000
+        0000000                       -2
                   0000  0000  0000  c000
         0000010
         ",
@@ -946,6 +964,21 @@ fn test_skip_bytes_error() {
         .arg("--skip-bytes=10")
         .run_piped_stdin(input.as_bytes())
         .failure();
+}
+
+// The skip is measured over all the inputs joined together, and the message
+// says so, matching GNU od.
+#[test]
+fn test_skip_bytes_past_end_message() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "abc");
+    at.write("b", "de");
+    ucmd.arg("-j6")
+        .arg("a")
+        .arg("b")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_only("od: cannot skip past end of combined input\n");
 }
 
 // A seekable special file such as /dev/null can be skipped past its (empty)
@@ -1257,6 +1290,7 @@ fn test_od_options_after_filename() {
         .arg("-An")
         .arg("-t")
         .arg("x2")
+        .arg("--endian=little")
         .succeeds()
         .stdout_only(" 1c68 fdbb\n");
 }
@@ -1401,7 +1435,7 @@ fn test_hex_lowercase() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 #[cfg_attr(wasi_runner, ignore)]
 fn test_is_a_directory() {
     let scene = TestScenario::new(util_name!());
@@ -1432,4 +1466,83 @@ fn test_od_strings_with_n_flag() {
         .run_piped_stdin(&input[..])
         .success()
         .stdout_only("0000000 foo\n0000004 bar\n");
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit_of_read_bytes() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-N", "3zz", "/dev/null"])
+            .fails_with_code(1);
+
+        // The number parsed; only the unit did not. The headline keeps the
+        // option spelled the way it was typed.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+od: invalid suffix in -N argument '3zz'
+   ╭─[ od:1:8 ]
+   │
+ 1 │ od -N 3zz /dev/null
+   │        ─┬
+   │         ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_inside_a_width_value() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--width=4qq", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("od:1:13"), "{stderr}");
+        assert!(stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_a_hexadecimal_offset_that_does_not_parse() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-j", "0x1zz", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // Nothing usable was read, so the whole value is underlined.
+        assert!(stderr.contains("od:1:7"), "{stderr}");
+        assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-N", "3zz", "/dev/null"])
+            .fails_with_code(1)
+            .stderr_is("od: invalid suffix in -N argument '3zz'\n");
+    }
+}
+
+#[test]
+fn test_hyphen_leading_byte_count_is_reported_as_invalid() {
+    // GNU hands the argument after the option to that option even when it
+    // starts with a hyphen, so it is reported as an invalid argument rather
+    // than as an unknown option.
+    for opt in ["-N", "-j"] {
+        new_ucmd!()
+            .args(&[opt, "-1"])
+            .pipe_in("")
+            .fails()
+            .stderr_contains(format!("invalid {opt} argument '-1'"));
+    }
 }

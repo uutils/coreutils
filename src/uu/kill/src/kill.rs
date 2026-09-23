@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (ToDO) signalname pids killpg NOPESIG
 
+#![cfg(not(target_os = "fuchsia"))]
+
 use clap::{Arg, ArgAction, Command};
 use std::io::{self, BufWriter, Write};
 use thiserror::Error;

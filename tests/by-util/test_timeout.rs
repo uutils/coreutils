@@ -244,7 +244,7 @@ fn test_hex_timeout_ending_with_d() {
 
 #[test]
 #[cfg_attr(
-    all(target_os = "macos", target_arch = "x86_64"),
+    all(target_vendor = "apple", target_arch = "x86_64"),
     ignore = "wontfix: intermittent failure in obsolete macOS x86_64 (macOS bug)."
 )]
 #[cfg(unix)]
@@ -317,9 +317,9 @@ fn test_forward_sigint_to_child() {
             "trap 'echo got_int; exit 42' INT; sleep 5",
         ])
         .run_no_wait();
-    #[cfg(target_os = "macos")]
+    #[cfg(target_vendor = "apple")]
     cmd.delay(1000);
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(target_vendor = "apple"))]
     cmd.delay(100);
     cmd.kill_with_custom_signal(nix::sys::signal::Signal::SIGINT);
     cmd.make_assertion()

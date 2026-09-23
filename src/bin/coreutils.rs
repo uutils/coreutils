@@ -4,12 +4,11 @@
 // file that was distributed with this source code.
 
 use clap::Command;
-use coreutils::validation;
+use coreutils::validation::{self, exit};
 use itertools::Itertools as _;
 use std::cmp;
 use std::ffi::OsString;
 use std::io::{self, Write};
-use std::process;
 use uucore::{Args, error::strip_errno};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -45,7 +44,7 @@ Currently defined functions:
         && e.kind() != io::ErrorKind::BrokenPipe
     {
         let _ = writeln!(io::stderr(), "coreutils: {}", strip_errno(&e));
-        process::exit(1);
+        exit(1);
     }
 }
 
@@ -57,7 +56,7 @@ fn main() {
     let binary = validation::binary_path(&mut args);
     let binary_as_util = validation::name(&binary).unwrap_or_else(|| {
         usage(&utils, "<unknown binary name>");
-        process::exit(0);
+        exit(0);
     });
 
     // binary name ends with util name?
@@ -88,7 +87,7 @@ fn main() {
                 // we should fail with additional args https://github.com/uutils/coreutils/issues/11383#issuecomment-4082564058
                 if args.next().is_some() {
                     let _ = writeln!(io::stderr(), "coreutils: invalid argument");
-                    process::exit(1);
+                    exit(1);
                 }
                 let mut out = io::stdout().lock();
                 for util in utils.keys() {
@@ -96,19 +95,19 @@ fn main() {
                         && e.kind() != io::ErrorKind::BrokenPipe
                     {
                         let _ = writeln!(io::stderr(), "coreutils: {}", strip_errno(&e));
-                        process::exit(1);
+                        exit(1);
                     }
                 }
-                process::exit(0);
+                exit(0);
             }
             "--version" | "-V" => {
                 if let Err(e) = writeln!(io::stdout(), "coreutils {VERSION} (multi-call binary)")
                     && e.kind() != io::ErrorKind::BrokenPipe
                 {
                     let _ = writeln!(io::stderr(), "coreutils: {}", strip_errno(&e));
-                    process::exit(1);
+                    exit(1);
                 }
-                process::exit(0);
+                exit(0);
             }
             // Not a special command: fallthrough to calling a util
             _ => {}
@@ -121,12 +120,12 @@ fn main() {
             // Could be something like:
             // #[cfg(not(feature = "only_english"))]
             validation::setup_localization_or_exit(util);
-            process::exit(uumain(vec![util_os].into_iter().chain(args)));
+            exit(uumain(vec![util_os].into_iter().chain(args)));
         }
         // GNU coreutils --help string shows help for coreutils
         if util == "--help" || util == "-h" {
             usage(&utils, binary_as_util);
-            process::exit(0);
+            exit(0);
         } else if util.starts_with('-') {
             // Argument looks like an option but wasn't recognized
             validation::unrecognized_option(binary_as_util, &util_os);
@@ -140,5 +139,5 @@ fn main() {
     } else {
         let _ = writeln!(io::stderr(), "coreutils: missing argument");
     }
-    process::exit(1);
+    exit(1);
 }

@@ -14,6 +14,7 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
 #[cfg(not(target_os = "wasi"))]
 use uucore::error::UResult;
+use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use uucore::translate;
 
 #[derive(Debug, Clone)]
@@ -84,11 +85,11 @@ impl Input {
                 // on dev/fd/0 (or /dev/stdin) will fail (NotFound),
                 // so we treat stdin as a pipe here
                 // https://github.com/rust-lang/rust/issues/95239
-                #[cfg(target_os = "macos")]
+                #[cfg(target_vendor = "apple")]
                 {
                     None
                 }
-                #[cfg(not(target_os = "macos"))]
+                #[cfg(not(target_vendor = "apple"))]
                 {
                     PathBuf::from(text::FD0).canonicalize().ok()
                 }
@@ -133,9 +134,12 @@ impl HeaderPrinter {
 
     pub fn print(&mut self, string: &str) {
         if self.verbose {
+            // GNU quotes the name shown in the header when it needs it.
+            let name = locale_aware_escape_name(string.as_ref(), QuotingStyle::SHELL_ESCAPE);
             println!(
-                "{}==> {string} <==",
+                "{}==> {} <==",
                 if self.first_header { "" } else { "\n" },
+                name.to_string_lossy(),
             );
             self.first_header = false;
         }
@@ -236,13 +240,13 @@ pub fn path_is_tailable(path: &Path) -> bool {
 }
 
 #[inline]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 pub fn stdin_is_bad_fd() -> bool {
     uucore::signals::stdin_was_closed()
 }
 
 #[inline]
-#[cfg(not(unix))]
+#[cfg(not(all(unix, not(target_os = "fuchsia"))))]
 pub fn stdin_is_bad_fd() -> bool {
     false
 }

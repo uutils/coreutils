@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use uutests::at_and_ucmd;
@@ -106,7 +107,7 @@ fn test_filename_ends_with_slash() {
         .stderr_is("sum: a/: Not a directory\n");
 }
 
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "openbsd")))]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "openbsd")))]
 #[cfg_attr(wasi_runner, ignore)]
 #[test]
 fn test_filename_proc_self_mem() {

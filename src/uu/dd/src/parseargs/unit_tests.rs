@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat, oconv
 
 use super::*;
@@ -11,6 +12,19 @@ use crate::conversion_tables::{
     ASCII_TO_EBCDIC_UCASE_TO_LCASE, ASCII_TO_IBM, EBCDIC_TO_ASCII_LCASE_TO_UCASE,
 };
 use crate::parseargs::Parser;
+
+impl Parser {
+    /// Parse the operands, keeping only the error itself.
+    ///
+    /// The utility goes through `parse_with_diagnostics`, which also knows
+    /// which operand failed; this is the plain form the tests compare against.
+    pub(crate) fn parse(
+        self,
+        operands: impl IntoIterator<Item: AsRef<str>>,
+    ) -> Result<Settings, ParseError> {
+        self.read(operands).map_err(|(_, error)| error)?.validate()
+    }
+}
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 #[allow(clippy::useless_vec)]

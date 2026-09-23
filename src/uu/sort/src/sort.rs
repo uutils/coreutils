@@ -3,17 +3,18 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore (misc) kKMGTPEZYRQ HFKJFK Mbdfhn getrlimit Nofile rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
+// spell-checker:ignore (misc) uppercased qsort getmonth juin juil
+
 // Although these links don't always seem to describe reality, check out the POSIX and GNU specs:
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
-
-// spell-checker:ignore (misc) kKMGTPEZYRQ HFKJFK Mbdfhn getrlimit Nofile rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
-// spell-checker:ignore (misc) uppercased qsort getmonth juin juil
 
 mod buffer_hint;
 mod check;
 mod chunks;
 mod custom_str_cmp;
+mod diagnostics;
 mod ext_sort;
 mod merge;
 mod numeric_str_cmp;
@@ -44,6 +45,7 @@ use std::path::PathBuf;
 use std::str::Utf8Error;
 use std::sync::OnceLock;
 use thiserror::Error;
+use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError};
@@ -59,6 +61,7 @@ use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::posix::{MODERN, TRADITIONAL};
 use uucore::show_error;
 use uucore::translate;
+use uucore::translate_text;
 use uucore::version_cmp::version_cmp;
 use uucore::{format_usage, i18n};
 
@@ -147,6 +150,12 @@ pub enum SortError {
         error: std::io::Error,
     },
 
+    #[error("{}", translate!("sort-truncate-failed", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
+    TruncateFailed {
+        path: PathBuf,
+        error: std::io::Error,
+    },
+
     #[error("{}", translate!("sort-cannot-read", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
     ReadFailed {
         path: PathBuf,
@@ -180,6 +189,9 @@ pub enum SortError {
     #[error("{}", translate!("sort-no-input-from", "file" => format!("{}", .file.quote())))]
     EmptyInputFile { file: PathBuf },
 
+    #[error("{}", translate!("sort-random-source-end-of-file", "path" => format!("{}", .path.quote())))]
+    RandomSourceEndOfFile { path: PathBuf },
+
     #[error("{}", translate!("sort-invalid-zero-length-filename", "file" => .file.maybe_quote(), "line_num" => .line_num))]
     ZeroLengthFileName { file: PathBuf, line_num: usize },
 }
@@ -199,7 +211,11 @@ fn format_disorder(file: &OsString, line_number: &usize, line: &String, silent: 
     if *silent {
         String::new()
     } else {
-        translate!("sort-error-disorder", "file" => file.maybe_quote(), "line_number" => line_number, "line" => line.to_owned())
+        // `line` is the offending input line echoed back verbatim (GNU sort does the
+        // same): it must not be reinterpreted as a number by `translate!`, which would
+        // reformat it via Fluent's numeric formatting (e.g. "1.10" -> "1.1", "1e5" ->
+        // "100000", "nan" -> "NaN").
+        translate_text!("sort-error-disorder", "file" => file.maybe_quote(), "line_number" => line_number, "line" => line.to_owned())
     }
 }
 
@@ -245,15 +261,20 @@ impl Output {
         Ok(Self { file })
     }
 
-    fn into_write(self) -> BufWriter<Box<dyn Write>> {
-        BufWriter::new(match self.file {
-            Some((_name, file)) => {
-                // truncate the file
-                let _ = file.set_len(0);
+    fn into_write(self) -> UResult<BufWriter<Box<dyn Write>>> {
+        Ok(BufWriter::new(match self.file {
+            Some((name, file)) => {
+                // Only regular files can be truncated; there a failure leaves stale bytes.
+                if file.metadata().is_ok_and(|meta| meta.is_file()) {
+                    file.set_len(0).map_err(|error| SortError::TruncateFailed {
+                        path: PathBuf::from(name),
+                        error,
+                    })?;
+                }
                 Box::new(file)
             }
             None => Box::new(stdout()),
-        })
+        }))
     }
 
     fn as_output_name(&self) -> Option<&OsStr> {
@@ -327,6 +348,7 @@ struct Precomputed {
     fast_lexicographic: bool,
     fast_locale_collation: bool,
     fast_ascii_insensitive: bool,
+    whole_line_numeric: bool,
     tokenize_blank_thousands_sep: bool,
     tokenize_allow_unit_after_blank: bool,
 }
@@ -392,6 +414,28 @@ impl GlobalSettings {
         self.precomputed.fast_locale_collation =
             disable_fast_lexicographic && self.can_use_fast_lexicographic();
         self.precomputed.fast_ascii_insensitive = self.can_use_fast_ascii_insensitive();
+        self.precomputed.whole_line_numeric = self.can_use_whole_line_numeric();
+    }
+
+    /// Returns true when a number parsed from the whole line can stand in for
+    /// the key.
+    ///
+    /// `-n` parses the line once up front and compares those numbers before
+    /// looking at any key. That is only the same comparison when the single
+    /// key spans the entire line: `-n -k1.2` sorts on the line's second
+    /// character onwards, and `-n -t. -k2` on its second field, neither of
+    /// which the line as a whole stands for. A key of its own `r` also has to
+    /// go the long way, since the shortcut only knows the global one.
+    fn can_use_whole_line_numeric(&self) -> bool {
+        let [selector] = &self.selectors[..] else {
+            return false;
+        };
+        self.mode == SortMode::Numeric
+            && selector.settings.mode == SortMode::Numeric
+            && !selector.settings.reverse
+            && selector.from.field == 1
+            && selector.from.char == 1
+            && selector.to.is_none()
     }
 
     /// Returns true when the fast lexicographic path can be used safely.
@@ -399,40 +443,38 @@ impl GlobalSettings {
     /// whether locale-aware collation is needed (via checking if we're in a UTF-8 locale).
     /// This check is performed in uumain() before init_precomputed() is called.
     fn can_use_fast_lexicographic(&self) -> bool {
+        let [selector] = &self.selectors[..] else {
+            return false;
+        };
         self.mode == SortMode::Default
             && !self.ignore_case
             && !self.dictionary_order
             && !self.ignore_non_printing
             && !self.ignore_leading_blanks
-            && self.selectors.len() == 1
-            && {
-                let selector = &self.selectors[0];
-                !selector.needs_selection
-                    && matches!(selector.settings.mode, SortMode::Default)
-                    && !selector.settings.ignore_case
-                    && !selector.settings.dictionary_order
-                    && !selector.settings.ignore_non_printing
-                    && !selector.settings.ignore_blanks
-            }
+            && !selector.needs_selection
+            && matches!(selector.settings.mode, SortMode::Default)
+            && !selector.settings.ignore_case
+            && !selector.settings.dictionary_order
+            && !selector.settings.ignore_non_printing
+            && !selector.settings.ignore_blanks
     }
 
     /// Returns true when the ASCII case-insensitive fast path is valid.
     fn can_use_fast_ascii_insensitive(&self) -> bool {
+        let [selector] = &self.selectors[..] else {
+            return false;
+        };
         self.mode == SortMode::Default
             && self.ignore_case
             && !self.dictionary_order
             && !self.ignore_non_printing
             && !self.ignore_leading_blanks
-            && self.selectors.len() == 1
-            && {
-                let selector = &self.selectors[0];
-                !selector.needs_selection
-                    && matches!(selector.settings.mode, SortMode::Default)
-                    && selector.settings.ignore_case
-                    && !selector.settings.dictionary_order
-                    && !selector.settings.ignore_non_printing
-                    && !selector.settings.ignore_blanks
-            }
+            && !selector.needs_selection
+            && matches!(selector.settings.mode, SortMode::Default)
+            && selector.settings.ignore_case
+            && !selector.settings.dictionary_order
+            && !selector.settings.ignore_non_printing
+            && !selector.settings.ignore_blanks
     }
 }
 
@@ -599,15 +641,16 @@ fn ordering_incompatible(
     false
 }
 
-fn incompatible_options_error(opts: &str) -> Box<dyn UError> {
-    USimpleError::new(
-        2,
-        translate!(
-            "sort-options-incompatible",
-            "opt1" => opts,
-            "opt2" => ""
-        ),
+fn incompatible_options_message(opts: &str) -> String {
+    translate!(
+        "sort-options-incompatible",
+        "opt1" => opts,
+        "opt2" => ""
     )
+}
+
+fn incompatible_options_error(opts: &str) -> Box<dyn UError> {
+    USimpleError::new(2, incompatible_options_message(opts))
 }
 enum Selection<'a> {
     AsBigDecimal(GeneralBigDecimalParseResult),
@@ -648,7 +691,7 @@ impl<'a> Line<'a> {
             || settings.precomputed.selections_per_line > 0
             || settings.precomputed.num_infos_per_line > 0
             || settings.precomputed.floats_per_line > 0
-            || settings.mode == SortMode::Numeric;
+            || settings.precomputed.whole_line_numeric;
         if !needs_line_data {
             return Self { line, index };
         }
@@ -661,7 +704,7 @@ impl<'a> Line<'a> {
                 &settings.precomputed,
             );
         }
-        if settings.mode == SortMode::Numeric {
+        if settings.precomputed.whole_line_numeric {
             // exclude inf, nan, scientific notation; GNU -n does not treat '+' as a sign
             let line_num_float = (!line.iter().any(u8::is_ascii_alphabetic))
                 .then(|| std::str::from_utf8(line).ok())
@@ -960,44 +1003,177 @@ impl Default for KeyPosition {
     }
 }
 
-fn bad_field_spec(spec: &str, msg_key: &str) -> Box<dyn UError> {
-    USimpleError::new(
-        2,
-        translate!(
+/// A `-k` spec that does not parse, and the part of it that is at fault.
+///
+/// The message is built here so that it reads exactly as it always has; `kind`
+/// exists only so the crate's `diagnostics` module can pick a label for the
+/// caret.
+pub struct KeyError {
+    message: String,
+    /// Byte range inside the key spec.
+    span: Range<usize>,
+    kind: KeyErrorKind,
+}
+
+pub enum KeyErrorKind {
+    /// A field or character number was expected, and there were no digits.
+    MissingCount,
+    /// A number was given where counting starts at one.
+    ZeroCount,
+    /// Something that is not a key option, past the end of the spec.
+    StrayCharacter,
+    /// Ordering options that contradict each other.
+    IncompatibleOptions,
+}
+
+impl From<KeyError> for Box<dyn UError> {
+    fn from(error: KeyError) -> Self {
+        USimpleError::new(2, error.message)
+    }
+}
+
+/// `msg_key` explains what was expected; `rest` is what was found instead.
+fn missing_count(span_start: usize, msg_key: &str, rest: &str) -> KeyError {
+    KeyError {
+        message: format!(
+            "{}: {}",
+            translate!(msg_key),
+            translate!("sort-invalid-count-at-start-of", "string" => rest.quote())
+        ),
+        span: span_start..span_start + rest.len(),
+        kind: KeyErrorKind::MissingCount,
+    }
+}
+
+/// Something past the end of the spec that is neither an ordering option nor a
+/// separator; the caret covers just that character.
+fn stray_character(key: &str, offset: usize) -> KeyError {
+    let width = key[offset..].chars().next().map_or(0, char::len_utf8);
+    bad_field_spec(
+        key,
+        offset..offset + width,
+        "sort-stray-character-field-spec",
+        KeyErrorKind::StrayCharacter,
+    )
+}
+
+fn bad_field_spec(spec: &str, span: Range<usize>, msg_key: &str, kind: KeyErrorKind) -> KeyError {
+    KeyError {
+        message: translate!(
             "sort-invalid-field-spec",
             "msg" => translate!(msg_key),
             "spec" => spec.quote()
         ),
-    )
+        span,
+        kind,
+    }
 }
 
-fn invalid_count_error(msg_key: &str, input: &str) -> Box<dyn UError> {
-    USimpleError::new(
-        2,
-        format!(
-            "{}: {}",
-            translate!(msg_key),
-            translate!("sort-invalid-count-at-start-of", "string" => input.quote())
-        ),
-    )
-}
-
-fn parse_field_count<'a>(input: &'a str, msg_key: &str) -> UResult<(usize, &'a str)> {
+/// Read the leading digits of `input`, returning them and what follows.
+///
+/// `offset` is where `input` starts inside the whole key spec, so that a failure
+/// can point back at it.
+fn parse_field_count<'a>(
+    input: &'a str,
+    offset: usize,
+    msg_key: &str,
+) -> Result<(usize, &'a str), KeyError> {
     let bytes = input.as_bytes();
     let mut idx = 0;
-    while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+    while bytes.get(idx).is_some_and(u8::is_ascii_digit) {
         idx += 1;
     }
     if idx == 0 {
-        return Err(invalid_count_error(msg_key, input));
+        return Err(missing_count(offset, msg_key, input));
     }
     let (num_str, rest) = input.split_at(idx);
     let value = match num_str.parse::<usize>() {
         Ok(v) => v,
         Err(e) if *e.kind() == IntErrorKind::PosOverflow => usize::MAX,
-        Err(_) => return Err(invalid_count_error(msg_key, input)),
+        Err(_) => return Err(missing_count(offset, msg_key, input)),
     };
     Ok((value, rest))
+}
+
+/// Which end of a key a `FIELD[.CHAR]` position belongs to.
+///
+/// The two ends read the same but do not mean the same: a key starts at a
+/// character, so `.0` is a mistake there, while it stands for the whole field
+/// at the end of a key.
+#[derive(Clone, Copy, PartialEq)]
+enum KeyEnd {
+    /// Before the comma, or the whole spec when there is none.
+    From,
+    /// After the comma.
+    To,
+}
+
+impl KeyEnd {
+    /// What to say when the field number is missing.
+    fn missing_field_key(self) -> &'static str {
+        match self {
+            Self::From => "sort-invalid-number-at-field-start",
+            Self::To => "sort-invalid-number-after-comma",
+        }
+    }
+
+    /// The character offset to assume when the spec gives none.
+    fn default_char(self) -> usize {
+        match self {
+            Self::From => 1,
+            Self::To => 0,
+        }
+    }
+}
+
+/// Read a `FIELD[.CHAR]` position from the head of `input`.
+///
+/// # Arguments
+///
+/// * `key` - The whole key spec, for the error message and for the offsets a
+///   caret is placed at.
+/// * `input` - What is left to parse, a suffix of `key`.
+/// * `end` - Which end of the key this position is.
+///
+/// # Returns
+///
+/// The field, the character offset inside it, and what follows the position.
+fn parse_position<'a>(
+    key: &str,
+    input: &'a str,
+    end: KeyEnd,
+) -> Result<(usize, usize, &'a str), KeyError> {
+    // Everything the parser hands around is a suffix of `key`, so how much is
+    // left is also where we are.
+    let at = |rest: &str| key.len() - rest.len();
+
+    let (field, mut rest) = parse_field_count(input, at(input), end.missing_field_key())?;
+    if field == 0 {
+        return Err(bad_field_spec(
+            key,
+            at(input)..at(rest),
+            "sort-field-number-is-zero",
+            KeyErrorKind::ZeroCount,
+        ));
+    }
+
+    let mut char = end.default_char();
+    if let Some(stripped) = rest.strip_prefix('.') {
+        let (char_idx, rest_after) =
+            parse_field_count(stripped, at(stripped), "sort-invalid-number-after-dot")?;
+        if char_idx == 0 && end == KeyEnd::From {
+            return Err(bad_field_spec(
+                key,
+                at(stripped)..at(rest_after),
+                "sort-character-offset-is-zero",
+                KeyErrorKind::ZeroCount,
+            ));
+        }
+        char = char_idx;
+        rest = rest_after;
+    }
+
+    Ok((field, char, rest))
 }
 
 fn is_ordering_option_char(byte: u8) -> bool {
@@ -1005,6 +1181,20 @@ fn is_ordering_option_char(byte: u8) -> bool {
         byte,
         b'b' | b'd' | b'f' | b'g' | b'h' | b'i' | b'M' | b'n' | b'R' | b'r' | b'V'
     )
+}
+
+/// The part of `key` that holds ordering options, from the first one to the
+/// last: what the caret should cover when they contradict each other. The
+/// field numbers around them are not at fault, so they stay outside the span.
+fn ordering_options_span(key: &str) -> Range<usize> {
+    let is_option = |(_, byte): &(usize, u8)| is_ordering_option_char(*byte);
+    let mut options = key.bytes().enumerate().filter(is_option);
+    let Some((first, _)) = options.next() else {
+        // Nothing to point at; fall back to the whole spec.
+        return 0..key.len();
+    };
+    let last = options.next_back().map_or(first, |(index, _)| index);
+    first..last + 1
 }
 
 fn parse_ordering_options<'a>(
@@ -1015,8 +1205,8 @@ fn parse_ordering_options<'a>(
     let mut ignore_blanks = false;
     let bytes = input.as_bytes();
     let mut idx = 0;
-    while idx < bytes.len() {
-        match bytes[idx] {
+    while let Some(byte) = bytes.get(idx) {
+        match byte {
             b'b' => ignore_blanks = true,
             b'd' => {
                 settings.dictionary_order = true;
@@ -1055,7 +1245,11 @@ struct FieldSelector {
 }
 
 impl FieldSelector {
-    fn parse(key: &str, global_settings: &GlobalSettings) -> UResult<Self> {
+    fn parse(key: &str, global_settings: &GlobalSettings) -> Result<Self, KeyError> {
+        // Everything the parser hands around is a suffix of `key`, so how much
+        // is left is also where we are.
+        let at = |rest: &str| key.len() - rest.len();
+
         let has_options = key.as_bytes().iter().copied().any(is_ordering_option_char);
         let mut settings = if has_options {
             KeySettings::default()
@@ -1079,21 +1273,7 @@ impl FieldSelector {
             settings.ignore_blanks
         };
 
-        let (from_field, mut rest) = parse_field_count(key, "sort-invalid-number-at-field-start")?;
-        if from_field == 0 {
-            return Err(bad_field_spec(key, "sort-field-number-is-zero"));
-        }
-
-        let mut from_char = 1;
-        if let Some(stripped) = rest.strip_prefix('.') {
-            let (char_idx, rest_after) =
-                parse_field_count(stripped, "sort-invalid-number-after-dot")?;
-            if char_idx == 0 {
-                return Err(bad_field_spec(key, "sort-character-offset-is-zero"));
-            }
-            from_char = char_idx;
-            rest = rest_after;
-        }
+        let (from_field, from_char, rest) = parse_position(key, key, KeyEnd::From)?;
 
         let (rest_after_opts, ignore_blanks) =
             parse_ordering_options(rest, &mut settings, &mut flags);
@@ -1103,26 +1283,14 @@ impl FieldSelector {
 
         let mut to = None;
         if let Some(rest_after_comma) = rest_after_opts.strip_prefix(',') {
-            let (to_field, mut rest) =
-                parse_field_count(rest_after_comma, "sort-invalid-number-after-comma")?;
-            if to_field == 0 {
-                return Err(bad_field_spec(key, "sort-field-number-is-zero"));
-            }
-
-            let mut to_char = 0;
-            if let Some(stripped) = rest.strip_prefix('.') {
-                let (char_idx, rest_after) =
-                    parse_field_count(stripped, "sort-invalid-number-after-dot")?;
-                to_char = char_idx;
-                rest = rest_after;
-            }
+            let (to_field, to_char, rest) = parse_position(key, rest_after_comma, KeyEnd::To)?;
 
             let (rest, ignore_blanks_end) = parse_ordering_options(rest, &mut settings, &mut flags);
             if ignore_blanks_end {
                 to_ignore_blanks = true;
             }
             if !rest.is_empty() {
-                return Err(bad_field_spec(key, "sort-stray-character-field-spec"));
+                return Err(stray_character(key, at(rest)));
             }
             to = Some(KeyPosition {
                 field: to_field,
@@ -1130,7 +1298,7 @@ impl FieldSelector {
                 ignore_blanks: to_ignore_blanks,
             });
         } else if !rest_after_opts.is_empty() {
-            return Err(bad_field_spec(key, "sort-stray-character-field-spec"));
+            return Err(stray_character(key, at(rest_after_opts)));
         }
 
         if ordering_incompatible(
@@ -1144,7 +1312,11 @@ impl FieldSelector {
                 settings.ignore_non_printing,
                 settings.ignore_case,
             );
-            return Err(incompatible_options_error(&opts));
+            return Err(KeyError {
+                message: incompatible_options_message(&opts),
+                span: ordering_options_span(key),
+                kind: KeyErrorKind::IncompatibleOptions,
+            });
         }
 
         settings.mode = flags.to_mode();
@@ -1154,29 +1326,23 @@ impl FieldSelector {
             char: from_char,
             ignore_blanks: from_ignore_blanks,
         };
-        Self::new(from, to, settings).map_err(|msg| USimpleError::new(2, msg))
+        Ok(Self::new(from, to, settings))
     }
 
-    fn new(
-        from: KeyPosition,
-        to: Option<KeyPosition>,
-        settings: KeySettings,
-    ) -> Result<Self, String> {
-        if from.char == 0 {
-            Err(translate!("sort-invalid-char-index-zero-start"))
-        } else {
-            Ok(Self {
-                needs_selection: (from.field != 1
-                    || from.char != 1
-                    || to.is_some()
-                    || matches!(settings.mode, SortMode::Numeric | SortMode::HumanNumeric)
-                    || from.ignore_blanks)
-                    && !matches!(settings.mode, SortMode::GeneralNumeric),
-                needs_tokens: from.field != 1 || from.char == 0 || to.is_some(),
-                from,
-                to,
-                settings,
-            })
+    fn new(from: KeyPosition, to: Option<KeyPosition>, settings: KeySettings) -> Self {
+        // A zero start position is rejected by `parse` before getting here.
+        debug_assert_ne!(from.char, 0);
+        Self {
+            needs_selection: (from.field != 1
+                || from.char != 1
+                || to.is_some()
+                || matches!(settings.mode, SortMode::Numeric | SortMode::HumanNumeric)
+                || from.ignore_blanks)
+                && !matches!(settings.mode, SortMode::GeneralNumeric),
+            needs_tokens: from.field != 1 || to.is_some(),
+            from,
+            to,
+            settings,
         }
     }
 
@@ -1393,6 +1559,16 @@ pub(crate) fn fd_soft_limit() -> Option<usize> {
 ))]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
     None
+}
+
+/// The largest `--batch-size` argument that can be honoured with the current file
+/// descriptor soft limit, or `None` if that limit is unknown.
+///
+/// Three descriptors are always in use (stdin, stdout and stderr) and are therefore
+/// not available for merge inputs.
+fn max_merge_batch_size() -> Option<usize> {
+    const RESERVED_STDIO: usize = 3;
+    fd_soft_limit().map(|limit| limit.saturating_sub(RESERVED_STDIO))
 }
 
 #[cfg(unix)]
@@ -1667,12 +1843,7 @@ fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [Leg
 
     let mut key_index = 0usize;
     let mut i = 0usize;
-    while i < processed_args.len() {
-        let arg = &processed_args[i];
-        if arg == OsStr::new("--") {
-            break;
-        }
-
+    while let Some(arg) = processed_args.get(i).filter(|&a| a != OsStr::new("--")) {
         let mut matched_key = false;
         if arg == OsStr::new("-k") || arg == OsStr::new("--key") {
             if i + 1 < processed_args.len() {
@@ -1967,6 +2138,30 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ..Default::default()
     };
 
+    // Kept for the caret in `-k` diagnostics, which echoes the command line:
+    // taken before the legacy rewrite, so that a `-k` error in a command that
+    // also used `+POS` shows what was typed rather than the `-k` the rewrite
+    // synthesized.
+    let args: Vec<OsString> = args.collect();
+    let key_args = uucore::diagnostics::capture(&args);
+
+    // GNU `sort` supports `-t=` to set the field separator to `=`.
+    // Clap strips the first `=` after a short option (see
+    // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242,
+    // and the same rewrite in `cut`), so rewrite every attached `-t<chars>`
+    // argument to its long form, which preserves the separator verbatim.
+    let args = args.into_iter().map(|x| {
+        // Non-UTF-8 separators are rejected later anyway, so lossy conversion
+        // here only affects arguments that cannot become a valid separator.
+        let as_str = x.to_string_lossy();
+        if as_str.starts_with("-t") && as_str.chars().count() > 2 {
+            OsString::from(format!("--{}={}", options::SEPARATOR, &as_str[2..]))
+        } else {
+            x
+        }
+    });
+    let args: Vec<OsString> = args.collect();
+
     let (processed_args, mut legacy_warnings) = preprocess_legacy_args(args);
     if !legacy_warnings.is_empty() {
         index_legacy_warnings(&processed_args, &mut legacy_warnings);
@@ -2096,8 +2291,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
-        settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|e| {
-            USimpleError::new(2, format_error_message(&e, size_str, options::BUF_SIZE))
+        settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|error| {
+            let message = format_error_message(&error, size_str, options::BUF_SIZE);
+            error.size_value_error(
+                key_args.as_deref(),
+                &OptionValue::new(size_str, 'S', options::BUF_SIZE),
+                0,
+                &message,
+                USimpleError::new(2, message.clone()),
+            )
         })?;
         settings.buffer_size_is_explicit = true;
     } else {
@@ -2127,54 +2329,51 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(String::from);
 
     if let Some(n_merge) = matches.get_one::<String>(options::BATCH_SIZE) {
-        match n_merge.parse::<usize>() {
-            Ok(parsed_value) => {
-                if parsed_value < 2 {
-                    show_error!(
-                        "{}",
-                        translate!("sort-invalid-batch-size-arg", "arg" => n_merge)
-                    );
-                    return Err(UUsageError::new(
-                        2,
-                        translate!("sort-minimum-batch-size-two"),
-                    ));
-                }
-                settings.merge_batch_size = parsed_value;
+        // `None` means the value does not even fit in a `usize`, which is always too large.
+        let parsed_value = match n_merge.parse::<usize>() {
+            Ok(parsed_value) => Some(parsed_value),
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => None,
+            Err(_) => {
+                return Err(UUsageError::new(
+                    2,
+                    translate!("sort-invalid-batch-size-arg", "arg" => n_merge),
+                ));
             }
-            Err(e) => {
-                let error_message = if *e.kind() == IntErrorKind::PosOverflow {
-                    let batch_too_large = translate!(
-                        "sort-batch-size-too-large",
-                        "arg" => n_merge.quote()
-                    );
+        };
 
-                    #[cfg(target_os = "linux")]
-                    {
-                        show_error!("{batch_too_large}");
-
-                        translate!(
-                            "sort-maximum-batch-size-rlimit",
-                            "rlimit" => {
-                                fd_soft_limit().ok_or_else(|| {
-                                    UUsageError::new(2, translate!("sort-failed-fetch-rlimit"))
-                                })?
-                            }
-                        )
-                    }
-                    #[cfg(not(target_os = "linux"))]
-                    {
-                        batch_too_large
-                    }
-                } else {
-                    translate!(
-                        "sort-invalid-batch-size-arg",
-                        "arg" =>  n_merge,
-                    )
-                };
-
-                return Err(UUsageError::new(2, error_message));
-            }
+        if parsed_value.is_some_and(|value| value < 2) {
+            show_error!(
+                "{}",
+                translate!("sort-invalid-batch-size-arg", "arg" => n_merge)
+            );
+            return Err(UUsageError::new(
+                2,
+                translate!("sort-minimum-batch-size-two"),
+            ));
         }
+
+        let max_batch_size = max_merge_batch_size();
+        let too_large = match (parsed_value, max_batch_size) {
+            (None, _) => true,
+            (Some(value), Some(max)) => value > max,
+            (Some(_), None) => false,
+        };
+        if too_large {
+            let batch_too_large = translate!(
+                "sort-batch-size-too-large",
+                "arg" => n_merge.quote()
+            );
+            let error_message = match max_batch_size {
+                Some(max) => {
+                    show_error!("{batch_too_large}");
+                    translate!("sort-maximum-batch-size-rlimit", "rlimit" => max)
+                }
+                None => batch_too_large,
+            };
+            return Err(UUsageError::new(2, error_message));
+        }
+
+        settings.merge_batch_size = parsed_value.unwrap_or(usize::MAX);
     }
 
     settings.line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
@@ -2241,7 +2440,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if let Some(values) = matches.get_many::<String>(options::KEY) {
         for value in values {
-            let selector = FieldSelector::parse(value, &settings)?;
+            let selector = match FieldSelector::parse(value, &settings) {
+                Ok(selector) => selector,
+                Err(error) => {
+                    return Err(uucore::diagnostics::error_after_report(
+                        key_args.as_deref(),
+                        error,
+                        |args, error| diagnostics::render(args, value, error),
+                    ));
+                }
+            };
             settings.selectors.push(selector);
         }
     }
@@ -2249,18 +2457,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if !matches.contains_id(options::KEY) {
         // add a default selector matching the whole line
         let key_settings = KeySettings::from(&settings);
-        settings.selectors.push(
-            FieldSelector::new(
-                KeyPosition {
-                    field: 1,
-                    char: 1,
-                    ignore_blanks: key_settings.ignore_blanks,
-                },
-                None,
-                key_settings,
-            )
-            .unwrap(),
-        );
+        settings.selectors.push(FieldSelector::new(
+            KeyPosition {
+                field: 1,
+                char: 1,
+                ignore_blanks: key_settings.ignore_blanks,
+            },
+            None,
+            key_settings,
+        ));
     }
 
     let needs_random = settings.mode == SortMode::Random
@@ -2275,11 +2480,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         });
     }
 
-    let opened_inputs = if settings.merge || settings.check {
-        Vec::new()
-    } else {
-        files.iter().map(open).collect::<UResult<Vec<_>>>()?
-    };
+    if !(settings.merge || settings.check) {
+        check_inputs(&files)?;
+    }
 
     let output = Output::new(matches.get_one::<OsString>(options::OUTPUT))?;
 
@@ -2298,7 +2501,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     settings.init_precomputed(needs_locale_collation);
 
-    let result = exec(&mut files, opened_inputs, &settings, output, &mut tmp_dir);
+    let result = exec(&mut files, &settings, output, &mut tmp_dir);
     // Wait here if `SIGINT` was received,
     // for signal handler to do its work and terminate the program.
     tmp_dir.wait_if_signal();
@@ -2549,7 +2752,6 @@ pub fn uu_app() -> Command {
 
 fn exec(
     files: &mut [OsString],
-    opened_inputs: Vec<Box<dyn Read + Send>>,
     settings: &GlobalSettings,
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
@@ -2566,7 +2768,9 @@ fn exec(
             check::check(files.first().unwrap(), settings)
         }
     } else {
-        let mut lines = opened_inputs.into_iter().map(Ok);
+        // Open each input once, when it is reached, so that only one input is open
+        // at a time and FIFOs are never reopened.
+        let mut lines = files.iter().map(open);
         ext_sort(&mut lines, settings, output, tmp_dir)
     }
 }
@@ -2930,6 +3134,10 @@ const U64_LEN: usize = 8;
 const RANDOM_SOURCE_TAG: &[u8] = b"uutils-sort-random-source"; // Domain separation tag
 
 /// Create a 128-bit salt by hashing up to 1 MiB from the given file.
+///
+/// The file has to hold at least [`SALT_LEN`] bytes. GNU asks for the same 128
+/// bits and reports `end of file` when the source cannot supply them, rather
+/// than shuffling with whatever it managed to read.
 fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     let mut reader = open_with_open_failed_error(path)?;
     let mut buf = [0u8; BUF_LEN];
@@ -2937,26 +3145,27 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     // freeze seed for --random-source
     let mut hasher = FoldHasher::with_seed(1, SharedSeed::global_fixed());
 
-    loop {
-        let n = reader
-            .read(&mut buf)
-            .map_err(|error| SortError::ReadFailed {
-                path: path.to_owned(),
-                error,
-            })?;
-        if n == 0 {
-            break;
-        }
-        let remaining = MAX_BYTES.saturating_sub(total);
-        if remaining == 0 {
-            break;
-        }
+    while let n @ 1.. = reader
+        .read(&mut buf)
+        .map_err(|error| SortError::ReadFailed {
+            path: path.to_owned(),
+            error,
+        })?
+        && let remaining @ 1.. = MAX_BYTES.saturating_sub(total)
+    {
         let take = n.min(remaining);
         hasher.write(&buf[..take]);
         total = total.saturating_add(take);
         if take < n {
             break;
         }
+    }
+
+    if total < SALT_LEN {
+        return Err(SortError::RandomSourceEndOfFile {
+            path: path.to_owned(),
+        }
+        .into());
     }
 
     let first = hasher.finish();
@@ -3051,8 +3260,9 @@ fn month_parse(line: &[u8]) -> (Month, usize) {
     if let Some(table) = get_locale_month_table() {
         let mut best = None;
         for (name, month) in table {
-            if line.len() >= name.len()
-                && line[..name.len()].eq_ignore_ascii_case(name)
+            if line
+                .get(..name.len())
+                .is_some_and(|l| l.eq_ignore_ascii_case(name))
                 && best.as_ref().is_none_or(|&(len, _)| name.len() > len)
             {
                 best = Some((name.len(), *month));
@@ -3099,11 +3309,43 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
         .to_owned();
     let ctx = || translate!("sort-error-write-failed", "output" => output_name.maybe_quote());
 
-    let mut writer = output.into_write();
+    let mut writer = output.into_write()?;
     for line in iter {
         line.write(&mut writer, settings).map_err_context(ctx)?;
     }
     writer.flush().map_err_context(ctx)?;
+    Ok(())
+}
+
+/// Check that all inputs are readable before sorting starts, like GNU sort's
+/// `check_inputs`. The inputs are probed with `access(2)` rather than opened:
+/// opening a FIFO here would block until a writer appears and lose data on the
+/// reopen, and keeping every input open would be bounded by `RLIMIT_NOFILE`.
+fn check_inputs(files: &[OsString]) -> UResult<()> {
+    for file in files {
+        if file == STDIN_FILE {
+            continue;
+        }
+        let path = Path::new(file);
+        check_readable(path).map_err(|error| SortError::ReadFailed {
+            path: path.to_owned(),
+            error,
+        })?;
+    }
+    Ok(())
+}
+
+#[cfg(all(unix, not(target_os = "redox")))]
+fn check_readable(path: &Path) -> std::io::Result<()> {
+    use rustix::fs::{Access, access};
+
+    access(path, Access::READ_OK).map_err(|e| std::io::Error::from_raw_os_error(e.raw_os_error()))
+}
+
+#[cfg(any(not(unix), target_os = "redox"))]
+fn check_readable(path: &Path) -> std::io::Result<()> {
+    // No `rustix::fs::access` here, so open the file and close it right away.
+    File::open(path)?;
     Ok(())
 }
 

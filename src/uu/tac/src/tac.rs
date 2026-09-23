@@ -9,14 +9,15 @@ mod error;
 
 use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
+#[cfg(not(target_os = "wasi"))]
 use memmap2::Mmap;
 use std::ffi::{OsStr, OsString};
 use std::io::{BufWriter, Read, Write, stdin, stdout};
 use std::{fs::File, path::Path};
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::error::UError;
 use uucore::error::UResult;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::error::set_exit_code;
 use uucore::{format_usage, show};
 
@@ -335,11 +336,12 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &OsStr) -> 
     };
 
     for filename in filenames {
+        #[cfg(not(target_os = "wasi"))]
         let mmap;
         let buf;
 
         let data: &[u8] = if filename == "-" {
-            #[cfg(unix)]
+            #[cfg(all(unix, not(target_os = "fuchsia")))]
             if uucore::signals::stdin_was_closed() {
                 let e: Box<dyn UError> = TacError::ReadError(
                     OsString::from("-"),
@@ -355,6 +357,7 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &OsStr) -> 
             // would expose `tac < file` to the same truncation SIGBUS as #9748,
             // and the temp file also bounds memory for huge stdin (#10094).
             match buffer_stdin() {
+                #[cfg(not(target_os = "wasi"))]
                 Ok(StdinData::Mmap(mmap1)) => {
                     mmap = mmap1;
                     &mmap
@@ -398,20 +401,17 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &OsStr) -> 
 
         // Select the appropriate `tac` algorithm based on whether the
         // separator is given as a regular expression or a fixed string.
-        let result = match maybe_pattern {
+        match maybe_pattern {
             Some(ref pattern) => buffer_tac_regex(data, pattern, before),
             None => buffer_tac(data, before, separator),
-        };
-
-        // If there is any error in writing the output, terminate immediately.
-        if let Err(e) = result {
-            return Err(TacError::WriteError(e).into());
         }
+        .map_err(TacError::WriteError)?;
     }
     Ok(())
 }
 
 enum StdinData {
+    #[cfg(not(target_os = "wasi"))]
     Mmap(Mmap),
     Vec(Vec<u8>),
 }
@@ -420,20 +420,21 @@ enum StdinData {
 /// Falls back to reading directly into memory if temp file creation fails.
 fn buffer_stdin() -> std::io::Result<StdinData> {
     // Try to create a temp file (respects TMPDIR)
-    let Ok(mut tmp) = tempfile::tempfile() else {
-        // Fall back to reading directly into memory (e.g., bad TMPDIR)
-        let mut buf = Vec::new();
-        stdin().read_to_end(&mut buf)?;
-        return Ok(StdinData::Vec(buf));
+    #[cfg(not(target_os = "wasi"))]
+    if let Ok(mut tmp) = tempfile::tempfile() {
+        // Temp file created - copy stdin to it, then read back
+        uucore::buf_copy::copy_fast(&mut stdin(), &mut tmp)?;
+        // SAFETY: `tmp` is an unlinked file owned by this process, so no other
+        // process can open and truncate it. The mapping therefore stays valid
+        // for its whole lifetime and cannot trigger SIGBUS (unlike mapping a
+        // caller-provided file; see #9748).
+        let mmap = unsafe { Mmap::map(&tmp)? };
+        return Ok(StdinData::Mmap(mmap));
     };
-    // Temp file created - copy stdin to it, then read back
-    uucore::buf_copy::copy_fast(&mut stdin(), &mut tmp)?;
-    // SAFETY: `tmp` is an unlinked file owned by this process, so no other
-    // process can open and truncate it. The mapping therefore stays valid
-    // for its whole lifetime and cannot trigger SIGBUS (unlike mapping a
-    // caller-provided file; see #9748).
-    let mmap = unsafe { Mmap::map(&tmp)? };
-    Ok(StdinData::Mmap(mmap))
+    // Fall back to reading directly into memory (e.g., bad TMPDIR)
+    let mut buf = Vec::new();
+    stdin().read_to_end(&mut buf)?;
+    Ok(StdinData::Vec(buf))
 }
 
 #[cfg(test)]

@@ -15,16 +15,19 @@ readme.workspace = true
 path = "src/od.rs"
 
 [dependencies]
-byteorder = { workspace = true }
 clap = { workspace = true }
 half = { workspace = true }
-rustix = { workspace = true, features = ["stdio"] }
-uucore = { workspace = true, features = ["fs", "parser-size"] }
+uucore = { workspace = true, features = ["fs", "parser-size", "pipes"] }
 fluent = { workspace = true }
 libc.workspace = true
 
+[target.'cfg(any(unix, target_os = "wasi"))'.dependencies]
+rustix = { workspace = true, features = ["stdio"] }
+
 [dev-dependencies]
+divan = { workspace = true }
 tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
 
 [lints]
 workspace = true
@@ -32,3 +35,7 @@ workspace = true
 [[bin]]
 name = "od"
 path = "src/main.rs"
+
+[[bench]]
+name = "od_bench"
+harness = false

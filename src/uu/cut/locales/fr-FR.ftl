@@ -3,7 +3,7 @@ cut-usage = cut OPTION... [FICHIER]...
 cut-after-help = Chaque appel doit spécifier un mode (quoi utiliser pour les colonnes),
   une séquence (quelles colonnes afficher), et fournir une source de données
 
-  ### Spécifier un mode
+  Spécifier un mode :
 
   Utilisez --bytes (-b) ou --characters (-c) pour spécifier le mode octet
 
@@ -11,7 +11,7 @@ cut-after-help = Chaque appel doit spécifier un mode (quoi utiliser pour les co
   champs identifiés par un caractère délimiteur. Par exemple pour un CSV typique
   vous pourriez utiliser ceci en combinaison avec la définition de la virgule comme délimiteur
 
-  ### Spécifier une séquence
+  Spécifier une séquence :
 
   Une séquence est un groupe de 1 ou plusieurs nombres ou plages inclusives séparés
   par des virgules.
@@ -40,7 +40,7 @@ cut-after-help = Chaque appel doit spécifier un mode (quoi utiliser pour les co
 
   affichera tous les champs sauf les 4ème, 5ème, et 6ème
 
-  ### Spécifier une source de données
+  Spécifier une source de données :
 
   Si aucun argument de fichier source n'est spécifié, stdin est utilisé comme source
   de lignes à afficher
@@ -53,11 +53,11 @@ cut-after-help = Chaque appel doit spécifier un mode (quoi utiliser pour les co
   Pour afficher les colonnes depuis STDIN et un argument de fichier, utilisez - (tiret) comme
   argument de fichier source pour représenter stdin.
 
-  ### Options du Mode Champ
+  Options du mode champ :
 
   Les champs dans chaque ligne sont identifiés par un délimiteur (séparateur)
 
-  #### Définir le délimiteur
+  Définir le délimiteur :
 
   Définissez le délimiteur qui sépare les champs dans le fichier en utilisant l'option
   --delimiter (-d). Définir le délimiteur est optionnel.
@@ -68,19 +68,19 @@ cut-after-help = Chaque appel doit spécifier un mode (quoi utiliser pour les co
   un Tab sauf si explicitement spécifié. Seulement une des options -d ou -w peut être spécifiée.
   Ceci est une extension adoptée de FreeBSD.
 
-  #### Filtrage optionnel basé sur le délimiteur
+  Filtrage optionnel basé sur le délimiteur :
 
   Si l'option --only-delimited (-s) est fournie, seules les lignes qui
   contiennent le délimiteur seront affichées
 
-  #### Remplacer le délimiteur
+  Remplacer le délimiteur :
 
   Si l'option --output-delimiter est fournie, l'argument utilisé pour
   elle remplacera le caractère délimiteur dans chaque ligne affichée. Ceci est
   utile pour transformer les données tabulaires - par ex. pour convertir un CSV en
   TSV (fichier séparé par tabulations)
 
-  ### Fins de ligne
+  Fins de ligne :
 
   Quand l'option --zero-terminated (-z) est utilisée, cut voit \\0 (null) comme le
   caractère de 'fin de ligne' (à la fois pour lire les lignes et
@@ -97,6 +97,7 @@ cut-help-characters = alias pour le mode caractère
 cut-help-delimiter = spécifier le caractère délimiteur qui sépare les champs dans la source d'entrée. Par défaut Tab.
 cut-help-whitespace-delimited = Utiliser tout nombre d'espaces (Espace, Tab) pour séparer les champs dans la source d'entrée (extension FreeBSD).
 cut-help-fields = filtrer les colonnes de champs depuis la source d'entrée
+cut-help-fields-merged = comme -f, mais fusionne les délimiteurs adjacents ; le délimiteur par défaut est l'espacement et le délimiteur de sortie un espace
 cut-help-complement = inverser le filtre - au lieu d'afficher seulement les colonnes filtrées, afficher toutes sauf ces colonnes
 cut-help-only-delimited = en mode champ, afficher seulement les lignes qui contiennent le délimiteur
 cut-help-zero-terminated = au lieu de filtrer les colonnes basées sur la ligne, filtrer les colonnes basées sur \\0 (caractère NULL)
@@ -106,10 +107,23 @@ cut-help-no-partial = avec -b, ne pas afficher les caractères multi-octets part
 # Messages d'erreur
 cut-error-is-directory = Est un répertoire
 cut-error-write-error = erreur d'écriture
-cut-error-delimiter-and-whitespace-conflict = entrée invalide : Seulement une des options --delimiter (-d) ou -w peut être spécifiée
+cut-error-delimiter-and-whitespace-conflict = -d et -w sont mutuellement exclusifs
 cut-error-delimiter-must-be-single-character = le délimiteur doit être un caractère unique
-cut-error-multiple-mode-args = usage invalide : attend au plus une des options --fields (-f), --chars (-c) ou --bytes (-b)
-cut-error-missing-mode-arg = usage invalide : attend une des options --fields (-f), --chars (-c) ou --bytes (-b)
-cut-error-delimiter-only-with-fields = entrée invalide : L'option '--delimiter' ('-d') n'est utilisable que si on affiche une séquence de champs
-cut-error-whitespace-only-with-fields = entrée invalide : L'option '-w' n'est utilisable que si on affiche une séquence de champs
-cut-error-only-delimited-only-with-fields = entrée invalide : L'option '--only-delimited' ('-s') n'est utilisable que si on affiche une séquence de champs
+cut-error-multiple-mode-args = une seule liste peut être spécifiée
+cut-error-missing-mode-arg = vous devez spécifier une liste d'octets, de caractères ou de champs
+cut-error-delimiter-only-with-fields = un délimiteur d'entrée n'a de sens{ "\u000A\u0009" }que lors d'opérations sur des champs
+cut-error-only-delimited-only-with-fields = supprimer les lignes sans délimiteur n'a de sens{ "\u000A\u0009" }que lors d'opérations sur des champs
+cut-error-field-numbered-from-1 = les champs sont numérotés à partir de 1
+cut-error-position-numbered-from-1 = les positions d'octet/caractère sont numérotées à partir de 1
+cut-error-invalid-field-range = plage de champs invalide
+cut-error-invalid-position-range = plage d'octets ou de caractères invalide
+cut-error-invalid-decreasing-range = plage décroissante invalide
+cut-error-invalid-range-no-endpoint = plage invalide sans borne : { $range }
+cut-error-invalid-field-value = valeur de champ invalide { $value }
+cut-error-invalid-position-value = position d'octet/caractère invalide { $value }
+cut-error-field-number-too-large = le numéro de champ { $value } est trop grand
+cut-error-position-too-large = le décalage d'octet/caractère { $value } est trop grand
+
+# Étiquettes de diagnostic : ce que le caret désigne dans une liste d'intervalles
+cut-diag-label-zero-bound = le décompte commence à 1
+cut-diag-help-list-syntax = une liste s'écrit N, N-M, N- ou -M, séparés par des virgules, comme -f1,4-6,9-

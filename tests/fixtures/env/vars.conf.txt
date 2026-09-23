@@ -1,4 +1,0 @@
-# comment
-FOO=bar
-
-BAR="bamf this"

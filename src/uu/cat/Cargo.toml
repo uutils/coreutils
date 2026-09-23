@@ -18,7 +18,6 @@ doctest = false
 [dependencies]
 clap = { workspace = true }
 memchr = { workspace = true }
-rustix = { workspace = true, features = ["fs"] }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["fast-inc", "fs", "pipes", "signals"] }
 fluent = { workspace = true }
@@ -28,12 +27,11 @@ divan = { workspace = true }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
 
-[target.'cfg(windows)'.dependencies]
-winapi-util = { workspace = true }
-windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
 
-[target.'cfg(unix)'.dev-dependencies]
-rustix = { workspace = true }
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
 
 [lints]
 workspace = true

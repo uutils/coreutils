@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use uutests::new_ucmd;
 
 #[test]
@@ -26,7 +27,7 @@ fn test_get_var() {
 
 #[test]
 fn test_ignore_equal_var() {
-    // tested by gnu/tests/misc/printenv.sh
+    // Basic printenv functionality
     new_ucmd!().env("a=b", "c").arg("a=b").fails().no_stdout();
 }
 

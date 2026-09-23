@@ -32,21 +32,33 @@ use uucore::translate;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let (args, obs_lines) = handle_obsolete(args);
+    let raw_args: Vec<OsString> = args.collect();
+    // Capture before the obsolete `-22` spelling is rewritten to `-l 22`.
+    let diag_args = uucore::diagnostics::capture(&raw_args);
+    let (args, obs_lines) = handle_obsolete(raw_args.into_iter());
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let settings = Settings::from(&matches, obs_lines.as_deref()).map_err(|e| {
+        let message = format!("{e}");
         if e.requires_usage() {
-            UUsageError::new(1, format!("{e}"))
-        } else {
-            USimpleError::new(1, format!("{e}"))
+            return UUsageError::new(1, message);
         }
+        uucore::diagnostics::error_after_report(
+            diag_args.as_deref(),
+            USimpleError::new(1, message.clone()),
+            |args, _| match &e {
+                SettingsError::Strategy(error) => error.render(args, &message),
+                // The rest is about how the options combine rather than about
+                // one of them, so there is nothing to point a caret at.
+                _ => false,
+            },
+        )
     })?;
 
     // When using --filter, we write to a child process's stdin which may
     // close early. Disable SIGPIPE so we get EPIPE errors instead of
     // being terminated, allowing graceful handling of broken pipes.
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     if settings.filter.is_some() {
         let _ = uucore::signals::disable_pipe_errors();
     }
@@ -234,8 +246,8 @@ struct Settings {
     io_blksize: Option<u64>,
 }
 
-#[derive(Debug, Error)]
 /// An error when parsing settings from command-line arguments.
+#[derive(Debug, Error)]
 enum SettingsError {
     /// Invalid chunking strategy.
     #[error("{0}")]
@@ -310,7 +322,7 @@ impl Settings {
             if let Some(s) = matches.get_one::<String>(options::IO_BLKSIZE) {
                 match parse_size_u64(s) {
                     Ok(0) => return Err(SettingsError::InvalidIOBlockSize(s.to_owned())),
-                    Ok(n) if n <= uucore::fs::sane_blksize::MAX => Some(n),
+                    Ok(n @ ..=uucore::fs::sane_blksize::MAX) => Some(n),
                     _ => return Err(SettingsError::InvalidIOBlockSize(s.to_owned())),
                 }
             } else {
@@ -1136,20 +1148,28 @@ fn n_chunks_by_line(
         // empty files in place(s) of skipped chunk(s)
         let num_line_bytes = bytes.len() as u64;
         num_bytes_written += num_line_bytes;
-        let mut skipped = -1;
-        while num_bytes_should_be_written <= num_bytes_written {
-            num_bytes_should_be_written +=
-                chunk_size_base + (chunk_size_reminder > chunk_number) as u64;
+        let first_chunk_number = chunk_number;
+        // Cap at the last chunk to avoid an infinite loop when trailing chunks are
+        // zero-sized, and keep excess input from indexing past out_files.
+        while chunk_number < num_chunks && num_bytes_should_be_written <= num_bytes_written {
+            let chunk_size = chunk_size_base + (chunk_size_reminder > chunk_number) as u64;
+            if chunk_size == 0 {
+                // Every remaining chunk is zero-sized as well, so all of them
+                // would be skipped one at a time, which takes prohibitively
+                // long for a huge number of chunks. Jump to the last one.
+                chunk_number = num_chunks;
+                break;
+            }
+            num_bytes_should_be_written += chunk_size;
             chunk_number += 1;
-            skipped += 1;
         }
 
         // If a chunk was skipped and `elide_empty_files` flag is set,
         // roll chunk_number back to preserve sequential continuity
         // of file names for files written to,
         // except for Kth chunk of N mode
-        if settings.elide_empty_files && skipped > 0 && kth_chunk.is_none() {
-            chunk_number -= skipped as u64;
+        if settings.elide_empty_files && kth_chunk.is_none() {
+            chunk_number = chunk_number.min(first_chunk_number + 1);
         }
         if kth_chunk.is_some_and(|k| chunk_number > k) {
             break;
@@ -1214,9 +1234,10 @@ fn n_chunks_by_line_round_robin(
     let mut closed_writers = 0;
 
     let mut i = 0;
+    let mut line = Vec::new();
     loop {
-        let line = &mut Vec::new();
-        let num_bytes_read = reader.by_ref().read_until(sep, line)?;
+        line.clear();
+        let num_bytes_read = reader.by_ref().read_until(sep, &mut line)?;
 
         // if there is nothing else to read - exit the loop
         if num_bytes_read == 0 {

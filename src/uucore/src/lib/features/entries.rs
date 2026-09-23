@@ -33,7 +33,7 @@
 //! ```
 
 use core::ffi::{CStr, c_char, c_int};
-#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
 use libc::time_t;
 use libc::{getgrgid, getgrnam};
 use libc::{getpwnam, getpwuid, group, passwd};
@@ -84,7 +84,7 @@ unsafe extern "C" {
 pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<rustix::process::RawGid>> {
     let groups = rustix::process::getgroups()
         .map(|g| g.into_iter().map(rustix::fs::Gid::as_raw).collect())?;
-    let egid = arg_id.unwrap_or_else(crate::features::process::getegid);
+    let egid = arg_id.unwrap_or_else(|| rustix::process::getegid().as_raw());
     Ok(sort_groups(groups, egid))
 }
 
@@ -116,22 +116,25 @@ pub struct Passwd {
     #[expect(clippy::struct_field_names)]
     pub user_passwd: Option<String>,
     /// AKA passwd.pw_class
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     pub user_access_class: Option<String>,
     /// AKA passwd.pw_change
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     #[expect(clippy::struct_field_names)]
     pub passwd_change_time: time_t,
     /// AKA passwd.pw_expire
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     pub expiration: time_t,
 }
 
 /// # Safety
-/// ptr must point to a valid C string.
 ///
-/// Returns None if ptr is null.
-fn cstr2string(ptr: *const c_char) -> Option<String> {
+/// If `ptr` is non-null, it must point to a valid, NUL-terminated C string
+///
+/// # Returns
+///
+/// Returns None if `ptr`` is null.
+unsafe fn cstr2string(ptr: *const c_char) -> Option<String> {
     if ptr.is_null() {
         None
     } else {
@@ -145,24 +148,24 @@ impl Passwd {
     /// the function runs. That means PW_LOCK must be held.
     unsafe fn from_raw(raw: passwd) -> Self {
         Self {
-            name: cstr2string(raw.pw_name).expect("passwd without name"),
+            name: unsafe { cstr2string(raw.pw_name).expect("passwd without name") },
             uid: raw.pw_uid,
             gid: raw.pw_gid,
             #[cfg(not(all(
                 target_os = "android",
                 any(target_arch = "x86", target_arch = "arm")
             )))]
-            user_info: cstr2string(raw.pw_gecos),
+            user_info: unsafe { cstr2string(raw.pw_gecos) },
             #[cfg(all(target_os = "android", any(target_arch = "x86", target_arch = "arm")))]
             user_info: None,
-            user_shell: cstr2string(raw.pw_shell),
-            user_dir: cstr2string(raw.pw_dir),
-            user_passwd: cstr2string(raw.pw_passwd),
-            #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
-            user_access_class: cstr2string(raw.pw_class),
-            #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+            user_shell: unsafe { cstr2string(raw.pw_shell) },
+            user_dir: unsafe { cstr2string(raw.pw_dir) },
+            user_passwd: unsafe { cstr2string(raw.pw_passwd) },
+            #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
+            user_access_class: unsafe { cstr2string(raw.pw_class) },
+            #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
             passwd_change_time: raw.pw_change,
-            #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+            #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
             expiration: raw.pw_expire,
         }
     }
@@ -226,7 +229,7 @@ impl Group {
     /// the function runs. That means PW_LOCK must be held.
     unsafe fn from_raw(raw: group) -> Self {
         Self {
-            name: cstr2string(raw.gr_name).expect("group without name"),
+            name: unsafe { cstr2string(raw.gr_name).expect("group without name") },
             gid: raw.gr_gid,
         }
     }
@@ -336,9 +339,11 @@ pub fn grp2gid(name: &str) -> IOResult<gid_t> {
 
 #[cfg(test)]
 mod test {
+    #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
     use super::*;
 
     #[test]
+    #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
     fn test_sort_groups() {
         assert_eq!(sort_groups(vec![1, 2, 3], 4), vec![4, 1, 2, 3]);
         assert_eq!(sort_groups(vec![1, 2, 3], 3), vec![3, 1, 2]);
@@ -348,6 +353,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
     fn test_entries_get_groups_gnu() {
         if let Ok(mut groups) = rustix::process::getgroups().map(|g| {
             g.into_iter()

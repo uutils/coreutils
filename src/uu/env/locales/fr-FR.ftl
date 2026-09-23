@@ -6,7 +6,6 @@ env-after-help = Un simple - implique -i. Si aucune COMMANDE, afficher l'environ
 env-help-ignore-environment = commencer avec un environnement vide
 env-help-chdir = changer le répertoire de travail vers RÉP
 env-help-null = terminer chaque ligne de sortie avec un octet 0 plutôt qu'un retour à la ligne (valide uniquement lors de l'affichage de l'environnement)
-env-help-file = lire et définir les variables à partir d'un fichier de configuration de style ".env" (avant toute suppression et/ou définition)
 env-help-unset = supprimer la variable de l'environnement
 env-help-debug = afficher des informations détaillées pour chaque étape de traitement
 env-help-split-string = traiter et diviser S en arguments séparés ; utilisé pour passer plusieurs arguments sur les lignes shebang
@@ -36,9 +35,16 @@ env-error-cannot-unset-invalid = impossible de supprimer { $name } : Argument in
 env-error-must-specify-command-with-chdir = doit spécifier une commande avec --chdir (-C)
 env-error-cannot-change-directory = impossible de changer de répertoire vers { $directory } : { $error }
 env-error-argv0-not-supported = --argv0 n'est actuellement pas pris en charge sur cette plateforme
-env-error-permission-denied = { $program } : Permission refusée
-env-error-unknown = erreur inconnue : { $error }
 env-error-failed-set-signal-action = échec de la définition de l'action du signal pour le signal { $signal } : { $error }
 
 # Messages d'avertissement
 env-warning-no-name-specified = aucun nom spécifié pour la valeur { $value }
+
+# Étiquettes de diagnostic : ce que le caret désigne dans une chaîne -S
+env-diag-label-variable-digit = un nom de variable ne peut pas commencer par un chiffre
+env-diag-label-missing-brace = cette {"{"} n'est jamais fermée
+env-diag-help-quoting = -S cite comme le shell : ' et " vont par paires, et \' échappe une apostrophe
+env-diag-help-backslash = une barre oblique inverse échappe le caractère qui suit, elle ne peut donc pas terminer la chaîne
+env-diag-help-backslash-c = \c termine la chaîne -S et n'a aucun sens entre guillemets
+env-diag-help-escape = -S comprend \r, \n, \t, \f, \v, \_, \#, \$, \" et \c
+env-diag-help-variable = seuls $NOM et ${"{"}NOM{"}"} sont développés ; les autres formes du shell ne le sont pas
