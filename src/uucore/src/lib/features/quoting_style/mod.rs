@@ -157,8 +157,8 @@ impl QuotingStyle {
     ///
     /// Used for e.g., the `QUOTING_STYLE` environment variable and the
     /// `--quoting-style` option of `ls`.
-    pub fn parse(s: &str) -> Option<Self> {
-        Some(match s {
+    pub fn parse(s: impl AsRef<str>) -> Option<Self> {
+        Some(match s.as_ref() {
             "literal" => Self::LITERAL,
             "shell" => Self::SHELL,
             "shell-always" => Self::SHELL_ALWAYS,
