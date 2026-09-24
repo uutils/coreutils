@@ -3171,6 +3171,29 @@ mod debug_flag {
             .stderr_contains("pclmul");
     }
 
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[test]
+    fn test_debug_with_glibc_tunables() {
+        if is_x86_feature_detected!("avx2") {
+            for (tunables, expected) in [
+                ("glibc.cpu.hwcaps=-AVX2", "avx2 support not detected"), // correctly disabling AVX2
+                ("glibc.cpu.hwcaps=-avx2", "using avx2 hardware support"), // lowercase invalidates AVX2 disabling
+                (
+                    "glibc.cpu.hwcaps=-AVX2:glibc.cpu.hwcaps=-AVX512F",
+                    "using avx2 hardware support",
+                ), // last wins
+                ("glibc.cpu.hwcaps=-AVX2 ", "using avx2 hardware support"), // trailing spaces invalidate AVX2 disabling
+            ] {
+                new_ucmd!()
+                    .arg("--debug")
+                    .arg("lorem_ipsum.txt")
+                    .env("GLIBC_TUNABLES", tunables)
+                    .succeeds()
+                    .stderr_contains(expected);
+            }
+        }
+    }
+
     #[test]
     #[cfg(target_arch = "aarch64")]
     fn test_debug_flag_aarch64() {
