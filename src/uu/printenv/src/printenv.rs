@@ -10,7 +10,9 @@ use clap::{Arg, ArgAction, Command};
 
 use uucore::display::{OsWrite, print_all_env_vars};
 use uucore::error::UResult;
+use uucore::i18n::get_ctype_encoding;
 use uucore::line_ending::LineEnding;
+use uucore::quoting_style::{escape_name, quoting_style_from_env};
 use uucore::{format_usage, translate};
 
 static OPT_NULL: &str = "null";
@@ -26,10 +28,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
+    let maybe_quoting_style = quoting_style_from_env();
+
     let separator = LineEnding::from_zero_flag(matches.get_flag(OPT_NULL));
 
     if variables.is_empty() {
-        print_all_env_vars(separator)?;
+        print_all_env_vars(separator, maybe_quoting_style, get_ctype_encoding())?;
         return Ok(());
     }
 
@@ -42,6 +46,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
         if let Some(var) = env::var_os(env_var) {
             let mut stdout = std::io::stdout().lock();
+
+            let var = if let Some(qs) = maybe_quoting_style {
+                escape_name(&var, qs, get_ctype_encoding())
+            } else {
+                var
+            };
+
             stdout.write_all_os(&var)?;
             write!(stdout, "{separator}")?;
         } else {
