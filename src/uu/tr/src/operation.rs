@@ -285,6 +285,11 @@ impl Sequence {
             .filter(|(_, n)| *n > 0)
     }
 
+    /// The number of characters in a set of runs, widened like `expanded_len_of`.
+    fn runs_len(runs: &[(u8, usize)]) -> u128 {
+        runs.iter().map(|(_, n)| *n as u128).sum()
+    }
+
     /// The characters a set of runs is made of, as a sorted list without duplicates.
     fn unique_chars(runs: &[(u8, usize)]) -> Vec<u8> {
         let mut uniques: Vec<u8> = runs.iter().map(|(c, _)| *c).collect();
@@ -362,16 +367,14 @@ impl Sequence {
         } else {
             Self::runs(&set1).collect()
         };
-        let set1_len: u128 = set1_runs.iter().map(|(_, n)| *n as u128).sum();
+        let set1_len = Self::runs_len(&set1_runs);
 
-        let set2_len: u128 = set2
-            .iter()
-            .filter(|s| !matches!(s, Self::CharStar(_)))
-            .map(|s| s.expanded_len() as u128)
-            .sum();
+        // A star has no length of its own until it is turned into a repeat,
+        // so this is the length of everything else in set2.
+        let set2_fixed_len = Self::expanded_len_of(&set2);
 
         let star_compensate_len =
-            usize::try_from(set1_len.saturating_sub(set2_len)).unwrap_or(usize::MAX);
+            usize::try_from(set1_len.saturating_sub(set2_fixed_len)).unwrap_or(usize::MAX);
         //Replace CharStar with CharRepeat
         set2 = set2
             .iter()
@@ -407,7 +410,7 @@ impl Sequence {
         }
 
         let set2_runs: Vec<(u8, usize)> = Self::runs(&set2).collect();
-        let set2_len: u128 = set2_runs.iter().map(|(_, n)| *n as u128).sum();
+        let set2_len = Self::runs_len(&set2_runs);
 
         // Calculate the set of unique characters in set2
         let set2_uniques = Self::unique_chars(&set2_runs);
