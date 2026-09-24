@@ -2961,7 +2961,7 @@ fn test_du_block_size_suffix() {
         .ucmd()
         .args(&["-B", "1KiB", "f"])
         .succeeds()
-        .stdout_does_not_contain("KiB");
+        .stdout_contains("0\tf");
 
     scene
         .ucmd()
