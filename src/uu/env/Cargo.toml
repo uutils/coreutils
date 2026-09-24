@@ -19,7 +19,7 @@ doctest = false
 clap = { workspace = true }
 fluent = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["signals"] }
+uucore = { workspace = true, features = ["quoting-style", "signals"] }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["process", "signal"] }
