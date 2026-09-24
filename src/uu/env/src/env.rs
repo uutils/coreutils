@@ -44,6 +44,7 @@ use std::os::unix::ffi::OsStrExt;
 
 use uucore::display::{Quotable, print_all_env_vars};
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, strip_errno};
+use uucore::i18n::UEncoding;
 use uucore::line_ending::LineEnding;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::signals::{
@@ -817,7 +818,8 @@ impl EnvAppData {
         apply_change_directory(&opts)?;
         if opts.program.is_empty() {
             // no program provided, so just dump all env vars to stdout
-            print_all_env_vars(opts.line_ending)?;
+            // `encoding` is irrelevant when `quoting_style` is None
+            print_all_env_vars(opts.line_ending, None, UEncoding::Ascii)?;
         } else {
             return self.run_program(&opts, self.do_debug_printing);
         }
