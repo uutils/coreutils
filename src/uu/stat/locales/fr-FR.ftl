@@ -94,7 +94,6 @@ stat-word-birth = Créé
 
 ## Messages d'erreur
 
-stat-warning-invalid-env-quoting-style = valeur invalide de la variable d'environnement QUOTING_STYLE ignorée : '{$style}'
 stat-error-invalid-directive = {$directive} : directive invalide
 stat-error-cannot-read-filesystem = impossible de lire la table des systèmes de fichiers montés : {$error}
 stat-error-stdin-filesystem-mode = utiliser '-' pour désigner l'entrée standard ne fonctionne pas en mode système de fichiers

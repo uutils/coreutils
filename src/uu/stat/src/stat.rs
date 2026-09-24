@@ -9,7 +9,7 @@ use std::ops::Range;
 use uucore::diagnostics::OptionValue;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::i18n::get_ctype_encoding;
-use uucore::quoting_style::{Quotes, QuotingStyle, escape_name};
+use uucore::quoting_style::{QuotingStyle, escape_name, quoting_style_from_env};
 use uucore::translate;
 
 use clap::builder::ValueParser;
@@ -245,23 +245,6 @@ pub enum OutputType<'a> {
     UnsignedOct(u32),
     Timestamp(i64, u32),
     Unknown,
-}
-
-/// Match a `QUOTING_STYLE` value to a quoting style.
-fn parse_quoting_style(style: &str) -> Option<QuotingStyle> {
-    Some(match style {
-        "literal" => QuotingStyle::Literal { show_control: true },
-        "shell" => QuotingStyle::SHELL.show_control(true),
-        "shell-always" => QuotingStyle::SHELL_QUOTE.show_control(true),
-        "shell-escape" => QuotingStyle::SHELL_ESCAPE,
-        "shell-escape-always" => QuotingStyle::SHELL_ESCAPE_QUOTE,
-        "c" | "clocale" => QuotingStyle::C_DOUBLE,
-        "escape" => QuotingStyle::C_NO_QUOTES,
-        "locale" => QuotingStyle::C {
-            quotes: Quotes::Single,
-        },
-        _ => return None,
-    })
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -519,22 +502,6 @@ fn quote_file_name(file_name: &str, quoting_style: QuotingStyle) -> String {
     escape_name(OsStr::new(file_name), quoting_style, get_ctype_encoding())
         .to_string_lossy()
         .to_string()
-}
-
-/// Get the quoting style from the `QUOTING_STYLE` environment variable.
-fn env_quoting_style() -> QuotingStyle {
-    match env::var("QUOTING_STYLE") {
-        Ok(style) => parse_quoting_style(&style).unwrap_or_else(|| {
-            // Warn when QUOTING_STYLE is set to a value we don't understand,
-            // then fall back to the default.
-            show_error!(
-                "{}",
-                translate!("stat-warning-invalid-env-quoting-style", "style" => style.clone())
-            );
-            QuotingStyle::SHELL_ESCAPE
-        }),
-        Err(_) => QuotingStyle::SHELL_ESCAPE,
-    }
 }
 
 fn get_quoted_file_name(
@@ -1112,7 +1079,11 @@ impl Stater {
     }
 
     fn quoting_style(&self) -> QuotingStyle {
-        *self.quoting_style.get_or_init(env_quoting_style)
+        *self.quoting_style.get_or_init(|| {
+            quoting_style_from_env()
+                .unwrap_or(QuotingStyle::SHELL_ESCAPE)
+                .show_control(true)
+        })
     }
 
     fn find_mount_point<P: AsRef<Path>>(&self, p: P) -> Option<&OsString> {
