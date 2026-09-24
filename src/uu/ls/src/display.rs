@@ -47,7 +47,6 @@ use uucore::{
     format::human::human_readable,
     fs::display_permissions,
     fsext::metadata_get_time,
-    i18n::{UEncoding, get_ctype_encoding},
     line_ending::LineEnding,
     os_str_as_bytes_lossy, os_string_from_vec,
     quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
@@ -132,12 +131,6 @@ pub(crate) enum IndicatorStyle {
     Classify,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LocaleQuoting {
-    Single,
-    Double,
-}
-
 #[derive(PartialEq, Eq, Debug)]
 pub enum Format {
     Columns,
@@ -170,7 +163,8 @@ pub fn show_dir_name(
     out: &mut BufWriter<Stdout>,
     config: &Config,
 ) -> std::io::Result<usize> {
-    let escaped_name = escape_dir_name_with_locale(path_data.path().as_os_str(), config);
+    let escaped_name =
+        locale_aware_escape_dir_name(path_data.path().as_os_str(), config.quoting_style);
 
     let name = if config.hyperlink && !config.dired {
         create_hyperlink(&escaped_name, path_data)
@@ -183,48 +177,24 @@ pub fn show_dir_name(
     Ok(name.len())
 }
 
-fn escape_with_locale<F>(name: &OsStr, config: &Config, fallback: F) -> OsString
-where
-    F: FnOnce(&OsStr, QuotingStyle) -> OsString,
-{
-    if let Some(locale) = config.locale_quoting {
-        locale_quote(name, locale)
-    } else {
-        fallback(name, config.quoting_style)
-    }
-}
-
-fn escape_dir_name_with_locale(name: &OsStr, config: &Config) -> OsString {
-    escape_with_locale(name, config, locale_aware_escape_dir_name)
-}
-
 fn escape_name_with_locale(name: &OsStr, config: &Config) -> OsString {
     let comma_separated =
         config.format == Format::Commas && os_str_as_bytes_lossy(name).contains(&b',');
-    let style = match config.quoting_style {
-        QuotingStyle::Shell {
-            escape,
-            show_control,
-            ..
-        } if comma_separated => QuotingStyle::Shell {
-            escape,
-            always_quote: true,
-            show_control,
-        },
-        style => style,
+
+    // Format::Commas forces quoting.
+    let style = if comma_separated {
+        config.quoting_style.always_quote(true)
+    } else {
+        config.quoting_style
     };
 
-    let escaped = escape_with_locale(name, config, |name, _| {
-        locale_aware_escape_name(name, style)
-    });
+    let escaped = locale_aware_escape_name(name, style);
 
-    let escaped =
-        if comma_separated && config.locale_quoting.is_none() && style == QuotingStyle::C_NO_QUOTES
-        {
-            escaped.to_string_lossy().replace(',', "\\,").into()
-        } else {
-            escaped
-        };
+    let escaped = if comma_separated && style == QuotingStyle::C_NO_QUOTES {
+        escaped.to_string_lossy().replace(',', "\\,").into()
+    } else {
+        escaped
+    };
 
     if config.format == Format::Commas
         && config.line_ending == LineEnding::Newline
@@ -244,86 +214,6 @@ fn escape_name_with_locale(name: &OsStr, config: &Config) -> OsString {
     }
 
     escaped
-}
-
-fn locale_quote(name: &OsStr, style: LocaleQuoting) -> OsString {
-    let bytes = os_str_as_bytes_lossy(name);
-
-    // In a UTF-8 locale GNU's locale/clocale quoting uses Unicode quotation
-    // marks U+2018 (LEFT) and U+2019 (RIGHT) as delimiters for both styles,
-    // keyed off LC_CTYPE. Since the delimiters differ from any ASCII quote,
-    // embedded apostrophes and double quotes are left untouched; only control
-    // characters, backslashes and invalid bytes are escaped.
-    if get_ctype_encoding() == UEncoding::Utf8 {
-        let mut quoted = String::with_capacity(name.len() + 6);
-        quoted.push('\u{2018}');
-        for chunk in bytes.utf8_chunks() {
-            for c in chunk.valid().chars() {
-                if c == '\\' {
-                    quoted.push_str("\\\\");
-                } else if c.is_ascii() && c.is_control() {
-                    push_basic_escape(&mut quoted, c as u8);
-                } else if c.is_control() {
-                    // Non-ASCII control characters (the C1 range, e.g.
-                    // U+0085 NEL) are not printable; octal-escape their
-                    // UTF-8 bytes like GNU does for non-printable chars.
-                    let mut buf = [0u8; 4];
-                    for &byte in c.encode_utf8(&mut buf).as_bytes() {
-                        let _ = write!(quoted, "\\{byte:03o}");
-                    }
-                } else {
-                    quoted.push(c);
-                }
-            }
-            for &byte in chunk.invalid() {
-                let _ = write!(quoted, "\\{byte:03o}");
-            }
-        }
-        quoted.push('\u{2019}');
-        return OsString::from(quoted);
-    }
-
-    let mut quoted = String::with_capacity(name.len() + 2);
-    match style {
-        LocaleQuoting::Single => quoted.push('\''),
-        LocaleQuoting::Double => quoted.push('"'),
-    }
-    for &byte in bytes.as_ref() {
-        push_locale_byte(&mut quoted, byte, style);
-    }
-    match style {
-        LocaleQuoting::Single => quoted.push('\''),
-        LocaleQuoting::Double => quoted.push('"'),
-    }
-    OsString::from(quoted)
-}
-
-fn push_locale_byte(buf: &mut String, byte: u8, style: LocaleQuoting) {
-    match (style, byte) {
-        (LocaleQuoting::Single, b'\'') => buf.push_str("'\\''"),
-        (LocaleQuoting::Double, b'"') => buf.push_str("\\\""),
-        (_, b'\\') => buf.push_str("\\\\"),
-        _ => push_basic_escape(buf, byte),
-    }
-}
-
-fn push_basic_escape(buf: &mut String, byte: u8) {
-    match byte {
-        b'\x07' => buf.push_str("\\a"),
-        b'\x08' => buf.push_str("\\b"),
-        b'\t' => buf.push_str("\\t"),
-        b'\n' => buf.push_str("\\n"),
-        b'\x0b' => buf.push_str("\\v"),
-        b'\x0c' => buf.push_str("\\f"),
-        b'\r' => buf.push_str("\\r"),
-        b'\x1b' => buf.push_str("\\e"),
-        b'"' => buf.push('"'),
-        b'\'' => buf.push('\''),
-        b if (0x20..=0x7e).contains(&b) => buf.push(b as char),
-        _ => {
-            let _ = write!(buf, "\\{byte:03o}");
-        }
-    }
 }
 
 pub fn should_display(entry: &DirEntry, config: &Config) -> bool {
