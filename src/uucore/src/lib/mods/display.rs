@@ -33,6 +33,12 @@ use std::{env, fmt};
 // These used to be defined here, but they live in their own crate now.
 pub use os_display::{Quotable, Quoted};
 
+#[cfg(feature = "quoting-style")]
+use crate::{
+    i18n::UEncoding,
+    quoting_style::{QuotingStyle, escape_name},
+};
+
 /// Print a path (or `OsStr`-like object) directly to stdout, with a trailing newline,
 /// without losing any information if its encoding is invalid.
 ///
@@ -119,13 +125,31 @@ impl OsWrite for Box<dyn OsWrite> {
 ///
 /// This function handles non-UTF-8 environment variable names and values correctly by using
 /// raw bytes on Unix systems.
-pub fn print_all_env_vars<T: fmt::Display>(line_ending: T) -> io::Result<()> {
-    let mut stdout = io::stdout().lock();
+pub fn print_all_env_vars<W: OsWrite, T: fmt::Display>(mut w: W, line_ending: T) -> io::Result<()> {
     for (name, value) in env::vars_os() {
-        stdout.write_all_os(&name)?;
-        stdout.write_all(b"=")?;
-        stdout.write_all_os(&value)?;
-        write!(stdout, "{line_ending}")?;
+        w.write_all_os(&name)?;
+        w.write_all(b"=")?;
+
+        w.write_all_os(&value)?;
+        write!(w, "{line_ending}")?;
+    }
+    Ok(())
+}
+
+/// Equivalent to [`print_all_env_vars`] that quotes
+#[cfg(feature = "quoting-style")]
+pub fn print_all_env_vars_quoted<W: OsWrite, T: fmt::Display>(
+    mut w: W,
+    line_ending: T,
+    quoting_style: QuotingStyle,
+    encoding: UEncoding,
+) -> io::Result<()> {
+    for (name, value) in env::vars_os() {
+        w.write_all_os(&escape_name(&name, quoting_style, encoding))?;
+        w.write_all(b"=")?;
+
+        w.write_all_os(&escape_name(&value, quoting_style, encoding))?;
+        write!(w, "{line_ending}")?;
     }
     Ok(())
 }
