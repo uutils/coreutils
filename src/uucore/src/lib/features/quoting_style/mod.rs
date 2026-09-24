@@ -22,6 +22,7 @@ mod literal_quoter;
 mod shell_quoter;
 
 pub use c_quoter::CQuotes;
+use os_display::Quotable;
 
 /// The quoting style to use when escaping a name.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -185,7 +186,7 @@ pub fn quoting_style_from_env() -> Option<QuotingStyle> {
         // Variable is present but invalid, report an error.
         show_error!(
             "{}",
-            translate!("invalid-quoting-style-env-var", "invalid" => style.to_string_lossy())
+            translate!("invalid-quoting-style-env-var", "invalid" => style.to_string_lossy().quote())
         );
         return None;
     };
