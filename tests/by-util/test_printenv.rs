@@ -133,3 +133,148 @@ fn test_non_utf8_env_vars() {
         .succeeds()
         .stdout_contains_bytes(b"NON_UTF8_VAR=hello\x80world");
 }
+
+mod quoting_style {
+    use uutests::new_ucmd;
+
+    use rstest::rstest;
+    use rstest_reuse::{apply, template};
+
+    #[template]
+    #[rstest]
+    #[case::literal("literal", "a b", "c d")]
+    #[case::escape("escape", "a\\ b", "c\\ d")]
+    #[case::shell("shell", "'a b'", "'c d'")]
+    #[case::c("c", "\"a b\"", "\"c d\"")]
+    fn test_qs(#[case] qs: &str, #[case] key: &str, #[case] val: &str) {}
+
+    #[apply(test_qs)]
+    fn test_qs_arg(qs: &str, key: &str, val: &str) {
+        new_ucmd!()
+            .env("a b", "c d")
+            .args(&["--quoting-style", qs])
+            .succeeds()
+            .stdout_contains(format!("{key}={val}"));
+
+        new_ucmd!()
+            .env("a b", "c d")
+            .arg("a b")
+            .args(&["--quoting-style", qs])
+            .succeeds()
+            .stdout_is(format!("{val}\n"));
+    }
+
+    #[cfg(unix)]
+    #[apply(test_qs)]
+    fn test_qs_env(qs: &str, key: &str, val: &str) {
+        new_ucmd!()
+            .env("QUOTING_STYLE", qs)
+            .env("a b", "c d")
+            .terminal_simulation(true)
+            .succeeds()
+            .stdout_contains(format!("{key}={val}"));
+
+        new_ucmd!()
+            .env("QUOTING_STYLE", qs)
+            .env("a b", "c d")
+            .arg("a b")
+            .terminal_simulation(true)
+            .succeeds()
+            .stdout_is(format!("{val}\r\n"));
+    }
+
+    #[template]
+    #[rstest]
+    #[case::locale_c("C", "locale", "'a b'", "'c d'")]
+    #[case::clocale_c("C", "clocale", "\"a b\"", "\"c d\"")]
+    #[case::locale_utf8("en_US.UTF-8", "locale", "\u{2018}a b\u{2019}", "\u{2018}c d\u{2019}")]
+    #[case::clocale_utf8("en_US.UTF-8", "clocale", "\u{2018}a b\u{2019}", "\u{2018}c d\u{2019}")]
+    fn test_qs_locale(
+        #[case] locale: &str,
+        #[case] qs: &str,
+        #[case] key: &str,
+        #[case] val: &str,
+    ) {
+    }
+
+    #[apply(test_qs_locale)]
+    fn test_qs_locale_arg(locale: &str, qs: &str, #[case] key: &str, #[case] val: &str) {
+        new_ucmd!()
+            .env("LC_ALL", locale)
+            .env("a b", "c d")
+            .args(&["--quoting-style", qs])
+            .succeeds()
+            .stdout_contains(format!("{key}={val}"));
+
+        new_ucmd!()
+            .env("LC_ALL", locale)
+            .env("a b", "c d")
+            .arg("a b")
+            .args(&["--quoting-style", qs])
+            .succeeds()
+            .stdout_is(format!("{val}\n"));
+    }
+
+    #[cfg(unix)]
+    #[apply(test_qs_locale)]
+    fn test_qs_locale_env(locale: &str, qs: &str, #[case] key: &str, #[case] val: &str) {
+        new_ucmd!()
+            .env("QUOTING_STYLE", qs)
+            .env("LC_ALL", locale)
+            .env("a b", "c d")
+            .terminal_simulation(true)
+            .succeeds()
+            .stdout_contains(format!("{key}={val}"));
+
+        new_ucmd!()
+            .env("QUOTING_STYLE", qs)
+            .env("LC_ALL", locale)
+            .env("a b", "c d")
+            .arg("a b")
+            .terminal_simulation(true)
+            .succeeds()
+            .stdout_is(format!("{val}\r\n"));
+    }
+
+    // Check that the QUOTING_STYLE environment variable is ignored when
+    // stdout is not a terminal.
+    #[test]
+    fn test_qs_env_no_effect_without_tty() {
+        new_ucmd!()
+            .env("QUOTING_STYLE", "c")
+            .env("a b", "c d")
+            .arg("a b")
+            // .terminal_simulation(false) // stdout is NOT a terminal
+            .succeeds()
+            .stdout_is("c d\n")
+            .stdout_does_not_contain("\"c d\"");
+    }
+
+    // Check that --quoting-style option takes precedence
+    // over the QUOTING_STYLE environment variable
+    #[cfg(unix)]
+    #[test]
+    fn test_qs_arg_precedence() {
+        new_ucmd!()
+            .env("QUOTING_STYLE", "c")
+            .env("a b", "c d")
+            .arg("a b")
+            .arg("--quoting-style=escape")
+            .terminal_simulation(true)
+            .succeeds()
+            .stdout_is("c\\ d\r\n")
+            .stdout_does_not_contain("\"c d\"");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_qs_env_invalid() {
+        new_ucmd!()
+            .env("QUOTING_STYLE", "invalid")
+            .terminal_simulation(true)
+            .succeeds()
+            .stderr_is(
+                "printenv: ignoring invalid value of environment variable QUOTING_STYLE: 'invalid'\r\n",
+            );
+    }
+}
