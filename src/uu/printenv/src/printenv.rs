@@ -4,17 +4,21 @@
 // file that was distributed with this source code.
 
 use std::env;
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 
+use clap::builder::PossibleValue;
 use clap::{Arg, ArgAction, Command};
 
-use uucore::display::{OsWrite, print_all_env_vars};
+use uucore::display::{OsWrite, print_all_env_vars, print_all_env_vars_quoted};
 use uucore::error::UResult;
+use uucore::i18n::get_ctype_encoding;
 use uucore::line_ending::LineEnding;
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+use uucore::quoting_style::{QuotingStyle, escape_name, quoting_style_from_env};
 use uucore::{format_usage, translate};
 
 static OPT_NULL: &str = "null";
-
+static OPT_QUOTING_STYLE: &str = "quoting-style";
 static ARG_VARIABLES: &str = "variables";
 
 #[uucore::main(no_signals)]
@@ -26,14 +30,34 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
+    let maybe_quoting_style = matches
+        .get_one::<String>(OPT_QUOTING_STYLE)
+        .and_then(QuotingStyle::parse)
+        .or_else(|| {
+            std::io::stdout()
+                .is_terminal() // quoting style from env var is only used in TTY
+                .then(quoting_style_from_env)
+                .flatten()
+        });
+
     let separator = LineEnding::from_zero_flag(matches.get_flag(OPT_NULL));
 
     if variables.is_empty() {
-        print_all_env_vars(separator)?;
+        if let Some(quoting_style) = maybe_quoting_style {
+            print_all_env_vars_quoted(
+                std::io::stdout(),
+                separator,
+                quoting_style,
+                get_ctype_encoding(),
+            )?;
+        } else {
+            print_all_env_vars(std::io::stdout(), separator)?;
+        }
         return Ok(());
     }
 
     let mut error_found = false;
+    let ctype = get_ctype_encoding();
     for env_var in variables {
         // we silently ignore a=b as variable but we trigger an error
         if env_var.contains('=') {
@@ -42,6 +66,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
         if let Some(var) = env::var_os(env_var) {
             let mut stdout = std::io::stdout().lock();
+
+            let var = if let Some(qs) = maybe_quoting_style {
+                escape_name(&var, qs, ctype)
+            } else {
+                var
+            };
+
             stdout.write_all_os(&var)?;
             write!(stdout, "{separator}")?;
         } else {
@@ -65,6 +96,23 @@ pub fn uu_app() -> Command {
                 .long(OPT_NULL)
                 .help(translate!("printenv-help-null"))
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(OPT_QUOTING_STYLE)
+                .long(OPT_QUOTING_STYLE)
+                .help(translate!("printenv-help-quoting-style"))
+                .value_parser(ShortcutValueParser::new([
+                    PossibleValue::new("literal"),
+                    PossibleValue::new("locale"),
+                    PossibleValue::new("shell"),
+                    PossibleValue::new("shell-escape"),
+                    PossibleValue::new("shell-always"),
+                    PossibleValue::new("shell-escape-always"),
+                    PossibleValue::new("clocale"),
+                    PossibleValue::new("c"),
+                    PossibleValue::new("c-maybe"),
+                    PossibleValue::new("escape"),
+                ])),
         )
         .arg(
             Arg::new(ARG_VARIABLES)
