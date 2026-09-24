@@ -12,9 +12,19 @@ pub struct CQuotes {
 }
 
 impl CQuotes {
+    pub const SINGLE: Self = Self {
+        opening: '\'',
+        closing: '\'',
+    };
+
     pub const DOUBLE: Self = Self {
         opening: '"',
         closing: '"',
+    };
+
+    pub const LOCALE_UTF8: Self = Self {
+        opening: '\u{2018}',
+        closing: '\u{2019}',
     };
 
     pub(super) fn opening_as_utf8(self, buf: &mut [u8]) -> &[u8] {
