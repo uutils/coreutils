@@ -1627,6 +1627,12 @@ fn test_repeat_keeps_every_set2_character_for_squeeze() {
         .pipe_in("aazz")
         .succeeds()
         .stdout_only("xz");
+}
+
+#[test]
+fn test_repeat_in_set1_padded_by_star_in_set2() {
+    // The star in set2 is padded to the length of the repeat in set1, and
+    // the last of the mappings for `a` wins.
     new_ucmd!()
         .args(&["[a*3]bc", "x[y*]z"])
         .pipe_in("abc")
