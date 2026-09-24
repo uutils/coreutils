@@ -25,14 +25,22 @@
 //! # Ok::<(), std::io::Error>(())
 //! ```
 
-use std::env;
 use std::ffi::OsStr;
-use std::fmt;
+#[cfg(feature = "quoting-style")]
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, BufWriter, Stdout, StdoutLock, Write as _};
 
 // These used to be defined here, but they live in their own crate now.
 pub use os_display::{Quotable, Quoted};
+
+#[cfg(feature = "quoting-style")]
+use crate::{
+    i18n::UEncoding,
+    quoting_style::{QuotingStyle, escape_name},
+};
+#[cfg(feature = "quoting-style")]
+use std::{env, fmt};
 
 /// Print a path (or `OsStr`-like object) directly to stdout, with a trailing newline,
 /// without losing any information if its encoding is invalid.
@@ -120,12 +128,24 @@ impl OsWrite for Box<dyn OsWrite> {
 ///
 /// This function handles non-UTF-8 environment variable names and values correctly by using
 /// raw bytes on Unix systems.
-pub fn print_all_env_vars<T: fmt::Display>(line_ending: T) -> io::Result<()> {
+#[cfg(feature = "quoting-style")]
+pub fn print_all_env_vars<T: fmt::Display>(
+    line_ending: T,
+    quoting_style: Option<QuotingStyle>,
+    encoding: UEncoding,
+) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
     for (name, value) in env::vars_os() {
-        stdout.write_all_os(&name)?;
+        let escape = |s: OsString| {
+            quoting_style
+                .map(|qs| escape_name(&s, qs, encoding))
+                .unwrap_or(s)
+        };
+
+        stdout.write_all_os(&escape(name))?;
         stdout.write_all(b"=")?;
-        stdout.write_all_os(&value)?;
+
+        stdout.write_all_os(&escape(value))?;
         write!(stdout, "{line_ending}")?;
     }
     Ok(())
