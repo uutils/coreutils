@@ -5644,6 +5644,46 @@ fn test_ls_dired_implies_long() {
         .stdout_contains("//DIRED-OPTIONS// --quoting-style");
 }
 
+// Regression test for issue #14775: //DIRED-OPTIONS// must report the
+// canonical name of the quoting style in effect, not a reconstruction from
+// the internal QuotingStyle enum (several distinct style names collapse
+// onto the same enum shape, and the enum's Display impl also appends a
+// -show-control/-always-quote suffix that GNU's --dired trailer never uses).
+#[test]
+fn test_ls_dired_quoting_style_name() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+
+    for style in [
+        "literal",
+        "shell",
+        "shell-always",
+        "shell-escape",
+        "shell-escape-always",
+        "c",
+        "escape",
+        "locale",
+        "clocale",
+    ] {
+        scene
+            .ucmd()
+            .env("LC_ALL", "C")
+            .args(&["-l", "--dired", &format!("--quoting-style={style}"), "dir"])
+            .succeeds()
+            .stdout_contains(format!("//DIRED-OPTIONS// --quoting-style={style}"));
+    }
+
+    for (opt, style) in [("-N", "literal"), ("-Q", "c"), ("-b", "escape")] {
+        scene
+            .ucmd()
+            .env("LC_ALL", "C")
+            .args(&["-l", "--dired", opt, "dir"])
+            .succeeds()
+            .stdout_contains(format!("//DIRED-OPTIONS// --quoting-style={style}"));
+    }
+}
+
 #[test]
 fn test_ls_dired_hyperlink() {
     // we will have link but not the DIRED output
