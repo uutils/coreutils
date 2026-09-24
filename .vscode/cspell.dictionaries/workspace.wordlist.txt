@@ -2,12 +2,6 @@
 cdylib
 doctest
 
-# * crates
-aho-corasick
-ariadne
-blake2b_simd
-rustix
-
 # * uutils project
 uutils
 coreutils
@@ -20,13 +14,9 @@ mkfifo
 urandom
 uchild
 ello
-bstr
-bytecount
-byteorder
 chacha
 chrono
 conv
-corasick
 crossterm
 exacl
 filetime
@@ -35,8 +25,6 @@ fsext
 getopts
 getrandom
 globset
-indicatif
-itertools
 itoa
 iuse
 langid
@@ -47,23 +35,17 @@ multifilereader
 ouroboros
 peekreader
 quickcheck
-rand_chacha
 ringbuffer
 rlimit
 rstest
 smallvec
 tempdir
-tempfile
 termion
 termios
 termsize
 termwidth
-textwrap
-thiserror
 unic
 ureq
-walkdir
-winapi
 xattr
 
 # * rust/rustc
@@ -308,6 +290,7 @@ LPWSTR
 ULONG
 ULONGLONG
 UNLEN
+MSYSTEM
 WCHAR
 WSADATA
 errhandlingapi
@@ -381,6 +364,8 @@ wasm
 wasip
 statx
 Statx
+ucrt
+UCRT
 
 # * stty terminal flags
 brkint

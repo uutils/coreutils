@@ -59,7 +59,7 @@ pub struct Behavior {
     strip: bool,
     strip_program: String,
     create_leading: bool,
-    target_dir: Option<String>,
+    target_dir: Option<OsString>,
     no_target_dir: bool,
     preserve_context: bool,
     context: Option<String>,
@@ -295,7 +295,8 @@ pub fn uu_app() -> Command {
                 .long(OPT_TARGET_DIRECTORY)
                 .help(translate!("install-help-target-directory"))
                 .value_name("DIRECTORY")
-                .value_hint(clap::ValueHint::DirPath),
+                .value_hint(clap::ValueHint::DirPath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(OPT_NO_TARGET_DIRECTORY)
@@ -391,7 +392,7 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
 
     let backup_mode =
         backup_control::determine_backup_mode(std::env::var("VERSION_CONTROL").ok(), matches)?;
-    let target_dir = matches.get_one::<String>(OPT_TARGET_DIRECTORY).cloned();
+    let target_dir = matches.get_one::<OsString>(OPT_TARGET_DIRECTORY).cloned();
     let no_target_dir = matches.get_flag(OPT_NO_TARGET_DIRECTORY);
     if target_dir.is_some() && no_target_dir {
         show_error!("{}", translate!("install-error-mutually-exclusive-target"));
@@ -1353,7 +1354,6 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     false
 }
 
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 /// Sets the `SELinux` security context for install's -Z flag behavior.
 ///
 /// This function implements the specific behavior needed for install's -Z flag,
@@ -1367,6 +1367,7 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
 /// # Returns
 ///
 /// Returns `Ok(())` if the context was successfully set, or a `SeLinuxError` if the operation failed.
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 pub fn set_selinux_default_context(path: &Path) -> Result<(), SeLinuxError> {
     if !is_selinux_enabled() {
         return Err(SeLinuxError::SELinuxNotEnabled);
@@ -1387,7 +1388,6 @@ pub fn set_selinux_default_context(path: &Path) -> Result<(), SeLinuxError> {
     }
 }
 
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 /// Gets the default `SELinux` context for a path based on the system's security policy.
 ///
 /// This function attempts to determine what the "correct" `SELinux` context should be
@@ -1407,6 +1407,7 @@ pub fn set_selinux_default_context(path: &Path) -> Result<(), SeLinuxError> {
 /// * `Ok(Some(String))` - The default context string if successfully determined
 /// * `Ok(None)` - No default context could be determined
 /// * `Err(SeLinuxError)` - An error occurred while determining the context
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn get_default_context_for_path(path: &Path) -> Result<Option<String>, SeLinuxError> {
     if !is_selinux_enabled() {
         return Err(SeLinuxError::SELinuxNotEnabled);
@@ -1442,12 +1443,12 @@ fn get_default_context_for_path(path: &Path) -> Result<Option<String>, SeLinuxEr
     Ok(None)
 }
 
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 /// Derives an appropriate `SELinux` context based on a parent directory context.
 ///
 /// This is a heuristic function that attempts to generate an appropriate
 /// context for a file based on its parent directory's context and file type.
 /// The goal is to mimic what `restorecon` would do based on `SELinux` policy.
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn derive_context_from_parent(parent_context: &str) -> String {
     // Parse the parent context (format: user:role:type:level)
     let parts: Vec<&str> = parent_context.split(':').collect();
@@ -1475,11 +1476,11 @@ fn derive_context_from_parent(parent_context: &str) -> String {
     }
 }
 
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 /// Helper function to collect paths that need `SELinux` context setting.
 ///
 /// Traverses from the given starting path up to existing parent directories.
 /// Returns a vector of paths in reverse order (from parent to child).
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn collect_paths_for_context_setting(starting_path: &Path) -> Vec<&Path> {
     let mut paths: Vec<&Path> = starting_path
         .ancestors()
@@ -1489,7 +1490,6 @@ fn collect_paths_for_context_setting(starting_path: &Path) -> Vec<&Path> {
     paths
 }
 
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 /// Sets the `SELinux` security context for a directory hierarchy.
 ///
 /// This function traverses from the given starting path up to existing parent directories
@@ -1523,13 +1523,13 @@ fn collect_paths_for_context_setting(starting_path: &Path) -> Vec<&Path> {
 /// // let context = String::from("user_u:object_r:tmp_t:s0");
 /// // set_selinux_context_for_directories(Path::new("/tmp/new/deep/dir"), Some(&context));
 /// ```
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn set_selinux_context_for_directories(target_path: &Path, context: Option<&String>) {
     for path in collect_paths_for_context_setting(target_path) {
         show_if_err!(set_selinux_security_context(path, context));
     }
 }
 
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 /// Sets `SELinux` context for created directories using install's -Z default behavior.
 ///
 /// Similar to `set_selinux_context_for_directories` but uses install's
@@ -1539,6 +1539,7 @@ fn set_selinux_context_for_directories(target_path: &Path, context: Option<&Stri
 ///
 /// * `target_path` - The target path (typically the deepest directory in a hierarchy)
 /// * `context` - Optional `SELinux` context string to set. If None, uses install's default derivation.
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 pub fn set_selinux_context_for_directories_install(target_path: &Path, context: Option<&String>) {
     if context.is_some() {
         // Use the standard function for explicit contexts

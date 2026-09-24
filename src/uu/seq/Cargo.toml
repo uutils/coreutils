@@ -1,4 +1,5 @@
-# spell-checker:ignore bigdecimal extendedbigdecimal
+# spell-checker:ignore extendedbigdecimal
+
 [package]
 name = "uu_seq"
 description = "seq ~ (uutils) display a sequence of numbers"

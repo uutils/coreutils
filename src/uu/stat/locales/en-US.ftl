@@ -17,6 +17,7 @@ stat-after-help = Valid format sequences for files (without `--file-system`):
     -`%i`: inode number
     -`%m`: mount point
     -`%n`: file name
+    -`%Qn`: quoted file name
     -`%N`: quoted file name with dereference (follow) if symbolic link
     -`%o`: optimal I/O transfer size hint
     -`%s`: total size, in bytes
@@ -43,6 +44,7 @@ stat-after-help = Valid format sequences for files (without `--file-system`):
     -`%i`: file system ID in hex
     -`%l`: maximum length of filenames
     -`%n`: file name
+    -`%Qn`: quoted file name
     -`%s`: block size (for faster transfers)
     -`%S`: fundamental block size (for block counts)
     -`%t`: file system type in hex
@@ -54,7 +56,6 @@ stat-after-help = Valid format sequences for files (without `--file-system`):
 
 ## Error messages
 
-stat-error-invalid-quoting-style = Invalid quoting style: {$style}
 stat-warning-invalid-env-quoting-style = ignoring invalid value of environment variable QUOTING_STYLE: '{$style}'
 stat-error-invalid-directive = {$directive}: invalid directive
 stat-error-cannot-read-filesystem = cannot read table of mounted file systems: {$error}

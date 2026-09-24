@@ -1,4 +1,5 @@
 # spell-checker:ignore (libs) kqueue
+
 [package]
 name = "uu_tail"
 description = "tail ~ (uutils) display the last lines of input"

@@ -6219,9 +6219,9 @@ fn test_cp_no_dereference_attributes_only_with_symlink() {
         "file2 content does not match expected"
     );
 }
+/// contains the test for cp when the source and destination points to the same file
 #[cfg(all(unix, not(target_os = "android")))]
 #[cfg(test)]
-/// contains the test for cp when the source and destination points to the same file
 mod same_file {
 
     use std::os::unix::fs::MetadataExt;
