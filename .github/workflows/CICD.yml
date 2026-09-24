@@ -725,9 +725,14 @@ jobs:
       uses: actions/upload-artifact@v7
       with:
         name: latest-commit-${{ matrix.job.target }}
-        path: |
-          ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
-          docs.tar.zst
+        path: ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
+        if-no-files-found: ignore
+    - name: Upload docs artifact
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.job.target == 'x86_64-unknown-linux-gnu'
+      uses: actions/upload-artifact@v7
+      with:
+        name: latest-commit-docs
+        path: docs.tar.zst
         if-no-files-found: ignore
 
   publish-latest-commit:
@@ -747,20 +752,19 @@ jobs:
         pattern: latest-commit-*
         path: publish
         merge-multiple: true
-    - name: Recreate latest-commit release
-      continue-on-error: true
+    - name: Publish latest-commit release
       shell: bash
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         if [ -z "$(ls -A publish 2>/dev/null)" ]; then
-          echo "::warning ::No package artifacts found to publish."
-          exit 0
+          echo "::error ::No package artifacts found to publish."
+          exit 1
         fi
-        gh release delete latest-commit --cleanup-tag --yes || true
         gh release create latest-commit --prerelease \
-          --title "latest-commit" --notes "commit: ${{ github.sha }}" \
-          publish/* || echo "::warning ::Failed to update latest-commit release (repository may enforce immutable releases)."
+          --title "latest-commit" --notes "commit: ${{ github.sha }}" 2>/dev/null || true
+        gh release upload latest-commit --clobber publish/*
+
 
   coverage:
     name: Code Coverage

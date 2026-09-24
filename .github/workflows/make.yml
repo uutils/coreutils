@@ -344,7 +344,7 @@ jobs:
         ! test -f /tmp/c/usr/local/share/fish/vendor_completions.d/uu-cat.fish
         # package
         mv target/release-small/deps/stdbuf.dll -t /tmp/c/usr/local/bin
-        bsdtar -caf individual-x86_64-pc-cygwin.tar.zst -C /tmp/c/usr/local bin
+        bsdtar -caf x86_64-pc-cygwin.tar.zst -C /tmp/c/usr/local bin
       env:
         CHERE_INVOKING: 1
         OPENSSL_NO_VENDOR: "1"
@@ -354,7 +354,7 @@ jobs:
       uses: actions/upload-artifact@v7
       with:
         name: latest-commit-individual-x86_64-pc-cygwin
-        path: individual-x86_64-pc-cygwin.tar.zst
+        path: x86_64-pc-cygwin.tar.zst
     - name: Publish
       uses: softprops/action-gh-release@v3
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -364,7 +364,7 @@ jobs:
         draft: false
         prerelease: true
         files: |
-          individual-x86_64-pc-cygwin.tar.zst
+          x86_64-pc-cygwin.tar.zst
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: "`make install` (MinGW UCRT)"
