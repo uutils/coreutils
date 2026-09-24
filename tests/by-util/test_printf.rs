@@ -851,6 +851,18 @@ fn test_extreme_exponent_does_not_overflow() {
             .fails_with_code(1)
             .stderr_contains("Numerical result out of range")
             .stdout_is(zero);
+
+        // Same for hexadecimal floats whose binary exponent fits in an i64.
+        new_ucmd!()
+            .args(&[spec, "0x1p9223372036854775807"])
+            .fails_with_code(1)
+            .stderr_contains("Numerical result out of range")
+            .stdout_contains("inf");
+        new_ucmd!()
+            .args(&[spec, "0x1p-9223372036854775808"])
+            .fails_with_code(1)
+            .stderr_contains("Numerical result out of range")
+            .stdout_is(zero);
     }
 }
 

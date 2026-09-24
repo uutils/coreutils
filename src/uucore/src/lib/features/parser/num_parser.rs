@@ -442,16 +442,17 @@ fn construct_extended_big_decimal(
         let bd = BigDecimal::from_bigint(signed_digits, 0)
             / BigDecimal::from_bigint(BigInt::from(16).pow(scale as u32), 0);
 
-        // powi "only" supports i64 values. Just overflow/underflow if the value provided
-        // is > 2**64 or < 2**-64.
+        // powi "only" supports i64 values, and even within that range a large exponent
+        // makes the BigDecimal scale overflow i64. Like the decimal case above, treat
+        // values whose decimal exponent cannot fit in an i32 as overflow/underflow:
+        // since 2**4 > 10, that is guaranteed once |exponent| > 4 * i32::MAX.
         let exponent = exponent
             .to_i64()
+            .filter(|e| e.unsigned_abs() <= 4 * i32::MAX as u64)
             .ok_or_else(|| make_error(exponent.is_positive(), negative))?;
 
         // Confusingly, exponent is in base 2 for hex floating point numbers.
         let base: BigDecimal = 2.into();
-        // Note: We cannot overflow/underflow BigDecimal here, as we will not be able to reach the
-        // maximum/minimum scale (i64 range).
         let pow2 = base.powi(exponent);
 
         bd * pow2
@@ -1003,6 +1004,21 @@ mod tests {
         ));
         assert!(matches!(
             ExtendedBigDecimal::extended_parse(&format!("-0x0.100p-{}", u64::MAX as u128 + 1)),
+            Err(ExtendedParserError::Underflow(
+                ExtendedBigDecimal::MinusZero
+            ))
+        ));
+        // Exponents that fit in an i64 but are still far too large for BigDecimal.
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse(&format!("0x1p{}", i64::MAX)),
+            Err(ExtendedParserError::Overflow(ExtendedBigDecimal::Infinity))
+        ));
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse(&format!("0x1p{}", i64::MIN)),
+            Err(ExtendedParserError::Underflow(ebd)) if ebd == ExtendedBigDecimal::zero()
+        ));
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse(&format!("-0x1p{}", i64::MIN)),
             Err(ExtendedParserError::Underflow(
                 ExtendedBigDecimal::MinusZero
             ))
