@@ -198,6 +198,10 @@ fn test_force_replace_same_inode_leaves_no_temp_file() {
 /// follow it the same way the first create attempt does.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: creating a link inside a symlinked directory is denied"
+)]
 fn test_force_replace_in_symlinked_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("real");
