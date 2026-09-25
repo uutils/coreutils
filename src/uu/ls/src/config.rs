@@ -539,11 +539,11 @@ fn match_quoting_style_name(
             show_control: false,
         }),
         "shell" => QuotingStyleSpec::new(QuotingStyle::SHELL),
-        "shell-always" => QuotingStyleSpec::new(QuotingStyle::SHELL_QUOTE),
+        "shell-always" => QuotingStyleSpec::new(QuotingStyle::SHELL_ALWAYS),
         "shell-escape" => QuotingStyleSpec::new(QuotingStyle::SHELL_ESCAPE),
-        "shell-escape-always" => QuotingStyleSpec::new(QuotingStyle::SHELL_ESCAPE_QUOTE),
+        "shell-escape-always" => QuotingStyleSpec::new(QuotingStyle::SHELL_ESCAPE_ALWAYS),
         "c" => QuotingStyleSpec::new(QuotingStyle::C_DOUBLE),
-        "escape" => QuotingStyleSpec::new(QuotingStyle::C_NO_QUOTES),
+        "escape" => QuotingStyleSpec::new(QuotingStyle::Escape),
         "locale" => QuotingStyleSpec {
             style: QuotingStyle::Literal {
                 show_control: false,
@@ -591,7 +591,7 @@ fn extract_quoting_style(
     } else if options.get_flag(options::quoting::LITERAL) {
         (QuotingStyle::Literal { show_control }, None)
     } else if options.get_flag(options::quoting::ESCAPE) {
-        (QuotingStyle::C_NO_QUOTES, None)
+        (QuotingStyle::Escape, None)
     } else if options.get_flag(options::quoting::C) {
         (QuotingStyle::C_DOUBLE, None)
     } else {
@@ -614,7 +614,7 @@ fn extract_quoting_style(
         }
 
         match mode {
-            ProgramMode::Dir | ProgramMode::Vdir => (QuotingStyle::C_NO_QUOTES, None),
+            ProgramMode::Dir | ProgramMode::Vdir => (QuotingStyle::Escape, None),
             ProgramMode::Ls if stdout().is_terminal() => {
                 (QuotingStyle::SHELL_ESCAPE.show_control(show_control), None)
             }

@@ -779,7 +779,7 @@ fn files0_iter_file<'a>(path: &Path) -> UResult<impl Iterator<Item = InputIterIt
             translate!("wc-error-cannot-open-for-reading",
                 "path" => quoting_style::locale_aware_escape_name(
                     path.as_os_str(),
-                    QuotingStyle::SHELL_ESCAPE_QUOTE,
+                    QuotingStyle::SHELL_ESCAPE_ALWAYS,
                 )
                 .into_string()
                 .expect("All escaped names with the escaping option return valid strings.")

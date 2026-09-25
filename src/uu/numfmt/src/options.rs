@@ -11,7 +11,7 @@ use std::ops::Range as ByteRange;
 use std::str::{CharIndices, FromStr};
 
 use crate::units::Unit;
-use uucore::quoting_style::{CQuotes, QuotingStyle, locale_aware_escape_name};
+use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use uucore::ranges::Range;
 use uucore::translate;
 
@@ -30,14 +30,9 @@ fn at(iter: &mut Peekable<CharIndices<'_>>, s: &str) -> ByteRange<usize> {
 /// control characters written as C escapes. Without this a format holding a
 /// newline or a tab would split the message across lines or move the cursor.
 fn quote_format(s: &str) -> String {
-    locale_aware_escape_name(
-        OsStr::new(s),
-        QuotingStyle::C {
-            quotes: Some(CQuotes::SINGLE),
-        },
-    )
-    .to_string_lossy()
-    .into_owned()
+    locale_aware_escape_name(OsStr::new(s), QuotingStyle::C_SINGLE)
+        .to_string_lossy()
+        .into_owned()
 }
 
 pub const DEBUG: &str = "debug";
