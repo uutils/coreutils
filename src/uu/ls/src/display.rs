@@ -190,7 +190,7 @@ fn escape_name_with_locale(name: &OsStr, config: &Config) -> OsString {
 
     let escaped = locale_aware_escape_name(name, style);
 
-    let escaped = if comma_separated && style == QuotingStyle::C_NO_QUOTES {
+    let escaped = if comma_separated && style == QuotingStyle::Escape {
         escaped.to_string_lossy().replace(',', "\\,").into()
     } else {
         escaped

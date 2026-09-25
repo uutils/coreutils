@@ -209,7 +209,7 @@ fn extract_value<T: Default>(
         Ok(v) => v,
         Err(e) => {
             set_exit_code(1);
-            let input = locale_aware_escape_name(OsStr::new(input), QuotingStyle::C_NO_QUOTES);
+            let input = locale_aware_escape_name(OsStr::new(input), QuotingStyle::Escape);
             match e {
                 ExtendedParserError::Overflow(v) | ExtendedParserError::Underflow(v) => {
                     show_error!("{}: Numerical result out of range", input.quote());
