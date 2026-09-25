@@ -54,3 +54,13 @@ size-diag-help-syntax = une taille est un nombre suivi d'une unité facultative 
 # compte, donc chaque utilitaire le dit avec ses propres mots.
 range-diag-label-too-large = ce nombre est trop grand
 range-diag-label-inverted = cet intervalle se termine avant de commencer
+
+# Messages d'analyse regex (expr, grep, sed, ...)
+regex-error-unmatched-opening-parenthesis = Parenthèse ouvrante ( ou \( non appariée
+regex-error-unmatched-closing-parenthesis = Parenthèse fermante ) ou \) non appariée
+regex-error-trailing-backslash = Barre oblique inverse en fin
+regex-error-unmatched-opening-brace = Accolade ouvrante {"\\{"} non appariée
+regex-error-invalid-bracket-content = Contenu invalide de {"\\{\\}"}
+regex-error-too-big-range-quantifier-index = Expression régulière trop grande
+regex-error-invalid-character-class-name = Nom de classe de caractères invalide
+regex-error-compilation-failed = Expression régulière invalide : { $error }
