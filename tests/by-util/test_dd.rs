@@ -2402,7 +2402,7 @@ fn test_stats_are_reported_when_a_write_fails() {
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_block_stats_are_reported_when_a_write_fails() {
-    use rustix::process::Resource;
+    use rlimit::Resource;
 
     const CAP: u64 = 200 * 1024;
 
@@ -2412,7 +2412,7 @@ fn test_block_stats_are_reported_when_a_write_fails() {
     let result = ucmd
         .args(&["conv=block", "cbs=1M", "obs=64K", "of=capped.bin"])
         .pipe_in("x\n")
-        .limit(Resource::Fsize, CAP, CAP)
+        .limit(Resource::FSIZE, CAP, CAP)
         .fails();
 
     // Three 64 KiB pieces are written in full, and the fourth one is cut short.
