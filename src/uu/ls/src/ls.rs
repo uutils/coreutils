@@ -1399,7 +1399,7 @@ fn enter_directory<O: LsOutput>(
         path: PathBuf,
         command_line: bool,
         is_first: bool,
-        id: DirId,
+        id: Option<DirId>, // None on the base case.
     }
 
     /// Controls inode freeing precisely in the loop, so we correctly thread
@@ -1414,7 +1414,7 @@ fn enter_directory<O: LsOutput>(
         path: path_data.path().to_path_buf(),
         command_line: path_data.command_line,
         is_first: true,
-        id: id.unwrap_or_default(),
+        id: None,
     }));
     let mut initial_read_dir = Some(read_dir);
 
@@ -1428,14 +1428,16 @@ fn enter_directory<O: LsOutput>(
         };
 
         // Check for duplicates at entry time, so we can reliably track cycles.
-        if !entry.is_first && !listed_ancestors.insert(entry.id) {
+        if !entry.is_first && entry.id.is_some_and(|id| !listed_ancestors.insert(id)) {
             output.flush()?;
             show!(LsError::AlreadyListedError(entry.path.clone()));
             continue;
         }
 
         // Register clean-up now.
-        stack.push(StackItem::Exit(entry.id));
+        if let Some(id) = entry.id {
+            stack.push(StackItem::Exit(id));
+        }
 
         let path_data = PathData::new(
             entry.path.as_path().into(),
@@ -1509,10 +1511,15 @@ fn enter_directory<O: LsOutput>(
                     path: child_path,
                     command_line: child_command_line,
                     is_first: false,
-                    id: DirId::new(&info),
+                    id: Some(DirId::new(&info)),
                 }));
             }
         }
+    }
+
+    // Pop base case
+    if let Some(ref id) = id {
+        listed_ancestors.remove(id);
     }
 
     Ok(())
