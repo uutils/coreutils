@@ -25,6 +25,13 @@ pub use c_quoter::CQuotes;
 /// The quoting style to use when escaping a name.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum QuotingStyle {
+    /// Do not escape the string.
+    /// Used in, e.g., `ls --literal`.
+    Literal {
+        /// Whether to show control and non-unicode characters, or replace them with `?`.
+        show_control: bool,
+    },
+
     /// Escape the name as a shell string.
     /// Used in, e.g., `ls --quoting-style=shell`.
     Shell {
@@ -42,20 +49,19 @@ pub enum QuotingStyle {
     /// Escape the name as a C string.
     /// Used in, e.g., `ls --quote-name`.
     C {
-        /// The type of quotes to use.
-        quotes: Option<CQuotes>,
+        quotes: CQuotes,
     },
 
-    /// Do not escape the string.
-    /// Used in, e.g., `ls --literal`.
-    Literal {
-        /// Whether to show control and non-unicode characters, or replace them with `?`.
-        show_control: bool,
-    },
+    /// Corresponds to --quoting-style=escape
+    Escape,
 }
 
 /// Provide sane defaults for quoting styles.
 impl QuotingStyle {
+    pub const LITERAL: Self = Self::Literal {
+        show_control: false,
+    };
+
     pub const SHELL: Self = Self::Shell {
         escape: false,
         always_quote: false,
@@ -68,22 +74,24 @@ impl QuotingStyle {
         show_control: false,
     };
 
-    pub const SHELL_QUOTE: Self = Self::Shell {
+    pub const SHELL_ALWAYS: Self = Self::Shell {
         escape: false,
         always_quote: true,
         show_control: false,
     };
 
-    pub const SHELL_ESCAPE_QUOTE: Self = Self::Shell {
+    pub const SHELL_ESCAPE_ALWAYS: Self = Self::Shell {
         escape: true,
         always_quote: true,
         show_control: false,
     };
 
-    pub const C_NO_QUOTES: Self = Self::C { quotes: None };
-
     pub const C_DOUBLE: Self = Self::C {
-        quotes: Some(CQuotes::DOUBLE),
+        quotes: CQuotes::DOUBLE,
+    };
+
+    pub const C_SINGLE: Self = Self::C {
+        quotes: CQuotes::SINGLE,
     };
 
     /// Set the `show_control` field of the quoting style.
@@ -101,8 +109,38 @@ impl QuotingStyle {
                 show_control,
             },
             Literal { .. } => Literal { show_control },
-            C { .. } => self,
+            C { .. } | Escape => self,
         }
+    }
+
+    /// Set the `always_quote` field of the quoting style.
+    /// Note: this is a no-op for all variants except `Shell`.
+    pub fn always_quote(self, always_quote: bool) -> Self {
+        match self {
+            Self::Shell {
+                escape,
+                show_control,
+                ..
+            } => Self::Shell {
+                escape,
+                show_control,
+                always_quote,
+            },
+            _ => self,
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "literal" => Self::LITERAL,
+            "shell" => Self::SHELL,
+            "shell-always" => Self::SHELL_ALWAYS,
+            "shell-escape" => Self::SHELL_ESCAPE,
+            "shell-escape-always" => Self::SHELL_ESCAPE_ALWAYS,
+            "c" => Self::C_DOUBLE,
+            "escape" => Self::Escape,
+            _ => return None,
+        })
     }
 }
 
@@ -122,6 +160,7 @@ impl fmt::Display for QuotingStyle {
                 )
             }
             Self::C { .. } => f.write_str("c"),
+            Self::Escape => f.write_str("escape"),
             Self::Literal { .. } => f.write_str("literal"),
         }
     }
@@ -164,7 +203,8 @@ fn escape_name_inner(
 
     let mut quoter: Box<dyn Quoter> = match style {
         QuotingStyle::Literal { .. } => Box::new(LiteralQuoter::new(name.len())),
-        QuotingStyle::C { quotes } => Box::new(CQuoter::new(quotes, dirname, name.len())),
+        QuotingStyle::C { quotes } => Box::new(CQuoter::new(Some(quotes), dirname, name.len())),
+        QuotingStyle::Escape => Box::new(CQuoter::new(None, dirname, name.len())),
         QuotingStyle::Shell {
             escape: true,
             always_quote,
@@ -260,14 +300,14 @@ mod tests {
                 show_control: false,
             },
             "literal-show" => QuotingStyle::Literal { show_control: true },
-            "escape" => QuotingStyle::C_NO_QUOTES,
+            "escape" => QuotingStyle::Escape,
             "c" => QuotingStyle::C_DOUBLE,
             "shell" => QuotingStyle::SHELL,
             "shell-show" => QuotingStyle::SHELL.show_control(true),
-            "shell-always" => QuotingStyle::SHELL_QUOTE,
-            "shell-always-show" => QuotingStyle::SHELL_QUOTE.show_control(true),
+            "shell-always" => QuotingStyle::SHELL_ALWAYS,
+            "shell-always-show" => QuotingStyle::SHELL_ALWAYS.show_control(true),
             "shell-escape" => QuotingStyle::SHELL_ESCAPE,
-            "shell-escape-always" => QuotingStyle::SHELL_ESCAPE_QUOTE,
+            "shell-escape-always" => QuotingStyle::SHELL_ESCAPE_ALWAYS,
             _ => panic!("Invalid name!"),
         }
     }
@@ -1060,6 +1100,9 @@ mod tests {
 
         let style = QuotingStyle::C_DOUBLE;
         assert_eq!(format!("{style}"), "c");
+
+        let style = QuotingStyle::Escape;
+        assert_eq!(format!("{style}"), "escape");
 
         let style = QuotingStyle::Literal {
             show_control: false,
