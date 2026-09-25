@@ -97,6 +97,10 @@ pub enum SuffixError {
     /// Suffix is not large enough to split into specified chunks
     #[error("{}", translate!("split-error-suffix-too-small", "length" => .0))]
     TooSmall(usize),
+
+    /// Suffix start value has more digits than the suffix length allows
+    #[error("{}", translate!("split-error-numerical-suffix-start-too-large"))]
+    StartTooLarge,
 }
 
 impl Suffix {
@@ -213,6 +217,10 @@ impl Suffix {
                 }
             }
 
+            if (start as u64) >= chunks && num_digits(start as u64, stype.radix()) > length {
+                return Err(SuffixError::StartTooLarge);
+            }
+
             if length < required_length {
                 return Err(SuffixError::TooSmall(required_length));
             }
@@ -242,6 +250,15 @@ impl Suffix {
 
         Ok(result)
     }
+}
+
+fn num_digits(mut n: u64, radix: u8) -> usize {
+    let mut digits = 1;
+    while n >= radix as u64 {
+        n /= radix as u64;
+        digits += 1;
+    }
+    digits
 }
 
 /// Compute filenames from a given index.

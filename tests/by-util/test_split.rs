@@ -926,9 +926,8 @@ fn test_suffix_length_zero() {
         .stderr_only("split: output file suffixes exhausted\n");
 }
 
-// A suffix start value near `u64::MAX` must not overflow the auto-width
-// calculation; it should be reported as an error rather than aborting.
 #[test]
+#[cfg(target_pointer_width = "64")]
 fn test_numeric_suffix_start_overflow() {
     new_ucmd!()
         .args(&[
@@ -938,15 +937,16 @@ fn test_numeric_suffix_start_overflow() {
             "/dev/null",
         ])
         .fails()
-        .stderr_contains("suffix length needs to be at least");
+        .usage_error("numerical suffix start value is too large for the suffix length");
 }
 
 #[test]
+#[cfg(target_pointer_width = "64")]
 fn test_hex_suffix_start_overflow() {
     new_ucmd!()
         .args(&["-n", "5", "--hex-suffixes=ffffffffffffffff", "/dev/null"])
         .fails()
-        .stderr_contains("suffix length needs to be at least");
+        .usage_error("numerical suffix start value is too large for the suffix length");
 }
 
 #[test]
