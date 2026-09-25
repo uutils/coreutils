@@ -1160,7 +1160,7 @@ pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> 
             "no unique temporary name available in the destination directory",
         ))
     }
-    #[cfg(not(all(unix, not(target_os = "redox"))))]
+    #[cfg(any(windows, target_os = "redox", target_os = "wasi"))]
     {
         // No atomic replace available here; this leaves the window described
         // above, accepted only where the platform offers nothing better.
@@ -1187,7 +1187,7 @@ fn link_at<Fd: AsFd>(target: &Path, dir: Fd, name: &OsStr, symbolic: bool) -> IO
     }
 }
 
-#[cfg(not(all(unix, not(target_os = "redox"))))]
+#[cfg(any(windows, target_os = "redox", target_os = "wasi"))]
 fn create_link_std(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> {
     if !symbolic {
         return fs::hard_link(target, dest);
@@ -1200,7 +1200,24 @@ fn create_link_std(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> {
             std::os::windows::fs::symlink_file(target, dest)
         }
     }
-    #[cfg(not(windows))]
+    // TODO: remove once https://github.com/bytecodealliance/rustix/pull/1638 is released
+    #[cfg(target_os = "redox")]
+    {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+
+        let target = CString::new(target.as_os_str().as_bytes())?;
+        let dest = CString::new(dest.as_os_str().as_bytes())?;
+
+        let result = unsafe { libc::symlinkat(target.as_ptr(), libc::AT_FDCWD, dest.as_ptr()) };
+
+        if result == 0 {
+            Ok(())
+        } else {
+            Err(Error::last_os_error())
+        }
+    }
+    #[cfg(target_os = "wasi")]
     {
         rustix::fs::symlinkat(target, rustix::fs::CWD, dest).map_err(Into::into)
     }
