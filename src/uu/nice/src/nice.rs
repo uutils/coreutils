@@ -21,7 +21,7 @@ use windows_sys::Win32::System::Threading::{
 
 use uucore::translate;
 use uucore::{
-    error::{UResult, UUsageError, set_exit_code},
+    error::{UResult, UUsageError, set_exit_code, strip_errno},
     format_usage, show_error,
 };
 
@@ -148,7 +148,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // will produce an exit code of 101 when it panics.
     #[cfg(unix)]
     if let Err(e) = rustix::process::setpriority_process(None, new_niceness) {
-        let warning_msg = translate!("nice-warning-setpriority", "util_name" => "nice", "error" => uucore::error::strip_errno(&e.into()) );
+        let warning_msg = translate!("nice-warning-setpriority", "util_name" => "nice", "error" => strip_errno(&e.into()) );
 
         if writeln!(std::io::stderr(), "{warning_msg}").is_err() {
             set_exit_code(125);
