@@ -1514,8 +1514,8 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
         Sort::Name => entries.sort_unstable_by(name_cmp),
         Sort::Version => entries.sort_unstable_by(|a, b| {
             version_cmp(
-                os_str_as_bytes_lossy(a.file_name()).as_ref(),
-                os_str_as_bytes_lossy(b.file_name()).as_ref(),
+                os_str_as_bytes_lossy(a.display_name()).as_ref(),
+                os_str_as_bytes_lossy(b.display_name()).as_ref(),
             )
             .then(a.path().cmp(b.path()))
         }),
