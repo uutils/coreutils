@@ -19,9 +19,9 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs", "mode"] }
 fluent = { workspace = true }
 nix = { workspace = true, features = ["fs"] }
+uucore = { workspace = true, features = ["fs", "mode"] }
 
 [features]
 diagnostics = ["uucore/diagnostics"]
