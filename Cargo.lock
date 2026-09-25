@@ -1845,8 +1845,7 @@ dependencies = [
 [[package]]
 name = "libc"
 version = "0.2.189"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
+source = "git+https://github.com/rust-lang/libc.git?branch=libc-0.2#b29beb056cb7cea51dd1b9e68342e30a956951a9"
 
 [[package]]
 name = "libloading"
