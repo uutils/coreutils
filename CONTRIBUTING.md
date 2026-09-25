@@ -101,7 +101,7 @@ We can't fix bugs we don't know about, so good issues are super helpful! Here
 are some tips for writing good issues:
 
 - Confirm the bug is in coreutils; some tools (e.g., `find`, `sed`) are maintained in separate repositories under the uutils project.
-- If you find a bug, make sure it's still a problem on the [`main` branch](https://github.com/uutils/coreutils/releases/tag/latest-commit).
+- If you find a bug, make sure it's still a problem on the [`main` branch](https://github.com/uutils/coreutils/tree/main), ideally using a binary from the newest [`main-*` prerelease](https://github.com/uutils/coreutils/releases?q=is%3Aprerelease+tag%3Amain-).
 - Search through the existing issues to see whether it has already been
   reported.
 - Make sure to include all relevant information, such as:

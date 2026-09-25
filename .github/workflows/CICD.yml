@@ -351,12 +351,60 @@ jobs:
         flags: nightly,${{ matrix.job.os }}
         fail_ci_if_error: false
 
+  prepare-main-release:
+    name: Prepare main release
+    runs-on: ubuntu-latest
+    concurrency:
+      group: prepare-main-release-${{ github.sha }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    outputs:
+      publish: ${{ steps.release.outputs.publish }}
+    steps:
+    - uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+    - name: Prepare immutable release
+      id: release
+      shell: bash
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        RELEASE_TAG: main-${{ github.sha }}
+      run: |
+        if [ "${{ github.event_name }}" != push ] || [ "${{ github.ref }}" != refs/heads/main ]; then
+          echo "publish=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        verify_tag() {
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq .sha)" = "$GITHUB_SHA"
+        }
+        if state=$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft'); then
+          if [ "$state" = false ]; then
+            gh release view "$RELEASE_TAG" --json tagName,isDraft,isImmutable,isPrerelease,targetCommitish,assets > release.json
+            python3 util/verify_release.py release.json --sha "$GITHUB_SHA" --published
+            verify_tag
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          gh release delete "$RELEASE_TAG" --yes --cleanup-tag
+        fi
+        gh release create "$RELEASE_TAG" \
+          --draft \
+          --prerelease \
+          --latest=false \
+          --target "$GITHUB_SHA" \
+          --title "main-${GITHUB_SHA:0:12}" \
+          --notes "Source commit: $GITHUB_SHA"
+        verify_tag
+        echo "publish=true" >> "$GITHUB_OUTPUT"
+
   build:
     permissions:
       contents: write # to create GitHub release (softprops/action-gh-release)
 
     name: Build
-    needs: [ min_version, deps ]
+    needs: [ min_version, deps, prepare-main-release ]
     runs-on: ${{ matrix.job.os }}
     timeout-minutes: 90
     env:
@@ -709,61 +757,84 @@ jobs:
         done
         rm share/zsh/site-functions/_[ # not supported
         tar --zstd -cf docs.tar.zst share
-    - name: Publish
+    - name: Publish tagged release
       uses: softprops/action-gh-release@v3
       if: steps.vars.outputs.DEPLOY && matrix.job.skip-publish != true && matrix.job.check-only != true
       with:
         draft: true
-        overwrite_files: true
-        files: |
-          ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
-          docs.tar.zst
+        fail_on_unmatched_files: true
+        files: ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    - name: Upload package artifact
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.job.skip-publish != true && matrix.job.check-only != true
-      uses: actions/upload-artifact@v7
+    - name: Upload docs to tagged release
+      uses: softprops/action-gh-release@v3
+      if: steps.vars.outputs.DEPLOY && matrix.job.target == 'x86_64-unknown-linux-gnu' && matrix.job.features == 'feat_os_unix,openssl,uudoc'
       with:
-        name: latest-commit-${{ matrix.job.target }}
-        path: ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
-        if-no-files-found: ignore
-    - name: Upload docs artifact
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.job.target == 'x86_64-unknown-linux-gnu'
-      uses: actions/upload-artifact@v7
+        draft: true
+        fail_on_unmatched_files: true
+        files: docs.tar.zst
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Upload package to main release
+      uses: softprops/action-gh-release@v3
+      if: needs.prepare-main-release.outputs.publish == 'true' && matrix.job.skip-publish != true && matrix.job.check-only != true
       with:
-        name: latest-commit-docs
-        path: docs.tar.zst
-        if-no-files-found: ignore
+        tag_name: main-${{ github.sha }}
+        draft: true
+        prerelease: true
+        fail_on_unmatched_files: true
+        files: ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Upload docs to main release
+      uses: softprops/action-gh-release@v3
+      if: needs.prepare-main-release.outputs.publish == 'true' && matrix.job.target == 'x86_64-unknown-linux-gnu' && matrix.job.features == 'feat_os_unix,openssl,uudoc'
+      with:
+        tag_name: main-${{ github.sha }}
+        draft: true
+        prerelease: true
+        fail_on_unmatched_files: true
+        files: docs.tar.zst
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  publish-latest-commit:
-    name: Publish latest commit
-    needs: [ build ]
-    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+  publish-main-release:
+    name: Publish main release
+    needs: [ prepare-main-release, build ]
+    if: needs.prepare-main-release.outputs.publish == 'true' && needs.build.result == 'success'
     permissions:
       contents: write
     runs-on: ubuntu-latest
-    concurrency:
-      group: publish-latest-commit
-      cancel-in-progress: false
     steps:
-    - name: Download package artifacts
-      uses: actions/download-artifact@v8
+    - uses: actions/checkout@v7.0.1
       with:
-        pattern: latest-commit-*
-        path: publish
-        merge-multiple: true
-    - name: Publish latest-commit release
+        persist-credentials: false
+    - name: Verify draft release
       shell: bash
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        RELEASE_TAG: main-${{ github.sha }}
       run: |
-        if [ -z "$(ls -A publish 2>/dev/null)" ]; then
-          echo "::error ::No package artifacts found to publish."
-          exit 1
-        fi
-        gh release create latest-commit --prerelease \
-          --title "latest-commit" --notes "commit: ${{ github.sha }}" 2>/dev/null || true
-        gh release upload latest-commit --clobber publish/*
+        verify_tag() {
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq .sha)" = "$GITHUB_SHA"
+        }
+        verify_tag
+        gh release view "$RELEASE_TAG" --json tagName,isDraft,isImmutable,isPrerelease,targetCommitish,assets > release.json
+        python3 util/verify_release.py release.json --sha "$GITHUB_SHA"
+    - name: Publish release
+      shell: bash
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        RELEASE_TAG: main-${{ github.sha }}
+      run: gh release edit "$RELEASE_TAG" --draft=false
+    - name: Verify published release
+      shell: bash
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        RELEASE_TAG: main-${{ github.sha }}
+      run: |
+        gh release view "$RELEASE_TAG" --json tagName,isDraft,isImmutable,isPrerelease,targetCommitish,assets > release.json
+        python3 util/verify_release.py release.json --sha "$GITHUB_SHA" --published
 
 
   coverage:
