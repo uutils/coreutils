@@ -1403,7 +1403,7 @@ fn enter_directory<O: LsOutput>(
     }
 
     /// Controls inode freeing precisely in the loop, so we correctly thread
-    /// cycle detection and inode discarding. Does away with many headaches.
+    /// cycle detection and inode discarding.
     enum StackItem {
         Enter(StackEntry),
         Exit(DirId),
