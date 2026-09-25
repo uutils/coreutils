@@ -313,7 +313,7 @@ pub fn escape_name(name: &OsStr, style: QuotingStyle, encoding: UEncoding) -> Os
 /// Retrieve the encoding from the locale and pass it to [`escape_name`].
 #[inline(always)]
 pub fn locale_aware_escape_name(name: &OsStr, style: QuotingStyle) -> OsString {
-    escape_name(name, style, i18n::get_locale_encoding())
+    escape_name(name, style, i18n::get_ctype_encoding())
 }
 
 /// Shorthand function for [`locale_aware_escape_name`]
@@ -345,7 +345,7 @@ pub fn escape_dir_name(dir_name: &OsStr, style: QuotingStyle, encoding: UEncodin
 
 /// Retrieve the encoding from the locale and pass it to [`escape_dir_name`].
 pub fn locale_aware_escape_dir_name(name: &OsStr, style: QuotingStyle) -> OsString {
-    escape_dir_name(name, style, i18n::get_locale_encoding())
+    escape_dir_name(name, style, i18n::get_ctype_encoding())
 }
 
 #[cfg(test)]

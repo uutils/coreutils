@@ -26,7 +26,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
-use uucore::{display::Quotable, translate};
+use uucore::{display::Quotable, quoting_style::locale_aware_shell_escape, translate};
 
 use uucore::{
     error::{FromIo, UError, UResult},
@@ -271,7 +271,7 @@ impl<'a> Input<'a> {
     /// Converts input into the form that appears in errors.
     fn path_display(&self) -> String {
         match self {
-            Self::Path(path) => escape_name_wrapper(path.as_os_str()),
+            Self::Path(path) => locale_aware_shell_escape(path.as_os_str()),
             Self::Stdin(_) => translate!("wc-standard-input"),
         }
     }
@@ -361,7 +361,7 @@ impl WcError {
             Some((input, idx)) => {
                 let path = match input {
                     Input::Stdin(_) => STDIN_REPR.into(),
-                    Input::Path(path) => escape_name_wrapper(path.as_os_str()).into(),
+                    Input::Path(path) => locale_aware_shell_escape(path.as_os_str()).into(),
                 };
                 Self::ZeroLengthFileNameCtx { path, idx }
             }
@@ -814,7 +814,7 @@ fn files0_iter<'a>(
                     }
                 }
                 Err(e) => Err(e.map_err_context(
-                    || translate!("wc-error-read-error", "path" => escape_name_wrapper(&err_path)),
+                    || translate!("wc-error-read-error", "path" => locale_aware_shell_escape(&err_path)),
                 ) as Box<dyn UError>),
             }),
     );
@@ -826,12 +826,6 @@ fn files0_iter<'a>(
         }
         next
     })
-}
-
-fn escape_name_wrapper(name: &OsStr) -> String {
-    quoting_style::locale_aware_escape_name(name, QuotingStyle::SHELL_ESCAPE)
-        .into_string()
-        .expect("All escaped names with the escaping option return valid strings.")
 }
 
 fn hardware_feature_label(feature: HardwareFeature) -> &'static str {
