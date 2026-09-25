@@ -18,12 +18,12 @@ use std::path::Path;
 use std::path::PathBuf;
 use thiserror::Error;
 use uucore::diagnostics::OptionValue;
-use uucore::display::{Quotable, print_verbatim};
+use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use uucore::line_ending::LineEnding;
 use uucore::parser::parse_signed_num::number_offset;
 use uucore::parser::parse_size::ParseSizeError;
-use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
+use uucore::quoting_style::locale_aware_shell_escape;
 use uucore::show;
 use uucore::translate;
 
@@ -454,11 +454,8 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 if !first {
                     writeln!(stdout)?;
                 }
-                let name = locale_aware_escape_name(
-                    translate!("head-name-stdin").as_ref(),
-                    QuotingStyle::SHELL_ESCAPE,
-                );
-                writeln!(stdout, "==> {} <==", name.to_string_lossy())?;
+                let name = locale_aware_shell_escape(translate!("head-name-stdin"));
+                writeln!(stdout, "==> {name} <==")?;
             }
             let stdin = io::stdin();
 
@@ -508,12 +505,8 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     if !first {
                         writeln!(stdout)?;
                     }
-                    write!(stdout, "==> ")?;
-                    print_verbatim(locale_aware_escape_name(
-                        file.as_ref(),
-                        QuotingStyle::SHELL_ESCAPE,
-                    ))?;
-                    writeln!(stdout, " <==")?;
+                    let name = locale_aware_shell_escape(file);
+                    writeln!(stdout, "==> {name} <==")?;
                     first = false;
                 }
                 Ok(())

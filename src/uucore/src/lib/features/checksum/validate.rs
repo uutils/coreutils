@@ -19,7 +19,7 @@ use crate::checksum::{
     digest_reader, parse_blake_length, unescape_filename,
 };
 use crate::error::{FromIo, UError, UResult, USimpleError, strip_errno};
-use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
+use crate::quoting_style::locale_aware_shell_escape;
 use crate::sum::{self, Blake2b, Blake3, DigestOutput};
 use crate::{
     os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_warning_caps, translate,
@@ -246,9 +246,8 @@ fn write_file_report<W: Write>(
     verbose: ChecksumVerbose,
 ) -> io::Result<()> {
     if result.can_display(verbose) {
-        let filename = locale_aware_escape_name(filename, QuotingStyle::SHELL_ESCAPE);
-        // Here, .to_string_lossy() is lossless thanks to the escaping.
-        writeln!(w, "{}: {result}", filename.to_string_lossy())?;
+        let filename = locale_aware_shell_escape(filename);
+        writeln!(w, "{filename}: {result}")?;
     }
     Ok(())
 }
@@ -554,12 +553,7 @@ fn get_file_to_check(
             );
         };
         let print_error = |err: io::Error| {
-            show!(err.map_err_context(|| {
-                locale_aware_escape_name(filename, QuotingStyle::SHELL_ESCAPE)
-                    // This is non destructive thanks to the escaping
-                    .to_string_lossy()
-                    .to_string()
-            }));
+            show!(err.map_err_context(|| { locale_aware_shell_escape(filename) }));
         };
         match File::open(filename) {
             Ok(f) => {
@@ -698,11 +692,9 @@ fn compute_and_check_digest_from_file(
         match digest_reader(&mut digest, &mut file_reader, ReadingMode::Binary) {
             Ok(result) => result,
             Err(err) => {
-                show!(err.map_err_context(|| {
-                    locale_aware_escape_name(real_filename_to_check, QuotingStyle::SHELL_ESCAPE)
-                        .to_string_lossy()
-                        .to_string()
-                }));
+                show!(
+                    err.map_err_context(|| { locale_aware_shell_escape(real_filename_to_check) })
+                );
 
                 let _ = write_file_report(
                     io::stdout(),

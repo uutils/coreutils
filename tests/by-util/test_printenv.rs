@@ -131,3 +131,83 @@ fn test_non_utf8_env_vars() {
         .succeeds()
         .stdout_contains_bytes(b"NON_UTF8_VAR=hello\x80world");
 }
+
+#[test]
+fn test_quoting_style() {
+    for (qs, key, val) in [
+        ("literal", "a b", "c d"),
+        ("escape", "a\\ b", "c\\ d"),
+        ("shell", "'a b'", "'c d'"),
+        ("c", "\"a b\"", "\"c d\""),
+    ] {
+        new_ucmd!()
+            .env("QUOTING_STYLE", qs)
+            .env("a b", "c d")
+            .succeeds()
+            .stdout_contains(format!("{key}={val}"));
+
+        new_ucmd!()
+            .env("QUOTING_STYLE", qs)
+            .env("a b", "c d")
+            .arg("a b")
+            .succeeds()
+            .stdout_is(format!("{val}\n"));
+    }
+
+    // ASCII Locale
+    for (qs, key, val) in [
+        ("locale", "'a b'", "'c d'"),
+        ("clocale", "\"a b\"", "\"c d\""),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("QUOTING_STYLE", qs)
+            .env("a b", "c d")
+            .succeeds()
+            .stdout_contains(format!("{key}={val}"));
+
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("QUOTING_STYLE", qs)
+            .env("a b", "c d")
+            .arg("a b")
+            .succeeds()
+            .stdout_is(format!("{val}\n"));
+    }
+
+    // UTF-8 Locale
+    for (qs, key, val) in [
+        ("locale", "\u{2018}a b\u{2019}", "\u{2018}c d\u{2019}"),
+        ("clocale", "\u{2018}a b\u{2019}", "\u{2018}c d\u{2019}"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "en_US.UTF-8")
+            .env("QUOTING_STYLE", qs)
+            .env("a b", "c d")
+            .succeeds()
+            .stdout_contains(format!("{key}={val}"));
+
+        new_ucmd!()
+            .env("LC_ALL", "en_US.UTF-8")
+            .env("QUOTING_STYLE", qs)
+            .env("a b", "c d")
+            .arg("a b")
+            .succeeds()
+            .stdout_is(format!("{val}\n"));
+    }
+
+    // Env var name
+    new_ucmd!()
+        .env("QUOTING_STYLE", "shell")
+        .env("a b", "c d")
+        .succeeds()
+        .stdout_contains("'a b'='c d'");
+
+    // Invalid case
+    new_ucmd!()
+        .env("QUOTING_STYLE", "invalid")
+        .succeeds()
+        .stderr_is(
+            "printenv: ignoring invalid value of environment variable QUOTING_STYLE: 'invalid'\n",
+        );
+}

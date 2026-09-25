@@ -54,3 +54,6 @@ size-diag-help-syntax = une taille est un nombre suivi d'une unité facultative 
 # compte, donc chaque utilitaire le dit avec ses propres mots.
 range-diag-label-too-large = ce nombre est trop grand
 range-diag-label-inverted = cet intervalle se termine avant de commencer
+
+# variable d'environnement QUOTING_STYLE invalide
+invalid-quoting-style-env-var = valeur invalide de la variable d'environnement QUOTING_STYLE ignorée : { $invalid }
