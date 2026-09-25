@@ -1546,3 +1546,20 @@ fn test_hyphen_leading_byte_count_is_reported_as_invalid() {
             .stderr_contains(format!("invalid {opt} argument '-1'"));
     }
 }
+
+#[test]
+fn test_od_tab_in_invalid_byte_count() {
+    // A literal tab character in the argument must be escaped as \t in the
+    // error message, matching GNU od 9.12 behavior.
+    new_ucmd!()
+        .args(&["-j", "a	"])
+        .pipe_in("")
+        .fails_with_code(1)
+        .stderr_is("od: invalid -j argument 'a\\t'\n");
+
+    new_ucmd!()
+        .args(&["-N", "a	"])
+        .pipe_in("")
+        .fails_with_code(1)
+        .stderr_is("od: invalid -N argument 'a\\t'\n");
+}

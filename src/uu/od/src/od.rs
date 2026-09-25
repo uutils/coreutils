@@ -41,13 +41,24 @@ use clap::ArgAction;
 use clap::{Arg, ArgMatches, Command, parser::ValueSource};
 use std::ffi::OsString;
 use uucore::diagnostics::OptionValue;
-use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
+use uucore::quoting_style::{Quotes, QuotingStyle, locale_aware_escape_name};
 use uucore::translate;
 
 use uucore::parser::parse_size::ParseSizeError;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, show_error, show_warning};
+
+fn quote_arg(s: &str) -> String {
+    locale_aware_escape_name(
+        std::ffi::OsStr::new(s),
+        QuotingStyle::C {
+            quotes: Quotes::Single,
+        },
+    )
+    .to_string_lossy()
+    .into_owned()
+}
 
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
 
@@ -161,7 +172,7 @@ impl OdOptions {
                     translate!(
                         "od-error-invalid-argument",
                         "option" => width_display,
-                        "value" => s.quote()
+                        "value" => quote_arg(s)
                     ),
                 ));
             }
@@ -171,7 +182,7 @@ impl OdOptions {
                     translate!(
                         "od-error-argument-too-large",
                         "option" => width_display.clone(),
-                        "value" => s.quote()
+                        "value" => quote_arg(s)
                     ),
                 )
             })?
@@ -847,15 +858,16 @@ fn option_display_name(args: &[String], option_name: &str, short: char) -> Strin
 fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
     // NOTE:
     // GNU's od echos affected flag, -N or --read-bytes (-j or --skip-bytes, etc.), depending user's selection
+    let formatted_value = quote_arg(s);
     match error {
         ParseSizeError::InvalidSuffix(_) => {
-            translate!("od-error-invalid-suffix", "option" => option, "value" => s.quote())
+            translate!("od-error-invalid-suffix", "option" => option, "value" => formatted_value)
         }
         ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
-            translate!("od-error-invalid-argument", "option" => option, "value" => s.quote())
+            translate!("od-error-invalid-argument", "option" => option, "value" => formatted_value)
         }
         ParseSizeError::SizeTooBig(_) => {
-            translate!("od-error-argument-too-large", "option" => option, "value" => s.quote())
+            translate!("od-error-argument-too-large", "option" => option, "value" => formatted_value)
         }
     }
 }
