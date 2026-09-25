@@ -92,17 +92,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             Err(err) => {
                 failed = true;
-                if !verbose {
-                    continue;
+                if verbose {
+                    let message = if err.raw_os_error() == Some(EINVAL) {
+                        translate!("readlink-error-invalid-argument", "path" => p.maybe_quote())
+                    } else {
+                        err.map_err_context(|| p.maybe_quote().to_string())
+                            .to_string()
+                    };
+                    show_error!("{message}");
                 }
-
-                let message = if err.raw_os_error() == Some(EINVAL) {
-                    translate!("readlink-error-invalid-argument", "path" => p.maybe_quote())
-                } else {
-                    err.map_err_context(|| p.maybe_quote().to_string())
-                        .to_string()
-                };
-                show_error!("{message}");
             }
         }
     }

@@ -40,7 +40,8 @@ fn test_resolve() {
 
 #[test]
 fn test_keeps_going_after_an_operand_that_cannot_be_read() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
     at.touch("foo");
     at.relative_symlink_file("foo", "bar");
     at.touch("baz");
@@ -48,21 +49,16 @@ fn test_keeps_going_after_an_operand_that_cannot_be_read() {
 
     // GNU prints the links it could read and reports the failure through
     // the exit status only, so nothing about `nope` stops `qux`.
-    ucmd.args(&["bar", "nope", "qux"])
+    scene
+        .ucmd()
+        .args(&["bar", "nope", "qux"])
         .fails_with_code(1)
         .stdout_is("foo\nbaz\n")
         .no_stderr();
-}
 
-#[test]
-fn test_verbose_keeps_going_after_an_operand_that_cannot_be_read() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.touch("foo");
-    at.relative_symlink_file("foo", "bar");
-    at.touch("baz");
-    at.relative_symlink_file("baz", "qux");
-
-    ucmd.args(&["-v", "bar", "nope", "qux"])
+    scene
+        .ucmd()
+        .args(&["-v", "bar", "nope", "qux"])
         .fails_with_code(1)
         .stdout_is("foo\nbaz\n")
         .stderr_contains("nope: No such file or directory");
