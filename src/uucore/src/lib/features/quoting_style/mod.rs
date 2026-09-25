@@ -79,13 +79,13 @@ impl QuotingStyle {
         show_control: false,
     };
 
-    pub const SHELL_QUOTE: Self = Self::Shell {
+    pub const SHELL_ALWAYS: Self = Self::Shell {
         escape: false,
         always_quote: true,
         show_control: false,
     };
 
-    pub const SHELL_ESCAPE_QUOTE: Self = Self::Shell {
+    pub const SHELL_ESCAPE_ALWAYS: Self = Self::Shell {
         escape: true,
         always_quote: true,
         show_control: false,
@@ -137,9 +137,9 @@ impl QuotingStyle {
         Some(match s {
             "literal" => Self::LITERAL,
             "shell" => Self::SHELL,
-            "shell-always" => Self::SHELL_QUOTE,
+            "shell-always" => Self::SHELL_ALWAYS,
             "shell-escape" => Self::SHELL_ESCAPE,
-            "shell-escape-always" => Self::SHELL_ESCAPE_QUOTE,
+            "shell-escape-always" => Self::SHELL_ESCAPE_ALWAYS,
             "c" => Self::C_DOUBLE,
             "escape" => Self::C_NO_QUOTES,
             "locale" => Self::Locale,
