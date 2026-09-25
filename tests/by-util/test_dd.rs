@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED Fsize SIGXFSZ sighandler
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED Fsize SIGXFSZ sighandler rusage maxrss
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -1864,6 +1864,40 @@ fn test_iflag_direct_read_uses_aligned_buffer() {
     ])
     .succeeds();
     assert_eq!(at.read_bytes("direct-out.bin"), data);
+}
+
+// `dd` has to accept a `bs=` far larger than the data it will copy, the way
+// GNU dd does, so the copy buffer must not fault in its pages.
+#[test]
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+fn test_large_bs_does_not_fault_in_copy_buffer() {
+    // `wait4` reports the peak RSS of this one child, so a test running in
+    // parallel cannot inflate the reading the way `/proc/self` would.
+    fn peak_rss_kib(bs: &str) -> i64 {
+        let child = Command::new(get_tests_binary())
+            .args(["dd", bs, "if=/dev/null", "of=/dev/null"])
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let pid = child.id() as libc::pid_t;
+        // Dropping a `Child` does not reap it, so `wait4` still finds it.
+        drop(child);
+
+        let mut status = 0;
+        let mut usage: libc::rusage = unsafe { std::mem::zeroed() };
+        assert_eq!(
+            unsafe { libc::wait4(pid, &raw mut status, 0, &raw mut usage) },
+            pid
+        );
+        assert_eq!(status, 0, "dd {bs} exited with status {status}");
+        usage.ru_maxrss
+    }
+
+    let growth = peak_rss_kib("bs=4G") - peak_rss_kib("bs=4K");
+    assert!(
+        growth < 64 << 10,
+        "a 4 GiB copy buffer raised peak RSS by {growth} KiB"
+    );
 }
 
 #[test]
