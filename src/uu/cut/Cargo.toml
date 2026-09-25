@@ -16,11 +16,11 @@ path = "src/cut.rs"
 doctest = false
 
 [dependencies]
-clap = { workspace = true }
-uucore = { workspace = true, features = ["i18n-charmap", "parser", "ranges"] }
-memchr = { workspace = true }
 bstr = { workspace = true }
+clap = { workspace = true }
 fluent = { workspace = true }
+memchr = { workspace = true }
+uucore = { workspace = true, features = ["i18n-charmap", "parser", "ranges"] }
 
 [dev-dependencies]
 divan = { workspace = true }

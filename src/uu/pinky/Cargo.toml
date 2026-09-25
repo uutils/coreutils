@@ -22,8 +22,8 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["utmpx", "entries"] }
 fluent = { workspace = true }
+uucore = { workspace = true, features = ["utmpx", "entries"] }
 
 [lints]
 workspace = true
