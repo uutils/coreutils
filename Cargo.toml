@@ -710,3 +710,6 @@ strip = true
 inherits = "release"
 panic = "unwind"
 debug = true
+
+[patch.crates-io]
+libc = { git = "https://github.com/rust-lang/libc.git", branch = "libc-0.2" }
