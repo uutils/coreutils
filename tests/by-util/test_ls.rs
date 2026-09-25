@@ -4076,6 +4076,25 @@ fn test_ls_version_sort() {
 }
 
 #[test]
+fn test_ls_version_sort_command_line_args() {
+    // Regression test for https://github.com/uutils/coreutils/issues/14859:
+    // command-line arguments sharing the same file name must be version-sorted
+    // by their full path, not just by the file name.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    for dir in ["10", "18", "9.5"] {
+        at.mkdir(dir);
+        at.touch(format!("{dir}/file"));
+    }
+
+    scene
+        .ucmd()
+        .args(&["-1v", "10/file", "18/file", "9.5/file"])
+        .succeeds()
+        .stdout_only("9.5/file\n10/file\n18/file\n");
+}
+
+#[test]
 fn test_ls_quoting_style() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
