@@ -1772,13 +1772,13 @@ mod tests {
     fn test_quote_file_name() {
         let file_name = "nice' file";
         assert_eq!(
-            quote_file_name(file_name, QuotingStyle::SHELL_ESCAPE_QUOTE),
+            quote_file_name(file_name, QuotingStyle::SHELL_ESCAPE_ALWAYS),
             "\"nice' file\""
         );
 
         let file_name = "nice\" file";
         assert_eq!(
-            quote_file_name(file_name, QuotingStyle::SHELL_ESCAPE_QUOTE),
+            quote_file_name(file_name, QuotingStyle::SHELL_ESCAPE_ALWAYS),
             "\'nice\" file\'"
         );
     }
