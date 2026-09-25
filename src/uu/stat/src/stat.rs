@@ -9,7 +9,7 @@ use std::ops::Range;
 use uucore::diagnostics::OptionValue;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::i18n::get_ctype_encoding;
-use uucore::quoting_style::{CQuotes, QuotingStyle, escape_name};
+use uucore::quoting_style::{QuotingStyle, escape_name};
 use uucore::translate;
 
 use clap::builder::ValueParser;
@@ -251,14 +251,12 @@ fn parse_quoting_style(style: &str) -> Option<QuotingStyle> {
     Some(match style {
         "literal" => QuotingStyle::Literal { show_control: true },
         "shell" => QuotingStyle::SHELL.show_control(true),
-        "shell-always" => QuotingStyle::SHELL_QUOTE.show_control(true),
+        "shell-always" => QuotingStyle::SHELL_ALWAYS.show_control(true),
         "shell-escape" => QuotingStyle::SHELL_ESCAPE,
-        "shell-escape-always" => QuotingStyle::SHELL_ESCAPE_QUOTE,
+        "shell-escape-always" => QuotingStyle::SHELL_ESCAPE_ALWAYS,
         "c" | "clocale" => QuotingStyle::C_DOUBLE,
-        "escape" => QuotingStyle::C_NO_QUOTES,
-        "locale" => QuotingStyle::C {
-            quotes: Some(CQuotes::SINGLE)
-        },
+        "escape" => QuotingStyle::Escape,
+        "locale" => QuotingStyle::C_SINGLE,
         _ => return None,
     })
 }
@@ -1337,7 +1335,7 @@ impl Stater {
 
     fn do_stat(&self, file: &OsStr, stdin_is_fifo: bool) -> UResult<i32> {
         let display_name = file.to_string_lossy();
-        let quoted_name = || quote_file_name(file, QuotingStyle::SHELL_ESCAPE_QUOTE);
+        let quoted_name = || quote_file_name(file, QuotingStyle::SHELL_ESCAPE_ALWAYS);
         let file = if cfg!(unix) && display_name == "-" {
             if self.show_fs {
                 show_error!("{}", StatError::StdinFilesystemMode);
@@ -1788,13 +1786,13 @@ mod tests {
     fn test_quote_file_name() {
         let file_name = "nice' file";
         assert_eq!(
-            quote_file_name(OsStr::new(file_name), QuotingStyle::SHELL_ESCAPE_QUOTE),
+            quote_file_name(OsStr::new(file_name), QuotingStyle::SHELL_ESCAPE_ALWAYS),
             "\"nice' file\""
         );
 
         let file_name = "nice\" file";
         assert_eq!(
-            quote_file_name(OsStr::new(file_name), QuotingStyle::SHELL_ESCAPE_QUOTE),
+            quote_file_name(OsStr::new(file_name), QuotingStyle::SHELL_ESCAPE_ALWAYS),
             "\'nice\" file\'"
         );
     }
