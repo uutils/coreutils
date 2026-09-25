@@ -2051,7 +2051,7 @@ fn test_date_format_a_french_locale() {
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
 fn test_date_french_full_sentence() {
     let result = new_ucmd!()
-        .env("LANG", "fr_FR.UTF-8")
+        .env("LC_ALL", "fr_FR.UTF-8")
         .env("TZ", "UTC")
         .arg("-d")
         .arg("2026-01-21")

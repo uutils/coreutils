@@ -118,7 +118,7 @@ fn test_manpage_base64() {
     let output = get_uudoc_command()
         .arg("manpage")
         .arg("base64")
-        .env("LANG", "C") // force locale to english to avoid issues with manpage output
+        .env("LC_ALL", "C") // force locale to english to avoid issues with manpage output
         .output()
         .expect("Failed to execute command");
 
