@@ -27,6 +27,7 @@ use uucore::error::FromIo;
 use uucore::error::{UError, UResult, USimpleError, strip_errno};
 #[cfg(feature = "i18n-datetime")]
 use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
+use uucore::show_error;
 use uucore::translate;
 use uucore::translate_text;
 use uucore::{format_usage, show};
@@ -1177,10 +1178,7 @@ fn parse_dates_from_reader<R: Read + 'static>(
             // hyphen are midnight today, just like `-d ''`, not the current time.
             Ok(s) if is_midnight_today_input(&s) => {
                 if dbg_opts.debug {
-                    let _ = writeln!(
-                        stderr(),
-                        "date: warning: using midnight as starting time: 00:00:00"
-                    );
+                    show_error!("warning: using midnight as starting time: 00:00:00");
                 }
                 parse_date(
                     &midnight,
