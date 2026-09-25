@@ -25,7 +25,7 @@ mod shell_quoter;
 
 pub use c_quoter::CQuotes;
 
-/// The quoting style to use when escaping a name.
+/// Enum representing a quoting and escaping strategy to print a string.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum QuotingStyle {
     /// Escape the name as a shell string.
@@ -38,7 +38,7 @@ pub enum QuotingStyle {
         /// Whether to always quote the name.
         always_quote: bool,
 
-        /// Whether to show control and non-unicode characters, or replace them with `?`.
+        /// If true, replaces control and non-Unicode characters with `?`.
         show_control: bool,
     },
 
@@ -46,13 +46,14 @@ pub enum QuotingStyle {
     /// Used in, e.g., `ls --quote-name`.
     C,
 
-    /// Corresponds to --quoting-style=escape
+    /// Simply escape characters without quoting
+    /// Used in, e.g., `ls --quoting-style=escape`.
     Escape,
 
     /// Do not escape the string.
     /// Used in, e.g., `ls --literal`.
     Literal {
-        /// Whether to show control and non-unicode characters, or replace them with `?`.
+        /// If true, replaces control and non-Unicode characters with `?`.
         show_control: bool,
     },
 
@@ -92,7 +93,9 @@ impl QuotingStyle {
     };
 
     /// Set the `show_control` field of the quoting style.
-    /// Note: this is a no-op for the `C` variant.
+    ///
+    /// > This is a no-op for variants others than [`QuotingStyle::Shell`]
+    /// > and [`QuotingStyle::Literal`].
     pub fn show_control(self, show_control: bool) -> Self {
         use QuotingStyle::*;
         match self {
@@ -111,7 +114,8 @@ impl QuotingStyle {
     }
 
     /// Set the `always_quote` field of the quoting style.
-    /// Note: this is a no-op for all variants except `Shell`.
+    ///
+    /// > This is a no-op for all variants except [`QuotingStyle::Shell`].
     pub fn always_quote(self, always_quote: bool) -> Self {
         match self {
             Self::Shell {
@@ -127,6 +131,10 @@ impl QuotingStyle {
         }
     }
 
+    /// Parse a [`QuotingStyle`] from a string.
+    ///
+    /// Used for e.g., the `QUOTING_STYLE` environment variable and the
+    /// `--quoting-style` option of `ls`.
     pub fn parse(s: &str) -> Option<Self> {
         Some(match s {
             "literal" => Self::LITERAL,
@@ -169,6 +177,9 @@ impl fmt::Display for QuotingStyle {
     }
 }
 
+/// Retrieve the `QUOTING_STYLE` environment variable. If present, parse it
+/// through [`QuotingStyle::parse`], and write a standard error message to
+/// stderr in case of an invalid value.
 pub fn quoting_style_from_env() -> Option<QuotingStyle> {
     let Some(style) = std::env::var_os("QUOTING_STYLE") else {
         // Variable absent, return None quietly.
@@ -207,7 +218,7 @@ trait Quoter {
     fn finalize(self: Box<Self>) -> Vec<u8>;
 }
 
-/// Escape a name according to the given quoting style.
+/// Escape a name according to the given [`QuotingStyle`] and [`UEncoding`].
 ///
 /// This inner function provides an additional flag `dirname` which
 /// is meant for ls' directory name display.
@@ -284,14 +295,15 @@ fn escape_name_inner(
     quoter.finalize()
 }
 
-/// Escape a filename with respect to the given style.
+/// Escape a filename with respect to the given [`QuotingStyle`].
 pub fn escape_name(name: &OsStr, style: QuotingStyle, encoding: UEncoding) -> OsString {
     let name = crate::os_str_as_bytes_lossy(name);
     crate::os_string_from_vec(escape_name_inner(&name, style, false, encoding))
         .expect("all byte sequences should be valid for platform, or already replaced in name")
 }
 
-/// Retrieve the encoding from the locale and pass it to `escape_name`.
+/// Retrieve the encoding from the locale and pass it to [`escape_name`].
+#[inline(always)]
 pub fn locale_aware_escape_name(name: &OsStr, style: QuotingStyle) -> OsString {
     escape_name(name, style, i18n::get_locale_encoding())
 }
@@ -314,7 +326,7 @@ pub fn escape_dir_name(dir_name: &OsStr, style: QuotingStyle, encoding: UEncodin
         .expect("all byte sequences should be valid for platform, or already replaced in name")
 }
 
-/// Retrieve the encoding from the locale and pass it to `escape_dir_name`.
+/// Retrieve the encoding from the locale and pass it to [`escape_dir_name`].
 pub fn locale_aware_escape_dir_name(name: &OsStr, style: QuotingStyle) -> OsString {
     escape_dir_name(name, style, i18n::get_locale_encoding())
 }
