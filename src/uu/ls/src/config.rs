@@ -530,9 +530,9 @@ fn extract_quoting_style(
     } else if options.get_flag(options::quoting::LITERAL) {
         QuotingStyle::Literal { show_control }
     } else if options.get_flag(options::quoting::ESCAPE) {
-        QuotingStyle::C_NO_QUOTES
+        QuotingStyle::Escape
     } else if options.get_flag(options::quoting::C) {
-        QuotingStyle::C_DOUBLE
+        QuotingStyle::C
     } else {
         // If set, the QUOTING_STYLE environment variable specifies a default style.
         if let Some(qs) = quoting_style_from_env() {
@@ -540,7 +540,7 @@ fn extract_quoting_style(
         }
 
         match mode {
-            ProgramMode::Dir | ProgramMode::Vdir => QuotingStyle::C_NO_QUOTES,
+            ProgramMode::Dir | ProgramMode::Vdir => QuotingStyle::Escape,
             ProgramMode::Ls if stdout().is_terminal() => {
                 QuotingStyle::SHELL_ESCAPE.show_control(show_control)
             }

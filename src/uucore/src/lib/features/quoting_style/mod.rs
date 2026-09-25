@@ -44,10 +44,10 @@ pub enum QuotingStyle {
 
     /// Escape the name as a C string.
     /// Used in, e.g., `ls --quote-name`.
-    C {
-        /// The type of quotes to use.
-        quotes: Option<CQuotes>,
-    },
+    C,
+
+    /// Corresponds to --quoting-style=escape
+    Escape,
 
     /// Do not escape the string.
     /// Used in, e.g., `ls --literal`.
@@ -91,12 +91,6 @@ impl QuotingStyle {
         show_control: false,
     };
 
-    pub const C_NO_QUOTES: Self = Self::C { quotes: None };
-
-    pub const C_DOUBLE: Self = Self::C {
-        quotes: Some(CQuotes::DOUBLE),
-    };
-
     /// Set the `show_control` field of the quoting style.
     /// Note: this is a no-op for the `C` variant.
     pub fn show_control(self, show_control: bool) -> Self {
@@ -112,7 +106,7 @@ impl QuotingStyle {
                 show_control,
             },
             Literal { .. } => Literal { show_control },
-            C { .. } | Locale | CLocale => self,
+            C | Escape | Locale | CLocale => self,
         }
     }
 
@@ -140,8 +134,8 @@ impl QuotingStyle {
             "shell-always" => Self::SHELL_ALWAYS,
             "shell-escape" => Self::SHELL_ESCAPE,
             "shell-escape-always" => Self::SHELL_ESCAPE_ALWAYS,
-            "c" => Self::C_DOUBLE,
-            "escape" => Self::C_NO_QUOTES,
+            "c" => Self::C,
+            "escape" => Self::Escape,
             "locale" => Self::Locale,
             "clocale" => Self::CLocale,
             _ => return None,
@@ -166,7 +160,8 @@ impl fmt::Display for QuotingStyle {
                 }
                 f.write_str(&style)
             }
-            Self::C { .. } => f.write_str("c"),
+            Self::C => f.write_str("c"),
+            Self::Escape { .. } => f.write_str("escape"),
             Self::Locale => f.write_str("locale"),
             Self::CLocale => f.write_str("clocale"),
             Self::Literal { .. } => f.write_str("literal"),
@@ -229,7 +224,8 @@ fn escape_name_inner(
 
     let mut quoter: Box<dyn Quoter> = match style {
         QuotingStyle::Literal { .. } => Box::new(LiteralQuoter::new(name.len())),
-        QuotingStyle::C { quotes } => Box::new(CQuoter::new(quotes, dirname, name.len())),
+        QuotingStyle::C => Box::new(CQuoter::new(Some(CQuotes::DOUBLE), dirname, name.len())),
+        QuotingStyle::Escape => Box::new(CQuoter::new(None, dirname, name.len())),
         QuotingStyle::CLocale => {
             let quotes = match encoding {
                 UEncoding::Ascii => CQuotes::DOUBLE,
@@ -1189,8 +1185,11 @@ mod tests {
         let style = QuotingStyle::SHELL.show_control(true);
         assert_eq!(format!("{style}"), "shell");
 
-        let style = QuotingStyle::C_DOUBLE;
+        let style = QuotingStyle::C;
         assert_eq!(format!("{style}"), "c");
+
+        let style = QuotingStyle::Escape;
+        assert_eq!(format!("{style}"), "escape");
 
         let style = QuotingStyle::Literal {
             show_control: false,
