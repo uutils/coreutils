@@ -18,6 +18,7 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
+fluent = { workspace = true }
 uu_checksum_common = { workspace = true }
 uucore = { workspace = true, features = [
   "checksum",
@@ -25,7 +26,6 @@ uucore = { workspace = true, features = [
   "sum",
   "hardware",
 ] }
-fluent = { workspace = true }
 
 [dev-dependencies]
 uucore = { workspace = true, features = ["benchmark"] }

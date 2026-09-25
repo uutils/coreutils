@@ -18,8 +18,8 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs", "i18n-collator"] }
 fluent = { workspace = true }
+uucore = { workspace = true, features = ["fs", "i18n-collator"] }
 
 [lints]
 workspace = true
