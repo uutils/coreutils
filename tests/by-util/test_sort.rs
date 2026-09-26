@@ -1377,6 +1377,22 @@ fn test_read_error_message() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_merge_flush_error_is_reported() {
+    use std::fs::File;
+
+    let ts = TestScenario::new("sort");
+    ts.fixtures.write("input.txt", "line\n");
+
+    let dev_full = File::create("/dev/full").expect("Failed to open /dev/full");
+    ts.ucmd()
+        .args(&["-m", "input.txt"])
+        .set_stdout(dev_full)
+        .fails()
+        .stderr_is("sort: write failed: 'standard output': No space left on device\n");
+}
+
+#[test]
 fn test_merge_unique() {
     new_ucmd!()
         .arg("-m")
@@ -3624,6 +3640,38 @@ fn test_sort_locale_punctuation() {
                 .stdout_is(expected);
         }
     }
+}
+
+#[test]
+fn test_locale_empty_env_vars_hungarian_lc_collate() {
+    // Regression test for issue #11136
+    let input = "gx\ngy\ngz\n";
+    let output = "gx\ngz\ngy\n";
+
+    let hungarian = "hu_HU.UTF-8";
+    let env_vars_combos = [
+        vec![("LC_ALL", ""), ("LC_COLLATE", hungarian)],
+        vec![("LC_ALL", ""), ("LANG", hungarian)],
+        vec![("LC_ALL", ""), ("LC_COLLATE", ""), ("LANG", hungarian)],
+    ];
+
+    for vars in env_vars_combos {
+        new_ucmd!()
+            .envs(vars)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is(output);
+    }
+
+    // check that LC_ALL, LC_COLLATE, LANG being all empty implies
+    // that locale falls back to C locale
+    new_ucmd!()
+        .env("LC_ALL", "")
+        .env("LC_COLLATE", "")
+        .env("LANG", "")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(input);
 }
 
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]

@@ -13,11 +13,11 @@ readme.workspace = true
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true }
+fluent = { workspace = true }
 memchr = { workspace = true }
 num-bigint = { workspace = true }
 num-prime = { workspace = true }
-fluent = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "factor"

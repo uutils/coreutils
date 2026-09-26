@@ -1,4 +1,5 @@
 # spell-checker:ignore datetime tzdb zoneinfo
+
 [package]
 name = "uu_date"
 description = "date ~ (uutils) display or set the current time"
@@ -30,12 +31,12 @@ clap = { workspace = true }
 fluent = { workspace = true }
 icu_calendar = { workspace = true, optional = true }
 icu_locale = { workspace = true, optional = true }
-jiff-icu = { workspace = true, optional = true }
 jiff = { workspace = true, features = [
   "tzdb-bundle-platform",
   "tzdb-zoneinfo",
   "tzdb-concatenated",
 ] }
+jiff-icu = { workspace = true, optional = true }
 parse_datetime = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["parser", "i18n-datetime"] }

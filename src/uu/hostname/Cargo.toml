@@ -21,9 +21,9 @@ doctest = false
 
 [target.'cfg(any(all(unix, not(any(target_os = "aix", target_os = "redox"))), windows))'.dependencies]
 clap = { workspace = true }
+fluent = { workspace = true }
 hostname = { workspace = true, features = ["set"] }
 uucore = { workspace = true, features = ["wide"] }
-fluent = { workspace = true }
 
 [[bin]]
 name = "hostname"

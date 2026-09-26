@@ -18,9 +18,9 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
+fluent = { workspace = true }
 rustix = { workspace = true, features = ["process"] }
 uucore = { workspace = true, features = ["entries", "process"] }
-fluent = { workspace = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 selinux = { workspace = true, optional = true }

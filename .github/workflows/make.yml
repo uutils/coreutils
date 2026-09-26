@@ -337,7 +337,7 @@ jobs:
         ! test -f /tmp/c/usr/local/share/fish/vendor_completions.d/uu-cat.fish
         # package
         mv target/release-small/deps/stdbuf.dll -t /tmp/c/usr/local/bin
-        bsdtar -caf x86_64-pc-cygwin.tar.zst -C /tmp/c/usr/local bin
+        bsdtar -caf individual-x86_64-pc-cygwin.tar.zst -C /tmp/c/usr/local bin
       env:
         CHERE_INVOKING: 1
         OPENSSL_NO_VENDOR: "1"

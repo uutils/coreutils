@@ -1,4 +1,5 @@
 # spell-checker:ignore dpkg
+
 [package]
 name = "uu_stdbuf"
 description = "stdbuf ~ (uutils) run COMMAND with modified standard stream buffering"
@@ -19,10 +20,10 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-tempfile = { workspace = true }
-uucore = { workspace = true, features = ["parser-size"] }
-thiserror = { workspace = true }
 fluent = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+uucore = { workspace = true, features = ["parser-size"] }
 
 [target.'cfg(unix)'.dependencies]
 libstdbuf = { package = "uu_stdbuf_libstdbuf", version = "0.13.0", path = "src/libstdbuf" }
