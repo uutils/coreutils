@@ -9,6 +9,11 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+    cfg_aliases::cfg_aliases! {
+        selinux: { all(feature = "selinux", any(target_os = "android", target_os = "linux")) },
+        smack: { all(feature = "smack", target_os = "linux") },
+    }
+
     let out_dir = env::var("OUT_DIR")?;
 
     let mut embedded_file = File::create(Path::new(&out_dir).join("embedded_locales.rs"))?;

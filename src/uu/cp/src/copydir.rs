@@ -29,7 +29,7 @@ use uucore::translate;
 use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 use crate::set_selinux_context;
 use crate::{
     CopyMode, CopyResult, CpError, Options, aligned_ancestors, context_for, copy_attributes,
@@ -583,7 +583,7 @@ pub(crate) fn copy_directory(
             options.set_selinux_context,
         )?;
 
-        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+        #[cfg(selinux)]
         if options.set_selinux_context {
             set_selinux_context(&dir.dest, options.context.as_ref())?;
         }
@@ -605,7 +605,7 @@ pub(crate) fn copy_directory(
                     options.set_selinux_context,
                 )?;
 
-                #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+                #[cfg(selinux)]
                 if options.set_selinux_context {
                     set_selinux_context(y, options.context.as_ref())?;
                 }
