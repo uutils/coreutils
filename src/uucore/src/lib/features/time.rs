@@ -128,14 +128,16 @@ pub fn format_system_time_locale_aware<W: Write>(
     #[cfg(feature = "i18n-datetime")]
     {
         use crate::i18n::datetime::{localize_format_string, should_use_icu_locale};
-        if should_use_icu_locale() {
-            if let Ok(zoned) = <SystemTime as TryInto<Zoned>>::try_into(time) {
-                let localized = localize_format_string(fmt, zoned.date(), padding);
-                return format_zoned(out, zoned, &localized);
-            }
-            // Out-of-range: fall through to the plain fallback below.
+        // Out-of-range times fall through to the plain fallback below.
+        if should_use_icu_locale()
+            && let Ok(zoned) = <SystemTime as TryInto<Zoned>>::try_into(time)
+        {
+            let localized = localize_format_string(fmt, zoned.date(), padding);
+            return format_zoned(out, zoned, &localized);
         }
     }
+    #[cfg(not(feature = "i18n-datetime"))]
+    let _ = padding;
     format_system_time(out, time, fmt, mode)
 }
 
