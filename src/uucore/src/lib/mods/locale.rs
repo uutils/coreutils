@@ -61,6 +61,10 @@ impl UError for LocalizationError {
 
 pub const DEFAULT_LOCALE: &str = "en-US";
 
+/// The environment variables that can select the locale, in the order POSIX
+/// gives them precedence.
+const LOCALE_ENV_VARS: [&str; 3] = ["LC_ALL", "LC_MESSAGES", "LANG"];
+
 // Include embedded locale files as fallback
 include!(concat!(env!("OUT_DIR"), "/embedded_locales.rs"));
 
@@ -561,15 +565,28 @@ pub fn is_integer_literal(s: &str) -> bool {
 }
 
 /// Function to detect system locale from environment variables
+///
+/// POSIX gives `LC_ALL` precedence over the category variables and puts
+/// `LC_MESSAGES` ahead of `LANG` for message catalogs, so all three are
+/// consulted in that order. As for the C library, a variable that is set but
+/// empty counts as unset.
 fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
-    let locale_str = std::env::var("LANG")
-        .unwrap_or_else(|_| DEFAULT_LOCALE.to_string())
-        .split('.')
-        .next()
-        .unwrap_or(DEFAULT_LOCALE)
-        .to_string();
-    LanguageIdentifier::from_str(&locale_str).map_err(|_| {
-        LocalizationError::ParseLocale(format!("Failed to parse locale: {locale_str}"))
+    let locale_env = LOCALE_ENV_VARS
+        .iter()
+        .find_map(|&key| std::env::var(key).ok().filter(|value| !value.is_empty()))
+        .unwrap_or_else(|| DEFAULT_LOCALE.to_string());
+    let locale_name = locale_env.split('.').next().unwrap_or(DEFAULT_LOCALE);
+
+    // `C` and `POSIX` ask for no localization at all. They are not language
+    // identifiers, so resolve them to the default locale here rather than
+    // leaving the parse below to turn them into an error.
+    if locale_name == "C" || locale_name == "POSIX" {
+        return Ok(LanguageIdentifier::from_str(DEFAULT_LOCALE)
+            .expect("the default locale is a valid language identifier"));
+    }
+
+    LanguageIdentifier::from_str(locale_name).map_err(|_| {
+        LocalizationError::ParseLocale(format!("Failed to parse locale: {locale_name}"))
     })
 }
 
@@ -577,8 +594,9 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
 /// Always loads common strings in addition to utility-specific strings.
 ///
 /// This function initializes the localization system based on the system's locale
-/// preferences (via the LANG environment variable) or falls back to English
-/// if the system locale cannot be determined or the locale file doesn't exist.
+/// preferences (via the `LC_ALL`, `LC_MESSAGES` and `LANG` environment variables,
+/// in that order) or falls back to English if the system locale cannot be
+/// determined or the locale file doesn't exist.
 /// English is always loaded as a fallback.
 ///
 /// # Arguments
@@ -885,6 +903,7 @@ mod tests {
     use std::env;
     use std::fs;
     use std::path::PathBuf;
+    use std::sync::{Mutex, MutexGuard, PoisonError};
     use tempfile::TempDir;
 
     #[test]
@@ -1709,38 +1728,110 @@ invalid-syntax = This is { $missing
         assert_eq!(default_lang_id.to_string(), "en-US");
     }
 
+    /// Locale variables are process-wide, so the tests that change them must not
+    /// run at the same time as each other.
+    static LOCALE_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    /// Hold this for as long as a test relies on the locale variables it set.
+    ///
+    /// A test that panics while holding the lock poisons it, which is no reason
+    /// to fail the tests that come after.
+    fn lock_locale_env() -> MutexGuard<'static, ()> {
+        LOCALE_ENV_LOCK
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// The locale environment variables as they were before a test changed
+    /// them, put back when the guard is dropped.
+    ///
+    /// Restoring on drop rather than at the end of the test means a failing
+    /// assertion cannot leave the process with the values the test set.
+    struct LocaleEnvGuard([(&'static str, Option<String>); 3]);
+
+    impl Drop for LocaleEnvGuard {
+        fn drop(&mut self) {
+            for (key, value) in &self.0 {
+                unsafe {
+                    match value {
+                        Some(value) => env::set_var(key, value),
+                        None => env::remove_var(key),
+                    }
+                }
+            }
+        }
+    }
+
+    /// Capture the locale environment variables, restoring them on drop.
+    fn save_locale_env() -> LocaleEnvGuard {
+        LocaleEnvGuard(LOCALE_ENV_VARS.map(|key| (key, env::var(key).ok())))
+    }
+
+    /// Set the locale variables listed in `vars` and unset the others, so a
+    /// test does not inherit whatever the developer has exported.
+    fn set_locale_env(vars: &[(&str, &str)]) {
+        for key in LOCALE_ENV_VARS {
+            unsafe {
+                env::remove_var(key);
+            }
+        }
+        for (key, value) in vars {
+            unsafe {
+                env::set_var(key, value);
+            }
+        }
+    }
+
     #[test]
     fn test_detect_system_locale_no_lang_env() {
-        // Save current LANG value
-        let original_lang = env::var("LANG").ok();
-
-        // Remove LANG environment variable
-        unsafe {
-            env::remove_var("LANG");
-        }
+        let _lock = lock_locale_env();
+        let _env = save_locale_env();
+        set_locale_env(&[]);
 
         let result = detect_system_locale();
         assert!(result.is_ok());
         assert_eq!(result.unwrap().to_string(), "en-US");
+    }
 
-        // Restore original LANG value
-        if let Some(val) = original_lang {
-            unsafe {
-                env::set_var("LANG", val);
-            }
-        } else {
-            {} // Was already unset
+    #[test]
+    fn test_detect_system_locale_env_var_precedence() {
+        let _lock = lock_locale_env();
+        let _env = save_locale_env();
+        set_locale_env(&[
+            ("LC_ALL", "es_ES.UTF-8"),
+            ("LC_MESSAGES", "de_DE.UTF-8"),
+            ("LANG", "fr_FR.UTF-8"),
+        ]);
+        assert_eq!(detect_system_locale().unwrap().to_string(), "es-ES");
+
+        // Without LC_ALL, message localization falls back to LC_MESSAGES.
+        set_locale_env(&[("LC_MESSAGES", "de_DE.UTF-8"), ("LANG", "fr_FR.UTF-8")]);
+        assert_eq!(detect_system_locale().unwrap().to_string(), "de-DE");
+
+        // LANG is only used when neither of the other two is set.
+        set_locale_env(&[("LANG", "fr_FR.UTF-8")]);
+        assert_eq!(detect_system_locale().unwrap().to_string(), "fr-FR");
+
+        // A variable that is set but empty counts as unset.
+        set_locale_env(&[("LC_ALL", ""), ("LANG", "fr_FR.UTF-8")]);
+        assert_eq!(detect_system_locale().unwrap().to_string(), "fr-FR");
+
+        // `C` and `POSIX` mean "do not localize". They are not language
+        // identifiers, but they still have to beat `LANG`, so the result is
+        // English rather than the French catalogue.
+        for no_localization in ["C", "POSIX"] {
+            set_locale_env(&[("LC_ALL", no_localization), ("LANG", "fr_FR.UTF-8")]);
+            assert_eq!(detect_system_locale().unwrap().to_string(), "en-US");
         }
     }
 
     #[test]
     fn test_setup_localization_success() {
         std::thread::spawn(|| {
-            // Save current LANG value
-            let original_lang = env::var("LANG").ok();
-            unsafe {
-                env::set_var("LANG", "en-US.UTF-8"); // Use English since we have embedded resources for "test"
-            }
+            let _lock = lock_locale_env();
+            let _env = save_locale_env();
+            // Use English since we have embedded resources for "test"
+            set_locale_env(&[("LANG", "en-US.UTF-8")]);
 
             let result = setup_localization("test");
             assert!(result.is_ok());
@@ -1749,17 +1840,6 @@ invalid-syntax = This is { $missing
             let message = get_message("test-about");
             // Since we're using embedded resources, we should get the expected message
             assert!(!message.is_empty());
-
-            // Restore original LANG value
-            if let Some(val) = original_lang {
-                unsafe {
-                    env::set_var("LANG", val);
-                }
-            } else {
-                unsafe {
-                    env::remove_var("LANG");
-                }
-            }
         })
         .join()
         .unwrap();
@@ -1768,11 +1848,10 @@ invalid-syntax = This is { $missing
     #[test]
     fn test_setup_localization_falls_back_to_english() {
         std::thread::spawn(|| {
-            // Save current LANG value
-            let original_lang = env::var("LANG").ok();
-            unsafe {
-                env::set_var("LANG", "de-DE.UTF-8"); // German file doesn't exist, should fallback
-            }
+            let _lock = lock_locale_env();
+            let _env = save_locale_env();
+            // German file doesn't exist, should fallback
+            set_locale_env(&[("LANG", "de-DE.UTF-8")]);
 
             let result = setup_localization("test");
             assert!(result.is_ok());
@@ -1780,17 +1859,6 @@ invalid-syntax = This is { $missing
             // Should fall back to English embedded resources
             let message = get_message("test-about");
             assert!(!message.is_empty()); // Should get something, not just the key
-
-            // Restore original LANG value
-            if let Some(val) = original_lang {
-                unsafe {
-                    env::set_var("LANG", val);
-                }
-            } else {
-                unsafe {
-                    env::remove_var("LANG");
-                }
-            }
         })
         .join()
         .unwrap();
@@ -1799,10 +1867,10 @@ invalid-syntax = This is { $missing
     #[test]
     fn test_setup_localization_fallback_to_embedded() {
         std::thread::spawn(|| {
+            let _lock = lock_locale_env();
+            let _env = save_locale_env();
             // Force English locale for this test
-            unsafe {
-                env::set_var("LANG", "en-US");
-            }
+            set_locale_env(&[("LANG", "en-US")]);
 
             // Test with a utility name that has embedded locales
             // This should fall back to embedded English when filesystem files aren't found
