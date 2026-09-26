@@ -799,9 +799,12 @@ mod tests {
 
         // Create a FIFO (pipe)
         let fifo_path = dir_path.join("my_fifo");
-        // todo: use rustix::fs::mkfifoat since selinux is linux specific
-        nix::unistd::mkfifo(&fifo_path, nix::sys::stat::Mode::from_bits_truncate(0o666))
-            .expect("Failed to create FIFO");
+        rustix::fs::mkfifoat(
+            rustix::fs::CWD,
+            &fifo_path,
+            rustix::fs::Mode::from_raw_mode(0o666),
+        )
+        .expect("Failed to create FIFO");
 
         // Just getting a context is good enough
         get_selinux_security_context(&fifo_path, false).expect("Cannot get fifo context");
