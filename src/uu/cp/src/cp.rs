@@ -1828,7 +1828,7 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
     if was_readonly {
         #[allow(clippy::permissions_set_readonly_false)]
         perms.set_readonly(false);
-        fs::set_permissions(dest, perms)?;
+        chmod_nofollow(dest, &perms)?;
     }
 
     // Perform the xattr copy and capture any potential error,
@@ -1854,7 +1854,7 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
     if was_readonly {
         let mut revert_perms = fs::symlink_metadata(dest)?.permissions();
         revert_perms.set_readonly(true);
-        fs::set_permissions(dest, revert_perms)?;
+        chmod_nofollow(dest, &revert_perms)?;
     }
 
     // If copying xattrs failed, propagate that error now with context.
