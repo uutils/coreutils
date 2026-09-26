@@ -2637,6 +2637,19 @@ fn test_locale_day_names() {
     }
 }
 
+// GNU test date-locale-hour: the timezone must follow the time in the default format
+#[test]
+#[cfg(unix)]
+fn test_date_locale_default_format_timezone_position() {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "Europe/Brussels")
+        .arg("-d")
+        .arg("2025-10-11T13:00")
+        .succeeds()
+        .stdout_is("Sat Oct 11 13:00:00 CEST 2025\n");
+}
+
 #[test]
 fn test_percent_percent_not_replaced() {
     let cases = [
