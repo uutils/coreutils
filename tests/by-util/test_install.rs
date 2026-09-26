@@ -2887,13 +2887,18 @@ fn test_install_d_dangling_symlink_in_path_errors() {
 
     at.write("file.txt", "hello");
 
-    // install -D file.txt dangling/subdir/file.txt should fail
+    // install -D file.txt dangling/subdir/file.txt should fail, naming the
+    // dangling component, like GNU does.
     scene
         .ucmd()
         .args(&["-D", "-m", "644"])
         .arg(at.plus("file.txt"))
         .arg(at.plus("dangling/subdir/file.txt"))
-        .fails();
+        .fails()
+        .stderr_contains(format!(
+            "cannot create directory '{}': File exists",
+            at.plus_as_string("dangling")
+        ));
 
     // The dangling symlink must not have been replaced with a real directory
     assert!(
@@ -2904,6 +2909,52 @@ fn test_install_d_dangling_symlink_in_path_errors() {
         !at.plus("nonexistent").exists(),
         "The symlink target must not have been created"
     );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_leading_dir_blames_failing_component() {
+    // A plain file in the middle of the path: the failing component is named,
+    // with the errno of descending into it.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("regular");
+    at.write("file.txt", "hello");
+
+    scene
+        .ucmd()
+        .args(&["-D", "file.txt", "regular/sub/file.txt"])
+        .fails()
+        .stderr_only("install: cannot create directory 'regular': Not a directory\n");
+
+    scene
+        .ucmd()
+        .args(&["-D", "file.txt", "regular/sub/deeper/file.txt"])
+        .fails()
+        .stderr_only("install: cannot create directory 'regular': Not a directory\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_directory_in_write_only_directory() {
+    // mkdir only needs write and execute on the parent, so `install -d` must
+    // keep working in a directory it cannot read. `-D` still fails here, see
+    // the fd-based walk in create_dir_all_safe.
+    use std::os::unix::fs::PermissionsExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    if geteuid().is_root() {
+        println!("Test skipped; root ignores directory permissions");
+        return;
+    }
+
+    at.mkdir("wx");
+    fs::set_permissions(at.plus("wx"), fs::Permissions::from_mode(0o300)).unwrap();
+
+    scene.ucmd().args(&["-d", "wx/sub"]).succeeds();
 }
 
 #[test]

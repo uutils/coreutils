@@ -72,7 +72,7 @@ enum InstallError {
     #[error("{}", translate!("install-error-dir-needs-arg", "util_name" => "install"))]
     DirNeedsArg,
 
-    #[error("{}", translate!("install-error-create-dir-failed", "path" => .0.quote()))]
+    #[error("{}", translate!("install-error-create-dir-failed", "path" => .0.quote(), "error" => strip_errno(.1)))]
     CreateDirFailed(PathBuf, #[source] std::io::Error),
 
     #[error("{}", translate!("install-error-chmod-failed", "path" => .0.quote()))]
@@ -508,10 +508,13 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
             // target directory. All created ancestor directories will have
             // the default mode. Hence it is safe to use fs::create_dir_all
             // and then only modify the target's dir mode.
-            if let Err(e) = fs::create_dir_all(&path_to_create).map_err_context(
-                || translate!("install-error-create-dir-failed", "path" => path_to_create.quote()),
-            ) {
-                show!(e);
+            //
+            // This stays path-based on purpose. Anchoring the walk to
+            // directory fds needs read permission on each existing ancestor,
+            // while mkdir only needs write and execute, so an fd walk fails on
+            // write-only directories where GNU succeeds.
+            if let Err(e) = fs::create_dir_all(&path_to_create) {
+                show!(InstallError::CreateDirFailed(path_to_create.clone(), e));
                 continue;
             }
 
@@ -658,11 +661,6 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             None
         };
 
-        // If -t is used, check if target exists as a file before trying to create directories
-        if b.target_dir.is_some() && target.exists() && !target.is_dir() {
-            return Err(InstallError::NotADirectory(target).into());
-        }
-
         if let Some(to_create) = to_create {
             let to_create_original = to_create;
             let to_create_owned;
@@ -678,6 +676,14 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                 }
                 _ => to_create,
             };
+
+            // With -t, GNU reports a target that exists but is not a directory
+            // as a failure to access it, rather than a failed creation. The
+            // check runs on the trimmed path so that a trailing slash, which
+            // makes `exists()` fail with ENOTDIR, is handled the same way.
+            if b.target_dir.is_some() && to_create.exists() && !to_create.is_dir() {
+                return Err(InstallError::NotADirectory(to_create_original.to_path_buf()).into());
+            }
 
             let dir_exists = to_create.exists() && metadata(to_create).is_ok_and(|m| m.is_dir());
 
@@ -735,20 +741,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                             }
                         }
                         Err(e) => {
-                            if e.kind() == std::io::ErrorKind::AlreadyExists
-                                && to_create.exists()
-                                && !to_create.is_dir()
-                            {
-                                return Err(InstallError::NotADirectory(
-                                    to_create_original.to_path_buf(),
-                                )
-                                .into());
-                            }
-                            return Err(InstallError::CreateDirFailed(
-                                to_create_original.to_path_buf(),
-                                e,
-                            )
-                            .into());
+                            return Err(InstallError::CreateDirFailed(e.path, e.error).into());
                         }
                     }
                 }
