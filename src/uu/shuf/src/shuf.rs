@@ -451,33 +451,24 @@ fn shuf_exec(
 /// the part that failed, and adds a detail only when a bound does not fit in
 /// a `u64`.
 fn parse_range(input_range: &str) -> UResult<RangeInclusive<u64>> {
-    let invalid = || {
-        USimpleError::new(
-            1,
-            translate!("shuf-error-invalid-input-range", "range" => input_range.quote()),
-        )
-    };
-    let too_large = || {
-        USimpleError::new(
-            1,
-            translate!("shuf-error-invalid-input-range-too-large", "range" => input_range.quote()),
-        )
-    };
+    let error = |key: &str| USimpleError::new(1, translate!(key, "range" => input_range.quote()));
 
     let Some((from, to)) = input_range.split_once('-') else {
-        return Err(invalid());
+        return Err(error("shuf-error-invalid-input-range"));
     };
     let parse = |bound: &str| match bound.parse::<u64>() {
         Ok(n) => Ok(n),
-        Err(e) if *e.kind() == IntErrorKind::PosOverflow => Err(too_large()),
-        Err(_) => Err(invalid()),
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
+            Err(error("shuf-error-invalid-input-range-too-large"))
+        }
+        Err(_) => Err(error("shuf-error-invalid-input-range")),
     };
     let begin = parse(from)?;
     let end = parse(to)?;
     if begin <= end || begin == end + 1 {
         Ok(begin..=end)
     } else {
-        Err(invalid())
+        Err(error("shuf-error-invalid-input-range"))
     }
 }
 

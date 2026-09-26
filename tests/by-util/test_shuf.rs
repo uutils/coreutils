@@ -740,35 +740,11 @@ fn test_shuf_input_range_and_file_not_allowed() {
         .stderr_contains("cannot be used with");
 }
 
-#[test]
-fn test_shuf_invalid_input_range_one() {
-    new_ucmd!()
-        .args(&["-i", "0"])
-        .fails()
-        .stderr_contains("shuf: invalid input range: '0'\n");
-}
-
-#[test]
-fn test_shuf_invalid_input_range_two() {
-    new_ucmd!()
-        .args(&["-i", "a-9"])
-        .fails()
-        .stderr_contains("shuf: invalid input range: 'a-9'\n");
-}
-
-#[test]
-fn test_shuf_invalid_input_range_three() {
-    new_ucmd!()
-        .args(&["-i", "0-b"])
-        .fails()
-        .stderr_contains("shuf: invalid input range: '0-b'\n");
-}
-
 /// Whatever is wrong with the LO-HI of -i, GNU names the range as a whole
 /// and exits 1, and adds a detail only when a bound overflows.
 #[test]
 fn test_shuf_invalid_input_range_message() {
-    for range in ["5-1", "abc", "1-", "1-2-3", ""] {
+    for range in ["0", "a-9", "0-b", "5-1", "abc", "1-", "1-2-3", ""] {
         new_ucmd!()
             .args(&["-i", range])
             .fails_with_code(1)
