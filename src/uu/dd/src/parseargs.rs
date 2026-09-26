@@ -41,8 +41,6 @@ pub enum ParseError {
     MultiplierStringParseFailure(String),
     #[error("{}", translate!("dd-error-multiplier-overflow", "input" => .0))]
     MultiplierStringOverflow(String),
-    #[error("{}", translate!("dd-error-block-without-cbs"))]
-    BlockUnblockWithoutCBS,
     #[error("{}", translate!("dd-error-status-not-recognized", "level" => .0))]
     StatusLevelNotRecognized(String),
     #[error("{}", translate!("dd-error-unimplemented", "feature" => .0))]
@@ -184,6 +182,12 @@ impl Parser {
             _ => return Err(ParseError::MultipleFmtTable),
         };
 
+        let block_requested = conv.block || conv.ebcdic || conv.ibm;
+        let unblock_requested = conv.unblock || conv.ascii;
+        if self.cbs.is_some() && block_requested && unblock_requested {
+            return Err(ParseError::MultipleBlockUnblock);
+        }
+
         let case = match (conv.ucase, conv.lcase) {
             (false, false) => None,
             (true, false) => Some(Case::Upper),
@@ -198,31 +202,10 @@ impl Parser {
             return Err(ParseError::MultipleExclNoCreate);
         }
 
-        // The GNU docs state that
-        // - ascii implies unblock
-        // - ebcdic and ibm imply block
-        // This has a side effect in how it's implemented in GNU, because this errors:
-        //     conv=block,unblock
-        // but these don't:
-        //     conv=ascii,block,unblock
-        //     conv=block,ascii,unblock
-        //     conv=block,unblock,ascii
-        //     conv=block conv=unblock conv=ascii
-        let block = if let Some(cbs) = self.cbs {
-            match conversion {
-                Some(Conversion::Ascii) => Some(Block::Unblock(cbs)),
-                Some(_) => Some(Block::Block(cbs)),
-                None => match (conv.block, conv.unblock) {
-                    (false, false) => None,
-                    (true, false) => Some(Block::Block(cbs)),
-                    (false, true) => Some(Block::Unblock(cbs)),
-                    (true, true) => return Err(ParseError::MultipleBlockUnblock),
-                },
-            }
-        } else if conv.block || conv.unblock {
-            return Err(ParseError::BlockUnblockWithoutCBS);
-        } else {
-            None
+        let block = match self.cbs {
+            Some(cbs) if block_requested => Some(Block::Block(cbs)),
+            Some(cbs) if unblock_requested => Some(Block::Unblock(cbs)),
+            _ => None,
         };
 
         let iconv = IConvFlags {
