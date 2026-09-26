@@ -67,17 +67,49 @@ pub enum CalendarType {
     Ethiopian,
 }
 
+struct NameFormatters {
+    month_long: Option<DateTimeFormatter<fieldsets::M>>,
+    month_medium: Option<DateTimeFormatter<fieldsets::M>>,
+    weekday_long: Option<DateTimeFormatter<fieldsets::E>>,
+    weekday_short: Option<DateTimeFormatter<fieldsets::E>>,
+}
+
+impl NameFormatters {
+    fn new() -> Self {
+        let (locale, _) = get_time_locale();
+        let prefs = || locale.clone().into();
+        Self {
+            month_long: DateTimeFormatter::try_new(prefs(), fieldsets::M::long()).ok(),
+            month_medium: DateTimeFormatter::try_new(prefs(), fieldsets::M::medium()).ok(),
+            weekday_long: DateTimeFormatter::try_new(prefs(), fieldsets::E::long()).ok(),
+            weekday_short: DateTimeFormatter::try_new(prefs(), fieldsets::E::short()).ok(),
+        }
+    }
+}
+
+thread_local! {
+    // Not a `static OnceLock`: ICU formatters are neither `Send` nor `Sync`.
+    static NAME_FORMATTERS: NameFormatters = NameFormatters::new();
+}
+
+fn get_time_locale_calendar_type() -> CalendarType {
+    static CALENDAR_TYPE: OnceLock<CalendarType> = OnceLock::new();
+
+    CALENDAR_TYPE
+        .get_or_init(|| get_locale_calendar_type(&get_time_locale().0))
+        .clone()
+}
+
 /// Transform a strftime format string to use locale-specific calendar values
 pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     const PERCENT_PLACEHOLDER: &str = "\x00\x00";
 
-    let (locale, _) = get_time_locale();
     let iso_date = Date::<Iso>::convert_from(date);
 
     let mut fmt = format.replace("%%", PERCENT_PLACEHOLDER);
 
     // For non-Gregorian calendars, replace date components with converted values
-    let calendar_type = get_locale_calendar_type(locale);
+    let calendar_type = get_time_locale_calendar_type();
     if calendar_type != CalendarType::Gregorian {
         let (cal_year, cal_month, cal_day) = match calendar_type {
             CalendarType::Buddhist => {
@@ -114,37 +146,37 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     }
 
     // Format localized names using ICU DateTimeFormatter
-    let locale_prefs = locale.clone().into();
-
-    if fmt.contains("%B")
-        && let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::long())
-    {
-        fmt = fmt.replace("%B", &f.format(&iso_date).to_string());
-    }
-    if (fmt.contains("%b") || fmt.contains("%h"))
-        && let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::medium())
-    {
-        // ICU's medium format may include trailing periods (e.g., "febr." for Hungarian),
-        // which when combined with locale format strings that also add periods after
-        // %b (e.g., "%Y. %b. %d") results in double periods ("febr..").
-        // The standard C/POSIX locale via nl_langinfo returns abbreviations
-        // WITHOUT trailing periods, so we strip them here for consistency.
-        let month_abbrev = f.format(&iso_date).to_string();
-        let month_abbrev = month_abbrev.trim_end_matches('.').to_string();
-        fmt = fmt
-            .replace("%b", &month_abbrev)
-            .replace("%h", &month_abbrev);
-    }
-    if fmt.contains("%A")
-        && let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::long())
-    {
-        fmt = fmt.replace("%A", &f.format(&iso_date).to_string());
-    }
-    if fmt.contains("%a")
-        && let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::short())
-    {
-        fmt = fmt.replace("%a", &f.format(&iso_date).to_string());
-    }
+    NAME_FORMATTERS.with(|formatters| {
+        if fmt.contains("%B")
+            && let Some(f) = &formatters.month_long
+        {
+            fmt = fmt.replace("%B", &f.format(&iso_date).to_string());
+        }
+        if (fmt.contains("%b") || fmt.contains("%h"))
+            && let Some(f) = &formatters.month_medium
+        {
+            // ICU's medium format may include trailing periods (e.g., "febr." for Hungarian),
+            // which when combined with locale format strings that also add periods after
+            // %b (e.g., "%Y. %b. %d") results in double periods ("febr..").
+            // The standard C/POSIX locale via nl_langinfo returns abbreviations
+            // WITHOUT trailing periods, so we strip them here for consistency.
+            let month_abbrev = f.format(&iso_date).to_string();
+            let month_abbrev = month_abbrev.trim_end_matches('.').to_string();
+            fmt = fmt
+                .replace("%b", &month_abbrev)
+                .replace("%h", &month_abbrev);
+        }
+        if fmt.contains("%A")
+            && let Some(f) = &formatters.weekday_long
+        {
+            fmt = fmt.replace("%A", &f.format(&iso_date).to_string());
+        }
+        if fmt.contains("%a")
+            && let Some(f) = &formatters.weekday_short
+        {
+            fmt = fmt.replace("%a", &f.format(&iso_date).to_string());
+        }
+    });
 
     fmt.replace(PERCENT_PLACEHOLDER, "%%")
 }
