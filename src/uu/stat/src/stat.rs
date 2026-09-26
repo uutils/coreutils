@@ -77,6 +77,7 @@ struct Flags {
     major: bool,
     minor: bool,
     quote: bool,
+    nanoseconds: bool,
 }
 
 /// checks if the string is within the specified bound,
@@ -900,6 +901,22 @@ impl Stater {
             });
         }
 
+        if *i + 1 < bound
+            && chars[*i] == ':'
+            && let Some(&next_char) = chars
+                .get(*i + 1)
+                .filter(|c| matches!(**c, 'W' | 'X' | 'Y' | 'Z'))
+        {
+            flag.nanoseconds = true;
+            *i += 1;
+            return Ok(Token::Directive {
+                flag,
+                width,
+                precision,
+                format: next_char,
+            });
+        }
+
         Ok(Token::Directive {
             flag,
             width,
@@ -1280,8 +1297,17 @@ impl Stater {
                         OutputType::Str(user_name)
                     }
 
-                    // time of file birth, human-readable; - if unknown
-                    'w' => OutputType::Str(pretty_time(meta, MetadataTimeField::Birth)),
+                    // time of file birth, access, modification, change, human-readable
+                    'w' | 'x' | 'y' | 'z' => {
+                        OutputType::Str(pretty_time(meta, directive_to_time_field(format)))
+                    }
+
+                    // time of file birth, access, modification, change, nanoseconds
+                    'W' | 'X' | 'Y' | 'Z' if flag.nanoseconds => {
+                        let (_, nsec) = metadata_get_time(meta, directive_to_time_field(format))
+                            .map_or((0, 0), system_time_to_timestamp);
+                        OutputType::Str(format!("{nsec:09}"))
+                    }
 
                     // time of file birth, seconds since Epoch; 0 if unknown
                     'W' => OutputType::Integer(
@@ -1289,27 +1315,9 @@ impl Stater {
                             .map_or(0, |x| system_time_to_timestamp(x).0),
                     ),
 
-                    // time of last access, human-readable
-                    'x' => OutputType::Str(pretty_time(meta, MetadataTimeField::Access)),
-                    // time of last access, seconds since Epoch
-                    'X' => {
-                        let (sec, nsec) = metadata_get_time(meta, MetadataTimeField::Access)
-                            .map_or((0, 0), system_time_to_timestamp);
-                        OutputType::Timestamp(sec, nsec)
-                    }
-                    // time of last data modification, human-readable
-                    'y' => OutputType::Str(pretty_time(meta, MetadataTimeField::Modification)),
-                    // time of last data modification, seconds since Epoch
-                    'Y' => {
-                        let (sec, nsec) = metadata_get_time(meta, MetadataTimeField::Modification)
-                            .map_or((0, 0), system_time_to_timestamp);
-                        OutputType::Timestamp(sec, nsec)
-                    }
-                    // time of last status change, human-readable
-                    'z' => OutputType::Str(pretty_time(meta, MetadataTimeField::Change)),
-                    // time of last status change, seconds since Epoch
-                    'Z' => {
-                        let (sec, nsec) = metadata_get_time(meta, MetadataTimeField::Change)
+                    // time of last access, data modification, status change, seconds since Epoch
+                    'X' | 'Y' | 'Z' => {
+                        let (sec, nsec) = metadata_get_time(meta, directive_to_time_field(format))
                             .map_or((0, 0), system_time_to_timestamp);
                         OutputType::Timestamp(sec, nsec)
                     }
@@ -1564,6 +1572,16 @@ pub fn uu_app() -> Command {
 }
 
 const PRETTY_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S.%N %z";
+
+fn directive_to_time_field(format: char) -> MetadataTimeField {
+    match format {
+        'w' | 'W' => MetadataTimeField::Birth,
+        'x' | 'X' => MetadataTimeField::Access,
+        'y' | 'Y' => MetadataTimeField::Modification,
+        'z' | 'Z' => MetadataTimeField::Change,
+        _ => unreachable!(),
+    }
+}
 
 fn pretty_time(meta: &Metadata, md_time_field: MetadataTimeField) -> String {
     if let Some(time) = metadata_get_time(meta, md_time_field) {
