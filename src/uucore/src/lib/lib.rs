@@ -218,21 +218,22 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
     }
 }
 
+/// Flushes `out` at the end of a utility, the way GNU `close_stdout` does.
+///
+/// Returns the error that should be reported, if any. A broken pipe is not
+/// reported, as it is the normal way for a pipeline to shut down.
+pub fn flush_at_exit<W: std::io::Write>(out: &mut W) -> Option<std::io::Error> {
+    match out.flush() {
+        Err(e) if e.kind() != std::io::ErrorKind::BrokenPipe => Some(e),
+        _ => None,
+    }
+}
+
 #[macro_export]
 macro_rules! bin_inner {
     ($util:ident, $post:expr) => {
         pub fn main() {
-            use std::io::Write;
             use uucore::locale;
-
-            // Check if fd 1 (stdout) is open *before* any allocation that could
-            // claim it. This detects `prog >&-` (shell closed stdout before we
-            // start). We use /proc/self/fd/1 to avoid a libc dependency.
-            #[cfg(unix)]
-            let stdout_initially_open: bool =
-                std::path::Path::new("/proc/self/fd/1").exists();
-            #[cfg(not(unix))]
-            let stdout_initially_open: bool = true;
 
             // Preserve inherited SIGPIPE settings (e.g., from env --default-signal=PIPE)
             uucore::panic::preserve_inherited_sigpipe();
@@ -253,25 +254,7 @@ macro_rules! bin_inner {
 
             // execute utility code
             let code = $util::uumain(uucore::args_os());
-            $post
-
-            // Emulate GNU close_stdout/close_stream: flush stdout and exit 1 on
-            // write failure, but silence:
-            //   - BrokenPipe: normal pipe shutdown
-            //   - EBADF when stdout was already closed at startup (`prog >&-`
-            //     with no output) — matches GNU close_stream EBADF exception
-            if let Err(e) = std::io::stdout().flush() {
-                let silent = match e.kind() {
-                    std::io::ErrorKind::BrokenPipe => true,
-                    std::io::ErrorKind::InvalidInput
-                    | std::io::ErrorKind::NotConnected => !stdout_initially_open,
-                    _ => false,
-                };
-                if !silent {
-                    eprintln!("error writing to stdout: {e}");
-                    std::process::exit(1);
-                }
-            }
+            let code = ($post)(code);
 
             std::process::exit(code);
         }
@@ -284,10 +267,25 @@ macro_rules! bin_inner {
 #[macro_export]
 macro_rules! bin {
     ($util:ident, no_flush) => {
-        ::uucore::bin_inner! {$util, {}}
+        ::uucore::bin_inner! {$util, |code: i32| code}
     };
     ($util:ident) => {
-        ::uucore::bin_inner! {$util, {}}
+        ::uucore::bin_inner! {$util, |code: i32| {
+            // flush stdout for utility prior to exit and report a write error
+            // like GNU close_stdout; see <https://github.com/rust-lang/rust/issues/23818>
+            // If the utility already failed, it has reported its own error.
+            match ::uucore::flush_at_exit(&mut std::io::stdout()) {
+                Some(e) if code == 0 => {
+                    ::uucore::show_error!(
+                        "{}: {}",
+                        ::uucore::translate!("common-write-error"),
+                        ::uucore::error::strip_errno(&e)
+                    );
+                    1
+                }
+                _ => code,
+            }
+        }}
     };
 }
 
@@ -747,6 +745,46 @@ impl<'a> IntoCharByteIterator<'a> for &'a [u8] {
 mod tests {
     use super::*;
     use std::ffi::OsStr;
+
+    struct FailingWriter(std::io::ErrorKind);
+
+    impl std::io::Write for FailingWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Err(std::io::Error::from(self.0))
+        }
+    }
+
+    #[test]
+    fn test_flush_at_exit_ok() {
+        assert!(flush_at_exit(&mut Vec::new()).is_none());
+    }
+
+    #[test]
+    fn test_flush_at_exit_ignores_broken_pipe() {
+        let mut out = FailingWriter(std::io::ErrorKind::BrokenPipe);
+        assert!(flush_at_exit(&mut out).is_none());
+    }
+
+    #[test]
+    fn test_flush_at_exit_reports_error() {
+        let mut out = FailingWriter(std::io::ErrorKind::StorageFull);
+        let err = flush_at_exit(&mut out).unwrap();
+        assert_eq!(err.kind(), std::io::ErrorKind::StorageFull);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_flush_at_exit_dev_full() {
+        use std::io::Write;
+        let mut out = std::io::BufWriter::new(std::fs::File::create("/dev/full").unwrap());
+        out.write_all(b"hello\n").unwrap();
+        let err = flush_at_exit(&mut out).unwrap();
+        assert_eq!(err.kind(), std::io::ErrorKind::StorageFull);
+    }
 
     fn make_os_vec(os_str: &OsStr) -> Vec<OsString> {
         vec![
