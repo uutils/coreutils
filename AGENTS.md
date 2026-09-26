@@ -9,12 +9,25 @@ diff before you send it.
 
 Answers to the reviewers should be done by a human, not a agent.
 
-## 1. Never read or copy GNU code
+## Start with an issue
+
+Before opening a PR, search for an existing issue describing the problem being
+addressed. Search both open and closed issues where relevant.
+
+When an existing issue covers the work, reference it in the PR.
+
+If a PR already covers the work, continue working on that PR rather than
+opening another one.
+
+If the PR fully resolves an issue, include `Closes #XXXXX` in the PR
+description so that the issue is automatically closed when the PR is merged.
+
+## Never read or copy GNU code
 
 GNU coreutils is GPLv3; this project is MIT. Any code derived from it - even a
 few lines, a helper structure, a test fixture or a comment - cannot be accepted.
 
-## 2. A PR needs tests
+## A PR needs tests
 
 New behavior or a bug fix comes with a test, in `tests/by-util/test_<util>.rs`
 or as a unit test next to the code. If a GNU test used to fail and now passes,
@@ -22,7 +35,7 @@ add a Rust test so it cannot silently regress.
 
 No tests, no merge.
 
-## 3. Keep the PR description short
+## Keep the PR description short
 
 Describe the problem being solved and what changed. That is all.
 
@@ -32,7 +45,7 @@ Describe the problem being solved and what changed. That is all.
 - Write issue reports, PR descriptions and replies to reviewers in your own
   words. The point of review is to check that a human understands the change.
 
-## 4. Read the docs already in this repo
+## Read the docs already in this repo
 
 Before changing anything, look at the Markdown files here - they are the actual
 rules, this file is only a pointer:

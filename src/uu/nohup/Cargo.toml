@@ -18,9 +18,9 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs"] }
-thiserror = { workspace = true }
 fluent = { workspace = true }
+thiserror = { workspace = true }
+uucore = { workspace = true, features = ["fs"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }

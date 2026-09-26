@@ -23,9 +23,9 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
+fluent = { workspace = true }
 rustix = { workspace = true, features = ["fs", "termios"] }
 uucore = { workspace = true, features = ["utmpx"] }
-fluent = { workspace = true }
 
 [lints]
 workspace = true

@@ -18,8 +18,8 @@ doctest = false
 
 [target.'cfg(not(target_os = "fuchsia"))'.dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs"] }
 fluent = { workspace = true }
+uucore = { workspace = true, features = ["fs"] }
 
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
 rustix = { workspace = true, features = ["fs", "termios"] }

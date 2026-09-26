@@ -29,7 +29,7 @@
           llvmPackages.bintools
           rustup
 
-          pre-commit
+          prek
           nodePackages.cspell
 
           # debugging
