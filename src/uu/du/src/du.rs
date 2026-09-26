@@ -26,6 +26,7 @@ use thiserror::Error;
 use uucore::diagnostics::OptionValue;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::fs::SYMLINK_FOLLOW_LIMIT;
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
 use uucore::line_ending::LineEnding;
 #[cfg(all(unix, not(target_os = "redox")))]
@@ -615,9 +616,6 @@ fn du_regular(
     ancestors: Option<&mut FxHashSet<FileInfo>>,
     symlink_depth: Option<usize>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
-    // Maximum symlink depth to prevent infinite loops
-    const MAX_SYMLINK_DEPTH: usize = 40;
-
     let mut default_ancestors = FxHashSet::default();
     let ancestors = ancestors.unwrap_or(&mut default_ancestors);
     let symlink_depth = symlink_depth.unwrap_or(0);
@@ -660,7 +658,7 @@ fn du_regular(
                         current_symlink_depth += 1;
 
                         // Check symlink depth limit
-                        if current_symlink_depth > MAX_SYMLINK_DEPTH {
+                        if current_symlink_depth > SYMLINK_FOLLOW_LIMIT {
                             print_tx.send(Err(io::Error::new(
                                 io::ErrorKind::InvalidData,
                                 "Too many levels of symbolic links",
