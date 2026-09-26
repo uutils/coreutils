@@ -77,7 +77,9 @@ fn find_valid_number_with_suffix(s: &str, unit: Unit) -> Option<&str> {
     let accepts_suffix = unit != Unit::None;
     let accepts_i = [Unit::Auto, Unit::Iec(true)].contains(&unit);
 
-    let mut characters = s.chars().skip(numeric_part.len());
+    // Slice by byte length, not `.chars().skip()`: the numeric part may
+    // contain a multi-byte decimal separator (e.g. Arabic ٫).
+    let mut characters = s[numeric_part.len()..].chars();
     let potential_suffix = characters.next();
     let potential_i = characters.next();
 
@@ -86,14 +88,12 @@ fn find_valid_number_with_suffix(s: &str, unit: Unit) -> Option<&str> {
     }
 
     match (potential_suffix, potential_i) {
-        (Some(suffix), None) if RawSuffix::try_from(&suffix).is_ok() => {
-            Some(&s[..=numeric_part.len()])
-        }
         (Some(suffix), Some('i')) if accepts_i && RawSuffix::try_from(&suffix).is_ok() => {
-            Some(&s[..numeric_part.len() + 2])
+            let suffix_len = suffix.len_utf8() + 1;
+            Some(&s[..numeric_part.len() + suffix_len])
         }
-        (Some(suffix), Some(_)) if RawSuffix::try_from(&suffix).is_ok() => {
-            Some(&s[..=numeric_part.len()])
+        (Some(suffix), _) if RawSuffix::try_from(&suffix).is_ok() => {
+            Some(&s[..numeric_part.len() + suffix.len_utf8()])
         }
         _ => Some(numeric_part),
     }
@@ -115,7 +115,7 @@ fn valid_end_with_unit_separator(
     RawSuffix::try_from(&first_char).ok()?;
 
     let is_iec = chars.next() == Some('i') && matches!(unit, Unit::Auto | Unit::Iec(true));
-    let suffix_len = 1 + usize::from(is_iec);
+    let suffix_len = first_char.len_utf8() + usize::from(is_iec);
 
     Some(valid_part.len() + unit_separator.len() + suffix_len)
 }
