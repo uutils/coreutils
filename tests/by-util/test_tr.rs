@@ -301,6 +301,73 @@ fn test_translate_and_squeeze_multiple_lines() {
         .stdout_is("yaay\nyaay"); // spell-checker:disable-line
 }
 
+/// An 'upper'/'lower' in SET2 must line up with an 'upper'/'lower' in SET1;
+/// any other class there leaves the mapping undefined. GNU calls that a
+/// misaligned construct.
+#[test]
+fn test_misaligned_upper_lower_construct() {
+    for sets in [
+        ["[:alpha:]", "[:upper:]"],
+        ["[:digit:]", "[:upper:]"],
+        ["abc", "[:upper:]"],
+        ["a[:lower:]", "[:upper:]b"],
+        ["[:lower:]", "[:upper:][:lower:]"],
+    ] {
+        new_ucmd!()
+            .args(&sets)
+            // No input: the sets are validated before stdin is read, so tr exits
+            // while the harness is still writing and the write hits a broken pipe.
+            .pipe_in("")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("tr: misaligned [:upper:] and/or [:lower:] construct\n");
+    }
+}
+
+/// The alignment rule is about translating only: with -d, SET2 is the squeeze
+/// set and lines up with nothing.
+#[test]
+fn test_misaligned_construct_not_checked_when_deleting() {
+    new_ucmd!()
+        .args(&["-ds", "[:alpha:]", "[:upper:]"])
+        .pipe_in("aZ1")
+        .succeeds()
+        .stdout_is("1");
+}
+
+/// -s alone still translates, so the alignment rule still applies.
+#[test]
+fn test_misaligned_construct_checked_when_squeezing() {
+    new_ucmd!()
+        .args(&["-s", "[:alpha:]", "[:upper:]"])
+        .pipe_in("")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("tr: misaligned [:upper:] and/or [:lower:] construct\n");
+}
+
+/// Plain -d takes one set: a class in SET2 is an extra operand, not a
+/// misaligned construct.
+#[test]
+fn test_delete_with_class_in_set2() {
+    new_ucmd!()
+        .args(&["-d", "[:alpha:]", "[:upper:]"])
+        .pipe_in("")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("extra operand '[:upper:]'");
+}
+
+/// SET1 longer than SET2 keeps its own message, which GNU also has.
+#[test]
+fn test_set1_longer_than_set2_ending_in_class() {
+    new_ucmd!()
+        .args(&["[:upper:][:lower:]", "[:lower:]"])
+        .pipe_in("aZ1")
+        .fails_with_code(1)
+        .stderr_contains("when translating with string1 longer than string2,\n");
+}
+
 #[test]
 fn test_delete_and_squeeze_one_set() {
     new_ucmd!()
