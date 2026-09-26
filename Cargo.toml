@@ -18,284 +18,6 @@ categories.workspace = true
 [package.metadata.docs.rs]
 all-features = true
 
-[features]
-default = ["feat_common_core", "feat_diagnostics"]
-## OS feature shortcodes
-unix = ["feat_os_unix"]
-windows = ["feat_os_windows"]
-## project-specific feature shortcodes
-expensive_tests = []
-# Opt-in: use OpenSSL (libcrypto) for md5/sha1/sha2-family digests in the
-# checksum utilities instead of the pure-Rust crates. Provides large speedups
-# on CPUs without SHA-NI.
-#
-# Enable with: `cargo build --release --features openssl`
-#
-# By default OpenSSL is built from source and statically linked (via the
-# `vendored` feature of the `openssl` crate). To link against the system
-# libcrypto/libssl dynamically instead, set `OPENSSL_NO_VENDOR=1` at build time.
-#
-# The `?/openssl` entries propagate the choice into each standalone checksum
-# crate only when that crate is itself enabled, so disabling this feature
-# genuinely turns OpenSSL off everywhere.
-openssl = [
-  "cksum?/openssl",
-  "md5sum?/openssl",
-  "sha1sum?/openssl",
-  "sha224sum?/openssl",
-  "sha256sum?/openssl",
-  "sha384sum?/openssl",
-  "sha512sum?/openssl",
-  "uucore/openssl",
-]
-# "test_risky_names" == enable tests that create problematic file names (would make a network share inaccessible to Windows, breaks SVN on Mac OS, etc.)
-test_risky_names = []
-# * only build `uudoc` when `--feature uudoc` is activated
-uudoc = [
-  "dep:clap_complete",
-  "dep:clap_mangen",
-  "dep:fluent-syntax",
-  "dep:jiff",
-  "dep:regex",
-  "dep:zip",
-]
-selinux = ["dep:selinux"]
-## features
-# "feat_diagnostics" == render errors against the argument list with a caret
-# when stderr is a terminal. On by default; build with `--no-default-features`
-# (plus a `feat_os_*` selection) to compile the rendering — and its ariadne
-# dependency — out. Utilities then keep their plain one-line messages.
-# Enabling `uucore/diagnostics` is enough: cargo unifies features, so every
-# utility in the build sees it. The matching `diagnostics` feature each `uu_*`
-# crate declares is there for building that crate on its own, and is
-# deliberately not listed here.
-feat_diagnostics = ["uucore/diagnostics"]
-## Optional feature for stdbuf
-# "feat_external_libstdbuf" == use an external libstdbuf.so for stdbuf instead of embedding it
-feat_external_libstdbuf = ["stdbuf/feat_external_libstdbuf"]
-# "feat_systemd_logind" == enable feat_systemd_logind support for utmpx replacement
-feat_systemd_logind = [
-  "pinky/feat_systemd_logind",
-  "uptime/feat_systemd_logind",
-  "users/feat_systemd_logind",
-  "uucore/feat_systemd_logind",
-  "who/feat_systemd_logind",
-]
-# "feat_selinux" == enable support for SELinux Security Context (by using `--features feat_selinux`)
-# NOTE:
-# * The selinux(-sys) crate requires `libselinux` headers and shared library to be accessible in the C toolchain at compile time.
-# * Running a uutils compiled with `feat_selinux` requires an SELinux enabled Kernel at run time.
-feat_selinux = [
-  "cp/selinux",
-  "feat_require_selinux",
-  "id/selinux",
-  "install/selinux",
-  "ls/selinux",
-  "mkdir/selinux",
-  "mkfifo/selinux",
-  "mknod/selinux",
-  "selinux",
-  "stat/selinux",
-]
-# "feat_smack" == enable support for SMACK Security Context (by using `--features feat_smack`)
-# NOTE:
-# * Running a uutils compiled with `feat_smack` requires a SMACK enabled Kernel at run time.
-feat_smack = [
-  "id/smack",
-  "ls/smack",
-  "mkdir/smack",
-  "mkfifo/smack",
-  "mknod/smack",
-]
-##
-## feature sets
-## (common/core and Tier1) feature sets
-# "feat_common_core" == baseline core set of utilities which can be built/run on most targets
-feat_common_core = [
-  "arch",
-  "base32",
-  "base64",
-  "basename",
-  "basenc",
-  "cat",
-  "cksum",
-  "b2sum",
-  "md5sum",
-  "nice",
-  "sha1sum",
-  "sha224sum",
-  "sha256sum",
-  "sha384sum",
-  "sha512sum",
-  "comm",
-  "cp",
-  "csplit",
-  "cut",
-  "date",
-  "dd",
-  "dir",
-  "dircolors",
-  "dirname",
-  "echo",
-  "expand",
-  "expr",
-  "factor",
-  "false",
-  "fmt",
-  "fold",
-  "head",
-  "hostid",
-  "join",
-  "link",
-  "ln",
-  "ls",
-  "mkdir",
-  "mktemp",
-  "mv",
-  "nl",
-  "numfmt",
-  "od",
-  "paste",
-  "pathchk",
-  "pr",
-  "printenv",
-  "printf",
-  "ptx",
-  "pwd",
-  "readlink",
-  "realpath",
-  "rm",
-  "rmdir",
-  "seq",
-  "shred",
-  "shuf",
-  "sleep",
-  "sort",
-  "split",
-  "sum",
-  "tac",
-  "tail",
-  "tee",
-  "test",
-  "touch",
-  "tr",
-  "true",
-  "truncate",
-  "tsort",
-  "tty",
-  "uname",
-  "unexpand",
-  "uniq",
-  "unlink",
-  "vdir",
-  "wc",
-  "yes",
-]
-# "feat_Tier1" == expanded set of utilities which can be built/run on the usual rust "Tier 1" target platforms (ref: <https://forge.rust-lang.org/release/platform-support.html>)
-feat_Tier1 = [
-  "feat_common_core",
-  "df",
-  "du",
-  "env",
-  "hostname",
-  "kill",
-  "nohup",
-  "nproc",
-  "more",
-  "sync",
-  "timeout",
-  "uptime",
-  "whoami",
-]
-## (primary platforms) feature sets
-# "feat_wasm" == set of utilities which can be built for wasm target
-# We don't need to support all of wasm targets. So the ambiguous name is used at here
-feat_wasm = ["feat_common_core", "nproc"]
-# "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms.
-feat_os_unix = [
-  "feat_Tier1",
-  #
-  "feat_require_unix",
-  "feat_require_unix_utmpx",
-]
-# "feat_os_unix_musl" == set of utilities which can be built/run on targets binding to the "musl" library (ref: <https://musl.libc.org/about.html>)
-# It excludes stdbuf due to cdylib limitations (https://github.com/rust-lang/rust/issues/82193)
-feat_os_unix_musl = [
-  "feat_Tier1",
-  #
-  "feat_require_unix_musl",
-  "feat_require_unix_utmpx",
-]
-# "feat_os_windows" == set of utilities which can be built/run on modern windows platforms
-feat_os_windows = ["feat_Tier1", "stdbuf"]
-## (secondary platforms) feature sets
-# "feat_os_unix_gnueabihf" == set of utilities which can be built/run on the "arm-unknown-linux-gnueabihf" target (ARMv6 Linux [hardfloat])
-feat_os_unix_gnueabihf = [
-  "feat_Tier1",
-  #
-  "feat_require_unix",
-  "feat_require_unix_utmpx",
-]
-feat_os_unix_android = [
-  "feat_Tier1",
-  #
-  "feat_require_unix",
-]
-## feature sets with requirements (restricting cross-platform availability)
-#
-# ** NOTE: these `feat_require_...` sets should be minimized as much as possible to encourage cross-platform availability of utilities
-#
-# "feat_require_unix" == set of utilities requiring support which is only available on unix platforms
-feat_require_unix = ["feat_require_unix_core", "stdbuf"]
-# "feat_require_unix_musl" == set of utilities requiring unix support, excluding stdbuf (cdylib not supported on musl)
-feat_require_unix_musl = ["feat_require_unix_core"]
-# "feat_require_unix_core" == core unix utilities (shared between regular unix and musl)
-feat_require_unix_core = [
-  "chgrp",
-  "chmod",
-  "chown",
-  "chroot",
-  "groups",
-  "id",
-  "install",
-  "logname",
-  "mkfifo",
-  "mknod",
-  "stat",
-  "stty",
-]
-# "feat_require_unix_utmpx" == set of utilities requiring unix utmp/utmpx support
-# * ref: <https://wiki.musl-libc.org/faq.html#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?>
-feat_require_unix_utmpx = ["pinky", "uptime", "users", "who"]
-# "feat_require_selinux" == set of utilities depending on SELinux.
-feat_require_selinux = ["chcon", "runcon"]
-## (alternate/newer/smaller platforms) feature sets
-# "feat_os_unix_fuchsia" == set of utilities which can be built/run on the "Fuchsia" OS (refs: <https://fuchsia.dev>; <https://en.wikipedia.org/wiki/Google_Fuchsia>)
-feat_os_unix_fuchsia = [
-  "feat_common_core",
-  #
-  "chgrp",
-  "chmod",
-  "chown",
-  "du",
-  "groups",
-  "install",
-  "logname",
-  "mkfifo",
-  "mknod",
-  "unlink",
-]
-# "feat_os_unix_redox" == set of utilities which can be built/run on "Redox OS" (refs: <https://www.redox-os.org>; <https://en.wikipedia.org/wiki/Redox_(operating_system)>)
-feat_os_unix_redox = [
-  "feat_common_core",
-  #
-  "chmod",
-  "stat",
-]
-##
-# * bypass/override ~ translate 'test' feature name to avoid dependency collision with rust core 'test' crate (o/w surfaces as compiler errors during testing)
-test = ["uu_test"]
-
 [workspace]
 resolver = "3"
 members = [
@@ -678,6 +400,284 @@ rustix = { workspace = true, features = ["net", "process"] }
 
 [build-dependencies]
 phf_codegen.workspace = true
+
+[features]
+default = ["feat_common_core", "feat_diagnostics"]
+## OS feature shortcodes
+unix = ["feat_os_unix"]
+windows = ["feat_os_windows"]
+## project-specific feature shortcodes
+expensive_tests = []
+# Opt-in: use OpenSSL (libcrypto) for md5/sha1/sha2-family digests in the
+# checksum utilities instead of the pure-Rust crates. Provides large speedups
+# on CPUs without SHA-NI.
+#
+# Enable with: `cargo build --release --features openssl`
+#
+# By default OpenSSL is built from source and statically linked (via the
+# `vendored` feature of the `openssl` crate). To link against the system
+# libcrypto/libssl dynamically instead, set `OPENSSL_NO_VENDOR=1` at build time.
+#
+# The `?/openssl` entries propagate the choice into each standalone checksum
+# crate only when that crate is itself enabled, so disabling this feature
+# genuinely turns OpenSSL off everywhere.
+openssl = [
+  "cksum?/openssl",
+  "md5sum?/openssl",
+  "sha1sum?/openssl",
+  "sha224sum?/openssl",
+  "sha256sum?/openssl",
+  "sha384sum?/openssl",
+  "sha512sum?/openssl",
+  "uucore/openssl",
+]
+# "test_risky_names" == enable tests that create problematic file names (would make a network share inaccessible to Windows, breaks SVN on Mac OS, etc.)
+test_risky_names = []
+# * only build `uudoc` when `--feature uudoc` is activated
+uudoc = [
+  "dep:clap_complete",
+  "dep:clap_mangen",
+  "dep:fluent-syntax",
+  "dep:jiff",
+  "dep:regex",
+  "dep:zip",
+]
+selinux = ["dep:selinux"]
+## features
+# "feat_diagnostics" == render errors against the argument list with a caret
+# when stderr is a terminal. On by default; build with `--no-default-features`
+# (plus a `feat_os_*` selection) to compile the rendering — and its ariadne
+# dependency — out. Utilities then keep their plain one-line messages.
+# Enabling `uucore/diagnostics` is enough: cargo unifies features, so every
+# utility in the build sees it. The matching `diagnostics` feature each `uu_*`
+# crate declares is there for building that crate on its own, and is
+# deliberately not listed here.
+feat_diagnostics = ["uucore/diagnostics"]
+## Optional feature for stdbuf
+# "feat_external_libstdbuf" == use an external libstdbuf.so for stdbuf instead of embedding it
+feat_external_libstdbuf = ["stdbuf/feat_external_libstdbuf"]
+# "feat_systemd_logind" == enable feat_systemd_logind support for utmpx replacement
+feat_systemd_logind = [
+  "pinky/feat_systemd_logind",
+  "uptime/feat_systemd_logind",
+  "users/feat_systemd_logind",
+  "uucore/feat_systemd_logind",
+  "who/feat_systemd_logind",
+]
+# "feat_selinux" == enable support for SELinux Security Context (by using `--features feat_selinux`)
+# NOTE:
+# * The selinux(-sys) crate requires `libselinux` headers and shared library to be accessible in the C toolchain at compile time.
+# * Running a uutils compiled with `feat_selinux` requires an SELinux enabled Kernel at run time.
+feat_selinux = [
+  "cp/selinux",
+  "feat_require_selinux",
+  "id/selinux",
+  "install/selinux",
+  "ls/selinux",
+  "mkdir/selinux",
+  "mkfifo/selinux",
+  "mknod/selinux",
+  "selinux",
+  "stat/selinux",
+]
+# "feat_smack" == enable support for SMACK Security Context (by using `--features feat_smack`)
+# NOTE:
+# * Running a uutils compiled with `feat_smack` requires a SMACK enabled Kernel at run time.
+feat_smack = [
+  "id/smack",
+  "ls/smack",
+  "mkdir/smack",
+  "mkfifo/smack",
+  "mknod/smack",
+]
+##
+## feature sets
+## (common/core and Tier1) feature sets
+# "feat_common_core" == baseline core set of utilities which can be built/run on most targets
+feat_common_core = [
+  "arch",
+  "base32",
+  "base64",
+  "basename",
+  "basenc",
+  "cat",
+  "cksum",
+  "b2sum",
+  "md5sum",
+  "nice",
+  "sha1sum",
+  "sha224sum",
+  "sha256sum",
+  "sha384sum",
+  "sha512sum",
+  "comm",
+  "cp",
+  "csplit",
+  "cut",
+  "date",
+  "dd",
+  "dir",
+  "dircolors",
+  "dirname",
+  "echo",
+  "expand",
+  "expr",
+  "factor",
+  "false",
+  "fmt",
+  "fold",
+  "head",
+  "hostid",
+  "join",
+  "link",
+  "ln",
+  "ls",
+  "mkdir",
+  "mktemp",
+  "mv",
+  "nl",
+  "numfmt",
+  "od",
+  "paste",
+  "pathchk",
+  "pr",
+  "printenv",
+  "printf",
+  "ptx",
+  "pwd",
+  "readlink",
+  "realpath",
+  "rm",
+  "rmdir",
+  "seq",
+  "shred",
+  "shuf",
+  "sleep",
+  "sort",
+  "split",
+  "sum",
+  "tac",
+  "tail",
+  "tee",
+  "test",
+  "touch",
+  "tr",
+  "true",
+  "truncate",
+  "tsort",
+  "tty",
+  "uname",
+  "unexpand",
+  "uniq",
+  "unlink",
+  "vdir",
+  "wc",
+  "yes",
+]
+# "feat_Tier1" == expanded set of utilities which can be built/run on the usual rust "Tier 1" target platforms (ref: <https://forge.rust-lang.org/release/platform-support.html>)
+feat_Tier1 = [
+  "feat_common_core",
+  "df",
+  "du",
+  "env",
+  "hostname",
+  "kill",
+  "nohup",
+  "nproc",
+  "more",
+  "sync",
+  "timeout",
+  "uptime",
+  "whoami",
+]
+## (primary platforms) feature sets
+# "feat_wasm" == set of utilities which can be built for wasm target
+# We don't need to support all of wasm targets. So the ambiguous name is used at here
+feat_wasm = ["feat_common_core", "nproc"]
+# "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms.
+feat_os_unix = [
+  "feat_Tier1",
+  #
+  "feat_require_unix",
+  "feat_require_unix_utmpx",
+]
+# "feat_os_unix_musl" == set of utilities which can be built/run on targets binding to the "musl" library (ref: <https://musl.libc.org/about.html>)
+# It excludes stdbuf due to cdylib limitations (https://github.com/rust-lang/rust/issues/82193)
+feat_os_unix_musl = [
+  "feat_Tier1",
+  #
+  "feat_require_unix_musl",
+  "feat_require_unix_utmpx",
+]
+# "feat_os_windows" == set of utilities which can be built/run on modern windows platforms
+feat_os_windows = ["feat_Tier1", "stdbuf"]
+## (secondary platforms) feature sets
+# "feat_os_unix_gnueabihf" == set of utilities which can be built/run on the "arm-unknown-linux-gnueabihf" target (ARMv6 Linux [hardfloat])
+feat_os_unix_gnueabihf = [
+  "feat_Tier1",
+  #
+  "feat_require_unix",
+  "feat_require_unix_utmpx",
+]
+feat_os_unix_android = [
+  "feat_Tier1",
+  #
+  "feat_require_unix",
+]
+## feature sets with requirements (restricting cross-platform availability)
+#
+# ** NOTE: these `feat_require_...` sets should be minimized as much as possible to encourage cross-platform availability of utilities
+#
+# "feat_require_unix" == set of utilities requiring support which is only available on unix platforms
+feat_require_unix = ["feat_require_unix_core", "stdbuf"]
+# "feat_require_unix_musl" == set of utilities requiring unix support, excluding stdbuf (cdylib not supported on musl)
+feat_require_unix_musl = ["feat_require_unix_core"]
+# "feat_require_unix_core" == core unix utilities (shared between regular unix and musl)
+feat_require_unix_core = [
+  "chgrp",
+  "chmod",
+  "chown",
+  "chroot",
+  "groups",
+  "id",
+  "install",
+  "logname",
+  "mkfifo",
+  "mknod",
+  "stat",
+  "stty",
+]
+# "feat_require_unix_utmpx" == set of utilities requiring unix utmp/utmpx support
+# * ref: <https://wiki.musl-libc.org/faq.html#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?>
+feat_require_unix_utmpx = ["pinky", "uptime", "users", "who"]
+# "feat_require_selinux" == set of utilities depending on SELinux.
+feat_require_selinux = ["chcon", "runcon"]
+## (alternate/newer/smaller platforms) feature sets
+# "feat_os_unix_fuchsia" == set of utilities which can be built/run on the "Fuchsia" OS (refs: <https://fuchsia.dev>; <https://en.wikipedia.org/wiki/Google_Fuchsia>)
+feat_os_unix_fuchsia = [
+  "feat_common_core",
+  #
+  "chgrp",
+  "chmod",
+  "chown",
+  "du",
+  "groups",
+  "install",
+  "logname",
+  "mkfifo",
+  "mknod",
+  "unlink",
+]
+# "feat_os_unix_redox" == set of utilities which can be built/run on "Redox OS" (refs: <https://www.redox-os.org>; <https://en.wikipedia.org/wiki/Redox_(operating_system)>)
+feat_os_unix_redox = [
+  "feat_common_core",
+  #
+  "chmod",
+  "stat",
+]
+##
+# * bypass/override ~ translate 'test' feature name to avoid dependency collision with rust core 'test' crate (o/w surfaces as compiler errors during testing)
+test = ["uu_test"]
 
 [lints]
 workspace = true
