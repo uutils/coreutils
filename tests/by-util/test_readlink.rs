@@ -39,6 +39,48 @@ fn test_resolve() {
 }
 
 #[test]
+fn test_keeps_going_after_an_operand_that_cannot_be_read() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("foo");
+    at.relative_symlink_file("foo", "bar");
+    at.touch("baz");
+    at.relative_symlink_file("baz", "qux");
+
+    // GNU prints the links it could read and reports the failure through
+    // the exit status only, so nothing about `nope` stops `qux`.
+    scene
+        .ucmd()
+        .args(&["bar", "nope", "qux"])
+        .fails_with_code(1)
+        .stdout_is("foo\nbaz\n")
+        .no_stderr();
+
+    scene
+        .ucmd()
+        .args(&["-v", "bar", "nope", "qux"])
+        .fails_with_code(1)
+        .stdout_is("foo\nbaz\n")
+        .stderr_contains("nope: No such file or directory");
+}
+
+#[test]
+fn test_canonicalize_existing_keeps_going_after_a_missing_operand() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("c");
+    let actual = ucmd
+        .args(&["-e", "a", "b", "c"])
+        .fails_with_code(1)
+        .stdout_move_str();
+    let expect = path_concat!(at.root_dir_resolved(), "a")
+        + "\n"
+        + &path_concat!(at.root_dir_resolved(), "c")
+        + "\n";
+    assert_eq!(actual, expect);
+}
+
+#[test]
 fn test_canonicalize() {
     let (at, mut ucmd) = at_and_ucmd!();
     let actual = ucmd.arg("-f").arg(".").succeeds().stdout_move_str();
