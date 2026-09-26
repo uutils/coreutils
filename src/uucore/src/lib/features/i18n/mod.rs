@@ -41,9 +41,12 @@ const DEFAULT_LOCALE: Locale = locale!("und");
 pub fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
     let locale_var = ["LC_ALL", locale_name, "LANG"]
         .iter()
-        .find_map(|&key| std::env::var(key).ok().filter(|l| !l.is_empty()));
+        .find_map(|&key| std::env::var_os(key).filter(|l| !l.is_empty()));
 
-    if let Some(locale_var_str) = locale_var {
+    if let Some(locale_var) = locale_var {
+        // A non-UTF-8 value still takes precedence over the lower-priority
+        // variables; it just won't parse into a known locale.
+        let locale_var_str = locale_var.to_string_lossy();
         let mut split = locale_var_str.split(&['.', '@']);
 
         if let Some(simple) = split.next() {
@@ -157,13 +160,6 @@ pub fn get_collating_locale() -> &'static (Locale, UEncoding) {
     COLLATING_LOCALE.get_or_init(|| get_locale_from_env("LC_COLLATE"))
 }
 
-/// Get the character-classification locale from the environment.
-pub fn get_ctype_locale() -> &'static (Locale, UEncoding) {
-    static CTYPE_LOCALE: OnceLock<(Locale, UEncoding)> = OnceLock::new();
-
-    CTYPE_LOCALE.get_or_init(|| get_locale_from_env("LC_CTYPE"))
-}
-
 /// Get the numeric locale from the environment
 pub fn get_numeric_locale() -> &'static (Locale, UEncoding) {
     static NUMERIC_LOCALE: OnceLock<(Locale, UEncoding)> = OnceLock::new();
@@ -176,7 +172,7 @@ pub fn get_numeric_locale() -> &'static (Locale, UEncoding) {
 /// Character classification (used to decide whether bytes are printable) is
 /// governed by LC_CTYPE, not LC_COLLATE.
 pub fn get_locale_encoding() -> UEncoding {
-    get_ctype_locale().1
+    get_ctype_encoding()
 }
 
 /// Return the character-type encoding (`LC_CTYPE`) deduced from the environment.

@@ -4414,6 +4414,25 @@ fn test_ls_lc_collate_does_not_affect_display() {
         .stdout_only("あいうえお\n");
 }
 
+// A non-UTF-8 LC_ALL is still set, so it must take precedence over LANG
+// instead of being skipped: it names no usable locale, hence ASCII.
+#[test]
+#[cfg(unix)]
+fn test_ls_non_utf8_lc_all_overrides_lang() {
+    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("tést");
+
+    scene
+        .ucmd()
+        .env("LC_ALL", OsStr::from_bytes(b"\xff"))
+        .env("LANG", "en_US.UTF-8")
+        .arg("-b")
+        .succeeds()
+        .stdout_only("t\\303\\251st\n");
+}
+
 #[test]
 fn test_ls_quoting_and_color() {
     let scene = TestScenario::new(util_name!());
