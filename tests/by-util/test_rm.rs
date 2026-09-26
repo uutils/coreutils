@@ -1915,3 +1915,18 @@ fn test_dash_hint_is_shell_escaped() {
         .fails_with_code(1)
         .stderr_contains("./'-a'$'\\t''b'\\''c'' to remove the file '-a'$'\\t''b'\\''c'.");
 }
+
+#[test]
+fn test_posixly_correct_options_after_operands() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("test_dir");
+    at.touch("test_dir/file");
+
+    ucmd.env("POSIXLY_CORRECT", "1")
+        .arg("test_dir")
+        .arg("-rf")
+        .fails()
+        .code_is(1);
+
+    assert!(at.dir_exists("test_dir"));
+}
