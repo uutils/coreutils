@@ -1056,6 +1056,19 @@ impl Config {
             tab_size: tab_size.unwrap_or(SPACES_IN_TAB),
         })
     }
+
+    /// Check if leading info (inode and/or block size) should be displayed
+    #[inline]
+    pub(crate) fn should_display_leading_info(&self) -> bool {
+        #[cfg(unix)]
+        {
+            self.inode || self.alloc_size
+        }
+        #[cfg(not(unix))]
+        {
+            self.alloc_size
+        }
+    }
 }
 
 fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String>), LsError> {
