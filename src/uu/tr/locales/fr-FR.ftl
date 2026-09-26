@@ -13,7 +13,7 @@ tr-error-missing-operand = opérande manquant
 tr-error-missing-operand-translating = opérande manquant après { $set }
   Deux chaînes doivent être données lors de la traduction.
 tr-error-missing-operand-deleting-squeezing = opérande manquant après { $set }
-  Deux chaînes doivent être données lors de la suppression et de la compression des répétitions.
+  Deux chaînes doivent être données lors de la suppression et compression.
 tr-error-extra-operand-deleting-without-squeezing = opérande supplémentaire { $operand }
   Une seule chaîne peut être donnée lors de la suppression sans compression des répétitions.
 tr-error-extra-operand-simple = opérande supplémentaire { $operand }
