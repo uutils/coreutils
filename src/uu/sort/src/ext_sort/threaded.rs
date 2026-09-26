@@ -8,7 +8,7 @@
 
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{Read, Write, stderr};
+use std::io::{Read, Write};
 use std::iter;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, SyncSender};
@@ -16,6 +16,8 @@ use std::thread;
 
 use itertools::Itertools;
 use uucore::error::{UResult, strip_errno};
+use uucore::show_error;
+use uucore::translate;
 
 use crate::Output;
 use crate::chunks::RecycledChunk;
@@ -53,6 +55,8 @@ pub fn ext_sort(
 
     // Test if compression program exists and works, disable if not
     let mut effective_settings = settings.clone();
+    // Keep the error until we know compression is actually needed.
+    let mut compress_prog_error = None;
     if let Some(ref prog) = settings.compress_prog {
         // Test the compression program by trying to spawn it
         match std::process::Command::new(prog)
@@ -66,12 +70,7 @@ pub fn ext_sort(
                 let _ = child.kill();
             }
             Err(err) => {
-                // Print the error and disable compression
-                let _ = writeln!(
-                    stderr(),
-                    "sort: could not run compress program '{prog}': {}",
-                    strip_errno(&err)
-                );
+                compress_prog_error = Some((prog.clone(), err));
                 effective_settings.compress_prog = None;
             }
         }
@@ -81,6 +80,7 @@ pub fn ext_sort(
         reader_writer::<_, WriteableCompressedTmpFile>(
             files,
             &effective_settings,
+            None,
             &sorted_receiver,
             recycled_sender,
             output,
@@ -90,6 +90,7 @@ pub fn ext_sort(
         reader_writer::<_, WriteablePlainTmpFile>(
             files,
             &effective_settings,
+            compress_prog_error,
             &sorted_receiver,
             recycled_sender,
             output,
@@ -104,6 +105,7 @@ fn reader_writer<
 >(
     files: F,
     settings: &GlobalSettings,
+    compress_prog_error: Option<(String, std::io::Error)>,
     receiver: &Receiver<Chunk>,
     sender: SyncSender<Chunk>,
     output: Output,
@@ -126,6 +128,7 @@ fn reader_writer<
         separator,
         buffer_size,
         settings,
+        compress_prog_error,
         receiver,
         sender,
     )?;
@@ -209,12 +212,14 @@ enum ReadResult<I: WriteableTmpFile> {
     WroteChunksToFile { tmp_files: Vec<I::Closed> },
 }
 /// The function that is executed on the reader/writer thread.
+#[allow(clippy::too_many_arguments)]
 fn read_write_loop<I: WriteableTmpFile>(
     mut files: impl Iterator<Item = UResult<Box<dyn Read + Send>>>,
     tmp_dir: &mut TmpDirWrapper,
     separator: u8,
     buffer_size: usize,
     settings: &GlobalSettings,
+    compress_prog_error: Option<(String, std::io::Error)>,
     receiver: &Receiver<Chunk>,
     sender: SyncSender<Chunk>,
 ) -> UResult<ReadResult<I>> {
@@ -249,6 +254,18 @@ fn read_write_loop<I: WriteableTmpFile>(
                 ReadResult::EmptyInput
             });
         }
+    }
+
+    // The input did not fit into the first two in-memory chunks.
+    if let Some((prog, err)) = compress_prog_error {
+        show_error!(
+            "{}",
+            translate!(
+                "sort-compress-prog-execution-failed",
+                "prog" => prog,
+                "error" => strip_errno(&err)
+            )
+        );
     }
 
     let mut sender_option = Some(sender);
