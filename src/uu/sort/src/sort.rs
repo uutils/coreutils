@@ -2157,13 +2157,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // GNU `sort` supports `-t=` to set the field separator to `=`.
     // Clap strips the first `=` after a short option (see
     // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242,
-    // and the same rewrite in `cut`), so rewrite every attached `-t<chars>`
-    // argument to its long form, which preserves the separator verbatim.
+    // and the same rewrite in `cut`), so give the separator its own
+    // argument, which clap passes through verbatim. A cluster such as
+    // `-nt=5` is split into `-nt` and `5` the same way.
+    let valueless_shorts = "bCcdfghimMnRrsuz";
     let args = args.into_iter().flat_map(|x| {
         // Non-UTF-8 separators are rejected later anyway, so lossy conversion
         // here only affects arguments that cannot become a valid separator.
         let as_str = x.to_string_lossy();
-        // Attached form -t<chars>: route through long option to preserve verbatim.
         if as_str.starts_with("-t") && as_str.chars().count() > 2 {
             return vec![OsString::from(format!(
                 "--{}={}",
@@ -2171,9 +2172,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 &as_str[2..]
             ))];
         }
-        // Clustered form, e.g. -nt=5: split into -<flags>t + rest so clap
-        // passes the value through unstripped. Only for valueless flag clusters.
-        let valueless_shorts = "bCcdfghimMnRrsuz";
         let bytes = as_str.as_bytes();
         if bytes.len() > 3
             && bytes[0] == b'-'
