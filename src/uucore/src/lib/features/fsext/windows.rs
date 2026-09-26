@@ -70,8 +70,8 @@ impl FsUsage {
             bfree: space.free / blocksize,
             bavail: space.available / blocksize,
             bavail_top_bit_set: false,
-            files: 0,
-            ffree: 0,
+            files: None,
+            ffree: None,
         })
     }
 }
