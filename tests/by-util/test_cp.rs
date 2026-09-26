@@ -9486,35 +9486,32 @@ fn test_cp_xattr_enotsup_handling() {
 #[cfg(target_os = "linux")]
 fn test_cp_xattr_failure_keeps_dest_contents() {
     use std::process::Command;
+    use uutests::util::tmpfs_to_target_failing_xattr_value;
     let scene = TestScenario::new(util_name!());
 
-    // tmpfs accepts large user-xattr values while ext4 and friends cap them
-    // near the block size, so copying such a source out of tmpfs makes
-    // --preserve=xattr fail only after the file data has been written.
-    // The fixtures dir may itself be on tmpfs, so put the destination in
-    // target/tmp, which lives on the build filesystem.
-    let big_value = "y".repeat(9_100);
     let pid = std::process::id();
-    let source = format!("/dev/shm/cp_keep_dest_{pid}");
     let dest_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("cp_keep_dest_{pid}"));
-    if std_fs::write(&source, "kept content").is_err() || std_fs::create_dir(&dest_dir).is_err() {
-        return; // skip: no usable /dev/shm or target/tmp
+    if std_fs::create_dir(&dest_dir).is_err() {
+        return; // skip: no usable target/tmp
     }
-    let source_accepts = Command::new("setfattr")
-        .args(["-n", "user.huge", "-v", &big_value, &source])
-        .status()
-        .is_ok_and(|s| s.success());
-    let probe = dest_dir.join("probe");
-    std_fs::write(&probe, "x").unwrap();
-    let dest_rejects = !Command::new("setfattr")
-        .args(["-n", "user.huge", "-v", &big_value])
-        .arg(&probe)
-        .status()
-        .is_ok_and(|s| s.success());
-    if !source_accepts || !dest_rejects {
-        std_fs::remove_file(&source).ok();
+    let Some(big_value) = tmpfs_to_target_failing_xattr_value(&dest_dir) else {
         std_fs::remove_dir_all(&dest_dir).ok();
         return; // skip: this filesystem combination cannot produce the failure
+    };
+
+    let source = format!("/dev/shm/cp_keep_dest_{pid}");
+    if std_fs::write(&source, "kept content").is_err() {
+        std_fs::remove_dir_all(&dest_dir).ok();
+        return;
+    }
+    if !Command::new("setfattr")
+        .args(["-n", "user.huge", "-v", &big_value, &source])
+        .status()
+        .is_ok_and(|s| s.success())
+    {
+        std_fs::remove_file(&source).ok();
+        std_fs::remove_dir_all(&dest_dir).ok();
+        return;
     }
 
     let out = dest_dir.join("out");
@@ -9524,7 +9521,7 @@ fn test_cp_xattr_failure_keeps_dest_contents() {
         .arg(&source)
         .arg(&out)
         .fails()
-        .stderr_contains("setting attributes");
+        .stderr_contains("setting attribute 'user.huge'");
     assert_eq!(std_fs::read_to_string(&out).unwrap(), "kept content");
 
     // A read-only source propagates its mode to the destination; the failure
@@ -9533,11 +9530,12 @@ fn test_cp_xattr_failure_keeps_dest_contents() {
     let out_ro = dest_dir.join("out_ro");
     scene
         .ucmd()
+        .umask(0o022)
         .arg("--preserve=xattr")
         .arg(&source)
         .arg(&out_ro)
         .fails()
-        .stderr_contains("setting attributes");
+        .stderr_contains("setting attribute 'user.huge'");
     assert_eq!(std_fs::read_to_string(&out_ro).unwrap(), "kept content");
     assert_eq!(
         std_fs::metadata(&out_ro).unwrap().mode() & 0o777,
