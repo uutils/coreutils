@@ -517,8 +517,10 @@ fn test_date_set_valid() {
         new_ucmd!()
             .arg("--set")
             .arg("2020-03-12 13:30:00+08:00")
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
             .succeeds()
-            .no_output();
+            .stdout_is("Thu Mar 12 05:30:00 UTC 2020\n");
     }
 }
 
@@ -555,8 +557,11 @@ fn test_date_set_permissions_error() {
         let result = new_ucmd!()
             .arg("--set")
             .arg("2020-03-11 21:45:00+08:00")
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
             .fails();
-        result.no_stdout();
+        // GNU prints the date even when the clock cannot be set.
+        result.stdout_is("Wed Mar 11 13:45:00 UTC 2020\n");
         assert!(result.stderr_str().starts_with("date: cannot set date: "));
     }
 }
@@ -567,10 +572,18 @@ fn test_date_set_hyphen_prefixed_values() {
     // test -s flag accepts hyphen-prefixed values like "-3 days"
     if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
         let test_cases = vec!["-1 hour", "-2 days", "-3 weeks", "-1 month"];
+        // The echoed date is relative to "now", so match its shape only.
+        let re = Regex::new(r"^\w{3} \w{3} {1,2}\d{1,2} \d{2}:\d{2}:\d{2} UTC \d{4}\n$").unwrap();
 
         for date_str in test_cases {
-            let result = new_ucmd!().arg("--set").arg(date_str).fails();
-            result.no_stdout();
+            let result = new_ucmd!()
+                .arg("--set")
+                .arg(date_str)
+                .env("LC_ALL", "C")
+                .env("TZ", "UTC0")
+                .fails();
+            // GNU prints the date even when the clock cannot be set.
+            result.stdout_matches(&re);
             // permission error, not argument parsing error
             assert!(
                 result.stderr_str().starts_with("date: cannot set date: "),
@@ -588,8 +601,33 @@ fn test_date_set_valid_2() {
         new_ucmd!()
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01 AWST") // spell-checker:disable-line
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
             .succeeds()
-            .no_output();
+            .stdout_is("Sat Mar 20 06:53:01 UTC 2021\n");
+    }
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_date_set_echo_honors_format_and_utc() {
+    // The echo is printed even when the set fails (GNU does the same), so
+    // the format and `-u` handling can be checked without privileges.
+    if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
+        // The echo goes through the user's format string.
+        new_ucmd!()
+            .args(&["--set", "2020-03-12 13:30:00+08:00", "+%F %T %Z"])
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
+            .fails()
+            .stdout_is("2020-03-12 05:30:00 UTC\n");
+        // `-u` echoes in UTC regardless of the local zone.
+        new_ucmd!()
+            .args(&["-u", "--set", "2020-03-12 13:30:00+08:00"])
+            .env("LC_ALL", "C")
+            .env("TZ", "Europe/Helsinki") // spell-checker:disable-line
+            .fails()
+            .stdout_is("Thu Mar 12 05:30:00 UTC 2020\n");
     }
 }
 
@@ -789,8 +827,10 @@ fn test_date_set_valid_3() {
         new_ucmd!()
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01") // Local timezone
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
             .succeeds()
-            .no_output();
+            .stdout_is("Sat Mar 20 14:53:01 UTC 2021\n");
     }
 }
 
@@ -801,8 +841,10 @@ fn test_date_set_valid_4() {
         new_ucmd!()
             .arg("--set")
             .arg("2020-03-11 21:45:00") // Local timezone
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
             .succeeds()
-            .no_output();
+            .stdout_is("Wed Mar 11 21:45:00 UTC 2020\n");
     }
 }
 
