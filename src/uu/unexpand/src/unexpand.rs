@@ -374,13 +374,19 @@ fn write_tabs(
     // This conditional establishes the following:
     // We never turn a single space before a non-blank into
     // a tab, unless it's at the start of the line.
-    let ai = print_state.leading || amode;
-    if (ai && print_state.pctype != CharType::Tab && print_state.col > print_state.scol + 1)
-        || (print_state.col > print_state.scol
-            && (print_state.leading || ai && print_state.pctype == CharType::Tab))
-    {
-        while let Some(nts) = next_tabstop(tab_config, print_state.scol) {
-            let target = print_state.scol + nts;
+    let has_pending = print_state.col > print_state.scol;
+    let multi_space = print_state.col > print_state.scol.saturating_add(1);
+    let tab_preceded = print_state.pctype == CharType::Tab;
+    let can_convert = print_state.leading || (amode && (tab_preceded || multi_space));
+
+    if has_pending && can_convert {
+        while print_state.scol < print_state.col {
+            let Some(nts) = next_tabstop(tab_config, print_state.scol) else {
+                break;
+            };
+            let Some(target) = print_state.scol.checked_add(nts) else {
+                break;
+            };
             if print_state.col < target {
                 break;
             }
@@ -389,7 +395,7 @@ fn write_tabs(
             if print_state
                 .pending_wide
                 .iter()
-                .any(|&(start, width, _)| start < target && target < start + width)
+                .any(|&(start, width, _)| start < target && target < start.saturating_add(width))
             {
                 break;
             }
@@ -413,11 +419,11 @@ fn write_tabs(
         {
             let (_, width, bytes) = &print_state.pending_wide[wide_idx];
             output.write_all(bytes)?;
-            print_state.scol += width;
+            print_state.scol = print_state.scol.saturating_add(*width);
             wide_idx += 1;
         } else {
             output.write_all(b" ")?;
-            print_state.scol += 1;
+            print_state.scol = print_state.scol.saturating_add(1);
         }
     }
     print_state.pending_wide.clear();
@@ -519,7 +525,7 @@ fn unexpand_buf(
         {
             write_tabs(output, tab_config, print_state, options.aflag)?;
             print_state.scol = print_state.col;
-            print_state.col += buf.len();
+            print_state.col = print_state.col.saturating_add(buf.len());
             output.write_all(buf)?;
             return Ok(());
         }
@@ -545,9 +551,9 @@ fn unexpand_buf(
             let mut saw_tab = false;
             while end < buf.len() {
                 match buf[end] {
-                    b' ' => col += 1,
+                    b' ' => col = col.saturating_add(1),
                     b'\t' => {
-                        col += next_tabstop(tab_config, col).unwrap_or(1);
+                        col = col.saturating_add(next_tabstop(tab_config, col).unwrap_or(1));
                         saw_tab = true;
                     }
                     _ => break,
@@ -602,10 +608,12 @@ fn unexpand_buf(
                 }
 
                 // compute next col, but only write space or tab chars if not buffering
-                print_state.col += if ctype == CharType::Space {
-                    cwidth
+                print_state.col = if ctype == CharType::Space {
+                    print_state.col.saturating_add(cwidth)
                 } else {
-                    next_tabstop(tab_config, print_state.col).unwrap_or(1)
+                    print_state
+                        .col
+                        .saturating_add(next_tabstop(tab_config, print_state.col).unwrap_or(1))
                 };
 
                 if !tabs_buffered {
@@ -619,7 +627,7 @@ fn unexpand_buf(
                 print_state.leading = false; // no longer at the start of a line
                 print_state.col = if ctype == CharType::Other {
                     // use computed width
-                    print_state.col + cwidth
+                    print_state.col.saturating_add(cwidth)
                 } else if print_state.col > 0 {
                     // Backspace case, but only if col > 0
                     print_state.col - 1
