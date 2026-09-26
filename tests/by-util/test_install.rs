@@ -3017,6 +3017,43 @@ fn test_install_backup_nil_same_file() {
     }
 }
 
+/// Regression test for #13232: `install -D src /single-component-dest` must
+/// not delete the source file when the destination's parent directory is `/`.
+///
+/// The slash-stripping loop turned `"/"` into `""`, which `create_dir_all_safe`
+/// resolved to the current directory.  A subsequent `unlink_at` then removed
+/// the source file instead of the (non-existent) destination.
+///
+/// We cannot write to `/` as a regular user, so we verify that install fails
+/// AND that the source is left intact.
+#[test]
+#[cfg(unix)]
+fn test_install_d_root_parent_does_not_destroy_source() {
+    // Skip if running as root — root can actually create /file, which would
+    // make the operation succeed and change the assertion below.
+    if unsafe { libc::getuid() } == 0 {
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("src", "hello\n");
+
+    // /install_test_13232 lives directly under "/" — parent is "/"
+    scene
+        .ucmd()
+        .args(&["-D", "src", "/install_test_13232"])
+        .fails();
+
+    // Source must survive regardless of the failure reason.
+    assert!(
+        at.file_exists("src"),
+        "source file was deleted by install -D"
+    );
+    assert_eq!(at.read("src"), "hello\n");
+}
+
 #[test]
 fn test_install_backup_refuses_when_source_is_the_backup() {
     // Installing `a~` over `a` renames `a` to `a~`, which would clobber the
