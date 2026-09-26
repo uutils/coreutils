@@ -1985,6 +1985,38 @@ fn test_iflag_directory_fails_when_file_is_piped_via_std_in() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_ftruncate_fail() {
+    use std::process::Command;
+    let (_, _ucmd) = at_and_ucmd!();
+
+    let Ok(out) = Command::new("strace")
+        .args([
+            "-o",
+            "/dev/null",
+            "-qqq",
+            "-e",
+            "fault=ftruncate:error=EPERM",
+            get_tests_binary(),
+            "dd",
+            "if=/dev/zero",
+            "of=/tmp/a",
+            "count=1",
+            "seek=1",
+            "status=none",
+        ])
+        .output()
+    else {
+        return; // missing strace
+    };
+    let err = String::from_utf8_lossy(&out.stderr);
+    // todo: add file path
+    assert!(err.contains("failed to truncate to"));
+    assert!(err.contains("bytes in output file:"));
+    assert!(err.contains("Operation not permitted"));
+}
+
+#[test]
 fn test_stdin_stdout_not_rewound_even_when_connected_to_seekable_file() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;

@@ -701,9 +701,13 @@ impl Dest {
         // truncate failure (e.g. ENOSPC, read-only fs) means silent data
         // loss.
         if let Err(e) = f.set_len(pos)
-            && f.metadata().is_ok_and(|m| m.file_type().is_file())
+            && (e.kind() != io::ErrorKind::InvalidInput || f.metadata()?.file_type().is_file())
         {
-            return Err(e);
+            return Err(io::Error::other(format!(
+                "{}: {}",
+                translate!("dd-error-failed-to-ftruncate", "len" => pos),
+                uucore::error::strip_errno(&e)
+            )));
         }
         Ok(())
     }
