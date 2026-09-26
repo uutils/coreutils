@@ -439,11 +439,64 @@ fn stty(opts: &Options) -> UResult<()> {
             }
         }
         tcsetattr(opts.file.as_fd(), set_arg, &termios)?;
+
+        // POSIX allows tcsetattr to report success after applying only some of
+        // the requested changes, so re-read the settings and check them.
+        let applied = tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
+        if !modes_match(&termios, &applied) {
+            return Err(USimpleError::new(
+                1,
+                translate!(
+                    "stty-error-unable-to-perform-all",
+                    "device" => opts.device_name.as_str()
+                ),
+            ));
+        }
     } else {
         let termios = tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
         print_settings(&termios, opts)?;
     }
     Ok(())
+}
+
+/// How many control characters the C library actually reads back.
+///
+/// musl asks the kernel for the legacy `TCGETS`, which carries the 19 control
+/// characters of the kernel's `struct termios`, so the remaining entries of the
+/// `NCCS`-sized array are left untouched. `nix` hands out an uninitialized
+/// `Termios`, so those entries are garbage and comparing them would report a
+/// difference that is not there. GNU stty hits the same thing and works around
+/// it by zeroing its `termios` before calling `tcgetattr`.
+#[cfg(target_env = "musl")]
+const ROUND_TRIPPED_CONTROL_CHARS: usize = 19;
+#[cfg(not(target_env = "musl"))]
+const ROUND_TRIPPED_CONTROL_CHARS: usize = nix::libc::NCCS;
+
+/// Report whether the terminal ended up holding the settings we asked for.
+///
+/// The fields are compared one by one instead of using `Termios`'s
+/// `PartialEq`. On glibc the wrapped `termios` also carries `c_ispeed` and
+/// `c_ospeed` fields, which glibc leaves alone when a speed is requested but
+/// which the kernel updates when the settings are read back, so a derived
+/// comparison reports a mismatch for a terminal that is in fact configured as
+/// requested. GNU stty compares the settings themselves as well.
+fn modes_match(requested: &Termios, applied: &Termios) -> bool {
+    if requested.input_flags != applied.input_flags
+        || requested.output_flags != applied.output_flags
+        || requested.control_flags != applied.control_flags
+        || requested.local_flags != applied.local_flags
+        || requested.control_chars[..ROUND_TRIPPED_CONTROL_CHARS]
+            != applied.control_chars[..ROUND_TRIPPED_CONTROL_CHARS]
+    {
+        return false;
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "haiku"))]
+    if requested.line_discipline != applied.line_discipline {
+        return false;
+    }
+
+    true
 }
 
 // The GNU implementation adds the --help message when the args are incorrectly formatted
