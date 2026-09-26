@@ -27,7 +27,6 @@ use uucore::{
 use crate::{
     LsError,
     colors::{LsColorsParseError, validate_ls_colors_env},
-    dired::is_dired_arg_present,
     display::{Format, IndicatorStyle, LocaleQuoting, LongFormat},
     options::QUOTING_STYLE,
 };
@@ -226,6 +225,7 @@ pub struct Config {
     pub(crate) width: u16,
     // Dir and vdir needs access to this field
     pub quoting_style: QuotingStyle,
+    pub(crate) show_control_chars: bool,
     pub(crate) locale_quoting: Option<LocaleQuoting>,
     pub(crate) indicator_style: Option<IndicatorStyle>,
     pub(crate) time_format_recent: String, // Time format for recent dates
@@ -609,7 +609,7 @@ fn extract_quoting_style(
 
         match mode {
             ProgramMode::Dir | ProgramMode::Vdir => (QuotingStyle::C_NO_QUOTES, None),
-            ProgramMode::Ls if !options.get_flag(options::DIRED) && stdout().is_terminal() => {
+            ProgramMode::Ls if stdout().is_terminal() => {
                 (QuotingStyle::SHELL_ESCAPE.show_control(show_control), None)
             }
             ProgramMode::Ls => (QuotingStyle::Literal { show_control }, None),
@@ -743,6 +743,11 @@ impl Config {
         // requested. This makes it distinct from the --format=singe-column option,
         // which always applies.
         //
+        // --dired (-D) implies long format the same way -g, -o and -n do: it
+        // wins over earlier format options, loses to later ones, and a -1
+        // after it has no effect. Whether dired output is actually emitted is
+        // decided below, once the final format is known.
+        //
         // The idea here is to not let these options override with the other
         // options, but manually whether they have an index that's greater than
         // the other format options. If so, we set the appropriate format.
@@ -755,6 +760,7 @@ impl Config {
                 options::format::LONG_NO_GROUP,
                 options::format::LONG_NUMERIC_UID_GID,
                 options::FULL_TIME,
+                options::DIRED,
             ]
             .iter()
             .filter_map(|opt| {
@@ -924,50 +930,28 @@ impl Config {
             options::quoting::LITERAL,
         ];
         let get_last = |flag: &str| -> usize {
-            if options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine) {
-                options.index_of(flag).unwrap_or(0)
-            } else {
-                0
-            }
+            (options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine))
+                .then(|| options.index_of(flag))
+                .flatten()
+                .unwrap_or(0)
         };
-        if get_last(options::ZERO)
-            > zero_formats_opts
-                .into_iter()
-                .map(get_last)
-                .max()
-                .unwrap_or(0)
-        {
-            format = if explicit_long {
-                format
-            } else {
-                Format::OneLine
-            };
+        let zero_idx = get_last(options::ZERO);
+        let last_of =
+            |flag_list: &[&str]| flag_list.iter().copied().map(get_last).max().unwrap_or(0);
+
+        if zero_idx > last_of(&zero_formats_opts) && !explicit_long {
+            format = Format::OneLine;
         }
-        if get_last(options::ZERO)
-            > zero_colors_opts
-                .into_iter()
-                .map(get_last)
-                .max()
-                .unwrap_or(0)
-        {
+
+        if zero_idx > last_of(&zero_colors_opts) {
             needs_color = false;
         }
-        if get_last(options::ZERO)
-            > zero_show_control_opts
-                .into_iter()
-                .map(get_last)
-                .max()
-                .unwrap_or(0)
-        {
+
+        if zero_idx > last_of(&zero_show_control_opts) {
             show_control = true;
         }
-        if get_last(options::ZERO)
-            > zero_quoting_style_opts
-                .into_iter()
-                .map(get_last)
-                .max()
-                .unwrap_or(0)
-        {
+
+        if zero_idx > last_of(&zero_quoting_style_opts) {
             quoting_style = QuotingStyle::Literal { show_control };
             locale_quoting = None;
         }
@@ -992,13 +976,13 @@ impl Config {
             None
         };
 
-        let dired = options.get_flag(options::DIRED);
-        if dired || is_dired_arg_present() {
-            // --dired implies --format=long
-            // if we have --dired --hyperlink, we don't show dired but we still want to see the
-            // long format
-            format = Format::Long;
-        }
+        // Hyperlinks enabled after the last --dired cancel the dired output,
+        // and a --dired after --hyperlink disables them again. Dired output
+        // also requires the final format to be long: a later -C, -x, -m or
+        // --format= cancels it.
+        let dired_idx = get_last(options::DIRED);
+        let hyperlink = hyperlink && get_last(options::HYPERLINK) > dired_idx;
+        let dired = dired_idx > 0 && format == Format::Long && !hyperlink;
         if dired && options.get_flag(options::ZERO) {
             return Err(Box::new(LsError::DiredAndZeroAreIncompatible));
         }
@@ -1055,6 +1039,7 @@ impl Config {
             block_size,
             width,
             quoting_style,
+            show_control_chars: options.get_flag(options::SHOW_CONTROL_CHARS),
             locale_quoting,
             indicator_style,
             time_format_recent,
@@ -1109,6 +1094,16 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                 field
             } else {
                 &field
+            };
+
+            // Resolve only unique prefixes, leaving ambiguous or invalid values
+            // unchanged so they produce the existing time-style error.
+            let mut styles = ["full-iso", "long-iso", "iso", "locale"]
+                .into_iter()
+                .filter(|style| style.starts_with(field));
+            let field = match (styles.next(), styles.next()) {
+                (Some(style), None) => style,
+                _ => field,
             };
 
             match field {

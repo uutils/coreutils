@@ -226,7 +226,7 @@ impl Parser {
         };
 
         let iconv = IConvFlags {
-            mode: conversion_mode(conversion_table, block, non_ascii, conv.sync),
+            mode: conversion_mode(conversion_table, block, non_ascii),
             swab: conv.swab,
             sync: if conv.sync {
                 if block.is_some() {
@@ -632,15 +632,14 @@ fn conversion_mode(
     ctable: Option<&'static ConversionTable>,
     block: Option<Block>,
     is_ascii: bool,
-    is_sync: bool,
 ) -> Option<ConversionMode> {
     match (ctable, block) {
         (Some(ct), None) => Some(ConversionMode::ConvertOnly(ct)),
         (Some(ct), Some(Block::Block(cbs))) => {
             if is_ascii {
-                Some(ConversionMode::ConvertThenBlock(ct, cbs, is_sync))
+                Some(ConversionMode::ConvertThenBlock(ct, cbs))
             } else {
-                Some(ConversionMode::BlockThenConvert(ct, cbs, is_sync))
+                Some(ConversionMode::BlockThenConvert(ct, cbs))
             }
         }
         (Some(ct), Some(Block::Unblock(cbs))) => {
@@ -650,7 +649,7 @@ fn conversion_mode(
                 Some(ConversionMode::UnblockThenConvert(ct, cbs))
             }
         }
-        (None, Some(Block::Block(cbs))) => Some(ConversionMode::BlockOnly(cbs, is_sync)),
+        (None, Some(Block::Block(cbs))) => Some(ConversionMode::BlockOnly(cbs)),
         (None, Some(Block::Unblock(cbs))) => Some(ConversionMode::UnblockOnly(cbs)),
         (None, None) => None,
     }

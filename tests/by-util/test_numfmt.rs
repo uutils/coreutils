@@ -2394,3 +2394,17 @@ mod field_diagnostics {
             .stderr_contains("range '0' was invalid: fields and positions are numbered from 1");
     }
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_write_error_is_reported_and_fatal() {
+    // A full output device must be diagnosed, not panic, whatever --invalid says.
+    for extra in [&["--to=si"][..], &["--invalid=ignore"][..]] {
+        let mut ucmd = new_ucmd!();
+        ucmd.args(extra)
+            .pipe_in("81920\n4096\n1024\n")
+            .set_stdout(std::fs::File::create("/dev/full").unwrap())
+            .fails_with_code(1)
+            .stderr_is("numfmt: write error: No space left on device\n");
+    }
+}

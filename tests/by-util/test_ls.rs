@@ -1003,6 +1003,37 @@ fn test_ls_commas() {
             .succeeds()
             .stdout_only("test-commas-1, test-commas-2, test-commas-3,\ntest-commas-4\n");
     }
+
+    at.touch("a");
+    at.touch("bb");
+    at.touch("c");
+    for (args, expected) in [
+        (vec!["-m", "-w5", "a", "bb"], "a, bb\n"),
+        (vec!["-m", "-w5", "a", "bb", "c"], "a,\nbb, c\n"),
+    ] {
+        scene.ucmd().args(&args).succeeds().stdout_only(expected);
+    }
+
+    #[cfg(unix)]
+    {
+        at.touch("com,ma");
+        for (style, expected) in [("shell", "'com,ma'"), ("escape", "com\\,ma")] {
+            scene
+                .ucmd()
+                .env("LC_ALL", "C")
+                .args(&["-m", &format!("--quoting-style={style}"), "com,ma"])
+                .succeeds()
+                .stdout_only(format!("{expected}\n"));
+        }
+
+        at.touch("n\nl");
+        for (args, expected) in [
+            (vec!["-m", "n\nl"], "n?l\n"),
+            (vec!["-m", "--show-control-chars", "n\nl"], "n\nl\n"),
+        ] {
+            scene.ucmd().args(&args).succeeds().stdout_only(expected);
+        }
+    }
 }
 
 #[test]
@@ -1509,8 +1540,8 @@ fn test_ls_long_dangling_symlink_color() {
     assert_eq!(target_color, "34");
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle3`.
+#[test]
 fn test_ls_dangling_symlink_or_and_missing_colors() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1574,8 +1605,8 @@ fn test_ls_symlink_to_dir_with_mi_colors() {
     assert_eq!(captures.name("target").unwrap().as_str(), "1;34");
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle4`.
+#[test]
 fn test_ls_dangling_symlink_ln_or_priority() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1603,8 +1634,8 @@ fn test_ls_dangling_symlink_ln_or_priority() {
     assert_eq!(captures.name("target").unwrap().as_str(), "35");
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle5`.
+#[test]
 fn test_ls_dangling_symlink_ln_and_missing_colors() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1632,8 +1663,8 @@ fn test_ls_dangling_symlink_ln_and_missing_colors() {
     assert_eq!(captures.name("target").unwrap().as_str(), "35");
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle7`.
+#[test]
 fn test_ls_dangling_symlink_blank_or_still_emits_reset() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1654,8 +1685,8 @@ fn test_ls_dangling_symlink_blank_or_still_emits_reset() {
     );
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle9`.
+#[test]
 fn test_ls_dangling_symlink_blank_or_in_directory_listing() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1677,8 +1708,8 @@ fn test_ls_dangling_symlink_blank_or_in_directory_listing() {
     );
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle8`.
+#[test]
 fn test_ls_dangling_symlink_uses_ln_when_or_blank() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1699,8 +1730,8 @@ fn test_ls_dangling_symlink_uses_ln_when_or_blank() {
     );
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle6`.
+#[test]
 fn test_ls_directory_dangling_symlink_uses_ln_when_or_blank() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -3359,10 +3390,10 @@ mod quoting {
         );
     }
 
-    #[cfg(not(any(target_vendor = "apple", windows, target_os = "openbsd")))]
-    #[test]
     /// This test creates files with an UTF-8 encoded name and verify that it
     /// gets escaped depending on the used locale.
+    #[cfg(not(any(target_vendor = "apple", windows, target_os = "openbsd")))]
+    #[test]
     fn test_locale_aware_quoting() {
         let cases: &[(&[u8], _, _, &[&str])] = &[
             (
@@ -4042,6 +4073,25 @@ fn test_ls_version_sort() {
         result.stdout_str().split('\n').collect::<Vec<_>>(),
         expected,
     );
+}
+
+#[test]
+fn test_ls_version_sort_command_line_args() {
+    // Regression test for https://github.com/uutils/coreutils/issues/14859:
+    // command-line arguments sharing the same file name must be version-sorted
+    // by their full path, not just by the file name.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    for dir in ["10", "18", "9.5"] {
+        at.mkdir(dir);
+        at.touch(format!("{dir}/file"));
+    }
+
+    scene
+        .ucmd()
+        .args(&["-1v", "10/file", "18/file", "9.5/file"])
+        .succeeds()
+        .stdout_only("9.5/file\n10/file\n18/file\n");
 }
 
 #[test]
@@ -5666,6 +5716,91 @@ fn test_ls_dired_order_format() {
 }
 
 #[test]
+fn test_ls_dired_format_precedence_is_positional() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("a");
+
+    // A later format option wins over --dired ...
+    for format in ["-C", "--format=single-column"] {
+        scene
+            .ucmd()
+            .args(&["--dired", format, "a"])
+            .succeeds()
+            .stdout_only("a\n");
+    }
+    // ... and a later --dired wins over the format option.
+    let result = scene.ucmd().args(&["-C", "--dired", "a"]).succeeds();
+    assert_eq!(dired_names(result.stdout_str()), ["a"]);
+
+    // -1 after --dired has no effect, exactly as after -l.
+    let result = scene.ucmd().args(&["--dired", "-1", "a"]).succeeds();
+    assert_eq!(dired_names(result.stdout_str()), ["a"]);
+
+    // A later long-format option restores both the long listing and dired.
+    let result = scene.ucmd().args(&["--dired", "-C", "-g", "a"]).succeeds();
+    assert_eq!(dired_names(result.stdout_str()), ["a"]);
+}
+
+#[test]
+fn test_ls_dired_position_vs_hyperlink() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("a");
+
+    // A --hyperlink option after --dired does not move --dired: with
+    // hyperlinks left disabled, both the long format and the dired output
+    // survive an earlier -C ...
+    let result = scene
+        .ucmd()
+        .args(&["-C", "--dired", "--hyperlink=never", "a"])
+        .succeeds();
+    assert_eq!(dired_names(result.stdout_str()), ["a"]);
+    // ... and with hyperlinks enabled, only the dired output is cancelled.
+    scene
+        .ucmd()
+        .args(&["-C", "--dired", "--hyperlink", "a"])
+        .succeeds()
+        .stdout_matches(&Regex::new(r"^-([r-][w-][xt-]){3}").unwrap())
+        .stdout_contains("file://")
+        .stdout_does_not_contain("//DIRED//");
+}
+
+#[test]
+fn test_ls_dired_lookalike_operand() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("-D");
+
+    // An operand that merely looks like the option is not the option.
+    scene
+        .ucmd()
+        .args(&["--zero", "--", "-D"])
+        .succeeds()
+        .stdout_only("-D\0");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_ls_dired_terminal_keeps_default_quoting() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("a b");
+    at.touch("a b/x");
+
+    // On a terminal the default quoting style is shell-escape, with or without
+    // --dired, and the offsets cover the quoted names, directory headers
+    // included.
+    let result = scene
+        .ucmd()
+        .args(&["--dired", "-R", "a b"])
+        .terminal_simulation(true)
+        .succeeds();
+    // The pty turns every \n into \r\n, which the offsets do not account for.
+    let stdout = result.stdout_str().replace("\r\n", "\n");
+    assert_eq!(dired_names(&stdout), ["x"]);
+    assert_eq!(subdired_names(&stdout), ["'a b'"]);
+    assert!(stdout.contains("//DIRED-OPTIONS// --quoting-style=shell-escape"));
+}
+
+#[test]
 fn test_ls_dired_offsets_follow_quoted_dir_headers() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5693,14 +5828,20 @@ fn test_ls_dired_offsets_follow_quoted_dir_headers() {
 #[test]
 fn test_ls_dired_and_zero_are_incompatible() {
     let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("a");
 
     scene
         .ucmd()
-        .arg("--dired")
-        .arg("-l")
-        .arg("--zero")
+        .args(&["--dired", "-l", "--zero"])
         .fails_with_code(2)
         .stderr_contains("--dired and --zero are incompatible");
+
+    // A later non-long format cancels dired, so --zero is allowed.
+    scene
+        .ucmd()
+        .args(&["--dired", "-C", "--zero", "a"])
+        .succeeds()
+        .stdout_only("a\0");
 }
 
 #[test]
@@ -6499,7 +6640,7 @@ fn test_ls_hyperlink() {
     }
 }
 
-// spell-checker: disable
+// spell-checker:disable
 #[test]
 fn test_ls_hyperlink_encode_link() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -6537,7 +6678,7 @@ fn test_ls_hyperlink_encode_link() {
             .contains("sp%20ace\x1b\\sp ace\x1b]8;;\x1b\\")
     );
 }
-// spell-checker: enable
+// spell-checker:enable
 
 #[test]
 fn test_ls_hyperlink_dirs() {
@@ -7081,7 +7222,7 @@ fn test_ls_color_clear_to_eol() {
         .arg("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo")
         .succeeds();
     // check that the wrapped name contains clear to end of line code
-    // cspell:disable-next-line
+    // spell-checker:disable-next-line
     result.stdout_contains("\x1b[0m\x1b[31;42mzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo\x1b[0m\x1b[K");
 }
 
@@ -7108,12 +7249,12 @@ fn test_suffix_case_sensitivity() {
         .arg("file2.Z")
         .succeeds();
     result.stdout_contains(
-        /* cSpell:disable */
+        // spell-checker:disable
         "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
                 \x1b[01;35mIMG2.JPG\x1b[0m\n\
                 \x1b[01;31mfile1.z\x1b[0m\n\
                 \x1b[01;31mfile2.Z\x1b[0m",
-        /* cSpell:enable */
+        // spell-checker:enable
     );
 
     // *.jpg is specified more than once with different cases and style, so
@@ -7128,11 +7269,11 @@ fn test_suffix_case_sensitivity() {
         .arg("img3.JpG")
         .succeeds();
     result.stdout_contains(
-        /* cSpell:disable */
+        // spell-checker:disable
         "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
                 \x1b[01;35;46mIMG2.JPG\x1b[0m\n\
                 img3.JpG",
-        /* cSpell:enable */
+        // spell-checker:enable
     );
 
     // *.jpg is specified more than once with different cases but style is same, so
@@ -7147,11 +7288,11 @@ fn test_suffix_case_sensitivity() {
         .arg("img3.JpG")
         .succeeds();
     result.stdout_contains(
-        /* cSpell:disable */
+        // spell-checker:disable
         "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
                 \x1b[01;35mIMG2.JPG\x1b[0m\n\
                 \x1b[01;35mimg3.JpG\x1b[0m",
-        /* cSpell:enable */
+        // spell-checker:enable
     );
 
     // last *.jpg gets more priority resulting in same style across
@@ -7166,11 +7307,11 @@ fn test_suffix_case_sensitivity() {
         .arg("img3.JpG")
         .succeeds();
     result.stdout_contains(
-        /* cSpell:disable */
+        // spell-checker:disable
         "\x1b[0m\x1b[01;35;46mimg1.jpg\x1b[0m\n\
                 \x1b[01;35;46mIMG2.JPG\x1b[0m\n\
                 \x1b[01;35;46mimg3.JpG\x1b[0m",
-        /* cSpell:enable */
+        // spell-checker:enable
     );
 
     // last *.jpg gets more priority resulting in different style across
@@ -7185,11 +7326,11 @@ fn test_suffix_case_sensitivity() {
         .arg("img3.JpG")
         .succeeds();
     result.stdout_contains(
-        /* cSpell:disable */
+        // spell-checker:disable
         "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
                 \x1b[01;35;46mIMG2.JPG\x1b[0m\n\
                 img3.JpG",
-        /* cSpell:enable */
+        // spell-checker:enable
     );
 }
 
@@ -8126,5 +8267,61 @@ ls: invalid --block-size argument '1fb'
             .arg("--block-size=1fb")
             .fails_with_code(2)
             .stderr_is("ls: invalid --block-size argument '1fb'\n");
+    }
+}
+
+#[test]
+fn test_time_style_unambiguous_prefixes() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("test");
+    for style in ["full-iso", "long-iso", "iso", "locale"] {
+        let expected = scene
+            .ucmd()
+            .args(&["-l", "--time-style", style, "test"])
+            .succeeds()
+            .stdout_str()
+            .to_owned();
+        let min_len = if style.starts_with("lo") { 3 } else { 1 };
+        for len in min_len..=style.len() {
+            for prefix in ["", "posix-"] {
+                let value = format!("{prefix}{}", &style[..len]);
+                scene
+                    .ucmd()
+                    .args(&["-l", "--time-style", &value, "test"])
+                    .succeeds()
+                    .stdout_is(&expected);
+                scene
+                    .ucmd()
+                    .env("TIME_STYLE", &value)
+                    .args(&["-l", "test"])
+                    .succeeds()
+                    .stdout_is(&expected);
+            }
+        }
+    }
+}
+
+#[test]
+fn test_time_style_ambiguous_and_invalid_prefixes() {
+    for value in [
+        "l",
+        "lo",
+        "posix-l",
+        "posix-lo",
+        "posix-",
+        "full-isox",
+        "Locale",
+    ] {
+        new_ucmd!()
+            .args(&["-l", "--time-style", value])
+            .fails()
+            .code_is(2)
+            .stderr_contains("invalid --time-style argument");
+        new_ucmd!()
+            .env("TIME_STYLE", value)
+            .arg("-l")
+            .fails()
+            .code_is(2)
+            .stderr_contains("invalid --time-style argument");
     }
 }

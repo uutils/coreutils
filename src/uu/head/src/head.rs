@@ -19,10 +19,11 @@ use std::path::PathBuf;
 use thiserror::Error;
 use uucore::diagnostics::OptionValue;
 use uucore::display::{Quotable, print_verbatim};
-use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use uucore::line_ending::LineEnding;
 use uucore::parser::parse_signed_num::number_offset;
 use uucore::parser::parse_size::ParseSizeError;
+use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use uucore::show;
 use uucore::translate;
 
@@ -208,7 +209,7 @@ impl HeadOptions {
 fn wrap_in_stdout_error(err: io::Error) -> io::Error {
     io::Error::new(
         err.kind(),
-        translate!("head-error-writing-stdout", "err" => uucore::error::strip_errno(&err)),
+        translate!("head-error-writing-stdout", "err" => strip_errno(&err)),
     )
 }
 
@@ -453,7 +454,11 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 if !first {
                     writeln!(stdout)?;
                 }
-                writeln!(stdout, "{}", translate!("head-header-stdin"))?;
+                let name = locale_aware_escape_name(
+                    translate!("head-name-stdin").as_ref(),
+                    QuotingStyle::SHELL_ESCAPE,
+                );
+                writeln!(stdout, "==> {} <==", name.to_string_lossy())?;
             }
             let stdin = io::stdin();
 
@@ -504,7 +509,10 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                         writeln!(stdout)?;
                     }
                     write!(stdout, "==> ")?;
-                    print_verbatim(file)?;
+                    print_verbatim(locale_aware_escape_name(
+                        file.as_ref(),
+                        QuotingStyle::SHELL_ESCAPE,
+                    ))?;
                     writeln!(stdout, " <==")?;
                     first = false;
                 }

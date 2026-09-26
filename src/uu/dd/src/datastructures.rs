@@ -15,13 +15,13 @@ type Cbs = usize;
 /// combination of conversion, blocking, or unblocking, applied in a
 /// certain order. The variants of this enumeration give the different
 /// ways of combining those three operations.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub(crate) enum ConversionMode {
     ConvertOnly(&'static ConversionTable),
-    BlockOnly(Cbs, bool),
+    BlockOnly(Cbs),
     UnblockOnly(Cbs),
-    BlockThenConvert(&'static ConversionTable, Cbs, bool),
-    ConvertThenBlock(&'static ConversionTable, Cbs, bool),
+    BlockThenConvert(&'static ConversionTable, Cbs),
+    ConvertThenBlock(&'static ConversionTable, Cbs),
     UnblockThenConvert(&'static ConversionTable, Cbs),
     ConvertThenUnblock(&'static ConversionTable, Cbs),
 }

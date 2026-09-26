@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) helloworld nodir objdump n'source nconfined testdir
+// spell-checker:ignore (words) helloworld nodir n'source nconfined testdir
 
 use rustix::process::{getegid, geteuid};
 use std::env::current_exe;
@@ -16,10 +16,8 @@ use std::thread::sleep;
 use uucore::error::strip_errno;
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
 use uutests::util::{TestScenario, is_ci, run_ucmd_as_root};
-use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 #[test]
 fn test_invalid_arg() {
@@ -1188,7 +1186,28 @@ fn test_install_dir() {
     assert!(at.file_exists(format!("{dir}/{file1}")));
     assert!(at.file_exists(format!("{dir}/{file2}")));
 }
-//
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_non_utf8_dir() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = std::ffi::OsStr::from_bytes(b"target_dir_\xFF\xFE");
+    let file = "source";
+
+    at.touch(file);
+    fs::create_dir(at.plus(dir)).unwrap();
+
+    ucmd.arg(file)
+        .arg("--target-directory")
+        .arg(dir)
+        .succeeds()
+        .no_output();
+
+    assert!(at.plus(dir).join(file).exists());
+}
+
 // test backup functionality
 #[test]
 fn test_install_backup_short_no_args_files() {
@@ -3189,4 +3208,20 @@ fn test_install_target_without_splice_support() {
         .unwrap();
     // properly copied with fallback from splice?
     assert!(uucore::fs::are_files_identical(coreutils, "target_file").unwrap());
+}
+
+#[test]
+fn test_install_will_not_overwrite_just_created() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+    at.write("a/f", "a");
+    at.write("b/f", "b");
+
+    ucmd.args(&["a/f", "b/f", "c/"])
+        .fails()
+        .stderr_contains("will not overwrite just-created 'c/f' with 'b/f'");
+
+    assert_eq!(at.read("c/f"), "a");
 }

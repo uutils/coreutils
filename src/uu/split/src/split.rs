@@ -246,8 +246,8 @@ struct Settings {
     io_blksize: Option<u64>,
 }
 
-#[derive(Debug, Error)]
 /// An error when parsing settings from command-line arguments.
+#[derive(Debug, Error)]
 enum SettingsError {
     /// Invalid chunking strategy.
     #[error("{0}")]
@@ -1234,9 +1234,10 @@ fn n_chunks_by_line_round_robin(
     let mut closed_writers = 0;
 
     let mut i = 0;
+    let mut line = Vec::new();
     loop {
-        let line = &mut Vec::new();
-        let num_bytes_read = reader.by_ref().read_until(sep, line)?;
+        line.clear();
+        let num_bytes_read = reader.by_ref().read_until(sep, &mut line)?;
 
         // if there is nothing else to read - exit the loop
         if num_bytes_read == 0 {

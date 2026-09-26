@@ -16,6 +16,7 @@ path = "src/install.rs"
 
 [dependencies]
 clap = { workspace = true }
+fluent = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, default-features = true, features = [
   "backup-control",
@@ -26,7 +27,6 @@ uucore = { workspace = true, default-features = true, features = [
   "perms",
   "process",
 ] }
-fluent = { workspace = true }
 
 [target.'cfg(all(unix, not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))))'.dependencies]
 uucore = { workspace = true, features = ["safe-traversal"] }

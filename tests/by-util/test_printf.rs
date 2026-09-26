@@ -1436,7 +1436,7 @@ fn mb_input() {
 }
 
 #[test]
-#[cfg(target_family = "unix")]
+#[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn mb_invalid_unicode() {
     use std::ffi::OsStr;
@@ -1525,7 +1525,7 @@ fn positional_format_specifiers() {
 }
 
 #[test]
-#[cfg(target_family = "unix")]
+#[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn non_utf_8_input() {
     use std::ffi::OsStr;
@@ -1880,4 +1880,14 @@ fn help_and_version_past_the_format_are_arguments() {
         .args(&["--", "--help"])
         .succeeds()
         .stdout_only("--help");
+}
+
+#[test]
+fn test_precision_above_formatter_limit() {
+    // A precision larger than u16::MAX must still be honoured in full.
+    let result = new_ucmd!().args(&["%.70123f", "3.25"]).succeeds();
+    let out = result.stdout_str();
+    assert_eq!(out.len(), 70_125);
+    assert!(out.starts_with("3.25"));
+    assert!(out[4..].bytes().all(|b| b == b'0'));
 }
