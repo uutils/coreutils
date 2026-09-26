@@ -22,7 +22,7 @@ fluent = { workspace = true }
 uucore = { workspace = true, features = ["fs", "mode"] }
 
 [target.'cfg(unix)'.dependencies]
-rustix = { workspace = true, features = ["fs", "process"] }
+rustix = { workspace = true, features = ["fs"] }
 
 [target.'cfg(target_vendor = "apple")'.dependencies]
 libc = { workspace = true }
