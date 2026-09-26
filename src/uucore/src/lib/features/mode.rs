@@ -411,32 +411,26 @@ pub fn get_umask() -> u32 {
 /// // Original umask is restored here when _guard is dropped
 /// ```
 #[cfg(unix)]
-pub struct UmaskGuard(libc::mode_t);
+pub struct UmaskGuard(rustix::fs::Mode);
 
 #[cfg(unix)]
 impl UmaskGuard {
     /// Set umask to the given value and return a guard that restores the original on drop.
     ///
-    /// # Safety
-    ///
-    /// This function manipulates the process-wide umask. While this is safe from a
-    /// memory safety perspective, it can affect other threads in multi-threaded programs.
-    /// The guard pattern ensures restoration even on panic.
+    /// This manipulates the process-wide umask, so it can affect other threads
+    /// in multi-threaded programs. The guard pattern ensures restoration even on panic.
     pub fn set(new_mask: libc::mode_t) -> Self {
-        // SAFETY: umask always succeeds and doesn't operate on memory.
-        // The returned value is the previous umask which we store for restoration.
-        let old_mask = unsafe { libc::umask(new_mask) };
-        Self(old_mask)
+        use rustix::fs::Mode;
+        use rustix::process::umask;
+
+        Self(umask(Mode::from_bits_truncate(new_mask)))
     }
 }
 
 #[cfg(unix)]
 impl Drop for UmaskGuard {
     fn drop(&mut self) {
-        // SAFETY: umask always succeeds. We're restoring the original value.
-        unsafe {
-            libc::umask(self.0);
-        }
+        rustix::process::umask(self.0);
     }
 }
 
@@ -597,7 +591,9 @@ mod tests {
         use super::{UmaskGuard, get_umask};
 
         // Acquire mutex to prevent concurrent umask tests
-        let _lock = UMASK_TEST_MUTEX.lock().unwrap();
+        let _lock = UMASK_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
         // Save original umask
         let original = get_umask();
@@ -618,7 +614,9 @@ mod tests {
         use super::{UmaskGuard, get_umask};
 
         // Acquire mutex to prevent concurrent umask tests
-        let _lock = UMASK_TEST_MUTEX.lock().unwrap();
+        let _lock = UMASK_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
         let original = get_umask();
 
@@ -639,13 +637,15 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg(all(unix, panic = "unwind"))]
     fn test_umask_guard_panic_safety() {
         use super::{UmaskGuard, get_umask};
         use std::panic::{AssertUnwindSafe, catch_unwind};
 
         // Acquire mutex to prevent concurrent umask tests
-        let _lock = UMASK_TEST_MUTEX.lock().unwrap();
+        let _lock = UMASK_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
         let original = get_umask();
 

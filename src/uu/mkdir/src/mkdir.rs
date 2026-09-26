@@ -264,7 +264,7 @@ fn create_dir_with_mode(
     use std::os::unix::fs::DirBuilderExt;
 
     // The guard restores the original umask on drop, even if we panic.
-    let _guard = mode::UmaskGuard::set(shaped_umask.bits() as uucore::libc::mode_t);
+    let _guard = mode::UmaskGuard::set(shaped_umask.bits());
 
     std::fs::DirBuilder::new().mode(mode).create(path)
 }
