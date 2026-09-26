@@ -678,7 +678,7 @@ impl ChownExecutor {
                                 "error" => if let Some(error) = e.io_error() {
                                     strip_errno(error)
                                 } else {
-                                    translate!("perms-too-many-symlink-levels")
+                                    translate!("error-too-many-symlink-levels")
                                 }
                             )
                         );

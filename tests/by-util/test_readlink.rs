@@ -398,6 +398,22 @@ fn test_canonicalize_trailing_slash_symlink_loop() {
 }
 
 #[test]
+fn test_canonicalize_growing_symlink_loop() {
+    // `link6 -> link6/more` grows the path on every expansion; it must fail
+    // instead of looping forever.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.relative_symlink_file("link6/more", "link6");
+    for mode in ["-f", "-e", "-m"] {
+        scene
+            .ucmd()
+            .args(&[mode, "link6"])
+            .fails_with_code(1)
+            .no_stdout();
+    }
+}
+
+#[test]
 #[cfg(not(windows))]
 fn test_delimiters() {
     new_ucmd!()
