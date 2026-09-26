@@ -304,12 +304,14 @@ impl PartialEq for MergeableFile<'_> {
 impl Eq for MergeableFile<'_> {}
 
 impl PartialOrd for MergeableFile<'_> {
+    #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl Ord for MergeableFile<'_> {
+    #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
         let mut cmp = merge_compare(
             &self.current_chunk.lines()[self.line_idx],
