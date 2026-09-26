@@ -370,7 +370,7 @@ struct Precomputed {
     fast_lexicographic: bool,
     /// The whole line is collated by the locale, with no key options in the way.
     whole_line_collation: bool,
-    /// Store a collation key per line for [`whole_line_collation`] instead of
+    /// Store a collation key per line for `whole_line_collation` instead of
     /// collating on demand.
     precompute_collation_keys: bool,
     fast_ascii_insensitive: bool,
@@ -3562,7 +3562,8 @@ mod tests {
     fn test_prefix_keys() {
         assert!(prefix_key(b"m") < prefix_key(b"m\x01"));
         assert!(prefix_key(b"m\x01") < prefix_key(b"n"));
-        assert!(prefix_key(b"zebra") < prefix_key(b"zebras"));
+        // Keep the strings shorter than a `usize` so this holds on 32-bit targets too.
+        assert!(prefix_key(b"ze") < prefix_key(b"zeb"));
         // Only the first bytes count, and a NUL is indistinguishable from padding.
         assert_eq!(prefix_key(b"wordsmith-A"), prefix_key(b"wordsmith-B"));
         assert_eq!(prefix_key(b"hi"), prefix_key(b"hi\0"));
