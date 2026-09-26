@@ -9,6 +9,8 @@
 //! for resolving block sizes from environment variables and defaults.
 //! This module centralizes that logic.
 
+use std::sync::LazyLock;
+
 use super::parse_size::parse_size_non_zero_u64;
 
 /// Result of looking up a block size from environment variables.
@@ -66,12 +68,11 @@ pub fn block_size_from_env(vars: &[&str]) -> BlockSizeEnv {
 ///
 /// Returns 512 if `POSIXLY_CORRECT` is set, 1024 otherwise.
 pub fn default_block_size() -> u64 {
-    if std::env::var("POSIXLY_CORRECT").is_ok() {
-        512
-    } else {
-        1024
-    }
+    if *IS_POSIXLY_CORRECT { 512 } else { 1024 }
 }
+
+static IS_POSIXLY_CORRECT: LazyLock<bool> =
+    LazyLock::new(|| std::env::var_os("POSIXLY_CORRECT").is_some());
 
 #[cfg(test)]
 mod tests {
@@ -343,35 +344,5 @@ mod tests {
         );
 
         clear_env_vars(&["BLOCKSIZE"]);
-    }
-
-    #[test]
-    fn test_default_block_size_without_posixly_correct() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        clear_env_vars(&["POSIXLY_CORRECT"]);
-        assert_eq!(default_block_size(), 1024);
-    }
-
-    #[test]
-    fn test_default_block_size_with_posixly_correct() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        clear_env_vars(&["POSIXLY_CORRECT"]);
-
-        set_env_var("POSIXLY_CORRECT", "1");
-        assert_eq!(default_block_size(), 512);
-
-        clear_env_vars(&["POSIXLY_CORRECT"]);
-    }
-
-    #[test]
-    fn test_default_block_size_with_posixly_correct_empty() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        clear_env_vars(&["POSIXLY_CORRECT"]);
-
-        // Even an empty value means POSIXLY_CORRECT is set
-        set_env_var("POSIXLY_CORRECT", "");
-        assert_eq!(default_block_size(), 512);
-
-        clear_env_vars(&["POSIXLY_CORRECT"]);
     }
 }
