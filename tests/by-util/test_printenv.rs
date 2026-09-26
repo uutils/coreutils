@@ -131,3 +131,8 @@ fn test_non_utf8_env_vars() {
         .succeeds()
         .stdout_contains_bytes(b"NON_UTF8_VAR=hello\x80world");
 }
+
+#[test]
+fn test_quoting_style() {
+    new_ucmd!().env("QUOTING_STYLE", "").succeeds();
+}

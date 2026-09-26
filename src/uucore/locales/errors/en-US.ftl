@@ -54,3 +54,6 @@ size-diag-help-syntax = a size is a number and an optional unit: K, M, G and so 
 # in its own words.
 range-diag-label-too-large = this number is too large
 range-diag-label-inverted = this range ends before it starts
+
+# Invalid QUOTING_STYLE env var
+invalid-quoting-style-env-var = ignoring invalid value of environment variable QUOTING_STYLE: { $invalid }

@@ -8,10 +8,13 @@
 use std::ffi::{OsStr, OsString};
 use std::fmt;
 
+use os_display::Quotable;
+
 use crate::i18n::{self, UEncoding};
 use crate::quoting_style::c_quoter::CQuoter;
 use crate::quoting_style::literal_quoter::LiteralQuoter;
 use crate::quoting_style::shell_quoter::{EscapedShellQuoter, NonEscapedShellQuoter};
+use crate::{show_error, translate};
 
 mod escaped_char;
 pub use escaped_char::{EscapeState, EscapedChar};
@@ -20,7 +23,9 @@ mod c_quoter;
 mod literal_quoter;
 mod shell_quoter;
 
-/// The quoting style to use when escaping a name.
+pub use c_quoter::CQuotes;
+
+/// Enum representing a quoting and escaping strategy to print a string.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum QuotingStyle {
     /// Escape the name as a shell string.
@@ -33,27 +38,36 @@ pub enum QuotingStyle {
         /// Whether to always quote the name.
         always_quote: bool,
 
-        /// Whether to show control and non-unicode characters, or replace them with `?`.
+        /// If false, replaces control and non-Unicode characters with `?`.
         show_control: bool,
     },
 
     /// Escape the name as a C string.
     /// Used in, e.g., `ls --quote-name`.
-    C {
-        /// The type of quotes to use.
-        quotes: Quotes,
-    },
+    C,
+
+    /// Simply escape characters without quoting
+    /// Used in, e.g., `ls --quoting-style=escape`.
+    Escape,
 
     /// Do not escape the string.
     /// Used in, e.g., `ls --literal`.
     Literal {
-        /// Whether to show control and non-unicode characters, or replace them with `?`.
+        /// If false, replaces control and non-Unicode characters with `?`.
         show_control: bool,
     },
+
+    /// Escape using locale.
+    Locale,
+    CLocale,
 }
 
 /// Provide sane defaults for quoting styles.
 impl QuotingStyle {
+    pub const LITERAL: Self = Self::Literal {
+        show_control: false,
+    };
+
     pub const SHELL: Self = Self::Shell {
         escape: false,
         always_quote: false,
@@ -66,28 +80,22 @@ impl QuotingStyle {
         show_control: false,
     };
 
-    pub const SHELL_QUOTE: Self = Self::Shell {
+    pub const SHELL_ALWAYS: Self = Self::Shell {
         escape: false,
         always_quote: true,
         show_control: false,
     };
 
-    pub const SHELL_ESCAPE_QUOTE: Self = Self::Shell {
+    pub const SHELL_ESCAPE_ALWAYS: Self = Self::Shell {
         escape: true,
         always_quote: true,
         show_control: false,
     };
 
-    pub const C_NO_QUOTES: Self = Self::C {
-        quotes: Quotes::None,
-    };
-
-    pub const C_DOUBLE: Self = Self::C {
-        quotes: Quotes::Double,
-    };
-
     /// Set the `show_control` field of the quoting style.
-    /// Note: this is a no-op for the `C` variant.
+    ///
+    /// > This is a no-op for variants others than [`QuotingStyle::Shell`]
+    /// > and [`QuotingStyle::Literal`].
     pub fn show_control(self, show_control: bool) -> Self {
         use QuotingStyle::*;
         match self {
@@ -101,9 +109,93 @@ impl QuotingStyle {
                 show_control,
             },
             Literal { .. } => Literal { show_control },
-            C { .. } => self,
+            C | Escape | Locale | CLocale => self,
         }
     }
+
+    /// Set the `always_quote` field of the quoting style.
+    ///
+    /// > This is a no-op for all variants except [`QuotingStyle::Shell`].
+    pub fn always_quote(self, always_quote: bool) -> Self {
+        match self {
+            Self::Shell {
+                escape,
+                show_control,
+                ..
+            } => Self::Shell {
+                escape,
+                show_control,
+                always_quote,
+            },
+            _ => self,
+        }
+    }
+
+    /// Parse a [`QuotingStyle`] from a string.
+    ///
+    /// Used for e.g., the `QUOTING_STYLE` environment variable and the
+    /// `--quoting-style` option of `ls`.
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "literal" => Self::LITERAL,
+            "shell" => Self::SHELL,
+            "shell-always" => Self::SHELL_ALWAYS,
+            "shell-escape" => Self::SHELL_ESCAPE,
+            "shell-escape-always" => Self::SHELL_ESCAPE_ALWAYS,
+            "c" => Self::C,
+            "escape" => Self::Escape,
+            "locale" => Self::Locale,
+            "clocale" => Self::CLocale,
+            _ => return None,
+        })
+    }
+}
+
+impl fmt::Display for QuotingStyle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Self::Shell {
+                escape,
+                always_quote,
+                ..
+            } => {
+                let mut style = "shell".to_string();
+                if escape {
+                    style.push_str("-escape");
+                }
+                if always_quote {
+                    style.push_str("-always");
+                }
+                f.write_str(&style)
+            }
+            Self::C => f.write_str("c"),
+            Self::Escape { .. } => f.write_str("escape"),
+            Self::Locale => f.write_str("locale"),
+            Self::CLocale => f.write_str("clocale"),
+            Self::Literal { .. } => f.write_str("literal"),
+        }
+    }
+}
+
+/// Retrieve the `QUOTING_STYLE` environment variable. If present, parse it
+/// through [`QuotingStyle::parse`], and write a standard error message to
+/// stderr in case of an invalid value.
+pub fn quoting_style_from_env() -> Option<QuotingStyle> {
+    let Some(style) = std::env::var_os("QUOTING_STYLE") else {
+        // Variable absent, return None quietly.
+        return None;
+    };
+
+    let Some(qs) = style.to_str().and_then(QuotingStyle::parse) else {
+        // Variable is present but invalid, report an error.
+        show_error!(
+            "{}",
+            translate!("invalid-quoting-style-env-var", "invalid" => style.to_string_lossy().quote())
+        );
+        return None;
+    };
+
+    Some(qs)
 }
 
 /// Common interface of quoting mechanisms.
@@ -126,21 +218,7 @@ trait Quoter {
     fn finalize(self: Box<Self>) -> Vec<u8>;
 }
 
-/// The type of quotes to use when escaping a name as a C string.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Quotes {
-    /// Do not use quotes.
-    None,
-
-    /// Use single quotes.
-    Single,
-
-    /// Use double quotes.
-    Double,
-    // TODO: Locale
-}
-
-/// Escape a name according to the given quoting style.
+/// Escape a name according to the given [`QuotingStyle`] and [`UEncoding`].
 ///
 /// This inner function provides an additional flag `dirname` which
 /// is meant for ls' directory name display.
@@ -157,7 +235,22 @@ fn escape_name_inner(
 
     let mut quoter: Box<dyn Quoter> = match style {
         QuotingStyle::Literal { .. } => Box::new(LiteralQuoter::new(name.len())),
-        QuotingStyle::C { quotes } => Box::new(CQuoter::new(quotes, dirname, name.len())),
+        QuotingStyle::C => Box::new(CQuoter::new(Some(CQuotes::DOUBLE), dirname, name.len())),
+        QuotingStyle::Escape => Box::new(CQuoter::new(None, dirname, name.len())),
+        QuotingStyle::CLocale => {
+            let quotes = match encoding {
+                UEncoding::Ascii => CQuotes::DOUBLE,
+                UEncoding::Utf8 => CQuotes::LOCALE_UTF8,
+            };
+            Box::new(CQuoter::new(Some(quotes), dirname, name.len()))
+        }
+        QuotingStyle::Locale => {
+            let quotes = match encoding {
+                UEncoding::Ascii => CQuotes::SINGLE,
+                UEncoding::Utf8 => CQuotes::LOCALE_UTF8,
+            };
+            Box::new(CQuoter::new(Some(quotes), dirname, name.len()))
+        }
         QuotingStyle::Shell {
             escape: true,
             always_quote,
@@ -202,14 +295,15 @@ fn escape_name_inner(
     quoter.finalize()
 }
 
-/// Escape a filename with respect to the given style.
+/// Escape a filename with respect to the given [`QuotingStyle`].
 pub fn escape_name(name: &OsStr, style: QuotingStyle, encoding: UEncoding) -> OsString {
     let name = crate::os_str_as_bytes_lossy(name);
     crate::os_string_from_vec(escape_name_inner(&name, style, false, encoding))
         .expect("all byte sequences should be valid for platform, or already replaced in name")
 }
 
-/// Retrieve the encoding from the locale and pass it to `escape_name`.
+/// Retrieve the encoding from the locale and pass it to [`escape_name`].
+#[inline(always)]
 pub fn locale_aware_escape_name(name: &OsStr, style: QuotingStyle) -> OsString {
     escape_name(name, style, i18n::get_locale_encoding())
 }
@@ -232,91 +326,40 @@ pub fn escape_dir_name(dir_name: &OsStr, style: QuotingStyle, encoding: UEncodin
         .expect("all byte sequences should be valid for platform, or already replaced in name")
 }
 
-/// Retrieve the encoding from the locale and pass it to `escape_dir_name`.
+/// Retrieve the encoding from the locale and pass it to [`escape_dir_name`].
 pub fn locale_aware_escape_dir_name(name: &OsStr, style: QuotingStyle) -> OsString {
     escape_dir_name(name, style, i18n::get_locale_encoding())
-}
-
-impl fmt::Display for QuotingStyle {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            Self::Shell {
-                escape,
-                always_quote,
-                show_control,
-            } => {
-                let mut style = "shell".to_string();
-                if escape {
-                    style.push_str("-escape");
-                }
-                if always_quote {
-                    style.push_str("-always-quote");
-                }
-                if show_control {
-                    style.push_str("-show-control");
-                }
-                f.write_str(&style)
-            }
-            Self::C { .. } => f.write_str("C"),
-            Self::Literal { .. } => f.write_str("literal"),
-        }
-    }
-}
-
-impl fmt::Display for Quotes {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            Self::None => f.write_str("None"),
-            Self::Single => f.write_str("Single"),
-            Self::Double => f.write_str("Double"),
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
         i18n::UEncoding,
-        quoting_style::{Quotes, QuotingStyle, escape_name_inner},
+        quoting_style::{QuotingStyle, escape_name_inner},
     };
 
     // spell-checker:ignore (tests/words) one\'two one'two
 
+    // Custom quoting style parsing for testing purposes (a -show might be appended)
     fn get_style(s: &str) -> QuotingStyle {
-        match s {
-            "literal" => QuotingStyle::Literal {
-                show_control: false,
-            },
-            "literal-show" => QuotingStyle::Literal { show_control: true },
-            "escape" => QuotingStyle::C_NO_QUOTES,
-            "c" => QuotingStyle::C_DOUBLE,
-            "shell" => QuotingStyle::SHELL,
-            "shell-show" => QuotingStyle::SHELL.show_control(true),
-            "shell-always" => QuotingStyle::SHELL_QUOTE,
-            "shell-always-show" => QuotingStyle::SHELL_QUOTE.show_control(true),
-            "shell-escape" => QuotingStyle::SHELL_ESCAPE,
-            "shell-escape-always" => QuotingStyle::SHELL_ESCAPE_QUOTE,
-            _ => panic!("Invalid name!"),
-        }
-    }
-
-    fn check_names_inner<T>(encoding: UEncoding, name: &[u8], map: &[(T, &str)]) -> Vec<Vec<u8>> {
-        map.iter()
-            .map(|(_, style)| escape_name_inner(name, get_style(style), false, encoding))
-            .collect()
+        let show_control = s.ends_with("-show");
+        let s = s.trim_end_matches("-show");
+        QuotingStyle::parse(s).unwrap().show_control(show_control)
     }
 
     fn check_names_encoding(encoding: UEncoding, name: &str, map: &[(&str, &str)]) {
-        assert_eq!(
-            map.iter()
-                .map(|(correct, _)| *correct)
-                .collect::<Vec<&str>>(),
-            check_names_inner(encoding, name.as_bytes(), map)
-                .iter()
-                .map(|bytes| std::str::from_utf8(bytes)
-                    .expect("valid str goes in, valid str comes out"))
-                .collect::<Vec<&str>>()
-        );
+        for (expected, style) in map {
+            assert_eq!(
+                *expected,
+                std::str::from_utf8(&escape_name_inner(
+                    name.as_bytes(),
+                    get_style(style),
+                    false,
+                    encoding
+                ))
+                .expect("valid str goes in, valid str comes out")
+            );
+        }
     }
 
     fn check_names_both(name: &str, map: &[(&str, &str)]) {
@@ -325,12 +368,12 @@ mod tests {
     }
 
     fn check_names_encoding_raw(encoding: UEncoding, name: &[u8], map: &[(&[u8], &str)]) {
-        assert_eq!(
-            map.iter()
-                .map(|(correct, _)| *correct)
-                .collect::<Vec<&[u8]>>(),
-            check_names_inner(encoding, name, map)
-        );
+        for (expected, style) in map {
+            assert_eq!(
+                *expected,
+                escape_name_inner(name, get_style(style), false, encoding)
+            );
+        }
     }
 
     fn check_names_raw_both(name: &[u8], map: &[(&[u8], &str)]) {
@@ -1068,29 +1111,107 @@ mod tests {
     }
 
     #[test]
+    fn test_locale_styles() {
+        fn test_case(name: &str, utf8: &str, ascii_locale: &str, ascii_clocale: &str) {
+            check_names_encoding(
+                UEncoding::Utf8,
+                name,
+                &[(utf8, "locale"), (utf8, "clocale")],
+            );
+            check_names_encoding(
+                UEncoding::Ascii,
+                name,
+                &[(ascii_locale, "locale"), (ascii_clocale, "clocale")],
+            );
+        }
+        fn test_case_raw(name: &[u8], utf8: &[u8], ascii_locale: &[u8], ascii_clocale: &[u8]) {
+            check_names_encoding_raw(
+                UEncoding::Utf8,
+                name,
+                &[(utf8, "locale"), (utf8, "clocale")],
+            );
+            check_names_encoding_raw(
+                UEncoding::Ascii,
+                name,
+                &[(ascii_locale, "locale"), (ascii_clocale, "clocale")],
+            );
+        }
+
+        // Simple name
+
+        test_case(
+            "one_two",
+            "\u{2018}one_two\u{2019}",
+            "'one_two'",
+            "\"one_two\"",
+        );
+
+        // Space
+
+        test_case(" ", "\u{2018} \u{2019}", "' '", "\" \"");
+
+        // Quotes
+
+        test_case("'", "\u{2018}'\u{2019}", "'\\''", "\"'\"");
+        test_case("\"", "\u{2018}\"\u{2019}", "'\"'", "\"\\\"\"");
+        test_case(
+            "\u{2018}",
+            "\u{2018}\u{2018}\u{2019}", // opening quote is not escaped
+            "'\\342\\200\\230'",
+            "\"\\342\\200\\230\"",
+        );
+        test_case(
+            "\u{2019}",
+            "\u{2018}\\\u{2019}\u{2019}", // closing quote is escaped
+            "'\\342\\200\\231'",
+            "\"\\342\\200\\231\"",
+        );
+
+        // ASCII control
+
+        test_case(
+            "\x00\n",
+            "\u{2018}\\000\\n\u{2019}",
+            "'\\000\\n'",
+            "\"\\000\\n\"",
+        );
+
+        // Non-Unicode
+
+        test_case_raw(
+            b"\xEF",
+            "\u{2018}\\357\u{2019}".as_bytes(),
+            b"'\\357'",
+            b"\"\\357\"",
+        );
+    }
+
+    #[test]
     fn test_quoting_style_display() {
         let style = QuotingStyle::SHELL_ESCAPE;
         assert_eq!(format!("{style}"), "shell-escape");
 
-        let style = QuotingStyle::SHELL_QUOTE;
-        assert_eq!(format!("{style}"), "shell-always-quote");
+        let style = QuotingStyle::SHELL_ALWAYS;
+        assert_eq!(format!("{style}"), "shell-always");
 
         let style = QuotingStyle::SHELL.show_control(true);
-        assert_eq!(format!("{style}"), "shell-show-control");
+        assert_eq!(format!("{style}"), "shell");
 
-        let style = QuotingStyle::C_DOUBLE;
-        assert_eq!(format!("{style}"), "C");
+        let style = QuotingStyle::C;
+        assert_eq!(format!("{style}"), "c");
+
+        let style = QuotingStyle::Escape;
+        assert_eq!(format!("{style}"), "escape");
 
         let style = QuotingStyle::Literal {
             show_control: false,
         };
         assert_eq!(format!("{style}"), "literal");
-    }
 
-    #[test]
-    fn test_quotes_display() {
-        assert_eq!(format!("{}", Quotes::None), "None");
-        assert_eq!(format!("{}", Quotes::Single), "Single");
-        assert_eq!(format!("{}", Quotes::Double), "Double");
+        let style = QuotingStyle::Locale;
+        assert_eq!(format!("{style}"), "locale");
+
+        let style = QuotingStyle::CLocale;
+        assert_eq!(format!("{style}"), "clocale");
     }
 }

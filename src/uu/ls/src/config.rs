@@ -9,7 +9,7 @@
 use std::{
     borrow::Cow,
     ffi::{OsStr, OsString},
-    io::{self, IsTerminal, Write as _, stdout},
+    io::{IsTerminal, stdout},
     num::IntErrorKind,
 };
 
@@ -18,16 +18,23 @@ use lscolors::LsColors;
 use term_grid::SPACES_IN_TAB;
 
 use uucore::{
-    diagnostics::OptionValue, display::Quotable, error::UResult, format::human::SizeFormat,
-    fsext::MetadataTimeField, line_ending::LineEnding, parser::parse_block_size,
-    parser::parse_glob, parser::parse_size::parse_size_non_zero_u64, quoting_style::QuotingStyle,
-    show_error, show_warning, time::format, translate,
+    diagnostics::OptionValue,
+    display::Quotable,
+    error::UResult,
+    format::human::SizeFormat,
+    fsext::MetadataTimeField,
+    line_ending::LineEnding,
+    parser::{parse_block_size, parse_glob, parse_size::parse_size_non_zero_u64},
+    quoting_style::{QuotingStyle, quoting_style_from_env},
+    show_error, show_warning,
+    time::format,
+    translate,
 };
 
 use crate::{
     LsError,
     colors::{LsColorsParseError, validate_ls_colors_env},
-    display::{Format, IndicatorStyle, LocaleQuoting, LongFormat},
+    display::{Format, IndicatorStyle, LongFormat},
     options::QUOTING_STYLE,
 };
 
@@ -226,7 +233,6 @@ pub struct Config {
     // Dir and vdir needs access to this field
     pub quoting_style: QuotingStyle,
     pub(crate) show_control_chars: bool,
-    pub(crate) locale_quoting: Option<LocaleQuoting>,
     pub(crate) indicator_style: Option<IndicatorStyle>,
     pub(crate) time_format_recent: String, // Time format for recent dates
     pub(crate) time_format_older: Option<String>, // Time format for older dates (optional, if not present, time_format_recent is used)
@@ -497,73 +503,6 @@ fn extract_hyperlink(options: &clap::ArgMatches) -> bool {
     }
 }
 
-/// Match the argument given to --quoting-style or the [`QUOTING_STYLE`] env variable.
-///
-/// # Arguments
-///
-/// * `style`: the actual argument string
-/// * `show_control` - A boolean value representing whether to show control characters.
-///
-/// # Returns
-///
-/// * An option with None if the style string is invalid, or a `QuotingStyle` wrapped in `Some`.
-struct QuotingStyleSpec {
-    style: QuotingStyle,
-    fixed_control: bool,
-    locale: Option<LocaleQuoting>,
-}
-
-impl QuotingStyleSpec {
-    fn new(style: QuotingStyle) -> Self {
-        Self {
-            style,
-            fixed_control: false,
-            locale: None,
-        }
-    }
-
-    fn with_locale(style: QuotingStyle, locale: LocaleQuoting) -> Self {
-        Self {
-            style,
-            fixed_control: true,
-            locale: Some(locale),
-        }
-    }
-}
-fn match_quoting_style_name(
-    style: &str,
-    show_control: bool,
-) -> Option<(QuotingStyle, Option<LocaleQuoting>)> {
-    let spec = match style {
-        "literal" => QuotingStyleSpec::new(QuotingStyle::Literal {
-            show_control: false,
-        }),
-        "shell" => QuotingStyleSpec::new(QuotingStyle::SHELL),
-        "shell-always" => QuotingStyleSpec::new(QuotingStyle::SHELL_QUOTE),
-        "shell-escape" => QuotingStyleSpec::new(QuotingStyle::SHELL_ESCAPE),
-        "shell-escape-always" => QuotingStyleSpec::new(QuotingStyle::SHELL_ESCAPE_QUOTE),
-        "c" => QuotingStyleSpec::new(QuotingStyle::C_DOUBLE),
-        "escape" => QuotingStyleSpec::new(QuotingStyle::C_NO_QUOTES),
-        "locale" => QuotingStyleSpec {
-            style: QuotingStyle::Literal {
-                show_control: false,
-            },
-            fixed_control: true,
-            locale: Some(LocaleQuoting::Single),
-        },
-        "clocale" => QuotingStyleSpec::with_locale(QuotingStyle::C_DOUBLE, LocaleQuoting::Double),
-        _ => return None,
-    };
-
-    let style = if spec.fixed_control {
-        spec.style
-    } else {
-        spec.style.show_control(show_control)
-    };
-
-    Some((style, spec.locale))
-}
-
 /// Extracts the quoting style to use based on the options provided.
 /// If no options are given, it looks if a default quoting style is provided
 /// through the [`QUOTING_STYLE`] environment variable.
@@ -580,39 +519,32 @@ fn extract_quoting_style(
     options: &clap::ArgMatches,
     show_control: bool,
     mode: ProgramMode,
-) -> (QuotingStyle, Option<LocaleQuoting>) {
+) -> QuotingStyle {
     let opt_quoting_style = options.get_one::<String>(QUOTING_STYLE);
 
     if let Some(style) = opt_quoting_style {
-        match match_quoting_style_name(style, show_control) {
-            Some(pair) => pair,
+        match QuotingStyle::parse(style) {
+            Some(qs) => qs.show_control(show_control),
             None => unreachable!("Should have been caught by Clap"),
         }
     } else if options.get_flag(options::quoting::LITERAL) {
-        (QuotingStyle::Literal { show_control }, None)
+        QuotingStyle::Literal { show_control }
     } else if options.get_flag(options::quoting::ESCAPE) {
-        (QuotingStyle::C_NO_QUOTES, None)
+        QuotingStyle::Escape
     } else if options.get_flag(options::quoting::C) {
-        (QuotingStyle::C_DOUBLE, None)
+        QuotingStyle::C
     } else {
         // If set, the QUOTING_STYLE environment variable specifies a default style.
-        if let Ok(style) = std::env::var("QUOTING_STYLE") {
-            if let Some(pair) = match_quoting_style_name(style.as_str(), show_control) {
-                return pair;
-            }
-            let _ = writeln!(
-                io::stderr(),
-                "{}",
-                translate!("ls-invalid-quoting-style", "program" => std::env::args().next().unwrap_or_else(|| "ls".to_string()), "style" => style)
-            );
+        if let Some(qs) = quoting_style_from_env() {
+            return qs.show_control(show_control);
         }
 
         match mode {
-            ProgramMode::Dir | ProgramMode::Vdir => (QuotingStyle::C_NO_QUOTES, None),
+            ProgramMode::Dir | ProgramMode::Vdir => QuotingStyle::Escape,
             ProgramMode::Ls if stdout().is_terminal() => {
-                (QuotingStyle::SHELL_ESCAPE.show_control(show_control), None)
+                QuotingStyle::SHELL_ESCAPE.show_control(show_control)
             }
-            ProgramMode::Ls => (QuotingStyle::Literal { show_control }, None),
+            ProgramMode::Ls => QuotingStyle::Literal { show_control },
         }
     }
 }
@@ -860,8 +792,7 @@ impl Config {
                 || !stdout().is_terminal()
         };
 
-        let (mut quoting_style, mut locale_quoting) =
-            extract_quoting_style(options, show_control, mode);
+        let mut quoting_style = extract_quoting_style(options, show_control, mode);
         let indicator_style = extract_indicator_style(options);
 
         let mut ignore_patterns: Vec<Pattern> = Vec::new();
@@ -953,7 +884,6 @@ impl Config {
 
         if zero_idx > last_of(&zero_quoting_style_opts) {
             quoting_style = QuotingStyle::Literal { show_control };
-            locale_quoting = None;
         }
 
         if needs_color && let Err(err) = validate_ls_colors_env() {
@@ -1040,7 +970,6 @@ impl Config {
             width,
             quoting_style,
             show_control_chars: options.get_flag(options::SHOW_CONTROL_CHARS),
-            locale_quoting,
             indicator_style,
             time_format_recent,
             time_format_older,
