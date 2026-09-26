@@ -189,6 +189,42 @@ fn test_realpath_loop() {
 }
 
 #[test]
+fn test_realpath_growing_loop() {
+    // `foo -> foo/bar` never repeats the same remaining path, so it must be
+    // stopped by the limit on followed symlinks rather than loop forever.
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.relative_symlink_file("foo/bar", "foo");
+    for args in [&[][..], &["-e"], &["-m"], &["-L"], &["-P"]] {
+        scene
+            .ucmd()
+            .args(args)
+            .arg("foo")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("Too many levels of symbolic links");
+    }
+}
+
+#[test]
+fn test_realpath_symlink_follow_limit() {
+    // Like the kernel, give up after following 40 symlinks.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("target");
+    at.relative_symlink_file("target", "link1");
+    for i in 2..=41 {
+        at.relative_symlink_file(&format!("link{}", i - 1), &format!("link{i}"));
+    }
+    let expect = path_concat!(at.root_dir_resolved(), "target") + "\n";
+    scene.ucmd().arg("link40").succeeds().stdout_only(expect);
+    scene
+        .ucmd()
+        .arg("link41")
+        .fails_with_code(1)
+        .stderr_contains("Too many levels of symbolic links");
+}
+
+#[test]
 fn test_realpath_default_allows_final_non_existent() {
     let p = Path::new("").join(GIBBERISH);
     let (at, mut ucmd) = at_and_ucmd!();

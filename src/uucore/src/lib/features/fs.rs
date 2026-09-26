@@ -7,6 +7,7 @@
 
 //! Set of functions to manage regular files, special files, and links.
 
+use crate::translate;
 #[cfg(all(unix, not(target_os = "haiku")))]
 pub use libc::{major, makedev, minor};
 use rustc_hash::FxHashSet;
@@ -344,7 +345,6 @@ pub fn canonicalize<P: AsRef<Path>>(
     miss_mode: MissingHandling,
     res_mode: ResolveMode,
 ) -> IOResult<PathBuf> {
-    const SYMLINKS_TO_LOOK_FOR_LOOPS: i32 = 20;
     let original = original.as_ref();
     let has_to_be_directory =
         (miss_mode == MissingHandling::Normal || miss_mode == MissingHandling::Existing) && {
@@ -365,7 +365,6 @@ pub fn canonicalize<P: AsRef<Path>>(
     let mut parts: VecDeque<OwningComponent> = path.components().map(Into::into).collect();
     let mut result = PathBuf::new();
     let mut followed_symlinks = 0;
-    let mut visited_files = FxHashSet::default();
     while let Some(part) = parts.pop_front() {
         match part {
             OwningComponent::Prefix(s) => {
@@ -388,21 +387,14 @@ pub fn canonicalize<P: AsRef<Path>>(
                 for link_part in link_path.components().rev() {
                     parts.push_front(link_part.into());
                 }
-                if followed_symlinks < SYMLINKS_TO_LOOK_FOR_LOOPS {
-                    followed_symlinks += 1;
-                } else {
-                    let file_info =
-                        FileInformation::from_path(result.parent().unwrap(), false).unwrap();
-                    let mut path_to_follow = PathBuf::new();
-                    for part in &parts {
-                        path_to_follow.push(part.as_os_str());
-                    }
-                    if !visited_files.insert((file_info, path_to_follow)) {
-                        return Err(Error::new(
-                            ErrorKind::InvalidInput,
-                            "Too many levels of symbolic links",
-                        )); // TODO use ErrorKind::FilesystemLoop when stable
-                    }
+                // A fixed cap rather than tracking visited links: loops such
+                // as `foo -> foo/bar` never revisit the same state.
+                followed_symlinks += 1;
+                if followed_symlinks > SYMLINK_FOLLOW_LIMIT {
+                    return Err(Error::new(
+                        ErrorKind::InvalidInput,
+                        translate!("error-too-many-symlink-levels"),
+                    )); // TODO use ErrorKind::FilesystemLoop when stable
                 }
                 result.pop();
             }
@@ -1395,6 +1387,24 @@ mod tests {
         unix::fs::symlink(&symlink2_path, &symlink1_path).unwrap();
 
         assert!(is_symlink_loop(&symlink1_path));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_canonicalize_growing_symlink_loop() {
+        let temp_dir = tempdir().unwrap();
+        let foo = temp_dir.path().join("foo");
+        unix::fs::symlink("foo/bar", &foo).unwrap();
+
+        for miss_mode in [
+            MissingHandling::Normal,
+            MissingHandling::Existing,
+            MissingHandling::Missing,
+        ] {
+            for res_mode in [ResolveMode::Physical, ResolveMode::Logical] {
+                assert!(canonicalize(&foo, miss_mode, res_mode).is_err());
+            }
+        }
     }
 
     #[cfg(unix)]
