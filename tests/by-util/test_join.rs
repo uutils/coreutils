@@ -833,3 +833,16 @@ fn test_hyphen_leading_field_number_is_reported_as_invalid() {
             .stderr_contains("invalid field number: '-1'");
     }
 }
+
+#[test]
+fn test_separator_attached_equals() {
+    // `-t=` must select `=` itself as the separator; clap strips a leading
+    // `=` from attached short-option values, hence the rewrite. #14120
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.write("f1", "1=a\n2=b\n");
+    ts.fixtures.write("f2", "1=b\n2=c\n");
+    ts.ucmd()
+        .args(&["-t=", "f1", "f2"])
+        .succeeds()
+        .stdout_only("1=a=b\n2=b=c\n");
+}

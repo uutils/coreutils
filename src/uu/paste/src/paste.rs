@@ -27,6 +27,11 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // GNU `paste` supports `-d=` to use `=` as a delimiter, which clap does
+    // not parse as a value, so split the two apart first.
+    // See https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
+    let args = uucore::args::split_attached_short_value(args.into_iter().collect(), "-d");
+
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let serial = matches.get_flag(options::SERIAL);
