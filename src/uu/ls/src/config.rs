@@ -1121,14 +1121,11 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                     // Formats are (optionally) separated by a newline:
                     // FORMAT1 NEWLINE FORMAT2 -> FORMAT1 for older files, FORMAT2 for recent.
                     // A single format applies to all files (stored as recent).
-                    let mut it = field[1..].split('\n');
-                    let first = it.next().unwrap_or_default();
-                    match it.next() {
-                        None => ok((first, None)),
-                        Some(second) => match it.next() {
-                            None => ok((second, Some(first))),
-                            Some(_) => Err(LsError::TimeStyleParseError(String::from(field))),
-                        },
+                    let formats: Vec<_> = field[1..].split('\n').collect();
+                    match formats.as_slice() {
+                        [format] => ok((*format, None)),
+                        [older, recent] => ok((*recent, Some(*older))),
+                        _ => Err(LsError::TimeStyleParseError(String::from(field))),
                     }
                 }
                 _ => Err(LsError::TimeStyleParseError(String::from(field))),
