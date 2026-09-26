@@ -1741,8 +1741,9 @@ fn test_cp_backup_off() {
 }
 
 // The VERSION_CONTROL variable selects the backup type when the command line
-// does not. These run the real binary so the variable is set on the child
-// process, which is the only safe way to test it.
+// does not. These tests live here rather than as unit tests in uucore because
+// changing an environment variable of the test process itself would require
+// unsafe code; here it is only set for the spawned cp process.
 #[test]
 fn test_cp_backup_short_reads_env() {
     let (at, mut ucmd) = at_and_ucmd!();
