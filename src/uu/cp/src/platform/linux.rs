@@ -26,7 +26,7 @@ use crate::{
 // Create the destination. It is followed when it is a pre-existing symlink,
 // matching GNU cp -d/-P which only forbid dereferencing on the source side.
 fn create_dest(dest: &Path) -> CopyResult<File> {
-    create_dest_restrictive(dest, false).map_err(|e| {
+    create_dest_restrictive(dest, false, false).map_err(|e| {
         CpError::IoErrContext(
             e,
             translate!("cp-error-cannot-create-regular-file", "path" => dest.quote()),
@@ -260,7 +260,7 @@ where
     // the dest does not momentarily sit with broader perms. The `0o622 &
     // !umask` form previously used here could still allow group/other write
     // under a permissive umask. See #10011.
-    let mut dst_file = create_dest_restrictive(&dest, false).map_err(|e| {
+    let mut dst_file = create_dest_restrictive(&dest, false, false).map_err(|e| {
         CpError::IoErrContext(
             e,
             translate!("cp-error-cannot-create-regular-file", "path" => dest.as_ref().quote()),

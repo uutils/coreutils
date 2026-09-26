@@ -19,7 +19,9 @@
 //!   shared directory cannot open the file before the caller narrows the
 //!   final permissions via `set_permissions` (issue #10011). The same
 //!   `nofollow` flag refuses to truncate through a symlink that may have
-//!   been swapped in at the destination path.
+//!   been swapped in at the destination path, and `exclusive` refuses to
+//!   open *any* pre-existing name, including a hard link to a file the
+//!   caller did not create.
 
 use std::fs::File;
 use std::io;
@@ -37,6 +39,10 @@ const SOURCE_FLAGS: OFlags = OFlags::RDONLY.union(OFlags::CLOEXEC);
 const DEST_FLAGS: OFlags = OFlags::WRONLY
     .union(OFlags::CREATE)
     .union(OFlags::TRUNC)
+    .union(OFlags::CLOEXEC);
+const DEST_EXCL_FLAGS: OFlags = OFlags::WRONLY
+    .union(OFlags::CREATE)
+    .union(OFlags::EXCL)
     .union(OFlags::CLOEXEC);
 
 /// Open `path` for reading, optionally with `O_NOFOLLOW`.
@@ -64,14 +70,24 @@ pub fn open_source<P: AsRef<Path>>(path: P, nofollow: bool) -> io::Result<File> 
 /// the source's permissions should do so via `set_permissions` *after*
 /// the content copy completes.
 ///
-/// With `nofollow = true`, an existing symlink at `path` causes `ELOOP`
-/// rather than truncating the symlink's target. Pass `true` whenever the
-/// caller has not just unlinked `path` itself: without it, an attacker
-/// who plants `path` as a symlink between the caller's check and this
-/// open can redirect the truncate (and the subsequent write) to any file
-/// the caller has permission to write.
-pub fn create_dest_restrictive<P: AsRef<Path>>(path: P, nofollow: bool) -> io::Result<File> {
-    let mut flags = DEST_FLAGS;
+/// With `exclusive = true`, the call carries `O_EXCL` and fails with
+/// `EEXIST` instead of opening an existing name at all. Pass `true`
+/// whenever the caller has just unlinked `path` and intends to create a
+/// fresh inode: `nofollow` alone still opens a hard link planted in that
+/// window, which would truncate (and later chown and chmod) a file the
+/// caller did not create. A symlink also fails under `O_EXCL`, so
+/// `nofollow` is subsumed when `exclusive` is set; the reverse is not
+/// true, since `O_NOFOLLOW` still opens a pre-existing regular file.
+pub fn create_dest_restrictive<P: AsRef<Path>>(
+    path: P,
+    nofollow: bool,
+    exclusive: bool,
+) -> io::Result<File> {
+    let mut flags = if exclusive {
+        DEST_EXCL_FLAGS
+    } else {
+        DEST_FLAGS
+    };
     if nofollow {
         flags |= OFlags::NOFOLLOW;
     }
@@ -138,7 +154,7 @@ mod tests {
     fn create_dest_uses_restrictive_initial_mode() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("new");
-        let f = create_dest_restrictive(&path, false).unwrap();
+        let f = create_dest_restrictive(&path, false, false).unwrap();
         let mode = f.metadata().unwrap().mode() & 0o777;
         assert_eq!(mode, DEST_INITIAL_MODE);
     }
@@ -159,7 +175,7 @@ mod tests {
         }
         // Re-open via the helper — mode of the existing inode stays 0o644,
         // only the contents are truncated.
-        create_dest_restrictive(&path, false).unwrap();
+        create_dest_restrictive(&path, false, false).unwrap();
         let mode = std::fs::metadata(&path).unwrap().mode() & 0o777;
         assert_eq!(mode, 0o644);
         assert_eq!(std::fs::metadata(&path).unwrap().len(), 0);
@@ -177,11 +193,26 @@ mod tests {
         std::fs::write(&victim, b"do not truncate me").unwrap();
         symlink(&victim, &dst).unwrap();
 
-        let err = create_dest_restrictive(&dst, true).unwrap_err();
+        let err = create_dest_restrictive(&dst, true, false).unwrap_err();
         assert_eq!(
             err.raw_os_error(),
             Some(rustix::io::Errno::LOOP.raw_os_error())
         );
         assert_eq!(std::fs::read(&victim).unwrap(), b"do not truncate me");
+    }
+
+    #[test]
+    fn create_dest_exclusive_refuses_existing_and_hard_linked() {
+        // An attacker who plants a hard link in the window between the
+        // caller's unlink and this create must not get the victim truncated
+        // and later chowned/chmoded. O_EXCL refuses the existing name.
+        let dir = tempdir().unwrap();
+        let victim = dir.path().join("victim");
+        std::fs::write(&victim, b"SECRET").unwrap();
+        std::fs::hard_link(&victim, dir.path().join("planted")).unwrap();
+
+        let err = create_dest_restrictive(dir.path().join("planted"), true, true).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(std::fs::read(&victim).unwrap(), b"SECRET");
     }
 }
