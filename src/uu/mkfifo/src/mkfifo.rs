@@ -5,7 +5,6 @@
 
 use clap::{Arg, ArgAction, Command, value_parser};
 use rustix::fs::{Mode, RawMode};
-use rustix::process::umask;
 use std::ffi::OsString;
 use uucore::display::Quotable;
 use uucore::error::{ExitCode, UResult, USimpleError, strip_errno};
@@ -80,10 +79,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // requested mode atomically. Skipping the path-based chmod
         // that used to follow this call closes the TOCTOU window an
         // attacker could use to swap the FIFO for a symlink between
-        // mkfifo and chmod (issue #10020).
-        let prev_umask = umask(Mode::empty());
-        let mkfifo_result = create_fifo(f.as_str(), mode as RawMode);
-        umask(prev_umask);
+        // mkfifo and chmod (issue #10020). The guard restores the
+        // original umask on drop, even if we panic.
+        let mkfifo_result = {
+            let _guard = uucore::mode::UmaskGuard::set(0);
+            create_fifo(f.as_str(), mode as RawMode)
+        };
 
         if let Err(e) = mkfifo_result {
             show!(USimpleError::new(
