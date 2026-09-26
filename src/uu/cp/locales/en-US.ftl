@@ -94,7 +94,6 @@ cp-error-cannot-create-regular-file = cannot create regular file { $path }
 cp-error-invalid-attribute = invalid attribute { $value }
 cp-error-failed-to-create-whole-tree = failed to create whole tree
 cp-error-failed-to-create-directory = Failed to create directory: { $error }
-  Try '{ $exec } --help' for more information.
 cp-error-setting-attributes = setting attributes for { $path }
 cp-error-write = write error
 
