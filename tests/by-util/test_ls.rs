@@ -4325,6 +4325,39 @@ fn test_ls_invalid_quoting_style_env_var_with_unwritable_stderr() {
 }
 
 #[test]
+fn test_ls_invalid_quoting_style_env_var_warns() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("alpha");
+
+    scene
+        .ucmd()
+        .env("QUOTING_STYLE", "not-a-style")
+        .arg("alpha")
+        .succeeds()
+        .stdout_is("alpha\n")
+        .stderr_contains("Ignoring invalid value of environment variable QUOTING_STYLE");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_ls_invalid_quoting_style_env_var_non_utf8() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("alpha");
+    let style = uucore::os_str_from_bytes(b"\xFF")
+        .expect("Only unix platforms can test non-unicode env values");
+
+    scene
+        .ucmd()
+        .env("QUOTING_STYLE", style)
+        .arg("alpha")
+        .succeeds()
+        .stdout_is("alpha\n")
+        .stderr_contains("Ignoring invalid value of environment variable QUOTING_STYLE");
+}
+
+#[test]
 fn test_ls_quoting_style_arg_overrides_env_var() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
