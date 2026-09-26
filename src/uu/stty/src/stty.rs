@@ -440,11 +440,10 @@ fn stty(opts: &Options) -> UResult<()> {
         }
         tcsetattr(opts.file.as_fd(), set_arg, &termios)?;
 
-        // Verify that tcsetattr actually applied all requested settings.
-        // POSIX allows tcsetattr to succeed while only partially applying
-        // changes. GNU stty re-reads and compares; we do the same.
-        let actual = tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
-        if actual != termios {
+        // POSIX allows tcsetattr to report success after applying only some of
+        // the requested changes, so re-read the settings and check them.
+        let applied = tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
+        if !modes_match(&termios, &applied) {
             return Err(USimpleError::new(
                 1,
                 translate!(
@@ -458,6 +457,32 @@ fn stty(opts: &Options) -> UResult<()> {
         print_settings(&termios, opts)?;
     }
     Ok(())
+}
+
+/// Report whether the terminal ended up holding the settings we asked for.
+///
+/// The fields are compared one by one instead of using `Termios`'s
+/// `PartialEq`. On glibc the wrapped `termios` also carries `c_ispeed` and
+/// `c_ospeed` fields, which glibc leaves alone when a speed is requested but
+/// which the kernel updates when the settings are read back, so a derived
+/// comparison reports a mismatch for a terminal that is in fact configured as
+/// requested. GNU stty compares the settings themselves as well.
+fn modes_match(requested: &Termios, applied: &Termios) -> bool {
+    if requested.input_flags != applied.input_flags
+        || requested.output_flags != applied.output_flags
+        || requested.control_flags != applied.control_flags
+        || requested.local_flags != applied.local_flags
+        || requested.control_chars != applied.control_chars
+    {
+        return false;
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "haiku"))]
+    if requested.line_discipline != applied.line_discipline {
+        return false;
+    }
+
+    true
 }
 
 // The GNU implementation adds the --help message when the args are incorrectly formatted

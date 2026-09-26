@@ -41,6 +41,26 @@ fn test_set_echo_and_verify() {
 
 #[test]
 #[cfg(unix)]
+fn test_set_speeds_and_verify() {
+    // Reading the settings back must not be mistaken for a partial
+    // application of what was just requested.
+    let (path, _controller, _replica) = pty_path();
+
+    new_ucmd!()
+        .args(&["--file", &path, "ispeed", "9600"])
+        .succeeds();
+    new_ucmd!()
+        .args(&["--file", &path, "ospeed", "19200"])
+        .succeeds();
+
+    new_ucmd!()
+        .args(&["--file", &path])
+        .succeeds()
+        .stdout_contains("19200");
+}
+
+#[test]
+#[cfg(unix)]
 fn test_basic() {
     let (path, _controller, _replica) = pty_path();
     new_ucmd!()
