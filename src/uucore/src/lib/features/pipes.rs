@@ -15,13 +15,23 @@ use std::{
 pub const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
 const KERNEL_DEFAULT_PIPE_SIZE: usize = 64 * 1024;
 
-/// A type allows to
-/// - check that zero-copy succeed by ?.is_ok()
-/// - check that zero-copy failed, but read/write fallback succeed by ?.is_err()
-/// - catch the read/write fallback's error by ? or let Err(e)
-///
-/// use rustix::io::Result for functions without read/write fallback
+/// An error from a pipe operation, retaining whether it came from reading or writing.
+#[derive(Debug)]
+pub enum PipeError {
+    Read(std::io::Error),
+    Write(std::io::Error),
+}
+
+impl From<PipeError> for std::io::Error {
+    fn from(error: PipeError) -> Self {
+        match error {
+            PipeError::Read(error) | PipeError::Write(error) => error,
+        }
+    }
+}
+
 type PipeRes = std::io::Result<Result<(), ()>>;
+type SpliceRes = Result<Result<(), ()>, PipeError>;
 
 /// return pipe and try to extend its size
 /// SIZE_REQUIRED should be true if you want to fail when changing pipe size failed
@@ -80,7 +90,7 @@ pub fn drain_pipe(pipe: &PipeReader, dest: &impl AsFd, len: usize) -> PipeRes {
 /// throughput is better than direct splice for the case one of in/output is pipe by unknown reason
 /// This includes read ahead and optimization for stdout's pipe size
 #[inline]
-pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRes {
+pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> SpliceRes {
     static PIPE_CACHE: OnceLock<Option<(PipeReader, PipeWriter)>> = OnceLock::new();
     let Some((pipe_rd, pipe_wr)) = PIPE_CACHE.get_or_init(|| pipe::<false>().ok()) else {
         return Ok(Err(()));
@@ -96,16 +106,21 @@ pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRe
     match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
         Ok(0) => return Ok(Ok(())),
         Ok(n) => {
-            if drain_pipe(pipe_rd, dest, n)?.is_err() {
+            if drain_pipe(pipe_rd, dest, n)
+                .map_err(PipeError::Write)?
+                .is_err()
+            {
                 return Ok(Err(()));
             }
         }
         Err(_) => return Ok(Err(())),
     }
     // GNU cat catches all strace injections for 2nd+ splice
-    while let mut n @ 1.. = splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE)? {
+    while let mut n @ 1.. = splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE)
+        .map_err(|error| PipeError::Read(error.into()))?
+    {
         while n > 0 {
-            n -= splice(pipe_rd, dest, n)?;
+            n -= splice(pipe_rd, dest, n).map_err(|error| PipeError::Write(error.into()))?;
         }
     }
     Ok(Ok(()))
