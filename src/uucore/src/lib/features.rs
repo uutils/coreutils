@@ -38,7 +38,10 @@ pub mod fast_inc;
 pub mod format;
 #[cfg(all(feature = "fs", any(unix, windows, target_os = "wasi")))]
 pub mod fs;
-#[cfg(feature = "fsext")]
+#[cfg(all(
+    feature = "fsext",
+    any(all(unix, not(target_os = "fuchsia")), windows, target_os = "wasi")
+))]
 pub mod fsext;
 #[cfg(feature = "i18n-common")]
 pub mod i18n;
