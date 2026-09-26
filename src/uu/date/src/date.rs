@@ -89,6 +89,8 @@ const OPT_UNIVERSAL_2: &str = "utc";
 
 #[derive(Error, Debug)]
 enum DateError {
+    #[error("{}", translate!("date-error-multiple-output-formats"))]
+    MultipleOutputFormats,
     #[error("{}", translate!("date-error-write", "error" => strip_errno(.0)))]
     Write(std::io::Error),
     #[error("{}", translate!("date-error-extra-operand", "operand" => .operand))]
@@ -394,6 +396,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
             return Err(Box::new(DateError::FormatMissingPlus { arg }));
         };
+        if matches.contains_id(OPT_ISO_8601)
+            || matches.get_flag(OPT_RFC_EMAIL)
+            || matches.contains_id(OPT_RFC_3339)
+        {
+            return Err(Box::new(DateError::MultipleOutputFormats));
+        }
         Format::Custom(rest.to_vec())
     } else if let Some(fmt) = matches
         .get_many::<String>(OPT_ISO_8601)
@@ -724,6 +732,7 @@ pub fn uu_app() -> Command {
                 ]))
                 .num_args(0..=1)
                 .default_missing_value(OPT_DATE)
+                .overrides_with_all([OPT_ISO_8601, OPT_RFC_EMAIL, OPT_RFC_3339])
                 .help(translate!("date-help-iso-8601")),
         )
         .arg(
@@ -740,7 +749,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_RFC_EMAIL)
                 .alias(OPT_RFC_2822)
                 .alias(OPT_RFC_822)
-                .overrides_with(OPT_RFC_EMAIL)
+                .overrides_with_all([OPT_ISO_8601, OPT_RFC_EMAIL, OPT_RFC_3339])
                 .help(translate!("date-help-rfc-email"))
                 .action(ArgAction::SetTrue),
         )
@@ -749,6 +758,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_RFC_3339)
                 .value_name("FMT")
                 .value_parser(ShortcutValueParser::new([DATE, SECONDS, NS]))
+                .overrides_with_all([OPT_ISO_8601, OPT_RFC_EMAIL, OPT_RFC_3339])
                 .help(translate!("date-help-rfc-3339")),
         )
         .arg(
