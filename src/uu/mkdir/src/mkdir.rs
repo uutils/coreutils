@@ -9,7 +9,7 @@ use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
-use std::io::{Write, stdout};
+use std::io::{ErrorKind, Write, stdout};
 use std::path::{Path, PathBuf};
 #[cfg(not(windows))]
 use uucore::error::ExitCode;
@@ -353,7 +353,17 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             Ok(())
         }
 
-        Err(_) if config.recursive && path.is_dir() => {
+        Err(e) if e.kind() == ErrorKind::AlreadyExists && path.is_dir() => {
+            // Only a parent directory or `-p` may accept an existing directory.
+            // A plain `mkdir dir` must fail, or a concurrent creator would be
+            // mistaken for this process, which is what makes mkdir a mutex.
+            if !is_parent && !config.recursive {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("mkdir-error-file-exists", "path" => path.maybe_quote()),
+                ));
+            }
+
             // Directory already exists - check if this is a logical directory creation
             // (i.e., not just a parent reference like "test_dir/..")
             let ends_with_parent_dir = matches!(
