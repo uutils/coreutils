@@ -15,6 +15,7 @@ mkdir-error-file-exists = { $path } : Le fichier existe
 mkdir-error-failed-to-create-tree = échec de la création de l'arborescence complète
 mkdir-error-cannot-set-permissions = impossible de définir les permissions { $path }
 mkdir-error-cannot-create-directory = impossible de créer le répertoire '{ $path }': { $error }
+mkdir-error-invalid-mode = mode invalide '{ $mode }'
 
 # Sortie détaillée
 mkdir-verbose-created-directory = { $util_name } : répertoire créé { $path }

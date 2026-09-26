@@ -70,11 +70,15 @@ fn get_mode(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Opt
     mode::parse_chmod(DEFAULT_PERM, m, true, mode::get_umask())
         .map(Some)
         .map_err(|err| {
-            if diag_args.is_some_and(|args| err.render_mode_value(args, m, 0, &err.to_string())) {
+            // GNU always says the same thing regardless of what specifically
+            // went wrong, and unlike `chmod` does not add a "Try --help"
+            // hint here.
+            let message = translate!("mkdir-error-invalid-mode", "mode" => m.clone());
+            if diag_args.is_some_and(|args| err.render_mode_value(args, m, 0, &message)) {
                 // The diagnostic is already on stderr; exit quietly.
                 ExitCode::new(1)
             } else {
-                USimpleError::new(1, err.to_string())
+                USimpleError::new(1, message)
             }
         })
 }
