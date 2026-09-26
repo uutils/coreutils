@@ -709,8 +709,8 @@ fn test_locale_collation() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    at.write("f1.sorted", "ab:d  1\nabc:d 2\n");
-    at.write("f2.sorted", "ab:d  x\nabc:d y\n");
+    at.write("f1.sorted", "abc:d 2\nab:d  1\n");
+    at.write("f2.sorted", "abc:d y\nab:d  x\n");
 
     ts.ucmd()
         .env("LC_ALL", "en_US.UTF-8")
@@ -718,8 +718,28 @@ fn test_locale_collation() {
         .arg("f1.sorted")
         .arg("f2.sorted")
         .succeeds()
-        .stdout_contains("ab:d 1 x")
-        .stdout_contains("abc:d 2 y");
+        .stdout_contains("abc:d 2 y")
+        .stdout_contains("ab:d 1 x");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_locale_collation_ascii_case() {
+    // Pure ASCII keys must still be compared with the collator:
+    // in byte order "Banana" < "apple", but not in en_US.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("f1.sorted", "apple 1\nBanana 2\n");
+    at.write("f2.sorted", "apple x\nBanana y\n");
+
+    ts.ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("--check-order")
+        .arg("f1.sorted")
+        .arg("f2.sorted")
+        .succeeds()
+        .stdout_only("apple 1 x\nBanana 2 y\n");
 }
 
 #[test]

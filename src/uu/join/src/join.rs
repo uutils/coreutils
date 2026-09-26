@@ -332,7 +332,6 @@ impl<Sep: Separator> Input<Sep> {
                     let field2 = CaseInsensitiveSlice { v: f2 };
                     field1.cmp(&field2)
                 } else if self.use_locale {
-                    // Locale-aware comparison with UTF-8 support and caching
                     locale_cmp_unchecked(f1, f2)
                 } else {
                     // Fast byte-wise comparison
@@ -1036,18 +1035,11 @@ fn exec<Sep: Separator>(
         settings.print_unpaired2,
     )?;
 
-    let use_locale = should_use_locale_collation();
-    if use_locale {
-        let mut opts = CollatorOptions::default();
-        opts.alternate_handling = Some(AlternateHandling::Shifted);
-        let _ = try_init_collator(opts);
-    }
-
     let input = Input::new(
         sep.clone(),
         settings.ignore_case,
         settings.check_order,
-        use_locale,
+        should_use_locale_collation(),
     );
 
     let format = if settings.autoformat {
