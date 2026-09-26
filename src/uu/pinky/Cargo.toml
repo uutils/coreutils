@@ -13,9 +13,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[features]
-feat_systemd_logind = ["uucore/feat_systemd_logind"]
-
 [lib]
 path = "src/pinky.rs"
 doctest = false
@@ -24,6 +21,9 @@ doctest = false
 clap = { workspace = true }
 fluent = { workspace = true }
 uucore = { workspace = true, features = ["utmpx", "entries"] }
+
+[features]
+feat_systemd_logind = ["uucore/feat_systemd_logind"]
 
 [lints]
 workspace = true

@@ -46,9 +46,6 @@ windows-sys = { workspace = true, features = [
 libc = { workspace = true }
 rustix = { workspace = true, features = ["fs"] }
 
-[features]
-selinux = ["uucore/selinux"]
-
 [[bin]]
 name = "mv"
 path = "src/main.rs"
@@ -57,6 +54,9 @@ path = "src/main.rs"
 divan = { workspace = true }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
+
+[features]
+selinux = ["uucore/selinux"]
 
 [lints]
 workspace = true
