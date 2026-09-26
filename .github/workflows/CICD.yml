@@ -264,7 +264,9 @@ jobs:
         done
 
   build_rust_stable:
-    name: Build/stable
+    # Keep the name independent of `features`: these checks are required by
+    # branch protection, so a renamed job would block every PR.
+    name: Build/stable (${{ matrix.job.os }}, ${{ matrix.job.name }})
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
     timeout-minutes: 90
@@ -272,11 +274,11 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: feat_os_unix }
+          - { os: ubuntu-latest  , name: feat_os_unix    , features: feat_os_unix }
           # Don't fail to build if SELinux specific utils are included by some reason.
           # But we are not interested in existence of stubs
-          - { os: macos-latest   , features: "feat_os_unix,chcon,runcon" }
-          - { os: windows-latest , features: "feat_os_windows,chcon,runcon" }
+          - { os: macos-latest   , name: feat_os_unix    , features: "feat_os_unix,chcon,runcon" }
+          - { os: windows-latest , name: feat_os_windows , features: "feat_os_windows,chcon,runcon" }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
