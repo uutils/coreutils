@@ -167,6 +167,7 @@ fn escape_name_inner(
             always_quote,
             dirname,
             name.len(),
+            encoding,
         )),
         QuotingStyle::Shell {
             escape: false,
@@ -336,6 +337,14 @@ mod tests {
     fn check_names_raw_both(name: &[u8], map: &[(&[u8], &str)]) {
         check_names_encoding_raw(UEncoding::Utf8, name, map);
         check_names_encoding_raw(UEncoding::Ascii, name, map);
+    }
+
+    #[test]
+    fn test_invalid_bytes_with_single_quote() {
+        check_names_raw_both(
+            b"missing-'\xff",
+            &[(b"'missing-'\\'''$'\\377'", "shell-escape-always")],
+        );
     }
 
     #[test]

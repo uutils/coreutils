@@ -9,7 +9,7 @@ use std::ops::Range;
 use uucore::diagnostics::OptionValue;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::i18n::get_ctype_encoding;
-use uucore::quoting_style::{Quotes, QuotingStyle, escape_name};
+use uucore::quoting_style::{Quotes, QuotingStyle, escape_name, locale_aware_escape_name};
 use uucore::translate;
 
 use clap::builder::ValueParser;
@@ -1340,6 +1340,11 @@ impl Stater {
 
     fn do_stat(&self, file: &OsStr, stdin_is_fifo: bool) -> UResult<i32> {
         let display_name = file.to_string_lossy();
+        let quoted_name = || {
+            locale_aware_escape_name(file, QuotingStyle::SHELL_ESCAPE_QUOTE)
+                .to_string_lossy()
+                .into_owned()
+        };
         let file = if cfg!(unix) && display_name == "-" {
             if self.show_fs {
                 show_error!("{}", StatError::StdinFilesystemMode);
@@ -1370,7 +1375,7 @@ impl Stater {
                     show_error!(
                         "{}",
                         StatError::CannotReadFilesystemInfo {
-                            file: display_name.quote().to_string(),
+                            file: quoted_name(),
                             error
                         }
                     );
@@ -1413,7 +1418,7 @@ impl Stater {
                     show_error!(
                         "{}",
                         StatError::CannotStatx {
-                            file: display_name.quote().to_string(),
+                            file: quoted_name(),
                             error: strip_errno(&e)
                         }
                     );
