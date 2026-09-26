@@ -70,6 +70,7 @@ let file_path = generate_random_file().expect("Failed to create file");
 ## Use Cases
 
 ### Fuzzing Testing
+
 Perfect for libFuzzer-based differential fuzzing:
 
 ```rust
@@ -86,6 +87,7 @@ fuzz_target!(|_data: &[u8]| {
 ```
 
 ### Integration Testing
+
 Use in regular test suites to verify compatibility:
 
 ```rust
