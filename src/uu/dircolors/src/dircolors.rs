@@ -90,11 +90,15 @@ fn generate_type_output(fmt: &OutputFmt) -> String {
 /// entry per known terminal. Those entries only take effect when one of them
 /// matches the environment, so reproduce that check before emitting anything.
 fn builtin_database_applies() -> bool {
-    if !env::var("COLORTERM").unwrap_or_default().is_empty() {
-        return true;
-    }
+    let (term, colorterm) = term_and_colorterm();
+    !colorterm.is_empty() || TERMS.iter().any(|pattern| term.fnmatch(pattern))
+}
+
+/// `TERM` (defaulting to "none") and `COLORTERM` (defaulting to empty).
+fn term_and_colorterm() -> (String, String) {
     let term = env::var("TERM").unwrap_or_else(|_| "none".to_owned());
-    TERMS.iter().any(|pattern| term.fnmatch(pattern))
+    let colorterm = env::var("COLORTERM").unwrap_or_default();
+    (term, colorterm)
 }
 
 fn generate_ls_colors(fmt: &OutputFmt, sep: &str) -> String {
@@ -339,8 +343,7 @@ where
     result.push_str(&prefix);
 
     // Get environment variables once at the start
-    let term = env::var("TERM").unwrap_or_else(|_| "none".to_owned());
-    let colorterm = env::var("COLORTERM").unwrap_or_default();
+    let (term, colorterm) = term_and_colorterm();
 
     let mut state = ParseState::Global;
     let mut saw_colorterm_match = false;
