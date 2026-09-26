@@ -93,7 +93,8 @@ macro_rules! show(
 
         let e = $err;
         $crate::error::set_exit_code(e.code());
-        let _ = writeln!(std::io::stderr(), "{}: {e}", $crate::util_name());
+        let msg = format!("{}: {e}\n", $crate::util_name());
+        let _ = std::io::stderr().write_all(msg.as_bytes());
     })
 );
 
@@ -154,12 +155,12 @@ macro_rules! show_if_err(
 macro_rules! show_error(
     ($($args:tt)+) => ({
 		use std::io::Write as _;
-        let _ = writeln!(
-            std::io::stderr(),
-            "{}: {}",
+        let msg = format!(
+            "{}: {}\n",
             $crate::util_name(),
             format_args!($($args)+)
         );
+        let _ = std::io::stderr().write_all(msg.as_bytes());
     })
 );
 
@@ -182,12 +183,12 @@ macro_rules! show_error(
 macro_rules! show_warning(
     ($($args:tt)+) => ({
 		use std::io::Write as _;
-        let _ = writeln!(
-            std::io::stderr(),
-            "{}: warning: {}",
+        let msg = format!(
+            "{}: warning: {}\n",
             $crate::util_name(),
             format_args!($($args)+)
         );
+        let _ = std::io::stderr().write_all(msg.as_bytes());
     })
 );
 
@@ -196,11 +197,11 @@ macro_rules! show_warning(
 macro_rules! show_warning_caps(
     ($($args:tt)+) => ({
 		use std::io::Write as _;
-        let _ = writeln!(
-            std::io::stderr(),
-            "{}: WARNING: {}",
+        let msg = format!(
+            "{}: WARNING: {}\n",
             $crate::util_name(),
             format_args!($($args)+)
         );
+        let _ = std::io::stderr().write_all(msg.as_bytes());
     })
 );
