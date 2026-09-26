@@ -91,6 +91,6 @@ fn describe(error: &BadSequence) -> Option<(Option<String>, Option<&'static str>
         )),
         // Raised against the solved sets rather than what was typed, so there
         // is nothing to point a caret at.
-        BadSequence::EmptySet2WhenNotTruncatingSet1 => None,
+        BadSequence::EmptySet2WhenNotTruncatingSet1 | BadSequence::MemoryExhausted => None,
     }
 }
