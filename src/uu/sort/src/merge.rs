@@ -128,6 +128,7 @@ pub fn merge_with_file_limit<
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
+    let settings = &settings.collating_on_demand();
     let batch_size = effective_merge_batch_size(settings);
     debug_assert!(batch_size >= 2);
 
@@ -269,6 +270,7 @@ fn reader(
                 &mut iter::empty(),
                 separator,
                 settings,
+                false,
             )?;
             if !should_continue {
                 // Remove the file from the list by replacing it with `None`.
