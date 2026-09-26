@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDO) unwritable GHSA
 
 use std::fmt::Write;
+use std::process::Stdio;
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -166,6 +167,15 @@ fn test_very_large_range_offset() {
         "Output includes element not from range: {}",
         result.stdout_str()
     );
+}
+
+#[test]
+fn test_large_range_without_head_count() {
+    new_ucmd!()
+        .arg("-i1-20000000")
+        .set_stdout(Stdio::null())
+        .succeeds()
+        .no_stderr();
 }
 
 #[test]
