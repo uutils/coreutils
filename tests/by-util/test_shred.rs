@@ -561,7 +561,7 @@ shred: invalid file size: '4vv'
 
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: /proc/self/mem doesn't exist in WASI.")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_couldnt_rename() {
     new_ucmd!()
         .args(&["-u", "/proc/self/mem"])
