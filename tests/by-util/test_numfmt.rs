@@ -1678,6 +1678,17 @@ fn test_format_precision_zero_with_to_scale_honors_round_method() {
             ],
             "1M",
         ),
+        // rounding carries into the next suffix
+        (vec!["--to=si", "--format=%.0f", "999999"], "1M"),
+        (vec!["--to=iec", "--format=%.0f", "1048575"], "1M"),
+        (
+            vec!["--to=si", "--format=%.0f", "--round=nearest", "999999"],
+            "1M",
+        ),
+        (
+            vec!["--to=si", "--format=%.0f", "--round=down", "999999"],
+            "999k",
+        ),
     ];
 
     for (args, expected) in cases {
