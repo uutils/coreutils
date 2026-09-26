@@ -2051,10 +2051,8 @@ fn test_date_strftime_n_width_and_flags() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/coreutils/issues/11657 — GNU date treats composite strftime specifiers (%D, %F, %T, ...) as atomic; flags like `-` should not propagate to sub-fields."]
 fn test_date_strftime_flag_on_composite() {
     // GNU `%-D` keeps `06/15/24` (flag ignored on composite).
-    // uutils applies `-` to inner `%m`, producing `6/15/24`.
     new_ucmd!()
         .env("LC_ALL", "C")
         .env("TZ", "UTC")
@@ -2063,6 +2061,76 @@ fn test_date_strftime_flag_on_composite() {
         .arg("+%-D")
         .succeeds()
         .stdout_is("06/15/24\n");
+
+    // GNU applies the modifier to the whole %F expansion, including its year.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("0001-01-01")
+        .arg("+%-F")
+        .succeeds()
+        .stdout_is("0001-01-01\n");
+
+    // GNU pads the whole %T expansion to the requested width.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15 07:08:09")
+        .arg("+%_10T")
+        .succeeds()
+        .stdout_is("  07:08:09\n");
+
+    // `%_D` is stripped the same way as `%-D`.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15")
+        .arg("+%_D")
+        .succeeds()
+        .stdout_is("06/15/24\n");
+
+    // Non-composite specifiers keep their modifiers: `%-d` drops the padding of
+    // the day, `%_m` pads the month with a space.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-05")
+        .arg("+%-d %_m")
+        .succeeds()
+        .stdout_is("5  6\n");
+
+    // An enormous width must still be rejected rather than silently truncated.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15")
+        .arg("+%18446744073709551615c")
+        .fails();
+
+    // `%%` is a literal, so the `-D` after it is not a composite specifier.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15")
+        .arg("+%%-%D")
+        .succeeds()
+        .stdout_is("%-06/15/24\n");
+
+    // The rewrite applies mid-string too, not just at the start.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15")
+        .arg("+a%-Db")
+        .succeeds()
+        .stdout_is("a06/15/24b\n");
 }
 
 #[test]
