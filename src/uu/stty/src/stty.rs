@@ -459,6 +459,19 @@ fn stty(opts: &Options) -> UResult<()> {
     Ok(())
 }
 
+/// How many control characters the C library actually reads back.
+///
+/// musl asks the kernel for the legacy `TCGETS`, which carries the 19 control
+/// characters of the kernel's `struct termios`, so the remaining entries of the
+/// `NCCS`-sized array are left untouched. `nix` hands out an uninitialized
+/// `Termios`, so those entries are garbage and comparing them would report a
+/// difference that is not there. GNU stty hits the same thing and works around
+/// it by zeroing its `termios` before calling `tcgetattr`.
+#[cfg(target_env = "musl")]
+const ROUND_TRIPPED_CONTROL_CHARS: usize = 19;
+#[cfg(not(target_env = "musl"))]
+const ROUND_TRIPPED_CONTROL_CHARS: usize = nix::libc::NCCS;
+
 /// Report whether the terminal ended up holding the settings we asked for.
 ///
 /// The fields are compared one by one instead of using `Termios`'s
@@ -472,7 +485,8 @@ fn modes_match(requested: &Termios, applied: &Termios) -> bool {
         || requested.output_flags != applied.output_flags
         || requested.control_flags != applied.control_flags
         || requested.local_flags != applied.local_flags
-        || requested.control_chars != applied.control_chars
+        || requested.control_chars[..ROUND_TRIPPED_CONTROL_CHARS]
+            != applied.control_chars[..ROUND_TRIPPED_CONTROL_CHARS]
     {
         return false;
     }
