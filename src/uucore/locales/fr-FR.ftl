@@ -9,6 +9,7 @@ common-help = aide
 common-version = version
 common-write-error = erreur d'écriture
 common-read-error = erreur de lecture
+common-memory-exhausted = mémoire épuisée
 # Messages d'erreur clap communs
 clap-error-unexpected-argument = { $error_word } : argument inattendu '{ $arg }' trouvé
 clap-error-unexpected-argument-simple = argument inattendu

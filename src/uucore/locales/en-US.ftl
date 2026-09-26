@@ -9,6 +9,9 @@ common-help = help
 common-version = version
 common-read-error = read error
 common-write-error = write error
+# Fatal allocation failure. Utilities may define `<util>-memory-exhausted` in
+# their own Fluent resource to override this diagnostic for that utility.
+common-memory-exhausted = memory exhausted
 
 # Common clap error messages
 clap-error-unexpected-argument = { $error_word }: unexpected argument '{ $arg }' found
