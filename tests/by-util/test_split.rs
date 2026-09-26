@@ -928,6 +928,29 @@ fn test_suffix_length_zero() {
 }
 
 #[test]
+#[cfg(target_pointer_width = "64")]
+fn test_numeric_suffix_start_overflow() {
+    new_ucmd!()
+        .args(&[
+            "-n",
+            "5",
+            "--numeric-suffixes=18446744073709551615",
+            "/dev/null",
+        ])
+        .fails()
+        .usage_error("numerical suffix start value is too large for the suffix length");
+}
+
+#[test]
+#[cfg(target_pointer_width = "64")]
+fn test_hex_suffix_start_overflow() {
+    new_ucmd!()
+        .args(&["-n", "5", "--hex-suffixes=ffffffffffffffff", "/dev/null"])
+        .fails()
+        .usage_error("numerical suffix start value is too large for the suffix length");
+}
+
+#[test]
 fn test_suffixes_exhausted() {
     new_ucmd!()
         .args(&["-b", "1", "-a", "1", "asciilowercase.txt"])
