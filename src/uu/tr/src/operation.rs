@@ -320,38 +320,38 @@ impl Sequence {
 
         // For every upper/lower in set2, there must be an upper/lower in set1 at the same position. The position is calculated by expanding everything before the upper/lower in both sets.
         // Only when translating: with -d, set2 is the squeeze set and lines up with nothing.
-        for (set2_pos, set2_item) in set2.iter().enumerate() {
-            if translating && matches!(set2_item, Self::Class(_)) {
-                let mut set2_part_solved_len = 0;
-                if set2_pos >= 1 {
-                    set2_part_solved_len =
-                        set2.iter().take(set2_pos).flat_map(Self::flatten).count();
-                }
+        if translating {
+            for (set2_pos, set2_item) in set2.iter().enumerate() {
+                if matches!(set2_item, Self::Class(_)) {
+                    let mut set2_part_solved_len = 0;
+                    if set2_pos >= 1 {
+                        set2_part_solved_len =
+                            set2.iter().take(set2_pos).flat_map(Self::flatten).count();
+                    }
 
-                let mut class_matches = false;
-                for (set1_pos, set1_item) in set1.iter().enumerate() {
-                    // Only an 'upper'/'lower' in set1 can line up with one in
-                    // set2: any other class there leaves the mapping
-                    // undefined, so GNU rejects it.
-                    if matches!(set1_item, Self::Class(Class::Upper | Class::Lower)) {
-                        let mut set1_part_solved_len = 0;
-                        if set1_pos >= 1 {
-                            set1_part_solved_len =
-                                set1.iter().take(set1_pos).flat_map(Self::flatten).count();
-                        }
+                    let mut class_matches = false;
+                    for (set1_pos, set1_item) in set1.iter().enumerate() {
+                        // only upper/lower can pair with upper/lower
+                        if matches!(set1_item, Self::Class(Class::Upper | Class::Lower)) {
+                            let mut set1_part_solved_len = 0;
+                            if set1_pos >= 1 {
+                                set1_part_solved_len =
+                                    set1.iter().take(set1_pos).flat_map(Self::flatten).count();
+                            }
 
-                        if set1_part_solved_len == set2_part_solved_len {
-                            class_matches = true;
-                            break;
+                            if set1_part_solved_len == set2_part_solved_len {
+                                class_matches = true;
+                                break;
+                            }
                         }
                     }
-                }
 
-                if !class_matches {
-                    return Err(SequenceError::whole_set(
-                        BadSequence::ClassInSet2NotMatchedBySet1,
-                        2,
-                    ));
+                    if !class_matches {
+                        return Err(SequenceError::whole_set(
+                            BadSequence::ClassInSet2NotMatchedBySet1,
+                            2,
+                        ));
+                    }
                 }
             }
         }

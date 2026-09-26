@@ -333,6 +333,29 @@ fn test_misaligned_construct_not_checked_when_deleting() {
         .stdout_is("1");
 }
 
+/// -s alone still translates, so the alignment rule still applies.
+#[test]
+fn test_misaligned_construct_checked_when_squeezing() {
+    new_ucmd!()
+        .args(&["-s", "[:alpha:]", "[:upper:]"])
+        .pipe_in("")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("tr: misaligned [:upper:] and/or [:lower:] construct\n");
+}
+
+/// Plain -d takes one set: a class in SET2 is an extra operand, not a
+/// misaligned construct.
+#[test]
+fn test_delete_with_class_in_set2() {
+    new_ucmd!()
+        .args(&["-d", "[:alpha:]", "[:upper:]"])
+        .pipe_in("")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("extra operand '[:upper:]'");
+}
+
 /// SET1 longer than SET2 keeps its own message, which GNU also has.
 #[test]
 fn test_set1_longer_than_set2_ending_in_class() {
