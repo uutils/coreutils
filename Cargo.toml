@@ -708,3 +708,6 @@ strip = true
 inherits = "release"
 panic = "unwind"
 debug = true
+
+[patch.crates-io]
+hostname = { git = "https://github.com/xtqqczze/djc-hostname.git", branch = "target-aix" }
