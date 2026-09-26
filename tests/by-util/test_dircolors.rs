@@ -284,23 +284,21 @@ fn test_builtin_database_print_ls_colors_unknown_term() {
 
 #[test]
 fn test_builtin_database_known_term() {
-    let stdout = new_ucmd!()
+    new_ucmd!()
         .env("TERM", "xterm")
         .arg("-b")
         .succeeds()
-        .stdout_move_str();
-    assert!(stdout.contains("di=01;34"), "{stdout}");
+        .stdout_is_fixture("bash_def.expected");
 }
 
 #[test]
 fn test_builtin_database_colorterm_without_term() {
-    let stdout = new_ucmd!()
+    new_ucmd!()
         .env("TERM", "no-such-terminal")
         .env("COLORTERM", "truecolor")
         .arg("-b")
         .succeeds()
-        .stdout_move_str();
-    assert!(stdout.contains("di=01;34"), "{stdout}");
+        .stdout_is_fixture("bash_def.expected");
 }
 
 #[test]
