@@ -20,6 +20,11 @@ use native_int_str::{
 };
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use nix::libc;
+// libc does not expose `environ` on every target, so declare it ourselves.
+#[cfg(all(unix, not(target_os = "fuchsia")))]
+unsafe extern "C" {
+    static mut environ: *mut *mut libc::c_char;
+}
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use nix::sys::signal::{SigSet, SigmaskHow, Signal, sigprocmask};
 #[cfg(unix)]
@@ -33,16 +38,18 @@ use std::env;
 #[cfg(unix)]
 use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
-#[cfg(not(unix))]
+use std::fmt;
+use std::fs;
 use std::io;
+use std::io::Read as _;
 use std::io::Write as _;
 use std::io::stderr;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use std::mem::zeroed;
 #[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
-use uucore::display::{Quotable, print_all_env_vars};
+use uucore::display::{OsWrite, Quotable, print_all_env_vars};
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, strip_errno};
 use uucore::line_ending::LineEnding;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
@@ -91,6 +98,7 @@ mod options {
     pub const IGNORE_ENVIRONMENT: &str = "ignore-environment";
     pub const CHDIR: &str = "chdir";
     pub const NULL: &str = "null";
+    pub const ENV0_FROM: &str = "env0-from";
     pub const UNSET: &str = "unset";
     pub const DEBUG: &str = "debug";
     pub const SPLIT_STRING: &str = "split-string";
@@ -105,6 +113,7 @@ struct Options<'a> {
     ignore_env: bool,
     line_ending: LineEnding,
     running_directory: Option<&'a OsStr>,
+    env0_from: Vec<&'a OsStr>,
     unsets: Vec<&'a OsStr>,
     sets: Vec<(Cow<'a, OsStr>, Cow<'a, OsStr>)>,
     program: Vec<&'a OsStr>,
@@ -311,6 +320,198 @@ fn signal_is_valid(sig: usize) -> bool {
     true
 }
 
+/// One environment entry, kept verbatim as `NAME=VALUE` (or an entry without
+/// a '=' byte). An explicit model is needed for `--env0-from`, which must
+/// preserve entries exactly: their order, duplicate names, empty entries and
+/// entries without a '=' byte.
+type EnvEntries = Vec<OsString>;
+
+fn env_join(name: &OsStr, value: &OsStr) -> OsString {
+    #[cfg(unix)]
+    {
+        let mut bytes = name.as_bytes().to_vec();
+        bytes.push(b'=');
+        bytes.extend_from_slice(value.as_bytes());
+        OsString::from_vec(bytes)
+    }
+    #[cfg(not(unix))]
+    {
+        let mut joined = name.to_os_string();
+        joined.push("=");
+        joined.push(value);
+        joined
+    }
+}
+
+/// Split an entry at its first '=' byte; `None` for entries without one.
+fn split_env_entry(entry: &OsStr) -> Option<(&OsStr, &OsStr)> {
+    #[cfg(unix)]
+    {
+        let bytes = entry.as_bytes();
+        let pos = bytes.iter().position(|&b| b == b'=')?;
+        Some((
+            OsStr::from_bytes(&bytes[..pos]),
+            OsStr::from_bytes(&bytes[pos + 1..]),
+        ))
+    }
+    #[cfg(not(unix))]
+    {
+        let text = entry.to_str()?;
+        let (name, value) = text.split_once('=')?;
+        Some((OsStr::new(name), OsStr::new(value)))
+    }
+}
+
+fn entry_name(entry: &OsStr) -> Option<&OsStr> {
+    split_env_entry(entry).map(|(name, _)| name)
+}
+
+/// Set `name` to `value`, replacing the first entry with that name (like
+/// `setenv`), or appending a new entry when there is none.
+fn set_env_entry(entries: &mut EnvEntries, name: &OsStr, value: &OsStr) {
+    let new_entry = env_join(name, value);
+    if let Some(i) = entries.iter().position(|e| entry_name(e) == Some(name)) {
+        entries[i] = new_entry;
+    } else {
+        entries.push(new_entry);
+    }
+}
+
+fn inherited_env_entries() -> EnvEntries {
+    env::vars_os()
+        .map(|(name, value)| env_join(&name, &value))
+        .collect()
+}
+
+fn env_entry_from_bytes(bytes: &[u8]) -> OsString {
+    #[cfg(unix)]
+    {
+        OsString::from_vec(bytes.to_vec())
+    }
+    #[cfg(not(unix))]
+    {
+        OsString::from(String::from_utf8_lossy(bytes).into_owned())
+    }
+}
+
+/// Read NUL-terminated environment entries from `file`, or standard input when
+/// `file` is '-'. The content must either be empty or end with a NUL byte.
+fn read_env0_entries(file: &OsStr) -> UResult<EnvEntries> {
+    let mut data = Vec::new();
+    if file == "-" {
+        io::stdin()
+            .lock()
+            .read_to_end(&mut data)
+            .map_err(|e| USimpleError::new(1, format!("{}: {e}", file.maybe_quote())))?;
+    } else {
+        data = fs::read(file).map_err(|e| {
+            USimpleError::new(1, format!("{}: {}", file.maybe_quote(), strip_errno(&e)))
+        })?;
+    }
+
+    if !data.is_empty() && *data.last().unwrap() != 0 {
+        return Err(USimpleError::new(
+            1,
+            translate!("env-error-env0-from-not-nul-terminated", "file" => file.quote()),
+        ));
+    }
+
+    if data.is_empty() {
+        return Ok(EnvEntries::new());
+    }
+
+    // The split ends in the NUL terminator itself, which is not an entry. The
+    // chunks in between, including empty ones between two NUL bytes, are
+    // preserved verbatim.
+    let mut entries: EnvEntries = data.split(|&b| b == 0).map(env_entry_from_bytes).collect();
+    entries.pop();
+    Ok(entries)
+}
+
+/// Merge `--env0-from` entries into the inherited environment: entries of the
+/// form `name=value` replace the variable with the same name (a later
+/// assignment wins); entries without a '=' byte, including empty ones, are
+/// appended without replacing anything.
+fn merge_env0_entries(entries: &mut EnvEntries, file_entries: EnvEntries) {
+    for entry in file_entries {
+        if let Some((name, value)) = split_env_entry(&entry) {
+            set_env_entry(entries, name, value);
+        } else {
+            entries.push(entry);
+        }
+    }
+}
+
+/// Build the environment model for `--env0-from`. With `--ignore-environment`
+/// the file entries are the environment itself, so their order and contents
+/// are preserved exactly (including duplicates and entries without '=');
+/// `--unset` and `NAME=VALUE` operands then apply on top.
+/// Multiple `--env0-from` files are processed in the order given.
+fn build_env_model(opts: &Options<'_>) -> UResult<EnvEntries> {
+    let mut entries = if opts.ignore_env {
+        EnvEntries::new()
+    } else {
+        inherited_env_entries()
+    };
+
+    for file in &opts.env0_from {
+        let file_entries = read_env0_entries(file)?;
+        if entries.is_empty() {
+            entries = file_entries;
+        } else {
+            merge_env0_entries(&mut entries, file_entries);
+        }
+    }
+
+    for name in &opts.unsets {
+        validate_unset_name(name)?;
+        let name = *name;
+        entries.retain(|entry| entry_name(entry) != Some(name));
+    }
+
+    for (name, value) in &opts.sets {
+        if name.is_empty() {
+            show_warning!(
+                "{}",
+                translate!("env-warning-no-name-specified", "value" => value.quote())
+            );
+            continue;
+        }
+        set_env_entry(&mut entries, name, value);
+    }
+
+    Ok(entries)
+}
+
+/// Print the environment model verbatim, one entry per line ending.
+fn print_env_model<T: fmt::Display>(entries: &EnvEntries, line_ending: T) -> io::Result<()> {
+    let mut stdout = io::stdout().lock();
+    for entry in entries {
+        stdout.write_all_os(entry)?;
+        write!(stdout, "{line_ending}")?;
+    }
+    Ok(())
+}
+
+/// Materialize a model into the process environment. Only used on platforms
+/// where the exec'd environment cannot be passed explicitly (non-Unix), where
+/// entries without a '=' byte cannot be represented anyway.
+#[cfg(not(all(unix, not(target_os = "fuchsia"))))]
+fn materialize_env_model(entries: &[OsString]) {
+    for (name, _) in env::vars_os() {
+        unsafe {
+            env::remove_var(name);
+        }
+    }
+    for entry in entries {
+        if let Some((name, value)) = split_env_entry(entry) {
+            unsafe {
+                env::set_var(name, value);
+            }
+        }
+    }
+}
+
 pub fn uu_app() -> Command {
     Command::new("env")
         .version(uucore::crate_version!())
@@ -343,6 +544,15 @@ pub fn uu_app() -> Command {
                 .long(options::NULL)
                 .help(translate!("env-help-null"))
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::ENV0_FROM)
+                .long(options::ENV0_FROM)
+                .value_name("PATH")
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(ValueParser::os_string())
+                .action(ArgAction::Append)
+                .help(translate!("env-help-env0-from")),
         )
         .arg(
             Arg::new(options::UNSET)
@@ -576,7 +786,12 @@ impl EnvAppData {
         let mut process_flags = true;
         let mut expecting_arg = false;
         // Leave out split-string since it's a special case below
-        let flags_with_args = [options::ARGV0, options::CHDIR, options::UNSET];
+        let flags_with_args = [
+            options::ARGV0,
+            options::CHDIR,
+            options::ENV0_FROM,
+            options::UNSET,
+        ];
         let short_flags_with_args = ['a', 'C', 'u'];
         let mut consumed_split_payload_arg: Option<usize> = None;
         for (n, arg) in original_args.iter().enumerate() {
@@ -785,11 +1000,22 @@ impl EnvAppData {
         // NOTE: we manually set and unset the env vars below rather than using Command::env() to more
         //       easily handle the case where no command is given
 
-        apply_removal_of_all_env_vars(&opts);
+        // With --env0-from the environment is carried in an explicit model so
+        // entries can be preserved verbatim (order, duplicates, entries
+        // without a '=' byte), mirroring GNU. Without it the inherited
+        // environment is modified in place, as before.
+        #[allow(unused_mut)]
+        let mut env_model = if opts.env0_from.is_empty() {
+            apply_removal_of_all_env_vars(&opts);
 
-        apply_unset_env_vars(&opts)?;
+            apply_unset_env_vars(&opts)?;
 
-        apply_specified_env_vars(&opts);
+            apply_specified_env_vars(&opts);
+
+            None
+        } else {
+            Some(build_env_model(&opts)?)
+        };
 
         #[cfg(all(unix, not(target_os = "fuchsia")))]
         {
@@ -815,14 +1041,32 @@ impl EnvAppData {
             if opts.list_signal_handling {
                 list_signal_handling(&signal_action_log);
             }
+
+            // The exec environment is taken from the model, so also carry over
+            // RUST_SIGPIPE there (it is otherwise only set in the process
+            // environment by apply_signal_action()).
+            if let Some(model) = env_model.as_mut() {
+                let resets_sigpipe = opts.default_signal.apply_all
+                    || opts
+                        .default_signal
+                        .signals
+                        .contains(&(libc::SIGPIPE as usize));
+                if resets_sigpipe {
+                    set_env_entry(model, OsStr::new("RUST_SIGPIPE"), OsStr::new("default"));
+                }
+            }
         }
 
         apply_change_directory(&opts)?;
         if opts.program.is_empty() {
             // no program provided, so just dump all env vars to stdout
-            print_all_env_vars(opts.line_ending)?;
+            if let Some(model) = &env_model {
+                print_env_model(model, opts.line_ending)?;
+            } else {
+                print_all_env_vars(opts.line_ending)?;
+            }
         } else {
-            return self.run_program(&opts, self.do_debug_printing);
+            return self.run_program(&opts, self.do_debug_printing, env_model.as_deref());
         }
 
         Ok(())
@@ -841,6 +1085,7 @@ impl EnvAppData {
         &mut self,
         opts: &Options<'_>,
         do_debug_printing: bool,
+        env_model: Option<&[OsString]>,
     ) -> Result<(), Box<dyn UError>> {
         let prog = Cow::from(opts.program[0]);
 
@@ -903,6 +1148,40 @@ impl EnvAppData {
                 argv.push(arg_cstring);
             }
 
+            if let Some(model) = env_model {
+                #[cfg(all(unix, not(target_os = "fuchsia")))]
+                {
+                    // Replace the process environment with the model so exec
+                    // gets it verbatim: order, duplicates and entries without
+                    // a '=' byte are all preserved. PATH used for the exec
+                    // search is then read from the model as well. The exec
+                    // happens before the C strings holding the environment go
+                    // out of scope.
+                    let env_cstrings: Vec<CString> = model
+                        .iter()
+                        .map(|entry| CString::new(entry.as_bytes()))
+                        .collect::<Result<_, _>>()
+                        .map_err(|_| self.make_error_no_such_file_or_dir(&prog))?;
+                    let mut env_ptrs: Vec<*mut libc::c_char> =
+                        env_cstrings.iter().map(|c| c.as_ptr().cast_mut()).collect();
+                    env_ptrs.push(core::ptr::null_mut());
+                    unsafe {
+                        environ = env_ptrs.as_mut_ptr();
+                    }
+                    match execvp(&prog_cstring, &argv).unwrap_err() {
+                        nix::errno::Errno::ENOENT => {
+                            return Err(self.make_error_no_such_file_or_dir(&prog));
+                        }
+                        e => {
+                            uucore::show_error!("{}: {}", prog.quote(), strip_errno(&e.into()));
+                            return Err(126.into());
+                        }
+                    }
+                }
+                #[cfg(not(all(unix, not(target_os = "fuchsia"))))]
+                materialize_env_model(model);
+            }
+
             // Execute the program using execvp. this replaces the current
             // process. The execvp function takes care of appending a NULL
             // argument to the argument list so that we don't have to.
@@ -919,6 +1198,9 @@ impl EnvAppData {
         #[cfg(not(unix))]
         {
             // Fallback to Command::status for non-Unix systems
+            if let Some(model) = env_model {
+                materialize_env_model(model);
+            }
             let mut cmd = std::process::Command::new(&*prog);
             cmd.args(args);
 
@@ -963,6 +1245,10 @@ fn make_options<'a>(
     let running_directory = matches
         .get_one::<OsString>("chdir")
         .map(OsString::as_os_str);
+    let env0_from = match matches.get_many::<OsString>(options::ENV0_FROM) {
+        Some(v) => v.map(OsString::as_os_str).collect(),
+        None => Vec::new(),
+    };
     let unsets = match matches.get_many::<OsString>("unset") {
         Some(v) => v.map(OsString::as_os_str).collect(),
         None => Vec::new(),
@@ -984,6 +1270,7 @@ fn make_options<'a>(
         ignore_env,
         line_ending,
         running_directory,
+        env0_from,
         unsets,
         sets: vec![],
         program: vec![],
@@ -1022,18 +1309,21 @@ fn make_options<'a>(
     Ok(opts)
 }
 
+fn validate_unset_name(name: &OsStr) -> Result<(), Box<dyn UError>> {
+    let native_name = NativeStr::new(name);
+    if name.is_empty() || native_name.contains('\0').unwrap() || native_name.contains('=').unwrap()
+    {
+        return Err(USimpleError::new(
+            125,
+            translate!("env-error-cannot-unset-invalid", "name" => name.quote()),
+        ));
+    }
+    Ok(())
+}
+
 fn apply_unset_env_vars(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
     for name in &opts.unsets {
-        let native_name = NativeStr::new(name);
-        if name.is_empty()
-            || native_name.contains('\0').unwrap()
-            || native_name.contains('=').unwrap()
-        {
-            return Err(USimpleError::new(
-                125,
-                translate!("env-error-cannot-unset-invalid", "name" => name.quote()),
-            ));
-        }
+        validate_unset_name(name)?;
         unsafe {
             env::remove_var(name);
         }
