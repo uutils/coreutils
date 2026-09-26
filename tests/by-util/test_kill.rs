@@ -831,11 +831,17 @@ fn test_kill_windows_exited_target_with_held_handle() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn is_ignored(signal: i32) -> bool {
     let mut action = std::mem::MaybeUninit::<libc::sigaction>::uninit();
+
     // SAFETY: a null new-action only queries the current disposition.
-    unsafe {
-        libc::sigaction(signal, std::ptr::null(), action.as_mut_ptr()) == 0
-            && action.assume_init().sa_sigaction == libc::SIG_IGN
+    let result = unsafe { libc::sigaction(signal, std::ptr::null(), action.as_mut_ptr()) };
+
+    if result != 0 {
+        return false;
     }
+
+    let action = unsafe { action.assume_init() };
+
+    action.sa_sigaction == libc::SIG_IGN
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]

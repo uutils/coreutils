@@ -157,10 +157,8 @@ mod timer {
             // We cannot use nix or rustix because they don't support it in Redox.
             let mut sev = MaybeUninit::<libc::sigevent>::zeroed();
 
-            unsafe {
-                (*sev.as_mut_ptr()).sigev_notify = libc::SIGEV_SIGNAL;
-                (*sev.as_mut_ptr()).sigev_signo = libc::SIGALRM;
-            }
+            unsafe { (*sev.as_mut_ptr()).sigev_notify = libc::SIGEV_SIGNAL };
+            unsafe { (*sev.as_mut_ptr()).sigev_signo = libc::SIGALRM };
 
             // On cygwin, it's a u64; otherwise, a ptr with exposed provenance.
             let mut timer_id = MaybeUninit::zeroed();

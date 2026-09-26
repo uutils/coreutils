@@ -370,25 +370,31 @@ impl Utmpx {
 
         let iter = UtmpxIter::new();
         let path = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
-        unsafe {
-            #[cfg(target_os = "freebsd")]
-            setutxdb(libc::UTXDB_ACTIVE, path.as_ptr());
 
-            // In glibc, utmpxname() only fails if there's not enough memory
-            // to copy the string.
-            // Solaris returns 1 on success instead of 0. Supposedly there also
-            // exist systems where it returns void.
-            // GNU who on Debian seems to output nothing if an invalid filename
-            // is specified, no warning or anything.
-            // So this function is pretty crazy and we don't try to detect errors.
-            // Not much we can do besides pray.
-            #[cfg(not(target_os = "freebsd"))]
+        #[cfg(target_os = "freebsd")]
+        unsafe {
+            setutxdb(libc::UTXDB_ACTIVE, path.as_ptr());
+        }
+
+        // In glibc, utmpxname() only fails if there's not enough memory
+        // to copy the string.
+        // Solaris returns 1 on success instead of 0. Supposedly there also
+        // exist systems where it returns void.
+        // GNU who on Debian seems to output nothing if an invalid filename
+        // is specified, no warning or anything.
+        // So this function is pretty crazy and we don't try to detect errors.
+        // Not much we can do besides pray.
+        #[cfg(not(target_os = "freebsd"))]
+        unsafe {
             #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
             utmpxname(path.as_ptr());
+        }
 
+        unsafe {
             #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
             setutxent();
         }
+
         iter
     }
 }
@@ -562,20 +568,18 @@ impl Iterator for UtmpxIter {
         }
 
         // Traditional utmp path
-        unsafe {
-            #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
-            let res = getutxent();
-            if res.is_null() {
-                None
-            } else {
-                // The data behind this pointer will be replaced by the next
-                // call to getutxent(), so we have to read it now.
-                // All the strings live inline in the struct as arrays, which
-                // makes things easier.
-                Some(UtmpxRecord::Traditional(Box::new(Utmpx {
-                    inner: ptr::read(res.cast_const()),
-                })))
-            }
+        #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
+        let res = unsafe { getutxent() };
+        if res.is_null() {
+            None
+        } else {
+            // The data behind this pointer will be replaced by the next
+            // call to getutxent(), so we have to read it now.
+            // All the strings live inline in the struct as arrays, which
+            // makes things easier.
+            Some(UtmpxRecord::Traditional(Box::new(Utmpx {
+                inner: unsafe { ptr::read(res.cast_const()) },
+            })))
         }
     }
 }

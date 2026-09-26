@@ -78,19 +78,17 @@ cfg_langinfo! {
         #[cfg(test)]
         let _lock = LOCALE_MUTEX.lock().unwrap();
 
-        unsafe {
-            // Set locale from environment variables
-            libc::setlocale(libc::LC_TIME, c"".as_ptr());
+        // Set locale from environment variables
+        unsafe { libc::setlocale(libc::LC_TIME, c"".as_ptr()) };
 
-            // Get the date/time format string
-            let d_t_fmt_ptr = libc::nl_langinfo(DATE_FMT);
-            if d_t_fmt_ptr.is_null() {
-                return None;
-            }
-
-            let format = CStr::from_ptr(d_t_fmt_ptr).to_bytes();
-            (!format.is_empty()).then(|| format.to_vec())
+        // Get the date/time format string
+        let d_t_fmt_ptr = unsafe { libc::nl_langinfo(DATE_FMT) };
+        if d_t_fmt_ptr.is_null() {
+            return None;
         }
+
+        let format = unsafe { CStr::from_ptr(d_t_fmt_ptr).to_bytes() };
+        (!format.is_empty()).then(|| format.to_vec())
     }
 }
 

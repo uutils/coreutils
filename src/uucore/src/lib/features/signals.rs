@@ -673,20 +673,18 @@ pub unsafe extern "C" fn capture_startup_state() {
     }
 
     // Capture stdio state
-    unsafe {
-        STDIN_WAS_CLOSED.store(
-            libc::fcntl(libc::STDIN_FILENO, libc::F_GETFD) == -1,
-            Ordering::Relaxed,
-        );
-        STDOUT_WAS_CLOSED.store(
-            libc::fcntl(libc::STDOUT_FILENO, libc::F_GETFD) == -1,
-            Ordering::Relaxed,
-        );
-        STDERR_WAS_CLOSED.store(
-            libc::fcntl(libc::STDERR_FILENO, libc::F_GETFD) == -1,
-            Ordering::Relaxed,
-        );
-    }
+    STDIN_WAS_CLOSED.store(
+        unsafe { libc::fcntl(libc::STDIN_FILENO, libc::F_GETFD) } == -1,
+        Ordering::Relaxed,
+    );
+    STDOUT_WAS_CLOSED.store(
+        unsafe { libc::fcntl(libc::STDOUT_FILENO, libc::F_GETFD) } == -1,
+        Ordering::Relaxed,
+    );
+    STDERR_WAS_CLOSED.store(
+        unsafe { libc::fcntl(libc::STDERR_FILENO, libc::F_GETFD) } == -1,
+        Ordering::Relaxed,
+    );
 
     // Capture SIGPIPE state
     let mut current = MaybeUninit::<libc::sigaction>::uninit();

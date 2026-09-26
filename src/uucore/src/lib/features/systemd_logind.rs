@@ -62,7 +62,8 @@ mod login {
         if !sessions_ptr.is_null() {
             let mut i = 0;
             loop {
-                let session_ptr = unsafe { *sessions_ptr.add(i) };
+                let ptr = unsafe { sessions_ptr.add(i) };
+                let session_ptr = unsafe { *ptr };
                 if session_ptr.is_null() {
                     break;
                 }
@@ -357,12 +358,12 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
         };
 
         // Get username from UID
-        let user = unsafe {
+        let user = {
             let mut passwd = MaybeUninit::<libc::passwd>::uninit();
 
             // Get recommended buffer size, fall back if indeterminate
             let buf_size = {
-                let size = libc::sysconf(libc::_SC_GETPW_R_SIZE_MAX);
+                let size = unsafe { libc::sysconf(libc::_SC_GETPW_R_SIZE_MAX) };
                 if size == -1 {
                     16384 // Value was indeterminate, use fallback from getpwuid_r man page
                 } else {
@@ -372,17 +373,19 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
             let mut buf = vec![0u8; buf_size];
             let mut result: *mut libc::passwd = std::ptr::null_mut();
 
-            let ret = libc::getpwuid_r(
-                uid,
-                passwd.as_mut_ptr(),
-                buf.as_mut_ptr().cast(),
-                buf.len(),
-                &raw mut result,
-            );
+            let ret = unsafe {
+                libc::getpwuid_r(
+                    uid,
+                    passwd.as_mut_ptr(),
+                    buf.as_mut_ptr().cast(),
+                    buf.len(),
+                    &raw mut result,
+                )
+            };
 
             if ret == 0 && !result.is_null() {
-                let passwd = passwd.assume_init();
-                CStr::from_ptr(passwd.pw_name)
+                let passwd = unsafe { passwd.assume_init() };
+                unsafe { CStr::from_ptr(passwd.pw_name) }
                     .to_string_lossy()
                     .into_owned()
             } else {

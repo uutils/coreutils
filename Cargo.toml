@@ -466,27 +466,31 @@ unused_qualifications = "warn"
 all = { level = "warn", priority = -1 }
 cargo = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
-use_self = "warn"                            # nursery lint
-cargo_common_metadata = "allow"              # 3240
-multiple_crate_versions = "allow"            # 2882
-missing_errors_doc = "allow"                 # 1572
-missing_panics_doc = "allow"                 # 946
-must_use_candidate = "allow"                 # 322
-cast_possible_truncation = "allow"           # 122
-too_many_lines = "allow"                     # 101
-cast_possible_wrap = "allow"                 # 78
-cast_sign_loss = "allow"                     # 70
-struct_excessive_bools = "allow"             # 68
-cast_precision_loss = "allow"                # 52
-cast_lossless = "allow"                      # 35
-ignored_unit_patterns = "allow"              # 21
-similar_names = "allow"                      # 20
-needless_pass_by_value = "allow"             # 16
-float_cmp = "allow"                          # 12
-return_self_not_must_use = "allow"           # 8
-inline_always = "allow"                      # 6
-fn_params_excessive_bools = "allow"          # 6
-should_panic_without_expect = "allow"        # 2
+
+# * restriction
+multiple_unsafe_ops_per_block = "warn"
+
+use_self = "warn"                     # nursery lint
+cargo_common_metadata = "allow"       # 3240
+multiple_crate_versions = "allow"     # 2882
+missing_errors_doc = "allow"          # 1572
+missing_panics_doc = "allow"          # 946
+must_use_candidate = "allow"          # 322
+cast_possible_truncation = "allow"    # 122
+too_many_lines = "allow"              # 101
+cast_possible_wrap = "allow"          # 78
+cast_sign_loss = "allow"              # 70
+struct_excessive_bools = "allow"      # 68
+cast_precision_loss = "allow"         # 52
+cast_lossless = "allow"               # 35
+ignored_unit_patterns = "allow"       # 21
+similar_names = "allow"               # 20
+needless_pass_by_value = "allow"      # 16
+float_cmp = "allow"                   # 12
+return_self_not_must_use = "allow"    # 8
+inline_always = "allow"               # 6
+fn_params_excessive_bools = "allow"   # 6
+should_panic_without_expect = "allow" # 2
 
 doc_markdown = "allow"
 unused_self = "allow"

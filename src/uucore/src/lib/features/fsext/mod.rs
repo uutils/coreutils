@@ -746,23 +746,28 @@ pub fn statfs(path: &OsStr) -> Result<StatFs, String> {
     #[cfg(not(unix))]
     let p = path.into_string().unwrap();
 
-    match CString::new(p) {
-        Ok(p) => {
-            let mut buffer: StatFs = unsafe { mem::zeroed() };
-            unsafe {
-                if statfs_fn(p.as_ptr(), &raw mut buffer) == 0 {
-                    Ok(buffer)
-                } else {
-                    let errno = IOError::last_os_error().raw_os_error().unwrap_or(0);
-                    Err(CStr::from_ptr(strerror(errno))
-                        .to_str()
-                        .map_err(|_| "Error message contains invalid UTF-8".to_owned())?
-                        .to_owned())
-                }
-            }
-        }
-        Err(e) => Err(e.to_string()),
+    let p = CString::new(p).map_err(|e| e.to_string())?;
+
+    let mut buffer: StatFs = unsafe { mem::zeroed() };
+
+    let result = unsafe { statfs_fn(p.as_ptr(), &raw mut buffer) };
+
+    if result == 0 {
+        return Ok(buffer);
     }
+
+    let errno = IOError::last_os_error().raw_os_error().unwrap_or(0);
+
+    let error_ptr = unsafe { strerror(errno) };
+
+    let error = unsafe { CStr::from_ptr(error_ptr) };
+
+    let message = error
+        .to_str()
+        .map_err(|_| "Error message contains invalid UTF-8".to_owned())?
+        .to_owned();
+
+    Err(message)
 }
 
 #[cfg(unix)]

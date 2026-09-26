@@ -61,25 +61,24 @@ pub(crate) fn prepare(
         let sigpipe_was_ignored = uucore::signals::sigpipe_was_ignored();
         let stdin_was_closed = uucore::signals::stdin_was_closed();
 
-        unsafe {
-            cmd_builder.pre_exec(move || {
-                // Reset terminal signals to default
-                let _ = libc::signal(Signal::as_raw(Signal::TTIN), libc::SIG_DFL);
-                let _ = libc::signal(Signal::as_raw(Signal::TTOU), libc::SIG_DFL);
-                // Preserve SIGPIPE ignore status if parent had it ignored
-                if sigpipe_was_ignored {
-                    let _ = libc::signal(Signal::as_raw(Signal::PIPE), libc::SIG_IGN);
-                }
-                // If stdin was closed before Rust reopened it as /dev/null, close it in child
-                if stdin_was_closed {
-                    libc::close(libc::STDIN_FILENO);
-                }
-                let _ = timeout_signal_set().thread_unblock();
-                #[cfg(target_os = "linux")]
-                let _ = rustix::process::set_parent_process_death_signal(death_sig);
-                Ok(())
-            });
-        }
+        let f = move || {
+            // Reset terminal signals to default
+            let _ = unsafe { libc::signal(Signal::as_raw(Signal::TTIN), libc::SIG_DFL) };
+            let _ = unsafe { libc::signal(Signal::as_raw(Signal::TTOU), libc::SIG_DFL) };
+            // Preserve SIGPIPE ignore status if parent had it ignored
+            if sigpipe_was_ignored {
+                let _ = unsafe { libc::signal(Signal::as_raw(Signal::PIPE), libc::SIG_IGN) };
+            }
+            // If stdin was closed before Rust reopened it as /dev/null, close it in child
+            if stdin_was_closed {
+                unsafe { libc::close(libc::STDIN_FILENO) };
+            }
+            let _ = timeout_signal_set().thread_unblock();
+            #[cfg(target_os = "linux")]
+            let _ = rustix::process::set_parent_process_death_signal(death_sig);
+            Ok(())
+        };
+        unsafe { cmd_builder.pre_exec(f) };
     }
 
     install_sigchld();

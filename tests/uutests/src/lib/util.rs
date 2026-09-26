@@ -2067,12 +2067,11 @@ impl UCommand {
 
         #[cfg(unix)]
         if let Some(umask) = self.umask {
-            unsafe {
-                command.pre_exec(move || {
-                    libc::umask(umask);
-                    Ok(())
-                });
-            }
+            let f = move || {
+                unsafe { libc::umask(umask) };
+                Ok(())
+            };
+            unsafe { command.pre_exec(f) };
         }
 
         (command, captured_stdout, captured_stderr, stdin_pty)
