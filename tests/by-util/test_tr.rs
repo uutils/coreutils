@@ -1612,7 +1612,48 @@ fn test_stdin_is_socket() {
         .stdout_is(";;");
 }
 
+/// The help, and so the man page generated from it, has to say what a SET may
+/// hold: without it the synopsis mentions `[sets]` and nothing explains the
+/// ranges, repeats, escapes and character classes that `tr` accepts.
+#[test]
+fn test_help_documents_what_a_set_holds() {
+    // The utility reads LANG for its locale, so pin it: this asserts on the
+    // English text.
+    let result = new_ucmd!().env("LANG", "C").arg("--help").succeeds();
+    let help = result.stdout_str();
+
+    for documented in [
+        "CHAR1-CHAR2",   // ranges
+        "[CHAR*REPEAT]", // repeats
+        "[=CHAR=]",      // equivalence classes
+        "[:xdigit:]",    // character classes
+        "\\NNN",         // escapes
+    ] {
+        assert!(
+            help.contains(documented),
+            "the help does not document {documented}:\n{help}"
+        );
+    }
+
+    // Every class the parser accepts has to be listed.
+    for class in [
+        "alnum", "alpha", "blank", "cntrl", "digit", "graph", "lower", "print", "punct", "space",
+        "upper", "xdigit",
+    ] {
+        assert!(
+            help.contains(&format!("[:{class}:]")),
+            "the help does not list the {class} class:\n{help}"
+        );
+    }
+
+    // And the positional operand is no longer left without a description.
+    assert!(
+        help.contains("[sets]...  SET1"),
+        "the sets operand has no help text:\n{help}"
+    );
+}
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+
 mod diagnostics {
     use super::*;
 
