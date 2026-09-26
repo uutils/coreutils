@@ -3336,7 +3336,7 @@ fn test_color_environment_variables() {
 
     for (env_vars, should_have_colors, description) in test_env_vars {
         let mut cmd = new_ucmd!();
-        cmd.env("LANG", "en_US.UTF-8");
+        cmd.env("LC_ALL", "en_US.UTF-8");
 
         for (key, value) in env_vars {
             cmd.env(key, value);
@@ -3559,7 +3559,7 @@ c d 5435 down data path1 path2 path3 path4 path5
 e f 5436 down data path1 path2 path3 path4 path5\n";
 
     new_ucmd!()
-        .env("LANG", "en_US.utf8")
+        .env("LC_ALL", "en_US.utf8")
         .arg("-k3")
         .pipe_in(input)
         .succeeds()

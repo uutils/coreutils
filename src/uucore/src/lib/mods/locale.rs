@@ -562,8 +562,10 @@ pub fn is_integer_literal(s: &str) -> bool {
 
 /// Function to detect system locale from environment variables
 fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
-    let locale_str = std::env::var("LANG")
-        .unwrap_or_else(|_| DEFAULT_LOCALE.to_string())
+    let locale_str = ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .iter()
+        .find_map(|&key| std::env::var(key).ok().filter(|l| !l.is_empty()))
+        .unwrap_or_else(|| DEFAULT_LOCALE.to_string())
         .split('.')
         .next()
         .unwrap_or(DEFAULT_LOCALE)
@@ -1710,26 +1712,82 @@ invalid-syntax = This is { $missing
     }
 
     #[test]
-    fn test_detect_system_locale_no_lang_env() {
-        // Save current LANG value
-        let original_lang = env::var("LANG").ok();
+    fn test_detect_system_locale_some_empty_env_vars() {
+        let env_vars = ["LC_ALL", "LC_MESSAGES", "LANG"];
 
-        // Remove LANG environment variable
+        let env_vars_values = [
+            vec![("LC_ALL", "fr_FR"), ("LANG", "en_US")],
+            vec![("LC_ALL", ""), ("LC_MESSAGES", "fr_FR"), ("LANG", "en_US")],
+            vec![("LC_ALL", ""), ("LC_MESSAGES", ""), ("LANG", "fr_FR")],
+        ];
+
+        // Save current env values
+        let original_values = env_vars
+            .iter()
+            .map(|var| (var, env::var(var).ok()))
+            .collect::<Vec<_>>();
+
+        for var_combo in env_vars_values {
+            for (var, val) in var_combo {
+                unsafe {
+                    env::set_var(var, val);
+                }
+            }
+
+            let result = detect_system_locale();
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().to_string(), "fr-FR");
+        }
+
+        // Remove changed environment variables
         unsafe {
-            env::remove_var("LANG");
+            for var in &env_vars {
+                env::remove_var(var);
+            }
+        }
+
+        // Restore original values
+        for (var, val_option) in original_values {
+            if let Some(val) = val_option {
+                unsafe {
+                    env::set_var(var, val);
+                }
+            } else {
+                {} // Was already unset
+            }
+        }
+    }
+
+    #[test]
+    fn test_detect_system_locale_no_env_vars() {
+        let env_vars = ["LC_ALL", "LC_MESSAGES", "LANG"];
+
+        // Save current env values
+        let original_values = env_vars
+            .iter()
+            .map(|var| (var, env::var(var).ok()))
+            .collect::<Vec<_>>();
+
+        // Remove environment variables
+        for (var, _) in &original_values {
+            unsafe {
+                env::remove_var(var);
+            }
         }
 
         let result = detect_system_locale();
         assert!(result.is_ok());
         assert_eq!(result.unwrap().to_string(), "en-US");
 
-        // Restore original LANG value
-        if let Some(val) = original_lang {
-            unsafe {
-                env::set_var("LANG", val);
+        // Restore original values
+        for (var, val_option) in original_values {
+            if let Some(val) = val_option {
+                unsafe {
+                    env::set_var(var, val);
+                }
+            } else {
+                {} // Was already unset
             }
-        } else {
-            {} // Was already unset
         }
     }
 
@@ -1801,7 +1859,7 @@ invalid-syntax = This is { $missing
         std::thread::spawn(|| {
             // Force English locale for this test
             unsafe {
-                env::set_var("LANG", "en-US");
+                env::set_var("LC_ALL", "en-US");
             }
 
             // Test with a utility name that has embedded locales
