@@ -375,12 +375,20 @@ fn truncate(
                 _ => error.map_err_context(String::new),
             })?;
 
-            // For normal files and symbolic links, the size returned by `stat` is correct.
-            if reference_metadata.is_file() || reference_metadata.is_symlink() {
+            // For regular files, the size returned by `stat` is correct. For
+            // other files (e.g. block devices), ask the file itself. Directories
+            // are excluded: seeking to their end can report a bogus huge offset.
+            if reference_metadata.is_file() || reference_metadata.is_dir() {
                 Some(reference_metadata.len())
             } else {
-                let mut reference_file = OpenOptions::new().read(true).open(reference_path)?;
-                Some(reference_file.seek(SeekFrom::End(0))?)
+                let size = OpenOptions::new()
+                    .read(true)
+                    .open(&reference_path)
+                    .and_then(|mut file| file.seek(SeekFrom::End(0)))
+                    .map_err_context(
+                        || translate!("truncate-error-cannot-get-size", "filename" => reference_path.quote()),
+                    )?;
+                Some(size)
             }
         }
         None => None,
