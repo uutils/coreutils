@@ -124,15 +124,11 @@ jobs:
 
       - name: Verify tldr examples integration
         run: |
-          if [ ! -f "docs/src/utils/cp.md" ]; then
-            echo "docs/src/utils/cp.md does not exist"
-            exit 1
-          fi
+          grep -q "The examples are provided by" docs/src/utils/cp.md
 
-          if ! grep -q "The examples are provided by" docs/src/utils/cp.md; then
-            echo "tldr examples integration missing from cp.md"
-            echo "Expected to find 'The examples are provided by' text"
-            echo "Content of cp.md:"
-            tail -20 docs/src/utils/cp.md
-            exit 1
-          fi
+      - name: Verify tldr examples appear in man page output
+        run: |
+          cargo run --bin uudoc --all-features -- manpage cp > /tmp/cp.1
+          grep -q "\.SH EXAMPLES" /tmp/cp.1
+          grep -q "tldr.sh" /tmp/cp.1
+          ! grep -q "{{" /tmp/cp.1

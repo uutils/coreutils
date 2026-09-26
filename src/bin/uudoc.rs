@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore mangen tldr mandoc uppercasing uppercased manpages DESTDIR
+// spell-checker:ignore mangen tldr mandoc uppercasing uppercased manpages DESTDIR roff
 
 use std::{
     collections::HashMap,
@@ -144,34 +144,33 @@ fn gen_manpage<T: Args>(
         .get_matches_from(std::iter::once(OsString::from("manpage")).chain(args));
 
     let utility = matches.get_one::<String>("utility").unwrap();
-    let command = if utility == "coreutils" {
-        gen_coreutils_app(util_map)
+    let (command, raw_examples) = if utility == "coreutils" {
+        (gen_coreutils_app(util_map), None)
     } else {
         validation::setup_localization_or_exit(utility);
         let mut cmd = util_map.get(utility).unwrap().1();
         cmd.set_bin_name(utility.clone());
-        let mut cmd = cmd.display_name(utility);
-        if let Some(zip) = tldr
-            && let Ok(examples) = write_zip_examples(zip, utility, false)
-        {
-            cmd = cmd.after_help(examples);
-        }
-        cmd
+        let cmd = cmd.display_name(utility);
+        let raw = tldr.as_mut().and_then(|zip| {
+            get_zip_content(zip, &format!("pages/common/{utility}.md"))
+                .or_else(|| get_zip_content(zip, &format!("pages/linux/{utility}.md")))
+        });
+        (cmd, raw)
     };
 
-    // Generate the manpage to a buffer first so we can post-process it
     let mut buffer = Vec::new();
     let man = Man::new(command);
     man.render(&mut buffer).expect("Man page generation failed");
 
-    // Convert to string for processing
+    if let Some(content) = raw_examples {
+        buffer.extend_from_slice(format_roff_examples(&content).as_bytes());
+    }
+
     let manpage = String::from_utf8(buffer).expect("Invalid UTF-8 in manpage");
 
-    // Post-process the manpage to fix mandoc lint issues
     let date = Zoned::now().strftime("%Y-%m-%d").to_string();
     let processed_manpage = post_process_manpage(manpage, &date);
 
-    // Write the processed manpage to stdout
     io::stdout()
         .write_all(processed_manpage.as_bytes())
         .unwrap();
@@ -560,7 +559,7 @@ impl MDWriter<'_, '_> {
     /// Returns an error if the writer fails.
     fn examples(&mut self) -> io::Result<()> {
         if let Some(zip) = self.tldr_zip
-            && let Ok(examples) = write_zip_examples(zip, self.name, true)
+            && let Ok(examples) = write_zip_examples(zip, self.name)
         {
             writeln!(self.w, "{examples}")?;
         }
@@ -657,7 +656,6 @@ fn get_zip_content(archive: &mut ZipArchive<impl Read + Seek>, name: &str) -> Op
 fn write_zip_examples(
     archive: &mut ZipArchive<impl Read + Seek>,
     name: &str,
-    output_markdown: bool,
 ) -> io::Result<String> {
     let content = if let Some(f) = get_zip_content(archive, &format!("pages/common/{name}.md")) {
         f
@@ -670,7 +668,7 @@ fn write_zip_examples(
         ));
     };
 
-    match format_examples(content, output_markdown) {
+    match format_examples(content) {
         Err(e) => Err(io::Error::other(format!(
             "Failed to format the tldr examples of {name}: {e}"
         ))),
@@ -678,8 +676,65 @@ fn write_zip_examples(
     }
 }
 
+/// Strip tldr placeholder markers `{{` and `}}` from a command line.
+fn strip_placeholders(s: &str) -> String {
+    s.replace("{{", "").replace("}}", "")
+}
+
+/// Replace markdown links `[text](url)` by `text <url>`, for plain text output.
+fn markdown_links_to_plain(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(start) = rest.find('[') {
+        let Some((text, after)) = rest[start + 1..].split_once("](") else {
+            break;
+        };
+        let Some((url, tail)) = after.split_once(')') else {
+            break;
+        };
+        out.push_str(&rest[..start]);
+        out.push_str(text);
+        out.push_str(" <");
+        out.push_str(url);
+        out.push('>');
+        rest = tail;
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Render tldr examples as a roff `EXAMPLES` section for man pages.
+fn format_roff_examples(content: &str) -> String {
+    use clap_mangen::roff::{Roff, bold, roman};
+    let mut roff = Roff::default();
+    roff.control("SH", ["EXAMPLES"]);
+    for line in content.lines().skip_while(|l| !l.starts_with('-')) {
+        if let Some(desc) = line.strip_prefix("- ") {
+            roff.text([roman(desc)]);
+        } else if line.starts_with('`') {
+            let cmd = strip_placeholders(line.trim_matches('`'));
+            roff.text([bold(cmd)]);
+        } else if line.is_empty() {
+            roff.control("PP", []);
+        }
+    }
+    roff.control("PP", []);
+    roff.text([roman(markdown_links_to_plain(&get_message(
+        "uudoc-tldr-attribution",
+    )))]);
+    roff.control("PP", []);
+    roff.text([roman(get_message("uudoc-tldr-disclaimer"))]);
+    // `render()` prepends the apostrophe preamble, which the man page
+    // generated by clap_mangen already contains: only keep the section.
+    let rendered = roff.render();
+    match rendered.find(".SH EXAMPLES") {
+        Some(start) => rendered[start..].to_string(),
+        None => rendered,
+    }
+}
+
 /// Format examples using std::fmt::Write
-fn format_examples(content: String, output_markdown: bool) -> Result<String, std::fmt::Error> {
+fn format_examples(content: String) -> Result<String, std::fmt::Error> {
     use std::fmt::Write;
     let mut s = String::new();
     writeln!(s)?;
@@ -689,11 +744,8 @@ fn format_examples(content: String, output_markdown: bool) -> Result<String, std
         if let Some(l) = line.strip_prefix("- ") {
             writeln!(s, "{l}")?;
         } else if line.starts_with('`') {
-            if output_markdown {
-                writeln!(s, "```shell\n{}\n```", line.trim_matches('`'))?;
-            } else {
-                writeln!(s, "{}", line.trim_matches('`'))?;
-            }
+            let cmd = strip_placeholders(line.trim_matches('`'));
+            writeln!(s, "```shell\n{cmd}\n```")?;
         } else if line.is_empty() {
             writeln!(s)?;
         } else {
@@ -861,5 +913,37 @@ mod tests {
 
         let result = post_process_manpage(input.to_string(), "2024-01-01");
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_strip_placeholders() {
+        assert_eq!(
+            strip_placeholders("cp {{path/to/src}} {{dest}}"),
+            "cp path/to/src dest"
+        );
+        assert_eq!(strip_placeholders("ls -la"), "ls -la");
+    }
+
+    #[test]
+    fn test_markdown_links_to_plain() {
+        assert_eq!(
+            markdown_links_to_plain("by the [tldr](https://tldr.sh) under [CC](https://x/y)."),
+            "by the tldr <https://tldr.sh> under CC <https://x/y>."
+        );
+        assert_eq!(markdown_links_to_plain("no links [here"), "no links [here");
+    }
+
+    #[test]
+    fn test_format_roff_examples() {
+        let content =
+            "# cp\n\n> Copy files.\n\n- Copy a file:\n\n`cp {{path/to/src}} {{path/to/dest}}`\n";
+        let roff = format_roff_examples(content);
+        assert!(roff.starts_with(".SH EXAMPLES\n"));
+        assert!(roff.contains("Copy a file:"));
+        assert!(roff.contains("\\fBcp path/to/src path/to/dest\\fR"));
+        assert!(!roff.contains("{{"));
+        assert!(!roff.contains("> Copy files."));
+        // attribution (the raw key when localization is not initialized)
+        assert!(roff.contains("tldr"));
     }
 }
