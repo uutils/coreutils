@@ -28,12 +28,20 @@ echo "path_UUTILS='${path_UUTILS}'"
 echo "path_GNU='${path_GNU}'"
 
 # Use GNU nproc for *BSD
-NPROC_BIN=$(command -v "${path_GNU}"/src/nproc||command -v nproc)
-# `-j` wants a job count: handing it the path to nproc made make read it as a
-# (bogus) goal and run with unlimited parallelism, which starves the CI runner.
-NPROC=$("${NPROC_BIN}" 2>/dev/null) || NPROC=1
-MAKEFLAGS="${MAKEFLAGS} -j ${NPROC}"
+if NPROC_COMMAND=$(command -v "${path_GNU}/src/nproc" || command -v nproc); then
+    JOBS=$("${NPROC_COMMAND}")
+else
+    JOBS=2
+fi
+case "${JOBS}" in
+    '' | 0* | *[!0-9]*)
+        echo "Error: invalid make job count: '${JOBS}'" >&2
+        exit 1
+        ;;
+esac
+MAKEFLAGS="${MAKEFLAGS:+${MAKEFLAGS} }-j${JOBS}"
 export MAKEFLAGS
+echo "GNU test make job count: ${JOBS}"
 ###
 
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
