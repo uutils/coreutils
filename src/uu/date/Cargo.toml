@@ -17,15 +17,6 @@ readme.workspace = true
 path = "src/date.rs"
 doctest = false
 
-[features]
-default = ["i18n-datetime"]
-i18n-datetime = [
-  "uucore/i18n-datetime",
-  "dep:icu_calendar",
-  "dep:icu_locale",
-  "dep:jiff-icu",
-]
-
 [dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
@@ -65,6 +56,15 @@ path = "src/main.rs"
 divan = { workspace = true }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
+
+[features]
+default = ["i18n-datetime"]
+i18n-datetime = [
+  "uucore/i18n-datetime",
+  "dep:icu_calendar",
+  "dep:icu_locale",
+  "dep:jiff-icu",
+]
 
 [lints]
 workspace = true
