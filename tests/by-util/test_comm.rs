@@ -822,3 +822,91 @@ fn test_identical_unsorted_prefix_check_order_fails() {
         .stdout_is("\t\tb\n")
         .stderr_is("comm: file 1 is not in sorted order\n");
 }
+
+#[test]
+fn test_dash_dash() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .args(&["-", "-"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is("a\n\tb\n");
+}
+
+#[test]
+fn test_dash_dash_empty() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .args(&["-", "-"])
+        .pipe_in("")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+fn test_dash_dash_interleaved() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .args(&["-", "-"])
+        .pipe_in("a\nb\nc\nd\n")
+        .succeeds()
+        .stdout_is("a\n\tb\nc\n\td\n");
+}
+
+#[test]
+fn test_dash_dash_identical_pairs() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .args(&["-", "-"])
+        .pipe_in("a\na\nb\nb\n")
+        .succeeds()
+        .stdout_is("\t\ta\n\t\tb\n");
+}
+
+#[test]
+fn test_dash_dash_suppressed_columns() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .args(&["-", "-", "-12"])
+        .pipe_in("a\na\nb\nc\n")
+        .succeeds()
+        .stdout_is("a\n");
+}
+
+#[test]
+fn test_dash_dash_zero_terminated() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .args(&["-", "-", "-z"])
+        .pipe_in("a\0b\0")
+        .succeeds()
+        .stdout_is("a\0\tb\0");
+}
+
+#[test]
+fn test_dash_dash_out_of_order() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .args(&["-", "-"])
+        .pipe_in("2\n3\n1\n")
+        .fails_with_code(1)
+        .stderr_is("comm: file 1 is not in sorted order\ncomm: input is not in sorted order\n");
+}
+
+#[test]
+fn test_dash_dash_nocheck_order() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .args(&["-", "-", "--nocheck-order"])
+        .pipe_in("2\n3\n1\n")
+        .succeeds()
+        .stdout_is("2\n1\n\t3\n");
+}
