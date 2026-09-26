@@ -40,7 +40,6 @@ use crate::strategy::Strategy;
 use clap::ArgMatches;
 use std::ffi::{OsStr, OsString};
 use std::path::is_separator;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
@@ -86,7 +85,7 @@ pub struct Suffix {
 }
 
 /// An error when parsing suffix parameters from command-line arguments.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum SuffixError {
     /// Invalid suffix length parameter.
     #[error("{}", translate!("split-error-suffix-not-parsable", "value" => .0.quote()))]

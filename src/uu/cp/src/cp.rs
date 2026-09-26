@@ -32,7 +32,6 @@ use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
 use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, mode_t};
-use thiserror::Error;
 
 use platform::copy_on_write;
 use uucore::backup_control::backup_would_destroy_source;
@@ -57,7 +56,7 @@ use crate::copydir::copy_directory;
 mod copydir;
 mod platform;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum CpError {
     /// Simple [`io::Error`] wrapper
     #[error("{0}")]

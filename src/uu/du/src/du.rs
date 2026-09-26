@@ -22,7 +22,6 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
 use std::time::SystemTime;
-use thiserror::Error;
 use uucore::diagnostics::OptionValue;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
@@ -786,7 +785,7 @@ fn du_regular(
     Ok(my_stat)
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum DuError {
     #[error("{}", translate!("du-error-invalid-max-depth", "depth" => _0.quote()))]
     InvalidMaxDepthArg(String),

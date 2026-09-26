@@ -5,7 +5,6 @@
 
 use std::io;
 use std::ops::Range;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, strip_errno};
 use uucore::translate;
@@ -28,7 +27,7 @@ pub struct PatternProblem {
 }
 
 /// Errors thrown by the csplit command
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum CsplitError {
     #[error("{}", strip_errno(_0))]
     IoError(#[from] io::Error),

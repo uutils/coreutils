@@ -16,7 +16,6 @@ use std::os::fd::AsFd;
 #[cfg(windows)]
 use std::path::Path;
 use std::path::PathBuf;
-use thiserror::Error;
 use uucore::diagnostics::OptionValue;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
@@ -39,7 +38,7 @@ use take::copy_all_but_n_bytes;
 use take::copy_all_but_n_lines;
 use take::take_lines;
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 enum HeadError {
     /// Wrapper around `io::Error`
     #[error("{}", translate!("head-error-reading-file", "name" => name.quote(), "err" => err))]

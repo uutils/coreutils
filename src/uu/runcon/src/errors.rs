@@ -25,7 +25,7 @@ pub(crate) mod error_exit_status {
     pub const ANOTHER_ERROR: i32 = libc::EXIT_FAILURE;
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     #[error("{}", translate!("runcon-error-no-command"))]
     MissingCommand,
