@@ -23,6 +23,7 @@ rustc-hash = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "format",
+  "fs",
   "fsext",
   "i18n-decimal",
   "parser-size",

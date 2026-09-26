@@ -40,6 +40,12 @@ use windows_sys::Win32::System::IO::DeviceIoControl;
 #[cfg(windows)]
 use windows_sys::Win32::System::Ioctl::FSCTL_SET_SPARSE;
 
+/// Maximum number of symlinks followed while resolving a single path.
+///
+/// Matches the limit Linux enforces during path lookup; going past it is
+/// reported as "Too many levels of symbolic links".
+pub const SYMLINK_FOLLOW_LIMIT: usize = 40;
+
 /// Used to check if the `mode` has its `perm` bit set.
 ///
 /// This macro expands to `mode & perm != 0`.
