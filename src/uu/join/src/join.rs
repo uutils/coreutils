@@ -849,27 +849,16 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // GNU `join` supports `-t=` to use `=` as the field separator.
-    // Clap strips a leading `=` from an attached short-option value, so split
-    // attached `-t<chars>` into `-t <chars>` (which clap passes through
-    // verbatim). The caret diagnostics keep echoing the arguments as typed.
+    // GNU `join` supports `-t=` to use `=` as the field separator, which clap
+    // does not parse as a value, so split the two apart first. The caret
+    // diagnostics keep echoing the arguments as typed.
     // See https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
     let raw: Vec<OsString> = args.collect();
     let diag_args = uucore::diagnostics::capture(&raw);
-    let parsed_args = raw.into_iter().flat_map(|x| {
-        let as_str = x.to_string_lossy();
-        if as_str.starts_with("-t") && as_str.len() > 2 {
-            vec![OsString::from("-t"), OsString::from(&as_str[2..])]
-        } else {
-            vec![x]
-        }
-    });
+    let parsed_args = uucore::args::split_attached_short_value(raw, "-t");
 
-    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(
-        uu_app(),
-        parsed_args.collect::<Vec<OsString>>(),
-        1,
-    )?;
+    let matches =
+        uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), parsed_args, 1)?;
 
     let mut opts = CollatorOptions::default();
     opts.alternate_handling = Some(AlternateHandling::Shifted);
