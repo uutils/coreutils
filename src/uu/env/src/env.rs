@@ -43,7 +43,9 @@ use std::mem::zeroed;
 use std::os::unix::ffi::OsStrExt;
 
 use uucore::display::{Quotable, print_all_env_vars};
-use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, strip_errno};
+use uucore::error::{
+    ExitCode, UClapError, UError, UResult, USimpleError, UUsageError, strip_errno,
+};
 use uucore::line_ending::LineEnding;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::signals::{
@@ -736,7 +738,9 @@ impl EnvAppData {
             Err(e) => {
                 match e.kind() {
                     clap::error::ErrorKind::DisplayHelp
-                    | clap::error::ErrorKind::DisplayVersion => return Err(e.into()),
+                    | clap::error::ErrorKind::DisplayVersion => {
+                        return Err(e.with_exit_code(125).into());
+                    }
                     _ => {
                         // Use ErrorFormatter directly to handle error with shebang message callback
                         let formatter = uucore::clap_localization::ErrorFormatter::new("env");
