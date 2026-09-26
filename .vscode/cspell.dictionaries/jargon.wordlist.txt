@@ -261,3 +261,4 @@ charmap
 hijri
 ctype
 clocale
+CTYPE
