@@ -86,6 +86,10 @@ fn test_signal_realtime() {
     // tests/env/env-signal-handler.sh.
     // The kill-after window is generous: a regression sends SIGKILL at once, while a
     // slow CI container just needs time to tear the child down.
+    if !uutests::util::realtime_signals_terminate() {
+        println!("test skipped: real-time signals are not delivered in this environment");
+        return;
+    }
     new_ucmd!()
         .args(&["--verbose", "-k5", "--signal=RTMIN", ".1", "sleep", "10"])
         .fails_with_code(124)

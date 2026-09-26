@@ -970,6 +970,10 @@ fn test_env_arg_ignore_signal_valid_signals() {
 fn test_env_ignore_signal_realtime() {
     // Real-time signals (SIGRTMIN..=SIGRTMAX) are not in nix's Signal enum; make sure
     // env still applies the action to them. Regression for env-signal-handler.sh.
+    if !uutests::util::realtime_signals_terminate() {
+        println!("test skipped: real-time signals are not delivered in this environment");
+        return;
+    }
     let rtmin = libc::SIGRTMIN();
     {
         let mut target = Target::new(&["RTMIN"]);
