@@ -10,7 +10,6 @@ use std::io::{self, Write, stdout};
 use uucore::display::Quotable;
 use uucore::error::{UError, UIoError, UResult};
 
-use uucore::fs::replace_link;
 use uucore::fs::{make_path_relative_to, paths_refer_to_same_file};
 use uucore::translate;
 use uucore::{format_usage, prompt_yes, show_error};
@@ -454,16 +453,19 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
         Some(source.to_path_buf())
     };
 
-    // Link first, matching GNU. Replacing uses a temp name + `renameat`, so
-    // `dst` is never briefly free for another user to claim.
-    let link_target = hard_link_src.as_deref().unwrap_or(&source);
-    let raw = if overwrite_on_conflict {
-        replace_link(link_target, dst, settings.symbolic)
-    } else if settings.symbolic {
-        symlink(&source, dst)
-    } else {
-        fs::hard_link(link_target, dst)
+    // Link first, matching GNU; remove the destination only on EEXIST.
+    let try_create = || -> io::Result<()> {
+        if settings.symbolic {
+            symlink(&source, dst)
+        } else {
+            fs::hard_link(hard_link_src.as_ref().unwrap(), dst)
+        }
     };
+    let mut raw = try_create();
+    if overwrite_on_conflict && matches!(&raw, Err(e) if e.kind() == io::ErrorKind::AlreadyExists) {
+        let _ = fs::remove_file(dst);
+        raw = try_create();
+    }
 
     let res = raw.map_err(|e| {
         if settings.symbolic {

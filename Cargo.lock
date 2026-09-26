@@ -561,6 +561,7 @@ dependencies = [
  "pretty_assertions",
  "rand 0.10.3",
  "regex",
+ "rlimit",
  "rstest",
  "rstest_reuse",
  "rustc-hash",
@@ -1844,8 +1845,7 @@ dependencies = [
 [[package]]
 name = "libc"
 version = "0.2.189"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
+source = "git+https://github.com/rust-lang/libc.git?branch=libc-0.2#b29beb056cb7cea51dd1b9e68342e30a956951a9"
 
 [[package]]
 name = "libloading"
@@ -2553,6 +2553,15 @@ name = "relative-path"
 version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba39f3699c378cd8970968dcbff9c43159ea4cfbd88d43c00b22f2ef10a435d2"
+
+[[package]]
+name = "rlimit"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f35ee2729c56bb610f6dba436bf78135f728b7373bdffae2ec815b2d3eb98cc3"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "roff"
@@ -4563,7 +4572,7 @@ dependencies = [
  "pretty_assertions",
  "rand 0.10.3",
  "regex",
- "rustix",
+ "rlimit",
  "tempfile",
  "uucore",
  "xattr",

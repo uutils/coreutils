@@ -17,7 +17,7 @@
 use core::str;
 #[cfg(unix)]
 use libc::mode_t;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 use nix::pty::OpenptyResult;
 #[cfg(unix)]
 use nix::sys;
@@ -25,7 +25,7 @@ use nix::sys;
 use nix::sys::stat::{self, SFlag};
 use pretty_assertions::assert_eq;
 #[cfg(unix)]
-use rustix::process::{Resource, Rlimit, setrlimit};
+use rlimit::setrlimit;
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::ffi::{OsStr, OsString};
@@ -1543,7 +1543,7 @@ pub struct UCommand {
     stderr: Option<Stdio>,
     bytes_into_stdin: Option<Vec<u8>>,
     #[cfg(unix)]
-    limits: Vec<(Resource, u64, u64)>,
+    limits: Vec<(rlimit::Resource, u64, u64)>,
     stderr_to_stdout: bool,
     timeout: Option<Duration>,
     #[cfg(unix)]
@@ -1706,7 +1706,12 @@ impl UCommand {
     }
 
     #[cfg(unix)]
-    pub fn limit(&mut self, resource: Resource, soft_limit: u64, hard_limit: u64) -> &mut Self {
+    pub fn limit(
+        &mut self,
+        resource: rlimit::Resource,
+        soft_limit: u64,
+        hard_limit: u64,
+    ) -> &mut Self {
         self.limits.push((resource, soft_limit, hard_limit));
         self
     }
@@ -1958,9 +1963,9 @@ impl UCommand {
 
         let mut captured_stdout = None;
         let mut captured_stderr = None;
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "redox")))]
         let mut stdin_pty: Option<File> = None;
-        #[cfg(not(unix))]
+        #[cfg(not(all(unix, not(target_os = "redox"))))]
         let stdin_pty: Option<File> = None;
         if self.stderr_to_stdout {
             let mut output = CapturedOutput::default();
@@ -1995,7 +2000,7 @@ impl UCommand {
                 .stderr(stderr);
         }
 
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "redox")))]
         if let Some(simulated_terminal) = &self.terminal_simulation {
             let terminal_size = simulated_terminal.size.unwrap_or(libc::winsize {
                 ws_col: 80,
@@ -2047,13 +2052,7 @@ impl UCommand {
             let limits_copy = self.limits.clone();
             let closure = move || -> Result<()> {
                 for &(resource, soft_limit, hard_limit) in &limits_copy {
-                    setrlimit(
-                        resource,
-                        Rlimit {
-                            current: Some(soft_limit),
-                            maximum: Some(hard_limit),
-                        },
-                    )?;
+                    setrlimit(resource, soft_limit, hard_limit)?;
                 }
                 Ok(())
             };
@@ -3002,7 +3001,7 @@ pub fn whoami() -> String {
 /// - path: The filesystem path to the PTY replica device
 /// - controller: The controller file
 /// - replica: The replica file
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 pub fn pty_path() -> (String, File, File) {
     use nix::pty::openpty;
     use nix::unistd::ttyname;
@@ -3672,7 +3671,11 @@ mod tests {
         let ts = TestScenario::new("util");
         ts.cmd("sh")
             .args(&["-c", "ulimit -Sf; ulimit -Hf"])
-            .limit(Resource::Fsize, 8 * unit_size_bytes, 16 * unit_size_bytes)
+            .limit(
+                rlimit::Resource::FSIZE,
+                8 * unit_size_bytes,
+                16 * unit_size_bytes,
+            )
             .succeeds()
             .no_stderr()
             .stdout_is("8\n16\n");

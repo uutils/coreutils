@@ -37,9 +37,9 @@ uucore = { workspace = true, features = [
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["fs", "term"] }
-rustix = { workspace = true, features = ["process"] }
+rlimit = { workspace = true }
 
-[target.'cfg(all(unix, not(any(target_os = "macos", target_os = "openbsd"))))'.dependencies]
+[target.'cfg(any(target_os = "freebsd", target_os = "hurd", target_os = "linux", target_os = "android", target_os = "netbsd"))'.dependencies]
 xattr = { workspace = true }
 
 [lints]

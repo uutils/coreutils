@@ -391,6 +391,7 @@ rand = { version = "0.10.1", features = ["std_rng"] }
 rand_chacha = { version = "0.10.0" }
 rayon = "1.10"
 regex = "1.10.4"
+rlimit = "0.11.0"
 rstest = "0.27.0"
 rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"
@@ -674,6 +675,7 @@ runcon = { optional = true, version = "0.13.0", package = "uu_runcon", path = "s
 
 [target.'cfg(unix)'.dev-dependencies]
 nix = { workspace = true, features = ["fs", "signal"] }
+rlimit = { workspace = true }
 rustix = { workspace = true, features = ["net", "process"] }
 
 [build-dependencies]
@@ -708,3 +710,6 @@ strip = true
 inherits = "release"
 panic = "unwind"
 debug = true
+
+[patch.crates-io]
+libc = { git = "https://github.com/rust-lang/libc.git", branch = "libc-0.2" }
