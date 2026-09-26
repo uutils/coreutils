@@ -2397,16 +2397,45 @@ fn test_ls_time_styles() {
         .stdout_matches(&re_custom_format_recent)
         .stdout_matches(&re_custom_format_old);
 
-    //+FORMAT_RECENT\nFORMAT_OLD
+    //+FORMAT_OLD\nFORMAT_RECENT
     let re_custom_format_old =
         Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}--\d{2} test-old\n").unwrap();
     scene
         .ucmd()
         .arg("-l")
-        .arg("--time-style=+%Y__%M\n%Y--%M")
+        .arg("--time-style=+%Y--%M\n%Y__%M")
         .succeeds()
         .stdout_matches(&re_custom_format_recent)
         .stdout_matches(&re_custom_format_old);
+
+    // Empty halves must preserve the order in both --time-style and TIME_STYLE.
+    for (style, expected_recent, expected_old) in [
+        ("+OLD\nNEW", "NEW", "OLD"),
+        ("+\nNEW", "NEW", ""),
+        ("+OLD\n", "", "OLD"),
+        ("+SAME", "SAME", "SAME"),
+    ] {
+        for use_env in [false, true] {
+            for (file, expected) in [("test", expected_recent), ("test-old", expected_old)] {
+                let mut cmd = scene.ucmd();
+                cmd.arg("-ln");
+                if use_env {
+                    cmd.env("TIME_STYLE", style);
+                } else {
+                    cmd.arg(format!("--time-style={style}"));
+                }
+                let result = cmd.arg(file).succeeds();
+                let fields: Vec<_> = result.stdout_str().split_ascii_whitespace().collect();
+                assert_eq!(fields.last(), Some(&file), "unexpected output: {fields:?}");
+                if expected.is_empty() {
+                    assert_eq!(fields.len(), 6, "unexpected output: {fields:?}");
+                } else {
+                    assert_eq!(fields.len(), 7, "unexpected output: {fields:?}");
+                    assert_eq!(fields[5], expected, "unexpected output: {fields:?}");
+                }
+            }
+        }
+    }
 
     // Also fails due to not having full clap support for time_styles
     scene
@@ -2419,7 +2448,7 @@ fn test_ls_time_styles() {
     scene
         .ucmd()
         .arg("-l")
-        .arg("--time-style=+%Y__%M\n%Y--%M\n")
+        .arg("--time-style=+%Y--%M\n%Y__%M\n")
         .fails_with_code(2);
 
     //Overwrite options tests
@@ -2534,12 +2563,12 @@ fn test_ls_time_recent_future() {
         .stdout_matches(&re_iso_old);
 
     // Also test that we can set a format that varies for recent of older files.
-    //+FORMAT_RECENT\nFORMAT_OLD
+    //+FORMAT_OLD\nFORMAT_RECENT
     f.set_modified(SystemTime::now()).unwrap();
     scene
         .ucmd()
         .arg("-l")
-        .arg("--time-style=+RECENT\nOLD")
+        .arg("--time-style=+OLD\nRECENT")
         .succeeds()
         .stdout_contains("RECENT");
 
@@ -2549,7 +2578,7 @@ fn test_ls_time_recent_future() {
     scene
         .ucmd()
         .arg("-l")
-        .arg("--time-style=+RECENT\nOLD")
+        .arg("--time-style=+OLD\nRECENT")
         .succeeds()
         .stdout_contains("OLD");
 

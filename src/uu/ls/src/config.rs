@@ -1118,13 +1118,13 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                 // `field` can be empty here (e.g. --time-style=posix-), so test
                 // the prefix instead of unwrapping the first char.
                 _ if field.starts_with('+') => {
-                    // recent/older formats are (optionally) separated by a newline
+                    // The non-recent format comes first, followed by the recent format.
                     let mut it = field[1..].split('\n');
-                    let recent = it.next().unwrap_or_default();
-                    let older = it.next();
-                    match it.next() {
-                        None => ok((recent, older)),
-                        Some(_) => Err(LsError::TimeStyleParseError(String::from(field))),
+                    let first = it.next().unwrap_or_default();
+                    match (it.next(), it.next()) {
+                        (None, None) => ok((first, None)),
+                        (Some(recent), None) => ok((recent, Some(first))),
+                        (_, Some(_)) => Err(LsError::TimeStyleParseError(String::from(field))),
                     }
                 }
                 _ => Err(LsError::TimeStyleParseError(String::from(field))),
