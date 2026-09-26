@@ -98,3 +98,21 @@ pub fn locale_cmp(left: &[u8], right: &[u8]) -> Ordering {
             .map_or_else(|| left.cmp(right), |c| c.compare_utf8(left, right))
     }
 }
+
+/// Locale-aware comparison for hot paths, when the caller already knows
+/// that locale collation is in use.
+///
+/// Byte-identical inputs are equal without calling ICU. Byte order is *not*
+/// collation order even for ASCII (punctuation is ignored at the primary level
+/// with shifted alternate handling, case is a tertiary difference), so every
+/// other comparison goes through the collator.
+/// Falls back to byte comparison if the collator is not initialized.
+#[inline]
+pub fn locale_cmp_unchecked(left: &[u8], right: &[u8]) -> Ordering {
+    if left == right {
+        return Ordering::Equal;
+    }
+    COLLATOR
+        .get()
+        .map_or_else(|| left.cmp(right), |c| c.compare_utf8(left, right))
+}
