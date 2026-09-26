@@ -7833,6 +7833,7 @@ fn test_cp_preserve_mode_via_nofollow_chmod() {
 /// source's — the other branch feeding the same chmod.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no chmod syscall")]
 fn test_cp_existing_dest_keeps_its_mode() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
