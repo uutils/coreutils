@@ -27,6 +27,7 @@ use uucore::error::FromIo;
 use uucore::error::{UError, UResult, strip_errno};
 #[cfg(feature = "i18n-datetime")]
 use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
+use uucore::i18n::{UEncoding, get_ctype_encoding};
 use uucore::translate;
 use uucore::translate_text;
 use uucore::{format_usage, show};
@@ -210,47 +211,58 @@ enum DayDelta {
     Next,
 }
 
-/// Escape invalid UTF-8 bytes in GNU-compatible octal notation.
+/// Escape user input for an error message the way GNU date quotes it.
 ///
-/// Converts bytes to a string with printable ASCII characters preserved
-/// and non-printable/invalid UTF-8 bytes escaped as `\NNN` octal sequences.
-///
-/// This matches GNU date's behavior for invalid input.
-///
-/// # Arguments
-/// * `bytes` - The byte sequence to escape
-///
-/// # Returns
-/// A string with invalid bytes escaped in octal notation
+/// Backslash is backslash-escaped, control characters use C escapes (`\t`,
+/// `\n`, ...) or `\NNN` octal, and invalid UTF-8 bytes are octal-escaped, so
+/// the input cannot write raw control bytes to the terminal. Outside a UTF-8
+/// locale, where GNU quotes with `'` rather than `‘’`, a single quote is
+/// backslash-escaped and non-ASCII bytes are octal-escaped too.
 ///
 /// # Example
 /// ```ignore
-/// let invalid = b"\xb0";
-/// assert_eq!(escape_invalid_bytes(invalid), "\\260");
+/// assert_eq!(escape_for_error(b"a\tb\xb0"), "a\\tb\\260");
 /// ```
-fn escape_invalid_bytes(bytes: &[u8]) -> String {
-    let escaped = bytes
-        .iter()
-        .flat_map(|&b| {
-            // Preserve printable ASCII except backslash
-            if (0x20..0x7f).contains(&b) && b != b'\\' {
-                vec![b]
-            } else {
-                // Escape as octal: \NNN
-                format!("\\{b:03o}").into_bytes()
+fn escape_for_error(bytes: &[u8]) -> String {
+    fn push_octal(out: &mut String, b: u8) {
+        out.push('\\');
+        out.push(char::from(b'0' + (b >> 6)));
+        out.push(char::from(b'0' + ((b >> 3) & 7)));
+        out.push(char::from(b'0' + (b & 7)));
+    }
+
+    let utf8 = get_ctype_encoding() == UEncoding::Utf8;
+    let mut out = String::with_capacity(bytes.len());
+    for chunk in bytes.utf8_chunks() {
+        for c in chunk.valid().chars() {
+            match c {
+                '\\' => out.push_str("\\\\"),
+                '\'' if !utf8 => out.push_str("\\'"),
+                '\x07' => out.push_str("\\a"),
+                '\x08' => out.push_str("\\b"),
+                '\t' => out.push_str("\\t"),
+                '\n' => out.push_str("\\n"),
+                '\x0B' => out.push_str("\\v"),
+                '\x0C' => out.push_str("\\f"),
+                '\r' => out.push_str("\\r"),
+                c if !c.is_control() && (c.is_ascii() || utf8) => out.push(c),
+                c => {
+                    for &b in c.encode_utf8(&mut [0; 4]).as_bytes() {
+                        push_octal(&mut out, b);
+                    }
+                }
             }
-        })
-        .collect::<Vec<u8>>();
-    String::from_utf8_lossy(&escaped).into_owned()
+        }
+        for &b in chunk.invalid() {
+            push_octal(&mut out, b);
+        }
+    }
+    out
 }
 
-/// Renders a command-line operand for an error message the way GNU does:
-/// valid UTF-8 is kept as-is, anything else is octal-escaped.
+/// Renders a command-line operand for an error message the way GNU does.
 fn operand_for_error(operand: &OsStr) -> String {
-    operand.to_str().map_or_else(
-        || escape_invalid_bytes(operand.as_encoded_bytes()),
-        ToOwned::to_owned,
-    )
+    escape_for_error(operand.as_encoded_bytes())
 }
 
 /// Strip parenthesized comments from a date string.
@@ -437,7 +449,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             Ok(ParsedDateTime::Extended(_)) | Err(_) => {
                 return Err(Box::new(DateError::InvalidDate {
-                    date: input.clone(),
+                    date: escape_for_error(input.as_bytes()),
                 }));
             }
         }
@@ -1259,7 +1271,7 @@ fn parse_dates_from_reader<R: Read + 'static>(
             // Report lines with invalid UTF-8 (with non-printable bytes
             // octal-escaped like GNU) instead of silently stopping the input
             Err(e) => Err((
-                escape_invalid_bytes(e.as_bytes()),
+                escape_for_error(e.as_bytes()),
                 parse_datetime::ParseDateTimeError::InvalidInput,
             )),
         }
@@ -1339,10 +1351,10 @@ fn parse_date<S: AsRef<str>>(
         }
         Ok(ParsedDateTime::Extended(date)) if allow_extended => Ok(ParsedDateTime::Extended(date)),
         Ok(ParsedDateTime::Extended(_)) => Err((
-            input_str.into(),
+            escape_for_error(input_str.as_bytes()),
             parse_datetime::ParseDateTimeError::InvalidInput,
         )),
-        Err(e) => Err((input_str.into(), e)),
+        Err(e) => Err((escape_for_error(input_str.as_bytes()), e)),
     }
 }
 
