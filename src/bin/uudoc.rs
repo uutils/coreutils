@@ -421,11 +421,9 @@ fn load_all_ftl(uu_dir: &str) -> String {
     if let Ok(entries) = fs::read_dir(base) {
         for entry in entries.flatten() {
             let ftl_path = entry.path().join("locales/en-US.ftl");
-            if ftl_path.is_file() {
-                if let Ok(content) = fs::read_to_string(&ftl_path) {
-                    combined.push('\n');
-                    combined.push_str(&content);
-                }
+            if let Ok(content) = fs::read_to_string(&ftl_path) {
+                combined.push('\n');
+                combined.push_str(&content);
             }
         }
     }
@@ -1018,7 +1016,7 @@ mod tests {
         fn new() -> Self {
             Self(std::sync::Arc::new(std::sync::Mutex::new(Vec::new())))
         }
-        fn to_string(&self) -> String {
+        fn contents(&self) -> String {
             String::from_utf8_lossy(&self.0.lock().unwrap()).into_owned()
         }
     }
@@ -1059,7 +1057,7 @@ mod tests {
         };
 
         writer.options().unwrap();
-        let html = buf.to_string();
+        let html = buf.contents();
 
         // The resolved text "decode data" must appear, NOT the raw key
         assert!(
@@ -1120,7 +1118,7 @@ ck-common-help-status = don't output anything, status code shows success
         };
 
         writer.options().unwrap();
-        let html = buf.to_string();
+        let html = buf.contents();
 
         assert!(
             html.contains("read checksums from the FILEs and check them"),
