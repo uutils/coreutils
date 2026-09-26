@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::{OpenOptions, metadata};
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Seek, SeekFrom};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
@@ -375,7 +375,21 @@ fn truncate(
                 _ => error.map_err_context(String::new),
             })?;
 
-            Some(reference_metadata.len())
+            // For regular files, the size returned by `stat` is correct. For
+            // other files (e.g. block devices), ask the file itself. Directories
+            // are excluded: seeking to their end can report a bogus huge offset.
+            if reference_metadata.is_file() || reference_metadata.is_dir() {
+                Some(reference_metadata.len())
+            } else {
+                let size = OpenOptions::new()
+                    .read(true)
+                    .open(&reference_path)
+                    .and_then(|mut file| file.seek(SeekFrom::End(0)))
+                    .map_err_context(
+                        || translate!("truncate-error-cannot-get-size", "filename" => reference_path.quote()),
+                    )?;
+                Some(size)
+            }
         }
         None => None,
     };
