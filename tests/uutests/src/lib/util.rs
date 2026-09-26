@@ -1918,6 +1918,10 @@ impl UCommand {
             if let Some(systemroot) = env::var_os("SYSTEMROOT") {
                 cmd_env.push(("SYSTEMROOT".into(), systemroot));
             }
+            // %TMP% is required on Windows to create temporary files.
+            if let Some(tmp) = env::var_os("TMP") {
+                cmd_env.push(("TMP".into(), tmp));
+            }
         } else if let Some(ld_preload) = env::var_os("LD_PRELOAD") {
             cmd_env.push(("LD_PRELOAD".into(), ld_preload));
         }
