@@ -2907,6 +2907,41 @@ fn test_install_d_dangling_symlink_in_path_errors() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_install_d_leading_dirs_in_write_only_directory() {
+    // mkdir needs write and execute on the parent, not read, so -D must be
+    // able to create leading directories inside a directory it cannot read.
+    use std::os::unix::fs::PermissionsExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    if geteuid().is_root() {
+        println!("Test skipped; root ignores directory permissions");
+        return;
+    }
+    if !uucore::safe_traversal::SEARCH_ONLY_SUPPORTED {
+        println!("Test skipped; platform cannot anchor on an unreadable directory");
+        return;
+    }
+
+    at.write("file.txt", "hello");
+    at.mkdir("wx");
+    fs::set_permissions(at.plus("wx"), fs::Permissions::from_mode(0o300)).unwrap();
+
+    scene
+        .ucmd()
+        .args(&["-D", "file.txt", "wx/a/b/file.txt"])
+        .succeeds();
+
+    fs::set_permissions(at.plus("wx"), fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(
+        fs::read_to_string(at.plus("wx/a/b/file.txt")).unwrap(),
+        "hello"
+    );
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_install_set_owner_nonexistent_uid_and_gid() {
     use std::collections::HashSet;
