@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) rwxr sourcepath targetpath Isnt uioerror matchpathcon
+// spell-checker:ignore (ToDO) rwxr sourcepath targetpath Isnt uioerror matchpathcon ETXTBSY
 
 mod mode;
 
@@ -19,6 +19,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{Write, stdout};
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process;
+use std::time::Duration;
 use thiserror::Error;
 use uucore::backup_control::{self, BackupMode, backup_would_destroy_source};
 use uucore::buf_copy::copy_fast;
@@ -44,6 +45,9 @@ use std::os::unix::prelude::OsStrExt;
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
+
+const STRIP_SPAWN_ATTEMPTS: u32 = 3;
+const STRIP_SPAWN_RETRY_DELAY: Duration = Duration::from_millis(50);
 
 #[allow(dead_code)]
 pub struct Behavior {
@@ -1046,6 +1050,39 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     Ok(())
 }
 
+/// Return whether the spawning of the strip program failed with ETXTBSY.
+///
+/// The kernel rejects exec with ETXTBSY while the file being exec'd (e.g. the
+/// interpreter of a script) is concurrently exec'd by another process. BSD
+/// kernels transparently sleep and retry (see exec(3)); this reimplements that
+/// behavior, which Linux does not provide.
+#[cfg(unix)]
+fn is_text_file_busy(error: &std::io::Error) -> bool {
+    error.raw_os_error() == Some(uucore::libc::ETXTBSY)
+}
+
+#[cfg(not(unix))]
+fn is_text_file_busy(_: &std::io::Error) -> bool {
+    false
+}
+
+/// Run `spawn`, retrying while it transiently fails with ETXTBSY.
+fn spawn_strip_program<F>(mut spawn: F) -> std::io::Result<process::ExitStatus>
+where
+    F: FnMut() -> std::io::Result<process::ExitStatus>,
+{
+    let mut attempts = 0;
+    loop {
+        attempts += 1;
+        match spawn() {
+            Err(error) if attempts < STRIP_SPAWN_ATTEMPTS && is_text_file_busy(&error) => {
+                std::thread::sleep(STRIP_SPAWN_RETRY_DELAY);
+            }
+            outcome => return outcome,
+        }
+    }
+}
+
 /// Strip a file using an external program.
 ///
 /// # Parameters
@@ -1067,7 +1104,7 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
     } else {
         to.to_path_buf()
     };
-    match process::Command::new(&b.strip_program).arg(&to).status() {
+    match spawn_strip_program(|| process::Command::new(&b.strip_program).arg(&to).status()) {
         Ok(status) => {
             if !status.success() {
                 // Follow GNU's behavior: if strip fails, removes the target
@@ -1557,6 +1594,17 @@ mod tests {
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     use super::derive_context_from_parent;
 
+    #[cfg(unix)]
+    use super::{STRIP_SPAWN_ATTEMPTS, spawn_strip_program};
+    #[cfg(unix)]
+    use std::io::Error;
+    #[cfg(unix)]
+    use std::io::ErrorKind;
+    #[cfg(unix)]
+    use std::os::unix::process::ExitStatusExt;
+    #[cfg(unix)]
+    use std::process::ExitStatus;
+
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     #[test]
     fn test_derive_context_from_parent() {
@@ -1706,5 +1754,47 @@ mod tests {
                 "File type independence test failed - file_type: '{file_type}', Expected: '{expected}', Got: '{result}'"
             );
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_spawn_strip_program_retries_on_text_file_busy() {
+        let mut calls = 0u32;
+        let result = spawn_strip_program(|| {
+            calls += 1;
+            match calls {
+                1..=2 => Err(Error::from_raw_os_error(uucore::libc::ETXTBSY)),
+                _ => Ok(ExitStatus::from_raw(0)),
+            }
+        });
+        assert!(result.is_ok());
+        assert_eq!(calls, 3);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_spawn_strip_program_gives_up_after_attempts() {
+        let mut calls = 0u32;
+        let result = spawn_strip_program(|| {
+            calls += 1;
+            Err(Error::from_raw_os_error(uucore::libc::ETXTBSY))
+        });
+        assert_eq!(
+            result.unwrap_err().raw_os_error(),
+            Some(uucore::libc::ETXTBSY)
+        );
+        assert_eq!(calls, STRIP_SPAWN_ATTEMPTS);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_spawn_strip_program_does_not_retry_other_errors() {
+        let mut calls = 0u32;
+        let result = spawn_strip_program(|| {
+            calls += 1;
+            Err(Error::new(ErrorKind::NotFound, "strip not found"))
+        });
+        assert!(result.is_err());
+        assert_eq!(calls, 1);
     }
 }
