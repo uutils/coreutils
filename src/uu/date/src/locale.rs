@@ -30,12 +30,65 @@ macro_rules! cfg_langinfo {
     };
 }
 
-cfg_langinfo! {
+// The POSIX `nl_langinfo` items used by `%x`, `%X` and `%r` (`D_FMT`, `T_FMT`,
+// `T_FMT_AMPM`) are standard, so they are available on far more targets than
+// glibc's `_DATE_FMT` extension: everywhere `nl_langinfo` itself exists, which
+// is every unix except Android, Cygwin and Redox. `cfg_nl_langinfo!(else ...)`
+// gates the fallbacks for the remaining targets and is the exact inverse of the
+// plain form, so no target can compile both or neither.
+macro_rules! cfg_nl_langinfo {
+    (else $($item:item)*) => {
+        $(
+            #[cfg(not(all(
+                unix,
+                not(target_os = "android"),
+                not(target_os = "cygwin"),
+                not(target_os = "redox")
+            )))]
+            $item
+        )*
+    };
+    ($($item:item)*) => {
+        $(
+            #[cfg(all(
+                unix,
+                not(target_os = "android"),
+                not(target_os = "cygwin"),
+                not(target_os = "redox")
+            ))]
+            $item
+        )*
+    };
+}
+
+cfg_nl_langinfo! {
     use core::ffi::CStr;
-    use std::sync::OnceLock;
 
     #[cfg(test)]
     use std::sync::Mutex;
+
+    /// `D_FMT` — locale date format (used by `%x`)
+    const D_FMT_ITEM: libc::nl_item = libc::D_FMT;
+    /// `T_FMT` — locale time format (used by `%X`)
+    const T_FMT_ITEM: libc::nl_item = libc::T_FMT;
+    /// `T_FMT_AMPM` — locale 12-hour time format (used by `%r`)
+    const T_FMT_AMPM_ITEM: libc::nl_item = libc::T_FMT_AMPM;
+    /// Locale AM marker (used by `%p`/`%r`).
+    const AM_STR_ITEM: libc::nl_item = libc::AM_STR;
+    /// Locale PM marker (used by `%p`/`%r`).
+    const PM_STR_ITEM: libc::nl_item = libc::PM_STR;
+
+    /// Mutex to serialize setlocale() calls during tests.
+    ///
+    /// setlocale() is process-global, so parallel tests that call it can
+    /// interfere with each other. This mutex ensures only one test accesses
+    /// locale functions at a time.
+    #[cfg(test)]
+    static LOCALE_MUTEX: Mutex<()> = Mutex::new(());
+}
+
+cfg_langinfo! {
+    use std::sync::OnceLock;
 
     /// glibc's `_DATE_FMT` has been stable for the last 12 years
     /// being added upstream to libc TODO: update to libc
@@ -45,14 +98,6 @@ cfg_langinfo! {
 cfg_langinfo! {
     /// Cached locale date/time format string
     static DEFAULT_FORMAT_CACHE: OnceLock<&'static [u8]> = OnceLock::new();
-
-    /// Mutex to serialize setlocale() calls during tests.
-    ///
-    /// setlocale() is process-global, so parallel tests that call it can
-    /// interfere with each other. This mutex ensures only one test accesses
-    /// locale functions at a time.
-    #[cfg(test)]
-    static LOCALE_MUTEX: Mutex<()> = Mutex::new(());
 
     /// Returns the default date format string for the current locale.
     ///
@@ -101,6 +146,139 @@ cfg_langinfo! { else
     }
 }
 
+cfg_nl_langinfo! {
+    /// Applies the environment's `LC_TIME` locale, reporting whether it exists.
+    fn set_locale_time_from_environment() -> bool {
+        unsafe { !libc::setlocale(libc::LC_TIME, c"".as_ptr()).is_null() }
+    }
+
+    /// Reads a `nl_langinfo` item for the environment's `LC_TIME` locale,
+    /// treating an empty value as unavailable.
+    fn query_nl_langinfo(item: libc::nl_item) -> Option<String> {
+        query_nl_langinfo_inner(item, false)
+    }
+
+    /// Reads a `nl_langinfo` item, keeping an explicitly empty value.
+    fn query_nl_langinfo_allow_empty(item: libc::nl_item) -> Option<String> {
+        query_nl_langinfo_inner(item, true)
+    }
+
+    fn query_nl_langinfo_inner(item: libc::nl_item, allow_empty: bool) -> Option<String> {
+        // In tests, acquire mutex to prevent race conditions with setlocale()
+        // which is process-global and not thread-safe
+        #[cfg(test)]
+        let _lock = LOCALE_MUTEX.lock().unwrap();
+
+        if !set_locale_time_from_environment() {
+            return None;
+        }
+
+        unsafe {
+            let ptr = libc::nl_langinfo(item);
+            if ptr.is_null() {
+                return None;
+            }
+
+            let s = CStr::from_ptr(ptr).to_str().ok()?;
+            if s.is_empty() && !allow_empty {
+                return None;
+            }
+
+            Some(s.to_string())
+        }
+    }
+
+    /// Returns the locale date format (`D_FMT`) used by `%x`.
+    pub fn get_locale_date_format() -> Option<String> {
+        query_nl_langinfo(D_FMT_ITEM)
+    }
+
+    /// Returns the locale time format (`T_FMT`) used by `%X`.
+    pub fn get_locale_time_format() -> Option<String> {
+        query_nl_langinfo(T_FMT_ITEM)
+    }
+
+    /// Resolve a locale's `T_FMT_AMPM`, distinguishing an explicitly empty
+    /// value from an unavailable value.
+    fn ampm_format_or_default(format: Option<String>) -> String {
+        match format.as_deref() {
+            Some("") => "%H:%M:%S".to_string(),
+            None => "%I:%M:%S %p".to_string(),
+            Some(value) => value.to_string(),
+        }
+    }
+
+    /// Returns the locale 12-hour time format (`T_FMT_AMPM`) used by `%r`.
+    /// GNU date falls back to `%I:%M:%S %p` if it is unavailable.
+    /// However, if a locale explicitly defines it as empty (like French),
+    /// it uses `%H:%M:%S`.
+    pub fn get_locale_time_ampm_format() -> String {
+        ampm_format_or_default(query_nl_langinfo_allow_empty(T_FMT_AMPM_ITEM))
+    }
+
+    /// Returns the locale's AM and PM markers used by `%p` and `%P`.
+    fn get_locale_ampm_markers() -> Option<(String, String)> {
+        Some((
+            query_nl_langinfo_allow_empty(AM_STR_ITEM)?,
+            query_nl_langinfo_allow_empty(PM_STR_ITEM)?,
+        ))
+    }
+
+    /// Replace bare `%p` and `%P` with the marker for the supplied hour.
+    ///
+    /// The caller must protect any format syntax it does not want expanded;
+    /// this helper independently protects `%%` literals in the input and in
+    /// locale-provided marker strings.
+    pub fn localize_ampm_markers(format: &str, is_pm: bool) -> String {
+        const PERCENT_PLACEHOLDER: &str = "\0PERCENT\0";
+        const LOWER_MARKER_PLACEHOLDER: &str = "\0LOWER_MARKER\0";
+        const MARKER_PLACEHOLDER: &str = "\0MARKER\0";
+
+        if !format.contains("%p") && !format.contains("%P") {
+            return format.to_string();
+        }
+
+        let Some((am, pm)) = get_locale_ampm_markers() else {
+            return format.to_string();
+        };
+
+        let marker = if is_pm { pm } else { am };
+        let marker_lower = marker.to_lowercase();
+        let marker = marker.replace('%', "%%");
+        let marker_lower = marker_lower.replace('%', "%%");
+
+        format
+            .replace("%%", PERCENT_PLACEHOLDER)
+            .replace("%p", MARKER_PLACEHOLDER)
+            .replace("%P", LOWER_MARKER_PLACEHOLDER)
+            .replace(MARKER_PLACEHOLDER, &marker)
+            .replace(LOWER_MARKER_PLACEHOLDER, &marker_lower)
+            .replace(PERCENT_PLACEHOLDER, "%%")
+    }
+}
+
+cfg_nl_langinfo! { else
+    /// Fallback for platforms without `nl_langinfo`.
+    pub fn get_locale_date_format() -> Option<String> {
+        None
+    }
+
+    /// Fallback for platforms without `nl_langinfo`.
+    pub fn get_locale_time_format() -> Option<String> {
+        None
+    }
+
+    /// Fallback for platforms without `nl_langinfo`.
+    pub fn get_locale_time_ampm_format() -> String {
+        "%I:%M:%S %p".to_string()
+    }
+
+    /// Fallback for platforms without `nl_langinfo`.
+    pub fn localize_ampm_markers(format: &str, _is_pm: bool) -> String {
+        format.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::POSIX_DEFAULT_FORMAT;
@@ -118,6 +296,76 @@ mod tests {
         #[test]
         fn test_default_format_without_date_fmt() {
             assert_eq!(super::get_locale_default_format(), POSIX_DEFAULT_FORMAT);
+        }
+    }
+
+    cfg_nl_langinfo! {
+        use super::{LOCALE_MUTEX, ampm_format_or_default, set_locale_time_from_environment};
+        use core::ffi::CStr;
+
+        #[test]
+        fn test_ampm_format_distinguishes_empty_and_unavailable() {
+            assert_eq!(ampm_format_or_default(Some(String::new())), "%H:%M:%S");
+            assert_eq!(ampm_format_or_default(None), "%I:%M:%S %p");
+            assert_eq!(
+                ampm_format_or_default(Some("%I:%M:%S %p".to_string())),
+                "%I:%M:%S %p"
+            );
+        }
+
+        /// musl's `setlocale` accepts any locale name and never returns NULL,
+        /// so the failure this asserts cannot be observed there.
+        #[test]
+        #[cfg_attr(
+            target_env = "musl",
+            ignore = "musl setlocale accepts any locale name"
+        )]
+        fn test_setlocale_failure_is_reported() {
+            let _lock = LOCALE_MUTEX.lock().unwrap();
+            let original_lc_all = std::env::var_os("LC_ALL");
+            let original_lc_time = std::env::var_os("LC_TIME");
+            let original_lang = std::env::var_os("LANG");
+            let original_process_locale = unsafe {
+                let ptr = libc::setlocale(libc::LC_TIME, std::ptr::null());
+                if ptr.is_null() {
+                    None
+                } else {
+                    CStr::from_ptr(ptr).to_str().ok().map(ToString::to_string)
+                }
+            };
+
+            unsafe {
+                std::env::set_var("LC_ALL", "__hermes_locale_that_does_not_exist__");
+                std::env::remove_var("LC_TIME");
+                std::env::remove_var("LANG");
+            }
+            let result = set_locale_time_from_environment();
+
+            unsafe {
+                if let Some(value) = original_lc_all {
+                    std::env::set_var("LC_ALL", value);
+                } else {
+                    std::env::remove_var("LC_ALL");
+                }
+                if let Some(value) = original_lc_time {
+                    std::env::set_var("LC_TIME", value);
+                } else {
+                    std::env::remove_var("LC_TIME");
+                }
+                if let Some(value) = original_lang {
+                    std::env::set_var("LANG", value);
+                } else {
+                    std::env::remove_var("LANG");
+                }
+                if let Some(locale) = original_process_locale {
+                    let c_locale = std::ffi::CString::new(locale).unwrap();
+                    libc::setlocale(libc::LC_TIME, c_locale.as_ptr());
+                } else {
+                    libc::setlocale(libc::LC_TIME, c"".as_ptr());
+                }
+            }
+
+            assert!(!result, "invalid environment locale must be reported");
         }
     }
 
