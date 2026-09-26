@@ -219,9 +219,17 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
 
         // Verify regex is valid and doesn't match empty string
         let re = Regex::new(&regex).map_err(|error| {
+            let clean_msg = error
+                .to_string()
+                .lines()
+                .last()
+                .unwrap_or("")
+                .trim_start_matches("error: ")
+                .to_string();
+
             USimpleError::new(
                 1,
-                translate!("ptx-error-invalid-regexp", "error" => error.to_string()),
+                translate!("ptx-error-invalid-regexp", "error" => clean_msg),
             )
         })?;
         if re.is_match("") {

@@ -489,6 +489,14 @@ fn test_invalid_utf8_input_is_not_an_error() {
 }
 
 #[test]
+fn test_invalid_regex_error_message() {
+    new_ucmd!()
+        .args(&["-S", "[a-z"])
+        .fails_with_code(1)
+        .stderr_is("ptx: Invalid regexp: unclosed character class\n");
+}
+
+#[test]
 fn test_nullable_word_regexp_no_empty_matches() {
     let expected = concat!(
         "                                       aa bb cc\n",
