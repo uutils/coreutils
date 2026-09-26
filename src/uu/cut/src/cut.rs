@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) delim foxjumping sourcefiles undelimited xacfoxjumping
+// spell-checker:ignore (ToDO) delim foxjumping sourcefiles undelimited xacfoxjumping xffijklmnop
 
 use bstr::ByteSlice;
 use bstr::io::BufReadExt;
@@ -1461,7 +1461,7 @@ pub fn uu_app() -> Command {
 
 #[cfg(test)]
 mod tests {
-    use super::{CharCut, Encoding};
+    use super::{CharCut, Encoding, select_chars, validated_prefix};
 
     fn utf8_cut(by_char: bool) -> CharCut<'static> {
         CharCut {
@@ -1519,5 +1519,32 @@ mod tests {
         assert_eq!(cut.advance_scalar(wide, 0, 0, 11), (12, 11));
         // An empty line has nothing to walk.
         assert_eq!(cut.advance_scalar(b"", 0, 0, 4), (0, 0));
+    }
+
+    #[test]
+    fn select_chars_matches_the_scalar_walk() {
+        let cut = utf8_cut(true);
+        for n in 0..30 {
+            let (off, consumed) = select_chars(LINE, n);
+            assert_eq!((off, consumed), cut.advance_scalar(LINE, 0, 0, n));
+        }
+    }
+
+    #[test]
+    fn validated_prefix_rejects_invalid_or_short_walks() {
+        // Short walks are not worth validating.
+        assert_eq!(validated_prefix(LINE, 7), b"");
+        // A long enough walk covers the whole (valid) line.
+        assert_eq!(validated_prefix(LINE, 8), LINE);
+        // The cap (4 * 8 + 3 = 35 bytes) would split a 2-byte character, so
+        // it backs off to the character boundary before it.
+        let long = "é".repeat(20);
+        let prefix = validated_prefix(long.as_bytes(), 8);
+        assert_eq!(prefix.len(), 34);
+        assert!(std::str::from_utf8(prefix).is_ok());
+        // Invalid UTF-8 inside the span leaves everything to the scalar walk.
+        assert_eq!(validated_prefix(b"abcdefgh\xffijklmnop", 8), b"");
+        // A line of stray continuation bytes backs off to an empty prefix.
+        assert_eq!(validated_prefix(&[0x80; 64], 8), b"");
     }
 }

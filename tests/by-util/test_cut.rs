@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore defg naïve nave närd nøys ntøys nfjärd undelimited xbfw
+// spell-checker:ignore cdéfghïjklmnop defg ghij ghïj naïve nave närd nøys ntøys nfjärd undelimited xbfw xffcdefghijklmnop éééé
 
 use uutests::{at_and_ucmd, new_ucmd};
 
@@ -1203,6 +1203,34 @@ fn test_cut_chars_utf8_mixed_ascii_lines() {
         .pipe_in(input)
         .succeeds()
         .stdout_only("okk\när\nmba\nøys\n");
+}
+
+// Walks of eight characters or more count characters in validated UTF-8
+// without decoding them; invalid bytes and stray continuation bytes send the
+// line back to the per-character walk, which must give the same offsets.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
+fn test_cut_chars_utf8_long_walks() {
+    let mut input = Vec::new();
+    input.extend_from_slice("aéb€cdéfghïjklmnop\n".as_bytes());
+    input.extend_from_slice(b"a\xc3\xa9b\xffcdefghijklmnop\n");
+    input.extend_from_slice(b"\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80xyz\n");
+    input.extend_from_slice("é".repeat(30).as_bytes());
+    input.push(b'\n');
+
+    let mut expected = Vec::new();
+    expected.extend_from_slice("ghïj+op\n".as_bytes());
+    expected.extend_from_slice(b"ghij+op\n");
+    expected.extend_from_slice(b"\x80\x80xy\n");
+    expected.extend_from_slice("éééé+éé\n".as_bytes());
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["-c9-12,17-18", "--output-delimiter=+"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only_bytes(expected);
 }
 
 #[test]
