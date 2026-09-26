@@ -6082,9 +6082,7 @@ fn test_posixly_correct_and_block_size_env_vars_with_k() {
 #[cfg(unix)]
 fn test_ls_block_size_rounds_up() {
     // A block that is only partly used still occupies a whole block, so
-    // scaling an allocation to the block size rounds up. The total scales the
-    // sum of the allocations once; rounding every file first and adding the
-    // results overshoots it.
+    // scaling an allocation to the block size rounds up.
     use std::os::unix::fs::MetadataExt;
 
     let (at, mut ucmd) = at_and_ucmd!();

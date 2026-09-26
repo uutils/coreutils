@@ -1563,11 +1563,6 @@ fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Resu
 }
 
 /// Allocated size of a file in bytes, before it is scaled to the block size.
-///
-/// This is the figure the `total` line sums: GNU scales the sum once, so
-/// scaling every file first and adding the results would round several times
-/// over and overshoot the total.
-#[allow(unused_variables)]
 fn get_block_bytes(md: &Metadata) -> u64 {
     /* GNU ls will display sizes in terms of block size
        md.len() will differ from this value when the file has some holes
