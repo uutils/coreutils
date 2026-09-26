@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore backport Ioctl absolutized linkat symlinkat renameat unlinkat openat urandom NOFOLLOW CLOEXEC RDONLY
+// spell-checker:ignore backport Ioctl absolutized linkat symlinkat renameat unlinkat openat urandom NOFOLLOW CLOEXEC RDONLY unguessability
 
 //! Set of functions to manage regular files, special files, and links.
 
@@ -39,6 +39,12 @@ use windows_sys::Win32::Storage::FileSystem::{
 use windows_sys::Win32::System::IO::DeviceIoControl;
 #[cfg(windows)]
 use windows_sys::Win32::System::Ioctl::FSCTL_SET_SPARSE;
+
+/// Maximum number of symlinks followed while resolving a single path.
+///
+/// Matches the limit Linux enforces during path lookup; going past it is
+/// reported as "Too many levels of symbolic links".
+pub const SYMLINK_FOLLOW_LIMIT: usize = 40;
 
 /// Used to check if the `mode` has its `perm` bit set.
 ///
