@@ -502,7 +502,7 @@ mod test_split_seps {
 
     #[test]
     fn test_empty_input() {
-        assert!(split_seps(b"", b'\n').is_empty());
+        assert_eq!(split_seps(b"", b'\n'), [] as [&[_]; 0]);
     }
 
     #[test]
