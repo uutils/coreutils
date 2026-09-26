@@ -10,7 +10,6 @@
 use crate::translate;
 #[cfg(all(unix, not(target_os = "haiku")))]
 pub use libc::{major, makedev, minor};
-use rustc_hash::FxHashSet;
 use std::collections::VecDeque;
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -743,6 +742,7 @@ pub fn make_path_relative_to<P1: AsRef<Path>, P2: AsRef<Path>>(path: P1, to: P2)
 /// Checks if there is a symlink loop in the given path.
 ///
 /// A symlink loop is a chain of symlinks where the last symlink points back to one of the previous symlinks in the chain.
+/// Like the kernel, a chain longer than [`SYMLINK_FOLLOW_LIMIT`] is treated as a loop.
 ///
 /// # Arguments
 ///
@@ -752,23 +752,22 @@ pub fn make_path_relative_to<P1: AsRef<Path>, P2: AsRef<Path>>(path: P1, to: P2)
 ///
 /// * `bool` - Returns `true` if a symlink loop is detected, `false` otherwise.
 pub fn is_symlink_loop(path: &Path) -> bool {
-    let mut visited_symlinks = FxHashSet::default();
     let mut current_path = path.to_path_buf();
 
-    while let (Ok(metadata), Ok(link)) = (
-        current_path.symlink_metadata(),
-        fs::read_link(&current_path),
-    ) {
+    for _ in 0..=SYMLINK_FOLLOW_LIMIT {
+        let (Ok(metadata), Ok(link)) = (
+            current_path.symlink_metadata(),
+            fs::read_link(&current_path),
+        ) else {
+            return false;
+        };
         if !metadata.file_type().is_symlink() {
             return false;
-        }
-        if !visited_symlinks.insert(current_path.clone()) {
-            return true;
         }
         current_path = link;
     }
 
-    false
+    true
 }
 
 #[cfg(not(unix))]
@@ -1387,6 +1386,22 @@ mod tests {
         unix::fs::symlink(&symlink2_path, &symlink1_path).unwrap();
 
         assert!(is_symlink_loop(&symlink1_path));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_is_symlink_loop_follow_limit() {
+        let temp_dir = tempdir().unwrap();
+        let link = |i: usize| temp_dir.path().join(format!("link{i}"));
+        let target = temp_dir.path().join("target");
+        fs::File::create(&target).unwrap();
+        unix::fs::symlink(&target, link(1)).unwrap();
+        for i in 2..=SYMLINK_FOLLOW_LIMIT + 1 {
+            unix::fs::symlink(link(i - 1), link(i)).unwrap();
+        }
+
+        assert!(!is_symlink_loop(&link(SYMLINK_FOLLOW_LIMIT)));
+        assert!(is_symlink_loop(&link(SYMLINK_FOLLOW_LIMIT + 1)));
     }
 
     #[cfg(unix)]
