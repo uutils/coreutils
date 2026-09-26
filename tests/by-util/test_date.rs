@@ -3446,3 +3446,28 @@ fn test_non_utf8_operands_are_octal_escaped() {
             .stderr_contains(expected);
     }
 }
+
+#[test]
+fn test_date_print_and_set_conflict() {
+    // Invalid set input also prevents any clock change if validation regresses.
+    for print_args in [
+        vec!["-d", "@0"],
+        vec!["-f", "missing"],
+        vec!["-r", "missing"],
+        vec!["--resolution"],
+    ] {
+        for set_first in [true, false] {
+            let mut args = vec!["-s", "not-a-date"];
+            if set_first {
+                args.extend(&print_args);
+            } else {
+                args.splice(0..0, print_args.iter().copied());
+            }
+            new_ucmd!()
+                .args(&args)
+                .fails_with_code(1)
+                .no_stdout()
+                .stderr_contains("cannot be used with");
+        }
+    }
+}

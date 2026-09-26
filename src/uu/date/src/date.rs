@@ -774,6 +774,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_SET)
                 .value_name("STRING")
                 .allow_hyphen_values(true)
+                .conflicts_with_all([OPT_DATE, OPT_FILE, OPT_REFERENCE, OPT_RESOLUTION])
                 .help({
                     #[cfg(not(target_os = "redox"))]
                     {
