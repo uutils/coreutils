@@ -14,7 +14,7 @@
 
 use std::collections::HashSet;
 
-#[cfg(not(any(target_os = "freebsd", windows)))]
+#[cfg(not(target_os = "freebsd"))]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 #[cfg(target_os = "linux")]
@@ -103,6 +103,35 @@ fn test_inodes_not_supported_windows() {
             .succeeds()
             .stdout_only("df: doesn't support -i option\n");
     }
+}
+
+#[test]
+#[cfg(windows)]
+fn test_windows_filesystem_source() {
+    new_ucmd!()
+        .arg("--output=source")
+        .succeeds()
+        .stdout_matches(&regex::Regex::new(r"\AFilesystem\n(?:\\Device\\[^\s]+\n)+\z").unwrap());
+}
+
+#[test]
+#[cfg(windows)]
+fn test_windows_filesystem_type() {
+    new_ucmd!()
+        .arg("--output=fstype")
+        .succeeds()
+        .stdout_matches(&regex::Regex::new(r"\AType\n(?:\S+\n)+\z").unwrap());
+}
+
+#[test]
+#[cfg(windows)]
+fn test_windows_available_space() {
+    let output = new_ucmd!()
+        .args(&["--output=avail", "--block-size=1", "--total"])
+        .succeeds()
+        .stdout_str_lossy();
+    let available = output.lines().last().unwrap().trim();
+    assert!(available.parse::<u64>().unwrap() > 0);
 }
 
 #[test]
@@ -1018,7 +1047,7 @@ fn test_output_file_all_filesystems() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "freebsd", windows)))] // FIXME: fix test for FreeBSD & Win
+#[cfg(not(target_os = "freebsd"))] // FIXME: fix test for FreeBSD
 fn test_output_file_specific_files() {
     // Create three files.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1037,7 +1066,7 @@ fn test_output_file_specific_files() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "freebsd", windows)))] // FIXME: fix test for FreeBSD & Win
+#[cfg(not(target_os = "freebsd"))] // FIXME: fix test for FreeBSD
 fn test_file_column_width_if_filename_contains_unicode_chars() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("äöü.txt");
@@ -1060,7 +1089,7 @@ fn test_output_field_no_more_than_once() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "freebsd", windows)))] // FIXME: fix test for FreeBSD & Win
+#[cfg(not(target_os = "freebsd"))] // FIXME: fix test for FreeBSD
 fn test_nonexistent_file() {
     new_ucmd!()
         .arg("does-not-exist")
