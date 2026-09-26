@@ -567,16 +567,13 @@ fn parse_bytes_no_x_with_overflow(full: &str, s: &str) -> Result<ParsedFactor, P
         },
         _ => return Err(ParseError::MultiplierStringParseFailure(full.to_string())),
     };
-    if let ParsedFactor::Overflow(error) = num {
-        return Ok(ParsedFactor::Overflow(error));
+    match num {
+        ParsedFactor::Overflow(error) => Ok(ParsedFactor::Overflow(error)),
+        ParsedFactor::Value(num) => Ok(match num.checked_mul(multiplier) {
+            Some(value) => ParsedFactor::Value(value),
+            None => ParsedFactor::Overflow(ParseError::MultiplierStringOverflow(full.to_string())),
+        }),
     }
-    let ParsedFactor::Value(num) = num else {
-        unreachable!();
-    };
-    Ok(match num.checked_mul(multiplier) {
-        Some(value) => ParsedFactor::Value(value),
-        None => ParsedFactor::Overflow(ParseError::MultiplierStringOverflow(full.to_string())),
-    })
 }
 
 /// Parse byte and multiplier like 512, 5KiB, or 1G.
@@ -603,6 +600,11 @@ pub fn parse_bytes_with_opt_multiplier(s: &str) -> Result<u64, ParseError> {
     }
 
     let mut total: u64 = 1;
+    // A zero factor short-circuits the product, so a part that would overflow
+    // no longer matters: `0x<too big>` is 0, not an error. The warnings are
+    // counted here and printed only once parsing is done, because a later part
+    // can still turn the whole expression into an error, and GNU stays quiet
+    // when it exits with a diagnostic.
     let mut zero_warnings = 0;
     for (i, part) in parts.iter().enumerate() {
         match parse_bytes_no_x_with_overflow(s, part)? {

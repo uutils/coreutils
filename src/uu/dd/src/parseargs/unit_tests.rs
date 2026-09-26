@@ -483,9 +483,18 @@ fn test_zero_factor_still_validates_later_factors() {
     for input in [
         "0xfoo",
         "0x0x1xfoo",
-        "0x0c9999999999999999999999999999999999999999999999999999999999999",
+        &format!("0x0c{BIG}"),
         &format!("{BIG}x1"),
     ] {
+        assert!(parse_bytes_with_opt_multiplier(input).is_err());
+    }
+}
+
+#[test]
+fn test_multiplier_must_end_the_part() {
+    // `c`, `w` and `b` are only multipliers at the end of a part, so `1c2` is
+    // malformed rather than `1` counted in 512-byte blocks.
+    for input in ["1c2", "1w2", "1b2", "1c2x1", "1kb2"] {
         assert!(parse_bytes_with_opt_multiplier(input).is_err());
     }
 }
