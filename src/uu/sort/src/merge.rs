@@ -31,7 +31,7 @@ use uucore::error::{FromIo, UResult};
 use crate::{
     GlobalSettings, Output, SortError,
     chunks::{self, Chunk, RecycledChunk},
-    compare_by, current_open_fd_count, fd_soft_limit, open,
+    current_open_fd_count, fd_soft_limit, merge_compare, open,
     tmp_dir::TmpDirWrapper,
 };
 
@@ -207,7 +207,13 @@ fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
     }
 
     let reader_join_handle = thread::spawn({
-        let settings = settings.clone();
+        // The merge comparator (`merge_compare`) compares whole-line locale keys lazily
+        // with the ICU collator, so the reader does not need to precompute per-line sort
+        // keys. Disabling `fast_locale_collation` here turns `Line::create` into a no-op
+        // for that (whole-line, default) mode and avoids the dominant cost of merging
+        // already-sorted input. Other modes are unaffected (the flag is already false).
+        let mut settings = settings.clone();
+        settings.precomputed.fast_locale_collation = false;
         move || {
             reader(
                 &request_receiver,
@@ -298,14 +304,16 @@ impl PartialEq for MergeableFile<'_> {
 impl Eq for MergeableFile<'_> {}
 
 impl PartialOrd for MergeableFile<'_> {
+    #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl Ord for MergeableFile<'_> {
+    #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
-        let mut cmp = compare_by(
+        let mut cmp = merge_compare(
             &self.current_chunk.lines()[self.line_idx],
             &other.current_chunk.lines()[other.line_idx],
             self.settings,
@@ -411,7 +419,7 @@ impl FileMerger<'_> {
                 if settings.unique
                     && let Some(prev) = &prev
                 {
-                    let cmp = compare_by(
+                    let cmp = merge_compare(
                         &prev.chunk.lines()[prev.line_idx],
                         current_line,
                         settings,

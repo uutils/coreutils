@@ -3600,6 +3600,53 @@ fn test_consistent_sorting_with_i18n_collate() {
 }
 
 #[test]
+fn test_merge_locale_collation() {
+    // `sort -m` compares lines lazily with the collator instead of precomputed
+    // sort keys; the result must match what a full sort produces.
+    let ts = TestScenario::new("sort");
+    ts.fixtures
+        .write("a.txt", "0_1\n01\napple\nbanana\nzebra\n");
+    ts.fixtures
+        .write("b.txt", "0_1\n01\nApple\nBanana\nZebra\n");
+    ts.fixtures
+        .write("single.txt", "apple\nApple\nbanana\nBanana\n");
+    ts.fixtures
+        .write("rev_a.txt", "zebra\nbanana\napple\n01\n0_1\n");
+    ts.fixtures
+        .write("rev_b.txt", "Zebra\nBanana\nApple\n01\n0_1\n");
+
+    let cases: [(&[&str], &str); 4] = [
+        (
+            &["-m", "a.txt", "b.txt"],
+            "0_1\n0_1\n01\n01\napple\nApple\nbanana\nBanana\nzebra\nZebra\n",
+        ),
+        (
+            &["-m", "-u", "a.txt", "b.txt"],
+            "0_1\n01\napple\nApple\nbanana\nBanana\nzebra\nZebra\n",
+        ),
+        (&["-m", "single.txt"], "apple\nApple\nbanana\nBanana\n"),
+        (
+            &["-m", "-r", "rev_a.txt", "rev_b.txt"],
+            "Zebra\nzebra\nBanana\nbanana\nApple\napple\n01\n01\n0_1\n0_1\n",
+        ),
+    ];
+    for (args, expected) in cases {
+        ts.ucmd()
+            .env("LC_ALL", "en_US.UTF-8")
+            .args(args)
+            .succeeds()
+            .stdout_is(expected);
+        // A full sort of the same input yields the same output.
+        let sort_args: Vec<&str> = args.iter().filter(|a| **a != "-m").copied().collect();
+        ts.ucmd()
+            .env("LC_ALL", "en_US.UTF-8")
+            .args(&sort_args)
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
 fn test_sort_locale_punctuation() {
     // Punctuation gets a distinguishing collation weight, so lines differing
     // only by punctuation sort in a stable order (issue #12542) and are never
