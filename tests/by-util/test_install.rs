@@ -3225,3 +3225,17 @@ fn test_install_will_not_overwrite_just_created() {
 
     assert_eq!(at.read("c/f"), "a");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_install_fifo_path() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file = "existing-file-to-be-overwritten.txt";
+    at.touch(file);
+    scene
+        .ucmd()
+        .args(&["-m644", "/dev/stdin", "existing-file-to-be-overwritten.txt"])
+        .pipe_in("some stuff\n")
+        .succeeds();
+}
