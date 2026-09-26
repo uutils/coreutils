@@ -840,6 +840,50 @@ fn substitute_epoch_seconds(fmt: &str, date: &Zoned) -> String {
     out
 }
 
+/// Drop the `-` and `_` pad flags before `%D`, which GNU treats as atomic but
+/// jiff expands into `%m/%d/%y`, where they do apply.
+fn strip_modifiers_on_composite(fmt: &str) -> String {
+    if !fmt.contains('%') {
+        return fmt.to_string();
+    }
+
+    let mut out = String::with_capacity(fmt.len());
+    let mut chars = fmt.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '%' {
+            out.push(c);
+            continue;
+        }
+        // Skip `%%` literally.
+        if chars.peek() == Some(&'%') {
+            chars.next();
+            out.push_str("%%");
+            continue;
+        }
+        // Look ahead: optional pad flags (`-`/`_`), other modifiers, then `%D`.
+        let mut ahead = chars.clone();
+        while ahead
+            .peek()
+            .is_some_and(|&m| m == '-' || m == '_' || "_0^#+".contains(m) || m.is_ascii_digit())
+        {
+            ahead.next();
+        }
+        if ahead.peek() == Some(&'D') {
+            out.push('%');
+            // Consume only the pad flags (`-`/`_`); keep width and other flags.
+            while chars.peek().is_some_and(|&m| m == '-' || m == '_') {
+                chars.next();
+            }
+            if let Some(specifier) = chars.next() {
+                out.push(specifier);
+            }
+        } else {
+            out.push('%');
+        }
+    }
+    out
+}
+
 /// Remove the `O` strftime modifier from `fmt`.
 ///
 /// In the C locale `%O` requests alternative numeric symbols that do not
@@ -1053,7 +1097,8 @@ fn format_date_with_locale_aware_months(
     // negative infinity (e.g. `@-1.5` → `-2`, not `-1`). Every other field jiff
     // produces already agrees with GNU, so only `%s` needs correcting; rewrite it
     // to the floored epoch second before jiff sees the format string.
-    let fmt_owned = strip_o_modifier(&substitute_epoch_seconds(fmt, date));
+    let fmt_owned =
+        strip_modifiers_on_composite(&strip_o_modifier(&substitute_epoch_seconds(fmt, date)));
     let fmt = fmt_owned.as_str();
 
     // Check if format string has GNU modifiers (width/flags) and format if present
