@@ -40,8 +40,8 @@ jobs:
       uses: taiki-e/install-action@wasmtime
     - name: Run unit tests
       env:
-        CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime
-        CARGO_TARGET_WASM32_WASIP2_RUNNER: wasmtime
+        CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime --dir=.
+        CARGO_TARGET_WASM32_WASIP2_RUNNER: wasmtime --dir=.
       run: |
         # Get all utilities and exclude ones that don't compile for ${{ matrix.job.target }}
         EXCLUDE="df|du|env|more"
