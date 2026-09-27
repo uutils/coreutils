@@ -506,6 +506,53 @@ fn test_cp_arg_update_none() {
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
 
+#[cfg(unix)]
+#[rstest]
+#[case::no_clobber("-n", true)]
+#[case::update_none("--update=none", true)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
+#[case::archive_no_clobber("-an", true)]
+#[case::declined_prompt("-i", false)]
+fn test_cp_recursive_continues_after_skipped_file(#[case] arg: &str, #[case] succeeds: bool) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("source");
+    at.mkdir_all("destination/source");
+    at.write("source/first", "first contents");
+    at.write("source/second", "second contents");
+    // Skip whichever file the traversal reaches first, so the other one comes after it.
+    let order = walkdir::WalkDir::new(at.plus("source"))
+        .min_depth(1)
+        .into_iter()
+        .map(|entry| entry.unwrap().file_name().to_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    let (skipped, copied) = (&order[0], &order[1]);
+    at.write(&format!("destination/source/{skipped}"), "old contents");
+
+    let result = ucmd
+        .args(&["-R", arg, "source", "destination"])
+        .pipe_in("n\n")
+        .run();
+    if succeeds {
+        result.success().no_output();
+    } else {
+        result
+            .code_is(1)
+            .stderr_is(format!("cp: overwrite 'destination/source/{skipped}'? "));
+    }
+
+    assert_eq!(
+        at.read(&format!("destination/source/{skipped}")),
+        "old contents"
+    );
+    assert_eq!(
+        at.read(&format!("destination/source/{copied}")),
+        at.read(&format!("source/{copied}"))
+    );
+}
+
 #[test]
 fn test_cp_arg_update_none_fail() {
     let (at, mut ucmd) = at_and_ucmd!();
