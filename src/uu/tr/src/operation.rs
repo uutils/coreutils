@@ -29,7 +29,9 @@ use uucore::show_warning;
 
 /// Common trait for operations that can process chunks of data
 pub trait ChunkProcessor {
-    fn process_chunk(&self, input: &[u8], output: &mut Vec<u8>);
+    /// Return the bytes to write: `input` itself when it is left unchanged,
+    /// `output` otherwise.
+    fn process_chunk<'a>(&self, input: &'a [u8], output: &'a mut Vec<u8>) -> &'a [u8];
 }
 
 #[derive(Debug, Clone)]
@@ -751,14 +753,15 @@ impl SymbolTranslator for DeleteOperation {
 }
 
 impl ChunkProcessor for DeleteOperation {
-    fn process_chunk(&self, input: &[u8], output: &mut Vec<u8>) {
+    fn process_chunk<'a>(&self, input: &'a [u8], output: &'a mut Vec<u8>) -> &'a [u8] {
         use crate::simd::{process_delete, process_single_delete};
 
         if let Some(delete_char) = self.single_delete {
-            process_single_delete(input, output, delete_char, &self.keep_table);
+            process_single_delete(input, output, delete_char, &self.keep_table)
         } else {
             // Standard deletion
             process_delete(input, output, &self.keep_table);
+            output
         }
     }
 }
@@ -813,15 +816,16 @@ impl SymbolTranslator for TranslateOperation {
 }
 
 impl ChunkProcessor for TranslateOperation {
-    fn process_chunk(&self, input: &[u8], output: &mut Vec<u8>) {
+    fn process_chunk<'a>(&self, input: &'a [u8], output: &'a mut Vec<u8>) -> &'a [u8] {
         use crate::simd::process_single_char_replace;
 
         if let Some((source, target)) = self.single_change {
             // Use SIMD-optimized single character replacement
-            process_single_char_replace(input, output, source, target);
+            process_single_char_replace(input, output, source, target)
         } else {
             // Standard translation using table lookup
             output.extend(input.iter().map(|&b| self.translation_table[b as usize]));
+            output
         }
     }
 }

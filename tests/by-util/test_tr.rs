@@ -220,6 +220,24 @@ fn test_delete_set_mostly_deleted() {
 }
 
 #[test]
+fn test_translate_one_char_large_input() {
+    // Longer than one read, with no and some matches.
+    let none = vec![b'x'; 40_000];
+    let some = b"a,".repeat(20_000);
+    for input in [none, some] {
+        let expected: Vec<u8> = input
+            .iter()
+            .map(|&b| if b == b',' { b';' } else { b })
+            .collect();
+        new_ucmd!()
+            .args(&[",", ";"])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is_bytes(expected);
+    }
+}
+
+#[test]
 fn test_complement1() {
     new_ucmd!()
         .args(&["-c", "a", "X"])

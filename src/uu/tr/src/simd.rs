@@ -28,16 +28,17 @@ where
 
 /// SIMD-optimized single character replacement
 #[inline]
-pub fn process_single_char_replace(
-    input: &[u8],
-    output: &mut Vec<u8>,
+pub fn process_single_char_replace<'a>(
+    input: &'a [u8],
+    output: &'a mut Vec<u8>,
     source_char: u8,
     target_char: u8,
-) {
+) -> &'a [u8] {
     let count = bytecount::count(input, source_char);
     if count == 0 {
-        output.extend_from_slice(input);
-    } else if count == input.len() {
+        return input;
+    }
+    if count == input.len() {
         output.resize(output.len() + input.len(), target_char);
     } else {
         output.extend(
@@ -46,21 +47,23 @@ pub fn process_single_char_replace(
                 .map(|&b| if b == source_char { target_char } else { b }),
         );
     }
+    output
 }
 
 /// SIMD-optimized delete operation for single character
 ///
 /// `keep` must be false for `delete_char` only.
-pub fn process_single_delete(
-    input: &[u8],
-    output: &mut Vec<u8>,
+pub fn process_single_delete<'a>(
+    input: &'a [u8],
+    output: &'a mut Vec<u8>,
     delete_char: u8,
     keep: &[bool; 256],
-) {
+) -> &'a [u8] {
     let count = bytecount::count(input, delete_char);
     if count == 0 {
-        output.extend_from_slice(input);
-    } else if count < input.len() / 128 {
+        return input;
+    }
+    if count < input.len() / 128 {
         // Below one match per 128 bytes, copying the runs between matches
         // beats `process_delete`.
         let mut start = 0;
@@ -73,6 +76,7 @@ pub fn process_single_delete(
         process_delete(input, output, keep);
     }
     // If count == input.len(), all deleted, output nothing
+    output
 }
 
 /// Append to `output` the bytes of `input` whose `keep` entry is true.
@@ -129,10 +133,10 @@ where
         };
 
         output_buf.clear();
-        processor.process_chunk(&buf[..length], &mut output_buf);
+        let processed = processor.process_chunk(&buf[..length], &mut output_buf);
 
-        if !output_buf.is_empty() {
-            write_output(output, &output_buf)?;
+        if !processed.is_empty() {
+            write_output(output, processed)?;
         }
     }
 
