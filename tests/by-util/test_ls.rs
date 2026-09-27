@@ -8077,7 +8077,7 @@ fn test_ls_non_utf8_hidden() {
 }
 
 #[test]
-#[cfg(target_os = "wasi")]
+#[cfg(wasi_runner)]
 fn test_ls_a_dotdot_no_error_on_wasi() {
     // On WASI the sandbox may block access to ".." at the preopened root.
     // ls -a should still succeed and show ".." without an error message.
@@ -8092,7 +8092,7 @@ fn test_ls_a_dotdot_no_error_on_wasi() {
 }
 
 #[test]
-#[cfg(target_os = "wasi")]
+#[cfg(wasi_runner)]
 fn test_ls_al_no_capabilities_insufficient_on_wasi() {
     // `ls -al` reads metadata for every entry including "..". Without the
     // WASI fallback, stat on ".." at the preopened root returns
