@@ -5644,11 +5644,7 @@ fn test_ls_dired_implies_long() {
         .stdout_contains("//DIRED-OPTIONS// --quoting-style");
 }
 
-// Regression test for issue #14775: //DIRED-OPTIONS// must report the
-// canonical name of the quoting style in effect, not a reconstruction from
-// the internal QuotingStyle enum (several distinct style names collapse
-// onto the same enum shape, and the enum's Display impl also appends a
-// -show-control/-always-quote suffix that GNU's --dired trailer never uses).
+// Regression test for issue #14775.
 #[test]
 fn test_ls_dired_quoting_style_name() {
     let scene = TestScenario::new(util_name!());
