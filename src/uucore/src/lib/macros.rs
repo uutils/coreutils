@@ -89,12 +89,10 @@ macro_rules! show(
     ($err:expr) => ({
         #[allow(unused_imports)]
         use $crate::error::UError;
-        use std::io::Write as _;
 
         let e = $err;
         $crate::error::set_exit_code(e.code());
-        let msg = format!("{}: {e}\n", $crate::util_name());
-        let _ = std::io::stderr().write_all(msg.as_bytes());
+        $crate::error::print_diagnostic("", format_args!("{e}"));
     })
 );
 
@@ -154,13 +152,7 @@ macro_rules! show_if_err(
 #[macro_export]
 macro_rules! show_error(
     ($($args:tt)+) => ({
-		use std::io::Write as _;
-        let msg = format!(
-            "{}: {}\n",
-            $crate::util_name(),
-            format_args!($($args)+)
-        );
-        let _ = std::io::stderr().write_all(msg.as_bytes());
+        $crate::error::print_diagnostic("", format_args!($($args)+));
     })
 );
 
@@ -182,13 +174,7 @@ macro_rules! show_error(
 #[macro_export]
 macro_rules! show_warning(
     ($($args:tt)+) => ({
-		use std::io::Write as _;
-        let msg = format!(
-            "{}: warning: {}\n",
-            $crate::util_name(),
-            format_args!($($args)+)
-        );
-        let _ = std::io::stderr().write_all(msg.as_bytes());
+        $crate::error::print_diagnostic("warning: ", format_args!($($args)+));
     })
 );
 
@@ -196,12 +182,6 @@ macro_rules! show_warning(
 #[macro_export]
 macro_rules! show_warning_caps(
     ($($args:tt)+) => ({
-		use std::io::Write as _;
-        let msg = format!(
-            "{}: WARNING: {}\n",
-            $crate::util_name(),
-            format_args!($($args)+)
-        );
-        let _ = std::io::stderr().write_all(msg.as_bytes());
+        $crate::error::print_diagnostic("WARNING: ", format_args!($($args)+));
     })
 );
