@@ -531,10 +531,12 @@ fn test_cp_recursive_continues_after_skipped_file(#[case] arg: &str, #[case] suc
     let (skipped, copied) = (&order[0], &order[1]);
     at.write(&format!("destination/source/{skipped}"), "old contents");
 
-    let result = ucmd
-        .args(&["-R", arg, "source", "destination"])
-        .pipe_in("n\n")
-        .run();
+    ucmd.args(&["-R", arg, "source", "destination"]);
+    // Only the prompt reads stdin; writing to a cp that never reads it can fail.
+    if !succeeds {
+        ucmd.pipe_in("n\n");
+    }
+    let result = ucmd.run();
     if succeeds {
         result.success().no_output();
     } else {
