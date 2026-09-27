@@ -2973,6 +2973,89 @@ fn test_mv_cross_device_dir_refuses_symlink_at_recreated_dest() {
     assert_eq!(at.read("victim/guard"), "PROTECTED_DATA");
 }
 
+/// A cross-device directory move must not write through an entry that appears
+/// in the destination while it is being copied: `fs::copy` followed such a symlink and
+/// let it redirect the content anywhere the caller could write. GNU replaces the
+/// entry and finishes the move, and so do we — by unlinking it first.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_dir_replaces_symlink_entry_created_mid_copy() {
+    use std::ffi::OsString;
+    use std::os::unix::fs::symlink;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::thread;
+    use std::time::{Duration, Instant};
+    use tempfile::TempDir;
+    use uutests::util::TestScenario;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir");
+    // Many entries, so the copy is still running when the symlink lands
+    // wherever it does: readdir order decides which names come first, not us.
+    let mut names: Vec<OsString> = Vec::new();
+    for i in 0..200 {
+        let name = format!("f{i:03}");
+        at.write(&format!("dir/{name}"), "SOURCE_DATA");
+        names.push(name.into());
+    }
+    at.write("outside", "OUTSIDE_DATA");
+
+    let dst_dir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let dest = dst_dir.path().join("moved");
+    let outside = at.plus_as_string("outside");
+
+    let done = Arc::new(AtomicBool::new(false));
+    let linker_dest = dest.clone();
+    let linker_names = names.clone();
+    let linker_done = Arc::clone(&done);
+    let linker = thread::spawn(move || {
+        let linker_outside = outside.clone();
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let mut created = 0;
+        while created == 0 && !linker_done.load(Ordering::Relaxed) && Instant::now() < deadline {
+            if linker_dest.is_dir() {
+                for name in &linker_names {
+                    if symlink(&linker_outside, linker_dest.join(name)).is_ok() {
+                        created += 1;
+                    }
+                }
+            }
+            thread::yield_now();
+        }
+        created
+    });
+
+    // Exit status is not asserted: a symlink landing again inside the replace-and-retry
+    // window can legitimately make the move fail. The outside file is what matters.
+    scene.ucmd().arg("dir").arg(dest.to_str().unwrap()).run();
+    done.store(true, Ordering::Relaxed);
+
+    let created = linker.join().expect("symlink thread panicked");
+    assert!(
+        created > 0,
+        "no symlink was created, so this run proved nothing"
+    );
+    assert_eq!(
+        at.read("outside"),
+        "OUTSIDE_DATA",
+        "cross-device dir move must not write through a symlink created in the destination"
+    );
+    for name in &names {
+        let Ok(metadata) = dest.join(name).symlink_metadata() else {
+            continue; // the move was refused before reaching this entry
+        };
+        assert!(
+            !metadata.is_symlink(),
+            "{} is still a symlink; the move must replace it, not leave it",
+            name.to_string_lossy()
+        );
+    }
+}
+
 #[test]
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mv_selinux_context() {

@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized unwriteable
 // spell-checker:ignore renameat symlinkat unlinkat unguessability RDONLY CLOEXEC
-// spell-checker:ignore renamer fsetxattr
+// spell-checker:ignore renamer fsetxattr fchown setxattr dupfd
 
 mod error;
 #[cfg(unix)]
@@ -26,7 +26,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
 use std::env;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::{self, IsTerminal};
 #[cfg(unix)]
@@ -59,6 +59,11 @@ use uucore::fs::{
     target_os = "netbsd"
 ))]
 use uucore::fsxattr;
+#[cfg(all(
+    unix,
+    not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))
+))]
+use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::set_selinux_security_context;
 use uucore::translate;
@@ -1126,10 +1131,15 @@ fn rename_dir_fallback(
             .unwrap_or_else(|_| FxHashMap::default())
     };
 
+    // Hold the destination open for the whole copy, so entries land in this
+    // directory even if the path is redirected underneath us.
+    create_dir_fail_closed(to)?;
+    let dest = DestDir::open(to)?;
+
     // Use directory copying (with or without hardlink support)
     let result = copy_dir_contents(
         from,
-        to,
+        &dest,
         #[cfg(unix)]
         hardlink_tracker,
         #[cfg(unix)]
@@ -1152,11 +1162,7 @@ fn rename_dir_fallback(
         target_os = "android",
         target_os = "netbsd"
     ))]
-    {
-        use std::fs::File;
-        let dest = File::open(to)?;
-        fsxattr::apply_xattrs_fd_ignore_unsupported(&dest, xattrs)?;
-    }
+    dest.apply_xattrs(xattrs)?;
 
     result?;
 
@@ -1166,22 +1172,345 @@ fn rename_dir_fallback(
     Ok(())
 }
 
-/// Copy directory recursively, optionally preserving hardlinks
+/// A directory in the destination tree of a cross-device move.
+///
+/// Entries are created relative to its descriptor, so a symlink swapped in at
+/// the destination path cannot redirect the copy out of the tree. Where
+/// `uucore::safe_traversal` is missing, they are created by path instead —
+/// still without following a symlink.
+struct DestDir {
+    /// For messages, hardlink bookkeeping, and the platforms without an anchor.
+    path: PathBuf,
+    /// Unused where `uucore::safe_traversal` is unavailable.
+    #[cfg_attr(
+        any(not(unix), target_os = "aix", target_os = "hurd", target_os = "redox"),
+        allow(dead_code)
+    )]
+    anchor: DestAnchor,
+}
+
+#[cfg(all(
+    unix,
+    not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))
+))]
+type DestAnchor = DirFd;
+#[cfg(any(not(unix), target_os = "aix", target_os = "hurd", target_os = "redox"))]
+type DestAnchor = ();
+
+/// The operations that need the descriptor, where `uucore::safe_traversal`
+/// exists; the other platforms get the block below.
+#[cfg(all(
+    unix,
+    not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))
+))]
+impl DestDir {
+    /// Anchor an already created destination directory.
+    pub fn open(path: &Path) -> io::Result<Self> {
+        Ok(Self {
+            path: path.to_path_buf(),
+            anchor: DirFd::open(path, SymlinkBehavior::NoFollow)?,
+        })
+    }
+
+    /// Remove `name` itself, never what it points at.
+    pub fn remove(&self, name: &OsStr) -> io::Result<()> {
+        // An empty planted directory has to go too, or the retry below fails.
+        match self.anchor.unlink_at(name, /* is_dir */ false) {
+            Err(e) if matches!(e.raw_os_error(), Some(libc::EISDIR) | Some(libc::EPERM)) => {
+                self.anchor.unlink_at(name, /* is_dir */ true)
+            }
+            res => res,
+        }
+    }
+
+    /// Create the subdirectory `name`; the mode is left to the umask.
+    pub fn create_dir(&self, name: &OsStr) -> io::Result<Self> {
+        let child = self.path.join(name);
+        self.anchor
+            .mkdir_at(name, 0o777)
+            .map_err(|e| dest_appeared(&child, e))?;
+        Ok(Self {
+            path: child,
+            anchor: self.anchor.open_subdir(name, SymlinkBehavior::NoFollow)?,
+        })
+    }
+
+    /// `O_EXCL` and `O_NOFOLLOW` mean a planted symlink or hard link is
+    /// reported instead of opened and truncated.
+    #[cfg(unix)]
+    pub fn create_file(&self, name: &OsStr) -> io::Result<fs::File> {
+        self.anchor.open_file_at(name)
+    }
+
+    #[cfg(unix)]
+    pub fn create_symlink(&self, target: &Path, name: &OsStr) -> io::Result<()> {
+        self.anchor.symlink_at(target, name)
+    }
+
+    #[cfg(unix)]
+    pub fn create_fifo(&self, name: &OsStr) -> io::Result<()> {
+        // Where `mkfifoat(2)` is missing, the FIFO is created by path: it still
+        // refuses to follow a symlink at `name`, but the parent path is not
+        // re-anchored.
+        match self.anchor.mkfifo_at(name, FIFO_MODE) {
+            Err(e) if e.kind() == io::ErrorKind::Unsupported => self.mkfifo_by_path(name),
+            res => res,
+        }
+    }
+
+    #[cfg(unix)]
+    pub fn create_hardlink(&self, existing: &Path, name: &OsStr) -> io::Result<()> {
+        self.anchor.link_at(existing, name)
+    }
+
+    /// Best effort: a non-root `mv` cannot hand a file to someone else.
+    #[cfg(unix)]
+    pub fn preserve_owner(&self, from: &Path) {
+        if let Ok((uid, gid)) = source_owner(from) {
+            let _ = self.anchor.fchown(Some(uid), Some(gid));
+        }
+    }
+
+    /// Best effort, as in [`Self::preserve_owner`].
+    #[cfg(unix)]
+    pub fn preserve_owner_at(&self, name: &OsStr, from: &Path) {
+        if let Ok((uid, gid)) = source_owner(from) {
+            let _ = self
+                .anchor
+                .chown_at(name, Some(uid), Some(gid), SymlinkBehavior::NoFollow);
+        }
+    }
+
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "hurd",
+        target_os = "linux",
+        target_os = "android",
+        target_os = "netbsd"
+    ))]
+    pub fn apply_xattrs(&self, xattrs: FxHashMap<OsString, Vec<u8>>) -> io::Result<()> {
+        let dest = fs::File::from(rustix::io::fcntl_dupfd_cloexec(&self.anchor, 0)?);
+        fsxattr::apply_xattrs_fd_ignore_unsupported(&dest, xattrs)
+    }
+}
+
+#[cfg(any(not(unix), target_os = "aix", target_os = "hurd", target_os = "redox"))]
+impl DestDir {
+    // Cannot fail here, but keeps the signature of the descriptor-backed `open`.
+    #[allow(clippy::unnecessary_wraps)]
+    pub fn open(path: &Path) -> io::Result<Self> {
+        Ok(Self {
+            path: path.to_path_buf(),
+            anchor: (),
+        })
+    }
+
+    #[cfg(unix)]
+    pub fn remove(&self, name: &OsStr) -> io::Result<()> {
+        let path = self.path.join(name);
+        if fs::symlink_metadata(&path)?.is_dir() {
+            fs::remove_dir(&path)
+        } else {
+            fs::remove_file(path)
+        }
+    }
+
+    pub fn create_dir(&self, name: &OsStr) -> io::Result<Self> {
+        let child = self.path.join(name);
+        fs::create_dir(&child).map_err(|e| dest_appeared(&child, e))?;
+        Self::open(&child)
+    }
+
+    /// `create_new` means a planted symlink or hard link is reported instead of
+    /// opened and truncated.
+    #[cfg(unix)]
+    pub fn create_file(&self, name: &OsStr) -> io::Result<fs::File> {
+        use std::os::unix::fs::OpenOptionsExt;
+
+        fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(uucore::safe_copy::DEST_INITIAL_MODE)
+            .open(self.path.join(name))
+    }
+
+    #[cfg(unix)]
+    pub fn create_symlink(&self, target: &Path, name: &OsStr) -> io::Result<()> {
+        unix::fs::symlink(target, self.path.join(name))
+    }
+
+    #[cfg(unix)]
+    pub fn create_fifo(&self, name: &OsStr) -> io::Result<()> {
+        self.mkfifo_by_path(name)
+    }
+
+    #[cfg(unix)]
+    pub fn create_hardlink(&self, existing: &Path, name: &OsStr) -> io::Result<()> {
+        fs::hard_link(existing, self.path.join(name))
+    }
+
+    /// Best effort: a non-root `mv` cannot hand a file to someone else.
+    #[cfg(unix)]
+    pub fn preserve_owner(&self, from: &Path) {
+        let _ = preserve_ownership(from, &self.path);
+    }
+
+    #[cfg(unix)]
+    pub fn preserve_owner_at(&self, name: &OsStr, from: &Path) {
+        let _ = preserve_ownership(from, &self.path.join(name));
+    }
+
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "hurd",
+        target_os = "linux",
+        target_os = "android",
+        target_os = "netbsd"
+    ))]
+    pub fn apply_xattrs(&self, xattrs: FxHashMap<OsString, Vec<u8>>) -> io::Result<()> {
+        let dest = fs::File::open(&self.path)?;
+        fsxattr::apply_xattrs_fd_ignore_unsupported(&dest, xattrs)
+    }
+}
+
+impl DestDir {
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    #[cfg(unix)]
+    fn mkfifo_by_path(&self, name: &OsStr) -> io::Result<()> {
+        nix::unistd::mkfifo(
+            &self.path.join(name),
+            nix::sys::stat::Mode::from_bits_truncate(FIFO_MODE as libc::mode_t),
+        )
+        .map_err(|e| io::Error::from_raw_os_error(e as i32))
+    }
+
+    #[cfg(unix)]
+    fn copy_file_in(&self, from: &Path, name: &OsStr) -> io::Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+        use uucore::safe_copy::open_source;
+
+        let source = open_source(from, /* nofollow */ true)?;
+        // `fs::copy` gave the destination the source's permissions; keep that,
+        // apart from setuid/setgid below.
+        let source_mode = source.metadata()?.permissions().mode() & 0o7777;
+        let mut dest = self.create_entry(name, || self.create_file(name))?;
+        uucore::buf_copy::copy_fast(&mut &source, &mut dest)?;
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "hurd",
+            target_os = "linux",
+            target_os = "android",
+            target_os = "netbsd"
+        ))]
+        {
+            let _ = fsxattr::copy_xattrs_fd_ignore_unsupported(&source, &dest);
+        }
+        // chown before chmod: chown(2) clears setuid/setgid, so the final mode
+        // is applied last. If the chown did not take, the destination belongs to
+        // whoever ran `mv` and those bits would run as them instead, so GNU
+        // drops them — as `rename_file_fallback` does.
+        let ownership_preserved = match source_owner(from) {
+            Ok((uid, gid)) => nix::unistd::fchown(
+                &dest,
+                Some(nix::unistd::Uid::from_raw(uid)),
+                Some(nix::unistd::Gid::from_raw(gid)),
+            )
+            .is_ok(),
+            Err(_) => false,
+        };
+        let dest_mode = if ownership_preserved {
+            source_mode
+        } else {
+            source_mode & !0o6000
+        };
+        dest.set_permissions(fs::Permissions::from_mode(dest_mode))?;
+        Ok(())
+    }
+
+    /// Create `name`, replacing an entry already sitting there.
+    ///
+    /// An entry at `name` arrived while the move was running. GNU replaces it
+    /// and finishes, so do we — by unlinking it, since every `create` here
+    /// refuses to follow a symlink. Subdirectories still fail closed.
+    #[cfg(unix)]
+    fn create_entry<T>(&self, name: &OsStr, create: impl Fn() -> io::Result<T>) -> io::Result<T> {
+        match create() {
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                self.remove(name)?;
+                create()
+            }
+            res => res,
+        }
+    }
+
+    #[cfg(unix)]
+    fn copy_symlink_in(&self, from: &Path, name: &OsStr) -> io::Result<()> {
+        let target = fs::read_link(from)?;
+        self.create_entry(name, || self.create_symlink(&target, name))?;
+        // There is no descriptor form of `setxattr` for symlinks, so this one
+        // step goes by path: `name` itself is not followed, but a directory
+        // swapped in above it would redirect the call.
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "hurd",
+            target_os = "linux",
+            target_os = "android",
+            target_os = "netbsd"
+        ))]
+        {
+            let _ = fsxattr::copy_xattrs_ignore_unsupported(from, &self.path.join(name));
+        }
+        self.preserve_owner_at(name, from);
+        fs::remove_file(from)?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    fn copy_fifo_in(&self, from: &Path, name: &OsStr) -> io::Result<()> {
+        self.create_entry(name, || self.create_fifo(name))?;
+        self.preserve_owner_at(name, from);
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    fn copy_hardlink_in(&self, existing: &Path, name: &OsStr) -> io::Result<()> {
+        self.create_entry(name, || self.create_hardlink(existing, name))
+    }
+}
+
+#[cfg(unix)]
+fn source_owner(path: &Path) -> io::Result<(u32, u32)> {
+    use std::os::unix::fs::MetadataExt;
+
+    let metadata = path.symlink_metadata()?;
+    Ok((metadata.uid(), metadata.gid()))
+}
+
+/// Permissions a moved FIFO is created with, before the umask.
+#[cfg(unix)]
+const FIFO_MODE: u32 = 0o666;
+
+/// Report an entry that was already there as the one we refuse to reuse.
+fn dest_appeared(path: &Path, err: io::Error) -> io::Error {
+    if err.kind() == io::ErrorKind::AlreadyExists {
+        io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            translate!("mv-error-dest-appeared", "path" => path.quote()),
+        )
+    } else {
+        err
+    }
+}
+
 /// Create `path`, refusing to reuse anything already there.
 ///
 /// `create_dir_all` would accept a symlink planted at `path` after the caller
 /// removed the destination, redirecting the move out of the destination tree.
 fn create_dir_fail_closed(path: &Path) -> io::Result<()> {
-    fs::create_dir(path).map_err(|e| {
-        if e.kind() == io::ErrorKind::AlreadyExists {
-            io::Error::new(
-                io::ErrorKind::AlreadyExists,
-                translate!("mv-error-dest-appeared", "path" => path.quote()),
-            )
-        } else {
-            e
-        }
-    })
+    fs::create_dir(path).map_err(|e| dest_appeared(path, e))
 }
 
 fn get_dir_size(path: &Path) -> io::Result<u64> {
@@ -1202,27 +1531,25 @@ fn get_dir_size(path: &Path) -> io::Result<u64> {
     Ok(size)
 }
 
+/// Copy `from` into the already created and anchored `dest`.
 fn copy_dir_contents(
     from: &Path,
-    to: &Path,
+    dest: &DestDir,
     #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
     #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
     verbose: bool,
     progress_bar: Option<&ProgressBar>,
     display_manager: Option<&MultiProgress>,
 ) -> io::Result<()> {
-    // Create the destination directory
-    create_dir_fail_closed(to)?;
-
     #[cfg(unix)]
     {
         // Preserve ownership (uid/gid) of the top-level directory
-        let _ = preserve_ownership(from, to);
+        dest.preserve_owner(from);
 
         if let (Some(tracker), Some(scanner)) = (hardlink_tracker, hardlink_scanner) {
             copy_dir_contents_recursive(
                 from,
-                to,
+                dest,
                 tracker,
                 scanner,
                 verbose,
@@ -1233,7 +1560,7 @@ fn copy_dir_contents(
     }
     #[cfg(not(unix))]
     {
-        copy_dir_contents_recursive(from, to, verbose, progress_bar, display_manager)?;
+        copy_dir_contents_recursive(from, dest, verbose, progress_bar, display_manager)?;
     }
 
     Ok(())
@@ -1241,7 +1568,7 @@ fn copy_dir_contents(
 
 fn copy_dir_contents_recursive(
     from_dir: &Path,
-    to_dir: &Path,
+    dest: &DestDir,
     #[cfg(unix)] hardlink_tracker: &mut HardlinkTracker,
     #[cfg(unix)] hardlink_scanner: &HardlinkGroupScanner,
     verbose: bool,
@@ -1268,7 +1595,7 @@ fn copy_dir_contents_recursive(
         let entry = entry?;
         let from_path = entry.path();
         let file_name = from_path.file_name().unwrap();
-        let to_path = to_dir.join(file_name);
+        let to_path = dest.path().join(file_name);
 
         if let Some(pb) = progress_bar {
             pb.set_message(from_path.to_string_lossy().to_string());
@@ -1281,7 +1608,8 @@ fn copy_dir_contents_recursive(
             {
                 copy_file_with_hardlinks_helper(
                     &from_path,
-                    &to_path,
+                    file_name,
+                    dest,
                     hardlink_tracker,
                     hardlink_scanner,
                 )?;
@@ -1294,19 +1622,17 @@ fn copy_dir_contents_recursive(
             print_verbose(&from_path, &to_path);
         } else if from_path.is_dir() {
             // Recursively copy subdirectory (only real directories, not symlinks)
-            create_dir_fail_closed(&to_path)?;
+            let subdir = dest.create_dir(file_name)?;
 
             // Preserve ownership (uid/gid) of the subdirectory
             #[cfg(unix)]
-            {
-                let _ = preserve_ownership(&from_path, &to_path);
-            }
+            subdir.preserve_owner(&from_path);
 
-            print_verbose(&from_path, &to_path);
+            print_verbose(&from_path, subdir.path());
 
             copy_dir_contents_recursive(
                 &from_path,
-                &to_path,
+                &subdir,
                 #[cfg(unix)]
                 hardlink_tracker,
                 #[cfg(unix)]
@@ -1321,7 +1647,8 @@ fn copy_dir_contents_recursive(
             {
                 copy_file_with_hardlinks_helper(
                     &from_path,
-                    &to_path,
+                    file_name,
+                    dest,
                     hardlink_tracker,
                     hardlink_scanner,
                 )?;
@@ -1348,46 +1675,31 @@ fn copy_dir_contents_recursive(
 #[cfg(unix)]
 fn copy_file_with_hardlinks_helper(
     from: &Path,
-    to: &Path,
+    name: &OsStr,
+    dest: &DestDir,
     hardlink_tracker: &mut HardlinkTracker,
     hardlink_scanner: &HardlinkGroupScanner,
 ) -> io::Result<()> {
     // Check if this file should be a hardlink to an already-copied file
     use crate::hardlink::HardlinkOptions;
     let hardlink_options = HardlinkOptions::default();
+    let to_path = dest.path().join(name);
     // Create a hardlink instead of copying
     if let Some(existing_target) =
-        hardlink_tracker.check_hardlink(from, to, hardlink_scanner, &hardlink_options)
+        hardlink_tracker.check_hardlink(from, &to_path, hardlink_scanner, &hardlink_options)
     {
-        fs::hard_link(&existing_target, to)?;
+        dest.copy_hardlink_in(&existing_target, name)?;
         return Ok(());
     }
 
     if from.is_symlink() {
-        // Copy a symlink file (no-follow).
-        // rename_symlink_fallback already preserves ownership and removes the source.
-        rename_symlink_fallback(from, to)?;
+        // Recreate the symlink itself rather than what it points at.
+        dest.copy_symlink_in(from, name)?;
     } else if is_fifo(from.symlink_metadata()?.file_type()) {
-        // rustix::fs::mkfifoat is linux only
-        nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666))?;
-        // Preserve ownership (uid/gid) from the source
-        let _ = preserve_ownership(from, to);
+        dest.copy_fifo_in(from, name)?;
     } else {
         // Copy a regular file.
-        fs::copy(from, to)?;
-        // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
-        #[cfg(any(
-            target_os = "freebsd",
-            target_os = "hurd",
-            target_os = "linux",
-            target_os = "android",
-            target_os = "netbsd"
-        ))]
-        {
-            let _ = fsxattr::copy_xattrs_ignore_unsupported(from, to);
-        }
-        // Preserve ownership (uid/gid) from the source
-        let _ = preserve_ownership(from, to);
+        dest.copy_file_in(from, name)?;
     }
 
     Ok(())
