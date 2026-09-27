@@ -809,13 +809,13 @@ fn set_to_bitmap(set: &[u8]) -> [bool; 256] {
 
 #[derive(Debug)]
 pub struct DeleteOperation {
-    pub(crate) delete_table: [bool; 256],
+    pub(crate) keep_table: [bool; 256],
 }
 
 impl DeleteOperation {
     pub fn new(set: Vec<u8>) -> Self {
         Self {
-            delete_table: set_to_bitmap(&set),
+            keep_table: set_to_bitmap(&set).map(|delete| !delete),
         }
     }
 }
@@ -823,27 +823,20 @@ impl DeleteOperation {
 impl SymbolTranslator for DeleteOperation {
     fn translate(&mut self, current: u8) -> Option<u8> {
         // keep if not present in the delete set
-        (!self.delete_table[current as usize]).then_some(current)
+        self.keep_table[current as usize].then_some(current)
     }
 }
 
 impl ChunkProcessor for DeleteOperation {
     fn process_chunk(&self, input: &[u8], output: &mut Vec<u8>) {
-        use crate::simd::{find_single_change, process_single_delete};
+        use crate::simd::{find_single_change, process_delete, process_single_delete};
 
         // Check if this is single character deletion
-        if let Some((delete_char, _)) =
-            find_single_change(&self.delete_table, |_, &should_delete| should_delete)
-        {
-            process_single_delete(input, output, delete_char);
+        if let Some((delete_char, _)) = find_single_change(&self.keep_table, |_, &keep| !keep) {
+            process_single_delete(input, output, delete_char, &self.keep_table);
         } else {
             // Standard deletion
-            output.extend(
-                input
-                    .iter()
-                    .filter(|&&b| !self.delete_table[b as usize])
-                    .copied(),
-            );
+            process_delete(input, output, &self.keep_table);
         }
     }
 }
