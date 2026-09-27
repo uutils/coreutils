@@ -726,12 +726,19 @@ fn set_to_bitmap(set: &[u8]) -> [bool; 256] {
 #[derive(Debug)]
 pub struct DeleteOperation {
     pub(crate) keep_table: [bool; 256],
+    /// The byte to delete, when it is the only one.
+    single_delete: Option<u8>,
 }
 
 impl DeleteOperation {
     pub fn new(set: Vec<u8>) -> Self {
+        use crate::simd::find_single_change;
+
+        let keep_table = set_to_bitmap(&set).map(|delete| !delete);
+        let single_delete = find_single_change(&keep_table, |_, &keep| !keep).map(|(b, _)| b);
         Self {
-            keep_table: set_to_bitmap(&set).map(|delete| !delete),
+            keep_table,
+            single_delete,
         }
     }
 }
@@ -745,10 +752,9 @@ impl SymbolTranslator for DeleteOperation {
 
 impl ChunkProcessor for DeleteOperation {
     fn process_chunk(&self, input: &[u8], output: &mut Vec<u8>) {
-        use crate::simd::{find_single_change, process_delete, process_single_delete};
+        use crate::simd::{process_delete, process_single_delete};
 
-        // Check if this is single character deletion
-        if let Some((delete_char, _)) = find_single_change(&self.keep_table, |_, &keep| !keep) {
+        if let Some(delete_char) = self.single_delete {
             process_single_delete(input, output, delete_char, &self.keep_table);
         } else {
             // Standard deletion
@@ -760,6 +766,8 @@ impl ChunkProcessor for DeleteOperation {
 #[derive(Debug)]
 pub struct TranslateOperation {
     pub(crate) translation_table: [u8; 256],
+    /// The byte to replace and its replacement, when it is the only one.
+    single_change: Option<(u8, u8)>,
 }
 
 impl TranslateOperation {
@@ -776,14 +784,24 @@ impl TranslateOperation {
                 translation_table[from as usize] = to;
             }
 
-            Ok(Self { translation_table })
+            Ok(Self::from_table(translation_table))
         } else if set1.is_empty() && set2.is_empty() {
             // Identity mapping for empty sets
-            Ok(Self { translation_table })
+            Ok(Self::from_table(translation_table))
         } else {
             // Raised against the solved sets rather than what was typed, so
             // there is nothing to point a caret at.
             Err(BadSequence::EmptySet2WhenNotTruncatingSet1)
+        }
+    }
+
+    fn from_table(translation_table: [u8; 256]) -> Self {
+        use crate::simd::find_single_change;
+
+        let single_change = find_single_change(&translation_table, |i, &val| val != i as u8);
+        Self {
+            translation_table,
+            single_change,
         }
     }
 }
@@ -796,12 +814,9 @@ impl SymbolTranslator for TranslateOperation {
 
 impl ChunkProcessor for TranslateOperation {
     fn process_chunk(&self, input: &[u8], output: &mut Vec<u8>) {
-        use crate::simd::{find_single_change, process_single_char_replace};
+        use crate::simd::process_single_char_replace;
 
-        // Check if this is a simple single-character translation
-        if let Some((source, target)) =
-            find_single_change(&self.translation_table, |i, &val| val != i as u8)
-        {
+        if let Some((source, target)) = self.single_change {
             // Use SIMD-optimized single character replacement
             process_single_char_replace(input, output, source, target);
         } else {
