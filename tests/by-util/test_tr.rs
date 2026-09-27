@@ -1769,9 +1769,11 @@ fn test_failed_write_is_reported() {
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI: no pipe/signal support")]
 fn test_broken_pipe_no_error() {
+    // More than a pipe buffer, so that the output blocks until the reader is gone.
     new_ucmd!()
         .args(&["e", "a"])
-        .pipe_in("hello".repeat(100))
+        .pipe_in("hello".repeat(100_000))
+        .ignore_stdin_write_error()
         .run_stdout_starts_with(b"")
         .fails_silently();
 }

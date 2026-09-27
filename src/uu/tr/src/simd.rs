@@ -144,7 +144,9 @@ where
 }
 
 /// Helper function to handle platform-specific write operations
-#[inline]
+// Kept out of line: inlined into `translate_input`, the raw `write` made the
+// translator state go to memory on every byte, doubling the time of `tr -s`.
+#[inline(never)]
 pub fn write_output<W: Write>(output: &mut W, buf: &[u8]) -> UResult<()> {
     #[cfg(not(windows))]
     return output
