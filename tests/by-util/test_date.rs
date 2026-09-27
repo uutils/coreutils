@@ -2691,6 +2691,17 @@ fn test_locale_day_names() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_locale_names_for_several_dates_in_one_run() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("dates", "2026-01-26\n2026-06-14\n2026-12-12\n");
+    ucmd.env("LC_ALL", "fr_FR.UTF-8")
+        .args(&["-f", "dates", "+%A %a %B %b"])
+        .succeeds()
+        .stdout_is("lundi lun. janvier janv\ndimanche dim. juin juin\nsamedi sam. décembre déc\n");
+}
+
+#[test]
 fn test_percent_percent_not_replaced() {
     let cases = [
         // Time conversion specifiers
