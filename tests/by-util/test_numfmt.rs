@@ -1295,6 +1295,46 @@ fn test_format_with_invalid_precision() {
 }
 
 #[test]
+fn test_format_error_escapes_special_characters() {
+    // A control character in --format used to be written to stderr verbatim,
+    // which split the error across lines or moved the cursor. Each error that
+    // quotes the format is covered here.
+    let cases = [
+        ("ab\ncd", r"format 'ab\ncd' has no % directive"),
+        ("a\nb%", r"format 'a\nb%' ends in %"),
+        ("a\nb%f%", r"format 'a\nb%f%' has too many % directives"),
+        ("a\tb%f%", r"format 'a\tb%f%' has too many % directives"),
+        ("a\\b%f%", r"format 'a\\b%f%' has too many % directives"),
+        ("a'b%f%", r"format 'a\'b%f%' has too many % directives"),
+        (
+            "a\nb%q",
+            r"invalid format 'a\nb%q', directive must be %[0]['][-][N][.][N]f",
+        ),
+        (
+            "a\nb%99999999999999999999f",
+            r"invalid format 'a\nb%99999999999999999999f' (width overflow)",
+        ),
+        ("a\nb%.-f", r"invalid precision in format 'a\nb%.-f'"),
+    ];
+
+    for (invalid_format, expected) in cases {
+        new_ucmd!()
+            .arg(format!("--format={invalid_format}"))
+            .fails_with_code(1)
+            .stderr_contains(expected);
+    }
+}
+
+#[test]
+fn test_format_error_keeps_printable_characters_as_is() {
+    // Guards against over-escaping: a space is printable and must stay a space.
+    new_ucmd!()
+        .arg("--format=a b%f%")
+        .fails_with_code(1)
+        .stderr_contains("format 'a b%f%' has too many % directives");
+}
+
+#[test]
 fn test_format_grouping_conflicts_with_to_option() {
     new_ucmd!()
         .args(&["--format=%'f", "--to=si"])
