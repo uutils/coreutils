@@ -1306,6 +1306,8 @@ fn test_format_error_escapes_special_characters() {
         ("a\tb%f%", r"format 'a\tb%f%' has too many % directives"),
         ("a\\b%f%", r"format 'a\\b%f%' has too many % directives"),
         ("a'b%f%", r"format 'a\'b%f%' has too many % directives"),
+        // A space is printable and must stay a space, not become "\ ".
+        ("a b%f%", r"format 'a b%f%' has too many % directives"),
         (
             "a\nb%q",
             r"invalid format 'a\nb%q', directive must be %[0]['][-][N][.][N]f",
@@ -1323,15 +1325,6 @@ fn test_format_error_escapes_special_characters() {
             .fails_with_code(1)
             .stderr_contains(expected);
     }
-}
-
-#[test]
-fn test_format_error_keeps_printable_characters_as_is() {
-    // Guards against over-escaping: a space is printable and must stay a space.
-    new_ucmd!()
-        .arg("--format=a b%f%")
-        .fails_with_code(1)
-        .stderr_contains("format 'a b%f%' has too many % directives");
 }
 
 #[test]
