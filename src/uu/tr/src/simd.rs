@@ -49,14 +49,64 @@ pub fn process_single_char_replace(
 }
 
 /// SIMD-optimized delete operation for single character
-pub fn process_single_delete(input: &[u8], output: &mut Vec<u8>, delete_char: u8) {
+///
+/// `keep` must be false for `delete_char` only.
+pub fn process_single_delete(
+    input: &[u8],
+    output: &mut Vec<u8>,
+    delete_char: u8,
+    keep: &[bool; 256],
+) {
     let count = bytecount::count(input, delete_char);
     if count == 0 {
         output.extend_from_slice(input);
+    } else if count < input.len() / 128 {
+        // Below one match per 128 bytes, copying the runs between matches
+        // beats `process_delete`.
+        let mut start = 0;
+        for pos in memchr::memchr_iter(delete_char, input) {
+            output.extend_from_slice(&input[start..pos]);
+            start = pos + 1;
+        }
+        output.extend_from_slice(&input[start..]);
     } else if count < input.len() {
-        output.extend(input.iter().filter(|&&b| b != delete_char).copied());
+        process_delete(input, output, keep);
     }
     // If count == input.len(), all deleted, output nothing
+}
+
+/// Append to `output` the bytes of `input` whose `keep` entry is true.
+pub fn process_delete(input: &[u8], output: &mut Vec<u8>, keep: &[bool; 256]) {
+    // The index is always below `BLOCK` (a power of two), so the modulo is a
+    // mask that only serves to drop the bounds check.
+    const BLOCK: usize = 1024;
+    // Below one kept byte in `FEW`, a branch per byte is well predicted and
+    // stores less.
+    const FEW: usize = 64;
+    let mut block = [0; BLOCK];
+    // Guess for the first block from its start, then go by the previous one.
+    let start = &input[..input.len().min(256)];
+    let mut few_kept = start.iter().filter(|&&b| keep[b as usize]).count() * FEW < start.len();
+    for chunk in input.chunks(BLOCK) {
+        let mut kept = 0;
+        if few_kept {
+            // Only store the kept bytes.
+            for &b in chunk {
+                if keep[b as usize] {
+                    block[kept % BLOCK] = b;
+                    kept += 1;
+                }
+            }
+        } else {
+            // Store every byte and only advance past kept ones: no branch.
+            for &b in chunk {
+                block[kept % BLOCK] = b;
+                kept += usize::from(keep[b as usize]);
+            }
+        }
+        output.extend_from_slice(&block[..kept]);
+        few_kept = kept * FEW < chunk.len();
+    }
 }
 
 /// Unified I/O processing for all operations

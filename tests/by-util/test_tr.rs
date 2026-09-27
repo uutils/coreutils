@@ -157,6 +157,69 @@ fn test_delete_complement_2() {
 }
 
 #[test]
+fn test_delete_one_char_large_input() {
+    // Longer than one read, with no, few, many and only matches. `few` is
+    // sparse enough for the path that copies the runs between matches.
+    let none = vec![b'x'; 40_000];
+    let few = [[b'x'; 999].as_slice(), b","].concat().repeat(40);
+    let many = b"a,".repeat(20_000);
+    let only = vec![b','; 40_000];
+    for input in [none, few, many, only] {
+        let expected: Vec<u8> = input.iter().copied().filter(|&b| b != b',').collect();
+        new_ucmd!()
+            .args(&["-d", ","])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is_bytes(expected);
+    }
+}
+
+#[test]
+fn test_delete_set_large_input() {
+    let input: Vec<u8> = (0..=u8::MAX).cycle().take(40_000).collect();
+
+    let expected: Vec<u8> = input
+        .iter()
+        .copied()
+        .filter(|&b| !matches!(b, 0 | b'a'..=b'f' | u8::MAX))
+        .collect();
+    new_ucmd!()
+        .args(&["-d", "\\000a-f\\377"])
+        .pipe_in(input.clone())
+        .succeeds()
+        .stdout_is_bytes(expected);
+
+    let expected: Vec<u8> = input
+        .iter()
+        .copied()
+        .filter(u8::is_ascii_lowercase)
+        .collect();
+    new_ucmd!()
+        .args(&["-cd", "a-z"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(expected);
+}
+
+#[test]
+fn test_delete_set_mostly_deleted() {
+    // Almost everything deleted, then half, then almost everything again.
+    let few_kept = [[b'a'; 99].as_slice(), b"\n"].concat().repeat(100);
+    let half_kept = b"a\n".repeat(5_000);
+    let input = [few_kept.as_slice(), &half_kept, &few_kept].concat();
+    let expected: Vec<u8> = input
+        .iter()
+        .copied()
+        .filter(|b| !b.is_ascii_lowercase())
+        .collect();
+    new_ucmd!()
+        .args(&["-d", "a-z"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(expected);
+}
+
+#[test]
 fn test_complement1() {
     new_ucmd!()
         .args(&["-c", "a", "X"])
