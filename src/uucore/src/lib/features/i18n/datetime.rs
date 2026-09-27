@@ -79,6 +79,12 @@ thread_local! {
         DateTimeFormatter::try_new(get_time_locale().0.clone().into(), fieldsets::E::short()).ok();
 }
 
+macro_rules! format_with {
+    ($formatter:ident, $date:expr) => {
+        $formatter.with(|f| Some(f.as_ref()?.format($date).to_string()))
+    };
+}
+
 /// Transform a strftime format string to use locale-specific calendar values
 pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     const PERCENT_PLACEHOLDER: &str = "\x00\x00";
@@ -127,13 +133,12 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
 
     // Format localized names using ICU DateTimeFormatter
     if fmt.contains("%B")
-        && let Some(name) = MONTH_LONG.with(|f| Some(f.as_ref()?.format(&iso_date).to_string()))
+        && let Some(name) = format_with!(MONTH_LONG, &iso_date)
     {
         fmt = fmt.replace("%B", &name);
     }
     if (fmt.contains("%b") || fmt.contains("%h"))
-        && let Some(month_abbrev) =
-            MONTH_MEDIUM.with(|f| Some(f.as_ref()?.format(&iso_date).to_string()))
+        && let Some(month_abbrev) = format_with!(MONTH_MEDIUM, &iso_date)
     {
         // ICU's medium format may include trailing periods (e.g., "febr." for Hungarian),
         // which when combined with locale format strings that also add periods after
@@ -146,12 +151,12 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
             .replace("%h", &month_abbrev);
     }
     if fmt.contains("%A")
-        && let Some(name) = WEEKDAY_LONG.with(|f| Some(f.as_ref()?.format(&iso_date).to_string()))
+        && let Some(name) = format_with!(WEEKDAY_LONG, &iso_date)
     {
         fmt = fmt.replace("%A", &name);
     }
     if fmt.contains("%a")
-        && let Some(name) = WEEKDAY_SHORT.with(|f| Some(f.as_ref()?.format(&iso_date).to_string()))
+        && let Some(name) = format_with!(WEEKDAY_SHORT, &iso_date)
     {
         fmt = fmt.replace("%a", &name);
     }
