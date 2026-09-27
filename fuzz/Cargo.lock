@@ -1954,6 +1954,7 @@ dependencies = [
  "bytecount",
  "clap",
  "fluent",
+ "memchr",
  "nom",
  "uucore",
 ]

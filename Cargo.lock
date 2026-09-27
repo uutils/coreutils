@@ -4313,6 +4313,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "memchr",
  "nom 8.0.0",
  "rustix",
  "uucore",
