@@ -2134,21 +2134,20 @@ fn context_for(src: &Path, dest: &Path) -> String {
     format!("{} -> {}", src.quote(), dest.quote())
 }
 
-/// Implements a simple backup copy for the destination file .
-/// if `is_dest_symlink` flag is set to true dest will be renamed to `backup_path`
-/// TODO: for the backup, should this function be replaced by `copy_file(...)`?
-fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyResult<()> {
-    if is_dest_symlink {
-        fs::rename(dest, backup_path)?;
-    } else {
+/// Back up `dest` onto `backup_path` and report whether `dest` was moved away.
+/// When `dest` is also the source the backup is a copy and `dest` stays.
+fn backup_dest(dest: &Path, backup_path: &Path, dest_is_source: bool) -> CopyResult<bool> {
+    if dest_is_source {
         match fs::remove_file(backup_path) {
             Ok(()) => {}
             Err(err) if err.kind() == io::ErrorKind::NotFound => {}
             Err(err) => return Err(err.into()),
         }
         fs::copy(dest, backup_path)?;
+        return Ok(false);
     }
-    Ok(())
+    fs::rename(dest, backup_path)?;
+    Ok(true)
 }
 
 /// Decide whether `source` and `dest` are the same directory entry, as opposed
@@ -2158,6 +2157,35 @@ fn paths_are_same_entry(source: &Path, dest: &Path) -> bool {
         .ok()
         .zip(canonicalize(dest, MissingHandling::Normal, ResolveMode::Physical).ok())
         .is_some_and(|(s, d)| s == d)
+}
+
+/// Decide whether `source` and `dest` name one directory entry, comparing the
+/// final component without following symlinks.
+fn names_are_same_entry(source: &Path, dest: &Path) -> bool {
+    fn parent_dir(path: &Path) -> &Path {
+        path.parent()
+            .filter(|dir| !dir.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."))
+    }
+
+    if source.file_name() != dest.file_name() {
+        return false;
+    }
+    canonicalize(
+        parent_dir(source),
+        MissingHandling::Normal,
+        ResolveMode::Physical,
+    )
+    .ok()
+    .zip(
+        canonicalize(
+            parent_dir(dest),
+            MissingHandling::Normal,
+            ResolveMode::Physical,
+        )
+        .ok(),
+    )
+    .is_some_and(|(source_dir, dest_dir)| source_dir == dest_dir)
 }
 
 /// Decide whether source and destination files are the same and
@@ -2237,17 +2265,24 @@ fn handle_existing_dest(
         options.overwrite.verify(dest, options.debug)?;
     }
 
-    let mut is_dest_removed = false;
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
-    if let Some(backup_path) = backup_path {
-        if backup_would_destroy_source(source, dest, &options.backup_suffix, options.backup, true) {
-            return Err(translate!("cp-error-backing-up-destroy-source", "dest" => dest.quote(), "source" => source.quote())
-            .into());
+    let dest_moved_aside = match backup_path {
+        Some(backup_path) => {
+            if backup_would_destroy_source(
+                source,
+                dest,
+                &options.backup_suffix,
+                options.backup,
+                true,
+            ) {
+                return Err(translate!("cp-error-backing-up-destroy-source", "dest" => dest.quote(), "source" => source.quote())
+                .into());
+            }
+            backup_dest(dest, &backup_path, names_are_same_entry(source, dest))?
         }
-        is_dest_removed = dest.is_symlink();
-        backup_dest(dest, &backup_path, is_dest_removed)?;
-    }
-    if !is_dest_removed {
+        None => false,
+    };
+    if !dest_moved_aside {
         delete_dest_if_needed_and_allowed(
             source,
             dest,
@@ -2454,8 +2489,9 @@ fn handle_copy_mode(
             if dest.exists() {
                 let backup_path =
                     backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
-                if let Some(backup_path) = backup_path {
-                    backup_dest(dest, &backup_path, dest.is_symlink())?;
+                if let Some(backup_path) = backup_path
+                    && !backup_dest(dest, &backup_path, names_are_same_entry(source, dest))?
+                {
                     fs::remove_file(dest)?;
                 }
                 force = options.overwrite == OverwriteMode::Clobber(ClobberMode::Force);
