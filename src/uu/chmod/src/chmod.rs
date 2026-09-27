@@ -317,8 +317,7 @@ struct ChmodFrame {
     dir_fd: DirFd,
     dir_path: PathBuf,
     dir_info: Option<FileInformation>,
-    entries: Vec<OsString>,
-    entry_idx: usize,
+    entries: std::vec::IntoIter<OsString>,
 }
 
 impl Chmoder {
@@ -719,15 +718,11 @@ impl Chmoder {
             dir_fd,
             dir_path: dir_path.to_path_buf(),
             dir_info,
-            entries,
-            entry_idx: 0,
+            entries: entries.into_iter(),
         }];
 
         while let Some(top) = stack.last_mut() {
-            if top.entry_idx < top.entries.len() {
-                let entry_name = top.entries[top.entry_idx].clone();
-                top.entry_idx += 1;
-
+            if let Some(entry_name) = top.entries.next() {
                 let entry_path = top.dir_path.join(&entry_name);
 
                 let dir_meta: std::io::Result<uucore::safe_traversal::Metadata> = top
@@ -793,8 +788,7 @@ impl Chmoder {
                                             dir_fd: child_dir_fd,
                                             dir_path: entry_path,
                                             dir_info: child_info,
-                                            entries: child_entries,
-                                            entry_idx: 0,
+                                            entries: child_entries.into_iter(),
                                         });
                                     }
                                     Err(err) => {
@@ -822,13 +816,10 @@ impl Chmoder {
                         }
                     }
                 }
-            } else {
+            } else if let Some(info) = stack.pop().and_then(|f| f.dir_info) {
                 // Backtrack so sibling subtrees that legitimately reach the same directory
                 // (e.g. two symlinks to one dir) are not mistaken for cycles.
-                let finished = stack.pop().unwrap();
-                if let Some(info) = finished.dir_info {
-                    ancestors.remove(&info);
-                }
+                ancestors.remove(&info);
             }
         }
 

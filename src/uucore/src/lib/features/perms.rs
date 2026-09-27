@@ -282,8 +282,7 @@ struct PermsFrame {
     dir_fd: DirFd,
     dir_path: std::path::PathBuf,
     dir_info: Option<FileInformation>,
-    entries: Vec<OsString>,
-    entry_idx: usize,
+    entries: std::vec::IntoIter<OsString>,
 }
 
 impl ChownExecutor {
@@ -552,9 +551,12 @@ impl ChownExecutor {
                 *ret = 1;
                 if self.verbosity.level != VerbosityLevel::Silent {
                     show_error!(
-                        "cannot read directory {}: {}",
-                        dir_path.quote(),
-                        strip_errno(&e)
+                        "{}",
+                        translate!(
+                            "perms-cannot-read-directory",
+                            "file" => dir_path.quote(),
+                            "error" => strip_errno(&e)
+                        )
                     );
                 }
                 if let Some(info) = dir_info {
@@ -568,15 +570,11 @@ impl ChownExecutor {
             dir_fd,
             dir_path: dir_path.to_path_buf(),
             dir_info,
-            entries,
-            entry_idx: 0,
+            entries: entries.into_iter(),
         }];
 
         while let Some(top) = stack.last_mut() {
-            if top.entry_idx < top.entries.len() {
-                let entry_name = top.entries[top.entry_idx].clone();
-                top.entry_idx += 1;
-
+            if let Some(entry_name) = top.entries.next() {
                 let entry_path = top.dir_path.join(&entry_name);
 
                 // Get metadata for the entry
@@ -600,7 +598,10 @@ impl ChownExecutor {
                     && is_root(&entry_path, self.traverse_symlinks == TraverseSymlinks::All)
                 {
                     *ret = 1;
-                    return;
+                    if let Some(info) = stack.pop().and_then(|f| f.dir_info) {
+                        ancestors.remove(&info);
+                    }
+                    continue;
                 }
 
                 // Check if we should chown this entry
@@ -671,8 +672,7 @@ impl ChownExecutor {
                                         dir_fd: subdir_fd,
                                         dir_path: entry_path,
                                         dir_info: child_info,
-                                        entries: child_entries,
-                                        entry_idx: 0,
+                                        entries: child_entries.into_iter(),
                                     });
                                 }
                                 Err(e) => {
@@ -682,9 +682,12 @@ impl ChownExecutor {
                                     *ret = 1;
                                     if self.verbosity.level != VerbosityLevel::Silent {
                                         show_error!(
-                                            "cannot read directory {}: {}",
-                                            entry_path.quote(),
-                                            strip_errno(&e)
+                                            "{}",
+                                            translate!(
+                                                "perms-cannot-read-directory",
+                                                "file" => entry_path.quote(),
+                                                "error" => strip_errno(&e)
+                                            )
                                         );
                                     }
                                 }
@@ -701,11 +704,8 @@ impl ChownExecutor {
                         }
                     }
                 }
-            } else {
-                let finished = stack.pop().unwrap();
-                if let Some(info) = finished.dir_info {
-                    ancestors.remove(&info);
-                }
+            } else if let Some(info) = stack.pop().and_then(|f| f.dir_info) {
+                ancestors.remove(&info);
             }
         }
     }

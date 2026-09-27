@@ -122,6 +122,7 @@ struct FileInfo {
     dev_id: u64,
 }
 
+#[derive(Clone)]
 struct Stat {
     path: PathBuf,
     size: u64,
@@ -211,6 +212,17 @@ impl Stat {
             metadata: std_metadata,
             latest_time,
         })
+    }
+
+    fn merge(&mut self, other: &Self) {
+        self.size += other.size;
+        self.blocks += other.blocks;
+        self.inodes += other.inodes;
+        self.latest_time = match (self.latest_time, other.latest_time) {
+            (Some(a), Some(b)) => Some(a.max(b)),
+            (a, None) => a,
+            (None, b) => b,
+        };
     }
 }
 
@@ -359,8 +371,7 @@ struct DuFrame {
     dir_path: PathBuf,
     depth: usize,
     my_stat: Stat,
-    entries: Vec<OsString>,
-    entry_idx: usize,
+    entries: std::vec::IntoIter<OsString>,
 }
 
 #[cfg(all(unix, not(target_os = "redox")))]
@@ -462,20 +473,18 @@ fn safe_du(
         }
     };
 
+    let mut last_stat = my_stat.clone();
+
     let mut stack = vec![DuFrame {
         dir_fd,
         dir_path: path.to_path_buf(),
         depth,
         my_stat,
-        entries,
-        entry_idx: 0,
+        entries: entries.into_iter(),
     }];
 
     while let Some(top) = stack.last_mut() {
-        if top.entry_idx < top.entries.len() {
-            let entry_name = top.entries[top.entry_idx].clone();
-            top.entry_idx += 1;
-
+        if let Some(entry_name) = top.entries.next() {
             // First get the lstat (without following symlinks) to check if it's a symlink
             let lstat = match top.dir_fd.stat_at(&entry_name, SymlinkBehavior::NoFollow) {
                 Ok(stat) => stat,
@@ -542,7 +551,7 @@ fn safe_du(
             } else {
                 // For files
                 Stat {
-                    path: child_path.clone(),
+                    path: child_path,
                     #[allow(clippy::unnecessary_cast)]
                     size: entry_stat.st_size as u64,
                     #[allow(clippy::unnecessary_cast)]
@@ -597,18 +606,10 @@ fn safe_du(
                     Ok(fd) => fd,
                     Err(e) => {
                         print_tx.send(Err(e.map_err_context(
-                            || translate!("du-error-cannot-read-directory", "path" => child_path.quote()),
+                            || translate!("du-error-cannot-read-directory", "path" => this_stat.path.quote()),
                         )))?;
                         if !options.separate_dirs {
-                            top.my_stat.size += this_stat.size;
-                            top.my_stat.blocks += this_stat.blocks;
-                            top.my_stat.inodes += this_stat.inodes;
-                            top.my_stat.latest_time =
-                                match (top.my_stat.latest_time, this_stat.latest_time) {
-                                    (Some(a), Some(b)) => Some(a.max(b)),
-                                    (a, None) => a,
-                                    (None, b) => b,
-                                };
+                            top.my_stat.merge(&this_stat);
                         }
                         print_tx.send(Ok(StatPrintInfo {
                             stat: this_stat,
@@ -622,18 +623,10 @@ fn safe_du(
                     Ok(entries) => entries,
                     Err(e) => {
                         print_tx.send(Err(e.map_err_context(
-                            || translate!("du-error-cannot-read-directory", "path" => child_path.quote()),
+                            || translate!("du-error-cannot-read-directory", "path" => this_stat.path.quote()),
                         )))?;
                         if !options.separate_dirs {
-                            top.my_stat.size += this_stat.size;
-                            top.my_stat.blocks += this_stat.blocks;
-                            top.my_stat.inodes += this_stat.inodes;
-                            top.my_stat.latest_time =
-                                match (top.my_stat.latest_time, this_stat.latest_time) {
-                                    (Some(a), Some(b)) => Some(a.max(b)),
-                                    (a, None) => a,
-                                    (None, b) => b,
-                                };
+                            top.my_stat.merge(&this_stat);
                         }
                         print_tx.send(Ok(StatPrintInfo {
                             stat: this_stat,
@@ -645,21 +638,13 @@ fn safe_du(
 
                 stack.push(DuFrame {
                     dir_fd: child_dir_fd,
-                    dir_path: child_path,
+                    dir_path: this_stat.path.clone(),
                     depth: child_depth,
                     my_stat: this_stat,
-                    entries: child_entries,
-                    entry_idx: 0,
+                    entries: child_entries.into_iter(),
                 });
             } else {
-                top.my_stat.size += this_stat.size;
-                top.my_stat.blocks += this_stat.blocks;
-                top.my_stat.inodes += 1;
-                top.my_stat.latest_time = match (top.my_stat.latest_time, this_stat.latest_time) {
-                    (Some(a), Some(b)) => Some(a.max(b)),
-                    (a, None) => a,
-                    (None, b) => b,
-                };
+                top.my_stat.merge(&this_stat);
                 if options.all {
                     print_tx.send(Ok(StatPrintInfo {
                         stat: this_stat,
@@ -667,33 +652,23 @@ fn safe_du(
                     }))?;
                 }
             }
-        } else {
-            // Finished all entries in the current directory: pop it
-            let finished = stack.pop().unwrap();
+        } else if let Some(finished) = stack.pop() {
             if let Some(parent) = stack.last_mut() {
                 if !options.separate_dirs {
-                    parent.my_stat.size += finished.my_stat.size;
-                    parent.my_stat.blocks += finished.my_stat.blocks;
-                    parent.my_stat.inodes += finished.my_stat.inodes;
-                    parent.my_stat.latest_time =
-                        match (parent.my_stat.latest_time, finished.my_stat.latest_time) {
-                            (Some(a), Some(b)) => Some(a.max(b)),
-                            (a, None) => a,
-                            (None, b) => b,
-                        };
+                    parent.my_stat.merge(&finished.my_stat);
                 }
                 print_tx.send(Ok(StatPrintInfo {
                     stat: finished.my_stat,
                     depth: finished.depth,
                 }))?;
             } else {
-                // Popped the root directory: return its aggregated stat
-                return Ok(finished.my_stat);
+                last_stat = finished.my_stat;
+                break;
             }
         }
     }
 
-    unreachable!()
+    Ok(last_stat)
 }
 
 // this takes `my_stat` to avoid having to stat files multiple times.
