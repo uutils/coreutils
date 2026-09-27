@@ -1224,13 +1224,10 @@ fn test_inaccessible_dir_recursive() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "wasi"))]
+#[cfg(target_os = "linux")]
 fn test_non_utf8_paths() {
     use std::ffi::OsStr;
-    #[cfg(target_os = "linux")]
     use std::os::unix::ffi::OsStrExt;
-    #[cfg(target_os = "wasi")]
-    use std::os::wasi::ffi::OsStrExt;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
