@@ -1871,7 +1871,6 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
 /// Copy the specified attributes from one path to another.
 /// If `skip_selinux_xattr` is true, the security.selinux xattr will not be copied
 /// (used when -Z is specified to set the default context instead).
-#[allow(unused_variables)]
 pub(crate) fn copy_attributes(
     source: &Path,
     dest: &Path,
@@ -1879,9 +1878,31 @@ pub(crate) fn copy_attributes(
     dest_is_freshly_created_dir: bool,
     skip_selinux_xattr: bool,
 ) -> CopyResult<()> {
+    let source_metadata = fs::symlink_metadata(source)
+        .map_err(|e| CpError::IoErrContext(e, context_for(source, dest)))?;
+    copy_attributes_with_metadata(
+        source,
+        &source_metadata,
+        dest,
+        attributes,
+        dest_is_freshly_created_dir,
+        skip_selinux_xattr,
+    )
+}
+
+/// Like [`copy_attributes`], with the source's metadata read by the caller.
+/// Reading it before copying the contents keeps the access time the source
+/// had before the copy read it.
+#[allow(unused_variables)]
+fn copy_attributes_with_metadata(
+    source: &Path,
+    source_metadata: &Metadata,
+    dest: &Path,
+    attributes: &Attributes,
+    dest_is_freshly_created_dir: bool,
+    skip_selinux_xattr: bool,
+) -> CopyResult<()> {
     let context = &*format!("{} -> {}", source.quote(), dest.quote());
-    let source_metadata =
-        fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
     let mode_explicitly_disabled = matches!(attributes.mode, Preserve::No { explicit: true });
 
@@ -1994,7 +2015,7 @@ pub(crate) fn copy_attributes(
     })?;
 
     handle_preserve(attributes.timestamps, || -> CopyResult<()> {
-        let (atime, mtime) = source_times(&source_metadata, context)?;
+        let (atime, mtime) = source_times(source_metadata, context)?;
         // `set_file_times` opens the destination (O_RDONLY) before calling
         // futimens; opening a FIFO or device with no peer blocks forever, and a
         // socket cannot be opened at all. For symlinks and these special files
@@ -2878,8 +2899,9 @@ fn copy_file(
             .ok()
             .filter(|p| p.exists())
             .unwrap_or_else(|| source.to_path_buf());
-        copy_attributes(
+        copy_attributes_with_metadata(
             &src_for_attrs,
+            &source_metadata,
             dest,
             &options.attributes,
             false,
@@ -2892,8 +2914,9 @@ fn copy_file(
         // copy function (see `copy_stream` under platform/linux.rs).
         Ok(())
     } else {
-        copy_attributes(
+        copy_attributes_with_metadata(
             source,
+            &source_metadata,
             dest,
             &options.attributes,
             false,

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) filefrag rlimit Rlim Nofile clob btrfs neve ROOTDIR USERDIR outfile subvolume uufs xattrs ELOOP
+// spell-checker:ignore (flags) reflink (fs) relatime tmpfs (linux) filefrag rlimit Rlim Nofile clob btrfs neve ROOTDIR USERDIR outfile subvolume uufs xattrs ELOOP
 // spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx dstlink mcstransd
 
 #[cfg(unix)]
@@ -1977,6 +1977,10 @@ fn test_cp_parents_with_permissions_copy_file() {
         at.set_mode(file, file_mode);
     }
 
+    // Read before the copy, which reads the file and updates its access time.
+    #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
+    let file_metadata = at.metadata(file);
+
     ucmd.arg("-p")
         .arg("--parents")
         .arg(file)
@@ -1987,7 +1991,6 @@ fn test_cp_parents_with_permissions_copy_file() {
     {
         let p1_metadata = at.metadata("p1");
         let p2_metadata = at.metadata("p1/p2");
-        let file_metadata = at.metadata(file);
 
         assert_metadata_eq!(p1_metadata, at.metadata("dir/p1"));
         assert_metadata_eq!(p2_metadata, at.metadata("dir/p1/p2"));
@@ -2023,6 +2026,10 @@ fn test_cp_parents_with_permissions_copy_dir() {
         at.set_mode(file, file_mode);
     }
 
+    // Read before the copy, which reads the file and updates its access time.
+    #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
+    let file_metadata = at.metadata(file);
+
     ucmd.arg("-p")
         .arg("--parents")
         .arg("-r")
@@ -2034,7 +2041,6 @@ fn test_cp_parents_with_permissions_copy_dir() {
     {
         let p1_metadata = at.metadata("p1");
         let p2_metadata = at.metadata("p1/p2");
-        let file_metadata = at.metadata(file);
 
         assert_metadata_eq!(p1_metadata, at.metadata("dir/p1"));
         assert_metadata_eq!(p2_metadata, at.metadata("dir/p1/p2"));
@@ -2081,6 +2087,10 @@ fn test_cp_preserve_no_args() {
     #[cfg(unix)]
     at.set_mode(src_file, 0o0500);
 
+    // Read before the copy, which reads the file and updates its access time.
+    #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
+    let metadata_src = at.metadata(src_file);
+
     // Copy
     ucmd.arg(src_file)
         .arg(dst_file)
@@ -2091,7 +2101,6 @@ fn test_cp_preserve_no_args() {
     {
         // Assert that the mode, ownership, and timestamps are preserved
         // NOTICE: the ownership is not modified on the src file, because that requires root permissions
-        let metadata_src = at.metadata(src_file);
         let metadata_dst = at.metadata(dst_file);
         assert_metadata_eq!(metadata_src, metadata_dst);
     }
@@ -2113,6 +2122,10 @@ fn test_cp_preserve_no_args_before_opts() {
     #[cfg(unix)]
     at.set_mode(src_file, 0o0500);
 
+    // Read before the copy, which reads the file and updates its access time.
+    #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
+    let metadata_src = at.metadata(src_file);
+
     // Copy
     ucmd.arg("--preserve")
         .arg(src_file)
@@ -2123,7 +2136,6 @@ fn test_cp_preserve_no_args_before_opts() {
     {
         // Assert that the mode, ownership, and timestamps are preserved
         // NOTICE: the ownership is not modified on the src file, because that requires root permissions
-        let metadata_src = at.metadata(src_file);
         let metadata_dst = at.metadata(dst_file);
         assert_metadata_eq!(metadata_src, metadata_dst);
     }
@@ -2145,6 +2157,10 @@ fn test_cp_preserve_all() {
         #[cfg(unix)]
         at.set_mode(src_file, 0o0500);
 
+        // Read before the copy, which reads the file and updates its access time.
+        #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
+        let metadata_src = at.metadata(src_file);
+
         // TODO: create a destination that does not allow copying of xattr and context
         // Copy
         ucmd.arg(src_file).arg(dst_file).arg(argument).succeeds();
@@ -2153,7 +2169,6 @@ fn test_cp_preserve_all() {
         {
             // Assert that the mode, ownership, and timestamps are preserved
             // NOTICE: the ownership is not modified on the src file, because that requires root permissions
-            let metadata_src = at.metadata(src_file);
             let metadata_dst = at.metadata(dst_file);
             assert_metadata_eq!(metadata_src, metadata_dst);
         }
@@ -2864,6 +2879,34 @@ fn test_cp_preserve_timestamps() {
 
     println!("ls dest {}", result.stdout_str());
     assert_eq!(creation, creation2);
+}
+
+#[test]
+fn test_cp_preserve_timestamps_keeps_access_time_from_before_the_copy() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // Even a `relatime` mount updates an access time this old when the copy
+    // reads the file.
+    let accessed = std::time::UNIX_EPOCH + Duration::from_secs(1_000_000_000);
+    let modified = accessed + Duration::from_secs(3600);
+    at.write("source", "contents");
+    std::fs::File::options()
+        .write(true)
+        .open(at.plus("source"))
+        .unwrap()
+        .set_times(
+            std::fs::FileTimes::new()
+                .set_accessed(accessed)
+                .set_modified(modified),
+        )
+        .unwrap();
+
+    ucmd.args(&["--preserve=timestamps", "source", "destination"])
+        .succeeds()
+        .no_output();
+
+    let metadata = at.metadata("destination");
+    assert_eq!(metadata.accessed().unwrap(), accessed);
+    assert_eq!(metadata.modified().unwrap(), modified);
 }
 
 #[test]
@@ -8295,6 +8338,9 @@ fn test_cp_preserve_selinux() {
     let args = ["-Z", "--context=unconfined_u:object_r:user_tmp_t:s0"];
     at.touch(TEST_HELLO_WORLD_SOURCE);
     for arg in args {
+        // Read before the copy, which reads the file and updates its access time.
+        #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
+        let metadata_src = at.metadata(TEST_HELLO_WORLD_SOURCE);
         ts.ucmd()
             .arg(arg)
             .arg(TEST_HELLO_WORLD_SOURCE)
@@ -8316,7 +8362,6 @@ fn test_cp_preserve_selinux() {
         {
             // Assert that the mode, ownership, and timestamps are preserved
             // NOTICE: the ownership is not modified on the src file, because that requires root permissions
-            let metadata_src = at.metadata(TEST_HELLO_WORLD_SOURCE);
             let metadata_dst = at.metadata(TEST_HELLO_WORLD_DEST);
             assert_metadata_eq!(metadata_src, metadata_dst);
         }
