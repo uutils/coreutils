@@ -1865,3 +1865,43 @@ mod diagnostics {
             .no_output();
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn test_deep_directory_traversal_no_stack_overflow() {
+    use rustix::process::{Resource, Rlimit, getrlimit, setrlimit};
+
+    let lim = getrlimit(Resource::Nofile);
+    let max = lim.maximum.unwrap_or(4096);
+    let soft = max.min(4096);
+    let _ = setrlimit(
+        Resource::Nofile,
+        Rlimit {
+            current: Some(soft),
+            maximum: Some(max),
+        },
+    );
+    let nofile = soft;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut current = at.plus_as_string("root_dir");
+    std::fs::create_dir(&current).unwrap();
+    let mut depth = 0;
+    for _ in 0..1500 {
+        current.push_str("/d");
+        if std::fs::create_dir(&current).is_ok() {
+            depth += 1;
+        } else {
+            break;
+        }
+    }
+    assert_eq!(
+        depth, 1500,
+        "failed to create nested directories: depth was {depth}"
+    );
+
+    if nofile >= 2000 {
+        ucmd.limit(Resource::Nofile, nofile, nofile);
+    }
+    ucmd.arg("-R").arg("755").arg("root_dir").succeeds();
+}
