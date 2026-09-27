@@ -272,6 +272,10 @@ fn parse_delimiters(delimiters: &OsString) -> UResult<Box<[Box<[u8]>]>> {
 
 fn remove_trailing_line_ending_byte(line_ending_byte: u8, output: &mut Vec<u8>) {
     let _ = output.pop_if(|byte| *byte == line_ending_byte);
+
+    if cfg!(windows) && line_ending_byte == b'\n' {
+        let _ = output.pop_if(|byte| *byte == b'\r');
+    }
 }
 
 enum DelimiterState<'a> {
