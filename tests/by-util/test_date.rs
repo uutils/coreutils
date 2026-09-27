@@ -3457,3 +3457,45 @@ fn test_non_utf8_operands_are_octal_escaped() {
             .stderr_contains(expected);
     }
 }
+
+#[test]
+fn test_control_chars_in_operands_are_escaped() {
+    let cases: [(&[&str], &str); 3] = [
+        (&["-d", "a\tb\rc\x1bd"], "invalid date 'a\\tb\\rc\\033d'"),
+        (&["+%Y", "a\tb"], "extra operand 'a\\tb'"),
+        (
+            &["-d", "now", "a\tb"],
+            "the argument a\\tb lacks a leading '+'",
+        ),
+    ];
+
+    for (args, expected) in cases {
+        new_ucmd!()
+            .args(args)
+            .fails_with_code(1)
+            .stderr_contains(expected);
+    }
+}
+
+#[test]
+fn test_date_file_control_chars_are_escaped() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("dates", "a\tb\rc\x1bd\n");
+    ucmd.args(&["-f", "dates"])
+        .fails_with_code(1)
+        .stderr_is("date: invalid date 'a\\tb\\rc\\033d'\n");
+}
+
+#[test]
+fn test_invalid_date_escaping_depends_on_locale() {
+    for (locale, expected) in [
+        ("en_US.UTF-8", "date: invalid date 'it\\'s é'\n"),
+        ("C", "date: invalid date 'it\\'s \\303\\251'\n"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", locale)
+            .args(&["-d", "it's é"])
+            .fails_with_code(1)
+            .stderr_is(expected);
+    }
+}

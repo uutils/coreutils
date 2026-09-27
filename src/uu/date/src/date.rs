@@ -27,7 +27,8 @@ use uucore::error::FromIo;
 use uucore::error::{UError, UResult, strip_errno};
 #[cfg(feature = "i18n-datetime")]
 use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
-use uucore::i18n::{UEncoding, get_ctype_encoding};
+use uucore::i18n::get_ctype_encoding;
+use uucore::quoting_style::{Quotes, QuotingStyle, escape_bytes};
 use uucore::translate;
 use uucore::translate_text;
 use uucore::{format_usage, show};
@@ -211,53 +212,15 @@ enum DayDelta {
     Next,
 }
 
-/// Escape user input for an error message the way GNU date quotes it.
-///
-/// Backslash is backslash-escaped, control characters use C escapes (`\t`,
-/// `\n`, ...) or `\NNN` octal, and invalid UTF-8 bytes are octal-escaped, so
-/// the input cannot write raw control bytes to the terminal. Outside a UTF-8
-/// locale, where GNU quotes with `'` rather than `‘’`, a single quote is
-/// backslash-escaped and non-ASCII bytes are octal-escaped too.
-///
-/// # Example
-/// ```ignore
-/// assert_eq!(escape_for_error(b"a\tb\xb0"), "a\\tb\\260");
-/// ```
+/// Escape user input for an error message the way GNU date quotes it: C
+/// escapes for control characters and quotes, octal for bytes the locale
+/// cannot display. The surrounding quotes come from the message itself.
 fn escape_for_error(bytes: &[u8]) -> String {
-    fn push_octal(out: &mut String, b: u8) {
-        out.push('\\');
-        out.push(char::from(b'0' + (b >> 6)));
-        out.push(char::from(b'0' + ((b >> 3) & 7)));
-        out.push(char::from(b'0' + (b & 7)));
-    }
-
-    let utf8 = get_ctype_encoding() == UEncoding::Utf8;
-    let mut out = String::with_capacity(bytes.len());
-    for chunk in bytes.utf8_chunks() {
-        for c in chunk.valid().chars() {
-            match c {
-                '\\' => out.push_str("\\\\"),
-                '\'' if !utf8 => out.push_str("\\'"),
-                '\x07' => out.push_str("\\a"),
-                '\x08' => out.push_str("\\b"),
-                '\t' => out.push_str("\\t"),
-                '\n' => out.push_str("\\n"),
-                '\x0B' => out.push_str("\\v"),
-                '\x0C' => out.push_str("\\f"),
-                '\r' => out.push_str("\\r"),
-                c if !c.is_control() && (c.is_ascii() || utf8) => out.push(c),
-                c => {
-                    for &b in c.encode_utf8(&mut [0; 4]).as_bytes() {
-                        push_octal(&mut out, b);
-                    }
-                }
-            }
-        }
-        for &b in chunk.invalid() {
-            push_octal(&mut out, b);
-        }
-    }
-    out
+    let style = QuotingStyle::C {
+        quotes: Quotes::Single,
+    };
+    let quoted = escape_bytes(bytes, style, get_ctype_encoding());
+    String::from_utf8_lossy(&quoted[1..quoted.len() - 1]).into_owned()
 }
 
 /// Renders a command-line operand for an error message the way GNU does.
