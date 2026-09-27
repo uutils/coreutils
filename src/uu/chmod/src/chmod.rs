@@ -730,8 +730,9 @@ impl Chmoder {
 
                 let entry_path = top.dir_path.join(&entry_name);
 
-                let dir_meta: std::io::Result<uucore::safe_traversal::Metadata> =
-                    top.dir_fd.metadata_at(&entry_name, should_follow_symlink.into());
+                let dir_meta: std::io::Result<uucore::safe_traversal::Metadata> = top
+                    .dir_fd
+                    .metadata_at(&entry_name, should_follow_symlink.into());
                 let Ok(meta) = dir_meta else {
                     // Handle permission denied with proper file path context
                     let e = dir_meta.unwrap_err();
@@ -773,8 +774,9 @@ impl Chmoder {
                     // TOCTOU where an attacker swaps the just-stat'd directory for a
                     // symlink before the open and redirects the descent off-tree.
                     if meta.is_dir() {
-                        let open_res: std::io::Result<DirFd> =
-                            top.dir_fd.open_subdir(&entry_name, should_follow_symlink.into());
+                        let open_res: std::io::Result<DirFd> = top
+                            .dir_fd
+                            .open_subdir(&entry_name, should_follow_symlink.into());
                         match open_res {
                             Ok(child_dir_fd) => {
                                 let child_info = FileInformation::from_file(&child_dir_fd).ok();
@@ -799,11 +801,12 @@ impl Chmoder {
                                         if let Some(info) = child_info {
                                             ancestors.remove(&info);
                                         }
-                                        let error = if err.kind() == std::io::ErrorKind::PermissionDenied {
-                                            ChmodError::PermissionDenied(entry_path).into()
-                                        } else {
-                                            err.into()
-                                        };
+                                        let error =
+                                            if err.kind() == std::io::ErrorKind::PermissionDenied {
+                                                ChmodError::PermissionDenied(entry_path).into()
+                                            } else {
+                                                err.into()
+                                            };
                                         r = r.and(Err(error));
                                     }
                                 }

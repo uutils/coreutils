@@ -613,9 +613,12 @@ impl ChownExecutor {
                     let chown_uid = self.dest_uid;
                     let chown_gid = self.dest_gid;
 
-                    if let Err(e) =
-                        top.dir_fd.chown_at(&entry_name, chown_uid, chown_gid, follow_symlinks.into())
-                    {
+                    if let Err(e) = top.dir_fd.chown_at(
+                        &entry_name,
+                        chown_uid,
+                        chown_gid,
+                        follow_symlinks.into(),
+                    ) {
                         *ret = 1;
                         if self.verbosity.level != VerbosityLevel::Silent {
                             let msg = format!(

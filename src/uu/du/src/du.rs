@@ -347,7 +347,13 @@ fn time_from_raw_stat(
 }
 
 #[cfg(all(unix, not(target_os = "redox")))]
-// #[cfg(all(unix, not(target_os = "redox")))]
+const S_IFMT: u32 = 0o170_000;
+#[cfg(all(unix, not(target_os = "redox")))]
+const S_IFDIR: u32 = 0o040_000;
+#[cfg(all(unix, not(target_os = "redox")))]
+const S_IFLNK: u32 = 0o120_000;
+
+#[cfg(all(unix, not(target_os = "redox")))]
 struct DuFrame {
     dir_fd: DirFd,
     dir_path: PathBuf,
@@ -469,10 +475,6 @@ fn safe_du(
         if top.entry_idx < top.entries.len() {
             let entry_name = top.entries[top.entry_idx].clone();
             top.entry_idx += 1;
-
-            const S_IFMT: u32 = 0o170_000;
-            const S_IFDIR: u32 = 0o040_000;
-            const S_IFLNK: u32 = 0o120_000;
 
             // First get the lstat (without following symlinks) to check if it's a symlink
             let lstat = match top.dir_fd.stat_at(&entry_name, SymlinkBehavior::NoFollow) {
@@ -601,11 +603,12 @@ fn safe_du(
                             top.my_stat.size += this_stat.size;
                             top.my_stat.blocks += this_stat.blocks;
                             top.my_stat.inodes += this_stat.inodes;
-                            top.my_stat.latest_time = match (top.my_stat.latest_time, this_stat.latest_time) {
-                                (Some(a), Some(b)) => Some(a.max(b)),
-                                (a, None) => a,
-                                (None, b) => b,
-                            };
+                            top.my_stat.latest_time =
+                                match (top.my_stat.latest_time, this_stat.latest_time) {
+                                    (Some(a), Some(b)) => Some(a.max(b)),
+                                    (a, None) => a,
+                                    (None, b) => b,
+                                };
                         }
                         print_tx.send(Ok(StatPrintInfo {
                             stat: this_stat,
@@ -625,11 +628,12 @@ fn safe_du(
                             top.my_stat.size += this_stat.size;
                             top.my_stat.blocks += this_stat.blocks;
                             top.my_stat.inodes += this_stat.inodes;
-                            top.my_stat.latest_time = match (top.my_stat.latest_time, this_stat.latest_time) {
-                                (Some(a), Some(b)) => Some(a.max(b)),
-                                (a, None) => a,
-                                (None, b) => b,
-                            };
+                            top.my_stat.latest_time =
+                                match (top.my_stat.latest_time, this_stat.latest_time) {
+                                    (Some(a), Some(b)) => Some(a.max(b)),
+                                    (a, None) => a,
+                                    (None, b) => b,
+                                };
                         }
                         print_tx.send(Ok(StatPrintInfo {
                             stat: this_stat,
@@ -671,11 +675,12 @@ fn safe_du(
                     parent.my_stat.size += finished.my_stat.size;
                     parent.my_stat.blocks += finished.my_stat.blocks;
                     parent.my_stat.inodes += finished.my_stat.inodes;
-                    parent.my_stat.latest_time = match (parent.my_stat.latest_time, finished.my_stat.latest_time) {
-                        (Some(a), Some(b)) => Some(a.max(b)),
-                        (a, None) => a,
-                        (None, b) => b,
-                    };
+                    parent.my_stat.latest_time =
+                        match (parent.my_stat.latest_time, finished.my_stat.latest_time) {
+                            (Some(a), Some(b)) => Some(a.max(b)),
+                            (a, None) => a,
+                            (None, b) => b,
+                        };
                 }
                 print_tx.send(Ok(StatPrintInfo {
                     stat: finished.my_stat,

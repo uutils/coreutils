@@ -2938,3 +2938,27 @@ du: invalid suffix in --block-size argument '1fb'
             .stderr_is("du: invalid suffix in --block-size argument '1fb'\n");
     }
 }
+
+#[test]
+#[cfg(unix)]
+fn test_deep_directory_traversal_no_stack_overflow() {
+    let ts = TestScenario::new(util_name!());
+    let mut current = ts.fixtures.subdir.clone();
+    let mut depth = 0;
+    // Limit depth to 400 to stay safely below the default RLIMIT_NOFILE (1024)
+    // on WSL2 and macOS while testing deep traversal without stack overflow.
+    for _ in 0..400 {
+        current.push("d");
+        if std::fs::create_dir(&current).is_ok() {
+            depth += 1;
+        } else {
+            break;
+        }
+    }
+    assert!(
+        depth >= 100,
+        "failed to create nested directories: depth was {depth}"
+    );
+
+    ts.ucmd().arg("-s").succeeds();
+}
