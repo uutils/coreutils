@@ -135,15 +135,7 @@ pub fn print_dired_output(
 }
 
 /// The canonical `--quoting-style` name for the `//DIRED-OPTIONS//` trailer.
-///
-/// `QuotingStyle`'s `Display` impl doesn't work here: several distinct style
-/// names collapse onto the same `QuotingStyle` shape (`c`, `escape` and
-/// `clocale` all reduce to `QuotingStyle::C`; `literal` and `locale` both
-/// reduce to `QuotingStyle::Literal`), and it appends a `-show-control`/
-/// `-always-quote` suffix that GNU's `--dired` trailer never uses (those are
-/// separate `ls` options, not part of the quoting-style name).
-/// `config.locale_quoting` carries the extra bit needed to tell the
-/// locale-aware pair apart from their non-locale counterparts.
+/// `QuotingStyle`'s `Display` impl collapses distinct style names together and adds suffixes GNU's trailer never uses, so this maps the config directly instead.
 fn dired_quoting_style_name(config: &Config) -> &'static str {
     match config.locale_quoting {
         Some(LocaleQuoting::Single) => return "locale",
