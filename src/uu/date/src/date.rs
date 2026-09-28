@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz unparseable
-// spell-checker:ignore ohos OHOS tzdata tzdb tzif zoneinfo
+// spell-checker:ignore ohos OHOS tzdata tzdb tzif zoneinfo euctw
 
 mod format_modifiers;
 mod locale;

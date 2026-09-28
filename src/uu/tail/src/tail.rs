@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) seek'd tail'ing ringbuffer ringbuf unwatch
 // spell-checker:ignore (ToDO) Uncategorized filehandle Signum memrchr
-// spell-checker:ignore (libs) kqueue
+// spell-checker:ignore (libs) kqueue lseek
 // spell-checker:ignore (acronyms)
 // spell-checker:ignore (env/flags)
 // spell-checker:ignore (jargon) tailable untailable stdlib

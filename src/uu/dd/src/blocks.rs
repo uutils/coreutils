@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore datastructures rstat rposition cflags ctable
+// spell-checker:ignore datastructures rstat rposition cflags ctable efgh
 
 use crate::conversion_tables::ConversionTable;
 use crate::datastructures::ConversionMode;
