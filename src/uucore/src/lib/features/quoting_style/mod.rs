@@ -11,7 +11,7 @@ use std::fmt;
 use os_display::Quotable;
 
 use crate::i18n::{self, UEncoding};
-use crate::quoting_style::c_quoter::CQuoter;
+use crate::quoting_style::c_quoter::{CQuoter, CQuotesEnforce};
 use crate::quoting_style::literal_quoter::LiteralQuoter;
 use crate::quoting_style::shell_quoter::{EscapedShellQuoter, NonEscapedShellQuoter};
 use crate::{show_error, translate};
@@ -241,21 +241,15 @@ fn escape_name_inner(
 
     let mut quoter: Box<dyn Quoter> = match style {
         QuotingStyle::Literal { .. } => Box::new(LiteralQuoter::new(name.len())),
-        QuotingStyle::C { quotes } => Box::new(CQuoter::new(Some(quotes), dirname, name.len())),
-        QuotingStyle::Escape => Box::new(CQuoter::new(None, dirname, name.len())),
+        QuotingStyle::C { quotes } => Box::new(CQuoter::new(quotes.always(), dirname, name.len())),
+        QuotingStyle::Escape => Box::new(CQuoter::new(CQuotesEnforce::None, dirname, name.len())),
         QuotingStyle::CLocale => {
-            let quotes = match encoding {
-                UEncoding::Ascii => CQuotes::DOUBLE,
-                UEncoding::Utf8 => CQuotes::LOCALE_UTF8,
-            };
-            Box::new(CQuoter::new(Some(quotes), dirname, name.len()))
+            let quotes = CQuotes::utf8_or(encoding, CQuotes::DOUBLE);
+            Box::new(CQuoter::new(quotes.always(), dirname, name.len()))
         }
         QuotingStyle::Locale => {
-            let quotes = match encoding {
-                UEncoding::Ascii => CQuotes::SINGLE,
-                UEncoding::Utf8 => CQuotes::LOCALE_UTF8,
-            };
-            Box::new(CQuoter::new(Some(quotes), dirname, name.len()))
+            let quotes = CQuotes::utf8_or(encoding, CQuotes::SINGLE);
+            Box::new(CQuoter::new(quotes.always(), dirname, name.len()))
         }
         QuotingStyle::Shell {
             escape: true,
