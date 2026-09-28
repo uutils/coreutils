@@ -4069,6 +4069,7 @@ dependencies = [
  "memchr",
  "rand 0.10.3",
  "rayon",
+ "rlimit",
  "rustix",
  "self_cell",
  "tempfile",
