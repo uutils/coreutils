@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-# spell-checker:ignore (shell) OSTYPE
-# spell-checker:ignore (utils) cksum coreutils dircolors mkdir mktemp printenv printf readlink rmdir shuf tsort unexpand
 # spell-checker:ignore (jq) deps startswith
 
 ME="${0}"
