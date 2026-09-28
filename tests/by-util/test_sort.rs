@@ -90,7 +90,7 @@ fn test_buffer_size_limits_both_chunks() {
             .pipe_in(input.as_bytes())
             .ignore_stdin_write_error()
             .fails_with_code(2)
-            .stdout_is("")
+            .no_stdout()
             .stderr_contains("cannot create temporary file");
     }
 }
