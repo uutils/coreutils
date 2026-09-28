@@ -1,13 +1,13 @@
 # AGENTS.md
 
 Writing this file is not a statement for or against using AI coding agents.
-People are using them on this repository either way, so this file exists to make
-sure that when they do, the rules of the project are actually followed.
+People are using them in this repository either way, so this file exists to make
+sure that when they do, the project's rules are actually followed.
 
 If you are driving an agent here, you are responsible for its output. Read the
 diff before you send it.
 
-Answers to the reviewers should be done by a human, not a agent.
+Responses to reviewers should be written by a human, not an agent.
 
 ## Start with an issue
 
