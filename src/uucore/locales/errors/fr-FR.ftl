@@ -3,7 +3,6 @@
 # chaînes uucore communes, que chaque utilitaire analyse au démarrage alors
 # que presque aucune exécution n'en a besoin.
 
-checksum-error-failed-to-read-input = échec de la lecture de l'entrée
 checksum-error-algo-bad-format = { $file }: { $line }: ligne invalide pour { $algo }
 # Messages d'analyse des chaînes de format (printf, seq, env, ...)
 format-error-invalid-spec = %{ $spec } : spécification de conversion invalide
