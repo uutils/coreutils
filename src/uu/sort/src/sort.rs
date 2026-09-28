@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (misc) kKMGTPEZYRQ HFKJFK Mbdfhn getrlimit Nofile rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
+// spell-checker:ignore (misc) kKMGTPEZYRQ HFKJFK Mbdfhn getrlimit NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
 // spell-checker:ignore (misc) uppercased qsort getmonth juin juil
 
 // Although these links don't always seem to describe reality, check out the POSIX and GNU specs:
@@ -1529,49 +1529,23 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
         .action(ArgAction::SetTrue)
 }
 
-#[cfg(all(
-    unix,
-    not(any(
-        target_os = "redox",
-        target_os = "fuchsia",
-        target_os = "haiku",
-        target_os = "solaris",
-        target_os = "illumos"
-    ))
-))]
+#[cfg(unix)]
 fn get_rlimit() -> UResult<usize> {
-    use rustix::process::{Resource, getrlimit};
+    use rlimit::{Resource, getrlimit};
 
-    let rlim_cur = getrlimit(Resource::Nofile)
-        .current
-        .ok_or_else(|| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))?;
+    let (rlim_cur, _) = getrlimit(Resource::NOFILE)
+        .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))?;
 
     usize::try_from(rlim_cur)
         .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))
 }
 
-#[cfg(all(
-    unix,
-    not(any(
-        target_os = "redox",
-        target_os = "fuchsia",
-        target_os = "haiku",
-        target_os = "solaris",
-        target_os = "illumos"
-    ))
-))]
+#[cfg(unix)]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
     get_rlimit().ok()
 }
 
-#[cfg(any(
-    not(unix),
-    target_os = "redox",
-    target_os = "fuchsia",
-    target_os = "haiku",
-    target_os = "solaris",
-    target_os = "illumos"
-))]
+#[cfg(not(unix))]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
     None
 }
