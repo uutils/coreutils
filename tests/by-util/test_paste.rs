@@ -560,13 +560,10 @@ fn test_crlf_input_in_parallel_mode() {
 
     let (at, mut ucmd) = at_and_ucmd!();
 
-    std::fs::write(at.plus("a"), b"1\r\n2\r\n").unwrap();
-    std::fs::write(at.plus("b"), b"3\r\n4\r\n").unwrap();
+    at.write_bytes("a", b"1\r\n2\r\n");
+    at.write_bytes("b", b"3\r\n4\r\n");
 
-    ucmd.arg("a")
-        .arg("b")
-        .succeeds()
-        .stdout_is(expected);
+    ucmd.arg("a").arg("b").succeeds().stdout_is(expected);
 }
 
 #[test]
@@ -582,7 +579,33 @@ fn test_crlf_kept_when_input_is_zero_terminated() {
 fn test_crlf_input_of_a_single_file_is_copied() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    std::fs::write(at.plus("a"), b"1\r\n2\r\n").unwrap();
+    at.write_bytes("a", b"1\r\n2\r\n");
 
     ucmd.arg("a").succeeds().stdout_is("1\r\n2\r\n");
+}
+
+#[test]
+fn test_crlf_kept_when_last_line_ends_with_cr_and_no_newline() {
+    let expected = if cfg!(windows) {
+        "1,2\r\n"
+    } else {
+        "1\r,2\r\n"
+    };
+
+    new_ucmd!()
+        .args(&["-s", "-d", ","])
+        .pipe_in(b"1\r\n2\r")
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_crlf_delimiter_not_eaten_by_an_empty_line() {
+    let expected = if cfg!(windows) { "1\r\n" } else { "1\r\r\n" };
+
+    new_ucmd!()
+        .args(&["-s", "-d", "\\r"])
+        .pipe_in(b"1\r\n\n")
+        .succeeds()
+        .stdout_is(expected);
 }
