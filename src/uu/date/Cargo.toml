@@ -72,3 +72,7 @@ workspace = true
 [[bench]]
 name = "date_bench"
 harness = false
+
+[[bench]]
+name = "date_locale_bench"
+harness = false
