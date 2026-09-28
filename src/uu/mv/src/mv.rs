@@ -44,7 +44,9 @@ use crate::hardlink::{
 };
 use uucore::backup_control::{self, backup_would_destroy_source};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::error::{
+    FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code, strip_errno,
+};
 #[cfg(unix)]
 use uucore::fs::display_permissions_unix;
 use uucore::fs::{
@@ -1407,14 +1409,11 @@ fn rename_file_fallback(
     #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
 ) -> io::Result<()> {
     // Remove existing target file if it exists
-    if to.is_symlink() {
+    if to.is_symlink() || to.exists() {
         fs::remove_file(to).map_err(|err| {
-            let inter_device_msg = translate!("mv-error-inter-device-move-failed", "from" => from.quote(), "to" => to.quote(), "err" => err);
+            let inter_device_msg = translate!("mv-error-inter-device-move-failed", "from" => from.quote(), "to" => to.quote(), "err" => strip_errno(&err));
             io::Error::new(err.kind(), inter_device_msg)
         })?;
-    } else if to.exists() {
-        // For non-symlinks, just remove the file without special error handling
-        fs::remove_file(to)?;
     }
 
     // Check if this file is part of a hardlink group and if so, create a hardlink instead of copying
