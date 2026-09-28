@@ -4216,6 +4216,22 @@ fn test_ls_quoting_style() {
                 .succeeds()
                 .stdout_only(format!("{correct}\n"));
         }
+
+        // Test difference between `c` and `c-maybe`
+        let simple: &str = "onetwo";
+        at.touch(simple);
+
+        for (arg, correct) in [
+            ("--quoting-style=c", "\"onetwo\""),
+            ("--quoting-style=c-maybe", "onetwo"),
+        ] {
+            scene
+                .ucmd()
+                .arg(arg)
+                .arg(simple)
+                .succeeds()
+                .stdout_only(format!("{correct}\n"));
+        }
     }
 
     // No-TTY
@@ -4429,6 +4445,26 @@ fn test_ls_quoting_and_color() {
         .terminal_simulation(true)
         .succeeds()
         .stdout_only("'one two'\r\n");
+}
+
+/// This test makes sure that the c-maybe quoting style behaves as expected
+/// when the name has a comma in it and -m is passed.
+#[test]
+fn test_ls_quoting_style_c_maybe_comma() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("a_file");
+    at.touch("b,file"); // Comma is explicitely quoted when
+
+    let cases: &[(&[&str], &str)] = &[
+        (&["--quoting-style=c-maybe"], "a_file\nb,file\n"),
+        (&["-m", "--quoting-style=c"], "\"a_file\", \"b,file\"\n"),
+        (&["-m", "--quoting-style=c-maybe"], "a_file, \"b,file\"\n"),
+    ];
+    for (args, expected) in cases {
+        scene.ucmd().args(args).succeeds().stdout_only(expected);
+    }
 }
 
 #[test]

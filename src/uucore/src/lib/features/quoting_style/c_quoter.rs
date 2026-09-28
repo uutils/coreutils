@@ -50,6 +50,17 @@ impl CQuotes {
         CQuotesEnforce::Always(self)
     }
 
+    /// Wrap `self` in [`CQuotesEnforce::Always`] if `always_quote` is
+    /// true, else wrap it in [`CQuotesEnforce::Maybe`].
+    #[inline]
+    pub(super) fn always_if(self, always_quotes: bool) -> CQuotesEnforce {
+        if always_quotes {
+            CQuotesEnforce::Always(self)
+        } else {
+            CQuotesEnforce::Maybe(self)
+        }
+    }
+
     pub(super) fn opening_as_utf8(self, buf: &mut [u8]) -> &[u8] {
         self.opening.encode_utf8(buf).as_bytes()
     }
@@ -85,6 +96,7 @@ impl CQuotesEnforce {
 ///
 /// Used for quoting-styles:
 /// - c
+/// - c-maybe
 /// - escape
 /// - clocale
 /// - locale
