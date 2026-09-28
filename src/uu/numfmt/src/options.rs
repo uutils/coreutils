@@ -3,7 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::ffi::OsStr;
 use std::fmt::Display;
 use std::iter::Peekable;
 // `Range` alone is the field range from uucore, so byte ranges are named apart.
@@ -11,7 +10,7 @@ use std::ops::Range as ByteRange;
 use std::str::{CharIndices, FromStr};
 
 use crate::units::Unit;
-use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
+use uucore::quoting_style::locale_aware_c_single_escape;
 use uucore::ranges::Range;
 use uucore::translate;
 
@@ -24,15 +23,6 @@ fn offset(iter: &mut Peekable<CharIndices<'_>>, s: &str) -> usize {
 fn at(iter: &mut Peekable<CharIndices<'_>>, s: &str) -> ByteRange<usize> {
     iter.peek()
         .map_or(s.len()..s.len(), |&(i, c)| i..i + c.len_utf8())
-}
-
-/// The format quoted the way an error message shows it: in single quotes, with
-/// control characters written as C escapes. Without this a format holding a
-/// newline or a tab would split the message across lines or move the cursor.
-fn quote_format(s: &str) -> String {
-    locale_aware_escape_name(OsStr::new(s), QuotingStyle::C_SINGLE)
-        .to_string_lossy()
-        .into_owned()
 }
 
 pub const DEBUG: &str = "debug";
@@ -234,7 +224,7 @@ impl FromStr for FormatOptions {
         // can say where in the format it gave up.
         let mut iter = s.char_indices().peekable();
         let mut options = Self::default();
-        let quoted = quote_format(s);
+        let quoted = locale_aware_c_single_escape(s);
         let error = |message: String, span: ByteRange<usize>, kind: FormatErrorKind| FormatError {
             message,
             span,
