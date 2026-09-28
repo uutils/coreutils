@@ -69,6 +69,33 @@ fn test_buffer_sizes() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
+fn test_buffer_size_limits_both_chunks() {
+    let line = format!("{}\n", "b".repeat(1022));
+    let input = line.repeat(1200);
+
+    for args in [vec![], vec!["-k1,1"]] {
+        new_ucmd!()
+            .args(&["-u", "-T", "missing-directory"])
+            .args(&args)
+            .pipe_in(input.as_bytes())
+            .succeeds()
+            .stdout_only(&line);
+
+        // The input fits in two buffers of 768 KiB each, but exceeds the
+        // requested total. Spilling must fail when no temp directory exists.
+        new_ucmd!()
+            .args(&["-u", "-T", "missing-directory", "-S", "768K"])
+            .args(&args)
+            .pipe_in(input.as_bytes())
+            .ignore_stdin_write_error()
+            .fails_with_code(2)
+            .stdout_is("")
+            .stderr_contains("cannot create temporary file");
+    }
+}
+
+#[test]
 fn test_invalid_buffer_size() {
     new_ucmd!()
         .arg("-S")
