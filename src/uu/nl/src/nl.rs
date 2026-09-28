@@ -368,6 +368,9 @@ pub fn uu_app() -> Command {
                 .long(options::STARTING_LINE_NUMBER)
                 .help(translate!("nl-help-starting-line-number"))
                 .value_name("NUMBER")
+                // GNU numbers lines from a negative start if asked, e.g.
+                // `nl -v -1`. The parser below already accepts one.
+                .allow_negative_numbers(true)
                 .value_parser(clap::value_parser!(i64)),
         )
         .arg(

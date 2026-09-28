@@ -962,3 +962,14 @@ fn test_no_skip_after_error() {
         .fails()
         .stdout_is("     1\thello\n");
 }
+
+#[test]
+fn test_negative_starting_line_number_as_separate_argument() {
+    // The attached spellings above already worked; `-v -10`, with the value
+    // as its own argument, was rejected as an unknown option instead.
+    new_ucmd!()
+        .args(&["-v", "-10"])
+        .pipe_in("test")
+        .succeeds()
+        .stdout_is("   -10\ttest\n");
+}
