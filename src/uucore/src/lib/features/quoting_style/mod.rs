@@ -106,6 +106,27 @@ impl QuotingStyle {
     }
 }
 
+impl fmt::Display for QuotingStyle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Self::Shell {
+                escape,
+                always_quote,
+                ..
+            } => {
+                write!(
+                    f,
+                    "shell{}{}",
+                    if escape { "-escape" } else { "" },
+                    if always_quote { "-always" } else { "" }
+                )
+            }
+            Self::C { .. } => f.write_str("c"),
+            Self::Literal { .. } => f.write_str("literal"),
+        }
+    }
+}
+
 /// Common interface of quoting mechanisms.
 trait Quoter {
     /// Push a valid character.
@@ -221,32 +242,6 @@ pub fn escape_dir_name(dir_name: &OsStr, style: QuotingStyle, encoding: UEncodin
 /// Retrieve the encoding from the locale and pass it to `escape_dir_name`.
 pub fn locale_aware_escape_dir_name(name: &OsStr, style: QuotingStyle) -> OsString {
     escape_dir_name(name, style, i18n::get_locale_encoding())
-}
-
-impl fmt::Display for QuotingStyle {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            Self::Shell {
-                escape,
-                always_quote,
-                show_control,
-            } => {
-                let mut style = "shell".to_string();
-                if escape {
-                    style.push_str("-escape");
-                }
-                if always_quote {
-                    style.push_str("-always-quote");
-                }
-                if show_control {
-                    style.push_str("-show-control");
-                }
-                f.write_str(&style)
-            }
-            Self::C { .. } => f.write_str("C"),
-            Self::Literal { .. } => f.write_str("literal"),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -1048,14 +1043,14 @@ mod tests {
         let style = QuotingStyle::SHELL_ESCAPE;
         assert_eq!(format!("{style}"), "shell-escape");
 
-        let style = QuotingStyle::SHELL_QUOTE;
-        assert_eq!(format!("{style}"), "shell-always-quote");
+        let style = QuotingStyle::SHELL_ALWAYS;
+        assert_eq!(format!("{style}"), "shell-always");
 
         let style = QuotingStyle::SHELL.show_control(true);
-        assert_eq!(format!("{style}"), "shell-show-control");
+        assert_eq!(format!("{style}"), "shell");
 
         let style = QuotingStyle::C_DOUBLE;
-        assert_eq!(format!("{style}"), "C");
+        assert_eq!(format!("{style}"), "c");
 
         let style = QuotingStyle::Literal {
             show_control: false,
