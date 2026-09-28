@@ -5,7 +5,7 @@
 
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
-// spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot
+// spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot FDCWD
 // spell-checker:ignore LARGEFILE
 
 // Safe directory traversal using openat() and related syscalls
@@ -314,6 +314,22 @@ impl DirFd {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
 
+        Self::chmod_at_fd(
+            self.fd.as_fd(),
+            name_cstr.as_c_str(),
+            mode,
+            symlink_behavior,
+        )
+    }
+
+    /// Shared implementation behind [`DirFd::chmod_at`] and [`chmod_nofollow`],
+    /// which passes `AT_FDCWD` as `dirfd`.
+    fn chmod_at_fd(
+        dirfd: BorrowedFd<'_>,
+        name_cstr: &core::ffi::CStr,
+        mode: u32,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<()> {
         let flags = if symlink_behavior.should_follow() {
             FchmodatFlags::FollowSymlink
         } else {
@@ -328,8 +344,8 @@ impl DirFd {
         // fallback takes over instead.
         #[cfg_attr(target_os = "linux", allow(unused_variables))]
         let libc_err = match fchmodat(
-            &self.fd,
-            name_cstr.as_c_str(),
+            dirfd,
+            name_cstr,
             Mode::from_bits_truncate(mode as libc::mode_t),
             flags,
         ) {
@@ -380,7 +396,7 @@ impl DirFd {
                 let res = unsafe {
                     libc::syscall(
                         SYS_FCHMODAT2,
-                        self.fd.as_raw_fd(),
+                        dirfd.as_raw_fd(),
                         name_cstr.as_ptr(),
                         mode as libc::mode_t,
                         libc::AT_SYMLINK_NOFOLLOW,
@@ -402,7 +418,7 @@ impl DirFd {
 
         #[cfg(target_os = "linux")]
         {
-            self.chmod_at_via_opath(name_cstr.as_c_str(), mode)
+            Self::chmod_at_fd_via_opath(dirfd, name_cstr, mode)
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -411,31 +427,77 @@ impl DirFd {
     }
 
     /// O_PATH-based fallback for chmod when fchmodat with AT_SYMLINK_NOFOLLOW
-    /// is not available (musl on kernel < 6.6).
+    /// is not available (kernel < 6.6).
     ///
     /// Opens the file with O_PATH|O_NOFOLLOW to get an fd without following
     /// symlinks, then chmods via /proc/self/fd/{fd}. This avoids the TOCTOU
-    /// race because the fd pins the inode.
+    /// race because the fd pins the inode. A symlink is refused with
+    /// `EOPNOTSUPP`, as `fchmodat(AT_SYMLINK_NOFOLLOW)` does.
     ///
+    /// Without procfs (e.g. a bare chroot), a regular file or a directory is
+    /// reopened without following symlinks and changed with `fchmod`, once the
+    /// reopened fd is confirmed to be the pinned inode.
     #[cfg(target_os = "linux")]
-    fn chmod_at_via_opath(&self, name: &core::ffi::CStr, mode: u32) -> io::Result<()> {
+    fn chmod_at_fd_via_opath(
+        dirfd: BorrowedFd<'_>,
+        name: &core::ffi::CStr,
+        mode: u32,
+    ) -> io::Result<()> {
         // Same reason as in chmod_at: rustix's linux_raw backend would make
         // these raw syscalls, invisible to LD_PRELOAD wrappers.
         use std::os::unix::fs::PermissionsExt;
 
+        let to_io = |e: nix::errno::Errno| io::Error::from_raw_os_error(e as i32);
+
         let fd = openat(
-            &self.fd,
+            dirfd,
             name,
             OFlag::O_PATH | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
             Mode::empty(),
         )
-        .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        .map_err(to_io)?;
+
+        let pinned = nix::sys::stat::fstat(&fd).map_err(to_io)?;
+        let file_type = pinned.st_mode & libc::S_IFMT;
+        if file_type == libc::S_IFLNK {
+            return Err(io::Error::from_raw_os_error(libc::EOPNOTSUPP));
+        }
 
         // set_permissions goes through the libc chmod() symbol.
-        fs::set_permissions(
+        let err = match fs::set_permissions(
             format!("/proc/self/fd/{}", fd.as_raw_fd()),
             fs::Permissions::from_mode(mode),
-        )
+        ) {
+            Ok(()) => return Ok(()),
+            Err(e) => e,
+        };
+
+        // The pinned inode cannot vanish, so ENOENT means procfs is not mounted.
+        // Opening anything but a regular file or a directory may have side
+        // effects (devices, FIFOs), so only those two are retried.
+        if err.raw_os_error() != Some(libc::ENOENT)
+            || !(file_type == libc::S_IFREG || file_type == libc::S_IFDIR)
+        {
+            return Err(err);
+        }
+        let Ok(reopened) = openat(
+            dirfd,
+            name,
+            OFlag::O_RDONLY
+                | OFlag::O_NOFOLLOW
+                | OFlag::O_NONBLOCK
+                | OFlag::O_NOCTTY
+                | OFlag::O_CLOEXEC,
+            Mode::empty(),
+        ) else {
+            return Err(err);
+        };
+        let current = nix::sys::stat::fstat(&reopened).map_err(to_io)?;
+        if current.st_dev != pinned.st_dev || current.st_ino != pinned.st_ino {
+            return Err(err);
+        }
+        nix::sys::stat::fchmod(&reopened, Mode::from_bits_truncate(mode as libc::mode_t))
+            .map_err(to_io)
     }
 
     /// Change mode of this directory
@@ -503,6 +565,25 @@ impl DirFd {
         let owned_fd = unsafe { OwnedFd::from_raw_fd(fd) };
         Ok(Self { fd: owned_fd })
     }
+}
+
+/// Change the mode of `path` without following a symlink at its final component.
+///
+/// The `AT_FDCWD` counterpart of [`DirFd::chmod_at`]: where a no-follow
+/// `fchmodat` is available, the whole path goes to that one call, so it costs the
+/// same as the `chmod(2)` it replaces rather than also opening the parent
+/// directory. On Linux kernels without `fchmodat2`, it takes the same `O_PATH`
+/// fallback as [`DirFd::chmod_at`].
+pub fn chmod_nofollow(path: &Path, mode: u32) -> io::Result<()> {
+    let path_cstr = CString::new(path.as_os_str().as_bytes())
+        .map_err(|_| SafeTraversalError::PathContainsNull)?;
+
+    DirFd::chmod_at_fd(
+        nix::fcntl::AT_FDCWD,
+        path_cstr.as_c_str(),
+        mode,
+        SymlinkBehavior::NoFollow,
+    )
 }
 
 /// Find the deepest existing directory ancestor for a path.
@@ -1478,6 +1559,87 @@ mod tests {
 
         // subdir should have been created inside the real target directory
         assert!(target.join("subdir").exists());
+    }
+
+    /// `chmod_nofollow` is the finalize-chmod primitive: a symlink planted at the
+    /// path must never have its target's mode changed.
+    #[test]
+    fn test_chmod_nofollow_does_not_follow_a_symlink() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path().join("target");
+        fs::write(&target, b"x").unwrap();
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o600)).unwrap();
+        symlink(&target, temp_dir.path().join("link")).unwrap();
+
+        let _ = chmod_nofollow(&temp_dir.path().join("link"), 0o777);
+
+        assert_eq!(
+            fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+            0o600,
+            "chmod_nofollow followed the symlink and changed its target"
+        );
+    }
+
+    #[test]
+    fn test_chmod_nofollow_changes_a_regular_file() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_dir = TempDir::new().unwrap();
+        let file = temp_dir.path().join("f");
+        fs::write(&file, b"x").unwrap();
+
+        chmod_nofollow(&file, 0o640).unwrap();
+
+        assert_eq!(
+            fs::metadata(&file).unwrap().permissions().mode() & 0o777,
+            0o640
+        );
+    }
+
+    /// The `O_PATH` fallback (kernels without `fchmodat2`) must refuse a
+    /// symlink rather than reach its target through `/proc/self/fd`.
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_chmod_via_opath_refuses_a_symlink() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path().join("target");
+        fs::write(&target, b"x").unwrap();
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o600)).unwrap();
+        symlink(&target, temp_dir.path().join("link")).unwrap();
+
+        let dir = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        let err = DirFd::chmod_at_fd_via_opath(dir.as_fd(), c"link", 0o777).unwrap_err();
+
+        assert_eq!(err.raw_os_error(), Some(libc::EOPNOTSUPP));
+        assert_eq!(
+            fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_chmod_via_opath_changes_a_regular_file() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("f"), b"x").unwrap();
+
+        let dir = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        DirFd::chmod_at_fd_via_opath(dir.as_fd(), c"f", 0o640).unwrap();
+
+        assert_eq!(
+            fs::metadata(temp_dir.path().join("f"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o640
+        );
     }
 
     #[test]
