@@ -1372,9 +1372,10 @@ fn test_spill_write_error_does_not_panic() {
         return;
     }
 
-    let lines = (0..200_000)
-        .map(|line| format!("{line:06}\n"))
-        .collect::<String>();
+    let mut lines = String::new();
+    for line in 0..200_000 {
+        writeln!(lines, "{line:06}").expect("writing to a String cannot fail");
+    }
     scene.fixtures.write("input.txt", &lines);
 
     scene
