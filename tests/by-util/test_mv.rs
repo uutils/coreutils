@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore mydir hardlinked tmpfs notty unwriteable myfolder SRCDATA DSTDATA REALDATA
+// spell-checker:ignore mydir hardlinked tmpfs notty unwriteable myfolder SRCDATA DSTDATA REALDATA realfile
 // spell-checker:ignore dirattr dirvalue setfattr getfattr
 
 use rstest::rstest;
