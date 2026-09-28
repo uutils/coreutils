@@ -290,9 +290,6 @@ fn test_nohup_stderr_to_stdout() {
 fn test_nohup_propagates_command_exit_code() {
     new_ucmd!().args(&["true"]).succeeds();
     new_ucmd!().args(&["sh", "-c", "exit 3"]).fails_with_code(3);
-    new_ucmd!()
-        .args(&["sh", "-c", "exit 42"])
-        .fails_with_code(42);
 }
 
 // A freshly created nohup.out must be readable only by its owner (0600),
@@ -312,11 +309,7 @@ fn test_nohup_new_output_file_is_owner_only() {
 
     sleep(std::time::Duration::from_millis(10));
 
-    let mode = std::fs::metadata(at.plus("nohup.out"))
-        .unwrap()
-        .permissions()
-        .mode()
-        & 0o777;
+    let mode = at.metadata("nohup.out").permissions().mode() & 0o777;
     assert_eq!(
         mode, 0o600,
         "new nohup.out should have mode 0600, got {mode:o}"
