@@ -36,6 +36,11 @@ jobs:
     - uses: Swatinem/rust-cache@v2
       with:
         key: "${{ matrix.job.target }}"
+    - name: Check sort for threaded WASI
+      if: matrix.job.target == 'wasm32-wasip1'
+      run: |
+        rustup target add wasm32-wasip1-threads
+        cargo check --target wasm32-wasip1-threads --no-default-features -p uu_sort
     - name: Install wasmtime
       uses: taiki-e/install-action@wasmtime
     - name: Run unit tests
@@ -64,7 +69,8 @@ jobs:
         #   arch b2sum cksum csplit date dir dircolors fmt join
         #   ls md5sum mkdir mv nproc pathchk pr printenv ptx pwd readlink
         #   realpath rm rmdir seq sha1sum sha224sum sha256sum sha384sum
-        #   sha512sum shred sleep sort split tsort uname uniq vdir
+        #   sha512sum shred sleep split tsort uname uniq
+        #   vdir
         UUTESTS_BINARY_PATH="$(pwd)/target/${{ matrix.job.target }}/debug/coreutils.wasm" \
         UUTESTS_WASM_RUNNER=wasmtime \
         cargo test --test tests -- \
@@ -75,7 +81,7 @@ jobs:
           test_ls::test_ls_a_dotdot_no_error_on_wasi \
           test_ls::test_ls_al_no_capabilities_insufficient_on_wasi \
           test_mktemp:: test_nl:: test_numfmt:: \
-          test_od:: test_paste:: test_printf:: test_shuf:: test_sum:: \
-          test_tail:: test_tee:: test_test:: test_touch:: test_tr:: \
+          test_od:: test_paste:: test_printf:: test_shuf:: test_sort:: \
+          test_sum:: test_tail:: test_tee:: test_test:: test_touch:: test_tr:: \
           test_true:: test_truncate:: \
           test_unexpand:: test_unlink:: test_wc:: test_yes::
