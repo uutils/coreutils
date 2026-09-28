@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED Fsize SIGXFSZ rusage maxrss cdefg ncdefg cdefh memfd ftruncate
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED FSIZE SIGXFSZ rusage maxrss cdefg ncdefg cdefh memfd ftruncate
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -17,6 +17,8 @@ use uutests::util::{UCommand, get_tests_binary};
 use uutests::util_name;
 
 use regex::Regex;
+#[cfg(all(unix, not(target_vendor = "apple")))]
+use rlimit::Resource;
 use uucore::io::OwnedFileDescriptorOrHandle;
 
 use std::fs::{File, OpenOptions};
@@ -2508,14 +2510,12 @@ fn test_count_bytes_with_expanding_block_conv() {
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_stats_are_reported_when_a_write_fails() {
-    use rustix::process::Resource;
-
     const CAP: u64 = 768 * 1024;
 
     let (at, mut ucmd) = at_and_ucmd!();
     let result = ucmd
         .args(&["if=/dev/zero", "of=capped.bin", "bs=512K", "count=3"])
-        .limit(Resource::Fsize, CAP, CAP)
+        .limit(Resource::FSIZE, CAP, CAP)
         .ignore_sigxfsz()
         .fails();
 
@@ -2531,15 +2531,13 @@ fn test_stats_are_reported_when_a_write_fails() {
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_block_stats_are_reported_when_a_write_fails() {
-    use rustix::process::Resource;
-
     const CAP: u64 = 200 * 1024;
 
     let (at, mut ucmd) = at_and_ucmd!();
     let result = ucmd
         .args(&["conv=block", "cbs=1M", "obs=64K", "of=capped.bin"])
         .pipe_in("x\n")
-        .limit(Resource::Fsize, CAP, CAP)
+        .limit(Resource::FSIZE, CAP, CAP)
         .ignore_sigxfsz()
         .fails();
 
