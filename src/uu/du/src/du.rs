@@ -214,6 +214,7 @@ impl Stat {
         })
     }
 
+    #[cfg(all(unix, not(target_os = "redox")))]
     fn merge(&mut self, other: &Self) {
         self.size += other.size;
         self.blocks += other.blocks;
