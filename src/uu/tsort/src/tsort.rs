@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore TAOCP indegree
+// spell-checker:ignore TAOCP indegree espidf
 // spell-checker:ignore (libs) interner
 
 mod error;

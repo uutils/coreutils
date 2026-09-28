@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST MESZ KST uueuu ueuu vasárnap június január distros
-// spell-checker:ignore uppercases
+// spell-checker:ignore uppercases xffx
 
 use std::cmp::Ordering;
 
@@ -714,6 +714,17 @@ fn test_date_stdin_invalid_utf8_line() {
         .pipe_in(b"Hello\xffx\n".to_vec())
         .fails_with_code(1)
         .stderr_contains("date: invalid date 'Hello\\377x'");
+}
+
+#[test]
+fn test_date_file_line_ends_at_nul() {
+    // GNU-compat, everything after a NUL byte on a line is ignored
+    new_ucmd!()
+        .args(&["-u", "-f", "-"])
+        .pipe_in(b"2024-01-15 12:00:00\0garbage\nbad\0\xff\n".to_vec())
+        .fails_with_code(1)
+        .stdout_is("Mon Jan 15 12:00:00 UTC 2024\n")
+        .stderr_is("date: invalid date 'bad'\n");
 }
 
 #[test]

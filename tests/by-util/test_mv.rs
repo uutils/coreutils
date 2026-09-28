@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore mydir hardlinked tmpfs notty unwriteable myfolder SRCDATA DSTDATA REALDATA
+// spell-checker:ignore mydir hardlinked tmpfs notty unwriteable myfolder SRCDATA DSTDATA REALDATA realfile
 // spell-checker:ignore dirattr dirvalue setfattr getfattr
 
 use rstest::rstest;
@@ -1932,7 +1932,13 @@ fn test_mv_dir_into_path_slash() {
     assert!(at.dir_exists("f/b"));
 }
 
-#[cfg(all(unix, not(any(target_vendor = "apple", target_os = "openbsd"))))]
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "android",
+    target_os = "netbsd"
+))]
 #[test]
 fn test_acl() {
     use std::process::Command;

@@ -828,20 +828,19 @@ impl<R: HasError> HasError for BufReader<R> {
 }
 
 fn option_display_name(args: &[String], option_name: &str, short: char) -> String {
-    let long_form = format!("--{option_name}");
-    let long_form_with_eq = format!("{long_form}=");
-    let short_form = format!("-{short}");
-    for arg in args.iter().skip(1) {
-        if !arg.starts_with("--") && arg.starts_with(&short_form) {
-            return short_form;
+    if let Some(args) = args.get(1..) {
+        let long_form = format!("--{option_name}");
+        for arg in args {
+            if arg == &long_form
+                || arg
+                    .strip_prefix(&long_form)
+                    .is_some_and(|rest| rest.starts_with('='))
+            {
+                return long_form;
+            }
         }
     }
-    for arg in args.iter().skip(1) {
-        if arg == &long_form || arg.starts_with(&long_form_with_eq) {
-            return long_form;
-        }
-    }
-    short_form
+    format!("-{short}")
 }
 
 fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {

@@ -13,9 +13,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[features]
-feat_systemd_logind = ["uucore/feat_systemd_logind"]
-
 [lib]
 path = "src/users.rs"
 test = false
@@ -31,6 +28,9 @@ uucore = { workspace = true, features = [] }
 
 [target.'cfg(target_os = "openbsd")'.dependencies]
 utmp-classic = { workspace = true }
+
+[features]
+feat_systemd_logind = ["uucore/feat_systemd_logind"]
 
 [lints]
 workspace = true

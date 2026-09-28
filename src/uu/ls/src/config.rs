@@ -596,14 +596,20 @@ fn extract_quoting_style(
         (QuotingStyle::C_DOUBLE, None)
     } else {
         // If set, the QUOTING_STYLE environment variable specifies a default style.
-        if let Ok(style) = std::env::var("QUOTING_STYLE") {
-            if let Some(pair) = match_quoting_style_name(style.as_str(), show_control) {
+        // Value may not be valid UTF-8.
+        if let Some(os_style) = std::env::var_os("QUOTING_STYLE") {
+            let style = os_style.to_string_lossy();
+            if let Some(pair) = match_quoting_style_name(&style, show_control) {
                 return pair;
             }
             let _ = writeln!(
                 io::stderr(),
                 "{}",
-                translate!("ls-invalid-quoting-style", "program" => std::env::args().next().unwrap_or_else(|| "ls".to_string()), "style" => style)
+                translate!(
+                    "ls-invalid-quoting-style",
+                    "program" => std::env::args().next().unwrap_or_else(|| "ls".to_string()),
+                    "style" => style
+                )
             );
         }
 
@@ -1118,13 +1124,14 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                 // `field` can be empty here (e.g. --time-style=posix-), so test
                 // the prefix instead of unwrapping the first char.
                 _ if field.starts_with('+') => {
-                    // recent/older formats are (optionally) separated by a newline
-                    let mut it = field[1..].split('\n');
-                    let recent = it.next().unwrap_or_default();
-                    let older = it.next();
-                    match it.next() {
-                        None => ok((recent, older)),
-                        Some(_) => Err(LsError::TimeStyleParseError(String::from(field))),
+                    // Formats are (optionally) separated by a newline:
+                    // FORMAT1 NEWLINE FORMAT2 -> FORMAT1 for older files, FORMAT2 for recent.
+                    // A single format applies to all files (stored as recent).
+                    let formats: Vec<_> = field[1..].split('\n').collect();
+                    match formats.as_slice() {
+                        [format] => ok((*format, None)),
+                        [older, recent] => ok((*recent, Some(*older))),
+                        _ => Err(LsError::TimeStyleParseError(String::from(field))),
                     }
                 }
                 _ => Err(LsError::TimeStyleParseError(String::from(field))),

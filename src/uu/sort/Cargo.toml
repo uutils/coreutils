@@ -15,11 +15,6 @@ readme.workspace = true
 path = "src/sort.rs"
 doctest = false
 
-[features]
-default = ["i18n-collator"]
-diagnostics = ["uucore/diagnostics"]
-i18n-collator = ["uucore/i18n-collator"]
-
 [dependencies]
 bigdecimal = { workspace = true }
 clap = { workspace = true }
@@ -61,6 +56,11 @@ uucore = { workspace = true, features = [
   "i18n-collator",
   "i18n-datetime",
 ] }
+
+[features]
+default = ["i18n-collator"]
+diagnostics = ["uucore/diagnostics"]
+i18n-collator = ["uucore/i18n-collator"]
 
 [lints]
 workspace = true

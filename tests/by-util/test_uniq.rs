@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore nabcd badoption schar
+// spell-checker:ignore nabcd badoption schar nosuchfile
 
 use uucore::posix::OBSOLETE;
 use uutests::at_and_ucmd;

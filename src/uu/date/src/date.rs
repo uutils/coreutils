@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz unparseable
-// spell-checker:ignore ohos OHOS tzdata tzdb tzif zoneinfo
+// spell-checker:ignore ohos OHOS tzdata tzdb tzif zoneinfo euctw
 
 mod format_modifiers;
 mod locale;
@@ -1250,6 +1250,10 @@ fn parse_dates_from_reader<R: Read + 'static>(
 > {
     let lines = BufReader::new(reader).split(b'\n');
     Box::new(lines.map_while(Result::ok).map(move |mut bytes| {
+        // GNU handles each line as a C string, so a NUL byte ends it
+        if let Some(nul) = bytes.iter().position(|&b| b == 0) {
+            bytes.truncate(nul);
+        }
         // Strip a trailing '\r' (CRLF input; GNU's lexer ignores it too)
         if bytes.last() == Some(&b'\r') {
             bytes.pop();
