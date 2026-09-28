@@ -438,9 +438,8 @@ fn mode_from_umask(mask: u32) -> rustix::fs::Mode {
 }
 
 #[cfg(unix)]
-#[allow(clippy::unnecessary_cast)] // no-op where RawMode is already u32
 fn umask_from_mode(mode: rustix::fs::Mode) -> u32 {
-    mode.bits() as u32
+    mode.bits() as _
 }
 
 #[cfg(unix)]
