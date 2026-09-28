@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore DATETIME getmntinfo subsecond (fs) cifs smbfs
+// spell-checker:ignore DATETIME getmntinfo subsecond (fs) cifs smbfs namemax
 
 //! Set of functions to manage file systems
 
@@ -14,7 +14,15 @@ mod windows;
 const LINUX_MTAB: &str = "/etc/mtab";
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
 const LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
-#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "cygwin",
+    target_os = "freebsd",
+    target_os = "linux",
+    target_os = "android",
+    target_os = "netbsd",
+    target_os = "openbsd",
+))]
 static MOUNT_OPT_BIND: &str = "bind";
 
 #[cfg(any(
@@ -65,6 +73,8 @@ pub use libc::statfs as StatFs;
     target_os = "aix",
     target_os = "netbsd",
     target_os = "dragonfly",
+    target_os = "haiku",
+    target_os = "hurd",
     target_os = "illumos",
     target_os = "solaris",
     target_os = "redox",
@@ -82,7 +92,9 @@ pub use libc::statvfs as StatFs;
 pub use libc::statfs as statfs_fn;
 #[cfg(any(
     target_os = "aix",
+    target_os = "haiku",
     target_os = "netbsd",
+    target_os = "hurd",
     target_os = "illumos",
     target_os = "solaris",
     target_os = "dragonfly",
@@ -280,7 +292,15 @@ impl From<StatFs> for MountInfo {
     }
 }
 
-#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "cygwin",
+    target_os = "freebsd",
+    target_os = "linux",
+    target_os = "android",
+    target_os = "netbsd",
+    target_os = "openbsd",
+))]
 fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
     // spell-checker:disable
     match fs_type {
@@ -303,14 +323,30 @@ fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
     // spell-checker:enable
 }
 
-#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "cygwin",
+    target_os = "freebsd",
+    target_os = "linux",
+    target_os = "android",
+    target_os = "netbsd",
+    target_os = "openbsd",
+))]
 fn is_remote_filesystem(dev_name: &str, fs_type: &str) -> bool {
     dev_name.find(':').is_some()
         || (dev_name.starts_with("//") && fs_type == "smbfs" || fs_type == "cifs")
         || dev_name == "-hosts"
 }
 
-#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "cygwin",
+    target_os = "freebsd",
+    target_os = "linux",
+    target_os = "android",
+    target_os = "netbsd",
+    target_os = "openbsd",
+))]
 fn mount_dev_id(mount_dir: &OsStr) -> String {
     use std::os::unix::fs::MetadataExt;
 
@@ -350,16 +386,7 @@ use std::ptr;
 use std::slice;
 
 /// Read file system list.
-#[cfg_attr(
-    any(
-        target_os = "aix",
-        target_os = "redox",
-        target_os = "illumos",
-        target_os = "solaris",
-        target_os = "wasi"
-    ),
-    expect(clippy::unnecessary_wraps)
-)]
+#[allow(clippy::unnecessary_wraps)]
 pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
     {
@@ -400,6 +427,8 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     }
     #[cfg(any(
         target_os = "aix",
+        target_os = "haiku",
+        target_os = "hurd",
         target_os = "redox",
         target_os = "illumos",
         target_os = "solaris",
@@ -428,7 +457,12 @@ impl FsUsage {
     pub fn new(statvfs: StatFs) -> Self {
         {
             #[cfg(all(
-                not(any(target_os = "freebsd", target_os = "openbsd")),
+                not(any(
+                    target_os = "freebsd",
+                    target_os = "haiku",
+                    target_os = "netbsd",
+                    target_os = "openbsd"
+                )),
                 target_pointer_width = "64"
             ))]
             return Self {
@@ -441,9 +475,15 @@ impl FsUsage {
                 ffree: statvfs.f_ffree,
             };
             #[cfg(all(
-                not(any(target_os = "freebsd", target_os = "openbsd")),
+                not(any(
+                    target_os = "freebsd",
+                    target_os = "haiku",
+                    target_os = "netbsd",
+                    target_os = "openbsd"
+                )),
                 not(target_pointer_width = "64")
             ))]
+            #[allow(clippy::useless_conversion)]
             return Self {
                 blocksize: statvfs.block_size() as u64,
                 blocks: statvfs.f_blocks.into(),
@@ -466,6 +506,28 @@ impl FsUsage {
                     != 0,
                 files: statvfs.f_files,
                 ffree: statvfs.f_ffree.try_into().unwrap(),
+            };
+            #[cfg(target_os = "haiku")]
+            return Self {
+                blocksize: statvfs.block_size().try_into().unwrap(),
+                blocks: statvfs.f_blocks.try_into().unwrap(),
+                bfree: statvfs.f_bfree.try_into().unwrap(),
+                bavail: statvfs.f_bavail.try_into().unwrap(),
+                bavail_top_bit_set: ((TryInto::<u64>::try_into(statvfs.f_bavail).unwrap())
+                    & (1u64.rotate_right(1)))
+                    != 0,
+                files: statvfs.f_files.try_into().unwrap(),
+                ffree: statvfs.f_ffree.try_into().unwrap(),
+            };
+            #[cfg(target_os = "netbsd")]
+            return Self {
+                blocksize: statvfs.block_size() as u64,
+                blocks: statvfs.f_blocks,
+                bfree: statvfs.f_bfree,
+                bavail: statvfs.f_bavail,
+                bavail_top_bit_set: ((statvfs.f_bavail) & (1u64.rotate_right(1))) != 0,
+                files: statvfs.f_files,
+                ffree: statvfs.f_ffree,
             };
             #[cfg(target_os = "openbsd")]
             return Self {
@@ -519,88 +581,68 @@ impl FsMeta for StatFs {
 
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
     fn block_size(&self) -> i64 {
-        #[cfg(all(
-            not(target_env = "musl"),
-            not(target_vendor = "apple"),
-            not(target_os = "aix"),
-            not(target_os = "freebsd"),
-            not(target_os = "netbsd"),
-            not(target_os = "openbsd"),
-            not(target_os = "illumos"),
-            not(target_os = "solaris"),
-            not(target_os = "redox"),
-            not(target_arch = "s390x"),
-            not(target_os = "cygwin"),
-            target_pointer_width = "64"
-        ))]
-        return self.f_bsize;
-        #[cfg(all(
-            not(target_env = "musl"),
-            not(target_os = "freebsd"),
-            not(target_os = "netbsd"),
-            not(target_os = "redox"),
-            not(target_os = "cygwin"),
-            any(
-                target_arch = "s390x",
-                target_vendor = "apple",
-                target_os = "openbsd",
-                not(target_pointer_width = "64")
-            )
-        ))]
-        return self.f_bsize.into();
         #[cfg(any(
             target_env = "musl",
             target_os = "aix",
             target_os = "freebsd",
-            target_os = "netbsd",
+            target_os = "hurd",
             target_os = "illumos",
             target_os = "solaris",
             target_os = "redox",
             target_os = "cygwin",
+            all(target_os = "haiku", target_pointer_width = "64"),
+            all(target_os = "netbsd", target_pointer_width = "64"),
         ))]
         return self.f_bsize.try_into().unwrap();
+        #[cfg(not(any(
+            target_env = "musl",
+            target_os = "aix",
+            target_os = "freebsd",
+            target_os = "hurd",
+            target_os = "illumos",
+            target_os = "solaris",
+            target_os = "redox",
+            target_os = "cygwin",
+            all(target_os = "haiku", target_pointer_width = "64"),
+            all(target_os = "netbsd", target_pointer_width = "64"),
+        )))]
+        #[allow(clippy::useless_conversion)]
+        return self.f_bsize.into();
     }
     fn total_blocks(&self) -> u64 {
-        #[cfg(target_pointer_width = "64")]
-        return self.f_blocks;
-        #[cfg(not(target_pointer_width = "64"))]
+        #[cfg(target_os = "haiku")]
+        return self.f_blocks.try_into().unwrap();
+        #[cfg(not(target_os = "haiku"))]
+        #[allow(clippy::useless_conversion)]
         return self.f_blocks.into();
     }
     fn free_blocks(&self) -> u64 {
-        #[cfg(target_pointer_width = "64")]
-        return self.f_bfree;
-        #[cfg(not(target_pointer_width = "64"))]
+        #[cfg(target_os = "haiku")]
+        return self.f_bfree.try_into().unwrap();
+        #[cfg(not(target_os = "haiku"))]
+        #[allow(clippy::useless_conversion)]
         return self.f_bfree.into();
     }
     fn avail_blocks(&self) -> u64 {
-        #[cfg(all(
-            not(target_os = "freebsd"),
-            not(target_os = "openbsd"),
-            target_pointer_width = "64"
-        ))]
-        return self.f_bavail;
-        #[cfg(all(
-            not(target_os = "freebsd"),
-            not(target_os = "openbsd"),
-            not(target_pointer_width = "64")
-        ))]
-        return self.f_bavail.into();
-        #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+        #[cfg(any(target_os = "freebsd", target_os = "haiku", target_os = "openbsd"))]
         return self.f_bavail.try_into().unwrap();
+        #[cfg(not(any(target_os = "freebsd", target_os = "haiku", target_os = "openbsd")))]
+        #[allow(clippy::useless_conversion)]
+        return self.f_bavail.into();
     }
     fn total_file_nodes(&self) -> u64 {
-        #[cfg(target_pointer_width = "64")]
-        return self.f_files;
-        #[cfg(not(target_pointer_width = "64"))]
+        #[cfg(target_os = "haiku")]
+        return self.f_files.try_into().unwrap();
+        #[cfg(not(target_os = "haiku"))]
+        #[allow(clippy::useless_conversion)]
         return self.f_files.into();
     }
     fn free_file_nodes(&self) -> u64 {
-        #[cfg(all(not(target_os = "freebsd"), target_pointer_width = "64"))]
-        return self.f_ffree;
-        #[cfg(all(not(target_os = "freebsd"), not(target_pointer_width = "64")))]
-        return self.f_ffree.into();
-        #[cfg(target_os = "freebsd")]
+        #[cfg(any(target_os = "freebsd", target_os = "haiku"))]
         return self.f_ffree.try_into().unwrap();
+        #[cfg(not(any(target_os = "freebsd", target_os = "haiku")))]
+        #[allow(clippy::useless_conversion)]
+        return self.f_ffree.into();
     }
     #[cfg(any(
         target_vendor = "apple",
@@ -609,32 +651,19 @@ impl FsMeta for StatFs {
         target_os = "freebsd"
     ))]
     fn fs_type(&self) -> i64 {
-        #[cfg(all(
-            not(any(target_env = "musl", target_env = "ohos")),
-            not(target_vendor = "apple"),
-            not(target_os = "android"),
-            not(target_os = "freebsd"),
-            not(target_arch = "s390x"),
-            target_pointer_width = "64"
-        ))]
-        return self.f_type;
-        #[cfg(all(
-            not(any(target_env = "musl", target_env = "ohos")),
-            any(
-                target_vendor = "apple",
-                all(target_os = "android", target_pointer_width = "32"),
-                target_os = "freebsd",
-                target_arch = "s390x",
-                not(target_pointer_width = "64")
-            )
-        ))]
-        return self.f_type.into();
         #[cfg(any(
             target_env = "musl",
             target_env = "ohos",
             all(target_os = "android", target_pointer_width = "64"),
         ))]
         return self.f_type.try_into().unwrap();
+        #[cfg(not(any(
+            target_env = "musl",
+            target_env = "ohos",
+            all(target_os = "android", target_pointer_width = "64"),
+        )))]
+        #[allow(clippy::useless_conversion)]
+        return self.f_type.into();
     }
     #[cfg(not(any(
         target_vendor = "apple",
@@ -648,7 +677,12 @@ impl FsMeta for StatFs {
     }
 
     /// The preferred transfer size, which on Linux is `f_bsize`.
-    #[cfg(any(target_os = "aix", target_os = "linux", target_os = "android"))]
+    #[cfg(any(
+        target_os = "aix",
+        target_os = "haiku",
+        target_os = "linux",
+        target_os = "android"
+    ))]
     #[allow(clippy::unnecessary_cast)]
     fn io_size(&self) -> u64 {
         self.f_bsize as u64
@@ -666,12 +700,14 @@ impl FsMeta for StatFs {
         target_vendor = "apple",
         target_os = "aix",
         target_os = "freebsd",
+        target_os = "haiku",
         target_os = "linux",
         target_os = "android",
         target_os = "netbsd"
     )))]
     fn io_size(&self) -> u64 {
-        self.f_bsize as u64
+        #[allow(clippy::useless_conversion)]
+        self.f_bsize.into()
     }
 
     // Linux, SunOS, HP-UX, 4.4BSD, FreeBSD have a system call statfs() that returns
@@ -708,7 +744,8 @@ impl FsMeta for StatFs {
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     fn namelen(&self) -> u64 {
-        self.f_namelen as u64
+        #[allow(clippy::unnecessary_cast)]
+        (self.f_namelen as u64)
     }
     #[cfg(target_vendor = "apple")]
     fn namelen(&self) -> u64 {
@@ -717,25 +754,28 @@ impl FsMeta for StatFs {
     #[cfg(any(
         target_os = "aix",
         target_os = "freebsd",
+        target_os = "haiku",
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
-    #[allow(clippy::unnecessary_cast)]
     fn namelen(&self) -> u64 {
-        self.f_namemax as u64 // spell-checker:disable-line
+        #[allow(clippy::unnecessary_cast)]
+        (self.f_namemax as u64)
     }
     // XXX: should everything just use statvfs?
     #[cfg(not(any(
         target_vendor = "apple",
         target_os = "aix",
         target_os = "freebsd",
+        target_os = "haiku",
         target_os = "linux",
         target_os = "android",
         target_os = "netbsd",
         target_os = "openbsd"
     )))]
     fn namelen(&self) -> u64 {
-        self.f_namemax as u64 // spell-checker:disable-line
+        #[allow(clippy::useless_conversion)]
+        self.f_namemax.into()
     }
 }
 
@@ -1077,7 +1117,15 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
+    #[cfg(any(
+        target_vendor = "apple",
+        target_os = "cygwin",
+        target_os = "freebsd",
+        target_os = "linux",
+        target_os = "android",
+        target_os = "netbsd",
+        target_os = "openbsd",
+    ))]
     // spell-checker:ignore (word) binfmt
     fn test_binfmt_misc_is_dummy() {
         use super::is_dummy_filesystem;

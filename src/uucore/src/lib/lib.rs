@@ -145,7 +145,10 @@ pub use crate::features::utmpx;
 #[cfg(all(windows, feature = "wide"))]
 pub use crate::features::wide;
 
-#[cfg(feature = "fsext")]
+#[cfg(all(
+    feature = "fsext",
+    any(all(unix, not(target_os = "fuchsia")), windows, target_os = "wasi")
+))]
 pub use crate::features::fsext;
 
 #[cfg(all(
