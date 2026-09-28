@@ -16,6 +16,7 @@ memmap2
 parse_datetime
 rand_chacha
 rustix
+simdutf
 tempfile
 textwrap
 thiserror

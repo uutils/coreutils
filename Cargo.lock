@@ -2825,6 +2825,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a219298ac11a56ea9a6d2120044824d6f01aeb034955e7af7bc16858527deea"
 
 [[package]]
+name = "simdutf8"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
+
+[[package]]
 name = "siphasher"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3397,10 +3403,12 @@ name = "uu_cut"
 version = "0.13.0"
 dependencies = [
  "bstr",
+ "bytecount",
  "clap",
  "codspeed-divan-compat",
  "fluent",
  "memchr",
+ "simdutf8",
  "uucore",
 ]
 
