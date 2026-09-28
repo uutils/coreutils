@@ -99,6 +99,39 @@ pub fn is_ci() -> bool {
     env::var("CI").is_ok_and(|s| s.eq_ignore_ascii_case("true"))
 }
 
+/// Check whether a plain `sleep` child is terminated by `SIGRTMIN`.
+///
+/// Some emulated environments (e.g. the `cross` containers used in CI) do not
+/// deliver real-time signals with their default disposition, so tests relying on
+/// it would fail for reasons unrelated to the code under test.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn realtime_signals_terminate() -> bool {
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+
+    let Ok(mut child) = Command::new("sleep")
+        .arg("10")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+    else {
+        return false;
+    };
+    // SAFETY: kill(2) with our own child's pid and a valid signal number.
+    unsafe { libc::kill(child.id() as libc::pid_t, libc::SIGRTMIN()) };
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(2) {
+        if let Ok(Some(status)) = child.try_wait() {
+            return !status.success();
+        }
+        sleep(Duration::from_millis(20));
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    false
+}
+
 /// Check if a locale is available on the system by verifying that
 /// `locale charmap` returns `"UTF-8"` when `LC_ALL` is set to the given locale.
 #[cfg(unix)]
