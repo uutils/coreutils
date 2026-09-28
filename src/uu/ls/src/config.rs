@@ -532,7 +532,7 @@ fn extract_quoting_style(
     } else if options.get_flag(options::quoting::ESCAPE) {
         QuotingStyle::Escape
     } else if options.get_flag(options::quoting::C) {
-        QuotingStyle::C_DOUBLE
+        QuotingStyle::C_ALWAYS
     } else {
         // If set, the QUOTING_STYLE environment variable specifies a default style.
         if let Some(qs) = quoting_style_from_env() {
