@@ -1,4 +1,4 @@
-# spell-checker:ignore datetime tzdb zoneinfo
+# spell-checker:ignore datetime tzdb zoneinfo ohos OHOS tzdata
 
 [package]
 name = "uu_date"
