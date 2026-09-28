@@ -16,8 +16,9 @@ addressed. Search both open and closed issues where relevant.
 
 When an existing issue covers the work, reference it in the PR.
 
-If a PR already covers the work, continue working on that PR rather than
-opening another one.
+If you have already opened a PR for the work, continue working on that PR
+rather than opening a new one to replace it. Rebase or otherwise update the
+existing PR's branch as needed.
 
 If the PR fully resolves an issue, include `Closes #XXXXX` in the PR
 description so that the issue is automatically closed when the PR is merged.
