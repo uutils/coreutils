@@ -141,11 +141,9 @@ fn paste(
         for input_source in &mut input_source_vec {
             output.clear();
 
-            let mut read = input_source.read_until(line_ending_byte, &mut output)?;
-            while read > 0 {
+            while let read @ 1.. = input_source.read_until(line_ending_byte, &mut output)? {
                 remove_trailing_line_ending_byte(line_ending_byte, read, &mut output);
                 delimiter_state.write_delimiter(&mut output);
-                read = input_source.read_until(line_ending_byte, &mut output)?;
             }
 
             delimiter_state.remove_trailing_delimiter(&mut output);
