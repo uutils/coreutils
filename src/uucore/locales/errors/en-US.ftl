@@ -3,7 +3,6 @@
 # uucore strings because every utility parses those at startup, and almost
 # no run ever needs one of these.
 
-checksum-error-failed-to-read-input = failed to read input
 checksum-error-algo-bad-format = { $file }: { $line }: improperly formatted { $algo } checksum line
 # Format string parsing messages (printf, seq, env, ...)
 format-error-invalid-spec = %{ $spec }: invalid conversion specification
