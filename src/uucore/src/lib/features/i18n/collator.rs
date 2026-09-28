@@ -59,11 +59,14 @@ pub fn should_use_locale_collation() -> bool {
 /// }
 /// ```
 pub fn init_locale_collation() -> bool {
-    use crate::i18n::{UEncoding, get_locale_encoding};
+    use crate::i18n::UEncoding;
 
     // Use ICU collation only for UTF-8 locales that are NOT C/POSIX
-    // (e.g. en_US.UTF-8, but not C.UTF-8 — C still uses byte comparison)
-    if get_locale_encoding() != UEncoding::Utf8 || !should_use_locale_collation() {
+    // (e.g. en_US.UTF-8, but not C.UTF-8 — C still uses byte comparison).
+    // Collation is governed by LC_COLLATE, not LC_CTYPE, so read the encoding
+    // off the collating locale directly instead of going through
+    // get_locale_encoding().
+    if get_collating_locale().1 != UEncoding::Utf8 || !should_use_locale_collation() {
         return false;
     }
 
