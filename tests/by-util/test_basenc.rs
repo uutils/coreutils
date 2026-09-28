@@ -3,8 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker: ignore (encodings) lsbf msbf
-// spell-checker: ignore autopad MFRGG MFRGGZDF abcdeabc baddecode CPNMUO
+// spell-checker:ignore (encodings) lsbf msbf
+// spell-checker:ignore autopad MFRGG MFRGGZDF abcdeabc baddecode CPNMUO
 
 use uutests::{at_and_ucmd, new_ucmd};
 

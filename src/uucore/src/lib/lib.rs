@@ -734,7 +734,7 @@ mod tests {
         ]
     }
 
-    #[cfg(any(unix, target_os = "redox"))]
+    #[cfg(unix)]
     fn test_invalid_utf8_args_lossy(os_str: &OsStr) {
         // assert our string is invalid utf8
         assert!(os_str.to_os_string().into_string().is_err());
@@ -753,7 +753,7 @@ mod tests {
         );
     }
 
-    #[cfg(any(unix, target_os = "redox"))]
+    #[cfg(unix)]
     fn test_invalid_utf8_args_ignore(os_str: &OsStr) {
         // assert our string is invalid utf8
         assert!(os_str.to_os_string().into_string().is_err());
@@ -778,7 +778,7 @@ mod tests {
         let _ = test_vec.into_iter().collect_lossy();
     }
 
-    #[cfg(any(unix, target_os = "redox"))]
+    #[cfg(unix)]
     #[test]
     fn invalid_utf8_args_unix() {
         use std::os::unix::ffi::OsStrExt;

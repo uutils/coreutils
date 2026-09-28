@@ -95,3 +95,8 @@ mode-error-invalid-operator = invalid operator (expected +, -, or =, but found {
 mode-diag-label-missing-operator = this clause says who, but not what to change
 mode-diag-label-invalid-number = not an octal mode
 mode-diag-help-syntax = a mode is either octal, as in 644, or clauses such as u+rwx,go-w
+
+# Shared recursive chown/chgrp/chmod diagnostics (uucore::perms)
+perms-cannot-access = cannot access { $file }: { $error }
+perms-cannot-access-replaced = cannot access { $file }: replaced while it was being processed
+perms-too-many-symlink-levels = Too many levels of symbolic links

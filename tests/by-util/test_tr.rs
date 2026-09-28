@@ -307,7 +307,7 @@ fn test_delete_and_squeeze_one_set() {
         .args(&["-ds", "a-z"])
         .fails()
         .stderr_contains("missing operand after 'a-z'")
-        .stderr_contains("Two strings must be given when deleting and squeezing.");
+        .stderr_contains("Two strings must be given when both deleting and squeezing repeats.");
 }
 
 #[test]

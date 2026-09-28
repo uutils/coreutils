@@ -14,8 +14,8 @@ use std::str::FromStr;
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser};
 use rand::{
-    RngExt as _,
-    rngs::ThreadRng,
+    RngExt as _, SeedableRng,
+    rngs::{SmallRng, SysRng},
     seq::{IndexedRandom, SliceRandom},
 };
 
@@ -139,7 +139,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // here (missing input, unreadable random source) leaves an existing output
     // file untouched, matching GNU and avoiding silent data loss.
     let mut rng = match options.random_source {
-        RandomSource::None => WrappedRng::Default(rand::rng()),
+        RandomSource::None => {
+            // GNU returns error on the legacy kernel gerandom is missing. But fallback is allowed
+            let r = SmallRng::try_from_rng(&mut SysRng)
+                .unwrap_or_else(|_| SmallRng::seed_from_u64(&raw const options as u64));
+            WrappedRng::Default(r)
+        }
         RandomSource::Seed(ref seed) => WrappedRng::Seed(SeededRng::new(seed)),
         RandomSource::File(ref r) => {
             let file = File::open(r).map_err_context(
@@ -460,7 +465,7 @@ fn parse_range(input_range: &str) -> Result<RangeInclusive<u64>, String> {
 }
 
 enum WrappedRng {
-    Default(ThreadRng),
+    Default(SmallRng),
     Seed(SeededRng),
     File(RandomSourceAdapter<BufReader<File>>),
 }

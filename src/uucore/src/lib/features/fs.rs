@@ -9,7 +9,7 @@
 
 #[cfg(all(unix, not(target_os = "haiku")))]
 pub use libc::{major, makedev, minor};
-use std::collections::HashSet;
+use rustc_hash::FxHashSet;
 use std::collections::VecDeque;
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -359,7 +359,7 @@ pub fn canonicalize<P: AsRef<Path>>(
     let mut parts: VecDeque<OwningComponent> = path.components().map(Into::into).collect();
     let mut result = PathBuf::new();
     let mut followed_symlinks = 0;
-    let mut visited_files = HashSet::new();
+    let mut visited_files = FxHashSet::default();
     while let Some(part) = parts.pop_front() {
         match part {
             OwningComponent::Prefix(s) => {
@@ -430,8 +430,8 @@ pub fn canonicalize<P: AsRef<Path>>(
     Ok(result)
 }
 
-#[cfg(not(unix))]
 /// Display the permissions of a file
+#[cfg(not(unix))]
 pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> String {
     let write = if metadata.permissions().readonly() {
         '-'
@@ -454,8 +454,8 @@ pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> 
     }
 }
 
-#[cfg(unix)]
 /// Display the permissions of a file
+#[cfg(unix)]
 pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> String {
     display_permissions_unix(metadata.mode(), display_file_type)
 }
@@ -522,10 +522,9 @@ fn get_file_display(mode: u32) -> char {
     }
 }
 
-// The logic below is more readable written this way.
-#[allow(clippy::if_not_else)]
-#[allow(clippy::cognitive_complexity)]
 /// Display the unix permissions of a file
+#[allow(clippy::if_not_else, reason = "more readable written this way")]
+#[allow(clippy::cognitive_complexity)]
 pub fn display_permissions_unix(mode: u32, display_file_type: bool) -> String {
     use mode::{
         S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP,
@@ -755,7 +754,7 @@ pub fn make_path_relative_to<P1: AsRef<Path>, P2: AsRef<Path>>(path: P1, to: P2)
 ///
 /// * `bool` - Returns `true` if a symlink loop is detected, `false` otherwise.
 pub fn is_symlink_loop(path: &Path) -> bool {
-    let mut visited_symlinks = HashSet::new();
+    let mut visited_symlinks = FxHashSet::default();
     let mut current_path = path.to_path_buf();
 
     while let (Ok(metadata), Ok(link)) = (

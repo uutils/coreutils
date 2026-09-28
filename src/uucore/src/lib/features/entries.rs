@@ -128,10 +128,13 @@ pub struct Passwd {
 }
 
 /// # Safety
-/// ptr must point to a valid C string.
 ///
-/// Returns None if ptr is null.
-fn cstr2string(ptr: *const c_char) -> Option<String> {
+/// If `ptr` is non-null, it must point to a valid, NUL-terminated C string
+///
+/// # Returns
+///
+/// Returns None if `ptr`` is null.
+unsafe fn cstr2string(ptr: *const c_char) -> Option<String> {
     if ptr.is_null() {
         None
     } else {
@@ -145,21 +148,21 @@ impl Passwd {
     /// the function runs. That means PW_LOCK must be held.
     unsafe fn from_raw(raw: passwd) -> Self {
         Self {
-            name: cstr2string(raw.pw_name).expect("passwd without name"),
+            name: unsafe { cstr2string(raw.pw_name).expect("passwd without name") },
             uid: raw.pw_uid,
             gid: raw.pw_gid,
             #[cfg(not(all(
                 target_os = "android",
                 any(target_arch = "x86", target_arch = "arm")
             )))]
-            user_info: cstr2string(raw.pw_gecos),
+            user_info: unsafe { cstr2string(raw.pw_gecos) },
             #[cfg(all(target_os = "android", any(target_arch = "x86", target_arch = "arm")))]
             user_info: None,
-            user_shell: cstr2string(raw.pw_shell),
-            user_dir: cstr2string(raw.pw_dir),
-            user_passwd: cstr2string(raw.pw_passwd),
+            user_shell: unsafe { cstr2string(raw.pw_shell) },
+            user_dir: unsafe { cstr2string(raw.pw_dir) },
+            user_passwd: unsafe { cstr2string(raw.pw_passwd) },
             #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
-            user_access_class: cstr2string(raw.pw_class),
+            user_access_class: unsafe { cstr2string(raw.pw_class) },
             #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
             passwd_change_time: raw.pw_change,
             #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
@@ -226,7 +229,7 @@ impl Group {
     /// the function runs. That means PW_LOCK must be held.
     unsafe fn from_raw(raw: group) -> Self {
         Self {
-            name: cstr2string(raw.gr_name).expect("group without name"),
+            name: unsafe { cstr2string(raw.gr_name).expect("group without name") },
             gid: raw.gr_gid,
         }
     }

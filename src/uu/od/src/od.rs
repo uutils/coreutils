@@ -84,7 +84,7 @@ fn parse_bytes_option(
     args: &[String],
     diag_args: Option<&[OsString]>,
     option_name: &'static str,
-    short: Option<char>,
+    short: char,
 ) -> UResult<Option<u64>> {
     match matches.get_one::<String>(option_name) {
         None => Ok(None),
@@ -93,7 +93,7 @@ fn parse_bytes_option(
             Err(e) => {
                 let message =
                     format_error_message(&e, s, &option_display_name(args, option_name, short));
-                let option = OptionValue::with_names(s, short, Some(option_name));
+                let option = OptionValue::with_names(s, Some(short), Some(option_name));
                 Err(e.size_value_error(
                     diag_args,
                     &option,
@@ -124,8 +124,7 @@ impl OdOptions {
         };
 
         let mut skip_bytes =
-            parse_bytes_option(matches, args, diag_args, options::SKIP_BYTES, Some('j'))?
-                .unwrap_or(0);
+            parse_bytes_option(matches, args, diag_args, options::SKIP_BYTES, 'j')?.unwrap_or(0);
 
         let mut label: Option<u64> = None;
 
@@ -145,7 +144,7 @@ impl OdOptions {
             matches.get_one::<String>(options::WIDTH),
             matches.value_source(options::WIDTH),
         ) {
-            let width_display = option_display_name(args, options::WIDTH, Some('w'));
+            let width_display = option_display_name(args, options::WIDTH, 'w');
             let parsed = parse_number_of_bytes(s).map_err(|e| {
                 let message = format_error_message(&e, s, &width_display);
                 e.size_value_error(
@@ -193,10 +192,9 @@ impl OdOptions {
 
         let output_duplicates = matches.get_flag(options::OUTPUT_DUPLICATES);
 
-        let read_bytes =
-            parse_bytes_option(matches, args, diag_args, options::READ_BYTES, Some('N'))?;
+        let read_bytes = parse_bytes_option(matches, args, diag_args, options::READ_BYTES, 'N')?;
 
-        let strings = parse_bytes_option(matches, args, diag_args, options::STRINGS, Some('S'))?;
+        let strings = parse_bytes_option(matches, args, diag_args, options::STRINGS, 'S')?;
         let string_min_length = match strings {
             None => None,
             Some(n) => Some(usize::try_from(n).map_err(|_| {
@@ -829,25 +827,21 @@ impl<R: HasError> HasError for BufReader<R> {
     }
 }
 
-fn option_display_name(args: &[String], option_name: &str, short: Option<char>) -> String {
+fn option_display_name(args: &[String], option_name: &str, short: char) -> String {
     let long_form = format!("--{option_name}");
     let long_form_with_eq = format!("{long_form}=");
-    if let Some(short_char) = short {
-        let short_form = format!("-{short_char}");
-        for arg in args.iter().skip(1) {
-            if !arg.starts_with("--") && arg.starts_with(&short_form) {
-                return short_form;
-            }
+    let short_form = format!("-{short}");
+    for arg in args.iter().skip(1) {
+        if !arg.starts_with("--") && arg.starts_with(&short_form) {
+            return short_form;
         }
-        for arg in args.iter().skip(1) {
-            if arg == &long_form || arg.starts_with(&long_form_with_eq) {
-                return long_form;
-            }
-        }
-        short_form
-    } else {
-        long_form
     }
+    for arg in args.iter().skip(1) {
+        if arg == &long_form || arg.starts_with(&long_form_with_eq) {
+            return long_form;
+        }
+    }
+    short_form
 }
 
 fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {

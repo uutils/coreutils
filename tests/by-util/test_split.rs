@@ -9,8 +9,6 @@ use rand::{RngExt as _, SeedableRng, rng};
 use regex::Regex;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::process::Resource;
-#[cfg(not(windows))]
-use std::env;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::path::Path;
@@ -337,27 +335,20 @@ fn test_filter() {
 #[test]
 #[cfg(unix)]
 fn test_filter_with_env_var_set() {
-    // This test will ensure that if $FILE env var was set before running --filter, it'll stay that
-    // way
+    // This test will ensure that if $FILE is already set in split's environment, --filter still
+    // sets it to each output file name
     // implemented like `test_split_default()` but run a command before writing
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "filtered";
     let n_lines = 3;
     RandomFile::new(&at, name).add_lines(n_lines);
 
-    let env_var_value = "some-value";
-    unsafe {
-        env::set_var("FILE", env_var_value);
-    }
-    ucmd.args(&[format!("--filter={}", "cat > $FILE").as_str(), name])
+    ucmd.env("FILE", "some-value")
+        .args(&[format!("--filter={}", "cat > $FILE").as_str(), name])
         .succeeds();
 
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.collate(), at.read_bytes(name));
-    assert_eq!(
-        env::var("FILE").unwrap_or_else(|_| "var was unset".to_owned()),
-        env_var_value
-    );
 }
 
 #[test]
