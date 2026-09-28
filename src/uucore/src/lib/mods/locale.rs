@@ -562,7 +562,7 @@ pub fn is_integer_literal(s: &str) -> bool {
 
 /// Function to detect system locale from environment variables
 fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
-    let locale_str = ["LC_ALL", "LC_MESSAGES", "LANG"]
+    let locale_str = ["LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"]
         .iter()
         .find_map(|&key| std::env::var(key).ok().filter(|l| !l.is_empty()))
         .unwrap_or_else(|| DEFAULT_LOCALE.to_string())
