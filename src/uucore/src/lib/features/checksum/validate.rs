@@ -221,8 +221,7 @@ impl FileChecksumResult {
     fn can_display(self, verbose: ChecksumVerbose) -> bool {
         match self {
             Self::Ok => verbose.over_quiet(),
-            Self::Failed => verbose.over_status(),
-            Self::CantOpen => true,
+            Self::Failed | Self::CantOpen => verbose.over_status(),
         }
     }
 }
@@ -580,7 +579,7 @@ fn get_file_to_check(
             }
             Err(err) => {
                 if !opts.ignore_missing {
-                    // yes, we have both stderr and stdout here
+                    // Keep the individual diagnostic even when --status hides the result.
                     print_error(err);
                     failed_open();
                 }

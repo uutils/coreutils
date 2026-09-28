@@ -2811,6 +2811,25 @@ mod cksum_check_mode {
         scene
             .ucmd()
             .arg("--check")
+            .arg("--status")
+            .arg("CHECKSUMS2")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("input2: No such file or directory")
+            .stderr_does_not_contain("listed file could not be read");
+
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("--quiet")
+            .arg("CHECKSUMS2")
+            .fails_with_code(1)
+            .stdout_contains("input2: FAILED open or read")
+            .stderr_contains("input2: No such file or directory");
+
+        scene
+            .ucmd()
+            .arg("--check")
             .arg("CHECKSUMS2")
             .fails()
             .stdout_contains("input2: FAILED open or read")
