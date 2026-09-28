@@ -105,6 +105,9 @@ enum DateError {
     #[cfg(target_os = "redox")]
     #[error("{}", translate!("date-error-setting-date-not-supported-redox"))]
     SettingDateNotSupportedRedox,
+    #[cfg(target_os = "wasi")]
+    #[error("{}", translate!("date-error-setting-date-not-supported-wasi"))]
+    SettingDateNotSupportedWasi,
 }
 
 impl UError for DateError {}
@@ -1400,7 +1403,33 @@ fn parse_date<S: AsRef<str>>(
     }
 }
 
-#[cfg(not(any(unix, windows)))]
+#[cfg(target_os = "wasi")]
+/// Returns the resolution of the system's realtime clock.
+///
+/// `rustix::time::clock_getres` excludes WASI, so `libc::clock_getres` is
+/// used directly as a workaround.
+fn get_clock_resolution() -> Timestamp {
+    let mut timespec = std::mem::MaybeUninit::<libc::timespec>::uninit();
+
+    // SAFETY: `clock_getres` writes a complete `timespec` into the provided
+    // pointer when it returns 0. We only read `timespec` after checking for
+    // success, so it is always fully initialized before use.
+    let timespec = unsafe {
+        let ret = libc::clock_getres(libc::CLOCK_REALTIME, timespec.as_mut_ptr());
+        assert_eq!(
+            ret,
+            0,
+            "clock_getres(CLOCK_REALTIME) failed: {}",
+            std::io::Error::last_os_error()
+        );
+        timespec.assume_init()
+    };
+
+    #[allow(clippy::unnecessary_cast, reason = "needed for 32 bit target")]
+    Timestamp::constant(timespec.tv_sec as _, timespec.tv_nsec as _)
+}
+
+#[cfg(not(any(unix, windows, target_os = "wasi")))]
 fn get_clock_resolution() -> Timestamp {
     unimplemented!("getting clock resolution not implemented (unsupported target)");
 }
@@ -1439,7 +1468,7 @@ fn get_clock_resolution() -> Timestamp {
     Timestamp::constant(0, 100)
 }
 
-#[cfg(not(any(unix, windows)))]
+#[cfg(not(any(unix, windows, target_os = "wasi")))]
 fn set_system_datetime(_date: Zoned) -> UResult<()> {
     unimplemented!("setting date not implemented (unsupported target)");
 }
@@ -1451,6 +1480,12 @@ fn convert_for_set(date: Zoned, utc: bool) -> Zoned {
     } else {
         date
     }
+}
+
+#[cfg(target_os = "wasi")]
+/// The WASI sandbox has no syscall for setting the wall clock.
+fn set_system_datetime(_date: Zoned) -> UResult<()> {
+    Err(Box::new(DateError::SettingDateNotSupportedWasi))
 }
 
 #[cfg(target_os = "redox")]
@@ -1659,6 +1694,18 @@ mod tests {
         assert_eq!(
             write_date_with_settings(date, settings),
             "2020-03-12 05:30:00 +00:00\n"
+        );
+    }
+
+    #[test]
+    fn test_get_clock_resolution() {
+        let res = get_clock_resolution();
+
+        // Every supported platform reports a resolution of at least 1ns.
+        let nanos = res.as_second() as i128 * 1_000_000_000 + i128::from(res.subsec_nanosecond());
+        assert!(
+            (1..=1_000_000_000).contains(&nanos),
+            "unexpected clock resolution: {nanos}ns"
         );
     }
 }
