@@ -1883,11 +1883,15 @@ fn test_deep_directory_traversal_no_stack_overflow() {
     );
     let nofile = soft;
 
+    // On macOS and BSD, PATH_MAX is 1024, so depth cannot exceed ~480 without hitting ENAMETOOLONG.
+    // On Linux, PATH_MAX is 4096, allowing 1500+ levels.
+    let target_depth = if cfg!(target_os = "linux") { 1500 } else { 400 };
+
     let (at, mut ucmd) = at_and_ucmd!();
     let mut current = at.plus_as_string("root_dir");
     std::fs::create_dir(&current).unwrap();
     let mut depth = 0;
-    for _ in 0..1500 {
+    for _ in 0..target_depth {
         current.push_str("/d");
         if std::fs::create_dir(&current).is_ok() {
             depth += 1;
@@ -1896,7 +1900,7 @@ fn test_deep_directory_traversal_no_stack_overflow() {
         }
     }
     assert_eq!(
-        depth, 1500,
+        depth, target_depth,
         "failed to create nested directories: depth was {depth}"
     );
 
