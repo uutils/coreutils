@@ -9,7 +9,7 @@ cd -- "$(dirname -- "$0")/.."
 if ! jq --version 1>/dev/null 2>&1; then
     # refs: <https://forge.rust-lang.org/release/platform-support.html> , <https://docs.rs/platforms/0.2.1/platforms/platform/tier1/index.html>
     # default utility list
-    default_utils=$(sed -n '/feat_common_core = \[/,/\]/p' Cargo.toml | sed '1d' | tr -d '],"\n')
+    default_utils=$(cargo tree --depth 1 --features feat_common_core --format "{lib}" --prefix none | sed -n 's/^uu_//p')
     echo "WARN: missing \`jq\` (install with \`sudo apt install jq\`); falling back to default (only fully cross-platform) utility list" 1>&2
     echo "$default_utils"
 else
