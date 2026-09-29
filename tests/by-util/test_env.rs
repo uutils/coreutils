@@ -86,14 +86,14 @@ fn test_flags_after_command() {
         .no_stderr()
         .stdout_is("-u=v\n");
 
+    // spell-checker:disable
     new_ucmd!()
         // Ensure the string isn't split
-        // cSpell:disable
         .args(&["printf", "%s-%s", "-Sfoo bar"])
         .succeeds()
         .no_stderr()
         .stdout_is("-Sfoo bar-");
-    // cSpell:enable
+    // spell-checker:enable
 
     new_ucmd!()
         // Ensure -- is recognized

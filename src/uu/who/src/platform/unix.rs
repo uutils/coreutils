@@ -327,7 +327,9 @@ impl Who {
                 let last = (ut.pid() / 256) as u8 as char;
                 let level = (ut.pid() % 256) as u8 as char;
                 runlevel_line = translate!("who-runlevel", "level" => level);
-                runlevel_note = translate!("who-runlevel-last", "last" => (if last == 'N' { 'S' } else { 'N' }));
+                // Like GNU, a previous level of 'N' is reported as 'S'; any
+                // other previous level is reported as-is.
+                runlevel_note = translate!("who-runlevel-last", "last" => (if last == 'N' { 'S' } else { last }));
                 Row {
                     line: &runlevel_line,
                     time: &time,

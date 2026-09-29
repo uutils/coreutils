@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore wipesync
+// spell-checker:ignore wipesync couldnt
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -557,4 +557,14 @@ shred: invalid file size: '4vv'
             .fails_with_code(1)
             .stderr_is("shred: invalid file size: '4vv'\n");
     }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
+fn test_couldnt_rename() {
+    new_ucmd!()
+        .args(&["-u", "/proc/self/mem"])
+        .fails_with_code(1)
+        .stderr_is("shred: /proc/self/mem: Couldn't rename to '/proc/self/000': No such file or directory\n");
 }

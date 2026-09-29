@@ -130,8 +130,8 @@ fn remove_dir_with_feedback(path: &Path, options: &Options) -> bool {
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Copy)]
 /// Enum, determining when the `rm` will prompt the user about the file deletion
+#[derive(Eq, PartialEq, Clone, Copy)]
 pub enum InteractiveMode {
     /// Never prompt
     Never,
@@ -195,9 +195,9 @@ pub struct Options {
     pub verbose: bool,
     /// `-g`, `--progress`
     pub progress: bool,
-    #[doc(hidden)]
     /// `---presume-input-tty`
     /// Always use `None`; GNU flag for testing use only
+    #[doc(hidden)]
     pub __presume_input_tty: Option<bool>,
 }
 
@@ -532,7 +532,9 @@ fn count_files_in_directory(p: &Path) -> u64 {
         entries
             .flatten()
             .map(|entry| match entry.file_type() {
-                Ok(ft) if ft.is_dir() => count_files_in_directory(&entry.path()),
+                Ok(ft) if ft.is_dir() && !ft.is_symlink() => {
+                    count_files_in_directory(&entry.path())
+                }
                 Ok(_) => 1,
                 Err(_) => 0,
             })
@@ -665,7 +667,14 @@ fn remove_dir_recursive(
     // a directory and we don't want to recurse. In particular, this
     // avoids an infinite recursion in the case of a link to the current
     // directory, like `ln -s . link`.
-    if !path.is_dir() || path.is_symlink() {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(e) => return show_removal_error(e, path),
+    };
+    if is_symlink_dir(&metadata) {
+        return remove_dir(path, options, progress_bar);
+    }
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
         return remove_file(path, options, progress_bar);
     }
 

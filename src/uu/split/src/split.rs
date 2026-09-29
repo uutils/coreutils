@@ -76,6 +76,7 @@ fn handle_obsolete(args: impl uucore::Args) -> (Vec<OsString>, Option<String>) {
     let mut obs_lines = None;
     let mut preceding_long_opt_req_value = false;
     let mut preceding_short_opt_req_value = false;
+    let mut after_double_dash = false;
 
     let filtered_args = args
         .filter_map(|os_slice| {
@@ -84,6 +85,7 @@ fn handle_obsolete(args: impl uucore::Args) -> (Vec<OsString>, Option<String>) {
                 &mut obs_lines,
                 &mut preceding_long_opt_req_value,
                 &mut preceding_short_opt_req_value,
+                &mut after_double_dash,
             )
         })
         .collect();
@@ -98,9 +100,19 @@ fn filter_args(
     obs_lines: &mut Option<String>,
     preceding_long_opt_req_value: &mut bool,
     preceding_short_opt_req_value: &mut bool,
+    after_double_dash: &mut bool,
 ) -> Option<OsString> {
     let filter: Option<OsString>;
     if let Some(slice) = os_slice.to_str() {
+        if *after_double_dash {
+            // Past `--` everything is an operand, so `split -- -1` names a file
+            // rather than setting the line count.
+            return Some(OsString::from(slice));
+        }
+        if slice == "--" {
+            *after_double_dash = true;
+            return Some(OsString::from(slice));
+        }
         if should_extract_obs_lines(
             slice,
             *preceding_long_opt_req_value,
@@ -246,8 +258,8 @@ struct Settings {
     io_blksize: Option<u64>,
 }
 
-#[derive(Debug, Error)]
 /// An error when parsing settings from command-line arguments.
+#[derive(Debug, Error)]
 enum SettingsError {
     /// Invalid chunking strategy.
     #[error("{0}")]
@@ -1234,9 +1246,10 @@ fn n_chunks_by_line_round_robin(
     let mut closed_writers = 0;
 
     let mut i = 0;
+    let mut line = Vec::new();
     loop {
-        let line = &mut Vec::new();
-        let num_bytes_read = reader.by_ref().read_until(sep, line)?;
+        line.clear();
+        let num_bytes_read = reader.by_ref().read_until(sep, &mut line)?;
 
         // if there is nothing else to read - exit the loop
         if num_bytes_read == 0 {

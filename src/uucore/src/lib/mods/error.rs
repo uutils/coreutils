@@ -425,7 +425,9 @@ impl Display for UIoError {
                 AddrInUse => "Address in use",
                 AddrNotAvailable => "Address not available",
                 BrokenPipe => "Broken pipe",
-                AlreadyExists => "Already exists",
+                // strerror(EEXIST); GNU prints "File exists", not the Rust
+                // ErrorKind name.
+                AlreadyExists => "File exists",
                 WouldBlock => "Would block",
                 InvalidInput => "Invalid input",
                 InvalidData => "Invalid data",

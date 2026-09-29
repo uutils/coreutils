@@ -83,6 +83,23 @@ fn test_fs_default_format_block_size_label() {
         .stdout_contains("Block size:");
 }
 
+#[test]
+// `stat -f` is only implemented for these targets; elsewhere `fs_type` is
+// still `unimplemented!()`.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_fs_default_format_quotes_name() {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.touch("a b");
+    ts.ucmd()
+        .args(&["-f", "a b"])
+        .succeeds()
+        .stdout_contains("  File: 'a b'\n");
+    ts.ucmd()
+        .args(&["-f", "-t", "a b"])
+        .succeeds()
+        .stdout_str_check(|s| s.starts_with("'a b' "));
+}
+
 #[cfg(unix)]
 #[test]
 fn test_terse_normal_format() {
@@ -499,6 +516,74 @@ fn test_without_argument() {
 }
 
 #[test]
+fn test_quoting_style_default() {
+    // By default, a name is only quoted when needed (shell-escape).
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("plain");
+    at.touch("a b");
+    at.relative_symlink_file("plain", "link");
+    ts.ucmd()
+        .args(&["-c", "%N", "plain", "a b", "link"])
+        .succeeds()
+        .stdout_only("plain\n'a b'\nlink -> plain\n");
+
+    ts.ucmd()
+        .arg("a b")
+        .succeeds()
+        .stdout_contains("  File: 'a b'\n");
+}
+
+#[test]
+fn test_quoted_name_directive() {
+    // %Qn quotes the name like %N, without dereferencing a symbolic link.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a b");
+    at.relative_symlink_file("a b", "link");
+    ts.ucmd()
+        .args(&["-c", "%Qn|%-6Qn|", "a b", "link"])
+        .succeeds()
+        .stdout_only("'a b'|'a b' |\nlink|link  |\n");
+
+    ts.ucmd()
+        .env("QUOTING_STYLE", "c")
+        .args(&["-f", "-c", "%Qn", "a b"])
+        .succeeds()
+        .stdout_only("\"a b\"\n");
+
+    ts.ucmd()
+        .args(&["-t", "a b"])
+        .succeeds()
+        .stdout_str_check(|s| s.starts_with("'a b' "));
+}
+
+#[test]
+fn test_quoting_style_env() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("it's");
+    at.touch("tab\there");
+    for (style, expected) in [
+        ("literal", "it's\ntab\there\n"),
+        ("shell", "\"it's\"\n'tab\there'\n"),
+        ("shell-always", "\"it's\"\n'tab\there'\n"),
+        ("shell-escape", "\"it's\"\n'tab'$'\\t''here'\n"),
+        ("shell-escape-always", "\"it's\"\n'tab'$'\\t''here'\n"),
+        ("c", "\"it's\"\n\"tab\\there\"\n"),
+        ("escape", "it's\ntab\\there\n"),
+        ("locale", "'it\\'s'\n'tab\\there'\n"),
+        ("clocale", "\"it's\"\n\"tab\\there\"\n"),
+    ] {
+        ts.ucmd()
+            .env("QUOTING_STYLE", style)
+            .args(&["-c", "%N", "it's", "tab\there"])
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
 fn test_quoting_style_locale() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -572,7 +657,7 @@ fn test_quoting_style_invalid_env() {
         .env("QUOTING_STYLE", "fromage")
         .args(&["-c", "nom=[%N]", "baguette", "Croissant", "Escargot"])
         .succeeds();
-    res.stdout_is("nom=['baguette']\nnom=['Croissant']\nnom=['Escargot']\n");
+    res.stdout_is("nom=[baguette]\nnom=[Croissant]\nnom=[Escargot]\n");
     assert_eq!(res.stderr_str().matches(needle).count(), 1);
 
     // An empty value is also invalid and must be reported with empty quotes.
@@ -580,7 +665,7 @@ fn test_quoting_style_invalid_env() {
         .env("QUOTING_STYLE", "")
         .args(&["-c", "%N", "baguette"])
         .succeeds()
-        .stdout_is("'baguette'\n")
+        .stdout_is("baguette\n")
         .stderr_is("stat: ignoring invalid value of environment variable QUOTING_STYLE: ''\n");
 
     // %%%N: a literal '%' followed by the quoted name, fallback style applies.
@@ -588,7 +673,7 @@ fn test_quoting_style_invalid_env() {
         .env("QUOTING_STYLE", "soufflé")
         .args(&["-c", "%%%N", "baguette"])
         .succeeds()
-        .stdout_is("%'baguette'\n")
+        .stdout_is("%baguette\n")
         .stderr_is(
             "stat: ignoring invalid value of environment variable QUOTING_STYLE: 'soufflé'\n",
         );

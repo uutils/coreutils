@@ -17,10 +17,10 @@ test = false
 doctest = false
 
 [dependencies]
-libc = { workspace = true }
 clap = { workspace = true }
-uucore = { workspace = true }
 fluent = { workspace = true }
+libc = { workspace = true }
+uucore = { workspace = true }
 
 [lints]
 workspace = true

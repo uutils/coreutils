@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::{Pattern, PatternError};
-use rustc_hash::FxHashSet as HashSet;
+use rustc_hash::FxHashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, DirEntry, File, Metadata};
@@ -26,6 +26,7 @@ use thiserror::Error;
 use uucore::diagnostics::OptionValue;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::fs::SYMLINK_FOLLOW_LIMIT;
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
 use uucore::line_ending::LineEnding;
 #[cfg(all(unix, not(target_os = "redox")))]
@@ -353,7 +354,7 @@ fn safe_du(
     path: &Path,
     options: &TraversalOptions,
     depth: usize,
-    seen_inodes: &mut HashSet<FileInfo>,
+    seen_inodes: &mut FxHashSet<FileInfo>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
     parent_fd: Option<&DirFd>,
     initial_stat: Option<io::Result<Stat>>,
@@ -610,15 +611,12 @@ fn du_regular(
     mut my_stat: Stat,
     options: &TraversalOptions,
     depth: usize,
-    seen_inodes: &mut HashSet<FileInfo>,
+    seen_inodes: &mut FxHashSet<FileInfo>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
-    ancestors: Option<&mut HashSet<FileInfo>>,
+    ancestors: Option<&mut FxHashSet<FileInfo>>,
     symlink_depth: Option<usize>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
-    // Maximum symlink depth to prevent infinite loops
-    const MAX_SYMLINK_DEPTH: usize = 40;
-
-    let mut default_ancestors = HashSet::default();
+    let mut default_ancestors = FxHashSet::default();
     let ancestors = ancestors.unwrap_or(&mut default_ancestors);
     let symlink_depth = symlink_depth.unwrap_or(0);
 
@@ -660,7 +658,7 @@ fn du_regular(
                         current_symlink_depth += 1;
 
                         // Check symlink depth limit
-                        if current_symlink_depth > MAX_SYMLINK_DEPTH {
+                        if current_symlink_depth > SYMLINK_FOLLOW_LIMIT {
                             print_tx.send(Err(io::Error::new(
                                 io::ErrorKind::InvalidData,
                                 "Too many levels of symbolic links",
@@ -801,7 +799,12 @@ enum DuError {
     InvalidGlob(PatternError),
 }
 
-impl UError for DuError {}
+impl UError for DuError {
+    fn usage(&self) -> bool {
+        // GNU points at --help for a bad --max-depth argument.
+        matches!(self, Self::InvalidMaxDepthArg(_))
+    }
+}
 
 /// Read a file and return each line in a vector of String
 fn file_as_vec(filename: impl AsRef<Path>) -> UResult<Vec<String>> {
@@ -1169,7 +1172,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let printing_thread = thread::spawn(move || stat_printer.print_stats(&rx));
 
     // Check existence of path provided in argument
-    let mut seen_inodes: HashSet<FileInfo> = HashSet::default();
+    let mut seen_inodes: FxHashSet<FileInfo> = FxHashSet::default();
 
     'loop_file: for path in files {
         // Skip if we don't want to ignore anything
@@ -1387,6 +1390,8 @@ pub fn uu_app() -> Command {
                 .long("max-depth")
                 .value_name("N")
                 .help(translate!("du-help-max-depth"))
+                // Accept a negative depth so it is rejected by us, not by clap.
+                .allow_hyphen_values(true)
                 .overrides_with(options::MAX_DEPTH),
         )
         .arg(

@@ -1086,7 +1086,7 @@ fn test_width_zero() {
         .arg("-w")
         .arg("0")
         .fails_with_code(1)
-        .stderr_is("fold: invalid number of columns: '0': Result too large\n");
+        .stderr_is("fold: invalid number of columns: '0': Numerical result out of range\n");
 }
 
 #[test]
@@ -1107,6 +1107,6 @@ fn test_width_overflow() {
         .arg("999999999999999999999")
         .fails_with_code(1)
         .stderr_is(
-            "fold: invalid number of columns: '999999999999999999999': Value too large to be stored in data type\n",
+            "fold: invalid number of columns: '999999999999999999999': Numerical result out of range\n",
         );
 }

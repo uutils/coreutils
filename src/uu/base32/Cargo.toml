@@ -17,8 +17,8 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["encoding"] }
 fluent = { workspace = true }
+uucore = { workspace = true, features = ["encoding"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))'.dependencies]
 rustix = { workspace = true, features = ["fs"] }

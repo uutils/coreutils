@@ -162,7 +162,7 @@ fn test_too_many_args_output() {
         .usage_error("extra operand 'c'");
 }
 
-#[cfg(any(unix, target_os = "redox"))]
+#[cfg(unix)]
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_invalid_utf8_args() {

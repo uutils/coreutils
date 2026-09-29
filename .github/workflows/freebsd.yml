@@ -23,13 +23,13 @@ concurrency:
 jobs:
   style:
     name: Style and Lint
-    runs-on: ${{ matrix.job.os }}
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-24.04 , features: unix }
+          - { features: unix }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -109,13 +109,13 @@ jobs:
 
   test:
     name: Tests
-    runs-on: ${{ matrix.job.os }}
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-24.04 , features: unix }
+          - { features: unix }
     env:
       mem: 4096
     steps:

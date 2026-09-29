@@ -512,7 +512,7 @@ fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> PathBuf {
     SmallRng::try_from_rng(&mut rngs::SysRng)
         .unwrap_or_else(|_| {
             //rand::rng panics if getrandom failed
-            SmallRng::seed_from_u64(bytes.as_ptr() as usize as u64)
+            SmallRng::seed_from_u64(bytes.as_ptr() as u64)
         })
         .fill(bytes);
     for byte in bytes {
