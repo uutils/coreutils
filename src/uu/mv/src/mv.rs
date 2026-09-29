@@ -775,6 +775,15 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             hardlink_params.1,
         ) {
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
+            // This message already names both files, so it is shown without a context
+            Err(e) if is_inter_device_move_error(&e) => {
+                let e = USimpleError::new(1, e.to_string());
+                if let Some(ref pb) = display_manager {
+                    pb.suspend(|| show!(e));
+                } else {
+                    show!(e);
+                }
+            }
             Err(e) => {
                 let message = if is_directory_not_empty_error(&e) {
                     translate!(
@@ -924,6 +933,12 @@ fn rename(
 
 fn is_directory_not_empty_error(err: &io::Error) -> bool {
     err.kind() == io::ErrorKind::DirectoryNotEmpty
+}
+
+fn is_inter_device_move_error(err: &io::Error) -> bool {
+    err.get_ref()
+        .and_then(|inner| inner.downcast_ref::<MvError>())
+        .is_some_and(|e| matches!(e, MvError::InterDeviceMoveFailed(..)))
 }
 
 #[cfg(unix)]
@@ -1411,8 +1426,12 @@ fn rename_file_fallback(
     // Remove existing target file if it exists
     if to.is_symlink() || to.exists() {
         fs::remove_file(to).map_err(|err| {
-            let inter_device_msg = translate!("mv-error-inter-device-move-failed", "from" => from.quote(), "to" => to.quote(), "err" => strip_errno(&err));
-            io::Error::new(err.kind(), inter_device_msg)
+            let inter_device_err = MvError::InterDeviceMoveFailed(
+                from.quote().to_string(),
+                to.quote().to_string(),
+                strip_errno(&err),
+            );
+            io::Error::new(err.kind(), inter_device_err)
         })?;
     }
 

@@ -3849,3 +3849,21 @@ fn test_mv_inter_device_unable_to_remove_target() {
         );
     assert!(at.file_exists("src"));
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_into_dir_inter_device_unable_to_remove_target() {
+    // Same as above, but with a target directory: the message must not get a
+    // "cannot move" prefix.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("comm", "src contents");
+
+    ucmd.arg("comm")
+        .arg("/proc/self")
+        .fails_with_code(1)
+        .stderr_is(
+            "mv: inter-device move failed: 'comm' to '/proc/self/comm'; \
+             unable to remove target: Operation not permitted\n",
+        );
+    assert!(at.file_exists("comm"));
+}
