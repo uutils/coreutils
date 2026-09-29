@@ -6,7 +6,7 @@ use uu_tee::uumain;
 use uucore::benchmark::{get_bench_args, setup_test_file};
 
 #[cfg(unix)]
-#[divan::bench(args = [10_000_000], sample_size = 1)]
+#[divan::bench(args = [10_000_000])]
 fn tee_stdin_file(bencher: Bencher, size_bytes: usize) {
     let data = vec![b'a'; size_bytes];
     let file_path = setup_test_file(&data);
@@ -25,5 +25,9 @@ fn tee_stdin_file(bencher: Bencher, size_bytes: usize) {
 }
 
 fn main() {
+    // Rewind happens before each sample; force one iteration after CLI/env overrides.
+    #[cfg(not(codspeed))]
+    divan::Divan::from_args().sample_size(1).main();
+    #[cfg(codspeed)]
     divan::main();
 }

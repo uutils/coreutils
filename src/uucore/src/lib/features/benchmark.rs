@@ -27,6 +27,19 @@ pub fn create_test_file(data: &[u8], temp_dir: &Path) -> PathBuf {
     file_path
 }
 
+/// Run a utility function directly with given arguments
+/// This calls the uumain function that returns i32 (like the fuzzing approach)
+pub fn run_util_function<F>(util_func: F, args: &[&str]) -> i32
+where
+    F: FnOnce(std::vec::IntoIter<std::ffi::OsString>) -> i32,
+{
+    // Prepend a dummy program name as argv[0] since clap expects it
+    let os_args = std::iter::once("benchmark".into())
+        .chain(args.iter().map(Into::into))
+        .collect_vec();
+    util_func(os_args.into_iter())
+}
+
 /// Prepare benchmark arguments for a utility function
 pub fn get_bench_args(args: &[&dyn AsRef<std::ffi::OsStr>]) -> Vec<std::ffi::OsString> {
     // Prepend a dummy program name as argv[0] since clap expects it

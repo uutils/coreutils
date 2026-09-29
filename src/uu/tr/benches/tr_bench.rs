@@ -46,7 +46,7 @@ mod benches {
     /// ASCII lowercase->uppercase range translation.
     /// Exercises the AVX2 ASCII-range fast path on x86_64 hosts that
     /// support it, and the scalar range fallback on other targets.
-    #[divan::bench(sample_size = 1)]
+    #[divan::bench]
     fn tr_ascii_range_lower_to_upper(bencher: Bencher) {
         let data = text_data::generate_by_size(SIZE_MB, 80);
         bench_tr_with_stdin(bencher, &data, get_bench_args(&[&"a-z", &"A-Z"]));
@@ -55,7 +55,7 @@ mod benches {
     /// Single-character replacement. Exercises the existing
     /// `process_single_char_replace` SIMD path; guards against
     /// regressions outside the new range fast path.
-    #[divan::bench(sample_size = 1)]
+    #[divan::bench]
     fn tr_single_char_replace(bencher: Bencher) {
         let data = text_data::generate_by_size(SIZE_MB, 80);
         bench_tr_with_stdin(bencher, &data, get_bench_args(&[&"a", &"b"]));
@@ -63,14 +63,14 @@ mod benches {
 
     /// Multi-character set translation. Falls through to the
     /// 256-byte translation table path (no fast path applies).
-    #[divan::bench(sample_size = 1)]
+    #[divan::bench]
     fn tr_multi_char_translate(bencher: Bencher) {
         let data = text_data::generate_by_size(SIZE_MB, 80);
         bench_tr_with_stdin(bencher, &data, get_bench_args(&[&"aeiou", &"AEIOU"]));
     }
 
     /// Delete an ASCII range — covers the deletion path.
-    #[divan::bench(sample_size = 1)]
+    #[divan::bench]
     fn tr_delete_ascii_range(bencher: Bencher) {
         let data = text_data::generate_by_size(SIZE_MB, 80);
         bench_tr_with_stdin(bencher, &data, get_bench_args(&[&"-d", &"a-z"]));
@@ -78,5 +78,9 @@ mod benches {
 }
 
 fn main() {
+    // Rewind happens before each sample; force one iteration after CLI/env overrides.
+    #[cfg(not(codspeed))]
+    divan::Divan::from_args().sample_size(1).main();
+    #[cfg(codspeed)]
     divan::main();
 }

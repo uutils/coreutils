@@ -165,7 +165,7 @@ fn bench_with_stdin(bencher: Bencher, data: &[u8], args: Vec<std::ffi::OsString>
 
 /// Benchmark SI formatting with the numbers on stdin
 #[cfg(unix)]
-#[divan::bench(sample_size = 1)]
+#[divan::bench]
 fn numfmt_stream_to_si(bencher: Bencher) {
     let data: Vec<u8> = (1..=100_000u64)
         .flat_map(|n| format!("{}\n", n * 7919).into_bytes())
@@ -175,7 +175,7 @@ fn numfmt_stream_to_si(bencher: Bencher) {
 
 /// The same, with a precision: formats through the exact float path
 #[cfg(unix)]
-#[divan::bench(sample_size = 1)]
+#[divan::bench]
 fn numfmt_stream_to_si_precision(bencher: Bencher) {
     let data: Vec<u8> = (1..=100_000u64)
         .flat_map(|n| format!("{}\n", n * 7919).into_bytes())
@@ -188,5 +188,9 @@ fn numfmt_stream_to_si_precision(bencher: Bencher) {
 }
 
 fn main() {
+    // Rewind happens before each sample; force one iteration after CLI/env overrides.
+    #[cfg(not(codspeed))]
+    divan::Divan::from_args().sample_size(1).main();
+    #[cfg(codspeed)]
     divan::main();
 }
