@@ -996,6 +996,37 @@ fn tr_translate_overlap_repeat_squeeze() {
 }
 
 #[test]
+fn tr_huge_repeat_count_in_set2_costs_nothing() {
+    // Nothing past the length of set1 is ever used from set2, so a [c*N]
+    // there must not be spelled out N bytes long: that used to be an
+    // out-of-memory abort for a huge N, or a long hang for a merely big one.
+    // The count goes up to 64 bits on every target, as in GNU.
+    for count in ["4294967296", "999999999999", "18446744073709551615"] {
+        new_ucmd!()
+            .args(&["a", &format!("[x*{count}]")])
+            .pipe_in("abc")
+            .succeeds()
+            .stdout_is("xbc");
+    }
+    new_ucmd!()
+        .args(&["a", "[x*99999999999999999999]"])
+        .pipe_in("abc")
+        .fails()
+        .stderr_contains("invalid repeat count");
+}
+
+#[test]
+fn tr_huge_repeat_count_in_set1_is_reported() {
+    // A [c*N] in set1 does have to be spelled out, so one that cannot fit in
+    // memory is an error, rather than an abort.
+    new_ucmd!()
+        .args(&["-d", "[a*18446744073709551615]"])
+        .pipe_in("abc")
+        .fails()
+        .stderr_contains("memory exhausted");
+}
+
+#[test]
 fn octal_repeat_count_test() {
     //below will result in 8'x' and 4'y' as octal 010 = decimal 8
     new_ucmd!()

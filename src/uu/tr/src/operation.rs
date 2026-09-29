@@ -47,6 +47,7 @@ pub enum BadSequence {
     ComplementMoreThanOneUniqueInSet2,
     BackwardsRange { end: u32, start: u32 },
     MultipleCharInEquivalence(String),
+    MemoryExhausted,
 }
 
 /// A range endpoint, printed the way the shell would show it: as itself for
@@ -122,6 +123,9 @@ impl Display for BadSequence {
                     "{}",
                     translate!("tr-error-complement-more-than-one-unique")
                 )
+            }
+            Self::MemoryExhausted => {
+                write!(f, "{}", translate!("tr-error-memory-exhausted"))
             }
             Self::BackwardsRange { end, start } => {
                 write!(
@@ -202,7 +206,7 @@ pub enum Sequence {
     Char(u8),
     CharRange(u8, u8),
     CharStar(u8),
-    CharRepeat(u8, usize),
+    CharRepeat(u8, u64),
     Class(Class),
 }
 
@@ -212,7 +216,12 @@ impl Sequence {
             Self::Char(c) => Box::new(std::iter::once(*c)),
             Self::CharRange(l, r) => Box::new(*l..=*r),
             Self::CharStar(c) => Box::new(std::iter::repeat(*c)),
-            Self::CharRepeat(c, n) => Box::new(std::iter::repeat_n(*c, *n)),
+            Self::CharRepeat(c, n) => {
+                // Counted out rather than `repeat_n`, which takes a usize,
+                // so a count that only fits in 64 bits works on 32-bit too.
+                let c = *c;
+                Box::new((0..*n).map(move |_| c))
+            }
             Self::Class(class) => match class {
                 Class::Alnum => Box::new((b'0'..=b'9').chain(b'A'..=b'Z').chain(b'a'..=b'z')),
                 Class::Alpha => Box::new((b'A'..=b'Z').chain(b'a'..=b'z')),
@@ -246,6 +255,43 @@ impl Sequence {
                 Class::Lower => Box::new(b'a'..=b'z'),
                 Class::Upper => Box::new(b'A'..=b'Z'),
             },
+        }
+    }
+
+    /// How many bytes this sequence stands for. A `[c*]` has no length of its
+    /// own: it is sized to whatever the set is short by, and replaced with the
+    /// `[c*N]` that gives, before any length is looked at.
+    fn len(&self) -> u64 {
+        match self {
+            Self::CharStar(_) => 0,
+            Self::CharRepeat(_, n) => *n,
+            Self::Char(_) | Self::CharRange(..) | Self::Class(_) => self.flatten().count() as u64,
+        }
+    }
+
+    /// The total length of `sequences`, saturating rather than wrapping.
+    fn total_len<'a>(sequences: impl Iterator<Item = &'a Self>) -> u64 {
+        sequences.fold(0, |total, s| total.saturating_add(s.len()))
+    }
+
+    /// The bytes `sequences` stand for, or only the first `limit` of them. A
+    /// `[c*N]` can ask for far more than there is memory for, so the space is
+    /// reserved up front, and a refusal is reported instead of aborting.
+    fn expand<'a>(
+        sequences: impl Iterator<Item = &'a Self> + Clone,
+        limit: Option<u64>,
+    ) -> Result<Vec<u8>, BadSequence> {
+        let mut len = Self::total_len(sequences.clone());
+        if let Some(limit) = limit {
+            len = len.min(limit);
+        }
+        let mut bytes = Vec::new();
+        match usize::try_from(len) {
+            Ok(len) if bytes.try_reserve_exact(len).is_ok() => {
+                bytes.extend(sequences.flat_map(Self::flatten).take(len));
+                Ok(bytes)
+            }
+            _ => Err(BadSequence::MemoryExhausted),
         }
     }
 
@@ -292,22 +338,16 @@ impl Sequence {
             ));
         }
 
-        let mut set1_solved: Vec<u8> = set1.iter().flat_map(Self::flatten).collect();
+        let mut set1_solved =
+            Self::expand(set1.iter(), None).map_err(|error| SequenceError::whole_set(error, 1))?;
         if complement_flag {
             set1_solved = (0..=u8::MAX).filter(|x| !set1_solved.contains(x)).collect();
         }
         let set1_len = set1_solved.len();
 
-        let set2_len = set2
-            .iter()
-            .filter_map(|s| match s {
-                Self::CharStar(_) => None,
-                r => Some(r),
-            })
-            .flat_map(Self::flatten)
-            .count();
+        let set2_fixed_len = Self::total_len(set2.iter());
 
-        let star_compensate_len = set1_len.saturating_sub(set2_len);
+        let star_compensate_len = (set1_len as u64).saturating_sub(set2_fixed_len);
         //Replace CharStar with CharRepeat
         set2 = set2
             .iter()
@@ -323,8 +363,7 @@ impl Sequence {
             if matches!(set2_item, Self::Class(_)) {
                 let mut set2_part_solved_len = 0;
                 if set2_pos >= 1 {
-                    set2_part_solved_len =
-                        set2.iter().take(set2_pos).flat_map(Self::flatten).count();
+                    set2_part_solved_len = Self::total_len(set2.iter().take(set2_pos));
                 }
 
                 let mut class_matches = false;
@@ -332,8 +371,7 @@ impl Sequence {
                     if matches!(set1_item, Self::Class(_)) {
                         let mut set1_part_solved_len = 0;
                         if set1_pos >= 1 {
-                            set1_part_solved_len =
-                                set1.iter().take(set1_pos).flat_map(Self::flatten).count();
+                            set1_part_solved_len = Self::total_len(set1.iter().take(set1_pos));
                         }
 
                         if set1_part_solved_len == set2_part_solved_len {
@@ -352,7 +390,13 @@ impl Sequence {
             }
         }
 
-        let set2_solved: Vec<_> = set2.iter().flat_map(Self::flatten).collect();
+        // Nothing past the length of set1 is ever used from set2, so when
+        // translating there is no point spelling it out: a `[c*N]` there then
+        // costs nothing whatever N is, as in GNU.
+        let set2_len = Self::total_len(set2.iter());
+        let limit = translating.then_some(set1_len as u64);
+        let set2_solved =
+            Self::expand(set2.iter(), limit).map_err(|error| SequenceError::whole_set(error, 2))?;
 
         // Calculate the set of unique characters in set2
         let mut set2_uniques = set2_solved.clone();
@@ -367,7 +411,7 @@ impl Sequence {
         if set1_has_class
             && translating
             && complement_flag
-            && (set2_uniques.len() > 1 || set2_solved.len() > set1_len)
+            && (set2_uniques.len() > 1 || set2_len > set1_len as u64)
         {
             return Err(SequenceError::whole_set(
                 BadSequence::ComplementMoreThanOneUniqueInSet2,
@@ -375,7 +419,7 @@ impl Sequence {
             ));
         }
 
-        if set2_solved.len() < set1_solved.len() {
+        if set2_len < set1_len as u64 {
             if truncate_set1_flag {
                 if complement_flag && set1_has_class {
                     // GNU applies -t before complementing a character class.
@@ -609,13 +653,13 @@ impl Sequence {
         .map(|(l, (c, cnt_str))| {
             let s = String::from_utf8_lossy(cnt_str);
             let result = if cnt_str.starts_with(b"0") {
-                match usize::from_str_radix(&s, 8) {
+                match u64::from_str_radix(&s, 8) {
                     Ok(0) => Ok(Self::CharStar(c)),
                     Ok(count) => Ok(Self::CharRepeat(c, count)),
                     Err(_) => Err(BadSequence::InvalidRepeatCount(s.to_string())),
                 }
             } else {
-                match s.parse::<usize>() {
+                match s.parse::<u64>() {
                     Ok(0) => Ok(Self::CharStar(c)),
                     Ok(count) => Ok(Self::CharRepeat(c, count)),
                     Err(_) => Err(BadSequence::InvalidRepeatCount(s.to_string())),
