@@ -5,6 +5,8 @@
 
 // spell-checker:ignore powf seps replacen
 
+use std::fmt::Write as _;
+
 use uucore::display::Quotable;
 use uucore::i18n::decimal::{locale_decimal_separator, locale_grouping_separator};
 use uucore::translate;
@@ -898,13 +900,13 @@ pub(crate) fn escape_line(line: &[u8]) -> String {
     for chunk in line.utf8_chunks() {
         for c in chunk.valid().chars() {
             if c.is_ascii() && !c.is_ascii_graphic() && !c.is_ascii_whitespace() {
-                result.push_str(&format!("\\{:03o}", c as u8));
+                let _ = write!(result, "\\{:03o}", c as u8);
             } else {
                 result.push(c);
             }
         }
         for &b in chunk.invalid() {
-            result.push_str(&format!("\\{b:03o}"));
+            let _ = write!(result, "\\{b:03o}");
         }
     }
     result
