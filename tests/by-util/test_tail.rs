@@ -268,8 +268,8 @@ fn test_n0_with_follow() {
 fn test_follow_sparse_file_growth_under_memory_limit() {
     use rlimit::Resource;
 
-    // The old follow implementation buffered the entire newly readable range. Keep the address
-    // space smaller than the sparse range so that implementation aborts instead of streaming it.
+    // Ensure newly readable data is streamed rather than buffered in full.
+    // Keep the address-space limit smaller than the sparse range.
     const AS_LIMIT: u64 = 200 * 1024 * 1024;
     const SPARSE_FILE_SIZE: u64 = 512 * 1024 * 1024;
 

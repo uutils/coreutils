@@ -6,7 +6,6 @@
 // spell-checker:ignore tailable stdlib (stdlib)
 
 use crate::args::Settings;
-use crate::chunks::BytesChunk;
 use crate::paths::{HeaderPrinter, PathExtTail};
 use crate::text;
 use std::collections::HashMap;
@@ -160,8 +159,7 @@ impl FileHandling {
         verbose: bool,
         reader: &mut impl BufRead,
     ) -> UResult<bool> {
-        let mut chunk = BytesChunk::new();
-        if chunk.fill(reader)?.is_none() {
+        if reader.fill_buf()?.is_empty() {
             return Ok(false);
         }
 
@@ -171,7 +169,6 @@ impl FileHandling {
         }
 
         let mut writer = BufWriter::new(stdout().lock());
-        writer.write_all(chunk.get_buffer())?;
         io::copy(&mut *reader, &mut writer)?;
         writer.flush()?;
 
