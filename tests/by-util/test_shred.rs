@@ -355,9 +355,9 @@ fn test_shred_rename_exhaustion() {
     assert!(!at.file_exists("test"));
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_shred_non_utf8_paths() {
     use std::os::unix::ffi::OsStrExt;
     let ts = TestScenario::new(util_name!());
@@ -576,9 +576,9 @@ shred: invalid file size: '4vv'
     }
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_couldnt_rename() {
     new_ucmd!()
         .args(&["-u", "/proc/self/mem"])

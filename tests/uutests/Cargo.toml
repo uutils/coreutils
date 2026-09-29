@@ -32,6 +32,7 @@ uucore = { workspace = true, features = [
   "signals",
   "utmpx",
 ] }
+uutests_procs = { workspace = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 

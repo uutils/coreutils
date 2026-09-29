@@ -125,8 +125,8 @@ fn test_tee_multiple_append_flags() {
     assert_eq!(at.read(file2), format!("existing2\n{content}"));
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_readonly() {
     let (at, mut ucmd) = at_and_ucmd!();
     let content_tee = "hello";
@@ -147,8 +147,8 @@ fn test_readonly() {
     assert_eq!(at.read(writable_file), content_tee);
 }
 
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no pipe/signal support")]
 fn test_tee_output_not_buffered() {
     // POSIX says: The tee utility shall not buffer output
 
@@ -252,7 +252,8 @@ fn test_tee_continues_after_short_read() {
     handle.join().unwrap();
 }
 
-#[cfg(all(target_os = "linux", not(wasi_runner)))]
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
+#[cfg(target_os = "linux")]
 mod linux_only {
     use uutests::util::{AtPath, CmdResult, UCommand};
 
