@@ -3,7 +3,10 @@
 set -eo pipefail
 # spell-checker:ignore (jq) deps startswith
 
-cd -- "$(dirname -- "$0")/.."
+# This script should not depend on external binaries to maximize portability if possible
+dir="${0%/*}"
+[ "$dir" = "$0" ] && dir="."
+cd -- "$dir/.."
 
 # `jq` available?
 if ! jq --version 1>/dev/null 2>&1; then
