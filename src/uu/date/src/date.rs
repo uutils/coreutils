@@ -636,19 +636,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     &output.config,
                     &output_time_zone,
                 );
-                match formatted {
-                    Ok(bytes) => {
-                        stdout.write_all(&bytes).map_err(DateError::Write)?;
-                        stdout.write_all(b"\n").map_err(DateError::Write)?;
-                    }
-                    Err(e) => {
-                        let _ = stdout.flush();
-                        return Err(Box::new(DateError::InvalidFormat {
-                            format: String::from_utf8_lossy(output.format_string).into_owned(),
-                            error: e,
-                        }));
-                    }
-                }
+                write_formatted_bytes(&mut stdout, formatted, &output)?;
             }
             Err((input, _err)) => {
                 let _ = stdout.flush();
@@ -962,9 +950,23 @@ fn write_formatted_date<W: Write>(
     } else {
         date
     };
-    match format_chunks(&output.chunks, |fmt| {
-        format_date_with_locale_aware_months(&date, fmt, &output.config, skip_localization)
-    }) {
+    write_formatted_bytes(
+        writer,
+        format_chunks(&output.chunks, |fmt| {
+            format_date_with_locale_aware_months(&date, fmt, &output.config, skip_localization)
+        }),
+        output,
+    )
+}
+
+/// Write formatted bytes, newline-terminated, mapping a formatting failure to
+/// `InvalidFormat` after flushing what made it out.
+fn write_formatted_bytes<W: Write>(
+    writer: &mut W,
+    formatted: Result<Vec<u8>, String>,
+    output: &OutputContext,
+) -> UResult<()> {
+    match formatted {
         Ok(bytes) => {
             writer.write_all(&bytes).map_err(DateError::Write)?;
             writer.write_all(b"\n").map_err(DateError::Write)?;
@@ -992,13 +994,8 @@ fn set_and_echo(input: &str, now: &Zoned, settings: &Settings) -> UResult<()> {
 
             let output = OutputContext::new(settings);
             let mut stdout = BufWriter::new(std::io::stdout().lock());
-            let echo_result =
-                write_formatted_date(&mut stdout, date, &output, settings).and_then(|()| {
-                    stdout
-                        .flush()
-                        .map_err(|e| Box::new(DateError::Write(e)) as Box<dyn UError>)
-                });
-            show_if_err!(echo_result);
+            write_formatted_date(&mut stdout, date, &output, settings)?;
+            stdout.flush().map_err(DateError::Write)?;
             Ok(())
         }
         Ok(ParsedDateTime::Extended(_)) | Err(_) => Err(Box::new(DateError::InvalidDate {
