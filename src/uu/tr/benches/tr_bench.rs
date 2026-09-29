@@ -10,15 +10,15 @@
 //! `tr` only reads stdin, so each bench redirects fd 0 onto a prepared
 //! input file before invoking `uumain`. fd 1 is redirected to /dev/null
 //! so the translated output does not flood the harness's terminal.
-//! Both fds are restored after each iteration.
+//! Both fds are restored after each benchmark.
 
 #[cfg(unix)]
 mod benches {
     use divan::{Bencher, black_box};
     use uu_tr::uumain;
-    use uucore::benchmark::{run_util_function, setup_test_file, text_data};
+    use uucore::benchmark::{get_bench_args, setup_test_file, text_data};
 
-    fn bench_tr_with_stdin(bencher: Bencher, data: &[u8], args: &[&str]) {
+    fn bench_tr_with_stdin(bencher: Bencher, data: &[u8], args: Vec<std::ffi::OsString>) {
         let file_path = setup_test_file(data);
         let file = std::fs::File::open(file_path).unwrap();
         let devnull = std::fs::OpenOptions::new()
@@ -27,16 +27,18 @@ mod benches {
             .unwrap();
         let stdin_bak = rustix::io::dup(rustix::stdio::stdin()).unwrap();
         let stdout_bak = rustix::io::dup(rustix::stdio::stdout()).unwrap();
+        rustix::stdio::dup2_stdin(&file).unwrap();
+        rustix::stdio::dup2_stdout(&devnull).unwrap();
 
-        bencher.bench_local(|| {
-            use rustix::stdio::{dup2_stdin, dup2_stdout};
-            rustix::fs::seek(&file, rustix::fs::SeekFrom::Start(0)).unwrap();
-            dup2_stdin(&file).unwrap();
-            dup2_stdout(&devnull).unwrap();
-            black_box(run_util_function(uumain, args));
-            dup2_stdin(&stdin_bak).unwrap();
-            dup2_stdout(&stdout_bak).unwrap();
-        });
+        bencher
+            .with_inputs(|| {
+                rustix::fs::seek(&file, rustix::fs::SeekFrom::Start(0)).unwrap();
+                args.clone().into_iter()
+            })
+            .bench_local_values(|args| black_box(uumain(args)));
+
+        rustix::stdio::dup2_stdin(&stdin_bak).unwrap();
+        rustix::stdio::dup2_stdout(&stdout_bak).unwrap();
     }
 
     const SIZE_MB: usize = 16;
@@ -44,34 +46,34 @@ mod benches {
     /// ASCII lowercase->uppercase range translation.
     /// Exercises the AVX2 ASCII-range fast path on x86_64 hosts that
     /// support it, and the scalar range fallback on other targets.
-    #[divan::bench]
+    #[divan::bench(sample_size = 1)]
     fn tr_ascii_range_lower_to_upper(bencher: Bencher) {
         let data = text_data::generate_by_size(SIZE_MB, 80);
-        bench_tr_with_stdin(bencher, &data, &["a-z", "A-Z"]);
+        bench_tr_with_stdin(bencher, &data, get_bench_args(&[&"a-z", &"A-Z"]));
     }
 
     /// Single-character replacement. Exercises the existing
     /// `process_single_char_replace` SIMD path; guards against
     /// regressions outside the new range fast path.
-    #[divan::bench]
+    #[divan::bench(sample_size = 1)]
     fn tr_single_char_replace(bencher: Bencher) {
         let data = text_data::generate_by_size(SIZE_MB, 80);
-        bench_tr_with_stdin(bencher, &data, &["a", "b"]);
+        bench_tr_with_stdin(bencher, &data, get_bench_args(&[&"a", &"b"]));
     }
 
     /// Multi-character set translation. Falls through to the
     /// 256-byte translation table path (no fast path applies).
-    #[divan::bench]
+    #[divan::bench(sample_size = 1)]
     fn tr_multi_char_translate(bencher: Bencher) {
         let data = text_data::generate_by_size(SIZE_MB, 80);
-        bench_tr_with_stdin(bencher, &data, &["aeiou", "AEIOU"]);
+        bench_tr_with_stdin(bencher, &data, get_bench_args(&[&"aeiou", &"AEIOU"]));
     }
 
     /// Delete an ASCII range — covers the deletion path.
-    #[divan::bench]
+    #[divan::bench(sample_size = 1)]
     fn tr_delete_ascii_range(bencher: Bencher) {
         let data = text_data::generate_by_size(SIZE_MB, 80);
-        bench_tr_with_stdin(bencher, &data, &["-d", "a-z"]);
+        bench_tr_with_stdin(bencher, &data, get_bench_args(&[&"-d", &"a-z"]));
     }
 }
 

@@ -7,7 +7,7 @@ use divan::{Bencher, black_box};
 use std::{fs::File, io::Write};
 use tempfile::TempDir;
 use uu_join::uumain;
-use uucore::benchmark::run_util_function;
+use uucore::benchmark::get_bench_args;
 
 /// Create two sorted files with matching keys for join benchmarking
 fn create_join_files(temp_dir: &TempDir, num_lines: usize) -> (String, String) {
@@ -65,10 +65,11 @@ fn join_full_match(bencher: Bencher) {
     let num_lines = 10000;
     let temp_dir = TempDir::new().unwrap();
     let (file1, file2) = create_join_files(&temp_dir, num_lines);
+    let args = get_bench_args(&[&file1, &file2]);
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[&file1, &file2]));
-    });
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark join with partial overlap (50%)
@@ -77,10 +78,11 @@ fn join_partial_overlap(bencher: Bencher) {
     let num_lines = 10000;
     let temp_dir = TempDir::new().unwrap();
     let (file1, file2) = create_partial_overlap_files(&temp_dir, num_lines, 0.5);
+    let args = get_bench_args(&[&file1, &file2]);
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[&file1, &file2]));
-    });
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark join with custom field separator
@@ -101,13 +103,11 @@ fn join_custom_separator(bencher: Bencher) {
 
     let file1_str = file1_path.to_str().unwrap();
     let file2_str = file2_path.to_str().unwrap();
+    let args = get_bench_args(&[&"-t", &"\t", &file1_str, &file2_str]);
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-t", "\t", file1_str, file2_str],
-        ));
-    });
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark join with French locale (fr_FR.UTF-8) - ASCII data (fast path)
@@ -116,14 +116,14 @@ fn join_french_locale(bencher: Bencher) {
     let num_lines = 10000;
     let temp_dir = TempDir::new().unwrap();
     let (file1, file2) = create_join_files(&temp_dir, num_lines);
+    let args = get_bench_args(&[&file1, &file2]);
 
     bencher
         .with_inputs(|| unsafe {
             std::env::set_var("LC_ALL", "fr_FR.UTF-8");
+            args.clone().into_iter()
         })
-        .bench_values(|_| {
-            black_box(run_util_function(uumain, &[&file1, &file2]));
-        });
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Create files with Unicode data that requires locale collation
@@ -157,14 +157,14 @@ fn join_unicode_locale(bencher: Bencher) {
     let num_lines = 1000; // Smaller due to complexity
     let temp_dir = TempDir::new().unwrap();
     let (file1, file2) = create_unicode_join_files(&temp_dir, num_lines);
+    let args = get_bench_args(&[&file1, &file2]);
 
     bencher
         .with_inputs(|| unsafe {
             std::env::set_var("LC_ALL", "fr_FR.UTF-8");
+            args.clone().into_iter()
         })
-        .bench_values(|_| {
-            black_box(run_util_function(uumain, &[&file1, &file2]));
-        });
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 fn main() {

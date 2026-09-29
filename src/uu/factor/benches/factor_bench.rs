@@ -7,19 +7,20 @@
 
 use divan::{Bencher, black_box};
 use uu_factor::uumain;
-use uucore::benchmark::run_util_function;
+use uucore::benchmark::get_bench_args;
 
 /// Benchmark multiple u64 digits
 #[divan::bench(args = [(2)])]
 fn factor_multiple_u64s(bencher: Bencher, start_num: u64) {
-    bencher
-        // this is a range of 5000 different u128 integers
-        .with_inputs(|| (start_num, start_num + 2500))
-        .bench_values(|(start_u64, end_u64)| {
-            for u64_digit in start_u64..=end_u64 {
-                black_box(run_util_function(uumain, &[&u64_digit.to_string()]));
-            }
-        });
+    let args = (start_num..=start_num + 2500)
+        .map(|number| get_bench_args(&[&number.to_string()]).into_iter())
+        .collect::<Vec<_>>();
+
+    bencher.with_inputs(|| args.clone()).bench_values(|args| {
+        for args in args {
+            black_box(uumain(args));
+        }
+    });
 }
 
 /// Products of several primes of similar, moderate size.
@@ -29,10 +30,13 @@ fn factor_multiple_u64s(bencher: Bencher, start_num: u64) {
 /// splits anything, and any O(n^(1/4)) fallback never finishes. Each of them
 /// is an input GNU factor handles in well under a second.
 mod hard {
-    use super::{Bencher, black_box, run_util_function, uumain};
+    use super::{Bencher, black_box, get_bench_args, uumain};
 
     fn factor(bencher: Bencher, number: &str) {
-        bencher.bench(|| black_box(run_util_function(uumain, &[number])));
+        let args = get_bench_args(&[&number]);
+        bencher
+            .with_inputs(|| args.clone().into_iter())
+            .bench_values(|args| black_box(uumain(args)));
     }
 
     /// 529341446939 * 529341447079 * 529341447139
