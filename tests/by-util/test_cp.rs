@@ -61,9 +61,11 @@ static TEST_MOUNT_MOUNTPOINT: &str = "mount";
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
 static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
-#[cfg(all(
-    unix,
-    not(any(target_vendor = "apple", target_os = "android", target_os = "openbsd"))
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "netbsd"
 ))]
 use uutests::util::compare_xattrs;
 
@@ -5480,9 +5482,11 @@ fn test_cp_no_such() {
         .stderr_is("cp: 'no-such/' is not a directory\n");
 }
 
-#[cfg(all(
-    unix,
-    not(any(target_vendor = "apple", target_os = "android", target_os = "openbsd"))
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "netbsd"
 ))]
 #[test]
 #[cfg_attr(
@@ -5533,12 +5537,13 @@ fn test_acl_preserve() {
 fn test_cp_debug_reflink_never_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
+    let page_size = rustix::param::page_size();
     at.write("a", "hello");
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
         .unwrap();
-    f.set_len(10000).unwrap();
+    f.set_len((page_size as u64) * 4).unwrap();
 
     ts.ucmd()
         .arg("--debug")
@@ -5586,11 +5591,12 @@ fn test_cp_debug_default_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.touch("a");
+    let page_size = rustix::param::page_size();
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
         .unwrap();
-    f.set_len(10000).unwrap();
+    f.set_len((page_size as u64) * 4).unwrap();
 
     at.append_bytes("a", "hello".as_bytes());
 
@@ -5684,12 +5690,13 @@ fn test_cp_debug_default_empty_file_with_hole() {
 fn test_cp_debug_reflink_never_sparse_always_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
+    let page_size = rustix::param::page_size();
     at.write("a", "hello");
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
         .unwrap();
-    f.set_len(10000).unwrap();
+    f.set_len((page_size as u64) * 4).unwrap();
 
     ts.ucmd()
         .arg("--debug")
@@ -5934,12 +5941,13 @@ fn test_cp_debug_reflink_never_file_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.touch("a");
+    let page_size = rustix::param::page_size();
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
         .unwrap();
-    f.set_len(10000).unwrap();
-    at.append_bytes("a", "hello".as_bytes());
+    f.set_len((page_size as u64) * 4).unwrap();
+    at.append_bytes("a", b"hello");
 
     ts.ucmd()
         .arg("--debug")
@@ -6027,12 +6035,13 @@ fn test_cp_debug_sparse_never_empty_file_with_hole() {
 fn test_cp_debug_sparse_never_file_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
+    let page_size = rustix::param::page_size();
     at.touch("a");
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
         .unwrap();
-    f.set_len(10000).unwrap();
+    f.set_len((page_size as u64) * 4).unwrap();
     at.append_bytes("a", "hello".as_bytes());
 
     ts.ucmd()
@@ -6214,9 +6223,9 @@ fn test_cp_no_dereference_attributes_only_with_symlink() {
         "file2 content does not match expected"
     );
 }
+/// contains the test for cp when the source and destination points to the same file
 #[cfg(all(unix, not(target_os = "android")))]
 #[cfg(test)]
-/// contains the test for cp when the source and destination points to the same file
 mod same_file {
 
     use std::os::unix::fs::MetadataExt;
@@ -7935,9 +7944,11 @@ fn test_cp_no_file() {
 }
 
 #[test]
-#[cfg(all(
-    unix,
-    not(any(target_vendor = "apple", target_os = "android", target_os = "openbsd"))
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "netbsd"
 ))]
 fn test_cp_preserve_xattr_readonly_source() {
     use std::process::Command;

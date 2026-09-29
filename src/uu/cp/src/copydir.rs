@@ -246,7 +246,6 @@ impl Entry {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 /// Copy a single entry during a directory traversal.
 ///
 /// # Returns
@@ -254,6 +253,7 @@ impl Entry {
 /// Returns `Ok(true)` if this function created a new directory, `Ok(false)` otherwise.
 /// This information is used to determine whether default directory permissions should
 /// be preserved during attribute copying.
+#[allow(clippy::too_many_arguments)]
 fn copy_direntry(
     progress_bar: Option<&ProgressBar>,
     entry: &Entry,

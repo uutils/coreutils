@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore lowre punct aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase fooclass Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer
+// spell-checker:ignore lowre punct aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase fooclass Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer mnop mnopq pqopq pqqqq ppqqrr pqrr ppqr ppqqpp
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -307,7 +307,7 @@ fn test_delete_and_squeeze_one_set() {
         .args(&["-ds", "a-z"])
         .fails()
         .stderr_contains("missing operand after 'a-z'")
-        .stderr_contains("Two strings must be given when deleting and squeezing.");
+        .stderr_contains("Two strings must be given when both deleting and squeezing repeats.");
 }
 
 #[test]
@@ -1698,19 +1698,26 @@ fn test_broken_pipe_no_error() {
 #[cfg(unix)]
 #[test]
 fn test_stdin_is_socket() {
+    use std::fs::File;
     use std::io::Write as _;
 
-    let (fd1, fd2) = rustix::net::socketpair(
-        rustix::net::AddressFamily::UNIX,
-        rustix::net::SocketType::STREAM,
-        rustix::net::SocketFlags::empty(),
-        None,
-    )
+    let (mut writer, reader): (File, File) = {
+        rustix::net::socketpair(
+            rustix::net::AddressFamily::UNIX,
+            rustix::net::SocketType::STREAM,
+            rustix::net::SocketFlags::empty(),
+            None,
+        )
+        .map(|(fd0, fd1)| (fd0.into(), fd1.into()))
+    }
     .unwrap();
-    std::fs::File::from(fd1).write_all(b"::").unwrap();
+
+    writer.write_all(b"::").unwrap();
+    drop(writer);
+
     new_ucmd!()
         .args(&[":", ";"])
-        .set_stdin(fd2)
+        .set_stdin(reader)
         .succeeds()
         .stdout_is(";;");
 }

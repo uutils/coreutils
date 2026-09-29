@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (methods) hexdigest funcs nprimes cmdline
+// spell-checker:ignore (methods) hexdigest funcs nprimes cmdline cofactor
 
 #![allow(
     clippy::similar_names,
@@ -1673,6 +1673,31 @@ fn succeeds_with_numbers_larger_than_u256() {
             "115792089237316195423570985008687907853\
                 269984665640564039457584007913129639936: 2^256\n",
         );
+}
+
+// A 301-bit product of ten primes just above 2^30. This used to come back as
+// "Factorization incomplete. Remainders exists." because the Pollard's rho
+// budget underneath was shared by the whole factorization rather than by each
+// cofactor, so everything past the fourth split was given up on.
+#[test]
+fn factors_many_primes_of_similar_size_completely() {
+    const N: &str = "2037036890754971402431340509217469262474509779036256996849055359081480084266333562576864437";
+    new_ucmd!().arg(N).succeeds().stdout_is(format!(
+        "{N}: 1073741827 1073741831 1073741833 1073741839 1073741843 \
+         1073741857 1073741891 1073741909 1073741939 1073741953\n"
+    ));
+}
+
+// A prime power is the one shape Pollard's rho cannot split on its own: it
+// needs about sqrt(p) iterations on p^k. This is 34359738421^7.
+#[test]
+fn factors_a_wide_prime_power() {
+    const N: &str = "56539106683390492137844827055225747632151249167945695848217966183182073341";
+    new_ucmd!()
+        .arg("-h")
+        .arg(N)
+        .succeeds()
+        .stdout_is(format!("{N}: 34359738421^7\n"));
 }
 
 #[test]

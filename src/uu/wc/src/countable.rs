@@ -8,6 +8,7 @@
 //! This module provides a [`WordCountable`] trait and implementations
 //! for some common file-like objects. Use the [`WordCountable::buffered`]
 //! method to get an iterator over lines of a file-like object.
+
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, StdinLock};
 

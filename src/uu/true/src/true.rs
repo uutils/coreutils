@@ -10,6 +10,20 @@ use uucore::{crate_version, show_error, translate};
 
 // uucore::main does not support no-result
 pub fn uumain(mut args: impl uucore::Args) -> i32 {
+    #[cold]
+    #[inline(never)]
+    fn cold_error(e: io::Error) -> i32 {
+        if e.kind() != io::ErrorKind::BrokenPipe {
+            // Try to display this error.
+            show_error!("{}", strip_errno(&e));
+            // Mirror GNU options. When failing to print warnings or version flags, then we exit
+            // with FAIL. This avoids allocation some error information which may result in yet
+            // other types of failure.
+            return 1;
+        }
+        0
+    }
+
     // skip binary name
     let (Some(flag), None) = (args.nth(1), args.next()) else {
         return 0;
@@ -24,17 +38,10 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
         return 0;
     };
 
-    if let Err(e) = res
-        && e.kind() != io::ErrorKind::BrokenPipe
-    {
-        // Try to display this error.
-        show_error!("{}", strip_errno(&e));
-        // Mirror GNU options. When failing to print warnings or version flags, then we exit
-        // with FAIL. This avoids allocation some error information which may result in yet
-        // other types of failure.
-        return 1;
+    match res {
+        Ok(()) => 0,
+        Err(e) => cold_error(e),
     }
-    0
 }
 
 pub fn uu_app() -> Command {

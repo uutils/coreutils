@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDOs) corasick memchr Roff trunc oset iset CHARCLASS
+// spell-checker:ignore (ToDOs) corasick memchr Roff trunc oset iset CHARCLASS rescanning
 
 use std::cmp;
 use std::cmp::PartialEq;
@@ -351,6 +351,9 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
             // match words with given regex
             for mat in reg.find_iter(line) {
                 let (mut beg, end) = (mat.start(), mat.end());
+                if beg == end {
+                    continue;
+                }
 
                 // GNU-compatible default behavior:
                 // with default regexp, keyword must start at first alphabetic char.

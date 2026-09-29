@@ -228,16 +228,24 @@ fn find_uucore_locales_dir(utility_locales_dir: &Path) -> Option<PathBuf> {
         .canonicalize()
         .unwrap_or_else(|_| utility_locales_dir.to_path_buf());
 
-    // Walk up: locales -> printenv -> uu -> src
-    let uucore_locales = normalized_dir
-        .parent()? // printenv
-        .parent()? // uu
-        .parent()? // src
-        .join("uucore")
-        .join("locales");
+    // In the source tree, walk up: locales -> printenv -> uu -> src
+    let in_source_tree = normalized_dir
+        .parent() // printenv
+        .and_then(Path::parent) // uu
+        .and_then(Path::parent) // src
+        .map(|src| src.join("uucore").join("locales"));
 
-    // Only return if the directory actually exists
-    uucore_locales.exists().then_some(uucore_locales)
+    // Next to an installed binary, the directory sits beside the one of the
+    // utility: <locales>/printenv -> <locales>/uucore
+    let installed = normalized_dir
+        .parent()
+        .map(|locales| locales.join("uucore"));
+
+    // Only return a directory that actually exists
+    [in_source_tree, installed]
+        .into_iter()
+        .flatten()
+        .find(|dir| dir.exists())
 }
 
 /// Create a bundle that combines common and utility-specific strings
@@ -1133,6 +1141,28 @@ invalid-syntax = This is { $missing
             Err(other) => panic!("Expected LocalesDirNotFound error, got: {other:?}"),
             Ok(_) => panic!("Expected error, but create_bundle returned Ok"),
         }
+    }
+
+    /// The common strings also have to be found next to an installed binary,
+    /// where there is no source tree to walk up and the uucore directory sits
+    /// beside the one of the utility.
+    #[test]
+    fn test_find_uucore_locales_dir_installed_layout() {
+        //   <temp>/share/locales/fake_util/ <- locales directory of the utility
+        //   <temp>/share/locales/uucore/    <- common strings
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let locales = temp_dir.path().join("share").join("locales");
+        let util_dir = locales.join("fake_util");
+        let uucore_dir = locales.join("uucore");
+
+        fs::create_dir_all(&util_dir).expect("Failed to create fake util locales dir");
+        assert_eq!(find_uucore_locales_dir(&util_dir), None);
+
+        fs::create_dir_all(&uucore_dir).expect("Failed to create fake uucore locales dir");
+        assert_eq!(
+            find_uucore_locales_dir(&util_dir),
+            Some(uucore_dir.canonicalize().unwrap())
+        );
     }
 
     #[test]

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore mydir hardlinked tmpfs notty unwriteable myfolder SRCDATA DSTDATA REALDATA
+// spell-checker:ignore mydir hardlinked tmpfs notty unwriteable myfolder SRCDATA DSTDATA REALDATA realfile
 // spell-checker:ignore dirattr dirvalue setfattr getfattr
 
 use rstest::rstest;
@@ -1932,7 +1932,13 @@ fn test_mv_dir_into_path_slash() {
     assert!(at.dir_exists("f/b"));
 }
 
-#[cfg(all(unix, not(any(target_vendor = "apple", target_os = "openbsd"))))]
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "android",
+    target_os = "netbsd"
+))]
 #[test]
 fn test_acl() {
     use std::process::Command;
@@ -2016,6 +2022,28 @@ fn test_move_should_not_fallback_to_copy() {
 
     assert!(at.file_exists(locked_file));
     assert!(!at.file_exists(target_file));
+}
+
+// A directory containing two symlinks that point back at an ancestor must not
+// send the hardlink pre-scan into an exponential walk.
+#[test]
+#[cfg(unix)]
+fn test_mv_dir_with_symlink_cycles_terminates() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("dir");
+    at.mkdir("dest");
+    at.write("dir/file", "content");
+    at.relative_symlink_dir(".", "dir/loop1");
+    at.relative_symlink_dir(".", "dir/loop2");
+
+    ucmd.arg("dir").arg("dest/").succeeds().no_output();
+
+    assert!(at.dir_exists("dest/dir"));
+    assert_eq!(at.read("dest/dir/file"), "content");
+    assert!(at.is_symlink("dest/dir/loop1"));
+    assert!(at.is_symlink("dest/dir/loop2"));
+    assert!(!at.dir_exists("dir"));
 }
 
 // Todo:

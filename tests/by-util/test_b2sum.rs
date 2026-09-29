@@ -178,6 +178,19 @@ fn test_check_b2sum_length_option_8() {
 }
 
 #[test]
+fn test_check_status_reports_unusable_checksum_input() {
+    // --status silences per-file results, but a checksum list with no usable
+    // line is an input error and must still be reported.
+    new_ucmd!()
+        .arg("-c")
+        .arg("--status")
+        .pipe_in("not-a-checksum-line\n")
+        .fails()
+        .no_stdout()
+        .stderr_contains("'standard input': no properly formatted checksum lines found");
+}
+
+#[test]
 fn test_invalid_b2sum_length_option_not_multiple_of_8() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

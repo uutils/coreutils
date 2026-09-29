@@ -16,13 +16,13 @@ test = false
 
 [dependencies]
 clap = { workspace = true }
+fluent = { workspace = true }
 uucore = { workspace = true, features = [
   "checksum",
   "encoding",
   "sum",
   "hardware",
 ] }
-fluent = { workspace = true }
 
 [lints]
 workspace = true

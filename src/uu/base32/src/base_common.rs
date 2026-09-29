@@ -124,6 +124,7 @@ pub fn base_app(about: String, usage: String) -> Command {
                 .short('w')
                 .long(options::WRAP)
                 .value_name("COLS")
+                .allow_hyphen_values(true)
                 .help(translate!("base-common-help-wrap", "default" => WRAP_DEFAULT))
                 .overrides_with(options::WRAP),
         )
