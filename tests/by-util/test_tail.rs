@@ -266,7 +266,7 @@ fn test_n0_with_follow() {
 #[test]
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
 fn test_follow_sparse_file_growth_under_memory_limit() {
-    use rlimit::Resource;
+    use rustix::process::Resource;
 
     // Ensure newly readable data is streamed rather than buffered in full.
     // Keep the address-space limit smaller than the sparse range.
@@ -278,7 +278,7 @@ fn test_follow_sparse_file_growth_under_memory_limit() {
     at.touch(test_file);
 
     let mut child = ucmd
-        .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
+        .limit(Resource::As, AS_LIMIT, AS_LIMIT)
         .set_stdout(Stdio::null())
         .args(&[
             "-n0",
