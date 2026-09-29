@@ -133,7 +133,7 @@ fn test_check_md5_ignore_missing() {
     scene
         .ccmd("md5sum")
         .arg("-c")
-        .arg(at.subdir.join("testf.sha1"))
+        .arg("testf.sha1")
         .fails()
         .stdout_contains("testf2: FAILED open or read");
 
@@ -141,14 +141,14 @@ fn test_check_md5_ignore_missing() {
         .ccmd("md5sum")
         .arg("-c")
         .arg("--ignore-missing")
-        .arg(at.subdir.join("testf.sha1"))
+        .arg("testf.sha1")
         .succeeds()
         .stdout_only("testf: OK\n");
 
     scene
         .ccmd("md5sum")
         .arg("--ignore-missing")
-        .arg(at.subdir.join("testf.sha1"))
+        .arg("testf.sha1")
         .fails()
         .stderr_contains(
             "md5sum: the --ignore-missing option is meaningful only when verifying checksums",
@@ -416,7 +416,7 @@ fn test_check_empty_line() {
     scene
         .ccmd("md5sum")
         .arg("--check")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .succeeds()
         .stderr_contains("WARNING: 1 line is improperly formatted");
 }
@@ -470,7 +470,7 @@ fn test_check_strict_error() {
         .ccmd("md5sum")
         .arg("--check")
         .arg("--strict")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .fails()
         .stderr_contains("WARNING: 3 lines are improperly formatted");
 }
@@ -489,7 +489,7 @@ fn test_check_warn() {
         .ccmd("md5sum")
         .arg("--check")
         .arg("--warn")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .succeeds()
         .stderr_contains("in.md5: 3: improperly formatted MD5 checksum line")
         .stderr_contains("WARNING: 1 line is improperly formatted");
@@ -499,7 +499,7 @@ fn test_check_warn() {
         .ccmd("md5sum")
         .arg("--check")
         .arg("--strict")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .fails();
 }
 
@@ -514,7 +514,7 @@ fn test_check_status() {
         .ccmd("md5sum")
         .arg("--check")
         .arg("--status")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .fails()
         .no_output();
 }
@@ -530,7 +530,7 @@ fn test_check_status_code() {
         .ccmd("md5sum")
         .arg("--check")
         .arg("--status")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .fails()
         .no_output();
 }
@@ -557,7 +557,7 @@ fn test_sha1_with_md5sum_should_fail() {
     scene
         .ccmd("md5sum")
         .arg("--check")
-        .arg(at.subdir.join("f.sha1"))
+        .arg("f.sha1")
         .fails()
         .stderr_contains("f.sha1: no properly formatted checksum lines found")
         .stderr_does_not_contain("WARNING: 1 line is improperly formatted");
@@ -578,7 +578,7 @@ fn test_check_one_two_space_star() {
     scene
         .ccmd("md5sum")
         .arg("--check")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .succeeds()
         .stdout_is("empty: OK\n");
 
@@ -588,7 +588,7 @@ fn test_check_one_two_space_star() {
     scene
         .ccmd("md5sum")
         .arg("--check")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .fails()
         .stdout_is("'*empty': FAILED open or read\n");
 
@@ -597,7 +597,7 @@ fn test_check_one_two_space_star() {
     scene
         .ccmd("md5sum")
         .arg("--check")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .succeeds()
         .stdout_is("'*empty': OK\n");
 }
@@ -622,7 +622,7 @@ fn test_check_space_star_or_not() {
     scene
         .ccmd("md5sum")
         .arg("--check")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .fails()
         .stdout_contains("c: FAILED")
         .stdout_does_not_contain("a: FAILED")
@@ -638,7 +638,7 @@ fn test_check_space_star_or_not() {
     scene
         .ccmd("md5sum")
         .arg("--check")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .succeeds()
         .stdout_contains("a: OK")
         .stderr_contains("WARNING: 1 line is improperly formatted");
@@ -654,7 +654,7 @@ fn test_check_no_backslash_no_space() {
     scene
         .ccmd("md5sum")
         .arg("--check")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .succeeds()
         .stdout_is("f: OK\n");
 }
@@ -669,7 +669,7 @@ fn test_incomplete_format() {
     scene
         .ccmd("md5sum")
         .arg("--check")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .fails()
         .stderr_contains("no properly formatted checksum lines found");
 }
@@ -685,7 +685,7 @@ fn test_start_error() {
         .ccmd("md5sum")
         .arg("--check")
         .arg("--strict")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .fails()
         .stdout_is("f: OK\n")
         .stderr_contains("WARNING: 1 line is improperly formatted");
@@ -702,7 +702,7 @@ fn test_check_check_ignore_no_file() {
         .ccmd("md5sum")
         .arg("--check")
         .arg("--ignore-missing")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .fails()
         .stderr_contains("in.md5: no file was verified");
 }
@@ -721,7 +721,7 @@ fn test_check_directory_error() {
     scene
         .ccmd("md5sum")
         .arg("--check")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .fails()
         .stderr_contains(err_msg);
 }
@@ -769,7 +769,7 @@ fn test_check_quiet() {
         .ccmd("md5sum")
         .arg("--quiet")
         .arg("--check")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .succeeds()
         .no_output();
 
@@ -779,7 +779,7 @@ fn test_check_quiet() {
         .ccmd("md5sum")
         .arg("--quiet")
         .arg("--check")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .fails()
         .stdout_contains("f: FAILED")
         .stderr_contains("WARNING: 1 computed checksum did NOT match");
@@ -787,13 +787,13 @@ fn test_check_quiet() {
     scene
         .ccmd("md5sum")
         .arg("--quiet")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .fails()
         .stderr_contains("md5sum: the --quiet option is meaningful only when verifying checksums");
     scene
         .ccmd("md5sum")
         .arg("--strict")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .fails()
         .stderr_contains("md5sum: the --strict option is meaningful only when verifying checksums");
 }
@@ -808,7 +808,7 @@ fn test_star_to_start() {
     scene
         .ccmd("md5sum")
         .arg("--check")
-        .arg(at.subdir.join("in.md5"))
+        .arg("in.md5")
         .succeeds()
         .stdout_only("f: OK\n");
 }
@@ -883,6 +883,10 @@ fn test_check_md5_comment_leading_space() {
 
 #[test]
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: /proc/self/mem is not available in the sandbox"
+)]
 fn test_read_error_does_not_stop_other_files() {
     // https://github.com/uutils/coreutils/issues/13128
     // Reading /proc/self/mem from offset 0 fails with EIO.
