@@ -394,9 +394,9 @@ fn test_file() {
         .stdout_is("Zm9v\n");
 }
 
+#[uutests::wasi_ignore(ArgvFilenamesUtf8)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_file_with_non_utf8_name() {
     use std::os::unix::ffi::OsStringExt;
     let (at, mut ucmd) = at_and_ucmd!();

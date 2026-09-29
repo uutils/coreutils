@@ -70,9 +70,9 @@ fn test_reference() {
     assert_eq!(expected, actual, "expected '{expected}' got '{actual}'");
 }
 
+#[uutests::wasi_ignore(ArgvFilenamesUtf8)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_reference_non_utf8_path() {
     use std::os::unix::ffi::OsStrExt;
 
@@ -334,8 +334,8 @@ fn test_relative_size_overflow_preserves_file() {
 }
 
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoBlockSizeSupport)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no block size support")]
 fn test_io_blocks_uses_file_block_size() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write(FILE1, "x");
@@ -349,8 +349,8 @@ fn test_io_blocks_uses_file_block_size() {
 }
 
 #[cfg(unix)]
+#[uutests::wasi_ignore(NoBlockSizeSupport)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no block size support")]
 fn test_io_blocks_uses_parent_block_size_for_new_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let block_size = at.metadata(".").blksize();
@@ -505,9 +505,9 @@ fn test_negative_size_with_space() {
     assert!(at.read_bytes(FILE1).is_empty());
 }
 
+#[uutests::wasi_ignore(ArgvFilenamesUtf8)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_truncate_non_utf8_paths() {
     use std::os::unix::ffi::OsStrExt;
     let ts = TestScenario::new(util_name!());

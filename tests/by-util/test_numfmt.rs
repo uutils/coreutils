@@ -1389,8 +1389,8 @@ fn test_zero_terminated_embedded_newline() {
 }
 
 #[cfg(unix)]
+#[uutests::wasi_ignore(ArgvFilenamesUtf8)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_non_utf8_delimiter() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1717,8 +1717,8 @@ fn test_format_value_below_large_threshold_ok() {
         .stdout_is("999999999999999999.0\n");
 }
 
+#[uutests::wasi_ignore(LocaleEnvNotPropagated)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
 fn test_locale_fr_output() {
     // Output uses the locale separator
     new_ucmd!()
@@ -1728,8 +1728,8 @@ fn test_locale_fr_output() {
         .stdout_is("1,5K\n");
 }
 
+#[uutests::wasi_ignore(LocaleEnvNotPropagated)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
 fn test_locale_fr_input_comma() {
     // fr_FR should take '1,5' as a number
     new_ucmd!()
@@ -1739,8 +1739,8 @@ fn test_locale_fr_input_comma() {
         .stdout_is("1,500\n");
 }
 
+#[uutests::wasi_ignore(LocaleEnvNotPropagated)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
 fn test_locale_fr_rejects_period() {
     // '.' isn't valid in fr_FR, should bail
     new_ucmd!()

@@ -27,6 +27,7 @@ members = [
   "src/uucore",
   "src/uucore_procs",
   "tests/uutests",
+  "tests/uutests_procs",
   # "fuzz",  # TODO
 ]
 
@@ -161,6 +162,7 @@ uu_ls = { version = "0.13.0", path = "src/uu/ls" }
 uu_base32 = { version = "0.13.0", path = "src/uu/base32" }
 uu_checksum_common = { version = "0.13.0", path = "src/uu/checksum_common" }
 uutests = { version = "0.13.0", path = "tests/uutests" }
+uutests_procs = { version = "0.13.0", path = "tests/uutests_procs" }
 
 # This is the linting configuration for all crates.
 # In order to use these, all crates have `[lints] workspace = true` section.

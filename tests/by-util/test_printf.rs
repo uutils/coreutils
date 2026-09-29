@@ -1435,9 +1435,9 @@ fn mb_input() {
     }
 }
 
+#[uutests::wasi_ignore(ArgvFilenamesUtf8)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn mb_invalid_unicode() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1524,9 +1524,9 @@ fn positional_format_specifiers() {
         .stdout_only("Octal: 115, Int: 42, Float: 3.141590, String: hello, Hex: ff, Scientific: 1.000000e-05, Char: A, Unsigned: 100, Integer: 123");
 }
 
+#[uutests::wasi_ignore(ArgvFilenamesUtf8)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn non_utf_8_input() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;

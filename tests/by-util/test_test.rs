@@ -400,9 +400,9 @@ fn test_float_inequality_is_error() {
         .stderr_is("test: invalid integer '123.45'\n");
 }
 
+#[uutests::wasi_ignore(ArgvFilenamesUtf8)]
 #[test]
 #[cfg(not(windows))]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_invalid_utf8_integer_compare() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -462,8 +462,8 @@ fn test_file_is_itself() {
         .succeeds();
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 // Disabled for android, since the temp dir doesn't allow creating hard links
 #[cfg(not(target_os = "android"))]
 fn test_hard_link_is_same_file() {
@@ -507,8 +507,8 @@ fn test_file_is_newer_than_non_existing_file() {
         .no_output();
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_same_device_inode() {
     let scenario = TestScenario::new(util_name!());
     let at = &scenario.fixtures;
@@ -586,9 +586,9 @@ fn test_file_is_readable() {
     new_ucmd!().args(&["-r", "regular_file"]).succeeds();
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(not(windows))]
-#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
 fn test_file_is_not_readable() {
     let scenario = TestScenario::new(util_name!());
     let mut ucmd = scenario.ucmd();
@@ -600,8 +600,8 @@ fn test_file_is_not_readable() {
     ucmd.args(&["!", "-r", "crypto_file"]).succeeds();
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
 fn test_file_is_writable() {
     new_ucmd!().args(&["-w", "regular_file"]).succeeds();
 }
@@ -641,9 +641,9 @@ fn test_file_is_not_executable() {
     ucmd.args(&["!", "-x", "regular_file"]).succeeds();
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(not(windows))]
-#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
 fn test_file_is_executable() {
     let scenario = TestScenario::new(util_name!());
     let mut chmod = scenario.cmd("chmod");
@@ -704,8 +704,8 @@ fn test_file_is_executable_from_pathext_windows() {
         .succeeds();
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
 fn test_directory_is_executable() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
@@ -829,11 +829,11 @@ fn test_nonexistent_file_is_not_symlink() {
         .succeeds();
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 // Only the superuser is allowed to set the sticky bit on files on FreeBSD/OpenBSD.
 // Windows has no concept of sticky bit
 #[cfg(not(any(windows, target_os = "freebsd", target_os = "openbsd")))]
-#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
 fn test_file_is_sticky() {
     let scenario = TestScenario::new(util_name!());
     let mut ucmd = scenario.ucmd();
@@ -928,8 +928,8 @@ fn test_parenthesized_right_parenthesis_as_literal() {
     new_ucmd!().args(&["(", "-f", ")", ")"]).fails_with_code(1);
 }
 
+#[uutests::wasi_ignore(NoUidGid)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no uid/gid")]
 fn test_file_owned_by_euid() {
     new_ucmd!().args(&["-O", "regular_file"]).succeeds();
 }
@@ -941,18 +941,18 @@ fn test_nonexistent_file_not_owned_by_euid() {
         .fails_with_code(1);
 }
 
+#[uutests::wasi_ignore(NoUidGid)]
 #[test]
 #[cfg(not(windows))]
-#[cfg_attr(wasi_runner, ignore = "WASI: no uid/gid")]
 fn test_file_not_owned_by_euid() {
     new_ucmd!()
         .args(&["-f", "/bin/sh", "-a", "!", "-O", "/bin/sh"])
         .succeeds();
 }
 
+#[uutests::wasi_ignore(NoUidGid)]
 #[test]
 #[cfg(not(windows))]
-#[cfg_attr(wasi_runner, ignore = "WASI: no uid/gid")]
 fn test_file_owned_by_egid() {
     // On some platforms (mostly the BSDs) the test fixture files copied to the
     // /tmp directory will have a different gid than the current egid (due to
@@ -982,9 +982,9 @@ fn test_nonexistent_file_not_owned_by_egid() {
         .fails_with_code(1);
 }
 
+#[uutests::wasi_ignore(NoUidGid)]
 #[test]
 #[cfg(not(windows))]
-#[cfg_attr(wasi_runner, ignore = "WASI: no uid/gid")]
 fn test_file_not_owned_by_egid() {
     let target_file = if cfg!(target_os = "freebsd") {
         // The coreutils test runner user has a primary group id of "wheel",

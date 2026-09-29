@@ -406,8 +406,8 @@ fn test_paste_delimiter_escape_sequences() {
 
 // As of 2024-10-09, only bsdutils (https://github.com/dcantrell/bsdutils, derived from FreeBSD) and toybox handle
 // multibyte delimiter characters in the way a user would likely expect. BusyBox and GNU Core Utilities do not.
+#[uutests::wasi_ignore(LcAllNotInherited)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
 fn test_multi_byte_delimiter() {
     for option_style in ["-d", "--delimiters"] {
         new_ucmd!()
@@ -433,8 +433,8 @@ fn test_multi_byte_delimiter() {
     }
 }
 
+#[uutests::wasi_ignore(LcAllNotInherited)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
 fn test_data() {
     for example in EXAMPLE_DATA {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -454,9 +454,9 @@ fn test_data() {
     }
 }
 
+#[uutests::wasi_ignore(ArgvFilenamesUtf8)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_non_utf8_delimiter() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("f1", "1\n2\n");
@@ -470,9 +470,9 @@ fn test_non_utf8_delimiter() {
         .stdout_only_bytes(b"1\xA2\xE3a\n2\xA2\xE3b\n");
 }
 
+#[uutests::wasi_ignore(ArgvFilenamesUtf8)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_paste_non_utf8_paths() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -497,9 +497,9 @@ fn make_broken_pipe() -> std::io::PipeWriter {
     write
 }
 
+#[uutests::wasi_ignore(HostPathsDevNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/dev) not visible")]
 fn test_dev_zero_write_error_dev_full() {
     use std::fs::File;
 
@@ -514,9 +514,9 @@ fn test_dev_zero_write_error_dev_full() {
         .stderr_contains("No space left on device");
 }
 
+#[uutests::wasi_ignore(HostPathsDevNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/dev) not visible")]
 fn test_dev_zero_closed_pipe() {
     new_ucmd!()
         .arg("/dev/zero")
