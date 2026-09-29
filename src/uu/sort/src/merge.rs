@@ -26,7 +26,9 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use uucore::error::{FromIo, UResult};
+use uucore::error::{FromIo, UError, UResult};
+#[cfg(all(unix, not(target_vendor = "apple")))]
+use uucore::signals::with_sigpipe_blocked;
 
 use crate::{
     GlobalSettings, Output, SortError,
@@ -144,10 +146,7 @@ pub fn merge_with_file_limit<
                 let merger = merge_without_limit(batch.into_iter(), settings)?;
                 batch = Vec::with_capacity(batch_size);
 
-                let mut tmp_file =
-                    Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
-                merger.write_all_to(settings, tmp_file.as_write(), || "write failed".into())?;
-                temporary_files.push(tmp_file.finished_writing()?);
+                temporary_files.push(merger.write_to_tmp::<Tmp>(settings, tmp_dir)?);
             }
         }
         // Merge any remaining files that didn't get merged in a full batch above.
@@ -155,10 +154,7 @@ pub fn merge_with_file_limit<
             assert!(batch.len() < batch_size);
             let merger = merge_without_limit(batch.into_iter(), settings)?;
 
-            let mut tmp_file =
-                Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
-            merger.write_all_to(settings, tmp_file.as_write(), || "write failed".into())?;
-            temporary_files.push(tmp_file.finished_writing()?);
+            temporary_files.push(merger.write_to_tmp::<Tmp>(settings, tmp_dir)?);
         }
         merge_with_file_limit::<_, _, Tmp>(
             temporary_files
@@ -183,13 +179,22 @@ fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
     settings: &GlobalSettings,
 ) -> UResult<FileMerger<'_>> {
     let (request_sender, request_receiver) = channel();
-    let mut reader_files = Vec::with_capacity(files.size_hint().0);
+    let mut reader_files: Vec<Option<ReaderFile<M>>> = Vec::with_capacity(files.size_hint().0);
     let mut loaded_receivers = Vec::with_capacity(files.size_hint().0);
     for (file_number, file) in files.enumerate() {
+        let file = match file {
+            Ok(file) => file,
+            Err(error) => {
+                for reader_file in reader_files.into_iter().flatten() {
+                    let _ = reader_file.file.finished_reading();
+                }
+                return Err(error);
+            }
+        };
         let (sender, receiver) = sync_channel(2);
         loaded_receivers.push(receiver);
         reader_files.push(Some(ReaderFile {
-            file: file?,
+            file,
             sender,
             carry_over: vec![],
         }));
@@ -253,6 +258,27 @@ fn reader(
     settings: &GlobalSettings,
     separator: u8,
 ) -> UResult<()> {
+    let read_result = read_chunks(recycled_receiver, files, settings, separator);
+
+    // A failed decompressor or an early end to the merge can leave other
+    // children running. Close their output pipes and reap all of them.
+    let mut cleanup_result = Ok(());
+    for reader_file in files.iter_mut().filter_map(Option::take) {
+        let result = reader_file.file.finished_reading();
+        if cleanup_result.is_ok() {
+            cleanup_result = result;
+        }
+    }
+    read_result.and(cleanup_result)
+}
+
+/// Read requested chunks until the merge stops requesting them or reading fails.
+fn read_chunks(
+    recycled_receiver: &Receiver<(usize, RecycledChunk)>,
+    files: &mut [Option<ReaderFile<impl MergeInput>>],
+    settings: &GlobalSettings,
+    separator: u8,
+) -> UResult<()> {
     for (file_idx, recycled_chunk) in recycled_receiver {
         if let Some(ReaderFile {
             file,
@@ -280,6 +306,7 @@ fn reader(
     }
     Ok(())
 }
+
 /// The struct on the main thread representing an input file
 pub struct MergeableFile<'a> {
     current_chunk: Rc<Chunk>,
@@ -340,20 +367,36 @@ struct FileMerger<'a> {
 }
 
 impl FileMerger<'_> {
+    /// Write the merged contents to a new temporary file.
+    fn write_to_tmp<Tmp: WriteableTmpFile>(
+        self,
+        settings: &GlobalSettings,
+        tmp_dir: &mut TmpDirWrapper,
+    ) -> UResult<Tmp::Closed> {
+        let mut tmp_file = Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
+        let write_result = self.write_all_to(settings, tmp_file.as_write(), |error| {
+            SortError::WriteTmpFileFailed { error }.into()
+        });
+        // Close the pipe and wait for the compressor even if writing failed.
+        let finished_result = tmp_file.finished_writing();
+        write_result?;
+        finished_result
+    }
+
     /// Write the merged contents to the output file.
     fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
         let ctx = output.write_failed_context();
         let mut out = output.into_write()?;
-        self.write_all_to(settings, &mut out, &ctx)?;
+        self.write_all_to(settings, &mut out, |error| error.map_err_context(&ctx))?;
         out.flush().map_err_context(ctx)
     }
 
-    /// Write the merged contents to `out`, reporting write errors with `ctx`.
+    /// Write the merged contents to `out`, converting write errors with `map_error`.
     fn write_all_to(
         mut self,
         settings: &GlobalSettings,
         out: &mut impl Write,
-        ctx: impl FnOnce() -> String,
+        map_error: impl FnOnce(io::Error) -> Box<dyn UError>,
     ) -> UResult<()> {
         let write_result = loop {
             match self.write_next(out, settings) {
@@ -391,7 +434,7 @@ impl FileMerger<'_> {
         let reader_result = reader_join_handle.join().unwrap();
         // A write failure is what the user needs to hear about; the reader hitting an error
         // on the way down is secondary.
-        write_result.map_err_context(ctx).and(reader_result)
+        write_result.map_err(map_error).and(reader_result)
     }
 
     fn write_next(
@@ -456,7 +499,13 @@ impl FileMerger<'_> {
 
 /// Wait for the child to exit and check its exit code.
 fn check_child_success(mut child: Child, program: &str) -> UResult<()> {
-    if matches!(child.wait().map(|e| e.code()), Ok(Some(0) | None) | Err(_)) {
+    let status = child
+        .wait()
+        .map_err(|error| SortError::CompressProgWaitFailed {
+            prog: program.to_owned(),
+            error,
+        })?;
+    if status.success() {
         Ok(())
     } else {
         Err(SortError::CompressProgTerminatedAbnormally {
@@ -512,7 +561,10 @@ impl WriteableTmpFile for WriteablePlainTmpFile {
         })
     }
 
-    fn finished_writing(self) -> UResult<Self::Closed> {
+    fn finished_writing(mut self) -> UResult<Self::Closed> {
+        self.file
+            .flush()
+            .map_err(|error| SortError::WriteTmpFileFailed { error })?;
         Ok(ClosedPlainTmpFile { path: self.path })
     }
 
@@ -545,11 +597,29 @@ impl MergeInput for PlainTmpMergeInput {
     }
 }
 
+/// Protect compression pipe writes without changing the process's SIGPIPE handler.
+pub struct CompressionPipeWriter(ChildStdin);
+
+impl Write for CompressionPipeWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        #[cfg(target_vendor = "apple")]
+        uucore::signals::disable_pipe_errors_for_fd(&self.0)?;
+        #[cfg(all(unix, not(target_vendor = "apple")))]
+        return with_sigpipe_blocked(|| self.0.write(buf));
+        #[cfg(any(not(unix), target_vendor = "apple"))]
+        self.0.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.0.flush()
+    }
+}
+
 pub struct WriteableCompressedTmpFile {
     path: PathBuf,
     compress_prog: String,
     child: Child,
-    child_stdin: BufWriter<ChildStdin>,
+    child_stdin: BufWriter<CompressionPipeWriter>,
 }
 pub struct ClosedCompressedTmpFile {
     path: PathBuf,
@@ -563,7 +633,7 @@ pub struct CompressedTmpMergeInput {
 }
 impl WriteableTmpFile for WriteableCompressedTmpFile {
     type Closed = ClosedCompressedTmpFile;
-    type InnerWrite = BufWriter<ChildStdin>;
+    type InnerWrite = BufWriter<CompressionPipeWriter>;
 
     fn create((file, path): (File, PathBuf), compress_prog: Option<&str>) -> UResult<Self> {
         let compress_prog = compress_prog.unwrap();
@@ -580,13 +650,16 @@ impl WriteableTmpFile for WriteableCompressedTmpFile {
             path,
             compress_prog: compress_prog.to_owned(),
             child,
-            child_stdin: BufWriter::new(child_stdin),
+            child_stdin: BufWriter::new(CompressionPipeWriter(child_stdin)),
         })
     }
 
-    fn finished_writing(self) -> UResult<Self::Closed> {
+    fn finished_writing(mut self) -> UResult<Self::Closed> {
+        let flush_result = self.child_stdin.flush();
         drop(self.child_stdin);
-        check_child_success(self.child, &self.compress_prog)?;
+        let child_result = check_child_success(self.child, &self.compress_prog);
+        flush_result.map_err(|error| SortError::WriteTmpFileFailed { error })?;
+        child_result?;
         Ok(ClosedCompressedTmpFile {
             path: self.path,
             compress_prog: self.compress_prog,

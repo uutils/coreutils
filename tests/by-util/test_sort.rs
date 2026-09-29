@@ -1696,6 +1696,72 @@ fn test_compress_merge() {
         .stdout_only_fixture("merge_ints_interleaved.expected");
 }
 
+#[cfg(target_os = "linux")]
+fn sort_with_ignored_sigchld(ts: &TestScenario) -> uutests::util::UCommand {
+    let mut command = ts.cmd("bash");
+    command
+        .timeout(Duration::from_secs(30))
+        .args(&["-c", "trap '' CHLD; exec \"$@\"", "bash"])
+        .arg(&ts.bin_path)
+        .arg(&ts.util_name);
+    command
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_compress_ignored_sigchld() {
+    let ts = TestScenario::new("sort");
+    ts.fixtures.write("input", &compressor_input(600, 4, ""));
+    let mut expected = String::new();
+    for i in 0..600 {
+        writeln!(&mut expected, "{i:04}").unwrap();
+    }
+    sort_with_ignored_sigchld(&ts)
+        .args(&["--compress-program=gzip", "-S", "1k", "input"])
+        .succeeds()
+        .stdout_only(&expected);
+
+    ts.fixtures.write("sorted", &expected);
+    sort_with_ignored_sigchld(&ts)
+        .args(&[
+            "-m",
+            "-u",
+            "--batch-size=2",
+            "--compress-program=gzip",
+            "sorted",
+            "sorted",
+            "sorted",
+        ])
+        .succeeds()
+        .stdout_only(&expected);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_compress_failures_ignored_sigchld() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    let ts = TestScenario::new("sort");
+    ts.fixtures.write("input", &compressor_input(600, 4, ""));
+    for script in [
+        "#!/bin/sh\ncat >/dev/null\nexit 7\n",
+        "#!/bin/sh\ncat >/dev/null\nkill -TERM $$\n",
+        "#!/bin/sh\ncat\nif [ \"$1\" = -d ]; then exit 7; fi\n",
+    ] {
+        ts.fixtures.write("compressor", script);
+        fs::set_permissions(
+            ts.fixtures.plus("compressor"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+        sort_with_ignored_sigchld(&ts)
+            .args(&["--compress-program=./compressor", "-S", "1k", "input"])
+            .fails_with_code(2)
+            .stderr_contains("'./compressor' terminated abnormally");
+    }
+}
+
 #[test]
 #[cfg(not(target_os = "android"))]
 fn test_compress_fail() {
@@ -1724,6 +1790,109 @@ fn test_compress_fail() {
         .succeeds()
         .stdout_move_str();
     assert_eq!(result.stdout_str(), expected);
+}
+
+#[cfg(unix)]
+fn compressor_input(count: usize, width: usize, suffix: &str) -> String {
+    let mut input = String::new();
+    for i in (0..count).rev() {
+        writeln!(&mut input, "{i:0width$}{suffix}").unwrap();
+    }
+    input
+}
+
+#[cfg(unix)]
+fn run_with_compressor(script: &str, input: &str, buffer_size: &str, expected_error: &str) {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("compressor", script);
+    fs::set_permissions(at.plus("compressor"), fs::Permissions::from_mode(0o755)).unwrap();
+    at.write("input", input);
+    ucmd.timeout(Duration::from_secs(30))
+        .args(&[
+            "--compress-program=./compressor",
+            "-S",
+            buffer_size,
+            "--batch-size=2",
+            "input",
+        ])
+        .fails_with_code(2)
+        .stderr_contains(expected_error);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_compressor_exits_before_reading() {
+    let input = compressor_input(30_000, 8, "xxxxxxxxxxxxxxxxxxxxxxxx");
+    run_with_compressor(
+        "#!/bin/sh\nexit 0\n",
+        &input,
+        "300k",
+        "failed to write temporary file:",
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_compressor_exits_during_intermediate_merge() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("compressor", "#!/bin/sh\nexit 7\n");
+    fs::set_permissions(at.plus("compressor"), fs::Permissions::from_mode(0o755)).unwrap();
+    // Exceed the pipe capacity so the failure occurs while merging, before
+    // finished_writing checks the compressor's exit status.
+    at.write("input", &"a long sorted input line\n".repeat(100_000));
+    ucmd.timeout(Duration::from_secs(30))
+        .args(&[
+            "-m",
+            "--batch-size=2",
+            "--compress-program=./compressor",
+            "input",
+            "input",
+            "input",
+        ])
+        .fails_with_code(2)
+        .stderr_contains("failed to write temporary file:");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_compressor_failure_after_input() {
+    let input = compressor_input(600, 4, "");
+    run_with_compressor(
+        "#!/bin/sh\ncat >/dev/null\nexit 7\n",
+        &input,
+        "1k",
+        "'./compressor' terminated abnormally",
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_compressor_terminated_by_signal() {
+    let input = compressor_input(600, 4, "");
+    run_with_compressor(
+        "#!/bin/sh\ncat >/dev/null\nkill -TERM $$\n",
+        &input,
+        "1k",
+        "'./compressor' terminated abnormally",
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_decompressor_failure_after_output() {
+    let input = compressor_input(600, 4, "");
+    run_with_compressor(
+        "#!/bin/sh\ncat\nif [ \"$1\" = -d ]; then exit 7; fi\n",
+        &input,
+        "1k",
+        "'./compressor' terminated abnormally",
+    );
 }
 
 #[test]
@@ -1902,6 +2071,50 @@ fn test_sigpipe_panic() {
     // The "Broken pipe" error should be silently ignored.
     child.close_stdout();
     child.wait().unwrap().no_stderr();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_compressed_sort_closed_stdout() {
+    let (at, mut cmd) = at_and_ucmd!();
+    at.write(
+        "input",
+        &compressor_input(30_000, 8, "xxxxxxxxxxxxxxxxxxxxxxxx"),
+    );
+    let mut child = cmd
+        .timeout(Duration::from_secs(30))
+        .args(&["--compress-program=gzip", "-S", "100k", "input"])
+        .set_stdout(std::process::Stdio::piped())
+        .run_no_wait();
+    child.close_stdout();
+    child.wait().unwrap().signal_is(13).no_stderr();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_compressor_sigpipe_not_ignored() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    let (at, mut cmd) = at_and_ucmd!();
+    // An ignored SIGPIPE survives exec and cannot be caught by the shell.
+    at.write(
+        "compressor",
+        "#!/bin/sh\nkill -PIPE $$\necho SIGPIPE-was-ignored >&2\nexit 7\n",
+    );
+    fs::set_permissions(at.plus("compressor"), fs::Permissions::from_mode(0o755)).unwrap();
+    at.write("input", "a\n");
+    cmd.timeout(Duration::from_secs(30))
+        .args(&[
+            "-m",
+            "--batch-size=2",
+            "--compress-program=./compressor",
+            "input",
+            "input",
+            "input",
+        ])
+        .fails_with_code(2)
+        .stderr_does_not_contain("SIGPIPE-was-ignored");
 }
 
 #[test]

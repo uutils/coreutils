@@ -614,6 +614,88 @@ pub fn disable_pipe_errors() -> Result<(), Errno> {
     unsafe { signal(SIGPIPE, SigIgn) }.map(|_| ())
 }
 
+/// Runs a pipe write with SIGPIPE blocked only on the calling thread.
+/// Consumes a newly generated SIGPIPE on EPIPE, preserving any already pending
+/// signal and restoring the original mask even if the operation panics.
+#[cfg(all(unix, not(target_vendor = "apple")))]
+pub fn with_sigpipe_blocked<T>(write: impl FnOnce() -> std::io::Result<T>) -> std::io::Result<T> {
+    use nix::{libc, sys::signal::SigmaskHow};
+
+    struct RestoreMask(SigSet);
+    impl Drop for RestoreMask {
+        fn drop(&mut self) {
+            let _ = self.0.thread_set_mask();
+        }
+    }
+
+    fn pipe_pending() -> std::io::Result<bool> {
+        let mut pending = std::mem::MaybeUninit::<libc::sigset_t>::uninit();
+        // SAFETY: sigpending initializes valid storage on success.
+        Errno::result(unsafe { libc::sigpending(pending.as_mut_ptr()) })?;
+        // SAFETY: sigpending succeeded and SIGPIPE is a valid signal number.
+        let member = unsafe { libc::sigismember(pending.as_ptr(), libc::SIGPIPE) };
+        Ok(Errno::result(member)? != 0)
+    }
+
+    let mut blocked = SigSet::empty();
+    blocked.add(SIGPIPE);
+    let restore = RestoreMask(blocked.thread_swap_mask(SigmaskHow::SIG_BLOCK)?);
+    let was_pending = pipe_pending()?;
+    let result = write();
+    if result
+        .as_ref()
+        .is_err_and(|error| error.raw_os_error() == Some(libc::EPIPE))
+        && !was_pending
+        && pipe_pending()?
+    {
+        let mut received = 0;
+        // SAFETY: SIGPIPE is blocked and pending; the set and output are valid.
+        // Use libc because nix does not expose sigwait on all Unix targets.
+        let error = unsafe { libc::sigwait(blocked.as_ref(), &raw mut received) };
+        if error != 0 {
+            return Err(std::io::Error::from_raw_os_error(error));
+        }
+    }
+    restore.0.thread_set_mask()?;
+    result
+}
+
+/// Suppresses SIGPIPE on a private pipe descriptor, returning EPIPE instead.
+/// Darwin pipe writes can signal other threads, so a thread mask is insufficient.
+#[cfg(target_vendor = "apple")]
+pub fn disable_pipe_errors_for_fd(fd: impl std::os::fd::AsFd) -> std::io::Result<()> {
+    use nix::libc;
+    use std::os::fd::AsRawFd;
+
+    // Darwin's <sys/fcntl.h> defines this command, but libc does not expose it.
+    const F_SETNOSIGPIPE: libc::c_int = 73;
+    // SAFETY: fd is valid and this command takes an integer argument.
+    Errno::result(unsafe { libc::fcntl(fd.as_fd().as_raw_fd(), F_SETNOSIGPIPE, 1) })?;
+    Ok(())
+}
+
+/// Makes child exit statuses waitable when SIGCHLD was explicitly ignored.
+/// Leaves the default disposition and custom handlers unchanged.
+#[cfg(unix)]
+pub fn prepare_child_wait() -> Result<(), Errno> {
+    use nix::libc;
+
+    let mut action = std::mem::MaybeUninit::<libc::sigaction>::uninit();
+    // nix's sigaction requires a new action; use libc to query without changing it.
+    // SAFETY: a null new action queries the disposition into valid storage.
+    Errno::result(unsafe {
+        libc::sigaction(libc::SIGCHLD, std::ptr::null(), action.as_mut_ptr())
+    })?;
+    // SAFETY: the successful sigaction call initialized action.
+    let action = unsafe { action.assume_init() };
+    if action.sa_sigaction == libc::SIG_IGN {
+        // Ignoring SIGCHLD can auto-reap children, making wait return ECHILD.
+        // SAFETY: SigDfl is a predefined disposition, not a custom handler.
+        unsafe { signal(Signal::SIGCHLD, SigDfl) }?;
+    }
+    Ok(())
+}
+
 /// Ignores the SIGINT signal.
 #[cfg(unix)]
 pub fn ignore_interrupts() -> Result<(), Errno> {
@@ -804,6 +886,123 @@ pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
     // This means the pipe is healthy (not broken).
     // res < 0 would be an error, but nix returns Err in that case.
     Ok(true)
+}
+
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+fn test_with_sigpipe_blocked() {
+    use nix::{libc, sys::signal::raise};
+    use std::io::Write;
+
+    const CHILD_MODE: &str = "UUCORE_TEST_WITH_SIGPIPE_BLOCKED";
+    if let Ok(mode) = std::env::var(CHILD_MODE) {
+        // SAFETY: both dispositions are predefined, not custom handlers.
+        unsafe { signal(SIGPIPE, if mode == "ignored" { SigIgn } else { SigDfl }) }.unwrap();
+        let mut original_mask = SigSet::thread_get_mask().unwrap();
+        original_mask.add(Signal::SIGUSR1);
+        if mode == "pending" {
+            original_mask.add(SIGPIPE);
+        } else {
+            original_mask.remove(SIGPIPE);
+        }
+        original_mask.thread_set_mask().unwrap();
+        assert_eq!(with_sigpipe_blocked(|| Ok(42)).unwrap(), 42);
+        assert_eq!(SigSet::thread_get_mask().unwrap(), original_mask);
+
+        if mode == "panic" {
+            let result = std::panic::catch_unwind(|| {
+                let _: std::io::Result<()> = with_sigpipe_blocked(|| panic!("test panic"));
+            });
+            assert!(result.is_err());
+        } else {
+            if mode == "pending" {
+                raise(SIGPIPE).unwrap();
+            }
+            let (read_end, write_end) = nix::unistd::pipe().unwrap();
+            drop(read_end);
+            let mut writer = std::fs::File::from(write_end);
+            let error = with_sigpipe_blocked(|| writer.write(b"x")).unwrap_err();
+            assert_eq!(error.raw_os_error(), Some(libc::EPIPE));
+
+            let mut pending = std::mem::MaybeUninit::<libc::sigset_t>::uninit();
+            // SAFETY: sigpending initializes valid storage on success.
+            assert_eq!(unsafe { libc::sigpending(pending.as_mut_ptr()) }, 0);
+            // SAFETY: the preceding call succeeded and SIGPIPE is valid.
+            let pending = unsafe { libc::sigismember(pending.as_ptr(), libc::SIGPIPE) };
+            assert_eq!(pending, i32::from(mode == "pending"));
+        }
+        assert_eq!(SigSet::thread_get_mask().unwrap(), original_mask);
+        return;
+    }
+
+    // Each child can change SIGPIPE without affecting the parent test runner.
+    for mode in ["default", "ignored", "pending", "panic"] {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "features::signals::test_with_sigpipe_blocked",
+                "--nocapture",
+            ])
+            .env(CHILD_MODE, mode)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{mode}: {output:?}");
+        assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_prepare_child_wait() {
+    const CHILD_MODE: &str = "UUCORE_TEST_PREPARE_CHILD_WAIT";
+    if let Ok(mode) = std::env::var(CHILD_MODE) {
+        extern "C" fn handler(_: core::ffi::c_int) {}
+
+        let initial_handler = match mode.as_str() {
+            "ignored" => SigIgn,
+            "default" => SigDfl,
+            "custom" => SigHandler::Handler(handler),
+            _ => panic!("unexpected child mode"),
+        };
+        let action = SigAction::new(initial_handler, SaFlags::SA_RESTART, SigSet::empty());
+        // SAFETY: the custom handler does nothing and is async-signal-safe.
+        unsafe { sigaction(Signal::SIGCHLD, &action) }.unwrap();
+        prepare_child_wait().unwrap();
+        // SAFETY: reinstall an async-signal-safe action to inspect the previous one.
+        let previous = unsafe { sigaction(Signal::SIGCHLD, &action) }.unwrap();
+        let expected = if mode == "ignored" {
+            SigDfl
+        } else {
+            initial_handler
+        };
+        match (previous.handler(), expected) {
+            (SigDfl, SigDfl) => (),
+            (SigHandler::Handler(actual), SigHandler::Handler(expected)) => {
+                assert!(std::ptr::fn_addr_eq(actual, expected));
+            }
+            (actual, expected) => panic!("expected {expected:?}, got {actual:?}"),
+        }
+        if mode != "ignored" {
+            assert_eq!(previous.flags(), action.flags());
+            assert_eq!(previous.mask(), action.mask());
+        }
+        return;
+    }
+
+    // Signal dispositions are process-wide: isolate each case from other tests.
+    for mode in ["ignored", "default", "custom"] {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "features::signals::test_prepare_child_wait",
+                "--nocapture",
+            ])
+            .env(CHILD_MODE, mode)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{mode}: {output:?}");
+        assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
+    }
 }
 
 #[test]
