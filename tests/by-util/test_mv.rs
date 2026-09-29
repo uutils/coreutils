@@ -716,9 +716,9 @@ fn test_mv_symlink_into_target() {
     ucmd.arg("dir-link").arg("dir").succeeds();
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[cfg(target_os = "linux")]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_broken_symlink_to_another_fs() {
     use tempfile::TempDir;
 
@@ -1898,8 +1898,8 @@ mod inter_partition_copying {
     // preserved. The mover owns the file here, so the chown is a no-op and the
     // bits are legitimate; only a failed chown justifies stripping them, and
     // that needs a second uid, so it is exercised out of band rather than here.
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
-    #[cfg_attr(wasi_runner, ignore = "WASI sandbox: /dev/shm not visible")]
     pub(crate) fn test_mv_inter_partition_keeps_setuid_when_ownership_preserved() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -1930,8 +1930,8 @@ mod inter_partition_copying {
     }
 
     // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
-    #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
     pub(crate) fn test_mv_unlinks_dest_symlink() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -1980,8 +1980,8 @@ mod inter_partition_copying {
 
     // In an inter-partition move if unlinking the destination symlink fails, ensure
     // that it would output the proper error message.
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
-    #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
     pub(crate) fn test_mv_unlinks_dest_symlink_error_message() {
         use uutests::util::TestScenario;
         let scene = TestScenario::new(util_name!());
@@ -2012,9 +2012,9 @@ mod inter_partition_copying {
     }
 
     // Test that hardlinks are preserved when moving files across partitions
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     #[cfg(unix)]
-    #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
     pub(crate) fn test_mv_preserves_hardlinks_across_partitions() {
         use std::fs;
         use std::os::unix::fs::MetadataExt;
@@ -2087,11 +2087,11 @@ mod inter_partition_copying {
     }
 
     // Test that hardlinks are preserved even with multiple sets of hardlinked files
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     #[cfg(unix)]
     #[allow(clippy::too_many_lines)]
     #[allow(clippy::similar_names)]
-    #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
     pub(crate) fn test_mv_preserves_multiple_hardlink_groups_across_partitions() {
         use std::fs::metadata;
         use std::os::unix::fs::MetadataExt;
@@ -2203,9 +2203,9 @@ mod inter_partition_copying {
     }
 
     // Test hardlinks within directories being moved
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     #[cfg(unix)]
-    #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
     pub(crate) fn test_mv_preserves_hardlinks_in_directories_across_partitions() {
         use std::fs::metadata;
         use std::os::unix::fs::MetadataExt;
@@ -2304,11 +2304,11 @@ mod inter_partition_copying {
     }
 
     // Test complex scenario with multiple hardlink groups across nested directories
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     #[cfg(unix)]
     #[allow(clippy::too_many_lines)]
     #[allow(clippy::similar_names)]
-    #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
     pub(crate) fn test_mv_preserves_complex_hardlinks_across_nested_directories() {
         use std::fs::metadata;
         use std::os::unix::fs::MetadataExt;
@@ -2453,9 +2453,9 @@ mod inter_partition_copying {
         );
     }
 
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     #[cfg(unix)]
-    #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
     pub(crate) fn test_mv_dir_with_fifo_across_partitions() {
         use std::os::unix::fs::FileTypeExt;
         use tempfile::TempDir;
@@ -2487,9 +2487,9 @@ mod inter_partition_copying {
     // follows symlinks) instead of symlink_metadata() made mv "preserve" the
     // hardlink by linking the regular files to the copied *symlink*, leaving
     // self-referential symlinks and destroying the content.
+    #[uutests::wasi_ignore(HostPathsNotVisible)]
     #[test]
     #[cfg(unix)]
-    #[cfg_attr(wasi_runner, ignore = "WASI sandbox: /dev/shm not visible")]
     pub(crate) fn test_mv_symlink_to_hardlinked_sibling_across_partitions() {
         use std::os::unix::fs::MetadataExt;
 
@@ -2687,9 +2687,9 @@ fn test_special_file_different_filesystem() {
 /// Test cross-device move with permission denied error
 /// Test partial failure handling where
 /// a cross-device move fails due to permission errors when removing the target file
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_cross_device_permission_denied() {
     use std::fs::{set_permissions, write};
     use std::os::unix::fs::PermissionsExt;
@@ -2736,9 +2736,9 @@ fn test_mv_cross_device_permission_denied() {
 /// the symlink. The deterministic stand-in here pre-plants the symlink:
 /// `safe_copy::create_dest_restrictive` must refuse it with `ELOOP` rather
 /// than truncate `victim`.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_cross_device_refuses_planted_symlink_dest() {
     use std::os::unix::fs::symlink;
     use tempfile::TempDir;
@@ -2888,9 +2888,9 @@ fn test_mv_error_usage_display_too_few() {
         .stderr_contains("For more information, try '--help'.");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_verbose_directory_recursive() {
     use tempfile::TempDir;
 
@@ -2944,9 +2944,9 @@ fn test_mv_verbose_directory_recursive() {
     assert!(stdout.contains("'mv-dir/d/e/f/file2' -> "));
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[cfg(unix)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
 fn test_mv_prompt_unwriteable_file_when_using_tty() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -3098,9 +3098,9 @@ fn test_mv_cross_device_dir_xattr_preserved() {
 /// copied in a cross-device move. Each refused one is reported, but the move
 /// still succeeds. tmpfs takes large values while ext4 caps a value at one
 /// block, so the large attributes fail there and the small ones must survive.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: /dev/shm not visible")]
 fn test_mv_cross_device_xattr_failure_keeps_the_rest() {
     use rustc_hash::FxHashMap;
     use std::ffi::{OsStr, OsString};
@@ -3165,9 +3165,9 @@ fn test_mv_cross_device_xattr_failure_keeps_the_rest() {
 
 /// Cross-device mv of a symlink onto an existing file must replace the
 /// destination atomically, matching GNU.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_cross_device_symlink_onto_existing() {
     use std::fs;
     use std::os::unix::fs::symlink;
@@ -3206,9 +3206,9 @@ fn test_mv_cross_device_symlink_onto_existing() {
 
 /// Cross-device mv of a symlink onto an existing directory (`-T`) must
 /// fail without destroying the directory or its contents.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_cross_device_symlink_onto_existing_dir() {
     use std::fs;
     use std::os::unix::fs::symlink;
@@ -3248,9 +3248,9 @@ fn test_mv_cross_device_symlink_onto_existing_dir() {
 
 /// Test that symlinks inside directories are preserved during cross-device moves
 /// (not expanded into full copies of their targets)
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_cross_device_symlink_preserved() {
     use std::fs;
     use std::os::unix::fs::symlink;
@@ -3296,9 +3296,9 @@ fn test_mv_cross_device_symlink_preserved() {
 }
 
 /// Test that broken/dangling symlinks are preserved during cross-device moves
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_cross_device_broken_symlink_preserved() {
     use std::fs;
     use std::os::unix::fs::symlink;
@@ -3342,9 +3342,9 @@ fn test_mv_cross_device_broken_symlink_preserved() {
 }
 
 /// Test that symlinks to regular files are preserved during cross-device moves
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_cross_device_file_symlink_preserved() {
     use std::fs;
     use std::os::unix::fs::symlink;
@@ -3404,9 +3404,9 @@ fn find_other_group(current: u32) -> Option<u32> {
 /// Test that group ownership is preserved during cross-device file moves.
 /// Uses chgrp to a supplementary group (no root needed).
 /// See <https://github.com/uutils/coreutils/issues/9714>
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_cross_device_preserves_ownership() {
     use std::fs;
     use std::os::unix::fs::MetadataExt;
@@ -3467,9 +3467,9 @@ fn test_mv_cross_device_preserves_ownership() {
 /// Test that group ownership is preserved for files inside directories during cross-device moves.
 /// Uses chgrp to a supplementary group (no root needed).
 /// See <https://github.com/uutils/coreutils/issues/9714>
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_mv_cross_device_preserves_ownership_recursive() {
     use std::fs;
     use std::os::unix::fs::MetadataExt;
@@ -3597,7 +3597,7 @@ fn test_mv_backup_numbered_allows_source_named_like_backup() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: --exchange is not supported")]
+#[cfg(not(wasi_runner))]
 fn test_mv_exchange_file_and_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("leaf", "payload");
@@ -3618,7 +3618,7 @@ fn test_mv_exchange_file_and_dir() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: --exchange is not supported")]
+#[cfg(not(wasi_runner))]
 fn test_mv_exchange_verbose() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("first", "1");
@@ -3637,7 +3637,7 @@ fn test_mv_exchange_verbose() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: --exchange is not supported")]
+#[cfg(not(wasi_runner))]
 fn test_mv_exchange_wrong_operand_count() {
     let scene = TestScenario::new(util_name!());
     scene.fixtures.write("only", "x");
@@ -3668,7 +3668,7 @@ fn test_mv_exchange_wrong_operand_count() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: --exchange is not supported")]
+#[cfg(not(wasi_runner))]
 fn test_mv_exchange_multiple_operands_into_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("a", "src-a");
@@ -3700,7 +3700,7 @@ fn test_mv_exchange_multiple_operands_into_directory() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: --exchange is not supported")]
+#[cfg(not(wasi_runner))]
 fn test_mv_exchange_same_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("only", "data");
@@ -3735,7 +3735,7 @@ fn test_mv_exchange_not_supported() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: --exchange is not supported")]
+#[cfg(not(wasi_runner))]
 fn test_mv_exchange_missing_target() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("present", "data");

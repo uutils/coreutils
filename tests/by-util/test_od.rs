@@ -49,12 +49,12 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[rstest]
 #[cfg(all(unix, not(target_vendor = "apple")))]
 #[case::bytes(&["-An", "-tx1"], None, " 61 62 63 64 65 66 00\n")]
 #[case::strings(&["-An", "-S3"], None, "abcdef\n")]
 #[case::traditional(&["--traditional", "-An", "-tx1"], Some("4"), " 65 66 00\n")]
-#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
 fn test_non_utf8_filename(
     #[case] flags: &[&str],
     #[case] offset: Option<&str>,
@@ -74,11 +74,11 @@ fn test_non_utf8_filename(
     cmd.succeeds().stdout_only(expected);
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[rstest]
 #[cfg(all(unix, not(target_vendor = "apple")))]
 #[case::missing(false, "No such file or directory")]
 #[case::directory(true, "Is a directory")]
-#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
 fn test_non_utf8_filename_errors(
     #[case] directory: bool,
     #[case] error: &str,
@@ -989,8 +989,8 @@ fn test_skip_bytes_prints_after_consuming_multiple_inputs() {
 }
 
 #[cfg(target_os = "linux")]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_skip_bytes_proc_file_without_seeking() {
     let proc_path = Path::new("/proc/version");
     if !proc_path.exists() {
@@ -1074,11 +1074,8 @@ fn test_strings_skip_bytes_within_input() {
 // A seekable special file such as /dev/null can be skipped past its (empty)
 // end without error, matching GNU od.
 #[cfg(unix)]
+#[uutests::wasi_ignore(DevNullNotSeekable)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: /dev/null is not a seekable device"
-)]
 fn test_skip_bytes_past_end_of_seekable_device() {
     new_ucmd!()
         .arg("-j1")
@@ -1096,11 +1093,8 @@ fn test_skip_bytes_past_end_no_offset() {
     ucmd.arg("-j10").arg("f").fails().no_stdout();
 }
 
+#[uutests::wasi_ignore(StdinPositionNotPreserved)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: stdin file position not preserved through wasmtime"
-)]
 fn test_read_bytes() {
     let scene = TestScenario::new(util_name!());
     let fixtures = &scene.fixtures;
@@ -1526,9 +1520,9 @@ fn test_hex_lowercase() {
         ));
 }
 
+#[uutests::wasi_ignore(ErrnoMessageMismatch)]
 #[test]
 #[cfg(not(windows))]
-#[cfg_attr(wasi_runner, ignore)]
 fn test_is_a_directory() {
     let scene = TestScenario::new(util_name!());
     let fixtures = &scene.fixtures;

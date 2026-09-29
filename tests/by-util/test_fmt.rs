@@ -560,9 +560,9 @@ fn test_fmt_knuth_plass_line_breaking() {
         .stdout_is(expected);
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_fmt_non_utf8_paths() {
     use uutests::at_and_ucmd;
 
