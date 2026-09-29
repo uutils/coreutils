@@ -16,9 +16,11 @@ path = "src/du.rs"
 doctest = false
 
 [dependencies]
-# For the --exclude & --exclude-from options
-glob = { workspace = true }
 clap = { workspace = true }
+fluent = { workspace = true }
+glob = { workspace = true }
+rustc-hash = { workspace = true }
+thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "format",
   "fsext",
@@ -27,9 +29,6 @@ uucore = { workspace = true, features = [
   "parser-glob",
   "time",
 ] }
-rustc-hash = { workspace = true }
-thiserror = { workspace = true }
-fluent = { workspace = true }
 
 [target.'cfg(all(unix, not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))))'.dependencies]
 uucore = { workspace = true, features = ["safe-traversal"] }

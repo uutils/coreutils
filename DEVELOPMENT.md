@@ -50,16 +50,17 @@ You will need these to [run uutils against the GNU test suite locally](#comparin
 
 For MacOS and Windows platform specific setup please check [MacOS GNU utils](#macos-gnu-utils) and [Windows GNU utils](#windows-gnu-utils) sections respectfully.
 
-### pre-commit hooks
+### prek hooks
 
-A configuration for `pre-commit` is provided in the repository. It allows
-automatically checking every git commit you make to ensure it compiles, and
-passes `clippy` and `rustfmt` without warnings.
+A configuration for `prek` is provided in the repository. It reads the existing
+`.pre-commit-config.yaml` natively and allows automatically checking every git
+commit you make to ensure it compiles, and passes `clippy` and `rustfmt`
+without warnings.
 
 To use the provided hook:
 
-1. [Install `pre-commit`](https://pre-commit.com/#install)
-1. Run `pre-commit install` while in the repository directory
+1. [Install `prek`](https://prek.j178.dev/installation/)
+1. Run `prek install` while in the repository directory
 
 Your git commits will then automatically be checked. If a check fails, an error
 message will explain why, and your commit will be canceled. You can then make
@@ -290,7 +291,7 @@ brew install \
   gnu-sed \
   m4 \
   bison \
-  pre-commit \
+  prek \
   findutils
 ```
 

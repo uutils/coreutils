@@ -73,9 +73,9 @@ fn format_and_write(
         match std::str::from_utf8(line) {
             Ok(s) => {
                 if is_scientific(s.as_bytes()) {
-                    Err(format!(
-                        "invalid suffix in input: '{}'",
-                        String::from_utf8_lossy(line)
+                    Err(translate!(
+                        "numfmt-error-invalid-suffix",
+                        "input" => String::from_utf8_lossy(line).quote()
                     )
                     .into())
                 } else {
