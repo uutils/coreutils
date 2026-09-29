@@ -437,8 +437,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         debug: debug_mode,
     };
 
-    // GNU `date` echoes the resulting date for `-s` whether or not the clock
-    // could actually be set (issue #14677); only a parse failure skips it.
     if let Some(input) = matches.get_one::<String>(OPT_SET) {
         return set_and_echo(input, &now, &settings);
     }
