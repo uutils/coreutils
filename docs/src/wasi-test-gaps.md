@@ -1,8 +1,10 @@
 # WASI integration test gaps
 
-Tests annotated with `#[cfg_attr(wasi_runner, ignore = "...")]` are skipped when running integration tests against a WASI binary via wasmtime. This document tracks the reasons so that gaps in WASI support are visible in one place.
+Tests annotated with `#[uutests::wasi_ignore(ReasonKey)]` are skipped when running integration tests against a WASI binary via wasmtime. The macro expands to `#[cfg_attr(wasi_runner, ignore = "...")]`, resolving `ReasonKey` to its reason text. Every reason lives once, alphabetically, in `tests/uutests_procs/src/lib.rs`; this document gives the prose overview so that gaps in WASI support are visible in one place.
 
-To find all annotated tests: `grep -rn 'wasi_runner, ignore' tests/`
+When a test cannot run under WASI, annotate it with `#[uutests::wasi_ignore(ReasonKey)]` using the key that matches the root cause. Reuse an existing key whenever one fits rather than adding a near-duplicate; add a new key to `tests/uutests_procs/src/lib.rs` only when no existing reason describes the cause, and keep the key list and this document in sync. If the real cause of an existing skip turns out to differ from its key, switch the key (and refine the reason text) rather than leaving it mislabeled.
+
+To find all annotated tests: `grep -rn 'wasi_ignore' tests/`. For the full, authoritative list of reason keys and their text, see `tests/uutests_procs/src/lib.rs`.
 
 ## Tools not yet covered by integration tests
 

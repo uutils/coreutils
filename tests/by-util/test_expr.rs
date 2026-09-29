@@ -581,11 +581,8 @@ fn test_invalid_substr() {
         .stdout_only("\n");
 }
 
+#[uutests::wasi_ignore(Usize32BitOverflow)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: usize is 32-bit, the host usize::MAX does not parse"
-)]
 fn test_substr_large_length_capacity_overflow() {
     new_ucmd!()
         .args(&["substr", "abc", "1", &usize::MAX.to_string()])
@@ -1574,8 +1571,8 @@ mod expr_arithmetic {
 mod locale_aware {
     use uutests::new_ucmd;
 
+    #[uutests::wasi_ignore(NoLocaleData)]
     #[test]
-    #[cfg_attr(wasi_runner, ignore = "WASI: no locale data, every locale is C")]
     fn test_expr_collating() {
         for (loc, code, output) in [
             ("C", 0, "1\n"),
@@ -2042,8 +2039,8 @@ mod expr_multibyte_arithmetic {
     }
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no locale data, every locale is C")]
 fn test_emoji_operations() {
     new_ucmd!()
         .args(&["🚀", "=", "🚀"])
