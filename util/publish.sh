@@ -58,7 +58,7 @@ TOTAL_ORDER=${TOTAL_ORDER#ROOT}
 CRATE_VERSION=$(grep '^version =' Cargo.toml | head -n1 | cut -d '"' -f2)
 
 set -e
-CORE_DIRS="src/uucore_procs/ src/uucore/ src/uu/stdbuf/src/libstdbuf/ tests/uutests/ fuzz/uufuzz/"
+CORE_DIRS="src/uucore_procs/ src/uucore/ src/uu/stdbuf/src/libstdbuf/ tests/uutests_procs/ tests/uutests/ fuzz/uufuzz/"
 CORE_COUNT=$(echo $CORE_DIRS | wc -w)
 UTIL_COUNT=$(echo $TOTAL_ORDER | wc -w)
 TOTAL_COUNT=$((CORE_COUNT + UTIL_COUNT + 1))

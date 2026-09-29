@@ -473,9 +473,9 @@ fn test_read_from_nonexistent_file() {
         .stderr_only("wc: bogusfile: No such file or directory\n");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_files_from_pseudo_filesystem() {
     use pretty_assertions::assert_ne;
     let result = new_ucmd!().arg("-c").arg("/proc/cpuinfo").succeeds();
@@ -769,8 +769,8 @@ fn test_files0_progressive_stream() {
 }
 
 #[cfg(target_os = "linux")]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_files0_stops_after_stdout_write_error() {
     use std::fs::OpenOptions;
 
@@ -873,8 +873,8 @@ fn test_invalid_byte_sequence_word_count() {
 }
 
 #[cfg(unix)]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_simd_respects_glibc_tunables() {
     use std::fmt::Write as _;
 
