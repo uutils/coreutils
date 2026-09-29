@@ -26,6 +26,8 @@ pub enum MvError {
     TargetNotADirectory(String),
     #[error("{}", translate!("mv-error-failed-access-not-directory", "path" => .0))]
     FailedToAccessNotADirectory(String),
+    #[error("{}", translate!("mv-error-inter-device-move-failed", "from" => .0, "to" => .1, "err" => .2))]
+    InterDeviceMoveFailed(String, String, String),
 }
 
 impl UError for MvError {}
