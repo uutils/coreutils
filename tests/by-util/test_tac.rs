@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore axxbxx bxxaxx axxx axxxx xxaxx xxax xxxxa axyz zyax zyxa bbaaa aaabc bcdddd cddddaaabc xyzabc abcxyzabc nbbaaa EISDIR SIGBUS mmap
+
 #[cfg(unix)]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -145,7 +147,7 @@ fn test_before_no_separator() {
 
 #[test]
 fn test_before_empty_file() {
-    new_ucmd!().arg("-b").pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().arg("-b").pipe_in("").succeeds().no_output();
 }
 
 #[test]

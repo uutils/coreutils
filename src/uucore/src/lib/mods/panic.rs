@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 //! Custom panic hooks that allow silencing certain types of errors.
 //!
 //! Use the [`mute_sigpipe_panic`] function to silence panics caused by
@@ -13,6 +14,7 @@
 //! $ seq inf | head -n 1
 //! ```
 //!
+
 use std::panic::{self, PanicHookInfo};
 
 /// Decide whether a panic was caused by a broken pipe (SIGPIPE) error.

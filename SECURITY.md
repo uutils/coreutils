@@ -32,9 +32,12 @@ privilege boundary on the local system.
   re-resolved paths) so a symlink swapped in mid-walk cannot redirect the
   operation outside the intended tree.
 - **Unintended destructive actions** - operations that delete, overwrite, or
-  signal something the user did not ask for, including security-relevant
-  divergences from GNU behavior that scripts rely on (a parsing bug that "fails
-  open" instead of erroring).
+  signal something the user did not ask for, **where the input that triggers it
+  reaches the utility across a trust boundary**: an attacker-supplied filename
+  or file content that a privileged script, cron job, or automated pipeline
+  processes. A divergence from GNU makes such a bug real and worth fixing, but
+  it is the boundary crossing that makes it a security issue - see "What makes a
+  report a vulnerability" below.
 - Memory-safety issues, integer overflow, or unbounded allocation reachable
   from untrusted input.
 
@@ -45,6 +48,47 @@ privilege boundary on the local system.
   not change which files or processes are affected.
 - Issues requiring an already-privileged or already-malicious local actor who
   could achieve the same effect directly.
+- **A divergence from GNU on its own.** Differing from GNU - including failing
+  where GNU errors, or erroring where GNU succeeds - is a bug we want reported,
+  but it is not by itself a vulnerability. The question is what the divergence
+  lets an attacker *do* that they could not do already. For example: an
+  argument-parsing difference that makes a utility treat an attacker-chosen
+  filename as an option is a real bug, but if the result stays inside the
+  caller's own permissions and the operands the caller already named, no
+  boundary was crossed - it belongs in a public issue.
+- **Data loss or a destructive action with no boundary crossing** - a utility
+  destroying the caller's own files, under the caller's own permissions, from
+  the caller's own arguments.
+- **An absent or ineffective mitigation that grants no access.** A control that
+  fails open leaves the user where they would have been without it. That is a
+  bug to fix promptly, not an advisory, unless the failure itself hands someone
+  access they did not have.
+- **Availability bounded to the caller's own job** - a hang, an unbounded loop,
+  or resource use that affects only the invocation that asked for it (see below).
+
+### What makes a report a vulnerability
+
+One test decides it: **name the attacker and what they gain.**
+
+- *Who is the attacker?* If the only party in the reproduction is the operator
+  running their own command in their own environment, there is no boundary and
+  no vulnerability. What *could* happen in a hypothetical hostile deployment
+  does not supply one.
+- *What do they control?* Inputs - a filename, file contents, a directory a
+  privileged process walks, the environment a caller passes in. Not the
+  privileged process's own code, arguments, or configuration.
+- *What do they end up with that they did not have before?* If the end state
+  gives them no access, no privilege, and no reach beyond what they already had
+  - if it is merely *less* of something the operator wanted - it is a bug.
+
+If you cannot answer all three, please open a normal public issue instead. That
+is not a lesser outcome: it gets the bug fixed faster, in the open, and you are
+credited the same way. **Declining an advisory is never declining the fix** - if
+we judge a report to be a bug rather than a vulnerability, we will say so
+plainly, file it publicly, credit you, and fix it.
+
+If you are unsure, report it privately anyway. We would much rather triage a
+borderline report than miss a real one.
 
 ### Local denial-of-service
 

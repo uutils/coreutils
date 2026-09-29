@@ -104,16 +104,8 @@ fn report_verbose_write_error(result: UResult<()>) {
 
 /// Helper function to show error with context and return error status
 fn show_removal_error(error: io::Error, path: &Path) -> bool {
-    if error.kind() == io::ErrorKind::PermissionDenied {
-        show_error!(
-            "{}",
-            translate!("rm-error-cannot-remove-permission-denied", "file" =>  path.quote())
-        );
-    } else {
-        let e =
-            error.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
-        show_error!("{e}");
-    }
+    let e = error.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
+    show_error!("{e}");
     true
 }
 
@@ -138,13 +130,14 @@ fn remove_dir_with_feedback(path: &Path, options: &Options) -> bool {
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Copy)]
 /// Enum, determining when the `rm` will prompt the user about the file deletion
+#[derive(Eq, PartialEq, Clone, Copy)]
 pub enum InteractiveMode {
     /// Never prompt
     Never,
-    /// Prompt once before removing more than three files, or when removing
-    /// recursively.
+    /// Ask for confirmation a single time, covering the whole operation, when
+    /// the request looks broad: a recursive removal, or more than three
+    /// operands.
     Once,
     /// Prompt before every removal
     Always,
@@ -202,9 +195,9 @@ pub struct Options {
     pub verbose: bool,
     /// `-g`, `--progress`
     pub progress: bool,
-    #[doc(hidden)]
     /// `---presume-input-tty`
     /// Always use `None`; GNU flag for testing use only
+    #[doc(hidden)]
     pub __presume_input_tty: Option<bool>,
 }
 
@@ -468,12 +461,10 @@ pub fn uu_app() -> Command {
                 .help(translate!("rm-help-progress"))
                 .action(ArgAction::SetTrue),
         )
-        // From the GNU source code:
-        // This is solely for testing.
-        // Do not document.
-        // It is relatively difficult to ensure that there is a tty on stdin.
-        // Since rm acts differently depending on that, without this option,
-        // it'd be harder to test the parts of rm that depend on that setting.
+        // Hidden, and meant only for the test suite: handing the process a real
+        // tty on stdin is awkward to arrange, and the prompting paths behave
+        // differently once it has one, so this switch stands in for that state
+        // and makes those paths reachable from a test.
         // In contrast with Arg::long, Arg::alias does not strip leading
         // hyphens. Therefore it supports 3 leading hyphens.
         .arg(
@@ -541,7 +532,9 @@ fn count_files_in_directory(p: &Path) -> u64 {
         entries
             .flatten()
             .map(|entry| match entry.file_type() {
-                Ok(ft) if ft.is_dir() => count_files_in_directory(&entry.path()),
+                Ok(ft) if ft.is_dir() && !ft.is_symlink() => {
+                    count_files_in_directory(&entry.path())
+                }
                 Ok(_) => 1,
                 Err(_) => 0,
             })
@@ -674,7 +667,14 @@ fn remove_dir_recursive(
     // a directory and we don't want to recurse. In particular, this
     // avoids an infinite recursion in the case of a link to the current
     // directory, like `ln -s . link`.
-    if !path.is_dir() || path.is_symlink() {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(e) => return show_removal_error(e, path),
+    };
+    if is_symlink_dir(&metadata) {
+        return remove_dir(path, options, progress_bar);
+    }
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
         return remove_file(path, options, progress_bar);
     }
 
@@ -764,20 +764,27 @@ fn remove_dir_recursive(
     }
 }
 
-/// Check if a path resolves to the root directory.
+/// Check if a path is the root directory.
 /// Returns true if the path is root, false otherwise.
 fn is_root_path(path: &Path) -> bool {
-    // Check simple case: literal "/" path
+    // Check simple case: literal "/" path. Costs no syscall.
     if path.has_root() && path.parent().is_none() {
         return true;
     }
 
-    // Check if path resolves to "/" after following symlinks
-    if let Ok(canonical) = path.canonicalize() {
-        canonical.has_root() && canonical.parent().is_none()
-    } else {
-        false
+    // Otherwise settle by (st_dev, st_ino): a bind mount of "/" is a directory
+    // whose path never resolves to "/", so a name check misses it (symlinks too).
+    if uucore::fs::path_is_root_dir(path, true) {
+        return true;
     }
+
+    // Platforms without (st_dev, st_ino) keep the name-based test.
+    #[cfg(not(unix))]
+    if let Ok(canonical) = path.canonicalize() {
+        return canonical.has_root() && canonical.parent().is_none();
+    }
+
+    false
 }
 
 /// Show error message for attempting to remove root.
@@ -1051,12 +1058,10 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
     }
 }
 
-// For windows we can use windows metadata trait and file attributes to see if a directory is readonly
+// For Windows, metadata.permissions().readonly() checks FILE_ATTRIBUTE_READONLY
 #[cfg(windows)]
 fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
-    use std::os::windows::prelude::MetadataExt;
-    use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_READONLY;
-    let not_user_writable = (metadata.file_attributes() & FILE_ATTRIBUTE_READONLY) != 0;
+    let not_user_writable = metadata.permissions().readonly();
     let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
     match (stdin_ok, not_user_writable, options.interactive) {
         (false, _, InteractiveMode::PromptProtected) => true,
@@ -1122,11 +1127,9 @@ fn is_symlink_dir(_metadata: &Metadata) -> bool {
 
 #[cfg(windows)]
 fn is_symlink_dir(metadata: &Metadata) -> bool {
-    use std::os::windows::prelude::MetadataExt;
-    use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_DIRECTORY;
+    use std::os::windows::fs::FileTypeExt;
 
-    metadata.file_type().is_symlink()
-        && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY) != 0)
+    metadata.file_type().is_symlink_dir()
 }
 
 mod tests {

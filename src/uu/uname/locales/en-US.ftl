@@ -18,3 +18,15 @@ uname-help-machine = print the machine hardware name.
 uname-help-os = print the operating system name.
 uname-help-processor = print the processor type (non-portable)
 uname-help-hardware-platform = print the hardware platform (non-portable)
+uname-help-all-labeled = like -a, print all information but one item per line, labeled.
+
+# Labels for --all-labeled
+# Labels for --all-labeled; { $value } is the system-provided field value.
+uname-label-kernel-name = Kernel name: { $value }
+uname-label-nodename = Node name: { $value }
+uname-label-kernel-release = Kernel release: { $value }
+uname-label-kernel-version = Kernel version: { $value }
+uname-label-machine = Machine: { $value }
+uname-label-processor = Processor: { $value }
+uname-label-hardware-platform = Hardware platform: { $value }
+uname-label-os = Operating system: { $value }

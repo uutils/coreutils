@@ -54,6 +54,8 @@ const DEFAULT_GOAL: usize = 70;
 const DEFAULT_WIDTH: usize = 75;
 // by default, goal is 93% of width
 const DEFAULT_GOAL_TO_WIDTH_RATIO: usize = 93;
+// When only --goal is given, GNU sets the maximum width to goal + 10.
+const DEFAULT_GOAL_WIDTH_SLACK: usize = 10;
 
 mod options {
     pub const CROWN_MARGIN: &str = "crown-margin";
@@ -108,8 +110,8 @@ impl FmtOptions {
             tagged = false;
         }
 
-        let xprefix = matches.contains_id(options::EXACT_PREFIX);
-        let xanti_prefix = matches.contains_id(options::SKIP_PREFIX);
+        let xprefix = matches.get_flag(options::EXACT_PREFIX);
+        let xanti_prefix = matches.get_flag(options::EXACT_SKIP_PREFIX);
 
         let prefix = matches.get_one::<String>(options::PREFIX).map(String::from);
         let anti_prefix = matches
@@ -119,12 +121,10 @@ impl FmtOptions {
         let width_opt = extract_width(matches)?;
         let goal_opt_str = matches.get_one::<String>(options::GOAL);
         let goal_opt = if let Some(goal_str) = goal_opt_str {
-            match goal_str.parse::<usize>() {
-                Ok(goal) => Some(goal),
-                Err(_) => {
-                    return Err(FmtError::InvalidGoal(goal_str.clone()).into());
-                }
-            }
+            let goal = goal_str
+                .parse::<usize>()
+                .map_err(|_| FmtError::InvalidGoal(goal_str.clone()))?;
+            Some(goal)
         } else {
             None
         };
@@ -151,7 +151,7 @@ impl FmtOptions {
                 if g > DEFAULT_WIDTH {
                     return Err(FmtError::GoalGreaterThanWidth.into());
                 }
-                let w = (g * 100 / DEFAULT_GOAL_TO_WIDTH_RATIO).max(g + 3);
+                let w = g + DEFAULT_GOAL_WIDTH_SLACK;
                 (w, g)
             }
             (None, None) => (DEFAULT_WIDTH, DEFAULT_GOAL),
@@ -165,19 +165,12 @@ impl FmtOptions {
             return Err(FmtError::WidthOutOfRange(width).into());
         }
 
-        let mut tabwidth = 8;
-        if let Some(s) = matches.get_one::<String>(options::TAB_WIDTH) {
-            tabwidth = match s.parse::<usize>() {
-                Ok(t) => t,
-                Err(_) => {
-                    return Err(FmtError::InvalidTabWidth(s.clone()).into());
-                }
-            };
-        }
-
-        if tabwidth < 1 {
-            tabwidth = 1;
-        }
+        #[expect(clippy::unwrap_used, reason = "clap provides default width")]
+        let tabwidth_str = matches.get_one::<String>(options::TAB_WIDTH).unwrap();
+        let tabwidth = tabwidth_str
+            .parse::<usize>()
+            .map_err(|_| FmtError::InvalidTabWidth(tabwidth_str.to_owned()))?
+            .clamp(1, usize::MAX);
 
         Ok(Self {
             crown,
@@ -457,6 +450,7 @@ pub fn uu_app() -> Command {
                 .short('T')
                 .long("tab-width")
                 .help(translate!("fmt-tab-width-help"))
+                .default_value("8")
                 .value_name("TABWIDTH"),
         )
         .arg(

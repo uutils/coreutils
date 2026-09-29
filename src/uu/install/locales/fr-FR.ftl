@@ -50,6 +50,7 @@ install-error-mutually-exclusive-compare-strip = Les options --compare et --stri
 install-error-missing-file-operand = opérande de fichier manquant
 install-error-missing-destination-operand = opérande de fichier de destination manquant après { $path }
 install-error-failed-to-remove = Échec de la suppression du fichier existant { $path }. Erreur : { $error }
+install-error-will-not-overwrite-just-created = n'écrasera pas le fichier tout juste créé { $dest } avec { $source }
 
 # Messages d'avertissement
 install-warning-compare-ignored = l'option --compare (-C) est ignorée quand un mode est indiqué avec des bits non liés à des droits

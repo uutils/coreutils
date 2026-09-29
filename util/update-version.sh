@@ -17,38 +17,31 @@
 # 10) Create the release on github https://github.com/uutils/coreutils/releases/new
 # 11) Make sure we have good release notes
 
-FROM="0.9.0"
-TO="0.10.0"
+FROM="0.12.0"
+TO="0.13.0"
 
-PROGS=$(ls -1d src/uu/*/Cargo.toml src/uu/stdbuf/src/libstdbuf/Cargo.toml src/uucore/Cargo.toml Cargo.toml fuzz/uufuzz/Cargo.toml src/uu/stdbuf/Cargo.toml)
+MANIFESTS=$(ls -1d Cargo.toml src/uu/*/Cargo.toml src/uu/stdbuf/src/libstdbuf/Cargo.toml src/uucore/Cargo.toml src/uucore_procs/Cargo.toml tests/uutests/Cargo.toml fuzz/uufuzz/Cargo.toml)
 
-# update the version of all programs
+# Only two kinds of lines are rewritten, so that third party crates which
+# happen to share our version number (md-5, sha1, sha2, sha3, ...) are left
+# alone:
+#  1) the crate's own version declaration, anchored at the start of the line
+#  2) dependencies carrying a "path =" key, which are the in-tree uutils crates
+
+# 1) the "version = "X"" of each [package] (and of [workspace.package])
 #shellcheck disable=SC2086
-sed -i -e "s|version = \"$FROM\"|version = \"$TO\"|" $PROGS
+sed -i -E "s|^version = \"$FROM\"$|version = \"$TO\"|" $MANIFESTS
 
-# Update uucore_procs
-sed -i -e "s|version = \"$FROM\"|version = \"$TO\"|" src/uucore_procs/Cargo.toml
-
-
-# Update the stdbuf stuff
-sed -i -e "s|libstdbuf = { version=\"$FROM\"|libstdbuf = { version=\"$TO\"|" src/uu/stdbuf/Cargo.toml
-sed -i -e "s|= { optional=true, version=\"$FROM\", package=\"uu_|= { optional=true, version=\"$TO\", package=\"uu_|g" Cargo.toml
-
-# Update the base32 dependency for basenc and base64
-sed -i -e "s|uu_base32 = { version=\">=$FROM\"|uu_base32 = { version=\">=$TO\"|" src/uu/base64/Cargo.toml src/uu/basenc/Cargo.toml
-
-# Update the ls dependency for dir and vdir
-sed -i -e "s|uu_ls = { version = \">=$FROM\"|uu_ls = { version = \">=$TO\"|" src/uu/dir/Cargo.toml src/uu/vdir/Cargo.toml
-
-# Update uucore itself
-sed -i -e "s|version = \"$FROM\"|version = \"$TO\"|" src/uucore/Cargo.toml
-# Update crates using uucore
+# 2) the in-tree dependencies, keeping the ">=" prefix when there is one
 #shellcheck disable=SC2086
-sed -i -e "s|uucore = { version=\">=$FROM\",|uucore = { version=\">=$TO\",|" $PROGS
-# Update crates using uucore_procs
-#shellcheck disable=SC2086
-sed -i -e "s|uucore_procs = { version=\">=$FROM\",|uucore_procs = { version=\">=$TO\",|" $PROGS
+sed -i -E "/path *=/ s|(version *= *\"(>=)?)$FROM\"|\1$TO\"|g" $MANIFESTS
 
 # Update Cargo.lock files
 cargo update --workspace
 cargo update --workspace --manifest-path fuzz/Cargo.toml
+
+# Sanity check: anything left pointing at the old version is either a third
+# party crate (fine) or something this script missed (not fine)
+echo "Remaining occurrences of $FROM - please review:"
+#shellcheck disable=SC2086
+grep -n "$FROM" $MANIFESTS || echo "  (none)"

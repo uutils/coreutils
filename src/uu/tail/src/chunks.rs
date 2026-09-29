@@ -3,12 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore (ToDO) filehandle BUFSIZ
+
 //! Iterating over a file by chunks, either starting at the end of the file with [`ReverseChunks`]
 //! or at the end of piped stdin with [`LinesChunk`] or [`BytesChunk`].
 //!
 //! Use [`ReverseChunks::new`] to create a new iterator over chunks of bytes from the file.
-
-// spell-checker:ignore (ToDO) filehandle BUFSIZ
 
 use std::collections::VecDeque;
 use std::fs::File;
@@ -84,14 +84,12 @@ impl Iterator for ReverseChunks<'_> {
 
         // Seek backwards by the next chunk, read the full chunk into
         // `buf`, and then seek back to the start of the chunk again.
-        let mut buf = vec![0; BLOCK_SIZE as usize];
+        let mut buf = vec![0; block_size as usize];
         let pos = self
             .file
             .seek(SeekFrom::Current(-(block_size as i64)))
             .unwrap();
-        self.file
-            .read_exact(&mut buf[0..(block_size as usize)])
-            .unwrap();
+        self.file.read_exact(&mut buf).unwrap();
         let pos2 = self
             .file
             .seek(SeekFrom::Current(-(block_size as i64)))
@@ -100,7 +98,7 @@ impl Iterator for ReverseChunks<'_> {
 
         self.block_idx += 1;
 
-        Some(buf[0..(block_size as usize)].to_vec())
+        Some(buf)
     }
 }
 
@@ -291,14 +289,14 @@ impl BytesChunkBuffer {
         // fill chunks with all bytes from reader and reuse already instantiated chunks if possible
         while chunk.fill(reader)?.is_some() {
             self.bytes += chunk.bytes as u64;
-            self.chunks.push_back(chunk.clone());
+            self.chunks.push_back(chunk);
 
             let first = &self.chunks[0];
             if self.bytes - first.bytes as u64 > self.num_print {
                 chunk = self.chunks.pop_front().unwrap();
                 self.bytes -= chunk.bytes as u64;
             } else {
-                *chunk = BytesChunk::new();
+                chunk = Box::new(BytesChunk::new());
             }
         }
 
@@ -565,15 +563,14 @@ impl LinesChunkBuffer {
 
         while chunk.fill(reader)?.is_some() {
             self.lines += chunk.lines as u64;
-            self.chunks.push_back(chunk.clone());
+            self.chunks.push_back(chunk);
 
             let first = &self.chunks[0];
             if self.lines - first.lines as u64 > self.num_print {
                 chunk = self.chunks.pop_front().unwrap();
-
                 self.lines -= chunk.lines as u64;
             } else {
-                *chunk = LinesChunk::new(self.delimiter);
+                chunk = Box::new(LinesChunk::new(self.delimiter));
             }
         }
 

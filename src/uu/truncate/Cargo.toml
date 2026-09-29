@@ -17,8 +17,11 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["parser-size"] }
 fluent = { workspace = true }
+uucore = { workspace = true, features = ["fs", "parser-size"] }
+
+[features]
+diagnostics = ["uucore/diagnostics"]
 
 [lints]
 workspace = true

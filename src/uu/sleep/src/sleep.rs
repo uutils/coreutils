@@ -8,7 +8,7 @@ use std::thread;
 use std::time::Duration;
 use uucore::translate;
 use uucore::{
-    error::{UResult, USimpleError, UUsageError},
+    error::{UResult, UUsageError},
     format_usage,
     parser::parse_time,
     show_error,
@@ -22,14 +22,10 @@ mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
+    #[expect(clippy::unwrap_used, reason = "set as required by clap")]
     let numbers = matches
         .get_many::<String>(options::NUMBER)
-        .ok_or_else(|| {
-            USimpleError::new(
-                1,
-                translate!("sleep-error-missing-operand", "program" => uucore::execution_phrase()),
-            )
-        })?
+        .unwrap()
         .map(String::as_str)
         .collect::<Vec<_>>();
 
@@ -48,6 +44,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::NUMBER)
                 .help(translate!("sleep-help-number"))
                 .value_name(options::NUMBER)
+                .required(true)
                 .action(ArgAction::Append),
         )
 }

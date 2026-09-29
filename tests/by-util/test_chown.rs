@@ -2,12 +2,14 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist cuuser groupname notexisting passgrp
+
+// spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist groupname notexisting passgrp
+
 #[cfg(all(unix, not(target_os = "openbsd")))]
 use std::os::unix::fs::MetadataExt;
 use uutests::util::{CmdResult, TestScenario, is_ci, run_ucmd_as_root};
-use uutests::util_name;
-use uutests::{at_and_ucmd, new_ucmd};
+use uutests::{at_and_ucmd, new_ucmd, util_name};
+
 // Apparently some CI environments have configuration issues, e.g. with 'whoami' and 'id'.
 // If we are running inside the CI and "needle" is in "stderr" skipping this test is
 // considered okay. If we are not inside the CI this calls assert!(result.success).
@@ -35,9 +37,9 @@ fn skipping_test_is_okay(result: &CmdResult, needle: &str) -> bool {
     false
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "android", windows))]
 const ROOT_GROUP: &str = "root";
-#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "windows")))]
+#[cfg(not(any(target_os = "linux", target_os = "android", windows)))]
 const ROOT_GROUP: &str = "wheel";
 
 #[cfg(test)]
@@ -560,7 +562,7 @@ fn test_chown_only_group_id() {
 
     // Apparently on CI "macos-latest, x86_64-apple-darwin, feat_os_unix"
     // the process has the rights to change from runner:staff to runner:wheel
-    #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
+    #[cfg(any(windows, all(unix, not(target_vendor = "apple"))))]
     // FreeBSD user on CI is part of wheel group
     if group_id != "0" {
         scene
@@ -904,6 +906,26 @@ fn test_chown_reference_file() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_chown_reference_file_with_non_utf8_path() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+
+    let reference = std::ffi::OsStr::from_bytes(b"reference_\xFF\xFE");
+    std::fs::File::create(at.plus(reference)).unwrap();
+
+    ucmd.arg("--verbose")
+        .arg("--reference")
+        .arg(reference)
+        .arg("file")
+        .succeeds()
+        .stdout_contains("ownership of 'file' retained as")
+        .no_stderr();
+}
+
+#[test]
 #[cfg(all(unix, not(target_os = "openbsd")))]
 fn test_chown_no_dereference_symlink_to_dir() {
     let scene = TestScenario::new(util_name!());
@@ -965,7 +987,7 @@ fn test_chown_symlink_cycles() {
 
     let result = scene.ucmd().arg("-vRL").arg(&user_name).arg("a").run();
 
-    if cfg!(target_os = "macos") || cfg!(target_os = "openbsd") || cfg!(target_os = "android") {
+    if cfg!(target_vendor = "apple") || cfg!(target_os = "openbsd") || cfg!(target_os = "android") {
         result
             .stdout_contains(format!("ownership of 'a' retained as {user_name}"))
             .stdout_contains(format!("ownership of 'a/b' retained as {user_name}"))
@@ -1008,7 +1030,7 @@ fn test_chown_symlink_two_links_same_dir() {
     let user_name = String::from(result.stdout_str().trim());
     assert!(!user_name.is_empty());
 
-    // cSpell:disable
+    // spell-checker:disable
     at.mkdir_all("base/realdir");
     at.touch("base/realdir/file");
     at.symlink_dir("base/realdir", "base/link1");
@@ -1031,14 +1053,14 @@ fn test_chown_symlink_two_links_same_dir() {
                 "ownership of 'base/link2/file' retained as {user_name}"
             ));
     }
-    // cSpell:enable
+    // spell-checker:enable
 }
 
 #[cfg(target_os = "linux")]
 #[test]
 fn verbose_missing_file_write_error_is_reported_not_panic() {
+    use rustix::process::geteuid;
     use std::fs::OpenOptions;
-    use uucore::process::geteuid;
 
     let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
     new_ucmd!()

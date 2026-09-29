@@ -1,6 +1,5 @@
 tests/basenc/bounded-memory
 tests/cut/bounded-memory
-tests/date/date-locale-hour
 tests/date/resolution
 tests/expand/bounded-memory
 tests/pr/bounded-memory

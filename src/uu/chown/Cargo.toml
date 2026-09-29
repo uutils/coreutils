@@ -17,13 +17,11 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = [
-  "entries",
-  "fs",
-  "perms",
-  "safe-traversal",
-] }
 fluent = { workspace = true }
+uucore = { workspace = true, features = ["entries", "fs", "perms"] }
+
+[target.'cfg(all(unix, not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))))'.dependencies]
+uucore = { workspace = true, features = ["safe-traversal"] }
 
 [lints]
 workspace = true

@@ -91,22 +91,20 @@ mod platform {
 #[cfg(windows)]
 mod platform {
     use std::fs::OpenOptions;
-    use std::os::windows::prelude::*;
     use std::path::Path;
     use uucore::error::{UResult, USimpleError};
     use uucore::translate;
     use uucore::wide::{FromWide, ToWide};
     use windows_sys::Win32::Foundation::{
-        ERROR_NO_MORE_FILES, GetLastError, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
+        ERROR_NO_MORE_FILES, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
     };
     use windows_sys::Win32::Storage::FileSystem::{
-        FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, FlushFileBuffers, GetDriveTypeW,
+        FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDriveTypeW,
     };
     use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
 
     fn get_last_error() -> u32 {
-        // SAFETY: `GetLastError` has no safety preconditions
-        unsafe { GetLastError() as u32 }
+        std::io::Error::last_os_error().raw_os_error().unwrap_or(1) as u32
     }
 
     fn flush_volume(name: &str) -> UResult<()> {
@@ -125,13 +123,12 @@ mod platform {
                     translate!("sync-error-create-volume-handle"),
                 )
             })?;
-        // SAFETY: `file` is a valid `File`
-        if unsafe { FlushFileBuffers(file.as_raw_handle() as HANDLE) } == 0 {
-            return Err(USimpleError::new(
-                get_last_error() as i32,
+        file.sync_all().map_err(|e| {
+            USimpleError::new(
+                e.raw_os_error().unwrap_or(1),
                 translate!("sync-error-flush-file-buffer"),
-            ));
-        }
+            )
+        })?;
         Ok(())
     }
 
@@ -218,6 +215,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // open with O_NONBLOCK to handle fifo files
         #[cfg(any(target_os = "linux", target_os = "android"))]
         {
+            use uucore::error::strip_errno;
             let path = Path::new(f);
             if let Err(e) = rustix::fs::open(
                 path,
@@ -225,7 +223,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 rustix::fs::Mode::empty(),
             ) && (e != rustix::io::Errno::ACCESS || path.is_dir())
             {
-                let msg = translate!("sync-error-opening-file", "file" => f.quote(), "err" => uucore::error::strip_errno(&std::io::Error::from(e)));
+                let msg = translate!("sync-error-opening-file", "file" => f.quote(), "err" => strip_errno(&std::io::Error::from(e)));
                 show_error!("{msg}");
                 set_exit_code(1);
             }
@@ -251,7 +249,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if files.is_empty() {
             sync()?;
         } else {
-            #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
+            #[cfg(any(target_os = "linux", target_os = "android", windows))]
             syncfs(&files)?;
         }
     } else if matches.get_flag(options::DATA) {
@@ -297,7 +295,7 @@ fn sync() -> UResult<()> {
     platform::do_sync()
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "android", windows))]
 fn syncfs(files: &[String]) -> UResult<()> {
     platform::do_syncfs(files)
 }

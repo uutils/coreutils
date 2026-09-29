@@ -220,6 +220,18 @@ fn test_wrap_bad_arg() {
 }
 
 #[test]
+fn test_wrap_negative_arg() {
+    // GNU treats the token after -w as the wrap size even if it starts with '-'.
+    for arg in ["-5", "-d"] {
+        new_ucmd!()
+            .arg("-w")
+            .arg(arg)
+            .fails()
+            .stderr_only(format!("base64: invalid wrap size: '{arg}'\n"));
+    }
+}
+
+#[test]
 fn test_base64_extra_operand() {
     // Expect a failure when multiple files are specified.
     new_ucmd!()
@@ -244,7 +256,7 @@ fn test_no_repeated_trailing_newline() {
         .pipe_in("The quick brown fox jumps over the lazy dog.")
         .succeeds()
         .stdout_only(
-            // cSpell:disable
+            // spell-checker:disable
             "\
 VGhlIHF1aW
 NrIGJyb3du
@@ -253,7 +265,7 @@ IGZveCBqdW
 IHRoZSBsYX
 p5IGRvZy4=
 ",
-            // cSpell:enable
+            // spell-checker:enable
         );
 }
 
@@ -266,13 +278,13 @@ fn test_wrap_default() {
         .pipe_in(PIPE_IN)
         .succeeds()
         .stdout_only(
-            // cSpell:disable
+            // spell-checker:disable
             "\
 VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJy
 b3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJyb3duIGZveCBqdW1w
 cyBvdmVyIHRoZSBsYXp5IGRvZy4=
 ",
-            // cSpell:enable
+            // spell-checker:enable
         );
 }
 

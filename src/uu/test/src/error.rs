@@ -22,6 +22,9 @@ pub enum ParseErrorKind {
     UnknownOperator(String),
     #[error("{}", translate!("test-error-invalid-integer", "value" => .0))]
     InvalidInteger(String),
+    /// Worded like [`Self::InvalidInteger`], but kept apart so `-t` gets advice about descriptors.
+    #[error("{}", translate!("test-error-invalid-integer", "value" => .0))]
+    InvalidFileDescriptor(String),
     #[error("{}", translate!("test-error-unary-operator-expected", "operator" => .0))]
     UnaryOperatorExpected(String),
 }

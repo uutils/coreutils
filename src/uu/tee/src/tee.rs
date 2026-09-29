@@ -7,11 +7,11 @@
 
 use std::ffi::OsString;
 use std::fs::OpenOptions;
-use std::io::{self, Error, ErrorKind, Write, stderr};
+use std::io::{self, Error, ErrorKind, Write};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
-use uucore::translate;
+use uucore::{show_error, translate};
 
 mod cli;
 pub use crate::cli::uu_app;
@@ -19,7 +19,7 @@ use crate::cli::{Options, OutputErrorMode, options};
 
 #[cfg(target_os = "linux")]
 use uucore::signals::ensure_stdout_not_broken;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::signals::{disable_pipe_errors, ignore_interrupts};
 
 #[uucore::main]
@@ -57,11 +57,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 fn tee(options: &Options) -> Result<(), ()> {
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     if options.ignore_interrupts {
         ignore_interrupts().map_err(|_| ())?;
     }
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     if options.output_error.is_some() {
         disable_pipe_errors().map_err(|_| ())?;
     }
@@ -124,7 +124,7 @@ fn open(
             name: name.clone(),
         })),
         Err(f) => {
-            let _ = writeln!(stderr(), "{}: {f}", name.maybe_quote());
+            show_error!("{}: {}", name.maybe_quote(), strip_errno(&f));
             match output_error {
                 Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) => Some(Err(f)),
                 _ => None,
@@ -214,9 +214,8 @@ impl MultiWriter {
                 Ok(slice) => self.write_flush(slice)?,
                 Err(e) if e.kind() == ErrorKind::Interrupted => {}
                 Err(e) => {
-                    let _ = writeln!(
-                        stderr(),
-                        "tee: {}",
+                    show_error!(
+                        "{}",
                         translate!("tee-error-stdin", "error" => strip_errno(&e))
                     );
                     return Err(());
@@ -270,7 +269,7 @@ fn process_error(
     if ignore_pipe && e.kind() == ErrorKind::BrokenPipe {
         return Ok(());
     }
-    let _ = writeln!(stderr(), "{}: {e}", writer.name.maybe_quote());
+    show_error!("{}: {}", writer.name.maybe_quote(), strip_errno(&e));
     if let Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) = mode {
         Err(())
     } else {

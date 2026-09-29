@@ -5,8 +5,9 @@
 
 // spell-checker:ignore hashset Addrs addrs
 
+#![cfg(any(all(unix, not(any(target_os = "aix", target_os = "redox"))), windows))]
+
 use std::io::{Write, stdout};
-#[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))]
 use std::net::ToSocketAddrs;
 use std::str;
 use std::{collections::hash_set::HashSet, ffi::OsString};
@@ -14,8 +15,6 @@ use std::{collections::hash_set::HashSet, ffi::OsString};
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
-#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
-use dns_lookup::lookup_host;
 use uucore::translate;
 
 use uucore::{
@@ -29,38 +28,9 @@ static OPT_FQDN: &str = "fqdn";
 static OPT_SHORT: &str = "short";
 static OPT_HOST: &str = "host";
 
-#[cfg(windows)]
-mod wsa {
-    use std::io;
-
-    use windows_sys::Win32::Networking::WinSock::{WSACleanup, WSADATA, WSAStartup};
-
-    pub(super) struct WsaHandle(());
-
-    pub(super) fn start() -> io::Result<WsaHandle> {
-        let mut data = std::mem::MaybeUninit::<WSADATA>::uninit();
-        let err = unsafe { WSAStartup(0x0202, data.as_mut_ptr()) };
-        if err == 0 {
-            Ok(WsaHandle(()))
-        } else {
-            Err(io::Error::from_raw_os_error(err))
-        }
-    }
-
-    impl Drop for WsaHandle {
-        fn drop(&mut self) {
-            // This possibly returns an error but we can't handle it
-            let _ = unsafe { WSACleanup() };
-        }
-    }
-}
-
 #[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-
-    #[cfg(windows)]
-    let _handle = wsa::start().map_err_context(|| translate!("hostname-error-winsock"))?;
 
     match matches.get_one::<OsString>(OPT_HOST) {
         None => display_hostname(&matches),
@@ -123,26 +93,9 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
         .into_owned();
 
     if matches.get_flag(OPT_IP_ADDRESS) {
-        let addresses;
-
-        #[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))]
-        {
-            let hostname = hostname + ":1";
-            let addrs = hostname
-                .to_socket_addrs()
-                .map_err_context(|| "failed to resolve socket addresses".to_owned())?;
-            addresses = addrs;
-        }
-
-        // DNS reverse lookup via "hostname:1" does not work on FreeBSD and OpenBSD
-        // use dns-lookup crate instead
-        #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
-        {
-            let addrs: Vec<std::net::IpAddr> = lookup_host(hostname.as_str())
-                .map_err_context(|| "failed to lookup hostname".to_owned())?
-                .collect();
-            addresses = addrs;
-        }
+        let addresses = (hostname, 1)
+            .to_socket_addrs()
+            .map_err_context(|| "failed to resolve socket addresses".to_owned())?;
 
         let mut hashset = HashSet::new();
         let mut output = String::new();

@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//! Utilities for parsing numbers in various formats
-
 // spell-checker:ignore powf copysign prec ilog inity infinit infs bigdecimal extendedbigdecimal biguint underflowed muls
+
+//! Utilities for parsing numbers in various formats
 
 use bigdecimal::{
     BigDecimal,
