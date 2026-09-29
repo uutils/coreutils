@@ -19,10 +19,10 @@ doctest = false
 clap = { workspace = true }
 fluent = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["fs", "wide"] }
+uucore = { workspace = true, features = ["fs", "i18n-collator", "wide"] }
 
 [target.'cfg(not(any(windows, target_os = "wasi")))'.dependencies]
-rustix = { workspace = true, features = ["process"] }
+rustix = { workspace = true, features = ["fs", "process"] }
 
 [target.'cfg(not(windows))'.dependencies]
 libc = { workspace = true }
