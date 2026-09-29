@@ -171,6 +171,9 @@ pub enum SortError {
     #[error("{}", translate!("sort-compress-prog-execution-failed", "prog" => .prog, "error" => strip_errno(.error)))]
     CompressProgExecutionFailed { prog: String, error: std::io::Error },
 
+    #[error("{}", translate!("sort-compress-prog-wait-failed", "prog" => .prog.quote(), "error" => strip_errno(.error)))]
+    CompressProgWaitFailed { prog: String, error: std::io::Error },
+
     #[error("{}", translate!("sort-compress-prog-terminated-abnormally", "prog" => .prog.quote()))]
     CompressProgTerminatedAbnormally { prog: String },
 
@@ -2768,6 +2771,15 @@ fn exec(
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
+    #[cfg(unix)]
+    if settings.compress_prog.is_some() && !settings.check {
+        merge::prepare_child_wait().map_err(|error| {
+            USimpleError::new(
+                2,
+                translate!("sort-failed-to-set-up-signal-handler", "error" => error),
+            )
+        })?;
+    }
     if settings.merge {
         merge::merge(files, settings, output, tmp_dir)
     } else if settings.check {

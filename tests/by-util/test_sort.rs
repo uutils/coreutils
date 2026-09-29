@@ -1696,6 +1696,72 @@ fn test_compress_merge() {
         .stdout_only_fixture("merge_ints_interleaved.expected");
 }
 
+#[cfg(target_os = "linux")]
+fn sort_with_ignored_sigchld(ts: &TestScenario) -> uutests::util::UCommand {
+    let mut command = ts.cmd("bash");
+    command
+        .timeout(Duration::from_secs(30))
+        .args(&["-c", "trap '' CHLD; exec \"$@\"", "bash"])
+        .arg(&ts.bin_path)
+        .arg(&ts.util_name);
+    command
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_compress_ignored_sigchld() {
+    let ts = TestScenario::new("sort");
+    ts.fixtures.write("input", &compressor_input(600, 4, ""));
+    let mut expected = String::new();
+    for i in 0..600 {
+        writeln!(&mut expected, "{i:04}").unwrap();
+    }
+    sort_with_ignored_sigchld(&ts)
+        .args(&["--compress-program=gzip", "-S", "1k", "input"])
+        .succeeds()
+        .stdout_only(&expected);
+
+    ts.fixtures.write("sorted", &expected);
+    sort_with_ignored_sigchld(&ts)
+        .args(&[
+            "-m",
+            "-u",
+            "--batch-size=2",
+            "--compress-program=gzip",
+            "sorted",
+            "sorted",
+            "sorted",
+        ])
+        .succeeds()
+        .stdout_only(&expected);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_compress_failures_ignored_sigchld() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    let ts = TestScenario::new("sort");
+    ts.fixtures.write("input", &compressor_input(600, 4, ""));
+    for script in [
+        "#!/bin/sh\ncat >/dev/null\nexit 7\n",
+        "#!/bin/sh\ncat >/dev/null\nkill -TERM $$\n",
+        "#!/bin/sh\ncat\nif [ \"$1\" = -d ]; then exit 7; fi\n",
+    ] {
+        ts.fixtures.write("compressor", script);
+        fs::set_permissions(
+            ts.fixtures.plus("compressor"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+        sort_with_ignored_sigchld(&ts)
+            .args(&["--compress-program=./compressor", "-S", "1k", "input"])
+            .fails_with_code(2)
+            .stderr_contains("'./compressor' terminated abnormally");
+    }
+}
+
 #[test]
 #[cfg(not(target_os = "android"))]
 fn test_compress_fail() {

@@ -486,9 +486,36 @@ impl FileMerger<'_> {
     }
 }
 
+/// Make compression children waitable even if the caller ignored SIGCHLD.
+#[cfg(unix)]
+pub fn prepare_child_wait() -> io::Result<()> {
+    let mut action = std::mem::MaybeUninit::<libc::sigaction>::uninit();
+    // SAFETY: a null new action queries the disposition into valid storage.
+    if unsafe { libc::sigaction(libc::SIGCHLD, std::ptr::null(), action.as_mut_ptr()) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: the successful sigaction call initialized action.
+    let action = unsafe { action.assume_init() };
+    if action.sa_sigaction == libc::SIG_IGN {
+        // Ignoring SIGCHLD can auto-reap children, making wait return ECHILD
+        // even after successful compression. Reset it before spawning any child.
+        // SAFETY: SIG_DFL is a predefined disposition, not a custom handler.
+        if unsafe { libc::signal(libc::SIGCHLD, libc::SIG_DFL) } == libc::SIG_ERR {
+            return Err(io::Error::last_os_error());
+        }
+    }
+    Ok(())
+}
+
 /// Wait for the child to exit and check its exit code.
 fn check_child_success(mut child: Child, program: &str) -> UResult<()> {
-    if child.wait().is_ok_and(|status| status.success()) {
+    let status = child
+        .wait()
+        .map_err(|error| SortError::CompressProgWaitFailed {
+            prog: program.to_owned(),
+            error,
+        })?;
+    if status.success() {
         Ok(())
     } else {
         Err(SortError::CompressProgTerminatedAbnormally {
