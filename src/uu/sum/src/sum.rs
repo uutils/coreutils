@@ -10,13 +10,12 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{ErrorKind, Read, Write, stdin, stdout};
 use std::path::Path;
-use uucore::display::{OsWrite, Quotable};
+use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, strip_errno};
 use uucore::translate;
 
 use uucore::{format_usage, show};
 
-// Fixed to 8 KiB (equivalent to `std::sys::io::DEFAULT_BUF_SIZE` on most targets)
 const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 
 fn bsd_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
@@ -129,6 +128,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let print_names = files.len() > 1 || files[0] != "-";
     let width = if sysv { 1 } else { 5 };
 
+    let mut out_buf = Vec::new();
+
     for file in &files {
         let reader = match open(file) {
             Ok(f) => f,
@@ -143,15 +144,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             bsd_sum(reader)
         }
         .map_err(|e| USimpleError::new(1, format!("{}: {1}", file.display(), strip_errno(&e))))?;
-        let mut stdout = stdout().lock();
+
         if print_names {
-            write!(stdout, "{sum:0width$} {blocks:width$} ")?;
-            stdout.write_all_os(file)?;
-            stdout.write_all(b"\n")?;
+            write!(out_buf, "{sum:0width$} {blocks:width$} ")?;
+            out_buf.write_all(file.as_encoded_bytes())?;
+            out_buf.write_all(b"\n")?;
         } else {
-            writeln!(stdout, "{sum:0width$} {blocks:width$}")?;
+            writeln!(out_buf, "{sum:0width$} {blocks:width$}")?;
         }
     }
+
+    let stdout_handle = stdout();
+    if let Err(e) = stdout_handle.lock().write_all(&out_buf) {
+        return Err(USimpleError::new(1, format!("write error: {e}")));
+    }
+
     Ok(())
 }
 
