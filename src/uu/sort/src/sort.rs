@@ -165,6 +165,9 @@ pub enum SortError {
     #[error("{}", translate!("sort-open-tmp-file-failed", "error" => strip_errno(.error)))]
     OpenTmpFileFailed { error: std::io::Error },
 
+    #[error("{}", translate!("sort-write-tmp-file-failed", "error" => strip_errno(.error)))]
+    WriteTmpFileFailed { error: std::io::Error },
+
     #[error("{}", translate!("sort-compress-prog-execution-failed", "prog" => .prog, "error" => strip_errno(.error)))]
     CompressProgExecutionFailed { prog: String, error: std::io::Error },
 

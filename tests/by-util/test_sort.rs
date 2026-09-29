@@ -1726,6 +1726,95 @@ fn test_compress_fail() {
     assert_eq!(result.stdout_str(), expected);
 }
 
+#[cfg(unix)]
+fn compressor_input(count: usize, width: usize, suffix: &str) -> String {
+    let mut input = String::new();
+    for i in (0..count).rev() {
+        writeln!(&mut input, "{i:0width$}{suffix}").unwrap();
+    }
+    input
+}
+
+#[cfg(unix)]
+fn run_with_compressor(script: &str, input: &str, buffer_size: &str) {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("compressor", script);
+    fs::set_permissions(at.plus("compressor"), fs::Permissions::from_mode(0o755)).unwrap();
+    at.write("input", input);
+    ucmd.timeout(Duration::from_secs(30))
+        .args(&[
+            "--compress-program=./compressor",
+            "-S",
+            buffer_size,
+            "--batch-size=2",
+            "input",
+        ])
+        .fails_with_code(2);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_compressor_exits_before_reading() {
+    let input = compressor_input(30_000, 8, "xxxxxxxxxxxxxxxxxxxxxxxx");
+    run_with_compressor("#!/bin/sh\nexit 0\n", &input, "300k");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_compressor_exits_during_intermediate_merge() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("compressor", "#!/bin/sh\nexit 7\n");
+    fs::set_permissions(at.plus("compressor"), fs::Permissions::from_mode(0o755)).unwrap();
+    // Exceed the pipe capacity so the failure occurs while merging, before
+    // finished_writing checks the compressor's exit status.
+    at.write("input", &"a long sorted input line\n".repeat(100_000));
+    ucmd.timeout(Duration::from_secs(30))
+        .args(&[
+            "-m",
+            "--batch-size=2",
+            "--compress-program=./compressor",
+            "input",
+            "input",
+            "input",
+        ])
+        .fails_with_code(2);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_compressor_failure_after_input() {
+    let input = compressor_input(600, 4, "");
+    run_with_compressor(
+        "#!/bin/sh\ncat >/dev/null\nsleep 0.1\nexit 7\n",
+        &input,
+        "1k",
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_compressor_terminated_by_signal() {
+    let input = compressor_input(600, 4, "");
+    run_with_compressor("#!/bin/sh\ncat >/dev/null\nkill -TERM $$\n", &input, "1k");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_decompressor_failure_after_output() {
+    let input = compressor_input(600, 4, "");
+    run_with_compressor(
+        "#!/bin/sh\ncat\nif [ \"$1\" = -d ]; then sleep 0.1; exit 7; fi\n",
+        &input,
+        "1k",
+    );
+}
+
 #[test]
 fn test_merge_batches() {
     new_ucmd!()
