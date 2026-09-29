@@ -5,10 +5,8 @@
 
 // spell-checker:ignore (ToDO) parsemode makedev sysmacros perror RAII mknodat
 
-use std::ffi::CString;
-
 use clap::{Arg, ArgAction, Command, value_parser};
-use rustix::fs::{FileType as RustixFileType, Mode};
+use rustix::fs::{CWD, Dev, FileType as RustixFileType, Mode, mknodat};
 use rustix::process::umask;
 use std::ffi::OsString;
 use std::io::{self, Write as _};
@@ -57,7 +55,7 @@ struct Config {
     /// when false, the exact mode bits will be set
     use_umask: bool,
 
-    dev: libc::dev_t,
+    dev: Dev,
 
     /// Set security context (SELinux/SMACK).
     #[cfg(any(
@@ -90,22 +88,6 @@ impl Drop for UmaskGuard {
     }
 }
 
-/// Create a special file using `mknod(2)`.
-///
-/// Uses `libc::mknod` directly since `rustix::fs::mknodat` is unavailable on
-/// Apple targets. Combines `file_type` (S_IF* bits) with `mode` (permission
-/// bits) into the raw `mode_t` argument expected by the syscall.
-fn do_mknod(path: &str, file_type: RustixFileType, mode: Mode, dev: u64) -> std::io::Result<()> {
-    let raw_mode = file_type.as_raw_mode() | mode.as_raw_mode();
-    let c_path = CString::new(path)?;
-    let result = unsafe { libc::mknod(c_path.as_ptr(), raw_mode as _, dev as _) };
-    if result == 0 {
-        Ok(())
-    } else {
-        Err(std::io::Error::last_os_error())
-    }
-}
-
 fn mknod(file_name: &str, config: Config) -> i32 {
     // Label the node at creation, as GNU does; relabelling after leaves a window.
     #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
@@ -132,17 +114,23 @@ fn mknod(file_name: &str, config: Config) -> i32 {
         Some(UmaskGuard::set(Mode::empty()))
     };
 
-    let mknod_err = do_mknod(
+    let mknod_err = mknodat(
+        CWD,
         file_name,
         config.file_type.to_file_type(),
         config.mode,
-        config.dev as _,
+        config.dev,
     )
     .err();
     let errno = if mknod_err.is_some() { -1 } else { 0 };
 
     if let Some(err) = mknod_err {
-        let _ = writeln!(io::stderr(), "{}: {err}", uucore::execution_phrase());
+        let _ = writeln!(
+            io::stderr(),
+            "{}: {}",
+            uucore::execution_phrase(),
+            io::Error::from(err)
+        );
     }
 
     // Apply SMACK context if requested
