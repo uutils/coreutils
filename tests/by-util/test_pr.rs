@@ -628,8 +628,8 @@ fn test_with_date_format() {
         .stdout_only(format!("\n\nHello!{whitespace}Page 1\n\n\na{blank_lines}"));
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: locale database not visible")]
 fn test_with_date_format_env() {
     // POSIXLY_CORRECT + LC_ALL/TIME=POSIX uses "%b %e %H:%M %Y" date format
     let whitespace = " ".repeat(49);
@@ -1388,9 +1388,9 @@ fn test_missing_file_error_message() {
         .stderr_does_not_contain("(os error");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
-#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
 fn test_non_utf8_input_filename() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1404,9 +1404,9 @@ fn test_non_utf8_input_filename() {
         .stdout_only("from file\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
 fn test_missing_non_utf8_input_does_not_read_stdin() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1420,9 +1420,9 @@ fn test_missing_non_utf8_input_does_not_read_stdin() {
         .stderr_does_not_contain("(os error");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
-#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
 fn test_merge_non_utf8_input_filename() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1437,9 +1437,9 @@ fn test_merge_non_utf8_input_filename() {
         .stdout_only(format!("{:<35}\t{}\n", "left", "right"));
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
-#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
 fn test_header_preserves_non_utf8_filename() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
