@@ -380,10 +380,7 @@ fn write_tabs(
     let can_convert = print_state.leading || (amode && (tab_preceded || multi_space));
 
     if has_pending && can_convert {
-        while print_state.scol < print_state.col {
-            let Some(nts) = next_tabstop(tab_config, print_state.scol) else {
-                break;
-            };
+        while let Some(nts) = next_tabstop(tab_config, print_state.scol) {
             let Some(target) = print_state.scol.checked_add(nts) else {
                 break;
             };
