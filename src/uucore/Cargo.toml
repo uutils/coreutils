@@ -89,6 +89,8 @@ thiserror = { workspace = true }
 cfg_aliases = { workspace = true }
 
 [dev-dependencies]
+divan = { workspace = true }
+rand = { workspace = true }
 tempfile = { workspace = true }
 temp-env = { workspace = true }
 
@@ -242,6 +244,11 @@ tty = []
 time = ["jiff"]
 uptime = ["jiff", "libc", "rustix/time", "utmp-classic", "utmpx", "windows-sys"]
 benchmark = ["itertools", "tempfile"]
+
+[[bench]]
+name = "quoting_style_bench"
+harness = false
+required-features = ["quoting-style"]
 
 [lints]
 workspace = true
