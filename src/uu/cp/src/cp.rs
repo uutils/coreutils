@@ -1482,7 +1482,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
 
     for source in sources {
         let normalized_source = normalize_path(source);
-        if options.backup == BackupMode::None && seen_sources.contains(&normalized_source) {
+        if options.backup == BackupMode::None && !seen_sources.insert(normalized_source) {
             let file_type = if source.symlink_metadata()?.file_type().is_dir() {
                 "directory"
             } else {
@@ -1538,7 +1538,6 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 copied_destinations.insert(dest.clone());
             }
         }
-        seen_sources.insert(normalized_source);
     }
 
     if let Some(pb) = progress_bar {
