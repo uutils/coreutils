@@ -2802,6 +2802,28 @@ mod cksum_check_mode {
     }
 
     #[test]
+    fn test_status_with_directory() {
+        let scene = make_scene();
+        scene.fixtures.mkdir("dir");
+        scene
+            .fixtures
+            .write("CHECKSUMS2", &format!("SM3 (dir) = {INVALID_SUM}\n"));
+
+        #[cfg(not(windows))]
+        let err_msg = "cksum: dir: Is a directory\n";
+        #[cfg(windows)]
+        let err_msg = "cksum: dir: Permission denied\n";
+
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("--status")
+            .arg("CHECKSUMS2")
+            .fails_with_code(1)
+            .stderr_only(err_msg);
+    }
+
+    #[test]
     fn test_check_with_non_existing_file() {
         let scene = make_scene();
         scene
@@ -2814,9 +2836,7 @@ mod cksum_check_mode {
             .arg("--status")
             .arg("CHECKSUMS2")
             .fails_with_code(1)
-            .no_stdout()
-            .stderr_contains("input2: No such file or directory")
-            .stderr_does_not_contain("listed file could not be read");
+            .stderr_only("cksum: input2: No such file or directory\n");
 
         scene
             .ucmd()

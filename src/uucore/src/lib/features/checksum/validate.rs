@@ -579,7 +579,7 @@ fn get_file_to_check(
             }
             Err(err) => {
                 if !opts.ignore_missing {
-                    // Keep the individual diagnostic even when --status hides the result.
+                    // yes, we have both stderr and stdout here
                     print_error(err);
                     failed_open();
                 }
