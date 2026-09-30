@@ -120,15 +120,13 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
         Ok(())
     } else {
         if matches.get_flag(OPT_SHORT) || matches.get_flag(OPT_DOMAIN) {
-            let mut it = hostname.char_indices().filter(|&ci| ci.1 == '.');
-            if let Some(ci) = it.next() {
-                if matches.get_flag(OPT_SHORT) {
-                    writeln!(stdout(), "{}", &hostname[0..ci.0])?;
-                } else {
-                    writeln!(stdout(), "{}", &hostname[ci.0 + 1..])?;
-                }
-            } else if matches.get_flag(OPT_SHORT) {
-                writeln!(stdout(), "{hostname}")?;
+            let (short, domain) = hostname
+                .split_once('.')
+                .unwrap_or((hostname.as_str(), "(none)"));
+            if matches.get_flag(OPT_SHORT) {
+                writeln!(stdout(), "{short}")?;
+            } else {
+                writeln!(stdout(), "{domain}")?;
             }
             return Ok(());
         }

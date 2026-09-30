@@ -12,7 +12,9 @@ fn test_hostname() {
     let ls_domain_res = new_ucmd!().arg("-d").succeeds();
 
     assert!(ls_default_res.stdout().len() >= ls_short_res.stdout().len());
-    assert!(ls_default_res.stdout().len() >= ls_domain_res.stdout().len());
+    if ls_domain_res.stdout_str() != "(none)\n" {
+        assert!(ls_default_res.stdout().len() >= ls_domain_res.stdout().len());
+    }
 }
 
 #[test]
@@ -45,7 +47,7 @@ fn test_hostname_domain_empty() {
     let domain_short = new_ucmd!().arg("-sd").succeeds();
 
     if fqdn.stdout() == short.stdout() {
-        assert!(domain.stdout().is_empty());
-        assert!(domain_short.stdout().is_empty());
+        assert_eq!(domain.stdout_str(), "(none)\n");
+        assert_eq!(domain_short.stdout_str(), "(none)\n");
     }
 }
