@@ -658,14 +658,9 @@ fn format_timestamp(seconds: i64, nanoseconds: u32, precision: Precision) -> Str
         let divisor = 10_i128.pow((9 - precision) as u32);
         // Integer seconds use the floor, but fractional output truncates toward zero.
         let value = total_nanoseconds / divisor;
-        let result = format_scaled_decimal(value, precision);
-        if total_nanoseconds < 0 && value == 0 {
-            format!("-{result}")
-        } else {
-            result
-        }
+        format_scaled_decimal(value, precision, total_nanoseconds < 0)
     } else {
-        let mut result = format_scaled_decimal(total_nanoseconds, 9);
+        let mut result = format_scaled_decimal(total_nanoseconds, 9, total_nanoseconds < 0);
         result.push_str(&"0".repeat(precision - 9));
         result
     }
@@ -680,16 +675,12 @@ fn system_time_to_timestamp(time: SystemTime) -> (i64, u32) {
     (seconds, nanoseconds)
 }
 
-fn format_scaled_decimal(value: i128, precision: usize) -> String {
-    if precision == 0 {
-        return value.to_string();
-    }
-
+fn format_scaled_decimal(value: i128, precision: usize, negative: bool) -> String {
     let scale = 10_u128.pow(precision as u32);
     let magnitude = value.unsigned_abs();
     let whole = magnitude / scale;
     let fraction = magnitude % scale;
-    let sign = if value < 0 { "-" } else { "" };
+    let sign = if negative { "-" } else { "" };
     format!("{sign}{whole}.{fraction:0>precision$}")
 }
 
@@ -1753,8 +1744,10 @@ mod tests {
             (-3, 765_432_109, Precision::Number(0), "-3"),
             (-3, 765_432_109, Precision::Number(2), "-2.23"),
             (-3, 765_432_109, Precision::Number(6), "-2.234567"),
+            (-1, 999_999_999, Precision::Number(1), "-0.0"),
             (-1, 999_999_999, Precision::Number(3), "-0.000"),
             (-1, 999_999_999, Precision::Number(9), "-0.000000001"),
+            (-1, 999_999_999, Precision::Number(10), "-0.0000000010"),
             (-3, 0, Precision::Number(3), "-3.000"),
         ] {
             assert_eq!(format_timestamp(seconds, nanoseconds, precision), expected);
