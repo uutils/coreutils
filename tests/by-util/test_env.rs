@@ -2207,26 +2207,21 @@ fn test_exec_non_utf8_binary_not_found() {
 
 #[test]
 #[cfg(unix)]
-fn test_exec_directory_permission_denied() {
+fn test_exec_directory_errors() {
     let ts = TestScenario::new(util_name!());
     ts.fixtures.mkdir("test_dir");
+    ts.fixtures.touch("test_file");
 
     ts.ucmd()
         .arg("./test_dir")
         .fails_with_code(126)
         .stderr_is("env: './test_dir': Permission denied\n");
-}
 
-#[test]
-#[cfg(unix)]
-fn test_exec_file_with_slash_not_a_directory() {
-    let ts = TestScenario::new(util_name!());
-    ts.fixtures.touch("test_file");
-
-    ts.ucmd()
-        .arg("test_file/")
-        .fails_with_code(126)
-        .stderr_contains("env: 'test_file/':");
+    let result = ts.ucmd().arg("test_file/").fails_with_code(126);
+    #[cfg(target_os = "linux")]
+    result.stderr_is("env: 'test_file/': Not a directory\n");
+    #[cfg(not(target_os = "linux"))]
+    result.stderr_contains("env: 'test_file/':");
 }
 
 #[test]
