@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore DATETIME getmntinfo subsecond (fs) cifs smbfs
+// spell-checker:ignore DATETIME getmntinfo subsecond (fs) cifs smbfs ohos virtiofs
 
 //! Set of functions to manage file systems
 

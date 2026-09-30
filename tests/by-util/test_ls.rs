@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons Nofile NOTCAPABLE
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons Nofile NOTCAPABLE iproduct newfstatat isox
 
 #![allow(
     clippy::similar_names,
@@ -2397,15 +2397,17 @@ fn test_ls_time_styles() {
         .stdout_matches(&re_custom_format_recent)
         .stdout_matches(&re_custom_format_old);
 
-    //+FORMAT_RECENT\nFORMAT_OLD
+    //+FORMAT_OLD\nFORMAT_RECENT: FORMAT1 applies to old files, FORMAT2 to recent files.
+    let re_custom_format_recent_2 =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}--\d{2} test\n").unwrap();
     let re_custom_format_old =
-        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}--\d{2} test-old\n").unwrap();
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}__\d{2} test-old\n").unwrap();
     scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=+%Y__%M\n%Y--%M")
         .succeeds()
-        .stdout_matches(&re_custom_format_recent)
+        .stdout_matches(&re_custom_format_recent_2)
         .stdout_matches(&re_custom_format_old);
 
     // Also fails due to not having full clap support for time_styles
@@ -2533,13 +2535,13 @@ fn test_ls_time_recent_future() {
         .succeeds()
         .stdout_matches(&re_iso_old);
 
-    // Also test that we can set a format that varies for recent of older files.
-    //+FORMAT_RECENT\nFORMAT_OLD
+    // A two-line format assigns FORMAT1 to old files and FORMAT2 to recent files.
+    //+FORMAT_OLD\nFORMAT_RECENT
     f.set_modified(SystemTime::now()).unwrap();
     scene
         .ucmd()
         .arg("-l")
-        .arg("--time-style=+RECENT\nOLD")
+        .arg("--time-style=+OLD\nRECENT")
         .succeeds()
         .stdout_contains("RECENT");
 
@@ -2549,11 +2551,11 @@ fn test_ls_time_recent_future() {
     scene
         .ucmd()
         .arg("-l")
-        .arg("--time-style=+RECENT\nOLD")
+        .arg("--time-style=+OLD\nRECENT")
         .succeeds()
         .stdout_contains("OLD");
 
-    // RECENT format is still used if no "OLD" one provided.
+    // The single format is used for all files when no second one is provided.
     scene
         .ucmd()
         .arg("-l")
@@ -4325,6 +4327,39 @@ fn test_ls_invalid_quoting_style_env_var_with_unwritable_stderr() {
 }
 
 #[test]
+fn test_ls_invalid_quoting_style_env_var_warns() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("alpha");
+
+    scene
+        .ucmd()
+        .env("QUOTING_STYLE", "not-a-style")
+        .arg("alpha")
+        .succeeds()
+        .stdout_is("alpha\n")
+        .stderr_contains("Ignoring invalid value of environment variable QUOTING_STYLE");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_ls_invalid_quoting_style_env_var_non_utf8() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("alpha");
+    let style = uucore::os_str_from_bytes(b"\xFF")
+        .expect("Only unix platforms can test non-unicode env values");
+
+    scene
+        .ucmd()
+        .env("QUOTING_STYLE", style)
+        .arg("alpha")
+        .succeeds()
+        .stdout_is("alpha\n")
+        .stderr_contains("Ignoring invalid value of environment variable QUOTING_STYLE");
+}
+
+#[test]
 fn test_ls_quoting_style_arg_overrides_env_var() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5661,6 +5696,42 @@ fn test_ls_dired_implies_long() {
         .stdout_does_not_contain("//DIRED//")
         .stdout_contains("  total 0")
         .stdout_contains("//DIRED-OPTIONS// --quoting-style");
+}
+
+// Regression test for issue #14775.
+#[test]
+fn test_ls_dired_quoting_style_name() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+
+    for style in [
+        "literal",
+        "shell",
+        "shell-always",
+        "shell-escape",
+        "shell-escape-always",
+        "c",
+        "escape",
+        "locale",
+        "clocale",
+    ] {
+        scene
+            .ucmd()
+            .env("LC_ALL", "C")
+            .args(&["-l", "--dired", &format!("--quoting-style={style}"), "dir"])
+            .succeeds()
+            .stdout_contains(format!("//DIRED-OPTIONS// --quoting-style={style}"));
+    }
+
+    for (opt, style) in [("-N", "literal"), ("-Q", "c"), ("-b", "escape")] {
+        scene
+            .ucmd()
+            .env("LC_ALL", "C")
+            .args(&["-l", "--dired", opt, "dir"])
+            .succeeds()
+            .stdout_contains(format!("//DIRED-OPTIONS// --quoting-style={style}"));
+    }
 }
 
 #[test]
@@ -8077,7 +8148,6 @@ fn test_ls_non_utf8_hidden() {
 }
 
 #[test]
-#[cfg(target_os = "wasi")]
 fn test_ls_a_dotdot_no_error_on_wasi() {
     // On WASI the sandbox may block access to ".." at the preopened root.
     // ls -a should still succeed and show ".." without an error message.
@@ -8092,7 +8162,6 @@ fn test_ls_a_dotdot_no_error_on_wasi() {
 }
 
 #[test]
-#[cfg(target_os = "wasi")]
 fn test_ls_al_no_capabilities_insufficient_on_wasi() {
     // `ls -al` reads metadata for every entry including "..". Without the
     // WASI fallback, stat on ".." at the preopened root returns

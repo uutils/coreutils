@@ -3,13 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore backport Ioctl absolutized linkat symlinkat renameat unlinkat openat urandom NOFOLLOW CLOEXEC RDONLY
+// spell-checker:ignore backport Ioctl absolutized linkat symlinkat renameat unlinkat openat urandom NOFOLLOW CLOEXEC RDONLY unguessability
 
 //! Set of functions to manage regular files, special files, and links.
 
+use crate::translate;
 #[cfg(all(unix, not(target_os = "haiku")))]
 pub use libc::{major, makedev, minor};
-use rustc_hash::FxHashSet;
 use std::collections::VecDeque;
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -39,6 +39,12 @@ use windows_sys::Win32::Storage::FileSystem::{
 use windows_sys::Win32::System::IO::DeviceIoControl;
 #[cfg(windows)]
 use windows_sys::Win32::System::Ioctl::FSCTL_SET_SPARSE;
+
+/// Maximum number of symlinks followed while resolving a single path.
+///
+/// Matches the limit Linux enforces during path lookup; going past it is
+/// reported as "Too many levels of symbolic links".
+pub const SYMLINK_FOLLOW_LIMIT: usize = 40;
 
 /// Used to check if the `mode` has its `perm` bit set.
 ///
@@ -338,7 +344,6 @@ pub fn canonicalize<P: AsRef<Path>>(
     miss_mode: MissingHandling,
     res_mode: ResolveMode,
 ) -> IOResult<PathBuf> {
-    const SYMLINKS_TO_LOOK_FOR_LOOPS: i32 = 20;
     let original = original.as_ref();
     let has_to_be_directory =
         (miss_mode == MissingHandling::Normal || miss_mode == MissingHandling::Existing) && {
@@ -359,7 +364,6 @@ pub fn canonicalize<P: AsRef<Path>>(
     let mut parts: VecDeque<OwningComponent> = path.components().map(Into::into).collect();
     let mut result = PathBuf::new();
     let mut followed_symlinks = 0;
-    let mut visited_files = FxHashSet::default();
     while let Some(part) = parts.pop_front() {
         match part {
             OwningComponent::Prefix(s) => {
@@ -382,21 +386,14 @@ pub fn canonicalize<P: AsRef<Path>>(
                 for link_part in link_path.components().rev() {
                     parts.push_front(link_part.into());
                 }
-                if followed_symlinks < SYMLINKS_TO_LOOK_FOR_LOOPS {
-                    followed_symlinks += 1;
-                } else {
-                    let file_info =
-                        FileInformation::from_path(result.parent().unwrap(), false).unwrap();
-                    let mut path_to_follow = PathBuf::new();
-                    for part in &parts {
-                        path_to_follow.push(part.as_os_str());
-                    }
-                    if !visited_files.insert((file_info, path_to_follow)) {
-                        return Err(Error::new(
-                            ErrorKind::InvalidInput,
-                            "Too many levels of symbolic links",
-                        )); // TODO use ErrorKind::FilesystemLoop when stable
-                    }
+                // A fixed cap rather than tracking visited links: loops such
+                // as `foo -> foo/bar` never revisit the same state.
+                followed_symlinks += 1;
+                if followed_symlinks > SYMLINK_FOLLOW_LIMIT {
+                    return Err(Error::new(
+                        ErrorKind::InvalidInput,
+                        translate!("error-too-many-symlink-levels"),
+                    )); // TODO use ErrorKind::FilesystemLoop when stable
                 }
                 result.pop();
             }
@@ -745,6 +742,7 @@ pub fn make_path_relative_to<P1: AsRef<Path>, P2: AsRef<Path>>(path: P1, to: P2)
 /// Checks if there is a symlink loop in the given path.
 ///
 /// A symlink loop is a chain of symlinks where the last symlink points back to one of the previous symlinks in the chain.
+/// Like the kernel, a chain longer than [`SYMLINK_FOLLOW_LIMIT`] is treated as a loop.
 ///
 /// # Arguments
 ///
@@ -754,23 +752,22 @@ pub fn make_path_relative_to<P1: AsRef<Path>, P2: AsRef<Path>>(path: P1, to: P2)
 ///
 /// * `bool` - Returns `true` if a symlink loop is detected, `false` otherwise.
 pub fn is_symlink_loop(path: &Path) -> bool {
-    let mut visited_symlinks = FxHashSet::default();
     let mut current_path = path.to_path_buf();
 
-    while let (Ok(metadata), Ok(link)) = (
-        current_path.symlink_metadata(),
-        fs::read_link(&current_path),
-    ) {
+    for _ in 0..=SYMLINK_FOLLOW_LIMIT {
+        let (Ok(metadata), Ok(link)) = (
+            current_path.symlink_metadata(),
+            fs::read_link(&current_path),
+        ) else {
+            return false;
+        };
         if !metadata.file_type().is_symlink() {
             return false;
-        }
-        if !visited_symlinks.insert(current_path.clone()) {
-            return true;
         }
         current_path = link;
     }
 
-    false
+    true
 }
 
 #[cfg(not(unix))]
@@ -1389,6 +1386,40 @@ mod tests {
         unix::fs::symlink(&symlink2_path, &symlink1_path).unwrap();
 
         assert!(is_symlink_loop(&symlink1_path));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_is_symlink_loop_follow_limit() {
+        let temp_dir = tempdir().unwrap();
+        let link = |i: usize| temp_dir.path().join(format!("link{i}"));
+        let target = temp_dir.path().join("target");
+        fs::File::create(&target).unwrap();
+        unix::fs::symlink(&target, link(1)).unwrap();
+        for i in 2..=SYMLINK_FOLLOW_LIMIT + 1 {
+            unix::fs::symlink(link(i - 1), link(i)).unwrap();
+        }
+
+        assert!(!is_symlink_loop(&link(SYMLINK_FOLLOW_LIMIT)));
+        assert!(is_symlink_loop(&link(SYMLINK_FOLLOW_LIMIT + 1)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_canonicalize_growing_symlink_loop() {
+        let temp_dir = tempdir().unwrap();
+        let foo = temp_dir.path().join("foo");
+        unix::fs::symlink("foo/bar", &foo).unwrap();
+
+        for miss_mode in [
+            MissingHandling::Normal,
+            MissingHandling::Existing,
+            MissingHandling::Missing,
+        ] {
+            for res_mode in [ResolveMode::Physical, ResolveMode::Logical] {
+                assert!(canonicalize(&foo, miss_mode, res_mode).is_err());
+            }
+        }
     }
 
     #[cfg(unix)]

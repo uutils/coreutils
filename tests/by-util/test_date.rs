@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST MESZ KST uueuu ueuu vasárnap június január distros
-// spell-checker:ignore uppercases
+// spell-checker:ignore uppercases xffx
 
 use std::cmp::Ordering;
 

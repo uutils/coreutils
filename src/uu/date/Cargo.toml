@@ -1,4 +1,4 @@
-# spell-checker:ignore datetime tzdb zoneinfo
+# spell-checker:ignore datetime tzdb zoneinfo ohos OHOS tzdata
 
 [package]
 name = "uu_date"
@@ -16,15 +16,6 @@ readme.workspace = true
 [lib]
 path = "src/date.rs"
 doctest = false
-
-[features]
-default = ["i18n-datetime"]
-i18n-datetime = [
-  "uucore/i18n-datetime",
-  "dep:icu_calendar",
-  "dep:icu_locale",
-  "dep:jiff-icu",
-]
 
 [dependencies]
 clap = { workspace = true }
@@ -66,9 +57,22 @@ divan = { workspace = true }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
 
+[features]
+default = ["i18n-datetime"]
+i18n-datetime = [
+  "uucore/i18n-datetime",
+  "dep:icu_calendar",
+  "dep:icu_locale",
+  "dep:jiff-icu",
+]
+
 [lints]
 workspace = true
 
 [[bench]]
 name = "date_bench"
+harness = false
+
+[[bench]]
+name = "date_locale_bench"
 harness = false

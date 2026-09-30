@@ -21,6 +21,7 @@ memchr = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "parser",
+  "quoting-style",
   "ranges",
   "i18n-common",
   "i18n-decimal",
