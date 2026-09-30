@@ -648,7 +648,7 @@ fn print_integer(
 
 fn format_timestamp(seconds: i64, nanoseconds: u32, precision: Precision) -> String {
     let precision = match precision {
-        Precision::NotSpecified => return seconds.to_string(),
+        Precision::NotSpecified | Precision::Number(0) => return seconds.to_string(),
         Precision::NoNumber => 9,
         Precision::Number(p) => p,
     };
@@ -656,8 +656,14 @@ fn format_timestamp(seconds: i64, nanoseconds: u32, precision: Precision) -> Str
     let total_nanoseconds = i128::from(seconds) * 1_000_000_000 + i128::from(nanoseconds);
     if precision <= 9 {
         let divisor = 10_i128.pow((9 - precision) as u32);
-        let value = total_nanoseconds.div_euclid(divisor);
-        format_scaled_decimal(value, precision)
+        // Integer seconds use the floor, but fractional output truncates toward zero.
+        let value = total_nanoseconds / divisor;
+        let result = format_scaled_decimal(value, precision);
+        if total_nanoseconds < 0 && value == 0 {
+            format!("-{result}")
+        } else {
+            result
+        }
     } else {
         let mut result = format_scaled_decimal(total_nanoseconds, 9);
         result.push_str(&"0".repeat(precision - 9));
@@ -1730,13 +1736,28 @@ mod tests {
             (Precision::NotSpecified, "-1"),
             (Precision::NoNumber, "-0.876543211"),
             (Precision::Number(0), "-1"),
-            (Precision::Number(1), "-0.9"),
-            (Precision::Number(3), "-0.877"),
+            (Precision::Number(1), "-0.8"),
+            (Precision::Number(3), "-0.876"),
             (Precision::Number(9), "-0.876543211"),
             (Precision::Number(10), "-0.8765432110"),
         ];
         for (precision, expected) in pre_epoch_cases {
             assert_eq!(format_timestamp(-1, 123_456_789, precision), expected);
+        }
+    }
+
+    #[test]
+    fn test_format_timestamp_negative_fraction_truncation() {
+        for (seconds, nanoseconds, precision, expected) in [
+            (-3, 765_432_109, Precision::NotSpecified, "-3"),
+            (-3, 765_432_109, Precision::Number(0), "-3"),
+            (-3, 765_432_109, Precision::Number(2), "-2.23"),
+            (-3, 765_432_109, Precision::Number(6), "-2.234567"),
+            (-1, 999_999_999, Precision::Number(3), "-0.000"),
+            (-1, 999_999_999, Precision::Number(9), "-0.000000001"),
+            (-3, 0, Precision::Number(3), "-3.000"),
+        ] {
+            assert_eq!(format_timestamp(seconds, nanoseconds, precision), expected);
         }
     }
 
