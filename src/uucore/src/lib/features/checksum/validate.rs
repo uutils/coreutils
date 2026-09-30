@@ -275,7 +275,8 @@ impl LineFormat {
 
         //   r"\MD5 (a\\ b) = abc123",
         //   BLAKE2b(44)= a45a4c4883cce4b50d844fab460414cc2080ca83690e74d850a9253e757384366382625b218c8585daee80f34dc9eb2f2fde5fb959db81cd48837f9216e7b0fa
-        let trimmed = line.trim_ascii_start();
+        // Other whitespace before the algorithm name makes a tagged line malformed.
+        let trimmed = line.trim_blanks_start();
         let algo_start = usize::from(trimmed.starts_with(b"\\"));
         let rest = &trimmed[algo_start..];
 
@@ -1080,6 +1081,10 @@ mod tests {
             (b"(filename) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
             (b"filename) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
             (b"filename = fds65dsf46as5df4d6f54asds5d7f7g9", None),
+            // only spaces and tabs may come before the algorithm name
+            (b"\t MD5 (blanks) = fds65dsf46as5df4d6f54asds5d7f7g9", Some((b"MD5", None, b"blanks", b"fds65dsf46as5df4d6f54asds5d7f7g9"))),
+            (b"\x0cMD5 (formfeed) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
+            (b"\rMD5 (return) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
             // spell-checker:enable
         ];
 
