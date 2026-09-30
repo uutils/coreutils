@@ -68,6 +68,9 @@ impl ChecksumVerbose {
 /// This struct regroups CLI flags.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ChecksumValidateOptions {
+    /// An untagged line with no file name after the separator is a check of the file '' for
+    /// cksum and b2sum, and is improperly formatted for md5sum and sha*sum.
+    pub allow_empty_filename: bool,
     pub ignore_missing: bool,
     pub strict: bool,
     pub verbose: ChecksumVerbose,
@@ -354,15 +357,19 @@ impl LineFormat {
     ///
     /// [untagged output format]: https://www.gnu.org/software/coreutils/manual/html_node/cksum-output-modes.html#cksum-output-modes-1
     fn parse_untagged(line: &[u8]) -> Option<LineInfo> {
-        let space_idx = line.iter().position(|&b| b == b' ')?;
-        let checksum = &line[..space_idx];
+        let line = line.trim_blanks_start();
+        let blank_idx = line.iter().position(|&b| b == b' ' || b == b'\t')?;
+        let checksum = &line[..blank_idx];
 
         let checksum_utf8 = Self::validate_checksum_format(checksum)?;
 
-        let rest = &line[space_idx..];
+        let rest = &line[blank_idx + 1..];
+        // No file name after the flag: not this format, though the single-space parser
+        // may still read the flag as the file name.
         let filename = rest
-            .strip_prefix(b"  ")
-            .or_else(|| rest.strip_prefix(b" *"))?;
+            .strip_prefix(b" ")
+            .or_else(|| rest.strip_prefix(b"*"))
+            .filter(|name| !name.is_empty())?;
 
         Some(LineInfo {
             algo_name: None,
@@ -384,9 +391,9 @@ impl LineFormat {
     ///
     /// [untagged output format]: https://www.gnu.org/software/coreutils/manual/html_node/cksum-output-modes.html#cksum-output-modes-1
     fn parse_single_space(line: &[u8]) -> Option<LineInfo> {
-        // Find first space
-        let space_idx = line.iter().position(|&b| b == b' ')?;
-        let checksum = &line[..space_idx];
+        let line = line.trim_blanks_start();
+        let blank_idx = line.iter().position(|&b| b == b' ' || b == b'\t')?;
+        let checksum = &line[..blank_idx];
         if !checksum.iter().all(|&b| b.is_ascii_hexdigit()) || checksum.is_empty() {
             return None;
         }
@@ -394,7 +401,7 @@ impl LineFormat {
         // String from it
         let checksum_utf8 = unsafe { String::from_utf8_unchecked(checksum.to_vec()) };
 
-        let filename = line.get(space_idx + 1..)?; // Skip single space
+        let filename = line.get(blank_idx + 1..)?;
 
         Some(LineInfo {
             algo_name: None,
@@ -495,22 +502,30 @@ impl LineInfo {
     /// over the detected format. Otherwise, we must set it to the detected format.
     /// This specific behavior is emphasized by the test
     /// `test_md5sum::test_check_md5sum_only_one_space`.
-    fn parse(s: impl AsRef<OsStr>, cached_line_format: &mut Option<LineFormat>) -> Option<Self> {
+    fn parse(
+        s: impl AsRef<OsStr>,
+        cached_line_format: &mut Option<LineFormat>,
+        allow_empty_filename: bool,
+    ) -> Option<Self> {
         let line_bytes = os_str_as_bytes(s.as_ref()).ok()?;
 
+        let parse_single_space = || {
+            LineFormat::parse_single_space(line_bytes)
+                .filter(|info| allow_empty_filename || !info.filename.is_empty())
+        };
         if let Some(info) = LineFormat::parse_algo_based(line_bytes) {
             return Some(info);
         }
         if let Some(cached_format) = cached_line_format {
             match cached_format {
                 LineFormat::Untagged => LineFormat::parse_untagged(line_bytes),
-                LineFormat::SingleSpace => LineFormat::parse_single_space(line_bytes),
+                LineFormat::SingleSpace => parse_single_space(),
                 LineFormat::AlgoBased => unreachable!("we never catch the algo based format"),
             }
         } else if let Some(info) = LineFormat::parse_untagged(line_bytes) {
             *cached_line_format = Some(LineFormat::Untagged);
             Some(info)
-        } else if let Some(info) = LineFormat::parse_single_space(line_bytes) {
+        } else if let Some(info) = parse_single_space() {
             *cached_line_format = Some(LineFormat::SingleSpace);
             Some(info)
         } else {
@@ -785,21 +800,12 @@ fn process_algo_based_line(
 
 /// Check a digest checksum with non-algo based pre-treatment.
 fn process_non_algo_based_line(
-    line_number: usize,
     line_info: &LineInfo,
     cli_algo_kind: AlgoKind,
     cli_algo_length: Option<HashLength>,
     opts: ChecksumValidateOptions,
 ) -> Result<(), LineCheckError> {
     use AlgoKind as ak;
-    let mut filename_to_check = line_info.filename.as_slice();
-    if filename_to_check.starts_with(b"*")
-        && line_number == 0
-        && line_info.format == LineFormat::SingleSpace
-    {
-        // Remove the leading asterisk if present - only for the first line
-        filename_to_check = &filename_to_check[1..];
-    }
 
     let expected_digest_sum = cli_algo_kind.expected_digest_bit_len();
     let expected_checksum = get_raw_expected_digest(&line_info.checksum, expected_digest_sum)
@@ -828,7 +834,7 @@ fn process_non_algo_based_line(
 
     let algo = SizedAlgoKind::from_unsized(cli_algo_kind, algo_len)?;
 
-    compute_and_check_digest_from_file(filename_to_check, &expected_checksum, algo, opts)
+    compute_and_check_digest_from_file(&line_info.filename, &expected_checksum, algo, opts)
 }
 
 /// Parses a checksum line, detect the algorithm to use, read the file and produce
@@ -839,7 +845,6 @@ fn process_non_algo_based_line(
 /// If the comparison didn't happen, return a `LineChecksumError`.
 fn process_checksum_line(
     line: &OsStr,
-    i: usize,
     cli_algo_name: Option<AlgoKind>,
     cli_algo_length: Option<HashLength>,
     opts: ChecksumValidateOptions,
@@ -855,15 +860,15 @@ fn process_checksum_line(
 
     // Use `LineInfo` to extract the data of a line.
     // Then, depending on its format, apply a different pre-treatment.
-    let line_info =
-        LineInfo::parse(line, cached_line_format).ok_or(LineCheckError::ImproperlyFormatted)?;
+    let line_info = LineInfo::parse(line, cached_line_format, opts.allow_empty_filename)
+        .ok_or(LineCheckError::ImproperlyFormatted)?;
 
     if line_info.format == LineFormat::AlgoBased {
         process_algo_based_line(&line_info, cli_algo_name, opts, last_algo)
     } else if let Some(cli_algo) = cli_algo_name {
         // If we match a non-algo based parser, we expect a cli argument
         // to give us the algorithm to use
-        process_non_algo_based_line(i, &line_info, cli_algo, cli_algo_length, opts)
+        process_non_algo_based_line(&line_info, cli_algo, cli_algo_length, opts)
     } else {
         // We have no clue of what algorithm to use
         Err(LineCheckError::ImproperlyFormatted)
@@ -916,7 +921,6 @@ fn process_checksum_file(
 
         let line_result = process_checksum_line(
             &line,
-            i,
             cli_algo_kind,
             cli_algo_length,
             opts,
@@ -1156,6 +1160,19 @@ mod tests {
                 b"b21lbGV0dGUgZHUgZnJvbWFnZQ==   ",
                 Some((b"b21lbGV0dGUgZHUgZnJvbWFnZQ==", b" ")),
             ),
+            (
+                b" \t60b725f10c9c85c70d97880dfe8191b3  a",
+                Some((b"60b725f10c9c85c70d97880dfe8191b3", b"a")),
+            ),
+            (
+                b"60b725f10c9c85c70d97880dfe8191b3\t*a",
+                Some((b"60b725f10c9c85c70d97880dfe8191b3", b"a")),
+            ),
+            // Other whitespace is not a checksum separator.
+            (b"\x0c60b725f10c9c85c70d97880dfe8191b3  a", None),
+            (b"60b725f10c9c85c70d97880dfe8191b3\x0b a", None),
+            (b"60b725f10c9c85c70d97880dfe8191b3  ", None),
+            (b" 60b725f10c9c85c70d97880dfe8191b3\t*", None),
             // Invalid checksums fail
             (b"inva|idchecksum  test", None),
         ];
@@ -1196,6 +1213,23 @@ mod tests {
                 b"b064a020db8018f18ff5ae367d01b212 dd",
                 Some((b"b064a020db8018f18ff5ae367d01b212", b"dd")),
             ),
+            (
+                b"\t60b725f10c9c85c70d97880dfe8191b3\ta",
+                Some((b"60b725f10c9c85c70d97880dfe8191b3", b"a")),
+            ),
+            (b"\r60b725f10c9c85c70d97880dfe8191b3 a", None),
+            (
+                b"60b725f10c9c85c70d97880dfe8191b3 ",
+                Some((b"60b725f10c9c85c70d97880dfe8191b3", b"")),
+            ),
+            (
+                b" 60b725f10c9c85c70d97880dfe8191b3 ",
+                Some((b"60b725f10c9c85c70d97880dfe8191b3", b"")),
+            ),
+            (
+                b"60b725f10c9c85c70d97880dfe8191b3\t",
+                Some((b"60b725f10c9c85c70d97880dfe8191b3", b"")),
+            ),
             (b"invalidchecksum test", None),
         ];
 
@@ -1222,7 +1256,7 @@ mod tests {
         // Test algo-based parser
         let line_algo_based =
             OsString::from("MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e");
-        let line_info = LineInfo::parse(&line_algo_based, &mut cached_line_format).unwrap();
+        let line_info = LineInfo::parse(&line_algo_based, &mut cached_line_format, true).unwrap();
         assert_eq!(line_info.algo_name.as_deref(), Some("MD5"));
         assert!(line_info.algo_bit_len.is_none());
         assert_eq!(line_info.filename, b"example.txt");
@@ -1232,7 +1266,7 @@ mod tests {
 
         // Test double-space parser
         let line_double_space = OsString::from("d41d8cd98f00b204e9800998ecf8427e  example.txt");
-        let line_info = LineInfo::parse(&line_double_space, &mut cached_line_format).unwrap();
+        let line_info = LineInfo::parse(&line_double_space, &mut cached_line_format, true).unwrap();
         assert!(line_info.algo_name.is_none());
         assert!(line_info.algo_bit_len.is_none());
         assert_eq!(line_info.filename, b"example.txt");
@@ -1244,7 +1278,7 @@ mod tests {
 
         // Test single-space parser
         let line_single_space = OsString::from("d41d8cd98f00b204e9800998ecf8427e example.txt");
-        let line_info = LineInfo::parse(&line_single_space, &mut cached_line_format).unwrap();
+        let line_info = LineInfo::parse(&line_single_space, &mut cached_line_format, true).unwrap();
         assert!(line_info.algo_name.is_none());
         assert!(line_info.algo_bit_len.is_none());
         assert_eq!(line_info.filename, b"example.txt");
@@ -1256,21 +1290,26 @@ mod tests {
 
         // Test invalid checksum line
         let line_invalid = OsString::from("invalid checksum line");
-        assert!(LineInfo::parse(&line_invalid, &mut cached_line_format).is_none());
+        assert!(LineInfo::parse(&line_invalid, &mut cached_line_format, true).is_none());
         assert!(cached_line_format.is_none());
 
         // Test leading space before checksum line
         let line_algo_based_leading_space =
             OsString::from("   MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e");
-        let line_info =
-            LineInfo::parse(&line_algo_based_leading_space, &mut cached_line_format).unwrap();
+        let line_info = LineInfo::parse(
+            &line_algo_based_leading_space,
+            &mut cached_line_format,
+            true,
+        )
+        .unwrap();
         assert_eq!(line_info.format, LineFormat::AlgoBased);
         assert!(cached_line_format.is_none());
 
         // Test an upper-case hex digest followed by a single space: the rest of
         // the line looks like the end of a tagged line, but is a file name
         let line_single_space_hex = OsString::from("D41D8CD98F00B204E9800998ECF8427E (a)= b");
-        let line_info = LineInfo::parse(&line_single_space_hex, &mut cached_line_format).unwrap();
+        let line_info =
+            LineInfo::parse(&line_single_space_hex, &mut cached_line_format, true).unwrap();
         assert_eq!(line_info.format, LineFormat::SingleSpace);
         assert_eq!(line_info.filename, b"(a)= b");
         assert_eq!(line_info.checksum, "D41D8CD98F00B204E9800998ECF8427E");
@@ -1280,7 +1319,11 @@ mod tests {
         // Test trailing space after checksum line (should fail)
         let line_algo_based_leading_space =
             OsString::from("MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e ");
-        let res = LineInfo::parse(&line_algo_based_leading_space, &mut cached_line_format);
+        let res = LineInfo::parse(
+            &line_algo_based_leading_space,
+            &mut cached_line_format,
+            true,
+        );
         assert!(res.is_none());
         assert!(cached_line_format.is_none());
     }
