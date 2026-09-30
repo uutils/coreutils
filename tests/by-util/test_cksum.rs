@@ -672,6 +672,28 @@ fn test_check_tagged_missing_algo() {
         .stderr_contains("no properly formatted checksum lines found");
 }
 
+#[test]
+fn test_check_tagged_blanks_around_equal_sign() {
+    // Like GNU, accept any blanks, or none, around the '=' of a tagged line,
+    // with or without a space before the '('.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    let digest = "d41d8cd98f00b204e9800998ecf8427e";
+    let lines = [
+        format!("MD5(f) = {digest}"),
+        format!("MD5 (f)= {digest}"),
+        format!("MD5 (f) ={digest}"),
+        format!("MD5 (f)={digest}"),
+        format!("MD5 (f)\t=\t{digest}"),
+        format!("MD5 (f)  =  {digest}"),
+    ];
+
+    ucmd.arg("-c")
+        .pipe_in(lines.join("\n"))
+        .succeeds()
+        .stdout_only("f: OK\n".repeat(lines.len()));
+}
+
 #[rstest]
 #[case::md5("md5", "d41d8cd98f00b204e9800998ecf8427e")]
 #[case::sha1("sha1", "da39a3ee5e6b4b0d3255bfef95601890afd80709")]
