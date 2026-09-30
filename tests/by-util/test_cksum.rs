@@ -1598,6 +1598,85 @@ fn test_check_md5_format() {
         .stdout_contains("not-empty: OK");
 }
 
+#[test]
+fn test_check_untagged_blanks() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("a");
+    let digest = "d41d8cd98f00b204e9800998ecf8427e";
+
+    for line in [
+        format!(" {digest}  a"),
+        format!("{digest}\t*a"),
+        format!("{digest}\ta"),
+    ] {
+        scene
+            .ucmd()
+            .args(&["-a", "md5", "--check"])
+            .pipe_in(format!("{line}\n"))
+            .succeeds()
+            .stdout_only("a: OK\n");
+    }
+}
+
+#[test]
+fn test_check_untagged_flag_without_file_name() {
+    // Once the first line sets the two-space format, such a line is improperly
+    // formatted rather than a check of the file "".
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    let digest = "d41d8cd98f00b204e9800998ecf8427e";
+
+    ucmd.arg("-a")
+        .arg("md5")
+        .arg("--check")
+        .pipe_in(format!("{digest}  a\n{digest}  \n{digest} *\n"))
+        .succeeds()
+        .stdout_is("a: OK\n")
+        .stderr_contains("WARNING: 2 lines are improperly formatted");
+}
+
+#[test]
+#[cfg(all(not(windows), feature = "b2sum"))]
+fn test_check_untagged_without_file_name() {
+    let scene = TestScenario::new(util_name!());
+    let digest = "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce";
+
+    for (util, args) in [("cksum", vec!["-a", "blake2b"]), ("b2sum", vec![])] {
+        for line in [format!("{digest} "), format!(" {digest}\t")] {
+            scene
+                .ccmd(util)
+                .args(&args)
+                .arg("--check")
+                .pipe_in(format!("{line}\n"))
+                .fails_with_code(1)
+                .stdout_is("'': FAILED open or read\n")
+                .stderr_is(format!(
+                    "{util}: '': No such file or directory\n\
+                    {util}: WARNING: 1 listed file could not be read\n"
+                ));
+        }
+    }
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_check_untagged_blank_or_star_as_file_name() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write(" ", "a\n");
+    at.write("*", "a\n");
+    let digest = "60b725f10c9c85c70d97880dfe8191b3";
+
+    for (line, name) in [(format!("{digest}  "), " "), (format!(" {digest}\t*"), "*")] {
+        scene
+            .ucmd()
+            .args(&["-a", "md5", "--check"])
+            .pipe_in(format!("{line}\n"))
+            .succeeds()
+            .stdout_only(format!("'{name}': OK\n"));
+    }
+}
+
 // The digest in check mode must be computed over the raw bytes of the file:
 // on Windows, no CRLF -> LF conversion must happen (matching generation).
 #[test]

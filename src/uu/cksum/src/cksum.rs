@@ -118,7 +118,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         print_cpu_debug_info();
     }
 
-    checksum_main(algo_cli, length, matches, output_format)
+    checksum_main(algo_cli, length, matches, output_format, true)
 }
 
 pub fn uu_app() -> Command {

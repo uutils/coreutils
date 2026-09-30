@@ -634,14 +634,55 @@ fn test_check_space_star_or_not() {
             d41d8cd98f00b204e9800998ecf8427e *c\n",
     );
 
-    // First should fail as *empty doesn't exit
+    // The first line fixes the single-space format, so "*" belongs to the file name.
     scene
         .ccmd("md5sum")
         .arg("--check")
         .arg(at.subdir.join("in.md5"))
         .succeeds()
         .stdout_contains("a: OK")
-        .stderr_contains("WARNING: 1 line is improperly formatted");
+        .stdout_contains("'*c': OK")
+        .no_stderr();
+}
+
+#[test]
+fn test_check_line_without_file_name() {
+    let scene = TestScenario::new(util_name!());
+    let digest = "d41d8cd98f00b204e9800998ecf8427e";
+
+    for line in [
+        format!("{digest} "),
+        format!(" {digest} "),
+        format!("{digest}\t"),
+    ] {
+        scene
+            .ccmd("md5sum")
+            .arg("--check")
+            .pipe_in(format!("{line}\n"))
+            .fails()
+            .no_stdout()
+            .stderr_contains("no properly formatted checksum lines found");
+    }
+}
+
+#[test]
+fn test_check_empty_file_name_does_not_set_format() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("a");
+    let digest = "d41d8cd98f00b204e9800998ecf8427e";
+
+    for input in [
+        format!("{digest}\t\n{digest}  a\n"),
+        format!("{digest} a\n{digest}\t\n"),
+    ] {
+        scene
+            .ccmd("md5sum")
+            .arg("--check")
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is("a: OK\n")
+            .stderr_is("md5sum: WARNING: 1 line is improperly formatted\n");
+    }
 }
 
 #[test]
