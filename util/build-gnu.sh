@@ -242,8 +242,7 @@ grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r "${SED}
 # Request faults in tee's optional splice path to exercise short-write retries
 # through the read/write fallback, preserving the existing trace options.
 # Avoid adding the fault option again when reusing the GNU test tree.
-sed -i '/ -e fault=splice /!s/ -e trace=write /&-e fault=splice /' \
-    tests/tee/short-write.sh
+sed -i "s/strace/strace -e fault=splice/" tests/tee/short-write.sh
 
 sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
