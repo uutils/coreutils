@@ -227,13 +227,17 @@ fn wait_or_kill_process(
     match process.wait_or_timeout(duration, true) {
         Ok(TimeoutRet::Exited(status)) => {
             if preserve_status {
-                let exit_code = status.code().unwrap_or_else(|| {
-                    platform::status_signal(status).unwrap_or_else(|| {
+                let exit_code = status
+                    .code()
+                    .or_else(|| {
+                        platform::status_signal(status)
+                            .map(|s| ExitStatus::SignalSent(s as usize).into())
+                    })
+                    .unwrap_or_else(|| {
                         // Extremely rare: process exited but we have neither exit code nor signal.
                         // This can happen on some platforms or in unusual termination scenarios.
                         ExitStatus::TimeoutFailed.into()
-                    })
-                });
+                    });
                 Ok(exit_code)
             } else {
                 Ok(ExitStatus::CommandTimedOut.into())

@@ -136,6 +136,25 @@ fn test_preserve_status() {
     }
 }
 
+/// COMMAND dies from the first signal before KILL is due: --preserve-status
+/// reports 128 + signal, as it does without --kill-after.
+#[test]
+fn test_preserve_status_with_kill_after() {
+    let (ts, bin) = scenario_with_bin();
+    ts.ucmd()
+        .args(&["-p", "-k", "10", ".1", &bin, "sleep", "10"])
+        // 128 + SIGTERM = 128 + 15
+        .fails_with_code(128 + 15)
+        .no_output();
+    ts.ucmd()
+        .args(&[
+            "-p", "-f", "-s", "HUP", "-k", "10", ".1", &bin, "sleep", "10",
+        ])
+        // 128 + SIGHUP = 128 + 1
+        .fails_with_code(128 + 1)
+        .no_output();
+}
+
 #[test]
 fn test_kill_after_preserves_timeout_exit_without_preserve_status() {
     let (ts, bin) = scenario_with_bin();
