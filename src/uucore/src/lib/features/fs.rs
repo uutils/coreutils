@@ -631,6 +631,19 @@ pub fn path_is_root_dir<P: AsRef<Path>>(path: P, dereference: bool) -> bool {
     }
 }
 
+/// Whether the file a `stat` already taken reports as `(dev, ino)` is `/`.
+///
+/// Unlike [`path_is_root_dir`] this does not look the path up again, so the
+/// answer describes the file the caller is about to act on even if the path
+/// has been re-pointed since.
+#[cfg(unix)]
+pub fn dev_ino_is_root_dir(dev: u64, ino: u64) -> bool {
+    // st_dev and st_ino have different types on different platforms
+    #[allow(clippy::unnecessary_cast)]
+    root_file_information()
+        .is_some_and(|root| root.0.st_dev as u64 == dev && root.0.st_ino as u64 == ino)
+}
+
 /// Check if two files are identical by comparing their contents.
 ///
 /// Returns `Ok(true)` if both files exist, are regular files, and have identical contents.
@@ -1603,5 +1616,16 @@ mod tests {
 
         assert!(path_is_root_dir(&link, true));
         assert!(!path_is_root_dir(&link, false));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_dev_ino_is_root_dir() {
+        let root = fs::metadata("/").unwrap();
+        assert!(dev_ino_is_root_dir(root.dev(), root.ino()));
+
+        let dir = tempdir().unwrap();
+        let other = fs::metadata(dir.path()).unwrap();
+        assert!(!dev_ino_is_root_dir(other.dev(), other.ino()));
     }
 }
