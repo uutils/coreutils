@@ -34,7 +34,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{env, fs};
 
-use uucore::time::{FormatSystemTimeFallback, format_system_time, system_time_to_sec};
+use uucore::time::{FormatSystemTimeFallback, format_system_time};
 
 #[derive(Debug, thiserror::Error)]
 enum StatError {
@@ -635,12 +635,17 @@ fn format_timestamp(seconds: i64, nanoseconds: u32, precision: Precision) -> Str
 }
 
 fn system_time_to_timestamp(time: SystemTime) -> (i64, u32) {
-    let (mut seconds, mut nanoseconds) = system_time_to_sec(time);
-    if time < UNIX_EPOCH && nanoseconds != 0 {
-        seconds -= 1;
-        nanoseconds = 1_000_000_000 - nanoseconds;
+    match time.duration_since(UNIX_EPOCH) {
+        Ok(d) => (d.as_secs() as i64, d.subsec_nanos()),
+        Err(e) => {
+            let d = e.duration();
+            if d.subsec_nanos() == 0 {
+                (-(d.as_secs() as i64), 0)
+            } else {
+                (-(d.as_secs() as i64) - 1, 1_000_000_000 - d.subsec_nanos())
+            }
+        }
     }
-    (seconds, nanoseconds)
 }
 
 fn format_scaled_decimal(value: i128, precision: usize, negative: bool) -> String {
