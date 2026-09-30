@@ -243,7 +243,7 @@ trait Quoter {
 ///
 /// This inner function provides an additional flag `dirname` which
 /// is meant for ls' directory name display.
-fn escape_name_inner(
+pub fn escape_name_inner(
     name: &[u8],
     style: QuotingStyle,
     dirname: bool,
