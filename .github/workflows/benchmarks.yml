@@ -54,19 +54,22 @@ jobs:
             candidates=$(echo "$changed" | awk -F'/' '/^src\/uu\// {print $3}' | sort -u)
           fi
 
+          # Right now, unconditionnally run benchmarks for uucore.
+          uucore="{ \"pkg\": \"uucore\", \"features\": [\"quoting_style\"] }"
+
           package=$(for pkg in $candidates;
           do
             if [ -d "src/uu/$pkg/benches" ]; then
-              echo "uu_$pkg"
+              echo "{ \"pkg\": \"uu_$pkg\", \"features\": [] }"
             fi
-          done | sort -u | jq -R . | jq -sc .)
+          done | tee - <<< "$uucore" | sort -u | jq -sc .)
 
           echo "package=$package" >> "$GITHUB_OUTPUT"
 
   benchmarks:
     needs: detects-benchmarks
     if: needs.detects-benchmarks.outputs.package != '[]'
-    name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package }} (CodSpeed)
+    name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package.pkg }} (CodSpeed)
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -106,19 +109,23 @@ jobs:
         with:
           tool: cargo-codspeed
 
-      - name: Build benchmarks for ${{ matrix.package }} (${{ matrix.type }})
+      - name: Build benchmarks for ${{ matrix.package.pkg }} (${{ matrix.type }})
         shell: bash
         run: |
-          echo "Building ${{ matrix.type }} benchmarks for ${{ matrix.package }}"
-          cargo codspeed build -m ${{ matrix.type }} -p ${{ matrix.package }}
+          echo "Building ${{ matrix.type }} benchmarks for ${{ matrix.package.pkg }}"
+          if [ -n "${{ matrix.package.features }}" ]; then
+            cargo codspeed build -m ${{ matrix.type }} -p ${{ matrix.package.pkg }} --features ${{ matrix.package.features }}
+          else
+            cargo codspeed build -m ${{ matrix.type }} -p ${{ matrix.package.pkg }}
+          fi
 
-      - name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package }}
+      - name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package.pkg }}
         uses: CodSpeedHQ/action@v5
         env:
           CODSPEED_LOG: debug
         with:
           mode: ${{ matrix.type }}
           run: |
-            echo "Running ${{ matrix.type }} benchmarks for ${{ matrix.package }}"
-            cargo codspeed run -p ${{ matrix.package }} > /dev/null
+            echo "Running ${{ matrix.type }} benchmarks for ${{ matrix.package.pkg }}"
+            cargo codspeed run -p ${{ matrix.package.pkg }} --features ${{ matrix.package.features }} > /dev/null
           token: ${{ secrets.CODSPEED_TOKEN }}
