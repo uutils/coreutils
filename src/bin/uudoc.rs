@@ -297,7 +297,7 @@ fn main() -> io::Result<()> {
             )
             .unwrap()
             .trim()
-            .split(' ')
+            .split_ascii_whitespace()
             .map(ToString::to_string)
             .collect();
             map.insert(platform, platform_utils);
@@ -312,7 +312,7 @@ fn main() -> io::Result<()> {
         )
         .unwrap()
         .trim()
-        .split(' ')
+        .split_ascii_whitespace()
         .map(ToString::to_string)
         .collect();
         map.insert("linux", platform_utils);

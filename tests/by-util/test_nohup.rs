@@ -276,3 +276,90 @@ fn test_nohup_stderr_to_stdout() {
     assert!(content.contains("stdout message"));
     assert!(content.contains("stderr message"));
 }
+
+// The command's own exit status passes through nohup untouched, since the
+// command replaces nohup's process image via exec.
+#[test]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "linux",
+    target_os = "android",
+    target_os = "freebsd",
+    target_os = "openbsd"
+))]
+fn test_nohup_propagates_command_exit_code() {
+    new_ucmd!().args(&["true"]).succeeds();
+    new_ucmd!().args(&["sh", "-c", "exit 3"]).fails_with_code(3);
+}
+
+// A freshly created nohup.out must be readable only by its owner (0600),
+// so other users on a shared host cannot read the detached job's logs.
+#[test]
+#[cfg(unix)]
+fn test_nohup_new_output_file_is_owner_only() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    ts.ucmd()
+        .terminal_simulation(true)
+        .args(&["echo", "secret output"])
+        .succeeds();
+
+    sleep(std::time::Duration::from_millis(10));
+
+    let mode = at.metadata("nohup.out").permissions().mode() & 0o777;
+    assert_eq!(
+        mode, 0o600,
+        "new nohup.out should have mode 0600, got {mode:o}"
+    );
+}
+
+// If nohup.out already exists its permissions are left alone, and new
+// output is still appended to it.
+#[test]
+#[cfg(unix)]
+fn test_nohup_existing_output_file_keeps_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("nohup.out", "old content\n");
+    at.set_mode("nohup.out", 0o644);
+
+    ts.ucmd()
+        .terminal_simulation(true)
+        .args(&["echo", "new content"])
+        .succeeds();
+
+    sleep(std::time::Duration::from_millis(10));
+
+    let mode = std::fs::metadata(at.plus("nohup.out"))
+        .unwrap()
+        .permissions()
+        .mode()
+        & 0o777;
+    assert_eq!(
+        mode, 0o644,
+        "existing nohup.out should keep mode 0644, got {mode:o}"
+    );
+    let content = std::fs::read_to_string(at.plus_as_string("nohup.out")).unwrap();
+    assert!(content.contains("old content"));
+    assert!(content.contains("new content"));
+}
+
+#[test]
+fn test_nohup_help_and_version() {
+    use regex::Regex;
+
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("nohup COMMAND");
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .stdout_matches(&Regex::new(r"^nohup \(uutils coreutils\) (\d+\.\d+\.\d+)\n$").unwrap());
+}
