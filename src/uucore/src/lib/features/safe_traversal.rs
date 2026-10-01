@@ -667,15 +667,7 @@ fn blame(failed: PathBuf) -> PathBuf {
 pub fn create_dir_all_safe(path: &Path, mode: u32) -> Result<DirFd, CreateDirError> {
     let (existing_ancestor, components_to_create) = find_existing_ancestor(path);
 
-    // `components_to_create` is the tail of `path`, so dropping the components
-    // that were not reached yields the prefix that failed.
-    let failing_prefix = |index: usize| {
-        let mut failed = path.to_path_buf();
-        for _ in index + 1..components_to_create.len() {
-            failed.pop();
-        }
-        blame(failed)
-    };
+    let failing_prefix = |index: usize| failing_prefix(path, &components_to_create, index);
 
     let mut dir_fd = DirFd::open(&existing_ancestor, SymlinkBehavior::Follow).map_err(|error| {
         CreateDirError {
@@ -694,6 +686,29 @@ pub fn create_dir_all_safe(path: &Path, mode: u32) -> Result<DirFd, CreateDirErr
     }
 
     Ok(dir_fd)
+}
+
+/// The prefix of `path` to report when creating it by path has failed.
+///
+/// For callers that cannot use [`create_dir_all_safe`]: names the first
+/// component that is not an existing directory, as that function does.
+#[cfg(unix)]
+pub fn failed_create_dir_prefix(path: &Path) -> PathBuf {
+    let (_, components_to_create) = find_existing_ancestor(path);
+    failing_prefix(path, &components_to_create, 0)
+}
+
+/// The prefix of `path` ending at `components_to_create[index]`, as GNU names it.
+///
+/// `components_to_create` is the tail of `path`, so dropping the components
+/// after `index` yields the prefix that failed.
+#[cfg(unix)]
+fn failing_prefix(path: &Path, components_to_create: &[OsString], index: usize) -> PathBuf {
+    let mut failed = path.to_path_buf();
+    for _ in index + 1..components_to_create.len() {
+        failed.pop();
+    }
+    blame(failed)
 }
 
 /// Failure of [`create_dir_all_safe`], naming the path component that failed.
