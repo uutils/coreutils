@@ -703,8 +703,10 @@ fn blame(failed: PathBuf) -> PathBuf {
     let Some(parent) = failed.parent().filter(|p| !p.as_os_str().is_empty()) else {
         return failed;
     };
-    let searchable = CString::new(parent.as_os_str().as_bytes())
-        .is_ok_and(|c| unsafe { libc::access(c.as_ptr(), libc::X_OK) } == 0);
+    let searchable = CString::new(parent.as_os_str().as_bytes()).is_ok_and(|c| {
+        // SAFETY: `c` is a valid NUL-terminated string that outlives the call.
+        unsafe { libc::access(c.as_ptr(), libc::X_OK) == 0 }
+    });
     if searchable {
         failed
     } else {
@@ -798,13 +800,6 @@ impl std::fmt::Display for CreateDirError {
 impl std::error::Error for CreateDirError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(&self.error)
-    }
-}
-
-#[cfg(unix)]
-impl From<CreateDirError> for io::Error {
-    fn from(e: CreateDirError) -> Self {
-        e.error
     }
 }
 
