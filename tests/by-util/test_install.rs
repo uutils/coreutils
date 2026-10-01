@@ -2980,18 +2980,24 @@ fn test_install_leading_dir_blames_failing_component() {
         .fails()
         .stderr_only("install: cannot create directory 'regular': Not a directory\n");
 
-    // A symlink loop is named the same way.
+    // A symlink loop is named the same way, with the libc's ELOOP text.
+    #[cfg(all(not(target_env = "musl"), not(target_os = "android")))]
+    let expected = "install: cannot create directory 'loop': Too many levels of symbolic links\n";
+    #[cfg(all(not(target_env = "musl"), target_os = "android"))]
+    let expected = "install: cannot create directory 'loop': Too many symbolic links encountered\n";
+    #[cfg(all(target_env = "musl", not(target_os = "android")))]
+    let expected = "install: cannot create directory 'loop': Symbolic link loop\n";
     at.symlink_file("loop", "loop");
     scene
         .ucmd()
         .args(&["-D", "file.txt", "loop/sub/file.txt"])
         .fails()
-        .stderr_only(
-            "install: cannot create directory 'loop': Too many levels of symbolic links\n",
-        );
-    scene.ucmd().args(&["-d", "loop/sub"]).fails().stderr_only(
-        "install: cannot create directory 'loop': Too many levels of symbolic links\n",
-    );
+        .stderr_only(expected);
+    scene
+        .ucmd()
+        .args(&["-d", "loop/sub"])
+        .fails()
+        .stderr_only(expected);
 
     // `install -d` creates by path, but names the same component.
     for dir in ["regular/sub", "regular/sub/deeper"] {
