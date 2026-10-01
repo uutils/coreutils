@@ -332,8 +332,8 @@ mod tests {
     fn test_streaming_output_new() {
         let collector = StreamingOutput::new();
         assert!(collector.entries().is_empty());
-        assert!(collector.directories().is_empty());
-        assert!(collector.totals().is_empty());
+        assert_eq!(collector.directories(), Vec::<PathBuf>::new());
+        assert_eq!(collector.totals(), Vec::<u64>::new());
     }
 
     #[test]
@@ -369,8 +369,8 @@ mod tests {
 
         collector.clear();
         assert!(collector.entries().is_empty());
-        assert!(collector.directories().is_empty());
-        assert!(collector.totals().is_empty());
+        assert_eq!(collector.directories(), Vec::<PathBuf>::new());
+        assert_eq!(collector.totals(), Vec::<u64>::new());
     }
 
     #[test]

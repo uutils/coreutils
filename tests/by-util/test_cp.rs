@@ -6111,7 +6111,7 @@ fn test_cp_debug_sparse_never_zero_sized_virtual_file() {
 )]
 fn test_cp_zero_sized_virtual_file_contents() {
     let expected = std::fs::read_to_string("/proc/version").unwrap();
-    assert!(!expected.is_empty());
+    assert_ne!(expected, "");
 
     for extra in [
         &[][..],
