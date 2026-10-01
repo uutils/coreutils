@@ -209,11 +209,6 @@ impl DirFd {
     /// access, so that creating entries in a write-only directory works the
     /// way it does with `mkdir`. The returned descriptor is only guaranteed to
     /// support `*at` calls; it may not be able to list directory entries.
-    ///
-    /// Only symlink-following opens get the fallback. `O_PATH` ignores both
-    /// `O_DIRECTORY` and `O_NOFOLLOW`, so a search-only descriptor cannot
-    /// carry the "this must not be a symlink" guarantee that the traversal
-    /// relies on elsewhere.
     pub fn open_anchor(path: &Path) -> io::Result<Self> {
         let denied = match Self::open(path, SymlinkBehavior::Follow) {
             Err(e) if e.kind() == io::ErrorKind::PermissionDenied => e,
@@ -224,21 +219,9 @@ impl DirFd {
         };
 
         let flags = search_only | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC | LARGEFILE;
-        let fd = nix::fcntl::open(path, flags, Mode::empty()).map_err(|_| denied)?;
-        let this = Self { fd };
-
-        // Linux honours neither O_DIRECTORY nor O_NOFOLLOW together with
-        // O_PATH, so a regular file opens just as happily as a directory here.
-        // Check what we actually got.
-        let stat = fstat(&this.fd).map_err(|e| SafeTraversalError::StatFailed {
-            path: path.into(),
-            source: io::Error::from_raw_os_error(e as i32),
-        })?;
-        if (stat.st_mode as libc::mode_t) & libc::S_IFMT == libc::S_IFDIR {
-            Ok(this)
-        } else {
-            Err(io::Error::from_raw_os_error(libc::ENOTDIR))
-        }
+        nix::fcntl::open(path, flags, Mode::empty())
+            .map(|fd| Self { fd })
+            .map_err(|_| denied)
     }
 
     /// Open a subdirectory relative to this directory
@@ -1491,8 +1474,9 @@ mod tests {
 
     #[test]
     fn test_create_dir_all_safe_in_write_only_dir() {
-        if Uid::effective().is_root() {
-            // root ignores the permission bits this test depends on
+        // root ignores the permission bits this test depends on, and without
+        // O_PATH or O_SEARCH the walk cannot anchor on an unreadable directory
+        if Uid::effective().is_root() || !SEARCH_ONLY_SUPPORTED {
             return;
         }
         let temp_dir = TempDir::new().unwrap();
