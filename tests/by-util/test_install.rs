@@ -2941,6 +2941,19 @@ fn test_install_leading_dir_blames_failing_component() {
         .fails()
         .stderr_only("install: cannot create directory 'regular': Not a directory\n");
 
+    // A symlink loop is named the same way.
+    at.symlink_file("loop", "loop");
+    scene
+        .ucmd()
+        .args(&["-D", "file.txt", "loop/sub/file.txt"])
+        .fails()
+        .stderr_only(
+            "install: cannot create directory 'loop': Too many levels of symbolic links\n",
+        );
+    scene.ucmd().args(&["-d", "loop/sub"]).fails().stderr_only(
+        "install: cannot create directory 'loop': Too many levels of symbolic links\n",
+    );
+
     // `install -d` creates by path, but names the same component.
     for dir in ["regular/sub", "regular/sub/deeper"] {
         scene
@@ -2971,6 +2984,39 @@ fn test_install_directory_in_write_only_directory() {
     fs::set_permissions(at.plus("wx"), fs::Permissions::from_mode(0o300)).unwrap();
 
     scene.ucmd().args(&["-d", "wx/sub"]).succeeds();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_leading_dir_blames_unsearchable_parent() {
+    // A parent that cannot be searched is what gets named, like GNU does; one
+    // that can be searched but not written leaves the component to blame.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    if geteuid().is_root() {
+        println!("Test skipped; root ignores directory permissions");
+        return;
+    }
+
+    at.touch("f");
+    at.mkdir("r--");
+    fs::set_permissions(at.plus("r--"), fs::Permissions::from_mode(0o444)).unwrap();
+    at.mkdir("r-x");
+    fs::set_permissions(at.plus("r-x"), fs::Permissions::from_mode(0o555)).unwrap();
+
+    for args in [&["-d", "r--/x"][..], &["-D", "f", "r--/x/f"]] {
+        scene
+            .ucmd()
+            .args(args)
+            .fails()
+            .stderr_only("install: cannot create directory 'r--': Permission denied\n");
+    }
+    scene
+        .ucmd()
+        .args(&["-D", "f", "r-x/x/f"])
+        .fails()
+        .stderr_only("install: cannot create directory 'r-x/x': Permission denied\n");
 }
 
 #[test]
