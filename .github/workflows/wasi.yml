@@ -24,13 +24,16 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { target: wasm32-wasip1, rust-flags: "--cfg wasi_runner" }
-          - { target: wasm32-wasip2, rust-flags: "--cfg wasi_runner --cfg wasip2_runner" }
+          - { target: wasm32-wasip1, rust-flags: "--cfg wasi_runner", toolchain: stable }
+          # wasm32-wasip2 needs a toolchain where `std::process::exit` propagates the
+          # real exit code through `wasi:cli/exit#exit` instead of collapsing every
+          # nonzero code to 1; only available on nightly for now.
+          - { target: wasm32-wasip2, rust-flags: "--cfg wasi_runner --cfg wasip2_runner", toolchain: nightly }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
+    - uses: dtolnay/rust-toolchain@${{ matrix.job.toolchain }}
       with:
         targets: ${{ matrix.job.target }}
     - uses: Swatinem/rust-cache@v2
@@ -52,7 +55,7 @@ jobs:
         RUSTFLAGS: ${{ matrix.job.rust-flags }}
       run: |
         # Build the WASI binary
-        cargo build --target ${{ matrix.job.target }} --no-default-features --features feat_wasm,wasip2_exit_with_code
+        cargo build --target ${{ matrix.job.target }} --no-default-features --features feat_wasm
         # Run host-compiled integration tests against the WASI binary.
         # Tests incompatible with WASI are annotated with
         # #[cfg_attr(wasi_runner, ignore)] in the test source files.
@@ -61,7 +64,6 @@ jobs:
         # not(wasi_runner) in the cfg guarding every `mod diagnostics`.
         UUTESTS_BINARY_PATH="$(pwd)/target/${{ matrix.job.target }}/debug/coreutils.wasm" \
         UUTESTS_WASM_RUNNER=wasmtime \
-        UUTESTS_WASM_RUNNER_ARGS="-S cli-exit-with-code=y" \
         cargo test --test tests -- \
           test_arch:: test_b2sum:: test_base32:: test_base64:: test_basename:: \
           test_basenc:: test_cat:: test_cksum:: test_comm:: test_cp:: \
