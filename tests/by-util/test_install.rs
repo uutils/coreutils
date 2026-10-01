@@ -2939,6 +2939,13 @@ fn test_install_d_dangling_symlink_in_path_errors() {
             at.plus_as_string("dangling")
         ));
 
+    // `install -d` creates by path, but names the same component.
+    scene
+        .ucmd()
+        .args(&["-d", "dangling/subdir"])
+        .fails()
+        .stderr_only("install: cannot create directory 'dangling': File exists\n");
+
     // The dangling symlink must not have been replaced with a real directory
     assert!(
         at.plus("dangling").is_symlink(),
@@ -2972,6 +2979,15 @@ fn test_install_leading_dir_blames_failing_component() {
         .args(&["-D", "file.txt", "regular/sub/deeper/file.txt"])
         .fails()
         .stderr_only("install: cannot create directory 'regular': Not a directory\n");
+
+    // `install -d` creates by path, but names the same component.
+    for dir in ["regular/sub", "regular/sub/deeper"] {
+        scene
+            .ucmd()
+            .args(&["-d", dir])
+            .fails()
+            .stderr_only("install: cannot create directory 'regular': Not a directory\n");
+    }
 }
 
 #[test]

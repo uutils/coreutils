@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) rwxr sourcepath targetpath Isnt uioerror matchpathcon
+// spell-checker:ignore (ToDO) rwxr sourcepath targetpath Isnt uioerror matchpathcon ENOTDIR
 
 mod mode;
 
@@ -27,7 +27,9 @@ use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
 use uucore::fs::{are_files_identical, dir_strip_dot_for_creation};
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 #[cfg(unix)]
-use uucore::safe_traversal::{DirFd, SymlinkBehavior, create_dir_all_safe};
+use uucore::safe_traversal::{
+    DirFd, SymlinkBehavior, create_dir_all_safe, failed_create_dir_prefix,
+};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::{
     SeLinuxError, contexts_differ, get_selinux_security_context, is_selinux_enabled,
@@ -516,7 +518,11 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
             // while mkdir only needs write and execute, so an fd walk fails on
             // write-only directories where GNU succeeds.
             if let Err(e) = fs::create_dir_all(&path_to_create) {
-                show!(InstallError::CreateDirFailed(path_to_create.clone(), e));
+                #[cfg(unix)]
+                let failed = failed_create_dir_prefix(&path_to_create);
+                #[cfg(not(unix))]
+                let failed = path_to_create.clone();
+                show!(InstallError::CreateDirFailed(failed, e));
                 continue;
             }
 
