@@ -2203,6 +2203,32 @@ fn test_target_file_ends_with_slash() {
         .stderr_contains("failed to access 'dir/target_file/': Not a directory");
 }
 
+/// Without `-D`, a `-t` target that is not a directory is refused, even with a
+/// single source, rather than installed over or created as a file.
+#[test]
+fn test_install_target_dir_not_a_directory() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("source", "new");
+    at.write("regular", "old");
+    at.symlink_file("nowhere", "dangling");
+
+    for (target, reason) in [
+        ("regular", "Not a directory"),
+        ("dangling", "No such file or directory"),
+        ("missing", "No such file or directory"),
+    ] {
+        scene
+            .ucmd()
+            .args(&["-t", target, "source"])
+            .fails()
+            .stderr_only(format!("install: failed to access '{target}': {reason}\n"));
+    }
+    assert_eq!(at.read("regular"), "old");
+    assert!(at.is_symlink("dangling"));
+    assert!(!at.file_exists("missing"));
+}
+
 #[test]
 fn test_install_root_combined() {
     let ts = TestScenario::new(util_name!());

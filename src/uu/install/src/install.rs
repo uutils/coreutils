@@ -117,6 +117,9 @@ enum InstallError {
     #[error("{}", translate!("install-error-not-a-directory", "path" => .0.quote()))]
     NotADirectory(PathBuf),
 
+    #[error("{}", translate!("install-error-target-dir-access", "path" => .0.quote(), "error" => strip_errno(.1)))]
+    TargetDirAccess(PathBuf, #[source] std::io::Error),
+
     #[error("{}", translate!("install-error-existing-file-not-directory", "path" => .0.quote()))]
     ExistingFileNotADirectory(PathBuf),
 
@@ -759,7 +762,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         }
     }
 
-    if sources.len() > 1 {
+    // A `-t` target is always the directory to install into, never the file
+    // to install as, even with a single source.
+    if sources.len() > 1 || b.target_dir.is_some() {
         copy_files_into_dir(sources, &target, b)
     } else {
         let source = sources.first().unwrap();
@@ -835,6 +840,13 @@ fn metadata_for_source(path: &Path) -> UResult<fs::Metadata> {
 ///
 fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UResult<()> {
     if !target_dir.is_dir() {
+        if b.target_dir.is_some() {
+            // GNU names why the `-t` directory cannot be used.
+            let reason = metadata(target_dir)
+                .err()
+                .unwrap_or_else(|| rustix::io::Errno::NOTDIR.into());
+            return Err(InstallError::TargetDirAccess(target_dir.to_path_buf(), reason).into());
+        }
         return Err(InstallError::TargetDirIsntDir(target_dir.to_path_buf()).into());
     }
     let mut installed_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
