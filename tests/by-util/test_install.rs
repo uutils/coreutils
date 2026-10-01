@@ -2907,7 +2907,10 @@ fn test_install_d_dangling_symlink_in_path_errors() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(
+    unix,
+    not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))
+))]
 fn test_install_d_leading_dirs_in_write_only_directory() {
     // mkdir needs write and execute on the parent, not read, so -D must be
     // able to create leading directories inside a directory it cannot read.
