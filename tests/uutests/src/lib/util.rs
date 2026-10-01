@@ -3355,8 +3355,8 @@ mod tests {
         assert!(!result.succeeded());
         result.failure();
         result.fails_silently();
-        assert!(result.stderr.is_empty());
-        assert!(result.stdout.is_empty());
+        std::assert_eq!(result.stderr, Vec::new());
+        std::assert_eq!(result.stdout, Vec::new());
         result.no_output();
         result.no_stderr();
         result.no_stdout();
@@ -3377,8 +3377,8 @@ mod tests {
         result.code_is(0);
         assert!(result.succeeded());
         result.success();
-        assert!(result.stderr.is_empty());
-        assert!(result.stdout.is_empty());
+        std::assert_eq!(result.stderr, Vec::new());
+        std::assert_eq!(result.stdout, Vec::new());
         result.no_output();
         result.no_stderr();
         result.no_stdout();
@@ -3416,7 +3416,7 @@ mod tests {
         result.code_is(0);
         assert!(result.succeeded());
         result.success();
-        assert!(result.stderr.is_empty());
+        std::assert_eq!(result.stderr, Vec::new());
         std::assert_eq!(result.stdout, vector);
         result.no_stderr();
         result.stdout_is(string);
@@ -3445,7 +3445,7 @@ mod tests {
         result.code_is(0);
         assert!(result.succeeded());
         result.success();
-        assert!(result.stdout.is_empty());
+        std::assert_eq!(result.stdout, Vec::new());
         result.no_stdout();
         std::assert_eq!(result.stderr, vector);
         result.stderr_is(string);

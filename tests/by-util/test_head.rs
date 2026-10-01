@@ -823,7 +823,7 @@ fn test_read_backwards_bytes_proc_fs_version() {
 
     let args = ["-c", "-1", "/proc/version"];
     let result = ts.ucmd().args(&args).succeeds();
-    assert!(!result.stdout().is_empty());
+    assert_ne!(result.stdout(), []);
 }
 
 #[cfg(all(
@@ -843,7 +843,7 @@ fn test_read_backwards_bytes_proc_fs_modules() {
 
     // Only expect output if the file is not empty, e.g. it is empty in default WSL2.
     if !ts.fixtures.read("/proc/modules").is_empty() {
-        assert!(!result.stdout().is_empty());
+        assert_ne!(result.stdout(), []);
     }
 }
 
@@ -864,7 +864,7 @@ fn test_read_backwards_lines_proc_fs_modules() {
 
     // Only expect output if the file is not empty, e.g. it is empty in default WSL2.
     if !ts.fixtures.read("/proc/modules").is_empty() {
-        assert!(!result.stdout().is_empty());
+        assert_ne!(result.stdout(), []);
     }
 }
 

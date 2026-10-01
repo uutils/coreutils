@@ -1094,8 +1094,9 @@ fn handle_writable_directory(path: &Path, options: &Options, _metadata: &Metadat
     let is_accessible = fs::read_dir(path).is_ok();
 
     match (stdin_ok, is_accessible, options.interactive) {
-        (false, _, InteractiveMode::PromptProtected) => true,
-        (false, false, InteractiveMode::Never) => true,
+        (false, _, InteractiveMode::PromptProtected) | (false, false, InteractiveMode::Never) => {
+            true
+        }
         (_, false, _) => prompt_yes!(
             "attempt removal of inaccessible directory {}?",
             path.quote()
