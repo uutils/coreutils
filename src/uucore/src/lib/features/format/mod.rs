@@ -324,20 +324,21 @@ pub fn parse_escape_only(
     fmt: &[u8],
     zero_octal_parsing: OctalParsing,
     escape_set: EscapeSet,
-) -> impl Iterator<Item = EscapedChar> + '_ {
+) -> impl Iterator<Item = Result<EscapedChar, FormatError>> + '_ {
     let mut current = fmt;
     std::iter::from_fn(move || match current {
         [] => None,
         [b'\\', rest @ ..] => {
             current = rest;
-            Some(
-                parse_escape_code(&mut current, zero_octal_parsing, escape_set)
-                    .unwrap_or(EscapedChar::Backslash(b'x')),
-            )
+            Some(parse_escape_code(
+                &mut current,
+                zero_octal_parsing,
+                escape_set,
+            ))
         }
         [c, rest @ ..] => {
             current = rest;
-            Some(EscapedChar::Byte(*c))
+            Some(Ok(EscapedChar::Byte(*c)))
         }
     })
 }
