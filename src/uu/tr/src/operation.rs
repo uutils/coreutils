@@ -515,11 +515,11 @@ impl Sequence {
         while !rest.is_empty() {
             let start = input.len() - rest.len();
             let parsed = alt((
-                Self::parse_char_range,
                 Self::parse_char_star,
                 Self::parse_char_repeat,
                 Self::parse_class,
                 Self::parse_char_equal,
+                Self::parse_char_range,
                 // NOTE: This must be the last one
                 map(Self::parse_backslash_or_char_with_warning, |s| {
                     Ok(Self::Char(s))

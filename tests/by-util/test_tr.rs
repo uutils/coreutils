@@ -1875,4 +1875,19 @@ string2 must map all characters in the domain to one
             .fails_with_code(1)
             .stderr_only("tr: invalid character class 'lowre'\n");
     }
+
+    #[test]
+    fn test_repeat_hyphen() {
+        new_ucmd!()
+            .args(&["-s", "[:blank:]", "[-*]"])
+            .pipe_in("Base Z\n")
+            .succeeds()
+            .stdout_only("Base-Z\n");
+
+        new_ucmd!()
+            .args(&["-s", "[:blank:]", "[-*5]"])
+            .pipe_in("Base Z\n")
+            .succeeds()
+            .stdout_only("Base-Z\n");
+    }
 }
