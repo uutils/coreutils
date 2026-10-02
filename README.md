@@ -28,9 +28,9 @@ options might be missing or different behavior might be experienced.
 
 <div class="oranda-hide">
 
-We provide prebuilt binaries, manpages, and shell completions from main branch at https://github.com/uutils/coreutils/releases/tag/latest-commit .
+We provide prebuilt binaries, manpages, and shell completions from the main branch in immutable prereleases named `main-<commit>`. Select the newest [`main-*` prerelease](https://github.com/uutils/coreutils/releases?q=is%3Aprerelease+tag%3Amain-) for the latest build.
 The latest stable tag https://github.com/uutils/coreutils/releases/latest also exists for reproducible products and packagers.
-Bug reporters should use binary from latest commit.
+Bug reporters should use a binary from the newest `main-*` prerelease.
 
 Minimal compatible glibc version is same with ubuntu-latest runner. Use `coreutils-*-musl` if `coreutils-*-gnu` is not compatible with your system.
 

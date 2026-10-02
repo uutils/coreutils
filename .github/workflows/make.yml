@@ -36,8 +36,6 @@ jobs:
     env:
       # to reduce the size:
       RUSTFLAGS: "-C force-unwind-tables=no -C strip=symbols -Clink-arg=-z -Clink-arg=pack-relative-relocs"
-    permissions:
-      contents: write # Publish individual binaries
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -147,17 +145,6 @@ jobs:
         # Check that libstdbuf is present too
         mv target/release/deps/libstdbuf.so -t /tmp/individual/usr/local/bin
         ZSTD_CLEVEL=19 tar --zstd -caf individual-x86_64-unknown-linux-gnu.tar.zst -C /tmp/individual/usr/local bin
-    - name: Publish
-      uses: softprops/action-gh-release@v3
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      with:
-        tag_name: latest-commit
-        draft: false
-        prerelease: true
-        files: |
-          individual-x86_64-unknown-linux-gnu.tar.zst
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: Compute uutil release sizes
       shell: bash
       run: |
@@ -275,8 +262,6 @@ jobs:
   # keep this job minimal to avoid have many duplicated build with CICD
   build_makefile-windows-cygwin:
     name: Build MSYS
-    permissions:
-      contents: write # Publish cygwin binary
     runs-on: ${{ matrix.job.os }}
     env:
       CARGO_INCREMENTAL: 0
@@ -337,22 +322,11 @@ jobs:
         ! test -f /tmp/c/usr/local/share/fish/vendor_completions.d/uu-cat.fish
         # package
         mv target/release-small/deps/stdbuf.dll -t /tmp/c/usr/local/bin
-        bsdtar -caf individual-x86_64-pc-cygwin.tar.zst -C /tmp/c/usr/local bin
+        bsdtar -caf x86_64-pc-cygwin.tar.zst -C /tmp/c/usr/local bin
       env:
         CHERE_INVOKING: 1
         OPENSSL_NO_VENDOR: "1"
         RUST_BACKTRACE: "1"
-    - name: Publish
-      uses: softprops/action-gh-release@v3
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      with:
-        tag_name: latest-commit
-        draft: false
-        prerelease: true
-        files: |
-          individual-x86_64-pc-cygwin.tar.zst
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: "`make install` (MinGW UCRT)"
       shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
       env:
