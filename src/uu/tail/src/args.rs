@@ -427,7 +427,8 @@ fn parse_num(src: &str) -> Result<Signum, ParseSizeError> {
 
 pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     let args_vec: Vec<OsString> = args.collect();
-    let clap_args = uu_app().try_get_matches_from(args_vec.clone());
+    let prepared_args = uucore::clap_localization::prepare_args(&uu_app(), args_vec.clone());
+    let clap_args = uu_app().try_get_matches_from(prepared_args);
     let clap_result = match clap_args {
         // Kept for the caret in size diagnostics, which needs the value as
         // typed.
