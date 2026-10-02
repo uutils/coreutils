@@ -966,3 +966,35 @@ stat: '%.3': invalid directive
             .stderr_is("stat: '%.3': invalid directive\n");
     }
 }
+
+#[test]
+fn test_stat_nanoseconds() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("f");
+
+    let result = scene
+        .ucmd()
+        .args(&["-c", "%:X %:Y %:Z %:W", "f"])
+        .succeeds();
+    let parts: Vec<&str> = result.stdout_str().split_whitespace().collect();
+    assert_eq!(parts.len(), 4);
+    for part in parts {
+        assert_eq!(part.len(), 9, "nanoseconds should be 9 digits: {part}");
+        assert!(
+            part.chars().all(|c| c.is_ascii_digit()),
+            "nanoseconds should only contain digits: {part}"
+        );
+    }
+
+    let result_padded = scene.ucmd().args(&["-c", "%12:X", "f"]).succeeds();
+    assert_eq!(result_padded.stdout_str().trim_end_matches('\n').len(), 12);
+}
+
+#[test]
+fn test_stat_nanoseconds_unknown_conversion() {
+    new_ucmd!()
+        .args(&["-c", "%:A", "/dev/null"])
+        .succeeds()
+        .stdout_is("?A\n");
+}
