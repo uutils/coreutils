@@ -525,35 +525,47 @@ fn print_error(matches: &ArgMatches, err: &PrError) {
 }
 
 fn value_too_large(option_message: &str, raw: &str) -> String {
-    format!(
-        "{option_message}: {}: Value too large for defined data type",
-        raw.quote()
+    translate!(
+        "pr-error-value-too-large",
+        "desc" => option_message,
+        "arg" => raw.quote()
     )
+}
+
+fn parse_usize_str(raw: &str, option_desc: &str) -> Result<usize, PrError> {
+    match raw.parse::<usize>() {
+        Ok(0) => Err(PrError::EncounteredErrors {
+            msg: translate!(
+                "pr-error-numerical-result-out-of-range",
+                "desc" => option_desc,
+                "arg" => raw.quote()
+            ),
+        }),
+        Ok(n @ 1..=MAX_INT_VALUE) => Ok(n),
+        Ok(_) => Err(PrError::EncounteredErrors {
+            msg: value_too_large(option_desc, raw),
+        }),
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => Err(PrError::EncounteredErrors {
+            msg: value_too_large(option_desc, raw),
+        }),
+        Err(_) => Err(PrError::EncounteredErrors {
+            msg: translate!(
+                "pr-error-invalid-argument",
+                "desc" => option_desc,
+                "arg" => raw.quote()
+            ),
+        }),
+    }
 }
 
 fn parse_usize(
     matches: &ArgMatches,
     opt: &str,
-    too_large_error_message: &str,
+    option_desc: &str,
 ) -> Option<Result<usize, PrError>> {
-    matches.get_one::<String>(opt).map(|i| {
-        let raw = i.as_str();
-        match raw.parse::<usize>() {
-            Ok(n @ ..=MAX_INT_VALUE) => Ok(n),
-            Ok(_) => Err(PrError::EncounteredErrors {
-                msg: value_too_large(too_large_error_message, raw),
-            }),
-            Err(e) if *e.kind() == IntErrorKind::PosOverflow => Err(PrError::EncounteredErrors {
-                msg: value_too_large(too_large_error_message, raw),
-            }),
-            Err(_) => {
-                let option = format!("-{opt}");
-                Err(PrError::EncounteredErrors {
-                    msg: format!("invalid -{option} argument {}", raw.quote()),
-                })
-            }
-        }
-    })
+    matches
+        .get_one::<String>(opt)
+        .map(|i| parse_usize_str(i.as_str(), option_desc))
 }
 
 fn get_date_format(matches: &ArgMatches) -> String {
@@ -772,78 +784,73 @@ fn build_options(
     };
 
     // +page option is less priority than --pages
-    let plus_page = operands.page.as_deref();
-    let res = plus_page.map(|unparsed_num| {
-        let x: Vec<_> = unparsed_num.split(':').collect();
-        x[0].to_string()
-            .parse::<usize>()
-            .map_err(|_e| PrError::EncounteredErrors {
-                msg: format!("invalid {} argument {}", "+", unparsed_num.quote()),
-            })
-    });
-    let start_page_in_plus_option = match res {
-        Some(res) => res?,
-        None => 1,
-    };
+    let (start_page_in_plus_option, end_page_in_plus_option) =
+        if let Some(unparsed_num) = operands.page.as_deref() {
+            let invalid = |_| PrError::EncounteredErrors {
+                msg: translate!(
+                    "pr-error-invalid-plus-argument",
+                    "arg" => unparsed_num.quote()
+                ),
+            };
+            let mut parts = unparsed_num.split(':');
+            let start = parts.next().unwrap().parse::<usize>().map_err(invalid)?;
+            let end = parts
+                .next()
+                .map(|s| s.parse::<usize>().map_err(invalid))
+                .transpose()?;
+            (start, end)
+        } else {
+            (1, None)
+        };
 
-    let res = plus_page.filter(|i| i.contains(':')).map(|unparsed_num| {
-        let x: Vec<_> = unparsed_num.split(':').collect();
-        x[1].to_string()
-            .parse::<usize>()
-            .map_err(|_e| PrError::EncounteredErrors {
-                msg: format!("invalid {} argument {}", "+", unparsed_num.quote()),
-            })
-    });
-    let end_page_in_plus_option = match res {
-        Some(res) => Some(res?),
-        None => None,
-    };
-
-    let invalid_pages_map = |i: String| {
-        let unparsed_value = matches.get_one::<String>(options::PAGES).unwrap();
-        let parsed_value = i.parse::<usize>().map_err(|_e| PrError::EncounteredErrors {
-            msg: format!("invalid --pages argument {}", unparsed_value.quote()),
-        });
-
-        match parsed_value {
-            Ok(0) => Err(PrError::EncounteredErrors {
-                msg: "invalid --pages argument '0'".to_string(),
-            }),
-            Ok(res) => Ok(res),
-            Err(e) => Err(e),
+    let pages_arg = matches.get_one::<String>(options::PAGES);
+    let (start_page, end_page) = if let Some(pages_str) = pages_arg {
+        let parts: Vec<&str> = pages_str.split(':').collect();
+        if parts.len() > 2 {
+            return Err(PrError::EncounteredErrors {
+                msg: translate!(
+                    "pr-error-invalid-pages-argument",
+                    "arg" => pages_str.quote()
+                ),
+            });
         }
+        let start_res = parts[0].parse::<usize>();
+        let end_res = parts.get(1).map(|s| s.parse::<usize>());
+        match (start_res, end_res) {
+            (Ok(start), None) => {
+                if start == 0 {
+                    return Err(PrError::EncounteredErrors {
+                        msg: translate!(
+                            "pr-error-invalid-pages-range",
+                            "range" => pages_str.quote()
+                        ),
+                    });
+                }
+                (start, None)
+            }
+            (Ok(start), Some(Ok(end))) => {
+                if start == 0 || end == 0 || start > end {
+                    return Err(PrError::EncounteredErrors {
+                        msg: translate!(
+                            "pr-error-invalid-pages-range",
+                            "range" => pages_str.quote()
+                        ),
+                    });
+                }
+                (start, Some(end))
+            }
+            _ => {
+                return Err(PrError::EncounteredErrors {
+                    msg: translate!(
+                        "pr-error-invalid-pages-argument",
+                        "arg" => pages_str.quote()
+                    ),
+                });
+            }
+        }
+    } else {
+        (start_page_in_plus_option, end_page_in_plus_option)
     };
-
-    let res = matches
-        .get_one::<String>(options::PAGES)
-        .map(|i| {
-            let x: Vec<_> = i.split(':').collect();
-            x[0].to_string()
-        })
-        .map(invalid_pages_map);
-    let start_page = match res {
-        Some(res) => res?,
-        None => start_page_in_plus_option,
-    };
-
-    let res = matches
-        .get_one::<String>(options::PAGES)
-        .filter(|i| i.contains(':'))
-        .map(|i| {
-            let x: Vec<_> = i.split(':').collect();
-            x[1].to_string()
-        })
-        .map(invalid_pages_map);
-    let end_page = match res {
-        Some(res) => Some(res?),
-        None => end_page_in_plus_option,
-    };
-
-    if let Some(end_page) = end_page.filter(|end| start_page > *end) {
-        return Err(PrError::EncounteredErrors {
-            msg: translate!("pr-error-invalid-pages-range", "start" => start_page, "end" => end_page),
-        });
-    }
 
     let default_lines_per_page = if form_feed_used {
         LINES_PER_PAGE_FOR_FORM_FEED
@@ -857,12 +864,6 @@ fn build_options(
         "'-l PAGE_LENGTH' invalid number of lines",
     )
     .unwrap_or(Ok(default_lines_per_page))?;
-
-    if page_length == 0 {
-        return Err(PrError::EncounteredErrors {
-            msg: "invalid --length argument '0'".to_string(),
-        });
-    }
 
     // `pr --help` states the rule twice: a page length of 10 or less implies
     // `-t`. At exactly 10 the old `<` left the header and trailer in place and
@@ -909,12 +910,6 @@ fn build_options(
     )
     .unwrap_or(Ok(default_column_width))?;
 
-    if column_width == 0 {
-        return Err(PrError::EncounteredErrors {
-            msg: "invalid --width argument '0'".to_string(),
-        });
-    }
-
     let page_width = if matches.get_flag(options::JOIN_LINES) {
         None
     } else {
@@ -928,33 +923,11 @@ fn build_options(
         }
     };
 
-    if page_width == Some(0) {
-        return Err(PrError::EncounteredErrors {
-            msg: "invalid --page-width argument '0'".to_string(),
-        });
-    }
-
     let res = operands
         .column
         .as_deref()
-        .map(|unparsed_num| match unparsed_num.parse::<usize>() {
-            Ok(n @ ..=MAX_INT_VALUE) => Ok(n),
-            Ok(_) => Err(PrError::EncounteredErrors {
-                msg: value_too_large("invalid number of columns", unparsed_num),
-            }),
-            Err(e) if *e.kind() == IntErrorKind::PosOverflow => Err(PrError::EncounteredErrors {
-                msg: value_too_large("invalid number of columns", unparsed_num),
-            }),
-            Err(_) => Err(PrError::EncounteredErrors {
-                msg: format!("invalid {} argument {}", "-", unparsed_num.quote()),
-            }),
-        });
+        .map(|unparsed_num| parse_usize_str(unparsed_num, "invalid number of columns"));
     let start_column_option = match res {
-        Some(Ok(0)) => {
-            return Err(PrError::EncounteredErrors {
-                msg: "invalid --columns argument '0'".to_string(),
-            });
-        }
         Some(res) => Some(res?),
         None => None,
     };
@@ -963,11 +936,6 @@ fn build_options(
 
     let column_option_value =
         match parse_usize(matches, options::COLUMNS, "invalid number of columns") {
-            Some(Ok(0)) => {
-                return Err(PrError::EncounteredErrors {
-                    msg: "invalid --columns argument '0'".to_string(),
-                });
-            }
             Some(res) => Some(res?),
             None => start_column_option,
         };
@@ -992,7 +960,11 @@ fn build_options(
             }
             _ => {
                 return Err(PrError::EncounteredErrors {
-                    msg: format!("'-o MARGIN' invalid line offset: {}", raw.quote()),
+                    msg: translate!(
+                        "pr-error-invalid-argument",
+                        "desc" => "'-o MARGIN' invalid line offset",
+                        "arg" => raw.quote()
+                    ),
                 });
             }
         },
