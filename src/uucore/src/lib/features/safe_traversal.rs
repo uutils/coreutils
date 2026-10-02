@@ -25,12 +25,12 @@ use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use nix::dir::Dir;
 use nix::fcntl::{OFlag, openat};
 use nix::libc;
 use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat, mkdirat};
 use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
 use os_display::Quotable;
+use rustix::fs::Dir;
 
 use crate::translate;
 
@@ -111,15 +111,14 @@ impl From<SafeTraversalError> for io::Error {
     }
 }
 
-// Helper function to read directory entries using nix
+// Helper function to read directory entries
 fn read_dir_entries(fd: &OwnedFd) -> io::Result<Vec<OsString>> {
     let mut entries = Vec::new();
 
-    // Duplicate the fd for Dir (it takes ownership)
-    let dup_fd = nix::unistd::dup(fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
-    let mut dir = Dir::from_fd(dup_fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
-    for entry_result in dir.iter() {
-        let entry = entry_result.map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+    let dup_fd = fd.try_clone()?;
+    let dir = Dir::new(dup_fd)?;
+    for entry in dir {
+        let entry = entry?;
         let name = entry.file_name();
         let name_os = OsStr::from_bytes(name.to_bytes());
         if name_os != "." && name_os != ".." {
