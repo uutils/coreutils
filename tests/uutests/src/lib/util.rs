@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
-//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit Fsize SIGBUS SIGSEGV sigbus tmpfs mksocket
-//spell-checker: ignore (ToDO) ttyname
+//spell-checker:ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
+//spell-checker:ignore (linux) winsize xpixel ypixel setrlimit Fsize SIGBUS SIGSEGV sigbus tmpfs mksocket
+//spell-checker:ignore (ToDO) ttyname
 
 #![allow(dead_code)]
 #![allow(
@@ -17,7 +17,7 @@
 use core::str;
 #[cfg(unix)]
 use libc::mode_t;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 use nix::pty::OpenptyResult;
 #[cfg(unix)]
 use nix::sys;
@@ -1486,8 +1486,8 @@ impl TestScenario {
         Ok(())
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
     /// Unmounts the temporary filesystem if it is currently mounted.
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
     pub fn umount_temp_fs(&mut self) {
         if let Some(mount_point) = self.tmp_fs_mountpoint.as_ref() {
             self.cmd("umount").arg(mount_point).succeeds();
@@ -1711,8 +1711,8 @@ impl UCommand {
         self
     }
 
-    #[cfg(unix)]
     /// The umask is a value that restricts the permissions of newly created files and directories.
+    #[cfg(unix)]
     pub fn umask(&mut self, umask: mode_t) -> &mut Self {
         self.umask = Some(umask);
         self
@@ -1958,9 +1958,9 @@ impl UCommand {
 
         let mut captured_stdout = None;
         let mut captured_stderr = None;
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "redox")))]
         let mut stdin_pty: Option<File> = None;
-        #[cfg(not(unix))]
+        #[cfg(not(all(unix, not(target_os = "redox"))))]
         let stdin_pty: Option<File> = None;
         if self.stderr_to_stdout {
             let mut output = CapturedOutput::default();
@@ -1995,7 +1995,7 @@ impl UCommand {
                 .stderr(stderr);
         }
 
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "redox")))]
         if let Some(simulated_terminal) = &self.terminal_simulation {
             let terminal_size = simulated_terminal.size.unwrap_or(libc::winsize {
                 ws_col: 80,
@@ -3002,7 +3002,7 @@ pub fn whoami() -> String {
 /// - path: The filesystem path to the PTY replica device
 /// - controller: The controller file
 /// - replica: The replica file
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 pub fn pty_path() -> (String, File, File) {
     use nix::pty::openpty;
     use nix::unistd::ttyname;

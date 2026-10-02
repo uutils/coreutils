@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (paths) atim sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist fpath testdir testfile
-// spell-checker:ignore selfref ELOOP smallfile
+// spell-checker:ignore selfref ELOOP smallfile xstrtoumax
 
 #[cfg(not(windows))]
 use regex::Regex;

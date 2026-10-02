@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons Nofile NOTCAPABLE
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons Nofile NOTCAPABLE iproduct newfstatat isox
 
 #![allow(
     clippy::similar_names,
@@ -1540,8 +1540,8 @@ fn test_ls_long_dangling_symlink_color() {
     assert_eq!(target_color, "34");
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle3`.
+#[test]
 fn test_ls_dangling_symlink_or_and_missing_colors() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1605,8 +1605,8 @@ fn test_ls_symlink_to_dir_with_mi_colors() {
     assert_eq!(captures.name("target").unwrap().as_str(), "1;34");
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle4`.
+#[test]
 fn test_ls_dangling_symlink_ln_or_priority() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1634,8 +1634,8 @@ fn test_ls_dangling_symlink_ln_or_priority() {
     assert_eq!(captures.name("target").unwrap().as_str(), "35");
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle5`.
+#[test]
 fn test_ls_dangling_symlink_ln_and_missing_colors() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1663,8 +1663,8 @@ fn test_ls_dangling_symlink_ln_and_missing_colors() {
     assert_eq!(captures.name("target").unwrap().as_str(), "35");
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle7`.
+#[test]
 fn test_ls_dangling_symlink_blank_or_still_emits_reset() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1685,8 +1685,8 @@ fn test_ls_dangling_symlink_blank_or_still_emits_reset() {
     );
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle9`.
+#[test]
 fn test_ls_dangling_symlink_blank_or_in_directory_listing() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1708,8 +1708,8 @@ fn test_ls_dangling_symlink_blank_or_in_directory_listing() {
     );
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle8`.
+#[test]
 fn test_ls_dangling_symlink_uses_ln_when_or_blank() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1730,8 +1730,8 @@ fn test_ls_dangling_symlink_uses_ln_when_or_blank() {
     );
 }
 
-#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle6`.
+#[test]
 fn test_ls_directory_dangling_symlink_uses_ln_when_or_blank() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -2397,15 +2397,17 @@ fn test_ls_time_styles() {
         .stdout_matches(&re_custom_format_recent)
         .stdout_matches(&re_custom_format_old);
 
-    //+FORMAT_RECENT\nFORMAT_OLD
+    //+FORMAT_OLD\nFORMAT_RECENT: FORMAT1 applies to old files, FORMAT2 to recent files.
+    let re_custom_format_recent_2 =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}--\d{2} test\n").unwrap();
     let re_custom_format_old =
-        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}--\d{2} test-old\n").unwrap();
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}__\d{2} test-old\n").unwrap();
     scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=+%Y__%M\n%Y--%M")
         .succeeds()
-        .stdout_matches(&re_custom_format_recent)
+        .stdout_matches(&re_custom_format_recent_2)
         .stdout_matches(&re_custom_format_old);
 
     // Also fails due to not having full clap support for time_styles
@@ -2533,13 +2535,13 @@ fn test_ls_time_recent_future() {
         .succeeds()
         .stdout_matches(&re_iso_old);
 
-    // Also test that we can set a format that varies for recent of older files.
-    //+FORMAT_RECENT\nFORMAT_OLD
+    // A two-line format assigns FORMAT1 to old files and FORMAT2 to recent files.
+    //+FORMAT_OLD\nFORMAT_RECENT
     f.set_modified(SystemTime::now()).unwrap();
     scene
         .ucmd()
         .arg("-l")
-        .arg("--time-style=+RECENT\nOLD")
+        .arg("--time-style=+OLD\nRECENT")
         .succeeds()
         .stdout_contains("RECENT");
 
@@ -2549,11 +2551,11 @@ fn test_ls_time_recent_future() {
     scene
         .ucmd()
         .arg("-l")
-        .arg("--time-style=+RECENT\nOLD")
+        .arg("--time-style=+OLD\nRECENT")
         .succeeds()
         .stdout_contains("OLD");
 
-    // RECENT format is still used if no "OLD" one provided.
+    // The single format is used for all files when no second one is provided.
     scene
         .ucmd()
         .arg("-l")
@@ -3390,10 +3392,10 @@ mod quoting {
         );
     }
 
-    #[cfg(not(any(target_vendor = "apple", windows, target_os = "openbsd")))]
-    #[test]
     /// This test creates files with an UTF-8 encoded name and verify that it
     /// gets escaped depending on the used locale.
+    #[cfg(not(any(target_vendor = "apple", windows, target_os = "openbsd")))]
+    #[test]
     fn test_locale_aware_quoting() {
         let cases: &[(&[u8], _, _, &[&str])] = &[
             (
@@ -4076,6 +4078,25 @@ fn test_ls_version_sort() {
 }
 
 #[test]
+fn test_ls_version_sort_command_line_args() {
+    // Regression test for https://github.com/uutils/coreutils/issues/14859:
+    // command-line arguments sharing the same file name must be version-sorted
+    // by their full path, not just by the file name.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    for dir in ["10", "18", "9.5"] {
+        at.mkdir(dir);
+        at.touch(format!("{dir}/file"));
+    }
+
+    scene
+        .ucmd()
+        .args(&["-1v", "10/file", "18/file", "9.5/file"])
+        .succeeds()
+        .stdout_only("9.5/file\n10/file\n18/file\n");
+}
+
+#[test]
 fn test_ls_quoting_style() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4303,6 +4324,39 @@ fn test_ls_invalid_quoting_style_env_var_with_unwritable_stderr() {
         .set_stderr(dev_full)
         .succeeds()
         .stdout_is("alpha\nzeta\n");
+}
+
+#[test]
+fn test_ls_invalid_quoting_style_env_var_warns() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("alpha");
+
+    scene
+        .ucmd()
+        .env("QUOTING_STYLE", "not-a-style")
+        .arg("alpha")
+        .succeeds()
+        .stdout_is("alpha\n")
+        .stderr_contains("Ignoring invalid value of environment variable QUOTING_STYLE");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_ls_invalid_quoting_style_env_var_non_utf8() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("alpha");
+    let style = uucore::os_str_from_bytes(b"\xFF")
+        .expect("Only unix platforms can test non-unicode env values");
+
+    scene
+        .ucmd()
+        .env("QUOTING_STYLE", style)
+        .arg("alpha")
+        .succeeds()
+        .stdout_is("alpha\n")
+        .stderr_contains("Ignoring invalid value of environment variable QUOTING_STYLE");
 }
 
 #[test]
@@ -5644,6 +5698,42 @@ fn test_ls_dired_implies_long() {
         .stdout_contains("//DIRED-OPTIONS// --quoting-style");
 }
 
+// Regression test for issue #14775.
+#[test]
+fn test_ls_dired_quoting_style_name() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+
+    for style in [
+        "literal",
+        "shell",
+        "shell-always",
+        "shell-escape",
+        "shell-escape-always",
+        "c",
+        "escape",
+        "locale",
+        "clocale",
+    ] {
+        scene
+            .ucmd()
+            .env("LC_ALL", "C")
+            .args(&["-l", "--dired", &format!("--quoting-style={style}"), "dir"])
+            .succeeds()
+            .stdout_contains(format!("//DIRED-OPTIONS// --quoting-style={style}"));
+    }
+
+    for (opt, style) in [("-N", "literal"), ("-Q", "c"), ("-b", "escape")] {
+        scene
+            .ucmd()
+            .env("LC_ALL", "C")
+            .args(&["-l", "--dired", opt, "dir"])
+            .succeeds()
+            .stdout_contains(format!("//DIRED-OPTIONS// --quoting-style={style}"));
+    }
+}
+
 #[test]
 fn test_ls_dired_hyperlink() {
     // we will have link but not the DIRED output
@@ -6621,7 +6711,7 @@ fn test_ls_hyperlink() {
     }
 }
 
-// spell-checker: disable
+// spell-checker:disable
 #[test]
 fn test_ls_hyperlink_encode_link() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -6659,7 +6749,7 @@ fn test_ls_hyperlink_encode_link() {
             .contains("sp%20ace\x1b\\sp ace\x1b]8;;\x1b\\")
     );
 }
-// spell-checker: enable
+// spell-checker:enable
 
 #[test]
 fn test_ls_hyperlink_dirs() {
@@ -7203,7 +7293,7 @@ fn test_ls_color_clear_to_eol() {
         .arg("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo")
         .succeeds();
     // check that the wrapped name contains clear to end of line code
-    // cspell:disable-next-line
+    // spell-checker:disable-next-line
     result.stdout_contains("\x1b[0m\x1b[31;42mzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo\x1b[0m\x1b[K");
 }
 
@@ -7230,12 +7320,12 @@ fn test_suffix_case_sensitivity() {
         .arg("file2.Z")
         .succeeds();
     result.stdout_contains(
-        /* cSpell:disable */
+        // spell-checker:disable
         "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
                 \x1b[01;35mIMG2.JPG\x1b[0m\n\
                 \x1b[01;31mfile1.z\x1b[0m\n\
                 \x1b[01;31mfile2.Z\x1b[0m",
-        /* cSpell:enable */
+        // spell-checker:enable
     );
 
     // *.jpg is specified more than once with different cases and style, so
@@ -7250,11 +7340,11 @@ fn test_suffix_case_sensitivity() {
         .arg("img3.JpG")
         .succeeds();
     result.stdout_contains(
-        /* cSpell:disable */
+        // spell-checker:disable
         "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
                 \x1b[01;35;46mIMG2.JPG\x1b[0m\n\
                 img3.JpG",
-        /* cSpell:enable */
+        // spell-checker:enable
     );
 
     // *.jpg is specified more than once with different cases but style is same, so
@@ -7269,11 +7359,11 @@ fn test_suffix_case_sensitivity() {
         .arg("img3.JpG")
         .succeeds();
     result.stdout_contains(
-        /* cSpell:disable */
+        // spell-checker:disable
         "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
                 \x1b[01;35mIMG2.JPG\x1b[0m\n\
                 \x1b[01;35mimg3.JpG\x1b[0m",
-        /* cSpell:enable */
+        // spell-checker:enable
     );
 
     // last *.jpg gets more priority resulting in same style across
@@ -7288,11 +7378,11 @@ fn test_suffix_case_sensitivity() {
         .arg("img3.JpG")
         .succeeds();
     result.stdout_contains(
-        /* cSpell:disable */
+        // spell-checker:disable
         "\x1b[0m\x1b[01;35;46mimg1.jpg\x1b[0m\n\
                 \x1b[01;35;46mIMG2.JPG\x1b[0m\n\
                 \x1b[01;35;46mimg3.JpG\x1b[0m",
-        /* cSpell:enable */
+        // spell-checker:enable
     );
 
     // last *.jpg gets more priority resulting in different style across
@@ -7307,11 +7397,11 @@ fn test_suffix_case_sensitivity() {
         .arg("img3.JpG")
         .succeeds();
     result.stdout_contains(
-        /* cSpell:disable */
+        // spell-checker:disable
         "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
                 \x1b[01;35;46mIMG2.JPG\x1b[0m\n\
                 img3.JpG",
-        /* cSpell:enable */
+        // spell-checker:enable
     );
 }
 
@@ -8058,7 +8148,6 @@ fn test_ls_non_utf8_hidden() {
 }
 
 #[test]
-#[cfg(target_os = "wasi")]
 fn test_ls_a_dotdot_no_error_on_wasi() {
     // On WASI the sandbox may block access to ".." at the preopened root.
     // ls -a should still succeed and show ".." without an error message.
@@ -8073,7 +8162,6 @@ fn test_ls_a_dotdot_no_error_on_wasi() {
 }
 
 #[test]
-#[cfg(target_os = "wasi")]
 fn test_ls_al_no_capabilities_insufficient_on_wasi() {
     // `ls -al` reads metadata for every entry including "..". Without the
     // WASI fallback, stat on ".." at the preopened root returns
@@ -8248,5 +8336,61 @@ ls: invalid --block-size argument '1fb'
             .arg("--block-size=1fb")
             .fails_with_code(2)
             .stderr_is("ls: invalid --block-size argument '1fb'\n");
+    }
+}
+
+#[test]
+fn test_time_style_unambiguous_prefixes() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("test");
+    for style in ["full-iso", "long-iso", "iso", "locale"] {
+        let expected = scene
+            .ucmd()
+            .args(&["-l", "--time-style", style, "test"])
+            .succeeds()
+            .stdout_str()
+            .to_owned();
+        let min_len = if style.starts_with("lo") { 3 } else { 1 };
+        for len in min_len..=style.len() {
+            for prefix in ["", "posix-"] {
+                let value = format!("{prefix}{}", &style[..len]);
+                scene
+                    .ucmd()
+                    .args(&["-l", "--time-style", &value, "test"])
+                    .succeeds()
+                    .stdout_is(&expected);
+                scene
+                    .ucmd()
+                    .env("TIME_STYLE", &value)
+                    .args(&["-l", "test"])
+                    .succeeds()
+                    .stdout_is(&expected);
+            }
+        }
+    }
+}
+
+#[test]
+fn test_time_style_ambiguous_and_invalid_prefixes() {
+    for value in [
+        "l",
+        "lo",
+        "posix-l",
+        "posix-lo",
+        "posix-",
+        "full-isox",
+        "Locale",
+    ] {
+        new_ucmd!()
+            .args(&["-l", "--time-style", value])
+            .fails()
+            .code_is(2)
+            .stderr_contains("invalid --time-style argument");
+        new_ucmd!()
+            .env("TIME_STYLE", value)
+            .arg("-l")
+            .fails()
+            .code_is(2)
+            .stderr_contains("invalid --time-style argument");
     }
 }

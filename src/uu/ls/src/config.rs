@@ -596,14 +596,20 @@ fn extract_quoting_style(
         (QuotingStyle::C_DOUBLE, None)
     } else {
         // If set, the QUOTING_STYLE environment variable specifies a default style.
-        if let Ok(style) = std::env::var("QUOTING_STYLE") {
-            if let Some(pair) = match_quoting_style_name(style.as_str(), show_control) {
+        // Value may not be valid UTF-8.
+        if let Some(os_style) = std::env::var_os("QUOTING_STYLE") {
+            let style = os_style.to_string_lossy();
+            if let Some(pair) = match_quoting_style_name(&style, show_control) {
                 return pair;
             }
             let _ = writeln!(
                 io::stderr(),
                 "{}",
-                translate!("ls-invalid-quoting-style", "program" => std::env::args().next().unwrap_or_else(|| "ls".to_string()), "style" => style)
+                translate!(
+                    "ls-invalid-quoting-style",
+                    "program" => std::env::args().next().unwrap_or_else(|| "ls".to_string()),
+                    "style" => style
+                )
             );
         }
 
@@ -930,50 +936,28 @@ impl Config {
             options::quoting::LITERAL,
         ];
         let get_last = |flag: &str| -> usize {
-            if options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine) {
-                options.index_of(flag).unwrap_or(0)
-            } else {
-                0
-            }
+            (options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine))
+                .then(|| options.index_of(flag))
+                .flatten()
+                .unwrap_or(0)
         };
-        if get_last(options::ZERO)
-            > zero_formats_opts
-                .into_iter()
-                .map(get_last)
-                .max()
-                .unwrap_or(0)
-        {
-            format = if explicit_long {
-                format
-            } else {
-                Format::OneLine
-            };
+        let zero_idx = get_last(options::ZERO);
+        let last_of =
+            |flag_list: &[&str]| flag_list.iter().copied().map(get_last).max().unwrap_or(0);
+
+        if zero_idx > last_of(&zero_formats_opts) && !explicit_long {
+            format = Format::OneLine;
         }
-        if get_last(options::ZERO)
-            > zero_colors_opts
-                .into_iter()
-                .map(get_last)
-                .max()
-                .unwrap_or(0)
-        {
+
+        if zero_idx > last_of(&zero_colors_opts) {
             needs_color = false;
         }
-        if get_last(options::ZERO)
-            > zero_show_control_opts
-                .into_iter()
-                .map(get_last)
-                .max()
-                .unwrap_or(0)
-        {
+
+        if zero_idx > last_of(&zero_show_control_opts) {
             show_control = true;
         }
-        if get_last(options::ZERO)
-            > zero_quoting_style_opts
-                .into_iter()
-                .map(get_last)
-                .max()
-                .unwrap_or(0)
-        {
+
+        if zero_idx > last_of(&zero_quoting_style_opts) {
             quoting_style = QuotingStyle::Literal { show_control };
             locale_quoting = None;
         }
@@ -1118,6 +1102,16 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                 &field
             };
 
+            // Resolve only unique prefixes, leaving ambiguous or invalid values
+            // unchanged so they produce the existing time-style error.
+            let mut styles = ["full-iso", "long-iso", "iso", "locale"]
+                .into_iter()
+                .filter(|style| style.starts_with(field));
+            let field = match (styles.next(), styles.next()) {
+                (Some(style), None) => style,
+                _ => field,
+            };
+
             match field {
                 "full-iso" => ok((format::FULL_ISO, None)),
                 "long-iso" => ok((format::LONG_ISO, None)),
@@ -1130,13 +1124,14 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                 // `field` can be empty here (e.g. --time-style=posix-), so test
                 // the prefix instead of unwrapping the first char.
                 _ if field.starts_with('+') => {
-                    // recent/older formats are (optionally) separated by a newline
-                    let mut it = field[1..].split('\n');
-                    let recent = it.next().unwrap_or_default();
-                    let older = it.next();
-                    match it.next() {
-                        None => ok((recent, older)),
-                        Some(_) => Err(LsError::TimeStyleParseError(String::from(field))),
+                    // Formats are (optionally) separated by a newline:
+                    // FORMAT1 NEWLINE FORMAT2 -> FORMAT1 for older files, FORMAT2 for recent.
+                    // A single format applies to all files (stored as recent).
+                    let formats: Vec<_> = field[1..].split('\n').collect();
+                    match formats.as_slice() {
+                        [format] => ok((*format, None)),
+                        [older, recent] => ok((*recent, Some(*older))),
+                        _ => Err(LsError::TimeStyleParseError(String::from(field))),
                     }
                 }
                 _ => Err(LsError::TimeStyleParseError(String::from(field))),

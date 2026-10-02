@@ -153,9 +153,9 @@ dependencies = [
 
 [[package]]
 name = "bigdecimal"
-version = "0.4.10"
+version = "0.4.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d6867f1565b3aad85681f1015055b087fcfd840d6aeee6eee7f2da317603695"
+checksum = "8fa3f3d8cbf4dffcfe4991de61d012bef509a409ecbe9dd41049bfe32b4d4653"
 dependencies = [
  "autocfg",
  "libm",
@@ -883,7 +883,7 @@ version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "10d60334b3b2e7c9d91ef8150abfb6fa4c1c39ebbcf4a81c2e346aad939fee3e"
 dependencies = [
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -953,9 +953,9 @@ dependencies = [
 
 [[package]]
 name = "dns-lookup"
-version = "4.0.1"
+version = "4.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6120e7e5dcd1c90098e349def389e2797377cdbe6b465ad8fdd115c0c99d5cf2"
+checksum = "263c0ccfc6b3b6a93e959edad4f985779e76c0b36dbb2e13e3d27c690974adf1"
 dependencies = [
  "cfg-if",
  "libc",
@@ -1114,7 +1114,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54f0d287c53ffd184d04d8677f590f4ac5379785529e5e08b1c8083acdd5c198"
 dependencies = [
  "memchr",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -2086,9 +2086,9 @@ dependencies = [
 
 [[package]]
 name = "num-prime"
-version = "0.5.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b285c575532a33ef6fdd3a57640d0b1c70e6ca48644d6df7bbd4b7a0cfbbb12d"
+checksum = "d25a3c4d8a61c86376f9372bea15400e076398135c866495186972cdf5888a45"
 dependencies = [
  "bitvec",
  "either",
@@ -2667,7 +2667,7 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "selinux-sys",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -2986,11 +2986,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.20"
+version = "2.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec86235f5fcc2a73650310756d2ac5b138a5780bbbdfae3eeccec992c435ba4f"
+checksum = "09e52cb86a36cede5cb101bf8908837b3e4c6e5e59fe7fd85c23fb56200d189e"
 dependencies = [
- "thiserror-impl 2.0.20",
+ "thiserror-impl 2.0.21",
 ]
 
 [[package]]
@@ -3006,9 +3006,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.20"
+version = "2.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc04cd3e1236dd4a98afca4569f2deb3f120e5422a4023be2cb683f8486292af"
+checksum = "fe5197923287db20a58125f0bc85c062f7f2c892de97b18c356f9efb14b28524"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3273,9 +3273,9 @@ dependencies = [
  "memchr",
  "rustix",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3287,7 +3287,7 @@ dependencies = [
  "libc",
  "rustix",
  "selinux",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -3315,7 +3315,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -3335,7 +3335,7 @@ dependencies = [
  "clap",
  "fluent",
  "rustix",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -3373,10 +3373,10 @@ dependencies = [
  "rustix",
  "selinux",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
  "walkdir",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3388,7 +3388,7 @@ dependencies = [
  "fluent",
  "regex",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -3420,9 +3420,9 @@ dependencies = [
  "parse_datetime",
  "rustix",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3436,7 +3436,7 @@ dependencies = [
  "num-integer",
  "rustix",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -3449,7 +3449,7 @@ dependencies = [
  "fluent",
  "rustix",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "unicode-width 0.2.2",
  "uucore",
 ]
@@ -3491,9 +3491,9 @@ dependencies = [
  "glob",
  "rustc-hash",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3513,7 +3513,7 @@ dependencies = [
  "clap",
  "fluent",
  "nix",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -3526,7 +3526,7 @@ dependencies = [
  "fluent",
  "rustix",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -3540,7 +3540,7 @@ dependencies = [
  "fluent",
  "num-bigint",
  "num-traits",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -3573,7 +3573,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -3595,7 +3595,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -3606,7 +3606,7 @@ dependencies = [
  "clap",
  "fluent",
  "memchr",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -3652,7 +3652,7 @@ dependencies = [
  "fluent",
  "rustix",
  "selinux",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -3665,7 +3665,7 @@ dependencies = [
  "fluent",
  "memchr",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -3677,7 +3677,7 @@ dependencies = [
  "fluent",
  "libc",
  "rustix",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -3697,7 +3697,7 @@ dependencies = [
  "clap",
  "fluent",
  "rustix",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -3726,7 +3726,7 @@ dependencies = [
  "selinux",
  "tempfile",
  "terminal_size",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
  "uutils_term_grid",
 ]
@@ -3780,7 +3780,7 @@ dependencies = [
  "fluent",
  "rand 0.10.3",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -3803,14 +3803,13 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "indicatif",
- "libc",
  "nix",
  "rustc-hash",
  "rustix",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3821,7 +3820,7 @@ dependencies = [
  "fluent",
  "rustix",
  "uucore",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3845,9 +3844,9 @@ dependencies = [
  "fluent",
  "libc",
  "rustix",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3870,7 +3869,7 @@ dependencies = [
  "fluent",
  "memchr",
  "rustix",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -3925,7 +3924,7 @@ dependencies = [
  "itertools 0.15.0",
  "memchr",
  "regex",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -3956,7 +3955,7 @@ dependencies = [
  "fluent",
  "regex",
  "rustc-hash",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -3997,7 +3996,7 @@ dependencies = [
  "indicatif",
  "libc",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -4019,7 +4018,7 @@ dependencies = [
  "fluent",
  "libc",
  "selinux",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -4033,7 +4032,7 @@ dependencies = [
  "fluent",
  "num-bigint",
  "num-traits",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -4140,7 +4139,7 @@ dependencies = [
  "rustix",
  "self_cell",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -4154,7 +4153,7 @@ dependencies = [
  "memchr",
  "rustix",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -4165,7 +4164,7 @@ dependencies = [
  "clap",
  "fluent",
  "rustix",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -4176,7 +4175,7 @@ dependencies = [
  "clap",
  "fluent",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uu_stdbuf_libstdbuf",
  "uucore",
 ]
@@ -4218,7 +4217,7 @@ dependencies = [
  "fluent",
  "rustix",
  "uucore",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4232,7 +4231,7 @@ dependencies = [
  "memmap2",
  "regex",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -4248,7 +4247,7 @@ dependencies = [
  "rstest",
  "rustix",
  "uucore",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4271,9 +4270,9 @@ dependencies = [
  "libc",
  "rustix",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4300,9 +4299,9 @@ dependencies = [
  "parse_datetime",
  "rustix",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4348,9 +4347,9 @@ dependencies = [
  "memchr",
  "rustc-hash",
  "rustix",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4361,7 +4360,7 @@ dependencies = [
  "fluent",
  "rustix",
  "uucore",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4383,7 +4382,7 @@ dependencies = [
  "fluent",
  "rustix",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -4413,7 +4412,7 @@ dependencies = [
  "clap",
  "fluent",
  "jiff",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
@@ -4447,7 +4446,7 @@ dependencies = [
  "libc",
  "rustix",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "unicode-width 0.2.2",
  "uucore",
 ]
@@ -4470,7 +4469,7 @@ dependencies = [
  "fluent",
  "rustix",
  "uucore",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4531,7 +4530,7 @@ dependencies = [
  "shake",
  "sm3",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "time",
  "unic-langid",
  "unicode-width 0.2.2",
@@ -4540,7 +4539,7 @@ dependencies = [
  "uucore_procs",
  "walkdir",
  "wild",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
  "xattr",
  "z85",
 ]

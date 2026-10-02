@@ -3,8 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker: ignore (encodings) lsbf msbf
-// spell-checker: ignore autopad MFRGG MFRGGZDF abcdeabc baddecode CPNMUO
+// spell-checker:ignore (encodings) lsbf msbf
+// spell-checker:ignore autopad MFRGG MFRGGZDF abcdeabc baddecode CPNMUO
 
 use uutests::{at_and_ucmd, new_ucmd};
 
@@ -186,6 +186,19 @@ fn test_base16() {
         .pipe_in("Hello, World!")
         .succeeds()
         .stdout_only("48656C6C6F2C20576F726C6421\n");
+}
+
+// This test fails if the Base16 output buffer is not explicitly flushed.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+fn test_base16_write_error_is_reported() {
+    new_ucmd!()
+        .arg("--base16")
+        .pipe_in("Hello, World!")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("basenc: No space left on device\n");
 }
 
 #[test]

@@ -18,8 +18,8 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["format", "quoting-style"] }
 fluent = { workspace = true }
+uucore = { workspace = true, features = ["format", "quoting-style"] }
 
 [features]
 diagnostics = ["uucore/diagnostics"]
