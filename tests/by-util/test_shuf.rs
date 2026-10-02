@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) unwritable GHSA
+// spell-checker:ignore (ToDO) unwritable GHSA EAGAIN
 
 use std::fmt::Write;
 
@@ -448,7 +448,7 @@ fn test_echo_invalid_unicode_in_arguments() {
     assert!(result.stdout().contains(&b'\xFF'));
 }
 
-#[cfg(any(unix, target_os = "wasi"))]
+#[cfg(unix)]
 #[cfg(not(target_vendor = "apple"))]
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]

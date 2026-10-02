@@ -18,9 +18,9 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true }
 fluent = { workspace = true }
 unicode-width = { workspace = true }
+uucore = { workspace = true }
 
 [dev-dependencies]
 divan = { workspace = true }

@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz unparseable
-// spell-checker:ignore ohos OHOS tzdata tzdb tzif zoneinfo
+// spell-checker:ignore ohos OHOS tzdata tzdb tzif zoneinfo euctw
 
 mod format_modifiers;
 mod locale;
@@ -1097,7 +1097,7 @@ fn make_format_string(settings: &Settings) -> &[u8] {
 /// (e.g., EDT always means UTC-4, even in winter when New York observes EST).
 /// Offset is in seconds to support half-hour zones like IST (UTC+5:30).
 /// All other timezones (JST, CET, etc.) are dynamically resolved from IANA database.
-/* spell-checker: disable */
+// spell-checker:disable
 static FIXED_OFFSET_ABBREVIATIONS: &[(&str, i32)] = &[
     ("UTC", 0),
     ("GMT", 0),
@@ -1125,7 +1125,7 @@ static FIXED_OFFSET_ABBREVIATIONS: &[(&str, i32)] = &[
     // Asian timezones
     ("KST", 32400), // UTC+9 Korean Standard Time
 ];
-/* spell-checker: enable */
+// spell-checker:enable
 
 /// Lazy-loaded timezone abbreviation lookup map built from IANA database.
 static TZ_ABBREV_CACHE: OnceLock<HashMap<String, String>> = OnceLock::new();
@@ -1250,6 +1250,10 @@ fn parse_dates_from_reader<R: Read + 'static>(
 > {
     let lines = BufReader::new(reader).split(b'\n');
     Box::new(lines.map_while(Result::ok).map(move |mut bytes| {
+        // GNU handles each line as a C string, so a NUL byte ends it
+        if let Some(nul) = bytes.iter().position(|&b| b == 0) {
+            bytes.truncate(nul);
+        }
         // Strip a trailing '\r' (CRLF input; GNU's lexer ignores it too)
         if bytes.last() == Some(&b'\r') {
             bytes.pop();
@@ -1351,7 +1355,6 @@ fn get_clock_resolution() -> Timestamp {
     unimplemented!("getting clock resolution not implemented (unsupported target)");
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
 /// Returns the resolution of the system’s realtime clock.
 ///
 /// # Panics
@@ -1359,6 +1362,7 @@ fn get_clock_resolution() -> Timestamp {
 /// Panics if `clock_getres` fails. On a POSIX-compliant system this should not occur,
 /// as `CLOCK_REALTIME` is required to be supported.
 /// Failure would indicate a non-conforming or otherwise broken implementation.
+#[cfg(all(unix, not(target_os = "redox")))]
 fn get_clock_resolution() -> Timestamp {
     use rustix::time::{ClockId, clock_getres};
 
@@ -1404,12 +1408,12 @@ fn set_system_datetime(_date: Zoned) -> UResult<()> {
     Err(Box::new(DateError::SettingDateNotSupportedRedox))
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
 /// System call to set date (unix).
 /// See here for more:
 /// `<https://doc.rust-lang.org/libc/i686-unknown-linux-gnu/libc/fn.clock_settime.html>`
 /// `<https://linux.die.net/man/3/clock_settime>`
 /// `<https://www.gnu.org/software/libc/manual/html_node/Time-Types.html>`
+#[cfg(all(unix, not(target_os = "redox")))]
 fn set_system_datetime(date: Zoned) -> UResult<()> {
     use rustix::time::{ClockId, Timespec, clock_settime};
 
@@ -1424,11 +1428,11 @@ fn set_system_datetime(date: Zoned) -> UResult<()> {
         .map_err_context(|| translate!("date-error-cannot-set-date"))
 }
 
-#[cfg(windows)]
 /// System call to set date (Windows).
 /// See here for more:
 /// * <https://docs.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-setsystemtime>
 /// * <https://docs.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-systemtime>
+#[cfg(windows)]
 fn set_system_datetime(date: Zoned) -> UResult<()> {
     let system_time = SYSTEMTIME {
         wYear: date.year() as u16,

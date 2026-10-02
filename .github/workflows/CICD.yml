@@ -264,7 +264,9 @@ jobs:
         done
 
   build_rust_stable:
-    name: Build/stable
+    # Keep the name independent of `features`: these checks are required by
+    # branch protection, so a renamed job would block every PR.
+    name: Build/stable (${{ matrix.job.os }}, ${{ matrix.job.name }})
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
     timeout-minutes: 90
@@ -272,9 +274,11 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: feat_os_unix }
-          - { os: macos-latest   , features: feat_os_unix }
-          - { os: windows-latest , features: feat_os_windows }
+          - { os: ubuntu-latest  , name: feat_os_unix    , features: feat_os_unix }
+          # Don't fail to build if SELinux specific utils are included by some reason.
+          # But we are not interested in existence of stubs
+          - { os: macos-latest   , name: feat_os_unix    , features: "feat_os_unix,chcon,runcon" }
+          - { os: windows-latest , name: feat_os_windows , features: "feat_os_windows,chcon,runcon" }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -386,8 +390,6 @@ jobs:
           - { os: ubuntu-latest  , target: wasm32-wasip1, default-features: false, features: feat_wasm, skip-tests: true }
           - { os: ubuntu-latest  , target: wasm32-wasip2, default-features: false, features: feat_wasm, skip-tests: true }
           - { os: macos-latest   , target: aarch64-apple-darwin        , features: "feat_os_unix,openssl", workspace-tests: true, pgo: PGO } # M1 CPU
-          # PR #7964: chcon should not break build without the feature. cargo check is enough to detect it.
-          - { os: macos-latest   , target: aarch64-apple-darwin        , workspace-tests: true, check-only: true } # M1 CPU
           - { os: macos-latest   , target: x86_64-apple-darwin         , features: feat_os_unix, workspace-tests: true, pgo: PGO }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
           # msvc and gnu works on the same target. So publishing msvc is enough.
@@ -965,8 +967,7 @@ jobs:
     - run: rsync -v -a -e ssh . lima-default:~/work/
     - name: Setup Rust and other build deps in VM
       run: |
-        lima sudo dnf install --nodocs gcc g++ git rustup libselinux-devel clang-devel attr -y
-        lima rustup-init -y --default-toolchain stable --profile minimal -c clippy
+        lima sudo dnf install --nodocs cargo clippy gcc g++ git rust libselinux-devel clang-devel attr -y
     - name: Verify SELinux Status
       run: |
         lima getenforce
@@ -977,33 +978,6 @@ jobs:
         lima bash -c "cd work && cargo test --features 'feat_selinux' --no-default-features"
     - name: Lint with SELinux
       run: lima bash -c "cd work && cargo clippy --all-targets --features 'feat_selinux' --no-default-features -- -D warnings"
-
-  test_selinux_stubs:
-    name: Build/SELinux-Stubs (Non-Linux)
-    needs: [ min_version, deps ]
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: macos-latest   , features: feat_os_unix }
-          - { os: windows-latest , features: feat_os_windows }
-
-    steps:
-    - uses: actions/checkout@v7.0.1
-      with:
-        persist-credentials: false
-    - uses: Swatinem/rust-cache@v2
-    - name: Build SELinux utilities as stubs
-      run: cargo build -p uu_chcon -p uu_runcon
-    - name: Verify stub binaries exist
-      shell: bash
-      run: |
-        test -f target/debug/chcon || test -f target/debug/chcon.exe
-        test -f target/debug/runcon || test -f target/debug/runcon.exe
-    # check is enough to detect workspace breakage by chcon
-    - name: Verify workspace builds with stubs
-      run: cargo check --features ${{ matrix.job.features }}
 
   test_safe_traversal:
     name: Safe Traversal Security Check

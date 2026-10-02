@@ -18,14 +18,14 @@ path = "src/tac.rs"
 doctest = false
 
 [dependencies]
+clap = { workspace = true }
+fluent = { workspace = true }
+libc = { workspace = true }
 memchr = { workspace = true }
 regex = { workspace = true }
-clap = { workspace = true }
-libc = { workspace = true }
-uucore = { workspace = true, features = ["buf-copy", "fs", "signals"] }
-thiserror = { workspace = true }
-fluent = { workspace = true }
 tempfile = { workspace = true }
+thiserror = { workspace = true }
+uucore = { workspace = true, features = ["buf-copy", "fs", "signals"] }
 
 [target.'cfg(not(target_os = "wasi"))'.dependencies]
 memmap2 = { workspace = true }

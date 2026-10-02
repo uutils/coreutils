@@ -130,8 +130,8 @@ fn remove_dir_with_feedback(path: &Path, options: &Options) -> bool {
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Copy)]
 /// Enum, determining when the `rm` will prompt the user about the file deletion
+#[derive(Eq, PartialEq, Clone, Copy)]
 pub enum InteractiveMode {
     /// Never prompt
     Never,
@@ -195,9 +195,9 @@ pub struct Options {
     pub verbose: bool,
     /// `-g`, `--progress`
     pub progress: bool,
-    #[doc(hidden)]
     /// `---presume-input-tty`
     /// Always use `None`; GNU flag for testing use only
+    #[doc(hidden)]
     pub __presume_input_tty: Option<bool>,
 }
 

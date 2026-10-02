@@ -16,10 +16,10 @@ path = "src/od.rs"
 
 [dependencies]
 clap = { workspace = true }
-half = { workspace = true }
-uucore = { workspace = true, features = ["fs", "parser-size", "pipes"] }
 fluent = { workspace = true }
+half = { workspace = true }
 libc.workspace = true
+uucore = { workspace = true, features = ["fs", "parser-size", "pipes"] }
 
 [target.'cfg(any(unix, target_os = "wasi"))'.dependencies]
 rustix = { workspace = true, features = ["stdio"] }

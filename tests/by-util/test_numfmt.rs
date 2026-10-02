@@ -1295,6 +1295,39 @@ fn test_format_with_invalid_precision() {
 }
 
 #[test]
+fn test_format_error_escapes_special_characters() {
+    // A control character in --format used to be written to stderr verbatim,
+    // which split the error across lines or moved the cursor. Each error that
+    // quotes the format is covered here.
+    let cases = [
+        ("ab\ncd", r"format 'ab\ncd' has no % directive"),
+        ("a\nb%", r"format 'a\nb%' ends in %"),
+        ("a\nb%f%", r"format 'a\nb%f%' has too many % directives"),
+        ("a\tb%f%", r"format 'a\tb%f%' has too many % directives"),
+        ("a\\b%f%", r"format 'a\\b%f%' has too many % directives"),
+        ("a'b%f%", r"format 'a\'b%f%' has too many % directives"),
+        // A space is printable and must stay a space, not become "\ ".
+        ("a b%f%", r"format 'a b%f%' has too many % directives"),
+        (
+            "a\nb%q",
+            r"invalid format 'a\nb%q', directive must be %[0]['][-][N][.][N]f",
+        ),
+        (
+            "a\nb%99999999999999999999f",
+            r"invalid format 'a\nb%99999999999999999999f' (width overflow)",
+        ),
+        ("a\nb%.-f", r"invalid precision in format 'a\nb%.-f'"),
+    ];
+
+    for (invalid_format, expected) in cases {
+        new_ucmd!()
+            .arg(format!("--format={invalid_format}"))
+            .fails_with_code(1)
+            .stderr_contains(expected);
+    }
+}
+
+#[test]
 fn test_format_grouping_conflicts_with_to_option() {
     new_ucmd!()
         .args(&["--format=%'f", "--to=si"])
@@ -2392,5 +2425,19 @@ mod field_diagnostics {
             .args(&["--field=0", "--to=si", "1"])
             .fails_with_code(1)
             .stderr_contains("range '0' was invalid: fields and positions are numbered from 1");
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_write_error_is_reported_and_fatal() {
+    // A full output device must be diagnosed, not panic, whatever --invalid says.
+    for extra in [&["--to=si"][..], &["--invalid=ignore"][..]] {
+        let mut ucmd = new_ucmd!();
+        ucmd.args(extra)
+            .pipe_in("81920\n4096\n1024\n")
+            .set_stdout(std::fs::File::create("/dev/full").unwrap())
+            .fails_with_code(1)
+            .stderr_is("numfmt: write error: No space left on device\n");
     }
 }

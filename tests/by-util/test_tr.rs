@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore lowre punct aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase fooclass Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer
+// spell-checker:ignore lowre punct aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase fooclass Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer mnop mnopq pqopq pqqqq ppqqrr pqrr ppqr ppqqpp
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -307,7 +307,7 @@ fn test_delete_and_squeeze_one_set() {
         .args(&["-ds", "a-z"])
         .fails()
         .stderr_contains("missing operand after 'a-z'")
-        .stderr_contains("Two strings must be given when deleting and squeezing.");
+        .stderr_contains("Two strings must be given when both deleting and squeezing repeats.");
 }
 
 #[test]
@@ -1528,6 +1528,116 @@ fn test_backwards_range() {
             r"tr: range-endpoints of '&-\004' are in reverse collating sequence order
 ",
         );
+}
+
+#[cfg(target_pointer_width = "64")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: usize is 32-bit, so these repeat counts do not parse"
+)]
+#[test]
+fn test_huge_repeat_count_in_set1() {
+    // A repeat count this large used to be expanded character by character,
+    // which aborted the process before it read any input.
+    new_ucmd!()
+        .args(&["[a*9223372036854775808]", "b"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("bbc");
+    new_ucmd!()
+        .args(&["[a*99999999999999]b", "xy"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("yyc");
+    new_ucmd!()
+        .args(&["-t", "[a*99999999999999]", "x"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("xbc");
+    new_ucmd!()
+        .args(&["-d", "[a*99999999999999]"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("bc");
+}
+
+#[cfg(target_pointer_width = "64")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: usize is 32-bit, so these repeat counts do not parse"
+)]
+#[test]
+fn test_huge_repeat_count_in_set2() {
+    new_ucmd!()
+        .args(&["abc", "[x*99999999999999]"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("xxx");
+    new_ucmd!()
+        .args(&["abcd", "[x*99999999999999]yz"])
+        .pipe_in("abcd")
+        .succeeds()
+        .stdout_only("xxxx");
+    new_ucmd!()
+        .args(&["-c", "a", "[x*99999999999999]"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("axx");
+}
+
+#[cfg(target_pointer_width = "64")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: usize is 32-bit, so these repeat counts do not parse"
+)]
+#[test]
+fn test_repeat_lengths_beyond_usize() {
+    // Set lengths are kept exact when repeat counts add up past usize::MAX,
+    // so positions past that point still line up the way they should.
+    new_ucmd!()
+        .args(&["-c", "[a*18446744073709551614]bc", "x"])
+        .pipe_in("abcd")
+        .succeeds()
+        .stdout_only("abcx");
+    new_ucmd!()
+        .args(&["[a*18446744073709551615]b", "[x*18446744073709551614][y*]z"])
+        .pipe_in("ab")
+        .succeeds()
+        .stdout_only("yz");
+    new_ucmd!()
+        .args(&[
+            "[a*18446744073709551615]b[:upper:]",
+            "[x*18446744073709551615][:upper:]",
+        ])
+        .fails()
+        .stderr_contains("must be matched by");
+}
+
+#[test]
+fn test_repeat_keeps_every_set2_character_for_squeeze() {
+    // The mappings a->x and a->y both come from the one run of `a`, and the
+    // last one wins, but x is still part of set2 and so still squeezed.
+    new_ucmd!()
+        .args(&["-s", "[a*2]", "xy"])
+        .pipe_in("xxaa")
+        .succeeds()
+        .stdout_only("xy");
+    new_ucmd!()
+        .args(&["-s", "a", "xyz"])
+        .pipe_in("aazz")
+        .succeeds()
+        .stdout_only("xz");
+}
+
+#[test]
+fn test_repeat_in_set1_padded_by_star_in_set2() {
+    // The star in set2 is padded to the length of the repeat in set1, and
+    // the last of the mappings for `a` wins.
+    new_ucmd!()
+        .args(&["[a*3]bc", "x[y*]z"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("yyz");
 }
 
 #[test]
