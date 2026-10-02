@@ -597,7 +597,7 @@ fn full_version_argument() {
     new_ucmd!()
         .arg("--version")
         .succeeds()
-        .stdout_matches(&Regex::new(r"^echo \(uutils coreutils\) (\d+\.\d+\.\d+)\n$").unwrap());
+        .stdout_matches(&Regex::new(r"^echo \(coreutils\) (\d+\.\d+\.\d+)\n$").unwrap());
 }
 
 #[test]

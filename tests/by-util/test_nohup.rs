@@ -361,5 +361,5 @@ fn test_nohup_help_and_version() {
     new_ucmd!()
         .arg("--version")
         .succeeds()
-        .stdout_matches(&Regex::new(r"^nohup \(uutils coreutils\) (\d+\.\d+\.\d+)\n$").unwrap());
+        .stdout_matches(&Regex::new(r"^nohup \(coreutils\) (\d+\.\d+\.\d+)\n$").unwrap());
 }

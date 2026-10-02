@@ -57,7 +57,18 @@ fn test_version_no_path() {
     };
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.starts_with("mkdir (uutils coreutils)"));
+    assert!(stdout.starts_with("mkdir (coreutils)"));
+}
+
+#[test]
+fn test_version_autoconf_269_compatibility() {
+    // Autoconf 2.69 AC_PROG_MKDIR_P checks `mkdir --version` against:
+    //   'mkdir (GNU coreutils) '* | 'mkdir (coreutils) '* | 'mkdir (fileutils) '4.1*
+    // Ensure our version string starts with 'mkdir (coreutils) '.
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .stdout_contains("mkdir (coreutils) ");
 }
 
 #[test]

@@ -516,8 +516,8 @@ impl MDWriter<'_, '_> {
     fn version(&mut self) -> io::Result<()> {
         writeln!(
             self.w,
-            "<div class=\"version\">v{}</div>",
-            self.command.render_version().split_once(' ').unwrap().1
+            "<div class=\"version\">v(uutils coreutils) {}</div>",
+            env!("CARGO_PKG_VERSION")
         )
     }
 
