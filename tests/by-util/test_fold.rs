@@ -1187,6 +1187,9 @@ fn test_dash_operand_reads_stdin() {
     new_ucmd!()
         .args(&["-w", "-"])
         .pipe_in("hello\n")
+        // fold rejects the width before it reads stdin, so the write can
+        // race with its exit and hit a broken pipe.
+        .ignore_stdin_write_error()
         .fails()
         .stderr_contains("invalid number of columns: '-'");
 }
