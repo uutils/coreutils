@@ -46,7 +46,7 @@ pub(crate) fn copy_on_write(
     if source_is_stream {
         let mut src_file = open_source(source, nofollow)
             .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-        let mut dst_file = create_dest_restrictive(dest, false).map_err(|e| {
+        let mut dst_file = create_dest_restrictive(dest, false, false).map_err(|e| {
             CpError::IoErrContext(
                 e,
                 translate!("cp-error-cannot-create-regular-file", "path" => dest.quote()),
@@ -72,7 +72,7 @@ pub(crate) fn copy_on_write(
     // dest is followed, matching GNU cp.
     let mut src_file =
         open_source(source, nofollow).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-    let mut dst_file = create_dest_restrictive(dest, false).map_err(|e| {
+    let mut dst_file = create_dest_restrictive(dest, false, false).map_err(|e| {
         CpError::IoErrContext(
             e,
             translate!("cp-error-cannot-create-regular-file", "path" => dest.quote()),
