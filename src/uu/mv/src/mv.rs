@@ -947,19 +947,12 @@ fn rename_with_fallback(
     #[cfg(not(unix))] _hardlink_scanner: Option<()>,
 ) -> io::Result<()> {
     fs::rename(from, to).or_else(|err| {
-        #[cfg(windows)]
-        const EXDEV: i32 = windows_sys::Win32::Foundation::ERROR_NOT_SAME_DEVICE as _;
-        #[cfg(unix)]
-        const EXDEV: i32 = libc::EXDEV as _;
-        #[cfg(target_os = "wasi")]
-        const EXDEV: i32 = 18; // POSIX EXDEV value
-
         // We will only copy if:
-        // 1. Files are on different devices (EXDEV error)
+        // 1. Files are on different devices (CrossesDevices / EXDEV error)
         // 2. On Windows, if the target file exists and source file is opened by another process
         //    (MoveFileExW fails with "Access Denied" even if the source file has FILE_SHARE_DELETE permission)
-        let should_fallback =
-            matches!(err.raw_os_error(), Some(EXDEV)) || (from.is_file() && can_delete_file(from));
+        let should_fallback = err.kind() == io::ErrorKind::CrossesDevices
+            || (from.is_file() && can_delete_file(from));
         if !should_fallback {
             return Err(err);
         }

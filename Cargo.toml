@@ -209,6 +209,7 @@ return_self_not_must_use = "allow"           # 8
 inline_always = "allow"                      # 6
 fn_params_excessive_bools = "allow"          # 6
 should_panic_without_expect = "allow"        # 2
+assert_is_empty = "allow"
 
 doc_markdown = "allow"
 unused_self = "allow"
@@ -216,7 +217,6 @@ enum_glob_use = "allow"
 unnested_or_patterns = "allow"
 implicit_hasher = "allow"
 doc_link_with_quotes = "allow"
-flat_map_option = "allow"
 # TODO lint is deprecated since Rust 1.98, can be removed when we have a MSRV >= 1.98
 from_iter_instead_of_collect = "allow"
 large_types_passed_by_value = "allow"

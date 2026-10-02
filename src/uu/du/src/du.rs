@@ -586,11 +586,11 @@ fn safe_du(
             }
 
             // Handle inodes
-            if let Some(inode) = this_stat.inode {
-                if seen_inodes.contains(&inode) && !options.count_links {
-                    continue;
-                }
-                seen_inodes.insert(inode);
+            if let Some(inode) = this_stat.inode
+                && !seen_inodes.insert(inode)
+                && !options.count_links
+            {
+                continue;
             }
 
             // Process directories iteratively
@@ -773,14 +773,11 @@ fn du_regular(
                                 }
                             }
 
-                            if let Some(inode) = this_stat.inode {
-                                // Check if the inode has been seen before and if we should skip it
-                                if seen_inodes.contains(&inode) && !options.count_links {
-                                    // Skip further processing for this inode
-                                    continue;
-                                }
-                                // Mark this inode as seen
-                                seen_inodes.insert(inode);
+                            if let Some(inode) = this_stat.inode
+                                && !seen_inodes.insert(inode)
+                                && !options.count_links
+                            {
+                                continue;
                             }
 
                             if this_stat.metadata.is_dir() {
@@ -1273,11 +1270,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let stat = Stat::new(&path, None, &traversal_options);
         if let Ok(stat) = stat.as_ref()
             && let Some(inode) = stat.inode
+            && !traversal_options.count_links
+            && !seen_inodes.insert(inode)
         {
-            if !traversal_options.count_links && seen_inodes.contains(&inode) {
-                continue 'loop_file;
-            }
-            seen_inodes.insert(inode);
+            continue 'loop_file;
         }
 
         if use_safe_traversal {

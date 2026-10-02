@@ -154,7 +154,7 @@ fn check_sparse_detection(src_file: &File) -> io::Result<bool> {
 fn sparse_copy_without_hole_fd(src_file: &File, dst_file: &File, context: &str) -> CopyResult<()> {
     let ctx_err = |e: io::Error| CpError::IoErrContext(e, context.to_owned());
 
-    let size = src_file.metadata().map_err(&ctx_err)?.size();
+    let size = src_file.metadata().map_err(ctx_err)?.size();
     ftruncate(dst_file, size).map_err(|e| CpError::IoErrContext(e.into(), context.to_owned()))?;
     let mut current_offset = 0;
     // Maximize the data read at once to 16 MiB to avoid memory hogging with large files
@@ -178,10 +178,10 @@ fn sparse_copy_without_hole_fd(src_file: &File, dst_file: &File, context: &str) 
             let buf = &mut buf[..read_len];
             src_file
                 .read_exact_at(buf, current_offset + i)
-                .map_err(&ctx_err)?;
+                .map_err(ctx_err)?;
             dst_file
                 .write_all_at(buf, current_offset + i)
-                .map_err(&ctx_err)?;
+                .map_err(ctx_err)?;
         }
         current_offset = hole;
     }
@@ -194,10 +194,10 @@ fn sparse_copy_fd(src_file: &mut File, dst_file: &File, context: &str) -> CopyRe
 
     // Keep the size as u64: on 32-bit targets a usize conversion would
     // panic for sources of 4 GiB and more.
-    let size = src_file.metadata().map_err(&ctx_err)?.size();
+    let size = src_file.metadata().map_err(ctx_err)?.size();
     ftruncate(dst_file, size).map_err(|e| CpError::IoErrContext(e.into(), context.to_owned()))?;
 
-    let blksize = dst_file.metadata().map_err(&ctx_err)?.blksize();
+    let blksize = dst_file.metadata().map_err(ctx_err)?.blksize();
     let mut buf: Vec<u8> = vec![0; blksize as usize];
     let mut current_offset: u64 = 0;
 
@@ -205,7 +205,7 @@ fn sparse_copy_fd(src_file: &mut File, dst_file: &File, context: &str) -> CopyRe
     // file extent mappings:
     // https://www.kernel.org/doc/html/latest/filesystems/fiemap.html
     while current_offset < size {
-        let this_read = src_file.read(&mut buf).map_err(&ctx_err)?;
+        let this_read = src_file.read(&mut buf).map_err(ctx_err)?;
         if this_read == 0 {
             // EOF before the size seen at fstat time (source truncated
             // concurrently): shrink the dest to the bytes actually copied
@@ -218,7 +218,7 @@ fn sparse_copy_fd(src_file: &mut File, dst_file: &File, context: &str) -> CopyRe
         if buf.iter().any(|&x| x != 0) {
             dst_file
                 .write_all_at(buf, current_offset)
-                .map_err(&ctx_err)?;
+                .map_err(ctx_err)?;
         }
         current_offset += this_read as u64;
     }
@@ -269,15 +269,15 @@ where
 
     let ctx_err = |e: io::Error| CpError::IoErrContext(e, context.to_owned());
 
-    let dest_is_stream = is_stream(&dst_file.metadata().map_err(&ctx_err)?);
+    let dest_is_stream = is_stream(&dst_file.metadata().map_err(ctx_err)?);
     if !dest_is_stream {
         // `copy_stream` doesn't clear the dest file, if dest is not a stream, we should clear it manually.
-        dst_file.set_len(0).map_err(&ctx_err)?;
+        dst_file.set_len(0).map_err(ctx_err)?;
     }
 
     buf_copy::copy_fast(&mut src_file, &mut dst_file)
         .map_err(|e| io::Error::other(format!("{e}")))
-        .map_err(&ctx_err)?;
+        .map_err(ctx_err)?;
 
     Ok(())
 }
