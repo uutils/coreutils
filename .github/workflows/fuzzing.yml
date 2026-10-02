@@ -118,6 +118,15 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
+    - name: Use GNU as the system coreutils
+      shell: bash
+      run: |
+        ## The examples compare against the system coreutils, which must be GNU.
+        ## ubuntu-26.04 ships uutils there; older images have no such switch.
+        sudo apt-get update
+        if apt-cache show coreutils-from-gnu >/dev/null 2>&1; then
+          sudo apt-get install -y --allow-remove-essential coreutils-from-gnu coreutils-from-uutils-
+        fi
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: "fuzz -> target"
@@ -186,6 +195,15 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
+    - name: Use GNU as the system coreutils
+      shell: bash
+      run: |
+        ## The fuzzers compare against the system coreutils, which must be GNU.
+        ## ubuntu-26.04 ships uutils there; older images have no such switch.
+        sudo apt-get update
+        if apt-cache show coreutils-from-gnu >/dev/null 2>&1; then
+          sudo apt-get install -y --allow-remove-essential coreutils-from-gnu coreutils-from-uutils-
+        fi
     - name: Install `cargo-fuzz`
       uses: taiki-e/install-action@v2
       with:
