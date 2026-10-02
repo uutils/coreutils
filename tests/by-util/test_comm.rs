@@ -823,3 +823,39 @@ fn test_identical_unsorted_prefix_check_order_fails() {
         .stdout_is("\t\tb\n")
         .stderr_is("comm: file 1 is not in sorted order\n");
 }
+
+#[test]
+fn test_dash_dash() {
+    let scene = TestScenario::new(util_name!());
+    for (input, expected) in [
+        ("a\nb\n", "a\n\tb\n"),
+        ("a\nb\nc\nd\n", "a\n\tb\nc\n\td\n"),
+        ("a\na\nb\nb\n", "\t\ta\n\t\tb\n"),
+        ("", ""),
+    ] {
+        scene
+            .ucmd()
+            .args(&["-", "-"])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+fn test_dash_dash_unsorted() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .args(&["-", "-"])
+        .pipe_in("2\n3\n1\n")
+        .fails_with_code(1)
+        .stderr_is("comm: file 1 is not in sorted order\ncomm: input is not in sorted order\n");
+
+    scene
+        .ucmd()
+        .args(&["-", "-", "--nocheck-order"])
+        .pipe_in("2\n3\n1\n")
+        .succeeds()
+        .stdout_is("2\n1\n\t3\n");
+}

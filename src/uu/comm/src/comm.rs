@@ -8,7 +8,7 @@
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, StdinLock, Write, stderr, stdin};
+use std::io::{self, BufRead, BufReader, BufWriter, Stdin, Write, stderr, stdin};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
@@ -78,13 +78,13 @@ fn line_cmp(a: &[u8], b: &[u8], use_locale: bool) -> Ordering {
 }
 
 enum Input {
-    Stdin(StdinLock<'static>),
+    Stdin(Stdin),
     FileIn(BufReader<File>),
 }
 
 impl Input {
     fn stdin() -> Self {
-        Self::Stdin(stdin().lock())
+        Self::Stdin(stdin())
     }
 
     fn from_file(f: File) -> Self {
@@ -106,7 +106,7 @@ impl LineReader {
         let line_ending = self.line_ending.into();
 
         let result = match &mut self.input {
-            Input::Stdin(r) => r.read_until(line_ending, buf),
+            Input::Stdin(r) => r.lock().read_until(line_ending, buf),
             Input::FileIn(r) => r.read_until(line_ending, buf),
         };
 
