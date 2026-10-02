@@ -1889,5 +1889,10 @@ string2 must map all characters in the domain to one
             .pipe_in("Base Z\n")
             .succeeds()
             .stdout_only("Base-Z\n");
+
+        new_ucmd!()
+            .args(&["[-*]", "a"])
+            .fails_with_code(1)
+            .stderr_only("tr: the [c*] repeat construct may not appear in string1\n");
     }
 }
