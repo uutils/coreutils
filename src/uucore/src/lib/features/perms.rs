@@ -18,19 +18,19 @@ use clap::{Arg, ArgMatches, Command};
 
 use libc::{gid_t, uid_t};
 use options::traverse;
-#[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+#[cfg(not(target_os = "redox"))]
 use std::collections::HashSet;
-#[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+#[cfg(not(target_os = "redox"))]
 use std::ffi::OsStr;
 use std::ffi::OsString;
 
-#[cfg(any(target_os = "aix", target_os = "hurd", target_os = "redox"))]
+#[cfg(target_os = "redox")]
 use walkdir::WalkDir;
 
-#[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+#[cfg(not(target_os = "redox"))]
 use crate::features::fs::FileInformation;
 use crate::features::fs::path_is_root_dir;
-#[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+#[cfg(not(target_os = "redox"))]
 use crate::features::safe_traversal::{
     CAN_PIN_SPECIAL_FILES, CAN_PIN_SYMLINKS, DirFd, FileInfo, Metadata as TraversalMetadata,
     PinnedFile, SymlinkBehavior,
@@ -295,14 +295,14 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
 ///
 /// A pathname can be re-pointed between the stat and the open, so comparing
 /// (device, inode) is what detects the swap. The descriptor cannot be re-pointed after.
-#[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+#[cfg(not(target_os = "redox"))]
 fn fd_is(dir_fd: &DirFd, meta: &Metadata) -> IOResult<bool> {
     let opened = FileInfo::from_stat(&dir_fd.fstat()?);
     Ok(opened == FileInfo::new(meta.dev(), meta.ino()))
 }
 
 /// Whether the file `meta` describes can be held open by [`PinnedFile`].
-#[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+#[cfg(not(target_os = "redox"))]
 // mode_t is u16 on macOS and u32 on Linux
 #[allow(clippy::unnecessary_cast)]
 fn can_hold<M: MetadataExt>(meta: &M, follow: bool) -> bool {
@@ -363,7 +363,7 @@ impl ChownExecutor {
         // Resolve the operand once. `--preserve-root` and the directory-vs-file
         // classification were decided on `meta`; re-opening the pathname would
         // let a swap apply those decisions to a different object.
-        #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+        #[cfg(not(target_os = "redox"))]
         // We cannot check path.is_dir() here, as this would resolve symlinks
         let operand_fd = if meta.is_dir() {
             match DirFd::open(path, SymlinkBehavior::Follow) {
@@ -398,7 +398,7 @@ impl ChownExecutor {
             None
         };
 
-        #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+        #[cfg(not(target_os = "redox"))]
         let ret = match operand_fd.as_ref() {
             // The descriptor is the very directory `meta` describes.
             Some(dir_fd) => {
@@ -406,15 +406,15 @@ impl ChownExecutor {
             }
             None => self.chown_operand(path, &meta),
         };
-        #[cfg(any(target_os = "aix", target_os = "hurd", target_os = "redox"))]
+        #[cfg(target_os = "redox")]
         let ret = self.chown_operand(path, &meta);
 
         if self.recursive {
-            #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+            #[cfg(not(target_os = "redox"))]
             {
                 ret | self.safe_dive_into(&root, &meta, operand_fd)
             }
-            #[cfg(any(target_os = "aix", target_os = "hurd", target_os = "redox"))]
+            #[cfg(target_os = "redox")]
             {
                 ret | self.dive_into(&root)
             }
@@ -430,7 +430,7 @@ impl ChownExecutor {
     /// `--from` the change goes to whatever the name refers to, which is all
     /// that was asked.
     fn chown_operand(&self, path: &Path, meta: &Metadata) -> i32 {
-        #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+        #[cfg(not(target_os = "redox"))]
         if !matches!(self.filter, IfFrom::All) && self.matched(meta.uid(), meta.gid()) {
             match self.hold(meta, self.dereference, || {
                 PinnedFile::open(path, self.dereference.into())
@@ -461,7 +461,7 @@ impl ChownExecutor {
     /// Changing by name instead is left to an unprivileged caller, who can
     /// only change files it owns, for a file that cannot be held or that it
     /// cannot open. Root is refused such a file.
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn hold<M: MetadataExt>(
         &self,
         meta: &M,
@@ -473,7 +473,7 @@ impl ChownExecutor {
 
     /// Whether the file held is not the one `meta` described when it passed
     /// `--from`, or no longer passes it.
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn replaced<M: MetadataExt>(&self, meta: &M, held: &TraversalMetadata) -> bool {
         (held.dev(), held.ino()) != (meta.dev(), meta.ino())
             || !self.matched(held.uid(), held.gid())
@@ -481,7 +481,7 @@ impl ChownExecutor {
 
     /// Leave alone a file found replaced after passing `--from`. As GNU does,
     /// this fails without an error message, and only `-v` says so. Returns 1.
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn report_replaced<M: MetadataExt>(&self, path: &Path, meta: &M) -> i32 {
         if self.verbosity.level == VerbosityLevel::Verbose {
             self.write_verbose_line(&failed_change_line(
@@ -496,7 +496,7 @@ impl ChownExecutor {
     }
 
     /// [`Self::hold`], for a caller that is `unprivileged` or root.
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn hold_as<M: MetadataExt>(
         unprivileged: bool,
         meta: &M,
@@ -523,7 +523,7 @@ impl ChownExecutor {
     }
 
     /// Report that `path` cannot be accessed. Returns 1.
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn show_cannot_access(&self, path: &Path, e: &IOError) -> i32 {
         if self.verbosity.level != VerbosityLevel::Silent {
             show_error!(
@@ -570,7 +570,7 @@ impl ChownExecutor {
     }
 
     /// `operand_fd` is the descriptor `traverse` opened and verified against `meta`.
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn safe_dive_into<P: AsRef<Path>>(
         &self,
         root: P,
@@ -611,7 +611,7 @@ impl ChownExecutor {
         ret
     }
 
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn safe_traverse_dir(
         &self,
         dir_fd: &DirFd,
@@ -715,7 +715,7 @@ impl ChownExecutor {
     /// stat depends on whether symlinks are followed: with -L or -H that is a
     /// failure, as for the operand; with -P the file now under that name is
     /// judged against `--from` in its place.
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn chown_entry(
         &self,
         dir_fd: &DirFd,
@@ -764,7 +764,7 @@ impl ChownExecutor {
 
     /// Change, through `change`, the entry `meta` describes if it passes `--from`.
     /// Returns 1 on failure.
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn chown_entry_if_matched(
         &self,
         path: &Path,
@@ -785,7 +785,7 @@ impl ChownExecutor {
         self.report_ownership_change_success(path, meta.uid(), meta.gid())
     }
 
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn show_entry_chown_error(&self, path: &Path, e: &IOError) {
         if self.verbosity.level != VerbosityLevel::Silent {
             show_error!(
@@ -801,7 +801,7 @@ impl ChownExecutor {
         }
     }
 
-    #[cfg(any(target_os = "aix", target_os = "hurd", target_os = "redox"))]
+    #[cfg(target_os = "redox")]
     #[allow(clippy::cognitive_complexity)]
     fn dive_into<P: AsRef<Path>>(&self, root: P) -> i32 {
         let root = root.as_ref();
@@ -954,7 +954,7 @@ impl ChownExecutor {
     }
 
     /// Try to open directory with error reporting
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn try_open_dir(&self, path: &Path) -> Option<DirFd> {
         DirFd::open(path, SymlinkBehavior::Follow)
             .map_err(|e| {
@@ -970,7 +970,7 @@ impl ChownExecutor {
 
     /// Report ownership change with proper verbose output
     /// Returns 0 on success
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn report_ownership_change_success(
         &self,
         path: &Path,
@@ -1248,7 +1248,7 @@ mod tests {
     use tempfile::tempdir;
 
     /// `fd_is` must accept the directory that was stat'd and reject anything else.
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     #[test]
     fn test_fd_is_identifies_the_stated_directory() {
         let temp_dir = tempdir().unwrap();
@@ -1274,7 +1274,7 @@ mod tests {
     }
 
     /// Two groups the current process may give its own files, or `None`.
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn two_groups() -> Option<(u32, u32)> {
         let egid = nix::unistd::getegid().as_raw();
         if nix::unistd::geteuid().is_root() {
@@ -1289,7 +1289,7 @@ mod tests {
     }
 
     /// An executor for `--from=:from :to` that reports nothing.
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn chgrp_from(from: u32, to: u32, dereference: bool) -> ChownExecutor {
         ChownExecutor {
             dest_uid: None,
@@ -1310,7 +1310,7 @@ mod tests {
 
     /// `item` has group `from` and `other` the group `other_group`. Stat `item`
     /// with `stat`, then rename `other` over it, as a concurrent rename could.
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn replaced_after_stat<M>(
         from: u32,
         other_group: u32,
@@ -1330,7 +1330,7 @@ mod tests {
 
     /// A name re-pointed after the operand passed `--from` must not have the
     /// change land on the new file; as with GNU, that counts as a failure.
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     #[test]
     fn test_from_operand_is_judged_on_the_file_changed() {
         let Some((from, other)) = two_groups() else {
@@ -1350,7 +1350,7 @@ mod tests {
     /// under the name either. As with GNU, that is a failure when symlinks
     /// are followed; with -P the new file is judged in its place, does not
     /// pass `--from`, and is left alone without one.
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     #[test]
     fn test_from_entry_is_judged_on_the_file_changed() {
         let Some((from, other)) = two_groups() else {
@@ -1374,7 +1374,7 @@ mod tests {
     /// A socket cannot be held everywhere. Where it cannot, root must not
     /// change one that passed `--from` by name, as a rename could send that
     /// change to any file; an unprivileged caller can only reach its own.
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     #[test]
     fn test_root_does_not_change_a_socket_by_name() {
         let temp_dir = tempdir().unwrap();

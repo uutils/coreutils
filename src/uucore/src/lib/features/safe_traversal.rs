@@ -6,7 +6,7 @@
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
 // spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot EOVERFLOW chowned chmoded
-// spell-checker:ignore LARGEFILE
+// spell-checker:ignore LARGEFILE atim mtim ctim
 
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
@@ -998,6 +998,45 @@ impl MetadataExt for Metadata {
         self.stat.st_size as u64
     }
 
+    // aix and hurd only expose the times as `timespec` fields (`st_atim` and
+    // so on), whose types vary between them and with the pointer width.
+    #[cfg(any(target_os = "aix", target_os = "hurd"))]
+    #[allow(clippy::unnecessary_cast)]
+    fn atime(&self) -> i64 {
+        self.stat.st_atim.tv_sec as i64
+    }
+
+    #[cfg(any(target_os = "aix", target_os = "hurd"))]
+    #[allow(clippy::unnecessary_cast)]
+    fn atime_nsec(&self) -> i64 {
+        self.stat.st_atim.tv_nsec as i64
+    }
+
+    #[cfg(any(target_os = "aix", target_os = "hurd"))]
+    #[allow(clippy::unnecessary_cast)]
+    fn mtime(&self) -> i64 {
+        self.stat.st_mtim.tv_sec as i64
+    }
+
+    #[cfg(any(target_os = "aix", target_os = "hurd"))]
+    #[allow(clippy::unnecessary_cast)]
+    fn mtime_nsec(&self) -> i64 {
+        self.stat.st_mtim.tv_nsec as i64
+    }
+
+    #[cfg(any(target_os = "aix", target_os = "hurd"))]
+    #[allow(clippy::unnecessary_cast)]
+    fn ctime(&self) -> i64 {
+        self.stat.st_ctim.tv_sec as i64
+    }
+
+    #[cfg(any(target_os = "aix", target_os = "hurd"))]
+    #[allow(clippy::unnecessary_cast)]
+    fn ctime_nsec(&self) -> i64 {
+        self.stat.st_ctim.tv_nsec as i64
+    }
+
+    #[cfg(not(any(target_os = "aix", target_os = "hurd")))]
     fn atime(&self) -> i64 {
         #[cfg(all(not(target_pointer_width = "64"), not(target_os = "netbsd")))]
         {
@@ -1009,6 +1048,7 @@ impl MetadataExt for Metadata {
         }
     }
 
+    #[cfg(not(any(target_os = "aix", target_os = "hurd")))]
     fn atime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
@@ -1035,6 +1075,7 @@ impl MetadataExt for Metadata {
         }
     }
 
+    #[cfg(not(any(target_os = "aix", target_os = "hurd")))]
     fn mtime(&self) -> i64 {
         #[cfg(all(not(target_pointer_width = "64"), not(target_os = "netbsd")))]
         {
@@ -1046,6 +1087,7 @@ impl MetadataExt for Metadata {
         }
     }
 
+    #[cfg(not(any(target_os = "aix", target_os = "hurd")))]
     fn mtime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
@@ -1071,6 +1113,7 @@ impl MetadataExt for Metadata {
         }
     }
 
+    #[cfg(not(any(target_os = "aix", target_os = "hurd")))]
     fn ctime(&self) -> i64 {
         #[cfg(all(not(target_pointer_width = "64"), not(target_os = "netbsd")))]
         {
@@ -1082,6 +1125,7 @@ impl MetadataExt for Metadata {
         }
     }
 
+    #[cfg(not(any(target_os = "aix", target_os = "hurd")))]
     fn ctime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
