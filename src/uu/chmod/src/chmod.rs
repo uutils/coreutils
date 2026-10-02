@@ -319,51 +319,27 @@ impl Chmoder {
         if let Some(mode) = self.fmode {
             Ok((mode, mode))
         } else {
-            let cmode_unwrapped = self.cmode.clone().unwrap();
-            let mut new_mode = current_mode;
-            let mut naively_expected_new_mode = current_mode;
-
-            // Where the clause being parsed starts inside `cmode_unwrapped`, so
-            // that an error can be pointed back at it.
-            let mut offset = 0;
-            for mode in cmode_unwrapped.split(',') {
-                let clause_start = offset;
-                offset += mode.len() + 1; // past the clause and its comma
-
-                let result = if mode.chars().any(|c| c.is_ascii_digit()) {
-                    mode::parse_numeric(new_mode, mode, is_dir).map(|v| (v, v))
-                } else {
-                    mode::parse_symbolic(new_mode, mode, mode::get_umask(), is_dir).map(|m| {
-                        // calculate the new mode as if umask was 0
-                        let naive_mode =
-                            mode::parse_symbolic(naively_expected_new_mode, mode, 0, is_dir)
-                                .unwrap(); // we know that mode must be valid, so this cannot fail
-                        (m, naive_mode)
-                    })
-                };
-
-                match result {
-                    Ok((mode, naive_mode)) => {
-                        new_mode = mode;
-                        naively_expected_new_mode = naive_mode;
+            let cmode = self.cmode.clone().unwrap();
+            // GNU's mode grammar lives in uucore::mode: a bare octal is the
+            // whole string, and a clause list must be all-symbolic and
+            // non-empty. The naive mode is what the clauses would yield with
+            // umask 0, kept here so the umask diagnostic below can compare.
+            mode::parse_chmod_with_naive(current_mode, &cmode, is_dir, mode::get_umask()).map_err(
+                |error| {
+                    if self.quiet {
+                        return ExitCode::new(1);
                     }
-                    Err(error) => {
-                        if self.quiet {
-                            return Err(ExitCode::new(1));
-                        }
-                        if let Some(args) = &self.args
-                            && let Some((index, operand, offset)) =
-                                self.locate_clause(args, &cmode_unwrapped, clause_start)
-                            && error.render_at(args, index, &operand, offset, &error.to_string())
-                        {
-                            // The diagnostic is already on stderr; exit quietly.
-                            return Err(ExitCode::new(1));
-                        }
-                        return Err(USimpleError::new(1, error.to_string()));
+                    if let Some(args) = &self.args
+                        && let Some((index, operand, offset)) =
+                            self.locate_clause(args, &cmode, error.clause_start)
+                        && error.render_at(args, index, &operand, offset, &error.to_string())
+                    {
+                        // The diagnostic is already on stderr; exit quietly.
+                        return ExitCode::new(1);
                     }
-                }
-            }
-            Ok((new_mode, naively_expected_new_mode))
+                    USimpleError::new(1, error.to_string())
+                },
+            )
         }
     }
 

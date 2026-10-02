@@ -139,6 +139,23 @@ fn test_mknod_invalid_mode() {
 }
 
 #[test]
+fn test_mknod_rejects_octal_clause_in_list_and_empty_modes() {
+    for mode in [
+        "644,u+x", "u+x,644", "a-w,644", "644,644", "g+s,755", "755,g+s", "u+x,,g+x", "644,",
+        ",644",
+    ] {
+        new_ucmd!()
+            .arg("--mode")
+            .arg(mode)
+            .arg("test_file")
+            .arg("p")
+            .fails()
+            .code_is(1)
+            .stderr_contains("invalid mode");
+    }
+}
+
+#[test]
 fn test_mknod_mode_permissions() {
     for test_mode in [0o0666, 0o0000, 0o0444, 0o0004, 0o0040, 0o0400, 0o0644] {
         let ts = TestScenario::new(util_name!());

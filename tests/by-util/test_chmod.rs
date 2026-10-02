@@ -795,7 +795,7 @@ fn test_mode_after_dash_dash() {
             args: vec!["--", "-r", TEST_FILE],
             before: 0o100_777,
             after: 0o100_333,
-            umask: None,
+            umask: Some(0o022),
         },
         &at,
         ucmd,
@@ -911,6 +911,28 @@ fn test_gnu_invalid_mode() {
     let at = &scene.fixtures;
     at.touch("file");
     scene.ucmd().arg("u+gr").arg("file").fails();
+}
+
+#[test]
+fn test_gnu_rejects_octal_clause_in_list() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    for mode in [
+        "644,u+x", "u+x,644", "a-w,644", "644,644", "g+s,755", "755,g+s",
+    ] {
+        scene.ucmd().arg(mode).arg("file").fails();
+    }
+}
+
+#[test]
+fn test_gnu_rejects_empty_mode() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    for mode in ["", " ", ",", "644,", ",644", "u+x,,g+x"] {
+        scene.ucmd().arg(mode).arg("file").fails();
+    }
 }
 
 #[test]
@@ -1755,6 +1777,23 @@ mod diagnostics {
         // Clauses are parsed one at a time, but the caret is placed in the
         // whole mode: `!` is its seventh character.
         assert_eq!(result.caret_column(), Some(7), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_into_a_numeric_clause_in_a_list() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["u+x,644", "probe"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("invalid mode"), "{stderr}");
+        // The caret lands on the octal clause: `6` is its fifth character.
+        assert_eq!(result.caret_column(), Some(5), "{stderr}");
     }
 
     #[cfg(unix)]

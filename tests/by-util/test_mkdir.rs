@@ -1084,6 +1084,24 @@ fn test_mkdir_inside_inexistent_dir() {
 
 // The mode is only parsed where a mode means something.
 #[cfg(unix)]
+#[test]
+fn test_mkdir_rejects_octal_clause_in_list() {
+    for mode in [
+        "644,u+x", "u+x,644", "a-w,644", "644,644", "g+s,755", "755,g+s",
+    ] {
+        new_ucmd!().args(&["-m", mode, "some_dir"]).fails();
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn test_mkdir_rejects_empty_mode() {
+    for mode in ["", " ", ",", "644,", ",644", "u+x,,g+x"] {
+        new_ucmd!().args(&["-m", mode, "some_dir"]).fails();
+    }
+}
+
+#[cfg(unix)]
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     use super::*;
