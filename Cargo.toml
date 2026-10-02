@@ -209,6 +209,7 @@ return_self_not_must_use = "allow"           # 8
 inline_always = "allow"                      # 6
 fn_params_excessive_bools = "allow"          # 6
 should_panic_without_expect = "allow"        # 2
+assert_is_empty = "allow"
 
 doc_markdown = "allow"
 unused_self = "allow"
