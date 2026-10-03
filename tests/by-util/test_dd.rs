@@ -896,6 +896,25 @@ fn test_etoa_conv_spec_test() {
 }
 
 #[test]
+fn test_etoa_and_lcase() {
+    // "Hello, World!" in EBCDIC.
+    new_ucmd!()
+        .args(&["conv=ascii,lcase", "status=none"])
+        .pipe_in(b"\xc8\x85\x93\x93\x96\x6b\x40\xe6\x96\x99\x93\x84\x5a".to_vec())
+        .succeeds()
+        .stdout_only_bytes(b"hello, world!");
+}
+
+#[test]
+fn test_etoa_and_ucase() {
+    new_ucmd!()
+        .args(&["conv=ascii,ucase", "status=none"])
+        .pipe_in(b"\xc8\x85\x93\x93\x96\x6b\x40\xe6\x96\x99\x93\x84\x5a".to_vec())
+        .succeeds()
+        .stdout_only_bytes(b"HELLO, WORLD!");
+}
+
+#[test]
 fn test_atoibm_conv_spec_test() {
     new_ucmd!()
         .args(&["conv=ibm"])
