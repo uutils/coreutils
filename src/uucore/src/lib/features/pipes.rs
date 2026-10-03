@@ -116,8 +116,7 @@ pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRe
 #[inline]
 pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Result<u64> {
     static PIPE_CACHE: OnceLock<Option<(PipeReader, PipeWriter)>> = OnceLock::new();
-    let n_len = usize::try_from(n).unwrap_or(usize::MAX);
-    let pipe_size = MAX_ROOTLESS_PIPE_SIZE.min(n_len);
+    let pipe_size = n.min(MAX_ROOTLESS_PIPE_SIZE as u64) as usize;
     // improve throughput if output is pipe
     // expected that input is already extended if it is coming from splice
     if pipe_size > KERNEL_DEFAULT_PIPE_SIZE {
