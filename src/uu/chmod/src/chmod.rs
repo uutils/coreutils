@@ -8,7 +8,7 @@
 #![cfg(unix)]
 
 use clap::{Arg, ArgAction, Command};
-use std::collections::HashSet;
+use hashbrown::HashSet;
 use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
