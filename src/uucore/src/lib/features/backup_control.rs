@@ -188,11 +188,6 @@ impl Display for BackupError {
                 arg.quote(),
             ),
             Self::BackupImpossible() => write!(f, "cannot create backup"),
-            // Placeholder for later
-            // Self::BackupFailed(from, to, e) => Display::fmt(
-            //     &uio_error!(e, "failed to backup {} to {}", from.quote(), to.quote()),
-            //     f
-            // ),
         }
     }
 }

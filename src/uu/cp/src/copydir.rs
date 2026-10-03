@@ -20,13 +20,11 @@ use std::path::{Path, PathBuf, StripPrefixError};
 
 use indicatif::ProgressBar;
 use uucore::display::Quotable;
-use uucore::error::UIoError;
 use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, canonicalize, path_ends_with_terminator,
 };
 use uucore::show;
 use uucore::translate;
-use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -335,14 +333,7 @@ fn copy_direntry(
             // cause us to continue walking the directory?
             match err {
                 CpError::IoErrContext(e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
-                    show!(uio_error!(
-                        e,
-                        "{}",
-                        translate!(
-                            "cp-error-cannot-open-for-reading",
-                            "source" => entry.source_relative.quote()
-                        ),
-                    ));
+                    show!(CpError::CannotOpenForReading(entry.source_relative.clone()));
                 }
                 e => return Err(e),
             }

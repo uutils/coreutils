@@ -170,6 +170,8 @@ enum OptionsError {
 /// * `error` - What the size parser rejected the value with.
 /// * `matches` - The parsed command line, for the value as it was typed.
 /// * `diag_args` - The arguments as typed, or `None` when they were not kept.
+#[cold]
+#[inline(never)]
 fn block_size_error(
     error: &ParseSizeError,
     matches: &ArgMatches,
