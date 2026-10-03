@@ -1,0 +1,31 @@
+Index: gnu/tests/uniq/uniq.pl
+===================================================================
+--- gnu.orig/tests/uniq/uniq.pl
++++ gnu/tests/uniq/uniq.pl
+@@ -268,7 +268,7 @@
+ if ($mb_locale ne 'C')
+   {
+     # Duplicate each test vector, appending "-mb" to the test name and
+-    # inserting {ENV => "LC_ALL=$mb_locale"} in the copy, so that we
++    # inserting {ENV => "LC_CTYPE=$mb_locale LC_MESSAGES=C"}, {ENV_DEL => "LC_ALL"} in the copy, so that we
+     # provide coverage for multi-byte code paths.
+     my @new;
+     foreach my $t (@Tests)
+@@ -286,7 +286,7 @@
+         next if (   $test_name =~ "schar"
+                  or $test_name =~ "^obs-plus"
+                  or $test_name =~ "119");
+-        push @new, ["$test_name-mb", @new_t, {ENV => "LC_ALL=$mb_locale"}];
++        push @new, ["$test_name-mb", @new_t, {ENV => "LC_CTYPE=$mb_locale LC_MESSAGES=C"}, {ENV_DEL => "LC_ALL"}];
+       }
+     push @Tests, @new;
+
+@@ -295,7 +295,7 @@
+     my @Locale_Tests =
+     (
+       ['w1-mb', '-w1',  {IN => $trouble_with_w1}, {OUT => $trouble_with_w1},
+-        {ENV => "LC_ALL=$mb_locale"}]
++        {ENV => "LC_CTYPE=$mb_locale LC_MESSAGES=C"}, {ENV_DEL => "LC_ALL"}]
+     );
+     push @Tests, @Locale_Tests;
+    }
