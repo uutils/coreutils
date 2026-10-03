@@ -5,7 +5,6 @@
 
 // spell-checker:ignore overridable colorterm
 
-#[cfg(target_os = "linux")]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -248,4 +247,59 @@ fn test_invalid_term_glob() {
         .args(&["-b", "-"])
         .succeeds()
         .stdout_only("LS_COLORS='';\nexport LS_COLORS\n");
+}
+
+#[test]
+fn test_invalid_utf8_line_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = "invalid-utf8-line";
+    std::fs::write(
+        at.plus(filename),
+        b"DIR 01;31\nBAD\xffLINE 99\n*.txt 00;32\n",
+    )
+    .unwrap();
+
+    // a line that fails to decode is skipped without truncating the rest
+    ucmd.args(&["-b", filename])
+        .succeeds()
+        .stdout_contains("di=01;31")
+        .stdout_contains("*.txt=00;32");
+}
+
+#[test]
+fn test_invalid_utf8_line_stdin() {
+    // the bad line must be skipped, not truncate the rest of the config
+    new_ucmd!()
+        .pipe_in(b"DIR 01;31\nBAD\xffLINE 99\n*.txt 00;32\n".to_vec())
+        .args(&["-b", "-"])
+        .succeeds()
+        .stdout_contains("di=01;31")
+        .stdout_contains("*.txt=00;32");
+}
+
+#[test]
+fn test_invalid_utf8_only_bad() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = "invalid-utf8-only";
+    std::fs::write(at.plus(filename), b"BAD\xffLINE 99\n").unwrap();
+
+    // the config holds nothing parseable: empty LS_COLORS, exit 0
+    ucmd.args(&["-b", filename])
+        .succeeds()
+        .stdout_only("LS_COLORS='';\nexport LS_COLORS\n");
+}
+
+#[test]
+fn test_invalid_utf8_line_preserves_line_numbers() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = "invalid-utf8-line-number";
+    std::fs::write(at.plus(filename), b"BAD\xffLINE 99\nONLYKEY\n").unwrap();
+
+    // GNU counts the skipped line, so the error points at the real line 2
+    ucmd.args(&["-b", filename])
+        .fails_with_code(1)
+        .stderr_contains(":2: invalid line");
 }
