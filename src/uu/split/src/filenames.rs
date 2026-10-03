@@ -99,6 +99,10 @@ pub enum SuffixError {
     /// Suffix is not large enough to split into specified chunks
     #[error("{}", translate!("split-error-suffix-too-small", "length" => .0))]
     TooSmall(usize),
+
+    /// Suffix start value has more digits than the suffix length allows
+    #[error("{}", translate!("split-error-numerical-suffix-start-too-large"))]
+    StartTooLarge,
 }
 
 impl Suffix {
@@ -201,7 +205,7 @@ impl Suffix {
         // Auto pre-calculate new suffix length (auto-width) if necessary
         if let Strategy::Number(number_type) = strategy {
             let chunks = number_type.num_chunks();
-            let required_length = ((start as u64 + chunks) as f64)
+            let required_length = ((start as u64).saturating_add(chunks) as f64)
                 .log(stype.radix() as f64)
                 .ceil() as usize;
 
@@ -213,6 +217,10 @@ impl Suffix {
                 if length < required_length {
                     length = required_length;
                 }
+            }
+
+            if (start as u64) >= chunks && num_digits(start as u64, stype.radix()) > length {
+                return Err(SuffixError::StartTooLarge);
             }
 
             if length < required_length {
@@ -244,6 +252,15 @@ impl Suffix {
 
         Ok(result)
     }
+}
+
+fn num_digits(mut n: u64, radix: u8) -> usize {
+    let mut digits = 1;
+    while n >= radix as u64 {
+        n /= radix as u64;
+        digits += 1;
+    }
+    digits
 }
 
 /// Compute filenames from a given index.
