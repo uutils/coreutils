@@ -3830,3 +3830,40 @@ fn test_mv_exchange_missing_target() {
         .stderr_contains("present")
         .stderr_contains("absent");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_inter_device_unable_to_remove_target() {
+    // https://github.com/uutils/coreutils/issues/14877
+    // Moving onto a file in /proc crosses a device and the kernel refuses to
+    // unlink the target, even for root.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("src", "src contents");
+
+    ucmd.arg("src")
+        .arg("/proc/self/comm")
+        .fails_with_code(1)
+        .stderr_is(
+            "mv: inter-device move failed: 'src' to '/proc/self/comm'; \
+             unable to remove target: Operation not permitted\n",
+        );
+    assert!(at.file_exists("src"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_into_dir_inter_device_unable_to_remove_target() {
+    // Same as above, but with a target directory: the message must not get a
+    // "cannot move" prefix.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("comm", "src contents");
+
+    ucmd.arg("comm")
+        .arg("/proc/self")
+        .fails_with_code(1)
+        .stderr_is(
+            "mv: inter-device move failed: 'comm' to '/proc/self/comm'; \
+             unable to remove target: Operation not permitted\n",
+        );
+    assert!(at.file_exists("comm"));
+}
