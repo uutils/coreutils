@@ -4,10 +4,9 @@
 // file that was distributed with this source code.
 
 //! Platform-specific pieces of `df`: the `--sync` flush, the usage probe,
-//! over-mount detection, the fallback used when the mount table cannot be
-//! read, and the Windows `-i` bail-out. `df.rs` and `filesystem.rs` only talk
-//! to the facade functions re-exported here, which both submodules provide
-//! with identical signatures.
+//! over-mount detection and the lookup of the filesystem containing a path.
+//! `df.rs` and `filesystem.rs` only talk to the facade functions re-exported
+//! here, which both submodules provide with identical signatures.
 
 #[cfg(unix)]
 mod unix;
