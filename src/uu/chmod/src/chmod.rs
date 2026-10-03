@@ -15,9 +15,7 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{
-    ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code, strip_errno,
-};
+use uucore::error::{ExitCode, UError, UResult, UUsageError, set_exit_code, strip_errno};
 use uucore::fs::{FileInformation, display_permissions_unix, path_is_root_dir};
 use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
@@ -351,15 +349,20 @@ impl Chmoder {
                         if self.quiet {
                             return Err(ExitCode::new(1));
                         }
+                        // GNU names the whole operand with this one message; `error` only labels the caret.
+                        let message = translate!(
+                            "chmod-error-invalid-mode",
+                            "mode" => cmode_unwrapped.clone()
+                        );
                         if let Some(args) = &self.args
                             && let Some((index, operand, offset)) =
                                 self.locate_clause(args, &cmode_unwrapped, clause_start)
-                            && error.render_at(args, index, &operand, offset, &error.to_string())
+                            && error.render_at(args, index, &operand, offset, &message)
                         {
                             // The diagnostic is already on stderr; exit quietly.
                             return Err(ExitCode::new(1));
                         }
-                        return Err(USimpleError::new(1, error.to_string()));
+                        return Err(UUsageError::new(1, message));
                     }
                 }
             }
