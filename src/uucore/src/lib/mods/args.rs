@@ -19,7 +19,19 @@ use std::ffi::OsString;
 /// with something else, and `-t` with an empty value are all left alone.
 pub fn split_attached_short_value(args: Vec<OsString>, short: &str) -> Vec<OsString> {
     let mut result = Vec::with_capacity(args.len());
+    // `--` ends option parsing; everything after it is an operand, and
+    // rewriting one would turn a file name into an option.
+    let mut operands_only = false;
     for arg in args {
+        if operands_only {
+            result.push(arg);
+            continue;
+        }
+        if arg == "--" {
+            operands_only = true;
+            result.push(arg);
+            continue;
+        }
         // A separator that is not valid UTF-8 is rejected later anyway, so the
         // lossy conversion here only affects arguments that cannot become one.
         let as_str = arg.to_string_lossy();
@@ -50,6 +62,17 @@ mod tests {
     fn splits_an_attached_value() {
         assert_eq!(rewrite(&["-t=", "f1", "f2"], "-t"), ["-t", "=", "f1", "f2"]);
         assert_eq!(rewrite(&["-t:", "f1"], "-t"), ["-t", ":", "f1"]);
+    }
+
+    #[test]
+    fn respects_the_end_of_options_marker() {
+        // Everything after `--` is an operand, even when it looks attached.
+        assert_eq!(
+            rewrite(&["-t,", "--", "-t=x", "b.txt"], "-t"),
+            ["-t", ",", "--", "-t=x", "b.txt"]
+        );
+        assert_eq!(rewrite(&["--", "-t=x"], "-t"), ["--", "-t=x"]);
+        assert_eq!(rewrite(&["--", "--", "-t=x"], "-t"), ["--", "--", "-t=x"]);
     }
 
     #[test]
