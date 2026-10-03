@@ -426,6 +426,10 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
 
     // If no_pad flag is active, suppress all padding and return
     if no_pad {
+        // GNU keeps the internal zero padding when the flag is applied to %F.
+        if specifier == "F" {
+            return Ok(result);
+        }
         return Ok(strip_default_padding(&result));
     }
 
@@ -455,6 +459,15 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
             // Switching to zero padding: strip leading spaces
             result = strip_default_padding(&result);
         }
+    }
+
+    // jiff leaves a single-digit hour unpadded in the time composites (%T, %R
+    // and the 12-hour %r); GNU keeps it padded before applying any other flags
+    // or width. A single digit followed by `:` can only be an unpadded hour, so
+    // test the shape rather than the length, which differs per composite.
+    let bytes = result.as_bytes();
+    if bytes.len() >= 2 && bytes[0].is_ascii_digit() && bytes[1] == b':' {
+        result.insert(0, '0');
     }
 
     // Apply force sign for numeric values
