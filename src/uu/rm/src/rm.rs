@@ -344,7 +344,7 @@ fn handle_parse_error(e: clap::Error, args: &[OsString]) -> Box<dyn UError> {
         // The path is shell-escaped (quoted only if needed), the file name is
         // always quoted, matching GNU's two quoting styles.
         let path = locale_aware_escape_name(file, QuotingStyle::SHELL_ESCAPE);
-        let quoted = locale_aware_escape_name(file, QuotingStyle::SHELL_ESCAPE_QUOTE);
+        let quoted = locale_aware_escape_name(file, QuotingStyle::SHELL_ESCAPE_ALWAYS);
         let _ = writeln!(
             io::stderr(),
             "{}",

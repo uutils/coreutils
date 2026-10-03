@@ -4338,7 +4338,7 @@ fn test_ls_invalid_quoting_style_env_var_warns() {
         .arg("alpha")
         .succeeds()
         .stdout_is("alpha\n")
-        .stderr_contains("Ignoring invalid value of environment variable QUOTING_STYLE");
+        .stderr_contains("ignoring invalid value of environment variable QUOTING_STYLE");
 }
 
 #[cfg(unix)]
@@ -4356,7 +4356,7 @@ fn test_ls_invalid_quoting_style_env_var_non_utf8() {
         .arg("alpha")
         .succeeds()
         .stdout_is("alpha\n")
-        .stderr_contains("Ignoring invalid value of environment variable QUOTING_STYLE");
+        .stderr_contains("ignoring invalid value of environment variable QUOTING_STYLE");
 }
 
 #[test]
