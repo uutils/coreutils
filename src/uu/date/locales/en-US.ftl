@@ -108,3 +108,5 @@ date-error-format-modifier-width-too-large = format modifier width '{$width}' is
 date-error-format-missing-plus = the argument {$arg} lacks a leading '+';
   when using an option to specify date(s), any non-option
   argument must be a format string beginning with '+'
+
+date-error-multiple-output-formats = multiple output formats specified
