@@ -82,6 +82,29 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_tail_getrandom_fail() {
+    use std::process::Command;
+    // `getrandom(2)` returns `EAGAIN` when the OS cannot provide random data immediately
+    let Ok(out) = Command::new("strace")
+        .args([
+            "-o",
+            "/dev/null",
+            "-e",
+            "inject=getrandom:error=EAGAIN",
+            uutests::util::get_tests_binary(),
+            "tail",
+            "/dev/null",
+        ])
+        .output()
+    else {
+        return; // missing strace
+    };
+    assert!(out.status.success());
+}
+
+#[test]
 fn test_stdin_default() {
     new_ucmd!()
         .pipe_in_fixture(FOOBAR_TXT)
