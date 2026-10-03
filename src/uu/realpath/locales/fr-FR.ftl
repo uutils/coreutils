@@ -15,3 +15,4 @@ realpath-help-relative-base = afficher les chemins absolus sauf pour les chemins
 
 # Messages d'erreur
 realpath-invalid-empty-operand = opérande invalide : chaîne vide
+realpath-file-name-too-long = Nom de fichier trop long
