@@ -460,9 +460,12 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
         }
     }
 
-    // jiff leaves a single-digit hour unpadded in %T; GNU keeps it padded
-    // before applying any other flags or width.
-    if specifier == "T" && result.len() == 7 {
+    // jiff leaves a single-digit hour unpadded in the time composites (%T, %R
+    // and the 12-hour %r); GNU keeps it padded before applying any other flags
+    // or width. A single digit followed by `:` can only be an unpadded hour, so
+    // test the shape rather than the length, which differs per composite.
+    let bytes = result.as_bytes();
+    if bytes.len() >= 2 && bytes[0].is_ascii_digit() && bytes[1] == b':' {
         result.insert(0, '0');
     }
 

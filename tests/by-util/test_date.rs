@@ -2082,6 +2082,69 @@ fn test_date_strftime_flag_on_composite() {
         .succeeds()
         .stdout_is("  07:08:09\n");
 
+    // A space-pad flag switches %R off zero padding and used to leave the hour
+    // unpadded; GNU keeps the hour's own zero padding and only pads the
+    // outer width with spaces.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15 07:08:09")
+        .arg("+%_R")
+        .succeeds()
+        .stdout_is("07:08\n");
+
+    // Same with an explicit width: the spaces pad the outside, the hour stays
+    // zero padded (this is the `%_10T` behaviour above, applied to %R).
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15 07:08:09")
+        .arg("+%_10R")
+        .succeeds()
+        .stdout_is("     07:08\n");
+
+    // %r is the 12-hour composite and had the same problem.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15 07:08:09")
+        .arg("+%_r")
+        .succeeds()
+        .stdout_is("07:08:09 AM\n");
+
+    // An unflagged %R was already correct; keep it covered.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15 07:08:09")
+        .arg("+%R")
+        .succeeds()
+        .stdout_is("07:08\n");
+
+    // An hour of ten or more was already padded; leave it alone.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15 10:08:09")
+        .arg("+%_R")
+        .succeeds()
+        .stdout_is("10:08\n");
+
+    // `%-R` still asks for the padding to be removed.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15 07:08:09")
+        .arg("+%-R")
+        .succeeds()
+        .stdout_is("7:08\n");
+
     // `%_D` is stripped the same way as `%-D`.
     new_ucmd!()
         .env("LC_ALL", "C")
