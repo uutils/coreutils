@@ -235,7 +235,18 @@ impl Entry {
             }
         }
 
-        let local_to_target = context.target.join(descendant);
+        // For the entry that maps onto the target itself, `join("")` appends a
+        // separator, which makes the symlink check in `copy_direntry` look through
+        // a target that is a symlink. Keep the target as given, except for `src/.`
+        // without `-T`: there the separator is wanted, since that copies into
+        // whatever the target resolves to.
+        let local_to_target = if descendant.as_os_str().is_empty()
+            && (no_target_dir || !ends_with_curdir(context.root))
+        {
+            context.target.to_path_buf()
+        } else {
+            context.target.join(descendant)
+        };
         let target_is_file = context.target_is_file;
         Ok(Self {
             source_absolute,
