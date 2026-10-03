@@ -1156,6 +1156,99 @@ fn test_ls_zero() {
         .stdout_contains("total ");
 }
 
+/// Regression test for issue #14774:
+/// When `--zero` precedes column formats (`-C` or `-x`),
+/// every line/row must terminate with NUL rather than newline.
+/// Tests edge cases: option ordering, zero width (`-w 0`),
+/// multiline row wrapping, comma format line wrapping (`-m`),
+/// and filenames with embedded newlines.
+#[test]
+fn test_ls_zero_column_formats() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.touch("b");
+
+    // --zero preceding -C or -x must terminate lines with NUL
+    for opt in ["-C", "-x"] {
+        scene
+            .ucmd()
+            .args(&["--zero", opt, "-w", "80"])
+            .succeeds()
+            .stdout_only("a  b\x00");
+    }
+
+    // Format flags preceding --zero are overridden to single-column by --zero
+    for opt in ["-C", "-x"] {
+        scene
+            .ucmd()
+            .args(&[opt, "--zero", "-w", "80"])
+            .succeeds()
+            .stdout_only("a\x00b\x00");
+    }
+
+    // -w 0 with column formats and --zero
+    for opt in ["-C", "-x"] {
+        scene
+            .ucmd()
+            .args(&["--zero", opt, "-w", "0"])
+            .succeeds()
+            .stdout_only("a  b\x00");
+    }
+
+    // -w 0 without --zero must terminate with a single newline
+    scene
+        .ucmd()
+        .args(&["-C", "-w", "0"])
+        .succeeds()
+        .stdout_only("a  b\n");
+
+    // Multiline grid output with --zero terminates every row with NUL
+    at.touch("c");
+    at.touch("d");
+    scene
+        .ucmd()
+        .args(&["--zero", "-C", "-w", "5"])
+        .succeeds()
+        .stdout_only("a  c\x00b  d\x00");
+
+    scene
+        .ucmd()
+        .args(&["--zero", "-x", "-w", "5"])
+        .succeeds()
+        .stdout_only("a  b\x00c  d\x00");
+
+    // Multiline comma format with --zero terminates wrapped lines with NUL
+    scene
+        .ucmd()
+        .args(&["--zero", "-m", "-w", "5"])
+        .succeeds()
+        .stdout_only("a, b,\x00c, d\x00");
+
+    // Multiline comma format without --zero terminates wrapped lines with newline
+    scene
+        .ucmd()
+        .args(&["-m", "-w", "5"])
+        .succeeds()
+        .stdout_only("a, b,\nc, d\n");
+
+    #[cfg(unix)]
+    {
+        let scene_nl = TestScenario::new(util_name!());
+        let at_nl = &scene_nl.fixtures;
+        at_nl.touch("a");
+        at_nl.touch(at_nl.plus_as_string("nl\nname"));
+
+        for opt in ["-C", "-x"] {
+            scene_nl
+                .ucmd()
+                .args(&["--zero", opt, "-w", "80"])
+                .succeeds()
+                .stdout_only("a  nl\nname\x00");
+        }
+    }
+}
+
 #[test]
 fn test_ls_commas_trailing() {
     let scene = TestScenario::new(util_name!());
