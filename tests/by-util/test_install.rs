@@ -2703,6 +2703,26 @@ fn test_install_non_utf8_paths() {
     ucmd.arg("-D").arg(source_file).arg(&target_path).succeeds();
 }
 
+/// The error for a failed removal of the existing destination must be the
+/// plain OS message, not the `Debug` form of the Rust error.
+#[test]
+fn test_install_failed_remove_existing_error_is_plain() {
+    // Root can always remove the file.
+    if geteuid().is_root() {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    at.mkdir("r--");
+    at.set_mode("r--", 0o400);
+
+    ucmd.args(&["-D", "f", "r--/f"])
+        .fails()
+        .stderr_contains("Error: Permission denied")
+        .stderr_does_not_contain("Os {");
+}
+
 /// A failed ownership change must not leave the setuid/setgid mode applied.
 #[test]
 fn test_install_failed_chown_does_not_leave_setuid() {
