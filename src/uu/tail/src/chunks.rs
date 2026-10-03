@@ -12,7 +12,7 @@
 
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::{BufRead, Read, Seek, SeekFrom, Write};
+use std::io::{self, BufRead, Read, Seek, SeekFrom, Write};
 use uucore::error::UResult;
 
 /// When reading files in reverse in `bounded_tail`, this is the size of each
@@ -46,26 +46,26 @@ pub struct ReverseChunks<'a> {
 }
 
 impl<'a> ReverseChunks<'a> {
-    pub fn new(file: &'a mut File) -> Self {
+    pub fn new(file: &'a mut File) -> io::Result<Self> {
         let current = if cfg!(unix) {
-            file.stream_position().unwrap()
+            file.stream_position()?
         } else {
             0
         };
-        let size = file.seek(SeekFrom::End(0)).unwrap() - current;
+        let size = file.seek(SeekFrom::End(0))? - current;
         let max_blocks_to_read = (size as f64 / BLOCK_SIZE as f64).ceil() as usize;
         let block_idx = 0;
-        ReverseChunks {
+        Ok(ReverseChunks {
             file,
             size,
             max_blocks_to_read,
             block_idx,
-        }
+        })
     }
 }
 
 impl Iterator for ReverseChunks<'_> {
-    type Item = Vec<u8>;
+    type Item = io::Result<Vec<u8>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // If there are no more chunks to read, terminate the iterator.
@@ -85,20 +85,19 @@ impl Iterator for ReverseChunks<'_> {
         // Seek backwards by the next chunk, read the full chunk into
         // `buf`, and then seek back to the start of the chunk again.
         let mut buf = vec![0; block_size as usize];
-        let pos = self
+        let result = self
             .file
             .seek(SeekFrom::Current(-(block_size as i64)))
-            .unwrap();
-        self.file.read_exact(&mut buf).unwrap();
-        let pos2 = self
-            .file
-            .seek(SeekFrom::Current(-(block_size as i64)))
-            .unwrap();
-        assert_eq!(pos, pos2);
+            .and_then(|pos| {
+                self.file.read_exact(&mut buf)?;
+                let pos2 = self.file.seek(SeekFrom::Current(-(block_size as i64)))?;
+                assert_eq!(pos, pos2);
+                Ok(buf)
+            });
 
         self.block_idx += 1;
 
-        Some(buf)
+        Some(result)
     }
 }
 

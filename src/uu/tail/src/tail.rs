@@ -32,7 +32,7 @@ use std::fs::File;
 use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin, stdout};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
+use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code, strip_errno};
 use uucore::translate;
 
 use uucore::{show, show_error};
@@ -178,7 +178,7 @@ fn tail_file(
                     && file.is_seekable(if input.is_stdin() { offset } else { 0 })
                     && (!st.is_file() || st.len() > blksize_limit)
                 {
-                    bounded_tail(&mut file, settings)?;
+                    bounded_tail(&mut file, settings, input.display_name.as_str())?;
                     reader = BufReader::new(file);
                 } else {
                     reader = BufReader::new(file);
@@ -406,16 +406,17 @@ fn forwards_thru_file(
 /// Iterate over bytes in the file, in reverse, until we find the
 /// `num_delimiters` instance of `delimiter`. The `file` is left seek'd to the
 /// position just after that delimiter.
-fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
+fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) -> io::Result<()> {
     if num_delimiters == 0 {
-        file.seek(SeekFrom::End(0)).unwrap();
-        return;
+        file.seek(SeekFrom::End(0))?;
+        return Ok(());
     }
     // This variable counts the number of delimiters found in the file
     // so far (reading from the end of the file toward the beginning).
     let mut counter = 0;
     let mut first_slice = true;
-    for slice in ReverseChunks::new(file) {
+    for slice in ReverseChunks::new(file)? {
+        let slice = slice?;
         // Iterate over each byte in the slice in reverse order.
         let mut iter = memrchr_iter(delimiter, &slice);
 
@@ -440,37 +441,34 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
                 // cursor in the file is at the *beginning* of the
                 // block, so seeking forward by `i + 1` bytes puts
                 // us right after the found delimiter.
-                file.seek(SeekFrom::Current((i + 1) as i64)).unwrap();
-                return;
+                file.seek(SeekFrom::Current((i + 1) as i64))?;
+                return Ok(());
             }
         }
     }
+    Ok(())
 }
 
-/// When tail'ing a file, we do not need to read the whole file from start to
-/// finish just to find the last n lines or bytes. Instead, we can seek to the
-/// end of the file, and then read the file "backwards" in blocks of size
-/// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
-/// being a nice performance win for very large files.
-fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
-    debug_assert!(!settings.presume_input_pipe);
+/// Seek `file` to where `bounded_tail` should start reading from, returning
+/// the byte limit for [`FilterMode::Bytes`]' negative case, if any.
+fn seek_to_tail_start(file: &mut File, settings: &Settings) -> io::Result<Option<u64>> {
     let mut limit = None;
 
     // Find the position in the file to start printing from.
     match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), delimiter) => {
-            backwards_thru_file(file, *count, *delimiter);
+            backwards_thru_file(file, *count, *delimiter)?;
         }
         FilterMode::Lines(Signum::Positive(count), delimiter) if count > &1 => {
-            let i = forwards_thru_file(file, *count - 1, *delimiter).unwrap();
-            file.seek(SeekFrom::Start(i as u64)).unwrap();
+            let i = forwards_thru_file(file, *count - 1, *delimiter)?;
+            file.seek(SeekFrom::Start(i as u64))?;
         }
         FilterMode::Lines(Signum::MinusZero, _) | FilterMode::Bytes(Signum::MinusZero) => {
-            file.seek(SeekFrom::End(0)).unwrap();
+            file.seek(SeekFrom::End(0))?;
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
             if file.seek(SeekFrom::End(-(*count as i64))).is_err() {
-                file.seek(SeekFrom::Start(0)).unwrap();
+                file.seek(SeekFrom::Start(0))?;
             }
             limit = Some(*count);
         }
@@ -481,11 +479,33 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
             // underlying `lseek` fail with `EINVAL`; treat that like a start
             // beyond the end of the file and produce no output.
             file.seek(SeekFrom::Start(*count - 1))
-                .or_else(|_| file.seek(SeekFrom::End(0)))
-                .unwrap();
+                .or_else(|_| file.seek(SeekFrom::End(0)))?;
         }
         _ => {}
     }
+
+    Ok(limit)
+}
+
+/// The message GNU gives for any read/seek failure while tailing a
+/// (previously successfully opened) file, keyed to the name as displayed
+/// rather than the raw error, which is quoted `strip_errno`'s way.
+fn tail_io_error(display_name: &str, error: io::Error) -> Box<dyn UError> {
+    USimpleError::new(
+        1,
+        translate!("tail-error-reading-file", "file" => display_name.to_owned(), "error" => strip_errno(&error)),
+    )
+}
+
+/// When tail'ing a file, we do not need to read the whole file from start to
+/// finish just to find the last n lines or bytes. Instead, we can seek to the
+/// end of the file, and then read the file "backwards" in blocks of size
+/// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
+/// being a nice performance win for very large files.
+fn bounded_tail(file: &mut File, settings: &Settings, display_name: &str) -> UResult<()> {
+    debug_assert!(!settings.presume_input_pipe);
+
+    let limit = seek_to_tail_start(file, settings).map_err(|e| tail_io_error(display_name, e))?;
 
     print_target_section(file, limit)?;
     Ok(())
