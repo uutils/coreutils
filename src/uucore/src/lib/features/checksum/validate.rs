@@ -221,8 +221,7 @@ impl FileChecksumResult {
     fn can_display(self, verbose: ChecksumVerbose) -> bool {
         match self {
             Self::Ok => verbose.over_quiet(),
-            Self::Failed => verbose.over_status(),
-            Self::CantOpen => true,
+            Self::Failed | Self::CantOpen => verbose.over_status(),
         }
     }
 }
