@@ -5,6 +5,7 @@
 
 // mods ~ cross-platforms modules (core/bundler file)
 
+pub mod args;
 pub mod clap_localization;
 pub mod display;
 pub mod error;
