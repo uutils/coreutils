@@ -90,8 +90,9 @@ fn compute_num_digits(input: &str, ebd: ExtendedBigDecimal) -> PreciseNumber {
                 // Check if the fractional part has any non-zero digit
                 if let Some(dot_pos) = mantissa_stripped.find('.') {
                     let frac_part = &mantissa_stripped[dot_pos + 1..];
-                    if frac_part.chars().any(|c| c != '0') {
-                        int_digits = int_digits.saturating_sub(1).max(1);
+                    let leading_zeros = frac_part.len() - frac_part.trim_start_matches('0').len();
+                    if leading_zeros < frac_part.len() {
+                        int_digits = int_digits.saturating_sub(leading_zeros + 1).max(1);
                     }
                 }
             }
@@ -331,6 +332,11 @@ mod tests {
         // Leading placeholder zero consumed by positive exponent
         assert_eq!(num_integral_digits("0.5e1"), 1);
         assert_eq!(num_integral_digits("0.5e2"), 2);
+        // Every leading zero before the first significant fractional digit is
+        // consumed along with the placeholder, not just one of them.
+        assert_eq!(num_integral_digits("0.05e2"), 1);
+        assert_eq!(num_integral_digits("0.001e3"), 1);
+        assert_eq!(num_integral_digits("0.0001e5"), 2);
         assert_eq!(num_integral_digits("-0.0e1"), 3);
         // minus zero float
         assert_eq!(num_integral_digits("-0.0"), 2);
