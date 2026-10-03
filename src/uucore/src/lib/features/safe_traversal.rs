@@ -642,8 +642,11 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
 ///
 /// # Arguments
 /// * `path` - The path to create directories for
-/// * `mode` - The mode to use when creating new directories (e.g., 0o755). The actual
-///   mode will be modified by the process umask.
+/// * `mode` - The mode to use when creating new directories (e.g., 0o755). The
+///   kernel applies the umask to the mode on each mkdir, so callers that
+///   require exact modes (e.g. install) should wrap the call in
+///   `uucore::mode::with_umask(0, ...)` rather than changing the umask
+///   themselves.
 ///
 /// # Returns
 /// A DirFd for the final created directory, or the first existing parent if
