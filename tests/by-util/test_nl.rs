@@ -267,9 +267,15 @@ fn test_starting_line_number() {
 
 #[test]
 fn test_negative_starting_line_number() {
-    for arg in ["-v-10", "--starting-line-number=-10"] {
+    // the value may be attached or passed as a separate argument
+    for args in [
+        &["-v-10"][..],
+        &["--starting-line-number=-10"][..],
+        &["-v", "-10"][..],
+        &["--starting-line-number", "-10"][..],
+    ] {
         new_ucmd!()
-            .arg(arg)
+            .args(args)
             .pipe_in("test")
             .succeeds()
             .stdout_is("   -10\ttest\n");
@@ -311,13 +317,34 @@ fn test_line_increment_from_negative_starting_line() {
 
 #[test]
 fn test_negative_line_increment() {
-    for arg in ["-i-10", "--line-increment=-10"] {
+    for args in [
+        &["-i-10"][..],
+        &["--line-increment=-10"][..],
+        &["-i", "-10"][..],
+        &["--line-increment", "-10"][..],
+    ] {
         new_ucmd!()
-            .arg(arg)
+            .args(args)
             .pipe_in("a\nb\nc")
             .succeeds()
             .stdout_is("     1\ta\n    -9\tb\n   -19\tc\n");
     }
+}
+
+#[test]
+fn test_hyphen_leading_value_as_separate_argument() {
+    // a value starting with '-' is taken as the option value, not as a flag
+    new_ucmd!()
+        .args(&["-s", "-->"])
+        .pipe_in("x\ny")
+        .succeeds()
+        .stdout_is("     1-->x\n     2-->y\n");
+
+    new_ucmd!()
+        .args(&["-d", "-@", "-h", "n"])
+        .pipe_in("-@-@-@\nheader\n-@-@\nbody\n")
+        .succeeds()
+        .stdout_is("\n       header\n\n     1\tbody\n");
 }
 
 #[test]
