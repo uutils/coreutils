@@ -73,6 +73,34 @@ fn test_mknod_fifo_mnemonic_usage() {
 }
 
 #[test]
+fn test_mknod_fifo_umask() {
+    for (mode, expected) in [(None, 0o600), (Some("0644"), 0o644)] {
+        let ts = TestScenario::new(util_name!());
+        let mut cmd = ts.ucmd();
+        if let Some(mode) = mode {
+            cmd.args(&["-m", mode]);
+        }
+        cmd.args(&["test_file", "p"]).umask(0o077).succeeds();
+        assert!(ts.fixtures.is_fifo("test_file"));
+        assert_eq!(
+            ts.fixtures.metadata("test_file").permissions().mode() & 0o777,
+            expected
+        );
+    }
+}
+
+#[test]
+fn test_mknod_fifo_existing_file() {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.write("test_file", "keep this content");
+    ts.ucmd()
+        .args(&["test_file", "p"])
+        .fails()
+        .stderr_contains("File exists");
+    assert_eq!(ts.fixtures.read("test_file"), "keep this content");
+}
+
+#[test]
 fn test_mknod_fifo_read_only() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd()

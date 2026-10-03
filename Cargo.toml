@@ -707,3 +707,6 @@ strip = true
 inherits = "release"
 panic = "unwind"
 debug = true
+
+[patch.crates-io]
+rustix = { git = "https://github.com/mattsu2020/rustix.git", branch = "mknodat_macos" }

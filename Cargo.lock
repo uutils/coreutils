@@ -2618,8 +2618,7 @@ dependencies = [
 [[package]]
 name = "rustix"
 version = "1.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "891efababe418670775f199f0d233d84843c227a0949a883ce15b37c78d6629d"
+source = "git+https://github.com/mattsu2020/rustix.git?branch=mknodat_macos#cdce88186f1501937bc01ce23b74c654f6bf9348"
 dependencies = [
  "bitflags 2.13.2",
  "errno",
@@ -3768,7 +3767,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "rustix",
  "uucore",
 ]
 
