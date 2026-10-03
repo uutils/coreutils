@@ -156,7 +156,7 @@ pub fn metadata_get_time(md: &Metadata, md_time: MetadataTimeField) -> Option<Sy
 // should be OsString.
 #[derive(Debug, Clone)]
 pub struct MountInfo {
-    /// Device id on unix, volume serial number on Windows.
+    /// Device id on Unix, NT filesystem path on Windows.
     pub dev_id: String,
     pub dev_name: String,
     pub fs_type: String,
