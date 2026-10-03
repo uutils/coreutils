@@ -11,7 +11,6 @@ mod unit_tests;
 use super::{ConversionMode, IConvFlags, IFlags, Num, OConvFlags, OFlags, Settings, StatusLevel};
 use crate::conversion_tables::ConversionTable;
 use std::ffi::OsString;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
 use uucore::parser::parse_size::{ParseSizeError, Parser as SizeParser};
@@ -19,7 +18,7 @@ use uucore::show_warning;
 use uucore::translate;
 
 /// Parser Errors describe errors with parser input
-#[derive(Debug, PartialEq, Eq, Error)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ParseError {
     #[error("{}", translate!("dd-error-unrecognized-operand", "operand" => .0))]
     UnrecognizedOperand(String),

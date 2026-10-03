@@ -34,10 +34,9 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{env, fs};
 
-use thiserror::Error;
 use uucore::time::{FormatSystemTimeFallback, format_system_time, system_time_to_sec};
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum StatError {
     #[error("{}", translate!("stat-error-invalid-directive", "directive" => directive))]
     InvalidDirective { directive: String },
