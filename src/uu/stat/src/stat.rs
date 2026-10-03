@@ -1160,10 +1160,8 @@ impl Stater {
         display_name: &str,
         file: &OsString,
         file_type: FileType,
-        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-        follow_symbolic_links: bool,
-        #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
-        _: bool,
+        #[cfg(selinux)] follow_symbolic_links: bool,
+        #[cfg(not(selinux))] _: bool,
     ) -> Result<(), i32> {
         match *t {
             Token::Byte(byte) => print_raw_byte(byte),
@@ -1191,10 +1189,7 @@ impl Stater {
                     'B' => OutputType::Unsigned(512),
                     // SELinux security context string
                     'C' => {
-                        #[cfg(all(
-                            feature = "selinux",
-                            any(target_os = "linux", target_os = "android")
-                        ))]
+                        #[cfg(selinux)]
                         {
                             if uucore::selinux::is_selinux_enabled() {
                                 match uucore::selinux::get_selinux_security_context(
@@ -1210,10 +1205,7 @@ impl Stater {
                                 OutputType::Str(translate!("stat-selinux-unsupported-system"))
                             }
                         }
-                        #[cfg(not(all(
-                            feature = "selinux",
-                            any(target_os = "linux", target_os = "android")
-                        )))]
+                        #[cfg(not(selinux))]
                         {
                             OutputType::Str(translate!("stat-selinux-unsupported-os"))
                         }
