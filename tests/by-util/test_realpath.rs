@@ -17,6 +17,10 @@ use std::path::{MAIN_SEPARATOR, Path};
 static GIBBERISH: &str = "supercalifragilisticexpialidocious";
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: canonicalized path resolves to the guest's virtual root, not the host's absolute path"
+)]
 fn test_realpath_current_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     let expect = at.root_dir_resolved() + "\n";
@@ -24,6 +28,10 @@ fn test_realpath_current_directory() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: canonicalized path resolves to the guest's virtual root, not the host's absolute path"
+)]
 fn test_realpath_long_redirection_to_current_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     // Create a 256-character path to current directory
@@ -163,6 +171,10 @@ fn test_realpath_logical_mode() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: canonicalized path resolves to the guest's virtual root, not the host's absolute path"
+)]
 fn test_realpath_dangling() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("nonexistent-file", "link");
@@ -225,6 +237,10 @@ fn test_realpath_symlink_follow_limit() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: canonicalized path resolves to the guest's virtual root, not the host's absolute path"
+)]
 fn test_realpath_default_allows_final_non_existent() {
     let p = Path::new("").join(GIBBERISH);
     let (at, mut ucmd) = at_and_ucmd!();
@@ -239,6 +255,10 @@ fn test_realpath_default_forbids_non_final_non_existent() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: canonicalized path resolves to the guest's virtual root, not the host's absolute path"
+)]
 fn test_realpath_existing() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg("-e")
@@ -261,6 +281,10 @@ fn test_realpath_existing_error_quiet() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: canonicalized path resolves to the guest's virtual root, not the host's absolute path"
+)]
 fn test_realpath_missing() {
     let p = Path::new("").join(GIBBERISH).join(GIBBERISH);
     let (at, mut ucmd) = at_and_ucmd!();
@@ -272,6 +296,10 @@ fn test_realpath_missing() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: canonicalized path resolves to the guest's virtual root, not the host's absolute path"
+)]
 fn test_realpath_when_symlink_is_absolute_and_enoent() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -557,6 +585,7 @@ fn test_realpath_empty() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_realpath_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;

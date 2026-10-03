@@ -386,6 +386,10 @@ fn test_date_utc_with_d_flag() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_utc_vs_local() {
     let cases = [
         ("-d", "2024-01-01 12:00", "+%H:%M %Z", "12:00 EST\n"),
@@ -550,6 +554,10 @@ fn test_date_error_echoes_input_verbatim() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: setting the system clock is not supported at all, not just permission-gated"
+)]
 fn test_date_set_permissions_error() {
     if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
         let result = new_ucmd!()
@@ -563,6 +571,10 @@ fn test_date_set_permissions_error() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: setting the system clock is not supported at all, not just permission-gated"
+)]
 fn test_date_set_hyphen_prefixed_values() {
     // test -s flag accepts hyphen-prefixed values like "-3 days"
     if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
@@ -1000,7 +1012,7 @@ fn test_date_parse_from_format() {
          2023-04-15 18:30:00",
     );
     ucmd.arg("-f")
-        .arg(at.plus(FILE))
+        .arg(FILE)
         .arg("+%Y-%m-%d %H:%M:%S")
         .succeeds();
 }
@@ -1028,6 +1040,10 @@ const JAN2: &str = "2024-01-02 12:00:00 +0000";
 const JUL2: &str = "2024-07-02 12:00:00 +0000";
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_tz() {
     fn test_tz(tz: &str, date: &str, output: &str) {
         println!("Test with TZ={tz}, date=\"{date}\".");
@@ -1074,6 +1090,10 @@ fn test_date_tz_with_utc_flag() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_tz_various_formats() {
     fn test_tz(tz: &str, date: &str, output: &str) {
         println!("Test with TZ={tz}, date=\"{date}\".");
@@ -1102,6 +1122,10 @@ fn test_date_tz_various_formats() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_tz_with_relative_time() {
     new_ucmd!()
         .env("TZ", "America/Vancouver")
@@ -1113,6 +1137,10 @@ fn test_date_tz_with_relative_time() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_utc_time() {
     // Test that -u flag shows correct UTC time
     // We get 2 UTC times just in case we're really unlucky and this runs around
@@ -1609,6 +1637,10 @@ fn test_date_whitespace_between_items() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_relative_m9() {
     // Military timezone "m9" should be parsed as noon + 9 hours = 21:00 UTC
     // When displayed in TZ=UTC+9 (which is UTC-9), this shows as 12:00 local time
@@ -1906,6 +1938,10 @@ fn test_date_locale_en_us_vs_c_difference() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_locale_hu_hungarian() {
     // Regression test for uutils/coreutils#11240: the GNU modifier fast-path
     // ("%-e") used to run before ICU localization, so "%b"/"%A" came out in
@@ -2197,6 +2233,10 @@ fn test_date_input_hhmm_ampm() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_input_trailing_tz_abbrev_rezones() {
     // `TZ=UTC+1 date -d '2024-01-01 EST'` should display the instant in UTC+1
     // (GNU: 04:00:00 -01:00), not leave it in EST (the pre-fix uutils
@@ -2325,6 +2365,10 @@ fn test_date_parenthesis_vs_other_special_chars() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_iranian_locale_solar_hijri_calendar() {
     // Test Iranian locale uses Solar Hijri calendar
     // Verify the Solar Hijri calendar is used in the Iranian locale
@@ -2392,6 +2436,10 @@ fn test_date_iranian_locale_solar_hijri_calendar() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_ethiopian_locale_calendar() {
     // Test Ethiopian locale uses Ethiopian calendar
     // Verify the Ethiopian calendar is used in the Ethiopian locale
@@ -2539,6 +2587,10 @@ fn check_date(locale: &str, date: &str, fmt: &str, expected: &str) {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_locale_calendar_conversions() {
     // Persian (Solar Hijri) - Nowruz is March 20/21
     for (d, e) in [
@@ -2590,6 +2642,10 @@ fn test_locale_calendar_conversions() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_locale_month_names() {
     // %B full month names: Jan, Jun, Dec for each locale
     for (loc, jan, jun, dec) in [
@@ -2610,6 +2666,10 @@ fn test_locale_month_names() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_locale_abbreviated_month_names() {
     // %b abbreviated month names: Feb, Jun, Dec for each locale
     // This test ensures we don't get double periods in locales like Hungarian
@@ -2633,6 +2693,10 @@ fn test_locale_abbreviated_month_names() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_locale_day_names() {
     // %A full day names: Mon (26th), Sun (25th), Sat (24th) Jan 2026
     for (loc, mon, sun, sat) in [
@@ -2734,6 +2798,10 @@ fn test_date_month_subtraction_keeps_day() {
 
 // Tests for embedded timezone parsing
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_embedded_timezone_conversion() {
     // Parse date with embedded timezone
     // Date should be interpreted in embedded TZ, then displayed in environment TZ
@@ -2750,6 +2818,7 @@ fn test_date_embedded_timezone_conversion() {
 // Tests for invalid UTF-8 in date string
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_date_invalid_utf8_byte_rejected() {
     use std::os::unix::ffi::OsStrExt;
 

@@ -17,12 +17,20 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: pwd reports the guest's virtual root, not the host's absolute path"
+)]
 fn test_default() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.succeeds().stdout_is(at.root_dir_resolved() + "\n");
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: pwd reports the guest's virtual root, not the host's absolute path"
+)]
 fn test_ignores_non_option_arguments() {
     // GNU pwd ignores non-option operands, warning on stderr but exiting 0.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -34,6 +42,10 @@ fn test_ignores_non_option_arguments() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: pwd reports the guest's virtual root, not the host's absolute path"
+)]
 fn test_deleted_dir() {
     use std::process::Command;
     use uutests::util::TestScenario;
@@ -52,7 +64,7 @@ fn test_deleted_dir() {
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert!(output.stdout.is_empty());
+    assert_eq!(output.stdout, [] as [u8; 0]);
     assert_eq!(
         String::from_utf8_lossy(&output.stderr),
         "pwd: failed to get current directory: No such file or directory\n"
@@ -86,24 +98,40 @@ fn symlinked_env() -> Env {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: pwd reports the guest's virtual root, not the host's absolute path"
+)]
 fn test_symlinked_logical() {
     let mut env = symlinked_env();
     env.ucmd.arg("-L").succeeds().stdout_is(env.symdir + "\n");
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: pwd reports the guest's virtual root, not the host's absolute path"
+)]
 fn test_symlinked_physical() {
     let mut env = symlinked_env();
     env.ucmd.arg("-P").succeeds().stdout_is(env.subdir + "\n");
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: pwd reports the guest's virtual root, not the host's absolute path"
+)]
 fn test_symlinked_default() {
     let mut env = symlinked_env();
     env.ucmd.succeeds().stdout_is(env.subdir + "\n");
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: pwd reports the guest's virtual root, not the host's absolute path"
+)]
 fn test_symlinked_default_posix() {
     let mut env = symlinked_env();
     env.ucmd
@@ -113,6 +141,10 @@ fn test_symlinked_default_posix() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: pwd reports the guest's virtual root, not the host's absolute path"
+)]
 fn test_symlinked_default_posix_l() {
     let mut env = symlinked_env();
     env.ucmd
@@ -123,6 +155,10 @@ fn test_symlinked_default_posix_l() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: pwd reports the guest's virtual root, not the host's absolute path"
+)]
 fn test_symlinked_default_posix_p() {
     let mut env = symlinked_env();
     env.ucmd
@@ -139,6 +175,10 @@ pub mod untrustworthy_pwd_var {
     use super::*;
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: pwd reports the guest's virtual root, not the host's absolute path"
+    )]
     fn test_nonexistent_logical() {
         let (at, mut ucmd) = at_and_ucmd!();
         ucmd.arg("-L")
@@ -148,6 +188,10 @@ pub mod untrustworthy_pwd_var {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: pwd reports the guest's virtual root, not the host's absolute path"
+    )]
     fn test_wrong_logical() {
         let mut env = symlinked_env();
         env.ucmd
@@ -158,6 +202,10 @@ pub mod untrustworthy_pwd_var {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: pwd reports the guest's virtual root, not the host's absolute path"
+    )]
     fn test_redundant_logical() {
         let mut env = symlinked_env();
         env.ucmd
@@ -168,6 +216,10 @@ pub mod untrustworthy_pwd_var {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: pwd reports the guest's virtual root, not the host's absolute path"
+    )]
     fn test_relative_logical() {
         let mut env = symlinked_env();
         env.ucmd

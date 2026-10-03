@@ -19,7 +19,7 @@ use blocks::Converter;
 use datastructures::{ConversionMode, IConvFlags, IFlags, OConvFlags, OFlags, options};
 use parseargs::Parser;
 use progress::ProgUpdateType;
-use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
+use progress::{ProgUpdate, ProgressReporter, ReadStat, StatusLevel, WriteStat};
 #[cfg(target_os = "linux")]
 use progress::{check_and_reset_sigusr1, install_sigusr1_handler};
 use uucore::io::OwnedFileDescriptorOrHandle;
@@ -28,22 +28,24 @@ use uucore::translate;
 use std::cmp;
 use std::env;
 use std::ffi::OsString;
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 use std::fs::Metadata;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
+#[cfg(any(unix, target_os = "wasi"))]
+use std::os::fd::{AsRawFd, FromRawFd};
+#[cfg(unix)]
+use std::os::unix::fs::FileTypeExt;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::OpenOptionsExt;
-#[cfg(unix)]
-use std::os::unix::{
-    fs::FileTypeExt,
-    io::{AsRawFd, FromRawFd},
-};
 #[cfg(windows)]
 use std::os::windows::{fs::MetadataExt, io::AsHandle};
 use std::path::Path;
+#[cfg(not(target_os = "wasi"))]
 use std::sync::atomic::AtomicU8;
-use std::sync::{Arc, atomic::Ordering::Relaxed, mpsc};
+#[cfg(not(target_os = "wasi"))]
+use std::sync::{Arc, atomic::Ordering::Relaxed};
+#[cfg(not(target_os = "wasi"))]
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -51,7 +53,7 @@ use clap::{Arg, Command};
 use num_integer::Integer;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 use uucore::error::{USimpleError, set_exit_code};
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 use uucore::show_if_err;
@@ -87,14 +89,28 @@ struct Settings {
 /// the first caller each interval will yield true.
 ///
 /// When all instances are dropped the background thread will exit on the next interval.
+#[cfg(not(target_os = "wasi"))]
 pub struct Alarm {
     trigger: Arc<AtomicU8>,
+}
+
+/// A timer which triggers on a given interval.
+///
+/// WASI has no thread support, so instead of a background thread waking up
+/// on the interval, this polls the wall clock on each [`Alarm::get_trigger`]
+/// call and fires once enough time has elapsed since the last trigger.
+#[cfg(target_os = "wasi")]
+pub struct Alarm {
+    interval: Duration,
+    last_trigger: std::cell::Cell<Instant>,
+    signalled: std::cell::Cell<bool>,
 }
 
 pub const ALARM_TRIGGER_NONE: u8 = 0;
 pub const ALARM_TRIGGER_TIMER: u8 = 1;
 pub const ALARM_TRIGGER_SIGNAL: u8 = 2;
 
+#[cfg(not(target_os = "wasi"))]
 impl Alarm {
     /// use to construct alarm timer with duration
     pub fn with_interval(interval: Duration) -> Self {
@@ -124,6 +140,46 @@ impl Alarm {
     /// by the closure returned from `manual_trigger_fn`
     pub fn get_trigger(&self) -> u8 {
         self.trigger.swap(ALARM_TRIGGER_NONE, Relaxed)
+    }
+}
+
+#[cfg(target_os = "wasi")]
+impl Alarm {
+    /// use to construct alarm timer with duration
+    pub fn with_interval(interval: Duration) -> Self {
+        Self {
+            interval,
+            last_trigger: std::cell::Cell::new(Instant::now()),
+            signalled: std::cell::Cell::new(false),
+        }
+    }
+
+    /// Manually trigger the alarm as a signal event
+    pub fn manual_trigger(&self) {
+        self.signalled.set(true);
+    }
+
+    /// Use this function to poll for any pending alarm event
+    ///
+    /// Returns `ALARM_TRIGGER_NONE` for no pending event.
+    /// Returns `ALARM_TRIGGER_TIMER` if the event was triggered by timer
+    /// Returns `ALARM_TRIGGER_SIGNAL` if the event was triggered manually
+    /// by the closure returned from `manual_trigger_fn`
+    pub fn get_trigger(&self) -> u8 {
+        if self.signalled.replace(false) {
+            return ALARM_TRIGGER_SIGNAL;
+        }
+        let now = Instant::now();
+        if now.duration_since(self.last_trigger.get()) >= self.interval {
+            self.last_trigger.set(now);
+            return ALARM_TRIGGER_TIMER;
+        }
+        ALARM_TRIGGER_NONE
+    }
+
+    // Getter function for the configured interval duration
+    pub fn get_interval(&self) -> Duration {
+        self.interval
     }
 }
 
@@ -213,14 +269,14 @@ impl AlignedBuf {
 /// fine-grained access to reading from stdin.
 enum Source {
     /// Input from stdin.
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, target_os = "wasi")))]
     Stdin(io::Stdin),
 
     /// Input from a file.
     File(File),
 
     /// Input from stdin, opened from its file descriptor.
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "wasi"))]
     StdinFile(File),
 
     /// Input from a named pipe, also known as a FIFO.
@@ -236,7 +292,14 @@ impl Source {
     /// the [`File`] parameter. You can use this instead of
     /// `Source::Stdin` to allow reading from stdin without consuming
     /// the entire contents of stdin when this process terminates.
-    #[cfg(unix)]
+    ///
+    /// This also avoids `io::Stdin`'s internal read-ahead buffering, which
+    /// on WASI would otherwise consume bytes from the underlying
+    /// descriptor beyond what `dd` itself has processed (observable e.g.
+    /// when a caller shares the same host file descriptor across two
+    /// separate `dd` invocations and expects the second one to resume from
+    /// where the first left off).
+    #[cfg(any(unix, target_os = "wasi"))]
     fn stdin_as_file() -> Self {
         let fd = io::stdin().as_raw_fd();
         let f = unsafe { File::from_raw_fd(fd) };
@@ -245,7 +308,7 @@ impl Source {
 
     fn skip(&mut self, n: u64, ibs: usize) -> io::Result<u64> {
         match self {
-            #[cfg(not(unix))]
+            #[cfg(not(any(unix, target_os = "wasi")))]
             Self::Stdin(stdin) => {
                 let m = uucore::io::read_and_discard(stdin, n, ibs)?;
                 if m < n {
@@ -256,8 +319,12 @@ impl Source {
                 }
                 Ok(m)
             }
-            #[cfg(unix)]
+            #[cfg(any(unix, target_os = "wasi"))]
             Self::StdinFile(f) => {
+                // WASI's sandbox model has no block devices, so this
+                // GNU-compatibility special case (skip beyond a block
+                // device's length) doesn't apply there.
+                #[cfg(unix)]
                 if let Ok(Some(len)) = try_get_len_of_block_device(f)
                     && len < n
                 {
@@ -335,10 +402,15 @@ impl Source {
 impl Read for Source {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
-            #[cfg(not(unix))]
+            #[cfg(not(any(unix, target_os = "wasi")))]
             Self::Stdin(stdin) => stdin.read(buf),
-            Self::File(f) => f.read(buf),
-            #[cfg(unix)]
+            // On WASI, opening a directory via `File::open` succeeds (the
+            // directory check is deferred to the first read), which then
+            // fails with a raw EBADF instead of IsADirectory.
+            Self::File(f) => f
+                .read(buf)
+                .map_err(uucore::error::wasi_normalize_open_error),
+            #[cfg(any(unix, target_os = "wasi"))]
             Self::StdinFile(f) => f.read(buf),
             #[cfg(unix)]
             Self::Fifo(f) => f.read(buf),
@@ -376,11 +448,11 @@ impl<'a> Input<'a> {
                 _ => Source::Stdin(io::stdin()),
             }
         };
-        #[cfg(all(not(unix), not(windows)))]
+        #[cfg(not(any(unix, windows, target_os = "wasi")))]
         let mut src = Source::Stdin(io::stdin());
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         let mut src = Source::stdin_as_file();
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         if let Source::StdinFile(f) = &src
             && settings.iflags.directory
             && !f.metadata()?.is_dir()
@@ -406,6 +478,16 @@ impl<'a> Input<'a> {
             #[cfg(any(target_os = "linux", target_os = "android"))]
             if let Some(libc_flags) = make_linux_iflags(&settings.iflags) {
                 opts.custom_flags(libc_flags);
+            }
+
+            // On WASI, opening an empty path resolves to the preopened
+            // directory itself instead of failing with `NotFound` the way
+            // it does on Unix, so reject it explicitly here.
+            #[cfg(target_os = "wasi")]
+            if filename.as_os_str().is_empty() {
+                return Err(io::Error::from_raw_os_error(libc::ENOENT).map_err_context(
+                    || translate!("dd-error-failed-to-open", "path" => filename.quote()),
+                ));
             }
 
             opts.open(filename).map_err_context(
@@ -851,6 +933,14 @@ impl<'a> Output<'a> {
     /// Instantiate this struct with the named file as a destination.
     fn new_file(filename: &Path, settings: &'a Settings) -> UResult<Self> {
         fn open_dst(path: &Path, cflags: &OConvFlags, oflags: &OFlags) -> Result<File, io::Error> {
+            // On WASI, opening an empty path resolves to the preopened
+            // directory itself instead of failing with `NotFound` the way
+            // it does on Unix, so reject it explicitly here.
+            #[cfg(target_os = "wasi")]
+            if path.as_os_str().is_empty() {
+                return Err(io::Error::from_raw_os_error(libc::ENOENT));
+            }
+
             let mut opts = OpenOptions::new();
             opts.write(true)
                 .create(!cflags.nocreat)
@@ -1148,18 +1238,15 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     // the input and output block sizes.
     let bsize = calc_bsize(i.settings.ibs, o.settings.obs);
 
-    // Start a thread that reports transfer progress.
+    // Set up progress reporting.
     //
     // The `dd` program reports its progress after every block is written,
     // at most every 1 second, and only if `status=progress` is given on
-    // the command-line or a SIGUSR1 signal is received. We
-    // perform this reporting in a new thread so as not to take
-    // any CPU time away from the actual reading and writing of
-    // data. We send a `ProgUpdate` from the transmitter `prog_tx`
-    // to the receives `rx`, and the receiver prints the transfer
-    // information.
-    let (prog_tx, rx) = mpsc::channel();
-    let output_thread = thread::spawn(gen_prog_updater(rx, i.settings.status));
+    // the command-line or a SIGUSR1 signal is received. On platforms with
+    // thread support, this reporting happens in its own thread so as not
+    // to take any CPU time away from the actual reading and writing of
+    // data; on WASI, which has no threads, updates are processed inline.
+    let reporter = ProgressReporter::spawn(i.settings.status);
 
     // Whether to truncate the output file after all blocks have been written.
     let truncate = !o.settings.oconv.notrunc;
@@ -1178,8 +1265,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             rstat,
             wstat,
             start,
-            &prog_tx,
-            output_thread,
+            reporter,
             truncate,
         );
     }
@@ -1311,7 +1397,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         };
         rstat.records_truncated = conv_rstat.records_truncated;
         let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), tp);
-        prog_tx.send(prog_update).unwrap_or(());
+        reporter.send(prog_update);
     }
 
     wstat += conv_wstat;
@@ -1327,14 +1413,12 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     if let Some(e) = copy_error {
         // Flushing and syncing are pointless now, but the caller still wants the statistics.
         let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), ProgUpdateType::Final);
-        prog_tx.send(prog_update).unwrap_or(());
-        output_thread
-            .join()
-            .expect("Failed to join with the output thread.");
+        reporter.send(prog_update);
+        reporter.finish();
         return Err(e);
     }
 
-    finalize(o, rstat, wstat, start, &prog_tx, output_thread, truncate)
+    finalize(o, rstat, wstat, start, reporter, truncate)
 }
 
 /// Write `data` through `converter`, which may count truncated records in `rstat`.
@@ -1372,13 +1456,12 @@ fn write_to<'a>(
 }
 
 /// Flush output, print final stats, and join with the progress thread.
-fn finalize<T>(
+fn finalize(
     mut output: BlockWriter,
     rstat: ReadStat,
     wstat: WriteStat,
     start: Instant,
-    prog_tx: &mpsc::Sender<ProgUpdate>,
-    output_thread: thread::JoinHandle<T>,
+    reporter: ProgressReporter,
     truncate: bool,
 ) -> io::Result<()> {
     // Flush the output in case a partial write has been buffered but
@@ -1396,11 +1479,9 @@ fn finalize<T>(
     // Print the final read/write statistics.
     let wstat = wstat + wstat_update;
     let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), ProgUpdateType::Final);
-    prog_tx.send(prog_update).unwrap_or(());
-    // Wait for the output thread to finish
-    output_thread
-        .join()
-        .expect("Failed to join with the output thread.");
+    reporter.send(prog_update);
+    // Wait for the output thread to finish (a no-op on WASI, which has no thread).
+    reporter.finish();
 
     Ok(())
 }
@@ -1805,6 +1886,6 @@ mod tests {
         use crate::AlignedBuf;
 
         let buf = AlignedBuf::new(0).unwrap();
-        assert!(buf.as_bytes().is_empty());
+        assert_eq!(buf.as_bytes(), []);
     }
 }

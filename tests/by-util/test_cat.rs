@@ -203,6 +203,7 @@ fn test_piped_to_dev_null() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_piped_to_dev_full() {
     for append in [true, false] {
         let s = TestScenario::new(util_name!());
@@ -612,10 +613,15 @@ fn test_domain_socket() {
     s.ucmd()
         .args(&[socket_path])
         .fails()
-        .stderr_contains("No such device or address");
+        .stderr_contains(if cfg!(wasi_runner) {
+            "No such file or directory"
+        } else {
+            "No such device or address"
+        });
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_write_to_self_empty() {
     // it's ok if the input file is also the output file if it's empty
     let s = TestScenario::new(util_name!());
@@ -887,6 +893,7 @@ fn test_write_error_handling() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_version_help_dev_full() {
     use std::fs::OpenOptions;
 

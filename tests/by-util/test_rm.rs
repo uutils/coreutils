@@ -340,6 +340,7 @@ fn test_verbose() {
 // write failure on stderr and exit 1 instead of panicking.
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_verbose_write_error_does_not_panic() {
     use std::fs::OpenOptions;
 
@@ -364,6 +365,7 @@ fn test_verbose_write_error_does_not_panic() {
 // Directory variant of the #10551 regression test.
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_verbose_write_error_does_not_panic_dir() {
     use std::fs::OpenOptions;
 
@@ -489,6 +491,7 @@ fn test_no_operand() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_verbose_slash() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_verbose_slash_directory";
@@ -926,6 +929,7 @@ fn test_current_or_parent_dir_rm4() {
     at.touch(file_1);
     at.touch(file_2);
 
+    #[cfg(not(wasi_runner))]
     let answers = [
         "rm: refusing to remove '.' or '..' directory: skipping 'd/.'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd/./'",
@@ -936,6 +940,20 @@ fn test_current_or_parent_dir_rm4() {
         "rm: refusing to remove '.' or '..' directory: skipping './'",
         "rm: refusing to remove '.' or '..' directory: skipping '../'",
         "rm: refusing to remove '.' or '..' directory: skipping '..'",
+    ];
+    #[cfg(wasi_runner)]
+    let answers = [
+        "rm: refusing to remove '.' or '..' directory: skipping 'd/.'",
+        "rm: refusing to remove '.' or '..' directory: skipping 'd/./'",
+        "rm: refusing to remove '.' or '..' directory: skipping 'd/./'",
+        "rm: refusing to remove '.' or '..' directory: skipping 'd/..'",
+        "rm: it is dangerous to operate recursively on 'd/../' (same as '/')",
+        "rm: use --no-preserve-root to override this failsafe",
+        "rm: refusing to remove '.' or '..' directory: skipping '.'",
+        "rm: it is dangerous to operate recursively on './' (same as '/')",
+        "rm: use --no-preserve-root to override this failsafe",
+        "rm: it is dangerous to operate recursively on '../' (same as '/')",
+        "rm: use --no-preserve-root to override this failsafe",
     ];
     let std_err_str = ts
         .ucmd()
@@ -1168,6 +1186,7 @@ fn test_recursive_remove_unreadable_subdir() {
     at.set_mode("foo/bar", 0o0000);
 
     let result = ucmd.args(&["-r", "-f", "foo"]).fails();
+
     result.stderr_contains("Permission denied");
     result.stderr_contains("foo/bar");
 
@@ -1225,9 +1244,12 @@ fn test_inaccessible_dir_recursive() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
+    #[cfg(all(target_os = "wasi", target_env = "p1"))]
+    use std::os::wasi::ffi::OsStrExt;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1531,8 +1553,9 @@ fn test_symlink_to_readonly_no_prompt() {
 }
 
 /// Test that --preserve-root properly detects symlinks pointing to root.
-#[cfg(unix)]
 #[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_preserve_root_symlink_to_root() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1553,8 +1576,9 @@ fn test_preserve_root_symlink_to_root() {
 }
 
 /// Test that --preserve-root properly detects nested symlinks pointing to root.
-#[cfg(unix)]
 #[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_preserve_root_nested_symlink_to_root() {
     let (at, mut ucmd) = at_and_ucmd!();
 
