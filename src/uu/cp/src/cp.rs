@@ -28,7 +28,6 @@ use uucore::fsxattr::{copy_acls, copy_xattrs_fd, copy_xattrs_skip_selinux};
 use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_parser};
-use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
 use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, mode_t};
@@ -1734,40 +1733,6 @@ impl OverwriteMode {
 /// Note: ENOTSUP/EOPNOTSUPP errors are silently ignored when not required, as per GNU cp
 /// documentation: "Try to preserve SELinux security context and extended attributes (xattr),
 /// but ignore any failure to do that and print no corresponding diagnostic."
-/// Returns the source's last access and modification times.
-///
-/// `filetime::FileTime::from_last_{access,modification}_time` panics on
-/// WASI (the `filetime` crate has no WASI-specific backend and falls back
-/// to its unimplemented generic wasm one). `Metadata::accessed`/`modified`
-/// are stable and WASI-backed, so use those instead there.
-// On non-wasi targets this can never fail, but the wasi branch below can.
-#[cfg_attr(not(target_os = "wasi"), allow(clippy::unnecessary_wraps))]
-fn source_times(source_metadata: &Metadata, context: &str) -> CopyResult<(FileTime, FileTime)> {
-    #[cfg(target_os = "wasi")]
-    {
-        Ok((
-            FileTime::from(
-                source_metadata
-                    .accessed()
-                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?,
-            ),
-            FileTime::from(
-                source_metadata
-                    .modified()
-                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?,
-            ),
-        ))
-    }
-    #[cfg(not(target_os = "wasi"))]
-    {
-        let _ = context;
-        Ok((
-            FileTime::from_last_access_time(source_metadata),
-            FileTime::from_last_modification_time(source_metadata),
-        ))
-    }
-}
-
 fn handle_preserve<F: Fn() -> CopyResult<()>>(p: Preserve, f: F) -> CopyResult<()> {
     match p {
         Preserve::No { .. } => {}
@@ -1993,27 +1958,22 @@ pub(crate) fn copy_attributes(
     })?;
 
     handle_preserve(attributes.timestamps, || -> CopyResult<()> {
-        let (atime, mtime) = source_times(&source_metadata, context)?;
-        // `set_file_times` opens the destination (O_RDONLY) before calling
-        // futimens; opening a FIFO or device with no peer blocks forever, and a
-        // socket cannot be opened at all. For symlinks and these special files
-        // use the path-based, no-follow variant, which sets the times via
-        // utimensat without opening.
-        #[cfg(unix)]
-        let no_open = {
-            let ft = source_metadata.file_type();
-            dest.is_symlink()
-                || ft.is_fifo()
-                || ft.is_socket()
-                || ft.is_char_device()
-                || ft.is_block_device()
-        };
-        #[cfg(not(unix))]
-        let no_open = dest.is_symlink();
-        if no_open {
-            filetime::set_symlink_file_times(dest, atime, mtime)?;
+        let times = fs::FileTimes::new()
+            .set_accessed(
+                source_metadata
+                    .accessed()
+                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?,
+            )
+            .set_modified(
+                source_metadata
+                    .modified()
+                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?,
+            );
+
+        if dest.is_symlink() {
+            fs::set_times_nofollow(dest, times)?;
         } else {
-            filetime::set_file_times(dest, atime, mtime)?;
+            fs::set_times(dest, times)?;
         }
 
         Ok(())
