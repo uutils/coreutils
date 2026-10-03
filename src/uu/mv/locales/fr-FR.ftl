@@ -40,6 +40,7 @@ mv-error-permission-denied = Permission refusée
 mv-error-inter-device-move-failed = échec du déplacement inter-périphérique : {$from} vers {$to} ; impossible de supprimer la cible : {$err}
 mv-error-exchange-two-operands = --exchange nécessite exactement deux opérandes
 mv-error-exchange-not-supported = --exchange n'est pas pris en charge sur cette plateforme
+mv-error-standard-output = sortie standard : {$error}
 
 # Messages d'aide
 mv-help-force = ne pas demander avant d'écraser
