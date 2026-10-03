@@ -27,7 +27,7 @@ use walkdir::WalkDir;
 
 #[cfg(target_os = "linux")]
 use crate::features::fs::FileInformation;
-use crate::features::fs::path_is_root_dir;
+use crate::features::fs::{dev_ino_is_root_dir, path_is_root_dir};
 #[cfg(target_os = "linux")]
 use crate::features::safe_traversal::{DirFd, FileInfo, SymlinkBehavior};
 
@@ -246,7 +246,21 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
     if !path_is_root_dir(path, would_traverse_symlink) {
         return false;
     }
+    report_root(path);
+    true
+}
 
+/// [`is_root`], judged on `meta` the caller already holds instead of on a new
+/// lookup of `path`, which a concurrent rename could have re-pointed.
+fn meta_is_root(path: &Path, meta: &Metadata) -> bool {
+    if !dev_ino_is_root_dir(meta.dev(), meta.ino()) {
+        return false;
+    }
+    report_root(path);
+    true
+}
+
+fn report_root(path: &Path) {
     if path.as_os_str() == "/" {
         show_error!("it is dangerous to operate recursively on '/'");
     } else {
@@ -256,7 +270,6 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
         );
     }
     show_error!("use --no-preserve-root to override this failsafe");
-    true
 }
 
 /// Whether `dir_fd` refers to the very object `meta` describes.
@@ -308,9 +321,13 @@ impl ChownExecutor {
             return 1;
         };
 
+        // Also judge `meta`: the descent below is pinned to it, so a swap after the
+        // path lookup in `is_root` cannot slip "/" past, while that lookup still
+        // catches a symlink to "/" which `meta` did not follow.
         if self.recursive
             && self.preserve_root
-            && is_root(path, self.traverse_symlinks != TraverseSymlinks::None)
+            && (is_root(path, self.traverse_symlinks != TraverseSymlinks::None)
+                || meta_is_root(path, &meta))
         {
             // Fail-fast, do not attempt to recurse.
             return 1;
@@ -1119,6 +1136,19 @@ mod tests {
         unix::fs::symlink(&dir, temp_dir.path().join("link")).unwrap();
         let link_fd = DirFd::open(&temp_dir.path().join("link"), SymlinkBehavior::Follow).unwrap();
         assert!(fd_is(&link_fd, &meta).unwrap());
+    }
+
+    /// The operand's `--preserve-root` verdict must come from the stat the
+    /// descent is pinned to, whatever the path points at by the time it is asked.
+    #[cfg(unix)]
+    #[test]
+    fn test_meta_is_root_ignores_the_path() {
+        let temp_dir = tempdir().unwrap();
+        let root = std::fs::metadata("/").unwrap();
+        let other = std::fs::metadata(temp_dir.path()).unwrap();
+
+        assert!(meta_is_root(temp_dir.path(), &root));
+        assert!(!meta_is_root(Path::new("/"), &other));
     }
 
     #[test]
