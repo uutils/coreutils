@@ -543,6 +543,7 @@ fn test_random_source_larger_than_the_salt() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_random_source_named_pipe_does_not_overread() {
     use uutests::util_name;
 
