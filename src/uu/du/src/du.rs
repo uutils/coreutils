@@ -123,6 +123,7 @@ struct FileInfo {
     dev_id: u64,
 }
 
+#[derive(Clone)]
 struct Stat {
     path: PathBuf,
     size: u64,
@@ -212,6 +213,18 @@ impl Stat {
             metadata: std_metadata,
             latest_time,
         })
+    }
+
+    #[cfg(all(unix, not(target_os = "redox")))]
+    fn merge(&mut self, other: &Self) {
+        self.size += other.size;
+        self.blocks += other.blocks;
+        self.inodes += other.inodes;
+        self.latest_time = match (self.latest_time, other.latest_time) {
+            (Some(a), Some(b)) => Some(a.max(b)),
+            (a, None) => a,
+            (None, b) => b,
+        };
     }
 }
 
@@ -348,8 +361,24 @@ fn time_from_raw_stat(
 }
 
 #[cfg(all(unix, not(target_os = "redox")))]
+const S_IFMT: u32 = 0o170_000;
+#[cfg(all(unix, not(target_os = "redox")))]
+const S_IFDIR: u32 = 0o040_000;
+#[cfg(all(unix, not(target_os = "redox")))]
+const S_IFLNK: u32 = 0o120_000;
+
+#[cfg(all(unix, not(target_os = "redox")))]
+struct DuFrame {
+    dir_fd: DirFd,
+    dir_path: PathBuf,
+    depth: usize,
+    my_stat: Stat,
+    entries: std::vec::IntoIter<OsString>,
+}
+
+#[cfg(all(unix, not(target_os = "redox")))]
 // Implement safe_du on Unix (except Redox which lacks full stat support)
-// This is done for TOCTOU safety
+// Iterative implementation using a heap-allocated stack to prevent stack overflow on deep directory trees (LP #2167204).
 fn safe_du(
     path: &Path,
     options: &TraversalOptions,
@@ -365,7 +394,7 @@ fn safe_du(
     // when traversing deep trees). The root directory may instead carry an error,
     // in which case we fall back to opening it directly with a DirFd.
     let initial_stat = initial_stat.unwrap_or_else(|| Stat::new(path, None, options));
-    let mut my_stat = match initial_stat {
+    let my_stat = match initial_stat {
         Ok(mut s) => {
             // For subdirectories the `metadata` field is a cheap placeholder (the
             // parent directory's metadata). It is only consulted by `--time`, so we
@@ -446,160 +475,202 @@ fn safe_du(
         }
     };
 
-    'file_loop: for entry_name in entries {
-        const S_IFMT: u32 = 0o170_000;
-        const S_IFDIR: u32 = 0o040_000;
-        const S_IFLNK: u32 = 0o120_000;
+    let mut last_stat = my_stat.clone();
 
-        // First get the lstat (without following symlinks) to check if it's a symlink
-        let lstat = match dir_fd.stat_at(&entry_name, SymlinkBehavior::NoFollow) {
-            Ok(stat) => stat,
-            Err(e) => {
-                let entry_path = path.join(&entry_name);
-                print_tx.send(Err(e.map_err_context(
-                    || translate!("du-error-cannot-access", "path" => entry_path.quote()),
-                )))?;
-                continue;
-            }
-        };
+    let mut stack = vec![DuFrame {
+        dir_fd,
+        dir_path: path.to_path_buf(),
+        depth,
+        my_stat,
+        entries: entries.into_iter(),
+    }];
 
-        // Check if it's a symlink
-        #[allow(clippy::unnecessary_cast)]
-        let is_symlink = (lstat.st_mode as u32 & S_IFMT) == S_IFLNK;
-
-        // Handle symlinks with -L option
-        // For safe traversal with -L, we skip symlinks to directories entirely
-        // and let the non-safe traversal handle them at the top level
-        if is_symlink && options.dereference == Deref::All {
-            // Skip symlinks to directories when using safe traversal with -L
-            // They will be handled by regular traversal
-            continue;
-        }
-
-        #[allow(clippy::unnecessary_cast)]
-        let is_dir = (lstat.st_mode as u32 & S_IFMT) == S_IFDIR;
-        let entry_stat = lstat;
-
-        #[allow(clippy::unnecessary_cast)]
-        let file_info = (entry_stat.st_ino != 0).then_some(FileInfo {
-            file_id: entry_stat.st_ino as u128,
-            dev_id: entry_stat.st_dev as u64,
-        });
-
-        let safe_metadata = uucore::safe_traversal::Metadata::from_stat(entry_stat);
-        let latest_time = options
-            .time
-            .and_then(|time| time_from_raw_stat(&safe_metadata, time));
-
-        // For safe traversal, we need to handle stats differently
-        // We can't use std::fs::Metadata since that requires the full path
-        let this_stat = if is_dir {
-            // For directories, recurse using safe_du
-            Stat {
-                path: path.join(&entry_name),
-                size: 0,
-                #[allow(clippy::unnecessary_cast)]
-                blocks: entry_stat.st_blocks as u64,
-                inodes: 1,
-                inode: file_info,
-                // We need a fake metadata - create one from symlink_metadata of parent
-                // This is a workaround since we can't get real metadata without the full path
-                metadata: my_stat.metadata.clone(),
-                latest_time,
-            }
-        } else {
-            // For files
-            Stat {
-                path: path.join(&entry_name),
-                #[allow(clippy::unnecessary_cast)]
-                size: entry_stat.st_size as u64,
-                #[allow(clippy::unnecessary_cast)]
-                blocks: entry_stat.st_blocks as u64,
-                inodes: 1,
-                inode: file_info,
-                metadata: my_stat.metadata.clone(),
-                latest_time,
-            }
-        };
-
-        // Check excludes
-        for pattern in &options.excludes {
-            if pattern.matches(&this_stat.path.to_string_lossy())
-                || pattern.matches(&entry_name.to_string_lossy())
-            {
-                if options.verbose {
-                    println!(
-                        "{}",
-                        translate!("du-verbose-ignored", "path" => this_stat.path.quote())
-                    );
+    while let Some(top) = stack.last_mut() {
+        if let Some(entry_name) = top.entries.next() {
+            // First get the lstat (without following symlinks) to check if it's a symlink
+            let lstat = match top.dir_fd.stat_at(&entry_name, SymlinkBehavior::NoFollow) {
+                Ok(stat) => stat,
+                Err(e) => {
+                    let entry_path = top.dir_path.join(&entry_name);
+                    print_tx.send(Err(e.map_err_context(
+                        || translate!("du-error-cannot-access", "path" => entry_path.quote()),
+                    )))?;
+                    continue;
                 }
-                continue 'file_loop;
-            }
-        }
-
-        // Handle inodes
-        if let Some(inode) = this_stat.inode
-            && !seen_inodes.insert(inode)
-            && !options.count_links
-        {
-            continue;
-        }
-
-        // Process directories recursively
-        if is_dir {
-            if options.one_file_system
-                && let (Some(this_inode), Some(my_inode)) = (this_stat.inode, my_stat.inode)
-                && this_inode.dev_id != my_inode.dev_id
-            {
-                continue;
-            }
-
-            // Reuse the stat we already computed for this entry instead of
-            // re-stating it inside the recursive call.
-            let sub_path = this_stat.path.clone();
-            let this_stat = safe_du(
-                &sub_path,
-                options,
-                depth + 1,
-                seen_inodes,
-                print_tx,
-                Some(&dir_fd),
-                Some(Ok(this_stat)),
-            )?;
-
-            if !options.separate_dirs {
-                my_stat.size += this_stat.size;
-                my_stat.blocks += this_stat.blocks;
-                my_stat.inodes += this_stat.inodes;
-                my_stat.latest_time = match (my_stat.latest_time, this_stat.latest_time) {
-                    (Some(a), Some(b)) => Some(a.max(b)),
-                    (a, None) => a,
-                    (None, b) => b,
-                }
-            }
-            print_tx.send(Ok(StatPrintInfo {
-                stat: this_stat,
-                depth: depth + 1,
-            }))?;
-        } else {
-            my_stat.size += this_stat.size;
-            my_stat.blocks += this_stat.blocks;
-            my_stat.inodes += 1;
-            my_stat.latest_time = match (my_stat.latest_time, this_stat.latest_time) {
-                (Some(a), Some(b)) => Some(a.max(b)),
-                (a, None) => a,
-                (None, b) => b,
             };
-            if options.all {
+
+            // Check if it's a symlink
+            #[allow(clippy::unnecessary_cast)]
+            let is_symlink = (lstat.st_mode as u32 & S_IFMT) == S_IFLNK;
+
+            // Handle symlinks with -L option
+            // For safe traversal with -L, we skip symlinks to directories entirely
+            // and let the non-safe traversal handle them at the top level
+            if is_symlink && options.dereference == Deref::All {
+                // Skip symlinks to directories when using safe traversal with -L
+                // They will be handled by regular traversal
+                continue;
+            }
+
+            #[allow(clippy::unnecessary_cast)]
+            let is_dir = (lstat.st_mode as u32 & S_IFMT) == S_IFDIR;
+            let entry_stat = lstat;
+
+            #[allow(clippy::unnecessary_cast)]
+            let file_info = (entry_stat.st_ino != 0).then_some(FileInfo {
+                file_id: entry_stat.st_ino as u128,
+                dev_id: entry_stat.st_dev as u64,
+            });
+
+            let safe_metadata = uucore::safe_traversal::Metadata::from_stat(entry_stat);
+            let latest_time = options
+                .time
+                .and_then(|time| time_from_raw_stat(&safe_metadata, time));
+
+            let child_path = top.dir_path.join(&entry_name);
+
+            // For safe traversal, we need to handle stats differently
+            // We can't use std::fs::Metadata since that requires the full path
+            let this_stat = if is_dir {
+                let mut s = Stat {
+                    path: child_path.clone(),
+                    size: 0,
+                    #[allow(clippy::unnecessary_cast)]
+                    blocks: entry_stat.st_blocks as u64,
+                    inodes: 1,
+                    inode: file_info,
+                    // We need a fake metadata - create one from symlink_metadata of parent
+                    // This is a workaround since we can't get real metadata without the full path
+                    metadata: top.my_stat.metadata.clone(),
+                    latest_time,
+                };
+                if options.time.is_some()
+                    && let Ok(md) = fs::symlink_metadata(&s.path)
+                {
+                    s.metadata = md;
+                }
+                s
+            } else {
+                // For files
+                Stat {
+                    path: child_path,
+                    #[allow(clippy::unnecessary_cast)]
+                    size: entry_stat.st_size as u64,
+                    #[allow(clippy::unnecessary_cast)]
+                    blocks: entry_stat.st_blocks as u64,
+                    inodes: 1,
+                    inode: file_info,
+                    metadata: top.my_stat.metadata.clone(),
+                    latest_time,
+                }
+            };
+
+            // Check excludes
+            let mut ignored = false;
+            for pattern in &options.excludes {
+                if pattern.matches(&this_stat.path.to_string_lossy())
+                    || pattern.matches(&entry_name.to_string_lossy())
+                {
+                    if options.verbose {
+                        println!(
+                            "{}",
+                            translate!("du-verbose-ignored", "path" => this_stat.path.quote())
+                        );
+                    }
+                    ignored = true;
+                    break;
+                }
+            }
+            if ignored {
+                continue;
+            }
+
+            // Handle inodes
+            if let Some(inode) = this_stat.inode
+                && !seen_inodes.insert(inode)
+                && !options.count_links
+            {
+                continue;
+            }
+
+            // Process directories iteratively
+            if is_dir {
+                if options.one_file_system
+                    && let (Some(this_inode), Some(my_inode)) = (this_stat.inode, top.my_stat.inode)
+                    && this_inode.dev_id != my_inode.dev_id
+                {
+                    continue;
+                }
+
+                let child_depth = top.depth + 1;
+                let open_subdir_res = top.dir_fd.open_subdir(&entry_name, SymlinkBehavior::Follow);
+                let child_dir_fd = match open_subdir_res {
+                    Ok(fd) => fd,
+                    Err(e) => {
+                        print_tx.send(Err(e.map_err_context(
+                            || translate!("du-error-cannot-read-directory", "path" => this_stat.path.quote()),
+                        )))?;
+                        if !options.separate_dirs {
+                            top.my_stat.merge(&this_stat);
+                        }
+                        print_tx.send(Ok(StatPrintInfo {
+                            stat: this_stat,
+                            depth: child_depth,
+                        }))?;
+                        continue;
+                    }
+                };
+
+                let child_entries = match child_dir_fd.read_dir() {
+                    Ok(entries) => entries,
+                    Err(e) => {
+                        print_tx.send(Err(e.map_err_context(
+                            || translate!("du-error-cannot-read-directory", "path" => this_stat.path.quote()),
+                        )))?;
+                        if !options.separate_dirs {
+                            top.my_stat.merge(&this_stat);
+                        }
+                        print_tx.send(Ok(StatPrintInfo {
+                            stat: this_stat,
+                            depth: child_depth,
+                        }))?;
+                        continue;
+                    }
+                };
+
+                stack.push(DuFrame {
+                    dir_fd: child_dir_fd,
+                    dir_path: this_stat.path.clone(),
+                    depth: child_depth,
+                    my_stat: this_stat,
+                    entries: child_entries.into_iter(),
+                });
+            } else {
+                top.my_stat.merge(&this_stat);
+                if options.all {
+                    print_tx.send(Ok(StatPrintInfo {
+                        stat: this_stat,
+                        depth: top.depth + 1,
+                    }))?;
+                }
+            }
+        } else if let Some(finished) = stack.pop() {
+            if let Some(parent) = stack.last_mut() {
+                if !options.separate_dirs {
+                    parent.my_stat.merge(&finished.my_stat);
+                }
                 print_tx.send(Ok(StatPrintInfo {
-                    stat: this_stat,
-                    depth: depth + 1,
+                    stat: finished.my_stat,
+                    depth: finished.depth,
                 }))?;
+            } else {
+                last_stat = finished.my_stat;
+                break;
             }
         }
     }
 
-    Ok(my_stat)
+    Ok(last_stat)
 }
 
 // this takes `my_stat` to avoid having to stat files multiple times.

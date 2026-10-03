@@ -312,6 +312,14 @@ struct Chmoder {
     mode_indices: Vec<usize>,
 }
 
+#[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+struct ChmodFrame {
+    dir_fd: DirFd,
+    dir_path: PathBuf,
+    dir_info: Option<FileInformation>,
+    entries: std::vec::IntoIter<OsString>,
+}
+
 impl Chmoder {
     /// Calculate the new mode based on the current mode and the chmod specification.
     /// Returns (`new_mode`, `naively_expected_new_mode`) for symbolic modes, or (`new_mode`, `new_mode`) for numeric/reference modes.
@@ -658,7 +666,7 @@ impl Chmoder {
         if (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir() {
             match DirFd::open(file_path, should_follow_symlink.into()) {
                 Ok(dir_fd) => {
-                    r = self.safe_traverse_dir(&dir_fd, file_path, ancestors).and(r);
+                    r = self.safe_traverse_dir(dir_fd, file_path, ancestors).and(r);
                 }
                 Err(err) => {
                     // Handle permission denied errors with proper file path context
@@ -676,7 +684,7 @@ impl Chmoder {
     #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
     fn safe_traverse_dir(
         &self,
-        dir_fd: &DirFd,
+        dir_fd: DirFd,
         dir_path: &Path,
         ancestors: &mut HashSet<FileInformation>,
     ) -> UResult<()> {
@@ -685,7 +693,7 @@ impl Chmoder {
         // Cycle detection: identify this directory by (dev, ino) via the already-open
         // fd. Using the fd is TOCTOU-safe (no path re-resolution through symlinks) and
         // avoids a redundant path walk. If it's already on the current path, it's a cycle.
-        let dir_info = FileInformation::from_file(dir_fd).ok();
+        let dir_info = FileInformation::from_file(&dir_fd).ok();
         if dir_info
             .as_ref()
             .is_some_and(|info| !ancestors.insert(info.clone()))
@@ -693,79 +701,126 @@ impl Chmoder {
             return r; // cycle: this directory is already an ancestor
         }
 
-        let entries = dir_fd.read_dir()?;
+        let entries = match dir_fd.read_dir() {
+            Ok(e) => e,
+            Err(e) => {
+                if let Some(info) = dir_info {
+                    ancestors.remove(&info);
+                }
+                return Err(e.into());
+            }
+        };
 
         // Determine if we should follow symlinks (doesn't depend on entry_name)
         let should_follow_symlink = self.traverse_symlinks == TraverseSymlinks::All;
 
-        for entry_name in entries {
-            let entry_path = dir_path.join(&entry_name);
+        let mut stack = vec![ChmodFrame {
+            dir_fd,
+            dir_path: dir_path.to_path_buf(),
+            dir_info,
+            entries: entries.into_iter(),
+        }];
 
-            let dir_meta = dir_fd.metadata_at(&entry_name, should_follow_symlink.into());
-            let Ok(meta) = dir_meta else {
-                // Handle permission denied with proper file path context
-                let e = dir_meta.unwrap_err();
-                let error = if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    ChmodError::PermissionDenied(entry_path).into()
-                } else {
-                    e.into()
+        while let Some(top) = stack.last_mut() {
+            if let Some(entry_name) = top.entries.next() {
+                let entry_path = top.dir_path.join(&entry_name);
+
+                let dir_meta: std::io::Result<uucore::safe_traversal::Metadata> = top
+                    .dir_fd
+                    .metadata_at(&entry_name, should_follow_symlink.into());
+                let Ok(meta) = dir_meta else {
+                    // Handle permission denied with proper file path context
+                    let e = dir_meta.unwrap_err();
+                    let error = if e.kind() == std::io::ErrorKind::PermissionDenied {
+                        ChmodError::PermissionDenied(entry_path).into()
+                    } else {
+                        e.into()
+                    };
+                    r = r.and(Err(error));
+                    continue;
                 };
-                r = r.and(Err(error));
-                continue;
-            };
 
-            if entry_path.is_symlink() {
-                r = self
-                    .handle_symlink_during_safe_recursion(
-                        &entry_path,
-                        dir_fd,
-                        &entry_name,
-                        ancestors,
-                    )
-                    .and(r);
-            } else {
-                // For regular files and directories, chmod them.
-                // Always use NoFollow: we already confirmed via stat that the entry
-                // is not a symlink, so this prevents TOCTOU races where an attacker
-                // replaces the entry with a symlink between stat and chmod.
-                r = self
-                    .safe_chmod_file(
-                        &entry_path,
-                        dir_fd,
-                        &entry_name,
-                        meta.mode() & 0o7777,
-                        SymlinkBehavior::NoFollow,
-                    )
-                    .and(r);
+                if entry_path.is_symlink() {
+                    r = self
+                        .handle_symlink_during_safe_recursion(
+                            &entry_path,
+                            &top.dir_fd,
+                            &entry_name,
+                            ancestors,
+                        )
+                        .and(r);
+                } else {
+                    // For regular files and directories, chmod them.
+                    // Always use NoFollow: we already confirmed via stat that the entry
+                    // is not a symlink, so this prevents TOCTOU races where an attacker
+                    // replaces the entry with a symlink between stat and chmod.
+                    r = self
+                        .safe_chmod_file(
+                            &entry_path,
+                            &top.dir_fd,
+                            &entry_name,
+                            meta.mode() & 0o7777,
+                            SymlinkBehavior::NoFollow,
+                        )
+                        .and(r);
 
-                // Recurse into subdirectories using the existing directory fd.
-                // Open with NoFollow unless `-L` was requested: this prevents a
-                // TOCTOU where an attacker swaps the just-stat'd directory for a
-                // symlink before the open and redirects the descent off-tree.
-                if meta.is_dir() {
-                    match dir_fd.open_subdir(&entry_name, should_follow_symlink.into()) {
-                        Ok(child_dir_fd) => {
-                            r = self
-                                .safe_traverse_dir(&child_dir_fd, &entry_path, ancestors)
-                                .and(r);
-                        }
-                        Err(err) => {
-                            let error = if err.kind() == std::io::ErrorKind::PermissionDenied {
-                                ChmodError::PermissionDenied(entry_path).into()
-                            } else {
-                                err.into()
-                            };
-                            r = r.and(Err(error));
+                    // Descend into subdirectories iteratively using the existing directory fd.
+                    // Open with NoFollow unless `-L` was requested: this prevents a
+                    // TOCTOU where an attacker swaps the just-stat'd directory for a
+                    // symlink before the open and redirects the descent off-tree.
+                    if meta.is_dir() {
+                        let open_res: std::io::Result<DirFd> = top
+                            .dir_fd
+                            .open_subdir(&entry_name, should_follow_symlink.into());
+                        match open_res {
+                            Ok(child_dir_fd) => {
+                                let child_info = FileInformation::from_file(&child_dir_fd).ok();
+                                if child_info
+                                    .as_ref()
+                                    .is_some_and(|info| !ancestors.insert(info.clone()))
+                                {
+                                    continue; // cycle detected: skip entering child
+                                }
+
+                                match child_dir_fd.read_dir() {
+                                    Ok(child_entries) => {
+                                        stack.push(ChmodFrame {
+                                            dir_fd: child_dir_fd,
+                                            dir_path: entry_path,
+                                            dir_info: child_info,
+                                            entries: child_entries.into_iter(),
+                                        });
+                                    }
+                                    Err(err) => {
+                                        if let Some(info) = child_info {
+                                            ancestors.remove(&info);
+                                        }
+                                        let error =
+                                            if err.kind() == std::io::ErrorKind::PermissionDenied {
+                                                ChmodError::PermissionDenied(entry_path).into()
+                                            } else {
+                                                err.into()
+                                            };
+                                        r = r.and(Err(error));
+                                    }
+                                }
+                            }
+                            Err(err) => {
+                                let error = if err.kind() == std::io::ErrorKind::PermissionDenied {
+                                    ChmodError::PermissionDenied(entry_path).into()
+                                } else {
+                                    err.into()
+                                };
+                                r = r.and(Err(error));
+                            }
                         }
                     }
                 }
+            } else if let Some(info) = stack.pop().and_then(|f| f.dir_info) {
+                // Backtrack so sibling subtrees that legitimately reach the same directory
+                // (e.g. two symlinks to one dir) are not mistaken for cycles.
+                ancestors.remove(&info);
             }
-        }
-
-        // Backtrack so sibling subtrees that legitimately reach the same directory
-        // (e.g. two symlinks to one dir) are not mistaken for cycles.
-        if let Some(info) = dir_info {
-            ancestors.remove(&info);
         }
 
         r
