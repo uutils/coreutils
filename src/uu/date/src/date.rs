@@ -27,6 +27,8 @@ use uucore::error::FromIo;
 use uucore::error::{UError, UResult, strip_errno};
 #[cfg(feature = "i18n-datetime")]
 use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
+use uucore::i18n::get_ctype_encoding;
+use uucore::quoting_style::{Quotes, QuotingStyle, escape_bytes};
 use uucore::translate;
 use uucore::translate_text;
 use uucore::{format_usage, show};
@@ -210,47 +212,20 @@ enum DayDelta {
     Next,
 }
 
-/// Escape invalid UTF-8 bytes in GNU-compatible octal notation.
-///
-/// Converts bytes to a string with printable ASCII characters preserved
-/// and non-printable/invalid UTF-8 bytes escaped as `\NNN` octal sequences.
-///
-/// This matches GNU date's behavior for invalid input.
-///
-/// # Arguments
-/// * `bytes` - The byte sequence to escape
-///
-/// # Returns
-/// A string with invalid bytes escaped in octal notation
-///
-/// # Example
-/// ```ignore
-/// let invalid = b"\xb0";
-/// assert_eq!(escape_invalid_bytes(invalid), "\\260");
-/// ```
-fn escape_invalid_bytes(bytes: &[u8]) -> String {
-    let escaped = bytes
-        .iter()
-        .flat_map(|&b| {
-            // Preserve printable ASCII except backslash
-            if (0x20..0x7f).contains(&b) && b != b'\\' {
-                vec![b]
-            } else {
-                // Escape as octal: \NNN
-                format!("\\{b:03o}").into_bytes()
-            }
-        })
-        .collect::<Vec<u8>>();
-    String::from_utf8_lossy(&escaped).into_owned()
+/// Escape user input for an error message the way GNU date quotes it: C
+/// escapes for control characters and quotes, octal for bytes the locale
+/// cannot display. The surrounding quotes come from the message itself.
+fn escape_for_error(bytes: &[u8]) -> String {
+    let style = QuotingStyle::C {
+        quotes: Quotes::Single,
+    };
+    let quoted = escape_bytes(bytes, style, get_ctype_encoding());
+    String::from_utf8_lossy(&quoted[1..quoted.len() - 1]).into_owned()
 }
 
-/// Renders a command-line operand for an error message the way GNU does:
-/// valid UTF-8 is kept as-is, anything else is octal-escaped.
+/// Renders a command-line operand for an error message the way GNU does.
 fn operand_for_error(operand: &OsStr) -> String {
-    operand.to_str().map_or_else(
-        || escape_invalid_bytes(operand.as_encoded_bytes()),
-        ToOwned::to_owned,
-    )
+    escape_for_error(operand.as_encoded_bytes())
 }
 
 /// Strip parenthesized comments from a date string.
@@ -437,7 +412,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             Ok(ParsedDateTime::Extended(_)) | Err(_) => {
                 return Err(Box::new(DateError::InvalidDate {
-                    date: input.clone(),
+                    date: escape_for_error(input.as_bytes()),
                 }));
             }
         }
@@ -1263,7 +1238,7 @@ fn parse_dates_from_reader<R: Read + 'static>(
             // Report lines with invalid UTF-8 (with non-printable bytes
             // octal-escaped like GNU) instead of silently stopping the input
             Err(e) => Err((
-                escape_invalid_bytes(e.as_bytes()),
+                escape_for_error(e.as_bytes()),
                 parse_datetime::ParseDateTimeError::InvalidInput,
             )),
         }
@@ -1343,10 +1318,10 @@ fn parse_date<S: AsRef<str>>(
         }
         Ok(ParsedDateTime::Extended(date)) if allow_extended => Ok(ParsedDateTime::Extended(date)),
         Ok(ParsedDateTime::Extended(_)) => Err((
-            input_str.into(),
+            escape_for_error(input_str.as_bytes()),
             parse_datetime::ParseDateTimeError::InvalidInput,
         )),
-        Err(e) => Err((input_str.into(), e)),
+        Err(e) => Err((escape_for_error(input_str.as_bytes()), e)),
     }
 }
 

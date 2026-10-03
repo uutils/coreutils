@@ -202,10 +202,15 @@ fn escape_name_inner(
     quoter.finalize()
 }
 
+/// Escape raw bytes with respect to the given style.
+pub fn escape_bytes(bytes: &[u8], style: QuotingStyle, encoding: UEncoding) -> Vec<u8> {
+    escape_name_inner(bytes, style, false, encoding)
+}
+
 /// Escape a filename with respect to the given style.
 pub fn escape_name(name: &OsStr, style: QuotingStyle, encoding: UEncoding) -> OsString {
     let name = crate::os_str_as_bytes_lossy(name);
-    crate::os_string_from_vec(escape_name_inner(&name, style, false, encoding))
+    crate::os_string_from_vec(escape_bytes(&name, style, encoding))
         .expect("all byte sequences should be valid for platform, or already replaced in name")
 }
 
