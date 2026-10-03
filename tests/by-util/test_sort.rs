@@ -2017,7 +2017,11 @@ fn test_separator_attached_equals_double() {
 fn test_separator_clustered_attached() {
     // `-nt=5`: -n is a flag, -t takes the rest of the argument (`=5`)
     // verbatim, which GNU rejects as multi-character.
+    // `sort` exits as soon as it rejects the suffix, so the stdin write races
+    // the exit and can lose with EPIPE. The write is not what is under test
+    // here, so tolerate it.
     new_ucmd!()
+        .ignore_stdin_write_error()
         .args(&["-nt=5"])
         .pipe_in("a=b=c\n")
         .fails()
@@ -2026,7 +2030,9 @@ fn test_separator_clustered_attached() {
 
 #[test]
 fn test_separator_clustered_attached_b() {
+    // Same race as above: the child exits before stdin is drained.
     new_ucmd!()
+        .ignore_stdin_write_error()
         .args(&["-bt=x"])
         .pipe_in("a=b=c\n")
         .fails()
