@@ -2208,13 +2208,50 @@ fn is_forbidden_to_copy_to_same_file(
         && !options.dereference)
 }
 
+/// With `--update=older`, skip the copy unless `source` is newer than `dest`,
+/// leaving `dest` untouched. Later hard links to a skipped `source` are linked
+/// to the kept `dest`.
+fn skip_unless_newer(
+    source: &Path,
+    dest: &Path,
+    options: &Options,
+    source_in_command_line: bool,
+    copied_files: &mut HashMap<FileInformation, PathBuf>,
+) -> CopyResult<()> {
+    if options.update != UpdateMode::IfOlder {
+        return Ok(());
+    }
+    let source_metadata = if options.dereference(source_in_command_line) {
+        fs::metadata(source)
+    } else {
+        fs::symlink_metadata(source)
+    }
+    .map_err(|e| CpError::IoErrContext(e, format!("cannot stat {}", source.quote())))?;
+    // The early `--remove-destination` handling may already have removed `dest`.
+    let dest_metadata = match fs::symlink_metadata(dest) {
+        Ok(metadata) => metadata,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e.into()),
+    };
+    if source_metadata.modified()? > dest_metadata.modified()? {
+        return Ok(());
+    }
+    if options.copy_mode != CopyMode::Link {
+        copied_files.insert(
+            FileInformation::from_path(source, options.dereference(source_in_command_line))?,
+            dest.to_path_buf(),
+        );
+    }
+    Err(CpError::Skipped(false))
+}
+
 /// Back up, remove, or leave intact the destination file, depending on the options.
 fn handle_existing_dest(
     source: &Path,
     dest: &Path,
     options: &Options,
     source_in_command_line: bool,
-    copied_files: &HashMap<FileInformation, PathBuf>,
+    copied_files: &mut HashMap<FileInformation, PathBuf>,
 ) -> CopyResult<()> {
     // Disallow copying a file to itself, unless `--force` and
     // `--backup` are both specified.
@@ -2232,7 +2269,20 @@ fn handle_existing_dest(
         return Err(CpError::Skipped(false));
     }
 
-    if options.update != UpdateMode::IfOlder {
+    // A hard link to a source already copied elsewhere is linked to that copy
+    // later, whatever its age.
+    let links_to_copied_file = options.update == UpdateMode::IfOlder
+        && options.preserve_hard_links()
+        && copied_files
+            .get(
+                &FileInformation::from_path(source, options.dereference(source_in_command_line))
+                    .map_err(|e| {
+                        CpError::IoErrContext(e, format!("cannot stat {}", source.quote()))
+                    })?,
+            )
+            .is_some_and(|linked| linked != dest);
+    if !links_to_copied_file {
+        skip_unless_newer(source, dest, options, source_in_command_line, copied_files)?;
         options.overwrite.verify(dest, options.debug)?;
     }
 
@@ -2502,7 +2552,8 @@ fn handle_copy_mode(
         CopyMode::Update => {
             if dest.exists() {
                 match options.update {
-                    UpdateMode::All => {
+                    // `copy_file` has already skipped a destination that is not older.
+                    UpdateMode::All | UpdateMode::IfOlder => {
                         copy_helper(
                             source,
                             dest,
@@ -2525,28 +2576,6 @@ fn handle_copy_mode(
                         return Err(CpError::Error(
                             translate!("cp-error-not-replacing", "file" => dest.quote()),
                         ));
-                    }
-                    UpdateMode::IfOlder => {
-                        let dest_metadata = fs::symlink_metadata(dest)?;
-
-                        let src_time = source_metadata.modified()?;
-                        let dest_time = dest_metadata.modified()?;
-                        if src_time <= dest_time {
-                            return Ok(PerformedAction::Skipped);
-                        }
-
-                        options.overwrite.verify(dest, options.debug)?;
-
-                        copy_helper(
-                            source,
-                            dest,
-                            options,
-                            context,
-                            source_metadata,
-                            symlinked_files,
-                            source_in_command_line,
-                            created_parent_dirs,
-                        )?;
                     }
                 }
             } else {
@@ -2807,6 +2836,20 @@ fn copy_file(
         }
     }
 
+    // `--attributes-only` skips `handle_existing_dest` above, so an
+    // `--update=older` skip is decided here.
+    if options.update == UpdateMode::IfOlder
+        && initial_dest_metadata.is_some()
+        && options.attributes_only
+        && !matches!(
+            options.overwrite,
+            OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+        )
+    {
+        skip_unless_newer(source, dest, options, source_in_command_line, copied_files)?;
+        options.overwrite.verify(dest, options.debug)?;
+    }
+
     // Calculate the context upfront before canonicalizing the path
     let context = context_for(source, dest);
     let context = context.as_str();
@@ -2849,7 +2892,11 @@ fn copy_file(
         created_parent_dirs,
     )?;
 
-    if options.verbose && performed_action != PerformedAction::Skipped {
+    if performed_action == PerformedAction::Skipped {
+        return Err(CpError::Skipped(false));
+    }
+
+    if options.verbose {
         print_verbose_output(options.parents, progress_bar, source, dest)?;
     }
 
