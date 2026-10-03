@@ -2882,7 +2882,7 @@ fn test_cp_preserve_timestamps() {
 }
 
 #[test]
-fn test_cp_preserve_timestamps_keeps_access_time_from_before_the_copy() {
+fn test_cp_preserve_timestamps_atime() {
     let (at, mut ucmd) = at_and_ucmd!();
     // Even a `relatime` mount updates an access time this old when the copy
     // reads the file.
@@ -2907,6 +2907,46 @@ fn test_cp_preserve_timestamps_keeps_access_time_from_before_the_copy() {
     let metadata = at.metadata("destination");
     assert_eq!(metadata.accessed().unwrap(), accessed);
     assert_eq!(metadata.modified().unwrap(), modified);
+}
+
+/// With `-L`, the attributes come from the file a link points to even when
+/// the path it resolves to does not exist, as for an open file that has been
+/// deleted.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev, /private) not visible"
+)]
+fn test_cp_preserve_timestamps_dereference_deleted() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let accessed = std::time::UNIX_EPOCH + Duration::from_secs(1_000_000_000);
+    let modified = accessed + Duration::from_secs(3600);
+    at.write("source", "contents");
+    let source = std::fs::File::options()
+        .read(true)
+        .write(true)
+        .open(at.plus("source"))
+        .unwrap();
+    source
+        .set_times(
+            std::fs::FileTimes::new()
+                .set_accessed(accessed)
+                .set_modified(modified),
+        )
+        .unwrap();
+    // `/dev/stdin` now resolves to a path ending in ` (deleted)`.
+    at.remove("source");
+
+    ucmd.args(&["-L", "--preserve=timestamps", "/dev/stdin", "destination"])
+        .set_stdin(source)
+        .succeeds()
+        .no_output();
+
+    let metadata = at.metadata("destination");
+    assert_eq!(metadata.accessed().unwrap(), accessed);
+    assert_eq!(metadata.modified().unwrap(), modified);
+    assert_eq!(at.read("destination"), "contents");
 }
 
 #[test]
