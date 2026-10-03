@@ -131,8 +131,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut args = &args[..];
     match args {
-        [a] if a == b"--help" => uu_app().print_help()?,
-        [a] if a == b"--version" => writeln!(stdout(), "expr {}", uucore::crate_version!())?,
+        [a] if a == b"--help" || a == b"--version" => {
+            let res = if a == b"--help" {
+                uu_app().print_help()
+            } else {
+                writeln!(stdout(), "expr {}", uucore::crate_version!())
+            };
+            // expr uses exit status 3 for write errors
+            if let Err(e) = res {
+                show_error!("{}", strip_errno(&e));
+                return Err(3.into());
+            }
+        }
         _ => {
             // ignore -- as the 1st argument
             if let [a, rest @ ..] = args
