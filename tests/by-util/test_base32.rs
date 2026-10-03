@@ -89,7 +89,7 @@ fn test_garbage() {
         .arg("-d")
         .pipe_in(input)
         .fails()
-        .stderr_only("base32: error: invalid input\n");
+        .stderr_only("base32: invalid input\n");
 }
 
 #[test]
