@@ -3918,3 +3918,22 @@ sort: invalid suffix in --buffer-size argument '8zz'
 }
 
 // spell-checker:enable
+
+#[test]
+fn test_double_dash_operand_that_looks_like_attached_separator() {
+    // `--` ends option parsing, so here `-t=x` names a file. It used to be
+    // rewritten into `--separator=x`, and sort looked for that instead.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("-t=x", "b\na\n");
+    ucmd.args(&["--", "-t=x"]).succeeds().stdout_only("a\nb\n");
+}
+
+#[test]
+fn test_attached_separator_still_split_before_double_dash() {
+    // The rewrite still applies ahead of `--`.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "b=a\na=b\n");
+    ucmd.args(&["-t=", "--", "in"])
+        .succeeds()
+        .stdout_only("a=b\nb=a\n");
+}

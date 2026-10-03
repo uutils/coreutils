@@ -2161,7 +2161,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // argument, which clap passes through verbatim. A cluster such as
     // `-nt=5` is split into `-nt` and `5` the same way.
     let valueless_shorts = "bCcdfghimMnRrsuz";
+    // `--` ends option parsing; an operand after it is a file name even when it
+    // looks like an attached `-t`, and rewriting it would make sort look for a
+    // different file.
+    let mut operands_only = false;
     let args = args.into_iter().flat_map(|x| {
+        if operands_only {
+            return vec![x];
+        }
+        if x == "--" {
+            operands_only = true;
+            return vec![x];
+        }
         // Non-UTF-8 separators are rejected later anyway, so lossy conversion
         // here only affects arguments that cannot become a valid separator.
         let as_str = x.to_string_lossy();
