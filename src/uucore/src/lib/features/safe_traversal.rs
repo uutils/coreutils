@@ -6,7 +6,7 @@
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
 // spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot EOVERFLOW chowned chmoded
-// spell-checker:ignore LARGEFILE
+// spell-checker:ignore LARGEFILE linkat symlinkat mkfifoat tvos watchos visionos
 
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
@@ -29,8 +29,9 @@ use nix::dir::Dir;
 use nix::fcntl::{OFlag, openat};
 use nix::libc;
 use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat, mkdirat};
-use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
+use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, linkat, symlinkat, unlinkat};
 use os_display::Quotable;
+use rustix::fs::CWD;
 
 use crate::translate;
 
@@ -145,6 +146,40 @@ pub struct DirFd {
 const LARGEFILE: OFlag = OFlag::O_LARGEFILE;
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 const LARGEFILE: OFlag = OFlag::empty();
+
+/// `mkfifoat(2)`, or [`io::ErrorKind::Unsupported`] where no such call exists.
+///
+/// The `cfg` lists below must stay in step with the one in `nix::unistd`.
+#[cfg(not(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "tvos",
+    target_os = "watchos",
+    target_os = "visionos",
+    target_os = "haiku",
+    target_os = "android",
+    target_os = "redox"
+)))]
+fn mkfifoat_impl(fd: &impl AsFd, name: &OsStr, mode: Mode) -> io::Result<()> {
+    nix::unistd::mkfifoat(fd, name, mode).map_err(|e| io::Error::from_raw_os_error(e as i32))
+}
+
+#[cfg(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "tvos",
+    target_os = "watchos",
+    target_os = "visionos",
+    target_os = "haiku",
+    target_os = "android",
+    target_os = "redox"
+))]
+fn mkfifoat_impl(_fd: &impl AsFd, _name: &OsStr, _mode: Mode) -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "mkfifoat is not available on this platform",
+    ))
+}
 
 impl DirFd {
     /// Open a directory and return a file descriptor
@@ -489,6 +524,32 @@ impl DirFd {
             .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
 
         Ok(fs::File::from(fd))
+    }
+
+    /// Create a symbolic link at `name` pointing to `target`.
+    ///
+    /// A symlink already at `name` fails with `EEXIST` rather than being
+    /// followed or replaced.
+    pub fn symlink_at(&self, target: &Path, name: &OsStr) -> io::Result<()> {
+        symlinkat(target, &self.fd, name).map_err(|e| io::Error::from_raw_os_error(e as i32))
+    }
+
+    /// Create a FIFO at `name`.
+    ///
+    /// Returns [`io::ErrorKind::Unsupported`] where `mkfifoat(2)` does not
+    /// exist, so a caller with a path can fall back to `mkfifo(2)`.
+    pub fn mkfifo_at(&self, name: &OsStr, mode: u32) -> io::Result<()> {
+        let mode = Mode::from_bits_truncate(mode as libc::mode_t);
+        mkfifoat_impl(&self.fd, name, mode)
+    }
+
+    /// Create a hard link at `name` to the file at `existing`.
+    ///
+    /// `existing` is resolved from the working directory and not followed if it
+    /// is a symlink, as `link(2)` does.
+    pub fn link_at(&self, existing: &Path, name: &OsStr) -> io::Result<()> {
+        linkat(CWD, existing, &self.fd, name, nix::fcntl::AtFlags::empty())
+            .map_err(|e| io::Error::from_raw_os_error(e as i32))
     }
 
     /// Create a DirFd from an existing file descriptor (takes ownership)
@@ -1345,6 +1406,66 @@ mod tests {
         let result = dir_fd.mkdir_at(OsStr::new("existing"), 0o755);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_symlink_at_creates_link_and_refuses_existing() {
+        let temp_dir = TempDir::new().unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+
+        dir_fd
+            .symlink_at(Path::new("target"), OsStr::new("link"))
+            .unwrap();
+        assert!(
+            fs::symlink_metadata(temp_dir.path().join("link"))
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+
+        // An entry planted at the same name must fail, not be followed.
+        assert!(
+            dir_fd
+                .symlink_at(Path::new("other"), OsStr::new("link"))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn test_link_at_creates_hard_link() {
+        use std::os::unix::fs::MetadataExt;
+
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("original"), b"content").unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+
+        dir_fd
+            .link_at(&temp_dir.path().join("original"), OsStr::new("linked"))
+            .unwrap();
+
+        let original = fs::metadata(temp_dir.path().join("original")).unwrap();
+        let linked = fs::metadata(temp_dir.path().join("linked")).unwrap();
+        assert_eq!(original.ino(), linked.ino());
+        assert_eq!(linked.nlink(), 2);
+    }
+
+    #[test]
+    fn test_mkfifo_at_creates_fifo() {
+        use std::os::unix::fs::FileTypeExt;
+
+        let temp_dir = TempDir::new().unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+
+        match dir_fd.mkfifo_at(OsStr::new("pipe"), 0o600) {
+            Ok(()) => assert!(
+                fs::symlink_metadata(temp_dir.path().join("pipe"))
+                    .unwrap()
+                    .file_type()
+                    .is_fifo()
+            ),
+            // Documented on platforms without mkfifoat(2).
+            Err(e) => assert_eq!(e.kind(), io::ErrorKind::Unsupported),
+        }
     }
 
     #[test]
