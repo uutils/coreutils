@@ -139,7 +139,9 @@ fn metadata_get_change_time(md: &Metadata) -> Option<SystemTime> {
 
 #[cfg(not(unix))]
 fn metadata_get_change_time(_md: &Metadata) -> Option<SystemTime> {
-    // Not available.
+    // Not available: ctime requires a platform MetadataExt trait that is
+    // unix-only (or nightly-only on WASI), so it cannot be read through std
+    // Metadata here.
     None
 }
 
