@@ -1628,6 +1628,102 @@ fn test_cp_backup_simple() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_cp_backup_moves_destination_aside() {
+    use std::os::unix::fs::MetadataExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dest_inode = at.metadata(TEST_HOW_ARE_YOU_SOURCE).ino();
+
+    ucmd.arg("--backup=simple")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(
+        at.metadata(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")).ino(),
+        dest_inode
+    );
+    assert_ne!(at.metadata(TEST_HOW_ARE_YOU_SOURCE).ino(), dest_inode);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_backup_does_not_read_destination() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let backup = format!("{TEST_HOW_ARE_YOU_SOURCE}~");
+    at.set_mode(TEST_HOW_ARE_YOU_SOURCE, 0o0000);
+
+    ucmd.arg("--backup=simple")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    at.set_mode(&backup, 0o600);
+    assert_eq!(at.read(&backup), "How are you?\n");
+}
+
+#[test]
+#[cfg(windows)]
+fn test_cp_backup_replaces_destination_held_open_for_delete() {
+    use std::fs::OpenOptions;
+    use std::os::windows::fs::OpenOptionsExt;
+
+    // The sharing a running image is held with on Windows. #3034
+    const FILE_SHARE_READ: u32 = 0x0000_0001;
+    const FILE_SHARE_DELETE: u32 = 0x0000_0004;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let held = OpenOptions::new()
+        .read(true)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_DELETE)
+        .open(at.subdir.join(TEST_HOW_ARE_YOU_SOURCE))
+        .expect("hold the destination open the way a running image is held");
+
+    ucmd.arg("--backup=simple")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    drop(held);
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
+        "How are you?\n"
+    );
+}
+
+#[test]
+#[cfg(windows)]
+fn test_cp_without_backup_cannot_replace_destination_held_open_for_delete() {
+    use std::fs::OpenOptions;
+    use std::os::windows::fs::OpenOptionsExt;
+
+    // Negative control: the same sharing must refuse an in-place overwrite.
+    const FILE_SHARE_READ: u32 = 0x0000_0001;
+    const FILE_SHARE_DELETE: u32 = 0x0000_0004;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let held = OpenOptions::new()
+        .read(true)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_DELETE)
+        .open(at.subdir.join(TEST_HOW_ARE_YOU_SOURCE))
+        .expect("hold the destination open the way a running image is held");
+
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .fails()
+        .no_stdout();
+
+    drop(held);
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
+}
+
+#[test]
 fn test_cp_backup_simple_protect_source() {
     let (at, mut ucmd) = at_and_ucmd!();
     let source = format!("{TEST_HELLO_WORLD_SOURCE}~");
