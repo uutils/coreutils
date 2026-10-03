@@ -19,7 +19,7 @@ path = "src/hostname.rs"
 test = false
 doctest = false
 
-[target.'cfg(any(all(unix, not(any(target_os = "aix", target_os = "redox"))), windows))'.dependencies]
+[target.'cfg(any(all(unix, not(target_os = "redox")), windows))'.dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
 hostname = { workspace = true, features = ["set"] }
