@@ -955,8 +955,8 @@ fn test_du_h_precision() {
     }
 }
 
+#[uutests::wasi_ignore(LocaleEnvNotPropagated)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
 fn test_du_h_locale_decimal_separator() {
     for (locale, expected) in [("fr_FR.UTF-8", "8,4K"), ("C", "8.4K")] {
         let (at, mut ucmd) = at_and_ucmd!();

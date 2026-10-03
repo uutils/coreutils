@@ -559,9 +559,9 @@ shred: invalid file size: '4vv'
     }
 }
 
+#[uutests::wasi_ignore(HostPathsProcNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_couldnt_rename() {
     new_ucmd!()
         .args(&["-u", "/proc/self/mem"])

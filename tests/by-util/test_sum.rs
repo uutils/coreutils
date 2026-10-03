@@ -98,9 +98,9 @@ fn test_invalid_metadata() {
         .stderr_is("sum: b: No such file or directory\n");
 }
 
+#[uutests::wasi_ignore(ArgvFilenamesUtf8)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_sum_non_utf8_paths() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -122,7 +122,7 @@ fn test_filename_ends_with_slash() {
 }
 
 #[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "openbsd")))]
-#[cfg_attr(wasi_runner, ignore)]
+#[uutests::wasi_ignore(HostPathsProcNotVisible)]
 #[test]
 fn test_filename_proc_self_mem() {
     // https://github.com/uutils/coreutils/issues/12949

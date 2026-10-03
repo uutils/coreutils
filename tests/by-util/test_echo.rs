@@ -657,8 +657,8 @@ fn multibyte_escape_unicode() {
         .stdout_only_bytes(b"A\xF0");
 }
 
+#[uutests::wasi_ignore(ArgvFilenamesUtf8)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn non_utf_8_hex_round_trip() {
     new_ucmd!()
         .args(&["-e", r"\xFF"])
@@ -681,9 +681,9 @@ fn nine_bit_octal() {
         .stdout_only_bytes(RESULT);
 }
 
+#[uutests::wasi_ignore(ArgvFilenamesUtf8)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn non_utf_8() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -737,8 +737,8 @@ fn test_cmd_result_stdout_check_and_stdout_str_check() {
     result.no_stderr();
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no subprocess spawning")]
 fn test_cmd_result_stderr_check_and_stderr_str_check() {
     let ts = TestScenario::new("echo");
 

@@ -32,34 +32,34 @@ fn test_version() {
     new_ucmd!().arg("--version").succeeds();
 }
 
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
-#[cfg_attr(wasi_runner, ignore)]
 fn test_simple() {
     run(NO_ARGS, b"y\ny\ny\ny\n");
 }
 
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
-#[cfg_attr(wasi_runner, ignore)]
 fn test_args() {
     run(&["a", "bar", "c"], b"a bar c\na bar c\na ba");
 }
 
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
-#[cfg_attr(wasi_runner, ignore)]
 fn test_long_output() {
     run(NO_ARGS, "y\n".repeat(512 * 1024).as_bytes());
 }
 
 /// Test with an output that seems likely to get mangled in case of incomplete writes.
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
-#[cfg_attr(wasi_runner, ignore)]
 fn test_long_odd_output() {
     run(&["abcdef"], "abcdef\n".repeat(1024 * 1024).as_bytes());
 }
 
 /// Test with an input that doesn't fit in the standard buffer.
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
-#[cfg_attr(wasi_runner, ignore)]
 fn test_long_input() {
     #[cfg(not(windows))]
     const TIMES: usize = 14000;
@@ -75,9 +75,9 @@ fn test_long_input() {
 
 /// A joined line larger than the internal broker pipe's capacity (1 MiB)
 /// can cause a deadlock
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-#[cfg_attr(wasi_runner, ignore)]
 fn test_long_line_exceeds_pipe_capacity() {
     // A single argv string is capped at ~128 KiB by the kernel, so use many
     // args joined by spaces to build a >1 MiB line instead of one huge arg.
@@ -87,9 +87,9 @@ fn test_long_line_exceeds_pipe_capacity() {
     run(&args, format!("{line}\n{line}\n").as_bytes());
 }
 
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
-#[cfg_attr(wasi_runner, ignore)]
 fn test_piped_to_dev_full() {
     use std::fs::OpenOptions;
 
@@ -109,10 +109,10 @@ fn test_piped_to_dev_full() {
     }
 }
 
+#[uutests::wasi_ignore(ArgvUtf8)]
 #[test]
 #[cfg(unix)]
 // WASI runners (wasmtime) require UTF-8 arguments, so skip this test when testing WASI binaries
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_non_utf8() {
     use std::os::unix::ffi::OsStrExt;
 
