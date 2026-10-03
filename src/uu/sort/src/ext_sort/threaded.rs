@@ -8,7 +8,7 @@
 
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{Read, Write, stderr};
+use std::io::{self, Read, Write, stderr};
 use std::iter;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, SyncSender};
@@ -24,7 +24,7 @@ use crate::merge::WriteablePlainTmpFile;
 use crate::merge::WriteableTmpFile;
 use crate::tmp_dir::TmpDirWrapper;
 use crate::{
-    GlobalSettings, Line,
+    GlobalSettings, Line, SortError,
     chunks::{self, Chunk},
     compare_by, merge, print_sorted, sort_by,
 };
@@ -64,6 +64,7 @@ pub fn ext_sort(
             Ok(mut child) => {
                 // Kill the test process immediately
                 let _ = child.kill();
+                let _ = child.wait();
             }
             Err(err) => {
                 // Print the error and disable compression
@@ -295,13 +296,17 @@ fn write<I: WriteableTmpFile>(
     separator: u8,
 ) -> UResult<I::Closed> {
     let mut tmp_file = I::create(file, compress_prog)?;
-    write_lines(chunk.lines(), tmp_file.as_write(), separator);
-    tmp_file.finished_writing()
+    let write_result = write_lines(chunk.lines(), tmp_file.as_write(), separator);
+    // Close the pipe and wait for the compressor even if writing failed.
+    let finished_result = tmp_file.finished_writing();
+    write_result.map_err(|error| SortError::WriteTmpFileFailed { error })?;
+    finished_result
 }
 
-fn write_lines<T: Write>(lines: &[Line], writer: &mut T, separator: u8) {
+fn write_lines<T: Write>(lines: &[Line], writer: &mut T, separator: u8) -> io::Result<()> {
     for s in lines {
-        writer.write_all(s.line).unwrap();
-        writer.write_all(&[separator]).unwrap();
+        writer.write_all(s.line)?;
+        writer.write_all(&[separator])?;
     }
+    Ok(())
 }
