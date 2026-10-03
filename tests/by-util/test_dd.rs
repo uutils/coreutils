@@ -2643,3 +2643,64 @@ dd: unrecognized operand 'bsx=1'
             .stderr_does_not_contain("╭─");
     }
 }
+
+// Conversion conflicts are reported in a fixed order: ascii/ebcdic/ibm,
+// block/unblock, lcase/ucase, then excl/nocreat.
+#[test]
+fn test_block_unblock_conflict_is_reported_before_other_pairs() {
+    for conv in ["block,unblock,lcase,ucase", "block,unblock,excl,nocreat"] {
+        new_ucmd!()
+            .args(&[
+                format!("conv={conv}"),
+                "cbs=1".into(),
+                "if=/dev/null".into(),
+            ])
+            .fails_with_code(1)
+            .stderr_only("dd: cannot combine block and unblock\n");
+    }
+}
+
+// ascii implies unblock; ebcdic and ibm imply block. With cbs, an explicit
+// flag in the other direction is a block/unblock conflict.
+#[test]
+fn test_implied_block_direction_conflicts_with_explicit_flag() {
+    for conv in [
+        "ascii,block",
+        "ebcdic,unblock",
+        "ibm,unblock",
+        "ascii,block,unblock",
+    ] {
+        new_ucmd!()
+            .args(&[
+                format!("conv={conv}"),
+                "cbs=1".into(),
+                "if=/dev/null".into(),
+            ])
+            .fails_with_code(1)
+            .stderr_only("dd: cannot combine block and unblock\n");
+    }
+}
+
+#[test]
+fn test_implied_block_direction_agrees_with_explicit_flag() {
+    for conv in ["ascii,unblock", "ebcdic,block", "ibm,block"] {
+        new_ucmd!()
+            .args(&[format!("conv={conv}"), "cbs=1".into(), "status=none".into()])
+            .pipe_in("")
+            .succeeds()
+            .no_output();
+    }
+}
+
+// Without cbs, block and unblock have no record length to work with and are
+// ignored rather than rejected.
+#[test]
+fn test_block_unblock_without_cbs_is_ignored() {
+    for conv in ["block", "unblock", "block,unblock"] {
+        new_ucmd!()
+            .args(&[format!("conv={conv}"), "status=none".into()])
+            .pipe_in("ab\ncd\n")
+            .succeeds()
+            .stdout_only("ab\ncd\n");
+    }
+}
