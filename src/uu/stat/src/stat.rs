@@ -515,8 +515,8 @@ fn print_os_str(s: &OsString, flags: Flags, width: usize, precision: Precision) 
     }
 }
 
-fn quote_file_name(file_name: &str, quoting_style: QuotingStyle) -> String {
-    escape_name(OsStr::new(file_name), quoting_style, get_ctype_encoding())
+fn quote_file_name(file_name: &OsStr, quoting_style: QuotingStyle) -> String {
+    escape_name(file_name, quoting_style, get_ctype_encoding())
         .to_string_lossy()
         .to_string()
 }
@@ -544,10 +544,10 @@ fn get_quoted_file_name(
     quoting_style: QuotingStyle,
 ) -> Result<String, i32> {
     if file_type.is_symlink() {
-        let quoted_display_name = quote_file_name(display_name, quoting_style);
+        let quoted_display_name = quote_file_name(OsStr::new(display_name), quoting_style);
         match fs::read_link(file) {
             Ok(dst) => {
-                let quoted_dst = quote_file_name(&dst.to_string_lossy(), quoting_style);
+                let quoted_dst = quote_file_name(dst.as_os_str(), quoting_style);
                 Ok(format!("{quoted_display_name} -> {quoted_dst}"))
             }
             Err(e) => {
@@ -556,7 +556,7 @@ fn get_quoted_file_name(
             }
         }
     } else {
-        Ok(quote_file_name(display_name, quoting_style))
+        Ok(quote_file_name(OsStr::new(display_name), quoting_style))
     }
 }
 
@@ -1243,9 +1243,10 @@ impl Stater {
                         None => OutputType::Str(String::new()),
                     },
                     // quoted file name
-                    'n' if flag.quote => {
-                        OutputType::Str(quote_file_name(display_name, self.quoting_style()))
-                    }
+                    'n' if flag.quote => OutputType::Str(quote_file_name(
+                        OsStr::new(display_name),
+                        self.quoting_style(),
+                    )),
                     // file name
                     'n' => OutputType::Str(display_name.to_string()),
                     // quoted file name with dereference if symbolic link
@@ -1337,6 +1338,7 @@ impl Stater {
 
     fn do_stat(&self, file: &OsStr, stdin_is_fifo: bool) -> UResult<i32> {
         let display_name = file.to_string_lossy();
+        let quoted_name = || quote_file_name(file, QuotingStyle::SHELL_ESCAPE_QUOTE);
         let file = if cfg!(unix) && display_name == "-" {
             if self.show_fs {
                 show_error!("{}", StatError::StdinFilesystemMode);
@@ -1358,7 +1360,7 @@ impl Stater {
                     // Usage
                     for t in tokens {
                         process_token_filesystem(t, &meta, &display_name, |name| {
-                            quote_file_name(name, self.quoting_style())
+                            quote_file_name(OsStr::new(name), self.quoting_style())
                         });
                     }
                     self.raise_format_error()?;
@@ -1367,7 +1369,7 @@ impl Stater {
                     show_error!(
                         "{}",
                         StatError::CannotReadFilesystemInfo {
-                            file: display_name.quote().to_string(),
+                            file: quoted_name(),
                             error
                         }
                     );
@@ -1410,7 +1412,7 @@ impl Stater {
                     show_error!(
                         "{}",
                         StatError::CannotStatx {
-                            file: display_name.quote().to_string(),
+                            file: quoted_name(),
                             error: strip_errno(&e)
                         }
                     );
@@ -1582,6 +1584,7 @@ fn pretty_time(meta: &Metadata, md_time_field: MetadataTimeField) -> String {
 #[cfg(test)]
 mod tests {
     use crate::{quote_file_name, write_padded_bytes, write_padding};
+    use std::ffi::OsStr;
     use uucore::quoting_style::QuotingStyle;
 
     use super::{Flags, Precision, ScanUtil, Stater, Token, format_timestamp, group_num};
@@ -1786,13 +1789,13 @@ mod tests {
     fn test_quote_file_name() {
         let file_name = "nice' file";
         assert_eq!(
-            quote_file_name(file_name, QuotingStyle::SHELL_ESCAPE_QUOTE),
+            quote_file_name(OsStr::new(file_name), QuotingStyle::SHELL_ESCAPE_QUOTE),
             "\"nice' file\""
         );
 
         let file_name = "nice\" file";
         assert_eq!(
-            quote_file_name(file_name, QuotingStyle::SHELL_ESCAPE_QUOTE),
+            quote_file_name(OsStr::new(file_name), QuotingStyle::SHELL_ESCAPE_QUOTE),
             "\'nice\" file\'"
         );
     }
