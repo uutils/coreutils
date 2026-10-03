@@ -135,7 +135,19 @@ fn test_mknod_invalid_mode() {
         .fails()
         .no_stdout()
         .code_is(1)
-        .stderr_contains("invalid mode");
+        .stderr_only("mknod: invalid mode\n");
+}
+
+/// Unlike `chmod`/`mkdir`/`install`, GNU does not name the mode operand at
+/// all here, regardless of what specifically was wrong with it.
+#[test]
+fn test_invalid_mode_is_not_named() {
+    for mode in ["999", "", "a", "u?rwx"] {
+        new_ucmd!()
+            .args(&["--mode", mode, "probe", "p"])
+            .fails_with_code(1)
+            .stderr_only("mknod: invalid mode\n");
+    }
 }
 
 #[test]
