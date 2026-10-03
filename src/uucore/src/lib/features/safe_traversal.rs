@@ -6,7 +6,7 @@
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
 // spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot EOVERFLOW chowned chmoded
-// spell-checker:ignore LARGEFILE
+// spell-checker:ignore LARGEFILE atim mtim ctim
 
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
@@ -185,6 +185,24 @@ impl DirFd {
             }
         })?;
         Ok(Self { fd })
+    }
+
+    /// Hold the file `name` relative to this directory, see [`PinnedFile`]
+    pub fn pin_at(
+        &self,
+        name: &OsStr,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<PinnedFile> {
+        let name_cstr =
+            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        let fd = openat(
+            &self.fd,
+            name_cstr.as_c_str(),
+            pin_flags(symlink_behavior),
+            Mode::empty(),
+        )
+        .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        Ok(PinnedFile { fd })
     }
 
     /// Get raw stat data for a file relative to this directory
@@ -672,6 +690,125 @@ impl AsFd for DirFd {
     }
 }
 
+/// Flags that open a file only to hold on to it, without reading it.
+fn pin_flags(symlink_behavior: SymlinkBehavior) -> OFlag {
+    let follow = symlink_behavior.should_follow();
+    // O_PATH needs no read access and opens no device, so a file of any type
+    // can be held, and O_NOFOLLOW then holds a symlink itself.
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+    let flags = OFlag::O_PATH
+        | if follow {
+            OFlag::empty()
+        } else {
+            OFlag::O_NOFOLLOW
+        };
+    // Elsewhere the file has to be opened for reading; O_NONBLOCK keeps a
+    // FIFO from waiting for a writer.
+    #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "freebsd")))]
+    let flags = OFlag::O_RDONLY
+        | OFlag::O_NONBLOCK
+        | OFlag::O_NOCTTY
+        | LARGEFILE
+        | if follow {
+            OFlag::empty()
+        } else {
+            nofollow_pin_flag()
+        };
+    flags | OFlag::O_CLOEXEC
+}
+
+/// O_SYMLINK opens a symlink itself instead of refusing it.
+#[cfg(target_vendor = "apple")]
+fn nofollow_pin_flag() -> OFlag {
+    OFlag::from_bits_retain(libc::O_SYMLINK)
+}
+
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "freebsd",
+    target_vendor = "apple"
+)))]
+fn nofollow_pin_flag() -> OFlag {
+    OFlag::O_NOFOLLOW
+}
+
+/// Whether [`PinnedFile`] can hold a symlink itself, rather than refusing it
+/// under [`SymlinkBehavior::NoFollow`].
+pub const CAN_PIN_SYMLINKS: bool = cfg!(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "freebsd",
+    target_vendor = "apple"
+));
+
+/// Whether [`PinnedFile`] can hold a socket or a device node. Without O_PATH,
+/// opening those for reading fails or acts on the device, so it is not attempted.
+pub const CAN_PIN_SPECIAL_FILES: bool = cfg!(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "freebsd"
+));
+
+/// A descriptor holding one file of any type, so that what is learned about
+/// it and what is done to it apply to the same file, whatever its name is
+/// re-pointed to in between.
+pub struct PinnedFile {
+    fd: OwnedFd,
+}
+
+impl PinnedFile {
+    /// Hold the file at `path`
+    pub fn open(path: &Path, symlink_behavior: SymlinkBehavior) -> io::Result<Self> {
+        let fd = nix::fcntl::open(path, pin_flags(symlink_behavior), Mode::empty())
+            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        Ok(Self { fd })
+    }
+
+    /// Get metadata for the held file
+    pub fn metadata(&self) -> io::Result<Metadata> {
+        nix::sys::stat::fstat(&self.fd)
+            .map(Metadata::from_stat)
+            .map_err(|e| io::Error::from_raw_os_error(e as i32))
+    }
+
+    /// Change ownership of the held file
+    /// Use uid/gid of None to keep the current value
+    pub fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> io::Result<()> {
+        let uid = uid.map(Uid::from_raw);
+        let gid = gid.map(Gid::from_raw);
+        // fchown refuses an O_PATH descriptor; an empty path names the
+        // descriptor itself.
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+        let result = fchownat(&self.fd, c"", uid, gid, nix::fcntl::AtFlags::AT_EMPTY_PATH);
+        #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "freebsd")))]
+        let result = fchown(&self.fd, uid, gid);
+        #[cfg(target_os = "freebsd")]
+        let result = result.map_err(|e| self.freebsd_chown_errno(e));
+        result.map_err(|e| io::Error::from_raw_os_error(e as i32))
+    }
+
+    /// FreeBSD (14.5 at least) fails a change through an O_PATH descriptor
+    /// with EBADF whatever the reason. Report what a change by name would.
+    #[cfg(target_os = "freebsd")]
+    fn freebsd_chown_errno(&self, e: nix::errno::Errno) -> nix::errno::Errno {
+        use nix::errno::Errno;
+        if e != Errno::EBADF {
+            return e;
+        }
+        let mut fs = std::mem::MaybeUninit::<libc::statfs>::uninit();
+        // SAFETY: `fd` is open and `fs` is large enough for the result.
+        let read_only = unsafe { libc::fstatfs(self.fd.as_raw_fd(), fs.as_mut_ptr()) } == 0
+            // SAFETY: fstatfs succeeded, so it filled `fs` in.
+            && unsafe { fs.assume_init() }.f_flags & libc::MNT_RDONLY as u64 != 0;
+        if read_only {
+            Errno::EROFS
+        } else {
+            Errno::EPERM
+        }
+    }
+}
+
 /// File information for tracking inodes
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct FileInfo {
@@ -861,6 +998,45 @@ impl MetadataExt for Metadata {
         self.stat.st_size as u64
     }
 
+    // aix and hurd only expose the times as `timespec` fields (`st_atim` and
+    // so on), whose types vary between them and with the pointer width.
+    #[cfg(any(target_os = "aix", target_os = "hurd"))]
+    #[allow(clippy::unnecessary_cast)]
+    fn atime(&self) -> i64 {
+        self.stat.st_atim.tv_sec as i64
+    }
+
+    #[cfg(any(target_os = "aix", target_os = "hurd"))]
+    #[allow(clippy::unnecessary_cast)]
+    fn atime_nsec(&self) -> i64 {
+        self.stat.st_atim.tv_nsec as i64
+    }
+
+    #[cfg(any(target_os = "aix", target_os = "hurd"))]
+    #[allow(clippy::unnecessary_cast)]
+    fn mtime(&self) -> i64 {
+        self.stat.st_mtim.tv_sec as i64
+    }
+
+    #[cfg(any(target_os = "aix", target_os = "hurd"))]
+    #[allow(clippy::unnecessary_cast)]
+    fn mtime_nsec(&self) -> i64 {
+        self.stat.st_mtim.tv_nsec as i64
+    }
+
+    #[cfg(any(target_os = "aix", target_os = "hurd"))]
+    #[allow(clippy::unnecessary_cast)]
+    fn ctime(&self) -> i64 {
+        self.stat.st_ctim.tv_sec as i64
+    }
+
+    #[cfg(any(target_os = "aix", target_os = "hurd"))]
+    #[allow(clippy::unnecessary_cast)]
+    fn ctime_nsec(&self) -> i64 {
+        self.stat.st_ctim.tv_nsec as i64
+    }
+
+    #[cfg(not(any(target_os = "aix", target_os = "hurd")))]
     fn atime(&self) -> i64 {
         #[cfg(all(not(target_pointer_width = "64"), not(target_os = "netbsd")))]
         {
@@ -872,6 +1048,7 @@ impl MetadataExt for Metadata {
         }
     }
 
+    #[cfg(not(any(target_os = "aix", target_os = "hurd")))]
     fn atime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
@@ -898,6 +1075,7 @@ impl MetadataExt for Metadata {
         }
     }
 
+    #[cfg(not(any(target_os = "aix", target_os = "hurd")))]
     fn mtime(&self) -> i64 {
         #[cfg(all(not(target_pointer_width = "64"), not(target_os = "netbsd")))]
         {
@@ -909,6 +1087,7 @@ impl MetadataExt for Metadata {
         }
     }
 
+    #[cfg(not(any(target_os = "aix", target_os = "hurd")))]
     fn mtime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
@@ -934,6 +1113,7 @@ impl MetadataExt for Metadata {
         }
     }
 
+    #[cfg(not(any(target_os = "aix", target_os = "hurd")))]
     fn ctime(&self) -> i64 {
         #[cfg(all(not(target_pointer_width = "64"), not(target_os = "netbsd")))]
         {
@@ -945,6 +1125,7 @@ impl MetadataExt for Metadata {
         }
     }
 
+    #[cfg(not(any(target_os = "aix", target_os = "hurd")))]
     fn ctime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
