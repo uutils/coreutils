@@ -385,26 +385,30 @@ impl Sequence {
             })
             .collect();
 
-        // For every upper/lower in set2, there must be an upper/lower in set1 at the same position. The position is calculated by expanding everything before the upper/lower in both sets
-        for (set2_pos, set2_item) in set2.iter().enumerate() {
-            if matches!(set2_item, Self::Class(_)) {
-                let set2_part_solved_len = Self::expanded_len_of(&set2[..set2_pos]);
+        // For every upper/lower in set2, there must be an upper/lower in set1 at the same position. The position is calculated by expanding everything before the upper/lower in both sets.
+        // Only when translating: with -d, set2 is the squeeze set and lines up with nothing.
+        if translating {
+            for (set2_pos, set2_item) in set2.iter().enumerate() {
+                if matches!(set2_item, Self::Class(_)) {
+                    let set2_part_solved_len = Self::expanded_len_of(&set2[..set2_pos]);
 
-                let mut class_matches = false;
-                for (set1_pos, set1_item) in set1.iter().enumerate() {
-                    if matches!(set1_item, Self::Class(_))
-                        && Self::expanded_len_of(&set1[..set1_pos]) == set2_part_solved_len
-                    {
-                        class_matches = true;
-                        break;
+                    let mut class_matches = false;
+                    for (set1_pos, set1_item) in set1.iter().enumerate() {
+                        // only upper/lower can pair with upper/lower
+                        if matches!(set1_item, Self::Class(Class::Upper | Class::Lower))
+                            && Self::expanded_len_of(&set1[..set1_pos]) == set2_part_solved_len
+                        {
+                            class_matches = true;
+                            break;
+                        }
                     }
-                }
 
-                if !class_matches {
-                    return Err(SequenceError::whole_set(
-                        BadSequence::ClassInSet2NotMatchedBySet1,
-                        2,
-                    ));
+                    if !class_matches {
+                        return Err(SequenceError::whole_set(
+                            BadSequence::ClassInSet2NotMatchedBySet1,
+                            2,
+                        ));
+                    }
                 }
             }
         }
@@ -449,10 +453,12 @@ impl Sequence {
                     }
                 }
                 // Otherwise set1 is cut to the length of set2 while pairing below.
-            } else if matches!(
-                set2.last().copied(),
-                Some(Self::Class(Class::Upper | Class::Lower))
-            ) {
+            } else if translating
+                && matches!(
+                    set2.last().copied(),
+                    Some(Self::Class(Class::Upper | Class::Lower))
+                )
+            {
                 return Err(SequenceError::whole_set(
                     BadSequence::Set1LongerSet2EndsInClass,
                     1,
