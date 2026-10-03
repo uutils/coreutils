@@ -1918,6 +1918,11 @@ impl UCommand {
             if let Some(systemroot) = env::var_os("SYSTEMROOT") {
                 cmd_env.push(("SYSTEMROOT".into(), systemroot));
             }
+            for var in ["TMP", "TEMP"] {
+                if let Some(value) = env::var_os(var) {
+                    cmd_env.push((var.into(), value));
+                }
+            }
         } else if let Some(ld_preload) = env::var_os("LD_PRELOAD") {
             cmd_env.push(("LD_PRELOAD".into(), ld_preload));
         }
@@ -3309,6 +3314,22 @@ mod tests {
 
     pub fn run_cmd<T: AsRef<OsStr>>(cmd: T) -> CmdResult {
         UCommand::new().arg(cmd).run()
+    }
+
+    #[test]
+    fn test_tmp_env_forwarding_matches_platform_convention() {
+        let (command, ..) = UCommand::new().build();
+        let forwarded: Vec<String> = command
+            .get_envs()
+            .filter_map(|(key, _)| key.to_str().map(str::to_owned))
+            .collect();
+
+        if cfg!(windows) {
+            assert!(forwarded.iter().any(|key| key == "TMP"));
+            assert!(forwarded.iter().any(|key| key == "TEMP"));
+        } else {
+            assert!(!forwarded.iter().any(|key| key == "TMP" || key == "TEMP"));
+        }
     }
 
     #[test]
