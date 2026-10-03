@@ -547,6 +547,7 @@ dependencies = [
  "clap_complete",
  "clap_mangen",
  "ctor",
+ "filedescriptor",
  "filetime",
  "fluent-syntax",
  "glob",
@@ -1026,12 +1027,11 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 [[package]]
 name = "filedescriptor"
 version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e40758ed24c9b2eeb76c35fb0aebc66c626084edd827e07e1552279814c6682d"
+source = "git+https://github.com/wezterm/wezterm.git?branch=main#b09b56c29c1e367e598b60ca266e2cc9038751e0"
 dependencies = [
  "libc",
- "thiserror 1.0.69",
- "winapi",
+ "thiserror 2.0.21",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
