@@ -1854,6 +1854,134 @@ fn test_header_detached() {
         .stdout_is("1\n2\n");
 }
 
+// https://github.com/uutils/coreutils/issues/12855
+#[test]
+fn test_too_many_digits_issue_input() {
+    let input = "1091611621123456668921298.1279298262626672676226672772762626627828";
+    new_ucmd!()
+        .arg(input)
+        .fails_with_code(2)
+        .no_stdout()
+        .stderr_is(format!(
+            "numfmt: value too large to be converted: '{input}'\n"
+        ));
+}
+
+#[test]
+fn test_too_many_digits_whole_part() {
+    new_ucmd!()
+        .args(&["--to=si", &"1".repeat(33)])
+        .succeeds()
+        .stdout_only("112Q\n");
+
+    let input = "1".repeat(34);
+    new_ucmd!()
+        .args(&["--to=si", &input])
+        .fails_with_code(2)
+        .no_stdout()
+        .stderr_is(format!(
+            "numfmt: value too large to be converted: '{input}'\n"
+        ));
+}
+
+#[test]
+fn test_too_many_digits_fraction() {
+    new_ucmd!()
+        .args(&["--to=si", &format!("1.{}", "1".repeat(33))])
+        .succeeds()
+        .stdout_only("1\n");
+
+    // Trailing zeros of the fraction count.
+    for input in [
+        format!("1.{}", "1".repeat(34)),
+        format!("1.1{}", "0".repeat(33)),
+    ] {
+        new_ucmd!()
+            .args(&["--to=si", &input])
+            .fails_with_code(2)
+            .no_stdout()
+            .stderr_is(format!(
+                "numfmt: value too large to be converted: '{input}'\n"
+            ));
+    }
+}
+
+#[test]
+fn test_too_many_digits_leading_zeros_not_counted() {
+    new_ucmd!()
+        .args(&["--to=si", &format!("0000{}", "1".repeat(33))])
+        .succeeds()
+        .stdout_only("112Q\n");
+    new_ucmd!()
+        .args(&["--to=si", &format!("1.0000{}", "1".repeat(33))])
+        .succeeds()
+        .stdout_only("1\n");
+
+    let input = format!("0000{}", "1".repeat(34));
+    new_ucmd!()
+        .args(&["--to=si", &input])
+        .fails_with_code(2)
+        .no_stdout()
+        .stderr_is(format!(
+            "numfmt: value too large to be converted: '{input}'\n"
+        ));
+}
+
+#[test]
+fn test_too_many_digits_negative() {
+    new_ucmd!()
+        .args(&["--to=si", "--", &format!("-{}", "1".repeat(33))])
+        .succeeds()
+        .stdout_only("-112Q\n");
+
+    for input in [
+        format!("-{}", "1".repeat(34)),
+        format!("-1.{}", "1".repeat(34)),
+    ] {
+        new_ucmd!()
+            .args(&["--to=si", "--", &input])
+            .fails_with_code(2)
+            .no_stdout()
+            .stderr_is(format!(
+                "numfmt: value too large to be converted: '{input}'\n"
+            ));
+    }
+}
+
+#[test]
+fn test_too_many_digits_comes_before_suffix_errors() {
+    for (unit, input) in [
+        ("--from=si", format!("{}K", "1".repeat(34))),
+        ("--from=none", format!("{}x", "1".repeat(34))),
+    ] {
+        new_ucmd!()
+            .args(&[unit, &input])
+            .fails_with_code(2)
+            .no_stdout()
+            .stderr_is(format!(
+                "numfmt: value too large to be converted: '{input}'\n"
+            ));
+    }
+}
+
+#[test]
+fn test_too_many_digits_follows_invalid_mode() {
+    let input = "1".repeat(34);
+    let message = format!("numfmt: value too large to be converted: '{input}'\n");
+    new_ucmd!()
+        .args(&["--to=si", "--invalid=warn"])
+        .pipe_in(format!("1000\n{input}\n2000\n"))
+        .succeeds()
+        .stdout_is(format!("1.0k\n{input}\n2.0k\n"))
+        .stderr_is(&message);
+    new_ucmd!()
+        .args(&["--to=si", "--invalid=fail"])
+        .pipe_in(format!("1000\n{input}\n2000\n"))
+        .fails_with_code(2)
+        .stdout_is(format!("1.0k\n{input}\n2.0k\n"))
+        .stderr_is(&message);
+}
+
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     use super::*;
@@ -2140,6 +2268,32 @@ numfmt: invalid number: 'abc'
  1 │ numfmt abc
    │        ───
 ───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_marks_a_number_with_too_many_digits() {
+        let input = format!("{}.5K", "1".repeat(34));
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--from=si", &input])
+            .fails_with_code(2);
+
+        // The number is refused whatever follows it, so the caret leaves the
+        // suffix out and no advice about suffixes is given.
+        result.no_stdout();
+        assert_eq!(
+            result.stderr_as_displayed(),
+            format!(
+                "numfmt: value too large to be converted: '{input}'
+   ╭─[ numfmt:1:18 ]
+   │
+ 1 │ numfmt --from=si {input}
+   │                  {}
+───╯",
+                "─".repeat(36)
+            )
         );
     }
 

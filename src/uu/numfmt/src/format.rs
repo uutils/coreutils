@@ -181,6 +181,30 @@ pub fn holds_number(input: &str) -> bool {
     })
 }
 
+/// How many digits numfmt converts on either side of the decimal separator,
+/// as GNU does. Leading zeros carry no value and are not counted.
+const MAX_DIGITS: usize = 33;
+
+/// Byte length of the number `s` starts with, when its whole part or its
+/// fraction has more than [`MAX_DIGITS`] digits; `None` otherwise.
+pub fn overlong_number_len(s: &str) -> Option<usize> {
+    let dec_sep = locale_decimal_separator();
+    let digits_len = |s: &str| s.bytes().take_while(u8::is_ascii_digit).count();
+    let counted = |digits: &str| digits.trim_start_matches('0').len();
+
+    let sign_len = usize::from(s.starts_with('-'));
+    let whole_len = digits_len(&s[sign_len..]);
+    let whole = &s[sign_len..sign_len + whole_len];
+    let fraction = s[sign_len + whole_len..]
+        .strip_prefix(dec_sep)
+        .map(|rest| &rest[..digits_len(rest)]);
+
+    if counted(whole) <= MAX_DIGITS && fraction.is_none_or(|f| counted(f) <= MAX_DIGITS) {
+        return None;
+    }
+    Some(sign_len + whole_len + fraction.map_or(0, |f| dec_sep.len() + f.len()))
+}
+
 fn detailed_error_message(s: &str, unit: Unit, unit_separator: &str) -> Option<String> {
     if s.is_empty() {
         return Some(translate!("numfmt-error-invalid-number-empty"));
@@ -482,6 +506,11 @@ fn transform_from(
     opts: &TransformOptions,
     options: &NumfmtOptions,
 ) -> Result<ParsedNumber> {
+    // Checked first: whatever follows the digits, the number itself is refused.
+    if overlong_number_len(s).is_some() {
+        return Err(translate!("numfmt-error-too-many-digits", "input" => s.quote()));
+    }
+
     let (i, suffix) = parse_suffix(
         s,
         opts.from,
