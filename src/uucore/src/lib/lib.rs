@@ -272,11 +272,11 @@ macro_rules! bin {
 /// Generate the version string for clap.
 ///
 /// The generated string has the format `(<project name>) <version>`, for
-/// example: "(uutils coreutils) 0.30.0". clap will then prefix it with the util name.
+/// example: "(coreutils) 0.30.0". clap will then prefix it with the util name.
 #[macro_export]
 macro_rules! crate_version {
     () => {
-        concat!("(uutils coreutils) ", env!("CARGO_PKG_VERSION"))
+        concat!("(coreutils) ", env!("CARGO_PKG_VERSION"))
     };
 }
 
