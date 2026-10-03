@@ -239,6 +239,12 @@ grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r "${SED}
 # we should not regress our project just to match what GNU is going.
 # So, do some changes on the fly
 
+# strace only injects faults into traced calls. Include splice to force tee's
+# stdout path to use read/write and exercise short-write retries. The
+# replacement stops matching after the first edit, avoiding duplicate options.
+sed -i 's/-e trace=write /-e trace=write,splice -e fault=splice /' \
+    tests/tee/short-write.sh
+
 sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
 # 'rel' doesn't exist. Our implementation is giving a better message.

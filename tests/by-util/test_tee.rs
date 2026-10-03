@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore nopipe
+// spell-checker:ignore nopipe EFBIG Fsize SIGXFSZ XFSZ
 
 #![allow(clippy::borrow_as_ptr)]
 
@@ -261,6 +261,37 @@ mod linux_only {
     use std::time::Duration;
     use uutests::at_and_ucmd;
     use uutests::new_ucmd;
+
+    #[test]
+    fn test_tee_append_short_write_before_file_size_error() {
+        use rustix::process::Resource;
+        use uutests::util::TestScenario;
+
+        const FILE_LIMIT: u64 = 4137;
+
+        let content: Vec<u8> = (0..100_000).map(|n| (n % 251) as u8).collect();
+        let scene = TestScenario::new("tee");
+        let at = &scene.fixtures;
+        at.write_bytes("input", &content);
+
+        // Append mode prevents splice from writing to the file, naturally
+        // exercising write_all: the file-size limit allows a prefix, then the
+        // retry fails. Ignore SIGXFSZ only in the child so it reports EFBIG
+        // without changing signal handling in other concurrently running tests.
+        scene
+            .cmd("sh")
+            .args(&["-c", "trap '' XFSZ; exec \"$@\"", "sh"])
+            .arg(&scene.bin_path)
+            .args(&["tee", "-a", "limited"])
+            .set_stdin(at.open("input"))
+            .set_stdout(Stdio::piped())
+            .limit(Resource::Fsize, FILE_LIMIT, FILE_LIMIT)
+            .fails_with_code(1)
+            .stdout_is_bytes(&content)
+            .stderr_is("tee: limited: File too large\n");
+
+        assert_eq!(at.read_bytes("limited"), content[..FILE_LIMIT as usize]);
+    }
 
     fn make_broken_pipe() -> std::io::PipeWriter {
         let (read, write) = std::io::pipe().expect("Failed to create pipe");
