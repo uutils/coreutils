@@ -18,12 +18,11 @@ use uucore::format_usage;
 
 use linebreak::break_lines;
 use parasplit::ParagraphStream;
-use thiserror::Error;
 
 mod linebreak;
 mod parasplit;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum FmtError {
     #[error("{}", translate!("fmt-error-invalid-goal", "goal" => .0.quote()))]
     InvalidGoal(String),
