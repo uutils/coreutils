@@ -802,6 +802,44 @@ pub fn uu_app() -> Command {
         )
 }
 
+/// Expand `%c` into the locale's date and time format.
+///
+/// jiff renders `%c` with the POSIX format, but GNU `date` stands it for the
+/// locale's `D_T_FMT`: that is what makes `%c` carry the timezone under
+/// `en_US` and drop it under `fr_FR`. Rewriting the format string rather than
+/// rendering `%c` ourselves keeps the expansion on the normal path, so the
+/// month and day names inside it are still localized afterwards.
+fn substitute_datetime_format(fmt: &str) -> Cow<'_, str> {
+    if !fmt.contains("%c") {
+        return Cow::Borrowed(fmt);
+    }
+    let Some(datetime_format) = locale::get_locale_datetime_format() else {
+        return Cow::Borrowed(fmt);
+    };
+
+    let mut out = String::with_capacity(fmt.len());
+    let mut chars = fmt.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '%' {
+            out.push(c);
+            continue;
+        }
+        match chars.peek() {
+            Some('c') => {
+                chars.next();
+                out.push_str(datetime_format);
+            }
+            // Keep `%%` intact so jiff still renders it as a literal percent.
+            Some('%') => {
+                chars.next();
+                out.push_str("%%");
+            }
+            _ => out.push('%'),
+        }
+    }
+    Cow::Owned(out)
+}
+
 /// Replace bare `%s` conversion specifiers in `fmt` with the Unix epoch second
 /// using floor semantics.
 ///
@@ -1037,6 +1075,12 @@ fn format_date_with_locale_aware_months(
     #[cfg(feature = "i18n-datetime")] skip_localization: bool,
     #[cfg(not(feature = "i18n-datetime"))] _skip_localization: bool,
 ) -> Result<String, String> {
+    // `%c` stands for a whole format string, so expand it before anything else
+    // reads the format: the names it contains still have to be localized, and
+    // its own specifiers still have to reach jiff.
+    let expanded = substitute_datetime_format(format_string);
+    let format_string: &str = &expanded;
+
     // Apply locale-aware name substitution (month/day names) before modifier
     // processing, so that formats like "%-e" don't bypass localization of "%b"/"%A".
     // The owned String is kept in `localized` so `fmt` can borrow from it for the
