@@ -24,7 +24,7 @@
 use divan::{Bencher, black_box};
 use std::io::Write;
 use uu_hostname::uumain;
-use uucore::benchmark::run_util_function;
+use uucore::benchmark::get_bench_args;
 
 /// Generate a large hosts file with the specified number of entries
 fn generate_hosts_file(entries: usize) -> Vec<u8> {
@@ -89,11 +89,14 @@ fn bench_hostname_ip(bencher: Bencher, entries: usize) {
             std::env::set_var("NSS_WRAPPER_HOSTS", &hosts_file);
         }
     }
+    let args = get_bench_args(&[&"-i"]);
 
-    bencher.bench(|| {
-        let result = black_box(run_util_function(uumain, &["-i"]));
-        assert_eq!(result, 0);
-    });
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| {
+            let result = black_box(uumain(args));
+            assert_eq!(result, 0);
+        });
 
     if has_nss_wrapper {
         unsafe {
@@ -105,10 +108,13 @@ fn bench_hostname_ip(bencher: Bencher, entries: usize) {
 /// Benchmark basic hostname display (baseline)
 #[divan::bench(name = "hostname_basic")]
 fn bench_hostname_basic(bencher: Bencher) {
-    bencher.bench(|| {
-        let result = black_box(run_util_function(uumain, &[]));
-        assert_eq!(result, 0);
-    });
+    let args = get_bench_args(&[]);
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| {
+            let result = black_box(uumain(args));
+            assert_eq!(result, 0);
+        });
 }
 
 /// Benchmark direct DNS lookup (Linux/macOS path)
