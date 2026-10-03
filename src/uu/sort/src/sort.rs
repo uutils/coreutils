@@ -3137,8 +3137,6 @@ fn get_rand_string() -> [u8; SALT_LEN] {
 }
 
 const SALT_LEN: usize = 16; // 128-bit salt
-const MAX_BYTES: usize = 1024 * 1024; // Read cap: 1 MiB
-const BUF_LEN: usize = 8192; // 8 KiB read buffer
 const U64_LEN: usize = 8;
 const RANDOM_SOURCE_TAG: &[u8] = b"uutils-sort-random-source"; // Domain separation tag
 
@@ -3148,34 +3146,40 @@ const RANDOM_SOURCE_TAG: &[u8] = b"uutils-sort-random-source"; // Domain separat
 /// bits and reports `end of file` when the source cannot supply them, rather
 /// than shuffling with whatever it managed to read.
 fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
+    // GNU reads exactly SALT_LEN bytes from the source and keeps the file open
+    // (a named pipe keeps its writer blocked until the reader closes it), so an
+    // over-read here would hang writers like
+    // `printf %016d > fifo & sort -R --random-source=fifo`. Match GNU and stop
+    // after the salt bytes are collected.
     let mut reader = open_with_open_failed_error(path)?;
-    let mut buf = [0u8; BUF_LEN];
-    let mut total = 0usize;
-    // freeze seed for --random-source
-    let mut hasher = FoldHasher::with_seed(1, SharedSeed::global_fixed());
-
-    while let n @ 1.. = reader
-        .read(&mut buf)
-        .map_err(|error| SortError::ReadFailed {
-            path: path.to_owned(),
-            error,
-        })?
-        && let remaining @ 1.. = MAX_BYTES.saturating_sub(total)
-    {
-        let take = n.min(remaining);
-        hasher.write(&buf[..take]);
-        total = total.saturating_add(take);
-        if take < n {
-            break;
+    let mut salt = [0u8; SALT_LEN];
+    let mut filled = 0usize;
+    while filled < SALT_LEN {
+        match reader.read(&mut salt[filled..]) {
+            Ok(0) => break,
+            Ok(n) => filled = filled.saturating_add(n),
+            // Retry on interrupted reads (EINTR) instead of surfacing them.
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => (),
+            Err(error) => {
+                return Err(SortError::ReadFailed {
+                    path: path.to_owned(),
+                    error,
+                }
+                .into());
+            }
         }
     }
 
-    if total < SALT_LEN {
+    if filled < SALT_LEN {
         return Err(SortError::RandomSourceEndOfFile {
             path: path.to_owned(),
         }
         .into());
     }
+
+    // freeze seed for --random-source
+    let mut hasher = FoldHasher::with_seed(1, SharedSeed::global_fixed());
+    hasher.write(&salt[..filled]);
 
     let first = hasher.finish();
     // freeze seed for --random-source
