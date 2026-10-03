@@ -1048,6 +1048,64 @@ fn tr_translate_backslash_at_end() {
 }
 
 #[test]
+fn test_complement_set1_longer_than_set2_ending_in_class() {
+    let msg = "tr: when translating with string1 longer than string2,\nthe latter string must not end with a character class\n";
+    for (flags, set1, set2) in [
+        ("-c", "[:upper:]", "[:lower:]"),
+        ("-c", "[:lower:]", "[:upper:]"),
+        ("-c", "[:upper:]", "x[:lower:]"),
+        ("-c", "[:digit:]", "[:upper:]"),
+        ("-c", "[:upper:]", "[:upper:]"),
+        ("-c", "a-z", "[:upper:]"),
+        ("-c", "a", "[:upper:]"),
+        ("-cs", "[:upper:]", "[:lower:]"),
+    ] {
+        new_ucmd!()
+            .args(&[flags, set1, set2])
+            .pipe_in("AbC1z\n")
+            .fails_with_code(1)
+            .stderr_only(msg);
+    }
+}
+
+#[test]
+fn test_complement_class_in_set2_without_class_in_set1() {
+    // The complement of everything is empty, so nothing is translated.
+    new_ucmd!()
+        .args(&["-c", "\\000-\\377", "[:upper:]"])
+        .pipe_in("AbC1z\n")
+        .succeeds()
+        .stdout_only("AbC1z\n");
+
+    new_ucmd!()
+        .args(&["-c", "\\000-\\375", "[:upper:]"])
+        .pipe_in(b"\xfe\xffAa\n".as_slice())
+        .succeeds()
+        .stdout_only("ABAa\n");
+
+    new_ucmd!()
+        .args(&["-c", "a-z", "[:upper:]x"])
+        .pipe_in("AbC1z\n")
+        .succeeds()
+        .stdout_only("xbxxzK");
+}
+
+#[test]
+fn test_complement_class_in_set2_unique_chars_error() {
+    let msg = "tr: when translating with complemented character classes,\nstring2 must map all characters in the domain to one\n";
+    for (flags, set1, set2) in [
+        ("-c", "[:upper:]", "[:lower:]x"),
+        ("-ct", "[:upper:]", "[:lower:]"),
+    ] {
+        new_ucmd!()
+            .args(&[flags, set1, set2])
+            .pipe_in("AbC1z\n")
+            .fails_with_code(1)
+            .stderr_only(msg);
+    }
+}
+
+#[test]
 fn tr_ross_delete_no_squeeze() {
     // # From Ross
     //  {ERR=>$map_all_to_1}],
