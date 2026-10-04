@@ -116,6 +116,14 @@ jobs:
     - name: Run GNU root tests
       shell: bash
       run: |
+        ## Root tests drop to $NON_ROOT_USERNAME via `chroot --user`. /home/runner is
+        ## 0750, so that user cannot reach our build dir and PATH lookup silently
+        ## falls back to the runner's own /usr/bin coreutils. Allow traversal.
+        dir="${GITHUB_WORKSPACE}"
+        while [ "${dir}" != / ]; do sudo chmod o+x "${dir}"; dir=$(dirname "${dir}"); done
+        ## Fail here if that user still cannot run our build, instead of letting the
+        ## tests pass or fail on whatever coreutils the runner image ships.
+        sudo -u nobody "${GITHUB_WORKSPACE}/uutils/target/release-small/id" -u
         ## Run GNU root tests
         path_GNU='gnu'
         path_UUTILS='uutils'
