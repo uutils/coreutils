@@ -21,8 +21,19 @@ doctest = false
 [dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
+time = { workspace = true, features = ["formatting", "local-offset"] }
+uucore = { workspace = true }
+
+[target.'cfg(all(unix, not(target_os = "openbsd")))'.dependencies]
 rustix = { workspace = true, features = ["fs", "termios"] }
 uucore = { workspace = true, features = ["utmpx"] }
+
+[target.'cfg(windows)'.dependencies]
+dns-lookup = { workspace = true }
+windows-sys = { workspace = true, features = [
+  "Win32_Foundation",
+  "Win32_System_RemoteDesktop",
+] }
 
 [features]
 feat_systemd_logind = ["uucore/feat_systemd_logind"]
