@@ -56,7 +56,7 @@ PKG_BUILDDIR  := $(BUILDDIR)/deps
 DOCSDIR       := $(BASEDIR)/docs
 
 BUSYBOX_ROOT := $(BASEDIR)/tmp
-BUSYBOX_VER  := 1.36.1
+BUSYBOX_VER  := 1_38_0
 BUSYBOX_SRC  := $(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER)
 
 TOYBOX_ROOT := $(BASEDIR)/tmp
@@ -170,8 +170,9 @@ toybox-src:
 busybox-src:
 	if [ ! -e "$(BUSYBOX_SRC)" ] ; then \
 		$(INSTALL) -d "$(BUSYBOX_ROOT)" ; \
-		curl -Ls "https://github.com/mirror/busybox/archive/refs/tags/$(subst .,_,$(BUSYBOX_VER)).tar.gz" -o "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.gz" ; \
+		curl -Ls "https://github.com/vda-linux/busybox_mirror/archive/refs/tags/$(BUSYBOX_VER).tar.gz" -o "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.gz" ; \
 		tar -C "$(BUSYBOX_ROOT)" -xf "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.gz" ; \
+		mv "$(BUSYBOX_ROOT)/busybox_mirror-$(BUSYBOX_VER)" "$(BUSYBOX_SRC)" ; \
 	fi ;
 
 # This is a busybox-specific config file their test suite wants to parse.
