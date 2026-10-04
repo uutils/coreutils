@@ -1255,7 +1255,19 @@ impl AtPath {
                 self.plus_as_string(link)
             ),
         );
-        symlink_file(self.plus(original), self.plus(link)).unwrap();
+        // Use a relative target instead of `self.plus(original)`'s absolute
+        // host path: under the WASI test runner, the wasm guest only sees
+        // the sandbox root, so an absolute host path would always dangle.
+        // Callers that pass an already-absolute `original` (e.g. "/") mean
+        // it literally, so leave those alone.
+        let link_path = self.plus(link);
+        let target = match (Path::new(original).is_absolute(), link_path.parent()) {
+            (false, Some(link_dir)) => {
+                uucore::fs::make_path_relative_to(self.plus(original), link_dir)
+            }
+            _ => self.plus(original),
+        };
+        symlink_file(target, link_path).unwrap();
     }
 
     pub fn relative_symlink_file(&self, original: &str, link: &str) {
@@ -1277,7 +1289,15 @@ impl AtPath {
                 self.plus_as_string(link)
             ),
         );
-        symlink_dir(self.plus(original), self.plus(link)).unwrap();
+        // See the comment in `symlink_file` about relative vs. absolute targets.
+        let link_path = self.plus(link);
+        let target = match (Path::new(original).is_absolute(), link_path.parent()) {
+            (false, Some(link_dir)) => {
+                uucore::fs::make_path_relative_to(self.plus(original), link_dir)
+            }
+            _ => self.plus(original),
+        };
+        symlink_dir(target, link_path).unwrap();
     }
 
     pub fn relative_symlink_dir(&self, original: &str, link: &str) {
@@ -1929,6 +1949,11 @@ impl UCommand {
         let mut command = if let Some(ref runner) = wasm_runner {
             let bin = self.bin_path.as_ref().unwrap();
             let mut cmd = Command::new(runner);
+            // Extra runner flags, e.g. "-S cli-exit-with-code=y" to opt in to
+            // an unstable WASI Preview2 feature. Space-separated.
+            if let Ok(extra_args) = env::var("UUTESTS_WASM_RUNNER_ARGS") {
+                cmd.args(extra_args.split_whitespace());
+            }
             // Map the working directory as the WASI guest's root. Only files
             // under this directory are visible to the guest; tests using
             // absolute host paths outside it must be skipped.
@@ -3330,8 +3355,8 @@ mod tests {
         assert!(!result.succeeded());
         result.failure();
         result.fails_silently();
-        assert!(result.stderr.is_empty());
-        assert!(result.stdout.is_empty());
+        std::assert_eq!(result.stderr, Vec::new());
+        std::assert_eq!(result.stdout, Vec::new());
         result.no_output();
         result.no_stderr();
         result.no_stdout();
@@ -3352,8 +3377,8 @@ mod tests {
         result.code_is(0);
         assert!(result.succeeded());
         result.success();
-        assert!(result.stderr.is_empty());
-        assert!(result.stdout.is_empty());
+        std::assert_eq!(result.stderr, Vec::new());
+        std::assert_eq!(result.stdout, Vec::new());
         result.no_output();
         result.no_stderr();
         result.no_stdout();
@@ -3391,7 +3416,7 @@ mod tests {
         result.code_is(0);
         assert!(result.succeeded());
         result.success();
-        assert!(result.stderr.is_empty());
+        std::assert_eq!(result.stderr, Vec::new());
         std::assert_eq!(result.stdout, vector);
         result.no_stderr();
         result.stdout_is(string);
@@ -3420,7 +3445,7 @@ mod tests {
         result.code_is(0);
         assert!(result.succeeded());
         result.success();
-        assert!(result.stdout.is_empty());
+        std::assert_eq!(result.stdout, Vec::new());
         result.no_stdout();
         std::assert_eq!(result.stderr, vector);
         result.stderr_is(string);

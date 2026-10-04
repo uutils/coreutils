@@ -106,6 +106,7 @@ fn test_cp_stream_to_full() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_cp_verbose_write_error_is_reported() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("source_file");
@@ -3222,6 +3223,10 @@ fn test_cp_conflicting_update() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: needs investigation (chmod/interactive/device/mode gaps)"
+)]
 fn test_cp_reflink_insufficient_permission() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -3239,6 +3244,7 @@ fn test_cp_reflink_insufficient_permission() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_closes_file_descriptors() {
     use rustix::process::Resource;
 
@@ -4366,6 +4372,10 @@ fn test_cp_overriding_arguments() {
 }
 
 #[test]
+#[cfg_attr(
+    wasip2_runner,
+    ignore = "WASI preview2: rustix::fs::stat doesn't return stable inode identity across path lookups (wasmtime filesystem limitation)"
+)]
 fn test_copy_no_dereference_1() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a");
@@ -6160,7 +6170,7 @@ fn test_cp_debug_sparse_never_zero_sized_virtual_file() {
 )]
 fn test_cp_zero_sized_virtual_file_contents() {
     let expected = std::fs::read_to_string("/proc/version").unwrap();
-    assert!(!expected.is_empty());
+    assert_ne!(expected, "");
 
     for extra in [
         &[][..],

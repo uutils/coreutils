@@ -141,8 +141,9 @@ impl Options {
                 } else if matches.get_flag(OPT_T) || matches.contains_id(OPT_TMPDIR) {
                     // If --tmpdir is given without an argument, or -t is given
                     // export in TMPDIR
-                    #[cfg(target_os = "wasi")]
                     // WASI's `std::env::temp_dir()` unconditionally panics
+                    // (`library/std/src/sys/paths/wasi.rs`).
+                    #[cfg(target_os = "wasi")]
                     let default_tmp_dir = env::var_os(TMPDIR_ENV_VAR)
                         .map_or_else(|| PathBuf::from(FALLBACK_TMPDIR), PathBuf::from);
                     #[cfg(not(target_os = "wasi"))]

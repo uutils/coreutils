@@ -84,11 +84,34 @@ impl OwnedFileDescriptorOrHandle {
     /// conversion from borrowed native type
     ///
     /// e.g. `std::io::stdout()`, `std::fs::File`, ...
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "wasi")))]
     pub fn from<T: AsFd>(t: T) -> io::Result<Self> {
         Ok(Self {
             fx: t.as_fd().try_clone_to_owned()?,
         })
+    }
+
+    /// conversion from borrowed native type
+    ///
+    /// e.g. `std::io::stdout()`, `std::fs::File`, ...
+    ///
+    /// `BorrowedFd::try_clone_to_owned` (`fcntl(F_DUPFD_CLOEXEC)`) is
+    /// unsupported on WASI (confirmed on both wasip1 and wasip2 under
+    /// wasmtime, for any file descriptor, not just stdio), so take
+    /// ownership of the raw descriptor directly instead of duplicating it,
+    /// the same way `dd`'s own `Source::stdin_as_file` already does for
+    /// stdin. `t` is forgotten rather than dropped after extracting its raw
+    /// descriptor: for `io::Stdin`/`io::Stdout`/`io::Stderr` this is a no-op
+    /// since Rust 1.61 (they don't own fd 0/1/2 in the first place), and for
+    /// an owned `File` it prevents a double-close of the fd we just took
+    /// ownership of.
+    #[cfg(target_os = "wasi")]
+    #[allow(clippy::unnecessary_wraps)]
+    pub fn from<T: AsFd>(t: T) -> io::Result<Self> {
+        use std::os::fd::{AsRawFd, FromRawFd};
+        let fx = unsafe { OwnedFd::from_raw_fd(t.as_fd().as_raw_fd()) };
+        std::mem::forget(t);
+        Ok(Self { fx })
     }
 
     /// instantiates a corresponding `File`

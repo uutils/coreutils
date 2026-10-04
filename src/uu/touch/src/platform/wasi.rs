@@ -14,16 +14,12 @@ use uucore::translate;
 
 use crate::error::TouchError;
 
-/// WASI replacement for `filetime::set_file_times`.
+/// WASI replacement for `filetime::set_symlink_file_times`.
 ///
 /// The `filetime` crate has an unimplemented stub on `wasm32-wasi`. WASI
-/// supports setting both atime and mtime via `utimensat`, which we reach
-/// through `rustix`.
-pub fn set_file_times(path: &Path, atime: FileTime, mtime: FileTime) -> Result<()> {
-    set_times(path, atime, mtime, AtFlags::empty())
-}
-
-/// WASI replacement for `filetime::set_symlink_file_times`.
+/// supports setting times via `utimensat`, which we reach through `rustix`.
+/// The non-symlink path goes through `set_times_by_path` in the main module,
+/// which adds a mode-0 retry, so only the symlink variant is needed here.
 pub fn set_symlink_file_times(path: &Path, atime: FileTime, mtime: FileTime) -> Result<()> {
     set_times(path, atime, mtime, AtFlags::SYMLINK_NOFOLLOW)
 }

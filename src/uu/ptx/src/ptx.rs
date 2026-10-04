@@ -1184,8 +1184,8 @@ mod tests {
         assert_eq!(chunks.keyword, "nut");
         assert_eq!(chunks.after, " cake tart pie");
         // Nothing wrapped around the ends of the line.
-        assert!(chunks.head.is_empty());
-        assert!(chunks.tail.is_empty());
+        assert_eq!(chunks.head, "");
+        assert_eq!(chunks.tail, "");
     }
 
     #[test]
@@ -1204,8 +1204,8 @@ mod tests {
         assert_eq!(chunks.before, "/plum");
         // No word at all fit to the right of the keyword.
         assert_eq!(chunks.after, "/");
-        assert!(chunks.head.is_empty());
-        assert!(chunks.tail.is_empty());
+        assert_eq!(chunks.head, "");
+        assert_eq!(chunks.tail, "");
     }
 
     #[test]
@@ -1222,6 +1222,6 @@ mod tests {
             &chars(" cake tart pie"),
         );
         assert_eq!(chunks.before, "plum");
-        assert!(chunks.after.is_empty());
+        assert_eq!(chunks.after, "");
     }
 }

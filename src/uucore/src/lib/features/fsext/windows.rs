@@ -310,7 +310,7 @@ mod tests {
                 .all(|m| m.mount_dir.to_string_lossy().ends_with('\\'))
         );
         let system = mounts.iter().find(|m| m.mount_dir == system_drive).unwrap();
-        assert!(!system.fs_type.is_empty());
+        assert_ne!(system.fs_type, "");
         assert_eq!(system.dev_name, system_drive.to_string_lossy());
     }
 }

@@ -906,7 +906,7 @@ fn tokenize(
     token_buffer: &mut Vec<Field>,
     precomputed: &Precomputed,
 ) {
-    assert!(token_buffer.is_empty());
+    assert_eq!(token_buffer.as_slice(), []);
     if let Some(separator) = separator {
         tokenize_with_separator(line, separator, token_buffer);
     } else {
@@ -2215,7 +2215,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         for (line_num, line_res) in buf_reader.split(b'\0').enumerate() {
             let line = line_res.map_err(|error| SortError::ReadFailed {
                 path: files0_from.clone(),
-                error,
+                error: uucore::error::wasi_normalize_read_error(error),
             })?;
             if line.as_slice() == STDIN_FILE.as_bytes() {
                 return Err(SortError::MinusInStdIn.into());
@@ -3383,7 +3383,7 @@ fn open_with_open_failed_error(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read 
         Ok(f) => Ok(Box::new(f) as Box<dyn Read + Send>),
         Err(error) => Err(SortError::OpenFailed {
             path: path.to_owned(),
-            error,
+            error: uucore::error::wasi_normalize_open_error(error),
         }
         .into()),
     }
