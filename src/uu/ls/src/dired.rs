@@ -35,10 +35,12 @@
 /// Overall, the module ensures each entry in the DIRED output has the correct
 /// byte position, considering additional lines or padding affecting positions.
 ///
+use crate::display::LocaleQuoting;
 use crate::{Config, LsError};
 use std::fmt;
 use std::io::{BufWriter, Stdout, Write};
 use uucore::error::UResult;
+use uucore::quoting_style::{Quotes, QuotingStyle};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BytePosition {
@@ -126,10 +128,40 @@ pub fn print_dired_output(
     writeln!(
         out,
         "//DIRED-OPTIONS// --quoting-style={}",
-        config.quoting_style
+        dired_quoting_style_name(config)
     )
     .map_err(LsError::WriteError)?;
     Ok(())
+}
+
+/// The canonical `--quoting-style` name for the `//DIRED-OPTIONS//` trailer.
+/// `QuotingStyle`'s `Display` impl collapses distinct style names together and adds suffixes GNU's trailer never uses, so this maps the config directly instead.
+fn dired_quoting_style_name(config: &Config) -> &'static str {
+    match config.locale_quoting {
+        Some(LocaleQuoting::Single) => return "locale",
+        Some(LocaleQuoting::Double) => return "clocale",
+        None => {}
+    }
+    match config.quoting_style {
+        QuotingStyle::Literal { .. } => "literal",
+        QuotingStyle::C {
+            quotes: Quotes::None,
+        } => "escape",
+        // `Quotes::Single` is never produced by ls's own option parsing
+        // (only reachable through `locale_quoting`, handled above), but
+        // `c` is the closest canonical name if that ever changes.
+        QuotingStyle::C { .. } => "c",
+        QuotingStyle::Shell {
+            escape,
+            always_quote,
+            ..
+        } => match (escape, always_quote) {
+            (false, false) => "shell",
+            (false, true) => "shell-always",
+            (true, false) => "shell-escape",
+            (true, true) => "shell-escape-always",
+        },
+    }
 }
 
 /// Helper function to print positions with a given prefix.
@@ -180,13 +212,6 @@ pub fn update_positions(dired: &mut DiredOutput, start: usize, end: usize, line_
     dired.line_offset += padding + line_len;
     // Remove the previous padding
     dired.padding = 0;
-}
-
-/// Checks if the "--dired" or "-D" argument is present in the command line arguments.
-/// we don't use clap here because we need to know if the argument is present
-/// as it can be overridden by --hyperlink
-pub fn is_dired_arg_present() -> bool {
-    std::env::args_os().any(|x| x == "--dired" || x == "-D")
 }
 
 #[cfg(test)]

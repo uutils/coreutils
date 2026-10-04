@@ -17,9 +17,9 @@ doctest = false
 
 [target.'cfg(unix)'.dependencies]
 clap = { workspace = true }
+fluent = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["fs", "mode", "perms"] }
-fluent = { workspace = true }
 
 [target.'cfg(all(unix, not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))))'.dependencies]
 uucore = { workspace = true, features = ["safe-traversal"] }

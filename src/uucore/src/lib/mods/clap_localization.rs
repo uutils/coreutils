@@ -562,7 +562,7 @@ pub fn configure_localized_command(mut cmd: Command) -> Command {
     cmd
 }
 
-/* spell-checker: disable */
+// spell-checker:disable
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -736,4 +736,4 @@ mod tests {
         }
     }
 }
-/* spell-checker: enable */
+// spell-checker:enable

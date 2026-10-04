@@ -32,7 +32,6 @@ use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
 use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, mode_t};
-use thiserror::Error;
 
 use platform::copy_on_write;
 use uucore::backup_control::backup_would_destroy_source;
@@ -57,7 +56,7 @@ use crate::copydir::copy_directory;
 mod copydir;
 mod platform;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum CpError {
     /// Simple [`io::Error`] wrapper
     #[error("{0}")]
@@ -1482,7 +1481,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
 
     for source in sources {
         let normalized_source = normalize_path(source);
-        if options.backup == BackupMode::None && seen_sources.contains(&normalized_source) {
+        if options.backup == BackupMode::None && !seen_sources.insert(normalized_source) {
             let file_type = if source.symlink_metadata()?.file_type().is_dir() {
                 "directory"
             } else {
@@ -1538,7 +1537,6 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 copied_destinations.insert(dest.clone());
             }
         }
-        seen_sources.insert(normalized_source);
     }
 
     if let Some(pb) = progress_bar {
@@ -1892,6 +1890,11 @@ pub(crate) fn copy_attributes(
         attributes.mode
     };
 
+    // A created directory only defaults to copying the source mode; unlike an
+    // explicit preserve (-p/-a), GNU applies the umask to it.
+    let apply_umask_to_mode =
+        dest_is_freshly_created_dir && !matches!(attributes.mode, Preserve::Yes { .. });
+
     // Track whether `chown` to the source's uid succeeded. If it did not
     // (typical case: non-root user copying a root-owned setuid file), the
     // mode preservation below must strip setuid/setgid so the destination
@@ -1955,6 +1958,12 @@ pub(crate) fn copy_attributes(
                     // (01000) and all rwx bits.
                     let mode = perms.mode() & !0o6000;
                     perms.set_mode(mode);
+                }
+                if apply_umask_to_mode {
+                    // The umask never covers setuid/setgid, so clear them
+                    // explicitly: a non-preserving copy must not carry the
+                    // source's set-user/group-ID bits into the new directory.
+                    perms.set_mode(perms.mode() & !0o6000 & !uucore::mode::get_umask());
                 }
                 perms
             };

@@ -146,7 +146,7 @@ pub fn merge_with_file_limit<
 
                 let mut tmp_file =
                     Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
-                merger.write_all_to(settings, tmp_file.as_write())?;
+                merger.write_all_to(settings, tmp_file.as_write(), || "write failed".into())?;
                 temporary_files.push(tmp_file.finished_writing()?);
             }
         }
@@ -157,7 +157,7 @@ pub fn merge_with_file_limit<
 
             let mut tmp_file =
                 Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
-            merger.write_all_to(settings, tmp_file.as_write())?;
+            merger.write_all_to(settings, tmp_file.as_write(), || "write failed".into())?;
             temporary_files.push(tmp_file.finished_writing()?);
         }
         merge_with_file_limit::<_, _, Tmp>(
@@ -342,16 +342,21 @@ struct FileMerger<'a> {
 impl FileMerger<'_> {
     /// Write the merged contents to the output file.
     fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
+        let ctx = output.write_failed_context();
         let mut out = output.into_write()?;
-        self.write_all_to(settings, &mut out)
+        self.write_all_to(settings, &mut out, &ctx)?;
+        out.flush().map_err_context(ctx)
     }
 
-    fn write_all_to(mut self, settings: &GlobalSettings, out: &mut impl Write) -> UResult<()> {
+    /// Write the merged contents to `out`, reporting write errors with `ctx`.
+    fn write_all_to(
+        mut self,
+        settings: &GlobalSettings,
+        out: &mut impl Write,
+        ctx: impl FnOnce() -> String,
+    ) -> UResult<()> {
         let write_result = loop {
-            match self
-                .write_next(out, settings)
-                .map_err_context(|| "write failed".into())
-            {
+            match self.write_next(out, settings) {
                 Ok(true) => (),
                 Ok(false) => break Ok(()),
                 Err(error) => {
@@ -386,7 +391,7 @@ impl FileMerger<'_> {
         let reader_result = reader_join_handle.join().unwrap();
         // A write failure is what the user needs to hear about; the reader hitting an error
         // on the way down is secondary.
-        write_result.and(reader_result)
+        write_result.map_err_context(ctx).and(reader_result)
     }
 
     fn write_next(

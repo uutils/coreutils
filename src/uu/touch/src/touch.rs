@@ -644,9 +644,9 @@ fn update_times(
     }
 }
 
-#[cfg(unix)]
 /// Build a rustix `Timestamps` from the access and modification `FileTime`s,
 /// preserving the `UTIME_NOW`/`UTIME_OMIT` sentinels in the nanoseconds field.
+#[cfg(unix)]
 fn build_timestamps(atime: FileTime, mtime: FileTime) -> Timestamps {
     Timestamps {
         last_access: rustix::fs::Timespec {
@@ -660,11 +660,11 @@ fn build_timestamps(atime: FileTime, mtime: FileTime) -> Timestamps {
     }
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
 /// Set file times by path using `utimensat`, following symlinks.
 ///
 /// This never opens the file, so it does not block on special files such as
 /// FIFOs.
+#[cfg(all(unix, not(target_os = "redox")))]
 fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<()> {
     let timestamps = build_timestamps(atime, mtime);
     rustix::fs::utimensat(
@@ -677,23 +677,23 @@ fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<(
     .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
 }
 
-#[cfg(target_os = "redox")]
 /// Set file times by path on Redox, which lacks `rustix::fs::utimensat`.
 ///
 /// Falls back to `filetime::set_file_times`; unlike on other unixes this may
 /// block on a reader-less FIFO, but Redox has no FIFO support so the FIFO
 /// edge case the `utimensat` path guards against does not arise here.
+#[cfg(target_os = "redox")]
 fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<()> {
     set_file_times(path, atime, mtime)
         .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
 }
 
-#[cfg(unix)]
 /// Set file times via file descriptor using `futimens`.
 ///
 /// This opens the file write-only and uses the POSIX `futimens` call to set
 /// access and modification times on the open FD (not by path), which also
 /// triggers `IN_CLOSE_WRITE` on Linux when the FD is closed.
+#[cfg(unix)]
 fn try_futimens_via_write_fd(path: &Path, atime: FileTime, mtime: FileTime) -> std::io::Result<()> {
     let file = OpenOptions::new()
         .write(true)

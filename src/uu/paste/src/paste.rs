@@ -141,8 +141,8 @@ fn paste(
         for input_source in &mut input_source_vec {
             output.clear();
 
-            while input_source.read_until(line_ending_byte, &mut output)? > 0 {
-                remove_trailing_line_ending_byte(line_ending_byte, &mut output);
+            while let read @ 1.. = input_source.read_until(line_ending_byte, &mut output)? {
+                remove_trailing_line_ending_byte(line_ending_byte, read, &mut output);
                 delimiter_state.write_delimiter(&mut output);
             }
 
@@ -173,8 +173,8 @@ fn paste(
                             eof[i] = true;
                             eof_count += 1;
                         }
-                        _ => {
-                            remove_trailing_line_ending_byte(line_ending_byte, &mut output);
+                        read => {
+                            remove_trailing_line_ending_byte(line_ending_byte, read, &mut output);
                         }
                     }
                 }
@@ -270,8 +270,14 @@ fn parse_delimiters(delimiters: &OsString) -> UResult<Box<[Box<[u8]>]>> {
     Ok(vec.into_boxed_slice())
 }
 
-fn remove_trailing_line_ending_byte(line_ending_byte: u8, output: &mut Vec<u8>) {
-    let _ = output.pop_if(|byte| *byte == line_ending_byte);
+fn remove_trailing_line_ending_byte(line_ending_byte: u8, read: usize, output: &mut Vec<u8>) {
+    if output.pop_if(|byte| *byte == line_ending_byte).is_none() {
+        return;
+    }
+
+    if cfg!(windows) && line_ending_byte == b'\n' && read > 1 {
+        let _ = output.pop_if(|byte| *byte == b'\r');
+    }
 }
 
 enum DelimiterState<'a> {

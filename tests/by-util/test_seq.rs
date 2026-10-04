@@ -1236,3 +1236,12 @@ seq: %5.2c: invalid conversion specification
             .stderr_is("seq: %5.2c: invalid conversion specification\n");
     }
 }
+
+#[test]
+fn test_format_precision_above_formatter_limit() {
+    let result = new_ucmd!().args(&["-f", "%.66000f", "4", "4"]).succeeds();
+    let out = result.stdout_str();
+    assert_eq!(out.len(), 66_003); // "4." + 66000 zeros + newline
+    assert!(out.starts_with("4."));
+    assert!(out[2..].trim_end().bytes().all(|b| b == b'0'));
+}

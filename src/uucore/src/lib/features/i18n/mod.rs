@@ -38,7 +38,7 @@ const DEFAULT_LOCALE: Locale = locale!("und");
 pub fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
     let locale_var = ["LC_ALL", locale_name, "LANG"]
         .iter()
-        .find_map(|&key| std::env::var(key).ok());
+        .find_map(|&key| std::env::var(key).ok().filter(|l| !l.is_empty()));
 
     if let Some(locale_var_str) = locale_var {
         let mut split = locale_var_str.split(&['.', '@']);
@@ -76,12 +76,11 @@ pub fn get_locale_from_os() -> (Locale, UEncoding) {
         WideCharToMultiByte,
     };
 
-    /// assume_init_ref is only stable starting Rust 1.93.
-    /// We cannot use it in the current MSRV of 1.88.
+    /// TODO(MSRV>=1.93): remove in favor of `slice::assume_init_ref`
     ///
     /// # Safety
     ///
-    /// Same as the official `assume_init_ref`.
+    /// Same as the official [`slice::assume_init_ref`](https://doc.rust-lang.org/1.93.0/std/primitive.slice.html#method.assume_init_ref).
     #[allow(clippy::ref_as_ptr)]
     unsafe fn assume_init_ref<T>(s: &[MaybeUninit<T>]) -> &[T] {
         unsafe { &*(s as *const [MaybeUninit<T>] as *const [T]) }

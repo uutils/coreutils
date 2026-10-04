@@ -11,7 +11,7 @@ use std::io::{ErrorKind, Write};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use uucore::display::Quotable;
-use uucore::error::USimpleError;
+use uucore::error::{USimpleError, strip_errno};
 use uucore::fs;
 use uucore::fs::FileInformation;
 use uucore::show;
@@ -197,7 +197,7 @@ fn create_or_truncate_output_file(input: &OsStr, filename: &OsStr) -> Result<std
 }
 
 fn open_file_error(filename: &OsStr, e: Error) -> Error {
-    let e = uucore::error::strip_errno(&e);
+    let e = strip_errno(&e);
     Error::other(format!("{}: {e}", filename.quote()))
 }
 

@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz unparseable
-// spell-checker:ignore ohos OHOS tzdata
+// spell-checker:ignore ohos OHOS tzdata tzdb tzif zoneinfo euctw
 
 mod format_modifiers;
 mod locale;
@@ -16,19 +16,19 @@ use jiff::{Timestamp, Zoned};
 use parse_datetime::{ExtendedDateTime, ParsedDateTime};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stderr};
 use std::path::PathBuf;
 use std::sync::OnceLock;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
-use uucore::error::{UError, UResult, USimpleError, strip_errno};
+use uucore::error::{UError, UResult, strip_errno};
 #[cfg(feature = "i18n-datetime")]
 use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
 use uucore::translate;
 use uucore::translate_text;
-use uucore::{format_usage, show};
+use uucore::{format_usage, show, show_if_err};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
@@ -37,7 +37,7 @@ use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 /// OHOS helper: pass through the system time zone ID returned by
 /// TimeService (OH_TimeService_GetTimeZone, e.g. "Asia/Shanghai") and
 /// resolve it against the embedded IANA tzdata (jiff-tzdb) so that
-/// historial DST rules and transitions are preserved. jiff's
+/// historical DST rules and transitions are preserved. jiff's
 /// `try_system()` is useless on OHOS because both `/etc/localtime` and
 /// the zoneinfo dirs are absent.
 #[cfg(target_env = "ohos")]
@@ -86,7 +86,7 @@ const OPT_REFERENCE: &str = "reference";
 const OPT_UNIVERSAL: &str = "universal";
 const OPT_UNIVERSAL_2: &str = "utc";
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 enum DateError {
     #[error("{}", translate!("date-error-write", "error" => strip_errno(.0)))]
     Write(std::io::Error),
@@ -102,9 +102,6 @@ enum DateError {
     CannotSetDate { path: String, error: String },
     #[error("{}", translate!("date-error-invalid-format", "format" => .format, "error" => .error))]
     InvalidFormat { format: String, error: String },
-    #[cfg(target_vendor = "apple")]
-    #[error("{}", translate!("date-error-setting-date-not-supported-macos"))]
-    SettingDateNotSupportedMacOs,
     #[cfg(target_os = "redox")]
     #[error("{}", translate!("date-error-setting-date-not-supported-redox"))]
     SettingDateNotSupportedRedox,
@@ -144,7 +141,7 @@ enum Format {
     Rfc5322,
     Rfc3339(Rfc3339Format),
     Resolution,
-    Custom(String),
+    Custom(Vec<u8>),
     Default,
 }
 
@@ -246,6 +243,15 @@ fn escape_invalid_bytes(bytes: &[u8]) -> String {
     String::from_utf8_lossy(&escaped).into_owned()
 }
 
+/// Renders a command-line operand for an error message the way GNU does:
+/// valid UTF-8 is kept as-is, anything else is octal-escaped.
+fn operand_for_error(operand: &OsStr) -> String {
+    operand.to_str().map_or_else(
+        || escape_invalid_bytes(operand.as_encoded_bytes()),
+        ToOwned::to_owned,
+    )
+}
+
 /// Strip parenthesized comments from a date string.
 ///
 /// GNU date removes balanced parentheses and their content, treating them as comments.
@@ -344,20 +350,18 @@ fn parse_military_timezone_with_offset(s: &str) -> Option<(i32, DayDelta)> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let date_source = if let Some(date_os) = matches.get_one::<std::ffi::OsString>(OPT_DATE) {
+    let date_source = if let Some(date_os) = matches.get_one::<OsString>(OPT_DATE) {
         // Convert OsString to String, handling invalid UTF-8 with GNU-compatible error
-        let date = date_os.to_str().ok_or_else(|| {
-            let bytes = date_os.as_encoded_bytes();
-            let escaped_str = escape_invalid_bytes(bytes);
-            USimpleError::new(1, format!("invalid date '{escaped_str}'"))
+        let date = date_os.to_str().ok_or_else(|| DateError::InvalidDate {
+            date: operand_for_error(date_os),
         })?;
         DateSource::Human(date.into())
-    } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
-        match file.as_ref() {
-            "-" => DateSource::Stdin,
+    } else if let Some(file) = matches.get_one::<OsString>(OPT_FILE) {
+        match file.as_encoded_bytes() {
+            b"-" => DateSource::Stdin,
             _ => DateSource::File(file.into()),
         }
-    } else if let Some(file) = matches.get_one::<String>(OPT_REFERENCE) {
+    } else if let Some(file) = matches.get_one::<OsString>(OPT_REFERENCE) {
         DateSource::FileMtime(file.into())
     } else if matches.get_flag(OPT_RESOLUTION) {
         DateSource::Resolution
@@ -366,29 +370,30 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     // Check for extra operands (multiple positional arguments)
-    if let Some(formats) = matches.get_many::<String>(OPT_FORMAT) {
-        let format_args: Vec<&String> = formats.collect();
+    if let Some(formats) = matches.get_many::<OsString>(OPT_FORMAT) {
+        let format_args: Vec<&OsString> = formats.collect();
         if format_args.len() > 1 {
             return Err(Box::new(DateError::ExtraOperand {
-                operand: format_args[1].clone(),
+                operand: operand_for_error(format_args[1]),
             }));
         }
     }
 
-    let format = if let Some(fmt) = matches.get_one::<String>(OPT_FORMAT) {
-        if !fmt.starts_with('+') {
+    let format = if let Some(fmt) = matches.get_one::<OsString>(OPT_FORMAT) {
+        let bytes = uucore::os_str_as_bytes_lossy(fmt);
+        let Some(rest) = bytes.strip_prefix(b"+") else {
+            let arg = operand_for_error(fmt);
             // if an optional Format String was found but the user has not provided an input date
             // GNU prints an invalid date Error
             if !matches!(date_source, DateSource::Human(_)) {
-                return Err(Box::new(DateError::InvalidDate { date: fmt.clone() }));
+                return Err(Box::new(DateError::InvalidDate { date: arg }));
             }
             // If the user did provide an input date with the --date flag and the Format String is
             // not starting with '+' GNU prints the missing '+' error message
 
-            return Err(Box::new(DateError::FormatMissingPlus { arg: fmt.clone() }));
-        }
-        let fmt = fmt[1..].to_string();
-        Format::Custom(fmt)
+            return Err(Box::new(DateError::FormatMissingPlus { arg }));
+        };
+        Format::Custom(rest.to_vec())
     } else if let Some(fmt) = matches
         .get_many::<String>(OPT_ISO_8601)
         .map(|mut iter| iter.next().unwrap_or(&DATE.to_string()).as_str().into())
@@ -424,25 +429,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    if let Some(input) = matches.get_one::<String>(OPT_SET) {
-        match parse_date(input, &now, DebugOptions::new(debug_mode, true), false) {
-            Ok(ParsedDateTime::InRange(date)) => {
-                return set_system_datetime(convert_for_set(date, utc));
-            }
-            Ok(ParsedDateTime::Extended(_)) | Err(_) => {
-                return Err(Box::new(DateError::InvalidDate {
-                    date: input.clone(),
-                }));
-            }
-        }
-    }
-
     let settings = Settings {
         utc,
         format,
         date_source,
         debug: debug_mode,
     };
+
+    if let Some(input) = matches.get_one::<String>(OPT_SET) {
+        return set_and_echo(input, &now, &settings);
+    }
 
     let allow_extended = matches!(settings.format, Format::Default);
     let output_time_zone = now.time_zone().clone();
@@ -621,44 +617,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    let format_string = make_format_string(&settings);
+    let output = OutputContext::new(&settings);
     let mut stdout = BufWriter::new(std::io::stdout().lock());
 
     // Format all the dates
-    let config = Config::new().custom(PosixCustom::new()).lenient(true);
     for date in dates {
         match date {
-            Ok(date) => {
-                let skip_localization =
-                    matches!(settings.format, Format::Rfc5322 | Format::Rfc3339(_));
-                let formatted = match date {
-                    ParsedDateTime::InRange(date) => {
-                        let date = if settings.utc {
-                            date.with_time_zone(TimeZone::UTC)
-                        } else {
-                            date
-                        };
-                        format_date_with_locale_aware_months(
-                            &date,
-                            format_string,
-                            &config,
-                            skip_localization,
-                        )
-                    }
-                    ParsedDateTime::Extended(date) => {
-                        format_extended_default(&date, format_string, &config, &output_time_zone)
-                    }
-                };
-                match formatted {
-                    Ok(s) => writeln!(stdout, "{s}").map_err(DateError::Write)?,
-                    Err(e) => {
-                        let _ = stdout.flush();
-                        return Err(Box::new(DateError::InvalidFormat {
-                            format: format_string.to_string(),
-                            error: e,
-                        }));
-                    }
-                }
+            Ok(ParsedDateTime::InRange(date)) => {
+                write_formatted_date(&mut stdout, date, &output, &settings)?;
+            }
+            Ok(ParsedDateTime::Extended(date)) => {
+                let formatted = format_extended_default(
+                    &date,
+                    &output.chunks,
+                    &output.config,
+                    &output_time_zone,
+                );
+                write_formatted_bytes(&mut stdout, formatted, &output)?;
             }
             Err((input, _err)) => {
                 let _ = stdout.flush();
@@ -688,7 +663,7 @@ pub fn uu_app() -> Command {
                 .value_name("STRING")
                 .allow_hyphen_values(true)
                 .overrides_with(OPT_DATE)
-                .value_parser(clap::value_parser!(std::ffi::OsString))
+                .value_parser(clap::value_parser!(OsString))
                 .help(translate!("date-help-date")),
         )
         .arg(
@@ -697,7 +672,9 @@ pub fn uu_app() -> Command {
                 .long(OPT_FILE)
                 .value_name("DATEFILE")
                 .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString))
                 .conflicts_with(OPT_DATE)
+                .overrides_with(OPT_FILE)
                 .help(translate!("date-help-file")),
         )
         .arg(
@@ -749,6 +726,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_REFERENCE)
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::AnyPath)
+                .value_parser(clap::value_parser!(OsString))
                 .conflicts_with_all([OPT_DATE, OPT_FILE, OPT_RESOLUTION])
                 .overrides_with(OPT_REFERENCE)
                 .help(translate!("date-help-reference")),
@@ -760,13 +738,9 @@ pub fn uu_app() -> Command {
                 .value_name("STRING")
                 .allow_hyphen_values(true)
                 .help({
-                    #[cfg(not(any(target_vendor = "apple", target_os = "redox")))]
+                    #[cfg(not(target_os = "redox"))]
                     {
                         translate!("date-help-set")
-                    }
-                    #[cfg(target_vendor = "apple")]
-                    {
-                        translate!("date-help-set-macos")
                     }
                     #[cfg(target_os = "redox")]
                     {
@@ -784,7 +758,11 @@ pub fn uu_app() -> Command {
                 .help(translate!("date-help-universal"))
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(OPT_FORMAT).num_args(0..))
+        .arg(
+            Arg::new(OPT_FORMAT)
+                .num_args(0..)
+                .value_parser(clap::value_parser!(OsString)),
+        )
 }
 
 /// Replace bare `%s` conversion specifiers in `fmt` with the Unix epoch second
@@ -868,12 +846,167 @@ fn strip_o_modifier(fmt: &str) -> String {
     out
 }
 
+/// A piece of a format string.
+///
+/// A format string is not necessarily valid UTF-8: a locale using a legacy
+/// charset (`zh_TW.euctw`, `cs_CZ`, ...) describes its date format with bytes
+/// of that charset, and the command line may contain arbitrary bytes too. Such
+/// bytes are never part of a conversion specifier, so they are split off and
+/// copied to the output untouched while the rest goes through the formatter.
+enum FormatChunk<'a> {
+    Specifiers(&'a str),
+    RawBytes(&'a [u8]),
+}
+
+/// Split a format string into UTF-8 pieces and the raw bytes between them.
+fn split_format(format: &[u8]) -> Vec<FormatChunk<'_>> {
+    let mut chunks = Vec::new();
+    let mut rest = format;
+
+    while !rest.is_empty() {
+        let error = match std::str::from_utf8(rest) {
+            Ok(valid) => {
+                chunks.push(FormatChunk::Specifiers(valid));
+                break;
+            }
+            Err(error) => error,
+        };
+
+        // A trailing unpaired '%' would lose its specifier byte, so hand it to
+        // the raw run instead; GNU prints it literally.
+        let mut valid_len = error.valid_up_to();
+        let trailing_percents = rest[..valid_len]
+            .iter()
+            .rev()
+            .take_while(|&&b| b == b'%')
+            .count();
+        if trailing_percents % 2 == 1 {
+            valid_len -= 1;
+        }
+
+        let valid = std::str::from_utf8(&rest[..valid_len]).unwrap_or_default();
+        if !valid.is_empty() {
+            chunks.push(FormatChunk::Specifiers(valid));
+        }
+
+        let invalid_end = error
+            .error_len()
+            .map_or(rest.len(), |len| error.valid_up_to() + len);
+        chunks.push(FormatChunk::RawBytes(&rest[valid_len..invalid_end]));
+        rest = &rest[invalid_end..];
+    }
+
+    chunks
+}
+
+/// Format each UTF-8 chunk with `format_chunk` and pass the other bytes through.
+fn format_chunks(
+    chunks: &[FormatChunk],
+    mut format_chunk: impl FnMut(&str) -> Result<String, String>,
+) -> Result<Vec<u8>, String> {
+    let mut output = Vec::new();
+    for chunk in chunks {
+        match chunk {
+            FormatChunk::Specifiers(fmt) => output.extend_from_slice(format_chunk(fmt)?.as_bytes()),
+            FormatChunk::RawBytes(bytes) => output.extend_from_slice(bytes),
+        }
+    }
+    Ok(output)
+}
+
+/// The format string, its chunks and the formatter config, shared by the
+/// display loop, the `-s` echo and the tests.
+struct OutputContext<'a> {
+    format_string: &'a [u8],
+    chunks: Vec<FormatChunk<'a>>,
+    config: Config<PosixCustom>,
+}
+
+impl<'a> OutputContext<'a> {
+    fn new(settings: &'a Settings) -> Self {
+        let format_string = make_format_string(settings);
+        Self {
+            format_string,
+            chunks: split_format(format_string),
+            config: Config::new().custom(PosixCustom::new()).lenient(true),
+        }
+    }
+}
+
+/// Write one in-range date, newline-terminated, with the normal display
+/// formatting.
+fn write_formatted_date<W: Write>(
+    writer: &mut W,
+    date: Zoned,
+    output: &OutputContext,
+    settings: &Settings,
+) -> UResult<()> {
+    let skip_localization = matches!(settings.format, Format::Rfc5322 | Format::Rfc3339(_));
+    let date = if settings.utc {
+        date.with_time_zone(TimeZone::UTC)
+    } else {
+        date
+    };
+    write_formatted_bytes(
+        writer,
+        format_chunks(&output.chunks, |fmt| {
+            format_date_with_locale_aware_months(&date, fmt, &output.config, skip_localization)
+        }),
+        output,
+    )
+}
+
+/// Write formatted bytes, newline-terminated, mapping a formatting failure to
+/// `InvalidFormat` after flushing what made it out.
+fn write_formatted_bytes<W: Write>(
+    writer: &mut W,
+    formatted: Result<Vec<u8>, String>,
+    output: &OutputContext,
+) -> UResult<()> {
+    match formatted {
+        Ok(bytes) => {
+            writer.write_all(&bytes).map_err(DateError::Write)?;
+            writer.write_all(b"\n").map_err(DateError::Write)?;
+            Ok(())
+        }
+        Err(e) => {
+            let _ = writer.flush();
+            Err(Box::new(DateError::InvalidFormat {
+                format: String::from_utf8_lossy(output.format_string).into_owned(),
+                error: e,
+            }))
+        }
+    }
+}
+
+/// Set the clock, then echo the resulting date like GNU does (issue #14677).
+/// Report a set failure first, so it isn't lost when the echo write fails.
+fn set_and_echo(input: &str, now: &Zoned, settings: &Settings) -> UResult<()> {
+    match parse_date(input, now, DebugOptions::new(settings.debug, true), false) {
+        Ok(ParsedDateTime::InRange(date)) => {
+            show_if_err!(set_system_datetime(convert_for_set(
+                date.clone(),
+                settings.utc
+            )));
+
+            let output = OutputContext::new(settings);
+            let mut stdout = BufWriter::new(std::io::stdout().lock());
+            write_formatted_date(&mut stdout, date, &output, settings)?;
+            stdout.flush().map_err(DateError::Write)?;
+            Ok(())
+        }
+        Ok(ParsedDateTime::Extended(_)) | Err(_) => Err(Box::new(DateError::InvalidDate {
+            date: input.to_owned(),
+        })),
+    }
+}
+
 fn format_extended_default(
     date: &ExtendedDateTime,
-    format_string: &str,
+    chunks: &[FormatChunk],
     config: &Config<PosixCustom>,
     output_time_zone: &TimeZone,
-) -> Result<String, String> {
+) -> Result<Vec<u8>, String> {
     // Apply the output timezone to an equivalent in-range instant, then let the
     // existing formatter handle every field except the real extended year.
     let utc = ExtendedDateTime::from_unix_seconds(date.unix_seconds(), date.nanosecond, 0)
@@ -897,9 +1030,18 @@ fn format_extended_default(
         surrogate.offset().seconds(),
     )
     .map_err(str::to_string)?;
-    let format_string = substitute_extended_year(format_string, output.year)?;
+    let mut year_replaced = false;
+    let formatted = format_chunks(chunks, |fmt| {
+        let (fmt, replaced) = substitute_extended_year(fmt, output.year);
+        year_replaced |= replaced;
+        format_date_with_locale_aware_months(&surrogate, &fmt, config, false)
+    })?;
 
-    format_date_with_locale_aware_months(&surrogate, &format_string, config, false)
+    if year_replaced {
+        Ok(formatted)
+    } else {
+        Err("default date format does not contain %Y".to_string())
+    }
 }
 
 fn surrogate_year(year: u32) -> i16 {
@@ -908,7 +1050,8 @@ fn surrogate_year(year: u32) -> i16 {
     (BASE + (i64::from(year) - BASE).rem_euclid(400)) as i16
 }
 
-fn substitute_extended_year(format_string: &str, year: u32) -> Result<String, String> {
+/// Expand `%Y` to an out-of-range year, reporting whether it occurred at all.
+fn substitute_extended_year(format_string: &str, year: u32) -> (String, bool) {
     let mut output = String::with_capacity(format_string.len() + 8);
     let mut chars = format_string.chars().peekable();
     let year = year.to_string();
@@ -934,9 +1077,7 @@ fn substitute_extended_year(format_string: &str, year: u32) -> Result<String, St
         }
     }
 
-    replaced
-        .then_some(output)
-        .ok_or_else(|| "default date format does not contain %Y".to_string())
+    (output, replaced)
 }
 
 fn format_date_with_locale_aware_months(
@@ -977,22 +1118,25 @@ fn format_date_with_locale_aware_months(
 }
 
 /// Return the appropriate format string for the given settings.
-fn make_format_string(settings: &Settings) -> &str {
+///
+/// Bytes rather than `str`: a user-supplied format, like the format of a
+/// locale using a legacy charset, may not be valid UTF-8.
+fn make_format_string(settings: &Settings) -> &[u8] {
     match settings.format {
         Format::Iso8601(ref fmt) => match *fmt {
-            Iso8601Format::Date => "%F",
-            Iso8601Format::Hours => "%FT%H%:z",
-            Iso8601Format::Minutes => "%FT%H:%M%:z",
-            Iso8601Format::Seconds => "%FT%T%:z",
-            Iso8601Format::Ns => "%FT%T,%N%:z",
+            Iso8601Format::Date => b"%F",
+            Iso8601Format::Hours => b"%FT%H%:z",
+            Iso8601Format::Minutes => b"%FT%H:%M%:z",
+            Iso8601Format::Seconds => b"%FT%T%:z",
+            Iso8601Format::Ns => b"%FT%T,%N%:z",
         },
-        Format::Rfc5322 => "%a, %d %h %Y %T %z",
+        Format::Rfc5322 => b"%a, %d %h %Y %T %z",
         Format::Rfc3339(ref fmt) => match *fmt {
-            Rfc3339Format::Date => "%F",
-            Rfc3339Format::Seconds => "%F %T%:z",
-            Rfc3339Format::Ns => "%F %T.%N%:z",
+            Rfc3339Format::Date => b"%F",
+            Rfc3339Format::Seconds => b"%F %T%:z",
+            Rfc3339Format::Ns => b"%F %T.%N%:z",
         },
-        Format::Resolution => "%s.%N",
+        Format::Resolution => b"%s.%N",
         Format::Custom(ref fmt) => fmt,
         Format::Default => locale::get_locale_default_format(),
     }
@@ -1003,7 +1147,7 @@ fn make_format_string(settings: &Settings) -> &str {
 /// (e.g., EDT always means UTC-4, even in winter when New York observes EST).
 /// Offset is in seconds to support half-hour zones like IST (UTC+5:30).
 /// All other timezones (JST, CET, etc.) are dynamically resolved from IANA database.
-/* spell-checker: disable */
+// spell-checker:disable
 static FIXED_OFFSET_ABBREVIATIONS: &[(&str, i32)] = &[
     ("UTC", 0),
     ("GMT", 0),
@@ -1031,7 +1175,7 @@ static FIXED_OFFSET_ABBREVIATIONS: &[(&str, i32)] = &[
     // Asian timezones
     ("KST", 32400), // UTC+9 Korean Standard Time
 ];
-/* spell-checker: enable */
+// spell-checker:enable
 
 /// Lazy-loaded timezone abbreviation lookup map built from IANA database.
 static TZ_ABBREV_CACHE: OnceLock<HashMap<String, String>> = OnceLock::new();
@@ -1156,6 +1300,10 @@ fn parse_dates_from_reader<R: Read + 'static>(
 > {
     let lines = BufReader::new(reader).split(b'\n');
     Box::new(lines.map_while(Result::ok).map(move |mut bytes| {
+        // GNU handles each line as a C string, so a NUL byte ends it
+        if let Some(nul) = bytes.iter().position(|&b| b == 0) {
+            bytes.truncate(nul);
+        }
         // Strip a trailing '\r' (CRLF input; GNU's lexer ignores it too)
         if bytes.last() == Some(&b'\r') {
             bytes.pop();
@@ -1257,7 +1405,6 @@ fn get_clock_resolution() -> Timestamp {
     unimplemented!("getting clock resolution not implemented (unsupported target)");
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
 /// Returns the resolution of the system’s realtime clock.
 ///
 /// # Panics
@@ -1265,6 +1412,7 @@ fn get_clock_resolution() -> Timestamp {
 /// Panics if `clock_getres` fails. On a POSIX-compliant system this should not occur,
 /// as `CLOCK_REALTIME` is required to be supported.
 /// Failure would indicate a non-conforming or otherwise broken implementation.
+#[cfg(all(unix, not(target_os = "redox")))]
 fn get_clock_resolution() -> Timestamp {
     use rustix::time::{ClockId, clock_getres};
 
@@ -1274,7 +1422,7 @@ fn get_clock_resolution() -> Timestamp {
     Timestamp::constant(timespec.tv_sec as _, timespec.tv_nsec as _)
 }
 
-#[cfg(all(unix, target_os = "redox"))]
+#[cfg(target_os = "redox")]
 fn get_clock_resolution() -> Timestamp {
     // Redox OS does not support the posix clock_getres function, however
     // internally it uses a resolution of 1ns to represent timestamps.
@@ -1305,22 +1453,17 @@ fn convert_for_set(date: Zoned, utc: bool) -> Zoned {
     }
 }
 
-#[cfg(target_vendor = "apple")]
-fn set_system_datetime(_date: Zoned) -> UResult<()> {
-    Err(Box::new(DateError::SettingDateNotSupportedMacOs))
-}
-
 #[cfg(target_os = "redox")]
 fn set_system_datetime(_date: Zoned) -> UResult<()> {
     Err(Box::new(DateError::SettingDateNotSupportedRedox))
 }
 
-#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "redox")))]
 /// System call to set date (unix).
 /// See here for more:
 /// `<https://doc.rust-lang.org/libc/i686-unknown-linux-gnu/libc/fn.clock_settime.html>`
 /// `<https://linux.die.net/man/3/clock_settime>`
 /// `<https://www.gnu.org/software/libc/manual/html_node/Time-Types.html>`
+#[cfg(all(unix, not(target_os = "redox")))]
 fn set_system_datetime(date: Zoned) -> UResult<()> {
     use rustix::time::{ClockId, Timespec, clock_settime};
 
@@ -1335,11 +1478,11 @@ fn set_system_datetime(date: Zoned) -> UResult<()> {
         .map_err_context(|| translate!("date-error-cannot-set-date"))
 }
 
-#[cfg(windows)]
 /// System call to set date (Windows).
 /// See here for more:
 /// * <https://docs.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-setsystemtime>
 /// * <https://docs.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-systemtime>
+#[cfg(windows)]
 fn set_system_datetime(date: Zoned) -> UResult<()> {
     let system_time = SYSTEMTIME {
         wYear: date.year() as u16,
@@ -1461,5 +1604,61 @@ mod tests {
         assert_eq!(strip_parenthesized_comments("a(b(c)d)e"), "ae"); // Nested balanced
         assert_eq!(strip_parenthesized_comments("a(b(c)d"), "a"); // Nested unbalanced
         assert_eq!(strip_parenthesized_comments("a(b)c(d)e(f"), "ace"); // Multiple groups, last unmatched
+    }
+
+    /// Run one date through the shared writer used by the display loop and
+    /// the `-s` echo, returning what it produced.
+    fn write_date_with_settings(date: Zoned, settings: Settings) -> String {
+        let output = OutputContext::new(&settings);
+        let mut out = Vec::new();
+        write_formatted_date(&mut out, date, &output, &settings).unwrap();
+        String::from_utf8(out).unwrap()
+    }
+
+    #[test]
+    fn test_write_formatted_date_custom_format() {
+        // Specifiers that no locale rewrites, so the test is locale-independent.
+        let date: Zoned = "2020-03-12T05:30:00+00:00[UTC]".parse().unwrap();
+        let settings = Settings {
+            utc: false,
+            format: Format::Custom(b"%F %T %Z".to_vec()),
+            date_source: DateSource::Now,
+            debug: false,
+        };
+        assert_eq!(
+            write_date_with_settings(date, settings),
+            "2020-03-12 05:30:00 UTC\n"
+        );
+    }
+
+    #[test]
+    fn test_write_formatted_date_rfc5322_not_localized() {
+        let date: Zoned = "2020-03-12T05:30:00+00:00[UTC]".parse().unwrap();
+        let settings = Settings {
+            utc: false,
+            format: Format::Rfc5322,
+            date_source: DateSource::Now,
+            debug: false,
+        };
+        assert_eq!(
+            write_date_with_settings(date, settings),
+            "Thu, 12 Mar 2020 05:30:00 +0000\n"
+        );
+    }
+
+    #[test]
+    fn test_write_formatted_date_utc_rezones_for_display() {
+        // Parsed at +08:00; `-u` echoes the same instant in UTC.
+        let date: Zoned = "2020-03-12T13:30:00+08:00[+08:00]".parse().unwrap();
+        let settings = Settings {
+            utc: true,
+            format: Format::Custom(b"%F %T %:z".to_vec()),
+            date_source: DateSource::Now,
+            debug: false,
+        };
+        assert_eq!(
+            write_date_with_settings(date, settings),
+            "2020-03-12 05:30:00 +00:00\n"
+        );
     }
 }

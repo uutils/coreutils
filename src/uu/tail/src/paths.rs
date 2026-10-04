@@ -14,6 +14,7 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
 #[cfg(not(target_os = "wasi"))]
 use uucore::error::UResult;
+use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use uucore::translate;
 
 #[derive(Debug, Clone)]
@@ -133,9 +134,12 @@ impl HeaderPrinter {
 
     pub fn print(&mut self, string: &str) {
         if self.verbose {
+            // GNU quotes the name shown in the header when it needs it.
+            let name = locale_aware_escape_name(string.as_ref(), QuotingStyle::SHELL_ESCAPE);
             println!(
-                "{}==> {string} <==",
+                "{}==> {} <==",
                 if self.first_header { "" } else { "\n" },
+                name.to_string_lossy(),
             );
             self.first_header = false;
         }

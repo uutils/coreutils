@@ -3,19 +3,17 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) COMFOLLOW Passwd RFILE RFILE's derefer dgid duid groupname
+// spell-checker:ignore (ToDO) Passwd RFILE RFILE's derefer dgid duid groupname
 
 use uucore::display::Quotable;
 pub use uucore::entries::{self, Group, Locate, Passwd};
-use uucore::format_usage;
-use uucore::perms::{GidUidOwnerFilter, IfFrom, chown_base, options};
-use uucore::show_warning;
-use uucore::translate;
-
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::perms::{GidUidOwnerFilter, IfFrom, chown_base, options};
+use uucore::{format_usage, show_warning, translate};
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
+use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 
@@ -34,7 +32,7 @@ fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> 
     let dest_uid: Option<u32>;
     let dest_gid: Option<u32>;
     let raw_owner: String;
-    if let Some(file) = matches.get_one::<String>(options::REFERENCE) {
+    if let Some(file) = matches.get_one::<OsString>(options::REFERENCE) {
         let meta = fs::metadata(file).map_err_context(
             || translate!("chown-error-failed-to-get-attributes", "file" => file.quote()),
         )?;
@@ -132,7 +130,8 @@ pub fn uu_app() -> Command {
                 .long(options::REFERENCE)
                 .help(translate!("chown-help-reference"))
                 .value_name("RFILE")
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::verbosity::SILENT)

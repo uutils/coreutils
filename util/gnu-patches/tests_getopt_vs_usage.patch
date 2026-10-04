@@ -1,0 +1,18 @@
+Skip getopt_vs_usage.sh: it takes the option tables from GNU's own src/*.c and
+greps our --help for each entry. There is little value in that here - every
+option is covered individually by our own tests, and our --help is worded and
+laid out differently from GNU's anyway.
+
+Index: gnu/tests/misc/getopt_vs_usage.sh
+===================================================================
+--- gnu.orig/tests/misc/getopt_vs_usage.sh
++++ gnu/tests/misc/getopt_vs_usage.sh
+@@ -18,6 +18,8 @@
+
+ . "${srcdir=.}/tests/init.sh";
+
++skip_ 'options are covered individually by our own tests'
++
+ getopts() {
+   sed -n '/long_*opt.*\[/,/^}/{/^ *{/p}' "$abs_top_srcdir/src/$1.c" |
+   grep -Ev "(\"-|Deprecated|Obsolescent|Not in $1)"

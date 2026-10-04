@@ -7,7 +7,7 @@
 //!
 //! Use the [`from_str`] function to parse a [`Pattern`] from a string.
 
-// cSpell:words fnmatch
+// spell-checker:words fnmatch
 
 use glob::{Pattern, PatternError};
 

@@ -1674,13 +1674,13 @@ fn test_chmod_symlink_cycles() {
     at.set_mode("a/b", 0o755);
     at.set_mode("a/b/c", 0o755);
 
+    // spell-checker:disable
     scene
         .ucmd()
         .arg("-vRL")
         .arg("+r")
         .arg("a")
         .run()
-        // cSpell:disable
         .stdout_contains_line("mode of 'a' retained as 0755 (rwxr-xr-x)")
         .stdout_contains_line("mode of 'a/b' retained as 0755 (rwxr-xr-x)")
         .stdout_contains_line("mode of 'a/b/c' retained as 0755 (rwxr-xr-x)")
@@ -1688,7 +1688,7 @@ fn test_chmod_symlink_cycles() {
         .stdout_does_not_contain("mode of 'a/b/c/d/b' retained as 0755 (rwxr-xr-x)")
         .stdout_does_not_contain("mode of 'a/b/c/d/b/c' retained as 0755 (rwxr-xr-x)")
         .stdout_does_not_contain("mode of 'a/b/c/d/b/c/d' retained as 0755 (rwxr-xr-x)");
-    // cSpell:enable
+    // spell-checker:enable
 }
 
 #[test]
@@ -1700,7 +1700,7 @@ fn test_chmod_symlink_two_links_same_dir() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    // cSpell:disable
+    // spell-checker:disable
     at.mkdir_all("base/realdir");
     at.touch("base/realdir/file");
     at.symlink_dir("base/realdir", "base/link1");
@@ -1717,7 +1717,7 @@ fn test_chmod_symlink_two_links_same_dir() {
         .stdout_contains("mode of 'base/realdir/file'")
         .stdout_contains("mode of 'base/link1/file'")
         .stdout_contains("mode of 'base/link2/file'");
-    // cSpell:enable
+    // spell-checker:enable
 }
 
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]

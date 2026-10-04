@@ -17,11 +17,11 @@ test = false
 doctest = false
 
 [dependencies]
-nom = { workspace = true }
-clap = { workspace = true }
-uucore = { workspace = true, features = ["fs", "signals"] }
-fluent = { workspace = true }
 bytecount = { workspace = true, features = ["runtime-dispatch-simd"] }
+clap = { workspace = true }
+fluent = { workspace = true }
+nom = { workspace = true }
+uucore = { workspace = true, features = ["fs", "signals"] }
 
 [dev-dependencies]
 divan = { workspace = true }

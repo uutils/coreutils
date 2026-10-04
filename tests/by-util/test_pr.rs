@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) Sdivide ading
+// spell-checker:ignore (ToDO) Sdivide ading tfre
 
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
@@ -1117,7 +1117,7 @@ fn test_simple_expand_tab_with_both_arguments() {
     }
 }
 
-/* cSpell:disable */
+// spell-checker:disable
 #[test]
 fn test_invalid_expand_tab_arguments() {
     let test_file_path = "empty_test_file";
@@ -1144,7 +1144,7 @@ fn test_invalid_expand_tab_arguments() {
             .stderr_contains(format!("pr: '-e' extra characters or invalid number in the argument: ‘{error_msg_field}’\nTry 'pr --help' for more information."));
     }
 }
-/* cSpell:enable */
+// spell-checker:enable
 
 #[test]
 fn test_expand_tab_does_not_consume_next_argument() {

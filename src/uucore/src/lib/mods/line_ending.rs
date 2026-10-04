@@ -6,6 +6,7 @@
 //! Provides consistent newline/zero terminator handling for `-z`/`--zero` flags.
 //!
 //! See the [`LineEnding`] struct for more information.
+
 use std::fmt::Display;
 
 /// Line ending of either `\n` or `\0`
@@ -19,8 +20,8 @@ use std::fmt::Display;
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum LineEnding {
-    #[default]
     /// Newline character (`\n`)
+    #[default]
     Newline = b'\n',
 
     /// Null character (`\0`)

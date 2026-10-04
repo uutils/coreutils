@@ -415,6 +415,9 @@ fn format_float_non_finite(e: &ExtendedBigDecimal, case: Case) -> String {
     s
 }
 
+/// Largest precision `format!` accepts; beyond it the formatter panics.
+const MAX_FMT_PRECISION: usize = u16::MAX as usize;
+
 fn format_float_decimal(
     bd: &BigDecimal,
     precision: Option<usize>,
@@ -431,6 +434,19 @@ fn format_float_decimal(
             return format!("{bd:.0}.");
         }
     }
+    // `format!` stores width and precision as `u16` and panics above that, so
+    // write the digits we have and pad the remainder with zeros ourselves.
+    if precision > MAX_FMT_PRECISION {
+        let digits = usize::try_from(bd.fractional_digit_count().max(0)).unwrap_or(usize::MAX);
+        let written = digits.min(MAX_FMT_PRECISION);
+        let mut s = format!("{bd:.written$}");
+        if written == 0 {
+            s.push('.');
+        }
+        s.extend(std::iter::repeat_n('0', precision - written));
+        return s;
+    }
+
     format!("{bd:.precision$}")
 }
 
@@ -855,6 +871,29 @@ mod test {
         let f = |x| format_float_non_finite(x, Case::Uppercase);
         assert_eq!(f(&ExtendedBigDecimal::Nan), "NAN");
         assert_eq!(f(&ExtendedBigDecimal::Infinity), "INF");
+    }
+
+    #[test]
+    fn decimal_float_precision_beyond_formatter_limit() {
+        use super::format_float_decimal;
+        // A precision above u16::MAX cannot go through `format!` directly.
+        let f = |x: &str, precision| {
+            format_float_decimal(
+                &BigDecimal::from_str(x).unwrap(),
+                Some(precision),
+                ForceDecimal::No,
+            )
+        };
+
+        let s = f("3.25", 70_123);
+        assert_eq!(s.len(), 70_125);
+        assert!(s.starts_with("3.25"));
+        assert!(s[4..].bytes().all(|b| b == b'0'));
+
+        let s = f("7", 65_536);
+        assert_eq!(s.len(), 65_538);
+        assert!(s.starts_with("7."));
+        assert!(s[2..].bytes().all(|b| b == b'0'));
     }
 
     #[test]

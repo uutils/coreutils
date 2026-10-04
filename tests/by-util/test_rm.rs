@@ -447,9 +447,11 @@ fn test_symlink_dir() {
     let at = &scene.fixtures;
 
     let dir = "test_rm_symlink_dir_directory";
+    let file = "test_rm_symlink_dir_directory/file";
     let link = "test_rm_symlink_dir_link";
 
     at.mkdir(dir);
+    at.touch(file);
     at.symlink_dir(dir, link);
 
     scene
@@ -461,6 +463,9 @@ fn test_symlink_dir() {
     assert!(at.dir_exists(link));
 
     scene.ucmd().arg("-r").arg(link).succeeds();
+    assert!(!at.dir_exists(link));
+    assert!(at.dir_exists(dir));
+    assert!(at.file_exists(file));
 }
 
 #[test]
@@ -1219,13 +1224,10 @@ fn test_inaccessible_dir_recursive() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "wasi"))]
+#[cfg(target_os = "linux")]
 fn test_non_utf8_paths() {
     use std::ffi::OsStr;
-    #[cfg(target_os = "linux")]
     use std::os::unix::ffi::OsStrExt;
-    #[cfg(target_os = "wasi")]
-    use std::os::wasi::ffi::OsStrExt;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

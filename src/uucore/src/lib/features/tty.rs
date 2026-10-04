@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 //! Set of functions to parsing TTY
+
 use std::{
     fmt::{self, Display, Formatter},
     path::PathBuf,

@@ -17,6 +17,7 @@ stat-after-help = Séquences de format valides pour les fichiers (sans `--file-s
     -`%i` : numéro d'inode
     -`%m` : point de montage
     -`%n` : nom de fichier
+    -`%Qn` : nom de fichier avec guillemets
     -`%N` : nom de fichier avec guillemets et déréférencement (suivi) si lien symbolique
     -`%o` : suggestion de taille optimale de transfert E/S
     -`%s` : taille totale, en octets
@@ -43,6 +44,7 @@ stat-after-help = Séquences de format valides pour les fichiers (sans `--file-s
     -`%i` : ID du système de fichiers en hexadécimal
     -`%l` : longueur maximale des noms de fichiers
     -`%n` : nom de fichier
+    -`%Qn` : nom de fichier avec guillemets
     -`%s` : taille de bloc (pour des transferts plus rapides)
     -`%S` : taille de bloc fondamentale (pour les comptes de blocs)
     -`%t` : type de système de fichiers en hexadécimal
@@ -92,7 +94,6 @@ stat-word-birth = Créé
 
 ## Messages d'erreur
 
-stat-error-invalid-quoting-style = Style de guillemets invalide : {$style}
 stat-warning-invalid-env-quoting-style = valeur invalide de la variable d'environnement QUOTING_STYLE ignorée : '{$style}'
 stat-error-invalid-directive = {$directive} : directive invalide
 stat-error-cannot-read-filesystem = impossible de lire la table des systèmes de fichiers montés : {$error}

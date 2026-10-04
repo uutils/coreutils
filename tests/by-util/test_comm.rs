@@ -683,6 +683,7 @@ fn test_output_lossy_utf8() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_comm_anonymous_pipes() {
+    use std::fmt::Write as _;
     use std::{io::Write, os::fd::AsRawFd, process};
 
     let scene = TestScenario::new(util_name!());
@@ -698,7 +699,7 @@ fn test_comm_anonymous_pipes() {
     // write 1500 lines into comm1: 00000\n00001\n...01500\n
     let mut content = String::new();
     for i in 0..1500 {
-        content.push_str(&format!("{i:05}\n"));
+        let _ = writeln!(content, "{i:05}");
     }
     assert!(comm1_writer.write_all(content.as_bytes()).is_ok());
     drop(comm1_writer);
@@ -793,4 +794,32 @@ fn test_comm_write_error_dev_full() {
         .set_stdout(dev_full)
         .fails()
         .stderr_is("comm: write error: No space left on device\n");
+}
+
+#[test]
+fn test_identical_unsorted_prefix_no_error() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("f1", "b\na\nc\n");
+    at.write("f2", "b\na\nd\n");
+    scene
+        .ucmd()
+        .args(&["f1", "f2"])
+        .succeeds()
+        .stdout_is("\t\tb\n\t\ta\nc\n\td\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_identical_unsorted_prefix_check_order_fails() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("f1", "b\na\nc\n");
+    at.write("f2", "b\na\nd\n");
+    scene
+        .ucmd()
+        .args(&["--check-order", "f1", "f2"])
+        .fails()
+        .stdout_is("\t\tb\n")
+        .stderr_is("comm: file 1 is not in sorted order\n");
 }

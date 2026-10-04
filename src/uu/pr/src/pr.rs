@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) adFfmprt, kmerge
+// spell-checker:ignore (ToDO) adFfmprt, kmerge Ffabm
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
@@ -16,7 +16,6 @@ use std::path::PathBuf;
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
 use std::time::SystemTime;
-use thiserror::Error;
 
 use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
@@ -163,7 +162,7 @@ impl Default for ExpandTabsOptions {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum PrError {
     #[error("pr: {msg}")]
     EncounteredErrors { msg: String },

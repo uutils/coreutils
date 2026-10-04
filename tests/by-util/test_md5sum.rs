@@ -880,3 +880,20 @@ fn test_check_md5_comment_leading_space() {
         .stdout_contains("foo: OK")
         .stderr_contains("WARNING: 1 line is improperly formatted");
 }
+
+#[test]
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+fn test_read_error_does_not_stop_other_files() {
+    // https://github.com/uutils/coreutils/issues/13128
+    // Reading /proc/self/mem from offset 0 fails with EIO.
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("f", "hello\n");
+
+    scene
+        .ucmd()
+        .arg("/proc/self/mem")
+        .arg("f")
+        .fails_with_code(1)
+        .stdout_is("b1946ac92492d2347c6235b4d2611184  f\n")
+        .stderr_is("md5sum: /proc/self/mem: Input/output error\n");
+}

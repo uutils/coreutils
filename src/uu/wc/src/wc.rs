@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// cSpell:ignore ilog wc wc's
+// spell-checker:ignore ilog wc wc's
 
 mod count_fast;
 mod countable;
@@ -23,7 +23,6 @@ use std::{
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
-use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
 use uucore::{display::Quotable, translate};
@@ -304,9 +303,9 @@ fn is_stdin_small_file() -> bool {
     )
 }
 
-#[cfg(not(unix))]
 /// Windows presents a piped stdin as a "normal file" with a length equal to however many bytes
 /// have been buffered at the time it's checked. To be safe, we must never assume it's a file.
+#[cfg(not(unix))]
 fn is_stdin_small_file() -> bool {
     false
 }
@@ -343,7 +342,7 @@ impl TotalWhen {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum WcError {
     #[error("{}", translate!("wc-error-files-disabled", "extra" => extra.quote()))]
     FilesDisabled { extra: Cow<'static, OsStr> },

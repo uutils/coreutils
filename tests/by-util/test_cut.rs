@@ -1207,7 +1207,7 @@ fn test_cut_chars_utf8_mixed_ascii_lines() {
 
 #[test]
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
-#[cfg_attr(wasi_runner, ignore)]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_read_error() {
     new_ucmd!()
         .args(&["-c1", "/proc/self/mem"])

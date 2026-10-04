@@ -61,9 +61,11 @@ static TEST_MOUNT_MOUNTPOINT: &str = "mount";
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
 static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
-#[cfg(all(
-    unix,
-    not(any(target_vendor = "apple", target_os = "android", target_os = "openbsd"))
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "netbsd"
 ))]
 use uutests::util::compare_xattrs;
 
@@ -504,6 +506,55 @@ fn test_cp_arg_update_none() {
         .succeeds()
         .no_output();
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
+}
+
+#[cfg(unix)]
+#[rstest]
+#[case::no_clobber("-n", true)]
+#[case::update_none("--update=none", true)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
+#[case::archive_no_clobber("-an", true)]
+#[case::declined_prompt("-i", false)]
+fn test_cp_recursive_continues_after_skipped_file(#[case] arg: &str, #[case] succeeds: bool) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("source");
+    at.mkdir_all("destination/source");
+    at.write("source/first", "first contents");
+    at.write("source/second", "second contents");
+    // Skip whichever file the traversal reaches first, so the other one comes after it.
+    let order = walkdir::WalkDir::new(at.plus("source"))
+        .min_depth(1)
+        .into_iter()
+        .map(|entry| entry.unwrap().file_name().to_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    let (skipped, copied) = (&order[0], &order[1]);
+    at.write(&format!("destination/source/{skipped}"), "old contents");
+
+    ucmd.args(&["-R", arg, "source", "destination"]);
+    // Only the prompt reads stdin; writing to a cp that never reads it can fail.
+    if !succeeds {
+        ucmd.pipe_in("n\n");
+    }
+    let result = ucmd.run();
+    if succeeds {
+        result.success().no_output();
+    } else {
+        result
+            .code_is(1)
+            .stderr_is(format!("cp: overwrite 'destination/source/{skipped}'? "));
+    }
+
+    assert_eq!(
+        at.read(&format!("destination/source/{skipped}")),
+        "old contents"
+    );
+    assert_eq!(
+        at.read(&format!("destination/source/{copied}")),
+        at.read(&format!("source/{copied}"))
+    );
 }
 
 #[test]
@@ -1054,6 +1105,80 @@ fn test_cp_umask_stripping_owner_write_bit_reflink_never() {
             0o444
         );
     }
+}
+
+// Regression for #14549: `cp -r` (without preserve) must apply the umask to
+// directories it creates, matching GNU, instead of copying the source's mode.
+#[test]
+#[cfg(unix)]
+fn test_cp_recursive_dir_applies_umask() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("src");
+    at.mkdir("src/dir");
+    at.set_mode("src/dir", 0o777);
+
+    ucmd.umask(0o077).args(&["-r", "src", "d"]).succeeds();
+
+    // 0o777 & ~0o077 = 0o700, not the source's raw 0o777.
+    assert_eq!(at.metadata("d/dir").permissions().mode() & 0o777, 0o700);
+}
+
+// The umask alone never covers setuid/setgid, so a non-preserving `cp -r`
+// must clear them on the directories it creates. The sticky bit survives.
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: directory modes/umask are not faithfully reproduced"
+)]
+fn test_cp_recursive_dir_drops_setuid_setgid() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("tree");
+    for (name, mode) in [
+        ("tree/setgid", 0o2731u32),
+        ("tree/setuid", 0o4713),
+        ("tree/sticky", 0o1735),
+    ] {
+        at.mkdir(name);
+        at.set_mode(name, mode);
+    }
+
+    scene
+        .ucmd()
+        .umask(0o026)
+        .args(&["-r", "tree", "plain"])
+        .succeeds();
+
+    assert_eq!(
+        at.metadata("plain/setgid").permissions().mode() & 0o7777,
+        0o711
+    );
+    assert_eq!(
+        at.metadata("plain/setuid").permissions().mode() & 0o7777,
+        0o711
+    );
+    assert_eq!(
+        at.metadata("plain/sticky").permissions().mode() & 0o7777,
+        0o1711
+    );
+
+    // An explicit preserve keeps the mode as-is, umask and special bits alike.
+    scene
+        .ucmd()
+        .umask(0o026)
+        .args(&["-r", "--preserve=mode", "tree", "kept"])
+        .succeeds();
+
+    assert_eq!(
+        at.metadata("kept/setgid").permissions().mode() & 0o7777,
+        0o2731
+    );
+    assert_eq!(
+        at.metadata("kept/setuid").permissions().mode() & 0o7777,
+        0o4713
+    );
 }
 
 // When --reflink=always fails, GNU cp removes a destination it created
@@ -5406,9 +5531,11 @@ fn test_cp_no_such() {
         .stderr_is("cp: 'no-such/' is not a directory\n");
 }
 
-#[cfg(all(
-    unix,
-    not(any(target_vendor = "apple", target_os = "android", target_os = "openbsd"))
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "netbsd"
 ))]
 #[test]
 #[cfg_attr(
@@ -5459,12 +5586,13 @@ fn test_acl_preserve() {
 fn test_cp_debug_reflink_never_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
+    let page_size = rustix::param::page_size();
     at.write("a", "hello");
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
         .unwrap();
-    f.set_len(10000).unwrap();
+    f.set_len((page_size as u64) * 4).unwrap();
 
     ts.ucmd()
         .arg("--debug")
@@ -5512,11 +5640,12 @@ fn test_cp_debug_default_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.touch("a");
+    let page_size = rustix::param::page_size();
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
         .unwrap();
-    f.set_len(10000).unwrap();
+    f.set_len((page_size as u64) * 4).unwrap();
 
     at.append_bytes("a", "hello".as_bytes());
 
@@ -5610,12 +5739,13 @@ fn test_cp_debug_default_empty_file_with_hole() {
 fn test_cp_debug_reflink_never_sparse_always_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
+    let page_size = rustix::param::page_size();
     at.write("a", "hello");
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
         .unwrap();
-    f.set_len(10000).unwrap();
+    f.set_len((page_size as u64) * 4).unwrap();
 
     ts.ucmd()
         .arg("--debug")
@@ -5860,12 +5990,13 @@ fn test_cp_debug_reflink_never_file_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.touch("a");
+    let page_size = rustix::param::page_size();
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
         .unwrap();
-    f.set_len(10000).unwrap();
-    at.append_bytes("a", "hello".as_bytes());
+    f.set_len((page_size as u64) * 4).unwrap();
+    at.append_bytes("a", b"hello");
 
     ts.ucmd()
         .arg("--debug")
@@ -5953,12 +6084,13 @@ fn test_cp_debug_sparse_never_empty_file_with_hole() {
 fn test_cp_debug_sparse_never_file_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
+    let page_size = rustix::param::page_size();
     at.touch("a");
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
         .unwrap();
-    f.set_len(10000).unwrap();
+    f.set_len((page_size as u64) * 4).unwrap();
     at.append_bytes("a", "hello".as_bytes());
 
     ts.ucmd()
@@ -6140,9 +6272,9 @@ fn test_cp_no_dereference_attributes_only_with_symlink() {
         "file2 content does not match expected"
     );
 }
+/// contains the test for cp when the source and destination points to the same file
 #[cfg(all(unix, not(target_os = "android")))]
 #[cfg(test)]
-/// contains the test for cp when the source and destination points to the same file
 mod same_file {
 
     use std::os::unix::fs::MetadataExt;
@@ -7861,9 +7993,11 @@ fn test_cp_no_file() {
 }
 
 #[test]
-#[cfg(all(
-    unix,
-    not(any(target_vendor = "apple", target_os = "android", target_os = "openbsd"))
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "netbsd"
 ))]
 fn test_cp_preserve_xattr_readonly_source() {
     use std::process::Command;

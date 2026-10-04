@@ -34,9 +34,11 @@ fn print_cpu_debug_info() {
     let features = SimdPolicy::detect();
 
     // x86/x86_64
-    print_feature("avx512", features.has_avx512());
-    print_feature("avx2", features.has_avx2());
-    print_feature("pclmul", features.has_pclmul());
+    if cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
+        print_feature("avx512", features.has_avx512());
+        print_feature("avx2", features.has_avx2());
+        print_feature("pclmul", features.has_pclmul());
+    }
 
     // ARM aarch64
     if cfg!(target_arch = "aarch64") {

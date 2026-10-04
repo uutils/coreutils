@@ -27,7 +27,6 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use thiserror::Error;
 
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
@@ -59,7 +58,7 @@ use config::{Dereference, Files, Sort};
 use dired::DiredOutput;
 use display::{display_items, display_size, should_display, show_dir_name};
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 enum LsError {
     #[error("{}", translate!("ls-error-invalid-line-width", "width" => format!("'{_0}'")))]
     InvalidLineWidth(String),
@@ -173,7 +172,6 @@ pub fn uu_app() -> Command {
                 options::format::LONG,
                 options::format::ACROSS,
                 options::format::COLUMNS,
-                options::DIRED,
             ]),
     )
     .arg(
@@ -249,8 +247,7 @@ pub fn uu_app() -> Command {
             .long(options::DIRED)
             .short('D')
             .help(translate!("ls-help-generate-dired-output"))
-            .action(ArgAction::SetTrue)
-            .overrides_with(options::HYPERLINK),
+            .action(ArgAction::SetTrue),
     )
     .arg(
         Arg::new(options::HYPERLINK)
@@ -265,8 +262,7 @@ pub fn uu_app() -> Command {
             .num_args(0..=1)
             .default_missing_value("always")
             .default_value("never")
-            .value_name("WHEN")
-            .overrides_with(options::DIRED),
+            .value_name("WHEN"),
     )
     // The next four arguments do not override with the other format
     // options, see the comment in Config::from for the reason.
@@ -801,11 +797,11 @@ enum PathDataDisplayName<'a> {
 /// Represents a Path along with it's associated data.
 /// Any data that will be reused several times makes sense to be added to this structure.
 /// Caching data here helps eliminate redundant syscalls to fetch same information.
-#[derive(Debug)]
 /// Internal representation of file/directory entry data.
 ///
 /// This struct is used internally for file enumeration. It can be converted
 /// to [`EntryInfo`] for programmatic access via the [`LsOutput`] trait.
+#[derive(Debug)]
 pub struct PathData<'a> {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
@@ -1078,29 +1074,23 @@ impl LsOutput for TextOutput<'_> {
         config: &Config,
         is_first: bool,
     ) -> UResult<()> {
-        if is_first {
-            if config.dired {
-                dired::indent(&mut self.state.out)?;
-            }
-            show_dir_name(path_data, &mut self.state.out, config)?;
-            writeln!(self.state.out)?;
-            if config.dired {
-                let dir_len = path_data.path().as_os_str().len();
-                dired::calculate_subdired(&mut self.dired, dir_len);
-                dired::add_dir_name(&mut self.dired, dir_len);
-            }
-        } else {
+        if !is_first {
             writeln!(self.state.out)?;
             if config.dired {
                 self.dired.line_offset += 1; // account for the blank line before recursive directory headings
                 self.dired.padding = 0;
-                dired::indent(&mut self.state.out)?;
-                let dir_name_size = path_data.path().as_os_str().len();
-                dired::calculate_subdired(&mut self.dired, dir_name_size);
-                dired::add_dir_name(&mut self.dired, dir_name_size);
             }
-            show_dir_name(path_data, &mut self.state.out, config)?;
-            writeln!(self.state.out)?;
+        }
+        if config.dired {
+            dired::indent(&mut self.state.out)?;
+        }
+        let name_len = show_dir_name(path_data, &mut self.state.out, config)?;
+        writeln!(self.state.out)?;
+        if config.dired {
+            // The header is rendered with the quoting style in force, so the
+            // offsets must follow the rendered name, not the raw path.
+            dired::calculate_subdired(&mut self.dired, name_len);
+            dired::add_dir_name(&mut self.dired, name_len);
         }
         Ok(())
     }
@@ -1523,8 +1513,8 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
         Sort::Name => entries.sort_unstable_by(name_cmp),
         Sort::Version => entries.sort_unstable_by(|a, b| {
             version_cmp(
-                os_str_as_bytes_lossy(a.file_name()).as_ref(),
-                os_str_as_bytes_lossy(b.file_name()).as_ref(),
+                os_str_as_bytes_lossy(a.display_name()).as_ref(),
+                os_str_as_bytes_lossy(b.display_name()).as_ref(),
             )
             .then(a.path().cmp(b.path()))
         }),

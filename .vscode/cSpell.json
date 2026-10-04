@@ -8,9 +8,17 @@
   "language": "en",
 
   // custom dictionaries
-  "dictionaries": ["acronyms+names", "jargon", "people", "shell", "workspace"],
+  "dictionaries": [
+    "acronyms+names",
+    "dependencies",
+    "jargon",
+    "people",
+    "shell",
+    "workspace"
+  ],
   "dictionaryDefinitions": [
     { "name": "acronyms+names", "path": "./cspell.dictionaries/acronyms+names.wordlist.txt" },
+    { "name": "dependencies", "path": "./cspell.dictionaries/dependencies.wordlist.txt" },
     { "name": "jargon", "path": "./cspell.dictionaries/jargon.wordlist.txt" },
     { "name": "people", "path": "./cspell.dictionaries/people.wordlist.txt" },
     { "name": "shell", "path": "./cspell.dictionaries/shell.wordlist.txt" },

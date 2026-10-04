@@ -39,6 +39,7 @@ install-error-invalid-user = utilisateur invalide : { $user }
 install-error-invalid-group = groupe invalide : { $group }
 install-error-omitting-directory = omission du répertoire { $path }
 install-error-not-a-directory = échec de l'accès à { $path } : N'est pas un répertoire
+install-error-target-dir-access = échec de l'accès à { $path } : { $error }
 install-error-existing-file-not-directory = impossible de créer le répertoire { $path } : Le fichier existe
 install-error-override-directory-failed = impossible d'écraser le répertoire { $dir } avec un non-répertoire { $file }
 install-error-same-file = { $file1 } et { $file2 } sont le même fichier
@@ -50,6 +51,7 @@ install-error-mutually-exclusive-compare-strip = Les options --compare et --stri
 install-error-missing-file-operand = opérande de fichier manquant
 install-error-missing-destination-operand = opérande de fichier de destination manquant après { $path }
 install-error-failed-to-remove = Échec de la suppression du fichier existant { $path }. Erreur : { $error }
+install-error-will-not-overwrite-just-created = n'écrasera pas le fichier tout juste créé { $dest } avec { $source }
 
 # Messages d'avertissement
 install-warning-compare-ignored = l'option --compare (-C) est ignorée quand un mode est indiqué avec des bits non liés à des droits

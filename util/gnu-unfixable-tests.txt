@@ -1,3 +1,4 @@
+# spell-checker:ignore getmntent GETMNTENT xstat fopen
 # GNU test-suite entries left out of the uutils pass/fail percentages.
 #
 # They do not check observable behavior, they check that the binary is built

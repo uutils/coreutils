@@ -9,8 +9,6 @@ use rand::{RngExt as _, SeedableRng, rng};
 use regex::Regex;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::process::Resource;
-#[cfg(not(windows))]
-use std::env;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::path::Path;
@@ -337,27 +335,20 @@ fn test_filter() {
 #[test]
 #[cfg(unix)]
 fn test_filter_with_env_var_set() {
-    // This test will ensure that if $FILE env var was set before running --filter, it'll stay that
-    // way
+    // This test will ensure that if $FILE is already set in split's environment, --filter still
+    // sets it to each output file name
     // implemented like `test_split_default()` but run a command before writing
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "filtered";
     let n_lines = 3;
     RandomFile::new(&at, name).add_lines(n_lines);
 
-    let env_var_value = "some-value";
-    unsafe {
-        env::set_var("FILE", env_var_value);
-    }
-    ucmd.args(&[format!("--filter={}", "cat > $FILE").as_str(), name])
+    ucmd.env("FILE", "some-value")
+        .args(&[format!("--filter={}", "cat > $FILE").as_str(), name])
         .succeeds();
 
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.collate(), at.read_bytes(name));
-    assert_eq!(
-        env::var("FILE").unwrap_or_else(|_| "var was unset".to_owned()),
-        env_var_value
-    );
 }
 
 #[test]
@@ -2123,16 +2114,70 @@ fn test_split_non_utf8_additional_suffix_is_byte_preserving() {
 }
 
 #[test]
+fn test_empty_input_does_not_create_output() {
+    for args in [&[][..], &["-b", "1"], &["-l", "1"], &["-C", "1"]] {
+        let scenario = TestScenario::new(util_name!());
+        let at = &scenario.fixtures;
+
+        scenario
+            .ucmd()
+            .args(args)
+            .arg("--verbose")
+            .pipe_in("")
+            .succeeds()
+            .no_output();
+        assert!(!at.plus("xaa").exists());
+
+        at.touch("empty");
+        scenario
+            .ucmd()
+            .args(args)
+            .arg("empty")
+            .succeeds()
+            .no_output();
+        assert!(!at.plus("xaa").exists());
+    }
+}
+
+#[test]
+fn test_empty_input_preserves_existing_output() {
+    for args in [&[][..], &["-b", "1"], &["-l", "1"], &["-C", "1"]] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("xaa", "keep this output\n");
+
+        ucmd.args(args).pipe_in("").succeeds().no_output();
+        assert_eq!(at.read("xaa"), "keep this output\n");
+        assert!(!at.plus("xab").exists());
+    }
+}
+
+#[test]
+fn test_empty_input_with_output_directory() {
+    for args in [&[][..], &["-b", "1"], &["-l", "1"], &["-C", "1"]] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("xaa");
+
+        ucmd.args(args).pipe_in("").succeeds().no_output();
+        assert!(at.plus("xaa").is_dir());
+        assert!(!at.plus("xab").exists());
+    }
+}
+
+#[test]
 #[cfg(unix)] // To re-enable on Windows once I work out what goes wrong with it.
 fn test_split_directory_already_exists() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    for args in [&[][..], &["-b", "1"], &["-l", "1"], &["-C", "1"]] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("xaa");
 
-    at.mkdir("xaa"); // For collision with.
-    at.touch("file");
-    ucmd.args(&["file"])
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_is("split: 'xaa': Is a directory\n");
+        ucmd.args(args)
+            .pipe_in("data\n")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_is("split: 'xaa': Is a directory\n");
+        assert!(at.plus("xaa").is_dir());
+        assert!(!at.plus("xab").exists());
+    }
 }
 
 #[test]
@@ -2158,14 +2203,18 @@ fn test_write_error_on_full_device() {
 
     // The first chunk lands on /dev/full, so its write can never succeed.
     at.symlink_file("/dev/full", "xaa");
-    at.write("input", "uv");
-
-    ucmd.args(&["-b", "1", "input"])
+    ucmd.args(&["-b", "1"])
+        .pipe_in("uv")
         .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("split: xaa: No space left on device");
+        .stderr_is("split: xaa: No space left on device\n");
 
     // split must not have moved on to the next chunk.
+    assert!(at.plus("xaa").is_symlink());
+    assert_eq!(
+        fs::read_link(at.plus("xaa")).unwrap(),
+        Path::new("/dev/full")
+    );
     assert!(!at.file_exists("xab"));
 }
 
@@ -2232,4 +2281,14 @@ split: invalid number of bytes: '7zq'
             .fails_with_code(1)
             .stderr_is("split: invalid number of bytes: '7zq'\n");
     }
+}
+
+#[test]
+fn test_obsolete_lines_not_read_after_double_dash() {
+    // After `--` there are no more options, so `-1` names a file rather than
+    // being taken as the obsolete `split -1` line-count spelling.
+    new_ucmd!()
+        .args(&["--", "-1"])
+        .fails()
+        .stderr_contains("cannot open '-1' for reading");
 }

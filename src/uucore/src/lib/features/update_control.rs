@@ -46,6 +46,7 @@
 //!     }
 //! }
 //! ```
+
 use clap::ArgMatches;
 
 /// Available update mode

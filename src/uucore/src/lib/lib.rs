@@ -27,7 +27,7 @@ pub use uucore_procs::*;
 pub use crate::mods::clap_localization;
 pub use crate::mods::display;
 pub use crate::mods::error;
-#[cfg(feature = "fs")]
+#[cfg(all(feature = "fs", any(unix, windows, target_os = "wasi")))]
 pub use crate::mods::io;
 pub use crate::mods::line_ending;
 pub use crate::mods::locale;
@@ -56,7 +56,7 @@ pub use crate::features::extendedbigdecimal;
 pub use crate::features::fast_inc;
 #[cfg(feature = "format")]
 pub use crate::features::format;
-#[cfg(feature = "fs")]
+#[cfg(all(feature = "fs", any(unix, windows, target_os = "wasi")))]
 pub use crate::features::fs;
 #[cfg(feature = "hardware")]
 pub use crate::features::hardware;
@@ -734,7 +734,7 @@ mod tests {
         ]
     }
 
-    #[cfg(any(unix, target_os = "redox"))]
+    #[cfg(unix)]
     fn test_invalid_utf8_args_lossy(os_str: &OsStr) {
         // assert our string is invalid utf8
         assert!(os_str.to_os_string().into_string().is_err());
@@ -753,7 +753,7 @@ mod tests {
         );
     }
 
-    #[cfg(any(unix, target_os = "redox"))]
+    #[cfg(unix)]
     fn test_invalid_utf8_args_ignore(os_str: &OsStr) {
         // assert our string is invalid utf8
         assert!(os_str.to_os_string().into_string().is_err());
@@ -778,7 +778,7 @@ mod tests {
         let _ = test_vec.into_iter().collect_lossy();
     }
 
-    #[cfg(any(unix, target_os = "redox"))]
+    #[cfg(unix)]
     #[test]
     fn invalid_utf8_args_unix() {
         use std::os::unix::ffi::OsStrExt;

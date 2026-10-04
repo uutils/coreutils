@@ -13,7 +13,7 @@ tr-error-missing-operand = missing operand
 tr-error-missing-operand-translating = missing operand after { $set }
   Two strings must be given when translating.
 tr-error-missing-operand-deleting-squeezing = missing operand after { $set }
-  Two strings must be given when deleting and squeezing.
+  Two strings must be given when both deleting and squeezing repeats.
 tr-error-extra-operand-deleting-without-squeezing = extra operand { $operand }
   Only one string may be given when deleting without squeezing repeats.
 tr-error-extra-operand-simple = extra operand { $operand }

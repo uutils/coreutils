@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore Nofile nonewline cmdline setrlimit ELOOP
+// spell-checker:ignore Nofile nonewline cmdline setrlimit ELOOP bcde acde
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::process::Resource;

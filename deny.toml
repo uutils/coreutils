@@ -66,8 +66,6 @@ skip = [
   { name = "itertools", version = "0.13.0" },
   # codspeed-divan-compat-macros
   { name = "itertools", version = "0.14.0" },
-  # ordered-multimap
-  { name = "hashbrown", version = "0.14.5" },
   # lru (via num-prime)
   { name = "hashbrown", version = "0.16.1" },
   # cexpr (via bindgen)

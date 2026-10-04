@@ -312,7 +312,7 @@ fn test_obsolete_extras() {
         .args(&["-5zv"])
         .pipe_in("1\x002\x003\x004\x005\x006")
         .succeeds()
-        .stdout_is("==> standard input <==\n1\x002\x003\x004\x005\0");
+        .stdout_is("==> 'standard input' <==\n1\x002\x003\x004\x005\0");
 }
 
 #[test]
@@ -332,7 +332,7 @@ fn test_multiple_files_with_stdin() {
         .stdout_is(
             "==> emptyfile.txt <==
 
-==> standard input <==
+==> 'standard input' <==
 hello
 
 ==> emptyfile.txt <==
@@ -1224,4 +1224,32 @@ fn test_accepted_multiplier_suffixes() {
             .ignore_stdin_write_error()
             .succeeds();
     }
+}
+
+#[test]
+fn test_header_quotes_names_needing_it() {
+    // A name with a space must come back quoted, an ordinary one must not.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("plain", "p\n");
+    at.write("two words", "w\n");
+
+    ts.ucmd()
+        .args(&["-n1", "plain", "two words"])
+        .succeeds()
+        .stdout_only("==> plain <==\np\n\n==> 'two words' <==\nw\n");
+}
+
+// Windows rejects control characters in file names, so this one is unix-only.
+#[test]
+#[cfg(unix)]
+fn test_header_quotes_name_with_control_char() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("tab\there", "t\n");
+
+    ts.ucmd()
+        .args(&["-v", "-n1", "tab\there"])
+        .succeeds()
+        .stdout_only("==> 'tab'$'\\t''here' <==\nt\n");
 }

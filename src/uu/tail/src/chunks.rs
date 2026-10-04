@@ -289,14 +289,14 @@ impl BytesChunkBuffer {
         // fill chunks with all bytes from reader and reuse already instantiated chunks if possible
         while chunk.fill(reader)?.is_some() {
             self.bytes += chunk.bytes as u64;
-            self.chunks.push_back(chunk.clone());
+            self.chunks.push_back(chunk);
 
             let first = &self.chunks[0];
             if self.bytes - first.bytes as u64 > self.num_print {
                 chunk = self.chunks.pop_front().unwrap();
                 self.bytes -= chunk.bytes as u64;
             } else {
-                *chunk = BytesChunk::new();
+                chunk = Box::new(BytesChunk::new());
             }
         }
 
@@ -563,15 +563,14 @@ impl LinesChunkBuffer {
 
         while chunk.fill(reader)?.is_some() {
             self.lines += chunk.lines as u64;
-            self.chunks.push_back(chunk.clone());
+            self.chunks.push_back(chunk);
 
             let first = &self.chunks[0];
             if self.lines - first.lines as u64 > self.num_print {
                 chunk = self.chunks.pop_front().unwrap();
-
                 self.lines -= chunk.lines as u64;
             } else {
-                *chunk = LinesChunk::new(self.delimiter);
+                chunk = Box::new(LinesChunk::new(self.delimiter));
             }
         }
 

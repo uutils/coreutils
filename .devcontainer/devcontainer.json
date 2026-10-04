@@ -12,7 +12,7 @@
         }
     },
     "onCreateCommand": {
-        "install pre-commit hooks": "pre-commit install",
+        "install prek hooks": "prek install",
         "update permissions for gnu coreutils volume": "sudo chown vscode:vscode ${containerWorkspaceFolder}/../gnu"
     },
 	"mounts": [

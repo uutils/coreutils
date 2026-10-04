@@ -10,7 +10,6 @@ use std::io::{self, Read};
 use std::num::IntErrorKind;
 
 use os_display::Quotable;
-use thiserror::Error;
 
 use crate::error::{UError, UResult, strip_errno};
 use crate::sum::{
@@ -431,7 +430,7 @@ impl SizedAlgoKind {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum ChecksumError {
     #[error("{}", translate!("checksum-error-raw-multiple-files"))]
     RawMultipleFiles,

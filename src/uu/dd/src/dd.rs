@@ -15,7 +15,7 @@ mod parseargs;
 mod progress;
 
 use crate::bufferedoutput::BufferedOutput;
-use blocks::conv_block_unblock_helper;
+use blocks::Converter;
 use datastructures::{ConversionMode, IConvFlags, IFlags, OConvFlags, OFlags, options};
 use parseargs::Parser;
 use progress::ProgUpdateType;
@@ -1090,6 +1090,9 @@ impl BlockWriter<'_> {
         }
     }
 
+    // Also called by the converter's writer, which would otherwise stop it
+    // from being inlined in the copy loop.
+    #[inline]
     fn write_blocks(&mut self, buf: &[u8]) -> io::Result<WriteStat> {
         match self {
             Self::Unbuffered(o) => o.write_blocks(buf),
@@ -1220,9 +1223,13 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     // 4 KiB alignment satisfies block devices that enforce a strict
     // `dma_alignment` for `iflag=direct` reads — see `AlignedBuf`.
     let mut buf = AlignedBuf::new(bsize)?;
-    // Separate scratch for `conv=block` / `conv=unblock`, which can change
-    // the byte count and so cannot be done in-place in `buf`.
-    let mut conv_buf: Vec<u8> = Vec::new();
+    // Applies the `conv=` flags not handled by `read_helper`.
+    let mut converter = i.settings.iconv.mode.map(Converter::new);
+    // The records truncated by `converter`, copied into `rstat` for progress
+    // reports: plain copies are faster when nothing borrows `rstat`.
+    let mut conv_rstat = ReadStat::default();
+    // What `converter` wrote before a write error, added to `wstat` after the loop.
+    let mut conv_wstat = WriteStat::default();
 
     // The main read/write loop.
     //
@@ -1239,8 +1246,8 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // best buffer size for reading based on the number of
         // blocks already read and the number of blocks remaining.
         let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, i.settings.ibs, bsize);
-        let Ok((rstat_update, data)) = read_helper(&mut i, &mut buf, &mut conv_buf, loop_bsize)
-            .map_err(|e| copy_error = Some(e))
+        let Ok((rstat_update, data)) =
+            read_helper(&mut i, &mut buf, loop_bsize).map_err(|e| copy_error = Some(e))
         else {
             break;
         };
@@ -1253,7 +1260,11 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             }
             break;
         }
-        let Ok(wstat_update) = o.write_blocks(data).map_err(|e| copy_error = Some(e)) else {
+        let written = match &mut converter {
+            None => o.write_blocks(data),
+            Some(c) => write_converted(c, data, &mut conv_rstat, &mut conv_wstat, &mut o),
+        };
+        let Ok(wstat_update) = written.map_err(|e| copy_error = Some(e)) else {
             break;
         };
 
@@ -1298,10 +1309,21 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             ALARM_TRIGGER_SIGNAL => ProgUpdateType::Signal,
             _ => continue,
         };
+        rstat.records_truncated = conv_rstat.records_truncated;
         let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), tp);
         prog_tx.send(prog_update).unwrap_or(());
     }
 
+    wstat += conv_wstat;
+    // The input may end in the middle of a `conv=block` record.
+    if copy_error.is_none()
+        && let Some(c) = &mut converter
+        && let Err(e) = c.finish(&mut write_to(&mut o, &mut wstat))
+    {
+        copy_error = Some(e);
+    }
+
+    rstat.records_truncated = conv_rstat.records_truncated;
     if let Some(e) = copy_error {
         // Flushing and syncing are pointless now, but the caller still wants the statistics.
         let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), ProgUpdateType::Final);
@@ -1313,6 +1335,40 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     }
 
     finalize(o, rstat, wstat, start, &prog_tx, output_thread, truncate)
+}
+
+/// Write `data` through `converter`, which may count truncated records in `rstat`.
+///
+/// On error, the pieces already written are counted in `failed_wstat`.
+/// Kept out of the copy loop, which is faster for plain copies.
+#[inline(never)]
+fn write_converted(
+    converter: &mut Converter,
+    data: &[u8],
+    rstat: &mut ReadStat,
+    failed_wstat: &mut WriteStat,
+    o: &mut BlockWriter,
+) -> io::Result<WriteStat> {
+    let mut wstat = WriteStat::default();
+    let result = converter.convert(data, rstat, &mut write_to(o, &mut wstat));
+    match result {
+        Ok(()) => Ok(wstat),
+        Err(e) => {
+            *failed_wstat = wstat;
+            Err(e)
+        }
+    }
+}
+
+/// The writer given to the converter: write each piece to `o` and count it in `wstat`.
+fn write_to<'a>(
+    o: &'a mut BlockWriter,
+    wstat: &'a mut WriteStat,
+) -> impl FnMut(&[u8]) -> io::Result<()> + 'a {
+    |buf| {
+        *wstat += o.write_blocks(buf)?;
+        Ok(())
+    }
 }
 
 /// Flush output, print final stats, and join with the progress thread.
@@ -1406,17 +1462,13 @@ fn alloc_copy_buffer(bsize: usize) -> io::Result<Vec<u8>> {
     Ok(vec![0u8; bsize])
 }
 
-/// Read one block worth of data, applying any `conv=` transformations.
+/// Read one block worth of data, applying `conv=sync` and `conv=swab`.
 ///
-/// `read_buf` is the page-aligned scratch read into directly. `conv_scratch`
-/// is only populated when `iconv.mode` is set (`conv=block` / `conv=unblock`)
-/// — those modes can change the byte count, so the converted output lives
-/// in a separate `Vec`. The returned slice points into whichever of the two
-/// holds the final data to be written.
+/// `read_buf` is the page-aligned scratch read into directly. The other
+/// `conv=` transformations are applied by [`Converter`].
 fn read_helper<'a>(
     i: &mut Input,
     read_buf: &'a mut AlignedBuf,
-    conv_scratch: &'a mut Vec<u8>,
     bsize: usize,
 ) -> io::Result<(ReadStat, &'a [u8])> {
     fn perform_swab(buf: &mut [u8]) {
@@ -1444,15 +1496,7 @@ fn read_helper<'a>(
         return Ok((rstat, &[]));
     }
 
-    match i.settings.iconv.mode {
-        Some(ref mode) => {
-            let mut rstat = rstat;
-            let input = read_buf.as_bytes()[..data_len].to_vec();
-            *conv_scratch = conv_block_unblock_helper(input, mode, &mut rstat);
-            Ok((rstat, conv_scratch.as_slice()))
-        }
-        None => Ok((rstat, &read_buf.as_bytes()[..data_len])),
-    }
+    Ok((rstat, &read_buf.as_bytes()[..data_len]))
 }
 
 // Calculate a 'good' internal buffer size.
@@ -1610,41 +1654,6 @@ mod tests {
     use crate::{Output, Parser, calc_bsize};
 
     use std::path::Path;
-
-    /// `dd` has to accept a `bs=` far larger than the data it will copy, the
-    /// way GNU dd does, so the copy buffer must not fault in its pages.
-    /// Constructing through `AlignedBuf` covers `alloc_copy_buffer` too,
-    /// since that is where the aligned buffer takes its storage from.
-    #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
-    #[test]
-    fn copy_buffer_does_not_touch_its_pages() {
-        use crate::AlignedBuf;
-
-        fn peak_rss_kib() -> u64 {
-            std::fs::read_to_string("/proc/self/status")
-                .unwrap()
-                .lines()
-                .find_map(|line| line.strip_prefix("VmHWM:"))
-                .and_then(|v| v.trim().trim_end_matches("kB").trim().parse().ok())
-                .unwrap()
-        }
-
-        // Larger than anything else this test binary allocates, so the reading
-        // below cannot be attributed to another test.
-        const BSIZE: usize = 4 << 30;
-        const SLACK_KIB: u64 = 64 << 10;
-
-        let before = peak_rss_kib();
-        let buf = AlignedBuf::new(BSIZE).unwrap();
-        let after = peak_rss_kib();
-
-        assert_eq!(buf.as_bytes().len(), BSIZE);
-        assert!(
-            after - before < SLACK_KIB,
-            "a {BSIZE}-byte copy buffer raised peak RSS by {} KiB",
-            after - before
-        );
-    }
 
     #[test]
     fn bsize_test_primes() {

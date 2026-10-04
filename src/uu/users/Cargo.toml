@@ -13,21 +13,24 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[features]
-feat_systemd_logind = ["uucore/feat_systemd_logind"]
-
 [lib]
 path = "src/users.rs"
 test = false
 doctest = false
 
-[dependencies]
-clap = { workspace = true }
+[target.'cfg(any(target_vendor = "apple", target_os = "cygwin", target_os = "freebsd", target_os = "linux", target_os = "netbsd"))'.dependencies]
 uucore = { workspace = true, features = ["utmpx"] }
+
+[target.'cfg(any(target_vendor = "apple", target_os = "cygwin", target_os = "freebsd", target_os = "linux", target_os = "netbsd", target_os = "openbsd"))'.dependencies]
+clap = { workspace = true }
 fluent = { workspace = true }
+uucore = { workspace = true, features = [] }
 
 [target.'cfg(target_os = "openbsd")'.dependencies]
 utmp-classic = { workspace = true }
+
+[features]
+feat_systemd_logind = ["uucore/feat_systemd_logind"]
 
 [lints]
 workspace = true
@@ -35,3 +38,4 @@ workspace = true
 [[bin]]
 name = "users"
 path = "src/main.rs"
+required-features = ["uucore/default"]

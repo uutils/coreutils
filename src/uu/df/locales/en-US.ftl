@@ -18,6 +18,7 @@ df-help-human-readable = print sizes in human readable format (e.g., 1K 234M 2G)
 df-help-si = likewise, but use powers of 1000 not 1024
 df-help-inodes = list inode information instead of block usage
 df-help-kilo = like --block-size=1K
+df-help-mega = like --block-size=1M
 df-help-local = limit listing to local file systems
 df-help-no-sync = do not invoke sync before getting usage info (default)
 df-help-output = use output format defined by FIELD_LIST, or print all fields if FIELD_LIST is omitted.

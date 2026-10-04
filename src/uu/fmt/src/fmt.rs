@@ -18,12 +18,11 @@ use uucore::format_usage;
 
 use linebreak::break_lines;
 use parasplit::ParagraphStream;
-use thiserror::Error;
 
 mod linebreak;
 mod parasplit;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum FmtError {
     #[error("{}", translate!("fmt-error-invalid-goal", "goal" => .0.quote()))]
     InvalidGoal(String),
@@ -54,6 +53,8 @@ const DEFAULT_GOAL: usize = 70;
 const DEFAULT_WIDTH: usize = 75;
 // by default, goal is 93% of width
 const DEFAULT_GOAL_TO_WIDTH_RATIO: usize = 93;
+// When only --goal is given, GNU sets the maximum width to goal + 10.
+const DEFAULT_GOAL_WIDTH_SLACK: usize = 10;
 
 mod options {
     pub const CROWN_MARGIN: &str = "crown-margin";
@@ -149,7 +150,7 @@ impl FmtOptions {
                 if g > DEFAULT_WIDTH {
                     return Err(FmtError::GoalGreaterThanWidth.into());
                 }
-                let w = (g * 100 / DEFAULT_GOAL_TO_WIDTH_RATIO).max(g + 3);
+                let w = g + DEFAULT_GOAL_WIDTH_SLACK;
                 (w, g)
             }
             (None, None) => (DEFAULT_WIDTH, DEFAULT_GOAL),

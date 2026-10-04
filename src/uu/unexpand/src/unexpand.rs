@@ -10,7 +10,6 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Read, Stdin, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
-use thiserror::Error;
 use uucore::char_width::char_info_at;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
@@ -19,7 +18,7 @@ use uucore::{format_usage, show};
 
 const DEFAULT_TABSTOP: usize = 8;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum ParseError {
     #[error("{}", translate!("unexpand-error-invalid-character", "char" => _0.quote()))]
     InvalidCharacter(String),
