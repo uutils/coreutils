@@ -9611,6 +9611,10 @@ fn test_cp_xattr_failure_keeps_dest_contents() {
 /// and the small ones must survive.
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/shm) not visible"
+)]
 fn test_cp_preserve_xattr_failure_keeps_the_rest() {
     use rustc_hash::FxHashMap;
     use std::ffi::OsStr;
