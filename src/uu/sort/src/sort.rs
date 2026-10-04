@@ -3179,7 +3179,7 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
 
     // freeze seed for --random-source
     let mut hasher = FoldHasher::with_seed(1, SharedSeed::global_fixed());
-    hasher.write(&salt[..filled]);
+    hasher.write(&salt);
 
     let first = hasher.finish();
     // freeze seed for --random-source
