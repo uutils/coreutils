@@ -875,9 +875,9 @@ fn process_checksum_file(
     // will use the same parser.
     let mut cached_line_format = None;
     // last_algo caches the algorithm used in the last line to print a warning
-    // message for the current line if improperly formatted.
+    // message for the current line if improperly formatted. Defaults to CRC.
     // Behavior tested in gnu_cksum_c::test_warn
-    let mut last_algo = None;
+    let mut last_algo = Some(AlgoKind::Crc.to_uppercase().to_string());
 
     for (i, line_res) in read_os_string_lines(reader).enumerate() {
         let line = line_res.map_err(|_| {
