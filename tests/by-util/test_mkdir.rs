@@ -235,6 +235,73 @@ fn test_mkdir_parent_mode_skip_existing_last_component_chmod() {
     assert_eq!(at.metadata("a/b").permissions().mode() as mode_t, 0o40000);
 }
 
+/// mkdir(2) drops setuid/setgid from its mode argument, so -m must reapply them.
+#[cfg(not(windows))]
+#[test]
+fn test_mkdir_mode_special_bits() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    for (mode, dir, expected) in [
+        ("3710", "num", 0o3710),
+        ("4500", "suid", 0o4500),
+        ("o-w,g+s", "sym", 0o2775),
+        ("u=rwx,+t", "sticky", 0o1777),
+        // Not readable by the owner, so the bits cannot be set through a plain fd.
+        ("2300", "blind", 0o2300),
+    ] {
+        scene
+            .ucmd()
+            .args(&["-m", mode, dir])
+            .umask(0o022)
+            .succeeds()
+            .no_output();
+        assert_eq!(at.metadata(dir).permissions().mode() & 0o7777, expected);
+    }
+
+    // Only the last component gets the requested special bits.
+    scene
+        .ucmd()
+        .args(&["-p", "-m", "2701", "top/mid/leaf"])
+        .umask(0o027)
+        .succeeds()
+        .no_output();
+    assert_eq!(at.metadata("top").permissions().mode() & 0o7777, 0o750);
+    assert_eq!(at.metadata("top/mid").permissions().mode() & 0o7777, 0o750);
+    assert_eq!(
+        at.metadata("top/mid/leaf").permissions().mode() & 0o7777,
+        0o2701
+    );
+}
+
+/// setgid inherited from the parent survives -m unless the mode clears it.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_mkdir_mode_inherited_setgid() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("shared");
+    at.set_mode("shared", 0o2770);
+
+    for (args, dir, expected) in [
+        (&["shared/plain"][..], "shared/plain", 0o2750),
+        (&["-m", "711", "shared/short"], "shared/short", 0o2711),
+        (&["-m", "o=", "shared/sym"], "shared/sym", 0o2770),
+        (&["-m", "g-s", "shared/cleared"], "shared/cleared", 0o777),
+        (&["-m", "000711", "shared/long"], "shared/long", 0o711),
+        (&["-m", "00000", "shared/none"], "shared/none", 0),
+        (&["-p", "-m", "1700", "shared/p/q"], "shared/p", 0o2750),
+        (&["-p", "-m", "1700", "shared/p/r"], "shared/p/r", 0o3700),
+    ] {
+        scene.ucmd().args(args).umask(0o027).succeeds().no_output();
+        assert_eq!(
+            at.metadata(dir).permissions().mode() & 0o7777,
+            expected,
+            "{args:?}"
+        );
+    }
+}
+
 #[test]
 fn test_mkdir_dup_file() {
     let scene = TestScenario::new(util_name!());
