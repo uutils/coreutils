@@ -309,7 +309,12 @@ fn timeout(
             report_if_verbose(signal, &cmd[0], verbose);
             platform::send_signal(process, signal, foreground, None, &spawn_state);
 
-            if let Some(kill_after) = kill_after {
+            // KILL cannot be caught, so a later kill is pointless and the
+            // exit status reports the signal instead of the timeout.
+            let sent_kill = signal_by_name_or_value("KILL") == Some(signal);
+            if let Some(kill_after) = kill_after
+                && !sent_kill
+            {
                 return match wait_or_kill_process(
                     process,
                     &cmd[0],
@@ -337,6 +342,8 @@ fn timeout(
                     })
                     .unwrap_or_else(|| ExitStatus::CommandTimedOut.into());
                 Err(exit_code.into())
+            } else if sent_kill {
+                Err(ExitStatus::SignalSent(signal).into())
             } else {
                 Err(ExitStatus::CommandTimedOut.into())
             }
