@@ -51,7 +51,7 @@ install-error-mutually-exclusive-target = Options --target-directory and --no-ta
 install-error-mutually-exclusive-compare-strip = Options --compare and --strip are mutually exclusive
 install-error-missing-file-operand = missing file operand
 install-error-missing-destination-operand = missing destination file operand after { $path }
-install-error-failed-to-remove = Failed to remove existing file { $path }. Error: { $error }
+install-error-failed-to-remove = Failed to remove existing file { $path }. { $error }
 install-error-will-not-overwrite-just-created = will not overwrite just-created { $dest } with { $source }
 
 # Warning messages
