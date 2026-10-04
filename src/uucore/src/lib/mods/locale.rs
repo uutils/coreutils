@@ -657,6 +657,15 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     if LOCALIZED_UTIL.with_borrow(|util| util.as_deref() == Some(p)) {
         return Ok(());
     }
+    // Callers such as the help template pass the invoked name (`dir`, `[`,
+    // a prefixed binary name...), which has no strings of its own: keep the
+    // utility that is already set up instead of switching to nothing
+    if LOCALIZED_UTIL.with_borrow(Option::is_some)
+        && get_locales_dir(p).is_err()
+        && get_embedded_locale(&format!("{p}/{DEFAULT_LOCALE}.ftl")).is_none()
+    {
+        return Ok(());
+    }
     // A different utility was set up on this thread before: start over with
     // this one's strings instead of keeping the previous utility's
     LOCALIZER.with_borrow_mut(|slot| *slot = None);
@@ -1859,6 +1868,25 @@ invalid-syntax = This is { $missing
 
             setup_localization("whoami").unwrap();
             assert_eq!(get_message("whoami-about"), "Print the current username.");
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn test_setup_localization_keeps_util_for_name_without_strings() {
+        // e.g. `dir` or a prefixed binary name passed by the help template
+        std::thread::spawn(|| {
+            unsafe {
+                env::set_var("LANG", "en-US");
+            }
+
+            setup_localization("test").unwrap();
+            setup_localization("no-such-util").unwrap();
+            assert_eq!(
+                get_message("test-about"),
+                "Check file types and compare values."
+            );
         })
         .join()
         .unwrap();
