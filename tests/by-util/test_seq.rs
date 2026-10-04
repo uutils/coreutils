@@ -1245,3 +1245,11 @@ fn test_format_precision_above_formatter_limit() {
     assert!(out.starts_with("4."));
     assert!(out[2..].trim_end().bytes().all(|b| b == b'0'));
 }
+
+#[test]
+fn test_format_zero_precision_above_formatter_limit() {
+    new_ucmd!()
+        .args(&["-f", "%.70000e", "0", "0"])
+        .succeeds()
+        .stdout_only(format!("0.{}e+00\n", "0".repeat(70000)));
+}
