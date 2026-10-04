@@ -189,6 +189,7 @@ fn tail_file(
                         Some(end) => end.saturating_sub(file.stream_position()?),
                         None => u64::MAX,
                     };
+                    // Dropping this reader loses nothing: unbounded_tail reads to EOF or not at all.
                     unbounded_tail(&mut BufReader::new((&file).take(remaining)), settings)?;
                 }
                 let reader = BufReader::new(file);
