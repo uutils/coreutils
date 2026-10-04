@@ -29,11 +29,14 @@ fn is_xattr_unsupported(_err: &std::io::Error) -> bool {
     false
 }
 
+/// The result of copying xattrs: each attribute that could not be copied,
+/// along with its error. Only failing to list the attributes of the source
+/// is an `Err`.
+pub type XattrCopyResult = std::io::Result<Vec<(OsString, std::io::Error)>>;
+
 /// Leaves `ENOTSUP` / `EOPNOTSUPP` out of the result of copying xattrs, for
 /// callers where xattr preservation is best-effort.
-fn without_unsupported(
-    result: std::io::Result<Vec<(OsString, std::io::Error)>>,
-) -> std::io::Result<Vec<(OsString, std::io::Error)>> {
+fn without_unsupported(result: XattrCopyResult) -> XattrCopyResult {
     match result {
         Ok(mut failed) => {
             failed.retain(|(_, e)| !is_xattr_unsupported(e));
@@ -44,6 +47,28 @@ fn without_unsupported(
     }
 }
 
+/// Copies each attribute in `names` that `keep` accepts, reading its value
+/// with `get` and writing it with `set`. An attribute that cannot be copied
+/// does not stop the others; it is returned along with its error.
+fn copy_each_xattr(
+    names: impl IntoIterator<Item = OsString>,
+    keep: impl Fn(&OsStr) -> bool,
+    get: impl Fn(&OsStr) -> std::io::Result<Option<Vec<u8>>>,
+    set: impl Fn(&OsStr, &[u8]) -> std::io::Result<()>,
+) -> Vec<(OsString, std::io::Error)> {
+    let mut failed = Vec::new();
+    for attr_name in names.into_iter().filter(|name| keep(name)) {
+        let result = get(&attr_name).and_then(|value| match value {
+            Some(value) => set(&attr_name, &value),
+            None => Ok(()),
+        });
+        if let Err(e) = result {
+            failed.push((attr_name, e));
+        }
+    }
+    failed
+}
+
 /// Copies extended attributes (xattrs) from one path to another.
 ///
 /// An attribute that cannot be copied does not stop the others from being
@@ -51,29 +76,18 @@ fn without_unsupported(
 /// `ENOTSUP` / `EOPNOTSUPP`; for best-effort callers see
 /// [`copy_xattrs_ignore_unsupported`]. Only failing to list the attributes of
 /// `source` is an `Err`.
-pub fn copy_xattrs<P: AsRef<Path>>(
-    source: P,
-    dest: P,
-) -> std::io::Result<Vec<(OsString, std::io::Error)>> {
-    let mut failed = Vec::new();
-    for attr_name in xattr::list(&source)? {
-        let result = xattr::get(&source, &attr_name).and_then(|value| match value {
-            Some(value) => xattr::set(&dest, &attr_name, &value),
-            None => Ok(()),
-        });
-        if let Err(e) = result {
-            failed.push((attr_name, e));
-        }
-    }
-    Ok(failed)
+pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> XattrCopyResult {
+    Ok(copy_each_xattr(
+        xattr::list(&source)?,
+        |_| true,
+        |name| xattr::get(&source, name),
+        |name, value| xattr::set(&dest, name, value),
+    ))
 }
 
 /// Like [`copy_xattrs`], but leaves out `ENOTSUP` / `EOPNOTSUPP` for callers
 /// where xattr preservation is best-effort.
-pub fn copy_xattrs_ignore_unsupported<P: AsRef<Path>>(
-    source: P,
-    dest: P,
-) -> std::io::Result<Vec<(OsString, std::io::Error)>> {
+pub fn copy_xattrs_ignore_unsupported<P: AsRef<Path>>(source: P, dest: P) -> XattrCopyResult {
     without_unsupported(copy_xattrs(source, dest))
 }
 
@@ -81,22 +95,14 @@ pub fn copy_xattrs_ignore_unsupported<P: AsRef<Path>>(
 /// list/get/set calls cannot be redirected by a concurrent renamer, unlike
 /// the path-based [`copy_xattrs`], and reports failures the same way.
 #[cfg(unix)]
-pub fn copy_xattrs_fd(
-    source: &std::fs::File,
-    dest: &std::fs::File,
-) -> std::io::Result<Vec<(OsString, std::io::Error)>> {
+pub fn copy_xattrs_fd(source: &std::fs::File, dest: &std::fs::File) -> XattrCopyResult {
     use xattr::FileExt;
-    let mut failed = Vec::new();
-    for attr_name in source.list_xattr()? {
-        let result = source.get_xattr(&attr_name).and_then(|value| match value {
-            Some(value) => dest.set_xattr(&attr_name, &value),
-            None => Ok(()),
-        });
-        if let Err(e) = result {
-            failed.push((attr_name, e));
-        }
-    }
-    Ok(failed)
+    Ok(copy_each_xattr(
+        source.list_xattr()?,
+        |_| true,
+        |name| source.get_xattr(name),
+        |name, value| dest.set_xattr(name, value),
+    ))
 }
 
 /// Like [`copy_xattrs_fd`], but leaves out `ENOTSUP` / `EOPNOTSUPP`.
@@ -104,30 +110,19 @@ pub fn copy_xattrs_fd(
 pub fn copy_xattrs_fd_ignore_unsupported(
     source: &std::fs::File,
     dest: &std::fs::File,
-) -> std::io::Result<Vec<(OsString, std::io::Error)>> {
+) -> XattrCopyResult {
     without_unsupported(copy_xattrs_fd(source, dest))
 }
 
 /// Like `copy_xattrs`, but skips the security.selinux attribute.
 #[cfg(unix)]
-pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(
-    source: P,
-    dest: P,
-) -> std::io::Result<Vec<(OsString, std::io::Error)>> {
-    let mut failed = Vec::new();
-    for attr_name in xattr::list(&source)? {
-        if attr_name.as_bytes() == b"security.selinux" {
-            continue;
-        }
-        let result = xattr::get(&source, &attr_name).and_then(|value| match value {
-            Some(value) => xattr::set(&dest, &attr_name, &value),
-            None => Ok(()),
-        });
-        if let Err(e) = result {
-            failed.push((attr_name, e));
-        }
-    }
-    Ok(failed)
+pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> XattrCopyResult {
+    Ok(copy_each_xattr(
+        xattr::list(&source)?,
+        |name| name.as_bytes() != b"security.selinux",
+        |name| xattr::get(&source, name),
+        |name, value| xattr::set(&dest, name, value),
+    ))
 }
 
 /// Copies only the POSIX ACL xattrs (`system.posix_acl_access` and
