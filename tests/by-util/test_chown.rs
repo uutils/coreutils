@@ -987,39 +987,27 @@ fn test_chown_symlink_cycles() {
 
     let result = scene.ucmd().arg("-vRL").arg(&user_name).arg("a").run();
 
-    if cfg!(target_vendor = "apple") || cfg!(target_os = "openbsd") || cfg!(target_os = "android") {
-        result
-            .stdout_contains(format!("ownership of 'a' retained as {user_name}"))
-            .stdout_contains(format!("ownership of 'a/b' retained as {user_name}"))
-            .stdout_contains(format!("ownership of 'a/b/c' retained as {user_name}"))
-            .stdout_does_not_contain(format!("ownership of 'a/b/c/d' retained as {user_name}"))
-            .stdout_does_not_contain(format!("ownership of 'a/b/c/d/b' retained as {user_name}"))
-            .stdout_does_not_contain(format!(
-                "ownership of 'a/b/c/d/b/c' retained as {user_name}"
-            ));
-    } else {
-        result
-            .success()
-            .stdout_contains(format!("ownership of 'a' retained as {user_name}"))
-            .stdout_contains(format!("ownership of 'a/b' retained as {user_name}"))
-            .stdout_contains(format!("ownership of 'a/b/c' retained as {user_name}"))
-            .stdout_contains(format!("ownership of 'a/b/c/d' retained as {user_name}"))
-            .stdout_does_not_contain(format!("ownership of 'a/b/c/d/b' retained as {user_name}"))
-            .stdout_does_not_contain(format!(
-                "ownership of 'a/b/c/d/b/c' retained as {user_name}"
-            ))
-            .stdout_does_not_contain(format!(
-                "ownership of 'a/b/c/d/b/c/d' retained as {user_name}"
-            ));
-    }
+    result
+        .success()
+        .stdout_contains(format!("ownership of 'a' retained as {user_name}"))
+        .stdout_contains(format!("ownership of 'a/b' retained as {user_name}"))
+        .stdout_contains(format!("ownership of 'a/b/c' retained as {user_name}"))
+        .stdout_contains(format!("ownership of 'a/b/c/d' retained as {user_name}"))
+        .stdout_does_not_contain(format!("ownership of 'a/b/c/d/b' retained as {user_name}"))
+        .stdout_does_not_contain(format!(
+            "ownership of 'a/b/c/d/b/c' retained as {user_name}"
+        ))
+        .stdout_does_not_contain(format!(
+            "ownership of 'a/b/c/d/b/c/d' retained as {user_name}"
+        ));
 }
 
 #[test]
 fn test_chown_symlink_two_links_same_dir() {
     // Two symlinks pointing at the same directory is NOT a cycle: neither link is
     // an ancestor of the other, so the target's contents must be visited through
-    // *both* links. This guards the backtracking in the linux safe-traversal
-    // cycle detection against false positives.
+    // *both* links. This guards the backtracking in the safe-traversal cycle
+    // detection against false positives.
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
@@ -1038,21 +1026,17 @@ fn test_chown_symlink_two_links_same_dir() {
 
     let result = scene.ucmd().arg("-vRL").arg(&user_name).arg("base").run();
 
-    // Only linux uses the safe-traversal cycle detection that this test exercises;
-    // other platforms fall back to walkdir with its own loop handling.
-    if cfg!(target_os = "linux") {
-        result
-            .success()
-            .stdout_contains(format!(
-                "ownership of 'base/realdir/file' retained as {user_name}"
-            ))
-            .stdout_contains(format!(
-                "ownership of 'base/link1/file' retained as {user_name}"
-            ))
-            .stdout_contains(format!(
-                "ownership of 'base/link2/file' retained as {user_name}"
-            ));
-    }
+    result
+        .success()
+        .stdout_contains(format!(
+            "ownership of 'base/realdir/file' retained as {user_name}"
+        ))
+        .stdout_contains(format!(
+            "ownership of 'base/link1/file' retained as {user_name}"
+        ))
+        .stdout_contains(format!(
+            "ownership of 'base/link2/file' retained as {user_name}"
+        ));
     // spell-checker:enable
 }
 
@@ -1070,4 +1054,72 @@ fn verbose_missing_file_write_error_is_reported_not_panic() {
         .set_stdout(dev_full)
         .fails_with_code(1)
         .stderr_contains("chown: write error: No space left on device");
+}
+
+/// Under `-R -H` a symlink met in the tree is followed for the change, so
+/// `--from` has to be judged on the file it points to, not on the link.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_from_judges_symlink_target_under_big_h() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let groups: Vec<u32> = scene
+        .cmd("id")
+        .arg("-G")
+        .succeeds()
+        .stdout_str()
+        .split_whitespace()
+        .map(|g| g.parse().unwrap())
+        .collect();
+    let Some(&target_group) = groups.first() else {
+        return;
+    };
+    let Some(&link_group) = groups.iter().find(|&&g| g != target_group) else {
+        return;
+    };
+
+    at.mkdir("dir");
+    at.touch("target");
+    at.relative_symlink_file("../target", "dir/link");
+    std::os::unix::fs::chown(at.plus("target"), None, Some(target_group)).unwrap();
+    std::os::unix::fs::lchown(at.plus("dir/link"), None, Some(link_group)).unwrap();
+
+    // Only the link is in `link_group`: the target is left alone.
+    scene
+        .ucmd()
+        .args(&["-R", "-H", &format!("--from=:{link_group}")])
+        .arg(format!(":{link_group}"))
+        .arg("dir")
+        .succeeds();
+    assert_eq!(at.plus("target").metadata().unwrap().gid(), target_group);
+
+    // The target is in `target_group`, so it is changed.
+    scene
+        .ucmd()
+        .args(&["-R", "-H", &format!("--from=:{target_group}")])
+        .arg(format!(":{link_group}"))
+        .arg("dir")
+        .succeeds();
+    assert_eq!(at.plus("target").metadata().unwrap().gid(), link_group);
+}
+
+/// A directory operand that cannot be read is still changed.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_unreadable_dir_operand() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    let meta = at.plus("dir").metadata().unwrap();
+    std::fs::set_permissions(at.plus("dir"), std::fs::Permissions::from_mode(0o000)).unwrap();
+
+    ucmd.arg("-v")
+        .arg(format!("--from={}:{}", meta.uid(), meta.gid()))
+        .arg(format!("{}:{}", meta.uid(), meta.gid()))
+        .arg("dir")
+        .succeeds()
+        .stdout_contains("ownership of 'dir' retained as");
+    std::fs::set_permissions(at.plus("dir"), std::fs::Permissions::from_mode(0o755)).unwrap();
 }
