@@ -9605,6 +9605,76 @@ fn test_cp_xattr_failure_keeps_dest_contents() {
     std_fs::remove_dir_all(&dest_dir).ok();
 }
 
+/// An xattr the destination refuses must not stop the other xattrs from being
+/// copied. cp still reports the failure and exits 1. tmpfs takes large values
+/// while ext4 caps a value at one block, so the large attributes fail there
+/// and the small ones must survive.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/shm) not visible"
+)]
+fn test_cp_preserve_xattr_failure_keeps_the_rest() {
+    use rustc_hash::FxHashMap;
+    use std::ffi::OsStr;
+    use tempfile::TempDir;
+    use uucore::fsxattr::{apply_xattrs, retrieve_xattrs};
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let too_big = vec![b'x'; 8000];
+    at.touch("probe");
+    let probe = FxHashMap::from_iter([(OsString::from("user.probe"), too_big.clone())]);
+    if apply_xattrs(at.plus("probe"), probe).is_ok() {
+        println!("test skipped: the destination filesystem accepts large xattr values");
+        return;
+    }
+
+    // tmpfs lists attributes sorted by name, so interleaving the names puts a
+    // refused attribute before a kept one whichever way the list is sorted.
+    let attrs: FxHashMap<OsString, Vec<u8>> = [
+        ("user.a_kept", b"first".to_vec()),
+        ("user.b_too_big", too_big.clone()),
+        ("user.c_kept", b"middle".to_vec()),
+        ("user.d_too_big", too_big),
+        ("user.e_kept", b"last".to_vec()),
+    ]
+    .into_iter()
+    .map(|(name, value)| (OsString::from(name), value))
+    .collect();
+
+    let src_dir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let file = src_dir.path().join("file");
+    let dir = src_dir.path().join("dir");
+    std_fs::write(&file, "content").unwrap();
+    std_fs::create_dir(&dir).unwrap();
+    if apply_xattrs(&file, attrs.clone()).is_err() {
+        println!("test skipped: /dev/shm does not accept user xattrs");
+        return;
+    }
+    apply_xattrs(&dir, attrs.clone()).unwrap();
+
+    // A regular file is copied through file descriptors, a directory by path.
+    for (src, dest) in [(&file, "file"), (&dir, "dir")] {
+        scene
+            .ucmd()
+            .args(&["-r", "--preserve=xattr"])
+            .arg(src)
+            .arg(dest)
+            .fails_with_code(1)
+            .stderr_contains(format!("cp: setting attributes for '{dest}"));
+
+        let copied = retrieve_xattrs(at.plus(dest)).unwrap();
+        for name in ["user.a_kept", "user.c_kept", "user.e_kept"] {
+            let name = OsStr::new(name);
+            assert_eq!(copied.get(name), attrs.get(name), "{name:?} on {dest}");
+        }
+    }
+}
+
 #[test]
 #[cfg(not(windows))]
 #[cfg_attr(

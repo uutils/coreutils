@@ -15,7 +15,6 @@ use std::io::{self, BufRead, BufReader, BufWriter, Split, Stdin, Write, stdin, s
 use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
-use thiserror::Error;
 use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
@@ -25,7 +24,7 @@ use uucore::i18n::collator::{
 use uucore::line_ending::LineEnding;
 use uucore::{format_usage, show_error, translate};
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum JoinError {
     #[error("{}", translate!("join-error-io", "error" => .0))]
     IOError(#[from] io::Error),

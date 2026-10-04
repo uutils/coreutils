@@ -32,7 +32,6 @@ use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
 use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, mode_t};
-use thiserror::Error;
 
 use platform::copy_on_write;
 use uucore::backup_control::backup_would_destroy_source;
@@ -57,7 +56,7 @@ use crate::copydir::copy_directory;
 mod copydir;
 mod platform;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum CpError {
     /// Simple [`io::Error`] wrapper
     #[error("{0}")]
@@ -1848,6 +1847,9 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
     } else {
         copy_xattrs(source, dest)
     };
+    // Every attribute has been tried; report the first one that failed.
+    let copy_xattrs_result = copy_xattrs_result
+        .and_then(|failed| failed.into_iter().next().map_or(Ok(()), |(_, e)| Err(e)));
 
     // Restore read-only if we changed it.
     if was_readonly {

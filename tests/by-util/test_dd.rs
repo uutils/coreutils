@@ -896,6 +896,25 @@ fn test_etoa_conv_spec_test() {
 }
 
 #[test]
+fn test_etoa_and_lcase() {
+    // "Hello, World!" in EBCDIC.
+    new_ucmd!()
+        .args(&["conv=ascii,lcase", "status=none"])
+        .pipe_in(b"\xc8\x85\x93\x93\x96\x6b\x40\xe6\x96\x99\x93\x84\x5a".to_vec())
+        .succeeds()
+        .stdout_only_bytes(b"hello, world!");
+}
+
+#[test]
+fn test_etoa_and_ucase() {
+    new_ucmd!()
+        .args(&["conv=ascii,ucase", "status=none"])
+        .pipe_in(b"\xc8\x85\x93\x93\x96\x6b\x40\xe6\x96\x99\x93\x84\x5a".to_vec())
+        .succeeds()
+        .stdout_only_bytes(b"HELLO, WORLD!");
+}
+
+#[test]
 fn test_atoibm_conv_spec_test() {
     new_ucmd!()
         .args(&["conv=ibm"])
@@ -940,24 +959,13 @@ fn test_atoe_and_lcase_conv_spec_test() {
         .stdout_is_fixture_bytes("lcase-ebcdic.test");
 }
 
-// TODO I think uppercase and lowercase are unintentionally swapped in
-// the code that parses the command-line arguments. See this line from
-// `parseargs.rs`:
-//
-//     (ConvFlag::FmtAtoI, ConvFlag::UCase) => Some(&ASCII_TO_IBM_UCASE_TO_LCASE),
-//     (ConvFlag::FmtAtoI, ConvFlag::LCase) => Some(&ASCII_TO_IBM_LCASE_TO_UCASE),
-//
-// If my reading is correct and that is a typo, then the
-// UCASE_TO_LCASE and LCASE_TO_UCASE in those lines should be swapped,
-// and the expected output for the following two tests should be
-// updated accordingly.
 #[test]
 fn test_atoibm_and_ucase_conv_spec_test() {
     new_ucmd!()
         .args(&["conv=ibm,ucase"])
         .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
         .succeeds()
-        .stdout_is_fixture_bytes("lcase-ibm.test");
+        .stdout_is_fixture_bytes("ucase-ibm.test");
 }
 
 #[test]
@@ -966,7 +974,7 @@ fn test_atoibm_and_lcase_conv_spec_test() {
         .args(&["conv=ibm,lcase"])
         .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
         .succeeds()
-        .stdout_is_fixture_bytes("ucase-ibm.test");
+        .stdout_is_fixture_bytes("lcase-ibm.test");
 }
 
 #[test]
