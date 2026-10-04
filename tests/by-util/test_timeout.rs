@@ -61,6 +61,20 @@ fn test_command_with_args() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_command_with_non_utf8_args() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let (ts, bin) = scenario_with_bin();
+    ts.ucmd()
+        .args(&["1700", &bin, "echo"])
+        .arg(OsStr::from_bytes(b"a\xffb"))
+        .succeeds()
+        .stdout_only_bytes(b"a\xffb\n");
+}
+
+#[test]
 fn test_verbose() {
     let (ts, bin) = scenario_with_bin();
     for verbose_flag in ["-v", "--verbose"] {
@@ -273,6 +287,39 @@ fn test_command_not_found() {
     new_ucmd!()
         .args(&["1", "/this/command/definitely/does/not/exist"])
         .fails_with_code(127);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_non_utf8_command_not_found() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .arg("1")
+        .arg(ts.fixtures.plus(OsStr::from_bytes(b"absent-\xff")))
+        .fails_with_code(127)
+        .no_stdout();
+}
+
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+fn test_non_utf8_command_path() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let ts = TestScenario::new(util_name!());
+    let dir = ts.fixtures.plus(OsStr::from_bytes(b"dir-\xff"));
+    std::fs::create_dir(&dir).unwrap();
+    let cmd = dir.join("coreutils");
+    std::os::unix::fs::symlink(&ts.bin_path, &cmd).unwrap();
+    ts.ucmd()
+        .arg("10")
+        .arg(&cmd)
+        .args(&["echo", "ran"])
+        .succeeds()
+        .stdout_only("ran\n");
 }
 
 #[test]
