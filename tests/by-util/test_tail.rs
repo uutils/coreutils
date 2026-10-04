@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile file siette ocho nueve diez MULT watchme nofile wxyz
-// spell-checker:ignore (libs) kqueue ELOOP EISDIR
+// spell-checker:ignore (libs) kqueue ELOOP EISDIR Fsize
 // spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
 // spell-checker:ignore (cmd) taskkill
 
@@ -164,6 +164,42 @@ fn test_stdin_redirect_offset() {
     fh.seek(SeekFrom::Start(2)).unwrap();
 
     ucmd.set_stdin(fh).succeeds().stdout_only("2\n");
+}
+
+// `tail f >> f` must print what `f` held when tail started, and stop there
+// rather than read back its own output. A file above one block takes the
+// seeking path, a smaller one the streaming path.
+#[rstest]
+#[case::last_line_of_large_file(&["-n1"], true, Some("last\n"))]
+#[case::large_file_from_start(&["-c+1"], true, None)]
+#[case::small_file_from_second_line(&["-n+2"], false, Some("b\nc\n"))]
+#[cfg(unix)]
+fn test_output_appended_to_input(
+    #[case] args: &[&str],
+    #[case] large: bool,
+    #[case] expected_tail: Option<&str>,
+) {
+    use rustix::process::Resource;
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let content = if large {
+        format!("{}\nlast\n", "x".repeat(100 * 1024))
+    } else {
+        "a\nb\nc\n".to_string()
+    };
+    // No expectation stands for the whole file.
+    let expected_tail = expected_tail.unwrap_or(&content);
+    at.write("f", &content);
+    let out = OpenOptions::new().append(true).open(at.plus("f")).unwrap();
+
+    // Should this regress, the cap stops tail long before the disk is full.
+    ucmd.args(args)
+        .arg("f")
+        .set_stdout(out)
+        .limit(Resource::Fsize, 1024 * 1024, 1024 * 1024)
+        .succeeds();
+    assert_eq!(at.read("f"), format!("{content}{expected_tail}"));
 }
 
 #[test]
