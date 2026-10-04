@@ -9,7 +9,7 @@
 use std::{
     borrow::Cow,
     ffi::{OsStr, OsString},
-    io::{IsTerminal, stdout},
+    io::{self, IsTerminal, Write as _, stdout},
     num::IntErrorKind,
 };
 
@@ -18,16 +18,15 @@ use lscolors::LsColors;
 use term_grid::SPACES_IN_TAB;
 
 use uucore::{
-    display::Quotable, error::UResult, format::human::SizeFormat, fsext::MetadataTimeField,
-    line_ending::LineEnding, parser::parse_block_size, parser::parse_glob,
-    parser::parse_size::parse_size_non_zero_u64, quoting_style::QuotingStyle, show_error,
-    show_warning, time::format, translate,
+    diagnostics::OptionValue, display::Quotable, error::UResult, format::human::SizeFormat,
+    fsext::MetadataTimeField, line_ending::LineEnding, parser::parse_block_size,
+    parser::parse_glob, parser::parse_size::parse_size_non_zero_u64, quoting_style::QuotingStyle,
+    show_error, show_warning, time::format, translate,
 };
 
 use crate::{
     LsError,
     colors::{LsColorsParseError, validate_ls_colors_env},
-    dired::is_dired_arg_present,
     display::{Format, IndicatorStyle, LocaleQuoting, LongFormat},
     options::QUOTING_STYLE,
 };
@@ -192,6 +191,17 @@ pub(crate) enum Files {
     Normal,
 }
 
+/// Which listing program is constructing this [`Config`].
+///
+/// `ls` defaults depend on whether stdout is a terminal. `dir` and `vdir`
+/// default to a fixed format and escape quoting.
+#[derive(Clone, Copy)]
+enum ProgramMode {
+    Ls,
+    Dir,
+    Vdir,
+}
+
 pub struct Config {
     // Dir and vdir needs access to this field
     pub format: Format,
@@ -215,8 +225,9 @@ pub struct Config {
     pub(crate) width: u16,
     // Dir and vdir needs access to this field
     pub quoting_style: QuotingStyle,
+    pub(crate) show_control_chars: bool,
     pub(crate) locale_quoting: Option<LocaleQuoting>,
-    pub(crate) indicator_style: IndicatorStyle,
+    pub(crate) indicator_style: Option<IndicatorStyle>,
     pub(crate) time_format_recent: String, // Time format for recent dates
     pub(crate) time_format_older: Option<String>, // Time format for older dates (optional, if not present, time_format_recent is used)
     pub(crate) context: bool,
@@ -233,11 +244,16 @@ pub struct Config {
 
 /// Extracts the format to display the information based on the options provided.
 ///
+/// When no format option is given, `mode` selects the program default: `ls`
+/// depends on whether stdout is a terminal; `dir` is columns; `vdir` is long.
+/// A `None` option id means that default, so `-1` and `--zero` can still
+/// override it.
+///
 /// # Returns
 ///
 /// A tuple containing the Format variant and an Option containing a &'static str
 /// which corresponds to the option used to define the format.
-fn extract_format(options: &clap::ArgMatches) -> (Format, Option<&'static str>) {
+fn extract_format(options: &clap::ArgMatches, mode: ProgramMode) -> (Format, Option<&'static str>) {
     if let Some(format_) = options.get_one::<String>(options::FORMAT) {
         (
             match format_.as_str() {
@@ -259,10 +275,18 @@ fn extract_format(options: &clap::ArgMatches) -> (Format, Option<&'static str>) 
         (Format::Commas, Some(options::format::COMMAS))
     } else if options.get_flag(options::format::COLUMNS) {
         (Format::Columns, Some(options::format::COLUMNS))
-    } else if stdout().is_terminal() {
-        (Format::Columns, None)
     } else {
-        (Format::OneLine, None)
+        match mode {
+            ProgramMode::Dir => (Format::Columns, None),
+            ProgramMode::Vdir => (Format::Long, None),
+            ProgramMode::Ls => {
+                if stdout().is_terminal() {
+                    (Format::Columns, None)
+                } else {
+                    (Format::OneLine, None)
+                }
+            }
+        }
     }
 }
 
@@ -301,7 +325,7 @@ fn extract_files(options: &clap::ArgMatches) -> Files {
 /// # Returns
 ///
 /// A Sort variant representing the sorting method to use.
-fn extract_sort(options: &clap::ArgMatches) -> Sort {
+fn extract_sort(options: &clap::ArgMatches, format: &Format) -> Sort {
     let get_last_index = |flag: &str| -> usize {
         if options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine) {
             options.index_of(flag).unwrap_or(0)
@@ -332,7 +356,7 @@ fn extract_sort(options: &clap::ArgMatches) -> Sort {
     match max_sort_index {
         0 => {
             // No sort flags specified, use default behavior
-            if !options.get_flag(options::format::LONG)
+            if *format != Format::Long
                 && (options.get_flag(options::time::ACCESS)
                     || options.get_flag(options::time::CHANGE)
                     || options.get_one::<String>(options::TIME).is_some())
@@ -555,6 +579,7 @@ fn match_quoting_style_name(
 fn extract_quoting_style(
     options: &clap::ArgMatches,
     show_control: bool,
+    mode: ProgramMode,
 ) -> (QuotingStyle, Option<LocaleQuoting>) {
     let opt_quoting_style = options.get_one::<String>(QUOTING_STYLE);
 
@@ -569,26 +594,31 @@ fn extract_quoting_style(
         (QuotingStyle::C_NO_QUOTES, None)
     } else if options.get_flag(options::quoting::C) {
         (QuotingStyle::C_DOUBLE, None)
-    } else if options.get_flag(options::DIRED) {
-        (QuotingStyle::Literal { show_control }, None)
     } else {
         // If set, the QUOTING_STYLE environment variable specifies a default style.
-        if let Ok(style) = std::env::var("QUOTING_STYLE") {
-            match match_quoting_style_name(style.as_str(), show_control) {
-                Some(pair) => return pair,
-                None => eprintln!(
-                    "{}",
-                    translate!("ls-invalid-quoting-style", "program" => std::env::args().next().unwrap_or_else(|| "ls".to_string()), "style" => style.clone())
-                ),
+        // Value may not be valid UTF-8.
+        if let Some(os_style) = std::env::var_os("QUOTING_STYLE") {
+            let style = os_style.to_string_lossy();
+            if let Some(pair) = match_quoting_style_name(&style, show_control) {
+                return pair;
             }
+            let _ = writeln!(
+                io::stderr(),
+                "{}",
+                translate!(
+                    "ls-invalid-quoting-style",
+                    "program" => std::env::args().next().unwrap_or_else(|| "ls".to_string()),
+                    "style" => style
+                )
+            );
         }
 
-        // By default, `ls` uses Shell escape quoting style when writing to a terminal file
-        // descriptor and Literal otherwise.
-        if stdout().is_terminal() {
-            (QuotingStyle::SHELL_ESCAPE.show_control(show_control), None)
-        } else {
-            (QuotingStyle::Literal { show_control }, None)
+        match mode {
+            ProgramMode::Dir | ProgramMode::Vdir => (QuotingStyle::C_NO_QUOTES, None),
+            ProgramMode::Ls if stdout().is_terminal() => {
+                (QuotingStyle::SHELL_ESCAPE.show_control(show_control), None)
+            }
+            ProgramMode::Ls => (QuotingStyle::Literal { show_control }, None),
         }
     }
 }
@@ -598,34 +628,26 @@ fn extract_quoting_style(
 /// # Returns
 ///
 /// An [`IndicatorStyle`] variant representing the indicator style to use.
-fn extract_indicator_style(options: &clap::ArgMatches) -> IndicatorStyle {
+fn extract_indicator_style(options: &clap::ArgMatches) -> Option<IndicatorStyle> {
     if let Some(field) = options.get_one::<String>(options::INDICATOR_STYLE) {
         match field.as_str() {
-            "none" => IndicatorStyle::None,
-            "file-type" => IndicatorStyle::FileType,
-            "classify" => IndicatorStyle::Classify,
-            "slash" => IndicatorStyle::Slash,
-            &_ => IndicatorStyle::None,
+            "file-type" => Some(IndicatorStyle::FileType),
+            "classify" => Some(IndicatorStyle::Classify),
+            "slash" => Some(IndicatorStyle::Slash),
+            "none" | &_ => None,
         }
     } else if let Some(field) = options.get_one::<String>(options::indicator_style::CLASSIFY) {
         match field.as_str() {
-            "never" | "no" | "none" => IndicatorStyle::None,
-            "always" | "yes" | "force" => IndicatorStyle::Classify,
-            "auto" | "tty" | "if-tty" => {
-                if stdout().is_terminal() {
-                    IndicatorStyle::Classify
-                } else {
-                    IndicatorStyle::None
-                }
-            }
-            &_ => IndicatorStyle::None,
+            "always" | "yes" | "force" => Some(IndicatorStyle::Classify),
+            "auto" | "tty" | "if-tty" => stdout().is_terminal().then_some(IndicatorStyle::Classify),
+            "never" | "no" | "none" | &_ => None,
         }
     } else if options.get_flag(options::indicator_style::SLASH) {
-        IndicatorStyle::Slash
+        Some(IndicatorStyle::Slash)
     } else if options.get_flag(options::indicator_style::FILE_TYPE) {
-        IndicatorStyle::FileType
+        Some(IndicatorStyle::FileType)
     } else {
-        IndicatorStyle::None
+        None
     }
 }
 
@@ -674,11 +696,45 @@ fn parse_width(width_match: Option<&String>) -> Result<u16, LsError> {
     Ok(ret)
 }
 
+/// Parses the tab size value from the command line
+fn parse_tab_size(size_str: &str) -> Result<usize, LsError> {
+    size_str
+        .parse::<usize>()
+        .ok()
+        .or_else(|| {
+            size_str
+                .strip_prefix("0x")
+                .or_else(|| size_str.strip_prefix("0X"))
+                .and_then(|hex| usize::from_str_radix(hex, 16).ok())
+        })
+        .ok_or_else(|| LsError::InvalidTabSize(size_str.to_string()))
+}
+
 impl Config {
+    pub fn from(options: &clap::ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Self> {
+        Self::from_with_program_mode(options, diag_args, ProgramMode::Ls)
+    }
+
+    /// Construct a configuration with dir's default column format and escape quoting.
+    pub fn from_dir(options: &clap::ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Self> {
+        Self::from_with_program_mode(options, diag_args, ProgramMode::Dir)
+    }
+
+    /// Construct a configuration with vdir's default long format and escape quoting.
+    pub fn from_vdir(options: &clap::ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Self> {
+        Self::from_with_program_mode(options, diag_args, ProgramMode::Vdir)
+    }
+
     #[allow(clippy::cognitive_complexity)]
-    pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
+    fn from_with_program_mode(
+        options: &clap::ArgMatches,
+        diag_args: Option<&[OsString]>,
+        mode: ProgramMode,
+    ) -> UResult<Self> {
         let context = options.get_flag(options::CONTEXT);
-        let (mut format, opt) = extract_format(options);
+        let (mut format, opt) = extract_format(options, mode);
+        // -1 and --zero override a default long format, but not an explicit one.
+        let mut explicit_long = format == Format::Long && opt.is_some();
         let files = extract_files(options);
 
         // The -o, -n and -g options are tricky. They cannot override with each
@@ -689,14 +745,19 @@ impl Config {
         // when switching to a different format option in-between like this:
         // -ogCl or "-og --format=vertical --format=long".
         //
-        // -1 has a similar issue: it does nothing if the format is long. This
-        // actually makes it distinct from the --format=singe-column option,
+        // -1 has a similar issue: it does nothing if long format was explicitly
+        // requested. This makes it distinct from the --format=singe-column option,
         // which always applies.
+        //
+        // --dired (-D) implies long format the same way -g, -o and -n do: it
+        // wins over earlier format options, loses to later ones, and a -1
+        // after it has no effect. Whether dired output is actually emitted is
+        // decided below, once the final format is known.
         //
         // The idea here is to not let these options override with the other
         // options, but manually whether they have an index that's greater than
         // the other format options. If so, we set the appropriate format.
-        if format != Format::Long {
+        if !explicit_long {
             let idx = opt
                 .and_then(|opt| options.indices_of(opt).map(|x| x.max().unwrap()))
                 .unwrap_or(0);
@@ -705,6 +766,7 @@ impl Config {
                 options::format::LONG_NO_GROUP,
                 options::format::LONG_NUMERIC_UID_GID,
                 options::FULL_TIME,
+                options::DIRED,
             ]
             .iter()
             .filter_map(|opt| {
@@ -718,17 +780,16 @@ impl Config {
             .any(|i| i >= idx)
             {
                 format = Format::Long;
-            } else if let Some(mut indices) = options.indices_of(options::format::ONE_LINE) {
-                if options.value_source(options::format::ONE_LINE)
+                explicit_long = true;
+            } else if let Some(mut indices) = options.indices_of(options::format::ONE_LINE)
+                && options.value_source(options::format::ONE_LINE)
                     == Some(clap::parser::ValueSource::CommandLine)
-                    && indices.any(|i| i > idx)
-                {
-                    format = Format::OneLine;
-                }
+                && indices.any(|i| i > idx)
+            {
+                format = Format::OneLine;
             }
         }
 
-        let sort = extract_sort(options);
         let time = extract_time(options);
         let mut needs_color = extract_color(options);
         let hyperlink = extract_hyperlink(options);
@@ -755,13 +816,24 @@ impl Config {
                 (DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
             } else if opt_hr {
                 (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
-            } else if let Ok(size) = parse_size_non_zero_u64(opt_block_size) {
+            } else {
+                let size = parse_size_non_zero_u64(opt_block_size).map_err(|error| {
+                    let ls_error = LsError::BlockSizeParseError(opt_block_size.clone());
+                    let message = ls_error.to_string();
+                    error.size_value_error(
+                        diag_args,
+                        &OptionValue::with_names(
+                            opt_block_size,
+                            None,
+                            Some(options::size::BLOCK_SIZE),
+                        ),
+                        0,
+                        &message,
+                        ls_error,
+                    )
+                })?;
                 // --block-size overrides -k
                 (size, size)
-            } else {
-                return Err(Box::new(LsError::BlockSizeParseError(
-                    opt_block_size.clone(),
-                )));
             }
         } else if !opt_si && !opt_hr {
             resolve_block_sizes_from_env(opt_kb)
@@ -776,13 +848,11 @@ impl Config {
             let group = !options.get_flag(options::NO_GROUP)
                 && !options.get_flag(options::format::LONG_NO_GROUP);
             let owner = !options.get_flag(options::format::LONG_NO_OWNER);
-            #[cfg(unix)]
             let numeric_uid_gid = options.get_flag(options::format::LONG_NUMERIC_UID_GID);
             LongFormat {
                 author,
                 group,
                 owner,
-                #[cfg(unix)]
                 numeric_uid_gid,
             }
         };
@@ -791,18 +861,14 @@ impl Config {
         let mut show_control = if options.get_flag(options::HIDE_CONTROL_CHARS) {
             false
         } else {
-            options.get_flag(options::SHOW_CONTROL_CHARS) || !stdout().is_terminal()
+            options.get_flag(options::SHOW_CONTROL_CHARS)
+                || !matches!(mode, ProgramMode::Ls)
+                || !stdout().is_terminal()
         };
 
-        let (mut quoting_style, mut locale_quoting) = extract_quoting_style(options, show_control);
+        let (mut quoting_style, mut locale_quoting) =
+            extract_quoting_style(options, show_control, mode);
         let indicator_style = extract_indicator_style(options);
-        // Only parse the value to "--time-style" if it will become relevant.
-        let dired = options.get_flag(options::DIRED);
-        let (time_format_recent, time_format_older) = if format == Format::Long || dired {
-            parse_time_style(options)?
-        } else {
-            Default::default()
-        };
 
         let mut ignore_patterns: Vec<Pattern> = Vec::new();
 
@@ -870,68 +936,44 @@ impl Config {
             options::quoting::LITERAL,
         ];
         let get_last = |flag: &str| -> usize {
-            if options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine) {
-                options.index_of(flag).unwrap_or(0)
-            } else {
-                0
-            }
+            (options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine))
+                .then(|| options.index_of(flag))
+                .flatten()
+                .unwrap_or(0)
         };
-        if get_last(options::ZERO)
-            > zero_formats_opts
-                .into_iter()
-                .map(get_last)
-                .max()
-                .unwrap_or(0)
-        {
-            format = if format == Format::Long {
-                format
-            } else {
-                Format::OneLine
-            };
+        let zero_idx = get_last(options::ZERO);
+        let last_of =
+            |flag_list: &[&str]| flag_list.iter().copied().map(get_last).max().unwrap_or(0);
+
+        if zero_idx > last_of(&zero_formats_opts) && !explicit_long {
+            format = Format::OneLine;
         }
-        if get_last(options::ZERO)
-            > zero_colors_opts
-                .into_iter()
-                .map(get_last)
-                .max()
-                .unwrap_or(0)
-        {
+
+        if zero_idx > last_of(&zero_colors_opts) {
             needs_color = false;
         }
-        if get_last(options::ZERO)
-            > zero_show_control_opts
-                .into_iter()
-                .map(get_last)
-                .max()
-                .unwrap_or(0)
-        {
+
+        if zero_idx > last_of(&zero_show_control_opts) {
             show_control = true;
         }
-        if get_last(options::ZERO)
-            > zero_quoting_style_opts
-                .into_iter()
-                .map(get_last)
-                .max()
-                .unwrap_or(0)
-        {
+
+        if zero_idx > last_of(&zero_quoting_style_opts) {
             quoting_style = QuotingStyle::Literal { show_control };
             locale_quoting = None;
         }
 
-        if needs_color {
-            if let Err(err) = validate_ls_colors_env() {
-                if let LsColorsParseError::UnrecognizedPrefix(prefix) = &err {
-                    show_warning!(
-                        "{}",
-                        translate!(
-                            "ls-warning-unrecognized-ls-colors-prefix",
-                            "prefix" => prefix.quote()
-                        )
-                    );
-                }
-                show_warning!("{}", translate!("ls-warning-unparsable-ls-colors"));
-                needs_color = false;
+        if needs_color && let Err(err) = validate_ls_colors_env() {
+            if let LsColorsParseError::UnrecognizedPrefix(prefix) = &err {
+                show_error!(
+                    "{}",
+                    translate!(
+                        "ls-error-unrecognized-ls-colors-prefix",
+                        "prefix" => prefix.quote()
+                    )
+                );
             }
+            show_error!("{}", translate!("ls-error-unparsable-ls-colors"));
+            needs_color = false;
         }
 
         let color = if needs_color {
@@ -940,15 +982,25 @@ impl Config {
             None
         };
 
-        if dired || is_dired_arg_present() {
-            // --dired implies --format=long
-            // if we have --dired --hyperlink, we don't show dired but we still want to see the
-            // long format
-            format = Format::Long;
-        }
+        // Hyperlinks enabled after the last --dired cancel the dired output,
+        // and a --dired after --hyperlink disables them again. Dired output
+        // also requires the final format to be long: a later -C, -x, -m or
+        // --format= cancels it.
+        let dired_idx = get_last(options::DIRED);
+        let hyperlink = hyperlink && get_last(options::HYPERLINK) > dired_idx;
+        let dired = dired_idx > 0 && format == Format::Long && !hyperlink;
         if dired && options.get_flag(options::ZERO) {
             return Err(Box::new(LsError::DiredAndZeroAreIncompatible));
         }
+
+        let sort = extract_sort(options, &format);
+
+        // Only parse the time style after the final output format is known.
+        let (time_format_recent, time_format_older) = if format == Format::Long {
+            parse_time_style(options)?
+        } else {
+            Default::default()
+        };
 
         let dereference = if options.get_flag(options::dereference::ALL) {
             Dereference::All
@@ -957,7 +1009,7 @@ impl Config {
         } else if options.get_flag(options::dereference::DIR_ARGS) {
             Dereference::DirArgs
         } else if options.get_flag(options::DIRECTORY)
-            || indicator_style == IndicatorStyle::Classify
+            || indicator_style == Some(IndicatorStyle::Classify)
             || format == Format::Long
         {
             Dereference::None
@@ -967,13 +1019,11 @@ impl Config {
 
         let tab_size = if needs_color {
             Some(0)
+        } else if let Some(size_str) = options.get_one::<String>(options::format::TAB_SIZE) {
+            Some(parse_tab_size(size_str)?)
         } else {
-            options
-                .get_one::<String>(options::format::TAB_SIZE)
-                .and_then(|size| size.parse::<usize>().ok())
-                .or_else(|| std::env::var("TABSIZE").ok().and_then(|s| s.parse().ok()))
-        }
-        .unwrap_or(SPACES_IN_TAB);
+            None
+        };
 
         Ok(Self {
             format,
@@ -995,6 +1045,7 @@ impl Config {
             block_size,
             width,
             quoting_style,
+            show_control_chars: options.get_flag(options::SHOW_CONTROL_CHARS),
             locale_quoting,
             indicator_style,
             time_format_recent,
@@ -1008,7 +1059,7 @@ impl Config {
             line_ending: LineEnding::from_zero_flag(options.get_flag(options::ZERO)),
             dired,
             hyperlink,
-            tab_size,
+            tab_size: tab_size.unwrap_or(SPACES_IN_TAB),
         })
     }
 }
@@ -1051,6 +1102,16 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                 &field
             };
 
+            // Resolve only unique prefixes, leaving ambiguous or invalid values
+            // unchanged so they produce the existing time-style error.
+            let mut styles = ["full-iso", "long-iso", "iso", "locale"]
+                .into_iter()
+                .filter(|style| style.starts_with(field));
+            let field = match (styles.next(), styles.next()) {
+                (Some(style), None) => style,
+                _ => field,
+            };
+
             match field {
                 "full-iso" => ok((format::FULL_ISO, None)),
                 "long-iso" => ok((format::LONG_ISO, None)),
@@ -1060,19 +1121,20 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                     Some(format::ISO.to_string() + " "),
                 )),
                 "locale" => ok(LOCALE_FORMAT),
-                _ => match field.chars().next().unwrap() {
-                    '+' => {
-                        // recent/older formats are (optionally) separated by a newline
-                        let mut it = field[1..].split('\n');
-                        let recent = it.next().unwrap_or_default();
-                        let older = it.next();
-                        match it.next() {
-                            None => ok((recent, older)),
-                            Some(_) => Err(LsError::TimeStyleParseError(String::from(field))),
-                        }
+                // `field` can be empty here (e.g. --time-style=posix-), so test
+                // the prefix instead of unwrapping the first char.
+                _ if field.starts_with('+') => {
+                    // Formats are (optionally) separated by a newline:
+                    // FORMAT1 NEWLINE FORMAT2 -> FORMAT1 for older files, FORMAT2 for recent.
+                    // A single format applies to all files (stored as recent).
+                    let formats: Vec<_> = field[1..].split('\n').collect();
+                    match formats.as_slice() {
+                        [format] => ok((*format, None)),
+                        [older, recent] => ok((*recent, Some(*older))),
+                        _ => Err(LsError::TimeStyleParseError(String::from(field))),
                     }
-                    _ => Err(LsError::TimeStyleParseError(String::from(field))),
-                },
+                }
+                _ => Err(LsError::TimeStyleParseError(String::from(field))),
             }
         }
     } else if options.get_flag(options::FULL_TIME) {

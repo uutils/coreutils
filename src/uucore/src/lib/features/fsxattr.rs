@@ -6,6 +6,7 @@
 // spell-checker:ignore getxattr posix_acl_default posix_acl_access ENOTSUP EOPNOTSUPP renamer
 
 //! Set of functions to manage xattr on files and dirs
+
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use std::ffi::{OsStr, OsString};
@@ -44,9 +45,8 @@ pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
 /// for callers where xattr preservation is best-effort.
 pub fn copy_xattrs_ignore_unsupported<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
     match copy_xattrs(source, dest) {
-        Ok(()) => Ok(()),
         Err(e) if is_xattr_unsupported(&e) => Ok(()),
-        Err(e) => Err(e),
+        res => res,
     }
 }
 
@@ -71,9 +71,8 @@ pub fn copy_xattrs_fd_ignore_unsupported(
     dest: &std::fs::File,
 ) -> std::io::Result<()> {
     match copy_xattrs_fd(source, dest) {
-        Ok(()) => Ok(()),
         Err(e) if is_xattr_unsupported(&e) => Ok(()),
-        Err(e) => Err(e),
+        res => res,
     }
 }
 
@@ -81,10 +80,10 @@ pub fn copy_xattrs_fd_ignore_unsupported(
 #[cfg(unix)]
 pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
     for attr_name in xattr::list(&source)? {
-        if attr_name.to_string_lossy() != "security.selinux" {
-            if let Some(value) = xattr::get(&source, &attr_name)? {
-                xattr::set(&dest, &attr_name, &value)?;
-            }
+        if attr_name.as_bytes() != b"security.selinux"
+            && let Some(value) = xattr::get(&source, &attr_name)?
+        {
+            xattr::set(&dest, &attr_name, &value)?;
         }
     }
     Ok(())
@@ -131,6 +130,30 @@ pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<FxHashMap<O
     Ok(attrs)
 }
 
+/// Retrieves the extended attributes (xattrs) of a given file using a file descriptor.
+///
+/// This version avoids TOCTOU races by operating on an open file descriptor
+/// rather than a path, ensuring all operations target the same inode.
+///
+/// # Arguments
+///
+/// * `source` - A reference to the file (open file descriptor).
+///
+/// # Returns
+///
+/// A result containing a map of attribute names to values, or an error.
+#[cfg(unix)]
+pub fn retrieve_xattrs_fd(source: &std::fs::File) -> std::io::Result<FxHashMap<OsString, Vec<u8>>> {
+    use xattr::FileExt;
+    let mut attrs = FxHashMap::default();
+    for attr_name in source.list_xattr()? {
+        if let Some(value) = source.get_xattr(&attr_name)? {
+            attrs.insert(attr_name, value);
+        }
+    }
+    Ok(attrs)
+}
+
 /// Applies extended attributes (xattrs) to a given file or directory.
 ///
 /// # Arguments
@@ -151,18 +174,62 @@ pub fn apply_xattrs<P: AsRef<Path>>(
     Ok(())
 }
 
+/// Applies extended attributes (xattrs) to a given file using a file descriptor.
+///
+/// This version avoids TOCTOU races by operating on an open file descriptor
+/// rather than a path, ensuring all operations target the same inode.
+///
+/// # Arguments
+///
+/// * `dest` - A reference to the file (open file descriptor).
+/// * `xattrs` - A map of attribute names to their corresponding values.
+///
+/// # Returns
+///
+/// A result indicating success or failure.
+#[cfg(unix)]
+pub fn apply_xattrs_fd(
+    dest: &std::fs::File,
+    xattrs: FxHashMap<OsString, Vec<u8>>,
+) -> std::io::Result<()> {
+    use xattr::FileExt;
+    for (attr, value) in xattrs {
+        dest.set_xattr(&attr, &value)?;
+    }
+    Ok(())
+}
+
+/// Like [`apply_xattrs_fd`], but maps `ENOTSUP` / `EOPNOTSUPP` to `Ok(())`.
+#[cfg(unix)]
+pub fn apply_xattrs_fd_ignore_unsupported(
+    dest: &std::fs::File,
+    xattrs: FxHashMap<OsString, Vec<u8>>,
+) -> std::io::Result<()> {
+    match apply_xattrs_fd(dest, xattrs) {
+        Err(e) if is_xattr_unsupported(&e) => Ok(()),
+        res => res,
+    }
+}
+
 /// Checks if a file has an Access Control List (ACL) based on its extended attributes.
 ///
 /// # Arguments
 ///
 /// * `file` - A reference to the path of the file.
+/// * `dereference` - Whether to inspect the target of a symlink instead of the link itself.
 ///
 /// # Returns
 ///
 /// `true` if the file has extended attributes (indicating an ACL), `false` otherwise.
-pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
+pub fn has_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
-    xattr::list_deref(file).is_ok_and(|acl| {
+    let attrs = if dereference {
+        xattr::list_deref(file)
+    } else {
+        xattr::list(file)
+    };
+
+    attrs.is_ok_and(|acl| {
         // if we have extra attributes, we have an acl
         acl.count() > 0
     })
@@ -173,13 +240,20 @@ pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
 /// # Arguments
 ///
 /// * `file` - A reference to the path of the file.
+/// * `dereference` - Whether to inspect the target of a symlink instead of the link itself.
 ///
 /// # Returns
 ///
 /// `true` if the file has an extended attribute named "security.capability", `false` otherwise.
-pub fn has_security_cap_acl<P: AsRef<Path>>(file: P) -> bool {
+pub fn has_security_cap_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
-    xattr::list_deref(file).is_ok_and(|mut acl| {
+    let attrs = if dereference {
+        xattr::list_deref(file)
+    } else {
+        xattr::list(file)
+    };
+
+    attrs.is_ok_and(|mut acl| {
         #[cfg(unix)]
         return acl.contains(OsStr::from_bytes(b"security.capability"));
 
@@ -230,7 +304,7 @@ pub fn get_acl_perm_bits_from_xattr<P: AsRef<Path>>(source: P) -> u32 {
                 .copied()
                 .collect::<Vec<u8>>();
 
-            for entry in acl_entries.chunks_exact(4) {
+            for entry in acl_entries.as_chunks::<4>().0 {
                 // Third byte and fourth byte will be the perm bits
                 perm = (perm << 3) | u32::from(entry[2]) | u32::from(entry[3]);
             }
@@ -373,14 +447,14 @@ mod tests {
         File::create(&file_path).unwrap();
 
         // FIXME: this fails on a system that uses SELinux
-        assert!(!has_acl(&file_path));
+        assert!(!has_acl(&file_path, true));
 
         let test_attr = "user.test_acl";
         let test_value = b"test value";
         xattr::set(&file_path, test_attr, test_value).unwrap();
 
-        assert!(has_acl(&file_path));
-        assert!(!has_security_cap_acl(&file_path));
+        assert!(has_acl(&file_path, true));
+        assert!(!has_security_cap_acl(&file_path, true));
 
         // FreeBSD/NetBSD's xattr library does not support the "security" namespace
         // (https://github.com/Stebalien/xattr/blob/master/src/sys/bsd.rs#L148).
@@ -392,7 +466,38 @@ mod tests {
             let test_value = b"";
             xattr::set(&file_path, test_attr, test_value).unwrap();
 
-            assert!(has_security_cap_acl(&file_path));
+            assert!(has_security_cap_acl(&file_path, true));
         }
+    }
+
+    #[test]
+    fn test_apply_and_retrieve_xattrs_fd() {
+        use std::fs::OpenOptions;
+
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("test_file.txt");
+
+        File::create(&file_path).unwrap();
+
+        let mut test_xattrs = FxHashMap::default();
+        let test_attr = "user.test_attr_fd";
+        let test_value = b"test value fd";
+        test_xattrs.insert(OsString::from(test_attr), test_value.to_vec());
+
+        // Apply using file descriptor
+        let file = OpenOptions::new().write(true).open(&file_path).unwrap();
+        apply_xattrs_fd(&file, test_xattrs).unwrap();
+        drop(file);
+
+        // Retrieve using file descriptor
+        let file = File::open(&file_path).unwrap();
+        let retrieved_xattrs = retrieve_xattrs_fd(&file).unwrap();
+        assert!(retrieved_xattrs.contains_key(OsString::from(test_attr).as_os_str()));
+        assert_eq!(
+            retrieved_xattrs
+                .get(OsString::from(test_attr).as_os_str())
+                .unwrap(),
+            test_value
+        );
     }
 }

@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) unwritable
+// spell-checker:ignore (ToDO) unwritable GHSA EAGAIN
+
 use std::fmt::Write;
 
 use uutests::at_and_ucmd;
@@ -12,6 +13,32 @@ use uutests::new_ucmd;
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_getrandom_fail() {
+    // getrandom is missing from legacy kernel
+    use std::process::Command;
+
+    let Ok(out) = Command::new("strace")
+        .args([
+            "-o",
+            "/dev/null",
+            "-e",
+            "inject=getrandom:error=EAGAIN",
+            uutests::util::get_tests_binary(),
+            "shuf",
+            "-i",
+            "1234-1235",
+        ])
+        .output()
+    else {
+        return; // missing strace
+    };
+    assert!(out.status.success());
+    assert!(String::from_utf8_lossy(&out.stdout).contains("1234"));
 }
 
 #[test]
@@ -235,6 +262,31 @@ fn test_range_permute_no_overflow_0_max() {
 }
 
 #[test]
+fn test_range_full_huge_no_head_count_memory_exhausted() {
+    // Repro for #12500: `shuf -i 1-huge` with no --head-count used to abort
+    // (hashbrown "Hash table capacity overflow" panic, or an allocator abort)
+    // because the sparse iterator reserved a map sized to the whole range.
+    // It must now fail cleanly, like GNU.
+    let upper_bound = usize::MAX;
+    new_ucmd!()
+        .arg(format!("-i1-{upper_bound}"))
+        .fails_with_code(1)
+        .stderr_only("shuf: memory exhausted\n");
+}
+
+#[test]
+fn test_range_huge_head_count_memory_exhausted() {
+    // Repro for #12500: a large --head-count is just as unsatisfiable as no
+    // --head-count; both used to abort. Must now fail cleanly.
+    let upper_bound = usize::MAX;
+    new_ucmd!()
+        .arg(format!("-n{upper_bound}"))
+        .arg(format!("-i1-{upper_bound}"))
+        .fails_with_code(1)
+        .stderr_only("shuf: memory exhausted\n");
+}
+
+#[test]
 fn test_very_high_range_full() {
     let input_seq = vec![
         2_147_483_641,
@@ -396,8 +448,8 @@ fn test_echo_invalid_unicode_in_arguments() {
     assert!(result.stdout().contains(&b'\xFF'));
 }
 
-#[cfg(any(unix, target_os = "wasi"))]
-#[cfg(not(target_os = "macos"))]
+#[cfg(unix)]
+#[cfg(not(target_vendor = "apple"))]
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_invalid_unicode_in_filename() {
@@ -498,6 +550,29 @@ fn test_zero_head_count_file_touch_output_positive_existing() {
         Vec::new(),
         "Output file must exist and be completely empty"
     );
+}
+
+#[test]
+fn test_output_not_truncated_when_input_missing() {
+    // A failure to read the input must leave an existing -o file untouched
+    // instead of truncating it first (data-loss regression, GHSA-5g6r-45q4-3p5r).
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("out", "keep me\n");
+    ucmd.args(&["-o", "out", "does-not-exist"])
+        .fails_with_code(1)
+        .stderr_contains("does-not-exist");
+    assert_eq!(at.read("out"), "keep me\n");
+}
+
+#[test]
+fn test_output_not_truncated_when_random_source_missing() {
+    // Same guarantee when the random source can't be opened.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("out", "keep me\n");
+    at.write("in", "a\nb\nc\n");
+    ucmd.args(&["-o", "out", "--random-source=does-not-exist", "in"])
+        .fails_with_code(1);
+    assert_eq!(at.read("out"), "keep me\n");
 }
 
 #[test]

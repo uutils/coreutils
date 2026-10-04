@@ -21,6 +21,7 @@ pub fn main() {
 
     // Check for tldr.zip when building uudoc to warn users once at build time
     // instead of repeatedly at runtime for each utility
+    println!("cargo:rerun-if-changed=docs/tldr.zip");
     if env::var("CARGO_FEATURE_UUDOC").is_ok() && !Path::new("docs/tldr.zip").exists() {
         println!(
             "cargo:warning=No tldr archive found, so the documentation will not include examples."
@@ -35,21 +36,22 @@ pub fn main() {
         println!("cargo:rustc-cfg=build={profile:?}");
     }
 
+    let mut crates = Vec::new();
+
     let out_dir = env::var("OUT_DIR").unwrap();
 
-    let mut crates = Vec::new();
+    let target_os = env::var_os("CARGO_CFG_TARGET_OS").unwrap();
     for (key, val) in env::vars() {
         if val == "1" && key.starts_with(ENV_FEATURE_PREFIX) {
             let krate = key[ENV_FEATURE_PREFIX.len()..].to_lowercase();
             // Allow this as we have a bunch of info in the comments
             #[allow(clippy::match_same_arms)]
             match krate.as_ref() {
-                #[cfg(not(any(target_os = "linux", target_os = "android")))]
-                "chcon" | "runcon" => {
+                "chcon" | "runcon" if !(target_os == "linux" || target_os == "android") => {
                     continue;
                 }
                 "default" | "macos" | "unix" | "windows" | "selinux" | "zip" | "clap_complete"
-                | "clap_mangen" | "fluent_syntax" => continue, // common/standard feature names
+                | "clap_mangen" | "fluent_syntax" | "openssl" => continue, // common/standard feature names
                 "nightly" | "test_unimplemented" | "expensive_tests" | "test_risky_names" => {
                     continue;
                 } // crate-local custom features

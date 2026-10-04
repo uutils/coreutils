@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore dired subdired
 
 /// `dired` Module Documentation
@@ -34,15 +35,37 @@
 /// Overall, the module ensures each entry in the DIRED output has the correct
 /// byte position, considering additional lines or padding affecting positions.
 ///
-use crate::Config;
+use crate::display::LocaleQuoting;
+use crate::{Config, LsError};
 use std::fmt;
 use std::io::{BufWriter, Stdout, Write};
 use uucore::error::UResult;
+use uucore::quoting_style::{Quotes, QuotingStyle};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BytePosition {
     pub start: usize,
     pub end: usize,
+}
+
+/// Where the file name sits inside the item that displays it. `--dired`
+/// reports the name alone: no color escapes, no `-F` indicator.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct NameSpan {
+    /// Offset of the name, i.e. the color escape sequence preceding it, if any.
+    pub offset: usize,
+    /// Length of the quoted name.
+    pub len: usize,
+}
+
+impl NameSpan {
+    /// Moves the name `n` bytes to the right, e.g. past a padding space.
+    pub fn shifted(self, n: usize) -> Self {
+        Self {
+            offset: self.offset + n,
+            len: self.len,
+        }
+    }
 }
 
 /// Represents the output structure for DIRED, containing positions for both DIRED and SUBDIRED.
@@ -94,26 +117,65 @@ pub fn print_dired_output(
     dired: &DiredOutput,
     out: &mut BufWriter<Stdout>,
 ) -> UResult<()> {
-    out.flush()?;
     if !dired.dired_positions.is_empty() {
-        print_positions("//DIRED//", &dired.dired_positions);
+        print_positions(out, "//DIRED//", &dired.dired_positions)?;
     }
     // SUBDIRED is needed whenever directory headings are printed (multiple args or -R),
     // so don't gate it on config.recursive.
     if !dired.subdired_positions.is_empty() {
-        print_positions("//SUBDIRED//", &dired.subdired_positions);
+        print_positions(out, "//SUBDIRED//", &dired.subdired_positions)?;
     }
-    println!("//DIRED-OPTIONS// --quoting-style={}", config.quoting_style);
+    writeln!(
+        out,
+        "//DIRED-OPTIONS// --quoting-style={}",
+        dired_quoting_style_name(config)
+    )
+    .map_err(LsError::WriteError)?;
     Ok(())
 }
 
-/// Helper function to print positions with a given prefix.
-fn print_positions(prefix: &str, positions: &[BytePosition]) {
-    print!("{prefix}");
-    for c in positions {
-        print!(" {c}");
+/// The canonical `--quoting-style` name for the `//DIRED-OPTIONS//` trailer.
+/// `QuotingStyle`'s `Display` impl collapses distinct style names together and adds suffixes GNU's trailer never uses, so this maps the config directly instead.
+fn dired_quoting_style_name(config: &Config) -> &'static str {
+    match config.locale_quoting {
+        Some(LocaleQuoting::Single) => return "locale",
+        Some(LocaleQuoting::Double) => return "clocale",
+        None => {}
     }
-    println!();
+    match config.quoting_style {
+        QuotingStyle::Literal { .. } => "literal",
+        QuotingStyle::C {
+            quotes: Quotes::None,
+        } => "escape",
+        // `Quotes::Single` is never produced by ls's own option parsing
+        // (only reachable through `locale_quoting`, handled above), but
+        // `c` is the closest canonical name if that ever changes.
+        QuotingStyle::C { .. } => "c",
+        QuotingStyle::Shell {
+            escape,
+            always_quote,
+            ..
+        } => match (escape, always_quote) {
+            (false, false) => "shell",
+            (false, true) => "shell-always",
+            (true, false) => "shell-escape",
+            (true, true) => "shell-escape-always",
+        },
+    }
+}
+
+/// Helper function to print positions with a given prefix.
+fn print_positions(
+    out: &mut BufWriter<Stdout>,
+    prefix: &str,
+    positions: &[BytePosition],
+) -> UResult<()> {
+    write!(out, "{prefix}").map_err(LsError::WriteError)?;
+    for c in positions {
+        write!(out, " {c}").map_err(LsError::WriteError)?;
+    }
+    writeln!(out).map_err(LsError::WriteError)?;
+    Ok(())
 }
 
 pub fn add_total(dired: &mut DiredOutput, total_len: usize) {
@@ -150,13 +212,6 @@ pub fn update_positions(dired: &mut DiredOutput, start: usize, end: usize, line_
     dired.line_offset += padding + line_len;
     // Remove the previous padding
     dired.padding = 0;
-}
-
-/// Checks if the "--dired" or "-D" argument is present in the command line arguments.
-/// we don't use clap here because we need to know if the argument is present
-/// as it can be overridden by --hyperlink
-pub fn is_dired_arg_present() -> bool {
-    std::env::args_os().any(|x| x == "--dired" || x == "-D")
 }
 
 #[cfg(test)]

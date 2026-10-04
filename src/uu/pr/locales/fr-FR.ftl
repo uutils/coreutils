@@ -55,7 +55,7 @@ pr-help-across =
                   à travers la page dans un ordre round-robin (par exemple, quand colonne est 2,
                   la première ligne d'entrée va en tête de colonne 1, la seconde va en tête de colonne 2,
                   la troisième est la seconde ligne en colonne 1, et ainsi de suite).
-pr-help-column =
+pr-help-columns =
   Produire une sortie multi-colonnes qui est arrangée en colonnes colonnes
                   (la valeur par défaut sera 1) et est écrite dans chaque colonne dans l'ordre
                   dans lequel le texte est reçu du fichier d'entrée. Cette option ne doit pas être
@@ -100,4 +100,6 @@ pr-error-no-such-file = pr : impossible d'ouvrir {$file}, Aucun fichier ou répe
 pr-error-column-merge-conflict = impossible de spécifier le nombre de colonnes lors de l'impression en parallèle
 pr-error-across-merge-conflict = impossible de spécifier à la fois l'impression transversale et l'impression en parallèle
 pr-error-invalid-pages-range = argument --pages invalide '{$start}:{$end}'
+pr-error-starting-page-exceeds-page-count = le numéro de page de début {$start} dépasse le nombre de pages {$count}
 pr-error-invalid-expand-tab-argument = Caractères supplémentaires ou nombre invalide dans l'argument de '-e': '{$arg}'
+pr-error-invalid-number-argument = Caractères supplémentaires ou nombre invalide dans l'argument de '-n': '{$arg}'

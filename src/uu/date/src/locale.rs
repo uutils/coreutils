@@ -3,23 +3,37 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore charsets euctw
+
 //! Locale detection for time format preferences
 
-// nl_langinfo is available on glibc (Linux), Apple platforms, and BSDs
-// but not on Android, Redox or other minimal Unix systems
+/// Format used when the locale does not provide a date/time format.
+const POSIX_DEFAULT_FORMAT: &[u8] = b"%a %b %e %X %Z %Y";
 
-// Macro to reduce cfg duplication across the module
+// `_DATE_FMT` is the only langinfo item that spells the full date line the way
+// `date` prints it, timezone included. It is a glibc extension, so everywhere
+// else (Android, the BSDs, macOS, Redox, non-unix) we use the POSIX format:
+// `D_T_FMT` would be locale-aware but has no timezone, which `date` must print.
+
+// Macro to reduce cfg duplication across the module; `cfg_langinfo!(else ...)`
+// gates the items for the platforms that do not have `_DATE_FMT`.
 macro_rules! cfg_langinfo {
-    ($($item:item)*) => {
+    (else $($item:item)*) => {
         $(
-            #[cfg(all(unix, not(target_os = "android"), not(target_os = "cygwin"), not(target_os = "redox")))]
+            #[cfg(not(all(target_os = "linux", not(target_env = "musl"))))]
             $item
         )*
-    }
+    };
+    ($($item:item)*) => {
+        $(
+            #[cfg(all(target_os = "linux", not(target_env = "musl")))]
+            $item
+        )*
+    };
 }
 
 cfg_langinfo! {
-    use std::ffi::CStr;
+    use core::ffi::CStr;
     use std::sync::OnceLock;
 
     #[cfg(test)]
@@ -27,15 +41,12 @@ cfg_langinfo! {
 
     /// glibc's `_DATE_FMT` has been stable for the last 12 years
     /// being added upstream to libc TODO: update to libc
-    #[cfg(any(target_os = "linux", target_os = "cygwin"))]
     const DATE_FMT: libc::nl_item = 0x2006c;
-    #[cfg(not(any(target_os = "linux", target_os = "cygwin")))]
-    const DATE_FMT: libc::nl_item = libc::D_T_FMT;
 }
 
 cfg_langinfo! {
     /// Cached locale date/time format string
-    static DEFAULT_FORMAT_CACHE: OnceLock<&'static str> = OnceLock::new();
+    static DEFAULT_FORMAT_CACHE: OnceLock<&'static [u8]> = OnceLock::new();
 
     /// Mutex to serialize setlocale() calls during tests.
     ///
@@ -47,24 +58,23 @@ cfg_langinfo! {
 
     /// Returns the default date format string for the current locale.
     ///
-    /// The format respects locale preferences for time display (12-hour vs 24-hour),
-    /// component ordering, and numeric formatting conventions. Ensures timezone
-    /// information is included in the output.
-    pub fn get_locale_default_format() -> &'static str {
+    /// This is the locale's `date_fmt`/`d_t_fmt` used verbatim, so the output
+    /// matches what `date +"$(locale date_fmt)"` produces. It is returned as
+    /// bytes because legacy charsets (e.g. `zh_TW.euctw`) are not UTF-8.
+    pub fn get_locale_default_format() -> &'static [u8] {
         DEFAULT_FORMAT_CACHE.get_or_init(|| {
             // Try to get locale format string
             if let Some(format) = get_locale_format_string() {
-                let format_with_tz = ensure_timezone_in_format(&format);
-                return Box::leak(format_with_tz.into_boxed_str());
+                return Box::leak(format.into_boxed_slice());
             }
 
-            // Fallback: use 24-hour format as safe default
-            "%a %b %e %X %Z %Y"
+            // Fallback: use the POSIX locale format
+            POSIX_DEFAULT_FORMAT
         })
     }
 
     /// Retrieves the date/time format string from the system locale
-    fn get_locale_format_string() -> Option<String> {
+    fn get_locale_format_string() -> Option<Vec<u8>> {
         // In tests, acquire mutex to prevent race conditions with setlocale()
         // which is process-global and not thread-safe
         #[cfg(test)]
@@ -80,50 +90,61 @@ cfg_langinfo! {
                 return None;
             }
 
-            let format = CStr::from_ptr(d_t_fmt_ptr).to_str().ok()?;
-            if format.is_empty() {
-                return None;
-            }
-
-            Some(format.to_string())
-        }
-    }
-
-    /// Ensures the format string includes timezone (%Z)
-    fn ensure_timezone_in_format(format: &str) -> String {
-        if format.contains("%Z") {
-            return format.to_string();
-        }
-
-        // Try to insert %Z before year specifier (%Y or %y)
-        if let Some(pos) = format.find("%Y").or_else(|| format.find("%y")) {
-            let mut result = String::with_capacity(format.len() + 3);
-            result.push_str(&format[..pos]);
-            result.push_str("%Z ");
-            result.push_str(&format[pos..]);
-            result
-        } else {
-            // No year found, append %Z at the end
-            format.to_string() + " %Z"
+            let format = CStr::from_ptr(d_t_fmt_ptr).to_bytes();
+            (!format.is_empty()).then(|| format.to_vec())
         }
     }
 }
 
-/// On platforms without nl_langinfo support, use 24-hour format by default
-#[cfg(any(
-    not(unix),
-    target_os = "android",
-    target_os = "cygwin",
-    target_os = "redox"
-))]
-pub fn get_locale_default_format() -> &'static str {
-    "%a %b %e %X %Z %Y"
+cfg_langinfo! { else
+    /// On platforms without `_DATE_FMT`, fall back to the POSIX format
+    pub fn get_locale_default_format() -> &'static [u8] {
+        POSIX_DEFAULT_FORMAT
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::POSIX_DEFAULT_FORMAT;
+
+    /// `date` with no format has to print the timezone, so the fallback used
+    /// wherever the locale offers no date format must carry %Z.
+    #[test]
+    fn test_posix_default_format_has_timezone() {
+        assert!(POSIX_DEFAULT_FORMAT.windows(2).any(|pair| pair == b"%Z"));
+    }
+
+    cfg_langinfo! { else
+        /// Platforms without glibc's `_DATE_FMT` get the POSIX format, not
+        /// `D_T_FMT`, which would drop the timezone.
+        #[test]
+        fn test_default_format_without_date_fmt() {
+            assert_eq!(super::get_locale_default_format(), POSIX_DEFAULT_FORMAT);
+        }
+    }
+
     cfg_langinfo! {
         use super::*;
+
+        /// Expands a format string with a fixed test date (Monday, January 15,
+        /// 2024, 14:30:45 UTC), so format strings can be validated by their
+        /// output rather than by looking for literal format codes.
+        ///
+        /// Returns `None` when the format cannot be expanded: a legacy-charset
+        /// locale (e.g. `zh_CN.GB18030`) hands us bytes that are not UTF-8, and
+        /// callers must skip rather than assert on an empty expansion.
+        fn expand_format_with_test_date(format: &[u8]) -> Option<String> {
+            use jiff::civil::date;
+            use jiff::fmt::strtime;
+
+            let format = std::str::from_utf8(format).ok()?;
+
+            // Create test timestamp: Monday, January 15, 2024, 14:30:45 UTC
+            let test_date = date(2024, 1, 15).at(14, 30, 45, 0).in_tz("UTC").ok()?;
+
+            // Expand the format string with the test date
+            strtime::format(format, &test_date).ok()
+        }
 
         #[test]
         fn test_locale_detection() {
@@ -134,10 +155,27 @@ mod tests {
         #[test]
         fn test_default_format_contains_valid_codes() {
             let format = get_locale_default_format();
-            assert!(format.contains("%a")); // abbreviated weekday
-            assert!(format.contains("%b")); // abbreviated month
-            assert!(format.contains("%Y") || format.contains("%y")); // year (4-digit or 2-digit)
-            assert!(format.contains("%Z")); // timezone
+
+            let Some(expanded) = expand_format_with_test_date(format) else {
+                return;
+            };
+
+            // Verify expanded output contains expected components
+            // Test date: Monday, January 15, 2024, 14:30:45
+            assert!(
+                expanded.contains("Mon") || expanded.contains("Monday"),
+                "Expanded format should contain weekday name, got: {expanded}"
+            );
+
+            assert!(
+                expanded.contains("Jan") || expanded.contains("January"),
+                "Expanded format should contain month name, got: {expanded}"
+            );
+
+            assert!(
+                expanded.contains("2024") || expanded.contains("24"),
+                "Expanded format should contain year, got: {expanded}"
+            );
         }
 
         #[test]
@@ -148,25 +186,36 @@ mod tests {
             // The format should not be empty
             assert!(!format.is_empty(), "Locale format should not be empty");
 
-            // Should contain date/time components
-            let has_date_component = format.contains("%a")
-                || format.contains("%A")
-                || format.contains("%b")
-                || format.contains("%B")
-                || format.contains("%d")
-                || format.contains("%e");
-            assert!(has_date_component, "Format should contain date components");
+            let Some(expanded) = expand_format_with_test_date(format) else {
+                return;
+            };
 
-            // Should contain time component (hour)
-            let has_time_component = format.contains("%H")
-                || format.contains("%I")
-                || format.contains("%k")
-                || format.contains("%l")
-                || format.contains("%r")
-                || format.contains("%R")
-                || format.contains("%T")
-                || format.contains("%X");
-            assert!(has_time_component, "Format should contain time components");
+            // Verify expanded output contains date components
+            // Test date: Monday, January 15, 2024
+            let has_date_component = expanded.contains("15")     // day
+                || expanded.contains("Jan")                      // month name
+                || expanded.contains("January")                  // full month
+                || expanded.contains("Mon")                      // weekday
+                || expanded.contains("Monday");                  // full weekday
+
+            assert!(
+                has_date_component,
+                "Expanded format should contain date components, got: {expanded}"
+            );
+
+            // Verify expanded output contains time components
+            // Test time: 14:30:45
+            let has_time_component = expanded.contains("14")     // 24-hour
+                || expanded.contains("02")                       // 12-hour
+                || expanded.contains("30")                       // minutes
+                || expanded.contains(':')                        // time separator
+                || expanded.contains("PM")                       // AM/PM indicator
+                || expanded.contains("pm");
+
+            assert!(
+                has_time_component,
+                "Expanded format should contain time components, got: {expanded}"
+            );
         }
 
         #[test]
@@ -248,13 +297,16 @@ mod tests {
         }
 
         #[test]
-        fn test_timezone_included_in_format() {
-            // The implementation should ensure %Z is present
+        fn test_format_is_locale_verbatim() {
+            // The locale format must be used as-is: no timezone specifier is
+            // injected, otherwise `date` and `date +"$(locale date_fmt)"`
+            // would disagree for locales whose format has no %Z.
             let format = get_locale_default_format();
-            assert!(
-                format.contains("%Z") || format.contains("%z"),
-                "Format should contain timezone indicator: {format}"
-            );
+            let Some(locale_format) = get_locale_format_string() else {
+                assert_eq!(format, POSIX_DEFAULT_FORMAT);
+                return;
+            };
+            assert_eq!(format, locale_format);
         }
     }
 }

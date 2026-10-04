@@ -2,7 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore fullwidth refgh tefgh nefgh
+
+// spell-checker:ignore fullwidth refgh tefgh nefgh unflushed
 
 use bytecount::count;
 use unicode_width::UnicodeWidthChar;
@@ -819,6 +820,36 @@ fn test_bytewise_fold_at_word_boundary_only_whitespace_preserve_final_newline() 
 }
 
 #[test]
+fn test_bytewise_fold_line_of_exactly_width_is_not_folded() {
+    // A line that is exactly `width` bytes long already fits, so -s must not
+    // break it at its last blank.
+    new_ucmd!()
+        .args(&["-w7", "-s", "-b"])
+        .pipe_in("aaa bbb\nccc ddd\n")
+        .succeeds()
+        .stdout_is("aaa bbb\nccc ddd\n");
+}
+
+#[test]
+fn test_bytewise_fold_remainder_of_exactly_width_is_not_folded() {
+    // Same, for what is left of a line after a width-driven fold.
+    new_ucmd!()
+        .args(&["-w7", "-s", "-b"])
+        .pipe_in("aaa bbb ccc\n")
+        .succeeds()
+        .stdout_is("aaa \nbbb ccc\n");
+}
+
+#[test]
+fn test_bytewise_fold_line_longer_than_width_still_folds() {
+    new_ucmd!()
+        .args(&["-w7", "-s", "-b"])
+        .pipe_in("aaa bbbb\n")
+        .succeeds()
+        .stdout_is("aaa \nbbbb\n");
+}
+
+#[test]
 fn test_bytewise_backspace_should_be_preserved() {
     new_ucmd!()
         .arg("-b")
@@ -889,6 +920,62 @@ fn test_bytewise_carriage_return_is_not_word_boundary() {
         .succeeds()
         .stdout_is("fizz\rb\nuzz\rfi\nzzbuzz"); // spell-checker:disable-line
 }
+
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: killing the wasmtime process discards the unflushed output buffer, so the streamed bytes never reach stdout"
+)]
+#[test]
+fn test_bytewise_read_from_pseudo_device() {
+    let mut child = new_ucmd!().arg("-b").arg("/dev/zero").run_no_wait();
+
+    child.make_assertion_with_delay(100).is_alive();
+
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_contains_bytes(b"\x00\x0a")
+        .no_stderr();
+}
+
+/// A fold boundary that lands exactly on the read-buffer boundary must still
+/// insert the fold newline. The streaming reader fills at most `BufReader`
+/// capacity per call, so folding at `width == capacity` is the case where the
+/// byte following the fold point is not yet buffered.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_bytewise_fold_at_read_buffer_boundary() {
+    let width = buf_reader_capacity();
+    let input = vec![b'a'; width * 2];
+
+    let mut expected = vec![b'a'; width];
+    expected.push(b'\n');
+    expected.extend(std::iter::repeat_n(b'a', width));
+
+    new_ucmd!()
+        .args(&["-b", &format!("-w{width}")])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(expected);
+}
+
+#[test]
+fn test_continue_after_missing_file() {
+    // A nonexistent operand must not abort the run: the surrounding files are
+    // still folded, the error is reported on stderr, and the exit status is 1.
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.write("first.txt", "hello\n");
+    ts.fixtures.write("third.txt", "world\n");
+
+    ts.ucmd()
+        .args(&["first.txt", "absent.txt", "third.txt"])
+        .fails_with_code(1)
+        .stdout_is("hello\nworld\n")
+        .stderr_is("fold: absent.txt: No such file or directory\n");
+}
+
 #[test]
 fn test_obsolete_syntax() {
     new_ucmd!()
@@ -991,4 +1078,130 @@ fn test_character_mode_special_chars() {
             .succeeds()
             .stdout_is(expected);
     }
+}
+
+#[test]
+fn test_width_zero() {
+    new_ucmd!()
+        .arg("-w")
+        .arg("0")
+        .fails_with_code(1)
+        .stderr_is("fold: invalid number of columns: '0': Numerical result out of range\n");
+}
+
+#[test]
+fn test_width_invalid() {
+    for width in ["xyz", "12x", "12.5", "1 2"] {
+        new_ucmd!()
+            .arg("-w")
+            .arg(width)
+            .fails_with_code(1)
+            .stderr_is(format!("fold: invalid number of columns: '{width}'\n"));
+    }
+}
+
+#[test]
+fn test_width_overflow() {
+    new_ucmd!()
+        .arg("-w")
+        .arg("999999999999999999999")
+        .fails_with_code(1)
+        .stderr_is(
+            "fold: invalid number of columns: '999999999999999999999': Numerical result out of range\n",
+        );
+}
+
+#[test]
+fn test_negative_width_as_separate_value() {
+    // GNU consumes the argument after `-w` as its value even when it looks
+    // like an option, and reports that value as the invalid one. Passing a
+    // file too, because the width used to be mistaken for the obsolete
+    // `-WIDTH` form, leaving the file name to be read as the width.
+    for args in [
+        vec!["-w", "-1"],
+        vec!["--width", "-1"],
+        vec!["-bw", "-1"],
+        vec!["-sw", "-1"],
+    ] {
+        new_ucmd!()
+            .args(&args)
+            .arg("lorem_ipsum.txt")
+            .fails_with_code(1)
+            .stderr_is("fold: invalid number of columns: '-1'\n");
+    }
+}
+
+#[test]
+fn test_obsolete_width_after_double_dash_is_a_file() {
+    // After `--` there are no more options, so `-3` names a file.
+    new_ucmd!()
+        .arg("--")
+        .arg("-3")
+        .fails_with_code(1)
+        .stderr_is("fold: -3: No such file or directory\n");
+}
+
+#[test]
+fn test_last_width_wins() {
+    // GNU processes options left to right, so the last width given wins,
+    // regardless of which spelling each one used.
+    for args in [
+        vec!["-w3", "-5"],
+        vec!["-3", "-5"],
+        vec!["-w", "3", "-w", "5"],
+        vec!["-w3", "-w5"],
+        vec!["-5", "-w", "5"],
+    ] {
+        new_ucmd!()
+            .args(&args)
+            .pipe_in("aaaaaaaaaa\n")
+            .succeeds()
+            .stdout_is("aaaaa\naaaaa\n");
+    }
+
+    // ...and an obsolete width is overridden by a later `-w` just the same.
+    new_ucmd!()
+        .args(&["-5", "-w", "3"])
+        .pipe_in("aaaaaa\n")
+        .succeeds()
+        .stdout_is("aaa\naaa\n");
+}
+
+#[test]
+fn test_dash_operand_reads_stdin() {
+    // A bare `-` names stdin and leaves nothing after the dash for the
+    // width-value scan to index, which used to abort before reading input.
+    new_ucmd!()
+        .arg("-")
+        .pipe_in("hello\n")
+        .succeeds()
+        .stdout_is("hello\n");
+
+    // ...in every position, including as the value of -w, where GNU rejects
+    // it as a width rather than treating it as the operand.
+    new_ucmd!()
+        .args(&["-w", "3", "-"])
+        .pipe_in("hello\n")
+        .succeeds()
+        .stdout_is("hel\nlo\n");
+    new_ucmd!()
+        .args(&["-w", "-"])
+        .pipe_in("hello\n")
+        // fold rejects the width before it reads stdin, so the write can
+        // race with its exit and hit a broken pipe.
+        .ignore_stdin_write_error()
+        .fails()
+        .stderr_contains("invalid number of columns: '-'");
+}
+
+/// A bare `-` has no trailing `w`, so it must not be mistaken for one of the
+/// short spellings that consumes the next argument as its width -- that once
+/// swallowed whatever followed the `-` operand instead of scanning it.
+#[test]
+fn test_dash_operand_does_not_swallow_the_next_argument() {
+    new_ucmd!()
+        .args(&["-", "-5"])
+        .pipe_in("hello\n")
+        .succeeds()
+        .stdout_is("hello\n");
 }

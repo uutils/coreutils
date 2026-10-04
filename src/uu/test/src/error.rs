@@ -3,14 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use thiserror::Error;
+use std::ffi::{OsStr, OsString};
 use uucore::translate;
 
 /// Represents an error encountered while parsing a test expression
-#[derive(Error, Debug)]
-pub enum ParseError {
-    #[error("{}", translate!("test-error-expected-value"))]
-    ExpectedValue,
+#[derive(Debug, thiserror::Error)]
+pub enum ParseErrorKind {
     #[error("{}", translate!("test-error-expected", "value" => .0))]
     Expected(String),
     #[error("{}", translate!("test-error-extra-argument", "argument" => .0))]
@@ -21,8 +19,66 @@ pub enum ParseError {
     UnknownOperator(String),
     #[error("{}", translate!("test-error-invalid-integer", "value" => .0))]
     InvalidInteger(String),
+    /// Worded like [`Self::InvalidInteger`], but kept apart so `-t` gets advice about descriptors.
+    #[error("{}", translate!("test-error-invalid-integer", "value" => .0))]
+    InvalidFileDescriptor(String),
     #[error("{}", translate!("test-error-unary-operator-expected", "operator" => .0))]
     UnaryOperatorExpected(String),
+    #[error("{}", translate!("test-error-binary-operator-expected", "operator" => .0))]
+    BinaryOperatorExpected(String),
+    #[error("{}", translate!("test-error-expected-found", "expected" => .0, "found" => .1))]
+    ExpectedFound(String, String),
+    #[error("{}", translate!("test-error-does-not-accept-length", "operator" => .0))]
+    DoesNotAcceptLength(String),
+}
+
+/// Where in the original argument list an error occurred.
+///
+/// Only read when a source snippet is rendered.
+#[derive(Debug, Default)]
+pub enum ErrorAt {
+    /// No position could be attributed to the error.
+    #[default]
+    Unknown,
+    /// Zero-based index into the arguments handed to the parser.
+    Token(usize),
+    /// The first argument equal to this value.
+    Value(OsString),
+}
+
+/// A parse or evaluation error, together with the position it points at.
+#[derive(Debug, thiserror::Error)]
+#[error("{kind}")]
+pub struct ParseError {
+    pub kind: ParseErrorKind,
+    pub at: ErrorAt,
+}
+
+impl From<ParseErrorKind> for ParseError {
+    fn from(kind: ParseErrorKind) -> Self {
+        Self {
+            kind,
+            at: ErrorAt::Unknown,
+        }
+    }
+}
+
+impl ParseError {
+    /// An error pointing at the argument with index `index`.
+    pub fn at_token(kind: ParseErrorKind, index: usize) -> Self {
+        Self {
+            kind,
+            at: ErrorAt::Token(index),
+        }
+    }
+
+    /// An error pointing at the first argument equal to `token`.
+    pub fn at_value(kind: ParseErrorKind, token: &OsStr) -> Self {
+        Self {
+            kind,
+            at: ErrorAt::Value(token.to_os_string()),
+        }
+    }
 }
 
 /// A Result type for parsing test expressions

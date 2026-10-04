@@ -59,7 +59,7 @@ od-error-overflow = Numerical result out of range
 od-error-invalid-suffix = invalid suffix in {$option} argument {$value}
 od-error-invalid-argument = invalid {$option} argument {$value}
 od-error-argument-too-large = {$option} argument {$value} too large
-od-error-skip-past-end = tried to skip past end of input
+od-error-skip-past-end = cannot skip past end of combined input
 
 # Help messages
 od-help-help = Print help information.

@@ -1,0 +1,41 @@
+/* Styling for the error reports shown on this page. The colors are the ones
+   the utilities actually emit, so the examples read here the way they do in a
+   terminal; they match the palette used on uutils.org. */
+
+pre.diag {
+    margin: 1rem 0;
+    padding: 0.9rem 1.1rem;
+    border-radius: 0.6em;
+    background: #1e1e2e;
+    color: #cdd6f4;
+    line-height: 1.5;
+    overflow-x: auto;
+    white-space: pre;
+}
+
+/* The prompt of the command being run. */
+pre.diag .a-p {
+    color: #89b4fa;
+}
+
+/* ANSI colors as emitted by the utilities: frame, source line, gutter,
+   the span at fault, and the Help: label. */
+pre.diag .a-d {
+    color: #9399b2;
+}
+
+pre.diag .a-s {
+    color: #cdd6f4;
+}
+
+pre.diag .a-f {
+    color: #7f849c;
+}
+
+pre.diag .a-e {
+    color: #f38ba8;
+}
+
+pre.diag .a-h {
+    color: #a6e3a1;
+}

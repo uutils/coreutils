@@ -34,7 +34,7 @@ fn test_id_no_specified_user() {
     let exp_result = unwrap_or_return!(expected_result(&ts, &[]));
     let mut exp_stdout = exp_result.stdout_str().to_string();
 
-    #[cfg(not(feature = "feat_selinux"))]
+    #[cfg(not(feature = "selinux"))]
     {
         // NOTE: strip 'context' part from exp_stdout if selinux not enabled:
         // example:
@@ -152,6 +152,40 @@ fn test_id_real() {
 }
 
 #[test]
+fn test_id_groups_ordering() {
+    // `groups=` is headed by the effective gid and `-G` by the real gid, so the
+    // two forms list the same set in a different order. Only observable when the
+    // real and effective gids differ, which needs a setgid wrapper, but the set
+    // and the `-r`-independence of `-G` hold either way.
+    let ts = TestScenario::new(util_name!());
+
+    let groups = ts.ucmd().arg("-G").succeeds().stdout_move_str();
+    let mut from_flag: Vec<&str> = groups.split_whitespace().collect();
+    assert!(!from_flag.is_empty());
+
+    // `-G` heads with the real gid
+    let rgid = ts.ucmd().args(&["-g", "-r"]).succeeds().stdout_move_str();
+    assert_eq!(from_flag[0], rgid.trim_end());
+
+    let default = ts.ucmd().succeeds().stdout_move_str();
+    let field = default.split(" groups=").nth(1).unwrap();
+    let mut from_default: Vec<&str> = field
+        .split(&[' ', '\n'][..])
+        .next()
+        .unwrap()
+        .split(',')
+        .map(|g| g.split('(').next().unwrap())
+        .collect();
+
+    from_flag.sort_unstable();
+    from_default.sort_unstable();
+    assert_eq!(from_flag, from_default);
+
+    // `-r` does not affect `-G`, matching GNU
+    ts.ucmd().args(&["-G", "-r"]).succeeds().stdout_is(&groups);
+}
+
+#[test]
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn test_id_pretty_print() {
     // `-p` is BSD only and not supported on GNU's `id`
@@ -176,7 +210,7 @@ fn test_id_multiple_users() {
         VERSION_MIN_MULTIPLE_USERS
     ));
 
-    // Same typical users that GNU test suite is using.
+    // Typical users commonly found on Unix systems.
     let test_users = ["root", "man", "postfix", "sshd", &whoami()];
 
     let ts = TestScenario::new(util_name!());
@@ -383,10 +417,7 @@ fn test_id_zero() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_id_context() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -447,7 +478,7 @@ fn test_id_context() {
 
 #[test]
 fn test_id_no_specified_user_posixly() {
-    // gnu/tests/id/no-context.sh
+    // Test id output without security context
 
     let ts = TestScenario::new(util_name!());
     let result = ts.ucmd().env("POSIXLY_CORRECT", "1").run();
@@ -456,10 +487,7 @@ fn test_id_no_specified_user_posixly() {
         result.success();
     }
 
-    #[cfg(all(
-        any(target_os = "linux", target_os = "android"),
-        feature = "feat_selinux"
-    ))]
+    #[cfg(all(any(target_os = "linux", target_os = "android"), feature = "selinux"))]
     {
         if uucore::selinux::is_selinux_enabled() {
             let result = ts.ucmd().succeeds();

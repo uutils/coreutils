@@ -5,9 +5,11 @@
 
 // spell-checker:ignore (ToDO) COMFOLLOW Chowner RFILE RFILE's derefer dgid nonblank nonprint nonprinting
 
+#![cfg(unix)]
+
 use uucore::display::Quotable;
 use uucore::entries;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::perms::{GidUidOwnerFilter, IfFrom, chown_base, options};
 use uucore::translate;
@@ -16,6 +18,16 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 
 use std::fs;
 use std::os::unix::fs::MetadataExt;
+
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+enum ChgrpError {
+    #[error("{}", translate!("chgrp-error-invalid-user", "from_group" => _0))]
+    InvalidUser(String),
+}
+
+impl UError for ChgrpError {}
 
 fn parse_gid_from_str(group: &str) -> Result<u32, String> {
     if let Some(gid_str) = group.strip_prefix(':') {
@@ -67,22 +79,17 @@ fn get_dest_gid(matches: &ArgMatches) -> UResult<(Option<u32>, String)> {
 }
 
 fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
-    let (dest_gid, raw_group) = get_dest_gid(matches)?;
-
     // Handle --from option
     let filter = if let Some(from_group) = matches.get_one::<String>(options::FROM) {
-        match parse_gid_from_str(from_group) {
-            Ok(g) => IfFrom::Group(g),
-            Err(_) => {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("chgrp-error-invalid-user", "from_group" => from_group),
-                ));
-            }
-        }
+        let Ok(gid) = parse_gid_from_str(from_group) else {
+            return Err(ChgrpError::InvalidUser(from_group.clone()).into());
+        };
+        IfFrom::Group(gid)
     } else {
         IfFrom::All
     };
+
+    let (dest_gid, raw_group) = get_dest_gid(matches)?;
 
     Ok(GidUidOwnerFilter {
         dest_gid,

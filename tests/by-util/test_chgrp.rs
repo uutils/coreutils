@@ -2,13 +2,14 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (words) nosuchgroup groupname
 
+use rustix::process::getegid;
 #[cfg(not(target_vendor = "apple"))]
 use rustix::process::getgroups;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
-use uucore::process::getegid;
 use uutests::{at_and_ucmd, new_ucmd};
 #[cfg(not(target_vendor = "apple"))]
 use uutests::{util::TestScenario, util_name};
@@ -63,7 +64,7 @@ fn test_invalid_group() {
 
 #[test]
 fn test_error_1() {
-    if getegid() != 0 {
+    if !getegid().is_root() {
         new_ucmd!().arg("bin").arg(DIR).fails().stderr_contains(
             // linux fails with "Operation not permitted (os error 1)"
             // because of insufficient permissions,
@@ -76,7 +77,7 @@ fn test_error_1() {
 
 #[test]
 fn test_fail_silently() {
-    if getegid() != 0 {
+    if !getegid().is_root() {
         for opt in ["-f", "--silent", "--quiet", "--sil", "--qui"] {
             new_ucmd!()
                 .arg(opt)
@@ -201,13 +202,14 @@ fn test_reference() {
     // skip for root or MS-WSL
     // * MS-WSL is bugged (as of 2019-12-25), allowing non-root accounts su-level privileges for `chgrp`
     // * for MS-WSL, succeeds and stdout == 'group of /etc retained as root'
-    if !(getegid() == 0 || uucore::os::is_wsl_1()) {
+    if !(getegid().is_root() || uucore::os::is_wsl_1()) {
         new_ucmd!()
             .arg("-v")
             .arg("--reference=/etc/passwd")
             .arg("/etc")
             .fails()
-            .stderr_is("chgrp: changing group of '/etc': Operation not permitted (os error 1)\nfailed to change group of '/etc' from root to root\n");
+            // group name can differ, so just check the first part of the message
+            .stderr_contains("chgrp: changing group of '/etc': Operation not permitted\nfailed to change group of '/etc' from ");
     }
 }
 
@@ -220,11 +222,11 @@ fn test_reference() {
         .arg("/etc")
         .fails()
         // group name can differ, so just check the first part of the message
-        .stderr_contains("chgrp: changing group of '/etc': Operation not permitted (os error 1)\nfailed to change group of '/etc' from ");
+        .stderr_contains("chgrp: changing group of '/etc': Operation not permitted\nfailed to change group of '/etc' from ");
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
 fn test_reference_multi_no_equal() {
     new_ucmd!()
         .arg("-v")
@@ -233,12 +235,13 @@ fn test_reference_multi_no_equal() {
         .arg("file1")
         .arg("file2")
         .succeeds()
-        .stderr_contains("chgrp: group of 'file1' retained as ")
-        .stderr_contains("\nchgrp: group of 'file2' retained as ");
+        .stdout_contains("group of 'file1' retained as ")
+        .stdout_contains("\ngroup of 'file2' retained as ")
+        .no_stderr();
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
 fn test_reference_last() {
     new_ucmd!()
         .arg("-v")
@@ -248,9 +251,10 @@ fn test_reference_last() {
         .arg("--reference")
         .arg("ref_file")
         .succeeds()
-        .stderr_contains("chgrp: group of 'file1' retained as ")
-        .stderr_contains("\nchgrp: group of 'file2' retained as ")
-        .stderr_contains("\nchgrp: group of 'file3' retained as ");
+        .stdout_contains("group of 'file1' retained as ")
+        .stdout_contains("\ngroup of 'file2' retained as ")
+        .stdout_contains("\ngroup of 'file3' retained as ")
+        .no_stderr();
 }
 
 #[test]
@@ -267,14 +271,14 @@ fn test_missing_files() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_big_p() {
-    if getegid() != 0 {
+    if !getegid().is_root() {
         new_ucmd!()
             .arg("-RP")
             .arg("bin")
             .arg("/proc/self/cwd")
             .fails()
             .stderr_contains(
-                "chgrp: changing group of '/proc/self/cwd': Operation not permitted (os error 1)\n",
+                "chgrp: changing group of '/proc/self/cwd': Operation not permitted\n",
             );
     }
 }
@@ -282,7 +286,7 @@ fn test_big_p() {
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_big_h() {
-    if getegid() != 0 {
+    if !getegid().is_root() {
         assert!(
             new_ucmd!()
                 .arg("-RH")
@@ -474,18 +478,28 @@ fn test_from_option() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "android", target_os = "macos")))]
+#[cfg(not(any(target_vendor = "apple", target_os = "android")))]
 fn test_from_with_invalid_group() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
     at.touch("test_file");
-    #[cfg(not(target_os = "android"))]
-    let err_msg = "chgrp: invalid user: 'nonexistent_group'\n";
-    #[cfg(target_os = "android")]
-    let err_msg = "chgrp: invalid user: 'staff'\n";
 
-    ucmd.arg("--from")
+    let err_msg = "chgrp: invalid user: 'nonexistent_group'\n";
+
+    scene
+        .ucmd()
+        .arg("--from")
         .arg("nonexistent_group")
-        .arg("staff")
+        .arg("nobody") // assumption: group exists
+        .arg("test_file")
+        .fails()
+        .stderr_is(err_msg);
+
+    scene
+        .ucmd()
+        .arg("--from")
+        .arg("nonexistent_group")
+        .arg("another_nonexistent_group")
         .arg("test_file")
         .fails()
         .stderr_is(err_msg);
@@ -511,7 +525,8 @@ fn test_verbosity_messages() {
         .arg("--reference=ref_file")
         .arg("target_file")
         .succeeds()
-        .stderr_contains("group of 'target_file' retained as ");
+        .stdout_contains("group of 'target_file' retained as ")
+        .no_stderr();
 }
 
 #[test]
@@ -611,7 +626,7 @@ fn test_chgrp_non_utf8_paths() {
     std::fs::write(at.plus(&filename), b"test content").unwrap();
 
     // Get current user's primary group
-    let current_gid = getegid();
+    let current_gid = getegid().as_raw();
 
     ucmd.arg(current_gid.to_string()).arg(&filename).succeeds();
 }
@@ -627,7 +642,7 @@ fn test_chgrp_recursive_on_file() {
 
     at.touch("regular_file");
 
-    let current_gid = getegid();
+    let current_gid = getegid().as_raw();
 
     ucmd.arg("-R")
         .arg(current_gid.to_string())
@@ -645,7 +660,7 @@ fn test_chgrp_recursive_on_file() {
 fn test_chgrp_exit_code_not_being_overwritten_by_last_file() {
     use std::os::unix::prelude::PermissionsExt;
 
-    let current_gid = getegid();
+    let current_gid = getegid().as_raw();
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
     at.mkdir("dir/a");
@@ -662,4 +677,19 @@ fn test_chgrp_exit_code_not_being_overwritten_by_last_file() {
         .arg(current_gid.to_string())
         .arg("dir")
         .fails();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn verbose_missing_file_write_error_is_reported_not_panic() {
+    use std::fs::OpenOptions;
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+    new_ucmd!()
+        .arg("--verbose")
+        .arg(getegid().to_string())
+        .arg("does-not-exist")
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_contains("chgrp: write error: No space left on device");
 }

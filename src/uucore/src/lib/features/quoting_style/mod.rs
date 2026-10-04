@@ -167,6 +167,7 @@ fn escape_name_inner(
             always_quote,
             dirname,
             name.len(),
+            encoding,
         )),
         QuotingStyle::Shell {
             escape: false,
@@ -212,6 +213,15 @@ pub fn escape_name(name: &OsStr, style: QuotingStyle, encoding: UEncoding) -> Os
 /// Retrieve the encoding from the locale and pass it to `escape_name`.
 pub fn locale_aware_escape_name(name: &OsStr, style: QuotingStyle) -> OsString {
     escape_name(name, style, i18n::get_locale_encoding())
+}
+
+/// Shorthand function for [`locale_aware_escape_name`]
+/// Useful for quoting filenames in error messages.
+#[inline(always)]
+pub fn locale_aware_shell_escape(name: impl AsRef<OsStr>) -> String {
+    locale_aware_escape_name(name.as_ref(), QuotingStyle::SHELL_ESCAPE)
+        .into_string()
+        .unwrap() // SAFETY: string was just escaped
 }
 
 /// Escape a directory name with respect to the given style.
@@ -327,6 +337,14 @@ mod tests {
     fn check_names_raw_both(name: &[u8], map: &[(&[u8], &str)]) {
         check_names_encoding_raw(UEncoding::Utf8, name, map);
         check_names_encoding_raw(UEncoding::Ascii, name, map);
+    }
+
+    #[test]
+    fn test_invalid_bytes_with_single_quote() {
+        check_names_raw_both(
+            b"missing-'\xff",
+            &[(b"'missing-'\\'''$'\\377'", "shell-escape-always")],
+        );
     }
 
     #[test]

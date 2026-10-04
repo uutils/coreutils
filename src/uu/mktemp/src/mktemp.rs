@@ -14,12 +14,11 @@ use uucore::translate;
 
 use std::env;
 use std::ffi::{OsStr, OsString};
+use std::fs;
 use std::io::ErrorKind;
 use std::iter;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
-#[cfg(unix)]
-use std::fs;
 #[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
 
@@ -28,7 +27,6 @@ use rand::{
     rngs::{self, SmallRng},
 };
 use tempfile::Builder;
-use thiserror::Error;
 
 static DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
 
@@ -49,7 +47,7 @@ const TMPDIR_ENV_VAR: &str = "TMP";
 
 const FALLBACK_TMPDIR: &str = "/tmp";
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 enum MkTempError {
     #[error("{}", translate!("mktemp-error-persist-file", "path" => .0.quote()))]
     PersistError(PathBuf),
@@ -72,7 +70,7 @@ enum MkTempError {
     #[error("{}", translate!("mktemp-error-too-many-templates"))]
     TooManyTemplates,
 
-    #[error("{}", translate!("mktemp-error-not-found", "template_type" => .0.clone(), "template" => .1.quote()))]
+    #[error("{}", translate!("mktemp-error-not-found", "template_type" => .0, "template" => .1.quote()))]
     NotFound(String, PathBuf),
 }
 
@@ -143,7 +141,13 @@ impl Options {
                 } else if matches.get_flag(OPT_T) || matches.contains_id(OPT_TMPDIR) {
                     // If --tmpdir is given without an argument, or -t is given
                     // export in TMPDIR
-                    Some(env::temp_dir())
+                    #[cfg(target_os = "wasi")]
+                    // WASI's `std::env::temp_dir()` unconditionally panics
+                    let default_tmp_dir = env::var_os(TMPDIR_ENV_VAR)
+                        .map_or_else(|| PathBuf::from(FALLBACK_TMPDIR), PathBuf::from);
+                    #[cfg(not(target_os = "wasi"))]
+                    let default_tmp_dir = env::temp_dir();
+                    Some(default_tmp_dir)
                 } else {
                     None
                 };
@@ -238,7 +242,7 @@ impl Params {
 
         // The template argument must end in 'X' if a suffix option is given.
         if options.suffix.is_some() && !template_str.ends_with('X') {
-            return Err(MkTempError::MustEndInX(template_str.clone()));
+            return Err(MkTempError::MustEndInX(template_str));
         }
 
         // Get the start and end indices of the randomized part of the template.
@@ -251,7 +255,7 @@ impl Params {
                     .chars()
                     .take(template_str.len())
                     .collect::<String>(),
-                None => template_str.clone(),
+                None => template_str,
             };
             return Err(MkTempError::TooFewXs(s));
         };
@@ -265,12 +269,10 @@ impl Params {
         let prefix_from_template = &template_str[..i];
         let prefix_path = Path::new(&prefix_from_option).join(prefix_from_template);
         if options.treat_as_template && prefix_from_template.contains(MAIN_SEPARATOR) {
-            return Err(MkTempError::PrefixContainsDirSeparator(
-                template_str.clone(),
-            ));
+            return Err(MkTempError::PrefixContainsDirSeparator(template_str));
         }
         if tmpdir.is_some() && Path::new(prefix_from_template).is_absolute() {
-            return Err(MkTempError::InvalidTemplate(template_str.clone().into()));
+            return Err(MkTempError::InvalidTemplate(template_str.into()));
         }
 
         // Split the parent directory from the file part of the prefix.
@@ -281,6 +283,16 @@ impl Params {
             let prefix_str = prefix_path.to_string_lossy();
             if prefix_str.ends_with(MAIN_SEPARATOR) {
                 (prefix_path, String::new())
+            } else if prefix_from_template.ends_with("/.") || prefix_from_template == "." {
+                // Path normalizes trailing '.' away, making both parent() and file_name()
+                // return wrong results for hidden files like /tmp/.XXXXXXXX.
+                // Use prefix_from_template directly instead.
+                let directory = Path::new(&prefix_from_option)
+                    .join(&prefix_from_template[..prefix_from_template.len() - 1]); // strip trailing '.'
+
+                let prefix = ".".to_string();
+
+                (directory, prefix)
             } else {
                 let directory = match prefix_path.parent() {
                     None => PathBuf::new(),
@@ -369,27 +381,22 @@ impl ValueParserFactory for OptionalPathBufParser {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<_> = args.collect();
-    let matches = match uu_app().try_get_matches_from(&args) {
-        Ok(m) => m,
-        Err(e) => {
-            use uucore::clap_localization::handle_clap_error_with_exit_code;
-            if e.kind() == clap::error::ErrorKind::UnknownArgument {
-                handle_clap_error_with_exit_code(e, 1);
-            }
-            if e.kind() == clap::error::ErrorKind::TooManyValues
-                && e.context().any(|(kind, val)| {
-                    kind == clap::error::ContextKind::InvalidArg
-                        && val == &clap::error::ContextValue::String("[template]".into())
-                })
+    let matches = uu_app().try_get_matches_from(&args).map_err(|e| {
+        use clap::error::{ContextKind, ContextValue, ErrorKind};
+        use uucore::clap_localization::handle_clap_error_with_exit_code;
+
+        match e.kind() {
+            ErrorKind::UnknownArgument => handle_clap_error_with_exit_code(e, 1),
+            ErrorKind::TooManyValues
+                if e.context().any(|(k, v)| {
+                    k == ContextKind::InvalidArg && v == &ContextValue::String("[template]".into())
+                }) =>
             {
-                return Err(UUsageError::new(
-                    1,
-                    translate!("mktemp-error-too-many-templates"),
-                ));
+                UUsageError::new(1, translate!("mktemp-error-too-many-templates"))
             }
-            return Err(e.into());
+            _ => e.into(),
         }
-    };
+    })?;
 
     // Parse command-line options into a format suitable for the
     // application logic.
@@ -405,32 +412,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let dry_run = options.dry_run;
-    let suppress_file_err = options.quiet;
-    let make_dir = options.directory;
-
-    // Parse file path parameters from the command-line options.
-    let Params {
-        directory: tmpdir,
-        prefix,
-        num_rand_chars: rand,
-        suffix,
-    } = Params::from(options)?;
-
-    // Create the temporary file or directory, or simulate creating it.
-    let res = if dry_run {
-        Ok(dry_exec(&tmpdir, &prefix, rand, &suffix))
-    } else {
-        exec(&tmpdir, &prefix, rand, &suffix, make_dir)
-    };
-
-    let res = if suppress_file_err {
-        // Mapping all UErrors to ExitCodes prevents the errors from being printed
-        res.map_err(|e| e.code().into())
-    } else {
-        res
-    };
-    println_verbatim(res?).map_err_context(|| translate!("mktemp-error-failed-print"))
+    let path = mktemp(&options)?;
+    if let Err(e) = println_verbatim(&path) {
+        // The caller never learns the name, so leaving the file behind would
+        // litter the temporary directory with something nothing can clean up.
+        if !options.dry_run {
+            let _ = if options.directory {
+                fs::remove_dir(&path)
+            } else {
+                fs::remove_file(&path)
+            };
+        }
+        return Err(e).map_err_context(|| translate!("common-write-error"));
+    }
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
@@ -516,7 +511,7 @@ fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> PathBuf {
     SmallRng::try_from_rng(&mut rngs::SysRng)
         .unwrap_or_else(|_| {
             //rand::rng panics if getrandom failed
-            SmallRng::seed_from_u64(bytes.as_ptr() as usize as u64)
+            SmallRng::seed_from_u64(bytes.as_ptr() as u64)
         })
         .fill(bytes);
     for byte in bytes {
@@ -624,6 +619,13 @@ fn exec(dir: &Path, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> 
 fn get_tmpdir_env_or_default() -> PathBuf {
     match env::var_os(TMPDIR_ENV_VAR) {
         Some(val) if val.is_empty() => PathBuf::from(FALLBACK_TMPDIR),
+        // WASI's `std::env::temp_dir()` unconditionally panics,
+        // so read `TMPDIR` directly.
+        #[cfg(target_os = "wasi")]
+        Some(val) => PathBuf::from(val),
+        #[cfg(target_os = "wasi")]
+        None => PathBuf::from(FALLBACK_TMPDIR),
+        #[cfg(not(target_os = "wasi"))]
         _ => env::temp_dir(),
     }
 }
@@ -631,6 +633,8 @@ fn get_tmpdir_env_or_default() -> PathBuf {
 /// Create a temporary file or directory
 ///
 /// Behavior is determined by the `options` parameter, see [`Options`] for details.
+///
+/// The function is public so it can be used by nushell and others.
 pub fn mktemp(options: &Options) -> UResult<PathBuf> {
     // Parse file path parameters from the command-line options.
     let Params {
@@ -641,10 +645,18 @@ pub fn mktemp(options: &Options) -> UResult<PathBuf> {
     } = Params::from(options.clone())?;
 
     // Create the temporary file or directory, or simulate creating it.
-    if options.dry_run {
+    let res = if options.dry_run {
         Ok(dry_exec(&tmpdir, &prefix, rand, &suffix))
     } else {
         exec(&tmpdir, &prefix, rand, &suffix, options.directory)
+    };
+
+    if options.quiet {
+        // Only creation failures are silenced; a bad template is still reported.
+        // Mapping the UError to an ExitCode prevents the error from being printed.
+        res.map_err(|e| e.code().into())
+    } else {
+        res
     }
 }
 

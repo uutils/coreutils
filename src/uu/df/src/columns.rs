@@ -2,10 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore itotal iused iavail ipcent pcent squashfs
+
 use crate::{OPT_INODES, OPT_OUTPUT, OPT_PRINT_TYPE};
 use clap::{ArgMatches, parser::ValueSource};
-use thiserror::Error;
 use uucore::display::Quotable;
 
 /// The columns in the output table produced by `df`.
@@ -53,12 +54,12 @@ pub(crate) enum Column {
     Fstype,
 
     /// Percentage of bytes available to non-privileged processes.
-    #[cfg(target_os = "macos")]
+    #[cfg(target_vendor = "apple")]
     Capacity,
 }
 
 /// An error while defining which columns to display in the output table.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum ColumnError {
     /// If a column appears more than once in the `--output` argument.
     #[error("{}", .0.quote())]
@@ -87,7 +88,7 @@ impl Column {
                 Self::Size,
                 Self::Used,
                 Self::Avail,
-                #[cfg(target_os = "macos")]
+                #[cfg(target_vendor = "apple")]
                 Self::Capacity,
                 Self::Pcent,
                 Self::Target,
@@ -130,7 +131,7 @@ impl Column {
                 Self::Size,
                 Self::Used,
                 Self::Avail,
-                #[cfg(target_os = "macos")]
+                #[cfg(target_vendor = "apple")]
                 Self::Capacity,
                 Self::Pcent,
                 Self::Target,
@@ -203,8 +204,7 @@ impl Column {
         match self {
             // 14 = length of "Filesystem" plus 4 spaces
             Self::Source => 14,
-            Self::Used => 5,
-            Self::Size => 5,
+            Self::Used | Self::Size => 5,
             // the shortest headers have a length of 4 chars so we use that as the minimum width
             _ => 4,
         }

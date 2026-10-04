@@ -7,10 +7,7 @@
 
 use std::os::unix::fs::PermissionsExt;
 
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -187,10 +184,7 @@ fn test_mknod_mode_comma_separated() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mknod_selinux() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -221,10 +215,7 @@ fn test_mknod_selinux() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mknod_selinux_invalid() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -251,10 +242,7 @@ fn test_mknod_selinux_invalid() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mknod_selinux_invalid_cleanup() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -269,4 +257,35 @@ fn test_mknod_selinux_invalid_cleanup() {
 
     // invalid context → node must not exist
     assert!(!at.file_exists(dest));
+}
+
+// The mode is only parsed where a mode means something.
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+    #[test]
+    fn test_snippet_points_at_the_bad_operator() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-m", "u+rw?", "some_node", "p"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("invalid mode"), "{stderr}");
+        // The caret lands on `?`: three columns of `-m ` and four of mode.
+        assert_eq!(result.caret_column(), Some(8), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        // The test harness pipes stderr, so the report must not appear.
+        let result = new_ucmd!()
+            .args(&["-m", "u+rw?", "some_node", "p"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.starts_with("mknod: "), "{stderr}");
+        assert!(!stderr.contains(":1:"), "{stderr}");
+    }
 }

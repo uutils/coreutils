@@ -7,6 +7,9 @@ name: FixPR
 env:
   BRANCH_TARGET: main
 
+permissions:
+  contents: write  # FixPR commits Cargo.lock back to main
+
 on:
   # * only trigger on pull request closed to specific branches
   # ref: https://github.community/t/trigger-workflow-only-on-pull-request-merge/17359/9
@@ -26,7 +29,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - name: Initialize job variables
@@ -69,7 +72,7 @@ jobs:
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
         cargo +stable tree --locked --no-dedupe -e=no-dev --prefix=none --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
     - name: Commit any changes (to '${{ env.BRANCH_TARGET }}')
-      uses: EndBug/add-and-commit@v10
+      uses: EndBug/add-and-commit@v11
       with:
         new_branch: ${{ env.BRANCH_TARGET }}
         default_author: github_actions

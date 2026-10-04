@@ -2,13 +2,16 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore btotal sigval
+
 //! Read and write progress tracking for dd.
 //!
 //! The [`ProgUpdate`] struct represents summary statistics for the
 //! read and write progress of a running `dd` process. The
 //! [`gen_prog_updater`] function can be used to implement a progress
 //! updater that runs in its own thread.
+
 use std::io::Write;
 #[cfg(target_os = "linux")]
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -454,16 +457,14 @@ pub(crate) fn check_and_reset_sigusr1() -> bool {
 }
 
 #[cfg(target_os = "linux")]
-extern "C" fn sigusr1_handler(_: std::os::raw::c_int) {
+extern "C" fn sigusr1_handler(_: core::ffi::c_int) {
     SIGUSR1_RECEIVED.store(true, Ordering::Relaxed);
 }
 
 #[cfg(target_os = "linux")]
-pub(crate) fn install_sigusr1_handler() -> Result<(), nix::errno::Errno> {
-    uucore::signals::install_signal_handler(
-        nix::sys::signal::Signal::SIGUSR1 as libc::c_int,
-        sigusr1_handler,
-    )
+pub(crate) fn install_sigusr1_handler() -> std::io::Result<()> {
+    uucore::signals::install_signal_handler(libc::SIGUSR1, sigusr1_handler)?;
+    Ok(())
 }
 
 /// Return a closure that can be used in its own thread to print progress info.

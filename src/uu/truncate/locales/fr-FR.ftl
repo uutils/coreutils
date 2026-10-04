@@ -18,16 +18,17 @@ truncate-after-help = TAILLE est un entier avec un préfixe optionnel et une uni
       '%' => arrondir vers le haut au multiple de
 
 # Messages d'aide
-truncate-help-io-blocks = traiter TAILLE comme le nombre de blocs I/O du fichier plutôt que des octets (NON IMPLÉMENTÉ)
+truncate-help-io-blocks = traiter TAILLE comme le nombre de blocs I/O du fichier plutôt que des octets
 truncate-help-no-create = ne pas créer les fichiers qui n'existent pas
 truncate-help-reference = baser la taille de chaque fichier sur la taille de RFICHIER
 truncate-help-size = définir ou ajuster la taille de chaque fichier selon TAILLE, qui est en octets sauf si --io-blocks est spécifié
 
 # Messages d'erreur
-truncate-error-missing-file-operand = opérande de fichier manquant
 truncate-error-cannot-open-no-device = impossible d'ouvrir { $filename } en écriture : Aucun périphérique ou adresse de ce type
 truncate-error-cannot-open-for-writing = impossible d'ouvrir { $filename } en écriture
 truncate-error-invalid-number = Nombre invalide : { $error }
 truncate-error-must-specify-relative-size = vous devez spécifier une '--size' relative avec '--reference'
 truncate-error-division-by-zero = division par zéro
 truncate-error-cannot-stat-no-such-file = impossible d'obtenir les informations de { $filename } : Aucun fichier ou répertoire de ce type
+truncate-error-value-too-large = Valeur trop grande pour le type de données défini
+truncate-error-value-too-large-arg = { $arg } Valeur trop grande pour le type de données défini

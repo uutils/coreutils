@@ -2,32 +2,42 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use clap::{Arg, ArgAction, Command};
-use std::io::Write;
-use uucore::{crate_version, translate};
+use std::io::{self, Write as _};
+use uucore::error::strip_errno;
+use uucore::{crate_version, show_error, translate};
 
 // uucore::main does not support no-result
 pub fn uumain(mut args: impl uucore::Args) -> i32 {
+    #[cold]
+    #[inline(never)]
+    fn cold_error(e: io::Error) -> i32 {
+        if e.kind() != io::ErrorKind::BrokenPipe {
+            show_error!("{}", strip_errno(&e));
+            return 1;
+        }
+        1
+    }
+
     // skip binary name
     let (Some(flag), None) = (args.nth(1), args.next()) else {
         return 1;
     };
 
-    let error = if flag == "--help" {
+    let res = if flag == "--help" {
         uu_app().print_help()
     } else if flag == "--version" {
         // avoid uu_app for smaller binary size
-        writeln!(std::io::stdout(), "false {}", crate_version!())
+        writeln!(io::stdout(), "false {}", crate_version!())
     } else {
         return 1;
     };
 
-    if let Err(print_fail) = error
-        && print_fail.kind() != std::io::ErrorKind::BrokenPipe
-    {
-        let _ = writeln!(std::io::stderr(), "false: {print_fail}");
+    match res {
+        Ok(()) => 1,
+        Err(e) => cold_error(e),
     }
-    1
 }
 
 pub fn uu_app() -> Command {

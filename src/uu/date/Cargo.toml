@@ -1,4 +1,5 @@
-# spell-checker:ignore datetime tzdb zoneinfo
+# spell-checker:ignore datetime tzdb zoneinfo ohos OHOS tzdata
+
 [package]
 name = "uu_date"
 description = "date ~ (uutils) display or set the current time"
@@ -12,39 +13,34 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/date.rs"
 doctest = false
-
-[features]
-default = ["i18n-datetime"]
-i18n-datetime = [
-  "uucore/i18n-datetime",
-  "dep:icu_calendar",
-  "dep:icu_locale",
-  "dep:jiff-icu",
-]
 
 [dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
 icu_calendar = { workspace = true, optional = true }
 icu_locale = { workspace = true, optional = true }
-jiff-icu = { workspace = true, optional = true }
 jiff = { workspace = true, features = [
   "tzdb-bundle-platform",
   "tzdb-zoneinfo",
   "tzdb-concatenated",
 ] }
+jiff-icu = { workspace = true, optional = true }
 parse_datetime = { workspace = true }
+thiserror = { workspace = true }
 uucore = { workspace = true, features = ["parser", "i18n-datetime"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
 rustix = { workspace = true, features = ["time"] }
+
+[target.'cfg(target_env = "ohos")'.dependencies]
+# OHOS has no /usr/share/zoneinfo or /etc/localtime: embed IANA tzdata so
+# ohos_system_zone() can resolve the TimeService timezone ID directly (pass-through,
+# no environment injection).
+jiff-tzdb = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
@@ -61,6 +57,22 @@ divan = { workspace = true }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
 
+[features]
+default = ["i18n-datetime"]
+i18n-datetime = [
+  "uucore/i18n-datetime",
+  "dep:icu_calendar",
+  "dep:icu_locale",
+  "dep:jiff-icu",
+]
+
+[lints]
+workspace = true
+
 [[bench]]
 name = "date_bench"
+harness = false
+
+[[bench]]
+name = "date_locale_bench"
 harness = false

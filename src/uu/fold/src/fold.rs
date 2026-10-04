@@ -8,11 +8,13 @@
 use clap::{Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::num::IntErrorKind;
 use std::path::Path;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
+use uucore::show;
 use uucore::translate;
 
 const TAB_WIDTH: usize = 8;
@@ -52,24 +54,36 @@ struct FoldContext<'a, W: Write> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let (args, obs_width) = handle_obsolete(&args[..]);
+    let args = handle_obsolete(&args[..]);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let bytes = matches.get_flag(options::BYTES);
     let characters = matches.get_flag(options::CHARACTERS);
     let spaces = matches.get_flag(options::SPACES);
-    let poss_width = match matches.get_one::<String>(options::WIDTH) {
-        Some(v) => Some(v.clone()),
-        None => obs_width,
-    };
+    let poss_width = matches.get_one::<String>(options::WIDTH).cloned();
 
     let width = match poss_width {
-        Some(inp_width) => inp_width.parse::<usize>().map_err(|e| {
-            USimpleError::new(
-                1,
-                translate!("fold-error-illegal-width", "width" => inp_width.quote(), "error" => e),
-            )
-        })?,
+        Some(inp_width) => match inp_width.parse::<usize>() {
+            Ok(0) => {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("fold-error-width-out-of-range", "width" => inp_width.quote()),
+                ));
+            }
+            Ok(parsed_width) => parsed_width,
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("fold-error-width-out-of-range", "width" => inp_width.quote()),
+                ));
+            }
+            Err(_) => {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("fold-error-illegal-width", "width" => inp_width.quote()),
+                ));
+            }
+        },
         None => 80,
     };
 
@@ -88,6 +102,8 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(&translate!("fold-usage")))
         .about(translate!("fold-about"))
         .infer_long_args(true)
+        // GNU lets a later width override an earlier one, e.g. `fold -w3 -w5`.
+        .args_override_self(true)
         .arg(
             Arg::new(options::BYTES)
                 .long(options::BYTES)
@@ -126,16 +142,75 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
-    for (i, arg) in args.iter().enumerate() {
-        let slice = &arg;
-        if slice.starts_with('-') && slice.chars().nth(1).is_some_and(|c| c.is_ascii_digit()) {
-            let mut v = args.to_vec();
-            v.remove(i);
-            return (v, Some(slice[1..].to_owned()));
-        }
+/// Whether `arg` is the obsolete `-WIDTH` form, such as `-5`.
+///
+/// The check is deliberately loose: GNU rejects `-5x` with
+/// `invalid number of columns: '5x'` rather than treating it as a file, so
+/// anything starting with a digit is taken as a (possibly invalid) width.
+fn is_obsolete_width(arg: &str) -> bool {
+    arg.strip_prefix('-')
+        .and_then(|rest| rest.chars().next())
+        .is_some_and(|c| c.is_ascii_digit())
+}
+
+/// Whether `arg` is a `-w`/`--width` spelling that consumes the *next*
+/// argument as its value.
+fn takes_width_value(arg: &str) -> bool {
+    if let Some(long) = arg.strip_prefix("--") {
+        // `--width=5` carries its own value. A bare `--width`, or an
+        // unambiguous abbreviation of it (`infer_long_args` is enabled),
+        // takes the following argument.
+        !long.is_empty() && !long.contains('=') && options::WIDTH.starts_with(long)
+    } else if let Some(short) = arg.strip_prefix('-') {
+        // Only a trailing `w` takes the next argument: in `-sw` it does, but
+        // in `-w3` and `-wb` the value is attached to the flag instead. A
+        // bare `-` has no trailing `w` either -- `ends_with` on an empty
+        // string is false, where comparing two `find`/`checked_sub` failures
+        // (both `None`) would wrongly call it a match.
+        short.ends_with('w')
+    } else {
+        false
     }
-    (args.to_vec(), None)
+}
+
+/// Rewrite the obsolete `-WIDTH` syntax into the equivalent `--width=WIDTH`.
+///
+/// GNU processes options left to right, so the last width given wins no matter
+/// which spelling was used (`fold -w3 -5` folds at 5). Rewriting in place keeps
+/// that ordering and lets clap apply the same last-one-wins rule, via
+/// `args_override_self`.
+///
+/// An argument is only the obsolete form when it is not already being consumed
+/// as the value of `-w`/`--width`, and has not been placed after a `--`
+/// terminator. Otherwise `fold -w -1` would misreport the file name as the
+/// invalid width, and `fold -- -3` would silently read stdin instead of
+/// failing to open the file named `-3`.
+fn handle_obsolete(args: &[String]) -> Vec<String> {
+    let mut result = Vec::with_capacity(args.len());
+    let mut iter = args.iter();
+
+    // argv[0] is the program name, never an option.
+    if let Some(program) = iter.next() {
+        result.push(program.clone());
+    }
+
+    let mut end_of_options = false;
+    let mut expecting_width = false;
+    for arg in iter {
+        if end_of_options || expecting_width {
+            expecting_width = false;
+        } else if arg == "--" {
+            end_of_options = true;
+        } else if is_obsolete_width(arg) {
+            result.push(format!("--{}={}", options::WIDTH, &arg[1..]));
+            continue;
+        } else {
+            expecting_width = takes_width_value(arg);
+        }
+        result.push(arg.clone());
+    }
+
+    result
 }
 
 fn fold(
@@ -155,7 +230,14 @@ fn fold(
             stdin_buf = stdin();
             &mut stdin_buf as &mut dyn Read
         } else {
-            file_buf = File::open(Path::new(filename)).map_err_context(|| filename.to_string())?;
+            // Like GNU, report the error but keep processing the remaining files.
+            match File::open(Path::new(filename)) {
+                Ok(f) => file_buf = f,
+                Err(e) => {
+                    show!(e.map_err_context(|| filename.to_string()));
+                    continue;
+                }
+            }
             &mut file_buf as &mut dyn Read
         });
 
@@ -194,64 +276,63 @@ fn fold_file_bytewise<T: Read, W: Write>(
     let mut line = Vec::new();
 
     loop {
-        if file
-            .read_until(NL, &mut line)
-            .map_err_context(|| translate!("fold-error-readline"))?
-            == 0
-        {
+        // Pull bytes from the reader until we have strictly more than `width`
+        // buffered (enough to know whether content follows a width-driven fold)
+        // or we reach EOF. Reading at most `width` bytes ahead keeps memory
+        // bounded even on endless streams like /dev/zero, where the old
+        // read_until(NL, ..) would buffer forever waiting for a newline.
+        while line.len() <= width {
+            let buf = file
+                .fill_buf()
+                .map_err_context(|| translate!("fold-error-readline"))?;
+            if buf.is_empty() {
+                break;
+            }
+            let len = buf.len();
+            line.extend_from_slice(buf);
+            file.consume(len);
+        }
+
+        // EOF with a tail shorter than (or equal to) `width`: no width/space
+        // fold can apply, so emit it verbatim (newlines inside are preserved).
+        if line.len() <= width {
+            if line.is_empty() {
+                break;
+            }
+            output.write_all(&line)?;
             break;
         }
 
-        if line == [NL] {
-            output.write_all(&[NL])?;
-            line.clear();
+        // We have a full `width`-byte chunk plus at least one lookahead byte.
+        let chunk = &line[..width];
+
+        // A newline no further than the `width`-th byte ends the line
+        // naturally; the newline is part of the slice, so no extra newline is
+        // emitted. The lookahead byte is included because a line of exactly
+        // `width` bytes needs no fold at all.
+        if let Some(end) = line[..=width].iter().position(|c| *c == NL).map(|i| i + 1) {
+            output.write_all(&line[..end])?;
+            line.drain(..end);
             continue;
         }
 
-        let len = line.len();
-        let mut i = 0;
+        // No newline: with -s, break after the last whitespace (excluding CR);
+        // otherwise hard-wrap at `width`.
+        let end = if spaces {
+            chunk
+                .iter()
+                .rposition(|c| c.is_ascii_whitespace() && *c != CR)
+                .map_or(width, |i| i + 1)
+        } else {
+            width
+        };
 
-        while i < len {
-            let width = if len - i >= width { width } else { len - i };
-            let slice = {
-                let slice = &line[i..i + width];
-                if spaces && i + width < len {
-                    match slice
-                        .iter()
-                        .enumerate()
-                        .rev()
-                        .find(|(_, c)| c.is_ascii_whitespace() && **c != CR)
-                    {
-                        Some((m, _)) => &slice[..=m],
-                        None => slice,
-                    }
-                } else {
-                    slice
-                }
-            };
-
-            // Don't duplicate trailing newlines: if the slice is "\n", the
-            // previous iteration folded just before the end of the line and
-            // has already printed this newline.
-            if slice == [NL] {
-                break;
-            }
-
-            i += slice.len();
-
-            let at_eol = i >= len;
-
-            if at_eol {
-                output.write_all(slice)?;
-            } else {
-                output.write_all(slice)?;
-                output.write_all(&[NL])?;
-            }
-        }
-
-        line.clear();
+        // Width/space-driven fold: `end <= width` and the check above ruled out
+        // a newline there, so the break always needs one.
+        output.write_all(&line[..end])?;
+        output.write_all(&[NL])?;
+        line.drain(..end);
     }
-
     Ok(())
 }
 

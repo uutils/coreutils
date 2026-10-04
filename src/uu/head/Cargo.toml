@@ -11,15 +11,13 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/head.rs"
 doctest = false
 
 [dependencies]
 clap = { workspace = true }
+fluent = { workspace = true }
 memchr = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
@@ -28,8 +26,14 @@ uucore = { workspace = true, features = [
   "ringbuffer",
   "lines",
   "fs",
+  "quoting-style",
 ] }
-fluent = { workspace = true }
+
+[features]
+diagnostics = ["uucore/diagnostics"]
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "head"

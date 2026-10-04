@@ -23,23 +23,17 @@ pub struct Base64SimdWrapper {
 
 impl Base64SimdWrapper {
     fn decode_with_standard(input: &[u8], output: &mut Vec<u8>) -> Result<(), ()> {
-        match base64_simd::STANDARD.decode_to_vec(input) {
-            Ok(decoded_bytes) => {
-                output.extend_from_slice(&decoded_bytes);
-                Ok(())
-            }
-            Err(_) => Err(()),
-        }
+        let decoded_bytes = base64_simd::STANDARD.decode_to_vec(input).map_err(|_| ())?;
+        output.extend_from_slice(&decoded_bytes);
+        Ok(())
     }
 
     fn decode_with_no_pad(input: &[u8], output: &mut Vec<u8>) -> Result<(), ()> {
-        match base64_simd::STANDARD_NO_PAD.decode_to_vec(input) {
-            Ok(decoded_bytes) => {
-                output.extend_from_slice(&decoded_bytes);
-                Ok(())
-            }
-            Err(_) => Err(()),
-        }
+        let decoded_bytes = base64_simd::STANDARD_NO_PAD
+            .decode_to_vec(input)
+            .map_err(|_| ())?;
+        output.extend_from_slice(&decoded_bytes);
+        Ok(())
     }
 
     pub fn new(
@@ -91,9 +85,8 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
                         return Err(USimpleError::new(1, "error: invalid input"));
                     }
 
-                    if Self::decode_with_standard(&remaining[..segment_len], output).is_err() {
-                        return Err(USimpleError::new(1, "error: invalid input"));
-                    }
+                    Self::decode_with_standard(&remaining[..segment_len], output)
+                        .map_err(|_| USimpleError::new(1, "error: invalid input"))?;
 
                     start += segment_len;
                 } else {
@@ -106,9 +99,8 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
                         Self::decode_with_no_pad
                     };
 
-                    if decoder(remaining, output).is_err() {
-                        return Err(USimpleError::new(1, "error: invalid input"));
-                    }
+                    decoder(remaining, output)
+                        .map_err(|_| USimpleError::new(1, "error: invalid input"))?;
 
                     break;
                 }
@@ -429,13 +421,8 @@ impl SupportsFastDecodeAndEncode for Z85Wrapper {
             return Err(USimpleError::new(1, "error: invalid input"));
         }
 
-        let decode_result = match z85::decode(input) {
-            Ok(ve) => ve,
-            Err(_de) => {
-                return Err(USimpleError::new(1, "error: invalid input"));
-            }
-        };
-
+        let decode_result =
+            z85::decode(input).map_err(|_de| USimpleError::new(1, "error: invalid input"))?;
         output.extend_from_slice(&decode_result);
 
         Ok(())
@@ -474,28 +461,23 @@ impl SupportsFastDecodeAndEncode for EncodingWrapper {
 
     // Adapted from `decode` in the "data-encoding" crate
     fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
-        let decode_len_result = match self.encoding.decode_len(input.len()) {
-            Ok(us) => us,
-            Err(_de) => {
-                return Err(USimpleError::new(1, "error: invalid input"));
-            }
-        };
+        let decode_len_result = self
+            .encoding
+            .decode_len(input.len())
+            .map_err(|_de| USimpleError::new(1, "error: invalid input"))?;
 
         let output_len = output.len();
 
         output.resize(output_len + decode_len_result, 0);
 
-        match self.encoding.decode_mut(input, &mut (output[output_len..])) {
-            Ok(us) => {
-                // See:
-                // https://docs.rs/data-encoding/latest/data_encoding/struct.Encoding.html#method.decode_mut
-                // "Returns the length of the decoded output. This length may be smaller than the output length if the input contained padding or ignored characters. The output bytes after the returned length are not initialized and should not be read."
-                output.truncate(output_len + us);
-            }
-            Err(_de) => {
-                return Err(USimpleError::new(1, "error: invalid input"));
-            }
-        }
+        let us = self
+            .encoding
+            .decode_mut(input, &mut (output[output_len..]))
+            .map_err(|_de| USimpleError::new(1, "error: invalid input"))?;
+        // See:
+        // https://docs.rs/data-encoding/latest/data_encoding/struct.Encoding.html#method.decode_mut
+        // "Returns the length of the decoded output. This length may be smaller than the output length if the input contained padding or ignored characters. The output bytes after the returned length are not initialized and should not be read."
+        output.truncate(output_len + us);
 
         Ok(())
     }

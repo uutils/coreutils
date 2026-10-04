@@ -6,7 +6,6 @@
 // spell-checker:ignore (ToDO) passwd
 
 use std::io::{Write, stdout};
-use thiserror::Error;
 use uucore::{
     display::Quotable,
     entries::{Locate, Passwd, get_groups_gnu, gid2grp},
@@ -21,7 +20,7 @@ mod options {
     pub const USERS: &str = "USERNAME";
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum GroupsError {
     #[error("{message}", message = translate!("groups-error-fetch"))]
     GetGroupsFailed,
@@ -55,9 +54,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap_or_default();
 
     if users.is_empty() {
-        let Ok(gids) = get_groups_gnu(None) else {
-            return Err(GroupsError::GetGroupsFailed.into());
-        };
+        let gids = get_groups_gnu(None).map_err(|_| GroupsError::GetGroupsFailed)?;
         let groups: Vec<String> = gids.into_iter().map(infallible_gid2grp).collect();
         writeln!(stdout(), "{}", groups.join(" "))?;
         return Ok(());

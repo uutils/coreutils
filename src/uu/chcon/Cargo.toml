@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/chcon.rs"
 test = false
@@ -22,12 +19,15 @@ doctest = false
 # TODO: block fetching crates without feat_selinux
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["entries", "fs", "perms"] }
+fluent = { workspace = true }
+libc = { workspace = true }
+rustix = { workspace = true, features = ["fs"] }
 selinux = { workspace = true }
 thiserror = { workspace = true }
-libc = { workspace = true }
-fts-sys = { workspace = true }
-fluent = { workspace = true }
+uucore = { workspace = true, features = ["entries", "fs", "perms"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "chcon"

@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::encoding::{
@@ -29,8 +29,7 @@ pub const BASE_CMD_PARSE_ERROR: i32 = 1;
 /// This default is only used if no "-w"/"--wrap" argument is passed
 pub const WRAP_DEFAULT: usize = 76;
 
-// Fixed to 8 KiB (equivalent to `std::sys::io::DEFAULT_BUF_SIZE` on most targets)
-pub const DEFAULT_BUF_SIZE: usize = 8 * 1024;
+pub const DEFAULT_BUF_SIZE: usize = 32 * 1024;
 
 pub struct Config {
     pub decode: bool,
@@ -62,16 +61,7 @@ impl Config {
                 if name == "-" {
                     None
                 } else {
-                    let path = Path::new(name);
-
-                    if !path.exists() {
-                        return Err(USimpleError::new(
-                            BASE_CMD_PARSE_ERROR,
-                            translate!("base-common-no-such-file", "file" => path.maybe_quote()),
-                        ));
-                    }
-
-                    Some(path.to_owned())
+                    Some(Path::new(name).to_owned())
                 }
             }
             None => None,
@@ -133,6 +123,7 @@ pub fn base_app(about: String, usage: String) -> Command {
                 .short('w')
                 .long(options::WRAP)
                 .value_name("COLS")
+                .allow_hyphen_values(true)
                 .help(translate!("base-common-help-wrap", "default" => WRAP_DEFAULT))
                 .overrides_with(options::WRAP),
         )
@@ -152,6 +143,8 @@ pub fn get_input(config: &Config) -> UResult<Box<dyn BufRead>> {
         Some(path_buf) => {
             let file =
                 File::open(path_buf).map_err_context(|| path_buf.maybe_quote().to_string())?;
+            #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+            let _ = rustix::fs::fadvise(&file, 0, None, rustix::fs::Advice::Sequential);
             Ok(Box::new(BufReader::with_capacity(DEFAULT_BUF_SIZE, file)))
         }
         None => {
@@ -201,6 +194,22 @@ pub fn handle_input<R: BufRead>(input: &mut R, format: Format, config: Config) -
             supports_fast_decode_and_encode_ref,
             config.ignore_garbage,
         ),
+        // Batch Base16's small encoded chunks to reduce write syscalls.
+        (Format::Base16, false) => {
+            let mut output = BufWriter::with_capacity(DEFAULT_BUF_SIZE, &mut stdout_lock);
+            let result = fast_encode::fast_encode_stream(
+                input,
+                &mut output,
+                supports_fast_decode_and_encode_ref,
+                config.wrap_cols,
+            );
+
+            match (result, output.flush()) {
+                (res, Ok(())) => res,
+                (Ok(_), Err(err)) => Err(err.into()),
+                (Err(original), Err(_)) => Err(original),
+            }
+        }
         (_, false) => fast_encode::fast_encode_stream(
             input,
             &mut stdout_lock,
@@ -549,14 +558,11 @@ pub mod fast_encode {
         let mut encoded_buffer = VecDeque::<u8>::new();
         let mut leftover_buffer = Vec::<u8>::with_capacity(encode_in_chunks_of_size);
 
-        loop {
-            let read_buffer = input
-                .fill_buf()
-                .map_err(|err| USimpleError::new(1, super::format_read_error(&err)))?;
-            if read_buffer.is_empty() {
-                break;
-            }
-
+        while let read_buffer = input
+            .fill_buf()
+            .map_err(|e| USimpleError::new(1, super::format_read_error(&e)))?
+            && !read_buffer.is_empty()
+        {
             let mut consumed = 0;
 
             if !leftover_buffer.is_empty() {
@@ -816,15 +822,11 @@ pub mod fast_decode {
         let mut buffer = Vec::with_capacity(decode_in_chunks_of_size);
         let mut decoded_buffer = Vec::<u8>::new();
 
-        loop {
-            let read_buffer = input
-                .fill_buf()
-                .map_err(|err| USimpleError::new(1, super::format_read_error(&err)))?;
-            let read_len = read_buffer.len();
-            if read_len == 0 {
-                break;
-            }
-
+        while let read_buffer = input
+            .fill_buf()
+            .map_err(|e| USimpleError::new(1, super::format_read_error(&e)))?
+            && let read_len @ 1.. = read_buffer.len()
+        {
             for &byte in read_buffer {
                 if byte == b'\n' || byte == b'\r' {
                     continue;

@@ -3,10 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore checkfile, testf, ntestf
+
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
-// spell-checker:ignore checkfile, testf, ntestf
+
 macro_rules! get_hash(
     ($str:expr) => (
         $str.split(' ').collect::<Vec<&str>>()[0]
@@ -40,6 +42,22 @@ macro_rules! test_digest {
             #[test]
             fn test_stdin() {
                 let ts = TestScenario::new(util_name!());
+                assert_eq!(
+                    ts.fixtures.read(EXPECTED_FILE),
+                    get_hash!(
+                        ts.ucmd()
+                            .pipe_in_fixture(INPUT_FILE)
+                            .succeeds()
+                            .no_stderr()
+                            .stdout_str()
+                    )
+                );
+            }
+
+            #[test]
+            fn test_stdin_with_dash_directory() {
+                let ts = TestScenario::new(util_name!());
+                ts.fixtures.mkdir("-");
                 assert_eq!(
                     ts.fixtures.read(EXPECTED_FILE),
                     get_hash!(
@@ -118,8 +136,7 @@ fn test_check_sha1() {
         .arg("-c")
         .arg(at.subdir.join("testf.sha1"))
         .succeeds()
-        .stdout_is("testf: OK\n")
-        .stderr_is("");
+        .stdout_only("testf: OK\n");
 }
 
 #[test]
