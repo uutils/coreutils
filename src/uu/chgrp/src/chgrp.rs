@@ -19,9 +19,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 
-use thiserror::Error;
-
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 enum ChgrpError {
     #[error("{}", translate!("chgrp-error-invalid-user", "from_group" => _0))]
     InvalidUser(String),
