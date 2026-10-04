@@ -16,7 +16,6 @@ use std::os::fd::AsFd;
 #[cfg(windows)]
 use std::path::Path;
 use std::path::PathBuf;
-use thiserror::Error;
 use uucore::diagnostics::OptionValue;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
@@ -39,7 +38,7 @@ use take::copy_all_but_n_bytes;
 use take::copy_all_but_n_lines;
 use take::take_lines;
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 enum HeadError {
     /// Wrapper around `io::Error`
     #[error("{}", translate!("head-error-reading-file", "name" => name.quote(), "err" => err))]
@@ -256,13 +255,9 @@ fn print_n_lines(input: &mut impl io::BufRead, n: u64, separator: u8) -> io::Res
     Ok(bytes_written)
 }
 
-fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> {
-    usize::try_from(n).ok()
-}
-
 fn print_but_last_n_bytes(mut input: impl Read, n: u64) -> io::Result<u64> {
     let mut bytes_written: u64 = 0;
-    if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
+    if let Ok(n) = usize::try_from(n) {
         let stdout = io::stdout();
         let mut stdout = stdout.lock();
 
@@ -286,7 +281,7 @@ fn print_but_last_n_lines(mut input: impl Read, n: u64, separator: u8) -> io::Re
         return io::copy(&mut input, &mut stdout).map_err(wrap_in_stdout_error);
     }
     let mut bytes_written: u64 = 0;
-    if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
+    if let Ok(n) = usize::try_from(n) {
         bytes_written = copy_all_but_n_lines(input, &mut stdout, n, separator)
             .map_err(wrap_in_stdout_error)?
             .try_into()

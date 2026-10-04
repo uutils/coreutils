@@ -557,6 +557,22 @@ fn test_install_target_file_dev_null() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_install_replaces_special_target() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "source_file";
+    let target = "target_fifo";
+
+    at.write(source, "contents");
+    at.mkfifo(target);
+
+    ucmd.arg(source).arg(target).succeeds().no_stderr();
+
+    assert!(at.file_exists(target));
+    assert_eq!(at.read(target), "contents");
+}
+
+#[test]
 fn test_install_nested_paths_copy_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file1 = "source_file";
@@ -2201,6 +2217,32 @@ fn test_target_file_ends_with_slash() {
         .arg(source)
         .fails()
         .stderr_contains("failed to access 'dir/target_file/': Not a directory");
+}
+
+/// Without `-D`, a `-t` target that is not a directory is refused, even with a
+/// single source, rather than installed over or created as a file.
+#[test]
+fn test_install_target_dir_not_a_directory() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("source", "new");
+    at.write("regular", "old");
+    at.symlink_file("nowhere", "dangling");
+
+    for (target, reason) in [
+        ("regular", "Not a directory"),
+        ("dangling", "No such file or directory"),
+        ("missing", "No such file or directory"),
+    ] {
+        scene
+            .ucmd()
+            .args(&["-t", target, "source"])
+            .fails()
+            .stderr_only(format!("install: failed to access '{target}': {reason}\n"));
+    }
+    assert_eq!(at.read("regular"), "old");
+    assert!(at.is_symlink("dangling"));
+    assert!(!at.file_exists("missing"));
 }
 
 #[test]

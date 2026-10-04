@@ -2802,11 +2802,50 @@ mod cksum_check_mode {
     }
 
     #[test]
+    fn test_status_with_directory() {
+        let scene = make_scene();
+        scene.fixtures.mkdir("dir");
+        scene
+            .fixtures
+            .write("CHECKSUMS2", &format!("SM3 (dir) = {INVALID_SUM}\n"));
+
+        #[cfg(not(windows))]
+        let err_msg = "cksum: dir: Is a directory\n";
+        #[cfg(windows)]
+        let err_msg = "cksum: dir: Permission denied\n";
+
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("--status")
+            .arg("CHECKSUMS2")
+            .fails_with_code(1)
+            .stderr_only(err_msg);
+    }
+
+    #[test]
     fn test_check_with_non_existing_file() {
         let scene = make_scene();
         scene
             .fixtures
             .write("CHECKSUMS2", &format!("SM3 (input2) = {INVALID_SUM}\n"));
+
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("--status")
+            .arg("CHECKSUMS2")
+            .fails_with_code(1)
+            .stderr_only("cksum: input2: No such file or directory\n");
+
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("--quiet")
+            .arg("CHECKSUMS2")
+            .fails_with_code(1)
+            .stdout_contains("input2: FAILED open or read")
+            .stderr_contains("input2: No such file or directory");
 
         scene
             .ucmd()
@@ -3169,6 +3208,29 @@ mod debug_flag {
             .stderr_contains("avx512")
             .stderr_contains("avx2")
             .stderr_contains("pclmul");
+    }
+
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[test]
+    fn test_debug_with_glibc_tunables() {
+        if is_x86_feature_detected!("avx2") {
+            for (tunables, expected) in [
+                ("glibc.cpu.hwcaps=-AVX2", "avx2 support not detected"), // correctly disabling AVX2
+                ("glibc.cpu.hwcaps=-avx2", "using avx2 hardware support"), // lowercase invalidates AVX2 disabling
+                (
+                    "glibc.cpu.hwcaps=-AVX2:glibc.cpu.hwcaps=-AVX512F",
+                    "using avx2 hardware support",
+                ), // last wins
+                ("glibc.cpu.hwcaps=-AVX2 ", "using avx2 hardware support"), // trailing spaces invalidate AVX2 disabling
+            ] {
+                new_ucmd!()
+                    .arg("--debug")
+                    .arg("lorem_ipsum.txt")
+                    .env("GLIBC_TUNABLES", tunables)
+                    .succeeds()
+                    .stderr_contains(expected);
+            }
+        }
     }
 
     #[test]

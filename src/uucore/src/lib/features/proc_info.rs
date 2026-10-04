@@ -333,7 +333,7 @@ impl ProcessInformation {
                 .follow_links(false)
                 .into_iter()
                 .flatten()
-                .flat_map(|it| {
+                .filter_map(|it| {
                     it.path()
                         .file_name()
                         .and_then(|it| it.to_str())

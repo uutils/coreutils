@@ -32,7 +32,6 @@ use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
 use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, mode_t};
-use thiserror::Error;
 
 use platform::copy_on_write;
 use uucore::backup_control::backup_would_destroy_source;
@@ -57,7 +56,7 @@ use crate::copydir::copy_directory;
 mod copydir;
 mod platform;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum CpError {
     /// Simple [`io::Error`] wrapper
     #[error("{0}")]
@@ -1482,7 +1481,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
 
     for source in sources {
         let normalized_source = normalize_path(source);
-        if options.backup == BackupMode::None && seen_sources.contains(&normalized_source) {
+        if options.backup == BackupMode::None && !seen_sources.insert(normalized_source) {
             let file_type = if source.symlink_metadata()?.file_type().is_dir() {
                 "directory"
             } else {
@@ -1538,7 +1537,6 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 copied_destinations.insert(dest.clone());
             }
         }
-        seen_sources.insert(normalized_source);
     }
 
     if let Some(pb) = progress_bar {

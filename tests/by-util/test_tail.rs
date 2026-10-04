@@ -1393,6 +1393,18 @@ fn test_positive_bytes_file_offset_past_seek_limit() {
         .no_stdout();
 }
 
+// A `-c -N` count past `i64::MAX` asks for the whole file.
+#[test]
+fn test_negative_bytes_file_count_past_seek_limit() {
+    for count in ["-9223372036854775808", "-18446744073709551615"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("big", &"a".repeat(8192));
+        ucmd.args(&["-c", count, "big"])
+            .succeeds()
+            .stdout_only("a".repeat(8192));
+    }
+}
+
 #[test]
 fn test_num_with_undocumented_sign_bytes() {
     // tail: '-' is not documented (8.32 man pages)
