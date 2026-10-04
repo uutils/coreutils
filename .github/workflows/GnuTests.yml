@@ -59,6 +59,9 @@ jobs:
       run: |
         ## Install dependencies
         sudo apt-get update
+        ## ubuntu-26.04 ships uutils as the system coreutils; give configure and the
+        ## test harness GNU's tools instead of whichever rust-coreutils the image has.
+        sudo apt-get install -y --allow-remove-essential coreutils-from-gnu coreutils-from-uutils-
         ## Check that build-gnu.sh works on the non SELinux system by installing libselinux only on lima
         sudo apt-get install -y gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
     - name: Add various locales
