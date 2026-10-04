@@ -113,7 +113,7 @@ jobs:
     name: Build and test uufuzz examples
     needs: detect
     if: needs.detect.outputs.all == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -122,11 +122,9 @@ jobs:
       shell: bash
       run: |
         ## The examples compare against the system coreutils, which must be GNU.
-        ## ubuntu-26.04 ships uutils there; older images have no such switch.
+        ## ubuntu-26.04 ships uutils there.
         sudo apt-get update
-        if apt-cache show coreutils-from-gnu >/dev/null 2>&1; then
-          sudo apt-get install -y --allow-remove-essential coreutils-from-gnu coreutils-from-uutils-
-        fi
+        sudo apt-get install -y --allow-remove-essential coreutils-from-gnu coreutils-from-uutils-
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: "fuzz -> target"
@@ -180,7 +178,7 @@ jobs:
     name: Fuzz (${{ matrix.target.name }})
     needs: detect
     if: needs.detect.outputs.targets != '[]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     env:
       RUN_FOR: 60
@@ -199,11 +197,9 @@ jobs:
       shell: bash
       run: |
         ## The fuzzers compare against the system coreutils, which must be GNU.
-        ## ubuntu-26.04 ships uutils there; older images have no such switch.
+        ## ubuntu-26.04 ships uutils there.
         sudo apt-get update
-        if apt-cache show coreutils-from-gnu >/dev/null 2>&1; then
-          sudo apt-get install -y --allow-remove-essential coreutils-from-gnu coreutils-from-uutils-
-        fi
+        sudo apt-get install -y --allow-remove-essential coreutils-from-gnu coreutils-from-uutils-
     - name: Install `cargo-fuzz`
       uses: taiki-e/install-action@v2
       with:
