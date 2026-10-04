@@ -130,6 +130,31 @@ fn test_kill_after_preserves_timeout_exit_without_preserve_status() {
         .fails_with_code(124)
         .no_output();
 }
+
+/// A timeout signal of KILL reports 128 + 9 rather than 124, with or
+/// without `--kill-after`; other signals keep reporting 124.
+#[test]
+fn test_kill_signal_reports_signal_exit_code() {
+    let (ts, bin) = scenario_with_bin();
+    for args in [
+        &["-s", "KILL", ".05"][..],
+        &["--signal=9", ".05"],
+        &["-s", "SIGKILL", "--kill-after=3", ".05"],
+        // Only the child is signaled here, but the status is still 128+9.
+        &["--foreground", "-s", "KILL", ".05"],
+    ] {
+        ts.ucmd()
+            .args(args)
+            .args(&[bin.as_str(), "sleep", "20"])
+            .fails_with_code(128 + 9)
+            .no_output();
+    }
+    ts.ucmd()
+        .args(&["-s", "HUP", ".05", &bin, "sleep", "20"])
+        .fails_with_code(124)
+        .no_output();
+}
+
 #[test]
 fn test_preserve_status_even_when_send_signal() {
     let (ts, bin) = scenario_with_bin();
