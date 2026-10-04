@@ -184,8 +184,10 @@ fn build_errors_bundle_with(
 // Cache localizer. FluentResource cannot be shared between threads while FluentBundle can be shared
 static UUCORE_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 static CHECKSUM_FLUENT: OnceLock<FluentResource> = OnceLock::new();
-// Keyed by utility: a single process can host several utilities (e.g. nushell)
-static UTIL_FLUENT: Mutex<BTreeMap<String, &'static FluentResource>> = Mutex::new(BTreeMap::new());
+// Other resources, keyed by their source (a file path or an embedded key). A
+// process can host several utilities (e.g. nushell) and switch between them, so
+// each source is parsed and leaked once instead of on every switch
+static RESOURCES: Mutex<BTreeMap<String, &'static FluentResource>> = Mutex::new(BTreeMap::new());
 thread_local! {
     #[cfg_attr(
         any(
@@ -261,15 +263,20 @@ fn create_bundle(
     bundle.set_use_isolating(false);
 
     let mut try_add_resource_from = |dir_opt: Option<PathBuf>| -> bool {
-        if let Some(resource) = dir_opt
-            .map(|dir| dir.join(format!("{locale}.ftl")))
-            .and_then(|locale_path| fs::read_to_string(locale_path).ok())
-            // On parse errors, use the partial resource which contains all
-            // successfully parsed messages
-            .map(|ftl| FluentResource::try_new(ftl).unwrap_or_else(|(partial, _)| partial))
-        {
-            // use Box::leak to provide 'static lifetime for shared FluentBundle between threads
-            bundle.add_resource_overriding(Box::leak(Box::new(resource)));
+        let Some(locale_path) = dir_opt.map(|dir| dir.join(format!("{locale}.ftl"))) else {
+            return false;
+        };
+        let resource = cached_resource(
+            locale_path.to_string_lossy().into_owned(),
+            || -> Result<_, ()> {
+                let ftl = fs::read_to_string(&locale_path).map_err(|_| ())?;
+                // On parse errors, use the partial resource which contains all
+                // successfully parsed messages
+                Ok(FluentResource::try_new(ftl).unwrap_or_else(|(partial, _)| partial))
+            },
+        );
+        if let Ok(resource) = resource {
+            bundle.add_resource_overriding(resource);
             true
         } else {
             false
@@ -341,7 +348,7 @@ fn init_localization(
         }
     };
 
-    set_localizer(loc)?;
+    set_localizer(loc);
     Ok(())
 }
 
@@ -386,18 +393,18 @@ fn parse_fluent_resource(
     }
 }
 
-/// Like [`parse_fluent_resource`], but caches one resource per utility
-fn parse_util_fluent_resource(
-    content: &str,
-    util_name: &str,
-) -> Result<&'static FluentResource, LocalizationError> {
-    let mut cache = UTIL_FLUENT.lock().unwrap_or_else(PoisonError::into_inner);
-    if let Some(res) = cache.get(util_name) {
+/// Return the resource cached under `key`, parsing and caching it on first use.
+/// Bundles shared between threads need `&'static` resources, so they are leaked.
+fn cached_resource<E>(
+    key: String,
+    parse: impl FnOnce() -> Result<FluentResource, E>,
+) -> Result<&'static FluentResource, E> {
+    let mut cache = RESOURCES.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(res) = cache.get(&key) {
         return Ok(res);
     }
-    let resource: &'static FluentResource =
-        Box::leak(Box::new(parse_fluent_resource_owned(content)?));
-    cache.insert(util_name.to_string(), resource);
+    let resource: &'static FluentResource = Box::leak(Box::new(parse()?));
+    cache.insert(key, resource);
     Ok(resource)
 }
 
@@ -433,7 +440,9 @@ fn create_english_bundle_from_embedded(
     // Then, try to load utility-specific strings
     let locale_key = format!("{util_name}/en-US.ftl");
     if let Some(ftl_content) = get_embedded_locale(&locale_key) {
-        let resource = parse_util_fluent_resource(ftl_content, util_name)?;
+        let resource = cached_resource(format!("embedded:{locale_key}"), || {
+            parse_fluent_resource_owned(ftl_content)
+        })?;
         bundle.add_resource_overriding(resource);
     }
 
@@ -450,8 +459,8 @@ fn create_english_bundle_from_embedded(
 }
 
 /// Create a bundle from embedded locale files for any locale on WASI.
-/// Bypasses the global OnceLock cache (uses Box::leak) so it can be
-/// called for multiple locales in the same process.
+/// Resources are cached per key, so it can be called for multiple locales
+/// in the same process.
 #[cfg(target_os = "wasi")]
 fn create_wasi_bundle_from_embedded(
     locale: &LanguageIdentifier,
@@ -463,9 +472,11 @@ fn create_wasi_bundle_from_embedded(
 
     let mut try_add = |key: &str| {
         if let Some(content) = get_embedded_locale(key)
-            && let Ok(resource) = FluentResource::try_new(content.to_string())
+            && let Ok(resource) = cached_resource(format!("embedded:{key}"), || {
+                FluentResource::try_new(content.to_string()).map_err(|_| ())
+            })
         {
-            bundle.add_resource_overriding(Box::leak(Box::new(resource)));
+            bundle.add_resource_overriding(resource);
         }
     };
 
@@ -484,16 +495,8 @@ fn create_wasi_bundle_from_embedded(
     }
 }
 
-fn set_localizer(localizer: Localizer) -> Result<(), LocalizationError> {
-    LOCALIZER.with_borrow_mut(|slot| {
-        if slot.is_some() {
-            return Err(LocalizationError::Bundle(
-                "Localizer already initialized".into(),
-            ));
-        }
-        *slot = Some(localizer);
-        Ok(())
-    })
+fn set_localizer(localizer: Localizer) {
+    LOCALIZER.with_borrow_mut(|slot| *slot = Some(localizer));
 }
 
 fn get_message_internal(id: &str, args: Option<FluentArgs>) -> String {
@@ -666,9 +669,6 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     {
         return Ok(());
     }
-    // A different utility was set up on this thread before: start over with
-    // this one's strings instead of keeping the previous utility's
-    LOCALIZER.with_borrow_mut(|slot| *slot = None);
 
     let locale = detect_system_locale().unwrap_or_else(|_| {
         LanguageIdentifier::from_str(DEFAULT_LOCALE).expect("Default locale should always be valid")
@@ -701,7 +701,7 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
             Localizer::new(english_bundle)
         };
 
-        set_localizer(localizer)?;
+        set_localizer(localizer);
     }
     LOCALIZED_UTIL.with_borrow_mut(|util| *util = Some(p.to_string()));
     Ok(())
@@ -992,7 +992,7 @@ mod tests {
             }
         };
 
-        set_localizer(loc)?;
+        set_localizer(loc);
         Ok(())
     }
 
@@ -1324,25 +1324,17 @@ invalid-syntax = This is { $missing
     }
 
     #[test]
-    fn test_init_localization_already_initialized() {
+    fn test_init_localization_twice_replaces_localizer() {
         std::thread::spawn(|| {
             let temp_dir = create_test_locales_dir();
-            let locale = LanguageIdentifier::from_str("en-US").unwrap();
+            let en_us = LanguageIdentifier::from_str("en-US").unwrap();
+            let fr_fr = LanguageIdentifier::from_str("fr-FR").unwrap();
 
-            // Initialize once
-            let result1 = init_test_localization(&locale, temp_dir.path());
-            assert!(result1.is_ok());
+            init_test_localization(&en_us, temp_dir.path()).unwrap();
+            assert_eq!(get_message("greeting"), "Hello, world!");
 
-            // Try to initialize again - should fail
-            let result2 = init_test_localization(&locale, temp_dir.path());
-            assert!(result2.is_err());
-
-            match result2 {
-                Err(LocalizationError::Bundle(msg)) => {
-                    assert!(msg.contains("already initialized"));
-                }
-                _ => panic!("Expected Bundle error"),
-            }
+            init_test_localization(&fr_fr, temp_dir.path()).unwrap();
+            assert_eq!(get_message("greeting"), "Bonjour, le monde!");
         })
         .join()
         .unwrap();
@@ -1893,17 +1885,25 @@ invalid-syntax = This is { $missing
     }
 
     #[test]
-    fn test_embedded_bundles_for_different_utils_on_different_threads() {
-        let en_us = LanguageIdentifier::from_str("en-US").unwrap();
-        for (util, id) in [("test", "test-about"), ("whoami", "whoami-about")] {
-            let en_us = en_us.clone();
-            std::thread::spawn(move || {
-                let bundle = create_english_bundle_from_embedded(&en_us, util).unwrap();
-                assert!(bundle.has_message(id), "{util} bundle is missing {id}");
+    fn test_bundles_reuse_cached_resources() {
+        // Switching utilities rebuilds bundles; the resources must come from
+        // the cache instead of being parsed and leaked again
+        fn assert_cached(key: String) {
+            cached_resource(key, || -> Result<FluentResource, ()> {
+                panic!("resource is not cached")
             })
-            .join()
             .unwrap();
         }
+        let en_us = LanguageIdentifier::from_str("en-US").unwrap();
+
+        let bundle = create_english_bundle_from_embedded(&en_us, "whoami").unwrap();
+        assert!(bundle.has_message("whoami-about"));
+        assert_cached("embedded:whoami/en-US.ftl".to_string());
+
+        let locales_dir = get_locales_dir("test").unwrap();
+        let bundle = create_bundle(&en_us, &locales_dir, "test").unwrap();
+        assert!(bundle.has_message("test-about"));
+        assert_cached(locales_dir.join("en-US.ftl").to_string_lossy().into_owned());
     }
 
     #[test]
