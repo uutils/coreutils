@@ -579,6 +579,7 @@ fn test_random_source_named_pipe_does_not_overread() {
     writer.join().unwrap();
 }
 
+#[cfg(unix)]
 const SALT_TEST_LEN: usize = 16;
 
 #[test]
