@@ -70,9 +70,8 @@ fn main() {
     // for inherited profiles (e.g., PROFILE=release for both release and release-small).
     // OUT_DIR is always .../target/[triple/]{profile}/build/{pkg-hash}/out, so the profile
     // is exactly 3 parent levels up — regardless of whether a target triple is in the path.
-    let profile = Path::new(&out_dir)
-        .ancestors()
-        .nth(3)
+    let profile_dir = Path::new(&out_dir).ancestors().nth(3);
+    let profile = profile_dir
         .and_then(|p| p.file_name())
         .and_then(|s| s.to_str())
         .unwrap_or("debug");
@@ -136,16 +135,9 @@ fn main() {
     // running tests and manual testing during development.
     #[cfg(all(unix, feature = "feat_external_libstdbuf"))]
     {
-        use std::path::PathBuf;
-
         // Get the main target directory (e.g., target/debug or target/release)
         // OUT_DIR is something like target/debug/build/uu_stdbuf-<hash>/out
-        let out_dir_path = PathBuf::from(&out_dir);
-        if let Some(target_dir) = out_dir_path
-            .parent()
-            .and_then(|p| p.parent())
-            .and_then(|p| p.parent())
-        {
+        if let Some(target_dir) = profile_dir {
             let lib_filename = format!("libstdbuf{dylib_ext}");
             let source = target_dir.join("deps").join(&lib_filename);
             let dest = target_dir.join(&lib_filename);
