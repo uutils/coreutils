@@ -100,11 +100,15 @@ fn test_to_si() {
 }
 
 #[test]
-fn test_to_si_rounding_past_top_suffix_is_too_big() {
+fn test_rounding_past_top_suffix() {
     new_ucmd!()
         .args(&["--to=si", "999500000000000000000000000000000"])
         .fails_with_code(2)
         .stderr_only("numfmt: Number is too big and unsupported\n");
+    new_ucmd!()
+        .args(&["--to=iec", "999500000000000000000000000000000"])
+        .succeeds()
+        .stdout_only("789Q\n");
 }
 
 #[test]
