@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf, StripPrefixError};
 
 use indicatif::ProgressBar;
 use uucore::display::Quotable;
-use uucore::error::UIoError;
+use uucore::error::{UIoError, set_exit_code};
 use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, canonicalize, path_ends_with_terminator,
 };
@@ -319,6 +319,14 @@ fn copy_direntry(
             false,
         )
     {
+        // A file left alone by --no-clobber, --update=none or a declined prompt
+        // does not stop the traversal; only a declined prompt is a failure.
+        if let CpError::Skipped(exit_with_error) = err {
+            if exit_with_error {
+                set_exit_code(crate::EXIT_ERR);
+            }
+            return Ok(false);
+        }
         if preserve_hard_links {
             if !source_is_symlink {
                 return Err(err);

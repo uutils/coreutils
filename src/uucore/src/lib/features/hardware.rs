@@ -324,43 +324,25 @@ fn detect_vmull() -> bool {
 
 // GLIBC_TUNABLES parsing
 
-/// Parse GLIBC_TUNABLES environment variable for disabled features
-///
-/// Format: `glibc.cpu.hwcaps=-AVX2,-AVX512F`
-/// Multiple tunable sections can be separated by colons.
+/// Parse the `glibc.cpu.hwcaps` setting of `GLIBC_TUNABLES` into the set of
+/// disabled features. Only the last setting counts and names are
+/// case-sensitive.
 fn parse_disabled_features(tunables: &str) -> BTreeSet<HardwareFeature> {
-    if tunables.is_empty() {
+    let Some(value) = tunables
+        .split(':')
+        .filter_map(|setting| setting.split_once('='))
+        .filter(|(name, _)| name.trim_start() == "glibc.cpu.hwcaps")
+        .map(|(_, value)| value)
+        .next_back()
+    else {
         return BTreeSet::new();
-    }
+    };
 
-    let mut disabled = BTreeSet::new();
-
-    // GLIBC_TUNABLES format: "tunable1=value1:tunable2=value2"
-    for entry in tunables.split(':') {
-        let entry = entry.trim();
-        let Some((name, raw_value)) = entry.split_once('=') else {
-            continue;
-        };
-
-        // We only care about glibc.cpu.hwcaps
-        if name.trim() != "glibc.cpu.hwcaps" {
-            continue;
-        }
-
-        // Parse comma-separated features, disabled ones start with '-'
-        for token in raw_value.split(',') {
-            let token = token.trim();
-            if let Some(feature) = token.strip_prefix('-') {
-                let feature =
-                    HardwareFeature::try_from(feature.trim().to_ascii_uppercase().as_str());
-                if let Ok(feature) = feature {
-                    disabled.insert(feature);
-                }
-            }
-        }
-    }
-
-    disabled
+    value
+        .split(',')
+        .filter_map(|token| token.trim_start().strip_prefix('-'))
+        .filter_map(|name| HardwareFeature::try_from(name).ok())
+        .collect()
 }
 
 #[cfg(test)]
@@ -425,15 +407,49 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_disabled_features_case_insensitive() {
+    fn test_parse_disabled_features_is_case_sensitive() {
         let result = parse_disabled_features("glibc.cpu.hwcaps=-avx2,-Avx512f");
-        let mut expected = BTreeSet::new();
+        assert_eq!(result, BTreeSet::new());
+    }
 
-        expected.insert(HardwareFeature::Avx2);
-        expected.insert(HardwareFeature::Avx512);
+    #[test]
+    fn test_parse_disabled_features_last_setting_wins() {
+        let result =
+            parse_disabled_features("glibc.cpu.hwcaps=-AVX2:glibc.cpu.hwcaps=-AVX512F:x=y");
+        assert_eq!(result, BTreeSet::from([HardwareFeature::Avx512]));
+    }
 
-        // Only features with '-' prefix are disabled
-        assert_eq!(result, expected);
+    #[test]
+    fn test_parse_disabled_features_whole_names_only() {
+        // A space after the name or after the dash is not a name.
+        let result = parse_disabled_features("glibc.cpu.hwcaps=-AVX2 ,- AVX512F");
+        assert_eq!(result, BTreeSet::new());
+        // A space before the dash is tolerated.
+        let result = parse_disabled_features("glibc.cpu.hwcaps= -AVX2, -AVX512F");
+        assert_eq!(
+            result,
+            BTreeSet::from([HardwareFeature::Avx2, HardwareFeature::Avx512])
+        );
+    }
+
+    #[test]
+    fn test_parse_disabled_features_ignores_invalid_last_setting() {
+        let result = parse_disabled_features("glibc.cpu.hwcaps=-AVX2:glibc.cpu.hwcaps =");
+        assert_eq!(result, BTreeSet::from([HardwareFeature::Avx2]));
+        let result = parse_disabled_features("glibc.cpu.hwcaps=-AVX2: glibc.cpu.hwcaps=-SSE2");
+        assert_eq!(result, BTreeSet::from([HardwareFeature::Sse2]));
+    }
+
+    #[test]
+    fn test_parse_disabled_features_empty_setting_enables_everything() {
+        assert_eq!(
+            parse_disabled_features("glibc.cpu.hwcaps="),
+            BTreeSet::new()
+        );
+        assert_eq!(
+            parse_disabled_features("glibc.cpu.hwcaps=-AVX2:glibc.cpu.hwcaps="),
+            BTreeSet::new()
+        );
     }
 
     #[test]

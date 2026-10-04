@@ -16,7 +16,6 @@ use std::path::PathBuf;
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
 use std::time::SystemTime;
-use thiserror::Error;
 
 use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
@@ -163,7 +162,7 @@ impl Default for ExpandTabsOptions {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum PrError {
     #[error("pr: {msg}")]
     EncounteredErrors { msg: String },

@@ -2114,16 +2114,70 @@ fn test_split_non_utf8_additional_suffix_is_byte_preserving() {
 }
 
 #[test]
+fn test_empty_input_does_not_create_output() {
+    for args in [&[][..], &["-b", "1"], &["-l", "1"], &["-C", "1"]] {
+        let scenario = TestScenario::new(util_name!());
+        let at = &scenario.fixtures;
+
+        scenario
+            .ucmd()
+            .args(args)
+            .arg("--verbose")
+            .pipe_in("")
+            .succeeds()
+            .no_output();
+        assert!(!at.plus("xaa").exists());
+
+        at.touch("empty");
+        scenario
+            .ucmd()
+            .args(args)
+            .arg("empty")
+            .succeeds()
+            .no_output();
+        assert!(!at.plus("xaa").exists());
+    }
+}
+
+#[test]
+fn test_empty_input_preserves_existing_output() {
+    for args in [&[][..], &["-b", "1"], &["-l", "1"], &["-C", "1"]] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("xaa", "keep this output\n");
+
+        ucmd.args(args).pipe_in("").succeeds().no_output();
+        assert_eq!(at.read("xaa"), "keep this output\n");
+        assert!(!at.plus("xab").exists());
+    }
+}
+
+#[test]
+fn test_empty_input_with_output_directory() {
+    for args in [&[][..], &["-b", "1"], &["-l", "1"], &["-C", "1"]] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("xaa");
+
+        ucmd.args(args).pipe_in("").succeeds().no_output();
+        assert!(at.plus("xaa").is_dir());
+        assert!(!at.plus("xab").exists());
+    }
+}
+
+#[test]
 #[cfg(unix)] // To re-enable on Windows once I work out what goes wrong with it.
 fn test_split_directory_already_exists() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    for args in [&[][..], &["-b", "1"], &["-l", "1"], &["-C", "1"]] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("xaa");
 
-    at.mkdir("xaa"); // For collision with.
-    at.touch("file");
-    ucmd.args(&["file"])
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_is("split: 'xaa': Is a directory\n");
+        ucmd.args(args)
+            .pipe_in("data\n")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_is("split: 'xaa': Is a directory\n");
+        assert!(at.plus("xaa").is_dir());
+        assert!(!at.plus("xab").exists());
+    }
 }
 
 #[test]
@@ -2149,14 +2203,18 @@ fn test_write_error_on_full_device() {
 
     // The first chunk lands on /dev/full, so its write can never succeed.
     at.symlink_file("/dev/full", "xaa");
-    at.write("input", "uv");
-
-    ucmd.args(&["-b", "1", "input"])
+    ucmd.args(&["-b", "1"])
+        .pipe_in("uv")
         .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("split: xaa: No space left on device");
+        .stderr_is("split: xaa: No space left on device\n");
 
     // split must not have moved on to the next chunk.
+    assert!(at.plus("xaa").is_symlink());
+    assert_eq!(
+        fs::read_link(at.plus("xaa")).unwrap(),
+        Path::new("/dev/full")
+    );
     assert!(!at.file_exists("xab"));
 }
 

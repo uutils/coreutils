@@ -9,7 +9,7 @@ use std::ops::Range;
 use uucore::diagnostics::OptionValue;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::i18n::get_ctype_encoding;
-use uucore::quoting_style::{Quotes, QuotingStyle, escape_name};
+use uucore::quoting_style::{QuotingStyle, escape_name, quoting_style_from_env};
 use uucore::translate;
 
 use clap::builder::ValueParser;
@@ -34,10 +34,9 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{env, fs};
 
-use thiserror::Error;
 use uucore::time::{FormatSystemTimeFallback, format_system_time, system_time_to_sec};
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum StatError {
     #[error("{}", translate!("stat-error-invalid-directive", "directive" => directive))]
     InvalidDirective { directive: String },
@@ -245,23 +244,6 @@ pub enum OutputType<'a> {
     UnsignedOct(u32),
     Timestamp(i64, u32),
     Unknown,
-}
-
-/// Match a `QUOTING_STYLE` value to a quoting style.
-fn parse_quoting_style(style: &str) -> Option<QuotingStyle> {
-    Some(match style {
-        "literal" => QuotingStyle::Literal { show_control: true },
-        "shell" => QuotingStyle::SHELL.show_control(true),
-        "shell-always" => QuotingStyle::SHELL_QUOTE.show_control(true),
-        "shell-escape" => QuotingStyle::SHELL_ESCAPE,
-        "shell-escape-always" => QuotingStyle::SHELL_ESCAPE_QUOTE,
-        "c" | "clocale" => QuotingStyle::C_DOUBLE,
-        "escape" => QuotingStyle::C_NO_QUOTES,
-        "locale" => QuotingStyle::C {
-            quotes: Quotes::Single,
-        },
-        _ => return None,
-    })
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -515,26 +497,10 @@ fn print_os_str(s: &OsString, flags: Flags, width: usize, precision: Precision) 
     }
 }
 
-fn quote_file_name(file_name: &str, quoting_style: QuotingStyle) -> String {
-    escape_name(OsStr::new(file_name), quoting_style, get_ctype_encoding())
+fn quote_file_name(file_name: &OsStr, quoting_style: QuotingStyle) -> String {
+    escape_name(file_name, quoting_style, get_ctype_encoding())
         .to_string_lossy()
         .to_string()
-}
-
-/// Get the quoting style from the `QUOTING_STYLE` environment variable.
-fn env_quoting_style() -> QuotingStyle {
-    match env::var("QUOTING_STYLE") {
-        Ok(style) => parse_quoting_style(&style).unwrap_or_else(|| {
-            // Warn when QUOTING_STYLE is set to a value we don't understand,
-            // then fall back to the default.
-            show_error!(
-                "{}",
-                translate!("stat-warning-invalid-env-quoting-style", "style" => style.clone())
-            );
-            QuotingStyle::SHELL_ESCAPE
-        }),
-        Err(_) => QuotingStyle::SHELL_ESCAPE,
-    }
 }
 
 fn get_quoted_file_name(
@@ -544,10 +510,10 @@ fn get_quoted_file_name(
     quoting_style: QuotingStyle,
 ) -> Result<String, i32> {
     if file_type.is_symlink() {
-        let quoted_display_name = quote_file_name(display_name, quoting_style);
+        let quoted_display_name = quote_file_name(OsStr::new(display_name), quoting_style);
         match fs::read_link(file) {
             Ok(dst) => {
-                let quoted_dst = quote_file_name(&dst.to_string_lossy(), quoting_style);
+                let quoted_dst = quote_file_name(dst.as_os_str(), quoting_style);
                 Ok(format!("{quoted_display_name} -> {quoted_dst}"))
             }
             Err(e) => {
@@ -556,7 +522,7 @@ fn get_quoted_file_name(
             }
         }
     } else {
-        Ok(quote_file_name(display_name, quoting_style))
+        Ok(quote_file_name(OsStr::new(display_name), quoting_style))
     }
 }
 
@@ -648,7 +614,7 @@ fn print_integer(
 
 fn format_timestamp(seconds: i64, nanoseconds: u32, precision: Precision) -> String {
     let precision = match precision {
-        Precision::NotSpecified => return seconds.to_string(),
+        Precision::NotSpecified | Precision::Number(0) => return seconds.to_string(),
         Precision::NoNumber => 9,
         Precision::Number(p) => p,
     };
@@ -656,10 +622,11 @@ fn format_timestamp(seconds: i64, nanoseconds: u32, precision: Precision) -> Str
     let total_nanoseconds = i128::from(seconds) * 1_000_000_000 + i128::from(nanoseconds);
     if precision <= 9 {
         let divisor = 10_i128.pow((9 - precision) as u32);
-        let value = total_nanoseconds.div_euclid(divisor);
-        format_scaled_decimal(value, precision)
+        // Integer seconds use the floor, but fractional output truncates toward zero.
+        let value = total_nanoseconds / divisor;
+        format_scaled_decimal(value, precision, total_nanoseconds < 0)
     } else {
-        let mut result = format_scaled_decimal(total_nanoseconds, 9);
+        let mut result = format_scaled_decimal(total_nanoseconds, 9, total_nanoseconds < 0);
         result.push_str(&"0".repeat(precision - 9));
         result
     }
@@ -674,16 +641,12 @@ fn system_time_to_timestamp(time: SystemTime) -> (i64, u32) {
     (seconds, nanoseconds)
 }
 
-fn format_scaled_decimal(value: i128, precision: usize) -> String {
-    if precision == 0 {
-        return value.to_string();
-    }
-
+fn format_scaled_decimal(value: i128, precision: usize, negative: bool) -> String {
     let scale = 10_u128.pow(precision as u32);
     let magnitude = value.unsigned_abs();
     let whole = magnitude / scale;
     let fraction = magnitude % scale;
-    let sign = if value < 0 { "-" } else { "" };
+    let sign = if negative { "-" } else { "" };
     format!("{sign}{whole}.{fraction:0>precision$}")
 }
 
@@ -1112,7 +1075,11 @@ impl Stater {
     }
 
     fn quoting_style(&self) -> QuotingStyle {
-        *self.quoting_style.get_or_init(env_quoting_style)
+        *self.quoting_style.get_or_init(|| {
+            quoting_style_from_env()
+                .unwrap_or(QuotingStyle::SHELL_ESCAPE)
+                .show_control(true)
+        })
     }
 
     fn find_mount_point<P: AsRef<Path>>(&self, p: P) -> Option<&OsString> {
@@ -1246,9 +1213,10 @@ impl Stater {
                         None => OutputType::Str(String::new()),
                     },
                     // quoted file name
-                    'n' if flag.quote => {
-                        OutputType::Str(quote_file_name(display_name, self.quoting_style()))
-                    }
+                    'n' if flag.quote => OutputType::Str(quote_file_name(
+                        OsStr::new(display_name),
+                        self.quoting_style(),
+                    )),
                     // file name
                     'n' => OutputType::Str(display_name.to_string()),
                     // quoted file name with dereference if symbolic link
@@ -1340,6 +1308,7 @@ impl Stater {
 
     fn do_stat(&self, file: &OsStr, stdin_is_fifo: bool) -> UResult<i32> {
         let display_name = file.to_string_lossy();
+        let quoted_name = || quote_file_name(file, QuotingStyle::SHELL_ESCAPE_ALWAYS);
         let file = if cfg!(unix) && display_name == "-" {
             if self.show_fs {
                 show_error!("{}", StatError::StdinFilesystemMode);
@@ -1361,7 +1330,7 @@ impl Stater {
                     // Usage
                     for t in tokens {
                         process_token_filesystem(t, &meta, &display_name, |name| {
-                            quote_file_name(name, self.quoting_style())
+                            quote_file_name(OsStr::new(name), self.quoting_style())
                         });
                     }
                     self.raise_format_error()?;
@@ -1370,7 +1339,7 @@ impl Stater {
                     show_error!(
                         "{}",
                         StatError::CannotReadFilesystemInfo {
-                            file: display_name.quote().to_string(),
+                            file: quoted_name(),
                             error
                         }
                     );
@@ -1413,7 +1382,7 @@ impl Stater {
                     show_error!(
                         "{}",
                         StatError::CannotStatx {
-                            file: display_name.quote().to_string(),
+                            file: quoted_name(),
                             error: strip_errno(&e)
                         }
                     );
@@ -1585,6 +1554,7 @@ fn pretty_time(meta: &Metadata, md_time_field: MetadataTimeField) -> String {
 #[cfg(test)]
 mod tests {
     use crate::{quote_file_name, write_padded_bytes, write_padding};
+    use std::ffi::OsStr;
     use uucore::quoting_style::QuotingStyle;
 
     use super::{Flags, Precision, ScanUtil, Stater, Token, format_timestamp, group_num};
@@ -1730,13 +1700,30 @@ mod tests {
             (Precision::NotSpecified, "-1"),
             (Precision::NoNumber, "-0.876543211"),
             (Precision::Number(0), "-1"),
-            (Precision::Number(1), "-0.9"),
-            (Precision::Number(3), "-0.877"),
+            (Precision::Number(1), "-0.8"),
+            (Precision::Number(3), "-0.876"),
             (Precision::Number(9), "-0.876543211"),
             (Precision::Number(10), "-0.8765432110"),
         ];
         for (precision, expected) in pre_epoch_cases {
             assert_eq!(format_timestamp(-1, 123_456_789, precision), expected);
+        }
+    }
+
+    #[test]
+    fn test_format_timestamp_negative_fraction_truncation() {
+        for (seconds, nanoseconds, precision, expected) in [
+            (-3, 765_432_109, Precision::NotSpecified, "-3"),
+            (-3, 765_432_109, Precision::Number(0), "-3"),
+            (-3, 765_432_109, Precision::Number(2), "-2.23"),
+            (-3, 765_432_109, Precision::Number(6), "-2.234567"),
+            (-1, 999_999_999, Precision::Number(1), "-0.0"),
+            (-1, 999_999_999, Precision::Number(3), "-0.000"),
+            (-1, 999_999_999, Precision::Number(9), "-0.000000001"),
+            (-1, 999_999_999, Precision::Number(10), "-0.0000000010"),
+            (-3, 0, Precision::Number(3), "-3.000"),
+        ] {
+            assert_eq!(format_timestamp(seconds, nanoseconds, precision), expected);
         }
     }
 
@@ -1772,13 +1759,13 @@ mod tests {
     fn test_quote_file_name() {
         let file_name = "nice' file";
         assert_eq!(
-            quote_file_name(file_name, QuotingStyle::SHELL_ESCAPE_QUOTE),
+            quote_file_name(OsStr::new(file_name), QuotingStyle::SHELL_ESCAPE_ALWAYS),
             "\"nice' file\""
         );
 
         let file_name = "nice\" file";
         assert_eq!(
-            quote_file_name(file_name, QuotingStyle::SHELL_ESCAPE_QUOTE),
+            quote_file_name(OsStr::new(file_name), QuotingStyle::SHELL_ESCAPE_ALWAYS),
             "\'nice\" file\'"
         );
     }

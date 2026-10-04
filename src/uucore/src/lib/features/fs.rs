@@ -152,6 +152,13 @@ impl FileInformation {
         #[allow(clippy::useless_conversion)]
         return self.0.st_ino.into();
     }
+
+    pub fn dev(&self) -> u64 {
+        #[cfg(any(unix, target_os = "wasi"))]
+        return self.0.st_dev as _;
+        #[cfg(windows)]
+        return self.0.dwVolumeSerialNumber as _;
+    }
 }
 
 #[cfg(any(unix, target_os = "wasi"))]
@@ -1123,10 +1130,12 @@ pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> 
         let basename = dest
             .file_name()
             .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid link path"))?;
+        // No NOFOLLOW: the parent may be a symlink to a directory, which the
+        // create attempt above already followed.
         let dir = openat(
             CWD,
             parent,
-            OFlags::DIRECTORY | OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+            OFlags::DIRECTORY | OFlags::RDONLY | OFlags::CLOEXEC,
             Mode::empty(),
         )?;
         let mut urandom = fs::File::open("/dev/urandom")?;
