@@ -1338,7 +1338,7 @@ fn test_long_record_with_limited_memory() {
     use uutests::util::TestScenario;
 
     let ts = TestScenario::new(uutests::util_name!());
-    // A sparse, unterminated record larger than the child's address space
+    // A sparse, unterminated record larger than the child's memory limit
     // forces record processing to avoid keeping the entire input in memory.
     let path = ts.fixtures.plus("large-record");
     File::create(&path)
@@ -1352,14 +1352,21 @@ fn test_long_record_with_limited_memory() {
             vec!["-f", "1,3"],
             vec!["-s", "-f", "2-"],
         ] {
-            ts.ucmd()
-                .env("LC_ALL", locale)
+            let mut cmd = ts.ucmd();
+            cmd.env("LC_ALL", locale)
                 .args(&args)
-                .arg(&path)
-                .limit(Resource::As, 64 * 1024 * 1024, 64 * 1024 * 1024)
-                .set_stdout(Stdio::null())
-                .succeeds()
-                .no_stderr();
+                .arg("large-record")
+                .set_stdout(Stdio::null());
+            if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
+                // Limit the guest's linear memory without restricting Wasmtime itself.
+                cmd.env(
+                    "WASMTIME_WASM_MAX_MEMORY_SIZE",
+                    (64 * 1024 * 1024).to_string(),
+                );
+            } else {
+                cmd.limit(Resource::As, 64 * 1024 * 1024, 64 * 1024 * 1024);
+            }
+            cmd.succeeds().no_stderr();
         }
     }
 }
