@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile file siette ocho nueve diez MULT watchme nofile wxyz
-// spell-checker:ignore (libs) kqueue ELOOP EISDIR Fsize
+// spell-checker:ignore (libs) kqueue ELOOP EISDIR Fsize setrlimit
 // spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
 // spell-checker:ignore (cmd) taskkill
 
@@ -174,6 +174,7 @@ fn test_stdin_redirect_offset() {
 #[case::large_file_from_start(&["-c+1"], true, None)]
 #[case::small_file_from_second_line(&["-n+2"], false, Some("b\nc\n"))]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: rlimit/setrlimit not supported")]
 fn test_output_appended_to_input(
     #[case] args: &[&str],
     #[case] large: bool,
