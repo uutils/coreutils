@@ -471,6 +471,7 @@ fn format_float_decimal(
         } else if let Some(s) = integer_digits(bd) {
             s + "."
         } else {
+            // Past `MAX_FORMAT_WIDTH` zeros, print exponent form and skip the precision and `.`.
             return format!("{bd:.0}");
         };
         s.extend(std::iter::repeat_n('0', precision - written));
