@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile file siette ocho nueve diez MULT watchme nofile wxyz
-// spell-checker:ignore (libs) kqueue ELOOP EISDIR Fsize setrlimit
+// spell-checker:ignore (libs) kqueue ELOOP EISDIR Fsize setrlimit SIGXFSZ
 // spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
 // spell-checker:ignore (cmd) taskkill
 
@@ -168,7 +168,9 @@ fn test_stdin_redirect_offset() {
 
 // `tail f >> f` must print what `f` held when tail started, and stop there
 // rather than read back its own output. A file above one block takes the
-// seeking path, a smaller one the streaming path.
+// seeking path, a smaller one the streaming path. With SIGXFSZ ignored, the
+// file size cap fails writes instead of killing tail, which a coverage build
+// would otherwise hit when writing its profile data on exit.
 #[rstest]
 #[case::last_line_of_large_file(&["-n1"], true, Some("last\n"))]
 #[case::large_file_from_start(&["-c+1"], true, None)]
@@ -199,6 +201,7 @@ fn test_output_appended_to_input(
         .arg("f")
         .set_stdout(out)
         .limit(Resource::Fsize, 1024 * 1024, 1024 * 1024)
+        .ignore_sigxfsz()
         .succeeds();
     assert_eq!(at.read("f"), format!("{content}{expected_tail}"));
 }
