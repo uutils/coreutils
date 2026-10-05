@@ -240,7 +240,7 @@ fn wait_or_kill_process(
             }
         }
         // GNU timeout also kills on signals other than SIGTERM.
-        Ok(TimeoutRet::TimedOut) | Ok(TimeoutRet::Interrupted(_)) => {
+        Ok(TimeoutRet::TimedOut | TimeoutRet::Interrupted(_)) => {
             let signal = signal_by_name_or_value("KILL").unwrap();
             report_if_verbose(signal, cmd, verbose);
             platform::send_signal(process, signal, foreground, None, spawn_state);
