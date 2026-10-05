@@ -955,6 +955,32 @@ fn test_cp_arg_link_with_same_file() {
     assert!(at.file_exists(file));
 }
 
+// A hard link shares the source's inode, so `cp --link` must not change the
+// mode of the file it links to.
+#[test]
+#[cfg(unix)]
+fn test_cp_arg_link_keeps_source_mode() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("src", "a");
+    at.set_mode("src", 0o755);
+    scene
+        .ucmd()
+        .umask(0o077)
+        .args(&["-l", "src", "lnk"])
+        .succeeds();
+    assert_eq!(at.metadata("src").permissions().mode() & 0o777, 0o755);
+
+    at.write("orig", "a");
+    at.set_mode("orig", 0o600);
+    at.write("dest", "b");
+    at.set_mode("dest", 0o777);
+    scene.ucmd().args(&["-lf", "orig", "dest"]).succeeds();
+    assert_eq!(at.metadata("orig").permissions().mode() & 0o777, 0o600);
+    assert_eq!(at.metadata("dest").permissions().mode() & 0o777, 0o600);
+}
+
 #[test]
 #[cfg(target_os = "linux")]
 fn test_cp_verbose_preserved_link_to_dir() {
