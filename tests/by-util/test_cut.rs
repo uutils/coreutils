@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore defg naïve nave närd nøys ntøys nfjärd undelimited xbfw
+// spell-checker:ignore defg naïve nave närd nøys ntøys nfjärd undelimited xbfw nbbbb
 
 use uutests::{at_and_ucmd, new_ucmd};
 
@@ -1394,9 +1394,8 @@ fn test_long_fields_across_input_chunks() {
             (
                 "1,3",
                 format!(
-                    "{long}:{long}\n{}{}\n",
-                    if suppress { "" } else { "plain\n" },
-                    long
+                    "{long}:{long}\n{}{long}\n",
+                    if suppress { "" } else { "plain\n" }
                 ),
             ),
             (
