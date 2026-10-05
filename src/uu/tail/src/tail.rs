@@ -33,6 +33,7 @@ use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
+use uucore::fs::FileInformation;
 use uucore::translate;
 
 use uucore::{show, show_error};
@@ -172,12 +173,10 @@ fn tail_file(
             Ok(mut file) => {
                 let st = file.metadata()?;
                 let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
-                // Our output may be appended to this very file (`tail f >> f`),
-                // so a regular file ends where it ended when we opened it.
-                // Reading on to the moving end of file would copy our own
-                // output back, forever. Files in /proc report a size of 0
-                // whatever they hold, so that size tells us nothing.
-                let end = (st.is_file() && st.len() > 0).then_some(st.len());
+                // When our output goes to this very file (`tail f >> f`), it
+                // ends where it ended when we opened it. Reading on to the
+                // moving end of file would copy our own output back, forever.
+                let end = (st.is_file() && is_stdout(&file)).then_some(st.len());
                 header_printer.print_input(input);
                 if !settings.presume_input_pipe
                     && file.is_seekable(if input.is_stdin() { offset } else { 0 })
@@ -253,6 +252,14 @@ fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
     } else {
         File::open(path)
     }
+}
+
+/// Whether `file` is the file that standard output writes to.
+fn is_stdout(file: &File) -> bool {
+    matches!(
+        (FileInformation::from_file(file), FileInformation::from_file(&stdout())),
+        (Ok(input), Ok(output)) if input == output
+    )
 }
 
 fn tail_stdin(

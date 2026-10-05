@@ -206,6 +206,28 @@ fn test_output_appended_to_input(
     assert_eq!(at.read("f"), format!("{content}{expected_tail}"));
 }
 
+// Same as above with `tail < f >> f`: standard input is the file as well.
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: rlimit/setrlimit not supported")]
+fn test_output_appended_to_stdin() {
+    use rustix::process::Resource;
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let content = format!("{}\nlast\n", "x".repeat(100 * 1024));
+    at.write("f", &content);
+    let out = OpenOptions::new().append(true).open(at.plus("f")).unwrap();
+
+    ucmd.arg("-c+1")
+        .set_stdin(File::open(at.plus("f")).unwrap())
+        .set_stdout(out)
+        .limit(Resource::Fsize, 1024 * 1024, 1024 * 1024)
+        .ignore_sigxfsz()
+        .succeeds();
+    assert_eq!(at.read("f"), content.repeat(2));
+}
+
 #[test]
 fn test_stdin_redirect_offset2() {
     // like test_stdin_redirect_offset but with multiple files
