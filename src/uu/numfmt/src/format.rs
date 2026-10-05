@@ -186,7 +186,7 @@ pub fn holds_number(input: &str) -> bool {
 const MAX_DIGITS: usize = 33;
 
 /// Byte length of the number `s` starts with, when its whole part or its
-/// fraction has more than [`MAX_DIGITS`] digits; `None` otherwise.
+/// fraction has more than `MAX_DIGITS` digits; `None` otherwise.
 pub fn overlong_number_len(s: &str) -> Option<usize> {
     let dec_sep = locale_decimal_separator();
     let digits_len = |s: &str| s.bytes().take_while(u8::is_ascii_digit).count();
