@@ -3140,11 +3140,10 @@ const SALT_LEN: usize = 16; // 128-bit salt
 const U64_LEN: usize = 8;
 const RANDOM_SOURCE_TAG: &[u8] = b"uutils-sort-random-source"; // Domain separation tag
 
-/// Create a 128-bit salt by hashing up to 1 MiB from the given file.
+/// Create a 128-bit salt by hashing the first [`SALT_LEN`] bytes from the file.
 ///
 /// The file has to hold at least [`SALT_LEN`] bytes. GNU asks for the same 128
-/// bits and reports `end of file` when the source cannot supply them, rather
-/// than shuffling with whatever it managed to read.
+/// bits and reports `end of file` when the source cannot supply them.
 fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     // GNU reads exactly SALT_LEN bytes from the source and keeps the file open
     // (a named pipe keeps its writer blocked until the reader closes it), so an
@@ -3153,29 +3152,18 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     // after the salt bytes are collected.
     let mut reader = open_with_open_failed_error(path)?;
     let mut salt = [0u8; SALT_LEN];
-    let mut filled = 0usize;
-    while filled < SALT_LEN {
-        match reader.read(&mut salt[filled..]) {
-            Ok(0) => break,
-            Ok(n) => filled = filled.saturating_add(n),
-            // Retry on interrupted reads (EINTR) instead of surfacing them.
-            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => (),
-            Err(error) => {
-                return Err(SortError::ReadFailed {
-                    path: path.to_owned(),
-                    error,
-                }
-                .into());
+    reader.read_exact(&mut salt).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::UnexpectedEof {
+            SortError::RandomSourceEndOfFile {
+                path: path.to_owned(),
+            }
+        } else {
+            SortError::ReadFailed {
+                path: path.to_owned(),
+                error,
             }
         }
-    }
-
-    if filled < SALT_LEN {
-        return Err(SortError::RandomSourceEndOfFile {
-            path: path.to_owned(),
-        }
-        .into());
-    }
+    })?;
 
     // freeze seed for --random-source
     let mut hasher = FoldHasher::with_seed(1, SharedSeed::global_fixed());

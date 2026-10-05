@@ -519,56 +519,54 @@ fn test_random_source_is_not_read_without_random_sort() {
 
 #[test]
 fn test_random_source_larger_than_the_salt() {
-    use uutests::util_name;
-
-    // GNU stops reading after the 128-bit salt, so sources larger than
-    // 16 bytes work and yield a deterministic order.
-    let ts = TestScenario::new(util_name!());
-    ts.fixtures.write_bytes("source", &vec![b'x'; 8192]);
-    ts.fixtures.write("input", "b\na\nc\n");
+    let ts = TestScenario::new(uutests::util_name!());
+    let at = &ts.fixtures;
+    at.write("input", "b\na\nc\n");
+    let mut source_a = vec![b'a'; 32];
+    let mut source_b = source_a.clone();
+    source_a[16] = b'b';
+    source_b[16] = b'c';
+    at.write_bytes("source-a", &source_a);
+    at.write_bytes("source-b", &source_b);
 
     let first = ts
         .ucmd()
-        .args(&["-R", "--random-source=source", "input"])
+        .args(&["-R", "--random-source=source-a", "input"])
         .succeeds()
         .stdout_move_str();
     let second = ts
         .ucmd()
-        .args(&["-R", "--random-source=source", "input"])
+        .args(&["-R", "--random-source=source-b", "input"])
         .succeeds()
         .stdout_move_str();
 
-    assert_eq!(first.lines().count(), 3);
     assert_eq!(first, second);
 }
 
 #[test]
 #[cfg(unix)]
 fn test_random_source_named_pipe_does_not_overread() {
-    use uutests::util_name;
-
     // GNU reads exactly the 128-bit salt from the source and keeps the file
     // open while shuffling. An over-read on a named pipe would block forever
     // on a writer that only supplied the salt.
     use std::io::Write;
 
-    let ts = TestScenario::new(util_name!());
+    let ts = TestScenario::new(uutests::util_name!());
     ts.fixtures.write("input", "b\na\nc\n");
     ts.fixtures.mkdir("d");
-    let fifo = ts.fixtures.plus("d/source");
+    ts.fixtures.mkfifo("d/source");
 
-    nix::unistd::mkfifo(&fifo, nix::sys::stat::Mode::S_IRWXU).unwrap();
-
-    let fifo_w = fifo.clone();
+    let fifo_w = ts.fixtures.plus("d/source");
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
     let writer = std::thread::spawn(move || {
         let mut file = std::fs::OpenOptions::new()
             .write(true)
             .open(&fifo_w)
             .unwrap();
         file.write_all(&[b'x'; SALT_TEST_LEN]).unwrap();
-        // Keep the descriptor open like a writer would before closing it
-        // (e.g. `printf %016d > fifo` still running).
-        std::thread::sleep(Duration::from_secs(5));
+        // Keep the descriptor open until sort has finished. An over-read
+        // would block here waiting for bytes beyond the salt.
+        done_rx.recv().unwrap();
         drop(file);
     });
 
@@ -576,6 +574,7 @@ fn test_random_source_named_pipe_does_not_overread() {
         .args(&["-R", "--random-source=d/source", "input"])
         .succeeds()
         .stdout_matches(&regex::Regex::new("[abc]\n[abc]\n[abc]\n").unwrap());
+    done_tx.send(()).unwrap();
     writer.join().unwrap();
 }
 
