@@ -413,7 +413,29 @@ impl UIoError {
 
 impl UError for UIoError {}
 
-impl Error for UIoError {}
+impl Error for UIoError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(&self.inner)
+    }
+}
+
+/// Whether `err`, or any error in its [`source`](Error::source) chain, is a
+/// broken pipe I/O error.
+///
+/// Unix utilities are killed by SIGPIPE when the reader of a pipe goes away.
+/// Windows has no SIGPIPE, so the write fails with a broken pipe error instead.
+pub fn is_broken_pipe(err: &(dyn Error + 'static)) -> bool {
+    let mut current = Some(err);
+    while let Some(e) = current {
+        if e.downcast_ref::<std::io::Error>()
+            .is_some_and(|io| io.kind() == std::io::ErrorKind::BrokenPipe)
+        {
+            return true;
+        }
+        current = e.source();
+    }
+    false
+}
 
 impl Display for UIoError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
