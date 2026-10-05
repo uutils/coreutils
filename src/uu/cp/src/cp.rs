@@ -2862,7 +2862,9 @@ fn copy_file(
     // and chmod() would follow it and change the mode of the link target,
     // which can live outside the copied tree. Conversely, --remove-destination
     // replaces a symlink with a regular file that still needs its mode set.
-    if !dest.is_symlink() {
+    // With --link, dest shares the source's inode, so chmod would change the
+    // mode of the source file as well.
+    if options.copy_mode != CopyMode::Link && !dest.is_symlink() {
         // Here, to match GNU semantics, we quietly ignore an error
         // if a user does not have the correct ownership to modify
         // the permissions of a file.
