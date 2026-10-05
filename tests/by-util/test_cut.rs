@@ -1335,11 +1335,12 @@ fn test_long_record_with_limited_memory() {
     use rustix::process::Resource;
     use std::fs::File;
     use std::process::Stdio;
+    use uutests::util::TestScenario;
 
-    let (at, _) = at_and_ucmd!();
+    let ts = TestScenario::new(uutests::util_name!());
     // A sparse, unterminated record larger than the child's address space
     // forces record processing to avoid keeping the entire input in memory.
-    let path = at.plus("large-record");
+    let path = ts.fixtures.plus("large-record");
     File::create(&path)
         .unwrap()
         .set_len(256 * 1024 * 1024)
@@ -1351,7 +1352,7 @@ fn test_long_record_with_limited_memory() {
             vec!["-f", "1,3"],
             vec!["-s", "-f", "2-"],
         ] {
-            new_ucmd!()
+            ts.ucmd()
                 .env("LC_ALL", locale)
                 .args(&args)
                 .arg(&path)
