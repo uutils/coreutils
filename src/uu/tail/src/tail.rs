@@ -255,11 +255,32 @@ fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
 }
 
 /// Whether `file` is the file that standard output writes to.
-fn is_stdout(file: &File) -> bool {
+fn is_stdout<
+    #[cfg(any(unix, target_os = "wasi"))] F: std::os::fd::AsFd,
+    #[cfg(windows)] F: std::os::windows::io::AsRawHandle,
+>(
+    file: &F,
+) -> bool {
     matches!(
         (FileInformation::from_file(file), FileInformation::from_file(&stdout())),
         (Ok(input), Ok(output)) if input == output
     )
+}
+
+/// How much of standard input to read: all of it, unless it is the regular
+/// file that standard output writes to (`tail < f >> f`), which ends where
+/// it ended when we started. On macOS, such a file is not resolved to a path,
+/// so it is read here rather than by `tail_file`.
+fn stdin_limit() -> u64 {
+    #[cfg(unix)]
+    if let Ok(st) = rustix::fs::fstat(stdin())
+        && rustix::fs::FileType::from_raw_mode(st.st_mode).is_file()
+        && is_stdout(&stdin())
+        && let Ok(pos) = rustix::fs::tell(stdin())
+    {
+        return u64::try_from(st.st_size).unwrap_or(0).saturating_sub(pos);
+    }
+    u64::MAX
 }
 
 fn tail_stdin(
@@ -326,7 +347,7 @@ fn tail_stdin(
                 );
             }
         } else {
-            let mut reader = BufReader::new(stdin());
+            let mut reader = BufReader::new(stdin().take(stdin_limit()));
             unbounded_tail(&mut reader, settings)?;
         }
     }
