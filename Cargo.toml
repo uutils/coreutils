@@ -214,7 +214,6 @@ assert_is_empty = "allow"
 doc_markdown = "allow"
 unused_self = "allow"
 enum_glob_use = "allow"
-unnested_or_patterns = "allow"
 implicit_hasher = "allow"
 doc_link_with_quotes = "allow"
 # TODO lint is deprecated since Rust 1.98, can be removed when we have a MSRV >= 1.98

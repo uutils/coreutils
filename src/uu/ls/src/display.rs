@@ -739,7 +739,7 @@ fn display_item_name(
         let should_stat_target = has_mi_or_or
             || matches!(
                 config.indicator_style,
-                Some(IndicatorStyle::Classify) | Some(IndicatorStyle::FileType)
+                Some(IndicatorStyle::Classify | IndicatorStyle::FileType)
             );
 
         match path.path().read_link() {

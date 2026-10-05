@@ -283,13 +283,13 @@ fn get_default_width(specifier: &str) -> usize {
     #[allow(clippy::match_same_arms)] // needs comment at each arms
     match specifier.chars().last() {
         // Day of month: 2 digits (01-31)
-        Some('d') | Some('e') => 2,
+        Some('d' | 'e') => 2,
         // Month: 2 digits (01-12)
         Some('m') => 2,
         // Hour: 2 digits (00-23)
-        Some('H') | Some('k') => 2,
+        Some('H' | 'k') => 2,
         // Hour (12-hour): 2 digits (01-12)
-        Some('I') | Some('l') => 2,
+        Some('I' | 'l') => 2,
         // Minute: 2 digits (00-59)
         Some('M') => 2,
         // Second: 2 digits (00-60)
@@ -299,13 +299,13 @@ fn get_default_width(specifier: &str) -> usize {
         // Day of year: 3 digits (001-366)
         Some('j') => 3,
         // Week number: 2 digits (00-53)
-        Some('U') | Some('W') | Some('V') => 2,
+        Some('U' | 'W' | 'V') => 2,
         // Day of week: 1 digit (0-6 or 1-7)
-        Some('w') | Some('u') => 1,
+        Some('w' | 'u') => 1,
         // Century: 2 digits (00-99)
         Some('C') => 2,
         // Full year: 4 digits
-        Some('Y') | Some('G') => 4,
+        Some('Y' | 'G') => 4,
         // ISO week year (2-digit): 2 digits
         Some('g') => 2,
         // Epoch seconds: typically 10 digits (but variable)
