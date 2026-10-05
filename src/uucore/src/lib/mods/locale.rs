@@ -660,11 +660,12 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     if LOCALIZED_UTIL.with_borrow(|util| util.as_deref() == Some(p)) {
         return Ok(());
     }
+    let locales_dir = get_locales_dir(p);
     // Callers such as the help template pass the invoked name (`dir`, `[`,
     // a prefixed binary name...), which has no strings of its own: keep the
     // utility that is already set up instead of switching to nothing
     if LOCALIZED_UTIL.with_borrow(Option::is_some)
-        && get_locales_dir(p).is_err()
+        && locales_dir.is_err()
         && get_embedded_locale(&format!("{p}/{DEFAULT_LOCALE}.ftl")).is_none()
     {
         return Ok(());
@@ -675,7 +676,7 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     });
 
     // Load common strings along with utility-specific strings
-    if let Ok(locales_dir) = get_locales_dir(p) {
+    if let Ok(locales_dir) = locales_dir {
         // Load both utility-specific and common strings
         init_localization(&locale, &locales_dir, p)?;
     } else {
