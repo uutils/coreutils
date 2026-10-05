@@ -16,6 +16,8 @@ use clap::builder::ValueParser;
 use table::HeaderMode;
 use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
+#[cfg(not(windows))]
+use uucore::error::FromIo;
 use uucore::error::{UError, UResult, USimpleError, get_exit_code};
 use uucore::fsext::{MountInfo, read_fs_list};
 use uucore::parser::parse_size::ParseSizeError;
@@ -406,6 +408,11 @@ where
                     result.push(fs);
                 }
             }
+            #[cfg(not(windows))]
+            Err(FsError::InvalidPath(e)) => {
+                show!(e.map_err_context(|| path.as_ref().maybe_quote().to_string()));
+            }
+            #[cfg(windows)]
             Err(FsError::InvalidPath) => {
                 show!(USimpleError::new(
                     1,

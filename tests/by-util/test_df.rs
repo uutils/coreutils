@@ -1064,13 +1064,51 @@ fn test_output_field_no_more_than_once() {
 fn test_nonexistent_file() {
     new_ucmd!()
         .arg("does-not-exist")
-        .fails()
+        .fails_with_code(1)
         .stderr_only("df: does-not-exist: No such file or directory\n");
     new_ucmd!()
         .args(&["--output=file", "does-not-exist", "."])
-        .fails()
+        .fails_with_code(1)
         .stderr_is("df: does-not-exist: No such file or directory\n")
         .stdout_is("File\n.\n");
+}
+
+#[test]
+#[cfg(not(any(target_os = "freebsd", windows)))]
+fn test_path_below_a_regular_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    ucmd.arg("file/sub")
+        .fails_with_code(1)
+        .stderr_only("df: file/sub: Not a directory\n");
+}
+
+#[test]
+#[cfg(not(any(target_os = "freebsd", windows)))]
+fn test_symlink_loop() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.relative_symlink_file("loop", "loop");
+    ucmd.arg("loop")
+        .fails_with_code(1)
+        .stderr_only("df: loop: Too many levels of symbolic links\n");
+}
+
+#[test]
+#[cfg(not(any(target_os = "freebsd", windows)))]
+fn test_path_in_locked_directory() {
+    // Root can search a mode 000 directory, so there is nothing to report.
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("locked");
+    at.set_mode("locked", 0o000);
+    let result = ucmd.arg("locked/sub").run();
+    // Restore search permission so the fixture directory can be cleaned up.
+    at.set_mode("locked", 0o755);
+    result
+        .code_is(1)
+        .stderr_only("df: locked/sub: Permission denied\n");
 }
 
 #[test]
