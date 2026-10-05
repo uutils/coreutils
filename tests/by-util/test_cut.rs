@@ -1328,3 +1328,89 @@ cut: invalid decreasing range
         assert!(!stderr.contains('\u{256d}'), "{stderr}");
     }
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_long_record_with_limited_memory() {
+    use rustix::process::Resource;
+    use std::fs::File;
+    use std::process::Stdio;
+
+    let (at, _) = at_and_ucmd!();
+    // A sparse, unterminated record larger than the child's address space
+    // forces record processing to avoid keeping the entire input in memory.
+    let path = at.plus("large-record");
+    File::create(&path)
+        .unwrap()
+        .set_len(256 * 1024 * 1024)
+        .unwrap();
+    for locale in ["C", "C.UTF-8"] {
+        for args in [
+            vec!["-b", "2,8192-8194"],
+            vec!["-c", "2,8192-8194"],
+            vec!["-f", "1,3"],
+            vec!["-s", "-f", "2-"],
+        ] {
+            new_ucmd!()
+                .env("LC_ALL", locale)
+                .args(&args)
+                .arg(&path)
+                .limit(Resource::As, 64 * 1024 * 1024, 64 * 1024 * 1024)
+                .set_stdout(Stdio::null())
+                .succeeds()
+                .no_stderr();
+        }
+    }
+}
+
+#[test]
+fn test_selection_across_input_chunks() {
+    let input = "a".repeat(8191) + "éZ\n" + &"b".repeat(9000);
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-c", "8192-8193"])
+        .pipe_in(input.as_str())
+        .succeeds()
+        .stdout_only("éZ\nbb\n");
+    new_ucmd!()
+        .args(&["-b", "8191-8194", "--output-delimiter=:"])
+        .pipe_in(input.as_str())
+        .succeeds()
+        .stdout_only("aéZ\nbbbb\n");
+    new_ucmd!()
+        .args(&["-b", "8191,8193-8194", "--output-delimiter=:"])
+        .pipe_in("x".repeat(9000))
+        .succeeds()
+        .stdout_only("x:xx\n");
+}
+
+#[test]
+fn test_long_fields_across_input_chunks() {
+    let long = "x".repeat(20000);
+    let input = format!("{long}\t\t{long}\tlast\nplain\n{long}\tend");
+    for suppress in [false, true] {
+        for (selection, expected) in [
+            (
+                "1,3",
+                format!(
+                    "{long}:{long}\n{}{}\n",
+                    if suppress { "" } else { "plain\n" },
+                    long
+                ),
+            ),
+            (
+                "2,4",
+                format!(":last\n{}end\n", if suppress { "" } else { "plain\n" }),
+            ),
+        ] {
+            let mut cmd = new_ucmd!();
+            cmd.args(&["-f", selection, "--output-delimiter=:"]);
+            if suppress {
+                cmd.arg("-s");
+            }
+            cmd.pipe_in(input.as_str())
+                .succeeds()
+                .stdout_only(&expected);
+        }
+    }
+}
