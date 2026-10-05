@@ -68,9 +68,13 @@ fn main() {
 
     // Determine the actual profile from OUT_DIR since PROFILE env var only gives the base profile
     // for inherited profiles (e.g., PROFILE=release for both release and release-small).
-    // OUT_DIR is always .../target/[triple/]{profile}/build/{pkg-hash}/out, so the profile
-    // is exactly 3 parent levels up — regardless of whether a target triple is in the path.
-    let profile_dir = Path::new(&out_dir).ancestors().nth(3);
+    // OUT_DIR is .../target/[triple/]{profile}/build/{pkg-hash}/out, or with cargo's newer
+    // build-dir layout .../{profile}/build/{pkg}/{hash}/out, so the depth varies: look for the
+    // enclosing "build" directory and take its parent.
+    let profile_dir = Path::new(&out_dir)
+        .ancestors()
+        .find(|p| p.file_name().is_some_and(|n| n == "build"))
+        .and_then(Path::parent);
     let profile = profile_dir
         .and_then(|p| p.file_name())
         .and_then(|s| s.to_str())
