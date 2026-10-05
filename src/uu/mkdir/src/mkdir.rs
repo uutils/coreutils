@@ -228,10 +228,7 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
         let mut current = path;
 
         // First pass: collect all parent directories
-        while let Some(parent) = current.parent() {
-            if parent.as_os_str().is_empty() {
-                break;
-            }
+        while let Some(parent) = current.parent().filter(|p| !p.as_os_str().is_empty()) {
             dirs_to_create.push(parent);
             current = parent;
         }
