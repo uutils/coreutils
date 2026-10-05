@@ -232,35 +232,28 @@ fn list_to_ranges(list: &str, complement: bool, is_field: bool) -> Result<Vec<Ra
     })
 }
 
-/// Write the parts of `line` selected by `ranges`, treating every byte as a
-/// character.
-///
-/// Always inlined: it is the body of the per-line loop, and a call per line
-/// costs more than the work it does on short lines.
-#[inline(always)]
-fn write_line_bytes<W: Write>(
-    line: &[u8],
-    out: &mut W,
-    ranges: &[Range],
-    out_delim: &[u8],
-    explicit_delim: bool,
+/// Process records in fixed-size chunks without retaining their contents.
+fn for_record_chunks<R: Read>(
+    reader: R,
+    newline: u8,
+    mut visit: impl FnMut(&[u8], bool) -> std::io::Result<()>,
 ) -> std::io::Result<()> {
-    let mut print_delim = false;
-    for &Range { low, high } in ranges {
-        if low > line.len() {
-            break;
+    let mut reader = BufReader::new(reader);
+    let mut unfinished = false;
+    loop {
+        let buf = reader.fill_buf()?;
+        if buf.is_empty() {
+            if unfinished {
+                visit(&[], true)?;
+            }
+            return Ok(());
         }
-        if print_delim {
-            out.write_all(out_delim)?;
-        } else if explicit_delim {
-            print_delim = true;
-        }
-        // change `low` from 1-indexed value to 0-index value
-        let low = low - 1;
-        let high = high.min(line.len());
-        out.write_all(&line[low..high])?;
+        let end = memchr::memchr(newline, buf);
+        let len = end.unwrap_or(buf.len());
+        visit(&buf[..len], end.is_some())?;
+        unfinished = end.is_none();
+        reader.consume(len + usize::from(end.is_some()));
     }
-    Ok(())
 }
 
 fn cut_bytes<R: Read, W: Write>(
@@ -269,18 +262,47 @@ fn cut_bytes<R: Read, W: Write>(
     ranges: &[Range],
     opts: &Options,
 ) -> UResult<()> {
-    let newline_char = opts.line_ending.into();
-    let mut buf_in = BufReader::new(reader);
-    let out_delim = opts.out_delimiter.unwrap_or(b"\t");
-    let explicit_delim = opts.out_delimiter.is_some();
-
-    buf_in
-        .for_byte_record(newline_char, |line| {
-            write_line_bytes(line, out, ranges, out_delim, explicit_delim)?;
-            out.write_all(&[newline_char])?;
-            Ok(true)
-        })
-        .map_err(|e| USimpleError::new(1, strip_errno(&e)))
+    let newline = opts.line_ending.into();
+    let mut offset = 0usize;
+    let mut range_idx = 0;
+    let mut printed = false;
+    let mut started_range = false;
+    for_record_chunks(reader, newline, |chunk, end| {
+        let chunk_end = offset.saturating_add(chunk.len());
+        while let Some(range) = ranges.get(range_idx) {
+            if range.low.saturating_sub(1) >= chunk_end {
+                break;
+            }
+            let start = range.low.saturating_sub(1).saturating_sub(offset);
+            let stop = range.high.saturating_sub(offset).min(chunk.len());
+            if start < stop {
+                if !started_range
+                    && printed
+                    && let Some(delim) = opts.out_delimiter
+                {
+                    out.write_all(delim)?;
+                }
+                out.write_all(&chunk[start..stop])?;
+                printed = true;
+                started_range = true;
+            }
+            if range.high > chunk_end {
+                break;
+            }
+            range_idx += 1;
+            started_range = false;
+        }
+        offset = chunk_end;
+        if end {
+            out.write_all(&[newline])?;
+            offset = 0;
+            range_idx = 0;
+            printed = false;
+            started_range = false;
+        }
+        Ok(())
+    })
+    .map_err(|e| USimpleError::new(1, strip_errno(&e)))
 }
 
 /// Offset of the first byte above `0x7F` in `bytes`, or `bytes.len()` if there
@@ -449,7 +471,7 @@ fn cut_chars<R: Read, W: Write>(
     by_char: bool,
 ) -> UResult<()> {
     let encoding = locale_encoding();
-    if encoding == Encoding::SingleByte || !(by_char || opts.suppress_split) {
+    if ranges.is_empty() || encoding == Encoding::SingleByte || !(by_char || opts.suppress_split) {
         return cut_bytes(reader, out, ranges, opts);
     }
 
@@ -462,6 +484,23 @@ fn cut_chars<R: Read, W: Write>(
         by_char,
         encoding,
     };
+
+    // All supported encodings use at most four bytes per character. Once
+    // this prefix is present, later bytes cannot affect a finite selection.
+    if let Some(limit) = ranges.last().and_then(|r| r.high.checked_mul(4)) {
+        let mut prefix = Vec::new();
+        return for_record_chunks(buf_in, newline_char, |chunk, end| {
+            let keep = chunk.len().min(limit.saturating_sub(prefix.len()));
+            prefix.extend_from_slice(&chunk[..keep]);
+            if end {
+                cut.write_line(&prefix, out)?;
+                out.write_all(&[newline_char])?;
+                prefix.clear();
+            }
+            Ok(())
+        })
+        .map_err(|e| USimpleError::new(1, strip_errno(&e)));
+    }
 
     buf_in
         .for_byte_record(newline_char, |line| {
@@ -839,6 +878,82 @@ fn cut_fields_with_matcher<R: Read, W: Write, M: Matcher>(
     }
 }
 
+/// Stream single-byte fields, buffering only an ambiguous first field.
+fn cut_fields_stream<R: Read, W: Write>(
+    reader: R,
+    out: &mut W,
+    ranges: &[Range],
+    opts: &Options,
+    delimiter: u8,
+) -> UResult<()> {
+    let newline = opts.line_ending.into();
+    let only_delimited = opts.field_opts.as_ref().unwrap().only_delimited;
+    let first_selected = ranges.first().is_some_and(|r| r.low == 1);
+    // Until the first delimiter, these cases cannot decide whether to emit
+    // the first field. Retain it so an undelimited record can be handled.
+    let buffer_first = first_selected == only_delimited;
+    let delimiter_bytes = [delimiter];
+    let matcher = ExactMatcher::new(&delimiter_bytes);
+    let mut first = Vec::new();
+    let mut field = 1usize;
+    let mut range_idx = 0;
+    let mut printed = false;
+    let mut started = false;
+    let out_delim = opts
+        .out_delimiter
+        .unwrap_or(std::slice::from_ref(&delimiter));
+    for_record_chunks(reader, newline, |mut chunk, end| {
+        loop {
+            let split = matcher.next_match(chunk).map(|(start, _)| start);
+            let len = split.unwrap_or(chunk.len());
+            let selected = ranges.get(range_idx).is_some_and(|r| field >= r.low);
+            if field == 1 && buffer_first {
+                first.extend_from_slice(&chunk[..len]);
+            } else if selected {
+                if !started {
+                    if printed {
+                        out.write_all(out_delim)?;
+                    }
+                    printed = true;
+                    started = true;
+                }
+                out.write_all(&chunk[..len])?;
+            }
+            if split.is_none() {
+                break;
+            }
+            if field == 1 && buffer_first {
+                if first_selected {
+                    out.write_all(&first)?;
+                    printed = true;
+                }
+                first.clear();
+            }
+            field = field.saturating_add(1);
+            if ranges.get(range_idx).is_some_and(|r| field > r.high) {
+                range_idx += 1;
+            }
+            started = false;
+            chunk = &chunk[len + 1..];
+        }
+        if end {
+            if field == 1 && buffer_first && !only_delimited {
+                out.write_all(&first)?;
+            }
+            if field > 1 || !only_delimited {
+                out.write_all(&[newline])?;
+            }
+            first.clear();
+            field = 1;
+            range_idx = 0;
+            printed = false;
+            started = false;
+        }
+        Ok(())
+    })
+    .map_err(|e| USimpleError::new(1, strip_errno(&e)))
+}
+
 fn cut_fields<R: Read, W: Write>(
     reader: R,
     out: &mut W,
@@ -862,15 +977,9 @@ fn cut_fields<R: Read, W: Write>(
         // An ASCII single-byte delimiter can never occur inside a multi-byte
         // character, so the fast byte-wise matcher is correct in every locale.
         // Otherwise match the delimiter as a whole character.
-        Delimiter::Slice(delim) if delim.len() == 1 && delim[0] <= 0x7F => cut_fields_with_matcher(
-            reader,
-            out,
-            &ExactMatcher::new(delim),
-            ranges,
-            field_opts.only_delimited,
-            newline_char,
-            opts.out_delimiter,
-        ),
+        Delimiter::Slice(delim) if delim.len() == 1 && delim[0] <= 0x7F => {
+            cut_fields_stream(reader, out, ranges, opts, delim[0])
+        }
         Delimiter::Slice(delim) => cut_fields_with_matcher(
             reader,
             out,
