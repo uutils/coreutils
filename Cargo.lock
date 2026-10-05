@@ -3100,13 +3100,13 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "utmp-classic"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20e200881580a4f341d558cf41ae6fd1b19c59b4e6046af9659d84b3c22ff836"
+checksum = "db5a80feb3b4d6ca5e7f2075904e6ef26d335a888f28c453f94efafbc9d0e5cb"
 dependencies = [
  "cfg-if",
  "libc",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "time",
  "utmp-classic-raw",
  "zerocopy",
@@ -3114,9 +3114,9 @@ dependencies = [
 
 [[package]]
 name = "utmp-classic-raw"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a22b698c90abe20260e0f26124e6dff2981dae2f46b040b1ab2a5d5caeeedc4e"
+checksum = "52463619959caa531fb5da45898e646000bb38ba133b31d67141e47e17e56147"
 dependencies = [
  "cfg-if",
  "zerocopy",
