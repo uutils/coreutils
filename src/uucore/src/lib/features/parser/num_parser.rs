@@ -392,8 +392,10 @@ fn make_error(overflow: bool, negative: bool) -> ExtendedParserError<ExtendedBig
 }
 
 /// Largest binary exponent (in absolute value) accepted for hexadecimal floats:
-/// `floor(i32::MAX * log2(10))` (= 7_133_786_260), so that `2**exponent` has a
-/// decimal exponent that fits in an `i32`, the same limit the decimal parser applies.
+/// `floor(i32::MAX * log2(10))` (= 7_133_786_260). Since `2**e == 10**(e * log10(2))`,
+/// a larger exponent has a decimal exponent that does not fit in an `i32` (the limit
+/// the decimal parser applies) and would overflow the `BigDecimal` scale in `powi`,
+/// so it is treated as overflow/underflow instead.
 const MAX_HEX_EXPONENT: u64 = (i32::MAX as f64 * std::f64::consts::LOG2_10) as u64;
 
 /// Construct an [`ExtendedBigDecimal`] based on parsed data
@@ -447,10 +449,7 @@ fn construct_extended_big_decimal(
         let bd = BigDecimal::from_bigint(signed_digits, 0)
             / BigDecimal::from_bigint(BigInt::from(16).pow(scale as u32), 0);
 
-        // powi "only" supports i64 values, and even within that range a large exponent
-        // makes the BigDecimal scale overflow i64. Like the decimal case above, treat
-        // values whose decimal exponent cannot fit in an i32 as overflow/underflow:
-        // 2**e == 10**(e * log10(2)), so that is the case once |e| > i32::MAX * log2(10).
+        // See MAX_HEX_EXPONENT for why larger exponents overflow/underflow.
         let exponent = exponent
             .to_i64()
             .filter(|e| e.unsigned_abs() <= MAX_HEX_EXPONENT)
