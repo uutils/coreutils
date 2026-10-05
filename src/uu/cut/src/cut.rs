@@ -232,35 +232,62 @@ fn list_to_ranges(list: &str, complement: bool, is_field: bool) -> Result<Vec<Ra
     })
 }
 
-/// Write the parts of `line` selected by `ranges`, treating every byte as a
-/// character.
-///
-/// Always inlined: it is the body of the per-line loop, and a call per line
-/// costs more than the work it does on short lines.
-#[inline(always)]
-fn write_line_bytes<W: Write>(
-    line: &[u8],
-    out: &mut W,
-    ranges: &[Range],
-    out_delim: &[u8],
-    explicit_delim: bool,
+/// Split each record into the pieces available in the read buffer, so a
+/// long record is never held in memory as a whole. `visit` gets each piece
+/// and whether it ends the record.
+fn for_each_record_piece<R: Read>(
+    reader: R,
+    newline: u8,
+    mut visit: impl FnMut(&[u8], bool) -> std::io::Result<()>,
 ) -> std::io::Result<()> {
-    let mut print_delim = false;
-    for &Range { low, high } in ranges {
-        if low > line.len() {
-            break;
+    let mut reader = BufReader::new(reader);
+    let mut unfinished = false;
+    loop {
+        let buf = reader.fill_buf()?;
+        if buf.is_empty() {
+            if unfinished {
+                visit(&[], true)?;
+            }
+            return Ok(());
         }
-        if print_delim {
-            out.write_all(out_delim)?;
-        } else if explicit_delim {
-            print_delim = true;
-        }
-        // change `low` from 1-indexed value to 0-index value
-        let low = low - 1;
-        let high = high.min(line.len());
-        out.write_all(&line[low..high])?;
+        let end = memchr::memchr(newline, buf);
+        let len = end.unwrap_or(buf.len());
+        visit(&buf[..len], end.is_some())?;
+        unfinished = end.is_none();
+        reader.consume(len + usize::from(end.is_some()));
     }
-    Ok(())
+}
+
+/// Output progress through the selected ranges of the record being cut.
+#[derive(Default)]
+struct SelectionProgress {
+    /// Index of the first range that can still select input.
+    range_idx: usize,
+    /// Some selected data of this record was already written.
+    printed: bool,
+    /// The current byte range or field already has output, so its next
+    /// piece is written without a delimiter.
+    continuing: bool,
+}
+
+impl SelectionProgress {
+    fn write_selected<W: Write>(
+        &mut self,
+        out: &mut W,
+        data: &[u8],
+        delimiter: Option<&[u8]>,
+    ) -> std::io::Result<()> {
+        if !self.continuing
+            && self.printed
+            && let Some(delimiter) = delimiter
+        {
+            out.write_all(delimiter)?;
+        }
+        out.write_all(data)?;
+        self.printed = true;
+        self.continuing = true;
+        Ok(())
+    }
 }
 
 fn cut_bytes<R: Read, W: Write>(
@@ -269,18 +296,35 @@ fn cut_bytes<R: Read, W: Write>(
     ranges: &[Range],
     opts: &Options,
 ) -> UResult<()> {
-    let newline_char = opts.line_ending.into();
-    let mut buf_in = BufReader::new(reader);
-    let out_delim = opts.out_delimiter.unwrap_or(b"\t");
-    let explicit_delim = opts.out_delimiter.is_some();
-
-    buf_in
-        .for_byte_record(newline_char, |line| {
-            write_line_bytes(line, out, ranges, out_delim, explicit_delim)?;
-            out.write_all(&[newline_char])?;
-            Ok(true)
-        })
-        .map_err(|e| USimpleError::new(1, strip_errno(&e)))
+    let newline = opts.line_ending.into();
+    let mut offset = 0usize;
+    let mut progress = SelectionProgress::default();
+    for_each_record_piece(reader, newline, |piece, record_end| {
+        let piece_end = offset.saturating_add(piece.len());
+        while let Some(range) = ranges.get(progress.range_idx) {
+            if range.low.saturating_sub(1) >= piece_end {
+                break;
+            }
+            let start = range.low.saturating_sub(1).saturating_sub(offset);
+            let stop = range.high.saturating_sub(offset).min(piece.len());
+            if start < stop {
+                progress.write_selected(out, &piece[start..stop], opts.out_delimiter)?;
+            }
+            if range.high > piece_end {
+                break;
+            }
+            progress.range_idx += 1;
+            progress.continuing = false;
+        }
+        offset = piece_end;
+        if record_end {
+            out.write_all(&[newline])?;
+            offset = 0;
+            progress = SelectionProgress::default();
+        }
+        Ok(())
+    })
+    .map_err(|e| USimpleError::new(1, strip_errno(&e)))
 }
 
 /// Offset of the first byte above `0x7F` in `bytes`, or `bytes.len()` if there
@@ -449,7 +493,9 @@ fn cut_chars<R: Read, W: Write>(
     by_char: bool,
 ) -> UResult<()> {
     let encoding = locale_encoding();
-    if encoding == Encoding::SingleByte || !(by_char || opts.suppress_split) {
+    // An empty selection (e.g. `--complement -c 1-`) prints nothing, so there
+    // is no need to decode characters.
+    if ranges.is_empty() || encoding == Encoding::SingleByte || !(by_char || opts.suppress_split) {
         return cut_bytes(reader, out, ranges, opts);
     }
 
@@ -462,6 +508,25 @@ fn cut_chars<R: Read, W: Write>(
         by_char,
         encoding,
     };
+
+    // All supported encodings use at most four bytes per character. Once
+    // this prefix is present, later bytes cannot affect a finite selection.
+    // An open-ended range such as `-c 2-` has no such bound, so the whole
+    // record is still buffered below.
+    if let Some(limit) = ranges.last().and_then(|r| r.high.checked_mul(4)) {
+        let mut prefix = Vec::new();
+        return for_each_record_piece(buf_in, newline_char, |piece, record_end| {
+            let keep = piece.len().min(limit.saturating_sub(prefix.len()));
+            prefix.extend_from_slice(&piece[..keep]);
+            if record_end {
+                cut.write_line(&prefix, out)?;
+                out.write_all(&[newline_char])?;
+                prefix.clear();
+            }
+            Ok(())
+        })
+        .map_err(|e| USimpleError::new(1, strip_errno(&e)));
+    }
 
     buf_in
         .for_byte_record(newline_char, |line| {
@@ -852,6 +917,77 @@ fn cut_fields_with_matcher<R: Read, W: Write, M: Matcher>(
     }
 }
 
+/// Stream single-byte fields, buffering only an ambiguous first field.
+fn cut_fields_stream<R: Read, W: Write>(
+    reader: R,
+    out: &mut W,
+    ranges: &[Range],
+    opts: &Options,
+    delimiter: u8,
+    only_delimited: bool,
+) -> UResult<()> {
+    let newline = opts.line_ending.into();
+    let first_selected = ranges.first().is_some_and(|r| r.low == 1);
+    // Until the first delimiter, these cases cannot decide whether to emit
+    // the first field. Retain it so an undelimited record can be handled.
+    let buffer_first = first_selected == only_delimited;
+    let out_delim = opts
+        .out_delimiter
+        .unwrap_or(std::slice::from_ref(&delimiter));
+    let delimiter_bytes = [delimiter];
+    let matcher = ExactMatcher::new(&delimiter_bytes);
+    let mut first = Vec::new();
+    let mut field = 1usize;
+    let mut progress = SelectionProgress::default();
+    for_each_record_piece(reader, newline, |mut piece, record_end| {
+        // Past the last range, the rest of the record cannot be selected.
+        while field == 1 || progress.range_idx < ranges.len() {
+            let split = matcher.next_match(piece).map(|(start, _)| start);
+            let len = split.unwrap_or(piece.len());
+            if field == 1 && buffer_first {
+                first.extend_from_slice(&piece[..len]);
+            } else if ranges
+                .get(progress.range_idx)
+                .is_some_and(|r| field >= r.low)
+            {
+                progress.write_selected(out, &piece[..len], Some(out_delim))?;
+            }
+            let Some(split) = split else {
+                break;
+            };
+            if field == 1 && buffer_first {
+                if first_selected {
+                    out.write_all(&first)?;
+                    progress.printed = true;
+                }
+                first.clear();
+            }
+            field = field.saturating_add(1);
+            if ranges
+                .get(progress.range_idx)
+                .is_some_and(|r| field > r.high)
+            {
+                progress.range_idx += 1;
+            }
+            progress.continuing = false;
+            piece = &piece[split + 1..];
+        }
+        if record_end {
+            if field == 1 && buffer_first && !only_delimited {
+                out.write_all(&first)?;
+            }
+            if field > 1 || !only_delimited {
+                out.write_all(&[newline])?;
+            }
+            first.clear();
+            field = 1;
+            progress = SelectionProgress::default();
+        }
+        Ok(())
+    })
+    .map_err(|e| USimpleError::new(1, strip_errno(&e)))
+}
+
 fn cut_fields<R: Read, W: Write>(
     reader: R,
     out: &mut W,
@@ -875,14 +1011,13 @@ fn cut_fields<R: Read, W: Write>(
         // An ASCII single-byte delimiter can never occur inside a multi-byte
         // character, so the fast byte-wise matcher is correct in every locale.
         // Otherwise match the delimiter as a whole character.
-        Delimiter::Slice(delim) if delim.len() == 1 && delim[0] <= 0x7F => cut_fields_with_matcher(
+        Delimiter::Slice(delim) if delim.len() == 1 && delim[0] <= 0x7F => cut_fields_stream(
             reader,
             out,
-            &ExactMatcher::new(delim),
             ranges,
+            opts,
+            delim[0],
             field_opts.only_delimited,
-            newline_char,
-            opts.out_delimiter,
         ),
         Delimiter::Slice(delim) => cut_fields_with_matcher(
             reader,
