@@ -2124,6 +2124,129 @@ fn test_cp_parents_with_permissions_copy_dir() {
 #[cfg(unix)]
 #[cfg_attr(
     wasi_runner,
+    ignore = "WASI: no chmod syscall, so source modes cannot be set up"
+)]
+fn test_cp_parents_created_dirs_take_source_mode() {
+    // Without -p, a directory that --parents creates gets the mode of the
+    // source directory it stands for, filtered through the umask, whether
+    // the operand is a file or a directory. --no-preserve=mode gives it the
+    // default mode instead.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("a/b/sub");
+    at.touch("a/b/f");
+    at.touch("a/b/sub/f");
+    at.mkdir("ro");
+    at.touch("ro/f");
+    at.set_mode("a", 0o777);
+    at.set_mode("a/b", 0o700);
+    at.set_mode("ro", 0o500);
+    for dest in ["file", "dir", "default"] {
+        at.mkdir(dest);
+    }
+
+    scene
+        .ucmd()
+        .umask(0o022)
+        .args(&["--parents", "a/b/f", "ro/f", "file"])
+        .succeeds();
+    scene
+        .ucmd()
+        .umask(0o022)
+        .args(&["-r", "--parents", "a/b/sub", "dir"])
+        .succeeds();
+    scene
+        .ucmd()
+        .umask(0o022)
+        .args(&["--parents", "--no-preserve=mode", "a/b/f", "default"])
+        .succeeds();
+
+    for (path, mode) in [
+        ("file/a", 0o755),
+        ("file/a/b", 0o700),
+        // Created writable for the copy, then given the source's mode.
+        ("file/ro", 0o500),
+        ("dir/a", 0o755),
+        ("dir/a/b", 0o700),
+        ("default/a", 0o755),
+        ("default/a/b", 0o755),
+    ] {
+        assert_eq!(
+            at.metadata(path).permissions().mode() & 0o7777,
+            mode,
+            "{path}"
+        );
+    }
+    assert!(at.file_exists("file/ro/f"));
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so source modes cannot be set up"
+)]
+fn test_cp_parents_existing_dirs() {
+    // Directories already in the destination keep their attributes when
+    // --parents has nothing to create. Once it creates one, -a/-p refreshes
+    // the whole path from the source, existing directories included, while a
+    // copy that does not preserve the mode still leaves them alone.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("a/b/sub");
+    at.mkdir("a/sub");
+    at.touch("a/f");
+    at.touch("a/b/f");
+    at.touch("a/sub/f");
+    at.set_mode("a", 0o777);
+    at.set_mode("a/b", 0o750);
+    for dest in ["none_file", "none_dir", "new_file", "new_dir", "new_plain"] {
+        at.mkdir_all(&format!("{dest}/a"));
+        at.set_mode(&format!("{dest}/a"), 0o700);
+    }
+
+    for args in [
+        &["-a", "--parents", "a/f", "none_file"][..],
+        &["-a", "-r", "--parents", "a/sub", "none_dir"],
+        &["-a", "--parents", "a/b/f", "new_file"],
+        &["-a", "-r", "--parents", "a/b/sub", "new_dir"],
+        &["--parents", "a/b/f", "new_plain"],
+    ] {
+        scene.ucmd().umask(0o022).args(args).succeeds();
+    }
+
+    for (path, mode) in [
+        ("none_file/a", 0o700),
+        ("none_dir/a", 0o700),
+        ("new_file/a", 0o777),
+        ("new_file/a/b", 0o750),
+        ("new_dir/a", 0o777),
+        ("new_dir/a/b", 0o750),
+        ("new_plain/a", 0o700),
+        ("new_plain/a/b", 0o750),
+    ] {
+        assert_eq!(
+            at.metadata(path).permissions().mode() & 0o7777,
+            mode,
+            "{path}"
+        );
+    }
+}
+
+#[test]
+fn test_cp_parents_failed_source_creates_nothing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    at.mkdir("d");
+    ucmd.args(&["--parents", "f/g", "missing/x", "d"]).fails();
+    assert!(!at.dir_exists("d/f"));
+    assert!(!at.dir_exists("d/missing"));
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
     ignore = "WASI sandbox: host paths (/dev, /private) not visible"
 )]
 fn test_cp_writable_special_file_permissions() {

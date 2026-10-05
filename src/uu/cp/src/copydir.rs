@@ -33,7 +33,7 @@ use walkdir::{DirEntry, WalkDir};
 use crate::set_selinux_context;
 use crate::{
     CopyMode, CopyResult, CpError, Options, aligned_ancestors, context_for, copy_attributes,
-    copy_file,
+    copy_file, create_parent_dirs,
 };
 
 /// Represents a directory that needs permission fixup after copying its contents.
@@ -413,10 +413,12 @@ pub(crate) fn copy_directory(
     // a -> d/a
     // a/b -> d/a/b
     //
-    let tmp = if options.parents {
+    let parents_dest = options.parents.then(|| target.join(root));
+    let mut parent_dirs = Vec::new();
+    let tmp = if let Some(parents_dest) = &parents_dest {
         if let Some(parent) = root.parent() {
             let new_target = target.join(parent);
-            build_dir(&new_target, true, options, None)?;
+            parent_dirs = create_parent_dirs(root, parents_dest, options)?;
             if root
                 .components()
                 .next_back()
@@ -597,26 +599,21 @@ pub(crate) fn copy_directory(
         }
     }
 
-    // Also fix permissions for parent directories,
-    // if we were asked to create them.
-    if options.parents {
-        let dest = root
-            .file_name()
-            .map_or_else(|| target.to_path_buf(), |name| target.join(name));
-        for (x, y) in aligned_ancestors(root, dest.as_path()) {
-            if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
-                copy_attributes(
-                    &src,
-                    y,
-                    &options.attributes,
-                    false,
-                    options.set_selinux_context,
-                )?;
+    // Set the attributes of the `--parents` directories now that the copy is
+    // done; see `create_parent_dirs` for which ones are included.
+    for (x, y, created) in parent_dirs {
+        if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
+            copy_attributes(
+                &src,
+                y,
+                &options.attributes,
+                created,
+                options.set_selinux_context,
+            )?;
 
-                #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-                if options.set_selinux_context {
-                    set_selinux_context(y, options.context.as_ref())?;
-                }
+            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+            if options.set_selinux_context {
+                set_selinux_context(y, options.context.as_ref())?;
             }
         }
     }
