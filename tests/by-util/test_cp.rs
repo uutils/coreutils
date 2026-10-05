@@ -958,7 +958,8 @@ fn test_cp_arg_link_with_same_file() {
 // A hard link shares the source's inode, so `cp --link` must not change the
 // mode of the file it links to.
 #[test]
-#[cfg(unix)]
+// Android's app-private filesystem refuses hard links.
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_cp_arg_link_keeps_source_mode() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
