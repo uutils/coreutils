@@ -263,34 +263,6 @@ fn test_n0_with_follow() {
     child.kill();
 }
 
-#[test]
-#[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: no rlimit support")]
-fn test_output_appended_to_input_file_terminates() {
-    // $ tail -n1 f >> f
-    // Appends the last line once and exits; it must not read back its
-    // own output forever. The file size limit makes a broken
-    // implementation fail instead of filling the disk.
-    use rustix::process::Resource;
-
-    let (at, mut ucmd) = at_and_ucmd!();
-
-    // Larger than the filesystem block size so `tail` reads from the end.
-    let content = "x".repeat(256 * 1024) + "\n";
-    at.write("f", &content);
-    let out = std::fs::OpenOptions::new()
-        .append(true)
-        .open(at.plus("f"))
-        .unwrap();
-
-    ucmd.args(&["-n1", "f"])
-        .set_stdout(Stdio::from(out))
-        .limit(Resource::Fsize, 4 * 1024 * 1024, 4 * 1024 * 1024)
-        .succeeds();
-
-    assert_eq!(at.read("f"), content.repeat(2));
-}
-
 // TODO: Add similar test for windows
 #[test]
 #[cfg(unix)]

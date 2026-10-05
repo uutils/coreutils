@@ -178,7 +178,7 @@ fn tail_file(
                     && file.is_seekable(if input.is_stdin() { offset } else { 0 })
                     && (!st.is_file() || st.len() > blksize_limit)
                 {
-                    bounded_tail(&mut file, settings, st.is_file().then_some(st.len()))?;
+                    bounded_tail(&mut file, settings)?;
                     reader = BufReader::new(file);
                 } else {
                     reader = BufReader::new(file);
@@ -452,7 +452,7 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
 /// end of the file, and then read the file "backwards" in blocks of size
 /// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
 /// being a nice performance win for very large files.
-fn bounded_tail(file: &mut File, settings: &Settings, file_size: Option<u64>) -> UResult<()> {
+fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
     debug_assert!(!settings.presume_input_pipe);
     let mut limit = None;
 
@@ -460,15 +460,6 @@ fn bounded_tail(file: &mut File, settings: &Settings, file_size: Option<u64>) ->
     match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), delimiter) => {
             backwards_thru_file(file, *count, *delimiter);
-            // Print only up to the end the file had when it was opened.
-            // Otherwise, if the output is appended back to the input file
-            // (e.g. `tail -n1 f >> f`), reading until EOF never terminates
-            // because our own output keeps extending it.
-            if let Some(size) = file_size
-                && let Ok(pos) = file.stream_position()
-            {
-                limit = Some(size.saturating_sub(pos));
-            }
         }
         FilterMode::Lines(Signum::Positive(count), delimiter) if count > &1 => {
             let i = forwards_thru_file(file, *count - 1, *delimiter).unwrap();
