@@ -216,7 +216,7 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
             translate!("mkdir-error-file-exists", "path" => path.maybe_quote()),
         ));
     }
-    if path == Path::new("") {
+    if path.as_os_str().is_empty() {
         return Ok(());
     }
 
@@ -229,7 +229,7 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
 
         // First pass: collect all parent directories
         while let Some(parent) = current.parent() {
-            if parent == Path::new("") {
+            if parent.as_os_str().is_empty() {
                 break;
             }
             dirs_to_create.push(parent);
