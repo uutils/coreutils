@@ -564,13 +564,18 @@ impl ChownExecutor {
     /// Leave alone a file found replaced after it passed `--from`. As with
     /// GNU, that fails without an error message, and only -v says so.
     #[cfg(target_os = "linux")]
-    fn report_replaced(&self, path: &Path, (uid, gid): (uid_t, gid_t)) -> i32 {
+    fn report_replaced(&self, path: &Path, owner: (uid_t, gid_t)) -> i32 {
         if self.verbosity.level == VerbosityLevel::Verbose {
-            let dest = (self.dest_uid.unwrap_or(uid), self.dest_gid.unwrap_or(gid));
-            let line = failed_change_line(path, (uid, gid), dest, self.verbosity.groups_only);
-            self.write_verbose_line(&line);
+            self.write_verbose_line(&self.failed_line(path, owner));
         }
         1
+    }
+
+    /// The line -v prints for `path`, owned by `owner`, when changing it failed.
+    #[cfg(target_os = "linux")]
+    fn failed_line(&self, path: &Path, (uid, gid): (uid_t, gid_t)) -> String {
+        let dest = (self.dest_uid.unwrap_or(uid), self.dest_gid.unwrap_or(gid));
+        failed_change_line(path, (uid, gid), dest, self.verbosity.groups_only)
     }
 
     /// `operand_fd` is the descriptor `traverse` opened and verified against `meta`.
@@ -698,7 +703,7 @@ impl ChownExecutor {
                 } else if let Err(e) = changed {
                     *ret = 1;
                     if self.verbosity.level != VerbosityLevel::Silent {
-                        let msg = format!(
+                        let mut msg = format!(
                             "changing {} of {}: {}",
                             if self.verbosity.groups_only {
                                 "group"
@@ -708,6 +713,11 @@ impl ChownExecutor {
                             entry_path.quote(),
                             strip_errno(&e)
                         );
+                        // As for an operand, see `report_chown`.
+                        if self.verbosity.level == VerbosityLevel::Verbose {
+                            let failed = self.failed_line(&entry_path, (owner.uid(), owner.gid()));
+                            msg = format!("{msg}\n{failed}");
+                        }
                         show_error!("{msg}");
                     }
                 } else {

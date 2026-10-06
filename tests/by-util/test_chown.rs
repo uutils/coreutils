@@ -1162,3 +1162,22 @@ fn test_chown_from_judges_symlink_target_under_big_h() {
         .succeeds();
     assert_eq!(at.plus("target").metadata().unwrap().gid(), link_group);
 }
+
+/// With -R -v, a change below the operand that fails is reported as for the
+/// operand itself.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_recursive_verbose_reports_failed_entry() {
+    // Root can give the files to root, so nothing fails.
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/file");
+
+    ucmd.args(&["-R", "-v", "root", "dir"])
+        .fails()
+        .stderr_contains("failed to change ownership of 'dir'")
+        .stderr_contains("failed to change ownership of 'dir/file'");
+}
