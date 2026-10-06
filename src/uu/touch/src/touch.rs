@@ -144,6 +144,12 @@ fn timestamp_to_filetime(ts: Timestamp) -> FileTime {
     FileTime::from_system_time(SystemTime::from(ts))
 }
 
+/// A [`FileTime`] holding the `UTIME_NOW` sentinel, which only needs write permission.
+#[cfg(target_os = "linux")]
+fn utime_now() -> FileTime {
+    FileTime::from_unix_time(0, libc::UTIME_NOW as u32)
+}
+
 fn filetime_to_zoned(ft: &FileTime) -> Option<Zoned> {
     let ts = Timestamp::new(ft.unix_seconds(), ft.nanoseconds() as i32).ok()?;
     Some(Zoned::new(ts, TimeZone::system()))
@@ -395,7 +401,7 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
             #[cfg(target_os = "linux")]
             {
                 if opts.date.is_none() {
-                    now = FileTime::from_unix_time(0, libc::UTIME_NOW as u32);
+                    now = utime_now();
                 } else {
                     now = timestamp_to_filetime(Timestamp::now());
                 }
@@ -410,16 +416,29 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
     };
 
     let (atime, mtime) = if let Some(date) = &opts.date {
-        (
-            parse_date(
-                filetime_to_zoned(&atime).ok_or_else(|| TouchError::InvalidFiletime(atime))?,
-                date,
-            )?,
-            parse_date(
-                filetime_to_zoned(&mtime).ok_or_else(|| TouchError::InvalidFiletime(mtime))?,
-                date,
-            )?,
-        )
+        let parsed_atime = parse_date(
+            filetime_to_zoned(&atime).ok_or(TouchError::InvalidFiletime(atime))?,
+            date,
+        )?;
+        let parsed_mtime = parse_date(
+            filetime_to_zoned(&mtime).ok_or(TouchError::InvalidFiletime(mtime))?,
+            date,
+        )?;
+
+        // `-d now` -> UTIME_NOW so write permission is enough (#15019).
+        #[cfg(target_os = "linux")]
+        {
+            if opts.source == Source::Now && parsed_atime == atime {
+                let now = utime_now();
+                (now, now)
+            } else {
+                (parsed_atime, parsed_mtime)
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            (parsed_atime, parsed_mtime)
+        }
     } else {
         (atime, mtime)
     };
@@ -953,6 +972,20 @@ mod tests {
                 .to_string()
                 .contains("GetFinalPathNameByHandleW failed with code 1")
         );
+    }
+
+    #[test]
+    fn test_parse_date_now_returns_the_reference_instant() {
+        // `-d now` must parse back to the reference instant, so `touch()` can spot it (#15019).
+        let now = super::timestamp_to_filetime(jiff::Timestamp::now());
+        let reference = super::filetime_to_zoned(&now).unwrap();
+
+        assert_eq!(super::parse_date(reference.clone(), "now").unwrap(), now);
+        assert_eq!(
+            super::parse_date(reference.clone(), "0 seconds").unwrap(),
+            now
+        );
+        assert_ne!(super::parse_date(reference, "2000-01-01").unwrap(), now);
     }
 
     #[test]
