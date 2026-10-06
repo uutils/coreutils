@@ -122,19 +122,19 @@ fn test_utf8_bytes_chars() {
 }
 
 #[test]
-fn test_utf8_fast_path_counts_sequence_leaders() {
+fn test_utf8_malformed_sequences_do_not_count_as_characters() {
     let cases: &[(&[u8], usize)] = &[
         (b"", 0),
         (b"\xc3\xa4\n", 2),
         (b"\xe2\x82\xac\n", 2),
         (b"\xf0\x9f\x92\xa9\n", 2),
         (b"\x80\n", 1),
-        (b"\xff\n", 2),
-        (b"\xe2\x82", 1),
-        (b"\xc3\xa4\xff\xe2\x82\xac\n", 4),
-        (b"a\xc3", 2),
-        (b"\xc0\xaf\n", 2),
-        (b"\xed\xa0\x80\n", 2),
+        (b"\xff\n", 1),
+        (b"\xe2\x82", 0),
+        (b"\xc3\xa4\xff\xe2\x82\xac\n", 3),
+        (b"a\xc3", 1),
+        (b"\xc0\xaf\n", 1),
+        (b"\xed\xa0\x80\n", 1),
     ];
     for &(input, chars) in cases {
         let lines = bytecount::count(input, b'\n');
@@ -156,7 +156,7 @@ fn test_utf8_fast_path_counts_sequence_leaders() {
 
 #[cfg(unix)]
 #[test]
-fn test_utf8_locale_without_encoding_suffix_counts_sequence_leaders() {
+fn test_utf8_locale_without_encoding_suffix_validates_characters() {
     let locale = "en_IN";
     if !uutests::util::is_locale_available(locale) {
         return;
@@ -170,18 +170,18 @@ fn test_utf8_locale_without_encoding_suffix_counts_sequence_leaders() {
             .arg("-cm")
             .pipe_in(b"\xc3\xa4\xff\n")
             .succeeds()
-            .stdout_is("      3       4\n");
+            .stdout_is("      2       4\n");
     }
 }
 
 #[test]
-fn test_utf8_fast_path_counts_sequence_leaders_across_read_buffers() {
+fn test_utf8_sequences_across_read_buffer_boundaries() {
     let cases: &[(&[u8], usize)] = &[
         (b"\xc3\xa4\xe2\x82\xac\xf0\x9f\x92\xa9\n", 4),
-        (b"\xe2\x82a\xc3\xa4\n", 4),
-        (b"\xf0\x9f\x92", 1),
-        (b"\xed\xa0\x80\xc0\xaf\xff\x80\n", 4),
-        (b"\xf4\x90\x80\x80\n", 2),
+        (b"\xe2\x82a\xc3\xa4\n", 3),
+        (b"\xf0\x9f\x92", 0),
+        (b"\xed\xa0\x80\xc0\xaf\xff\x80\n", 1),
+        (b"\xf4\x90\x80\x80\n", 1),
     ];
     for prefix in [64 * 1024 - 3, 64 * 1024 - 2, 64 * 1024 - 1] {
         for &(suffix, chars) in cases {

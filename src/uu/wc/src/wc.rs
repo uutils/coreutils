@@ -492,7 +492,7 @@ fn word_count_from_reader<T: WordCountable>(
             )
         }
 
-        // Fast paths that can be computed without Unicode decoding.
+        // Fast paths for byte, character, and line counts.
         // show_lines
         (false, false, true, false, false) => {
             count_bytes_chars_and_lines_fast::<_, false, false, true>(&mut reader)
