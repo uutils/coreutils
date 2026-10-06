@@ -1408,4 +1408,107 @@ fn test_chown_dangling_symlink_under_big_h() {
             .no_stdout()
             .stderr_is("chown: cannot dereference 'dir/dangling': No such file or directory\n");
     }
+
+    // -v says the change was not made, as for an operand.
+    let user = chown::entries::uid2usr(rustix::process::geteuid().as_raw()).unwrap();
+    let group = chown::entries::gid2grp(at.plus("dir").metadata().unwrap().gid()).unwrap();
+    scene
+        .ucmd()
+        .args(&["-R", "-H", "-v"])
+        .arg(format!(":{gid}"))
+        .arg("dir")
+        .fails_with_code(1)
+        .stdout_is(format!(
+            "ownership of 'dir' retained as {user}:{group}\n\
+             failed to change ownership of 'dir/dangling' to :{gid}\n"
+        ))
+        .stderr_is("chown: cannot dereference 'dir/dangling': No such file or directory\n");
+}
+
+/// Under -R -L -v, an entry that cannot be stat'd is reported as an operand
+/// would be.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_chown_verbose_reports_dangling_symlink_under_big_l() {
+    use chown::entries::{gid2grp, uid2usr};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.relative_symlink_file("../nowhere", "dir/dangling");
+    let gid = at.plus("dir").metadata().unwrap().gid();
+    let user = uid2usr(rustix::process::geteuid().as_raw()).unwrap();
+    let group = gid2grp(gid).unwrap();
+
+    ucmd.args(&["-R", "-L", "-v"])
+        .arg(format!(":{gid}"))
+        .arg("dir")
+        .fails_with_code(1)
+        .stdout_is(format!(
+            "ownership of 'dir' retained as {user}:{group}\n\
+             failed to change ownership of 'dir/dangling' to :{gid}\n"
+        ))
+        .stderr_is("chown: cannot access 'dir/dangling': No such file or directory\n");
+}
+
+/// Under -R -v, a directory operand that cannot be read is left alone, whatever
+/// --from says, and -v says so. `from` offsets the group --from asks for.
+#[cfg(target_os = "linux")]
+#[rstest::rstest]
+#[case::no_from(None)]
+#[case::matching_from(Some(0))]
+#[case::other_from(Some(1))]
+fn test_chown_verbose_reports_unreadable_dir_operand(#[case] from: Option<u32>) {
+    // Root can read the directory anyway.
+    if rustix::process::geteuid().is_root() {
+        println!("Test skipped: running as root");
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    let gid = at.plus("dir").metadata().unwrap().gid();
+    at.set_mode("dir", 0o000);
+    let from = from.map(|offset| format!("--from=:{}", gid.wrapping_add(offset)));
+
+    ucmd.args(&["-R", "-v"])
+        .args(from.as_slice())
+        .arg(format!(":{gid}"))
+        .arg("dir")
+        .fails_with_code(1)
+        .stdout_is(format!("failed to change ownership of 'dir' to :{gid}\n"))
+        .stderr_is("chown: cannot access 'dir': Permission denied\n");
+}
+
+/// With -R -v, a change below the operand that fails is reported as for the
+/// operand itself.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_recursive_verbose_reports_failed_entry() {
+    use chown::entries::{gid2grp, uid2usr};
+
+    // Root can give the files to root, so nothing fails.
+    if rustix::process::geteuid().is_root() {
+        println!("Test skipped: running as root");
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/file");
+    let user = uid2usr(rustix::process::geteuid().as_raw()).unwrap();
+    let root = uid2usr(0).unwrap();
+    let failed: String = ["dir", "dir/file"]
+        .map(|path| {
+            let group = gid2grp(at.plus(path).metadata().unwrap().gid()).unwrap();
+            format!(
+                "failed to change ownership of '{path}' from {user}:{group} to {root}:{group}\n"
+            )
+        })
+        .concat();
+
+    ucmd.args(&["-R", "-v", "root", "dir"])
+        .fails_with_code(1)
+        .stdout_is(failed)
+        .stderr_is(
+            "chown: changing ownership of 'dir': Operation not permitted\n\
+             chown: changing ownership of 'dir/file': Operation not permitted\n",
+        );
 }

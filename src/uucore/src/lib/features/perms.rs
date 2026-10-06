@@ -289,13 +289,7 @@ impl ChownExecutor {
     fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
         let path = root.as_ref();
         let Some(meta) = self.obtain_meta(path, self.dereference) else {
-            if self.verbosity.level == VerbosityLevel::Verbose {
-                self.write_verbose_line(&format!(
-                    "failed to change ownership of {} to {}",
-                    path.quote(),
-                    self.raw_owner
-                ));
-            }
+            self.report_owner_unknown(path);
             return 1;
         };
 
@@ -345,16 +339,21 @@ impl ChownExecutor {
             None
         };
 
-        let ret = if self.matched(meta.uid(), meta.gid()) {
+        // As with GNU, a directory that -R cannot read is left alone, whatever
+        // --from says; safe_dive_into reports it.
+        #[cfg(target_os = "linux")]
+        let left_alone = operand_fd.is_none() && meta.is_dir() && self.recursive;
+        #[cfg(not(target_os = "linux"))]
+        let left_alone = false;
+
+        let ret = if left_alone {
+            0
+        } else if self.matched(meta.uid(), meta.gid()) {
             // Use safe syscalls for root directory to prevent TOCTOU attacks on Linux
             #[cfg(target_os = "linux")]
             let chown_result = if let Some(dir_fd) = operand_fd.as_ref() {
                 self.safe_chown_dir(dir_fd, path, &meta)
                     .map(|_| String::new())
-            } else if meta.is_dir() && self.recursive {
-                // The open failed; safe_dive_into reports it. As with GNU,
-                // a directory that -R cannot read is left alone.
-                Ok(String::new())
             } else if !matches!(self.filter, IfFrom::All) {
                 // `--from` was judged on `meta`, so change that very file, held
                 // open, and not whatever a rename may have put under `path` since.
@@ -520,7 +519,9 @@ impl ChownExecutor {
             dir_fd
         } else {
             // The open in `traverse` failed; report it here, once.
+            // The operand was left alone, see `traverse`.
             let Some(dir_fd) = self.try_open_dir(root) else {
+                self.report_owner_unknown(root);
                 return 1;
             };
             if !fd_is(&dir_fd, meta).unwrap_or(false) {
@@ -592,6 +593,7 @@ impl ChownExecutor {
                             translate!("perms-cannot-access", "file" => entry_path.quote(), "error" => strip_errno(&e))
                         );
                     }
+                    self.report_owner_unknown(&entry_path);
                     continue;
                 }
             };
@@ -620,6 +622,7 @@ impl ChownExecutor {
                                 strip_errno(&e)
                             );
                         }
+                        self.report_owner_unknown(&entry_path);
                         continue;
                     }
                 }
@@ -648,6 +651,7 @@ impl ChownExecutor {
                         );
                         show_error!("{msg}");
                     }
+                    self.report_failed_change(&entry_path, (owner.uid(), owner.gid()));
                 } else {
                     // Report the successful ownership change using the shared helper
                     self.report_ownership_change_success(&entry_path, owner.uid(), owner.gid());
@@ -735,6 +739,7 @@ impl ChownExecutor {
 
             let Some(meta) = self.obtain_meta(path, self.dereference) else {
                 ret = 1;
+                self.report_owner_unknown(path);
                 if entry.file_type().is_dir() {
                     // Instruct walkdir to skip this directory to avoid getting another error
                     // when walkdir tries to query the children of this directory.
@@ -786,6 +791,22 @@ impl ChownExecutor {
             }
         }
         ret
+    }
+
+    /// With -v, say that `path`, whose owner could not be read, was not changed.
+    fn report_owner_unknown(&self, path: &Path) {
+        if self.verbosity.level == VerbosityLevel::Verbose {
+            let what = if self.verbosity.groups_only {
+                "group"
+            } else {
+                "ownership"
+            };
+            self.write_verbose_line(&format!(
+                "failed to change {what} of {} to {}",
+                path.quote(),
+                self.raw_owner
+            ));
+        }
     }
 
     fn obtain_meta<P: AsRef<Path>>(&self, path: P, follow: bool) -> Option<Metadata> {
