@@ -159,7 +159,14 @@ encoding = ["data-encoding", "data-encoding-macro", "z85", "base64-simd"]
 entries = ["libc", "rustix/fs", "rustix/process"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
 fast-inc = []
-fs = ["dunce", "libc", "rustix/fs", "rustix/std", "safe-traversal", "windows-sys"]
+fs = [
+  "dunce",
+  "libc",
+  "rustix/fs",
+  "rustix/std",
+  "safe-traversal",
+  "windows-sys",
+]
 fsext = ["libc", "windows-sys", "bstr", "wide"]
 fsxattr = ["xattr", "itertools", "libc"]
 hardware = []
