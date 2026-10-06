@@ -1126,12 +1126,7 @@ fn expand_locale_formats<'a>(
             };
             output.push_str(&format[copied..i]);
             // The marker is put into a format, so a `%` in it has to be doubled.
-            for c in marker.chars() {
-                if c == '%' {
-                    output.push('%');
-                }
-                output.push(c);
-            }
+            output.push_str(&marker.replace('%', "%%"));
             i += parsed.len;
             copied = i;
             continue;
