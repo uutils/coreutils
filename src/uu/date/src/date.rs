@@ -1084,10 +1084,11 @@ fn substitute_extended_year(format_string: &str, year: u32) -> (String, bool) {
 }
 
 /// Expand `%x`, `%X` and `%r` to the locale's formats, which jiff hardcodes to
-/// the C ones. GNU pads and cases a modified one (`%10X`, `%^r`) as a whole,
-/// so that one is formatted here and kept as literal text. `depth` counts the
-/// expansions around `format`: a locale format may use one of them in turn
-/// (glibc's `en_US` `%X` is `%r`).
+/// the C ones, and `%p` and `%P` to the locale's AM/PM markers. GNU pads and
+/// cases a modified `%x`, `%X` or `%r` (`%10X`, `%^r`) as a whole, so that one
+/// is formatted here and kept as literal text. `depth` counts the expansions
+/// around `format`: a locale format may use one of them in turn (glibc's
+/// `en_US` `%X` is `%r`).
 fn expand_locale_formats<'a>(
     date: &Zoned,
     format: &'a str,
@@ -1111,6 +1112,27 @@ fn expand_locale_formats<'a>(
             i += 1;
             continue;
         };
+        if let Some(marker) = locale::get_locale_ampm_marker(parsed.spec, date.hour() >= 12) {
+            let marker = if parsed.flags.is_empty() && parsed.width.is_none() {
+                marker
+            } else {
+                Cow::Owned(
+                    format_modifiers::apply_modifiers(&marker, &parsed)
+                        .map_err(|e| e.to_string())?,
+                )
+            };
+            output.push_str(&format[copied..i]);
+            // The marker is put into a format, so a `%` in it has to be doubled.
+            for c in marker.chars() {
+                if c == '%' {
+                    output.push('%');
+                }
+                output.push(c);
+            }
+            i += parsed.len;
+            copied = i;
+            continue;
+        }
         let locale_format = match locale::get_locale_format(parsed.spec) {
             Some(locale_format) if depth < 2 => locale_format,
             _ => {
