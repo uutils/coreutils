@@ -163,6 +163,8 @@ jobs:
       matrix:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
+          # rustix defaults to raw Linux syscalls; make sure the libc backend works too
+          - { os: ubuntu-latest , features: "feat_os_unix,rustix/use-libc" }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -309,34 +311,6 @@ jobs:
         disable_search: true
         flags: stable,${{ matrix.job.os }}
         fail_ci_if_error: false
-
-  build_rustix_use_libc:
-    # rustix defaults to raw Linux syscalls; make sure the libc backend works too
-    name: Build/rustix use-libc
-    needs: [ min_version, deps ]
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    steps:
-    - uses: actions/checkout@v7.0.1
-      with:
-        persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
-    - uses: taiki-e/install-action@nextest
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.11
-      continue-on-error: true
-    - name: Export sccache
-      if: steps.sccache-setup.outcome == 'success'
-      run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-    - name: Test
-      run: cargo nextest run --hide-progress-bar --profile ci --features feat_os_unix
-      env:
-        RUST_BACKTRACE: "1"
-        RUSTFLAGS: "--cfg rustix_use_libc"
 
   build_rust_nightly:
     name: Build/nightly
