@@ -1114,3 +1114,51 @@ fn test_chown_unreadable_dir_operand() {
     }
     std::fs::set_permissions(at.plus("dir"), std::fs::Permissions::from_mode(0o755)).unwrap();
 }
+
+/// Under `-R -H` a symlink met in the tree is followed for the change, so
+/// `--from` has to be judged on the file it points to, not on the link.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_from_judges_symlink_target_under_big_h() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let groups: Vec<u32> = scene
+        .cmd("id")
+        .arg("-G")
+        .succeeds()
+        .stdout_str()
+        .split_whitespace()
+        .map(|g| g.parse().unwrap())
+        .collect();
+    let Some(&target_group) = groups.first() else {
+        return;
+    };
+    let Some(&link_group) = groups.iter().find(|&&g| g != target_group) else {
+        return;
+    };
+
+    at.mkdir("dir");
+    at.touch("target");
+    at.relative_symlink_file("../target", "dir/link");
+    std::os::unix::fs::chown(at.plus("target"), None, Some(target_group)).unwrap();
+    std::os::unix::fs::lchown(at.plus("dir/link"), None, Some(link_group)).unwrap();
+
+    // Only the link is in `link_group`: the target is left alone.
+    scene
+        .ucmd()
+        .args(&["-R", "-H", &format!("--from=:{link_group}")])
+        .arg(format!(":{link_group}"))
+        .arg("dir")
+        .succeeds();
+    assert_eq!(at.plus("target").metadata().unwrap().gid(), target_group);
+
+    // The target is in `target_group`, so it is changed.
+    scene
+        .ucmd()
+        .args(&["-R", "-H", &format!("--from=:{target_group}")])
+        .arg(format!(":{link_group}"))
+        .arg("dir")
+        .succeeds();
+    assert_eq!(at.plus("target").metadata().unwrap().gid(), link_group);
+}
