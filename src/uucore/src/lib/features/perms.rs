@@ -348,20 +348,19 @@ impl ChownExecutor {
         let ret = if self.matched(meta.uid(), meta.gid()) {
             // Use safe syscalls for root directory to prevent TOCTOU attacks on Linux
             #[cfg(target_os = "linux")]
-            let chown_result = if meta.is_dir() {
-                match operand_fd.as_ref() {
-                    Some(dir_fd) => self
-                        .safe_chown_dir(dir_fd, path, &meta)
-                        .map(|_| String::new()),
-                    // The open failed; safe_dive_into reports it.
-                    None => Ok(String::new()),
-                }
+            let chown_result = if let Some(dir_fd) = operand_fd.as_ref() {
+                self.safe_chown_dir(dir_fd, path, &meta)
+                    .map(|_| String::new())
+            } else if meta.is_dir() && self.recursive {
+                // The open failed; safe_dive_into reports it. As with GNU,
+                // a directory that -R cannot read is left alone.
+                Ok(String::new())
             } else if !matches!(self.filter, IfFrom::All) {
                 // `--from` was judged on `meta`, so change that very file, held
                 // open, and not whatever a rename may have put under `path` since.
                 let held = PinnedFile::open(path, self.dereference.into())
                     .and_then(|file| self.hold(&meta, file));
-                // Replaced: not a directory, so there is nothing to recurse into.
+                // Replaced: nothing to recurse into, so return now.
                 let Some(file) = held.transpose() else {
                     return self.report_replaced(path, (meta.uid(), meta.gid()));
                 };
@@ -376,7 +375,8 @@ impl ChownExecutor {
                     |_, _| file?.chown(self.dest_uid, self.dest_gid),
                 )
             } else {
-                // For non-directories (files, symlinks), use the regular wrap_chown method
+                // Change anything else, including a directory that could not
+                // be opened, by name.
                 wrap_chown(
                     path,
                     &meta,
