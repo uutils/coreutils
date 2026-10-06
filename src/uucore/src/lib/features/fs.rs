@@ -1143,7 +1143,7 @@ pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> 
 }
 
 /// Create the entry `name` in `dir` with `create`, replacing an entry already
-/// there.
+/// there, and return what `create` returned.
 ///
 /// Never unlinks the existing entry first, which would briefly free the name
 /// for another user to claim. Try the create; if the name is taken, create the
@@ -1156,11 +1156,11 @@ pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> 
 /// Returns an error if `create` or the rename fails, or if no unique temporary
 /// name is available.
 #[cfg(all(unix, not(target_os = "redox")))]
-pub fn replace_entry_at<D: AsFd>(
+pub fn replace_entry_at<D: AsFd, T>(
     dir: &D,
     name: &OsStr,
-    mut create: impl FnMut(&D, &OsStr) -> IOResult<()>,
-) -> IOResult<()> {
+    mut create: impl FnMut(&D, &OsStr) -> IOResult<T>,
+) -> IOResult<T> {
     match create(dir, name) {
         Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
         res => return res,
@@ -1170,19 +1170,19 @@ pub fn replace_entry_at<D: AsFd>(
 
 /// [`replace_entry_at`] once creating `name` itself failed with `EEXIST`.
 #[cfg(all(unix, not(target_os = "redox")))]
-fn replace_existing_entry_at<D: AsFd>(
+fn replace_existing_entry_at<D: AsFd, T>(
     dir: &D,
     name: &OsStr,
-    create: impl FnMut(&D, &OsStr) -> IOResult<()>,
-) -> IOResult<()> {
+    create: impl FnMut(&D, &OsStr) -> IOResult<T>,
+) -> IOResult<T> {
     use rustix::fs::{AtFlags, renameat, unlinkat};
 
-    let ((), tmp) = create_temp_at(dir, create)?;
+    let (created, tmp) = create_temp_at(dir, create)?;
     let renamed = renameat(dir, &tmp, dir, name);
     // Renaming onto an existing link to the same inode is a no-op, which
     // leaves the temp behind.
     let _ = unlinkat(dir, &tmp, AtFlags::empty());
-    renamed.map_err(Into::into)
+    renamed.map(|()| created).map_err(Into::into)
 }
 
 /// Create an entry in `dir` under a random name that is not taken, and return
@@ -1231,9 +1231,14 @@ pub fn create_temp_at<D: AsFd, T>(
     ))
 }
 
-/// `symlinkat`/`linkat` relative to an open directory.
+/// `symlinkat`/`linkat` relative to an open directory: create `name` in `dir`
+/// as a link to `target`, symbolic if `symbolic` is set.
+///
+/// # Errors
+///
+/// Fails with `EEXIST` if `name` exists, without following it.
 #[cfg(all(unix, not(target_os = "redox")))]
-fn link_at<Fd: AsFd>(target: &Path, dir: Fd, name: &OsStr, symbolic: bool) -> IOResult<()> {
+pub fn link_at<Fd: AsFd>(target: &Path, dir: Fd, name: &OsStr, symbolic: bool) -> IOResult<()> {
     use rustix::fs::{AtFlags, CWD, linkat, symlinkat};
 
     if symbolic {
