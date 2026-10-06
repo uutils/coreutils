@@ -327,7 +327,7 @@ impl ChownExecutor {
     #[allow(clippy::cognitive_complexity)]
     fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
         let path = root.as_ref();
-        let Some(meta) = self.obtain_meta(path, self.dereference) else {
+        let Some(mut meta) = self.obtain_meta(path, self.dereference) else {
             if self.verbosity.level == VerbosityLevel::Verbose {
                 self.write_verbose_line(&format!(
                     "failed to change ownership of {} to {}",
@@ -337,6 +337,15 @@ impl ChownExecutor {
             }
             return 1;
         };
+
+        // -H and -L follow a symlink operand also with -h: as with GNU, it is
+        // judged, reported and descended into as the file it points to, while
+        // the link itself is changed.
+        let change_link =
+            self.traverse_symlinks != TraverseSymlinks::None && meta.file_type().is_symlink();
+        if change_link && let Ok(target) = get_metadata(path, true) {
+            meta = target;
+        }
 
         if self.recursive
             && self.preserve_root
@@ -385,9 +394,36 @@ impl ChownExecutor {
         };
 
         let ret = if self.matched(meta.uid(), meta.gid()) {
+            let by_name = || {
+                if change_link {
+                    // `meta` is the target's: leave the owner or group not
+                    // asked for as the link has it.
+                    return report_chown(
+                        path,
+                        &meta,
+                        self.dest_uid,
+                        self.dest_gid,
+                        self.verbosity.clone(),
+                        |_, _| std::os::unix::fs::lchown(path, self.dest_uid, self.dest_gid),
+                    );
+                }
+                wrap_chown(
+                    path,
+                    &meta,
+                    self.dest_uid,
+                    self.dest_gid,
+                    self.dereference,
+                    self.verbosity.clone(),
+                )
+            };
+
             // Use safe syscalls for root directory to prevent TOCTOU attacks on Linux
             #[cfg(target_os = "linux")]
-            let chown_result = if let Some(dir_fd) = operand_fd.as_ref() {
+            let chown_result = if change_link {
+                // The link is not the file `meta` describes, so there is none
+                // to hold or open.
+                by_name()
+            } else if let Some(dir_fd) = operand_fd.as_ref() {
                 self.safe_chown_dir(dir_fd, path, &meta)
                     .map(|_| String::new())
             } else if meta.is_dir() && self.recursive {
@@ -415,25 +451,11 @@ impl ChownExecutor {
             } else {
                 // Change anything else, including a directory that could not
                 // be opened, by name.
-                wrap_chown(
-                    path,
-                    &meta,
-                    self.dest_uid,
-                    self.dest_gid,
-                    self.dereference,
-                    self.verbosity.clone(),
-                )
+                by_name()
             };
 
             #[cfg(not(target_os = "linux"))]
-            let chown_result = wrap_chown(
-                path,
-                &meta,
-                self.dest_uid,
-                self.dest_gid,
-                self.dereference,
-                self.verbosity.clone(),
-            );
+            let chown_result = by_name();
 
             match chown_result {
                 Ok(n) => {
@@ -550,7 +572,16 @@ impl ChownExecutor {
         meta: &TraversalMetadata,
         follow: bool,
     ) -> IOResult<bool> {
-        if matches!(self.filter, IfFrom::All) {
+        // Under -L -h a symlink is stat'd through but changed itself: the file
+        // changed is not the one `meta` describes, so there is none to hold.
+        if matches!(self.filter, IfFrom::All)
+            || !follow
+                && self.traverse_symlinks == TraverseSymlinks::All
+                && dir_fd
+                    .metadata_at(name, SymlinkBehavior::NoFollow)?
+                    .file_type()
+                    .is_symlink()
+        {
             dir_fd.chown_at(name, self.dest_uid, self.dest_gid, follow.into())?;
             return Ok(true);
         }
@@ -684,9 +715,7 @@ impl ChownExecutor {
 
             // Under -H a symlink is stat'd itself for the descent, but changed
             // through, so `--from` and the report concern the file it points to.
-            let follow_symlinks =
-                self.dereference || self.traverse_symlinks == TraverseSymlinks::All;
-            let target_meta = if follow_symlinks && meta.file_type().is_symlink() {
+            let target_meta = if self.dereference && meta.file_type().is_symlink() {
                 dir_fd
                     .metadata_at(&entry_name, SymlinkBehavior::Follow)
                     .ok()
@@ -697,7 +726,7 @@ impl ChownExecutor {
 
             // Check if we should chown this entry
             if self.matched(owner.uid(), owner.gid()) {
-                let changed = self.chown_entry(dir_fd, &entry_name, owner, follow_symlinks);
+                let changed = self.chown_entry(dir_fd, &entry_name, owner, self.dereference);
                 if let Ok(false) = changed {
                     *ret = self.report_replaced(&entry_path, (owner.uid(), owner.gid()));
                 } else if let Err(e) = changed {
