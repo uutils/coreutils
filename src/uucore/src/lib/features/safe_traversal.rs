@@ -785,7 +785,7 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
 #[cfg(unix)]
 pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
     let (existing_ancestor, components_to_create) = find_existing_ancestor(path)?;
-    let mut dir_fd = DirFd::open(&existing_ancestor, SymlinkBehavior::Follow)?;
+    let mut dir_fd = DirFd::open_anchor(&existing_ancestor)?;
 
     for component in &components_to_create {
         dir_fd = open_or_create_subdir(&dir_fd, component.as_os_str(), mode)?;
