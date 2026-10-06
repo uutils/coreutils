@@ -846,6 +846,23 @@ fn test_touch_explicit_time_on_root_owned_file_eperm() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_touch_date_now_on_writable_file_owned_by_other() {
+    // `/dev/null` is owned by root and world-writable. `-d now` denotes the
+    // current time, so GNU touch applies it through the UTIME_NOW sentinel and
+    // only needs write permission; an explicit timestamp would fail with EPERM
+    // (#15019).
+    if rustix::process::geteuid().is_root() {
+        println!("Skipping test when running as root");
+        return;
+    }
+    new_ucmd!()
+        .args(&["-d", "now", "/dev/null"])
+        .succeeds()
+        .no_output();
+}
+
+#[test]
 #[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: no FIFO support")]
 fn test_touch_fifo() {

@@ -410,16 +410,32 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
     };
 
     let (atime, mtime) = if let Some(date) = &opts.date {
-        (
-            parse_date(
-                filetime_to_zoned(&atime).ok_or_else(|| TouchError::InvalidFiletime(atime))?,
-                date,
-            )?,
-            parse_date(
-                filetime_to_zoned(&mtime).ok_or_else(|| TouchError::InvalidFiletime(mtime))?,
-                date,
-            )?,
-        )
+        // The access time carries the instant the date is parsed against:
+        // `Source::Now` sets it to the current time, `Source::Reference` to the
+        // reference file's time.
+        let reference = atime;
+        let reference_zoned =
+            filetime_to_zoned(&reference).ok_or(TouchError::InvalidFiletime(reference))?;
+        let atime = parse_date(reference_zoned.clone(), date)?;
+        let mtime = parse_date(reference_zoned, date)?;
+
+        // GNU `touch` turns a date that denotes the current time (e.g. `-d now`)
+        // into the `UTIME_NOW` sentinel, so updating the file only needs write
+        // permission rather than ownership. Without this, `-d now` on a file we
+        // may write but do not own fails with EPERM (#15019).
+        #[cfg(target_os = "linux")]
+        {
+            if opts.source == Source::Now && atime == reference && mtime == reference {
+                let now = FileTime::from_unix_time(0, libc::UTIME_NOW as u32);
+                (now, now)
+            } else {
+                (atime, mtime)
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            (atime, mtime)
+        }
     } else {
         (atime, mtime)
     };
@@ -953,6 +969,22 @@ mod tests {
                 .to_string()
                 .contains("GetFinalPathNameByHandleW failed with code 1")
         );
+    }
+
+    #[test]
+    fn test_parse_date_now_returns_the_reference_instant() {
+        // `-d now` has to resolve to exactly the instant it was parsed against:
+        // that is how `touch()` recognises it and switches to the `UTIME_NOW`
+        // sentinel (#15019). Keep this in sync with `touch()`.
+        let now = super::timestamp_to_filetime(jiff::Timestamp::now());
+        let reference = super::filetime_to_zoned(&now).unwrap();
+
+        assert_eq!(super::parse_date(reference.clone(), "now").unwrap(), now);
+        assert_eq!(
+            super::parse_date(reference.clone(), "0 seconds").unwrap(),
+            now
+        );
+        assert_ne!(super::parse_date(reference, "2000-01-01").unwrap(), now);
     }
 
     #[test]
