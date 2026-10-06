@@ -599,6 +599,30 @@ fn test_chmod_preserve_root_symlink_during_recursion() {
 }
 
 #[test]
+fn test_chmod_preserve_root_symlink_operand() {
+    // A symlink operand that resolves to '/' is '/' whenever it is followed:
+    // by default and with -H or -L, and with -P once a trailing slash makes the
+    // lookup resolve it. `u+u` changes nothing, should the check ever let it by.
+    let cases: [(&[&str], &str); 4] = [
+        (&["-R"], "root"),
+        (&["-R", "-H"], "root"),
+        (&["-R", "-L"], "root"),
+        (&["-R", "-P"], "root/"),
+    ];
+    for (flags, operand) in cases {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.symlink_dir("/", "root");
+        ucmd.args(flags)
+            .args(&["--preserve-root", "u+u", operand])
+            .fails_with_code(1)
+            .stderr_is(format!(
+                "chmod: it is dangerous to operate recursively on '{operand}' (same as '/')\n\
+                 chmod: use --no-preserve-root to override this failsafe\n"
+            ));
+    }
+}
+
+#[test]
 fn test_chmod_recursive_operand_that_does_not_open() {
     // An operand directory that cannot be opened yet still has its mode changed,
     // and is descended into once that change makes it readable, also through a
@@ -657,6 +681,87 @@ fn test_chmod_recursive_operand_that_does_not_open() {
             "{flags:?}"
         );
     }
+}
+
+#[test]
+fn test_chmod_recursive_no_dereference_operand() {
+    // With -h, a directory operand followed by -H or -L has its mode changed by
+    // path rather than through a descriptor; it is still changed and descended.
+    for flags in [
+        &["-R", "-h"][..],
+        &["-R", "-H", "-h"],
+        &["-R", "-L", "-h"],
+        &["-R", "-P", "-h"],
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("d");
+        at.touch("d/f");
+        at.set_mode("d", 0o755);
+        at.set_mode("d/f", 0o644);
+
+        ucmd.args(flags).args(&["700", "d"]).succeeds().no_output();
+
+        assert_eq!(at.metadata("d").permissions().mode() & 0o7777, 0o700);
+        assert_eq!(at.metadata("d/f").permissions().mode() & 0o7777, 0o700);
+    }
+}
+
+/// `chmod -R` changes the operand's mode and then opens it again to descend:
+/// it must only descend into the directory whose mode it changed, which is the
+/// one checked for '/', whatever the operand's name points at by then. A racer
+/// re-points the operand between two directories of the fixture, so that a
+/// failure never reaches outside it.
+#[test]
+#[cfg(not(target_os = "redox"))]
+fn test_chmod_recursive_descends_only_into_the_directory_it_changed() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    for dir in ["a", "b"] {
+        at.mkdir(dir);
+        at.touch(format!("{dir}/f"));
+    }
+    at.relative_symlink_dir("a", "op");
+
+    let stop = Arc::new(AtomicBool::new(false));
+    let (op, tmp) = (at.plus("op"), at.plus("op.tmp"));
+    let racer_stop = stop.clone();
+    let racer = std::thread::spawn(move || {
+        for target in ["b", "a"].iter().cycle() {
+            if racer_stop.load(Ordering::Relaxed) {
+                break;
+            }
+            std::os::unix::fs::symlink(target, &tmp).unwrap();
+            std::fs::rename(&tmp, &op).unwrap();
+        }
+    });
+
+    for _ in 0..200 {
+        for dir in ["a", "b"] {
+            at.set_mode(dir, 0o755);
+            at.set_mode(&format!("{dir}/f"), 0o644);
+        }
+
+        let result = scene.ucmd().args(&["-R", "700", "op"]).run();
+        if !result.succeeded() {
+            result
+                .code_is(1)
+                .stderr_is("chmod: cannot access 'op': replaced while it was being processed\n");
+        }
+
+        for dir in ["a", "b"] {
+            let mode = |file: &str| at.metadata(file).permissions().mode() & 0o7777;
+            assert!(
+                mode(&format!("{dir}/f")) == 0o644 || mode(dir) == 0o700,
+                "descended into {dir} without changing its mode"
+            );
+        }
+    }
+
+    stop.store(true, Ordering::Relaxed);
+    racer.join().unwrap();
 }
 
 /// Each directory reached through a symlink under -L takes one descriptor
