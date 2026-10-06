@@ -45,11 +45,8 @@ enum ChmodError {
     NewPermissions(PathBuf, String, String),
     #[error("{}", translate!("chmod-error-changing-permissions", "file" => _0.quote(), "err" => strip_errno(_1)))]
     ChangingPermissions(PathBuf, std::io::Error),
+    #[cfg(not(target_os = "redox"))]
     #[error("{}", translate!("perms-cannot-access-replaced", "file" => _0.quote()))]
-    #[cfg_attr(
-        any(target_os = "aix", target_os = "hurd", target_os = "redox"),
-        allow(dead_code)
-    )]
     Replaced(PathBuf),
 }
 
@@ -519,20 +516,6 @@ impl Chmoder {
         path_is_root_dir(file, true)
     }
 
-    /// [`Self::is_root`] for a directory already open, which no rename can re-point.
-    #[cfg(not(target_os = "redox"))]
-    fn is_root_fd(dir_fd: &DirFd) -> bool {
-        dir_fd
-            .metadata()
-            .is_ok_and(|meta| uucore::fs::metadata_is_root_dir(&meta))
-    }
-
-    #[cfg(not(target_os = "redox"))]
-    fn same_dir(a: &DirFd, b: &DirFd) -> bool {
-        FileInformation::from_file(a)
-            .is_ok_and(|a| FileInformation::from_file(b).is_ok_and(|b| a == b))
-    }
-
     /// `--preserve-root` guard re-checked at every descent: a symlink to `/`
     /// (under `-L`) or a bind mount of `/` met inside the tree is still `/`, so
     /// the operand-only check is not enough. GNU re-checks every entry too.
@@ -628,43 +611,50 @@ impl Chmoder {
 
         // Change the mode through a descriptor, checked not to be "/", rather than by
         // pathname: after a rename that lookup could land on something else, "/"
-        // included once the check above has passed. Under `-P` (the `-R` default)
-        // O_NOFOLLOW fails the open rather than following a swapped-in symlink;
-        // `-H`/`-L` follow, which is what they ask for. `-H --no-dereference` asks
-        // for the mode of what `chmod_file` resolves, and a directory we cannot read
-        // yet opens only once its mode change allows it: both still go by path,
-        // neither being what a privileged `chmod -R` meets.
+        // included once the check above has passed. Under `-P` O_NOFOLLOW fails the
+        // open rather than following a swapped-in symlink; `-H`/`-L` follow, which is
+        // what they ask for. `-H --no-dereference` asks for the mode of what
+        // `chmod_file` resolves, and a directory that does not open (one that is not
+        // readable until its mode is changed, say) still has its mode changed, by
+        // path: in both cases the descent below checks what it opens for "/" itself.
         let pinned = if should_follow_symlink == self.dereference {
-            match DirFd::open(file_path, should_follow_symlink.into()) {
-                Ok(dir_fd) => Some(dir_fd),
-                Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => None,
-                Err(err) => return Err(err.into()),
-            }
+            DirFd::open(file_path, should_follow_symlink.into())
+                .and_then(|dir_fd| Ok((dir_fd.metadata()?, dir_fd)))
+                .ok()
         } else {
             None
         };
-        let mut r = match &pinned {
-            Some(dir_fd) => {
-                if self.preserve_root && Self::is_root_fd(dir_fd) {
+        // The descriptor is closed once the mode is changed, keeping only the
+        // directory's identity, so the walk holds no more descriptors than without it.
+        let (mut r, changed) = match pinned {
+            Some((meta, dir_fd)) => {
+                if self.preserve_root && uucore::fs::metadata_is_root_dir(&meta) {
                     show!(ChmodError::PreserveRootSameAs(file_path.into()));
                     return Ok(());
                 }
-                self.chmod_dir_fd(dir_fd, file_path)
+                let r = self.chmod_dir_fd(&dir_fd, meta.mode() & 0o7777, file_path);
+                (r, Some(meta.file_info()))
             }
-            None => self.chmod_file(file_path),
+            None => (self.chmod_file(file_path), None),
         };
 
         // Open again to descend, as GNU does, so the mode just set decides whether
-        // the directory can be read; it must still be the one changed above.
+        // the directory can be read.
         match DirFd::open(file_path, should_follow_symlink.into()) {
             Ok(dir_fd) => {
-                if pinned
-                    .as_ref()
-                    .is_some_and(|pinned| !Self::same_dir(pinned, &dir_fd))
+                if let Some(changed) = changed {
+                    // Descend only into the directory changed above, known not to be "/".
+                    if !dir_fd
+                        .metadata()
+                        .is_ok_and(|meta| meta.file_info() == changed)
+                    {
+                        return r.and(Err(ChmodError::Replaced(file_path.into()).into()));
+                    }
+                } else if self.preserve_root
+                    && dir_fd
+                        .metadata()
+                        .is_ok_and(|meta| uucore::fs::metadata_is_root_dir(&meta))
                 {
-                    return r.and(Err(ChmodError::Replaced(file_path.into()).into()));
-                }
-                if self.preserve_root && Self::is_root_fd(&dir_fd) {
                     show!(ChmodError::PreserveRootSameAs(file_path.into()));
                     return r;
                 }
@@ -901,16 +891,10 @@ impl Chmoder {
         self.check_umask_kept(file, new_mode, naively_expected_new_mode)
     }
 
-    /// [`Self::chmod_file`] for a directory already open, which no rename can re-point.
+    /// [`Self::chmod_file`] for a directory already open, which no rename can
+    /// re-point, whose mode bits are `fperm`.
     #[cfg(not(target_os = "redox"))]
-    fn chmod_dir_fd(&self, dir_fd: &DirFd, file: &Path) -> UResult<()> {
-        let fperm = match dir_fd.metadata() {
-            Ok(meta) => meta.mode() & 0o7777,
-            Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
-                return Err(ChmodError::PermissionDenied(file.into()).into());
-            }
-            Err(_) => return Err(ChmodError::CannotStat(file.into()).into()),
-        };
+    fn chmod_dir_fd(&self, dir_fd: &DirFd, fperm: u32, file: &Path) -> UResult<()> {
         let (new_mode, naively_expected_new_mode) = self.calculate_new_mode(fperm, true)?;
         let mode = self.fmode.unwrap_or(new_mode);
         self.change_file(fperm, mode, file, || dir_fd.fchmod(mode))?;

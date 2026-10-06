@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) dirfd subdirs openat FDCWD rwxr
+// spell-checker:ignore (words) dirfd subdirs openat FDCWD rwxr Nofile
 
 use std::fs::{OpenOptions, Permissions, metadata, set_permissions};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
@@ -596,6 +596,92 @@ fn test_chmod_preserve_root_symlink_during_recursion() {
         .stderr_contains(
             "chmod: it is dangerous to operate recursively on 'tree/link' (same as '/')",
         );
+}
+
+#[test]
+fn test_chmod_recursive_operand_that_does_not_open() {
+    // An operand directory that cannot be opened yet still has its mode changed,
+    // and is descended into once that change makes it readable, also through a
+    // symlink operand, which -P leaves alone.
+    for flags in [&["-R"][..], &["-R", "-H"], &["-R", "-L"], &["-R", "-P"]] {
+        for operand in ["d", "link"] {
+            let (at, mut ucmd) = at_and_ucmd!();
+            at.mkdir("d");
+            at.touch("d/f");
+            at.set_mode("d/f", 0o644);
+            at.set_mode("d", 0o000);
+            at.relative_symlink_dir("d", "link");
+
+            ucmd.args(flags)
+                .args(&["u+rwx", operand])
+                .succeeds()
+                .no_output();
+
+            let mode = |file| at.metadata(file).permissions().mode() & 0o7777;
+            if operand == "link" && flags.contains(&"-P") {
+                assert_eq!(mode("d"), 0o000, "{flags:?} {operand}");
+                at.set_mode("d", 0o755);
+                continue;
+            }
+            assert_eq!(mode("d"), 0o700, "{flags:?} {operand}");
+            assert_eq!(mode("d/f"), 0o744, "{flags:?} {operand}");
+        }
+    }
+
+    // The mode change can also leave it unreadable: the operand keeps its new
+    // mode, and the failed descent names it. Root reads it regardless.
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    for flags in [&["-R"][..], &["-R", "-H"], &["-R", "-L"], &["-R", "-P"]] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("d");
+        at.touch("d/f");
+        at.set_mode("d/f", 0o644);
+        at.set_mode("d", 0o755);
+
+        ucmd.args(flags)
+            .args(&["a-r", "d"])
+            .fails_with_code(1)
+            .stderr_is("chmod: cannot access 'd': Permission denied\n");
+
+        assert_eq!(
+            at.metadata("d").permissions().mode() & 0o7777,
+            0o311,
+            "{flags:?}"
+        );
+        at.set_mode("d", 0o755);
+        assert_eq!(
+            at.metadata("d/f").permissions().mode() & 0o7777,
+            0o644,
+            "{flags:?}"
+        );
+    }
+}
+
+/// Each directory reached through a symlink under -L takes one descriptor
+/// while the walk is below it, not more.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_chmod_recursive_dereference_one_descriptor_per_level() {
+    use rustix::process::Resource;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    for i in 0..=10 {
+        at.mkdir(format!("d{i}"));
+    }
+    for i in 0..10 {
+        at.relative_symlink_dir(&format!("../d{}", i + 1), &format!("d{i}/next"));
+    }
+    at.touch("d10/f");
+    at.set_mode("d10/f", 0o644);
+
+    ucmd.args(&["-R", "-L", "700", "d0"])
+        .limit(Resource::Nofile, 20, 20)
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.metadata("d10/f").permissions().mode() & 0o7777, 0o700);
 }
 
 #[test]
