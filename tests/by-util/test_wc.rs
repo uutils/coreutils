@@ -156,6 +156,10 @@ fn test_utf8_malformed_sequences_do_not_count_as_characters() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: locale names without encoding suffixes require native locale lookup"
+)]
 fn test_utf8_locale_without_encoding_suffix_validates_characters() {
     let locale = "en_IN";
     if !uutests::util::is_locale_available(locale) {
