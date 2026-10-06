@@ -206,6 +206,65 @@ fn test_utf8_sequences_across_read_buffer_boundaries() {
 }
 
 #[test]
+fn test_c_locale_multibyte_character_counts() {
+    // In the C locale, characters should count as bytes.
+    // Documenting current behavior where multibyte sequences count as 1 character.
+    let newline_cases: &[(&[u8], usize, usize, usize)] = &[
+        (b"\xc3\xa4\n", 1, 1, 2),
+        (b"\xe2\x82\xac\n", 1, 1, 2),
+        (b"\xf0\x9f\x92\xa9\n", 1, 1, 2),
+        (b"hello \xc3\xa4\nworld\n", 2, 3, 14),
+    ];
+    for &(input, lines, words, chars) in newline_cases {
+        let bytes = input.len();
+        for (flag, expected) in [
+            ("-m", format!("{chars}\n")),
+            ("-cm", format!("{chars:7} {bytes:7}\n")),
+            ("-ml", format!("{lines:7} {chars:7}\n")),
+            ("-cml", format!("{lines:7} {chars:7} {bytes:7}\n")),
+            ("-mw", format!("{words:7} {chars:7}\n")),
+            ("-cmw", format!("{words:7} {chars:7} {bytes:7}\n")),
+        ] {
+            new_ucmd!()
+                .env("LC_ALL", "C")
+                .arg(flag)
+                .pipe_in(input)
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
+
+    let raw_cases: &[(&[u8], usize, usize)] = &[
+        (b"\xc3\xa4", 1, 1),
+        (b"\xe2\x82\xac", 1, 1),
+        (b"\xf0\x9f\x92\xa9", 1, 1),
+    ];
+    for &(input, words, chars) in raw_cases {
+        let bytes = input.len();
+        for (flag, expected) in [
+            ("-m", format!("{chars}\n")),
+            ("-cm", format!("{chars:7} {bytes:7}\n")),
+            ("-mw", format!("{words:7} {chars:7}\n")),
+            ("-cmw", format!("{words:7} {chars:7} {bytes:7}\n")),
+        ] {
+            new_ucmd!()
+                .env("LC_ALL", "C")
+                .arg(flag)
+                .pipe_in(input)
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("input", b"\xc3\xa4\n");
+    ucmd.env("LC_ALL", "C")
+        .args(&["-cm", "input"])
+        .succeeds()
+        .stdout_is("2 3 input\n");
+}
+
+#[test]
 fn test_utf8_bytes_lines() {
     new_ucmd!()
         .arg("-cl")
