@@ -2123,32 +2123,86 @@ fn test_date_french_full_sentence() {
     }
 }
 
-/// Test that %x format specifier respects locale settings
-/// This is a regression test for locale-aware date formatting
+/// `%x`, `%X` and `%r` use the locale's `D_FMT`, `T_FMT` and `T_FMT_AMPM`.
+/// The Linux values are GNU date's, the macOS ones follow its locale data.
 #[test]
-#[ignore = "https://bugs.launchpad.net/ubuntu/+source/rust-coreutils/+bug/2137410"]
-#[cfg(any(target_vendor = "apple", target_os = "linux"))]
-fn test_date_format_x_locale_aware() {
-    // With C locale, %x should output MM/DD/YY (US format)
-    new_ucmd!()
-        .env("TZ", "UTC")
-        .env("LC_ALL", "C")
-        .arg("-d")
-        .arg("1997-01-19 08:17:48")
-        .arg("+%x")
-        .succeeds()
-        .stdout_is("01/19/97\n");
+#[cfg(any(target_vendor = "apple", all(target_os = "linux", target_env = "gnu")))]
+fn test_date_format_locale_date_and_time() {
+    #[cfg(target_os = "linux")]
+    let cases = [
+        ("fr_FR.UTF-8", "%x", "19/01/1997"),
+        ("fr_FR.UTF-8", "%X", "20:17:48"),
+        ("en_US.UTF-8", "%x", "01/19/1997"),
+        ("en_US.UTF-8", "%X", "08:17:48 PM"),
+        ("en_US.UTF-8", "%12X", " 08:17:48 PM"),
+        ("en_GB.UTF-8", "%x", "19/01/97"),
+        ("en_GB.UTF-8", "%r", " 8:17:48 pm UTC"),
+        ("en_GB.UTF-8", "%^r", " 8:17:48 PM UTC"),
+        ("en_GB.UTF-8", "%-20r", " 8:17:48 pm UTC"),
+        ("en_GB.UTF-8", "%20r", "      8:17:48 pm UTC"),
+    ];
+    #[cfg(target_vendor = "apple")]
+    let cases = [
+        ("fr_FR.UTF-8", "%x", "19.01.1997"),
+        ("fr_FR.UTF-8", "%12x", "  19.01.1997"),
+        ("en_GB.UTF-8", "%x", "19/01/1997"),
+        ("ja_JP.UTF-8", "%X", "20時17分48秒"),
+    ];
 
-    // With French locale, %x should output DD/MM/YYYY (European format)
-    // GNU date outputs: 19/01/1997
+    for (locale, format, expected) in cases {
+        if !is_locale_available(locale) {
+            continue;
+        }
+        new_ucmd!()
+            .env("LC_ALL", locale)
+            .arg("-d")
+            .arg("1997-01-19 20:17:48")
+            .arg(format!("+{format}"))
+            .succeeds()
+            .stdout_only(format!("{expected}\n"));
+    }
+}
+
+/// GNU pads `%x`, `%X` and `%r` as a whole and keeps the padding of the
+/// fields inside: `%-x` is still `01/19/97`.
+#[test]
+fn test_date_format_locale_date_and_time_modifiers() {
     new_ucmd!()
-        .env("TZ", "UTC")
-        .env("LC_ALL", "fr_FR.UTF-8")
         .arg("-d")
-        .arg("1997-01-19 08:17:48")
-        .arg("+%x")
+        .arg("1997-01-19 20:17:48")
+        .arg("+%10x|%-x|%_x|%010X|%+10x|%_15r|%-15r|%#r|%12X")
         .succeeds()
-        .stdout_is("19/01/1997\n");
+        .stdout_only(
+            "  01/19/97|01/19/97|01/19/97|0020:17:48|0001/19/97|    08:17:48 PM|08:17:48 PM|08:17:48 PM|    20:17:48\n",
+        );
+}
+
+/// With `-` there is no padding, so like GNU the width is ignored, even one too
+/// large to pad to.
+#[test]
+fn test_date_format_locale_date_and_time_no_pad_large_width() {
+    new_ucmd!()
+        .arg("-d")
+        .arg("1997-01-19 20:17:48")
+        .arg("+%-65536x|%-65536X|%-65536r")
+        .succeeds()
+        .stdout_only("01/19/97|20:17:48|08:17:48 PM\n");
+}
+
+/// bg_BG's `date_fmt` has the year only inside `%x`, which therefore has to
+/// be expanded before an out-of-range year is put in.
+#[test]
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn test_date_extended_year_in_locale_date_format() {
+    if !is_locale_available("bg_BG.UTF-8") {
+        return;
+    }
+    new_ucmd!()
+        .env("LC_ALL", "bg_BG.UTF-8")
+        .arg("-d")
+        .arg("10000-01-19T20:17:48")
+        .succeeds()
+        .stdout_only("19.01.10000 (ср) 20:17:48 UTC\n");
 }
 
 #[test]

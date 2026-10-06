@@ -10,6 +10,11 @@
 /// Format used when the locale does not provide a date/time format.
 const POSIX_DEFAULT_FORMAT: &[u8] = b"%a %b %e %X %Z %Y";
 
+/// The specifiers that expand to a locale format, and their C locale formats,
+/// used without `nl_langinfo` or when the locale leaves one empty.
+const LOCALE_FORMAT_SPECIFIERS: [&str; 3] = ["x", "X", "r"];
+const POSIX_LOCALE_FORMATS: [&str; 3] = ["%m/%d/%y", "%H:%M:%S", "%I:%M:%S %p"];
+
 // `_DATE_FMT` is the only langinfo item that spells the full date line the way
 // `date` prints it, timezone included. It is a glibc extension, so everywhere
 // else (Android, the BSDs, macOS, Redox, non-unix) we use the POSIX format:
@@ -32,12 +37,100 @@ macro_rules! cfg_langinfo {
     };
 }
 
-cfg_langinfo! {
+// `nl_langinfo`, with the POSIX items `D_FMT`, `T_FMT` and `T_FMT_AMPM` behind
+// `%x`, `%X` and `%r`, exists on every unix but Android, Cygwin and Redox;
+// `cfg_nl_langinfo!(else ...)` gates the items for the other platforms.
+macro_rules! cfg_nl_langinfo {
+    (else $($item:item)*) => {
+        $(
+            #[cfg(any(
+                not(unix),
+                target_os = "android",
+                target_os = "cygwin",
+                target_os = "redox"
+            ))]
+            $item
+        )*
+    };
+    ($($item:item)*) => {
+        $(
+            #[cfg(all(
+                unix,
+                not(target_os = "android"),
+                not(target_os = "cygwin"),
+                not(target_os = "redox")
+            ))]
+            $item
+        )*
+    };
+}
+
+cfg_nl_langinfo! {
     use core::ffi::CStr;
-    use std::sync::OnceLock;
+    use std::sync::LazyLock;
 
     #[cfg(test)]
     use std::sync::Mutex;
+
+    /// Mutex to serialize setlocale() calls during tests.
+    ///
+    /// setlocale() is process-global, so parallel tests that call it can
+    /// interfere with each other. This mutex ensures only one test accesses
+    /// locale functions at a time.
+    #[cfg(test)]
+    static LOCALE_MUTEX: Mutex<()> = Mutex::new(());
+
+    /// The locale's `D_FMT`, `T_FMT` and `T_FMT_AMPM`, read once.
+    static LOCALE_FORMATS: LazyLock<[&'static str; 3]> = LazyLock::new(|| {
+        let items = [libc::D_FMT, libc::T_FMT, libc::T_FMT_AMPM];
+        let mut formats = POSIX_LOCALE_FORMATS;
+        for (format, item) in formats.iter_mut().zip(items) {
+            if let Some(value) = langinfo(item)
+                .and_then(|value| String::from_utf8(value).ok())
+                .filter(|value| !value.is_empty())
+            {
+                *format = value.leak();
+            }
+        }
+        formats
+    });
+
+    /// Reads a langinfo item of the `LC_TIME` locale set in the environment.
+    fn langinfo(item: libc::nl_item) -> Option<Vec<u8>> {
+        // In tests, acquire mutex to prevent race conditions with setlocale()
+        // which is process-global and not thread-safe
+        #[cfg(test)]
+        let _lock = LOCALE_MUTEX.lock().unwrap();
+
+        // SAFETY: the locale name is a NUL-terminated literal. nl_langinfo
+        // returns a NUL-terminated string (or null, checked first) that stays
+        // valid until the next setlocale or nl_langinfo call; it is copied out
+        // before this function returns. date makes these calls from its main
+        // thread only, to fill once-initialized caches, and tests hold
+        // `LOCALE_MUTEX`.
+        unsafe {
+            libc::setlocale(libc::LC_TIME, c"".as_ptr());
+            let ptr = libc::nl_langinfo(item);
+            (!ptr.is_null()).then(|| CStr::from_ptr(ptr).to_bytes().to_vec())
+        }
+    }
+}
+
+cfg_nl_langinfo! { else
+    static LOCALE_FORMATS: [&str; 3] = POSIX_LOCALE_FORMATS;
+}
+
+/// Returns the locale's format for `%x`, `%X` or `%r`, given the specifier
+/// without `%`, and `None` for any other specifier.
+pub fn get_locale_format(specifier: &str) -> Option<&'static str> {
+    let index = LOCALE_FORMAT_SPECIFIERS
+        .iter()
+        .position(|known| *known == specifier)?;
+    Some(LOCALE_FORMATS[index])
+}
+
+cfg_langinfo! {
+    use std::sync::OnceLock;
 
     /// glibc's `_DATE_FMT` has been stable for the last 12 years
     /// being added upstream to libc TODO: update to libc
@@ -47,14 +140,6 @@ cfg_langinfo! {
 cfg_langinfo! {
     /// Cached locale date/time format string
     static DEFAULT_FORMAT_CACHE: OnceLock<&'static [u8]> = OnceLock::new();
-
-    /// Mutex to serialize setlocale() calls during tests.
-    ///
-    /// setlocale() is process-global, so parallel tests that call it can
-    /// interfere with each other. This mutex ensures only one test accesses
-    /// locale functions at a time.
-    #[cfg(test)]
-    static LOCALE_MUTEX: Mutex<()> = Mutex::new(());
 
     /// Returns the default date format string for the current locale.
     ///
@@ -75,24 +160,7 @@ cfg_langinfo! {
 
     /// Retrieves the date/time format string from the system locale
     fn get_locale_format_string() -> Option<Vec<u8>> {
-        // In tests, acquire mutex to prevent race conditions with setlocale()
-        // which is process-global and not thread-safe
-        #[cfg(test)]
-        let _lock = LOCALE_MUTEX.lock().unwrap();
-
-        unsafe {
-            // Set locale from environment variables
-            libc::setlocale(libc::LC_TIME, c"".as_ptr());
-
-            // Get the date/time format string
-            let d_t_fmt_ptr = libc::nl_langinfo(DATE_FMT);
-            if d_t_fmt_ptr.is_null() {
-                return None;
-            }
-
-            let format = CStr::from_ptr(d_t_fmt_ptr).to_bytes();
-            (!format.is_empty()).then(|| format.to_vec())
-        }
+        langinfo(DATE_FMT).filter(|format| !format.is_empty())
     }
 }
 
