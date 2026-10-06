@@ -84,6 +84,9 @@ fluent-syntax = { workspace = true }
 unic-langid = { workspace = true }
 thiserror = { workspace = true }
 
+[build-dependencies]
+cfg_aliases = { workspace = true }
+
 [dev-dependencies]
 tempfile = { workspace = true }
 

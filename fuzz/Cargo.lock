@@ -1833,6 +1833,7 @@ dependencies = [
  "bigdecimal",
  "blake2b_simd",
  "blake3",
+ "cfg_aliases",
  "clap",
  "crc-fast",
  "data-encoding",
