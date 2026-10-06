@@ -327,6 +327,29 @@ impl DirFd {
         Ok(Self { fd })
     }
 
+    /// Open a subdirectory to anchor `*at` calls, without following a
+    /// symlink at `name`.
+    ///
+    /// The descriptor is search-only where the platform has such a flag, so
+    /// a subdirectory with write and search but no read permission can be
+    /// opened to create entries in. It may not be able to list entries.
+    pub fn open_subdir_anchor(&self, name: &OsStr) -> io::Result<Self> {
+        let name_cstr =
+            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        let flags = SEARCH_ONLY.unwrap_or(OFlag::O_RDONLY)
+            | OFlag::O_DIRECTORY
+            | OFlag::O_NOFOLLOW
+            | OFlag::O_CLOEXEC
+            | LARGEFILE;
+        let fd = openat(&self.fd, name_cstr.as_c_str(), flags, Mode::empty()).map_err(|e| {
+            SafeTraversalError::OpenFailed {
+                path: name.into(),
+                source: io::Error::from_raw_os_error(e as i32),
+            }
+        })?;
+        Ok(Self { fd })
+    }
+
     /// Get raw stat data for a file relative to this directory
     pub fn stat_at(&self, name: &OsStr, symlink_behavior: SymlinkBehavior) -> io::Result<FileStat> {
         let name_cstr =
@@ -1636,6 +1659,31 @@ mod tests {
 
         fs::set_permissions(&write_only, fs::Permissions::from_mode(0o755)).unwrap();
         assert!(write_only.join("sub").is_dir());
+        assert!(write_only.join("file").is_file());
+    }
+
+    #[test]
+    #[cfg(any(has_o_path, has_o_search))]
+    fn test_open_subdir_anchor_in_write_only_dir_refuses_symlink() {
+        use std::os::unix::fs::PermissionsExt;
+
+        if Uid::effective().is_root() {
+            // root ignores the permission bits this test depends on
+            return;
+        }
+        let temp_dir = TempDir::new().unwrap();
+        let write_only = temp_dir.path().join("wx");
+        fs::create_dir(&write_only).unwrap();
+        fs::set_permissions(&write_only, fs::Permissions::from_mode(0o300)).unwrap();
+        symlink("wx", temp_dir.path().join("link")).unwrap();
+        let parent = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+
+        // Creating entries needs write and execute, not read.
+        let dir_fd = parent.open_subdir_anchor(OsStr::new("wx")).unwrap();
+        dir_fd.open_file_at(OsStr::new("file")).unwrap();
+        assert!(parent.open_subdir_anchor(OsStr::new("link")).is_err());
+
+        fs::set_permissions(&write_only, fs::Permissions::from_mode(0o755)).unwrap();
         assert!(write_only.join("file").is_file());
     }
 
