@@ -710,7 +710,7 @@ fn test_chmod_recursive_no_dereference_operand() {
 /// it must only descend into the directory whose mode it changed, which is the
 /// one checked for '/', whatever the operand's name points at by then. A racer
 /// re-points the operand between two directories of the fixture, so that a
-/// failure never reaches outside it.
+/// failure never reaches outside it, and a file, which fails the open.
 #[test]
 #[cfg(not(target_os = "redox"))]
 fn test_chmod_recursive_descends_only_into_the_directory_it_changed() {
@@ -723,13 +723,14 @@ fn test_chmod_recursive_descends_only_into_the_directory_it_changed() {
         at.mkdir(dir);
         at.touch(format!("{dir}/f"));
     }
+    at.touch("x");
     at.relative_symlink_dir("a", "op");
 
     let stop = Arc::new(AtomicBool::new(false));
     let (op, tmp) = (at.plus("op"), at.plus("op.tmp"));
     let racer_stop = stop.clone();
     let racer = std::thread::spawn(move || {
-        for target in ["b", "a"].iter().cycle() {
+        for target in ["b", "x", "a", "x"].iter().cycle() {
             if racer_stop.load(Ordering::Relaxed) {
                 break;
             }
@@ -746,9 +747,12 @@ fn test_chmod_recursive_descends_only_into_the_directory_it_changed() {
 
         let result = scene.ucmd().args(&["-R", "700", "op"]).run();
         if !result.succeeded() {
-            result
-                .code_is(1)
-                .stderr_is("chmod: cannot access 'op': replaced while it was being processed\n");
+            // Either as replaced, or with the error opening what replaced it.
+            let stderr = result.code_is(1).stderr_str();
+            assert!(
+                stderr.starts_with("chmod: cannot access 'op': ") && stderr.lines().count() == 1,
+                "{stderr}"
+            );
         }
 
         for dir in ["a", "b"] {

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's fchmod
+// spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's fchmod EMFILE ENFILE
 
 #![cfg(unix)]
 
@@ -48,6 +48,9 @@ enum ChmodError {
     #[cfg(not(target_os = "redox"))]
     #[error("{}", translate!("perms-cannot-access-replaced", "file" => _0.quote()))]
     Replaced(PathBuf),
+    #[cfg(not(target_os = "redox"))]
+    #[error("{}", translate!("perms-cannot-access", "file" => _0.quote(), "error" => strip_errno(_1)))]
+    CannotAccess(PathBuf, std::io::Error),
 }
 
 impl UError for ChmodError {}
@@ -614,13 +617,27 @@ impl Chmoder {
         // included once the check above has passed. Under `-P` O_NOFOLLOW fails the
         // open rather than following a swapped-in symlink; `-H`/`-L` follow, which is
         // what they ask for. `-H --no-dereference` asks for the mode of what
-        // `chmod_file` resolves, and a directory that does not open (one that is not
-        // readable until its mode is changed, say) still has its mode changed, by
-        // path: in both cases the descent below checks what it opens for "/" itself.
+        // `chmod_file` resolves, and a directory that is not readable until its mode
+        // is changed, or that does not open for lack of descriptors, still has its
+        // mode changed, by path, as GNU does: in both cases the descent below checks
+        // what it opens for "/" itself.
         let pinned = if should_follow_symlink == self.dereference {
-            DirFd::open(file_path, should_follow_symlink.into())
+            match DirFd::open(file_path, should_follow_symlink.into())
                 .and_then(|dir_fd| Ok((dir_fd.metadata()?, dir_fd)))
-                .ok()
+            {
+                Ok(pinned) => Some(pinned),
+                Err(e)
+                    if matches!(
+                        e.raw_os_error(),
+                        Some(uucore::libc::EACCES | uucore::libc::EMFILE | uucore::libc::ENFILE)
+                    ) =>
+                {
+                    None
+                }
+                // Other errors, such as the name now leading to a file or a symlink,
+                // leave it alone rather than change whatever is there by path.
+                Err(e) => return Err(ChmodError::CannotAccess(file_path.into(), e).into()),
+            }
         } else {
             None
         };
@@ -665,7 +682,7 @@ impl Chmoder {
                 if err.kind() == std::io::ErrorKind::PermissionDenied {
                     r = r.and(Err(ChmodError::PermissionDenied(file_path.into()).into()));
                 } else {
-                    r = r.and(Err(err.into()));
+                    r = r.and(Err(ChmodError::CannotAccess(file_path.into(), err).into()));
                 }
             }
         }
