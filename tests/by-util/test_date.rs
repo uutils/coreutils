@@ -517,8 +517,10 @@ fn test_date_set_valid() {
         new_ucmd!()
             .arg("--set")
             .arg("2020-03-12 13:30:00+08:00")
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
             .succeeds()
-            .no_output();
+            .stdout_is("Thu Mar 12 05:30:00 UTC 2020\n");
     }
 }
 
@@ -555,8 +557,11 @@ fn test_date_set_permissions_error() {
         let result = new_ucmd!()
             .arg("--set")
             .arg("2020-03-11 21:45:00+08:00")
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
             .fails();
-        result.no_stdout();
+        // GNU prints the date even when the clock cannot be set.
+        result.stdout_is("Wed Mar 11 13:45:00 UTC 2020\n");
         assert!(result.stderr_str().starts_with("date: cannot set date: "));
     }
 }
@@ -567,10 +572,18 @@ fn test_date_set_hyphen_prefixed_values() {
     // test -s flag accepts hyphen-prefixed values like "-3 days"
     if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
         let test_cases = vec!["-1 hour", "-2 days", "-3 weeks", "-1 month"];
+        // The echoed date is relative to "now", so match its shape only.
+        let re = Regex::new(r"^\w{3} \w{3} {1,2}\d{1,2} \d{2}:\d{2}:\d{2} UTC \d{4}\n$").unwrap();
 
         for date_str in test_cases {
-            let result = new_ucmd!().arg("--set").arg(date_str).fails();
-            result.no_stdout();
+            let result = new_ucmd!()
+                .arg("--set")
+                .arg(date_str)
+                .env("LC_ALL", "C")
+                .env("TZ", "UTC0")
+                .fails();
+            // GNU prints the date even when the clock cannot be set.
+            result.stdout_matches(&re);
             // permission error, not argument parsing error
             assert!(
                 result.stderr_str().starts_with("date: cannot set date: "),
@@ -588,8 +601,33 @@ fn test_date_set_valid_2() {
         new_ucmd!()
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01 AWST") // spell-checker:disable-line
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
             .succeeds()
-            .no_output();
+            .stdout_is("Sat Mar 20 06:53:01 UTC 2021\n");
+    }
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_date_set_echo_honors_format_and_utc() {
+    // The echo is printed even when the set fails (GNU does the same), so
+    // the format and `-u` handling can be checked without privileges.
+    if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
+        // The echo goes through the user's format string.
+        new_ucmd!()
+            .args(&["--set", "2020-03-12 13:30:00+08:00", "+%F %T %Z"])
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
+            .fails()
+            .stdout_is("2020-03-12 05:30:00 UTC\n");
+        // `-u` echoes in UTC regardless of the local zone.
+        new_ucmd!()
+            .args(&["-u", "--set", "2020-03-12 13:30:00+08:00"])
+            .env("LC_ALL", "C")
+            .env("TZ", "Europe/Helsinki") // spell-checker:disable-line
+            .fails()
+            .stdout_is("Thu Mar 12 05:30:00 UTC 2020\n");
     }
 }
 
@@ -800,8 +838,10 @@ fn test_date_set_valid_3() {
         new_ucmd!()
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01") // Local timezone
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
             .succeeds()
-            .no_output();
+            .stdout_is("Sat Mar 20 14:53:01 UTC 2021\n");
     }
 }
 
@@ -812,8 +852,10 @@ fn test_date_set_valid_4() {
         new_ucmd!()
             .arg("--set")
             .arg("2020-03-11 21:45:00") // Local timezone
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
             .succeeds()
-            .no_output();
+            .stdout_is("Wed Mar 11 21:45:00 UTC 2020\n");
     }
 }
 
@@ -2649,6 +2691,17 @@ fn test_locale_day_names() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_locale_names_for_several_dates_in_one_run() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("dates", "2026-01-26\n2026-06-14\n2026-12-12\n");
+    ucmd.env("LC_ALL", "fr_FR.UTF-8")
+        .args(&["-f", "dates", "+%A %a %B %b"])
+        .succeeds()
+        .stdout_is("lundi lun. janvier janv\ndimanche dim. juin juin\nsamedi sam. décembre déc\n");
+}
+
+#[test]
 fn test_percent_percent_not_replaced() {
     let cases = [
         // Time conversion specifiers
@@ -2837,7 +2890,7 @@ fn test_date_format_modifier_combined_flags() {
 
 #[test]
 fn test_date_format_modifier_case_precedence() {
-    // Test that ^ (uppercase) takes precedence over # (swap case) regardless of order
+    // On names, ^ (uppercase) takes precedence over # (swap case) regardless of order
     new_ucmd!()
         .env("TZ", "UTC")
         .env("LC_ALL", "C")
@@ -2851,6 +2904,25 @@ fn test_date_format_modifier_case_precedence() {
         .args(&["-d", "1999-06-01", "+%#^B"])
         .succeeds()
         .stdout_is("JUNE\n");
+}
+
+#[test]
+fn test_date_format_modifier_case_flags_per_conversion() {
+    for (format, expected) in [
+        ("+%#c", "Sat Jun 15 13:05:03 2024\n"),
+        ("+%#r", "01:05:03 PM\n"),
+        ("+%^P", "pm\n"),
+        ("+%^#p", "pm\n"),
+        ("+%#^p", "pm\n"),
+        ("+%^#Z", "utc\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .env("LC_ALL", "C")
+            .args(&["-d", "2024-06-15 13:05:03", format])
+            .succeeds()
+            .stdout_is(expected);
+    }
 }
 
 #[test]

@@ -193,6 +193,48 @@ fn test_force_replace_same_inode_leaves_no_temp_file() {
     );
 }
 
+/// The destination can sit inside a directory reached through a symlink, as
+/// when the target argument is a symlink to a directory. The replace must
+/// follow it the same way the first create attempt does.
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: creating a link inside a symlinked directory is denied"
+)]
+fn test_force_replace_in_symlinked_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("real");
+    at.symlink_dir("real", "dirlink");
+    at.symlink_file("old", "real/link");
+
+    ucmd.args(&["-s", "-f", "new", "dirlink/link"]).succeeds();
+
+    assert_eq!(at.resolve_link("real/link"), "new");
+}
+
+/// Same as above for a hard link, which goes through the same replace path.
+#[test]
+// Android's app-private filesystem refuses hard links.
+#[cfg(all(unix, not(any(target_os = "redox", target_os = "android"))))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: creating a link inside a symlinked directory is denied"
+)]
+fn test_force_replace_hard_link_in_symlinked_directory() {
+    use std::os::unix::fs::MetadataExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("new");
+    at.mkdir("real");
+    at.symlink_dir("real", "dirlink");
+    at.touch("real/link");
+
+    ucmd.args(&["-f", "new", "dirlink/link"]).succeeds();
+
+    assert_eq!(at.metadata("real/link").ino(), at.metadata("new").ino());
+}
+
 #[test]
 fn test_symlink_overwrite_force_overrides_interactive() {
     let (at, mut ucmd) = at_and_ucmd!();

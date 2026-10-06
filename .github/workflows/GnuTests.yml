@@ -112,21 +112,6 @@ jobs:
         path_UUTILS='uutils'
         python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_FULL_SUMMARY_FILE }}
 
-    ### Run tests as root
-    - name: Run GNU root tests
-      shell: bash
-      run: |
-        ## Run GNU root tests
-        path_GNU='gnu'
-        path_UUTILS='uutils'
-        bash "uutils/util/run-gnu-test.sh" run-root
-
-    - name: Extract testing info from individual logs (run as root) into JSON
-      shell: bash
-      run : |
-        path_UUTILS='uutils'
-        python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }}
-
     ### This shell has been changed from "bash" to this command
     ### "script" will start a pty and the -q command removes the "script" initiation log
     ### the -e flag makes it propagate the error code and -c runs the command in a pty
@@ -147,6 +132,21 @@ jobs:
       run : |
         path_UUTILS='uutils'
         python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_STTY_FULL_SUMMARY_FILE }}
+
+    ### Run tests as root
+    - name: Run GNU root tests
+      shell: bash
+      run: |
+        ## Run GNU root tests
+        path_GNU='gnu'
+        path_UUTILS='uutils'
+        bash "uutils/util/run-gnu-test.sh" run-root
+
+    - name: Extract testing info from individual logs (run as root) into JSON
+      shell: bash
+      run : |
+        path_UUTILS='uutils'
+        python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }}
 
     ### Upload artifacts
     - name: Upload full json results

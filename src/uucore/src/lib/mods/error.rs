@@ -94,6 +94,15 @@ pub fn set_exit_code(code: i32) {
     EXIT_CODE.store(code, Ordering::SeqCst);
 }
 
+/// Print `<util>: <prefix><msg>` to stderr, used by [`crate::show!`] and friends.
+///
+/// stderr is unbuffered, so the line is formatted first and written at once.
+#[doc(hidden)]
+pub fn print_diagnostic(prefix: &str, msg: std::fmt::Arguments<'_>) {
+    let line = format!("{}: {prefix}{msg}\n", crate::util_name());
+    let _ = std::io::stderr().write_all(line.as_bytes());
+}
+
 /// Result type that should be returned by all utils.
 pub type UResult<T> = Result<T, Box<dyn UError>>;
 
@@ -417,6 +426,16 @@ impl Display for UIoError {
             // and we want to strip the "(os error X)" suffix.
             match self.inner.kind() {
                 NotFound => "No such file or directory",
+                // Rust maps both EACCES and EPERM to PermissionDenied. GNU
+                // prints "Operation not permitted" for EPERM (e.g. touch on a
+                // writable file owned by someone else) and "Permission denied"
+                // for EACCES. Prefer the errno when available (#15020).
+                #[cfg(unix)]
+                PermissionDenied
+                    if self.inner.raw_os_error() == Some(nix::errno::Errno::EPERM as i32) =>
+                {
+                    "Operation not permitted"
+                }
                 PermissionDenied => "Permission denied",
                 ConnectionRefused => "Connection refused",
                 ConnectionReset => "Connection reset",
@@ -830,7 +849,7 @@ impl Display for ClapErrorWrapper {
             self.print_failed.set(true);
             // Try to display this error to stderr, but ignore if that fails too
             // since we're already in an error state.
-            let _ = writeln!(std::io::stderr(), "{}: {print_fail}", crate::util_name());
+            print_diagnostic("", format_args!("{print_fail}"));
             // Mirror GNU behavior: when failing to print help or version, exit with error code.
             // This avoids silent failures when stdout is full or closed.
             set_exit_code(1);
@@ -888,6 +907,13 @@ mod tests {
         assert_eq!(
             "test: Permission denied",
             Err::<(), nix::Error>(Errno::EACCES)
+                .map_err_context(|| String::from("test"))
+                .unwrap_err()
+                .to_string()
+        );
+        assert_eq!(
+            "test: Operation not permitted",
+            Err::<(), nix::Error>(Errno::EPERM)
                 .map_err_context(|| String::from("test"))
                 .unwrap_err()
                 .to_string()

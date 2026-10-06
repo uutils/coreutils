@@ -23,7 +23,7 @@ use fluent_syntax::{
     },
     parser,
 };
-use jiff::Zoned;
+use jiff::{Timestamp, Zoned, tz::TimeZone};
 use regex::Regex;
 use textwrap::{fill, indent, termwidth};
 use zip::ZipArchive;
@@ -167,8 +167,15 @@ fn gen_manpage<T: Args>(
     // Convert to string for processing
     let manpage = String::from_utf8(buffer).expect("Invalid UTF-8 in manpage");
 
+    // Use `SOURCE_DATE_EPOCH` for reproducible builds if set and valid; otherwise use the current time.
+    let now = std::env::var("SOURCE_DATE_EPOCH")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .and_then(|s| Timestamp::new(s, 0).ok())
+        .map_or_else(Zoned::now, |t| t.to_zoned(TimeZone::UTC));
+
     // Post-process the manpage to fix mandoc lint issues
-    let date = Zoned::now().strftime("%Y-%m-%d").to_string();
+    let date = now.strftime("%Y-%m-%d").to_string();
     let processed_manpage = post_process_manpage(manpage, &date);
 
     // Write the processed manpage to stdout

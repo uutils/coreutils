@@ -672,6 +672,28 @@ fn test_check_tagged_missing_algo() {
         .stderr_contains("no properly formatted checksum lines found");
 }
 
+#[test]
+fn test_check_tagged_blanks_around_equal_sign() {
+    // Like GNU, accept any blanks, or none, around the '=' of a tagged line,
+    // with or without a space before the '('.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    let digest = "d41d8cd98f00b204e9800998ecf8427e";
+    let lines = [
+        format!("MD5(f) = {digest}"),
+        format!("MD5 (f)= {digest}"),
+        format!("MD5 (f) ={digest}"),
+        format!("MD5 (f)={digest}"),
+        format!("MD5 (f)\t=\t{digest}"),
+        format!("MD5 (f)  =  {digest}"),
+    ];
+
+    ucmd.arg("-c")
+        .pipe_in(lines.join("\n"))
+        .succeeds()
+        .stdout_only("f: OK\n".repeat(lines.len()));
+}
+
 #[rstest]
 #[case::md5("md5", "d41d8cd98f00b204e9800998ecf8427e")]
 #[case::sha1("sha1", "da39a3ee5e6b4b0d3255bfef95601890afd80709")]
@@ -2802,11 +2824,50 @@ mod cksum_check_mode {
     }
 
     #[test]
+    fn test_status_with_directory() {
+        let scene = make_scene();
+        scene.fixtures.mkdir("dir");
+        scene
+            .fixtures
+            .write("CHECKSUMS2", &format!("SM3 (dir) = {INVALID_SUM}\n"));
+
+        #[cfg(not(windows))]
+        let err_msg = "cksum: dir: Is a directory\n";
+        #[cfg(windows)]
+        let err_msg = "cksum: dir: Permission denied\n";
+
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("--status")
+            .arg("CHECKSUMS2")
+            .fails_with_code(1)
+            .stderr_only(err_msg);
+    }
+
+    #[test]
     fn test_check_with_non_existing_file() {
         let scene = make_scene();
         scene
             .fixtures
             .write("CHECKSUMS2", &format!("SM3 (input2) = {INVALID_SUM}\n"));
+
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("--status")
+            .arg("CHECKSUMS2")
+            .fails_with_code(1)
+            .stderr_only("cksum: input2: No such file or directory\n");
+
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("--quiet")
+            .arg("CHECKSUMS2")
+            .fails_with_code(1)
+            .stdout_contains("input2: FAILED open or read")
+            .stderr_contains("input2: No such file or directory");
 
         scene
             .ucmd()
@@ -2850,6 +2911,28 @@ mod cksum_check_mode {
             .fails()
             .stderr_contains("CHECKSUMS: 6: improperly formatted SM3 checksum line")
             .stderr_contains("CHECKSUMS: 9: improperly formatted BLAKE2b checksum line");
+    }
+
+    #[test]
+    fn test_warn_malformed_line_before_first_tagged_checksum() {
+        let ts = TestScenario::new(util_name!());
+        let at = &ts.fixtures;
+
+        at.touch("empty");
+        at.write(
+            "CHECKSUMS",
+            "invalid line\nMD5 (empty) = d41d8cd98f00b204e9800998ecf8427e\ninvalid line\n",
+        );
+
+        ts.ucmd()
+            .arg("--warn")
+            .arg("--check")
+            .arg("CHECKSUMS")
+            .succeeds()
+            .stdout_contains("empty: OK")
+            .stderr_contains("CHECKSUMS: 1: improperly formatted CRC checksum line")
+            .stderr_contains("CHECKSUMS: 3: improperly formatted MD5 checksum line")
+            .stderr_contains("WARNING: 2 lines are improperly formatted");
     }
 
     fn make_scene_with_checksum_missing() -> TestScenario {
@@ -3169,6 +3252,29 @@ mod debug_flag {
             .stderr_contains("avx512")
             .stderr_contains("avx2")
             .stderr_contains("pclmul");
+    }
+
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[test]
+    fn test_debug_with_glibc_tunables() {
+        if is_x86_feature_detected!("avx2") {
+            for (tunables, expected) in [
+                ("glibc.cpu.hwcaps=-AVX2", "avx2 support not detected"), // correctly disabling AVX2
+                ("glibc.cpu.hwcaps=-avx2", "using avx2 hardware support"), // lowercase invalidates AVX2 disabling
+                (
+                    "glibc.cpu.hwcaps=-AVX2:glibc.cpu.hwcaps=-AVX512F",
+                    "using avx2 hardware support",
+                ), // last wins
+                ("glibc.cpu.hwcaps=-AVX2 ", "using avx2 hardware support"), // trailing spaces invalidate AVX2 disabling
+            ] {
+                new_ucmd!()
+                    .arg("--debug")
+                    .arg("lorem_ipsum.txt")
+                    .env("GLIBC_TUNABLES", tunables)
+                    .succeeds()
+                    .stderr_contains(expected);
+            }
+        }
     }
 
     #[test]

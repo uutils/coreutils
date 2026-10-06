@@ -271,6 +271,22 @@ fn sub_num_int_char_const_in() {
 }
 
 #[test]
+fn char_constant_warning_preserves_prior_failure() {
+    new_ucmd!()
+        .args(&["%d\n", "bad", "'ab"])
+        .fails_with_code(1)
+        .stdout_is("0\n97\n")
+        .stderr_is("printf: 'bad': expected a numeric value\nprintf: warning: b: character(s) following character constant have been ignored\n");
+
+    new_ucmd!()
+        .args(&["%d\n", "bad", "'ab"])
+        .env("POSIXLY_CORRECT", "1")
+        .fails_with_code(1)
+        .stdout_is("0\n97\n")
+        .stderr_is("printf: 'bad': expected a numeric value\n");
+}
+
+#[test]
 fn sub_num_thousands() {
     // For "C" locale, the thousands separator is ignored but should
     // not result in an error

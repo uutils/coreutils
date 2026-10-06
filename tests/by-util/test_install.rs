@@ -557,6 +557,22 @@ fn test_install_target_file_dev_null() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_install_replaces_special_target() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "source_file";
+    let target = "target_fifo";
+
+    at.write(source, "contents");
+    at.mkfifo(target);
+
+    ucmd.arg(source).arg(target).succeeds().no_stderr();
+
+    assert!(at.file_exists(target));
+    assert_eq!(at.read(target), "contents");
+}
+
+#[test]
 fn test_install_nested_paths_copy_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file1 = "source_file";
@@ -799,21 +815,27 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
 const STRIP_TARGET_FILE: &str = "helloworld_installed";
 const STRIP_PROGRAM: &str = "#!/bin/sh\n: > \"$1\"\n";
 
+/// Create the fake strip program from a child process. Tests run as threads of
+/// one process: if this process held the script open for writing, a sibling
+/// test forking at that moment would inherit the fd, and exec'ing the script
+/// would then fail with ETXTBSY.
+fn write_strip_program(scene: &TestScenario, name: &str) {
+    scene
+        .cmd("sh")
+        .env("STRIP_SCRIPT", STRIP_PROGRAM)
+        .arg("-c")
+        .arg(format!(
+            "printf '%s' \"$STRIP_SCRIPT\" > {name} && chmod 755 {name}"
+        ))
+        .succeeds();
+}
+
 #[test]
 fn test_install_and_strip() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    // Write the strip script and sync to disk to avoid ETXTBSY race on some
-    // platforms (observed on ARM64 Linux CI runners).
-    let strip_path = at.plus("strip");
-    {
-        use std::io::Write;
-        let mut f = fs::File::create(&strip_path).unwrap();
-        f.write_all(STRIP_PROGRAM.as_bytes()).unwrap();
-        f.sync_all().unwrap();
-    }
-    at.set_mode("strip", 0o755);
+    write_strip_program(&scene, "strip");
     at.write("source", "file contents");
     let path = format!(
         "{}:{}",
@@ -853,16 +875,7 @@ fn test_install_and_strip_with_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    // Write the strip script and sync to disk to avoid ETXTBSY race on some
-    // platforms (observed on ARM64 Linux CI runners).
-    let strip_path = at.plus("strip-program");
-    {
-        use std::io::Write;
-        let mut f = fs::File::create(&strip_path).unwrap();
-        f.write_all(STRIP_PROGRAM.as_bytes()).unwrap();
-        f.sync_all().unwrap();
-    }
-    at.set_mode("strip-program", 0o755);
+    write_strip_program(&scene, "strip-program");
     at.write("source", "file contents");
 
     scene
@@ -2201,6 +2214,32 @@ fn test_target_file_ends_with_slash() {
         .arg(source)
         .fails()
         .stderr_contains("failed to access 'dir/target_file/': Not a directory");
+}
+
+/// Without `-D`, a `-t` target that is not a directory is refused, even with a
+/// single source, rather than installed over or created as a file.
+#[test]
+fn test_install_target_dir_not_a_directory() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("source", "new");
+    at.write("regular", "old");
+    at.symlink_file("nowhere", "dangling");
+
+    for (target, reason) in [
+        ("regular", "Not a directory"),
+        ("dangling", "No such file or directory"),
+        ("missing", "No such file or directory"),
+    ] {
+        scene
+            .ucmd()
+            .args(&["-t", target, "source"])
+            .fails()
+            .stderr_only(format!("install: failed to access '{target}': {reason}\n"));
+    }
+    assert_eq!(at.read("regular"), "old");
+    assert!(at.is_symlink("dangling"));
+    assert!(!at.file_exists("missing"));
 }
 
 #[test]
