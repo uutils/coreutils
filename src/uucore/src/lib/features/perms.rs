@@ -550,9 +550,7 @@ impl ChownExecutor {
         meta: &TraversalMetadata,
         follow: bool,
     ) -> IOResult<bool> {
-        // Under -H a symlink is stat'd itself but changed through: the file
-        // changed is not the one `meta` describes, so there is none to hold.
-        if matches!(self.filter, IfFrom::All) || follow && meta.file_type().is_symlink() {
+        if matches!(self.filter, IfFrom::All) {
             dir_fd.chown_at(name, self.dest_uid, self.dest_gid, follow.into())?;
             return Ok(true);
         }
@@ -679,14 +677,24 @@ impl ChownExecutor {
                 return;
             }
 
-            // Check if we should chown this entry
-            if self.matched(meta.uid(), meta.gid()) {
-                let follow_symlinks =
-                    self.dereference || self.traverse_symlinks == TraverseSymlinks::All;
+            // Under -H a symlink is stat'd itself for the descent, but changed
+            // through, so `--from` and the report concern the file it points to.
+            let follow_symlinks =
+                self.dereference || self.traverse_symlinks == TraverseSymlinks::All;
+            let target_meta = if follow_symlinks && meta.file_type().is_symlink() {
+                dir_fd
+                    .metadata_at(&entry_name, SymlinkBehavior::Follow)
+                    .ok()
+            } else {
+                None
+            };
+            let owner = target_meta.as_ref().unwrap_or(&meta);
 
-                let changed = self.chown_entry(dir_fd, &entry_name, &meta, follow_symlinks);
+            // Check if we should chown this entry
+            if self.matched(owner.uid(), owner.gid()) {
+                let changed = self.chown_entry(dir_fd, &entry_name, owner, follow_symlinks);
                 if let Ok(false) = changed {
-                    *ret = self.report_replaced(&entry_path, (meta.uid(), meta.gid()));
+                    *ret = self.report_replaced(&entry_path, (owner.uid(), owner.gid()));
                 } else if let Err(e) = changed {
                     *ret = 1;
                     if self.verbosity.level != VerbosityLevel::Silent {
@@ -704,12 +712,12 @@ impl ChownExecutor {
                     }
                 } else {
                     // Report the successful ownership change using the shared helper
-                    self.report_ownership_change_success(&entry_path, meta.uid(), meta.gid());
+                    self.report_ownership_change_success(&entry_path, owner.uid(), owner.gid());
                 }
             } else if self.print_verbose_ownership_retained_as(
                 &entry_path,
-                meta.uid(),
-                self.dest_gid.map(|_| meta.gid()),
+                owner.uid(),
+                self.dest_gid.map(|_| owner.gid()),
             ) != 0
             {
                 *ret = 1;
