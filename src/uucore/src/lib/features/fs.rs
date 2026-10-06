@@ -152,6 +152,13 @@ impl FileInformation {
         #[allow(clippy::useless_conversion)]
         return self.0.st_ino.into();
     }
+
+    pub fn dev(&self) -> u64 {
+        #[cfg(any(unix, target_os = "wasi"))]
+        return self.0.st_dev as _;
+        #[cfg(windows)]
+        return self.0.dwVolumeSerialNumber as _;
+    }
 }
 
 #[cfg(any(unix, target_os = "wasi"))]
@@ -1159,7 +1166,7 @@ pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> 
             "no unique temporary name available in the destination directory",
         ))
     }
-    #[cfg(not(all(unix, not(target_os = "redox"))))]
+    #[cfg(any(windows, target_os = "redox", target_os = "wasi"))]
     {
         // No atomic replace available here; this leaves the window described
         // above, accepted only where the platform offers nothing better.
@@ -1186,7 +1193,7 @@ fn link_at<Fd: AsFd>(target: &Path, dir: Fd, name: &OsStr, symbolic: bool) -> IO
     }
 }
 
-#[cfg(not(all(unix, not(target_os = "redox"))))]
+#[cfg(any(windows, target_os = "redox", target_os = "wasi"))]
 fn create_link_std(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> {
     if !symbolic {
         return fs::hard_link(target, dest);
@@ -1199,7 +1206,11 @@ fn create_link_std(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> {
             std::os::windows::fs::symlink_file(target, dest)
         }
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "redox")]
+    {
+        std::os::unix::fs::symlink(target, dest)
+    }
+    #[cfg(target_os = "wasi")]
     {
         rustix::fs::symlinkat(target, rustix::fs::CWD, dest).map_err(Into::into)
     }

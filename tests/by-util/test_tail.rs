@@ -263,6 +263,34 @@ fn test_n0_with_follow() {
     child.kill();
 }
 
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no rlimit support")]
+fn test_output_appended_to_input_file_terminates() {
+    // $ tail -n1 f >> f
+    // Appends the last line once and exits; it must not read back its
+    // own output forever. The file size limit makes a broken
+    // implementation fail instead of filling the disk.
+    use rustix::process::Resource;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // Larger than the filesystem block size so `tail` reads from the end.
+    let content = "x".repeat(256 * 1024) + "\n";
+    at.write("f", &content);
+    let out = std::fs::OpenOptions::new()
+        .append(true)
+        .open(at.plus("f"))
+        .unwrap();
+
+    ucmd.args(&["-n1", "f"])
+        .set_stdout(Stdio::from(out))
+        .limit(Resource::Fsize, 4 * 1024 * 1024, 4 * 1024 * 1024)
+        .succeeds();
+
+    assert_eq!(at.read("f"), content.repeat(2));
+}
+
 // TODO: Add similar test for windows
 #[test]
 #[cfg(unix)]
@@ -968,6 +996,32 @@ fn test_lines_with_size_suffix() {
         .arg("2K")
         .succeeds()
         .stdout_is_fixture(EXPECTED_FILE);
+}
+
+#[test]
+fn test_lines_file_size_multiple_of_block_size() {
+    // Files of exactly one and two 64 KiB blocks.
+    for size in [65_536, 131_072] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("f", &"y\n".repeat(size / 2));
+        ucmd.args(&["-n", "1", "f"]).succeeds().stdout_only("y\n");
+    }
+}
+
+#[test]
+fn test_lines_reach_into_first_block() {
+    // 8192 lines of 16 bytes each: a file of exactly two 64 KiB blocks.
+    const LINES: usize = 8192;
+    let lines: Vec<String> = (0..LINES).map(|i| format!("{i:015}\n")).collect();
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("f", &lines.concat());
+    for n in [5000, LINES, LINES + 1] {
+        scene
+            .ucmd()
+            .args(&["-n", &n.to_string(), "f"])
+            .succeeds()
+            .stdout_only(lines[LINES.saturating_sub(n)..].concat());
+    }
 }
 
 #[test]
