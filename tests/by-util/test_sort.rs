@@ -882,6 +882,35 @@ fn test_month_sort_japanese_locale() {
 }
 
 #[test]
+#[cfg(any(
+    not(unix),
+    target_os = "android",
+    target_os = "cygwin",
+    target_os = "redox"
+))]
+fn test_month_sort_gregorian_names_in_other_calendars() {
+    // Dates use the Solar Hijri calendar in fa_IR and the Ethiopian one in
+    // am_ET, but -M still ranks the Gregorian month names: Jan, May, Dec
+    // spell-checker:disable
+    for (locale, input, expected) in [
+        (
+            "fa_IR.UTF-8",
+            "مه\nدسامبر\nژانویه\n",
+            "ژانویه\nمه\nدسامبر\n",
+        ),
+        ("am_ET.UTF-8", "ሜይ\nዲሴም\nጃን\n", "ጃን\nሜይ\nዲሴም\n"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", locale)
+            .arg("-M")
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is(expected);
+    }
+    // spell-checker:enable
+}
+
+#[test]
 fn test_default_unsorted_ints2() {
     let input = "9\n1909888\n000\n1\n2";
     new_ucmd!()
