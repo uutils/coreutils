@@ -3223,6 +3223,39 @@ fn test_mv_cross_device_special_file_staging_removed_at_fd_limit() {
     assert!(dest.symlink_metadata().unwrap().file_type().is_fifo());
 }
 
+/// Special files inside a directory moved across devices are recreated with
+/// their mode, not copied by content.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_dir_with_special_files() {
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+    use std::os::unix::net::UnixListener;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    UnixListener::bind(at.plus("dir/sock")).expect("bind socket");
+    at.mkfifo("dir/fifo");
+    set_permissions(at.plus("dir/fifo"), Permissions::from_mode(0o604)).unwrap();
+    let other_fs = TempDir::new_in("/dev/shm/").expect("create temp dir in /dev/shm");
+
+    scene
+        .ucmd()
+        .arg("dir")
+        .arg(other_fs.path())
+        .succeeds()
+        .no_output();
+
+    assert!(!at.dir_exists("dir"));
+    let sock = other_fs.path().join("dir/sock").symlink_metadata().unwrap();
+    assert!(sock.file_type().is_socket());
+    let fifo = other_fs.path().join("dir/fifo").symlink_metadata().unwrap();
+    assert!(fifo.file_type().is_fifo());
+    assert_eq!(fifo.permissions().mode() & 0o7777, 0o604);
+}
+
 #[test]
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mv_selinux_context() {
