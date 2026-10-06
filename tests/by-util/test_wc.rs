@@ -5,10 +5,8 @@
 
 // spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars ioerrdir
 
-#[cfg(unix)]
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
 use uutests::util::vec_of_size;
+use uutests::{at_and_ucmd, new_ucmd};
 
 #[test]
 fn test_invalid_arg() {
@@ -121,6 +119,86 @@ fn test_utf8_bytes_chars() {
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
         .stdout_is("    442     513\n");
+}
+
+#[test]
+fn test_utf8_fast_path_counts_sequence_leaders() {
+    let cases: &[(&[u8], usize)] = &[
+        (b"", 0),
+        (b"\xc3\xa4\n", 2),
+        (b"\xe2\x82\xac\n", 2),
+        (b"\xf0\x9f\x92\xa9\n", 2),
+        (b"\x80\n", 1),
+        (b"\xff\n", 2),
+        (b"\xe2\x82", 1),
+        (b"\xc3\xa4\xff\xe2\x82\xac\n", 4),
+        (b"a\xc3", 2),
+        (b"\xc0\xaf\n", 2),
+        (b"\xed\xa0\x80\n", 2),
+    ];
+    for &(input, chars) in cases {
+        let lines = bytecount::count(input, b'\n');
+        for (flag, expected) in [
+            ("-m", format!("{chars}\n")),
+            ("-cm", format!("{chars:7} {:7}\n", input.len())),
+            ("-ml", format!("{lines:7} {chars:7}\n")),
+            ("-cml", format!("{lines:7} {chars:7} {:7}\n", input.len())),
+        ] {
+            new_ucmd!()
+                .env("LC_ALL", "C.UTF-8")
+                .arg(flag)
+                .pipe_in(input)
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn test_utf8_locale_without_encoding_suffix_counts_sequence_leaders() {
+    let locale = "en_IN";
+    if !uutests::util::is_locale_available(locale) {
+        return;
+    }
+    for variable in ["LC_ALL", "LC_CTYPE", "LANG"] {
+        new_ucmd!()
+            .env("LC_ALL", "")
+            .env("LC_CTYPE", "")
+            .env("LANG", "C")
+            .env(variable, locale)
+            .arg("-cm")
+            .pipe_in(b"\xc3\xa4\xff\n")
+            .succeeds()
+            .stdout_is("      3       4\n");
+    }
+}
+
+#[test]
+fn test_utf8_fast_path_counts_sequence_leaders_across_read_buffers() {
+    let cases: &[(&[u8], usize)] = &[
+        (b"\xc3\xa4\xe2\x82\xac\xf0\x9f\x92\xa9\n", 4),
+        (b"\xe2\x82a\xc3\xa4\n", 4),
+        (b"\xf0\x9f\x92", 1),
+        (b"\xed\xa0\x80\xc0\xaf\xff\x80\n", 4),
+        (b"\xf4\x90\x80\x80\n", 2),
+    ];
+    for prefix in [64 * 1024 - 3, 64 * 1024 - 2, 64 * 1024 - 1] {
+        for &(suffix, chars) in cases {
+            let mut input = vec![b'a'; prefix];
+            input.extend_from_slice(suffix);
+            let expected = format!("{:5} {:5} input\n", prefix + chars, input.len());
+            for tunables in ["", "glibc.cpu.hwcaps=-AVX2,-SSE2,-ASIMD"] {
+                let (at, mut ucmd) = at_and_ucmd!();
+                at.write_bytes("input", &input);
+                ucmd.env("LC_ALL", "C.UTF-8")
+                    .env("GLIBC_TUNABLES", tunables)
+                    .args(&["-cm", "input"])
+                    .succeeds()
+                    .stdout_is(&expected);
+            }
+        }
+    }
 }
 
 #[test]
