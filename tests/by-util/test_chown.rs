@@ -1189,3 +1189,102 @@ fn test_repeated_flags_are_accepted() {
             .succeeds();
     }
 }
+
+/// Under `-R -H` a symlink met in the tree is changed through, so the file
+/// changed is not the link that was looked at: `--from` must not refuse it.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_from_changes_through_symlink_in_tree_under_big_h() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("target");
+    at.relative_symlink_file("../target", "dir/link");
+    let meta = at.plus("target").metadata().unwrap();
+    let owner = format!("{}:{}", meta.uid(), meta.gid());
+
+    let scene_names = TestScenario::new(util_name!());
+    let user = scene_names
+        .cmd("id")
+        .arg("-un")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .to_owned();
+    let group = scene_names
+        .cmd("id")
+        .arg("-gn")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .to_owned();
+
+    ucmd.args(&["-R", "-H", "-v", &format!("--from={owner}"), &owner, "dir"])
+        .succeeds()
+        .stdout_is(format!(
+            "ownership of 'dir' retained as {user}:{group}\nownership of 'dir/link' retained as {user}:{group}\n"
+        ));
+}
+
+/// A group of the current user other than the effective one, if any.
+#[cfg(target_os = "linux")]
+fn other_group() -> Option<u32> {
+    let current = rustix::process::getegid().as_raw();
+    let other = rustix::process::getgroups()
+        .unwrap()
+        .into_iter()
+        .map(rustix::process::Gid::as_raw)
+        .find(|&group| group != current);
+    if other.is_none() {
+        println!("Test skipped: the user is in only one group");
+    }
+    other
+}
+
+/// `-R --from` changes the entries it judged, through a descriptor held on each.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_chown_recursive_from_changes_entries() {
+    let Some(other) = other_group() else {
+        return;
+    };
+    let current = rustix::process::getegid().as_raw();
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/file");
+
+    ucmd.args(&[
+        "-R",
+        &format!("--from=:{current}"),
+        &format!(":{other}"),
+        "dir",
+    ])
+    .succeeds()
+    .no_output();
+    for path in ["dir", "dir/file"] {
+        assert_eq!(at.plus(path).metadata().unwrap().gid(), other, "{path}");
+    }
+}
+
+/// With -h, `--from` on a symlink operand changes the link and not its target.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_chown_from_changes_symlink_operand_itself() {
+    let Some(other) = other_group() else {
+        return;
+    };
+    let current = rustix::process::getegid().as_raw();
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("target");
+    at.relative_symlink_file("target", "link");
+
+    ucmd.args(&[
+        "-h",
+        &format!("--from=:{current}"),
+        &format!(":{other}"),
+        "link",
+    ])
+    .succeeds()
+    .no_output();
+    assert_eq!(at.plus("link").symlink_metadata().unwrap().gid(), other);
+    assert_eq!(at.plus("target").metadata().unwrap().gid(), current);
+}
