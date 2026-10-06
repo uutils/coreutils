@@ -1357,19 +1357,7 @@ fn test_chown_from_judges_symlink_target_under_big_h() {
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-
-    let groups: Vec<u32> = scene
-        .cmd("id")
-        .arg("-G")
-        .succeeds()
-        .stdout_str()
-        .split_whitespace()
-        .map(|g| g.parse().unwrap())
-        .collect();
-    let Some(&target_group) = groups.first() else {
-        return;
-    };
-    let Some(&link_group) = groups.iter().find(|&&g| g != target_group) else {
+    let Some((target_group, link_group)) = two_groups(&scene) else {
         return;
     };
     let user = uid2usr(rustix::process::geteuid().as_raw()).unwrap();
@@ -1500,4 +1488,277 @@ fn test_chown_verbose_reports_unreadable_dir_operand(#[case] from: Option<u32>) 
         .fails_with_code(1)
         .stdout_is(format!("failed to change ownership of 'dir' to :{gid}\n"))
         .stderr_is("chown: cannot access 'dir': Permission denied\n");
+}
+
+/// Two different groups the caller is in, if there are.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+fn two_groups(scene: &TestScenario) -> Option<(u32, u32)> {
+    let groups: Vec<u32> = scene
+        .cmd("id")
+        .arg("-G")
+        .succeeds()
+        .stdout_str()
+        .split_whitespace()
+        .map(|g| g.parse().unwrap())
+        .collect();
+    let first = *groups.first()?;
+    let second = *groups.iter().find(|&&g| g != first)?;
+    Some((first, second))
+}
+
+/// -H and -L follow a symlinked directory operand also with -h: as with GNU,
+/// `--from` is judged on the directory and it is descended into.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[rstest::rstest]
+#[case::big_h("-H")]
+#[case::big_l("-L")]
+fn test_chown_h_judges_symlink_operand_on_its_target(#[case] opt: &str) {
+    use std::os::unix::fs::lchown;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let Some((first, second)) = two_groups(&scene) else {
+        return;
+    };
+    let gid = |path: &str| at.plus(path).symlink_metadata().unwrap().gid();
+    at.mkdir("dir");
+    at.touch("dir/file");
+    at.symlink_dir("dir", "link");
+    lchown(at.plus("dir"), None, Some(second)).unwrap();
+    lchown(at.plus("dir/file"), None, Some(first)).unwrap();
+    lchown(at.plus("link"), None, Some(first)).unwrap();
+
+    // The link is in `first`, but the directory is not: only the file is.
+    scene
+        .ucmd()
+        .args(&["-R", opt, "-h", &format!("--from=:{first}")])
+        .arg(format!(":{second}"))
+        .arg("link")
+        .succeeds()
+        .no_output();
+    assert_eq!(
+        (gid("link"), gid("dir"), gid("dir/file")),
+        (first, second, second)
+    );
+}
+
+/// -H and -L follow a symlinked directory operand also with -h, but as with
+/// GNU, the link itself is changed and not the directory.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[rstest::rstest]
+#[case::big_h("-H")]
+#[case::big_l("-L")]
+fn test_chown_h_changes_symlink_operand_itself(#[case] opt: &str) {
+    use std::os::unix::fs::lchown;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let Some((first, second)) = two_groups(&scene) else {
+        return;
+    };
+    let gid = |path: &str| at.plus(path).symlink_metadata().unwrap().gid();
+    at.mkdir("dir");
+    at.touch("dir/file");
+    at.symlink_dir("dir", "link");
+    for path in ["dir", "dir/file", "link"] {
+        lchown(at.plus(path), None, Some(second)).unwrap();
+    }
+
+    scene
+        .ucmd()
+        .args(&["-R", opt, "-h"])
+        .arg(format!(":{first}"))
+        .arg("link")
+        .succeeds()
+        .no_output();
+    assert_eq!(
+        (gid("link"), gid("dir"), gid("dir/file")),
+        (first, second, first)
+    );
+}
+
+/// With -h, -R -H and -L leave a link to a directory they cannot read alone,
+/// as GNU does, as they would the directory.
+#[cfg(target_os = "linux")]
+#[rstest::rstest]
+#[case::big_h("-H")]
+#[case::big_l("-L")]
+fn test_chown_h_leaves_link_to_unreadable_dir(#[case] opt: &str) {
+    use std::os::unix::fs::lchown;
+
+    // Root can read the directory anyway.
+    if rustix::process::geteuid().is_root() {
+        println!("Test skipped: running as root");
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let Some((first, second)) = two_groups(&scene) else {
+        return;
+    };
+    at.mkdir("dir");
+    at.symlink_dir("dir", "link");
+    lchown(at.plus("link"), None, Some(first)).unwrap();
+    at.set_mode("dir", 0o000);
+
+    scene
+        .ucmd()
+        .args(&["-R", opt, "-h", "-v"])
+        .arg(format!(":{second}"))
+        .arg("link")
+        .fails_with_code(1)
+        .stdout_is(format!(
+            "failed to change ownership of 'link' to :{second}\n"
+        ))
+        .stderr_is("chown: cannot access 'link': Permission denied\n");
+    assert_eq!(at.plus("link").symlink_metadata().unwrap().gid(), first);
+}
+
+/// Under -L -h a symlink met in the tree is followed for the descent but, as
+/// with GNU, changed itself, also with `--from`.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[rstest::rstest]
+#[case::all(false)]
+#[case::from(true)]
+fn test_chown_big_l_with_h_changes_symlinks_in_tree(#[case] with_from: bool) {
+    use std::os::unix::fs::lchown;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let Some((first, second)) = two_groups(&scene) else {
+        return;
+    };
+    let gid = |path: &str| at.plus(path).symlink_metadata().unwrap().gid();
+    at.mkdir("dir");
+    at.mkdir("other");
+    at.touch("other/file");
+    at.symlink_dir("other", "dir/link");
+    for path in ["dir", "dir/link", "other", "other/file"] {
+        lchown(at.plus(path), None, Some(first)).unwrap();
+    }
+    let from = with_from.then(|| format!("--from=:{first}"));
+
+    scene
+        .ucmd()
+        .args(&["-R", "-L", "-h"])
+        .args(from.as_slice())
+        .arg(format!(":{second}"))
+        .arg("dir")
+        .succeeds()
+        .no_output();
+    assert_eq!(
+        (gid("dir/link"), gid("other"), gid("other/file")),
+        (second, first, second)
+    );
+}
+
+/// Under -L -h, `--from` judges a symlink met in the tree by its target, as GNU
+/// does, and then changes the link.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_chown_big_l_with_h_judges_from_on_link_target() {
+    use std::os::unix::fs::lchown;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let Some((first, second)) = two_groups(&scene) else {
+        return;
+    };
+    at.mkdir("dir");
+    at.mkdir("other");
+    at.symlink_dir("other", "dir/link");
+    for path in ["dir", "other"] {
+        lchown(at.plus(path), None, Some(first)).unwrap();
+    }
+    lchown(at.plus("dir/link"), None, Some(second)).unwrap();
+
+    scene
+        .ucmd()
+        .args(&["-R", "-L", "-h", &format!("--from=:{first}")])
+        .arg(format!(":{first}"))
+        .arg("dir")
+        .succeeds()
+        .no_output();
+    assert_eq!(at.plus("dir/link").symlink_metadata().unwrap().gid(), first);
+}
+
+/// With -h, -H and -L judge a symlink operand on its target but change the
+/// link: a group not asked for stays as the link has it.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[rstest::rstest]
+#[case::big_h("-H")]
+#[case::big_l("-L")]
+fn test_chown_h_keeps_unchanged_group_of_symlink_operand(#[case] opt: &str) {
+    use std::os::unix::fs::lchown;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let Some((first, second)) = two_groups(&scene) else {
+        return;
+    };
+    at.touch("target");
+    at.symlink_file("target", "link");
+    lchown(at.plus("target"), None, Some(first)).unwrap();
+    lchown(at.plus("link"), None, Some(second)).unwrap();
+    let uid = rustix::process::geteuid().as_raw();
+
+    scene
+        .ucmd()
+        .args(&["-R", opt, "-h", &uid.to_string(), "link"])
+        .succeeds()
+        .no_output();
+    assert_eq!(at.plus("link").symlink_metadata().unwrap().gid(), second);
+}
+
+/// With -h, -H and -L judge a dangling symlink operand, as GNU does, on the
+/// link itself and change it.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[rstest::rstest]
+#[case::big_h("-H")]
+#[case::big_l("-L")]
+fn test_chown_h_changes_dangling_symlink_operand(#[case] opt: &str) {
+    use std::os::unix::fs::lchown;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let Some((first, second)) = two_groups(&scene) else {
+        return;
+    };
+    at.relative_symlink_file("nowhere", "link");
+    lchown(at.plus("link"), None, Some(first)).unwrap();
+
+    scene
+        .ucmd()
+        .args(&["-R", opt, "-h", &format!("--from=:{first}")])
+        .arg(format!(":{second}"))
+        .arg("link")
+        .succeeds()
+        .no_output();
+    assert_eq!(at.plus("link").symlink_metadata().unwrap().gid(), second);
+}
+
+/// With -h, -H and -L fail on a symlink operand that cannot be followed for
+/// another reason than a missing target, as GNU does.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[rstest::rstest]
+#[case::big_h("-H")]
+#[case::big_l("-L")]
+fn test_chown_h_fails_on_symlink_loop_operand(#[case] opt: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.relative_symlink_file("loop", "loop");
+    let gid = at.plus("loop").symlink_metadata().unwrap().gid();
+
+    #[cfg(all(not(target_env = "musl"), not(target_os = "android")))]
+    let expected = "chown: cannot access 'loop': Too many levels of symbolic links\n";
+    #[cfg(target_os = "android")]
+    let expected = "chown: cannot access 'loop': Too many symbolic links encountered\n";
+    #[cfg(target_env = "musl")]
+    let expected = "chown: cannot access 'loop': Symbolic link loop\n";
+
+    ucmd.args(&["-R", opt, "-h"])
+        .arg(format!(":{gid}"))
+        .arg("loop")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is(expected);
 }
