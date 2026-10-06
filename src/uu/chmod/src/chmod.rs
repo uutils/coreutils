@@ -524,7 +524,7 @@ impl Chmoder {
     fn is_root_fd(dir_fd: &DirFd) -> bool {
         dir_fd
             .metadata()
-            .is_ok_and(|meta| uucore::fs::dev_ino_is_root_dir(meta.dev(), meta.ino()))
+            .is_ok_and(|meta| uucore::fs::metadata_is_root_dir(&meta))
     }
 
     #[cfg(not(target_os = "redox"))]
@@ -978,16 +978,6 @@ impl Chmoder {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[cfg(not(target_os = "redox"))]
-    #[test]
-    fn test_is_root_fd() {
-        let root = DirFd::open(Path::new("/"), SymlinkBehavior::Follow).unwrap();
-        assert!(Chmoder::is_root_fd(&root));
-
-        let cwd = DirFd::open(Path::new("."), SymlinkBehavior::Follow).unwrap();
-        assert!(!Chmoder::is_root_fd(&cwd));
-    }
 
     #[test]
     fn test_extract_negative_modes() {

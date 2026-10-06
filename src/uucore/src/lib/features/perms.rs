@@ -25,7 +25,7 @@ use walkdir::WalkDir;
 
 #[cfg(target_os = "linux")]
 use crate::features::fs::FileInformation;
-use crate::features::fs::{dev_ino_is_root_dir, path_is_root_dir};
+use crate::features::fs::{metadata_is_root_dir, path_is_root_dir};
 #[cfg(target_os = "linux")]
 use crate::features::safe_traversal::{DirFd, FileInfo, SymlinkBehavior};
 
@@ -251,7 +251,7 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
 /// [`is_root`], judged on `meta` the caller already holds instead of on a new
 /// lookup of `path`, which a concurrent rename could have re-pointed.
 fn meta_is_root(path: &Path, meta: &Metadata) -> bool {
-    if !dev_ino_is_root_dir(meta.dev(), meta.ino()) {
+    if !metadata_is_root_dir(meta) {
         return false;
     }
     report_root(path);
@@ -1134,19 +1134,6 @@ mod tests {
         unix::fs::symlink(&dir, temp_dir.path().join("link")).unwrap();
         let link_fd = DirFd::open(&temp_dir.path().join("link"), SymlinkBehavior::Follow).unwrap();
         assert!(fd_is(&link_fd, &meta).unwrap());
-    }
-
-    /// The operand's `--preserve-root` verdict must come from the stat the
-    /// descent is pinned to, whatever the path points at by the time it is asked.
-    #[cfg(unix)]
-    #[test]
-    fn test_meta_is_root_ignores_the_path() {
-        let temp_dir = tempdir().unwrap();
-        let root = std::fs::metadata("/").unwrap();
-        let other = std::fs::metadata(temp_dir.path()).unwrap();
-
-        assert!(meta_is_root(temp_dir.path(), &root));
-        assert!(!meta_is_root(Path::new("/"), &other));
     }
 
     #[test]

@@ -638,17 +638,19 @@ pub fn path_is_root_dir<P: AsRef<Path>>(path: P, dereference: bool) -> bool {
     }
 }
 
-/// Whether the file a `stat` already taken reports as `(dev, ino)` is `/`.
+/// Whether the file that `meta`, a `stat` already taken, describes is `/`.
 ///
 /// Unlike [`path_is_root_dir`] this does not look the path up again, so the
 /// answer describes the file the caller is about to act on even if the path
-/// has been re-pointed since.
+/// has been re-pointed since. Callers hold either a [`fs::Metadata`] or, from
+/// an `fstat` of a descriptor, a `safe_traversal::Metadata`, hence the generic.
 #[cfg(unix)]
-pub fn dev_ino_is_root_dir(dev: u64, ino: u64) -> bool {
+pub fn metadata_is_root_dir(meta: &impl MetadataExt) -> bool {
     // st_dev and st_ino have different types on different platforms
     #[allow(clippy::unnecessary_cast)]
-    root_file_information()
-        .is_some_and(|root| root.0.st_dev as u64 == dev && root.0.st_ino as u64 == ino)
+    root_file_information().is_some_and(|root| {
+        root.0.st_dev as u64 == meta.dev() && root.0.st_ino as u64 == meta.ino()
+    })
 }
 
 /// Check if two files are identical by comparing their contents.
@@ -1633,12 +1635,10 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn test_dev_ino_is_root_dir() {
-        let root = fs::metadata("/").unwrap();
-        assert!(dev_ino_is_root_dir(root.dev(), root.ino()));
+    fn test_metadata_is_root_dir() {
+        assert!(metadata_is_root_dir(&fs::metadata("/").unwrap()));
 
         let dir = tempdir().unwrap();
-        let other = fs::metadata(dir.path()).unwrap();
-        assert!(!dev_ino_is_root_dir(other.dev(), other.ino()));
+        assert!(!metadata_is_root_dir(&fs::metadata(dir.path()).unwrap()));
     }
 }
