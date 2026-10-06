@@ -2643,6 +2643,12 @@ fn test_locale_month_names() {
         ("hu_HU.UTF-8", "január", "június", "december"),
         ("ja_JP.UTF-8", "1月", "6月", "12月"),
         ("zh_CN.UTF-8", "一月", "六月", "十二月"),
+        ("th_TH.UTF-8", "มกราคม", "มิถุนายน", "ธันวาคม"), // spell-checker:disable-line
+        // Months of the calendar that %m uses: Solar Hijri for fa_IR,
+        // Ethiopian for am_ET, Gregorian for ps_AF
+        ("fa_IR.UTF-8", "دی", "خرداد", "آذر"), // spell-checker:disable-line
+        ("am_ET.UTF-8", "ጥር", "ሰኔ", "ታኅሣሥ"),   // spell-checker:disable-line
+        ("ps_AF.UTF-8", "جنوري", "جون", "دسمبر"), // spell-checker:disable-line
     ] {
         check_date(loc, "2026-01-15", "+%B", jan);
         check_date(loc, "2026-06-15", "+%B", jun);
@@ -2683,6 +2689,8 @@ fn test_locale_day_names() {
         ("es_ES.UTF-8", "lunes", "domingo", "sábado"),
         ("ja_JP.UTF-8", "月曜日", "日曜日", "土曜日"),
         ("zh_CN.UTF-8", "星期一", "星期日", "星期六"),
+        ("th_TH.UTF-8", "วันจันทร์", "วันอาทิตย์", "วันเสาร์"), // spell-checker:disable-line
+        ("fa_IR.UTF-8", "دوشنبه", "یکشنبه", "شنبه"),    // spell-checker:disable-line
     ] {
         check_date(loc, "2026-01-26", "+%A", mon);
         check_date(loc, "2026-01-25", "+%A", sun);

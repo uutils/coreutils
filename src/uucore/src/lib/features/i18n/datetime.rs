@@ -8,8 +8,9 @@
 //! Locale-aware datetime formatting utilities using ICU and jiff-icu
 
 use icu_calendar::Date;
-use icu_calendar::cal::{Buddhist, Ethiopian, Iso, Persian};
+use icu_calendar::cal::{Buddhist, Ethiopian, Gregorian, Iso, Persian};
 use icu_datetime::DateTimeFormatter;
+use icu_datetime::FixedCalendarDateTimeFormatter;
 use icu_datetime::fieldsets;
 use icu_locale::Locale;
 use jiff::civil::Date as JiffDate;
@@ -67,16 +68,41 @@ pub enum CalendarType {
     Ethiopian,
 }
 
+/// Create a formatter for `$calendar` only. `DateTimeFormatter::try_new` can
+/// pick any calendar at runtime, so it links the data of all of them, which
+/// every utility then pays for in relocations at startup.
+macro_rules! new_formatter {
+    ($fset:expr, $calendar:expr) => {
+        FixedCalendarDateTimeFormatter::try_new((&get_time_locale().0).into(), $fset)
+            .ok()
+            .map(|f| f.into_formatter($calendar))
+    };
+}
+
+/// Create a formatter for month names in the calendar that dates are converted
+/// to, so that %B agrees with %m. Thai month names are the same in the Buddhist
+/// and Gregorian calendars.
+macro_rules! new_month_formatter {
+    ($fset:expr) => {
+        match get_locale_calendar_type(&get_time_locale().0) {
+            CalendarType::Persian => new_formatter!($fset, Persian),
+            CalendarType::Ethiopian => new_formatter!($fset, Ethiopian::new()),
+            CalendarType::Buddhist | CalendarType::Gregorian => new_formatter!($fset, Gregorian),
+        }
+    };
+}
+
 thread_local! {
     // Not a `static OnceLock`: ICU formatters are neither `Send` nor `Sync`.
     static MONTH_LONG: Option<DateTimeFormatter<fieldsets::M>> =
-        DateTimeFormatter::try_new(get_time_locale().0.clone().into(), fieldsets::M::long()).ok();
+        new_month_formatter!(fieldsets::M::long());
     static MONTH_MEDIUM: Option<DateTimeFormatter<fieldsets::M>> =
-        DateTimeFormatter::try_new(get_time_locale().0.clone().into(), fieldsets::M::medium()).ok();
+        new_month_formatter!(fieldsets::M::medium());
+    // Weekday names do not depend on the calendar.
     static WEEKDAY_LONG: Option<DateTimeFormatter<fieldsets::E>> =
-        DateTimeFormatter::try_new(get_time_locale().0.clone().into(), fieldsets::E::long()).ok();
+        new_formatter!(fieldsets::E::long(), Gregorian);
     static WEEKDAY_SHORT: Option<DateTimeFormatter<fieldsets::E>> =
-        DateTimeFormatter::try_new(get_time_locale().0.clone().into(), fieldsets::E::short()).ok();
+        new_formatter!(fieldsets::E::short(), Gregorian);
 }
 
 macro_rules! format_with {
@@ -248,17 +274,11 @@ fn get_locale_months_inner() -> Option<[Vec<u8>; 12]> {
     target_os = "redox"
 ))]
 fn get_locale_months_inner() -> Option<[Vec<u8>; 12]> {
-    let (locale, _) = get_time_locale();
-    let locale_prefs = locale.clone().into();
-    // M::medium() produces abbreviated month names (e.g. "Jan", "Feb") matching
-    // nl_langinfo(ABMON_*) on Unix. M::short() produces numeric ("1", "2") and
-    // M::long() produces full names ("January", "February").
-    let formatter = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::medium()).ok()?;
-
     let mut months: [Vec<u8>; 12] = Default::default();
     for i in 0..12u8 {
         let iso_date = Date::<Iso>::try_new_iso(2000, i + 1, 1).ok()?;
-        let formatted = formatter.format(&iso_date).to_string();
+        // Abbreviated names ("Jan", "Feb"), like nl_langinfo(ABMON_*) on Unix
+        let formatted = format_with!(MONTH_MEDIUM, &iso_date)?;
         // Strip blanks and uppercase using ASCII case folding
         months[i as usize] = formatted
             .bytes()
