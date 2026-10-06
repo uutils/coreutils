@@ -26,9 +26,6 @@ uucore = { workspace = true, features = [
   "quoting-style",
 ] }
 
-[target.'cfg(unix)'.dependencies]
-rustix = { workspace = true, features = ["process", "fs"] }
-
 [features]
 diagnostics = ["uucore/diagnostics"]
 selinux = ["uucore/selinux"]
