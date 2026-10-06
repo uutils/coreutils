@@ -6,7 +6,7 @@
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
 // spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot EOVERFLOW chowned chmoded
-// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat
+// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat mknodat
 
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
@@ -597,6 +597,32 @@ impl DirFd {
             .into());
         }
         Ok(())
+    }
+
+    /// Create a fifo, socket, or device node relative to this directory
+    ///
+    /// `mode` holds the file type bits as well as the permissions, as for
+    /// `mknod(2)`, and the umask applies. Fails with `EEXIST` if the name
+    /// already exists.
+    pub fn mknod_at(&self, name: &OsStr, mode: u32, dev: u64) -> io::Result<()> {
+        let name_cstr =
+            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        // Neither nix nor rustix provides `mknodat` on Apple targets.
+        // SAFETY: `name_cstr` is NUL-terminated and outlives the call, and
+        // `self.fd` is an open directory descriptor.
+        let res = unsafe {
+            libc::mknodat(
+                self.fd.as_raw_fd(),
+                name_cstr.as_ptr(),
+                mode as libc::mode_t,
+                dev as libc::dev_t,
+            )
+        };
+        if res == 0 {
+            Ok(())
+        } else {
+            Err(io::Error::last_os_error())
+        }
     }
 
     /// Create a file for writing relative to this directory
@@ -1504,6 +1530,23 @@ mod tests {
         let result = dir_fd.mkdir_at(OsStr::new("existing"), 0o755);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_mknod_at_creates_fifo_and_refuses_existing() {
+        use std::os::unix::fs::FileTypeExt;
+
+        let temp_dir = TempDir::new().unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        // S_IFIFO | 0o600
+        let fifo = 0o010_600;
+
+        dir_fd.mknod_at(OsStr::new("fifo"), fifo, 0).unwrap();
+
+        let metadata = fs::symlink_metadata(temp_dir.path().join("fifo")).unwrap();
+        assert!(metadata.file_type().is_fifo());
+        let err = dir_fd.mknod_at(OsStr::new("fifo"), fifo, 0).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
     }
 
     #[test]
