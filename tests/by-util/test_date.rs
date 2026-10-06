@@ -2238,6 +2238,47 @@ fn test_date_format_locale_date_and_time_no_pad_large_width() {
         .stdout_only("01/19/97|20:17:48|08:17:48 PM\n");
 }
 
+/// `%p` and `%P` use the locale's AM/PM markers, also inside `%r`. The Linux
+/// values are GNU date's, the macOS ones follow its locale data.
+#[test]
+#[cfg(any(target_vendor = "apple", all(target_os = "linux", target_env = "gnu")))]
+fn test_date_format_locale_ampm_markers() {
+    #[cfg(target_os = "linux")]
+    let cases = [
+        ("es_ES.UTF-8", "%p", "p.\u{202f}m."),
+        ("es_ES.UTF-8", "%^p", "P.\u{202f}M."),
+        ("es_ES.UTF-8", "%10p", "   p.\u{202f}m."),
+        ("es_ES.UTF-8", "%r", "08:17:48 p.\u{202f}m."),
+        ("es_ES.UTF-8", "%^r", "08:17:48 P.\u{202f}M."),
+        ("fr_FR.UTF-8", "%p", ""),
+        ("fr_FR.UTF-8", "%10p", "          "),
+        ("fr_FR.UTF-8", "%r", "08:17:48 "),
+        ("en_GB.UTF-8", "%p", "pm"),
+        ("en_GB.UTF-8", "%^P", "pm"),
+    ];
+    #[cfg(target_vendor = "apple")]
+    let cases = [
+        ("es_ES.UTF-8", "%p", "p. m."),
+        ("es_ES.UTF-8", "%^p", "P. M."),
+        ("es_ES.UTF-8", "%r", "08:17:48 p. m."),
+        ("en_GB.UTF-8", "%P", "p.m."),
+        ("ja_JP.UTF-8", "%p", "午後"),
+    ];
+
+    for (locale, format, expected) in cases {
+        if !is_locale_available(locale) {
+            continue;
+        }
+        new_ucmd!()
+            .env("LC_ALL", locale)
+            .arg("-d")
+            .arg("1997-01-19 20:17:48")
+            .arg(format!("+{format}"))
+            .succeeds()
+            .stdout_only(format!("{expected}\n"));
+    }
+}
+
 /// bg_BG's `date_fmt` has the year only inside `%x`, which therefore has to
 /// be expanded before an out-of-range year is put in.
 #[test]

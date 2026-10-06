@@ -353,7 +353,7 @@ fn strip_default_padding(value: &str) -> String {
 /// padding character (space for text, zero for numeric).
 /// Flags are processed in order so that when conflicting flags appear,
 /// the last one takes precedence (e.g., `_+` means `+` wins for padding).
-fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, FormatError> {
+pub fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, FormatError> {
     let flags = parsed.flags;
     let width = parsed.width;
     let specifier = parsed.spec;

@@ -7,6 +7,8 @@
 
 //! Locale detection for time format preferences
 
+use std::borrow::Cow;
+
 /// Format used when the locale does not provide a date/time format.
 const POSIX_DEFAULT_FORMAT: &[u8] = b"%a %b %e %X %Z %Y";
 
@@ -14,6 +16,7 @@ const POSIX_DEFAULT_FORMAT: &[u8] = b"%a %b %e %X %Z %Y";
 /// used without `nl_langinfo` or when the locale leaves one empty.
 const LOCALE_FORMAT_SPECIFIERS: [&str; 3] = ["x", "X", "r"];
 const POSIX_LOCALE_FORMATS: [&str; 3] = ["%m/%d/%y", "%H:%M:%S", "%I:%M:%S %p"];
+const POSIX_AMPM_MARKERS: [&str; 2] = ["AM", "PM"];
 
 // `_DATE_FMT` is the only langinfo item that spells the full date line the way
 // `date` prints it, timezone included. It is a glibc extension, so everywhere
@@ -95,6 +98,17 @@ cfg_nl_langinfo! {
         formats
     });
 
+    /// The locale's `AM_STR` and `PM_STR`, read once. Either may be empty.
+    static LOCALE_AMPM_MARKERS: LazyLock<[&'static str; 2]> = LazyLock::new(|| {
+        let mut markers = POSIX_AMPM_MARKERS;
+        for (marker, item) in markers.iter_mut().zip([libc::AM_STR, libc::PM_STR]) {
+            if let Some(value) = langinfo(item).and_then(|value| String::from_utf8(value).ok()) {
+                *marker = value.leak();
+            }
+        }
+        markers
+    });
+
     /// Reads a langinfo item of the `LC_TIME` locale set in the environment.
     fn langinfo(item: libc::nl_item) -> Option<Vec<u8>> {
         // In tests, acquire mutex to prevent race conditions with setlocale()
@@ -118,6 +132,7 @@ cfg_nl_langinfo! {
 
 cfg_nl_langinfo! { else
     static LOCALE_FORMATS: [&str; 3] = POSIX_LOCALE_FORMATS;
+    static LOCALE_AMPM_MARKERS: [&str; 2] = POSIX_AMPM_MARKERS;
 }
 
 /// Returns the locale's format for `%x`, `%X` or `%r`, given the specifier
@@ -127,6 +142,22 @@ pub fn get_locale_format(specifier: &str) -> Option<&'static str> {
         .iter()
         .position(|known| *known == specifier)?;
     Some(LOCALE_FORMATS[index])
+}
+
+/// Returns the locale's AM or PM marker for `%p`, lowercased for `%P`, given
+/// the specifier without `%`, and `None` for any other specifier.
+pub fn get_locale_ampm_marker(specifier: &str, is_pm: bool) -> Option<Cow<'static, str>> {
+    let lowercase = match specifier {
+        "p" => false,
+        "P" => true,
+        _ => return None,
+    };
+    let marker = LOCALE_AMPM_MARKERS[usize::from(is_pm)];
+    Some(if lowercase {
+        Cow::Owned(marker.to_lowercase())
+    } else {
+        Cow::Borrowed(marker)
+    })
 }
 
 cfg_langinfo! {
