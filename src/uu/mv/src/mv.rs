@@ -1408,6 +1408,12 @@ fn rename_file_fallback(
     #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
     #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
 ) -> io::Result<()> {
+    // Open the source first, so a source that cannot be read does not cost
+    // the destination.
+    #[cfg(unix)]
+    let src_file = uucore::safe_copy::open_source(from, /* nofollow */ true)
+        .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+
     // Remove existing target file if it exists
     if to.is_symlink() {
         fs::remove_file(to).map_err(|err| {
@@ -1443,9 +1449,7 @@ fn rename_file_fallback(
     {
         use std::fs::Permissions;
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
-        use uucore::safe_copy::{create_dest_restrictive, open_source};
-        let src_file = open_source(from, /* nofollow */ true)
-            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+        use uucore::safe_copy::create_dest_restrictive;
         let src_mode = src_file
             .metadata()
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?

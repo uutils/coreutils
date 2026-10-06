@@ -2767,6 +2767,31 @@ fn test_mv_cross_device_dir_refuses_symlink_at_recreated_dest() {
     assert_eq!(at.read("victim/guard"), "PROTECTED_DATA");
 }
 
+/// A cross-device move that cannot read the source must keep the destination.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_unreadable_source_keeps_dest() {
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::PermissionsExt;
+    use tempfile::TempDir;
+
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("src", "source content");
+    set_permissions(at.plus("src"), Permissions::from_mode(0o000)).unwrap();
+    let other_fs = TempDir::new_in("/dev/shm/").expect("create temp dir in /dev/shm");
+    let dest = other_fs.path().join("dest");
+    std::fs::write(&dest, "old content").unwrap();
+
+    scene.ucmd().arg("src").arg(&dest).fails();
+
+    assert_eq!(std::fs::read_to_string(&dest).unwrap(), "old content");
+    assert!(at.file_exists("src"));
+}
+
 #[test]
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mv_selinux_context() {
