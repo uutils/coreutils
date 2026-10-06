@@ -5,7 +5,8 @@
 
 // spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized unwriteable
 // spell-checker:ignore renameat symlinkat unlinkat unguessability RDONLY CLOEXEC
-// spell-checker:ignore renamer fsetxattr
+// spell-checker:ignore renamer fsetxattr lsetxattr fchown
+// spell-checker:ignore fakeroot
 
 mod error;
 #[cfg(unix)]
@@ -26,6 +27,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
 use std::env;
+use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fs;
 use std::io::{self, IsTerminal};
@@ -1020,14 +1022,10 @@ fn rename_special_fallback(from: &Path, to: &Path, metadata: &fs::Metadata) -> i
     fs::remove_file(from)
 }
 
-/// The mode to give `node`, a new special file like `metadata`, after giving
-/// it the same owner with `chown` if it does not have it yet.
-///
-/// Ownership is best effort for unprivileged callers. As for regular files, if
-/// it did not take, the node belongs to whoever ran mv, so setuid and setgid
-/// are dropped. The rest of the mode, which the umask reduced, is restored.
+/// The mode to give `node`, a new file like `metadata`, after `chown` gives it the
+/// same owner if it can. If not, setuid and setgid are dropped, as in GNU.
 #[cfg(unix)]
-fn special_file_mode(
+fn mode_after_chown(
     metadata: &fs::Metadata,
     node: &impl unix::fs::MetadataExt,
     chown: impl FnOnce(u32, u32) -> io::Result<()>,
@@ -1046,14 +1044,20 @@ fn special_file_mode(
 /// be created.
 #[cfg(all(unix, not(target_os = "redox")))]
 fn copy_special_file(to: &Path, metadata: &fs::Metadata) -> io::Result<()> {
-    let parent = to
+    let (dir, name) = open_parent(to)?;
+    create_special_file_at(&dir, name, metadata)
+}
+
+/// Open the directory containing `path`, following symlinks as an operation on
+/// `path` would, and return it with the last component of `path`.
+#[cfg(all(unix, not(target_os = "redox")))]
+fn open_parent(path: &Path) -> io::Result<(DirFd, &OsStr)> {
+    let parent = path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
-    let name = to.file_name().ok_or(io::ErrorKind::InvalidInput)?;
-    // Follows symlinks in `parent`, as creating the node by path would.
-    let dir = DirFd::open_anchor(parent)?;
-    create_special_file_at(&dir, name, metadata)
+    let name = path.file_name().ok_or(io::ErrorKind::InvalidInput)?;
+    Ok((DirFd::open_anchor(parent)?, name))
 }
 
 /// Create the special file that `metadata` describes as `name` in `dir`, with
@@ -1063,11 +1067,7 @@ fn copy_special_file(to: &Path, metadata: &fs::Metadata) -> io::Result<()> {
 /// `dir` and is then renamed into place. In `dir` itself, whoever else can
 /// write there could link another file over the name between those calls.
 #[cfg(all(unix, not(target_os = "redox")))]
-fn create_special_file_at(
-    dir: &DirFd,
-    name: &std::ffi::OsStr,
-    metadata: &fs::Metadata,
-) -> io::Result<()> {
+fn create_special_file_at(dir: &DirFd, name: &OsStr, metadata: &fs::Metadata) -> io::Result<()> {
     use rustix::fs::renameat;
     use rustix::process::geteuid;
     use std::os::unix::fs::MetadataExt;
@@ -1097,7 +1097,7 @@ fn create_special_file_at(
         .mknod_at(name, metadata.mode(), metadata.rdev())
         .and_then(|()| {
             let node = staging.metadata_at(name, SymlinkBehavior::NoFollow)?;
-            let mode = special_file_mode(metadata, &node, |uid, gid| {
+            let mode = mode_after_chown(metadata, &node, |uid, gid| {
                 staging.chown_at(name, Some(uid), Some(gid), SymlinkBehavior::NoFollow)
             });
             staging.chmod_at(name, mode, SymlinkBehavior::NoFollow)
@@ -1127,7 +1127,7 @@ fn copy_special_file(to: &Path, metadata: &fs::Metadata) -> io::Result<()> {
         Mode::from_bits_truncate(mode),
         metadata.rdev() as nix::libc::dev_t,
     )?;
-    let mode = special_file_mode(metadata, &to.symlink_metadata()?, |uid, gid| {
+    let mode = mode_after_chown(metadata, &to.symlink_metadata()?, |uid, gid| {
         unix::fs::lchown(to, Some(uid), Some(gid))
     });
     fs::set_permissions(to, fs::Permissions::from_mode(mode))
@@ -1293,17 +1293,60 @@ fn rename_dir_fallback(
 ///
 /// `create_dir_all` would accept a symlink planted at `path` after the caller
 /// removed the destination, redirecting the move out of the destination tree.
+#[cfg(any(not(unix), target_os = "redox"))]
 fn create_dir_fail_closed(path: &Path) -> io::Result<()> {
-    fs::create_dir(path).map_err(|e| {
-        if e.kind() == io::ErrorKind::AlreadyExists {
-            io::Error::new(
-                io::ErrorKind::AlreadyExists,
-                translate!("mv-error-dest-appeared", "path" => path.quote()),
-            )
-        } else {
-            e
-        }
-    })
+    fs::create_dir(path).map_err(|e| dest_appeared(path, e))
+}
+
+/// Report an entry that was already at `path` as one we refuse to reuse.
+fn dest_appeared(path: &Path, e: io::Error) -> io::Error {
+    if e.kind() == io::ErrorKind::AlreadyExists {
+        io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            translate!("mv-error-dest-appeared", "path" => path.quote()),
+        )
+    } else {
+        e
+    }
+}
+
+/// A directory created by a cross-device directory move. Where it is held open,
+/// entries are created relative to `fd`, so a symlink swapped in cannot redirect them.
+struct DestDir<'a> {
+    path: &'a Path,
+    #[cfg(all(unix, not(target_os = "redox")))]
+    fd: DirFd,
+}
+
+/// Create the directory `path`, which is `name` in `parent` if given.
+#[cfg(all(unix, not(target_os = "redox")))]
+fn create_dest_dir<'a>(
+    parent: Option<(&DestDir, &OsStr)>,
+    path: &'a Path,
+) -> io::Result<DestDir<'a>> {
+    let opened;
+    let (parent, name) = if let Some((parent, name)) = parent {
+        (&parent.fd, name)
+    } else {
+        let (dir, name) = open_parent(path)?;
+        opened = dir;
+        (&opened, name)
+    };
+    parent
+        .mkdir_at(name, 0o777)
+        .map_err(|e| dest_appeared(path, e))?;
+    // Just created, so a symlink there was swapped in since. Entries are only
+    // created in it, which needs no read permission.
+    let fd = parent.open_subdir_anchor(name)?;
+    Ok(DestDir { path, fd })
+}
+
+#[cfg(any(not(unix), target_os = "redox"))]
+fn create_dest_dir<'a>(
+    _parent: Option<(&DestDir, &OsStr)>,
+    path: &'a Path,
+) -> io::Result<DestDir<'a>> {
+    create_dir_fail_closed(path).map(|()| DestDir { path })
 }
 
 fn get_dir_size(path: &Path) -> io::Result<u64> {
@@ -1334,7 +1377,7 @@ fn copy_dir_contents(
     display_manager: Option<&MultiProgress>,
 ) -> io::Result<()> {
     // Create the destination directory
-    create_dir_fail_closed(to)?;
+    let dest = create_dest_dir(None, to)?;
 
     #[cfg(unix)]
     {
@@ -1344,7 +1387,7 @@ fn copy_dir_contents(
         if let (Some(tracker), Some(scanner)) = (hardlink_tracker, hardlink_scanner) {
             copy_dir_contents_recursive(
                 from,
-                to,
+                &dest,
                 tracker,
                 scanner,
                 verbose,
@@ -1355,7 +1398,7 @@ fn copy_dir_contents(
     }
     #[cfg(not(unix))]
     {
-        copy_dir_contents_recursive(from, to, verbose, progress_bar, display_manager)?;
+        copy_dir_contents_recursive(from, &dest, verbose, progress_bar, display_manager)?;
     }
 
     Ok(())
@@ -1363,7 +1406,7 @@ fn copy_dir_contents(
 
 fn copy_dir_contents_recursive(
     from_dir: &Path,
-    to_dir: &Path,
+    to_dir: &DestDir,
     #[cfg(unix)] hardlink_tracker: &mut HardlinkTracker,
     #[cfg(unix)] hardlink_scanner: &HardlinkGroupScanner,
     verbose: bool,
@@ -1384,13 +1427,15 @@ fn copy_dir_contents_recursive(
         }
     };
 
-    let entries = fs::read_dir(from_dir)?;
+    // Read the names first, so the source directory is closed before
+    // descending and only the destination stays open per level.
+    let names = fs::read_dir(from_dir)?
+        .map(|entry| entry.map(|entry| entry.file_name()))
+        .collect::<io::Result<Vec<_>>>()?;
 
-    for entry in entries {
-        let entry = entry?;
-        let from_path = entry.path();
-        let file_name = from_path.file_name().unwrap();
-        let to_path = to_dir.join(file_name);
+    for file_name in names.iter().map(OsString::as_os_str) {
+        let from_path = from_dir.join(file_name);
+        let to_path = to_dir.path.join(file_name);
 
         if let Some(pb) = progress_bar {
             pb.set_message(from_path.to_string_lossy().to_string());
@@ -1404,6 +1449,8 @@ fn copy_dir_contents_recursive(
                 copy_file_with_hardlinks_helper(
                     &from_path,
                     &to_path,
+                    to_dir,
+                    file_name,
                     hardlink_tracker,
                     hardlink_scanner,
                 )?;
@@ -1416,7 +1463,7 @@ fn copy_dir_contents_recursive(
             print_verbose(&from_path, &to_path);
         } else if from_path.is_dir() {
             // Recursively copy subdirectory (only real directories, not symlinks)
-            create_dir_fail_closed(&to_path)?;
+            let subdir = create_dest_dir(Some((to_dir, file_name)), &to_path)?;
 
             // Preserve ownership (uid/gid) of the subdirectory
             #[cfg(unix)]
@@ -1428,7 +1475,7 @@ fn copy_dir_contents_recursive(
 
             copy_dir_contents_recursive(
                 &from_path,
-                &to_path,
+                &subdir,
                 #[cfg(unix)]
                 hardlink_tracker,
                 #[cfg(unix)]
@@ -1444,6 +1491,8 @@ fn copy_dir_contents_recursive(
                 copy_file_with_hardlinks_helper(
                     &from_path,
                     &to_path,
+                    to_dir,
+                    file_name,
                     hardlink_tracker,
                     hardlink_scanner,
                 )?;
@@ -1467,10 +1516,67 @@ fn copy_dir_contents_recursive(
     Ok(())
 }
 
-#[cfg(unix)]
+/// Copy `from` into `dest` as `name`, which is `to` by path. An entry that
+/// appeared at `name` meanwhile is replaced rather than followed, as in GNU.
+#[cfg(all(unix, not(target_os = "redox")))]
 fn copy_file_with_hardlinks_helper(
     from: &Path,
     to: &Path,
+    dest: &DestDir,
+    name: &OsStr,
+    hardlink_tracker: &mut HardlinkTracker,
+    hardlink_scanner: &HardlinkGroupScanner,
+) -> io::Result<()> {
+    use std::os::unix::fs::MetadataExt;
+    use uucore::fs::link_at;
+
+    let dest = &dest.fd;
+    let hardlink_options = HardlinkOptions::default();
+    if let Some(existing_target) =
+        hardlink_tracker.check_hardlink(from, to, hardlink_scanner, &hardlink_options)
+    {
+        return dest.replace_entry_at(name, |dir, name| {
+            link_at(&existing_target, dir, name, false)
+        });
+    }
+
+    let metadata = from.symlink_metadata()?;
+    if metadata.is_symlink() {
+        let target = fs::read_link(from)?;
+        dest.replace_entry_at(name, |dir, name| link_at(&target, dir, name, true))?;
+        // There is no descriptor form of `lsetxattr`, so this goes by path.
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "linux",
+            target_os = "android",
+            target_os = "netbsd"
+        ))]
+        if let Ok(failed) = fsxattr::copy_xattrs_ignore_unsupported(from, to) {
+            show_xattr_failures(failed);
+        }
+        let _ = dest.chown_at(
+            name,
+            Some(metadata.uid()),
+            Some(metadata.gid()),
+            SymlinkBehavior::NoFollow,
+        );
+        fs::remove_file(from)?;
+    } else if is_special_file(metadata.file_type()) {
+        create_special_file_at(dest, name, &metadata)?;
+    } else {
+        let src = uucore::safe_copy::open_source(from, /* nofollow */ true)?;
+        let mut dst = dest.replace_entry_at(name, DirFd::open_file_at)?;
+        copy_file_data(&src, &mut dst)?;
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "redox")]
+fn copy_file_with_hardlinks_helper(
+    from: &Path,
+    to: &Path,
+    _dest: &DestDir,
+    _name: &OsStr,
     hardlink_tracker: &mut HardlinkTracker,
     hardlink_scanner: &HardlinkGroupScanner,
 ) -> io::Result<()> {
@@ -1554,48 +1660,12 @@ fn rename_file_fallback(
     // step to a different inode.
     #[cfg(unix)]
     {
-        use std::fs::Permissions;
-        use std::os::unix::fs::{MetadataExt, PermissionsExt};
         use uucore::safe_copy::{create_dest_restrictive, open_source};
-        let src_file = open_source(from, /* nofollow */ true)
-            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
-        let src_mode = src_file
-            .metadata()
-            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?
-            .mode()
-            & 0o7777;
-        let mut dst_file = create_dest_restrictive(to, /* nofollow */ true)
-            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
-        uucore::buf_copy::copy_fast(&mut &src_file, &mut dst_file)
-            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
-
-        #[cfg(any(
-            target_os = "freebsd",
-            target_os = "hurd",
-            target_os = "linux",
-            target_os = "android",
-            target_os = "netbsd"
-        ))]
-        {
-            if let Ok(failed) = fsxattr::copy_xattrs_fd_ignore_unsupported(&src_file, &dst_file) {
-                show_xattr_failures(failed);
-            }
-        }
-
-        // chown before chmod: chown(2) clears setuid/setgid for non-root,
-        // so the final mode must be applied last to preserve those bits.
-        //
-        // If the chown did not take, the destination belongs to whoever ran
-        // `mv`, and re-applying setuid/setgid would hand them a binary running
-        // as themselves that used to run as someone else. GNU strips the bits
-        // in that case and so do we.
-        let ownership_preserved = preserve_ownership(from, to).unwrap_or(false);
-        let dest_mode = if ownership_preserved {
-            src_mode
-        } else {
-            src_mode & !0o6000
-        };
-        let _ = dst_file.set_permissions(Permissions::from_mode(dest_mode));
+        let denied =
+            |err: io::Error| io::Error::new(err.kind(), translate!("mv-error-permission-denied"));
+        let src_file = open_source(from, /* nofollow */ true).map_err(denied)?;
+        let mut dst_file = create_dest_restrictive(to, /* nofollow */ true).map_err(denied)?;
+        copy_file_data(&src_file, &mut dst_file).map_err(denied)?;
     }
 
     #[cfg(not(unix))]
@@ -1606,6 +1676,47 @@ fn rename_file_fallback(
 
     fs::remove_file(from)
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+    Ok(())
+}
+
+/// Copy the content, xattrs, ownership and mode of `src` to the new file `dst`,
+/// through the descriptors so a path swap cannot redirect any step.
+#[cfg(unix)]
+fn copy_file_data(src: &fs::File, dst: &mut fs::File) -> io::Result<()> {
+    // Use libc here so ownership emulators such as fakeroot can intercept fchown.
+    use nix::unistd::{Gid, Uid, fchown};
+
+    let src_meta = src.metadata()?;
+    uucore::buf_copy::copy_fast(&mut &*src, dst)?;
+
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "hurd",
+        target_os = "linux",
+        target_os = "android",
+        target_os = "netbsd"
+    ))]
+    {
+        if let Ok(failed) = fsxattr::copy_xattrs_fd_ignore_unsupported(src, dst) {
+            show_xattr_failures(failed);
+        }
+    }
+
+    // chown before chmod: chown(2) clears setuid/setgid for non-root,
+    // so the final mode must be applied last to preserve those bits.
+    //
+    // If the chown did not take, the destination belongs to whoever ran
+    // `mv`, and re-applying setuid/setgid would hand them a binary running
+    // as themselves that used to run as someone else. GNU strips the bits
+    // in that case and so do we.
+    let mode = mode_after_chown(&src_meta, &dst.metadata()?, |uid, gid| {
+        Ok(fchown(
+            &*dst,
+            Some(Uid::from_raw(uid)),
+            Some(Gid::from_raw(gid)),
+        )?)
+    });
+    let _ = dst.set_permissions(fs::Permissions::from_mode(mode));
     Ok(())
 }
 

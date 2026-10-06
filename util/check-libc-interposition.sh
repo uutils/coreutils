@@ -16,7 +16,7 @@ set -e
 echo "=== libc Interposition Verification ==="
 
 # shellcheck disable=SC2034  # read by check-common.sh once sourced
-CHECK_UTILS="chmod chown"
+CHECK_UTILS="chmod chown mv"
 . "$(dirname "${BASH_SOURCE[0]}")/check-common.sh"
 
 require_command fakeroot
@@ -56,6 +56,30 @@ if CHMOD_CMD=$(util_cmd chmod); then
     assert_visible_under_fakeroot "chmod -R" "$CHMOD_CMD -R 2751 ." "%a" "2751"
 else
     echo "⚠ chmod not built, skipping"
+fi
+
+# A move to another filesystem copies, so mv has to set the owner through libc too:
+# otherwise the setuid/setgid bits are dropped as for a chown that failed.
+if MV_CMD=$(util_cmd mv); then
+    shm=$(mktemp -d /dev/shm/uu-mv.XXXXXX)
+    if [ "$(stat -c %d "$TEMP_DIR")" = "$(stat -c %d "$shm")" ]; then
+        rm -rf "$shm"
+        echo "⚠ /dev/shm is on the same filesystem as $TEMP_DIR, skipping mv"
+    else
+        tree="$TEMP_DIR/mv"
+        mkdir -p "$tree/dir/sub"
+        touch "$tree/file" "$tree/dir/sub/file"
+        observed=$(cd "$tree" && fakeroot sh -c \
+            "$CHOWN_CMD 7:11 file dir/sub/file && chmod 6751 file dir/sub/file &&
+             $MV_CMD file dir $shm && /usr/bin/stat -c '%u:%g %a' $shm/file $shm/dir/sub/file")
+        rm -rf "$shm"
+        if [ "$observed" != "$(printf '7:11 6751\n7:11 6751')" ]; then
+            fail_immediately "mv across filesystems: fakeroot reports '$observed', expected '7:11 6751' twice -- the change must go through a libc symbol, not a raw syscall (issue #14028)"
+        fi
+        echo "✓ mv across filesystems is visible to LD_PRELOAD wrappers"
+    fi
+else
+    echo "⚠ mv not built, skipping"
 fi
 
 echo ""
