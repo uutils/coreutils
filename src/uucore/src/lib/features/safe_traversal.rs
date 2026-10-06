@@ -6,7 +6,7 @@
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
 // spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot EOVERFLOW chowned chmoded
-// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat renameat unguessability linkat symlinkat
+// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat renameat unguessability linkat symlinkat mknodat RTLD GETPATH
 
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
@@ -599,6 +599,19 @@ impl DirFd {
         Ok(())
     }
 
+    /// Create a fifo, socket or device node `name`, as `mknod(2)` does: `mode`
+    /// holds the file type and permissions, the umask applies.
+    pub fn mknod_at(&self, name: &OsStr, mode: u32, dev: u64) -> io::Result<()> {
+        let name_cstr =
+            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        mknodat(
+            self.fd.as_fd(),
+            &name_cstr,
+            mode as libc::mode_t,
+            dev as libc::dev_t,
+        )
+    }
+
     /// Create a file for writing relative to this directory
     /// Fails with `EEXIST` if the name already exists
     pub fn open_file_at(&self, name: &OsStr) -> io::Result<fs::File> {
@@ -789,6 +802,83 @@ impl AsRawFd for DirFd {
 impl AsFd for DirFd {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
+    }
+}
+
+/// `mknodat(2)`. Neither nix nor rustix provides it on Apple targets.
+#[cfg(not(target_vendor = "apple"))]
+fn mknodat(
+    dir: BorrowedFd<'_>,
+    name: &CStr,
+    mode: libc::mode_t,
+    dev: libc::dev_t,
+) -> io::Result<()> {
+    // SAFETY: `name` is NUL-terminated and `dir` is an open directory descriptor.
+    let res = unsafe { libc::mknodat(dir.as_raw_fd(), name.as_ptr(), mode, dev) };
+    if res == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+/// `mknodat(2)` exists from macOS 13, so it is looked up at run time, as cp does
+/// for `clonefile`; before that the node is created by the directory's path.
+#[cfg(target_vendor = "apple")]
+fn mknodat(
+    dir: BorrowedFd<'_>,
+    name: &CStr,
+    mode: libc::mode_t,
+    dev: libc::dev_t,
+) -> io::Result<()> {
+    use std::sync::OnceLock;
+
+    type Mknodat = unsafe extern "C" fn(
+        libc::c_int,
+        *const libc::c_char,
+        libc::mode_t,
+        libc::dev_t,
+    ) -> libc::c_int;
+    static MKNODAT: OnceLock<Option<Mknodat>> = OnceLock::new();
+
+    let mknodat = MKNODAT.get_or_init(|| {
+        // SAFETY: the symbol name is NUL-terminated.
+        let sym = unsafe { libc::dlsym(libc::RTLD_DEFAULT, c"mknodat".as_ptr()) };
+        // SAFETY: `mknodat` has this signature wherever libSystem exports it.
+        (!sym.is_null()).then(|| unsafe { std::mem::transmute::<*mut libc::c_void, Mknodat>(sym) })
+    });
+    let Some(mknodat) = mknodat else {
+        return mknod_by_dir_path(dir, name, mode, dev);
+    };
+    // SAFETY: `name` is NUL-terminated and `dir` is an open directory descriptor.
+    let res = unsafe { mknodat(dir.as_raw_fd(), name.as_ptr(), mode, dev) };
+    if res == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+/// `mknod(2)` of `name` under the path `dir` has now, for macOS before 13.
+#[cfg(target_vendor = "apple")]
+fn mknod_by_dir_path(
+    dir: BorrowedFd<'_>,
+    name: &CStr,
+    mode: libc::mode_t,
+    dev: libc::dev_t,
+) -> io::Result<()> {
+    let mut path = PathBuf::new();
+    nix::fcntl::fcntl(dir, nix::fcntl::FcntlArg::F_GETPATH(&mut path))
+        .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+    path.push(OsStr::from_bytes(name.to_bytes()));
+    let path = CString::new(path.as_os_str().as_bytes())
+        .map_err(|_| SafeTraversalError::PathContainsNull)?;
+    // SAFETY: `path` is NUL-terminated.
+    let res = unsafe { libc::mknod(path.as_ptr(), mode, dev) };
+    if res == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
     }
 }
 
@@ -1630,6 +1720,37 @@ mod tests {
         let result = dir_fd.mkdir_at(OsStr::new("existing"), 0o755);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_mknod_at_creates_fifo_and_refuses_existing() {
+        use std::os::unix::fs::FileTypeExt;
+
+        let temp_dir = TempDir::new().unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        // S_IFIFO | 0o600
+        let fifo = 0o010_600;
+
+        dir_fd.mknod_at(OsStr::new("fifo"), fifo, 0).unwrap();
+
+        let metadata = fs::symlink_metadata(temp_dir.path().join("fifo")).unwrap();
+        assert!(metadata.file_type().is_fifo());
+        let err = dir_fd.mknod_at(OsStr::new("fifo"), fifo, 0).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+    }
+
+    #[test]
+    #[cfg(target_vendor = "apple")]
+    fn test_mknod_by_dir_path_creates_fifo() {
+        use std::os::unix::fs::FileTypeExt;
+
+        let temp_dir = TempDir::new().unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        // S_IFIFO | 0o600, as macOS before 13 creates it.
+        mknod_by_dir_path(dir_fd.as_fd(), c"fifo", 0o010_600, 0).unwrap();
+
+        let metadata = fs::symlink_metadata(temp_dir.path().join("fifo")).unwrap();
+        assert!(metadata.file_type().is_fifo());
     }
 
     #[test]
