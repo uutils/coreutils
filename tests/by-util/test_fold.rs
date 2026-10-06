@@ -7,13 +7,42 @@
 
 use bytecount::count;
 use unicode_width::UnicodeWidthChar;
-use uutests::new_ucmd;
+#[cfg(target_os = "linux")]
+use uutests::at_and_ucmd;
 use uutests::util::TestScenario;
-use uutests::util_name;
+use uutests::{new_ucmd, util_name};
 
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
+fn test_non_utf8_filename() {
+    use std::os::unix::ffi::OsStringExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    std::fs::write(at.plus(&filename), b"foo").unwrap();
+
+    ucmd.arg(&filename).succeeds().stdout_only("foo");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
+fn test_non_utf8_filename_of_nonexisting_file() {
+    use std::os::unix::ffi::OsStringExt;
+
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+
+    new_ucmd!()
+        .arg(&filename)
+        .fails()
+        .stderr_only("fold: ''$'\\377\\376': No such file or directory\n");
 }
 
 #[test]
