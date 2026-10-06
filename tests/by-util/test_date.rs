@@ -2890,7 +2890,7 @@ fn test_date_format_modifier_combined_flags() {
 
 #[test]
 fn test_date_format_modifier_case_precedence() {
-    // Test that ^ (uppercase) takes precedence over # (swap case) regardless of order
+    // On names, ^ (uppercase) takes precedence over # (swap case) regardless of order
     new_ucmd!()
         .env("TZ", "UTC")
         .env("LC_ALL", "C")
@@ -2904,6 +2904,25 @@ fn test_date_format_modifier_case_precedence() {
         .args(&["-d", "1999-06-01", "+%#^B"])
         .succeeds()
         .stdout_is("JUNE\n");
+}
+
+#[test]
+fn test_date_format_modifier_case_flags_per_conversion() {
+    for (format, expected) in [
+        ("+%#c", "Sat Jun 15 13:05:03 2024\n"),
+        ("+%#r", "01:05:03 PM\n"),
+        ("+%^P", "pm\n"),
+        ("+%^#p", "pm\n"),
+        ("+%#^p", "pm\n"),
+        ("+%^#Z", "utc\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .env("LC_ALL", "C")
+            .args(&["-d", "2024-06-15 13:05:03", format])
+            .succeeds()
+            .stdout_is(expected);
+    }
 }
 
 #[test]

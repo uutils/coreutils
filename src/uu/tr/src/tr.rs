@@ -97,7 +97,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let stdin = stdin();
     let mut locked_stdin = stdin.lock();
-    let mut locked_stdout = stdout().lock();
+    // Write straight to the file descriptor: `Stdout` is line buffered, which
+    // costs a search for the last newline and an extra write per chunk.
+    #[cfg(any(unix, target_os = "wasi"))]
+    let mut output = uucore::io::RawWriter(stdout());
+    #[cfg(not(any(unix, target_os = "wasi")))]
+    let mut output = stdout().lock();
 
     // According to the man page: translating only happens if deleting or if a second set is given
     let translating = !delete_flag && sets.len() > 1;
@@ -131,27 +136,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let delete_op = DeleteOperation::new(set1);
             let squeeze_op = SqueezeOperation::new(set2);
             let op = delete_op.chain(squeeze_op);
-            translate_input(&mut locked_stdin, &mut locked_stdout, op)?;
+            translate_input(&mut locked_stdin, &mut output, op)?;
         } else {
             let op = DeleteOperation::new(set1);
-            process_input(&mut locked_stdin, &mut locked_stdout, &op)?;
+            process_input(&mut locked_stdin, &mut output, &op)?;
         }
     } else if squeeze_flag {
         if sets_len == 1 {
             let op = SqueezeOperation::new(set1);
-            translate_input(&mut locked_stdin, &mut locked_stdout, op)?;
+            translate_input(&mut locked_stdin, &mut output, op)?;
         } else {
             let translate_op = TranslateOperation::new(set1, set2.clone())?;
             let squeeze_op = SqueezeOperation::new(set2);
             let op = translate_op.chain(squeeze_op);
-            translate_input(&mut locked_stdin, &mut locked_stdout, op)?;
+            translate_input(&mut locked_stdin, &mut output, op)?;
         }
     } else {
         let op = TranslateOperation::new(set1, set2)?;
-        process_input(&mut locked_stdin, &mut locked_stdout, &op)?;
+        process_input(&mut locked_stdin, &mut output, &op)?;
     }
 
-    flush_output(&mut locked_stdout)?;
+    flush_output(&mut output)?;
 
     Ok(())
 }

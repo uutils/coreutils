@@ -827,6 +827,25 @@ fn test_touch_system_fails() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: guest root is a writable preopen, not the protected system root"
+)]
+fn test_touch_explicit_time_on_root_owned_file_eperm() {
+    // Setting explicit timestamps on a file we do not own fails with EPERM
+    // (not EACCES), which GNU reports as "Operation not permitted" (#15020).
+    if rustix::process::geteuid().is_root() {
+        println!("Skipping test when running as root");
+        return;
+    }
+    new_ucmd!()
+        .args(&["-d", "2000-01-01", "/"])
+        .fails()
+        .stderr_only("touch: setting times of '/': Operation not permitted\n");
+}
+
+#[test]
 #[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: no FIFO support")]
 fn test_touch_fifo() {

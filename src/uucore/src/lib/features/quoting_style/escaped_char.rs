@@ -5,7 +5,8 @@
 
 use std::char::from_digit;
 
-use super::Quotes;
+use super::c_quoter::CQuotes;
+use super::shell_quoter::ShellQuotes;
 
 // PR#6559 : Remove `]{}` from special shell chars.
 const SPECIAL_SHELL_CHARS: &str = "`$&*()|[;\\'\"<>?! ";
@@ -107,21 +108,25 @@ impl EscapeOctal {
 }
 
 impl EscapedChar {
-    pub fn new_literal(c: char) -> Self {
+    pub(super) fn new_literal(c: char) -> Self {
         Self {
             state: EscapeState::Char(c),
         }
     }
 
-    pub fn new_octal(b: u8) -> Self {
+    pub(super) fn new_octal(b: u8) -> Self {
         Self {
             state: EscapeState::Octal(EscapeOctal::from_byte(b)),
         }
     }
 
-    pub fn new_c(c: char, quotes: Quotes, dirname: bool) -> Self {
+    /// Escape a character for C or locale quoting style.
+    pub(super) fn new_c(c: char, quotes: Option<CQuotes>, dirname: bool) -> Self {
         use EscapeState::*;
         let init_state = match c {
+            // When using locale quoting style, only escape the closing
+            // character, not the opening one.
+            c if quotes.is_some_and(|q| q.closing == c) => Backslash(c),
             '\x07' => Backslash('a'),
             '\x08' => Backslash('b'),
             '\t' => Backslash('t'),
@@ -130,18 +135,7 @@ impl EscapedChar {
             '\x0C' => Backslash('f'),
             '\r' => Backslash('r'),
             '\\' => Backslash('\\'),
-            '\'' => match quotes {
-                Quotes::Single => Backslash('\''),
-                _ => Char('\''),
-            },
-            '"' => match quotes {
-                Quotes::Double => Backslash('"'),
-                _ => Char('"'),
-            },
-            ' ' if !dirname => match quotes {
-                Quotes::None => Backslash(' '),
-                _ => Char(' '),
-            },
+            ' ' if !dirname && quotes.is_none() => Backslash(' '),
             ':' if dirname => Backslash(':'),
             _ if c.is_control() => Octal(EscapeOctal::from_char(c)),
             _ => Char(c),
@@ -149,7 +143,7 @@ impl EscapedChar {
         Self { state: init_state }
     }
 
-    pub fn new_shell(c: char, escape: bool, quotes: Quotes) -> Self {
+    pub(super) fn new_shell(c: char, escape: bool, quotes: ShellQuotes) -> Self {
         use EscapeState::*;
         let init_state = match c {
             _ if !escape && c.is_control() => Char(c),
@@ -160,10 +154,7 @@ impl EscapedChar {
             '\x0B' => Backslash('v'),
             '\x0C' => Backslash('f'),
             '\r' => Backslash('r'),
-            '\'' => match quotes {
-                Quotes::Single => Backslash('\''),
-                _ => Char('\''),
-            },
+            '\'' if matches!(quotes, ShellQuotes::Single) => Backslash('\''),
             _ if c.is_control() => Octal(EscapeOctal::from_char(c)),
             _ if SPECIAL_SHELL_CHARS.contains(c) => ForceQuote(c),
             _ => Char(c),

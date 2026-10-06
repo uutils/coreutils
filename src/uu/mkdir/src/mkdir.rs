@@ -209,14 +209,13 @@ pub fn mkdir(path: &Path, config: &Config) -> UResult<()> {
 // Create a directory at the given path.
 // Uses iterative approach instead of recursion to avoid stack overflow with deep nesting.
 fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
-    let path_exists = path.exists();
-    if path_exists && !config.recursive {
+    if path.exists() && !config.recursive {
         return Err(USimpleError::new(
             1,
             translate!("mkdir-error-file-exists", "path" => path.maybe_quote()),
         ));
     }
-    if path == Path::new("") {
+    if path.as_os_str().is_empty() {
         return Ok(());
     }
 
@@ -225,24 +224,21 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
     if config.recursive {
         // Pre-allocate approximate capacity to avoid reallocations
         let mut dirs_to_create = Vec::with_capacity(16);
-        let mut current = path;
 
         // First pass: collect all parent directories
-        while let Some(parent) = current.parent() {
-            if parent == Path::new("") {
-                break;
-            }
-            dirs_to_create.push(parent);
-            current = parent;
-        }
+        dirs_to_create.extend(
+            path.ancestors()
+                .skip(1)
+                .take_while(|path| !path.as_os_str().is_empty()),
+        );
 
         // Second pass: create directories from root to leaf
         // Only create those that don't exist
-        for dir in dirs_to_create.iter().rev() {
-            if !dir.exists() {
-                create_single_dir(dir, true, config)?;
-            }
-        }
+        dirs_to_create
+            .iter()
+            .rev()
+            .filter(|dir| !dir.exists())
+            .try_for_each(|dir| create_single_dir(dir, true, config))?;
     }
 
     // Create the target directory

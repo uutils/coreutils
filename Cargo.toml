@@ -108,7 +108,7 @@ phf_codegen = "0.14.0"
 platform-info = "2.0.3"
 pretty_assertions = "1.4.1"
 proc-macro2 = "1.0.81"
-procfs = "0.18"
+procfs = { version = "0.18", default-features = false }
 rand = { version = "0.10.1", features = ["std_rng"] }
 rand_chacha = { version = "0.10.0" }
 rayon = "1.10"
@@ -128,7 +128,7 @@ quote = "1.0.36"
 unicode-width = "0.2.0"
 unindent = "0.2.3"
 unit-prefix = "0.5"
-utmp-classic = "0.1.6"
+utmp-classic = "0.2"
 uutils_term_grid = "0.8"
 walkdir = "2.5"
 wild = "2.2.1"

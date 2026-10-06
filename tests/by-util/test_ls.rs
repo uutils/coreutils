@@ -4338,7 +4338,7 @@ fn test_ls_invalid_quoting_style_env_var_warns() {
         .arg("alpha")
         .succeeds()
         .stdout_is("alpha\n")
-        .stderr_contains("Ignoring invalid value of environment variable QUOTING_STYLE");
+        .stderr_contains("ignoring invalid value of environment variable QUOTING_STYLE");
 }
 
 #[cfg(unix)]
@@ -4356,7 +4356,7 @@ fn test_ls_invalid_quoting_style_env_var_non_utf8() {
         .arg("alpha")
         .succeeds()
         .stdout_is("alpha\n")
-        .stderr_contains("Ignoring invalid value of environment variable QUOTING_STYLE");
+        .stderr_contains("ignoring invalid value of environment variable QUOTING_STYLE");
 }
 
 #[test]
@@ -8393,4 +8393,49 @@ fn test_time_style_ambiguous_and_invalid_prefixes() {
             .code_is(2)
             .stderr_contains("invalid --time-style argument");
     }
+}
+
+#[test]
+fn test_ls_dereference_looped_symlinks_recursive_nested() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("loop");
+    at.mkdir("loop/a");
+    at.relative_symlink_dir("..", "loop/a/back");
+
+    ucmd.args(&["-RL", "loop"])
+        .fails_with_code(2)
+        .stderr_contains("not listing already-listed directory");
+}
+
+#[test]
+fn test_ls_dereference_cross_branch_alias_after_first_branch_completes() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir_all("top/a/target");
+    at.touch("top/a/target/file");
+    at.mkdir_all("top/b");
+    at.relative_symlink_dir("../a/target", "top/b/link");
+
+    let result = ucmd.args(&["-RL", "top"]).succeeds();
+    result
+        .stdout_contains("target:\nfile")
+        .stdout_contains("link:\nfile")
+        .no_stderr();
+}
+
+#[test]
+fn test_ls_dereference_sibling_alias_not_already_listed() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("top");
+    at.mkdir("top/real");
+    at.touch("top/real/file");
+    at.relative_symlink_dir("real", "top/link");
+
+    let result = ucmd.args(&["-RL", "top"]).succeeds();
+    result
+        .stdout_contains("real:\nfile")
+        .stdout_contains("link:\nfile")
+        .no_stderr();
 }

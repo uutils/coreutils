@@ -208,7 +208,7 @@ fn extract_value<T: Default>(
     match p {
         Ok(v) => v,
         Err(e) => {
-            let input = locale_aware_escape_name(OsStr::new(input), QuotingStyle::C_NO_QUOTES);
+            let input = locale_aware_escape_name(OsStr::new(input), QuotingStyle::Escape);
             match e {
                 ExtendedParserError::Overflow(v) | ExtendedParserError::Underflow(v) => {
                     set_exit_code(1);
