@@ -6,7 +6,7 @@
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
 // spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot EOVERFLOW chowned chmoded
-// spell-checker:ignore LARGEFILE getdents
+// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat
 
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
@@ -941,8 +941,16 @@ impl MetadataExt for Metadata {
     }
 
     fn atime(&self) -> i64 {
-        #[allow(clippy::useless_conversion)]
-        self.stat.st_atime.into()
+        // aix and hurd only have the timespec fields
+        #[cfg(any(target_os = "aix", target_os = "hurd"))]
+        {
+            self.stat.st_atim.tv_sec as _
+        }
+        #[cfg(not(any(target_os = "aix", target_os = "hurd")))]
+        {
+            #[allow(clippy::useless_conversion)]
+            self.stat.st_atime.into()
+        }
     }
 
     fn atime_nsec(&self) -> i64 {
@@ -952,7 +960,12 @@ impl MetadataExt for Metadata {
             (self.stat.st_atimensec as i64)
         }
 
-        #[cfg(not(target_os = "netbsd"))]
+        #[cfg(any(target_os = "aix", target_os = "hurd"))]
+        {
+            self.stat.st_atim.tv_nsec as _
+        }
+
+        #[cfg(not(any(target_os = "netbsd", target_os = "aix", target_os = "hurd")))]
         {
             #[allow(clippy::unnecessary_cast)]
             (self.stat.st_atime_nsec as i64)
@@ -960,8 +973,15 @@ impl MetadataExt for Metadata {
     }
 
     fn mtime(&self) -> i64 {
-        #[allow(clippy::useless_conversion)]
-        self.stat.st_mtime.into()
+        #[cfg(any(target_os = "aix", target_os = "hurd"))]
+        {
+            self.stat.st_mtim.tv_sec as _
+        }
+        #[cfg(not(any(target_os = "aix", target_os = "hurd")))]
+        {
+            #[allow(clippy::useless_conversion)]
+            self.stat.st_mtime.into()
+        }
     }
 
     fn mtime_nsec(&self) -> i64 {
@@ -970,7 +990,11 @@ impl MetadataExt for Metadata {
             #[allow(clippy::unnecessary_cast)]
             (self.stat.st_mtimensec as i64)
         }
-        #[cfg(not(target_os = "netbsd"))]
+        #[cfg(any(target_os = "aix", target_os = "hurd"))]
+        {
+            self.stat.st_mtim.tv_nsec as _
+        }
+        #[cfg(not(any(target_os = "netbsd", target_os = "aix", target_os = "hurd")))]
         {
             #[allow(clippy::unnecessary_cast)]
             (self.stat.st_mtime_nsec as i64)
@@ -978,8 +1002,15 @@ impl MetadataExt for Metadata {
     }
 
     fn ctime(&self) -> i64 {
-        #[allow(clippy::useless_conversion)]
-        self.stat.st_ctime.into()
+        #[cfg(any(target_os = "aix", target_os = "hurd"))]
+        {
+            self.stat.st_ctim.tv_sec as _
+        }
+        #[cfg(not(any(target_os = "aix", target_os = "hurd")))]
+        {
+            #[allow(clippy::useless_conversion)]
+            self.stat.st_ctime.into()
+        }
     }
 
     fn ctime_nsec(&self) -> i64 {
@@ -988,7 +1019,11 @@ impl MetadataExt for Metadata {
             #[allow(clippy::unnecessary_cast)]
             (self.stat.st_ctimensec as i64)
         }
-        #[cfg(not(target_os = "netbsd"))]
+        #[cfg(any(target_os = "aix", target_os = "hurd"))]
+        {
+            self.stat.st_ctim.tv_nsec as _
+        }
+        #[cfg(not(any(target_os = "netbsd", target_os = "aix", target_os = "hurd")))]
         {
             #[allow(clippy::unnecessary_cast)]
             (self.stat.st_ctime_nsec as i64)
