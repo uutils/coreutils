@@ -1471,15 +1471,13 @@ fn copy_file_with_hardlinks_helper(
         return Ok(());
     }
 
-    if from.is_symlink() {
+    let metadata = from.symlink_metadata()?;
+    if metadata.is_symlink() {
         // Copy a symlink file (no-follow).
         // rename_symlink_fallback already preserves ownership and removes the source.
         rename_symlink_fallback(from, to)?;
-    } else if from.symlink_metadata()?.file_type().is_fifo() {
-        // rustix::fs::mkfifoat is linux only
-        nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666))?;
-        // Preserve ownership (uid/gid) from the source
-        let _ = preserve_ownership(from, to);
+    } else if is_special_file(metadata.file_type()) {
+        copy_special_file(to, &metadata)?;
     } else {
         // Copy a regular file.
         fs::copy(from, to)?;
