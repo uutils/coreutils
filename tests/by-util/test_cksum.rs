@@ -3259,13 +3259,19 @@ mod debug_flag {
     fn test_debug_with_glibc_tunables() {
         if is_x86_feature_detected!("avx2") {
             for (tunables, expected) in [
-                ("glibc.cpu.hwcaps=-AVX2", "avx2 support not detected"), // correctly disabling AVX2
-                ("glibc.cpu.hwcaps=-avx2", "using avx2 hardware support"), // lowercase invalidates AVX2 disabling
+                ("glibc.cpu.hwcaps=-AVX2", "cksum: avx2 support not detected"), // correctly disabling AVX2
+                (
+                    "glibc.cpu.hwcaps=-avx2",
+                    "cksum: using avx2 hardware support",
+                ), // lowercase invalidates AVX2 disabling
                 (
                     "glibc.cpu.hwcaps=-AVX2:glibc.cpu.hwcaps=-AVX512F",
-                    "using avx2 hardware support",
+                    "cksum: using avx2 hardware support",
                 ), // last wins
-                ("glibc.cpu.hwcaps=-AVX2 ", "using avx2 hardware support"), // trailing spaces invalidate AVX2 disabling
+                (
+                    "glibc.cpu.hwcaps=-AVX2 ",
+                    "cksum: using avx2 hardware support",
+                ), // trailing spaces invalidate AVX2 disabling
             ] {
                 new_ucmd!()
                     .arg("--debug")
@@ -3282,9 +3288,9 @@ mod debug_flag {
     fn test_debug_flag_aarch64() {
         // The vmull path needs PMULL. ASIMD alone is not enough.
         let expected = if std::arch::is_aarch64_feature_detected!("pmull") {
-            "using vmull hardware support\n"
+            "cksum: using vmull hardware support\n"
         } else {
-            "vmull support not detected\n"
+            "cksum: vmull support not detected\n"
         };
         new_ucmd!()
             .arg("--debug")
