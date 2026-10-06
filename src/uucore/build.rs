@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     cfg_aliases! {
         // Directory open flags that grant search but not read access.
+        // tests/by-util/test_install.rs repeats the union of these targets.
         has_o_path: { any(target_os = "linux", target_os = "android") },
         has_o_search: { any(
             target_os = "macos",
