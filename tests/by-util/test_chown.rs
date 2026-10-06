@@ -1312,3 +1312,38 @@ fn test_chown_from_changes_symlink_operand_itself() {
     assert_eq!(at.plus("link").symlink_metadata().unwrap().gid(), other);
     assert_eq!(at.plus("target").metadata().unwrap().gid(), current);
 }
+
+/// A directory operand that cannot be read is still changed without -R.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_unreadable_dir_operand() {
+    use chown::entries::{gid2grp, uid2usr};
+    use std::os::unix::fs::PermissionsExt;
+
+    // Root can read the directory anyway.
+    if rustix::process::geteuid().is_root() {
+        println!("Test skipped: running as root");
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    let meta = at.plus("dir").metadata().unwrap();
+    let owner = format!("{}:{}", meta.uid(), meta.gid());
+    let names = format!(
+        "{}:{}",
+        uid2usr(meta.uid()).unwrap(),
+        gid2grp(meta.gid()).unwrap()
+    );
+    std::fs::set_permissions(at.plus("dir"), std::fs::Permissions::from_mode(0o000)).unwrap();
+
+    for from in [None, Some(format!("--from={owner}"))] {
+        scene
+            .ucmd()
+            .arg("-v")
+            .args(from.as_slice())
+            .args(&[owner.as_str(), "dir"])
+            .succeeds()
+            .stdout_is(format!("ownership of 'dir' retained as {names}\n"));
+    }
+}
