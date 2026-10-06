@@ -1372,6 +1372,20 @@ fn test_long_record_with_limited_memory() {
 }
 
 #[test]
+fn test_locale_override_uses_last_value() {
+    for (locale, expected) in [("C", "é\n"), ("C.UTF-8", "éZ\n")] {
+        new_ucmd!()
+            .env("LC_ALL", "C.UTF-8")
+            .env("LC_ALL", "C")
+            .env("LC_ALL", locale)
+            .args(&["-c", "1-2"])
+            .pipe_in("éZ\n")
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
 fn test_selection_across_input_chunks() {
     let input = "a".repeat(8191) + "éZ\n" + &"b".repeat(9000);
     new_ucmd!()
