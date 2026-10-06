@@ -37,7 +37,7 @@ use uucore::{
 };
 
 use crate::{
-    count_fast::{count_bytes_chars_and_lines_fast, count_bytes_fast},
+    count_fast::{count_bytes_chars_and_lines_fast, count_bytes_fast, is_single_byte_locale},
     countable::WordCountable,
     word_count::WordCount,
 };
@@ -498,7 +498,18 @@ fn word_count_from_reader<T: WordCountable>(
         }
         // show_chars
         (false, true, false, false, false) => {
-            count_bytes_chars_and_lines_fast::<_, false, true, false>(&mut reader)
+            if *IS_SINGLE_BYTE_LOCALE {
+                let (bytes, error) = count_bytes_fast(&mut reader);
+                (
+                    WordCount {
+                        chars: bytes,
+                        ..WordCount::default()
+                    },
+                    error,
+                )
+            } else {
+                count_bytes_chars_and_lines_fast::<_, false, true, false>(&mut reader)
+            }
         }
         // show_chars, show_lines
         (false, true, true, false, false) => {
@@ -510,7 +521,19 @@ fn word_count_from_reader<T: WordCountable>(
         }
         // show_bytes, show_chars
         (true, true, false, false, false) => {
-            count_bytes_chars_and_lines_fast::<_, true, true, false>(&mut reader)
+            if *IS_SINGLE_BYTE_LOCALE {
+                let (bytes, error) = count_bytes_fast(&mut reader);
+                (
+                    WordCount {
+                        bytes,
+                        chars: bytes,
+                        ..WordCount::default()
+                    },
+                    error,
+                )
+            } else {
+                count_bytes_chars_and_lines_fast::<_, true, true, false>(&mut reader)
+            }
         }
         // show_bytes, show_chars, show_lines
         (true, true, true, false, false) => {
@@ -667,10 +690,17 @@ fn word_count_from_reader_specialized<
             }
             Err(e) => {
                 if let Some(e) = handle_error(e, &mut total, &mut in_word) {
+                    if SHOW_CHARS && *IS_SINGLE_BYTE_LOCALE {
+                        total.chars = total.bytes;
+                    }
                     return (total, Some(e));
                 }
             }
         }
+    }
+
+    if SHOW_CHARS && *IS_SINGLE_BYTE_LOCALE {
+        total.chars = total.bytes;
     }
 
     (total, None)
@@ -1031,6 +1061,8 @@ fn print_stats(
     }
     writeln!(stdout)
 }
+
+static IS_SINGLE_BYTE_LOCALE: LazyLock<bool> = LazyLock::new(is_single_byte_locale);
 
 static IS_POSIXLY_CORRECT: LazyLock<bool> =
     LazyLock::new(|| env::var_os("POSIXLY_CORRECT").is_some());

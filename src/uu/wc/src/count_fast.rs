@@ -22,8 +22,146 @@ const FILE_ATTRIBUTE_NORMAL: u32 = 128;
 
 const BUF_SIZE: usize = 64 * 1024;
 
-fn is_utf8_locale() -> bool {
-    static UTF8: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct LocaleEncodingInfo {
+    is_utf8: bool,
+    is_single_byte: bool,
+}
+
+#[cfg(any(
+    target_os = "linux",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "openbsd",
+    target_os = "illumos",
+    target_os = "solaris",
+    target_os = "aix",
+    target_os = "hurd"
+))]
+fn is_known_multibyte_codeset(cs: &[u8]) -> bool {
+    let lower = cs.to_ascii_lowercase();
+    let s = lower.as_slice();
+    s.starts_with(b"utf")
+        || s.starts_with(b"gb18030")
+        || s.starts_with(b"gbk")
+        || s.starts_with(b"gb2312")
+        || s.starts_with(b"big5")
+        || s.starts_with(b"euc")
+        || s.starts_with(b"ujis")
+        || s.starts_with(b"sjis")
+        || s.starts_with(b"shift_jis")
+        || s.starts_with(b"shift-jis")
+        || s.starts_with(b"cp932")
+        || s.starts_with(b"cp949")
+        || s.starts_with(b"cp950")
+        || s.starts_with(b"cp936")
+}
+
+#[cfg(any(
+    target_os = "linux",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "openbsd",
+    target_os = "illumos",
+    target_os = "solaris",
+    target_os = "aix",
+    target_os = "hurd"
+))]
+fn detect_native_locale_encoding() -> Option<LocaleEncodingInfo> {
+    use std::ffi::CStr;
+
+    // SAFETY: The empty name selects LC_CTYPE from the environment. A null
+    // base creates an owned locale; no process-wide locale is changed.
+    let locale =
+        unsafe { libc::newlocale(libc::LC_CTYPE_MASK, c"".as_ptr(), std::ptr::null_mut()) };
+    if locale.is_null() {
+        return None;
+    }
+
+    // SAFETY: locale is live. The previous thread locale is restored
+    // before freeing it, and locale-dependent queries are executed while it is live.
+    unsafe {
+        let previous = libc::uselocale(locale);
+        if previous.is_null() {
+            libc::freelocale(locale);
+            return None;
+        }
+
+        let codeset = libc::nl_langinfo(libc::CODESET);
+        let cs = if codeset.is_null() {
+            None
+        } else {
+            Some(CStr::from_ptr(codeset).to_bytes())
+        };
+
+        let is_utf8 =
+            cs.is_some_and(|b| b.eq_ignore_ascii_case(b"UTF-8") || b.eq_ignore_ascii_case(b"UTF8"));
+
+        let mb_cur_max: Option<usize> = {
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            {
+                unsafe extern "C" {
+                    fn __ctype_get_mb_cur_max() -> libc::size_t;
+                }
+                Some(__ctype_get_mb_cur_max() as usize)
+            }
+            #[cfg(target_vendor = "apple")]
+            {
+                unsafe extern "C" {
+                    fn ___mb_cur_max() -> libc::size_t;
+                }
+                Some(___mb_cur_max() as usize)
+            }
+            #[cfg(any(
+                target_os = "freebsd",
+                target_os = "dragonfly",
+                target_os = "openbsd",
+                target_os = "netbsd"
+            ))]
+            {
+                unsafe extern "C" {
+                    static __mb_cur_max: libc::c_int;
+                }
+                Some(__mb_cur_max as usize)
+            }
+            #[cfg(not(any(
+                target_os = "linux",
+                target_os = "android",
+                target_vendor = "apple",
+                target_os = "freebsd",
+                target_os = "dragonfly",
+                target_os = "openbsd",
+                target_os = "netbsd"
+            )))]
+            {
+                None
+            }
+        };
+
+        let is_single_byte = if let Some(max) = mb_cur_max {
+            max == 1
+        } else if is_utf8 {
+            false
+        } else if let Some(b) = cs {
+            !is_known_multibyte_codeset(b)
+        } else {
+            false
+        };
+
+        libc::uselocale(previous);
+        libc::freelocale(locale);
+
+        Some(LocaleEncodingInfo {
+            is_utf8,
+            is_single_byte,
+        })
+    }
+}
+
+fn locale_encoding_info() -> LocaleEncodingInfo {
+    static INFO: std::sync::LazyLock<LocaleEncodingInfo> = std::sync::LazyLock::new(|| {
         #[cfg(any(
             target_os = "linux",
             target_vendor = "apple",
@@ -35,37 +173,30 @@ fn is_utf8_locale() -> bool {
             target_os = "aix",
             target_os = "hurd"
         ))]
-        {
-            use std::ffi::CStr;
-            // SAFETY: The empty name selects LC_CTYPE from the environment. A null
-            // base creates an owned locale; no process-wide locale is changed.
-            let locale =
-                unsafe { libc::newlocale(libc::LC_CTYPE_MASK, c"".as_ptr(), std::ptr::null_mut()) };
-            if !locale.is_null() {
-                // SAFETY: locale is live. The previous thread locale is restored
-                // before freeing it, and CODESET's C string is read while it is live.
-                let result = unsafe {
-                    let previous = libc::uselocale(locale);
-                    let result = if previous.is_null() {
-                        None
-                    } else {
-                        let codeset = libc::nl_langinfo(libc::CODESET);
-                        let utf8 = !codeset.is_null()
-                            && matches!(CStr::from_ptr(codeset).to_bytes(), b"UTF-8" | b"UTF8");
-                        libc::uselocale(previous);
-                        Some(utf8)
-                    };
-                    libc::freelocale(locale);
-                    result
-                };
-                if let Some(utf8) = result {
-                    return utf8;
-                }
-            }
+        if let Some(info) = detect_native_locale_encoding() {
+            return info;
         }
-        get_ctype_encoding() == UEncoding::Utf8
+
+        match get_ctype_encoding() {
+            UEncoding::Utf8 => LocaleEncodingInfo {
+                is_utf8: true,
+                is_single_byte: false,
+            },
+            UEncoding::Ascii => LocaleEncodingInfo {
+                is_utf8: false,
+                is_single_byte: true,
+            },
+        }
     });
-    *UTF8
+    *INFO
+}
+
+pub(crate) fn is_utf8_locale() -> bool {
+    locale_encoding_info().is_utf8
+}
+
+pub(crate) fn is_single_byte_locale() -> bool {
+    locale_encoding_info().is_single_byte
 }
 
 /// This is a Linux-specific function to count the number of bytes using the
@@ -276,7 +407,7 @@ fn count_utf8_chars(mut input: &[u8], incomplete: &mut Incomplete, simd_allowed:
     chars
 }
 
-/// Returns a [`WordCount`] that counts the number of bytes, lines, and/or the number of Unicode characters encoded in UTF-8 read via a Reader.
+/// Returns a [`WordCount`] with byte, line, and/or character counts from a Reader.
 ///
 /// This corresponds to the `-c`, `-l` and `-m` command line flags to wc.
 ///
@@ -296,6 +427,7 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
     let policy = SimdPolicy::detect();
     let simd_allowed = wc_simd_allowed(policy);
     let validate_utf8 = COUNT_CHARS && is_utf8_locale();
+    let count_chars_as_bytes = COUNT_CHARS && is_single_byte_locale();
     let mut incomplete = Incomplete::empty();
     loop {
         match handle.read(buf) {
@@ -307,6 +439,8 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
                 if COUNT_CHARS {
                     total.chars += if validate_utf8 {
                         count_utf8_chars(&buf[..n], &mut incomplete, simd_allowed)
+                    } else if count_chars_as_bytes {
+                        n
                     } else if simd_allowed {
                         bytecount::num_chars(&buf[..n])
                     } else {

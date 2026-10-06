@@ -61,6 +61,7 @@ fn test_stdin_explicit() {
 #[test]
 fn test_utf8() {
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .args(&["-lwmcL"])
         .pipe_in_fixture("UTF_8_test.txt")
         .succeeds()
@@ -70,6 +71,7 @@ fn test_utf8() {
 #[test]
 fn test_utf8_words() {
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .arg("-w")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
@@ -79,6 +81,7 @@ fn test_utf8_words() {
 #[test]
 fn test_utf8_line_length_words() {
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .arg("-Lw")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
@@ -88,6 +91,7 @@ fn test_utf8_line_length_words() {
 #[test]
 fn test_utf8_line_length_chars() {
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .arg("-Lm")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
@@ -97,6 +101,7 @@ fn test_utf8_line_length_chars() {
 #[test]
 fn test_utf8_line_length_chars_words() {
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .arg("-Lmw")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
@@ -106,6 +111,7 @@ fn test_utf8_line_length_chars_words() {
 #[test]
 fn test_utf8_chars() {
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .arg("-m")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
@@ -115,6 +121,7 @@ fn test_utf8_chars() {
 #[test]
 fn test_utf8_bytes_chars() {
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .arg("-cm")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
@@ -205,18 +212,65 @@ fn test_utf8_sequences_across_read_buffer_boundaries() {
     }
 }
 
+fn locale_charmap(locale: &str) -> Option<String> {
+    #[cfg(unix)]
+    {
+        std::process::Command::new("locale")
+            .env("LC_ALL", locale)
+            .arg("charmap")
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_uppercase())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = locale;
+        None
+    }
+}
+
+fn is_single_byte_charmap(charmap: &str) -> bool {
+    let lower = charmap.to_ascii_lowercase();
+    !lower.starts_with("utf")
+        && !lower.starts_with("gb")
+        && !lower.starts_with("big5")
+        && !lower.starts_with("euc")
+        && !lower.starts_with("ujis")
+        && !lower.starts_with("sjis")
+        && !lower.starts_with("shift_jis")
+        && !lower.starts_with("shift-jis")
+        && !lower.starts_with("cp932")
+        && !lower.starts_with("cp949")
+        && !lower.starts_with("cp950")
+        && !lower.starts_with("cp936")
+}
+
+fn is_locale_single_byte(locale: &str) -> bool {
+    if let Some(charmap) = locale_charmap(locale) {
+        is_single_byte_charmap(&charmap)
+    } else {
+        matches!(locale, "C" | "POSIX")
+    }
+}
+
 #[test]
 fn test_c_locale_multibyte_character_counts() {
-    // In the C locale, characters should count as bytes.
-    // Documenting current behavior where multibyte sequences count as 1 character.
-    let newline_cases: &[(&[u8], usize, usize, usize)] = &[
-        (b"\xc3\xa4\n", 1, 1, 2),
-        (b"\xe2\x82\xac\n", 1, 1, 2),
-        (b"\xf0\x9f\x92\xa9\n", 1, 1, 2),
-        (b"hello \xc3\xa4\nworld\n", 2, 3, 14),
+    let c_is_single_byte = is_locale_single_byte("C");
+
+    let newline_cases: &[(&[u8], usize, usize, usize, usize)] = &[
+        (b"\xc3\xa4\n", 1, 1, 3, 2),
+        (b"\xe2\x82\xac\n", 1, 1, 4, 2),
+        (b"\xf0\x9f\x92\xa9\n", 1, 1, 5, 2),
+        (b"hello \xc3\xa4\nworld\n", 2, 3, 15, 14),
     ];
-    for &(input, lines, words, chars) in newline_cases {
+    for &(input, lines, words, chars_sb, chars_utf8) in newline_cases {
         let bytes = input.len();
+        let chars = if c_is_single_byte {
+            chars_sb
+        } else {
+            chars_utf8
+        };
         for (flag, expected) in [
             ("-m", format!("{chars}\n")),
             ("-cm", format!("{chars:7} {bytes:7}\n")),
@@ -234,13 +288,18 @@ fn test_c_locale_multibyte_character_counts() {
         }
     }
 
-    let raw_cases: &[(&[u8], usize, usize)] = &[
-        (b"\xc3\xa4", 1, 1),
-        (b"\xe2\x82\xac", 1, 1),
-        (b"\xf0\x9f\x92\xa9", 1, 1),
+    let raw_cases: &[(&[u8], usize, usize, usize)] = &[
+        (b"\xc3\xa4", 1, 2, 1),
+        (b"\xe2\x82\xac", 1, 3, 1),
+        (b"\xf0\x9f\x92\xa9", 1, 4, 1),
     ];
-    for &(input, words, chars) in raw_cases {
+    for &(input, words, chars_sb, chars_utf8) in raw_cases {
         let bytes = input.len();
+        let chars = if c_is_single_byte {
+            chars_sb
+        } else {
+            chars_utf8
+        };
         for (flag, expected) in [
             ("-m", format!("{chars}\n")),
             ("-cm", format!("{chars:7} {bytes:7}\n")),
@@ -256,17 +315,149 @@ fn test_c_locale_multibyte_character_counts() {
         }
     }
 
+    let expected_chars = if c_is_single_byte { 3 } else { 2 };
     let (at, mut ucmd) = at_and_ucmd!();
     at.write_bytes("input", b"\xc3\xa4\n");
     ucmd.env("LC_ALL", "C")
         .args(&["-cm", "input"])
         .succeeds()
-        .stdout_is("2 3 input\n");
+        .stdout_is(format!("{expected_chars} 3 input\n"));
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("input", b"\xc3\xa4\n");
+    ucmd.env("LC_ALL", "C")
+        .args(&["-m", "input"])
+        .succeeds()
+        .stdout_is(format!("{expected_chars} input\n"));
+}
+
+#[cfg(unix)]
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: native single-byte locales are unavailable"
+)]
+fn test_non_c_single_byte_locale_counts_every_byte() {
+    let candidate_locales = [
+        "en_US.iso88591",
+        "fr_FR.iso88591",
+        "de_DE.iso88591",
+        "es_ES.iso88591",
+        "en_GB.iso88591",
+        "en_US.ISO-8859-1",
+        "fr_FR.ISO-8859-1",
+    ];
+    let fr_locale = std::env::var("LOCALE_FR").ok();
+    let single_byte_locale = fr_locale
+        .as_deref()
+        .into_iter()
+        .chain(candidate_locales)
+        .find(|&loc| {
+            locale_charmap(loc)
+                .as_deref()
+                .is_some_and(is_single_byte_charmap)
+        });
+
+    let Some(locale) = single_byte_locale else {
+        return;
+    };
+
+    let cases: &[(&[u8], usize, usize, usize)] = &[
+        (b"\xc3\xa4\n", 1, 1, 3),
+        (b"\xe2\x82\xac\n", 1, 1, 4),
+        (b"\xf0\x9f\x92\xa9\n", 1, 1, 5),
+        (b"hello \xc3\xa4\nworld\n", 2, 3, 15),
+    ];
+    for &(input, lines, words, chars) in cases {
+        let bytes = input.len();
+        for (flag, expected) in [
+            ("-m", format!("{chars}\n")),
+            ("-cm", format!("{chars:7} {bytes:7}\n")),
+            ("-ml", format!("{lines:7} {chars:7}\n")),
+            ("-cml", format!("{lines:7} {chars:7} {bytes:7}\n")),
+            ("-mw", format!("{words:7} {chars:7}\n")),
+            ("-cmw", format!("{words:7} {chars:7} {bytes:7}\n")),
+        ] {
+            new_ucmd!()
+                .env("LC_ALL", locale)
+                .arg(flag)
+                .pipe_in(input)
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
+}
+
+#[test]
+fn test_c_and_posix_locale_precedence_counts_every_byte() {
+    for locale in ["C", "POSIX"] {
+        let is_single_byte = is_locale_single_byte(locale);
+        let expected = if is_single_byte {
+            "      4       4\n"
+        } else {
+            "      3       4\n"
+        };
+        for variable in ["LC_ALL", "LC_CTYPE", "LANG"] {
+            new_ucmd!()
+                .env("LC_ALL", "")
+                .env("LC_CTYPE", "")
+                .env("LANG", "C.UTF-8")
+                .env(variable, locale)
+                .arg("-cm")
+                .pipe_in(b"\xc3\xa4\xff\n")
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: native multibyte locales are unavailable")]
+fn test_non_utf8_multibyte_locales_preserve_character_counts() {
+    for (locale, charmap, input) in [
+        ("ja_JP.eucjp", "EUC-JP", b"\xe0\xa1"),
+        ("zh_TW.big5", "BIG5", b"\xa4\x40"),
+    ] {
+        let Ok(output) = std::process::Command::new("locale")
+            .env("LC_ALL", locale)
+            .arg("charmap")
+            .output()
+        else {
+            continue;
+        };
+        if !output.status.success() || String::from_utf8_lossy(&output.stdout).trim() != charmap {
+            continue;
+        }
+        for tunables in ["", "glibc.cpu.hwcaps=-AVX2,-SSE2,-ASIMD"] {
+            for (flag, expected) in [
+                ("-m", "1\n"),
+                ("-cm", "      1       2\n"),
+                ("-ml", "      0       1\n"),
+                ("-cml", "      0       1       2\n"),
+            ] {
+                new_ucmd!()
+                    .env("LC_ALL", locale)
+                    .env("GLIBC_TUNABLES", tunables)
+                    .arg(flag)
+                    .pipe_in(input)
+                    .succeeds()
+                    .stdout_is(expected);
+            }
+        }
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write_bytes("input", input);
+        ucmd.env("LC_ALL", locale)
+            .args(&["-cm", "input"])
+            .succeeds()
+            .stdout_is("1 2 input\n");
+    }
 }
 
 #[test]
 fn test_utf8_bytes_lines() {
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .arg("-cl")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
@@ -276,6 +467,7 @@ fn test_utf8_bytes_lines() {
 #[test]
 fn test_utf8_bytes_chars_lines() {
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .arg("-cml")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
@@ -285,6 +477,7 @@ fn test_utf8_bytes_chars_lines() {
 #[test]
 fn test_utf8_chars_words() {
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .arg("-mw")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
@@ -294,6 +487,7 @@ fn test_utf8_chars_words() {
 #[test]
 fn test_utf8_line_length_lines() {
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .arg("-Ll")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
@@ -303,6 +497,7 @@ fn test_utf8_line_length_lines() {
 #[test]
 fn test_utf8_line_length_lines_words() {
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .arg("-Llw")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
@@ -312,6 +507,7 @@ fn test_utf8_line_length_lines_words() {
 #[test]
 fn test_utf8_lines_chars() {
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .arg("-ml")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
@@ -321,6 +517,7 @@ fn test_utf8_lines_chars() {
 #[test]
 fn test_utf8_lines_words_chars() {
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .arg("-mlw")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
@@ -330,6 +527,7 @@ fn test_utf8_lines_words_chars() {
 #[test]
 fn test_utf8_line_length_lines_chars() {
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .arg("-Llm")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
@@ -339,6 +537,7 @@ fn test_utf8_line_length_lines_chars() {
 #[test]
 fn test_utf8_all() {
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .arg("-lwmcL")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
