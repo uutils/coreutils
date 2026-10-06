@@ -1347,3 +1347,89 @@ fn test_chown_unreadable_dir_operand() {
             .stdout_is(format!("ownership of 'dir' retained as {names}\n"));
     }
 }
+
+/// Under `-R -H` a symlink met in the tree is followed for the change, so
+/// `--from` and -v concern the file it points to, not the link.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_from_judges_symlink_target_under_big_h() {
+    use chown::entries::{gid2grp, uid2usr};
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let groups: Vec<u32> = scene
+        .cmd("id")
+        .arg("-G")
+        .succeeds()
+        .stdout_str()
+        .split_whitespace()
+        .map(|g| g.parse().unwrap())
+        .collect();
+    let Some(&target_group) = groups.first() else {
+        return;
+    };
+    let Some(&link_group) = groups.iter().find(|&&g| g != target_group) else {
+        return;
+    };
+    let user = uid2usr(rustix::process::geteuid().as_raw()).unwrap();
+    let target_name = gid2grp(target_group).unwrap();
+    let link_name = gid2grp(link_group).unwrap();
+
+    at.mkdir("dir");
+    at.touch("target");
+    at.relative_symlink_file("../target", "dir/link");
+    std::os::unix::fs::chown(at.plus("dir"), None, Some(target_group)).unwrap();
+    std::os::unix::fs::chown(at.plus("target"), None, Some(target_group)).unwrap();
+    std::os::unix::fs::lchown(at.plus("dir/link"), None, Some(link_group)).unwrap();
+
+    // Only the link is in `link_group`: the target is left alone.
+    scene
+        .ucmd()
+        .args(&["-R", "-H", "-v", &format!("--from=:{link_group}")])
+        .arg(format!(":{link_group}"))
+        .arg("dir")
+        .succeeds()
+        .stdout_is(format!(
+            "ownership of 'dir' retained as {target_name}\n\
+             ownership of 'dir/link' retained as {target_name}\n"
+        ));
+    assert_eq!(at.plus("target").metadata().unwrap().gid(), target_group);
+
+    // The target is in `target_group`, so it is changed.
+    scene
+        .ucmd()
+        .args(&["-R", "-H", "-v", &format!("--from=:{target_group}")])
+        .arg(format!(":{link_group}"))
+        .arg("dir")
+        .succeeds()
+        .stdout_is(format!(
+            "changed ownership of 'dir' from {user}:{target_name} to {user}:{link_name}\n\
+             changed ownership of 'dir/link' from {user}:{target_name} to {user}:{link_name}\n"
+        ));
+    assert_eq!(at.plus("target").metadata().unwrap().gid(), link_group);
+}
+
+/// Under `-R -H` a symlink whose target cannot be stat'd is left alone and
+/// reported, whatever `--from` says about the link itself.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_dangling_symlink_under_big_h() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.relative_symlink_file("../nowhere", "dir/dangling");
+    let gid = at.plus("dir/dangling").symlink_metadata().unwrap().gid();
+
+    for from in [None, Some(format!("--from=:{gid}"))] {
+        scene
+            .ucmd()
+            .args(&["-R", "-H"])
+            .args(from.as_slice())
+            .arg(format!(":{gid}"))
+            .arg("dir")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_is("chown: cannot dereference 'dir/dangling': No such file or directory\n");
+    }
+}
