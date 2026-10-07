@@ -151,33 +151,6 @@ impl MultiWriter {
         let input = rustix::stdio::stdin();
         #[cfg(not(any(unix, target_os = "wasi")))]
         let mut input = io::stdin();
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        macro_rules! splice_or_detach {
-            ($pipe_read:ident, $pipe_write:ident, $writer:expr, $len:expr, $sized:expr) => {
-                if let Err(e) = uucore::pipes::drain_pipe(&$pipe_read, &$writer, $len) {
-                    self.aborted |= process_error(
-                        self.output_error_mode,
-                        e,
-                        &$writer,
-                        &mut self.ignored_errors,
-                    )
-                    .is_err();
-                    $writer.name.clear(); //mark as exited
-                    // the failed write can leave bytes in the pipe: replace it with an empty one.
-                    // Free it first, so that the new one does not need more file descriptors.
-                    drop($pipe_read);
-                    drop($pipe_write);
-                    // same size as the 2nd pipe got, so the 2nd is never smaller than the 1st
-                    match if $sized { pipe::<true>() } else { io::pipe() } {
-                        Ok(pipe) => ($pipe_read, $pipe_write) = pipe,
-                        Err(e) => {
-                            show_error!("{}", strip_errno(&e));
-                            return Err(());
-                        }
-                    }
-                }
-            };
-        }
         // needs 2 pipes to duplicate input multiple times
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if let Ok((mut pipe_read, mut pipe_write)) = io::pipe()
@@ -191,6 +164,31 @@ impl MultiWriter {
                 let _ = fcntl_setpipe_size(&pipe_read, MAX_ROOTLESS_PIPE_SIZE);
                 let _ = fcntl_setpipe_size(&self.writers[0], MAX_ROOTLESS_PIPE_SIZE); // stdout
             }
+            macro_rules! splice_or_detach {
+                ($pipe_read:ident, $pipe_write:ident, $writer:expr, $len:expr) => {
+                    if let Err(e) = uucore::pipes::drain_pipe(&$pipe_read, &$writer, $len) {
+                        self.aborted |= process_error(
+                            self.output_error_mode,
+                            e,
+                            &$writer,
+                            &mut self.ignored_errors,
+                        ).is_err();
+                        $writer.name.clear(); //mark as exited
+                        // the failed write can leave bytes in the pipe: replace it with an empty one.
+                        // Free it first, so that the new one does not need more file descriptors.
+                        drop($pipe_read);
+                        drop($pipe_write);
+                        // same size as the 2nd pipe got, so the 2nd is never smaller than the 1st
+                        match if sized { pipe::<true>() } else { io::pipe() } {
+                            Ok(pipe) => ($pipe_read, $pipe_write) = pipe,
+                            Err(e) => {
+                                show_error!("{}", strip_errno(&e));
+                                return Err(());
+                            }
+                        }
+                    }
+                };
+            }
             while let Ok(s) = uucore::pipes::splice(&input, &pipe_write, MAX_ROOTLESS_PIPE_SIZE) {
                 if s == 0 {
                     return Ok(());
@@ -203,10 +201,10 @@ impl MultiWriter {
                     // do not consume input
                     let tee_res = uucore::pipes::tee(&pipe_read, &pipe2_write, s);
                     assert_eq!(tee_res, Ok(s), "2nd pipe should have enough spare");
-                    splice_or_detach!(pipe2_read, pipe2_write, *other, s, sized);
+                    splice_or_detach!(pipe2_read, pipe2_write, *other, s);
                 }
                 // last one consumes input
-                splice_or_detach!(pipe_read, pipe_write, *last, s, sized);
+                splice_or_detach!(pipe_read, pipe_write, *last, s);
                 self.writers.retain(|w| !w.name.is_empty());
                 if self.aborted {
                     return Err(());
