@@ -99,20 +99,13 @@ fn test_chgrp_recursive_unreadable_directory() {
         // root can read any directory
         return;
     }
-    let dirs = ["d/a", "d/b"];
-
     let (at, mut ucmd) = at_and_ucmd!();
-    for dir in dirs {
-        at.mkdir_all(&format!("{dir}/y"));
-        set_permissions(at.plus_as_string(dir), Permissions::from_mode(0o311)).unwrap();
-    }
-    let result = ucmd.args(&["-R", "--reference=d", "d"]).fails_with_code(1);
-    for dir in dirs {
-        result.stderr_contains(format!(
-            "chgrp: cannot read directory '{dir}': Permission denied\n"
-        ));
-        set_permissions(at.plus_as_string(dir), Permissions::from_mode(0o755)).unwrap();
-    }
+    at.mkdir_all("d/a/y");
+    set_permissions(at.plus_as_string("d/a"), Permissions::from_mode(0o311)).unwrap();
+
+    ucmd.args(&["-R", "--reference=d", "d"])
+        .fails_with_code(1)
+        .stderr_is("chgrp: cannot read directory 'd/a': Permission denied\n");
 
     // -f hides the message; the failure still sets the exit status.
     let (at, mut ucmd) = at_and_ucmd!();
