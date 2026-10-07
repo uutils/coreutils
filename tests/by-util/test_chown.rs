@@ -1292,3 +1292,28 @@ fn test_chown_h_keeps_unchanged_ids_of_symlink_operand() {
         }
     }
 }
+
+/// With --from, the file is held open before it is changed: that must neither
+/// wait for a writer on a FIFO nor fail on a file the caller cannot read.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_from_fifo_and_unreadable_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.mkfifo("dir/fifo");
+    at.touch("dir/file");
+    at.set_mode("dir/file", 0o000);
+    let meta = at.plus("dir").metadata().unwrap();
+    let owner = format!("{}:{}", meta.uid(), meta.gid());
+
+    for args in [&["dir/fifo", "dir/file"][..], &["-R", "dir"]] {
+        scene
+            .ucmd()
+            .args(&["-v", &format!("--from={owner}"), &owner])
+            .args(args)
+            .succeeds()
+            .stdout_contains("ownership of 'dir/fifo' retained as")
+            .stdout_contains("ownership of 'dir/file' retained as");
+    }
+}

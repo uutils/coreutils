@@ -273,7 +273,6 @@ impl DirFd {
     }
 
     /// Hold the file `name` relative to this directory, see [`PinnedFile`]
-    #[cfg(target_os = "linux")]
     pub fn pin_at(
         &self,
         name: &OsStr,
@@ -761,15 +760,40 @@ impl AsFd for DirFd {
     }
 }
 
-/// A descriptor holding one file of any type without opening it (O_PATH), so
-/// that what is learned about the file and what is done to it concern that
-/// same file, whatever its name is re-pointed to in between.
-#[cfg(target_os = "linux")]
+/// Flags that open a file only to hold on to it, without reading it.
+fn pin_flags(symlink_behavior: SymlinkBehavior) -> OFlag {
+    // O_PATH needs no read access and opens no device, so a file of any type
+    // can be held. Elsewhere the file has to be opened for reading; O_NONBLOCK
+    // keeps a FIFO from waiting for a writer.
+    #[cfg(has_o_path)]
+    let flags = OFlag::O_PATH;
+    #[cfg(not(has_o_path))]
+    let flags = OFlag::O_RDONLY | OFlag::O_NONBLOCK | OFlag::O_NOCTTY | LARGEFILE;
+    // With O_PATH, O_NOFOLLOW holds a symlink itself; elsewhere it refuses one.
+    let nofollow = if symlink_behavior.should_follow() {
+        OFlag::empty()
+    } else {
+        OFlag::O_NOFOLLOW
+    };
+    flags | nofollow | OFlag::O_CLOEXEC
+}
+
+/// Whether [`PinnedFile`] can hold a symlink itself, rather than refusing it
+/// under [`SymlinkBehavior::NoFollow`].
+pub const CAN_PIN_SYMLINKS: bool = cfg!(has_o_path);
+
+/// Whether [`PinnedFile`] can hold a socket or a device node. Without O_PATH,
+/// opening those for reading fails or acts on the device, so it is not attempted.
+pub const CAN_PIN_SPECIAL_FILES: bool = cfg!(has_o_path);
+
+/// A descriptor holding one file of any type, so that what is learned about
+/// it and what is done to it concern that same file, whatever its name is
+/// re-pointed to in between. See [`CAN_PIN_SYMLINKS`] and
+/// [`CAN_PIN_SPECIAL_FILES`] for what cannot be held everywhere.
 pub struct PinnedFile {
     fd: OwnedFd,
 }
 
-#[cfg(target_os = "linux")]
 impl PinnedFile {
     /// Hold the file at `path`
     pub fn open(path: &Path, symlink_behavior: SymlinkBehavior) -> io::Result<Self> {
@@ -781,12 +805,7 @@ impl PinnedFile {
         path: &P,
         symlink_behavior: SymlinkBehavior,
     ) -> io::Result<Self> {
-        let mut flags = OFlag::O_PATH | OFlag::O_CLOEXEC;
-        if !symlink_behavior.should_follow() {
-            // With O_PATH, this holds a symlink itself.
-            flags |= OFlag::O_NOFOLLOW;
-        }
-        let fd = openat(dir, path, flags, Mode::empty())
+        let fd = openat(dir, path, pin_flags(symlink_behavior), Mode::empty())
             .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
         Ok(Self { fd })
     }
@@ -799,16 +818,15 @@ impl PinnedFile {
     /// Change ownership of the held file
     /// Use uid/gid of None to keep the current value
     pub fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> io::Result<()> {
+        let uid = uid.map(Uid::from_raw);
+        let gid = gid.map(Gid::from_raw);
         // fchown refuses an O_PATH descriptor; an empty path names the
         // descriptor itself.
-        fchownat(
-            &self.fd,
-            c"",
-            uid.map(Uid::from_raw),
-            gid.map(Gid::from_raw),
-            nix::fcntl::AtFlags::AT_EMPTY_PATH,
-        )
-        .map_err(|e| io::Error::from_raw_os_error(e as i32))
+        #[cfg(has_o_path)]
+        let result = fchownat(&self.fd, c"", uid, gid, nix::fcntl::AtFlags::AT_EMPTY_PATH);
+        #[cfg(not(has_o_path))]
+        let result = fchown(&self.fd, uid, gid);
+        result.map_err(|e| io::Error::from_raw_os_error(e as i32))
     }
 }
 
@@ -1718,5 +1736,25 @@ mod tests {
         // With follow_symlinks=false, should fail
         let result_nofollow = DirFd::open(&link, SymlinkBehavior::NoFollow);
         assert!(result_nofollow.is_err());
+    }
+
+    /// Under NoFollow a symlink is held itself where [`CAN_PIN_SYMLINKS`]
+    /// says so, and refused elsewhere: never the file it points to.
+    #[test]
+    fn test_pin_nofollow_holds_symlink_itself() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path().join("target");
+        fs::write(&target, "").unwrap();
+        let link = temp_dir.path().join("link");
+        symlink(&target, &link).unwrap();
+
+        let held = PinnedFile::open(&link, SymlinkBehavior::NoFollow);
+        if CAN_PIN_SYMLINKS {
+            assert!(held.unwrap().metadata().unwrap().file_type().is_symlink());
+        } else {
+            assert!(held.is_err());
+        }
+        let held = PinnedFile::open(&link, SymlinkBehavior::Follow).unwrap();
+        assert!(!held.metadata().unwrap().file_type().is_symlink());
     }
 }
