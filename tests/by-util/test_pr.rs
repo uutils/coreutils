@@ -210,7 +210,7 @@ fn test_with_valid_page_ranges() {
     scenario
         .args(&["--pages=20:5", test_file_path])
         .fails()
-        .stderr_only("pr: invalid --pages argument '20:5'\n");
+        .stderr_only("pr: invalid page range '20:5'\n");
     new_ucmd!()
         .args(&["--pages=1:5", test_file_path])
         .succeeds();
@@ -226,7 +226,7 @@ fn test_with_valid_page_ranges() {
     new_ucmd!()
         .args(&["--pages=5:1", test_file_path])
         .fails()
-        .stderr_only("pr: invalid --pages argument '5:1'\n");
+        .stderr_only("pr: invalid page range '5:1'\n");
 }
 
 #[test]
@@ -577,7 +577,9 @@ fn test_offset_invalid() {
     new_ucmd!()
         .args(&["--indent=-5"])
         .fails_with_code(1)
-        .stderr_is("pr: '-o MARGIN' invalid line offset: '-5'\n");
+        .stderr_is(
+            "pr: '-o MARGIN' invalid line offset: '-5': Value too large for defined data type\n",
+        );
 
     new_ucmd!()
         .args(&["-o", "abc"])
@@ -1159,7 +1161,7 @@ fn test_zero_columns() {
     new_ucmd!()
         .arg("--columns=0")
         .fails_with_code(1)
-        .stderr_contains("pr: invalid --columns argument '0'");
+        .stderr_contains("pr: invalid number of columns: '0': Numerical result out of range");
 }
 
 #[test]
@@ -1167,7 +1169,7 @@ fn test_zero_columns_shortcut() {
     new_ucmd!()
         .arg("-0")
         .fails_with_code(1)
-        .stderr_contains("pr: invalid --columns argument '0'");
+        .stderr_contains("pr: invalid number of columns: '0': Numerical result out of range");
 }
 
 #[test]
@@ -1237,18 +1239,16 @@ fn test_zero_expand_tab_width() {
 
 #[test]
 fn test_zero_column_width() {
-    new_ucmd!()
-        .args(&["-w", "0"])
-        .fails_with_code(1)
-        .stderr_is("pr: invalid --width argument '0'\n");
+    new_ucmd!().args(&["-w", "0"]).fails_with_code(1).stderr_is(
+        "pr: '-w PAGE_WIDTH' invalid number of characters: '0': Numerical result out of range\n",
+    );
 }
 
 #[test]
 fn test_zero_page_width() {
-    new_ucmd!()
-        .args(&["-W", "0"])
-        .fails_with_code(1)
-        .stderr_is("pr: invalid --page-width argument '0'\n");
+    new_ucmd!().args(&["-W", "0"]).fails_with_code(1).stderr_is(
+        "pr: '-W PAGE_WIDTH' invalid number of characters: '0': Numerical result out of range\n",
+    );
 }
 
 #[test]
@@ -1281,10 +1281,9 @@ fn test_page_length_eleven_keeps_header() {
 
 #[test]
 fn test_zero_length() {
-    new_ucmd!()
-        .args(&["-l", "0"])
-        .fails_with_code(1)
-        .stderr_is("pr: invalid --length argument '0'\n");
+    new_ucmd!().args(&["-l", "0"]).fails_with_code(1).stderr_is(
+        "pr: '-l PAGE_LENGTH' invalid number of lines: '0': Numerical result out of range\n",
+    );
 }
 
 #[test]
@@ -1292,7 +1291,7 @@ fn test_zero_pages() {
     new_ucmd!()
         .args(&["--pages", "0"])
         .fails_with_code(1)
-        .stderr_is("pr: invalid --pages argument '0'\n");
+        .stderr_is("pr: invalid page range '0'\n");
 }
 
 #[test]
@@ -1322,4 +1321,79 @@ fn test_missing_file_error_message() {
         .fails_with_code(1)
         .stderr_contains("pr: nonexistent_file: ")
         .stderr_does_not_contain("(os error");
+}
+
+#[test]
+fn test_numeric_option_diagnostics() {
+    // A value that is not a number is quoted after the option; a number
+    // that is out of range gets the errno text, as GNU reports them.
+    let cases = [
+        (
+            &["-l", "x"][..],
+            "pr: '-l PAGE_LENGTH' invalid number of lines: 'x'\n",
+        ),
+        (
+            &["-l", "-1"],
+            "pr: '-l PAGE_LENGTH' invalid number of lines: '-1': Numerical result out of range\n",
+        ),
+        (
+            &["-w", "+0"],
+            "pr: '-w PAGE_WIDTH' invalid number of characters: '+0': Numerical result out of range\n",
+        ),
+        (
+            &["-W", "x"],
+            "pr: '-W PAGE_WIDTH' invalid number of characters: 'x'\n",
+        ),
+        (
+            &["-N", "x"],
+            "pr: '-N NUMBER' invalid starting line number: 'x'\n",
+        ),
+        (&["--columns=x"], "pr: invalid number of columns: 'x'\n"),
+        (&["--pages=1:x"], "pr: invalid --pages argument '1:x'\n"),
+        (&["--pages=1:0"], "pr: invalid page range '1:0'\n"),
+        (
+            &["--pages=99999999999999999999"],
+            "pr: --pages argument '99999999999999999999' too large\n",
+        ),
+        (&["+x"], "pr: invalid + argument 'x'\n"),
+        (&["+1:"], "pr: invalid + argument '1:'\n"),
+        (&["+1:3x"], "pr: invalid suffix in + argument '1:3x'\n"),
+        (
+            &["+99999999999999999999"],
+            "pr: + argument '99999999999999999999' too large\n",
+        ),
+    ];
+    for (args, stderr) in cases {
+        new_ucmd!()
+            .args(args)
+            .arg("test_one_page.log")
+            .fails()
+            .stderr_only(stderr);
+    }
+}
+
+#[test]
+fn test_option_value_is_not_an_operand() {
+    // `-l -1` holds no column operand, and `-l +5` no page operand: the
+    // value goes with the option, however it looks.
+    new_ucmd!()
+        .args(&["-l", "+5", "-t", "test_one_page.log"])
+        .succeeds()
+        .stdout_is_fixture("test_one_page.log");
+    new_ucmd!()
+        .args(&["-N", "-1", "test_one_page.log"])
+        .fails()
+        .stderr_only("pr: '-N NUMBER' invalid starting line number: '-1'\n");
+}
+
+#[test]
+fn test_plus_operand_that_is_not_a_page_range_names_a_file() {
+    // GNU takes a first page of 0, a last page before the first, or digits
+    // followed by other characters for a file name.
+    for operand in ["+0", "+2:1", "+1x"] {
+        new_ucmd!()
+            .args(&[operand, "test_one_page.log"])
+            .fails()
+            .stderr_contains("No such file or directory");
+    }
 }

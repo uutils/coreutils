@@ -245,6 +245,7 @@ pub fn uu_app() -> Command {
                 .short('N')
                 .long(options::FIRST_LINE_NUMBER)
                 .help(translate!("pr-help-first-line-number"))
+                .allow_hyphen_values(true)
                 .value_name("NUMBER"),
         )
         .arg(
@@ -266,6 +267,7 @@ pub fn uu_app() -> Command {
                 .short('l')
                 .long(options::PAGE_LENGTH)
                 .help(translate!("pr-help-page-length"))
+                .allow_hyphen_values(true)
                 .value_name("PAGE_LENGTH"),
         )
         .arg(
@@ -288,6 +290,7 @@ pub fn uu_app() -> Command {
                 .short('w')
                 .long(options::COLUMN_WIDTH)
                 .help(translate!("pr-help-column-width"))
+                .allow_hyphen_values(true)
                 .value_name("width"),
         )
         .arg(
@@ -295,6 +298,7 @@ pub fn uu_app() -> Command {
                 .short('W')
                 .long(options::PAGE_WIDTH)
                 .help(translate!("pr-help-page-width"))
+                .allow_hyphen_values(true)
                 .value_name("width"),
         )
         .arg(
@@ -347,6 +351,7 @@ pub fn uu_app() -> Command {
                 .short('o')
                 .long(options::INDENT)
                 .help(translate!("pr-help-indent"))
+                .allow_hyphen_values(true)
                 .value_name("margin"),
         )
         .arg(
@@ -457,6 +462,7 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
 
     // Remove only whole-token legacy operands before clap parsing.
     let mut past_terminator = false;
+    let mut value_follows = false;
     arguments
         .into_iter()
         .filter(|arg| {
@@ -467,9 +473,34 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
                 past_terminator = true;
                 return true;
             }
-            as_column_operand(arg).is_none() && as_page_operand(arg).is_none()
+            let is_value = value_follows;
+            value_follows = takes_next_argument(arg);
+            is_value || (as_column_operand(arg).is_none() && as_page_operand(arg).is_none())
         })
         .collect()
+}
+
+/// Whether `arg` is an option whose value is the next argument, which is
+/// then not an operand however it looks (`-l -1`, `-w +5`).
+fn takes_next_argument(arg: &str) -> bool {
+    matches!(
+        arg,
+        "-l" | "--length"
+            | "-w"
+            | "--width"
+            | "-W"
+            | "--page-width"
+            | "-N"
+            | "--first-line-number"
+            | "-o"
+            | "--indent"
+            | "-h"
+            | "--header"
+            | "-D"
+            | "--date-format"
+            | "--columns"
+            | "--pages"
+    )
 }
 
 #[derive(Default)]
@@ -481,9 +512,12 @@ struct ColumnPageOperands {
 /// Extract legacy `-COLUMN` and `+FIRST[:LAST]` operands before `--`.
 fn parse_column_page_operands(args: &[String]) -> ColumnPageOperands {
     let mut operands = ColumnPageOperands::default();
-    for arg in args {
-        if arg == "--" {
-            break;
+    let mut value_follows = false;
+    for arg in args.iter().take_while(|arg| arg.as_str() != "--") {
+        let is_value = value_follows;
+        value_follows = takes_next_argument(arg);
+        if is_value {
+            continue;
         }
         if operands.column.is_none()
             && let Some(digits) = as_column_operand(arg)
@@ -507,14 +541,31 @@ fn as_column_operand(arg: &str) -> Option<&str> {
 }
 
 /// Return the range from a whole-token `+FIRST[:LAST]` operand.
+///
+/// GNU takes two forms for file names instead: digits followed by other
+/// characters with no `:`, and numbers that do not make a page range (a 0,
+/// or a last page before the first). Everything else that starts with `+`
+/// is a page operand, valid or not.
 fn as_page_operand(arg: &str) -> Option<&str> {
     let spec = arg.strip_prefix('+')?;
     let is_digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
-    let valid = match spec.split_once(':') {
-        Some((first, last)) => is_digits(first) && is_digits(last),
-        None => is_digits(spec),
+    let (first, last) = match spec.split_once(':') {
+        Some((first, last)) => (first, Some(last)),
+        None => (spec, None),
     };
-    valid.then_some(spec)
+    if last.is_none() && first.starts_with(|c: char| c.is_ascii_digit()) && !is_digits(first) {
+        return None;
+    }
+    if is_digits(first) && last.is_none_or(is_digits) {
+        let first = first.parse::<usize>();
+        let last = last.map(str::parse::<usize>);
+        match (first, last) {
+            (Ok(0), _) | (Ok(_), Some(Ok(0))) => return None,
+            (Ok(first), Some(Ok(last))) if last < first => return None,
+            _ => (),
+        }
+    }
+    Some(spec)
 }
 
 fn print_error(matches: &ArgMatches, err: &PrError) {
@@ -530,29 +581,105 @@ fn value_too_large(option_message: &str, raw: &str) -> String {
     )
 }
 
+fn out_of_range(option_message: &str, raw: &str) -> String {
+    format!(
+        "{option_message}: {}: Numerical result out of range",
+        raw.quote()
+    )
+}
+
+/// Parse the value of a numeric option, reported as GNU does: a value that
+/// is not a number is quoted after `option_message`, one that does not fit
+/// gets the errno text. A leading `+` is accepted.
+fn parse_number(raw: &str, option_message: &str) -> Result<usize, PrError> {
+    match raw.strip_prefix('+').unwrap_or(raw).parse::<usize>() {
+        Ok(n @ ..=MAX_INT_VALUE) => Ok(n),
+        Ok(_) => Err(PrError::EncounteredErrors {
+            msg: value_too_large(option_message, raw),
+        }),
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => Err(PrError::EncounteredErrors {
+            msg: value_too_large(option_message, raw),
+        }),
+        Err(_) => Err(PrError::EncounteredErrors {
+            msg: format!("{option_message}: {}", raw.quote()),
+        }),
+    }
+}
+
+/// Like [`parse_number`], for an option that wants a number from 1 up:
+/// zero and negative numbers are numbers out of range.
+fn parse_positive(raw: &str, option_message: &str) -> Result<usize, PrError> {
+    let negative = raw
+        .strip_prefix('-')
+        .is_some_and(|digits| !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()));
+    match parse_number(raw, option_message) {
+        Ok(0) => Err(PrError::EncounteredErrors {
+            msg: out_of_range(option_message, raw),
+        }),
+        Err(_) if negative => Err(PrError::EncounteredErrors {
+            msg: out_of_range(option_message, raw),
+        }),
+        result => result,
+    }
+}
+
 fn parse_usize(
     matches: &ArgMatches,
     opt: &str,
-    too_large_error_message: &str,
+    option_message: &str,
 ) -> Option<Result<usize, PrError>> {
-    matches.get_one::<String>(opt).map(|i| {
-        let raw = i.as_str();
-        match raw.parse::<usize>() {
-            Ok(n @ ..=MAX_INT_VALUE) => Ok(n),
-            Ok(_) => Err(PrError::EncounteredErrors {
-                msg: value_too_large(too_large_error_message, raw),
-            }),
-            Err(e) if *e.kind() == IntErrorKind::PosOverflow => Err(PrError::EncounteredErrors {
-                msg: value_too_large(too_large_error_message, raw),
-            }),
-            Err(_) => {
-                let option = format!("-{opt}");
-                Err(PrError::EncounteredErrors {
-                    msg: format!("invalid -{option} argument {}", raw.quote()),
-                })
-            }
+    matches
+        .get_one::<String>(opt)
+        .map(|raw| parse_number(raw, option_message))
+}
+
+fn parse_positive_option(
+    matches: &ArgMatches,
+    opt: &str,
+    option_message: &str,
+) -> Option<Result<usize, PrError>> {
+    matches
+        .get_one::<String>(opt)
+        .map(|raw| parse_positive(raw, option_message))
+}
+
+/// Parse `FIRST[:LAST]` from `--pages` or a `+` operand, named by `option`
+/// in the messages, as GNU reports it.
+fn parse_page_range(spec: &str, option: &str) -> Result<(usize, Option<usize>), PrError> {
+    let error = |msg: String| PrError::EncounteredErrors { msg };
+    let (first, last) = match spec.split_once(':') {
+        Some((first, last)) => (first, Some(last)),
+        None => (spec, None),
+    };
+    let page = |part: &str| match part.parse::<usize>() {
+        Ok(n) => Ok(Some(n)),
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => Err(error(format!(
+            "{option} argument {} too large",
+            spec.quote()
+        ))),
+        Err(_) => Ok(None),
+    };
+    let (first_page, last_page) = (page(first)?, last.map(page).transpose()?);
+    match (first_page, last_page) {
+        (Some(first), None) if first >= 1 => Ok((first, None)),
+        (Some(first), Some(Some(last))) if first >= 1 && last >= first => Ok((first, Some(last))),
+        (Some(_), None | Some(Some(_))) => Err(error(
+            translate!("pr-error-invalid-pages-range", "range" => spec.quote()),
+        )),
+        // A last page that is digits followed by other characters.
+        _ if option == "+"
+            && last.is_some_and(|last| {
+                last.starts_with(|c: char| c.is_ascii_digit())
+                    && !last.bytes().all(|b| b.is_ascii_digit())
+            }) =>
+        {
+            Err(error(format!(
+                "invalid suffix in {option} argument {}",
+                spec.quote()
+            )))
         }
-    })
+        _ => Err(error(format!("invalid {option} argument {}", spec.quote()))),
+    }
 }
 
 fn get_date_format(matches: &ArgMatches) -> String {
@@ -771,78 +898,15 @@ fn build_options(
     };
 
     // +page option is less priority than --pages
-    let plus_page = operands.page.as_deref();
-    let res = plus_page.map(|unparsed_num| {
-        let x: Vec<_> = unparsed_num.split(':').collect();
-        x[0].to_string()
-            .parse::<usize>()
-            .map_err(|_e| PrError::EncounteredErrors {
-                msg: format!("invalid {} argument {}", "+", unparsed_num.quote()),
-            })
-    });
-    let start_page_in_plus_option = match res {
-        Some(res) => res?,
-        None => 1,
+    let plus_range = operands
+        .page
+        .as_deref()
+        .map(|spec| parse_page_range(spec, "+"))
+        .transpose()?;
+    let (start_page, end_page) = match matches.get_one::<String>(options::PAGES) {
+        Some(spec) => parse_page_range(spec, "--pages")?,
+        None => plus_range.unwrap_or((1, None)),
     };
-
-    let res = plus_page.filter(|i| i.contains(':')).map(|unparsed_num| {
-        let x: Vec<_> = unparsed_num.split(':').collect();
-        x[1].to_string()
-            .parse::<usize>()
-            .map_err(|_e| PrError::EncounteredErrors {
-                msg: format!("invalid {} argument {}", "+", unparsed_num.quote()),
-            })
-    });
-    let end_page_in_plus_option = match res {
-        Some(res) => Some(res?),
-        None => None,
-    };
-
-    let invalid_pages_map = |i: String| {
-        let unparsed_value = matches.get_one::<String>(options::PAGES).unwrap();
-        let parsed_value = i.parse::<usize>().map_err(|_e| PrError::EncounteredErrors {
-            msg: format!("invalid --pages argument {}", unparsed_value.quote()),
-        });
-
-        match parsed_value {
-            Ok(0) => Err(PrError::EncounteredErrors {
-                msg: "invalid --pages argument '0'".to_string(),
-            }),
-            Ok(res) => Ok(res),
-            Err(e) => Err(e),
-        }
-    };
-
-    let res = matches
-        .get_one::<String>(options::PAGES)
-        .map(|i| {
-            let x: Vec<_> = i.split(':').collect();
-            x[0].to_string()
-        })
-        .map(invalid_pages_map);
-    let start_page = match res {
-        Some(res) => res?,
-        None => start_page_in_plus_option,
-    };
-
-    let res = matches
-        .get_one::<String>(options::PAGES)
-        .filter(|i| i.contains(':'))
-        .map(|i| {
-            let x: Vec<_> = i.split(':').collect();
-            x[1].to_string()
-        })
-        .map(invalid_pages_map);
-    let end_page = match res {
-        Some(res) => Some(res?),
-        None => end_page_in_plus_option,
-    };
-
-    if let Some(end_page) = end_page.filter(|end| start_page > *end) {
-        return Err(PrError::EncounteredErrors {
-            msg: translate!("pr-error-invalid-pages-range", "start" => start_page, "end" => end_page),
-        });
-    }
 
     let default_lines_per_page = if form_feed_used {
         LINES_PER_PAGE_FOR_FORM_FEED
@@ -850,18 +914,12 @@ fn build_options(
         LINES_PER_PAGE
     };
 
-    let page_length = parse_usize(
+    let page_length = parse_positive_option(
         matches,
         options::PAGE_LENGTH,
         "'-l PAGE_LENGTH' invalid number of lines",
     )
     .unwrap_or(Ok(default_lines_per_page))?;
-
-    if page_length == 0 {
-        return Err(PrError::EncounteredErrors {
-            msg: "invalid --length argument '0'".to_string(),
-        });
-    }
 
     // `pr --help` states the rule twice: a page length of 10 or less implies
     // `-t`. At exactly 10 the old `<` left the header and trailer in place and
@@ -901,75 +959,33 @@ fn build_options(
         DEFAULT_COLUMN_WIDTH
     };
 
-    let column_width = parse_usize(
+    let column_width = parse_positive_option(
         matches,
         options::COLUMN_WIDTH,
         "'-w PAGE_WIDTH' invalid number of characters",
     )
     .unwrap_or(Ok(default_column_width))?;
 
-    if column_width == 0 {
-        return Err(PrError::EncounteredErrors {
-            msg: "invalid --width argument '0'".to_string(),
-        });
-    }
-
     let page_width = if matches.get_flag(options::JOIN_LINES) {
         None
     } else {
-        match parse_usize(
+        parse_positive_option(
             matches,
             options::PAGE_WIDTH,
             "'-W PAGE_WIDTH' invalid number of characters",
-        ) {
-            Some(res) => Some(res?),
-            None => None,
-        }
-    };
-
-    if page_width == Some(0) {
-        return Err(PrError::EncounteredErrors {
-            msg: "invalid --page-width argument '0'".to_string(),
-        });
-    }
-
-    let res = operands
-        .column
-        .as_deref()
-        .map(|unparsed_num| match unparsed_num.parse::<usize>() {
-            Ok(n @ ..=MAX_INT_VALUE) => Ok(n),
-            Ok(_) => Err(PrError::EncounteredErrors {
-                msg: value_too_large("invalid number of columns", unparsed_num),
-            }),
-            Err(e) if *e.kind() == IntErrorKind::PosOverflow => Err(PrError::EncounteredErrors {
-                msg: value_too_large("invalid number of columns", unparsed_num),
-            }),
-            Err(_) => Err(PrError::EncounteredErrors {
-                msg: format!("invalid {} argument {}", "-", unparsed_num.quote()),
-            }),
-        });
-    let start_column_option = match res {
-        Some(Ok(0)) => {
-            return Err(PrError::EncounteredErrors {
-                msg: "invalid --columns argument '0'".to_string(),
-            });
-        }
-        Some(res) => Some(res?),
-        None => None,
+        )
+        .transpose()?
     };
 
     // --columns has more priority than -column
-
-    let column_option_value =
-        match parse_usize(matches, options::COLUMNS, "invalid number of columns") {
-            Some(Ok(0)) => {
-                return Err(PrError::EncounteredErrors {
-                    msg: "invalid --columns argument '0'".to_string(),
-                });
-            }
-            Some(res) => Some(res?),
-            None => start_column_option,
-        };
+    let column_option_value = match matches.get_one::<String>(options::COLUMNS) {
+        Some(raw) => Some(parse_positive(raw, "invalid number of columns")?),
+        None => operands
+            .column
+            .as_deref()
+            .map(|digits| parse_positive(digits, "invalid number of columns"))
+            .transpose()?,
+    };
 
     let column_mode_options = column_option_value.map(|columns| ColumnModeOptions {
         columns,
@@ -984,6 +1000,16 @@ fn build_options(
         // Store the count. Spaces are streamed at print time to avoid huge allocations.
         Some(raw) => match raw.parse::<i32>() {
             Ok(n @ 0..) => n as usize,
+            Ok(_) | Err(_)
+                if raw.strip_prefix('-').is_some_and(|digits| {
+                    !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
+                }) =>
+            {
+                // A negative margin, reported like one that does not fit.
+                return Err(PrError::EncounteredErrors {
+                    msg: value_too_large("'-o MARGIN' invalid line offset", raw),
+                });
+            }
             Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
                 return Err(PrError::EncounteredErrors {
                     msg: value_too_large("'-o MARGIN' invalid line offset", raw),
