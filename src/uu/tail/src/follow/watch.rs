@@ -39,6 +39,13 @@ impl WatcherRx {
         let mut path = path.to_owned();
         #[cfg(target_os = "linux")]
         if path.is_file() {
+            // The directory watch below reports a write to the target of a
+            // symlink under the target's own name, which is not a followed
+            // path. Watching the link as well follows it to the target, whose
+            // events then arrive under the link's name.
+            if path.is_symlink() {
+                self.watch(&path, RecursiveMode::NonRecursive)?;
+            }
             /*
             NOTE: Using the parent directory instead of the file is a workaround.
             This workaround follows the recommendation of the notify crate authors:
@@ -153,7 +160,7 @@ impl Observer {
             let metadata = path.metadata().ok();
             self.files.insert(
                 &path,
-                PathData::new(reader, metadata, display_name),
+                PathData::new(reader, metadata, display_name, path.is_symlink()),
                 update_last,
             );
         }
@@ -291,6 +298,21 @@ impl Observer {
         Ok(())
     }
 
+    /// Open `path` again and, on Linux, watch the file it names now: a
+    /// watch on a symlink follows the link when it is added, so one added
+    /// before the link was changed still reports the old target.
+    fn reopen(&mut self, path: &Path) -> UResult<()> {
+        self.files.update_reader(path)?;
+        #[cfg(target_os = "linux")]
+        if path.is_symlink()
+            && let Some(watcher_rx) = &mut self.watcher_rx
+        {
+            let _ = watcher_rx.unwatch(path);
+            watcher_rx.watch(path, RecursiveMode::NonRecursive)?;
+        }
+        Ok(())
+    }
+
     #[allow(clippy::cognitive_complexity)]
     fn handle_event(
         &mut self,
@@ -315,16 +337,18 @@ impl Observer {
             EventKind::Modify(ModifyKind::Any | ModifyKind::Metadata(MetadataKind::Any | MetadataKind::WriteTime) | ModifyKind::Data(DataChange::Any) | ModifyKind::Name(RenameMode::To)) |
             EventKind::Create(CreateKind::File | CreateKind::Folder | CreateKind::Any) => {
                 if let Ok(new_md) = event_path.metadata() {
+                    let pd = self.files.get(event_path);
                     // `metadata()` follows symlinks, so under --follow=name a
                     // watched file swapped for a symlink would otherwise be
-                    // silently followed to its target. GNU treats such a
-                    // replacement as untailable.
+                    // silently followed to its target, and is treated as
+                    // untailable instead. A path that already was a symlink
+                    // is followed to its target, as GNU does.
                     let replaced_by_symlink = self.follow_name()
+                        && !pd.symlink
                         && event_path
                             .symlink_metadata()
                             .is_ok_and(|m| m.file_type().is_symlink());
                     let is_tailable = !replaced_by_symlink && new_md.is_tailable();
-                    let pd = self.files.get(event_path);
                     if let Some(old_md) = &pd.metadata {
                         if is_tailable {
                             // The path was untailable (missing, or not a
@@ -335,20 +359,20 @@ impl Observer {
                                     "{}",
                                     translate!("tail-status-has-become-accessible", "file" => display_name.quote())
                                 );
-                                self.files.update_reader(event_path)?;
+                                self.reopen(event_path)?;
                             } else if pd.reader.is_none() {
                                 show_error!(
                                     "{}",
                                     translate!("tail-status-has-appeared-following-new-file", "file" => display_name.quote())
                                 );
-                                self.files.update_reader(event_path)?;
+                                self.reopen(event_path)?;
                             } else if event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To))
                             || (self.use_polling && !old_md.file_id_eq(&new_md)) {
                                 show_error!(
                                     "{}",
                                     translate!("tail-status-has-been-replaced-following-new-file", "file" => display_name.quote())
                                 );
-                                self.files.update_reader(event_path)?;
+                                self.reopen(event_path)?;
                             } else if old_md.got_truncated(&new_md)? {
                                 // A file that has lost content is read again
                                 // from offset zero, since shortening a log
@@ -357,7 +381,7 @@ impl Observer {
                                     "{}",
                                     translate!("tail-status-file-truncated", "file" => display_name)
                                 );
-                                self.files.update_reader(event_path)?;
+                                self.reopen(event_path)?;
                             }
                             paths.push(event_path.clone());
                         } else if !is_tailable && old_md.is_tailable() {
@@ -381,7 +405,7 @@ impl Observer {
                             "{}",
                             translate!("tail-status-has-appeared-following-new-file", "file" => display_name.quote())
                         );
-                        self.files.update_reader(event_path)?;
+                        self.reopen(event_path)?;
                         paths.push(event_path.clone());
                     } else if settings.retry {
                         if self.follow_descriptor() {
@@ -402,7 +426,21 @@ impl Observer {
                         }
                     }
                     self.files.update_metadata(event_path, Some(new_md));
+                } else if self.follow_descriptor() && self.files.get(event_path).reader.is_some() {
+                    // The link no longer resolves, but the file it led to is
+                    // still open and is what --follow=descriptor follows.
+                    paths.push(event_path.clone());
                 } else if event_path.is_symlink() && settings.retry {
+                    // The link no longer resolves. Say so if it was being
+                    // followed, and poll it until it resolves again.
+                    if self.files.get(event_path).reader.is_some() {
+                        show_error!(
+                            "{} {}: {}",
+                            display_name.quote(),
+                            translate!("tail-become-inaccessible"),
+                            translate!("tail-no-such-file-or-directory")
+                        );
+                    }
                     self.files.reset_reader(event_path);
                     self.orphans.push(event_path.clone());
                 }
@@ -428,6 +466,11 @@ impl Observer {
                             );
                             self.orphans.push(event_path.clone());
                             let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
+                        } else if event_path.is_symlink() && !self.orphans.contains(event_path) {
+                            // The target of the link is gone, and nothing
+                            // reports the name it will come back under: poll
+                            // the link until it resolves again.
+                            self.orphans.push(event_path.clone());
                         }
                     } else {
                         show_error!(

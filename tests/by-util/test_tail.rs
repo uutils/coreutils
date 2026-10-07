@@ -5462,6 +5462,148 @@ fn test_follow_symlink_target_change() {
 }
 
 #[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+fn test_follow_descriptor_symlink_appends() {
+    // Appends to the target of a symlink reach tail through the link.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("2026-09-01.log", "a\n");
+    at.symlink_file("2026-09-01.log", "latest.log");
+    let mut p = ucmd.args(&["-s.1", "-f", "latest.log"]).run_no_wait();
+    p.delay(500);
+    at.append("2026-09-01.log", "b\n");
+    p.delay(500);
+    at.append("2026-09-01.log", "c\n");
+    p.delay(500);
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_only("a\nb\nc\n");
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+fn test_follow_name_symlink_appends() {
+    // A symlink named on the command line is followed to its target under
+    // --follow=name too: it is not a file that was replaced by a symlink.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("2026-09-01.log", "a\n");
+    at.symlink_file("2026-09-01.log", "latest.log");
+    let mut p = ucmd
+        .args(&["-s.1", "--max-unchanged-stats=1", "-F", "latest.log"])
+        .run_no_wait();
+    p.delay(500);
+    at.append("2026-09-01.log", "b\n");
+    p.delay(500);
+    at.append("2026-09-01.log", "c\n");
+    p.delay(500);
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_only("a\nb\nc\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+fn test_follow_name_symlink_retargeted() {
+    // Pointing the link at another file follows that file, as GNU does.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("t1", "A\n");
+    at.write("t2", "B\n");
+    at.symlink_file("t1", "latest.log");
+    let mut p = ucmd
+        .args(&["-s.1", "--max-unchanged-stats=1", "-F", "latest.log"])
+        .run_no_wait();
+    p.delay(500);
+    at.symlink_file("t2", "latest.tmp");
+    at.rename("latest.tmp", "latest.log");
+    p.delay(500);
+    at.append("t2", "C\n");
+    p.delay(500);
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_is("A\nB\nC\n")
+        .stderr_is("tail: 'latest.log' has been replaced;  following new file\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+fn test_follow_name_symlink_target_recreated() {
+    // The target is removed and a new one created under the same name: the
+    // link resolves again and is followed again.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("t1", "A\n");
+    at.symlink_file("t1", "latest.log");
+    let mut p = ucmd
+        .args(&["-s.1", "--max-unchanged-stats=1", "-F", "latest.log"])
+        .run_no_wait();
+    p.delay(500);
+    at.remove("t1");
+    p.delay(500);
+    at.write("t1", "B\n");
+    p.delay(500);
+    at.append("t1", "C\n");
+    p.delay(500);
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_is("A\nB\nC\n")
+        .stderr_is(
+            "tail: 'latest.log' has become inaccessible: No such file or directory\n\
+             tail: 'latest.log' has appeared;  following new file\n",
+        );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+fn test_follow_descriptor_symlink_target_renamed() {
+    // --follow=descriptor keeps following the file the link led to after
+    // that file is renamed, as it does for a file named directly.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("t1", "A\n");
+    at.symlink_file("t1", "latest.log");
+    let mut p = ucmd.args(&["-s.1", "-f", "latest.log"]).run_no_wait();
+    p.delay(500);
+    at.rename("t1", "t1.old");
+    p.delay(500);
+    at.append("t1.old", "B\n");
+    p.delay(500);
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_only("A\nB\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+fn test_follow_proc_fd_path() {
+    // `/proc/<pid>/fd/N` is a symlink to the open file, and is followed
+    // like one: inotify follows it, where the directory of the link
+    // reports nothing.
+    use std::io::Write;
+    use std::os::unix::io::AsRawFd;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut file = std::fs::File::create(at.plus("log")).unwrap();
+    writeln!(file, "a").unwrap();
+    let path = format!("/proc/{}/fd/{}", std::process::id(), file.as_raw_fd());
+    let mut p = ucmd.args(&["-s.1", "-f", &path]).run_no_wait();
+    p.delay(500);
+    writeln!(file, "b").unwrap();
+    p.delay(500);
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_only("a\nb\n");
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_no_skip_after_error() {
     let (at, mut ucmd) = at_and_ucmd!();
