@@ -588,6 +588,18 @@ pub fn is_integer_literal(s: &str) -> bool {
     !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
 }
 
+/// Whether `category`, one of the `LC_*` names, resolves to the C locale:
+/// no locale is set, or it is set to one of the two names of that locale.
+/// The precedence is the one setlocale(3) applies, `LC_ALL`, then the
+/// category, then `LANG`, and an empty value counts as unset.
+pub fn is_c_locale(category: &str) -> bool {
+    ["LC_ALL", category, "LANG"]
+        .into_iter()
+        .filter_map(std::env::var_os)
+        .find(|value| !value.is_empty())
+        .is_none_or(|value| value == "C" || value == "POSIX")
+}
+
 /// Function to detect system locale from environment variables
 fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
     let locale_str = std::env::var("LANG")
