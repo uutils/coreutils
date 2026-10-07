@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore strtime Yhello
+// spell-checker:ignore strtime Yhello février FéVRIER juin
 
 //! GNU date format modifier support
 //!
@@ -20,7 +20,7 @@
 //! - `_`: Pad with spaces instead of zeros
 //! - `0`: Pad with zeros (default for numeric fields)
 //! - `^`: Convert to uppercase
-//! - `#`: Swap the case of names; lowercase %p and %Z, even with `^`;
+//! - `#`: Uppercase names like `^`; lowercase %p and %Z, even with `^`;
 //!   no effect on %c and %r (%P is always lowercase)
 //! - `+`: Force display of sign (+ for positive, - for negative)
 //!
@@ -153,6 +153,52 @@ pub fn parse_format_spec(s: &str) -> Option<ParsedSpec<'_>> {
     })
 }
 
+/// Replace the specifiers for which `value_of` returns a value, with their
+/// flags and width applied, and leave the others for later formatting.
+///
+/// This lets locale-dependent values (localized names, dates in another
+/// calendar) go through the same modifiers as the values jiff formats.
+pub fn localize_specifiers(
+    format_string: &str,
+    value_of: impl Fn(char) -> Option<String>,
+) -> Result<String, FormatError> {
+    let mut result = String::with_capacity(format_string.len());
+    let mut rest = format_string;
+    while let Some(start) = rest.find('%') {
+        result.push_str(&rest[..start]);
+        rest = &rest[start..];
+        if rest.starts_with("%%") {
+            result.push_str("%%");
+            rest = &rest[2..];
+            continue;
+        }
+        let Some(parsed) = parse_format_spec(rest) else {
+            result.push('%');
+            rest = &rest[1..];
+            continue;
+        };
+        let value = match parsed.spec.as_bytes() {
+            [conv] => value_of(char::from(*conv)),
+            _ => None,
+        };
+        match value {
+            Some(value) => {
+                let value = if parsed.flags.is_empty() && parsed.width.is_none() {
+                    value
+                } else {
+                    apply_spec_modifiers(&value, &parsed)?
+                };
+                // Keep the value literal for the formatting that follows
+                result.push_str(&value.replace('%', "%%"));
+            }
+            None => result.push_str(&rest[..parsed.len]),
+        }
+        rest = &rest[parsed.len..];
+    }
+    result.push_str(rest);
+    Ok(result)
+}
+
 /// Check if format string contains any GNU modifiers and format if present.
 ///
 /// This function combines modifier detection and formatting in a single pass
@@ -245,16 +291,7 @@ fn format_with_modifiers(
                 let formatted = broken_down.to_string_with_config(config, &base_format)?;
 
                 if !parsed.flags.is_empty() || parsed.width.is_some() {
-                    // Composite conversions are already expanded as a whole;
-                    // timezone conversions need sign-aware width handling.
-                    let modified = if is_composite_specifier(parsed.spec) {
-                        apply_composite_modifiers(&formatted, &parsed)?
-                    } else if parsed.spec.ends_with('z') && !parsed.flags.is_empty() {
-                        apply_timezone_modifiers(&formatted, &parsed)?
-                    } else {
-                        apply_modifiers(&formatted, &parsed)?
-                    };
-                    result.push_str(&modified);
+                    result.push_str(&apply_spec_modifiers(&formatted, &parsed)?);
                 } else {
                     result.push_str(&formatted);
                 }
@@ -271,6 +308,20 @@ fn format_with_modifiers(
     }
 
     Ok(result)
+}
+
+/// Apply the flags and width of `parsed` to `value`, its conversion formatted
+/// without them.
+fn apply_spec_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, FormatError> {
+    // Composite conversions are already expanded as a whole;
+    // timezone conversions need sign-aware width handling.
+    if is_composite_specifier(parsed.spec) {
+        apply_composite_modifiers(value, parsed)
+    } else if parsed.spec.ends_with('z') && !parsed.flags.is_empty() {
+        apply_timezone_modifiers(value, parsed)
+    } else {
+        apply_modifiers(value, parsed)
+    }
 }
 
 /// Composite strftime conversions are expanded atomically by GNU date. In
@@ -305,11 +356,11 @@ pub fn apply_composite_modifiers(
         }
     }
 
-    let result = if uppercase {
-        value.to_uppercase()
-    } else {
-        value.to_string()
-    };
+    let mut result = value.to_string();
+    if uppercase {
+        // Only ASCII letters change, as in the other conversions
+        result.make_ascii_uppercase();
+    }
 
     if matches!(pad, Pad::None) {
         return Ok(result);
@@ -562,25 +613,17 @@ pub fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, F
         }
     }
 
-    // `#` only acts on names, %p and %Z; on %p and %Z it lowercases and wins
-    // over `^`. %P is always lowercase.
+    // `#` only acts on names, %p and %Z; on names it uppercases like `^`, on
+    // %p and %Z it lowercases and wins over `^`. %P is always lowercase.
+    // Only ASCII letters change, as the case is changed byte by byte:
+    // "février" becomes "FéVRIER".
     let conversion = specifier.chars().last();
     if swap_case && matches!(conversion, Some('p' | 'Z')) {
-        result = result.to_lowercase();
-    } else if uppercase && conversion != Some('P') {
-        result = result.to_uppercase();
-    } else if swap_case && matches!(conversion, Some('a' | 'A' | 'b' | 'B' | 'h')) {
-        if result
-            .chars()
-            .all(|c| !c.is_alphabetic() || c.is_uppercase())
-        {
-            result = result.to_lowercase();
-        } else if !result
-            .chars()
-            .all(|c| !c.is_alphabetic() || c.is_lowercase())
-        {
-            result = result.to_uppercase();
-        }
+        result.make_ascii_lowercase();
+    } else if (uppercase && conversion != Some('P'))
+        || (swap_case && matches!(conversion, Some('a' | 'A' | 'b' | 'B' | 'h')))
+    {
+        result.make_ascii_uppercase();
     }
 
     // If no_pad flag is active, suppress all padding and return
@@ -755,6 +798,11 @@ mod tests {
             apply_composite_modifiers(value, &spec("-", Some(usize::MAX), "r")).unwrap(),
             value
         );
+        // Only ASCII letters are uppercased: el_GR's `%r` keeps "μμ"
+        assert_eq!(
+            apply_composite_modifiers("03:00:00 μμ", &spec("^", None, "r")).unwrap(),
+            "03:00:00 μμ"
+        );
     }
 
     #[test]
@@ -845,6 +893,24 @@ mod tests {
         // %#B: swap case on "June" (mixed case) → uppercase
         let result = format_with_modifiers(&date, "%#B", &config).unwrap();
         assert_eq!(result, "JUNE");
+    }
+
+    #[test]
+    fn test_localize_specifiers() {
+        let value_of = |conv| match conv {
+            'B' => Some("février".to_string()),
+            'd' => Some("01".to_string()),
+            'b' => Some("50%".to_string()),
+            'D' => Some("06/14/26".to_string()),
+            _ => None,
+        };
+        // Flags and width apply to the localized value, only ASCII letters
+        // change case, other specifiers and %% are left for later formatting
+        let result = localize_specifiers("%B|%^B|%-d|%_d|%10b|%%B|%H|%:z|%b", value_of).unwrap();
+        assert_eq!(result, "février|FéVRIER|1| 1|       50%%|%%B|%H|%:z|50%%");
+        // Composite conversions are modified as a whole
+        let result = localize_specifiers("%-D|%_D|%10D", value_of).unwrap();
+        assert_eq!(result, "06/14/26|06/14/26|  06/14/26");
     }
 
     #[test]
@@ -947,6 +1013,8 @@ mod tests {
             apply_modifiers("UTC", &spec("#", None, "Z")).unwrap(),
             "utc"
         );
+        // Only ASCII letters are lowercased: "ÖS" (tr_TR) becomes "Ös"
+        assert_eq!(apply_modifiers("ÖS", &spec("#", None, "p")).unwrap(), "Ös");
         // Swap case: mixed case → uppercase
         assert_eq!(
             apply_modifiers("June", &spec("#", None, "B")).unwrap(),
@@ -1004,14 +1072,18 @@ mod tests {
             apply_modifiers("June", &spec("#^", None, "B")).unwrap(),
             "JUNE"
         );
-        // Test # alone (swap case)
+        // Test # alone: names are uppercased whatever their case
         assert_eq!(
             apply_modifiers("June", &spec("#", None, "B")).unwrap(),
             "JUNE"
         );
         assert_eq!(
             apply_modifiers("JUNE", &spec("#", None, "B")).unwrap(),
-            "june"
+            "JUNE"
+        );
+        assert_eq!(
+            apply_modifiers("juin", &spec("#", None, "B")).unwrap(),
+            "JUIN"
         );
     }
 

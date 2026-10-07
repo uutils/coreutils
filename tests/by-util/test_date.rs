@@ -3060,6 +3060,61 @@ fn test_locale_names_for_several_dates_in_one_run() {
 }
 
 #[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
+fn test_locale_names_with_flags() {
+    // Flags and widths apply to the localized names, and only ASCII letters
+    // change case
+    for (date, fmt, expected) in [
+        ("2026-03-21", "+[%^B|%#B|%-B]", "[MARS|MARS|mars]"),
+        ("2026-03-21", "+[%10B|%010B]", "[      mars|000000mars]"),
+        ("2026-03-21", "+[%^b|%^A|%#a]", "[MARS|SAMEDI|SAM.]"),
+        ("2026-02-21", "+[%^B]", "[FéVRIER]"), // spell-checker:disable-line
+    ] {
+        check_date("fr_FR.UTF-8", date, fmt, expected);
+    }
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
+fn test_locale_calendar_with_flags() {
+    // Flags, widths, %F and %D use the date in the calendar of the locale
+    // spell-checker:disable
+    for (locale, fmt, expected) in [
+        ("fa_IR.UTF-8", "+[%-d %B %Y]", "[1 فروردین 1405]"),
+        (
+            "fa_IR.UTF-8",
+            "+[%F|%D|%_m|%0e|%6Y]",
+            "[1405-01-01|01/01/26| 1|01|001405]",
+        ),
+        ("am_ET.UTF-8", "+[%F|%-m|%_d]", "[2018-07-12|7|12]"),
+        // Composite conversions are modified as a whole
+        (
+            "am_ET.UTF-8",
+            "+[%-D|%_D|%10D]",
+            "[07/12/26|07/12/26|  07/12/26]",
+        ),
+        ("th_TH.UTF-8", "+[%F|%-Y]", "[2569-03-21|2569]"),
+    ] {
+        check_date(locale, "2026-03-21", fmt, expected);
+    }
+    // spell-checker:enable
+    // ISO 8601 stays Gregorian
+    new_ucmd!()
+        .env("LC_ALL", "fa_IR.UTF-8")
+        .args(&["-d", "2026-03-21", "--iso-8601"])
+        .succeeds()
+        .stdout_is("2026-03-21\n");
+}
+
+#[test]
 fn test_percent_percent_not_replaced() {
     let cases = [
         // Time conversion specifiers
