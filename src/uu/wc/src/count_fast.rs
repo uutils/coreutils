@@ -105,26 +105,25 @@ fn detect_native_locale_encoding() -> Option<LocaleEncodingInfo> {
                 unsafe extern "C" {
                     fn __ctype_get_mb_cur_max() -> libc::size_t;
                 }
-                Some(__ctype_get_mb_cur_max() as usize)
-            }
-            #[cfg(target_vendor = "apple")]
-            {
-                unsafe extern "C" {
-                    fn ___mb_cur_max() -> libc::size_t;
-                }
-                Some(___mb_cur_max() as usize)
+                Some(__ctype_get_mb_cur_max())
             }
             #[cfg(any(
+                target_vendor = "apple",
                 target_os = "freebsd",
-                target_os = "dragonfly",
-                target_os = "openbsd",
-                target_os = "netbsd"
+                target_os = "dragonfly"
             ))]
             {
                 unsafe extern "C" {
-                    static __mb_cur_max: libc::c_int;
+                    fn ___mb_cur_max() -> libc::c_int;
                 }
-                Some(__mb_cur_max as usize)
+                usize::try_from(___mb_cur_max()).ok()
+            }
+            #[cfg(target_os = "openbsd")]
+            {
+                unsafe extern "C" {
+                    fn __mb_cur_max() -> libc::size_t;
+                }
+                Some(__mb_cur_max())
             }
             #[cfg(not(any(
                 target_os = "linux",
@@ -133,7 +132,6 @@ fn detect_native_locale_encoding() -> Option<LocaleEncodingInfo> {
                 target_os = "freebsd",
                 target_os = "dragonfly",
                 target_os = "openbsd",
-                target_os = "netbsd"
             )))]
             {
                 None
@@ -177,18 +175,23 @@ fn locale_encoding_info() -> LocaleEncodingInfo {
             return info;
         }
 
-        match get_ctype_encoding() {
-            UEncoding::Utf8 => LocaleEncodingInfo {
-                is_utf8: true,
-                is_single_byte: false,
-            },
-            UEncoding::Ascii => LocaleEncodingInfo {
-                is_utf8: false,
-                is_single_byte: true,
-            },
-        }
+        let name = ["LC_ALL", "LC_CTYPE", "LANG"]
+            .iter()
+            .find_map(|key| std::env::var(key).ok().filter(|value| !value.is_empty()));
+        fallback_locale_encoding(get_ctype_encoding(), name.as_deref())
     });
     *INFO
+}
+
+fn fallback_locale_encoding(encoding: UEncoding, name: Option<&str>) -> LocaleEncodingInfo {
+    let is_utf8 = encoding == UEncoding::Utf8;
+    // Other non-UTF-8 encodings may still use more than one byte per character.
+    let is_single_byte =
+        !is_utf8 && name.map_or(!cfg!(windows), |name| matches!(name, "C" | "POSIX"));
+    LocaleEncodingInfo {
+        is_utf8,
+        is_single_byte,
+    }
 }
 
 pub(crate) fn is_utf8_locale() -> bool {
@@ -458,5 +461,51 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
             Err(e) if e.kind() == ErrorKind::Interrupted => (),
             Err(e) => return (total, Some(e)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LocaleEncodingInfo, UEncoding, fallback_locale_encoding};
+
+    #[test]
+    fn fallback_keeps_other_encodings_multibyte() {
+        for name in ["ja_JP.eucjp", "zh_TW.big5", "en_US.iso88591", "unknown"] {
+            assert_eq!(
+                fallback_locale_encoding(UEncoding::Ascii, Some(name)),
+                LocaleEncodingInfo {
+                    is_utf8: false,
+                    is_single_byte: false
+                },
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn fallback_counts_bytes_only_for_c_and_posix() {
+        for name in ["C", "POSIX"] {
+            assert_eq!(
+                fallback_locale_encoding(UEncoding::Ascii, Some(name)),
+                LocaleEncodingInfo {
+                    is_utf8: false,
+                    is_single_byte: true
+                }
+            );
+        }
+        assert_eq!(
+            fallback_locale_encoding(UEncoding::Utf8, Some("C.UTF-8")),
+            LocaleEncodingInfo {
+                is_utf8: true,
+                is_single_byte: false
+            }
+        );
+        assert_eq!(
+            fallback_locale_encoding(UEncoding::Ascii, None),
+            LocaleEncodingInfo {
+                is_utf8: false,
+                is_single_byte: !cfg!(windows)
+            }
+        );
     }
 }
