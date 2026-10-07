@@ -268,13 +268,13 @@ pub fn uu_app() -> Command {
             Arg::new(options::MAJOR)
                 .value_name(options::MAJOR)
                 .help(translate!("mknod-help-major"))
-                .value_parser(value_parser!(u32)),
+                .value_parser(parse_u32_mknod),
         )
         .arg(
             Arg::new(options::MINOR)
                 .value_name(options::MINOR)
                 .help(translate!("mknod-help-minor"))
-                .value_parser(value_parser!(u32)),
+                .value_parser(parse_u32_mknod),
         )
         .arg(
             Arg::new(options::SECURITY_CONTEXT)
@@ -306,4 +306,21 @@ fn parse_type(tpe: &str) -> Result<FileType, String> {
             'p' => Ok(FileType::Fifo),
             _ => Err(translate!("mknod-error-invalid-device-type", "type" => tpe.quote())),
         })
+}
+
+fn parse_u32_mknod(s: &str) -> Result<u32, String> {
+    let Some(might_octal) = s.strip_prefix("0") else {
+        return s.parse::<u32>().map_err(|e| e.to_string());
+    };
+    if might_octal.is_empty() {
+        return Ok(0);
+    }
+    if let Some(hex) = might_octal
+        .strip_prefix("x")
+        .or_else(|| might_octal.strip_prefix("X"))
+    {
+        u32::from_str_radix(hex, 16).map_err(|e| e.to_string())
+    } else {
+        u32::from_str_radix(might_octal, 8).map_err(|e| e.to_string())
+    }
 }
