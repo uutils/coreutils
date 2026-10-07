@@ -25,8 +25,6 @@ use nix::sys::signal::{SigSet, SigmaskHow, Signal, sigprocmask};
 #[cfg(unix)]
 use nix::unistd::execvp;
 use std::borrow::Cow;
-#[cfg(all(unix, not(target_os = "fuchsia")))]
-use std::collections::BTreeMap;
 #[cfg(unix)]
 use std::collections::BTreeSet;
 use std::env;
@@ -47,7 +45,7 @@ use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, strip_
 use uucore::line_ending::LineEnding;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::signals::{
-    realtime_signal_bounds, signal_by_name_or_value, signal_name_by_value,
+    ALL_SIGNALS, realtime_signal_bounds, signal_by_name_or_value, signal_name_by_value,
     signal_number_upper_bound,
 };
 use uucore::translate;
@@ -229,34 +227,6 @@ enum SignalActionKind {
     Default,
     Ignore,
     Block,
-}
-
-#[cfg(all(unix, not(target_os = "fuchsia")))]
-#[derive(Copy, Clone)]
-struct SignalActionRecord {
-    kind: SignalActionKind,
-    explicit: bool,
-}
-
-#[cfg(all(unix, not(target_os = "fuchsia")))]
-#[derive(Default)]
-struct SignalActionLog {
-    records: BTreeMap<usize, SignalActionRecord>,
-}
-
-#[cfg(all(unix, not(target_os = "fuchsia")))]
-impl SignalActionLog {
-    fn record(&mut self, sig_value: usize, kind: SignalActionKind, explicit: bool) {
-        self.records
-            .entry(sig_value)
-            .and_modify(|entry| {
-                entry.kind = kind;
-                if explicit {
-                    entry.explicit = true;
-                }
-            })
-            .or_insert(SignalActionRecord { kind, explicit });
-    }
 }
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
@@ -803,14 +773,13 @@ impl EnvAppData {
 
         #[cfg(all(unix, not(target_os = "fuchsia")))]
         {
-            let mut signal_action_log = SignalActionLog::default();
             // GNU applies the options in the order they are given, so the last one for a
             // signal wins.
             for (action_kind, request) in &opts.signal_actions {
-                apply_signal_action(request, &mut signal_action_log, *action_kind)?;
+                apply_signal_action(request, *action_kind)?;
             }
             if opts.list_signal_handling {
-                list_signal_handling(&signal_action_log);
+                list_signal_handling();
             }
         }
 
@@ -1103,10 +1072,9 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 fn apply_signal_action(
     request: &SignalRequest,
-    log: &mut SignalActionLog,
     action_kind: SignalActionKind,
 ) -> UResult<()> {
-    request.for_each_signal(|sig_value, explicit| {
+    request.for_each_signal(|sig_value, _explicit| {
         // On some platforms ALL_SIGNALS may contain values that are not valid in libc.
         // Skip those invalid ones and continue (GNU env also ignores undefined signals).
         if !signal_is_valid(sig_value) {
@@ -1118,7 +1086,6 @@ fn apply_signal_action(
             SignalActionKind::Ignore => ignore_signal(sig_value)?,
             SignalActionKind::Block => block_signal(sig_value)?,
         }
-        log.record(sig_value, action_kind, explicit);
 
         // Set environment variable to communicate to Rust child processes
         // that SIGPIPE should be default (not ignored)
@@ -1217,19 +1184,36 @@ fn block_signal(sig: usize) -> UResult<()> {
     Ok(())
 }
 
+/// List the signals that are not at their default, blocked or ignored,
+/// whether env was asked for that or inherited it, as GNU does.
 #[cfg(all(unix, not(target_os = "fuchsia")))]
-fn list_signal_handling(log: &SignalActionLog) {
-    for (&sig_value, record) in &log.records {
-        if !record.explicit {
+fn list_signal_handling() {
+    let blocked = SigSet::thread_get_mask().unwrap_or_else(|_| SigSet::empty());
+    let last = realtime_signal_bounds().map_or(ALL_SIGNALS.len() - 1, |(_, rtmax)| rtmax);
+    for sig_value in 1..=last {
+        let Some(signal_name) = signal_name_by_value(sig_value) else {
+            continue;
+        };
+        if !signal_is_valid(sig_value) {
             continue;
         }
-        let action = match record.kind {
-            SignalActionKind::Default => "DEFAULT",
-            SignalActionKind::Ignore => "IGNORE",
-            SignalActionKind::Block => "BLOCK",
+        let sig = sig_value as libc::c_int;
+        // SAFETY: a null new action only queries the current one, into a
+        // zeroed `sigaction` that `sigaction(2)` fills in entirely.
+        let ignored = unsafe {
+            let mut current: libc::sigaction = zeroed();
+            libc::sigaction(sig, std::ptr::null(), &raw mut current) == 0
+                && current.sa_sigaction == libc::SIG_IGN
         };
-        let signal_name = signal_name_by_value(sig_value).unwrap_or("?".to_string());
-        eprintln!("{signal_name:<10} ({}): {action}", sig_value as i32);
+        // SAFETY: `sigismember` only reads the set it is given.
+        let blocked = unsafe { libc::sigismember(blocked.as_ref(), sig) == 1 };
+        let states: Vec<&str> = [(blocked, "BLOCK"), (ignored, "IGNORE")]
+            .into_iter()
+            .filter_map(|(set, state)| set.then_some(state))
+            .collect();
+        if !states.is_empty() {
+            eprintln!("{signal_name:<10} ({sig:2}): {}", states.join(","));
+        }
     }
 }
 
