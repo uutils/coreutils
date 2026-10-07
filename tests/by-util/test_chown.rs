@@ -1114,39 +1114,27 @@ fn test_chown_symlink_cycles() {
 
     let result = scene.ucmd().arg("-vRL").arg(&user_name).arg("a").run();
 
-    if cfg!(target_vendor = "apple") || cfg!(target_os = "openbsd") || cfg!(target_os = "android") {
-        result
-            .stdout_contains(format!("ownership of 'a' retained as {user_name}"))
-            .stdout_contains(format!("ownership of 'a/b' retained as {user_name}"))
-            .stdout_contains(format!("ownership of 'a/b/c' retained as {user_name}"))
-            .stdout_does_not_contain(format!("ownership of 'a/b/c/d' retained as {user_name}"))
-            .stdout_does_not_contain(format!("ownership of 'a/b/c/d/b' retained as {user_name}"))
-            .stdout_does_not_contain(format!(
-                "ownership of 'a/b/c/d/b/c' retained as {user_name}"
-            ));
-    } else {
-        result
-            .success()
-            .stdout_contains(format!("ownership of 'a' retained as {user_name}"))
-            .stdout_contains(format!("ownership of 'a/b' retained as {user_name}"))
-            .stdout_contains(format!("ownership of 'a/b/c' retained as {user_name}"))
-            .stdout_contains(format!("ownership of 'a/b/c/d' retained as {user_name}"))
-            .stdout_does_not_contain(format!("ownership of 'a/b/c/d/b' retained as {user_name}"))
-            .stdout_does_not_contain(format!(
-                "ownership of 'a/b/c/d/b/c' retained as {user_name}"
-            ))
-            .stdout_does_not_contain(format!(
-                "ownership of 'a/b/c/d/b/c/d' retained as {user_name}"
-            ));
-    }
+    result
+        .success()
+        .stdout_contains(format!("ownership of 'a' retained as {user_name}"))
+        .stdout_contains(format!("ownership of 'a/b' retained as {user_name}"))
+        .stdout_contains(format!("ownership of 'a/b/c' retained as {user_name}"))
+        .stdout_contains(format!("ownership of 'a/b/c/d' retained as {user_name}"))
+        .stdout_does_not_contain(format!("ownership of 'a/b/c/d/b' retained as {user_name}"))
+        .stdout_does_not_contain(format!(
+            "ownership of 'a/b/c/d/b/c' retained as {user_name}"
+        ))
+        .stdout_does_not_contain(format!(
+            "ownership of 'a/b/c/d/b/c/d' retained as {user_name}"
+        ));
 }
 
 #[test]
 fn test_chown_symlink_two_links_same_dir() {
     // Two symlinks pointing at the same directory is NOT a cycle: neither link is
     // an ancestor of the other, so the target's contents must be visited through
-    // *both* links. This guards the backtracking in the linux safe-traversal
-    // cycle detection against false positives.
+    // *both* links. This guards the backtracking in the safe-traversal cycle
+    // detection against false positives.
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
@@ -1165,21 +1153,17 @@ fn test_chown_symlink_two_links_same_dir() {
 
     let result = scene.ucmd().arg("-vRL").arg(&user_name).arg("base").run();
 
-    // Only linux uses the safe-traversal cycle detection that this test exercises;
-    // other platforms fall back to walkdir with its own loop handling.
-    if cfg!(target_os = "linux") {
-        result
-            .success()
-            .stdout_contains(format!(
-                "ownership of 'base/realdir/file' retained as {user_name}"
-            ))
-            .stdout_contains(format!(
-                "ownership of 'base/link1/file' retained as {user_name}"
-            ))
-            .stdout_contains(format!(
-                "ownership of 'base/link2/file' retained as {user_name}"
-            ));
-    }
+    result
+        .success()
+        .stdout_contains(format!(
+            "ownership of 'base/realdir/file' retained as {user_name}"
+        ))
+        .stdout_contains(format!(
+            "ownership of 'base/link1/file' retained as {user_name}"
+        ))
+        .stdout_contains(format!(
+            "ownership of 'base/link2/file' retained as {user_name}"
+        ));
     // spell-checker:enable
 }
 
@@ -1439,7 +1423,7 @@ fn test_chown_dangling_symlink_under_big_h() {
 
 /// Under -R -L -v, an entry that cannot be stat'd is reported as an operand
 /// would be.
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "openbsd")))]
 #[test]
 fn test_chown_verbose_reports_dangling_symlink_under_big_l() {
     use chown::entries::{gid2grp, uid2usr};
@@ -1464,7 +1448,7 @@ fn test_chown_verbose_reports_dangling_symlink_under_big_l() {
 
 /// Under -R -v, a directory operand that cannot be read is left alone, whatever
 /// --from says, and -v says so. `from` offsets the group --from asks for.
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "openbsd")))]
 #[rstest::rstest]
 #[case::no_from(None)]
 #[case::matching_from(Some(0))]
@@ -1646,7 +1630,7 @@ fn test_chown_h_changes_symlink_operand_itself(#[case] opt: &str) {
 
 /// With -h, -R -H and -L leave a link to a directory they cannot read alone,
 /// as GNU does, as they would the directory.
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "openbsd")))]
 #[rstest::rstest]
 #[case::big_h("-H")]
 #[case::big_l("-L")]
@@ -1721,7 +1705,7 @@ fn test_chown_big_l_with_h_changes_symlinks_in_tree(#[case] with_from: bool) {
 
 /// Under -L -h, `--from` judges a symlink met in the tree by its target, as GNU
 /// does, and then changes the link.
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "openbsd")))]
 #[test]
 fn test_chown_big_l_with_h_judges_from_on_link_target() {
     use std::os::unix::fs::lchown;

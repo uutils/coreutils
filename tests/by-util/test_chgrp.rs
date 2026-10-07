@@ -741,7 +741,7 @@ fn test_chgrp_cannot_access_vs_cannot_dereference() {
 }
 
 /// Under -R -L -v, an entry that cannot be stat'd gets chgrp's failure line.
-#[cfg(target_os = "linux")]
+#[cfg(not(target_os = "openbsd"))]
 #[test]
 fn test_chgrp_verbose_reports_dangling_symlink_under_big_l() {
     use std::os::unix::fs::MetadataExt;
