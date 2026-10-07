@@ -1622,34 +1622,26 @@ fn copy_source(
         let dest = construct_dest_path(source_path, target, target_type, options)?;
         // Nothing is created for a source that cannot be found, so that a
         // failed copy leaves no directories behind.
-        let parent_dirs = if options.parents && source_path.symlink_metadata().is_ok() {
-            create_parent_dirs(source, &dest, options)?
+        let mut parent_dirs = Vec::new();
+        let res = if options.parents && source_path.symlink_metadata().is_ok() {
+            create_parent_dirs(source, &dest, options, &mut parent_dirs)
         } else {
-            Vec::new()
-        };
-        let res = copy_file(
-            progress_bar,
-            source_path,
-            dest.as_path(),
-            options,
-            symlinked_files,
-            copied_destinations,
-            copied_files,
-            created_parent_dirs,
-            true,
-        );
-        for (x, y, created) in parent_dirs {
-            if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
-                copy_attributes(
-                    &src,
-                    y,
-                    &options.attributes,
-                    created,
-                    options.set_selinux_context,
-                )?;
-            }
+            Ok(())
         }
-        res
+        .and_then(|()| {
+            copy_file(
+                progress_bar,
+                source_path,
+                dest.as_path(),
+                options,
+                symlinked_files,
+                copied_destinations,
+                copied_files,
+                created_parent_dirs,
+                true,
+            )
+        });
+        res.and(set_parent_dirs_attributes(&parent_dirs, options))
     }
 }
 
@@ -2395,43 +2387,29 @@ fn aligned_ancestors<'a>(source: &'a Path, dest: &'a Path) -> Vec<(&'a Path, &'a
     result
 }
 
-/// Create the ancestors of `dest` that `--parents` needs and that do not exist
-/// yet.
+/// Create the missing ancestors of `dest` that `--parents` needs, owner-only
+/// until the copy is done (default mode with `--no-preserve=mode`).
 ///
-/// Returns the ancestors whose attributes must be set once the copy is done,
-/// outermost first, each with its counterpart in `source` and whether it was
-/// created here. As in GNU cp, that is every ancestor if at least one had to
-/// be created, so that `-p`/`-a` also refreshes the ones that already existed,
-/// and none otherwise, leaving an existing path alone.
-///
-/// A directory created here is private to its owner until the copy is done,
-/// unless `--no-preserve=mode` asks for the default mode anyway. It then gets
-/// the attributes of a freshly created directory: the source directory's mode
-/// filtered through the umask, or everything that `-p`/`-a` preserves.
+/// Adds every ancestor to `dirs`, outermost first, with its `source`
+/// counterpart and whether it was created; none if nothing was created, so an
+/// existing path is left alone. On error, `dirs` holds the ones made so far.
 pub(crate) fn create_parent_dirs<'a>(
     source: &'a Path,
     dest: &'a Path,
-    #[cfg_attr(not(unix), allow(unused_variables))] options: &Options,
-) -> CopyResult<Vec<(&'a Path, &'a Path, bool)>> {
-    #[cfg_attr(not(unix), allow(unused_mut))]
-    let mut builder = fs::DirBuilder::new();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        let mode = if matches!(options.attributes.mode, Preserve::No { explicit: true }) {
-            0o777
-        } else {
-            0o700
-        };
-        builder.mode(mode);
-    }
-    let mut dirs = Vec::new();
+    options: &Options,
+    dirs: &mut Vec<(&'a Path, &'a Path, bool)>,
+) -> CopyResult<()> {
+    let builder = parent_dir_builder(options);
     let mut any_created = false;
+    let mut result = Ok(());
     for (src, dst) in aligned_ancestors(source, dest) {
         let created = match builder.create(dst) {
             Ok(()) => true,
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists && dst.is_dir() => false,
-            Err(e) => return Err(e.into()),
+            Err(e) => {
+                result = Err(e.into());
+                break;
+            }
         };
         any_created |= created;
         dirs.push((src, dst, created));
@@ -2439,7 +2417,52 @@ pub(crate) fn create_parent_dirs<'a>(
     if !any_created {
         dirs.clear();
     }
-    Ok(dirs)
+    result
+}
+
+#[cfg(unix)]
+fn parent_dir_builder(options: &Options) -> fs::DirBuilder {
+    use std::os::unix::fs::DirBuilderExt;
+    let mut builder = fs::DirBuilder::new();
+    if matches!(options.attributes.mode, Preserve::No { explicit: true }) {
+        builder.mode(0o777);
+    } else {
+        builder.mode(0o700);
+    }
+    builder
+}
+
+#[cfg(not(unix))]
+fn parent_dir_builder(_options: &Options) -> fs::DirBuilder {
+    fs::DirBuilder::new()
+}
+
+/// Give the directories from [`create_parent_dirs`] their final attributes.
+///
+/// Called whether or not the copy succeeded, so that none stays owner-only;
+/// tries every directory and returns the first error.
+pub(crate) fn set_parent_dirs_attributes(
+    dirs: &[(&Path, &Path, bool)],
+    options: &Options,
+) -> CopyResult<()> {
+    let mut result = Ok(());
+    for &(src, dst, created) in dirs {
+        // realpath fails without search permission above the working directory;
+        // "src/." still reaches the directory, and never a symlink's own mode
+        let src = canonicalize(src, MissingHandling::Normal, ResolveMode::Physical)
+            .unwrap_or_else(|_| src.join("."));
+        let res = copy_attributes(
+            &src,
+            dst,
+            &options.attributes,
+            created,
+            options.set_selinux_context,
+        );
+        if result.is_ok() {
+            result = res;
+        }
+    }
+    result
 }
 
 fn print_verbose_output(

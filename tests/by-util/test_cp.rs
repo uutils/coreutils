@@ -2234,6 +2234,64 @@ fn test_cp_parents_existing_dirs() {
 }
 
 #[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so source modes cannot be set up"
+)]
+fn test_cp_parents_dirs_take_source_mode_when_copy_fails() {
+    // The --parents directories still get the source's mode when the copy
+    // stops part-way, and when a directory above the working directory is
+    // not searchable, so the source ancestors have no realpath.
+    if rustix::process::geteuid().is_root() {
+        return; // root ignores the permissions this relies on
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("p/w/a/b/sub");
+    at.mkdir("p/w/file");
+    at.mkdir("p/w/dir");
+    at.touch("p/w/a/b/f");
+    at.touch("p/w/a/b/sub/secret");
+    at.set_mode("p/w/a/b/sub/secret", 0);
+    at.set_mode("p/w/a", 0o750);
+    at.set_mode("p/w/a/b", 0o705);
+
+    // -d makes the unreadable file fatal, so the copy stops early.
+    scene
+        .ucmd()
+        .current_dir(at.plus("p/w"))
+        .umask(0o022)
+        .args(&["-r", "-d", "--parents", "a/b/sub", "dir"])
+        .fails();
+    scene
+        .cmd("sh")
+        .current_dir(at.plus("p/w"))
+        .umask(0o022)
+        .env("PATH", std::env::var_os("PATH").unwrap())
+        .args(&[
+            "-c",
+            "chmod 0 .. && \"$0\" cp --parents a/b/f file; s=$?; chmod 755 ..; exit $s",
+        ])
+        .arg(&scene.bin_path)
+        .succeeds();
+
+    for (path, mode) in [
+        ("p/w/dir/a", 0o750),
+        ("p/w/dir/a/b", 0o705),
+        ("p/w/file/a", 0o750),
+        ("p/w/file/a/b", 0o705),
+    ] {
+        assert_eq!(
+            at.metadata(path).permissions().mode() & 0o7777,
+            mode,
+            "{path}"
+        );
+    }
+    assert!(at.file_exists("p/w/file/a/b/f"));
+}
+
+#[test]
 fn test_cp_parents_failed_source_creates_nothing() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("f");
