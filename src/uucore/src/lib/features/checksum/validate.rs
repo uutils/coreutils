@@ -37,7 +37,7 @@ pub enum ChecksumVerbose {
 
 impl ChecksumVerbose {
     pub fn new(status: bool, quiet: bool, warn: bool) -> Self {
-        use ChecksumVerbose::*;
+        use ChecksumVerbose::{Normal, Quiet, Status, Warning};
 
         // Assume only one of the three booleans will be enabled at once.
         // This is ensured by clap's overriding arguments.
@@ -874,7 +874,10 @@ fn process_checksum_file(
     cli_algo_length: Option<HashLength>,
     opts: ChecksumValidateOptions,
 ) -> Result<(), FileCheckError> {
-    use LineCheckError::*;
+    use LineCheckError::{
+        CantOpenFile, DigestMismatch, FileIsDirectory, FileNotFound, ImproperlyFormatted, Skipped,
+        UError,
+    };
 
     let mut res = ChecksumResult::default();
 
@@ -1017,7 +1020,7 @@ where
 
     // if cksum has several input files, it will print the result for each file
     for filename_input in files {
-        use FileCheckError::*;
+        use FileCheckError::{CantOpenChecksumFile, Failed, UError};
         match process_checksum_file(filename_input, algo_kind, length_input, opts) {
             Err(UError(e)) => return Err(e),
             Err(Failed | CantOpenChecksumFile) => failed = true,

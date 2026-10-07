@@ -95,7 +95,10 @@ impl AlgoKind {
     /// Parses an [`AlgoKind`] from a string, only accepting valid cksum
     /// `--algorithm` values.
     pub fn from_cksum(algo: impl AsRef<str>) -> UResult<Self> {
-        use AlgoKind::*;
+        use AlgoKind::{
+            Blake2b, Blake3, Bsd, Crc, Crc32b, Md5, Sha1, Sha2, Sha3, Sha224, Sha256, Sha384,
+            Sha512, Shake128, Shake256, Sm3, Sysv,
+        };
         Ok(match algo.as_ref() {
             ALGORITHM_OPTIONS_SYSV => Sysv,
             ALGORITHM_OPTIONS_BSD => Bsd,
@@ -124,7 +127,7 @@ impl AlgoKind {
 
     /// Parses an algo kind from a string, accepting standalone binary names.
     pub fn from_bin_name(algo: impl AsRef<str>) -> UResult<Self> {
-        use AlgoKind::*;
+        use AlgoKind::{Blake2b, Md5, Sha1, Sha3, Sha224, Sha256, Sha384, Sha512};
         Ok(match algo.as_ref() {
             "md5sum" => Md5,
             "sha1sum" => Sha1,
@@ -141,7 +144,10 @@ impl AlgoKind {
 
     /// Returns a string corresponding to the algorithm kind.
     pub fn to_uppercase(self) -> &'static str {
-        use AlgoKind::*;
+        use AlgoKind::{
+            Blake2b, Blake3, Bsd, Crc, Crc32b, Md5, Sha1, Sha2, Sha3, Sha224, Sha256, Sha384,
+            Sha512, Shake128, Shake256, Sm3, Sysv,
+        };
         match self {
             // Legacy algorithms
             Sysv => "SYSV",
@@ -170,7 +176,10 @@ impl AlgoKind {
 
     /// Returns a string corresponding to the algorithm option in cksum `-a`
     pub fn to_lowercase(self) -> &'static str {
-        use AlgoKind::*;
+        use AlgoKind::{
+            Blake2b, Blake3, Bsd, Crc, Crc32b, Md5, Sha1, Sha2, Sha3, Sha224, Sha256, Sha384,
+            Sha512, Shake128, Shake256, Sm3, Sysv,
+        };
         match self {
             Sysv => "sysv",
             Bsd => "bsd",
@@ -196,7 +205,7 @@ impl AlgoKind {
     }
 
     pub fn is_legacy(self) -> bool {
-        use AlgoKind::*;
+        use AlgoKind::{Bsd, Crc, Crc32b, Sysv};
         matches!(self, Sysv | Bsd | Crc | Crc32b)
     }
 
@@ -241,7 +250,7 @@ impl TryFrom<usize> for ShaLength {
     type Error = ChecksumError;
 
     fn try_from(value: usize) -> Result<Self, Self::Error> {
-        use ShaLength::*;
+        use ShaLength::{Len224, Len256, Len384, Len512};
         match value {
             224 => Ok(Len224),
             256 => Ok(Len256),
@@ -376,7 +385,7 @@ impl SizedAlgoKind {
     }
 
     pub fn create_digest(&self) -> Box<dyn Digest + 'static> {
-        use ShaLength::*;
+        use ShaLength::{Len224, Len256, Len384, Len512};
         match self {
             Self::Sysv => Box::new(SysV::default()),
             Self::Bsd => Box::new(Bsd::default()),
@@ -425,7 +434,7 @@ impl SizedAlgoKind {
         }
     }
     pub fn is_legacy(&self) -> bool {
-        use SizedAlgoKind::*;
+        use SizedAlgoKind::{Bsd, Crc, Crc32b, Sysv};
         matches!(self, Sysv | Bsd | Crc | Crc32b)
     }
 }

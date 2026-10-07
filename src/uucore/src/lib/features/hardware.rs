@@ -68,7 +68,7 @@ impl TryFrom<&str> for HardwareFeature {
     type Error = InvalidHardwareFeature;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        use HardwareFeature::*;
+        use HardwareFeature::{Asimd, Avx2, Avx512, PclMul, Sse2, Vmull};
         match value {
             "AVX512" | "AVX512F" => Ok(Avx512),
             "AVX2" => Ok(Avx2),
