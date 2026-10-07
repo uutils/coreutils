@@ -1445,7 +1445,7 @@ cut: invalid decreasing range
 #[test]
 #[cfg(target_os = "linux")]
 fn test_long_record_with_limited_memory() {
-    use rustix::process::Resource;
+    use rlimit::Resource;
     use std::fs::File;
     use std::process::Stdio;
     use uutests::util::TestScenario;
@@ -1477,7 +1477,13 @@ fn test_long_record_with_limited_memory() {
                     (64 * 1024 * 1024).to_string(),
                 );
             } else {
-                cmd.limit(Resource::As, 64 * 1024 * 1024, 64 * 1024 * 1024);
+                // Coverage instrumentation and profile merging need additional address space.
+                let memory_limit = if std::env::var_os("LLVM_PROFILE_FILE").is_some() {
+                    128 * 1024 * 1024
+                } else {
+                    64 * 1024 * 1024
+                };
+                cmd.limit(Resource::AS, memory_limit, memory_limit);
             }
             cmd.succeeds().no_stderr();
         }
