@@ -43,6 +43,11 @@ impl WatcherRx {
             // symlink under the target's own name, which is not a followed
             // path. Watching the link as well follows it to the target, whose
             // events then arrive under the link's name.
+            //
+            // Unlike the file-and-parent pair the NOTE below warns about,
+            // these two watches are on different inodes and never report the
+            // same event: the directory watch covers the link itself (made,
+            // removed, renamed), the link watch covers the target's contents.
             if path.is_symlink() {
                 self.watch(&path, RecursiveMode::NonRecursive)?;
             }
@@ -434,12 +439,7 @@ impl Observer {
                     // The link no longer resolves. Say so if it was being
                     // followed, and poll it until it resolves again.
                     if self.files.get(event_path).reader.is_some() {
-                        show_error!(
-                            "{} {}: {}",
-                            display_name.quote(),
-                            translate!("tail-become-inaccessible"),
-                            translate!("tail-no-such-file-or-directory")
-                        );
+                        report_inaccessible(&display_name);
                     }
                     self.files.reset_reader(event_path);
                     self.orphans.push(event_path.clone());
@@ -451,12 +451,7 @@ impl Observer {
                     if settings.retry {
                         if self.files.get_mut_metadata(event_path).is_some_and(MetadataExtTail::is_tailable)
                             && self.files.get(event_path).reader.is_some() {
-                                show_error!(
-                                    "{} {}: {}",
-                                    display_name.quote(),
-                                    translate!("tail-become-inaccessible"),
-                                    translate!("tail-no-such-file-or-directory")
-                                );
+                                report_inaccessible(&display_name);
                         }
                         if !event_path.has_active_parent() && !self.orphans.contains(event_path) {
                             show_error!("{}", translate!("tail-status-directory-containing-watched-file-removed"));
@@ -538,6 +533,16 @@ impl Observer {
         }
         Ok(paths)
     }
+}
+
+/// A followed name that no longer leads to a file.
+fn report_inaccessible(display_name: &str) {
+    show_error!(
+        "{} {}: {}",
+        display_name.quote(),
+        translate!("tail-become-inaccessible"),
+        translate!("tail-no-such-file-or-directory")
+    );
 }
 
 #[allow(clippy::cognitive_complexity)]

@@ -5464,44 +5464,27 @@ fn test_follow_symlink_target_change() {
 #[test]
 #[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
-fn test_follow_descriptor_symlink_appends() {
-    // Appends to the target of a symlink reach tail through the link.
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.write("2026-09-01.log", "a\n");
-    at.symlink_file("2026-09-01.log", "latest.log");
-    let mut p = ucmd.args(&["-s.1", "-f", "latest.log"]).run_no_wait();
-    p.delay(500);
-    at.append("2026-09-01.log", "b\n");
-    p.delay(500);
-    at.append("2026-09-01.log", "c\n");
-    p.delay(500);
-    p.kill()
-        .make_assertion()
-        .with_all_output()
-        .stdout_only("a\nb\nc\n");
-}
-
-#[test]
-#[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
-fn test_follow_name_symlink_appends() {
-    // A symlink named on the command line is followed to its target under
-    // --follow=name too: it is not a file that was replaced by a symlink.
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.write("2026-09-01.log", "a\n");
-    at.symlink_file("2026-09-01.log", "latest.log");
-    let mut p = ucmd
-        .args(&["-s.1", "--max-unchanged-stats=1", "-F", "latest.log"])
-        .run_no_wait();
-    p.delay(500);
-    at.append("2026-09-01.log", "b\n");
-    p.delay(500);
-    at.append("2026-09-01.log", "c\n");
-    p.delay(500);
-    p.kill()
-        .make_assertion()
-        .with_all_output()
-        .stdout_only("a\nb\nc\n");
+fn test_follow_symlink_appends() {
+    // Appends to the target of a symlink reach tail through the link, by
+    // descriptor and by name alike: under --follow=name a symlink given on
+    // the command line is not a file that was replaced by a symlink.
+    for follow in ["-f", "-F"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("2026-09-01.log", "a\n");
+        at.symlink_file("2026-09-01.log", "latest.log");
+        let mut p = ucmd
+            .args(&["-s.1", "--max-unchanged-stats=1", follow, "latest.log"])
+            .run_no_wait();
+        p.delay(500);
+        at.append("2026-09-01.log", "b\n");
+        p.delay(500);
+        at.append("2026-09-01.log", "c\n");
+        p.delay(500);
+        p.kill()
+            .make_assertion()
+            .with_all_output()
+            .stdout_only("a\nb\nc\n");
+    }
 }
 
 #[test]
