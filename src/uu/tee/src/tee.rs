@@ -153,7 +153,7 @@ impl MultiWriter {
         let mut input = io::stdin();
         #[cfg(any(target_os = "linux", target_os = "android"))]
         macro_rules! splice_or_detach {
-            ($pipe_read:ident, $pipe_write:ident, $writer:expr, $len:expr, $sized:expr) => {
+            ($pipe_read:ident, $writer:expr, $len:expr) => {
                 if let Err(e) = uucore::pipes::drain_pipe(&$pipe_read, &$writer, $len) {
                     self.aborted |= process_error(
                         self.output_error_mode,
@@ -163,31 +163,25 @@ impl MultiWriter {
                     )
                     .is_err();
                     $writer.name.clear(); //mark as exited
-                    // the failed write can leave bytes in the pipe: replace it with an empty one.
-                    // Free it first, so that the new one does not need more file descriptors.
-                    drop($pipe_read);
-                    drop($pipe_write);
-                    // same size as the 2nd pipe got, so the 2nd is never smaller than the 1st
-                    match if $sized { pipe::<true>() } else { io::pipe() } {
-                        Ok(pipe) => ($pipe_read, $pipe_write) = pipe,
-                        Err(e) => {
-                            show_error!("{}", strip_errno(&e));
-                            return Err(());
-                        }
-                    }
+                    // the failed write can leave bytes in the pipe. We could:
+                    // - regenerate pipe: EMFILE could theorically happen in race condition even we dropped dirty pipes at 1st.
+                    // - splice to /dev/null: fastest, but needs /dev
+                    // - read to stack the content: never fails since pipe is private?
+                    std::io::copy(&mut $pipe_read, &mut std::io::sink()).inspect_err(
+                    // No translation since this error should not happen
+                    |e| show_error!("failed to cleanup pipe: {}", strip_errno(&e))).map_err(|_|())?;
                 }
             };
         }
         // needs 2 pipes to duplicate input multiple times
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        if let Ok((mut pipe_read, mut pipe_write)) = io::pipe()
-            && let Ok((mut pipe2_read, mut pipe2_write)) = io::pipe()
+        if let Ok((mut pipe_read, pipe_write)) = io::pipe()
+            && let Ok((mut pipe2_read, pipe2_write)) = io::pipe()
         {
             use rustix::pipe::fcntl_setpipe_size;
-            use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe};
+            use uucore::pipes::MAX_ROOTLESS_PIPE_SIZE;
             // improve throughput. 2nd pipe should be larger than 1st one for proper tee() length.
-            let sized = fcntl_setpipe_size(&pipe2_read, MAX_ROOTLESS_PIPE_SIZE).is_ok();
-            if sized {
+            if fcntl_setpipe_size(&pipe2_read, MAX_ROOTLESS_PIPE_SIZE).is_ok() {
                 let _ = fcntl_setpipe_size(&pipe_read, MAX_ROOTLESS_PIPE_SIZE);
                 let _ = fcntl_setpipe_size(&self.writers[0], MAX_ROOTLESS_PIPE_SIZE); // stdout
             }
@@ -203,10 +197,10 @@ impl MultiWriter {
                     // do not consume input
                     let tee_res = uucore::pipes::tee(&pipe_read, &pipe2_write, s);
                     assert_eq!(tee_res, Ok(s), "2nd pipe should have enough spare");
-                    splice_or_detach!(pipe2_read, pipe2_write, *other, s, sized);
+                    splice_or_detach!(pipe2_read, *other, s);
                 }
                 // last one consumes input
-                splice_or_detach!(pipe_read, pipe_write, *last, s, sized);
+                splice_or_detach!(pipe_read, *last, s);
                 self.writers.retain(|w| !w.name.is_empty());
                 if self.aborted {
                     return Err(());
