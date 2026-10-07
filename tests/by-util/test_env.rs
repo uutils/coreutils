@@ -1020,15 +1020,51 @@ fn test_env_block_realtime_signal() {
 #[test]
 #[cfg(unix)]
 fn test_env_list_signal_handling_reports_ignore() {
-    let result = new_ucmd!()
+    // Other tests change the dispositions of this process while this one
+    // runs, and env lists what it inherits, so only the line asked for is
+    // checked.
+    new_ucmd!()
         .env("PATH", PATH)
         .args(&["--ignore-signal=INT", "--list-signal-handling", "true"])
+        .succeeds()
+        .stderr_contains("INT        ( 2): IGNORE\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_list_signal_handling_states() {
+    // A signal at its default is not listed; one both blocked and ignored
+    // shows both states, as GNU prints them.
+    new_ucmd!()
+        .env("PATH", PATH)
+        .args(&["--default-signal=PIPE", "--list-signal-handling", "true"])
+        .succeeds()
+        .stderr_does_not_contain("PIPE")
+        .stderr_does_not_contain("DEFAULT");
+    new_ucmd!()
+        .env("PATH", PATH)
+        .args(&[
+            "--ignore-signal=INT",
+            "--block-signal=INT",
+            "--list-signal-handling",
+            "true",
+        ])
+        .succeeds()
+        .stderr_contains("INT        ( 2): BLOCK,IGNORE\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_list_signal_handling_reports_inherited_ignore() {
+    // The listing is the state of the signals, not only what env changed.
+    // SIGUSR1 rather than SIGPIPE, which a spawned child gets reset.
+    let previous = unsafe { libc::signal(libc::SIGUSR1, libc::SIG_IGN) };
+    let result = new_ucmd!()
+        .env("PATH", PATH)
+        .args(&["--list-signal-handling", "true"])
         .succeeds();
-    let stderr = result.stderr_str();
-    assert!(
-        stderr.contains("INT") && stderr.contains("IGNORE"),
-        "unexpected signal listing: {stderr}"
-    );
+    unsafe { libc::signal(libc::SIGUSR1, previous) };
+    result.stderr_contains(format!("USR1       ({:2}): IGNORE\n", libc::SIGUSR1));
 }
 
 #[cfg(unix)]
