@@ -651,9 +651,12 @@ fn test_chmod_recursive_operand_that_does_not_open() {
             assert_eq!(mode("d/f"), 0o744, "{flags:?} {operand}");
         }
     }
+}
 
-    // The mode change can also leave it unreadable: the operand keeps its new
-    // mode, and the failed descent names it. Root reads it regardless.
+#[test]
+fn test_chmod_recursive_operand_made_unreadable() {
+    // An operand that the mode change leaves unreadable keeps its new mode, and
+    // the failed descent names it. Root reads it regardless.
     if rustix::process::geteuid().is_root() {
         return;
     }
