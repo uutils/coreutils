@@ -16,20 +16,20 @@ use clap::{Arg, ArgMatches, Command};
 
 use libc::{gid_t, uid_t};
 use options::traverse;
-#[cfg(target_os = "linux")]
+#[cfg(has_safe_traversal)]
 use std::collections::HashSet;
-#[cfg(target_os = "linux")]
+#[cfg(has_safe_traversal)]
 use std::ffi::OsStr;
 use std::ffi::OsString;
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(has_safe_traversal))]
 use walkdir::WalkDir;
 
 use crate::features::fs::path_is_root_dir;
+#[cfg(has_safe_traversal)]
+use crate::features::safe_traversal::{DirFd, FileInfo, OPEN_DIR_FDS, SymlinkBehavior};
 #[cfg(target_os = "linux")]
-use crate::features::safe_traversal::{
-    DirFd, FileInfo, Metadata as TraversalMetadata, OPEN_DIR_FDS, PinnedFile, SymlinkBehavior,
-};
+use crate::features::safe_traversal::{Metadata as TraversalMetadata, PinnedFile};
 
 use std::ffi::CString;
 use std::fs::Metadata;
@@ -38,7 +38,7 @@ use std::os::unix::fs::MetadataExt;
 
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
-#[cfg(target_os = "linux")]
+#[cfg(has_safe_traversal)]
 use std::path::PathBuf;
 
 #[derive(Debug, thiserror::Error)]
@@ -254,7 +254,7 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
 ///
 /// A pathname can be re-pointed between the stat and the open, so comparing
 /// (device, inode) is what detects the swap. The descriptor cannot be re-pointed after.
-#[cfg(target_os = "linux")]
+#[cfg(has_safe_traversal)]
 fn fd_is(dir_fd: &DirFd, meta: &Metadata) -> IOResult<bool> {
     let opened = FileInfo::from_stat(&dir_fd.fstat()?);
     Ok(opened == FileInfo::new(meta.dev(), meta.ino()))
@@ -262,7 +262,7 @@ fn fd_is(dir_fd: &DirFd, meta: &Metadata) -> IOResult<bool> {
 
 /// A directory suspended while a subdirectory is walked; past the deepest
 /// [`OPEN_DIR_FDS`], it gets its descriptor back through ".." on the way up.
-#[cfg(target_os = "linux")]
+#[cfg(has_safe_traversal)]
 struct Frame {
     fd: Option<DirFd>,
     info: Option<FileInfo>,
@@ -274,7 +274,7 @@ struct Frame {
 }
 
 /// What the -R walk does after changing an entry.
-#[cfg(target_os = "linux")]
+#[cfg(has_safe_traversal)]
 enum Visit {
     Next,
     /// Skip the rest of the directory.
@@ -350,7 +350,7 @@ impl ChownExecutor {
         // Resolve the operand once. `--from`, `--preserve-root` and the
         // directory-vs-file classification were all decided on `meta`; re-opening the
         // pathname would let a swap apply those decisions to a different object.
-        #[cfg(target_os = "linux")]
+        #[cfg(has_safe_traversal)]
         // We cannot check path.is_dir() here, as this would resolve symlinks
         let operand_fd = if meta.is_dir() {
             match DirFd::open(path, SymlinkBehavior::Follow) {
@@ -387,9 +387,9 @@ impl ChownExecutor {
 
         // As with GNU, a directory that -R cannot read is left alone, or its link,
         // whatever --from says; safe_dive_into reports it.
-        #[cfg(target_os = "linux")]
+        #[cfg(has_safe_traversal)]
         let left_alone = operand_fd.is_none() && meta.is_dir() && self.recursive;
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(has_safe_traversal))]
         let left_alone = false;
 
         let ret = if left_alone {
@@ -418,41 +418,43 @@ impl ChownExecutor {
                 )
             };
 
-            // Use safe syscalls for root directory to prevent TOCTOU attacks on Linux
-            #[cfg(target_os = "linux")]
-            let chown_result = if change_link {
+            #[cfg(has_safe_traversal)]
+            let chown_result = match operand_fd.as_ref() {
                 // The link is not the file `meta` describes, so there is none
                 // to hold or open.
-                by_name()
-            } else if let Some(dir_fd) = operand_fd.as_ref() {
-                self.safe_chown_dir(dir_fd, path, &meta)
-                    .map(|_| String::new())
-            } else if !matches!(self.filter, IfFrom::All) {
+                _ if change_link => by_name(),
+                // Change a directory through the descriptor it was checked on.
+                Some(dir_fd) => self
+                    .safe_chown_dir(dir_fd, path, &meta)
+                    .map(|_| String::new()),
                 // `--from` was judged on `meta`, so change that very file, held
                 // open, and not whatever a rename may have put under `path` since.
-                let held = PinnedFile::open(path, self.dereference.into())
-                    .and_then(|file| self.hold(&meta, file));
-                // Replaced: nothing to recurse into, so return now.
-                let Some(file) = held.transpose() else {
-                    return self.report_replaced(path, (meta.uid(), meta.gid()));
-                };
-                // A file gone since the stat fails the change, as it did by path. Only
-                // the parts asked for are passed, so one changed meanwhile isn't undone.
-                report_chown(
-                    path,
-                    &meta,
-                    self.dest_uid,
-                    self.dest_gid,
-                    self.verbosity.clone(),
-                    |_, _| file?.chown(self.dest_uid, self.dest_gid),
-                )
-            } else {
+                // Only Linux can hold a file yet; elsewhere it is changed by name.
+                #[cfg(target_os = "linux")]
+                None if !matches!(self.filter, IfFrom::All) => {
+                    let held = PinnedFile::open(path, self.dereference.into())
+                        .and_then(|file| self.hold(&meta, file));
+                    // Replaced: nothing to recurse into, so return now.
+                    let Some(file) = held.transpose() else {
+                        return self.report_replaced(path, (meta.uid(), meta.gid()));
+                    };
+                    // A file gone since the stat fails the change, as it did by path. Only
+                    // the parts asked for are passed, so one changed meanwhile isn't undone.
+                    report_chown(
+                        path,
+                        &meta,
+                        self.dest_uid,
+                        self.dest_gid,
+                        self.verbosity.clone(),
+                        |_, _| file?.chown(self.dest_uid, self.dest_gid),
+                    )
+                }
                 // Change anything else, including a directory that could not
                 // be opened, by name.
-                by_name()
+                None => by_name(),
             };
 
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(has_safe_traversal))]
             let chown_result = by_name();
 
             match chown_result {
@@ -482,11 +484,11 @@ impl ChownExecutor {
         };
 
         if self.recursive {
-            #[cfg(target_os = "linux")]
+            #[cfg(has_safe_traversal)]
             {
                 ret | self.safe_dive_into(&root, &meta, operand_fd)
             }
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(has_safe_traversal))]
             {
                 // As in `safe_dive_into`, only a directory has entries to
                 // visit; walkdir would fail on a dangling link changed as itself.
@@ -501,7 +503,7 @@ impl ChownExecutor {
         }
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(has_safe_traversal)]
     fn safe_chown_dir(&self, dir_fd: &DirFd, path: &Path, meta: &Metadata) -> Result<(), String> {
         // Use fchown (safe) to change the directory's ownership
         if let Err(e) = dir_fd.fchown(self.dest_uid, self.dest_gid) {
@@ -532,48 +534,51 @@ impl ChownExecutor {
     }
 
     /// Change the entry `name` of `dir_fd`, which `meta` describes and which passed
-    /// `--from`, held by [`Self::hold`] with `--from`; whether it was changed.
-    #[cfg(target_os = "linux")]
+    /// `--from`, held by [`Self::hold`] on Linux; whether it was changed.
+    #[cfg(has_safe_traversal)]
     fn chown_entry(
         &self,
         dir_fd: &DirFd,
         name: &OsStr,
-        meta: &TraversalMetadata,
+        #[cfg(target_os = "linux")] meta: &TraversalMetadata,
         follow: bool,
     ) -> IOResult<bool> {
-        // Under -L -h a symlink is stat'd through but changed itself: the file
-        // changed is not the one `meta` describes, so there is none to hold.
-        if matches!(self.filter, IfFrom::All)
-            || !follow
+        // Only Linux can hold a file yet; elsewhere it is changed by name.
+        #[cfg(target_os = "linux")]
+        if !matches!(self.filter, IfFrom::All) {
+            // Under -L -h a symlink is stat'd through but changed itself: the file
+            // changed is not the one `meta` describes, so there is none to hold.
+            let link_itself = !follow
                 && self.traverse_symlinks == TraverseSymlinks::All
                 && dir_fd
                     .metadata_at(name, SymlinkBehavior::NoFollow)?
                     .file_type()
-                    .is_symlink()
-        {
-            dir_fd.chown_at(name, self.dest_uid, self.dest_gid, follow.into())?;
-            return Ok(true);
+                    .is_symlink();
+            if !link_itself {
+                let Some(file) = dir_fd
+                    .pin_at(name, follow.into())
+                    .and_then(|file| self.hold(meta, file))?
+                else {
+                    return Ok(false);
+                };
+                file.chown(self.dest_uid, self.dest_gid)?;
+                return Ok(true);
+            }
         }
-        let Some(file) = dir_fd
-            .pin_at(name, follow.into())
-            .and_then(|file| self.hold(meta, file))?
-        else {
-            return Ok(false);
-        };
-        file.chown(self.dest_uid, self.dest_gid)?;
+        dir_fd.chown_at(name, self.dest_uid, self.dest_gid, follow.into())?;
         Ok(true)
     }
 
     /// Leave alone a file found replaced after it passed `--from`. As with
     /// GNU, that fails without an error message, and only -v says so.
-    #[cfg(target_os = "linux")]
+    #[cfg(has_safe_traversal)]
     fn report_replaced(&self, path: &Path, (uid, gid): (uid_t, gid_t)) -> i32 {
         self.report_failed_change(path, (uid, gid));
         1
     }
 
     /// `operand_fd` is the descriptor `traverse` opened and verified against `meta`.
-    #[cfg(target_os = "linux")]
+    #[cfg(has_safe_traversal)]
     fn safe_dive_into<P: AsRef<Path>>(
         &self,
         root: P,
@@ -614,7 +619,7 @@ impl ChownExecutor {
     }
 
     /// Change everything below the directory `dir_fd`, at `dir_path`.
-    #[cfg(target_os = "linux")]
+    #[cfg(has_safe_traversal)]
     fn safe_traverse_dir(&self, dir_fd: DirFd, dir_path: &Path) -> i32 {
         let mut ret = 0;
         let mut ancestors = HashSet::new();
@@ -698,7 +703,7 @@ impl ChownExecutor {
 
     /// Read the directory `dir_fd`, at `dir_path`, and mark it as being walked;
     /// `None` if it cannot be read or is already being walked, a cycle.
-    #[cfg(target_os = "linux")]
+    #[cfg(has_safe_traversal)]
     fn enter_dir(
         &self,
         dir_fd: &DirFd,
@@ -734,7 +739,7 @@ impl ChownExecutor {
 
     /// Change the entry `entry_name` of `dir_fd`, at `dir_path`, and say
     /// whether to descend into it.
-    #[cfg(target_os = "linux")]
+    #[cfg(has_safe_traversal)]
     fn visit_entry(
         &self,
         dir_fd: &DirFd,
@@ -795,7 +800,13 @@ impl ChownExecutor {
 
         // Check if we should chown this entry
         if self.matched(owner.uid(), owner.gid()) {
-            let changed = self.chown_entry(dir_fd, entry_name, owner, self.dereference);
+            let changed = self.chown_entry(
+                dir_fd,
+                entry_name,
+                #[cfg(target_os = "linux")]
+                owner,
+                self.dereference,
+            );
             if let Ok(false) = changed {
                 *ret = self.report_replaced(&entry_path, (owner.uid(), owner.gid()));
             } else if let Err(e) = changed {
@@ -854,7 +865,7 @@ impl ChownExecutor {
         Visit::Next
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(has_safe_traversal))]
     #[allow(clippy::cognitive_complexity)]
     fn dive_into<P: AsRef<Path>>(&self, root: P) -> i32 {
         let root = root.as_ref();
@@ -1052,7 +1063,7 @@ impl ChownExecutor {
     }
 
     /// Try to open directory with error reporting
-    #[cfg(target_os = "linux")]
+    #[cfg(has_safe_traversal)]
     fn try_open_dir(&self, path: &Path) -> Option<DirFd> {
         DirFd::open(path, SymlinkBehavior::Follow)
             .map_err(|e| {
@@ -1068,7 +1079,7 @@ impl ChownExecutor {
 
     /// Report ownership change with proper verbose output
     /// Returns 0 on success
-    #[cfg(target_os = "linux")]
+    #[cfg(has_safe_traversal)]
     fn report_ownership_change_success(
         &self,
         path: &Path,
@@ -1346,7 +1357,7 @@ mod tests {
     use tempfile::tempdir;
 
     /// `fd_is` must accept the directory that was stat'd and reject anything else.
-    #[cfg(target_os = "linux")]
+    #[cfg(has_safe_traversal)]
     #[test]
     fn test_fd_is_identifies_the_stated_directory() {
         let temp_dir = tempdir().unwrap();
