@@ -640,7 +640,9 @@ fn identify_algo_name_and_length(
     use AlgoKind as ak;
     let algo_from_line = line_info.algo_name.clone().unwrap_or_default();
     let line_algo = AlgoKind::from_cksum(algo_from_line.to_lowercase())
-        .map_err(|_| LineCheckError::ImproperlyFormatted)?;
+        .ok()
+        .filter(|algo| !algo.is_legacy())
+        .ok_or(LineCheckError::ImproperlyFormatted)?;
     *last_algo = Some(algo_from_line);
 
     // check if we are called with XXXsum (example: md5sum) but we detected a
