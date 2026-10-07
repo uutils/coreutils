@@ -10,7 +10,6 @@ use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{Read, Write, stderr};
 use std::iter;
-use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, SyncSender};
 use std::thread;
 
@@ -22,7 +21,7 @@ use crate::chunks::RecycledChunk;
 use crate::merge::WriteableCompressedTmpFile;
 use crate::merge::WriteablePlainTmpFile;
 use crate::merge::WriteableTmpFile;
-use crate::tmp_dir::TmpDirWrapper;
+use crate::tmp_dir::{TmpDirWrapper, TmpPath};
 use crate::{
     GlobalSettings, Line,
     chunks::{self, Chunk},
@@ -290,7 +289,7 @@ fn read_write_loop<I: WriteableTmpFile>(
 /// `compress_prog` is used to optionally compress file contents.
 fn write<I: WriteableTmpFile>(
     chunk: &Chunk,
-    file: (File, PathBuf),
+    file: (File, TmpPath),
     compress_prog: Option<&str>,
     separator: u8,
 ) -> UResult<I::Closed> {

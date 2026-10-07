@@ -1895,6 +1895,47 @@ fn test_more_files_than_fd_limit() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_temporary_files_with_few_file_descriptors() {
+    use rustix::process::Resource;
+    let ts = TestScenario::new("sort");
+    // Each input is larger than what the merge reads ahead, so it stays open.
+    let mut names = Vec::new();
+    let mut expected = String::new();
+    for i in 0..12 {
+        let name = format!("few_fds_{i:02}");
+        let contents = format!("{i:02}\n").repeat(32768);
+        ts.fixtures.write(&name, &contents);
+        names.push(name);
+        expected.push_str(&contents);
+    }
+    let unsorted: String = (0..32768)
+        .flat_map(|_| (0..12).rev().map(|i| format!("{i:02}\n")))
+        .collect();
+    ts.fixtures.write("unsorted", &unsorted);
+
+    // Stdin, stdout, stderr, two merge inputs and the merge output.
+    ts.ucmd()
+        .limit(Resource::Nofile, 6, 6)
+        .arg("-m")
+        .args(&names)
+        .succeeds()
+        .stdout_only(&expected);
+    ts.ucmd()
+        .limit(Resource::Nofile, 6, 6)
+        .args(&["-S", "64K", "unsorted"])
+        .succeeds()
+        .stdout_only(&expected);
+    // Starting the compress program can take two more for a moment: on musl and
+    // glibc before 2.24, a failed exec is reported through a pipe.
+    ts.ucmd()
+        .limit(Resource::Nofile, 10, 10)
+        .args(&["-S", "64K", "--compress-program", "gzip", "unsorted"])
+        .succeeds()
+        .stdout_only(&expected);
+}
+
+#[test]
 fn test_sigpipe_panic() {
     let mut cmd = new_ucmd!();
     let mut child = cmd.args(&["ext_sort.txt"]).run_no_wait();
@@ -2221,6 +2262,70 @@ fn test_tmp_files_are_private() {
 
     kill_process(Pid::from_raw(child.id() as i32).unwrap(), Signal::INT).unwrap();
     child.wait().unwrap().code_is(2);
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_tmp_dir_replaced_by_a_symlink() {
+    use rustix::process::{Pid, Signal, kill_process};
+    use std::{
+        fs,
+        io::Write as _,
+        time::{Duration, Instant},
+    };
+
+    // Once the temporary directory's path leads to another directory, sort must
+    // neither read nor delete anything there, whether it exits normally or on SIGINT.
+    for interrupt in [false, true] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("scratch");
+        at.mkdir("other");
+        at.write("other/0", "zzz other\n");
+        at.write("other/notes", "notes\n");
+        at.mkfifo("input");
+        let child = ucmd
+            .args(&["-S", "1K", "-T", "scratch", "input"])
+            .run_no_wait();
+        // Keep the input open until the directory has been replaced, so that the
+        // rest of the run happens afterwards.
+        let mut input = fs::OpenOptions::new()
+            .write(true)
+            .open(at.plus("input"))
+            .unwrap();
+        input
+            .write_all("willow\ncedar\n".repeat(8192).as_bytes())
+            .unwrap();
+        // Wait for sort's first temporary file, however long the machine takes:
+        // the deadline is only reached if it never writes one.
+        let deadline = Instant::now() + Duration::from_secs(60);
+        let tmp_dir = loop {
+            let dir = fs::read_dir(at.plus("scratch")).unwrap().next();
+            let dir = dir.map(|entry| entry.unwrap().path());
+            if let Some(dir) = dir.filter(|dir| dir.join("0").exists()) {
+                break dir;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "sort did not write a temporary file"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        fs::rename(&tmp_dir, at.plus("moved")).unwrap();
+        std::os::unix::fs::symlink(at.plus("other"), &tmp_dir).unwrap();
+        if interrupt {
+            kill_process(Pid::from_raw(child.id() as i32).unwrap(), Signal::INT).unwrap();
+        }
+        drop(input);
+        let result = child.wait().unwrap();
+
+        // sort can't go on without its directory, but must not take any data
+        // from the other one.
+        result.code_is(2);
+        assert!(!result.stdout_str().contains("zzz"));
+        assert_eq!(at.read("other/0"), "zzz other\n");
+        assert_eq!(at.read("other/notes"), "notes\n");
+        assert_eq!(fs::read_dir(at.plus("other")).unwrap().count(), 2);
+    }
 }
 
 #[test]

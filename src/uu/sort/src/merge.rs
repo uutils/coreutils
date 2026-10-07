@@ -16,10 +16,10 @@ use std::{
     cmp::Ordering,
     collections::BinaryHeap,
     ffi::{OsStr, OsString},
-    fs::{self, File},
+    fs::File,
     io::{self, BufWriter, Read, Write},
     iter,
-    path::{Path, PathBuf},
+    path::Path,
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     rc::Rc,
     sync::mpsc::{Receiver, Sender, SyncSender, TryRecvError, channel, sync_channel},
@@ -32,17 +32,17 @@ use crate::{
     GlobalSettings, Output, SortError,
     chunks::{self, Chunk, RecycledChunk},
     current_open_fd_count, fd_soft_limit, merge_compare, open,
-    tmp_dir::TmpDirWrapper,
+    tmp_dir::{TmpDirWrapper, TmpPath},
 };
 
 /// If the output file occurs in the input files as well, copy the contents of the output file
-/// and replace its occurrences in the inputs with that copy.
+/// and replace its occurrences in the inputs with that copy, which is returned.
 fn replace_output_file_in_input_files(
     files: &mut [OsString],
     output: Option<&OsStr>,
     tmp_dir: &mut TmpDirWrapper,
-) -> UResult<()> {
-    let mut copy: Option<PathBuf> = None;
+) -> UResult<Option<TmpPath>> {
+    let mut copy: Option<TmpPath> = None;
     if let Some(Ok(output_path)) = output.map(|path| Path::new(path).canonicalize()) {
         for file in files {
             if Path::new(file)
@@ -50,7 +50,7 @@ fn replace_output_file_in_input_files(
                 .is_ok_and(|file_path| file_path == output_path)
             {
                 if let Some(copy) = &copy {
-                    *file = copy.clone().into_os_string();
+                    *file = copy.path().into();
                 } else {
                     // Write through the descriptor `next_file` just opened rather
                     // than `fs::copy`, which would put the source's permission bits
@@ -60,13 +60,25 @@ fn replace_output_file_in_input_files(
                         .map_err(|error| SortError::OpenTmpFileFailed { error })?;
                     io::copy(&mut source, &mut copy_file)
                         .map_err(|error| SortError::OpenTmpFileFailed { error })?;
-                    *file = copy_path.clone().into_os_string();
+                    *file = copy_path.path().into();
                     copy = Some(copy_path);
                 }
             }
         }
     }
-    Ok(())
+    Ok(copy)
+}
+
+/// Open the merge input `file`. `copy` is the copy of the output file returned by
+/// [`replace_output_file_in_input_files`].
+fn open_input(file: &OsStr, copy: Option<&TmpPath>) -> UResult<Box<dyn Read + Send>> {
+    match copy {
+        Some(copy) if Path::new(file) == copy.path() => Ok(Box::new(
+            copy.open()
+                .map_err(|error| SortError::OpenTmpFileFailed { error })?,
+        )),
+        _ => open(file),
+    }
 }
 
 /// Determine the effective merge batch size, enforcing a minimum and respecting the
@@ -106,10 +118,10 @@ pub fn merge(
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
-    replace_output_file_in_input_files(files, output.as_output_name(), tmp_dir)?;
+    let copy = replace_output_file_in_input_files(files, output.as_output_name(), tmp_dir)?;
     let files = files
         .iter()
-        .map(|file| open(file).map(|file| PlainMergeInput { inner: file }));
+        .map(|file| open_input(file, copy.as_ref()).map(|inner| PlainMergeInput { inner }));
     if settings.compress_prog.is_none() {
         merge_with_file_limit::<_, _, WriteablePlainTmpFile>(files, settings, output, tmp_dir)
     } else {
@@ -463,7 +475,7 @@ fn check_child_success(mut child: Child, program: &str) -> UResult<()> {
 pub trait WriteableTmpFile: Sized {
     type Closed: ClosedTmpFile;
     type InnerWrite: Write;
-    fn create(file: (File, PathBuf), compress_prog: Option<&str>) -> UResult<Self>;
+    fn create(file: (File, TmpPath), compress_prog: Option<&str>) -> UResult<Self>;
     /// Closes the temporary file.
     fn finished_writing(self) -> UResult<Self::Closed>;
     fn as_write(&mut self) -> &mut Self::InnerWrite;
@@ -484,21 +496,21 @@ pub trait MergeInput: Send {
 }
 
 pub struct WriteablePlainTmpFile {
-    path: PathBuf,
+    path: TmpPath,
     file: BufWriter<File>,
 }
 pub struct ClosedPlainTmpFile {
-    path: PathBuf,
+    path: TmpPath,
 }
 pub struct PlainTmpMergeInput {
-    path: PathBuf,
+    path: TmpPath,
     file: File,
 }
 impl WriteableTmpFile for WriteablePlainTmpFile {
     type Closed = ClosedPlainTmpFile;
     type InnerWrite = BufWriter<File>;
 
-    fn create((file, path): (File, PathBuf), _: Option<&str>) -> UResult<Self> {
+    fn create((file, path): (File, TmpPath), _: Option<&str>) -> UResult<Self> {
         Ok(Self {
             file: BufWriter::new(file),
             path,
@@ -517,7 +529,10 @@ impl ClosedTmpFile for ClosedPlainTmpFile {
     type Reopened = PlainTmpMergeInput;
     fn reopen(self) -> UResult<Self::Reopened> {
         Ok(PlainTmpMergeInput {
-            file: File::open(&self.path).map_err(|error| SortError::OpenTmpFileFailed { error })?,
+            file: self
+                .path
+                .open()
+                .map_err(|error| SortError::OpenTmpFileFailed { error })?,
             path: self.path,
         })
     }
@@ -529,7 +544,9 @@ impl MergeInput for PlainTmpMergeInput {
         // we ignore failures to delete the temporary file,
         // because there is a race at the end of the execution and the whole
         // temporary directory might already be gone.
-        let _ = fs::remove_file(self.path);
+        // Close the file first: removing it briefly takes another descriptor.
+        drop(self.file);
+        self.path.remove();
         Ok(())
     }
 
@@ -539,17 +556,17 @@ impl MergeInput for PlainTmpMergeInput {
 }
 
 pub struct WriteableCompressedTmpFile {
-    path: PathBuf,
+    path: TmpPath,
     compress_prog: String,
     child: Child,
     child_stdin: BufWriter<ChildStdin>,
 }
 pub struct ClosedCompressedTmpFile {
-    path: PathBuf,
+    path: TmpPath,
     compress_prog: String,
 }
 pub struct CompressedTmpMergeInput {
-    path: PathBuf,
+    path: TmpPath,
     compress_prog: String,
     child: Child,
     child_stdout: ChildStdout,
@@ -558,7 +575,7 @@ impl WriteableTmpFile for WriteableCompressedTmpFile {
     type Closed = ClosedCompressedTmpFile;
     type InnerWrite = BufWriter<ChildStdin>;
 
-    fn create((file, path): (File, PathBuf), compress_prog: Option<&str>) -> UResult<Self> {
+    fn create((file, path): (File, TmpPath), compress_prog: Option<&str>) -> UResult<Self> {
         let compress_prog = compress_prog.unwrap();
         let mut command = Command::new(compress_prog);
         command.stdin(Stdio::piped()).stdout(file);
@@ -596,8 +613,10 @@ impl ClosedTmpFile for ClosedCompressedTmpFile {
     fn reopen(self) -> UResult<Self::Reopened> {
         let mut command = Command::new(&self.compress_prog);
         // mirroring what is done for ClosedPlainTmpFile
-        let file =
-            File::open(&self.path).map_err(|error| SortError::OpenTmpFileFailed { error })?;
+        let file = self
+            .path
+            .open()
+            .map_err(|error| SortError::OpenTmpFileFailed { error })?;
         command.stdin(file).stdout(Stdio::piped()).arg("-d");
         let mut child = command
             .spawn()
@@ -622,7 +641,7 @@ impl MergeInput for CompressedTmpMergeInput {
         #[allow(clippy::drop_non_drop)]
         drop(self.child_stdout);
         check_child_success(self.child, &self.compress_prog)?;
-        let _ = fs::remove_file(self.path);
+        self.path.remove();
         Ok(())
     }
 
@@ -647,6 +666,7 @@ impl<R: Read + Send> MergeInput for PlainMergeInput<R> {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    use std::fs;
     use std::os::unix::fs::PermissionsExt;
 
     /// When the output file is also an input it is copied to a temporary file
@@ -671,5 +691,54 @@ mod tests {
             0o600
         );
         assert_eq!(fs::read(copy).unwrap(), b"a\n");
+    }
+
+    /// The copy of the output file is only read while it is the file sort
+    /// created: once the temporary directory's path leads elsewhere, the file
+    /// found at its name there is not read.
+    #[test]
+    #[cfg(not(target_os = "redox"))]
+    fn output_copy_is_not_read_through_a_replaced_tmp_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let other = tempfile::tempdir().unwrap();
+        fs::write(other.path().join("0"), b"other\n").unwrap();
+        let out = dir.path().join("out");
+        fs::write(&out, b"a\n").unwrap();
+
+        let mut tmp_dir = TmpDirWrapper::new(dir.path().to_owned());
+        let mut files = vec![out.clone().into_os_string()];
+        let copy =
+            replace_output_file_in_input_files(&mut files, Some(out.as_os_str()), &mut tmp_dir)
+                .unwrap();
+        let tmp = copy.as_ref().unwrap().path().parent().unwrap();
+        fs::rename(tmp, dir.path().join("moved")).unwrap();
+        std::os::unix::fs::symlink(other.path(), tmp).unwrap();
+
+        assert!(open_input(&files[0], copy.as_ref()).is_err());
+    }
+
+    /// A temporary file that is being merged when the directory's path is made
+    /// to lead elsewhere: removing it afterwards leaves the file of the same
+    /// name there alone.
+    #[test]
+    #[cfg(not(target_os = "redox"))]
+    fn finished_input_is_not_removed_through_a_replaced_tmp_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let other = tempfile::tempdir().unwrap();
+        fs::write(other.path().join("0"), b"other\n").unwrap();
+
+        let mut tmp_dir = TmpDirWrapper::new(dir.path().to_owned());
+        let input = WriteablePlainTmpFile::create(tmp_dir.next_file().unwrap(), None)
+            .unwrap()
+            .finished_writing()
+            .unwrap()
+            .reopen()
+            .unwrap();
+        let tmp = input.path.path().parent().unwrap().to_owned();
+        fs::rename(&tmp, dir.path().join("moved")).unwrap();
+        std::os::unix::fs::symlink(other.path(), &tmp).unwrap();
+        input.finished_reading().unwrap();
+
+        assert_eq!(fs::read(other.path().join("0")).unwrap(), b"other\n");
     }
 }
