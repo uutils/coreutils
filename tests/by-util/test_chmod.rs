@@ -746,20 +746,23 @@ fn test_chmod_recursive_descends_only_into_the_directory_it_changed() {
         }
 
         let result = scene.ucmd().args(&["-R", "700", "op"]).run();
-        if !result.succeeded() {
-            // Either as replaced, or with the error opening what replaced it.
-            let stderr = result.code_is(1).stderr_str();
-            assert!(
-                stderr.starts_with("chmod: cannot access 'op': ") && stderr.lines().count() == 1,
-                "{stderr}"
-            );
-        }
 
         for dir in ["a", "b"] {
             let mode = |file: &str| at.metadata(file).permissions().mode() & 0o7777;
             assert!(
                 mode(&format!("{dir}/f")) == 0o644 || mode(dir) == 0o700,
                 "descended into {dir} without changing its mode"
+            );
+        }
+        if !result.succeeded() {
+            // One error about the operand. Its cause varies with the timing:
+            // macOS can also fail a lookup through a symlink being replaced.
+            let stderr = result.code_is(1).stderr_str();
+            assert!(
+                stderr.starts_with("chmod: ")
+                    && stderr.contains("'op'")
+                    && stderr.lines().count() == 1,
+                "{stderr}"
             );
         }
     }
