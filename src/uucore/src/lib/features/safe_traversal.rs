@@ -769,18 +769,23 @@ fn pin_flags(symlink_behavior: SymlinkBehavior) -> OFlag {
     let flags = OFlag::O_PATH;
     #[cfg(not(has_o_path))]
     let flags = OFlag::O_RDONLY | OFlag::O_NONBLOCK | OFlag::O_NOCTTY | LARGEFILE;
-    // With O_PATH, O_NOFOLLOW holds a symlink itself; elsewhere it refuses one.
+    // With O_PATH, O_NOFOLLOW holds a symlink itself, as O_SYMLINK does on
+    // Apple systems. Elsewhere O_NOFOLLOW refuses one.
+    #[cfg(target_vendor = "apple")]
+    let nofollow = OFlag::from_bits_retain(libc::O_SYMLINK);
+    #[cfg(not(target_vendor = "apple"))]
+    let nofollow = OFlag::O_NOFOLLOW;
     let nofollow = if symlink_behavior.should_follow() {
         OFlag::empty()
     } else {
-        OFlag::O_NOFOLLOW
+        nofollow
     };
     flags | nofollow | OFlag::O_CLOEXEC
 }
 
 /// Whether [`PinnedFile`] can hold a symlink itself, rather than refusing it
 /// under [`SymlinkBehavior::NoFollow`].
-pub const CAN_PIN_SYMLINKS: bool = cfg!(has_o_path);
+pub const CAN_PIN_SYMLINKS: bool = cfg!(any(has_o_path, target_vendor = "apple"));
 
 /// Whether [`PinnedFile`] can hold a socket or a device node. Without O_PATH,
 /// opening those for reading fails or acts on the device, so it is not attempted.
