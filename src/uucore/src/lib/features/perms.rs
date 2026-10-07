@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (jargon) TOCTOU chownat fchownat fchown
+// spell-checker:ignore (jargon) TOCTOU chownat fchownat fchown EMFILE ENFILE
 
 //! Common functions to manage permissions
 
@@ -28,9 +28,10 @@ use walkdir::WalkDir;
 
 use crate::features::fs::{metadata_is_root_dir, path_is_root_dir};
 #[cfg(has_safe_traversal)]
-use crate::features::safe_traversal::{DirFd, FileInfo, OPEN_DIR_FDS, SymlinkBehavior};
-#[cfg(target_os = "linux")]
-use crate::features::safe_traversal::{Metadata as TraversalMetadata, PinnedFile};
+use crate::features::safe_traversal::{
+    CAN_PIN_SPECIAL_FILES, CAN_PIN_SYMLINKS, DirFd, FileInfo, FileType,
+    Metadata as TraversalMetadata, OPEN_DIR_FDS, PinnedFile, SymlinkBehavior,
+};
 
 #[cfg(target_os = "redox")]
 use std::ffi::CString;
@@ -312,6 +313,28 @@ enum Visit {
     Descend(DirFd, PathBuf, bool),
 }
 
+/// Whether the file `meta` describes can be held open by [`PinnedFile`].
+#[cfg(has_safe_traversal)]
+fn can_hold(meta: &impl MetadataExt) -> bool {
+    match FileType::from_mode(meta.mode() as libc::mode_t) {
+        FileType::Directory | FileType::RegularFile => true,
+        FileType::Symlink => CAN_PIN_SYMLINKS,
+        // A FIFO, a socket or a device node.
+        FileType::Other => CAN_PIN_SPECIAL_FILES,
+    }
+}
+
+/// What [`ChownExecutor::hold`] found for a file that passed `--from`.
+#[cfg(has_safe_traversal)]
+enum Hold {
+    /// The file, held open.
+    File(PinnedFile),
+    /// Another file, or one that no longer passes `--from`: to be left alone.
+    Replaced,
+    /// A file that cannot be held, to be changed by name.
+    ByName,
+}
+
 pub fn get_metadata(file: &Path, follow: bool) -> std::io::Result<Metadata> {
     if follow {
         file.metadata()
@@ -461,27 +484,35 @@ impl ChownExecutor {
                     .map(|_| String::new()),
                 // `--from` was judged on `meta`, so change that very file, held
                 // open, and not whatever a rename may have put under `path` since.
-                // Only Linux can hold a file yet; elsewhere it is changed by name.
-                #[cfg(target_os = "linux")]
                 None if !matches!(self.filter, IfFrom::All) => {
-                    let held = PinnedFile::open(path, self.dereference.into())
-                        .and_then(|file| self.hold(&meta, file));
-                    // Replaced: as with GNU, fail with no error, only -v's line. There is
-                    // nothing to recurse into, so return now.
-                    let Some(file) = held.transpose() else {
-                        self.report_failed_change(path, &meta);
-                        return 1;
-                    };
-                    // A file gone since the stat fails the change, as it did by path. Only
-                    // the parts asked for are passed, so one changed meanwhile isn't undone.
-                    report_chown(
-                        path,
-                        &meta,
-                        self.dest_uid,
-                        self.dest_gid,
-                        self.verbosity.clone(),
-                        |_, _| file?.chown(self.dest_uid, self.dest_gid),
-                    )
+                    let open = || PinnedFile::open(path, self.dereference.into());
+                    match self.hold(&meta, open) {
+                        // Only the parts asked for, so one changed meanwhile isn't undone.
+                        Ok(Hold::File(file)) => report_chown(
+                            path,
+                            &meta,
+                            self.dest_uid,
+                            self.dest_gid,
+                            self.verbosity.clone(),
+                            |_, _| file.chown(self.dest_uid, self.dest_gid),
+                        ),
+                        // Replaced: as with GNU, fail with no error, only -v's line.
+                        // There is nothing to recurse into, so return now.
+                        Ok(Hold::Replaced) => {
+                            self.report_failed_change(path, &meta);
+                            return 1;
+                        }
+                        Ok(Hold::ByName) => by_name(),
+                        // A file gone since the stat fails the change, as it did by path.
+                        Err(e) => report_chown(
+                            path,
+                            &meta,
+                            self.dest_uid,
+                            self.dest_gid,
+                            self.verbosity.clone(),
+                            |_, _| Err(e),
+                        ),
+                    }
                 }
                 // Change anything else, including a directory that could not
                 // be opened, by name.
@@ -558,49 +589,74 @@ impl ChownExecutor {
         Ok(())
     }
 
-    /// Keep `file` if it is the one `meta` describes, which passed `--from`, and
-    /// still passes; `None` if a rename put another file under its name since.
-    #[cfg(target_os = "linux")]
-    fn hold(&self, meta: &impl MetadataExt, file: PinnedFile) -> IOResult<Option<PinnedFile>> {
+    /// Hold open, through `open`, the file `meta` describes, which passed `--from`;
+    /// one that [`can_hold`] rules out, or lacking read access or a descriptor, goes by name.
+    #[cfg(has_safe_traversal)]
+    fn hold(
+        &self,
+        meta: &impl MetadataExt,
+        open: impl FnOnce() -> IOResult<PinnedFile>,
+    ) -> IOResult<Hold> {
+        if !can_hold(meta) {
+            return Ok(Hold::ByName);
+        }
+        let file = match open() {
+            Ok(file) => file,
+            // Without O_PATH, holding a file takes read access; it always takes one
+            // of our descriptors. A file that cannot get either is changed by name.
+            Err(e) if matches!(e.raw_os_error(), Some(libc::EACCES | libc::EMFILE)) => {
+                return Ok(Hold::ByName);
+            }
+            Err(e) => return Err(e),
+        };
         let held = file.metadata()?;
         let same = held.file_info() == FileInfo::new(meta.dev(), meta.ino());
-        Ok((same && self.matched(held.uid(), held.gid())).then_some(file))
+        Ok(if same && self.matched(held.uid(), held.gid()) {
+            Hold::File(file)
+        } else {
+            Hold::Replaced
+        })
     }
 
     /// Change the entry `name` of `dir_fd`, which `meta` describes and which passed
-    /// `--from`, held by [`Self::hold`] on Linux; whether it was changed.
+    /// `--from`, held by [`Self::hold`] with `--from`; whether it was changed.
     #[cfg(has_safe_traversal)]
     fn chown_entry(
         &self,
         dir_fd: &DirFd,
         name: &OsStr,
-        #[cfg(target_os = "linux")] meta: &TraversalMetadata,
+        meta: &TraversalMetadata,
         follow: bool,
     ) -> IOResult<bool> {
-        // Only Linux can hold a file yet; elsewhere it is changed by name.
-        #[cfg(target_os = "linux")]
-        if !matches!(self.filter, IfFrom::All) {
-            // Under -L -h a symlink is stat'd through but changed itself: the file
-            // changed is not the one `meta` describes, so there is none to hold.
-            let link_itself = !follow
-                && self.traverse_symlinks == TraverseSymlinks::All
-                && dir_fd
-                    .metadata_at(name, SymlinkBehavior::NoFollow)?
-                    .file_type()
-                    .is_symlink();
-            if !link_itself {
-                let Some(file) = dir_fd
-                    .pin_at(name, follow.into())
-                    .and_then(|file| self.hold(meta, file))?
-                else {
-                    return Ok(false);
-                };
-                file.chown(self.dest_uid, self.dest_gid)?;
-                return Ok(true);
+        let hold = if matches!(self.filter, IfFrom::All)
+            || self.changes_link_itself(dir_fd, name, follow)?
+        {
+            Hold::ByName
+        } else {
+            match self.hold(meta, || dir_fd.pin_at(name, follow.into())) {
+                // GNU opens no entry under -R, so one the system refuses goes by name.
+                Err(e) if e.raw_os_error() == Some(libc::EPERM) => Hold::ByName,
+                hold => hold?,
             }
+        };
+        match hold {
+            Hold::File(file) => file.chown(self.dest_uid, self.dest_gid)?,
+            Hold::Replaced => return Ok(false),
+            Hold::ByName => dir_fd.chown_at(name, self.dest_uid, self.dest_gid, follow.into())?,
         }
-        dir_fd.chown_at(name, self.dest_uid, self.dest_gid, follow.into())?;
         Ok(true)
+    }
+
+    /// Whether `name` is a symlink that -L -h stat'd through but changes itself,
+    /// so that the file changed is not the one stat'd and there is none to hold.
+    #[cfg(has_safe_traversal)]
+    fn changes_link_itself(&self, dir_fd: &DirFd, name: &OsStr, follow: bool) -> IOResult<bool> {
+        Ok(!follow
+            && self.traverse_symlinks == TraverseSymlinks::All
+            && dir_fd
+                .metadata_at(name, SymlinkBehavior::NoFollow)?
+                .file_type()
+                .is_symlink())
     }
 
     /// `operand_fd` is the descriptor `traverse` opened and verified against `meta`.
@@ -828,13 +884,7 @@ impl ChownExecutor {
 
         // Check if we should chown this entry
         if self.matched(owner.uid(), owner.gid()) {
-            let changed = self.chown_entry(
-                dir_fd,
-                entry_name,
-                #[cfg(target_os = "linux")]
-                owner,
-                self.dereference,
-            );
+            let changed = self.chown_entry(dir_fd, entry_name, owner, self.dereference);
             if let Ok(false) = changed {
                 // Replaced: as with GNU, fail with no error, only -v's line.
                 *ret = 1;
@@ -1423,9 +1473,25 @@ mod tests {
         assert!(fd_is(&link_fd, &meta).unwrap());
     }
 
+    #[cfg(has_safe_traversal)]
+    fn from_executor(filter: IfFrom) -> ChownExecutor {
+        ChownExecutor {
+            dest_uid: None,
+            dest_gid: None,
+            raw_owner: String::new(),
+            traverse_symlinks: TraverseSymlinks::None,
+            verbosity: Verbosity::default(),
+            filter,
+            files: Vec::new(),
+            recursive: false,
+            preserve_root: false,
+            dereference: true,
+        }
+    }
+
     /// `hold` must refuse a file renamed over the one that passed `--from`,
     /// even one that would pass too, and a file that no longer passes.
-    #[cfg(target_os = "linux")]
+    #[cfg(has_safe_traversal)]
     #[test]
     fn test_hold_refuses_another_file() {
         let temp_dir = tempdir().unwrap();
@@ -1436,29 +1502,59 @@ mod tests {
         let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
         let name = OsStr::new("item");
         let entry_meta = dir_fd.metadata_at(name, SymlinkBehavior::NoFollow).unwrap();
-        let open = || PinnedFile::open(&item, SymlinkBehavior::Follow).unwrap();
-        let mut executor = ChownExecutor {
-            dest_uid: None,
-            dest_gid: None,
-            raw_owner: String::new(),
-            traverse_symlinks: TraverseSymlinks::None,
-            verbosity: Verbosity::default(),
-            filter: IfFrom::Group(meta.gid()),
-            files: Vec::new(),
-            recursive: false,
-            preserve_root: false,
-            dereference: true,
-        };
-        assert!(executor.hold(&meta, open()).unwrap().is_some());
+        let open = || PinnedFile::open(&item, SymlinkBehavior::Follow);
+        let mut executor = from_executor(IfFrom::Group(meta.gid()));
+        assert!(matches!(executor.hold(&meta, open), Ok(Hold::File(_))));
 
         std::fs::rename(temp_dir.path().join("other"), &item).unwrap();
-        assert!(executor.hold(&meta, open()).unwrap().is_none());
-        let pin = dir_fd.pin_at(name, SymlinkBehavior::NoFollow).unwrap();
-        assert!(executor.hold(&entry_meta, pin).unwrap().is_none());
+        assert!(matches!(executor.hold(&meta, open), Ok(Hold::Replaced)));
+        let pin = || dir_fd.pin_at(name, SymlinkBehavior::NoFollow);
+        assert!(matches!(
+            executor.hold(&entry_meta, pin),
+            Ok(Hold::Replaced)
+        ));
 
         let meta = std::fs::metadata(&item).unwrap();
         executor.filter = IfFrom::Group(meta.gid().wrapping_add(1));
-        assert!(executor.hold(&meta, open()).unwrap().is_none());
+        assert!(matches!(executor.hold(&meta, open), Ok(Hold::Replaced)));
+    }
+
+    /// A file that cannot be opened for want of read access or of one of our own
+    /// descriptors is changed by name; other open errors fail the change.
+    #[cfg(has_safe_traversal)]
+    #[test]
+    fn test_hold_falls_back_by_name() {
+        let temp_dir = tempdir().unwrap();
+        let item = temp_dir.path().join("item");
+        std::fs::write(&item, "").unwrap();
+        let meta = std::fs::metadata(&item).unwrap();
+        let executor = from_executor(IfFrom::Group(meta.gid()));
+        let hold = |errno| executor.hold(&meta, || Err(std::io::Error::from_raw_os_error(errno)));
+        for errno in [libc::EACCES, libc::EMFILE] {
+            assert!(matches!(hold(errno), Ok(Hold::ByName)));
+        }
+        // A full system file table is something another user can bring about.
+        for errno in [libc::ENFILE, libc::ENOENT] {
+            assert!(hold(errno).is_err());
+        }
+    }
+
+    /// A socket is held with `O_PATH` on Linux and Android; elsewhere it is
+    /// changed by name, whoever runs chown.
+    #[cfg(has_safe_traversal)]
+    #[test]
+    fn test_hold_socket() {
+        let temp_dir = tempdir().unwrap();
+        let socket = temp_dir.path().join("socket");
+        let _listener = unix::net::UnixListener::bind(&socket).unwrap();
+        let meta = std::fs::metadata(&socket).unwrap();
+        let open = || PinnedFile::open(&socket, SymlinkBehavior::Follow);
+        let held = from_executor(IfFrom::Group(meta.gid())).hold(&meta, open);
+        if cfg!(has_o_path) {
+            assert!(matches!(held, Ok(Hold::File(_))));
+        } else {
+            assert!(matches!(held, Ok(Hold::ByName)));
+        }
     }
 
     #[test]

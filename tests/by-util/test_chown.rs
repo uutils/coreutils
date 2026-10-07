@@ -1813,3 +1813,84 @@ fn test_chown_h_fails_on_symlink_loop_operand(#[case] opt: &str) {
         .no_stdout()
         .stderr_is(expected);
 }
+
+/// With --from, the file is held open before it is changed: that must neither
+/// wait for a writer on a FIFO nor fail on a file the caller cannot read.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[rstest::rstest]
+#[case::operands(&["dir/fifo", "dir/file"], &["dir/fifo", "dir/file"])]
+#[case::recursive(&["-R", "dir"], &["dir", "dir/fifo", "dir/file"])]
+fn test_chown_from_fifo_and_unreadable_file(#[case] args: &[&str], #[case] paths: &[&str]) {
+    use chown::entries::{gid2grp, uid2usr};
+
+    // Root can read the file anyway.
+    if rustix::process::geteuid().is_root() {
+        println!("Test skipped: running as root");
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.mkfifo("dir/fifo");
+    at.touch("dir/file");
+    at.set_mode("dir/file", 0o000);
+    let meta = at.plus("dir").metadata().unwrap();
+    let owner = format!("{}:{}", meta.uid(), meta.gid());
+    let names = format!(
+        "{}:{}",
+        uid2usr(meta.uid()).unwrap(),
+        gid2grp(meta.gid()).unwrap()
+    );
+
+    let result = ucmd
+        .args(&["-v", &format!("--from={owner}"), &owner])
+        .args(args)
+        .succeeds();
+    // -R lists the entries in directory order; `paths` is sorted.
+    let mut lines: Vec<&str> = result.stdout_str().lines().collect();
+    lines.sort_unstable();
+    let expected: Vec<String> = paths
+        .iter()
+        .map(|path| format!("ownership of '{path}' retained as {names}"))
+        .collect();
+    assert_eq!(lines, expected);
+}
+
+/// Under -R, where GNU opens no entry, a file the system refuses to open is
+/// changed by name. As an operand with --from it fails, as with GNU.
+#[cfg(target_vendor = "apple")]
+#[test]
+fn test_chown_from_file_refused_by_sandbox() {
+    let scene = TestScenario::new(util_name!());
+    // A process already inside a sandbox cannot apply another profile.
+    let probe = ["-p", "(version 1)(allow default)", "true"];
+    if !scene.cmd("sandbox-exec").args(&probe).run().succeeded() {
+        println!("Test skipped: sandbox-exec cannot apply a profile here");
+        return;
+    }
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.touch("dir/file");
+    let meta = at.plus("dir/file").metadata().unwrap();
+    let owner = format!("{}:{}", meta.uid(), meta.gid());
+    let from = format!("--from={owner}");
+    // Reading the file fails with EPERM, as under TCC or a sandbox.
+    let file = at.plus("dir/file").canonicalize().unwrap();
+    let profile = format!("(version 1)(allow default)(deny file-read-data (literal {file:?}))");
+    let run_denied = |args: &[&str]| {
+        scene
+            .cmd("sandbox-exec")
+            .args(&["-p", &profile])
+            .arg(&scene.bin_path)
+            .arg("chown")
+            .args(args)
+            .run()
+    };
+
+    run_denied(&["-R", &from, &owner, "dir"])
+        .success()
+        .no_output();
+    run_denied(&[&from, &owner, "dir/file"])
+        .code_is(1)
+        .no_stdout()
+        .stderr_is("chown: changing ownership of 'dir/file': Operation not permitted\n");
+}
