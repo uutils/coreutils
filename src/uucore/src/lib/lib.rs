@@ -24,6 +24,7 @@ mod mods; // core cross-platform modules
 pub use uucore_procs::*;
 
 // * cross-platform modules
+pub use crate::mods::args;
 pub use crate::mods::clap_localization;
 pub use crate::mods::display;
 pub use crate::mods::error;
