@@ -73,23 +73,15 @@ impl Drop for Target {
 
 #[test]
 fn test_command_environment_uses_last_override() {
-    let result = new_ucmd!()
+    new_ucmd!()
         .env("LC_ALL", "POSIX")
         .env("UUTESTS_ENV_OVERRIDE", "first")
         .env("UUTESTS_ENV_OVERRIDE", "last")
-        .succeeds();
-    result
+        .succeeds()
         .stdout_contains_line("LC_ALL=POSIX")
-        .stdout_contains_line("UUTESTS_ENV_OVERRIDE=last");
-    if cfg!(wasi_runner) {
-        result
-            .stdout_contains_line("LC_ALL=C")
-            .stdout_contains_line("UUTESTS_ENV_OVERRIDE=first");
-    } else {
-        result
-            .stdout_does_not_contain("LC_ALL=C")
-            .stdout_does_not_contain("UUTESTS_ENV_OVERRIDE=first");
-    }
+        .stdout_does_not_contain("LC_ALL=C")
+        .stdout_contains_line("UUTESTS_ENV_OVERRIDE=last")
+        .stdout_does_not_contain("UUTESTS_ENV_OVERRIDE=first");
 }
 
 #[test]
