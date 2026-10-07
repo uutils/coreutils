@@ -123,7 +123,7 @@ pub fn merge_with_file_limit<
     F: ExactSizeIterator<Item = UResult<M>>,
     Tmp: WriteableTmpFile + 'static,
 >(
-    files: F,
+    mut files: F,
     settings: &GlobalSettings,
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
@@ -136,27 +136,12 @@ pub fn merge_with_file_limit<
         merger?.write_all(settings, output)
     } else {
         let mut temporary_files = vec![];
-        let mut batch = Vec::with_capacity(batch_size);
-        for file in files {
-            batch.push(file);
-            if batch.len() >= batch_size {
-                assert_eq!(batch.len(), batch_size);
-                let merger = merge_without_limit(batch.into_iter(), settings)?;
-                batch = Vec::with_capacity(batch_size);
-
-                let mut tmp_file =
-                    Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
-                merger.write_all_to(settings, tmp_file.as_write(), || "write failed".into())?;
-                temporary_files.push(tmp_file.finished_writing()?);
-            }
-        }
-        // Merge any remaining files that didn't get merged in a full batch above.
-        if !batch.is_empty() {
-            assert!(batch.len() < batch_size);
-            let merger = merge_without_limit(batch.into_iter(), settings)?;
-
+        while files.len() > 0 {
+            // Create the output before opening this batch's inputs, so that
+            // creating it doesn't compete with them for file descriptors.
             let mut tmp_file =
                 Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
+            let merger = merge_without_limit(files.by_ref().take(batch_size), settings)?;
             merger.write_all_to(settings, tmp_file.as_write(), || "write failed".into())?;
             temporary_files.push(tmp_file.finished_writing()?);
         }
