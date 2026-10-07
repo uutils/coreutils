@@ -36,6 +36,7 @@ impl Base64SimdWrapper {
         Ok(())
     }
 
+    #[inline]
     pub fn new(
         use_padding: bool,
         valid_decoding_multiple: usize,
@@ -56,10 +57,12 @@ impl Base64SimdWrapper {
 }
 
 impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
+    #[inline]
     fn alphabet(&self) -> &'static [u8] {
         self.alphabet
     }
 
+    #[inline]
     fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
         let original_len = output.len();
 
@@ -120,6 +123,7 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
         }
     }
 
+    #[inline]
     fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
         let encoded = if self.use_padding {
             base64_simd::STANDARD.encode_to_string(input)
@@ -132,10 +136,12 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
         Ok(())
     }
 
+    #[inline]
     fn unpadded_multiple(&self) -> usize {
         self.unpadded_multiple
     }
 
+    #[inline]
     fn valid_decoding_multiple(&self) -> usize {
         self.valid_decoding_multiple
     }
@@ -185,6 +191,7 @@ pub struct EncodingWrapper {
 }
 
 impl EncodingWrapper {
+    #[inline]
     pub fn new(
         encoding: Encoding,
         valid_decoding_multiple: usize,
@@ -246,23 +253,27 @@ pub trait SupportsFastDecodeAndEncode {
     /// Whether the decoder can flush partial chunks (multiples of `valid_decoding_multiple`)
     /// before seeing the full input. Defaults to `false` for encodings that must consume the
     /// entire input (e.g. base58).
+    #[inline]
     fn supports_partial_decode(&self) -> bool {
         false
     }
 
     /// Gives encoding-specific logic a chance to pad a trailing, non-empty remainder
     /// before the final decode attempt. The default implementation opts out.
+    #[inline]
     fn pad_remainder(&self, _remainder: &[u8]) -> Option<PadResult> {
         None
     }
 }
 
 impl SupportsFastDecodeAndEncode for Base58Wrapper {
+    #[inline]
     fn alphabet(&self) -> &'static [u8] {
         // Base58 alphabet
         b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
     }
 
+    #[inline]
     fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
         if input.is_empty() {
             return Ok(());
@@ -321,6 +332,7 @@ impl SupportsFastDecodeAndEncode for Base58Wrapper {
         Ok(())
     }
 
+    #[inline]
     fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
         if input.is_empty() {
             return Ok(());
@@ -398,6 +410,7 @@ impl SupportsFastDecodeAndEncode for Base58Wrapper {
         Ok(())
     }
 
+    #[inline]
     fn unpadded_multiple(&self) -> usize {
         // Base58 must encode the entire input as one big integer, not in chunks
         // Use a very large value to effectively disable chunking, but avoid overflow
@@ -405,17 +418,20 @@ impl SupportsFastDecodeAndEncode for Base58Wrapper {
         usize::MAX / 2048
     }
 
+    #[inline]
     fn valid_decoding_multiple(&self) -> usize {
         1 // Any length is valid for Base58
     }
 }
 
 impl SupportsFastDecodeAndEncode for Z85Wrapper {
+    #[inline]
     fn alphabet(&self) -> &'static [u8] {
         // Z85 alphabet
         b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#"
     }
 
+    #[inline]
     fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
         if input.first() == Some(&b'#') {
             return Err(USimpleError::new(1, "error: invalid input"));
@@ -428,10 +444,12 @@ impl SupportsFastDecodeAndEncode for Z85Wrapper {
         Ok(())
     }
 
+    #[inline]
     fn valid_decoding_multiple(&self) -> usize {
         5
     }
 
+    #[inline]
     fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
         // According to the spec we should not accept inputs whose len is not a multiple of 4.
         // However, the z85 crate implements a padded encoding and accepts such inputs. We have to manually check for them.
@@ -449,17 +467,20 @@ impl SupportsFastDecodeAndEncode for Z85Wrapper {
         Ok(())
     }
 
+    #[inline]
     fn unpadded_multiple(&self) -> usize {
         4
     }
 }
 
 impl SupportsFastDecodeAndEncode for EncodingWrapper {
+    #[inline]
     fn alphabet(&self) -> &'static [u8] {
         self.alphabet
     }
 
     // Adapted from `decode` in the "data-encoding" crate
+    #[inline]
     fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
         let decode_len_result = self
             .encoding
@@ -482,11 +503,13 @@ impl SupportsFastDecodeAndEncode for EncodingWrapper {
         Ok(())
     }
 
+    #[inline]
     fn valid_decoding_multiple(&self) -> usize {
         self.valid_decoding_multiple
     }
 
     // Adapted from `encode_append` in the "data-encoding" crate
+    #[inline]
     fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
         let output_len = output.len();
 
@@ -500,6 +523,7 @@ impl SupportsFastDecodeAndEncode for EncodingWrapper {
         Ok(())
     }
 
+    #[inline]
     fn unpadded_multiple(&self) -> usize {
         self.unpadded_multiple
     }
@@ -510,6 +534,7 @@ pub struct Base32Wrapper {
 }
 
 impl Base32Wrapper {
+    #[inline]
     pub fn new(
         encoding: Encoding,
         valid_decoding_multiple: usize,
@@ -528,26 +553,32 @@ impl Base32Wrapper {
 }
 
 impl SupportsFastDecodeAndEncode for Base32Wrapper {
+    #[inline]
     fn alphabet(&self) -> &'static [u8] {
         self.inner.alphabet()
     }
 
+    #[inline]
     fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
         self.inner.decode_into_vec(input, output)
     }
 
+    #[inline]
     fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
         self.inner.encode_to_vec_deque(input, output)
     }
 
+    #[inline]
     fn unpadded_multiple(&self) -> usize {
         self.inner.unpadded_multiple()
     }
 
+    #[inline]
     fn valid_decoding_multiple(&self) -> usize {
         self.inner.valid_decoding_multiple()
     }
 
+    #[inline]
     fn pad_remainder(&self, remainder: &[u8]) -> Option<PadResult> {
         const VALID_REMAINDERS: [usize; 4] = [2, 4, 5, 7];
 
@@ -577,6 +608,7 @@ impl SupportsFastDecodeAndEncode for Base32Wrapper {
         })
     }
 
+    #[inline]
     fn supports_partial_decode(&self) -> bool {
         true
     }

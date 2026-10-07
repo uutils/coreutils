@@ -53,6 +53,7 @@ fn fix_negation(glob: &str) -> String {
 /// assert!(!from_str("[^abc]").unwrap().matches("a"));
 /// assert!(from_str("[^abc]").unwrap().matches("x"));
 /// ```
+#[inline]
 pub fn from_str(glob: &str) -> Result<Pattern, PatternError> {
     Pattern::new(&fix_negation(glob))
 }

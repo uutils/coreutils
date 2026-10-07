@@ -41,6 +41,7 @@ impl FromStr for Range {
     /// assert!(Range::from_str("a").is_err());
     /// assert!(Range::from_str("a-b").is_err());
     /// ```
+    #[inline]
     fn from_str(s: &str) -> Result<Self, &'static str> {
         Self::parse(s).map_err(|invalid| invalid.reason)
     }
@@ -74,6 +75,7 @@ pub struct RangeError {
 }
 
 impl std::fmt::Display for RangeError {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.message)
     }
@@ -105,6 +107,7 @@ impl RangeError {
     ///
     /// `false` when no argument carries `list` as that option's value, in which
     /// case the caller should fall back to the plain one-line message.
+    #[inline]
     pub fn render_option_value(
         &self,
         args: &[std::ffi::OsString],
@@ -221,6 +224,7 @@ impl Range {
     ///
     /// On failure, the message as it has always read, and where in `list` the
     /// item at fault sits, so that a caller may point a caret at it.
+    #[inline]
     pub fn from_list(list: &str) -> Result<Vec<Self>, RangeError> {
         let mut ranges = Vec::new();
 
@@ -244,6 +248,7 @@ impl Range {
     /// Merge any overlapping ranges. Adjacent ranges are *NOT* merged.
     ///
     /// Is guaranteed to return only disjoint ranges in a sorted order.
+    #[inline]
     pub fn merge(mut ranges: Vec<Self>) -> Vec<Self> {
         ranges.sort_unstable_by_key(|r| r.low);
         ranges.dedup_by(|a, b| {
@@ -259,6 +264,7 @@ impl Range {
 }
 
 /// Calculate the complement of the given ranges.
+#[inline]
 pub fn complement(ranges: &[Range]) -> Vec<Range> {
     let mut prev_high = 0;
     let mut complements = Vec::with_capacity(ranges.len() + 1);
@@ -301,6 +307,7 @@ pub fn complement(ranges: &[Range]) -> Vec<Range> {
 /// assert!(uucore::ranges::contain(&ranges, 8));
 /// assert!(uucore::ranges::contain(&ranges, 11));
 /// ```
+#[inline]
 pub fn contain(ranges: &[Range], n: usize) -> bool {
     for range in ranges {
         if n >= range.low && n <= range.high {

@@ -47,12 +47,14 @@ pub enum UptimeError {
 }
 
 impl UError for UptimeError {
+    #[inline]
     fn code(&self) -> i32 {
         1
     }
 }
 
 /// Returns the formatted time string, e.g. "12:34:56"
+#[inline]
 pub fn get_formatted_time() -> String {
     Timestamp::now()
         .to_zoned(TimeZone::system())

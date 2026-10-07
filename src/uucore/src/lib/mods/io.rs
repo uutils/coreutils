@@ -35,6 +35,7 @@ type NativeType = OwnedFd;
 pub struct RawReader<T: AsFd>(pub T);
 #[cfg(any(unix, target_os = "wasi"))]
 impl<T: AsFd> io::Read for RawReader<T> {
+    #[inline]
     fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
         rustix::io::read(&self.0, b).map_err(Into::into)
     }
@@ -45,9 +46,11 @@ impl<T: AsFd> io::Read for RawReader<T> {
 pub struct RawWriter<T: AsFd>(pub T);
 #[cfg(any(unix, target_os = "wasi"))]
 impl<T: AsFd> io::Write for RawWriter<T> {
+    #[inline]
     fn write(&mut self, b: &[u8]) -> io::Result<usize> {
         rustix::io::write(&self.0, b).map_err(Into::into)
     }
+    #[inline]
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
@@ -61,11 +64,13 @@ pub struct OwnedFileDescriptorOrHandle {
 
 impl OwnedFileDescriptorOrHandle {
     /// create from underlying native type
+    #[inline]
     pub fn new(x: NativeType) -> Self {
         Self { fx: x }
     }
 
     /// create by opening a file
+    #[inline]
     pub fn open_file(options: &OpenOptions, path: &Path) -> io::Result<Self> {
         let f = options.open(path)?;
         Self::from(f)
@@ -85,6 +90,7 @@ impl OwnedFileDescriptorOrHandle {
     ///
     /// e.g. `std::io::stdout()`, `std::fs::File`, ...
     #[cfg(not(windows))]
+    #[inline]
     pub fn from<T: AsFd>(t: T) -> io::Result<Self> {
         Ok(Self {
             fx: t.as_fd().try_clone_to_owned()?,
@@ -92,12 +98,14 @@ impl OwnedFileDescriptorOrHandle {
     }
 
     /// instantiates a corresponding `File`
+    #[inline]
     pub fn into_file(self) -> File {
         File::from(self.fx)
     }
 
     /// instantiates a corresponding `Stdio`
     #[cfg(not(target_os = "wasi"))]
+    #[inline]
     pub fn into_stdio(self) -> Stdio {
         Stdio::from(self.fx)
     }
@@ -110,12 +118,14 @@ impl OwnedFileDescriptorOrHandle {
 
     /// clones self. useful when needing another
     /// owned reference to same file
+    #[inline]
     pub fn try_clone(&self) -> io::Result<Self> {
         self.fx.try_clone().map(Self::new)
     }
 
     /// provides native type to be used with
     /// OS specific functions without abstraction
+    #[inline]
     pub fn as_raw(&self) -> &NativeType {
         &self.fx
     }
@@ -123,6 +133,7 @@ impl OwnedFileDescriptorOrHandle {
 
 /// instantiates a corresponding `Stdio`
 impl From<OwnedFileDescriptorOrHandle> for Stdio {
+    #[inline]
     fn from(value: OwnedFileDescriptorOrHandle) -> Self {
         value.into_stdio()
     }
@@ -133,6 +144,7 @@ impl From<OwnedFileDescriptorOrHandle> for Stdio {
 /// Returns the number of bytes actually read; a value less than `n` means the
 /// reader hit EOF first. Reads are retried on [`io::ErrorKind::Interrupted`].
 /// This is used to skip over the start of an input that cannot be `seek`ed.
+#[inline]
 pub fn read_and_discard<R: io::Read>(reader: &mut R, n: u64, buf_size: usize) -> io::Result<u64> {
     use io::Read;
     let mut buf = Vec::new();

@@ -24,6 +24,7 @@ use std::ops::Range;
 ///
 /// * `text` - The string the offset counts into.
 /// * `offset` - A byte offset, trusted only as far as `text` agrees with it.
+#[inline]
 pub fn floor_boundary(text: &str, offset: usize) -> usize {
     let offset = offset.min(text.len());
     (0..=offset)
@@ -46,6 +47,7 @@ pub fn floor_boundary(text: &str, offset: usize) -> usize {
 ///
 /// An empty range at the end of `text`, which the renderer reads as "nothing
 /// left to point at".
+#[inline]
 pub fn char_span(text: &str, offset: usize) -> Range<usize> {
     let start = floor_boundary(text, offset);
     match text[start..].chars().next() {
@@ -73,6 +75,7 @@ pub struct OptionValue {
 
 impl OptionValue {
     /// The value of an option answering to both a short and a long name.
+    #[inline]
     pub fn new(value: impl Into<String>, short: char, long: &'static str) -> Self {
         Self::with_names(value, Some(short), Some(long))
     }
@@ -80,6 +83,7 @@ impl OptionValue {
     /// The value of an option that is missing one of the two names, or whose
     /// names are only known once the parse has failed — `stat` blames `-c` or
     /// `--printf` depending on which one it was given.
+    #[inline]
     pub fn with_names(
         value: impl Into<String>,
         short: Option<char>,
@@ -123,6 +127,7 @@ impl ValueOptions<'_> {
     ///
     /// * `arg` - An argument already known to start with `-` and not to be a
     ///   lone `-` or a bare `--`.
+    #[inline]
     pub fn takes_next(&self, arg: &str) -> bool {
         if let Some(long) = arg.strip_prefix("--") {
             // `--name=value` carries its own value.
@@ -146,6 +151,7 @@ impl ValueOptions<'_> {
 ///
 /// * `list` - The list as typed.
 /// * `separators` - The characters it is split on, of any width.
+#[inline]
 pub fn list_items<'a>(
     list: &'a str,
     separators: &'a [char],

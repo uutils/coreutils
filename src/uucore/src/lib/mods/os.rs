@@ -9,6 +9,7 @@
 //! ref: <https://github.com/microsoft/WSL/issues/4555> @@ <https://archive.is/dP0bz>
 
 /// Test if the program is running under WSL version 1
+#[inline]
 pub fn is_wsl_1() -> bool {
     #[cfg(target_os = "linux")]
     return !is_wsl_2()
@@ -21,6 +22,7 @@ pub fn is_wsl_1() -> bool {
 }
 
 /// Test if the program is running under WSL version 2
+#[inline]
 pub fn is_wsl_2() -> bool {
     #[cfg(target_os = "linux")]
     return std::fs::read_to_string("/proc/sys/kernel/osrelease")
@@ -30,6 +32,7 @@ pub fn is_wsl_2() -> bool {
 }
 
 /// Test if the program is running under WSL
+#[inline]
 pub fn is_wsl() -> bool {
     is_wsl_1() || is_wsl_2()
 }

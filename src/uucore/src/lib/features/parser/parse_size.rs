@@ -23,6 +23,7 @@
 /// * `src` - The argument as typed.
 /// * `is_prefix` - Whether a character is the prefix the caller's parser
 ///   strips.
+#[inline]
 pub fn size_offset(src: &str, is_prefix: impl Fn(char) -> bool) -> usize {
     let trimmed = src.trim_start();
     (src.len() - trimmed.len())
@@ -137,6 +138,7 @@ pub fn available_memory_bytes() -> Option<u128> {
 
 /// Return `None` when the platform does not expose Linux-like `/proc/meminfo`.
 #[cfg(not(target_os = "linux"))]
+#[inline]
 pub fn available_memory_bytes() -> Option<u128> {
     None
 }
@@ -208,24 +210,28 @@ fn numeric_prefix(size: &str, number_system: NumberSystem) -> &str {
 
 impl<'parser> Parser<'parser> {
     /// Change allow_list of the parser - whitelist for the suffix
+    #[inline]
     pub fn with_allow_list(&mut self, allow_list: &'parser [&str]) -> &mut Self {
         self.allow_list = Some(allow_list);
         self
     }
 
     /// Change default_unit of the parser - when no suffix is provided
+    #[inline]
     pub fn with_default_unit(&mut self, default_unit: &'parser str) -> &mut Self {
         self.default_unit = Some(default_unit);
         self
     }
 
     /// Change b_byte_count of the parser - to treat "b" as a "byte count" instead of "block"
+    #[inline]
     pub fn with_b_byte_count(&mut self, value: bool) -> &mut Self {
         self.b_byte_count = value;
         self
     }
 
     /// Change no_empty_numeric of the parser - to allow empty numeric strings
+    #[inline]
     pub fn with_allow_empty_numeric(&mut self, value: bool) -> &mut Self {
         self.no_empty_numeric = value;
         self
@@ -260,6 +266,7 @@ impl<'parser> Parser<'parser> {
     /// assert_eq!(Ok(44251 * 1024), parser.parse("0xACDBK")); // 0xACDB is 44251 in decimal
     /// assert_eq!(Ok(44251 * 1024 * 1024), parser.parse("0b1010110011011011")); // 0b1010110011011011 is 44251 in decimal, default M
     /// ```
+    #[inline]
     pub fn parse(&self, size: &str) -> Result<u128, ParseSizeError> {
         if size.is_empty() {
             return Err(ParseSizeError::parse_failure(size));
@@ -387,11 +394,13 @@ impl<'parser> Parser<'parser> {
     }
 
     /// Explicit u128 alias for `parse()`
+    #[inline]
     pub fn parse_u128(&self, size: &str) -> Result<u128, ParseSizeError> {
         self.parse(size)
     }
 
     /// Same as `parse()` but tries to return u64
+    #[inline]
     pub fn parse_u64(&self, size: &str) -> Result<u64, ParseSizeError> {
         self.parse(size).and_then(|num_u128| {
             u64::try_from(num_u128).map_err(|_| ParseSizeError::size_too_big(size))
@@ -401,6 +410,7 @@ impl<'parser> Parser<'parser> {
     /// Same as `parse_u64()`, except returns `u64::MAX` on overflow
     /// GNU lib/coreutils include similar functionality
     /// and GNU test suite checks this behavior for some utils (`split` for example)
+    #[inline]
     pub fn parse_u64_max(&self, size: &str) -> Result<u64, ParseSizeError> {
         let result = self.parse_u64(size);
         match result {
@@ -416,6 +426,7 @@ impl<'parser> Parser<'parser> {
     }
 
     /// Same as `parse_u64_max()`, except for u128, i.e. returns `u128::MAX` on overflow
+    #[inline]
     pub fn parse_u128_max(&self, size: &str) -> Result<u128, ParseSizeError> {
         let result = self.parse_u128(size);
         match result {
@@ -473,6 +484,7 @@ impl<'parser> Parser<'parser> {
     }
 }
 
+#[inline]
 pub fn allow_list_with_all_suffixes(units: &str) -> Vec<String> {
     let mut allow_list = Vec::with_capacity(4 * units.len());
     for unit in units.chars() {
@@ -497,16 +509,19 @@ pub fn allow_list_with_all_suffixes(units: &str) -> Vec<String> {
 /// assert_eq!(Ok(10), parse_size_u128("0b1010")); // binary
 /// assert_eq!(Ok(10 * 1024), parse_size_u128("0b1010K")); // binary with suffix
 /// ```
+#[inline]
 pub fn parse_size_u128(size: &str) -> Result<u128, ParseSizeError> {
     Parser::default().parse(size)
 }
 
 /// Same as `parse_size_u128()`, but for u64
+#[inline]
 pub fn parse_size_u64(size: &str) -> Result<u64, ParseSizeError> {
     Parser::default().parse_u64(size)
 }
 
 /// Same as `parse_size_u64()`, except 0 fails to parse
+#[inline]
 pub fn parse_size_non_zero_u64(size: &str) -> Result<u64, ParseSizeError> {
     let v = Parser::default().parse_u64(size)?;
     if v == 0 {
@@ -517,6 +532,7 @@ pub fn parse_size_non_zero_u64(size: &str) -> Result<u64, ParseSizeError> {
 
 /// Same as `parse_size_u64()` - deprecated
 #[deprecated = "Please use parse_size_u64(size: &str) -> Result<u64, ParseSizeError> OR parse_size_u128(size: &str) -> Result<u128, ParseSizeError> instead."]
+#[inline]
 pub fn parse_size(size: &str) -> Result<u64, ParseSizeError> {
     parse_size_u64(size)
 }
@@ -524,11 +540,13 @@ pub fn parse_size(size: &str) -> Result<u64, ParseSizeError> {
 /// Same as `parse_size_u64()`, except returns `u64::MAX` on overflow
 /// GNU lib/coreutils include similar functionality
 /// and GNU test suite checks this behavior for some utils
+#[inline]
 pub fn parse_size_u64_max(size: &str) -> Result<u64, ParseSizeError> {
     Parser::default().parse_u64_max(size)
 }
 
 /// Same as `parse_size_u128()`, except returns `u128::MAX` on overflow
+#[inline]
 pub fn parse_size_u128_max(size: &str) -> Result<u128, ParseSizeError> {
     Parser::default().parse_u128_max(size)
 }
@@ -550,6 +568,7 @@ pub enum ParseSizeError {
 }
 
 impl Error for ParseSizeError {
+    #[inline]
     fn description(&self) -> &str {
         match *self {
             Self::InvalidSuffix(ref s)
@@ -561,6 +580,7 @@ impl Error for ParseSizeError {
 }
 
 impl fmt::Display for ParseSizeError {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         let s = match self {
             Self::InvalidSuffix(s)
@@ -625,6 +645,7 @@ impl ParseSizeError {
     /// # Arguments
     ///
     /// * `size` - The SIZE operand as typed, the one this error is about.
+    #[inline]
     pub fn span(&self, size: &str) -> Range<usize> {
         let number = numeric_prefix(size, Parser::determine_number_system(size)).len();
         match self {
@@ -660,6 +681,7 @@ impl ParseSizeError {
     ///
     /// `false` when no argument carries the value as that option's value, in
     /// which case the caller should fall back to the plain one-line message.
+    #[inline]
     pub fn render_size_value(
         &self,
         args: &[std::ffi::OsString],
@@ -700,6 +722,7 @@ impl ParseSizeError {
     ///   kept — as [`crate::diagnostics::capture`] returns them.
     /// * `option`, `size_at`, `message` - As for [`Self::render_size_value`].
     /// * `error` - The error to raise if nothing was drawn.
+    #[inline]
     pub fn size_value_error(
         &self,
         diag_args: Option<&[std::ffi::OsString]>,

@@ -34,6 +34,7 @@ pub enum DigestOutput {
 }
 
 impl DigestOutput {
+    #[inline]
     pub fn write_raw(&self, mut w: impl Write) -> io::Result<()> {
         match self {
             Self::Vec(buf) => w.write_all(buf),
@@ -43,6 +44,7 @@ impl DigestOutput {
         }
     }
 
+    #[inline]
     pub fn to_hex(&self) -> UResult<String> {
         match self {
             Self::Vec(buf) => Ok(hex::encode(buf)),
@@ -50,6 +52,7 @@ impl DigestOutput {
         }
     }
 
+    #[inline]
     pub fn to_base64(&self) -> UResult<String> {
         match self {
             Self::Vec(buf) => Ok(BASE64.encode(buf)),
@@ -63,10 +66,12 @@ pub trait Digest {
     fn hash_finalize(&mut self, out: &mut [u8]);
     fn reset(&mut self);
     fn output_bits(&self) -> usize;
+    #[inline]
     fn output_bytes(&self) -> usize {
         self.output_bits().div_ceil(8)
     }
 
+    #[inline]
     fn result(&mut self) -> io::Result<DigestOutput> {
         let mut buf: Vec<u8> = Vec::new();
         try_reserve_zeroed(&mut buf, self.output_bytes())?;
@@ -97,6 +102,7 @@ impl Blake2b {
     pub const DEFAULT_BIT_SIZE: usize = Self::DEFAULT_BYTE_SIZE * 8;
 
     /// Return a new Blake2b instance with a custom output bytes length
+    #[inline]
     pub fn with_output_bytes(output_bytes: usize) -> Self {
         debug_assert!(
             output_bytes <= Self::DEFAULT_BYTE_SIZE,
@@ -115,25 +121,30 @@ impl Blake2b {
 }
 
 impl Default for Blake2b {
+    #[inline]
     fn default() -> Self {
         Self::with_output_bytes(Self::DEFAULT_BYTE_SIZE)
     }
 }
 
 impl Digest for Blake2b {
+    #[inline]
     fn hash_update(&mut self, input: &[u8]) {
         self.digest.update(input);
     }
 
+    #[inline]
     fn hash_finalize(&mut self, out: &mut [u8]) {
         let hash_result = &self.digest.finalize();
         out.copy_from_slice(hash_result.as_bytes());
     }
 
+    #[inline]
     fn reset(&mut self) {
         *self = Self::with_output_bytes(self.output_bytes());
     }
 
+    #[inline]
     fn output_bits(&self) -> usize {
         self.bit_size
     }
@@ -149,6 +160,7 @@ impl Blake3 {
     pub const DEFAULT_BYTE_SIZE: usize = 32;
     pub const DEFAULT_BIT_SIZE: usize = Self::DEFAULT_BYTE_SIZE * 8;
 
+    #[inline]
     pub fn with_output_bytes(output_bytes: usize) -> Self {
         Self {
             digest: blake3::Hasher::new(),
@@ -158,6 +170,7 @@ impl Blake3 {
 }
 
 impl Default for Blake3 {
+    #[inline]
     fn default() -> Self {
         Self {
             digest: blake3::Hasher::default(),
@@ -167,19 +180,23 @@ impl Default for Blake3 {
 }
 
 impl Digest for Blake3 {
+    #[inline]
     fn hash_update(&mut self, input: &[u8]) {
         self.digest.update(input);
     }
 
+    #[inline]
     fn hash_finalize(&mut self, out: &mut [u8]) {
         let mut hash_result = self.digest.finalize_xof();
         hash_result.fill(out);
     }
 
+    #[inline]
     fn reset(&mut self) {
         *self = Self::with_output_bytes(self.output_bytes());
     }
 
+    #[inline]
     fn output_bits(&self) -> usize {
         self.byte_size * 8
     }
@@ -193,18 +210,22 @@ impl Sm3 {
 }
 
 impl Digest for Sm3 {
+    #[inline]
     fn hash_update(&mut self, input: &[u8]) {
         <sm3::Sm3 as sm3::Digest>::update(&mut self.0, input);
     }
 
+    #[inline]
     fn hash_finalize(&mut self, out: &mut [u8]) {
         out.copy_from_slice(&<sm3::Sm3 as sm3::Digest>::finalize(self.0.clone()));
     }
 
+    #[inline]
     fn reset(&mut self) {
         *self = Self::default();
     }
 
+    #[inline]
     fn output_bits(&self) -> usize {
         Self::BIT_SIZE
     }
@@ -232,6 +253,7 @@ impl Crc {
 }
 
 impl Default for Crc {
+    #[inline]
     fn default() -> Self {
         Self {
             digest: crc_fast::Digest::new_with_params(Self::get_posix_cksum_params()),
@@ -241,11 +263,13 @@ impl Default for Crc {
 }
 
 impl Digest for Crc {
+    #[inline]
     fn hash_update(&mut self, input: &[u8]) {
         self.digest.update(input);
         self.size += input.len();
     }
 
+    #[inline]
     fn hash_finalize(&mut self, out: &mut [u8]) {
         // Add the size at the end of the buffer.
         let mut sz = self.size;
@@ -257,6 +281,7 @@ impl Digest for Crc {
         out.copy_from_slice(&self.digest.finalize().to_ne_bytes());
     }
 
+    #[inline]
     fn result(&mut self) -> io::Result<DigestOutput> {
         let mut out: [u8; 8] = [0; 8];
         self.hash_finalize(&mut out);
@@ -265,11 +290,13 @@ impl Digest for Crc {
         Ok(DigestOutput::Crc((x & (u32::MAX as u64)) as u32))
     }
 
+    #[inline]
     fn reset(&mut self) {
         self.digest.reset();
         self.size = 0;
     }
 
+    #[inline]
     fn output_bits(&self) -> usize {
         256
     }
@@ -280,6 +307,7 @@ pub struct CRC32B {
 }
 
 impl Default for CRC32B {
+    #[inline]
     fn default() -> Self {
         Self {
             digest: crc_fast::Digest::new(crc_fast::CrcAlgorithm::Crc32IsoHdlc),
@@ -288,10 +316,12 @@ impl Default for CRC32B {
 }
 
 impl Digest for CRC32B {
+    #[inline]
     fn hash_update(&mut self, input: &[u8]) {
         self.digest.update(input);
     }
 
+    #[inline]
     fn hash_finalize(&mut self, out: &mut [u8]) {
         let result = self.digest.finalize();
         // crc_fast returns a 64-bit value, but CRC32B should be 32-bit
@@ -300,14 +330,17 @@ impl Digest for CRC32B {
         out.copy_from_slice(&crc32_value.to_be_bytes());
     }
 
+    #[inline]
     fn reset(&mut self) {
         self.digest.reset();
     }
 
+    #[inline]
     fn output_bits(&self) -> usize {
         32
     }
 
+    #[inline]
     fn result(&mut self) -> io::Result<DigestOutput> {
         let mut out = [0; 4];
         self.hash_finalize(&mut out);
@@ -321,6 +354,7 @@ pub struct Bsd {
 }
 
 impl Digest for Bsd {
+    #[inline]
     fn hash_update(&mut self, input: &[u8]) {
         for &byte in input {
             self.state = (self.state >> 1) + ((self.state & 1) << 15);
@@ -328,20 +362,24 @@ impl Digest for Bsd {
         }
     }
 
+    #[inline]
     fn hash_finalize(&mut self, out: &mut [u8]) {
         out.copy_from_slice(&self.state.to_ne_bytes());
     }
 
+    #[inline]
     fn result(&mut self) -> io::Result<DigestOutput> {
         let mut out = [0; 2];
         self.hash_finalize(&mut out);
         Ok(DigestOutput::U16(self.state))
     }
 
+    #[inline]
     fn reset(&mut self) {
         *self = Self::default();
     }
 
+    #[inline]
     fn output_bits(&self) -> usize {
         128
     }
@@ -353,28 +391,33 @@ pub struct SysV {
 }
 
 impl Digest for SysV {
+    #[inline]
     fn hash_update(&mut self, input: &[u8]) {
         for &byte in input {
             self.state = self.state.wrapping_add(u32::from(byte));
         }
     }
 
+    #[inline]
     fn hash_finalize(&mut self, out: &mut [u8]) {
         self.state = (self.state & 0xffff) + (self.state >> 16);
         self.state = (self.state & 0xffff) + (self.state >> 16);
         out.copy_from_slice(&(self.state as u16).to_ne_bytes());
     }
 
+    #[inline]
     fn result(&mut self) -> io::Result<DigestOutput> {
         let mut out = [0; 2];
         self.hash_finalize(&mut out);
         Ok(DigestOutput::U16((self.state & (u16::MAX as u32)) as u16))
     }
 
+    #[inline]
     fn reset(&mut self) {
         *self = Self::default();
     }
 
+    #[inline]
     fn output_bits(&self) -> usize {
         512
     }
@@ -387,24 +430,29 @@ macro_rules! impl_digest_common {
             pub const BIT_SIZE: usize = $size;
         }
         impl Default for $algo_type {
+            #[inline]
             fn default() -> Self {
                 Self(Default::default())
             }
         }
         impl Digest for $algo_type {
+            #[inline]
             fn hash_update(&mut self, input: &[u8]) {
                 digest::Digest::update(&mut self.0, input);
             }
 
+            #[inline]
             fn hash_finalize(&mut self, out: &mut [u8]) {
                 let result = digest::Digest::finalize_reset(&mut self.0);
                 out.copy_from_slice(&result);
             }
 
+            #[inline]
             fn reset(&mut self) {
                 *self = Self::default();
             }
 
+            #[inline]
             fn output_bits(&self) -> usize {
                 Self::BIT_SIZE
             }
@@ -418,6 +466,7 @@ macro_rules! impl_digest_shake {
         impl $algo_type {
             pub const DEFAULT_BIT_SIZE: usize = $default_output_bits;
 
+            #[inline]
             pub fn with_output_bits(bits: usize) -> Self {
                 Self {
                     digest: Default::default(),
@@ -426,15 +475,18 @@ macro_rules! impl_digest_shake {
             }
         }
         impl Default for $algo_type {
+            #[inline]
             fn default() -> Self {
                 Self::with_output_bits(Self::DEFAULT_BIT_SIZE)
             }
         }
         impl Digest for $algo_type {
+            #[inline]
             fn hash_update(&mut self, input: &[u8]) {
                 digest::Update::update(&mut self.digest, input);
             }
 
+            #[inline]
             fn hash_finalize(&mut self, out: &mut [u8]) {
                 digest::ExtendableOutputReset::finalize_xof_reset_into(&mut self.digest, out);
 
@@ -445,14 +497,17 @@ macro_rules! impl_digest_shake {
                 }
             }
 
+            #[inline]
             fn reset(&mut self) {
                 *self = Self::with_output_bits(self.bit_size);
             }
 
+            #[inline]
             fn output_bits(&self) -> usize {
                 self.bit_size
             }
 
+            #[inline]
             fn result(&mut self) -> io::Result<DigestOutput> {
                 let mut bytes = Vec::new();
                 try_reserve_zeroed(&mut bytes, self.output_bits().div_ceil(8))?;
@@ -510,6 +565,7 @@ macro_rules! impl_digest_openssl {
         }
 
         impl Default for $algo_type {
+            #[inline]
             fn default() -> Self {
                 match openssl::hash::Hasher::new($md) {
                     Ok(h) => Self::OpenSsl(h),
@@ -519,6 +575,7 @@ macro_rules! impl_digest_openssl {
         }
 
         impl Digest for $algo_type {
+            #[inline]
             fn hash_update(&mut self, input: &[u8]) {
                 match self {
                     Self::OpenSsl(h) => {
@@ -528,6 +585,7 @@ macro_rules! impl_digest_openssl {
                 }
             }
 
+            #[inline]
             fn hash_finalize(&mut self, out: &mut [u8]) {
                 match self {
                     // `finish` finalizes the hash and resets the underlying context.
@@ -542,10 +600,12 @@ macro_rules! impl_digest_openssl {
                 }
             }
 
+            #[inline]
             fn reset(&mut self) {
                 *self = Self::default();
             }
 
+            #[inline]
             fn output_bits(&self) -> usize {
                 Self::BIT_SIZE
             }
@@ -633,6 +693,7 @@ pub struct DigestWriter<'a> {
 }
 
 impl<'a> DigestWriter<'a> {
+    #[inline]
     pub fn new(digest: &'a mut Box<dyn Digest>, binary: bool) -> Self {
         let was_last_character_carriage_return = false;
         DigestWriter {
@@ -642,6 +703,7 @@ impl<'a> DigestWriter<'a> {
         }
     }
 
+    #[inline]
     pub fn finalize(&mut self) -> bool {
         if self.was_last_character_carriage_return {
             self.digest.hash_update(b"\r");
@@ -654,6 +716,7 @@ impl<'a> DigestWriter<'a> {
 
 impl Write for DigestWriter<'_> {
     #[cfg(not(windows))]
+    #[inline]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.digest.hash_update(buf);
         Ok(buf.len())
@@ -710,6 +773,7 @@ impl Write for DigestWriter<'_> {
         Ok(n)
     }
 
+    #[inline]
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }

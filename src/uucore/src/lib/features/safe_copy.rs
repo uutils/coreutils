@@ -47,6 +47,7 @@ const DEST_FLAGS: OFlags = OFlags::WRONLY
 /// `-P`). With `O_NOFOLLOW` set, an attacker who swaps the path to a
 /// symlink between the metadata check and this open gets `ELOOP`
 /// instead of redirecting the read.
+#[inline]
 pub fn open_source<P: AsRef<Path>>(path: P, nofollow: bool) -> io::Result<File> {
     let mut flags = SOURCE_FLAGS;
     if nofollow {
@@ -70,6 +71,7 @@ pub fn open_source<P: AsRef<Path>>(path: P, nofollow: bool) -> io::Result<File> 
 /// who plants `path` as a symlink between the caller's check and this
 /// open can redirect the truncate (and the subsequent write) to any file
 /// the caller has permission to write.
+#[inline]
 pub fn create_dest_restrictive<P: AsRef<Path>>(path: P, nofollow: bool) -> io::Result<File> {
     let mut flags = DEST_FLAGS;
     if nofollow {

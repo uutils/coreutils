@@ -22,6 +22,7 @@ use unicode_width::UnicodeWidthChar;
 ///
 /// Panics if `pos` is out of bounds for `buf`.
 #[must_use]
+#[inline]
 pub fn char_info_at(buf: &[u8], pos: usize) -> (Option<char>, usize, usize) {
     let nbytes = match buf[pos] {
         0xC0..=0xDF => 2,
@@ -46,6 +47,7 @@ pub fn char_info_at(buf: &[u8], pos: usize) -> (Option<char>, usize, usize) {
 ///
 /// Panics if `pos` is out of bounds for `buf`.
 #[must_use]
+#[inline]
 pub fn char_width_at(buf: &[u8], pos: usize) -> (usize, usize) {
     let (_, width, nbytes) = char_info_at(buf, pos);
     (width, nbytes)

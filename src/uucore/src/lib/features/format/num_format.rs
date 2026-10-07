@@ -83,6 +83,7 @@ pub struct SignedInt {
 }
 
 impl Formatter<i64> for SignedInt {
+    #[inline]
     fn fmt(&self, writer: impl Write, x: i64) -> std::io::Result<()> {
         // -i64::MIN is actually 1 larger than i64::MAX, so we need to cast to i128 first.
         let abs = (x as i128).abs();
@@ -97,6 +98,7 @@ impl Formatter<i64> for SignedInt {
         write_output(writer, sign_indicator, s, self.width, self.alignment)
     }
 
+    #[inline]
     fn try_from_spec(s: Spec) -> Result<Self, FormatError> {
         let Spec::SignedInt {
             width,
@@ -140,6 +142,7 @@ pub struct UnsignedInt {
 }
 
 impl Formatter<u64> for UnsignedInt {
+    #[inline]
     fn fmt(&self, writer: impl Write, x: u64) -> std::io::Result<()> {
         let mut s = match self.variant {
             UnsignedIntVariant::Decimal => format!("{x}"),
@@ -174,6 +177,7 @@ impl Formatter<u64> for UnsignedInt {
         write_output(writer, String::new(), s, self.width, self.alignment)
     }
 
+    #[inline]
     fn try_from_spec(s: Spec) -> Result<Self, FormatError> {
         // A signed int spec might be mapped to an unsigned int spec if no sign is specified
         let s = if let Spec::SignedInt {
@@ -241,6 +245,7 @@ pub struct Float {
 }
 
 impl Default for Float {
+    #[inline]
     fn default() -> Self {
         Self {
             variant: FloatVariant::Decimal,
@@ -255,6 +260,7 @@ impl Default for Float {
 }
 
 impl Formatter<&ExtendedBigDecimal> for Float {
+    #[inline]
     fn fmt(&self, writer: impl Write, e: &ExtendedBigDecimal) -> std::io::Result<()> {
         /* TODO: Might be nice to implement Signed trait for ExtendedBigDecimal (for abs)
          * at some point, but that requires implementing a _lot_ of traits.
@@ -324,6 +330,7 @@ impl Formatter<&ExtendedBigDecimal> for Float {
         write_output(writer, sign_indicator, s, self.width, alignment)
     }
 
+    #[inline]
     fn try_from_spec(s: Spec) -> Result<Self, FormatError>
     where
         Self: Sized,

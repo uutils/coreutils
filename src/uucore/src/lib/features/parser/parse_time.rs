@@ -54,6 +54,7 @@ use std::time::Duration;
 /// assert_eq!(from_str("2d", true), Ok(Duration::from_secs(60 * 60 * 24 * 2)));
 /// assert!(from_str("2d", false).is_err());
 /// ```
+#[inline]
 pub fn from_str(string: &str, allow_suffixes: bool) -> Result<Duration, String> {
     const NANOS_PER_SEC: u32 = 1_000_000_000;
 

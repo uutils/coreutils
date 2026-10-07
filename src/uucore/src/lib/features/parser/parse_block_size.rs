@@ -32,6 +32,7 @@ impl BlockSizeEnv {
     ///
     /// Convenience method for callers (like `du`, `df`) that don't need to
     /// distinguish `SetButInvalid` from `NotSet`.
+    #[inline]
     pub fn found(self) -> Option<u64> {
         match self {
             Self::Found(n) => Some(n),
@@ -50,6 +51,7 @@ impl BlockSizeEnv {
 /// - `ls` (file size): `block_size_from_env(&["LS_BLOCK_SIZE", "BLOCK_SIZE"])`
 ///   (`BLOCKSIZE` excluded because it only affects allocation display)
 /// - `ls` (allocation): `block_size_from_env(&["BLOCKSIZE"])`
+#[inline]
 pub fn block_size_from_env(vars: &[&str]) -> BlockSizeEnv {
     for var in vars {
         if let Ok(s) = std::env::var(var) {
@@ -65,6 +67,7 @@ pub fn block_size_from_env(vars: &[&str]) -> BlockSizeEnv {
 /// Default block size when no env var or flag is set.
 ///
 /// Returns 512 if `POSIXLY_CORRECT` is set, 1024 otherwise.
+#[inline]
 pub fn default_block_size() -> u64 {
     if std::env::var("POSIXLY_CORRECT").is_ok() {
         512

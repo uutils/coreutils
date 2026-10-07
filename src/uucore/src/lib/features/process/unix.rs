@@ -27,6 +27,7 @@ use super::{ChildExt, TimeoutRet};
 
 #[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 impl ChildExt for Child {
+    #[inline]
     fn send_signal(&mut self, signal: usize) -> io::Result<()> {
         let pid = Pid::from_raw(self.id() as pid_t);
         let result = if signal == 0 {
@@ -39,6 +40,7 @@ impl ChildExt for Child {
         result.map_err(|e| io::Error::from_raw_os_error(e as i32))
     }
 
+    #[inline]
     fn send_signal_group(&mut self, signal: usize) -> io::Result<()> {
         // Send signal to our process group (group 0 = caller's group).
         // This matches GNU coreutils behavior: if the child has remained in our
@@ -65,6 +67,7 @@ impl ChildExt for Child {
         result.map_err(|e| io::Error::from_raw_os_error(e as i32))
     }
 
+    #[inline]
     fn wait_or_timeout(&mut self, timeout: Duration, ignore_term: bool) -> io::Result<TimeoutRet> {
         if timeout == Duration::from_micros(0) {
             return self.wait().map(TimeoutRet::Exited);
@@ -96,6 +99,7 @@ impl ChildExt for Child {
 
 /// These signals must be blocked before calling [`ChildExt::wait_or_timeout`].
 /// Consider unblocking them in the child's pre-exec hook.
+#[inline]
 pub fn timeout_signal_set() -> SigSet {
     let mut set = SigSet::empty();
     set.add(Signal::SIGALRM);
@@ -111,6 +115,7 @@ pub fn timeout_signal_set() -> SigSet {
 }
 
 /// Unblocks a signal from the current thread.
+#[inline]
 pub fn unblock_signal(signal: RixSignal) -> io::Result<()> {
     let mut set = SigSet::empty();
     // SAFETY: rustix's Signal is also a valid nix Signal.

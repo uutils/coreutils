@@ -34,6 +34,7 @@ fn is_broken_pipe(info: &PanicHookInfo) -> bool {
 /// * `<https://github.com/BurntSushi/ripgrep/issues/200>`
 /// * `<https://github.com/crev-dev/cargo-crev/issues/287>`
 ///
+#[inline]
 pub fn mute_sigpipe_panic() {
     let hook = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
@@ -50,6 +51,7 @@ pub fn mute_sigpipe_panic() {
 /// for SIGPIPE to be set to default by checking the RUST_SIGPIPE environment
 /// variable. If set to "default", it restores SIGPIPE to SIG_DFL.
 #[cfg(unix)]
+#[inline]
 pub fn preserve_inherited_sigpipe() {
     use nix::libc;
 

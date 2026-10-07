@@ -451,6 +451,7 @@ pub static ALL_SIGNALS: [&str; 32] = [
 ];
 
 /// Returns the signal number for a given signal name or value.
+#[inline]
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     let signal_name_upcase = signal_name_or_value.to_uppercase();
     if let Some(value) = signal_name_upcase.parse().ok().filter(|&v| is_signal(v)) {
@@ -506,6 +507,7 @@ fn signal_alias_value(_signal_name: &str) -> Option<usize> {
 }
 
 /// Returns true if the given number is a valid signal number.
+#[inline]
 pub fn is_signal(num: usize) -> bool {
     if num < ALL_SIGNALS.len() {
         return true;
@@ -519,6 +521,7 @@ pub fn is_signal(num: usize) -> bool {
 }
 
 /// Returns the signal name for a given signal value.
+#[inline]
 pub fn signal_name_by_value(signal_value: usize) -> Option<String> {
     if let Some(name) = ALL_SIGNALS.get(signal_value).copied() {
         return Some(name.to_string());
@@ -549,11 +552,13 @@ pub fn realtime_signal_bounds() -> Option<(usize, usize)> {
 
 /// Returns the values of SIGRTMIN and SIGRTMAX if defined on this platform.
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[inline]
 pub fn realtime_signal_bounds() -> Option<(usize, usize)> {
     None
 }
 
 /// Returns the largest signal number that list-style interfaces should accept.
+#[inline]
 pub fn signal_number_upper_bound() -> usize {
     let base = ALL_SIGNALS.len() - 1;
 
@@ -561,6 +566,7 @@ pub fn signal_number_upper_bound() -> usize {
 }
 
 /// Returns the signal name for list-style interfaces.
+#[inline]
 pub fn signal_list_name_by_value(signal_value: usize) -> Option<String> {
     if let Some(signal_name) = signal_name_by_value(signal_value) {
         return Some(signal_name);
@@ -578,6 +584,7 @@ pub fn signal_list_name_by_value(signal_value: usize) -> Option<String> {
 }
 
 /// Returns the signal value for list-style interfaces.
+#[inline]
 pub fn signal_list_value_by_name_or_number(spec: &str) -> Option<usize> {
     let spec_upcase = spec.to_uppercase();
 
@@ -599,6 +606,7 @@ pub fn signal_list_value_by_name_or_number(spec: &str) -> Option<usize> {
 
 /// Restores SIGPIPE to default behavior (process terminates on broken pipe).
 #[cfg(unix)]
+#[inline]
 pub fn enable_pipe_errors() -> Result<(), Errno> {
     // We pass the error as is, the return value would just be Ok(SigDfl), so we can safely ignore it.
     // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
@@ -609,6 +617,7 @@ pub fn enable_pipe_errors() -> Result<(), Errno> {
 /// Use this to override the default SIGPIPE handling when you need to handle
 /// broken pipe errors gracefully (e.g., tee with --output-error).
 #[cfg(unix)]
+#[inline]
 pub fn disable_pipe_errors() -> Result<(), Errno> {
     // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
     unsafe { signal(SIGPIPE, SigIgn) }.map(|_| ())
@@ -616,6 +625,7 @@ pub fn disable_pipe_errors() -> Result<(), Errno> {
 
 /// Ignores the SIGINT signal.
 #[cfg(unix)]
+#[inline]
 pub fn ignore_interrupts() -> Result<(), Errno> {
     // We pass the error as is, the return value would just be Ok(SigIgn), so we can safely ignore it.
     // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
@@ -624,6 +634,7 @@ pub fn ignore_interrupts() -> Result<(), Errno> {
 
 /// Installs a signal handler. The handler must be async-signal-safe.
 #[cfg(unix)]
+#[inline]
 pub fn install_signal_handler(
     sig: i32,
     handler: extern "C" fn(core::ffi::c_int),
@@ -662,6 +673,7 @@ static STARTUP_STATE_WAS_CAPTURED: AtomicBool = AtomicBool::new(false);
 /// Called from `.init_array` before main(). Only reads current state.
 #[cfg(unix)]
 #[allow(clippy::missing_safety_doc)]
+#[inline]
 pub unsafe extern "C" fn capture_startup_state() {
     use nix::libc;
     use std::mem::MaybeUninit;
@@ -724,6 +736,7 @@ macro_rules! init_startup_state_capture {
 }
 
 #[cfg(unix)]
+#[inline]
 pub fn stdin_was_closed() -> bool {
     STDIN_WAS_CLOSED.load(Ordering::Relaxed)
 }
@@ -734,6 +747,7 @@ pub const fn stdin_was_closed() -> bool {
 }
 
 #[cfg(unix)]
+#[inline]
 pub fn stdout_was_closed() -> bool {
     STDOUT_WAS_CLOSED.load(Ordering::Relaxed)
 }
@@ -744,6 +758,7 @@ pub const fn stdout_was_closed() -> bool {
 }
 
 #[cfg(unix)]
+#[inline]
 pub fn stderr_was_closed() -> bool {
     STDERR_WAS_CLOSED.load(Ordering::Relaxed)
 }
@@ -755,6 +770,7 @@ pub const fn stderr_was_closed() -> bool {
 
 /// Returns whether SIGPIPE was ignored at process startup.
 #[cfg(unix)]
+#[inline]
 pub fn sigpipe_was_ignored() -> bool {
     SIGPIPE_WAS_IGNORED.load(Ordering::Acquire)
 }

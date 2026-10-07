@@ -25,6 +25,7 @@ pub struct ShortcutValueParser(Vec<PossibleValue>);
 /// shortcuts as long as they are unambiguous.
 impl ShortcutValueParser {
     /// Create a new `ShortcutValueParser` from a list of `PossibleValue`.
+    #[inline]
     pub fn new(values: impl Into<Self>) -> Self {
         values.into()
     }
@@ -90,6 +91,7 @@ fn add_ambiguous_value_tip(
 impl TypedValueParser for ShortcutValueParser {
     type Value = String;
 
+    #[inline]
     fn parse_ref(
         &self,
         cmd: &clap::Command,
@@ -119,6 +121,7 @@ impl TypedValueParser for ShortcutValueParser {
         }
     }
 
+    #[inline]
     fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue> + '_>> {
         Some(Box::new(self.0.iter().cloned()))
     }
@@ -129,6 +132,7 @@ where
     I: IntoIterator<Item = T>,
     T: Into<PossibleValue>,
 {
+    #[inline]
     fn from(values: I) -> Self {
         Self(values.into_iter().map(Into::into).collect())
     }

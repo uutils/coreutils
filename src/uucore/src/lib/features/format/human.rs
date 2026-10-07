@@ -60,6 +60,7 @@ fn localize_decimal(s: String) -> String {
     }
 }
 
+#[inline]
 pub fn human_readable(size: u64, sfmt: SizeFormat) -> String {
     match sfmt {
         SizeFormat::Binary => format_prefixed(&NumberPrefix::binary(size as f64)),

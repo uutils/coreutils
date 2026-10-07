@@ -76,6 +76,7 @@ fn copy_each_xattr(
 /// `ENOTSUP` / `EOPNOTSUPP`; for best-effort callers see
 /// [`copy_xattrs_ignore_unsupported`]. Only failing to list the attributes of
 /// `source` is an `Err`.
+#[inline]
 pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> XattrCopyResult {
     Ok(copy_each_xattr(
         xattr::list(&source)?,
@@ -87,6 +88,7 @@ pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> XattrCopyResult {
 
 /// Like [`copy_xattrs`], but leaves out `ENOTSUP` / `EOPNOTSUPP` for callers
 /// where xattr preservation is best-effort.
+#[inline]
 pub fn copy_xattrs_ignore_unsupported<P: AsRef<Path>>(source: P, dest: P) -> XattrCopyResult {
     without_unsupported(copy_xattrs(source, dest))
 }
@@ -95,6 +97,7 @@ pub fn copy_xattrs_ignore_unsupported<P: AsRef<Path>>(source: P, dest: P) -> Xat
 /// list/get/set calls cannot be redirected by a concurrent renamer, unlike
 /// the path-based [`copy_xattrs`], and reports failures the same way.
 #[cfg(unix)]
+#[inline]
 pub fn copy_xattrs_fd(source: &std::fs::File, dest: &std::fs::File) -> XattrCopyResult {
     use xattr::FileExt;
     Ok(copy_each_xattr(
@@ -107,6 +110,7 @@ pub fn copy_xattrs_fd(source: &std::fs::File, dest: &std::fs::File) -> XattrCopy
 
 /// Like [`copy_xattrs_fd`], but leaves out `ENOTSUP` / `EOPNOTSUPP`.
 #[cfg(unix)]
+#[inline]
 pub fn copy_xattrs_fd_ignore_unsupported(
     source: &std::fs::File,
     dest: &std::fs::File,
@@ -116,6 +120,7 @@ pub fn copy_xattrs_fd_ignore_unsupported(
 
 /// Like `copy_xattrs`, but skips the security.selinux attribute.
 #[cfg(unix)]
+#[inline]
 pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> XattrCopyResult {
     Ok(copy_each_xattr(
         xattr::list(&source)?,
@@ -138,6 +143,7 @@ pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> XattrCopy
 /// without ACL/xattr support are common, and GNU cp itself does not surface
 /// failures here when `mode` is the only thing being preserved.
 #[cfg(unix)]
+#[inline]
 pub fn copy_acls<P: AsRef<Path>>(source: P, dest: P) {
     for name in ["system.posix_acl_access", "system.posix_acl_default"] {
         if let Ok(Some(value)) = xattr::get(&source, name) {
@@ -156,6 +162,7 @@ pub fn copy_acls<P: AsRef<Path>>(source: P, dest: P) {
 /// # Returns
 ///
 /// A result containing a HashMap of attributes names and values, or an error.
+#[inline]
 pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<FxHashMap<OsString, Vec<u8>>> {
     let mut attrs = FxHashMap::default();
     for attr_name in xattr::list(&source)? {
@@ -179,6 +186,7 @@ pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<FxHashMap<O
 ///
 /// A result containing a map of attribute names to values, or an error.
 #[cfg(unix)]
+#[inline]
 pub fn retrieve_xattrs_fd(source: &std::fs::File) -> std::io::Result<FxHashMap<OsString, Vec<u8>>> {
     use xattr::FileExt;
     let mut attrs = FxHashMap::default();
@@ -200,6 +208,7 @@ pub fn retrieve_xattrs_fd(source: &std::fs::File) -> std::io::Result<FxHashMap<O
 /// # Returns
 ///
 /// A result indicating success or failure.
+#[inline]
 pub fn apply_xattrs<P: AsRef<Path>>(
     dest: P,
     xattrs: FxHashMap<OsString, Vec<u8>>,
@@ -224,6 +233,7 @@ pub fn apply_xattrs<P: AsRef<Path>>(
 ///
 /// A result indicating success or failure.
 #[cfg(unix)]
+#[inline]
 pub fn apply_xattrs_fd(
     dest: &std::fs::File,
     xattrs: FxHashMap<OsString, Vec<u8>>,
@@ -237,6 +247,7 @@ pub fn apply_xattrs_fd(
 
 /// Like [`apply_xattrs_fd`], but maps `ENOTSUP` / `EOPNOTSUPP` to `Ok(())`.
 #[cfg(unix)]
+#[inline]
 pub fn apply_xattrs_fd_ignore_unsupported(
     dest: &std::fs::File,
     xattrs: FxHashMap<OsString, Vec<u8>>,
@@ -257,6 +268,7 @@ pub fn apply_xattrs_fd_ignore_unsupported(
 /// # Returns
 ///
 /// `true` if the file has extended attributes (indicating an ACL), `false` otherwise.
+#[inline]
 pub fn has_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
     let attrs = if dereference {
@@ -281,6 +293,7 @@ pub fn has_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
 /// # Returns
 ///
 /// `true` if the file has an extended attribute named "security.capability", `false` otherwise.
+#[inline]
 pub fn has_security_cap_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
     let attrs = if dereference {
@@ -309,6 +322,7 @@ pub fn has_security_cap_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool 
 ///
 /// `u32`  the perm bits of a file having extended attributes of type 'system.posix_acl_default' with permissions
 /// otherwise returns a 0 if perm bits are 0 or the file has no extended attributes
+#[inline]
 pub fn get_acl_perm_bits_from_xattr<P: AsRef<Path>>(source: P) -> u32 {
     // TODO: Modify this to work on non linux unix systems.
 

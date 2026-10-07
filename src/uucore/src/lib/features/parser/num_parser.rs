@@ -173,6 +173,7 @@ pub trait ExtendedParser {
 
 impl ExtendedParser for i64 {
     /// Parse a number as i64. No fractional part is allowed.
+    #[inline]
     fn extended_parse(input: &str) -> Result<Self, ExtendedParserError<Self>> {
         fn into_i64(ebd: ExtendedBigDecimal) -> Result<i64, ExtendedParserError<i64>> {
             match ebd {
@@ -208,6 +209,7 @@ impl ExtendedParser for i64 {
 
 impl ExtendedParser for u64 {
     /// Parse a number as u64. No fractional part is allowed.
+    #[inline]
     fn extended_parse(input: &str) -> Result<Self, ExtendedParserError<Self>> {
         fn into_u64(ebd: ExtendedBigDecimal) -> Result<u64, ExtendedParserError<u64>> {
             match ebd {
@@ -245,6 +247,7 @@ impl ExtendedParser for u64 {
 
 impl ExtendedParser for f64 {
     /// Parse a number as f64
+    #[inline]
     fn extended_parse(input: &str) -> Result<Self, ExtendedParserError<Self>> {
         fn into_f64(ebd: ExtendedBigDecimal) -> Result<f64, ExtendedParserError<f64>> {
             // TODO: _Some_ of this is generic, so this should probably be implemented as an ExtendedBigDecimal trait (ToPrimitive).
@@ -277,6 +280,7 @@ impl ExtendedParser for f64 {
 
 impl ExtendedParser for ExtendedBigDecimal {
     /// Parse a number as an ExtendedBigDecimal
+    #[inline]
     fn extended_parse(input: &str) -> Result<Self, ExtendedParserError<Self>> {
         parse(input, ParseTarget::Decimal, &[])
     }

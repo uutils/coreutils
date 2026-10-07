@@ -35,6 +35,7 @@ const DEFAULT_LOCALE: Locale = locale!("und");
 /// 3. LANG
 ///
 /// Or fallback on Posix locale, with ASCII encoding.
+#[inline]
 pub fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
     let locale_var = ["LC_ALL", locale_name, "LANG"]
         .iter()
@@ -143,11 +144,13 @@ pub fn get_locale_from_os() -> (Locale, UEncoding) {
 
 /// Returns the default POSIX locale representing LC_ALL=C.
 #[cfg(not(windows))]
+#[inline]
 pub fn get_locale_from_os() -> (Locale, UEncoding) {
     (DEFAULT_LOCALE, UEncoding::Ascii)
 }
 
 /// Get the collating locale from the environment
+#[inline]
 pub fn get_collating_locale() -> &'static (Locale, UEncoding) {
     static COLLATING_LOCALE: OnceLock<(Locale, UEncoding)> = OnceLock::new();
 
@@ -155,6 +158,7 @@ pub fn get_collating_locale() -> &'static (Locale, UEncoding) {
 }
 
 /// Get the numeric locale from the environment
+#[inline]
 pub fn get_numeric_locale() -> &'static (Locale, UEncoding) {
     static NUMERIC_LOCALE: OnceLock<(Locale, UEncoding)> = OnceLock::new();
 
@@ -162,11 +166,13 @@ pub fn get_numeric_locale() -> &'static (Locale, UEncoding) {
 }
 
 /// Return the encoding deduced from the locale environment variable.
+#[inline]
 pub fn get_locale_encoding() -> UEncoding {
     get_collating_locale().1
 }
 
 /// Return the character-type encoding (`LC_CTYPE`) deduced from the environment.
+#[inline]
 pub fn get_ctype_encoding() -> UEncoding {
     static CTYPE_ENCODING: OnceLock<UEncoding> = OnceLock::new();
 

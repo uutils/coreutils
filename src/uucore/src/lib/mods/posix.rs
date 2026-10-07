@@ -33,6 +33,7 @@ pub const TRADITIONAL: usize = 200_112;
 pub const MODERN: usize = 200_809;
 
 /// Returns the value of the `_POSIX2_VERSION` environment variable if it is defined
+#[inline]
 pub fn posix_version() -> Option<usize> {
     env::var("_POSIX2_VERSION")
         .ok()

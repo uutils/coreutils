@@ -44,6 +44,7 @@ pub enum LocalizationError {
 }
 
 impl From<std::io::Error> for LocalizationError {
+    #[inline]
     fn from(error: std::io::Error) -> Self {
         Self::Io {
             source: error,
@@ -54,6 +55,7 @@ impl From<std::io::Error> for LocalizationError {
 
 // Add a generic way to convert LocalizationError to UError
 impl UError for LocalizationError {
+    #[inline]
     fn code(&self) -> i32 {
         1
     }
@@ -530,6 +532,7 @@ fn get_message_internal(id: &str, args: Option<FluentArgs>) -> String {
 /// let greeting = get_message("greeting");
 /// println!("{greeting}");
 /// ```
+#[inline]
 pub fn get_message(id: &str) -> String {
     get_message_internal(id, None)
 }
@@ -565,12 +568,14 @@ pub fn get_message(id: &str) -> String {
 /// let message = get_message_with_args("notification", args);
 /// println!("{message}");
 /// ```
+#[inline]
 pub fn get_message_with_args(id: &str, ftl_args: FluentArgs) -> String {
     get_message_internal(id, Some(ftl_args))
 }
 
 /// The value as an `i64` when Fluent can represent it exactly, else `None`.
 #[doc(hidden)]
+#[inline]
 pub fn exact_fluent_integer(s: &str) -> Option<i64> {
     // Fluent stores numbers as f64, which represents integers exactly only up
     // to 2^53. Anything beyond that has to travel as a string.
@@ -583,6 +588,7 @@ pub fn exact_fluent_integer(s: &str) -> Option<i64> {
 /// Used by [`translate!`] to tell an integer that Fluent cannot hold exactly
 /// from a genuine float, so the former can bypass Fluent's number type.
 #[doc(hidden)]
+#[inline]
 pub fn is_integer_literal(s: &str) -> bool {
     let digits = s.strip_prefix(['-', '+']).unwrap_or(s);
     !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
@@ -638,6 +644,7 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
 ///     Err(e) => eprintln!("Failed to initialize localization: {e}"),
 /// }
 /// ```
+#[inline]
 pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     // Avoid duplicated and high-cost localizer setup
     thread_local! {

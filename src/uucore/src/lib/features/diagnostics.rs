@@ -92,6 +92,7 @@ impl Mode {
 /// a terminal — a person is watching, and gets the rich form — and `false` in
 /// a script or a pipe, where whatever reads stderr gets the plain message it
 /// can grep for.
+#[inline]
 pub fn enabled() -> bool {
     // Read once: this runs before the argument capture of every caret.
     static MODE: OnceLock<Mode> = OnceLock::new();
@@ -116,6 +117,7 @@ pub fn enabled() -> bool {
 ///
 /// `None` when diagnostics are off, so that the copy is only paid for when
 /// something is going to be rendered.
+#[inline]
 pub fn capture(args: &[OsString]) -> Option<Vec<OsString>> {
     enabled().then(|| args.to_vec())
 }
@@ -130,6 +132,7 @@ pub fn capture(args: &[OsString]) -> Option<Vec<OsString>> {
 /// # Returns
 ///
 /// As [`capture`], `None` when diagnostics are off.
+#[inline]
 pub fn operands(args: &[OsString]) -> Option<Vec<OsString>> {
     capture(args.get(1..).unwrap_or_default())
 }
@@ -155,6 +158,7 @@ pub use crate::features::diagnostics_boundary::{
 /// * `draw` - Draws the report against the arguments, and returns `false` when
 ///   it could not — because the error is not about any one of them, or because
 ///   none of them turned out to carry what the caret would point at.
+#[inline]
 pub fn error_after_report<E: Into<Box<dyn crate::error::UError>>>(
     diag_args: Option<&[OsString]>,
     error: E,
@@ -184,6 +188,7 @@ impl Snapshot {
     ///
     /// * `args` - The arguments as passed to the utility, without the utility
     ///   name itself.
+    #[inline]
     pub fn new<S: AsRef<OsStr>>(args: &[S]) -> Self {
         let mut snapshot = Self::with_capacity(args.len());
         for arg in args {
@@ -202,6 +207,7 @@ impl Snapshot {
     /// # Arguments
     ///
     /// * `args` - The whole argument list, `argv[0]` included.
+    #[inline]
     pub fn with_program<S: AsRef<OsStr>>(args: &[S]) -> Self {
         let mut snapshot = Self::new(args);
         snapshot.first_operand = args.len().min(1);
@@ -214,6 +220,7 @@ impl Snapshot {
     ///
     /// * `args` - The arguments as raw bytes, as produced by
     ///   [`crate::os_string_to_vec`].
+    #[inline]
     pub fn from_bytes<S: AsRef<[u8]>>(args: &[S]) -> Self {
         let mut snapshot = Self::with_capacity(args.len());
         for arg in args {
@@ -260,6 +267,7 @@ impl Snapshot {
     }
 
     /// Whether there is anything to point at.
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.spans.is_empty()
     }
@@ -278,6 +286,7 @@ impl Snapshot {
     /// The index of the first operand equal to `arg`, or `None` if there is
     /// none. A repeated value resolves to its first occurrence, and the
     /// program name is never matched.
+    #[inline]
     pub fn index_of(&self, arg: &OsStr) -> Option<usize> {
         self.args
             .iter()
@@ -307,6 +316,7 @@ impl Snapshot {
     /// itself for a detached value, the combined argument for a glued one —
     /// or `None` if no argument does. First match is the right one for
     /// repeatable options, since parsing stops at the first failing value.
+    #[inline]
     pub fn index_of_value(
         &self,
         operand: &str,
@@ -390,6 +400,7 @@ impl Snapshot {
     /// # Returns
     ///
     /// The index of that positional, or `None` if there are not that many.
+    #[inline]
     pub fn index_of_positional(&self, n: usize) -> Option<usize> {
         self.index_of_operand(n, &ValueOptions::NONE)
     }
@@ -408,6 +419,7 @@ impl Snapshot {
     /// # Returns
     ///
     /// The index of that operand, or `None` if there are not that many.
+    #[inline]
     pub fn index_of_operand(&self, n: usize, options: &ValueOptions) -> Option<usize> {
         let mut options_ended = false;
         let mut skip_value = false;
@@ -466,6 +478,7 @@ impl Snapshot {
     ///
     /// `false` if nothing could be rendered, in which case the caller should
     /// fall back to a plain one-line message.
+    #[inline]
     pub fn render(
         &self,
         index: usize,
@@ -512,6 +525,7 @@ impl Snapshot {
     ///
     /// `false` if nothing could be rendered, in which case the caller should
     /// fall back to a plain one-line message.
+    #[inline]
     pub fn render_inside_at(
         &self,
         index: usize,
@@ -556,6 +570,7 @@ impl Snapshot {
     // part of `render_inside_at`; folding them into a struct would only move
     // the list to the call site.
     #[allow(clippy::too_many_arguments)]
+    #[inline]
     pub fn render_option_value(
         &self,
         operand: &str,
@@ -586,6 +601,7 @@ impl Snapshot {
     /// * `label` - Text placed under the caret, already localized, or `None`
     ///   for a bare underline.
     /// * `help` - An optional line of advice, already localized.
+    #[inline]
     pub fn render_option(
         &self,
         option: &OptionValue,

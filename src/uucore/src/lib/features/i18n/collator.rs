@@ -17,6 +17,7 @@ static COLLATOR: OnceLock<CollatorBorrowed> = OnceLock::new();
 
 /// Will initialize the collator if not already initialized.
 /// returns `true` if initialization happened
+#[inline]
 pub fn try_init_collator(opts: CollatorOptions) -> bool {
     COLLATOR
         .set(CollatorBorrowed::try_new(get_collating_locale().0.clone().into(), opts).unwrap())
@@ -24,6 +25,7 @@ pub fn try_init_collator(opts: CollatorOptions) -> bool {
 }
 
 /// Will initialize the collator and panic if already initialized.
+#[inline]
 pub fn init_collator(opts: CollatorOptions) {
     COLLATOR
         .set(CollatorBorrowed::try_new(get_collating_locale().0.clone().into(), opts).unwrap())
@@ -31,6 +33,7 @@ pub fn init_collator(opts: CollatorOptions) {
 }
 
 /// Check if locale collation should be used.
+#[inline]
 pub fn should_use_locale_collation() -> bool {
     get_collating_locale().0 != DEFAULT_LOCALE
 }
@@ -58,6 +61,7 @@ pub fn should_use_locale_collation() -> bool {
 ///     // Using byte comparison (C/POSIX locale)
 /// }
 /// ```
+#[inline]
 pub fn init_locale_collation() -> bool {
     use crate::i18n::{UEncoding, get_locale_encoding};
 
@@ -78,6 +82,7 @@ pub fn init_locale_collation() -> bool {
 /// Compute the ICU collation sort key for the given input bytes and append it to `buf`.
 /// This allows pre-computing sort keys once per line, then comparing them with simple
 /// byte comparison during sorting (much faster than calling `compare_utf8` per comparison).
+#[inline]
 pub fn compute_sort_key_utf8(input: &[u8], buf: &mut Vec<u8>) {
     let c = COLLATOR
         .get()
@@ -87,6 +92,7 @@ pub fn compute_sort_key_utf8(input: &[u8], buf: &mut Vec<u8>) {
 }
 
 /// Compare both strings with regard to the current locale.
+#[inline]
 pub fn locale_cmp(left: &[u8], right: &[u8]) -> Ordering {
     // If the detected locale is 'C', just do byte-wise comparison
     if get_collating_locale().0 == DEFAULT_LOCALE {

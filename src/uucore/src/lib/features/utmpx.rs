@@ -225,30 +225,37 @@ impl Utmpx {
 
 impl Utmpx {
     /// A.K.A. ut.ut_type
+    #[inline]
     pub fn record_type(&self) -> i16 {
         self.ut_type()
     }
     /// A.K.A. ut.ut_pid
+    #[inline]
     pub fn pid(&self) -> i32 {
         self.inner.ut_pid
     }
     /// A.K.A. ut.ut_id
+    #[inline]
     pub fn terminal_suffix(&self) -> String {
         chars2string!(self.inner.ut_id)
     }
     ///  A.K.A. ut.ut_user / ut.ut_name (NetBSD)
+    #[inline]
     pub fn user(&self) -> String {
         self.ut_user()
     }
     /// A.K.A. ut.ut_host
+    #[inline]
     pub fn host(&self) -> String {
         chars2string!(self.inner.ut_host)
     }
     /// A.K.A. ut.ut_line
+    #[inline]
     pub fn tty_device(&self) -> String {
         chars2string!(self.inner.ut_line)
     }
     /// A.K.A. ut.ut_tv
+    #[inline]
     pub fn login_time(&self) -> time::OffsetDateTime {
         #[allow(clippy::unnecessary_cast)]
         let ts_nanos: i128 = (1_000_000_000_i64 * self.inner.ut_tv.tv_sec as i64
@@ -271,19 +278,23 @@ impl Utmpx {
     ///
     /// Return (0, 0) on Non-Linux platform
     #[cfg(not(target_os = "linux"))]
+    #[inline]
     pub fn exit_status(&self) -> (i16, i16) {
         (0, 0)
     }
     /// Consumes the `Utmpx`, returning the underlying C struct utmpx
+    #[inline]
     pub fn into_inner(self) -> utmpx {
         self.inner
     }
     /// check if the record is a user process
+    #[inline]
     pub fn is_user_process(&self) -> bool {
         !self.user().is_empty() && self.record_type() == USER_PROCESS
     }
 
     /// Canonicalize host name using DNS
+    #[inline]
     pub fn canon_host(&self) -> IOResult<String> {
         let host = self.host();
 
@@ -327,6 +338,7 @@ impl Utmpx {
     ///
     /// Only one instance of [`UtmpxIter`] may be active at a time. This
     /// function will block as long as one is still active. Beware!
+    #[inline]
     pub fn iter_all_records() -> UtmpxIter {
         #[cfg(feature = "feat_systemd_logind")]
         {
@@ -359,6 +371,7 @@ impl Utmpx {
     /// instead of traditional utmp files.
     ///
     /// The same caveats as for [`Utmpx::iter_all_records`] apply.
+    #[inline]
     pub fn iter_all_records_from<P: AsRef<Path>>(path: P) -> UtmpxIter {
         #[cfg(feature = "feat_systemd_logind")]
         {
@@ -458,6 +471,7 @@ pub enum UtmpxRecord {
 
 impl UtmpxRecord {
     /// A.K.A. ut.ut_type
+    #[inline]
     pub fn record_type(&self) -> i16 {
         match self {
             Self::Traditional(utmpx) => utmpx.record_type(),
@@ -467,6 +481,7 @@ impl UtmpxRecord {
     }
 
     /// A.K.A. ut.ut_pid
+    #[inline]
     pub fn pid(&self) -> i32 {
         match self {
             Self::Traditional(utmpx) => utmpx.pid(),
@@ -476,6 +491,7 @@ impl UtmpxRecord {
     }
 
     /// A.K.A. ut.ut_id
+    #[inline]
     pub fn terminal_suffix(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.terminal_suffix(),
@@ -485,6 +501,7 @@ impl UtmpxRecord {
     }
 
     /// A.K.A. ut.ut_user
+    #[inline]
     pub fn user(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.user(),
@@ -494,6 +511,7 @@ impl UtmpxRecord {
     }
 
     /// A.K.A. ut.ut_host
+    #[inline]
     pub fn host(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.host(),
@@ -503,6 +521,7 @@ impl UtmpxRecord {
     }
 
     /// A.K.A. ut.ut_line
+    #[inline]
     pub fn tty_device(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.tty_device(),
@@ -512,6 +531,7 @@ impl UtmpxRecord {
     }
 
     /// A.K.A. ut.ut_tv
+    #[inline]
     pub fn login_time(&self) -> time::OffsetDateTime {
         match self {
             Self::Traditional(utmpx) => utmpx.login_time(),
@@ -523,6 +543,7 @@ impl UtmpxRecord {
     /// A.K.A. ut.ut_exit
     ///
     /// Return (e_termination, e_exit)
+    #[inline]
     pub fn exit_status(&self) -> (i16, i16) {
         match self {
             Self::Traditional(utmpx) => utmpx.exit_status(),
@@ -532,6 +553,7 @@ impl UtmpxRecord {
     }
 
     /// check if the record is a user process
+    #[inline]
     pub fn is_user_process(&self) -> bool {
         match self {
             Self::Traditional(utmpx) => utmpx.is_user_process(),
@@ -541,6 +563,7 @@ impl UtmpxRecord {
     }
 
     /// Canonicalize host name using DNS
+    #[inline]
     pub fn canon_host(&self) -> IOResult<String> {
         match self {
             Self::Traditional(utmpx) => utmpx.canon_host(),
@@ -552,6 +575,7 @@ impl UtmpxRecord {
 
 impl Iterator for UtmpxIter {
     type Item = UtmpxRecord;
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         #[cfg(feature = "feat_systemd_logind")]
         {
@@ -581,6 +605,7 @@ impl Iterator for UtmpxIter {
 }
 
 impl Drop for UtmpxIter {
+    #[inline]
     fn drop(&mut self) {
         unsafe {
             #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]

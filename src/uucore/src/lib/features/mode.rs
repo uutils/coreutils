@@ -73,6 +73,7 @@ impl ModeError {
     ///
     /// `false` when the mode cannot be found among the arguments, in which case
     /// the caller should fall back to the plain one-line message.
+    #[inline]
     pub fn render_mode_value(
         &self,
         args: &[std::ffi::OsString],
@@ -109,6 +110,7 @@ impl ModeError {
     ///
     /// `false` when nothing could be rendered, in which case the caller should
     /// fall back to the plain one-line message.
+    #[inline]
     pub fn render_at(
         &self,
         args: &[std::ffi::OsString],
@@ -154,6 +156,7 @@ impl ModeError {
 }
 
 impl Display for ModeError {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.message)
     }
@@ -161,6 +164,7 @@ impl Display for ModeError {
 
 impl std::error::Error for ModeError {}
 
+#[inline]
 pub fn parse_numeric(fperm: u32, mode: &str, considering_dir: bool) -> Result<u32, ModeError> {
     let original = mode;
     let (op, pos) = parse_op(mode).map_or_else(|_| (None, 0), |(op, pos)| (Some(op), pos));
@@ -197,6 +201,7 @@ pub fn parse_numeric(fperm: u32, mode: &str, considering_dir: bool) -> Result<u3
     }
 }
 
+#[inline]
 pub fn parse_symbolic(
     mut fperm: u32,
     mode: &str,
@@ -319,6 +324,7 @@ fn parse_change(mode: &str, fperm: u32, considering_dir: bool) -> (u32, usize) {
 
 /// Modify a file mode based on a user-supplied string.
 /// Supports comma-separated mode strings like "ug+rwX,o+rX" (same as chmod).
+#[inline]
 pub fn parse_chmod(
     current_mode: u32,
     mode_string: &str,
@@ -351,10 +357,12 @@ pub fn parse_chmod(
 }
 
 /// Takes a user-supplied string and tries to parse to u32 mode bitmask.
+#[inline]
 pub fn parse(mode_string: &str, considering_dir: bool, umask: u32) -> Result<u32, ModeError> {
     parse_chmod(0, mode_string, considering_dir, umask)
 }
 
+#[inline]
 pub fn get_umask() -> u32 {
     // There's no portable way to read the umask without changing it.
     // We have to replace it and then quickly set it back, hopefully before

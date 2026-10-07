@@ -29,6 +29,7 @@ pub enum LineEnding {
 }
 
 impl Display for LineEnding {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Newline => writeln!(f),
@@ -38,6 +39,7 @@ impl Display for LineEnding {
 }
 
 impl From<LineEnding> for u8 {
+    #[inline]
     fn from(line_ending: LineEnding) -> Self {
         line_ending as Self
     }
@@ -48,6 +50,7 @@ impl LineEnding {
     ///
     /// If `is_zero_terminated` is true, [`LineEnding::Nul`] is returned,
     /// otherwise [`LineEnding::Newline`].
+    #[inline]
     pub fn from_zero_flag(is_zero_terminated: bool) -> Self {
         if is_zero_terminated {
             Self::Nul
