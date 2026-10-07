@@ -2367,7 +2367,10 @@ fn test_follow_name_truncate1() {
     at.touch(source); // trigger truncate
     p.delay(delay);
 
-    at.copy(backup, source);
+    // Restore in a single write. On Windows, copying sets the final size
+    // before writing the data, so tail could read zeros there and then wait
+    // for more data after them.
+    at.write(source, &at.read(backup));
     p.delay(delay);
 
     p.make_assertion().is_alive();
