@@ -1210,7 +1210,7 @@ fn test_chown_from_changes_through_symlink_in_tree_under_big_h() {
 }
 
 /// A group of the current user other than the effective one, if any.
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "openbsd")))]
 fn other_group() -> Option<u32> {
     let current = rustix::process::getegid().as_raw();
     let other = rustix::process::getgroups()
@@ -1250,7 +1250,7 @@ fn test_chown_recursive_from_changes_entries() {
 }
 
 /// With -h, `--from` on a symlink operand changes the link and not its target.
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "openbsd")))]
 #[test]
 fn test_chown_from_changes_symlink_operand_itself() {
     let Some(other) = other_group() else {
