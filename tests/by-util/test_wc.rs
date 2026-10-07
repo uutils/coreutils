@@ -331,7 +331,8 @@ fn test_c_locale_multibyte_character_counts() {
         .stdout_is(format!("{expected_chars} input\n"));
 }
 
-#[cfg(unix)]
+// musl uses UTF-8 for non-C locales, even if the host locale command reports otherwise.
+#[cfg(all(unix, not(target_env = "musl")))]
 #[test]
 #[cfg_attr(
     wasi_runner,
