@@ -113,9 +113,6 @@ struct Context<'a> {
     /// The target path to which the directory will be copied.
     target: &'a Path,
 
-    /// Whether the target is an existing file. Cached to avoid repeated `stat` calls.
-    target_is_file: bool,
-
     /// The source path from which the directory will be copied.
     root: &'a Path,
 }
@@ -137,7 +134,6 @@ impl<'a> Context<'a> {
             env::current_dir()?
         };
         let root_path = current_dir.join(root);
-        let target_is_file = target.is_file();
         let root_parent = if target.exists() && !ends_with_curdir(root) {
             root_path.parent().map(ToOwned::to_owned)
         } else {
@@ -147,7 +143,6 @@ impl<'a> Context<'a> {
             current_dir,
             root_parent,
             target,
-            target_is_file,
             root,
         })
     }
@@ -172,19 +167,16 @@ impl<'a> Context<'a> {
 ///         source_absolute: "/tmp/a".into(),
 ///         source_relative: "a".into(),
 ///         local_to_target: "d/a".into(),
-///         target_is_file: false,
 ///     }
 ///     Entry {
 ///         source_absolute: "/tmp/a/b".into(),
 ///         source_relative: "a/b".into(),
 ///         local_to_target: "d/a/b".into(),
-///         target_is_file: false,
 ///     }
 ///     Entry {
 ///         source_absolute: "/tmp/a/b/c".into(),
 ///         source_relative: "a/b/c".into(),
 ///         local_to_target: "d/a/b/c".into(),
-///         target_is_file: false,
 ///     }
 /// ];
 /// ```
@@ -197,9 +189,6 @@ struct Entry {
 
     /// The path to the destination, relative to the target.
     local_to_target: PathBuf,
-
-    /// Whether the destination is a file.
-    target_is_file: bool,
 }
 
 impl Entry {
@@ -236,12 +225,10 @@ impl Entry {
         }
 
         let local_to_target = context.target.join(descendant);
-        let target_is_file = context.target_is_file;
         Ok(Self {
             source_absolute,
             source_relative,
             local_to_target,
-            target_is_file,
         })
     }
 }
@@ -275,34 +262,27 @@ fn copy_direntry(
         entry_is_dir_no_follow
     };
 
-    // `exists()` resolves symlinks, so a destination entry that is itself a
-    // symlink to a directory would look like an already-existing directory and
-    // be descended into -- writing the source subtree through the link and out
-    // of the destination tree. GNU refuses this ("cannot overwrite
-    // non-directory ... with directory"), so treat a symlink at the destination
-    // as the non-directory it is.
-    let dest_is_symlink = entry.local_to_target.is_symlink();
-
-    // If the source is a directory and the destination does not
-    // exist, ...
-    if source_is_dir && (dest_is_symlink || !entry.local_to_target.exists()) {
-        return if entry.target_is_file || dest_is_symlink {
-            Err(translate!("cp-error-cannot-overwrite-non-directory-with-directory").into())
-        } else {
-            build_dir(
-                &entry.local_to_target,
-                false,
-                options,
-                Some(&entry.source_absolute),
-            )?;
+    if source_is_dir {
+        // `exists()` resolves symlinks, so a destination entry that is itself
+        // a symlink to a directory would look like an already-existing
+        // directory and be descended into -- writing the source subtree
+        // through the link and out of the destination tree. GNU refuses this
+        // ("cannot overwrite non-directory ... with directory"), so treat a
+        // symlink at the destination as the non-directory it is.
+        let dest = &entry.local_to_target;
+        if dest.is_symlink() || (dest.exists() && !dest.is_dir()) {
+            return Err(CpError::CannotOverwriteNonDirectory(
+                dest.clone(),
+                entry.source_relative.clone(),
+            ));
+        }
+        if !dest.exists() {
+            build_dir(dest, false, options, Some(&entry.source_absolute))?;
             if options.verbose {
-                println!(
-                    "{}",
-                    context_for(&entry.source_relative, &entry.local_to_target)
-                );
+                println!("{}", context_for(&entry.source_relative, dest));
             }
-            Ok(true)
-        };
+            return Ok(true);
+        }
     }
 
     // If the source is not a directory, then we need to copy the file.
@@ -405,6 +385,16 @@ pub(crate) fn copy_directory(
         .into());
     }
 
+    // A directory cannot take the place of a file, nor of a symlink that
+    // does not lead to a directory: a dangling one would be followed and
+    // its target created.
+    if target.symlink_metadata().is_ok() && !target.is_dir() {
+        return Err(CpError::CannotOverwriteNonDirectory(
+            target.to_path_buf(),
+            root.to_path_buf(),
+        ));
+    }
+
     // If in `--parents` mode, create all the necessary ancestor directories.
     //
     // For example, if the command is `cp --parents a/b/c d`, that
@@ -469,10 +459,11 @@ pub(crate) fn copy_directory(
         let mut dirs_needing_permissions: Vec<DirNeedingPermissions> = Vec::new();
 
         // Traverse the contents of the directory, copying each one.
-        for direntry_result in WalkDir::new(root)
+        let mut walker = WalkDir::new(root)
             .same_file_system(options.one_file_system)
             .follow_links(options.dereference)
-        {
+            .into_iter();
+        while let Some(direntry_result) = walker.next() {
             match direntry_result {
                 Ok(direntry) => {
                     let direntry_type = direntry.file_type();
@@ -487,7 +478,7 @@ pub(crate) fn copy_directory(
                         };
                     let entry = Entry::new(&context, direntry_path, options.no_target_dir)?;
 
-                    let created = copy_direntry(
+                    let created = match copy_direntry(
                         progress_bar,
                         &entry,
                         entry_is_symlink,
@@ -498,7 +489,17 @@ pub(crate) fn copy_directory(
                         copied_destinations,
                         copied_files,
                         created_parent_dirs,
-                    )?;
+                    ) {
+                        Ok(created) => created,
+                        // The subtree has nowhere to go: report it, leave what is
+                        // there alone, and go on with the next entry, as GNU does.
+                        Err(err @ CpError::CannotOverwriteNonDirectory(..)) => {
+                            show!(err);
+                            walker.skip_current_dir();
+                            continue;
+                        }
+                        Err(err) => return Err(err),
+                    };
 
                     // We omit certain permissions when creating directories
                     // to prevent other users from accessing them before they're done.

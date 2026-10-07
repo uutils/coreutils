@@ -4544,7 +4544,43 @@ fn test_cp_dir_vs_file() {
         .arg(TEST_COPY_FROM_FOLDER)
         .arg(TEST_EXISTING_FILE)
         .fails()
-        .stderr_only("cp: cannot overwrite non-directory with directory\n");
+        .stderr_only(format!(
+            "cp: cannot overwrite non-directory '{TEST_EXISTING_FILE}' with directory '{TEST_COPY_FROM_FOLDER}'\n"
+        ));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_dir_vs_dangling_symlink() {
+    // A symlink that leads nowhere is not a directory to copy into: following
+    // it would create its target.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("src");
+    at.touch("src/file");
+    at.symlink_file("nowhere", "dangling");
+
+    ucmd.args(&["-r", "src", "dangling"])
+        .fails()
+        .stderr_only("cp: cannot overwrite non-directory 'dangling' with directory 'src'\n");
+    assert!(!at.dir_exists("nowhere"));
+}
+
+#[test]
+fn test_cp_recursive_dest_subdir_is_file() {
+    // A directory whose destination already exists as a file is reported
+    // and left alone; the other entries are still copied.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("src/sub");
+    at.write("src/sub/x", "x");
+    at.write("src/other", "other");
+    at.mkdir_all("dst/src");
+    at.write("dst/src/sub", "kept");
+
+    ucmd.args(&["-r", "src", "dst"])
+        .fails()
+        .stderr_only("cp: cannot overwrite non-directory 'dst/src/sub' with directory 'src/sub'\n");
+    assert_eq!(at.read("dst/src/sub"), "kept");
+    assert_eq!(at.read("dst/src/other"), "other");
 }
 
 #[test]
