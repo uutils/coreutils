@@ -14,6 +14,32 @@ use uutests::util::TestScenario;
 use uutests::util::run_ucmd_as_root;
 use uutests::util_name;
 
+#[test]
+fn test_mknod_hex_major_minor() {
+    new_ucmd!()
+        .arg("/dev/null")
+        .arg("p")
+        .arg("0x0")
+        .arg("0X0")
+        .fails_with_code(1)
+        .stderr_contains("mknod: Fifos do not have major and minor device numbers");
+    // not hex
+    new_ucmd!()
+        .arg("/dev/null")
+        .arg("p")
+        .arg("0x")
+        .arg("0x")
+        .fails_with_code(1)
+        .stderr_contains("invalid value");
+    new_ucmd!()
+        .arg("/dev/null")
+        .arg("p")
+        .arg("0xZZ")
+        .arg("0xZZ")
+        .fails_with_code(1)
+        .stderr_contains("invalid value");
+}
+
 //Reject 2^32+1 major/minor device number
 #[test]
 fn test_mknod_overflow_major_minor() {
