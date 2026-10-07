@@ -541,9 +541,8 @@ impl ChownExecutor {
                 *ret = 1;
                 if self.verbosity.level != VerbosityLevel::Silent {
                     show_error!(
-                        "cannot read directory {}: {}",
-                        dir_path.quote(),
-                        strip_errno(&e)
+                        "{}",
+                        translate!("perms-cannot-read-directory", "file" => dir_path.quote(), "error" => strip_errno(&e))
                     );
                 }
                 return;
@@ -627,12 +626,13 @@ impl ChownExecutor {
                     Ok(subdir_fd) => {
                         self.safe_traverse_dir(&subdir_fd, &entry_path, ret, ancestors);
                     }
+                    // A directory that does not open cannot be read.
                     Err(e) => {
                         *ret = 1;
                         if self.verbosity.level != VerbosityLevel::Silent {
                             show_error!(
                                 "{}",
-                                translate!("perms-cannot-access", "file" => entry_path.quote(), "error" => strip_errno(&e))
+                                translate!("perms-cannot-read-directory", "file" => entry_path.quote(), "error" => strip_errno(&e))
                             );
                         }
                     }
@@ -667,11 +667,21 @@ impl ChownExecutor {
             let entry = match entry {
                 Err(e) => {
                     ret = 1;
+                    if self.verbosity.level == VerbosityLevel::Silent {
+                        continue;
+                    }
                     if let Some(path) = e.path() {
+                        // A directory that can be reached but not listed is
+                        // reported as unreadable, like GNU does.
+                        let message = if e.io_error().is_some() && path.is_dir() {
+                            "perms-cannot-read-directory"
+                        } else {
+                            "perms-cannot-access"
+                        };
                         show_error!(
                             "{}",
                             translate!(
-                                "perms-cannot-access",
+                                message,
                                 "file" => path.quote(),
                                 "error" => if let Some(error) = e.io_error() {
                                     strip_errno(error)
@@ -799,7 +809,8 @@ impl ChownExecutor {
         0
     }
 
-    /// Try to open directory with error reporting
+    /// Try to open directory with error reporting: a directory that does
+    /// not open cannot be read.
     #[cfg(target_os = "linux")]
     fn try_open_dir(&self, path: &Path) -> Option<DirFd> {
         DirFd::open(path, SymlinkBehavior::Follow)
@@ -807,7 +818,7 @@ impl ChownExecutor {
                 if self.verbosity.level != VerbosityLevel::Silent {
                     show_error!(
                         "{}",
-                        translate!("perms-cannot-access", "file" => path.quote(), "error" => strip_errno(&e))
+                        translate!("perms-cannot-read-directory", "file" => path.quote(), "error" => strip_errno(&e))
                     );
                 }
             })
