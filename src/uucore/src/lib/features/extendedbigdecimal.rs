@@ -83,6 +83,7 @@ pub enum ExtendedBigDecimal {
 }
 
 impl From<f64> for ExtendedBigDecimal {
+    #[inline]
     fn from(val: f64) -> Self {
         if val.is_nan() {
             if val.is_sign_negative() {
@@ -105,26 +106,31 @@ impl From<f64> for ExtendedBigDecimal {
 }
 
 impl From<u8> for ExtendedBigDecimal {
+    #[inline]
     fn from(val: u8) -> Self {
         Self::BigDecimal(val.into())
     }
 }
 
 impl From<u32> for ExtendedBigDecimal {
+    #[inline]
     fn from(val: u32) -> Self {
         Self::BigDecimal(val.into())
     }
 }
 
 impl ExtendedBigDecimal {
+    #[inline]
     pub fn zero() -> Self {
         Self::BigDecimal(0.into())
     }
 
+    #[inline]
     pub fn one() -> Self {
         Self::BigDecimal(1.into())
     }
 
+    #[inline]
     pub fn to_biguint(&self) -> Option<BigUint> {
         match self {
             Self::BigDecimal(big_decimal) => {
@@ -141,9 +147,11 @@ impl ExtendedBigDecimal {
 }
 
 impl Zero for ExtendedBigDecimal {
+    #[inline]
     fn zero() -> Self {
         Self::BigDecimal(BigDecimal::zero())
     }
+    #[inline]
     fn is_zero(&self) -> bool {
         match self {
             Self::BigDecimal(n) => n.is_zero(),
@@ -154,6 +162,7 @@ impl Zero for ExtendedBigDecimal {
 }
 
 impl Default for ExtendedBigDecimal {
+    #[inline]
     fn default() -> Self {
         Self::zero()
     }
@@ -162,6 +171,7 @@ impl Default for ExtendedBigDecimal {
 impl Add for ExtendedBigDecimal {
     type Output = Self;
 
+    #[inline]
     fn add(self, other: Self) -> Self {
         match (self, other) {
             (Self::BigDecimal(m), Self::BigDecimal(n)) => Self::BigDecimal(m.add(n)),
@@ -185,6 +195,7 @@ impl Add for ExtendedBigDecimal {
 }
 
 impl PartialEq for ExtendedBigDecimal {
+    #[inline]
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::BigDecimal(m), Self::BigDecimal(n)) => m.eq(n),
@@ -212,6 +223,7 @@ impl PartialEq for ExtendedBigDecimal {
 }
 
 impl PartialOrd for ExtendedBigDecimal {
+    #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
             (Self::BigDecimal(m), Self::BigDecimal(n)) => m.partial_cmp(n),
@@ -238,6 +250,7 @@ impl PartialOrd for ExtendedBigDecimal {
 impl Neg for ExtendedBigDecimal {
     type Output = Self;
 
+    #[inline]
     fn neg(self) -> Self::Output {
         match self {
             Self::BigDecimal(bd) => {

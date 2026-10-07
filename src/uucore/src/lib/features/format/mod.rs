@@ -122,18 +122,21 @@ impl Error for FormatError {}
 impl UError for FormatError {}
 
 impl From<std::io::Error> for FormatError {
+    #[inline]
     fn from(value: std::io::Error) -> Self {
         Self::IoError(value)
     }
 }
 
 impl From<NonUtf8OsStrError> for FormatError {
+    #[inline]
     fn from(value: NonUtf8OsStrError) -> Self {
         Self::InvalidEncoding(value)
     }
 }
 
 impl Display for FormatError {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Everything quoted below is text the user typed and has to come back
         // unchanged, hence translate_text! rather than translate!.
@@ -214,6 +217,7 @@ pub trait FormatChar {
 }
 
 impl FormatChar for u8 {
+    #[inline]
     fn write(&self, mut writer: impl Write) -> std::io::Result<ControlFlow<()>> {
         writer.write_all(&[*self])?;
         Ok(ControlFlow::Continue(()))
@@ -221,6 +225,7 @@ impl FormatChar for u8 {
 }
 
 impl FormatChar for EscapedChar {
+    #[inline]
     fn write(&self, mut writer: impl Write) -> std::io::Result<ControlFlow<()>> {
         match self {
             Self::Byte(c) => {
@@ -239,6 +244,7 @@ impl FormatChar for EscapedChar {
 }
 
 impl<C: FormatChar> FormatItem<C> {
+    #[inline]
     pub fn write(
         &self,
         writer: impl Write,
@@ -252,6 +258,7 @@ impl<C: FormatChar> FormatItem<C> {
 }
 
 /// Parse a format string containing % directives and escape sequences
+#[inline]
 pub fn parse_spec_and_escape(
     fmt: &[u8],
 ) -> impl Iterator<Item = Result<FormatItem<EscapedChar>, FormatError>> + '_ {
@@ -292,6 +299,7 @@ pub fn parse_spec_and_escape(
 }
 
 /// Parse a format string containing % directives
+#[inline]
 pub fn parse_spec_only(
     fmt: &[u8],
 ) -> impl Iterator<Item = Result<FormatItem<u8>, FormatError>> + '_ {
@@ -320,6 +328,7 @@ pub fn parse_spec_only(
 }
 
 /// Parse a format string containing escape sequences
+#[inline]
 pub fn parse_escape_only(
     fmt: &[u8],
     zero_octal_parsing: OctalParsing,
@@ -357,6 +366,7 @@ pub fn parse_escape_only(
 /// printf("hello %s", &[FormatArgument::String("world".into())]).unwrap();
 /// // prints "hello world"
 /// ```
+#[inline]
 pub fn printf<'a>(
     format_string: impl AsRef<[u8]>,
     arguments: impl IntoIterator<Item = &'a FormatArgument>,
@@ -395,6 +405,7 @@ fn printf_writer<'a>(
 /// let s = std::str::from_utf8(&s).unwrap();
 /// assert_eq!(s, "hello world");
 /// ```
+#[inline]
 pub fn sprintf<'a>(
     format_string: impl AsRef<[u8]>,
     arguments: impl IntoIterator<Item = &'a FormatArgument>,
@@ -419,6 +430,7 @@ pub struct Format<F: Formatter<T>, T> {
 }
 
 impl<F: Formatter<T>, T> Format<F, T> {
+    #[inline]
     pub fn from_formatter(formatter: F) -> Self {
         Self {
             prefix: Vec::<u8>::new(),
@@ -428,6 +440,7 @@ impl<F: Formatter<T>, T> Format<F, T> {
         }
     }
 
+    #[inline]
     pub fn parse(format_string: impl AsRef<[u8]>) -> Result<Self, FormatError> {
         let mut iter = parse_spec_only(format_string.as_ref());
 
@@ -469,6 +482,7 @@ impl<F: Formatter<T>, T> Format<F, T> {
         })
     }
 
+    #[inline]
     pub fn fmt(&self, mut w: impl Write, f: T) -> std::io::Result<()> {
         w.write_all(&self.prefix)?;
         self.formatter.fmt(&mut w, f)?;

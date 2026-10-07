@@ -103,6 +103,7 @@ impl From<&str> for MetadataTimeField {
     /// Get a `MetadataTimeField` from a string, we expect the value
     /// to come from clap, and be constrained there (e.g. if Modification is
     /// not supported), and the default branch should not be reached.
+    #[inline]
     fn from(value: &str) -> Self {
         match value {
             "ctime" | "status" => Self::Change,
@@ -143,6 +144,7 @@ fn metadata_get_change_time(_md: &Metadata) -> Option<SystemTime> {
     None
 }
 
+#[inline]
 pub fn metadata_get_time(md: &Metadata, md_time: MetadataTimeField) -> Option<SystemTime> {
     match md_time {
         MetadataTimeField::Change => metadata_get_change_time(md),
@@ -249,6 +251,7 @@ impl MountInfo {
     target_os = "openbsd",
 ))]
 impl From<StatFs> for MountInfo {
+    #[inline]
     fn from(statfs: StatFs) -> Self {
         let dev_name = unsafe {
             // spell-checker:disable-next-line
@@ -373,6 +376,7 @@ use std::slice;
     ),
     expect(clippy::unnecessary_wraps)
 )]
+#[inline]
 pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
     {
@@ -438,6 +442,7 @@ pub struct FsUsage {
 impl FsUsage {
     #[cfg(unix)]
     #[allow(clippy::unnecessary_cast)]
+    #[inline]
     pub fn new(statvfs: StatFs) -> Self {
         {
             #[cfg(all(
@@ -531,6 +536,7 @@ impl FsMeta for StatFs {
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    #[inline]
     fn block_size(&self) -> i64 {
         #[cfg(all(
             not(target_env = "musl"),
@@ -573,18 +579,21 @@ impl FsMeta for StatFs {
         ))]
         return self.f_bsize.try_into().unwrap();
     }
+    #[inline]
     fn total_blocks(&self) -> u64 {
         #[cfg(target_pointer_width = "64")]
         return self.f_blocks;
         #[cfg(not(target_pointer_width = "64"))]
         return self.f_blocks.into();
     }
+    #[inline]
     fn free_blocks(&self) -> u64 {
         #[cfg(target_pointer_width = "64")]
         return self.f_bfree;
         #[cfg(not(target_pointer_width = "64"))]
         return self.f_bfree.into();
     }
+    #[inline]
     fn avail_blocks(&self) -> u64 {
         #[cfg(all(
             not(target_os = "freebsd"),
@@ -601,12 +610,14 @@ impl FsMeta for StatFs {
         #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
         return self.f_bavail.try_into().unwrap();
     }
+    #[inline]
     fn total_file_nodes(&self) -> u64 {
         #[cfg(target_pointer_width = "64")]
         return self.f_files;
         #[cfg(not(target_pointer_width = "64"))]
         return self.f_files.into();
     }
+    #[inline]
     fn free_file_nodes(&self) -> u64 {
         #[cfg(all(not(target_os = "freebsd"), target_pointer_width = "64"))]
         return self.f_ffree;
@@ -621,6 +632,7 @@ impl FsMeta for StatFs {
         target_os = "android",
         target_os = "freebsd"
     ))]
+    #[inline]
     fn fs_type(&self) -> i64 {
         #[cfg(all(
             not(any(target_env = "musl", target_env = "ohos")),
@@ -668,6 +680,7 @@ impl FsMeta for StatFs {
     }
     #[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "netbsd"))]
     #[allow(clippy::unnecessary_cast)]
+    #[inline]
     fn io_size(&self) -> u64 {
         #[cfg(target_os = "freebsd")]
         return self.f_iosize;
@@ -700,6 +713,7 @@ impl FsMeta for StatFs {
         target_os = "android",
         target_os = "openbsd"
     ))]
+    #[inline]
     fn fsid(&self) -> u64 {
         // Use type inference to determine the type of f_fsid
         // (libc::__fsid_t on Android, libc::fsid_t on other platforms)
@@ -724,6 +738,7 @@ impl FsMeta for StatFs {
         self.f_namelen as u64
     }
     #[cfg(target_vendor = "apple")]
+    #[inline]
     fn namelen(&self) -> u64 {
         1024
     }
@@ -753,6 +768,7 @@ impl FsMeta for StatFs {
 }
 
 #[cfg(unix)]
+#[inline]
 pub fn statfs(path: &OsStr) -> Result<StatFs, String> {
     #[cfg(unix)]
     let p = path.as_bytes();
@@ -779,6 +795,7 @@ pub fn statfs(path: &OsStr) -> Result<StatFs, String> {
 }
 
 #[cfg(unix)]
+#[inline]
 pub fn pretty_filetype(mode: mode_t, size: u64) -> String {
     match mode & S_IFMT {
         S_IFREG => {
@@ -800,6 +817,7 @@ pub fn pretty_filetype(mode: mode_t, size: u64) -> String {
     .to_owned()
 }
 
+#[inline]
 pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
     // spell-checker:disable
     match fstype {

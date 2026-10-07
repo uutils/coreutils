@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use itertools::Itertools as _;
 
 /// Create a temporary file with test data
+#[inline]
 pub fn create_test_file(data: &[u8], temp_dir: &Path) -> PathBuf {
     let file_path = temp_dir.join("test_data.txt");
     let file = File::create(&file_path).unwrap();
@@ -29,6 +30,7 @@ pub fn create_test_file(data: &[u8], temp_dir: &Path) -> PathBuf {
 
 /// Run a utility function directly with given arguments
 /// This calls the uumain function that returns i32 (like the fuzzing approach)
+#[inline]
 pub fn run_util_function<F>(util_func: F, args: &[&str]) -> i32
 where
     F: FnOnce(std::vec::IntoIter<std::ffi::OsString>) -> i32,
@@ -41,6 +43,7 @@ where
 }
 
 /// Prepare benchmark arguments for a utility function
+#[inline]
 pub fn get_bench_args(args: &[&dyn AsRef<std::ffi::OsStr>]) -> Vec<std::ffi::OsString> {
     // Prepend a dummy program name as argv[0] since clap expects it
     std::iter::once("benchmark".into())
@@ -50,6 +53,7 @@ pub fn get_bench_args(args: &[&dyn AsRef<std::ffi::OsStr>]) -> Vec<std::ffi::OsS
 
 /// Helper function to set up a temporary test file and leak the temporary directory
 /// so it persists for the duration of the benchmark
+#[inline]
 pub fn setup_test_file(data: &[u8]) -> PathBuf {
     let temp_dir = tempfile::tempdir().unwrap();
     let file_path = create_test_file(data, temp_dir.path());
@@ -61,6 +65,7 @@ pub fn setup_test_file(data: &[u8]) -> PathBuf {
 /// Generate test data with different characteristics for text processing utilities
 pub mod text_data {
     /// Generate test data with a specific size in MB and average line length
+    #[inline]
     pub fn generate_by_size(size_mb: usize, avg_line_length: usize) -> Vec<u8> {
         let total_size = size_mb * 1024 * 1024;
         let mut data = Vec::with_capacity(total_size);
@@ -89,6 +94,7 @@ pub mod text_data {
     }
 
     /// Generate test data by line count instead of size
+    #[inline]
     pub fn generate_by_lines(num_lines: usize, avg_line_length: usize) -> Vec<u8> {
         let mut data = Vec::new();
 
@@ -113,6 +119,7 @@ pub mod text_data {
     }
 
     /// Helper function to generate test data from a list of words
+    #[inline]
     pub fn generate_data_from_words(words: &[&str], num_lines: usize) -> Vec<u8> {
         let mut data = Vec::new();
         for i in 0..num_lines {
@@ -124,6 +131,7 @@ pub mod text_data {
     }
 
     /// Helper function to generate test data from a list of words without number suffix
+    #[inline]
     pub fn generate_data_from_words_simple(words: &[&str], num_lines: usize) -> Vec<u8> {
         let mut data = Vec::new();
         for i in 0..num_lines {
@@ -134,6 +142,7 @@ pub mod text_data {
     }
 
     /// Helper function to generate test data from a list of words with counter
+    #[inline]
     pub fn generate_data_from_words_with_counter(words: &[&str], num_lines: usize) -> Vec<u8> {
         let mut data = Vec::new();
         for i in 0..num_lines {
@@ -145,6 +154,7 @@ pub mod text_data {
     }
 
     /// Generate test data with ASCII-only text
+    #[inline]
     pub fn generate_ascii_data(num_lines: usize) -> Vec<u8> {
         let words = [
             "apple",
@@ -178,6 +188,7 @@ pub mod text_data {
     }
 
     /// Generate simple ASCII data with line numbers
+    #[inline]
     pub fn generate_ascii_data_simple(num_lines: usize) -> Vec<u8> {
         let mut data = Vec::new();
         for i in 0..num_lines {
@@ -188,6 +199,7 @@ pub mod text_data {
     }
 
     /// Generate test data with accented characters that require locale-aware sorting
+    #[inline]
     pub fn generate_accented_data(num_lines: usize) -> Vec<u8> {
         let words = [
             // French words with accents
@@ -229,6 +241,7 @@ pub mod text_data {
     }
 
     /// Generate test data with mixed ASCII and non-ASCII characters
+    #[inline]
     pub fn generate_mixed_data(num_lines: usize) -> Vec<u8> {
         let words = [
             // Mix of ASCII and accented words
@@ -263,6 +276,7 @@ pub mod text_data {
     }
 
     /// Generate mixed locale data with counter
+    #[inline]
     pub fn generate_mixed_locale_data(num_lines: usize) -> Vec<u8> {
         let mixed_strings = [
             "zebra", "äpfel", "banana", "öl", "cat", "über", "dog", "zürich", "elephant", "café",
@@ -272,6 +286,7 @@ pub mod text_data {
     }
 
     /// Generate German locale-specific data
+    #[inline]
     pub fn generate_german_locale_data(num_lines: usize) -> Vec<u8> {
         let german_words = [
             "Ärger", "Öffnung", "Über", "Zucker", "Bär", "Föhn", "Größe", "Höhe", "Käse", "Löwe",
@@ -282,6 +297,7 @@ pub mod text_data {
     }
 
     /// Generate test data with uppercase/lowercase variations
+    #[inline]
     pub fn generate_case_sensitive_data(num_lines: usize) -> Vec<u8> {
         let base_words = [
             "apple", "Apple", "APPLE", "banana", "Banana", "BANANA", "café", "Café", "CAFÉ",
@@ -292,6 +308,7 @@ pub mod text_data {
     }
 
     /// Generate numeric data for benchmarking (simple sequential numbers)
+    #[inline]
     pub fn generate_numbers(count: usize) -> String {
         (1..=count)
             .map(|n| n.to_string())
@@ -310,6 +327,7 @@ pub mod binary_data {
     ///
     /// Creates a file of the specified size (in MB) filled with the given byte pattern.
     /// This is useful for benchmarking utilities that work with large binary files like dd, cp, etc.
+    #[inline]
     pub fn create_file(path: &Path, size_mb: usize, pattern: u8) {
         let buffer = vec![pattern; size_mb * 1024 * 1024];
         let mut file = File::create(path).unwrap();
@@ -327,6 +345,7 @@ pub mod fs_utils {
     ///
     /// This is a convenience function for cleaning up between benchmark iterations.
     /// It handles both files and directories, and is a no-op if the path doesn't exist.
+    #[inline]
     pub fn remove_path(path: &Path) {
         if !path.exists() {
             return;
@@ -350,6 +369,7 @@ pub mod fs_tree {
     ///
     /// Creates a tree with specified depth, number of directories per level, and files per directory.
     /// This creates a realistic filesystem structure for testing recursive operations.
+    #[inline]
     pub fn create_balanced_tree(
         base_dir: &Path,
         depth: usize,
@@ -378,6 +398,7 @@ pub mod fs_tree {
     ///
     /// This creates a flat structure with many files and directories at a shallow depth,
     /// useful for benchmarking operations that need to traverse many entries quickly.
+    #[inline]
     pub fn create_wide_tree(base_dir: &Path, total_files: usize, total_dirs: usize) {
         // Create many files in root
         for file_idx in 0..total_files {
@@ -399,6 +420,7 @@ pub mod fs_tree {
     ///
     /// This creates a linear chain of deeply nested directories, useful for testing
     /// recursion depth handling and stack usage.
+    #[inline]
     pub fn create_deep_tree(base_dir: &Path, depth: usize, files_per_level: usize) {
         let mut current_dir = base_dir.to_path_buf();
 
@@ -421,6 +443,7 @@ pub mod fs_tree {
     ///
     /// Creates files with different extensions, sizes, and permissions (on Unix).
     /// Useful for testing file type detection, permission handling, and formatting.
+    #[inline]
     pub fn create_mixed_tree(base_dir: &Path) {
         let extensions = ["txt", "log", "dat", "tmp", "bak", "cfg"];
         let sizes = [0, 100, 1024, 10240];

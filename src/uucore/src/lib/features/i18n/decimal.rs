@@ -31,6 +31,7 @@ fn get_decimal_separator(loc: Locale) -> String {
 ///  Say we need to format 1000.5
 ///     en_US: 1,000.5 -> decimal separator is '.'
 ///     fr_FR: 1 000,5 -> decimal separator is ','
+#[inline]
 pub fn locale_decimal_separator() -> &'static str {
     static DECIMAL_SEP: OnceLock<String> = OnceLock::new();
 
@@ -57,6 +58,7 @@ fn get_grouping_separator(loc: Locale) -> String {
 ///  Say we need to format 1,000
 ///     en_US: 1,000 -> grouping separator is ','
 ///     fr_FR: 1 000 -> grouping separator is '\u{202f}'
+#[inline]
 pub fn locale_grouping_separator() -> &'static str {
     static GROUPING_SEP: OnceLock<String> = OnceLock::new();
 

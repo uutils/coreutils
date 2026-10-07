@@ -8,6 +8,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+#[inline]
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let out_dir = env::var("OUT_DIR")?;
 
@@ -23,6 +24,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Generate optimized lookup function instead of HashMap
     writeln!(embedded_file, "#[expect(clippy::match_same_arms)]")?; // needed for dir and vdir aliases for ls
+    writeln!(embedded_file, "#[inline]")?;
     writeln!(
         embedded_file,
         "pub fn get_embedded_locale(key: &str) -> Option<&'static str> {{"

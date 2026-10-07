@@ -186,6 +186,7 @@ use std::sync::{LazyLock, atomic::Ordering};
 /// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
 /// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
 #[cfg(unix)]
+#[inline]
 pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
     unsafe {
         sigaction(
@@ -202,6 +203,7 @@ pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
     Ok(())
 }
 
+#[inline]
 pub fn get_canonical_util_name(util_name: &str) -> &str {
     // remove the "uu_" prefix
     let util_name = &util_name[3..];
@@ -283,6 +285,7 @@ macro_rules! crate_version {
 /// all occurrences of `{}` with the execution phrase and returns the resulting
 /// `String`. It does **not** support more advanced formatting features such
 /// as `{0}`.
+#[inline]
 pub fn format_usage(s: &str) -> String {
     let s = s.replace('\n', &format!("\n{}", " ".repeat(7)));
     s.replace("{}", execution_phrase())
@@ -309,6 +312,7 @@ pub fn format_usage(s: &str) -> String {
 /// let app = Command::new("myutil")
 ///     .help_template(localized_help_template("myutil"));
 /// ```
+#[inline]
 pub fn localized_help_template(util_name: &str) -> clap::builder::StyledStr {
     use std::io::IsTerminal;
 
@@ -327,6 +331,7 @@ pub fn localized_help_template(util_name: &str) -> clap::builder::StyledStr {
 
 /// Create a localized help template with explicit color control
 /// This ensures color detection consistency between clap and our template
+#[inline]
 pub fn localized_help_template_with_colors(
     util_name: &str,
     colors_enabled: bool,
@@ -364,12 +369,14 @@ pub fn localized_help_template_with_colors(
 
 /// Used to check if the utility is the second argument.
 /// Used to check if we were called as a multicall binary (`coreutils <utility>`)
+#[inline]
 pub fn get_utility_is_second_arg() -> bool {
     macros::UTILITY_IS_SECOND_ARG.load(Ordering::SeqCst)
 }
 
 /// Change the value of `UTILITY_IS_SECOND_ARG` to true
 /// Used to specify that the utility is the second argument.
+#[inline]
 pub fn set_utility_is_second_arg() {
     macros::UTILITY_IS_SECOND_ARG.store(true, Ordering::SeqCst);
 }
@@ -397,6 +404,7 @@ static UTIL_NAME: LazyLock<String> = LazyLock::new(|| {
 });
 
 /// Derive the utility name.
+#[inline]
 pub fn util_name() -> &'static str {
     &UTIL_NAME
 }
@@ -414,6 +422,7 @@ static EXECUTION_PHRASE: LazyLock<String> = LazyLock::new(|| {
 });
 
 /// Derive the complete execution phrase for "usage".
+#[inline]
 pub fn execution_phrase() -> &'static str {
     &EXECUTION_PHRASE
 }
@@ -424,11 +433,13 @@ pub fn execution_phrase() -> &'static str {
 /// The collected `Vec<String>` can be lossy or ignore invalid encoding.
 pub trait Args: Iterator<Item = OsString> + Sized {
     /// Collects the iterator into a `Vec<String>`, lossily converting the `OsString`s to `Strings`.
+    #[inline]
     fn collect_lossy(self) -> Vec<String> {
         self.map(|s| s.to_string_lossy().into_owned()).collect()
     }
 
     /// Collects the iterator into a `Vec<String>`, removing any elements that contain invalid encoding.
+    #[inline]
     fn collect_ignore(self) -> Vec<String> {
         self.filter_map(|s| s.into_string().ok()).collect()
     }
@@ -438,6 +449,7 @@ impl<T: Iterator<Item = OsString> + Sized> Args for T {}
 
 /// Returns an iterator over the command line arguments as `OsString`s.
 /// args_os() can be expensive to call
+#[inline]
 pub fn args_os() -> impl Iterator<Item = OsString> {
     ARGV.iter().cloned()
 }
@@ -445,11 +457,13 @@ pub fn args_os() -> impl Iterator<Item = OsString> {
 /// Returns an iterator over the command line arguments as `OsString`s, filtering out empty arguments.
 /// This is useful for handling cases where extra whitespace or empty arguments are present.
 /// args_os_filtered() can be expensive to call
+#[inline]
 pub fn args_os_filtered() -> impl Iterator<Item = OsString> {
     ARGV.iter().filter(|arg| !arg.is_empty()).cloned()
 }
 
 /// Read a line from stdin and check whether the first character is `'y'` or `'Y'`
+#[inline]
 pub fn read_yes() -> bool {
     let mut s = String::new();
     std::io::stdin().read_line(&mut s).is_ok() && matches!(s.chars().next(), Some('y' | 'Y'))
@@ -461,6 +475,7 @@ pub struct NonUtf8OsStrError {
 }
 
 impl std::fmt::Display for NonUtf8OsStrError {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use os_display::Quotable;
         let quoted = self.input_lossy_string.quote();
@@ -478,6 +493,7 @@ impl error::UError for NonUtf8OsStrError {}
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the string can't be coerced to UTF-8.
 #[cfg_attr(any(unix, target_os = "wasi"), expect(clippy::unnecessary_wraps))]
+#[inline]
 pub fn os_str_as_bytes(os_string: &OsStr) -> Result<&[u8], NonUtf8OsStrError> {
     #[cfg(any(unix, target_os = "wasi"))]
     return Ok(os_string.as_encoded_bytes());
@@ -495,6 +511,7 @@ pub fn os_str_as_bytes(os_string: &OsStr) -> Result<&[u8], NonUtf8OsStrError> {
 ///
 /// This is always lossless on unix platforms,
 /// and wraps [`OsStr::to_string_lossy`] on non-unix platforms.
+#[inline]
 pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<'_, [u8]> {
     #[cfg(any(unix, target_os = "wasi"))]
     return Cow::from(os_string.as_encoded_bytes());
@@ -514,6 +531,7 @@ pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<'_, [u8]> {
     any(unix, all(target_os = "wasi", target_env = "p1")),
     expect(clippy::unnecessary_wraps)
 )]
+#[inline]
 pub fn os_str_from_bytes(bytes: &[u8]) -> error::UResult<&OsStr> {
     #[cfg(any(unix, all(target_os = "wasi", target_env = "p1")))]
     return Ok(OsStr::from_bytes(bytes));
@@ -532,6 +550,7 @@ pub fn os_str_from_bytes(bytes: &[u8]) -> error::UResult<&OsStr> {
     any(unix, all(target_os = "wasi", target_env = "p1")),
     expect(clippy::unnecessary_wraps)
 )]
+#[inline]
 pub fn os_string_from_vec(vec: Vec<u8>) -> error::UResult<OsString> {
     #[cfg(any(unix, all(target_os = "wasi", target_env = "p1")))]
     return Ok(OsString::from_vec(vec));
@@ -550,6 +569,7 @@ pub fn os_string_from_vec(vec: Vec<u8>) -> error::UResult<OsString> {
     any(unix, all(target_os = "wasi", target_env = "p1")),
     expect(clippy::unnecessary_wraps)
 )]
+#[inline]
 pub fn os_string_to_vec(s: OsString) -> error::UResult<Vec<u8>> {
     #[cfg(any(unix, all(target_os = "wasi", target_env = "p1")))]
     let v = s.into_vec();
@@ -594,6 +614,7 @@ fn read_byte_lines<R: std::io::Read>(
 ///
 /// On platforms where `OsString` cannot contain arbitrary bytes,
 /// non-UTF8 inputs are reported as an error.
+#[inline]
 pub fn read_os_string_lines<R: std::io::Read>(
     buf_reader: BufReader<R>,
 ) -> impl Iterator<Item = error::UResult<OsString>> {
@@ -641,18 +662,21 @@ pub enum CharByte {
 }
 
 impl From<char> for CharByte {
+    #[inline]
     fn from(value: char) -> Self {
         Self::Char(value)
     }
 }
 
 impl From<u8> for CharByte {
+    #[inline]
     fn from(value: u8) -> Self {
         Self::Byte(value)
     }
 }
 
 impl From<&u8> for CharByte {
+    #[inline]
     fn from(value: &u8) -> Self {
         Self::Byte(*value)
     }
@@ -692,6 +716,7 @@ pub struct CharByteIterator<'a> {
 impl<'a> CharByteIterator<'a> {
     /// Make a `CharByteIterator` from a byte slice.
     /// [`CharByteIterator`]
+    #[inline]
     pub fn new(input: &'a [u8]) -> Self {
         Self {
             iter: Box::new(input.utf8_chunks().flat_map(Utf8ChunkIterator::from)),
@@ -702,6 +727,7 @@ impl<'a> CharByteIterator<'a> {
 impl Iterator for CharByteIterator<'_> {
     type Item = CharByte;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
     }
@@ -712,6 +738,7 @@ pub trait IntoCharByteIterator<'a> {
 }
 
 impl<'a> IntoCharByteIterator<'a> for &'a [u8] {
+    #[inline]
     fn iter_char_bytes(self) -> CharByteIterator<'a> {
         CharByteIterator::new(self)
     }

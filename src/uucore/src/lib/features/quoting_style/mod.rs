@@ -106,6 +106,7 @@ impl QuotingStyle {
     ///
     /// > This is a no-op for variants others than [`QuotingStyle::Shell`]
     /// > and [`QuotingStyle::Literal`].
+    #[inline]
     pub fn show_control(self, show_control: bool) -> Self {
         use QuotingStyle::*;
         match self {
@@ -126,6 +127,7 @@ impl QuotingStyle {
     /// Set the `always_quote` field of the quoting style.
     ///
     /// > This is a no-op for all variants except [`QuotingStyle::Shell`].
+    #[inline]
     pub fn always_quote(self, always_quote: bool) -> Self {
         match self {
             Self::Shell {
@@ -145,6 +147,7 @@ impl QuotingStyle {
     ///
     /// Used for e.g., the `QUOTING_STYLE` environment variable and the
     /// `--quoting-style` option of `ls`.
+    #[inline]
     pub fn parse(s: &str) -> Option<Self> {
         Some(match s {
             "literal" => Self::LITERAL,
@@ -162,6 +165,7 @@ impl QuotingStyle {
 }
 
 impl fmt::Display for QuotingStyle {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             Self::Shell {
@@ -188,6 +192,7 @@ impl fmt::Display for QuotingStyle {
 /// Retrieve the `QUOTING_STYLE` environment variable. If present, parse it
 /// through [`QuotingStyle::parse`], and write a standard error message to
 /// stderr in case of an invalid value.
+#[inline]
 pub fn quoting_style_from_env() -> Option<QuotingStyle> {
     // If variable is not set, return None quietly.
     let style = std::env::var_os("QUOTING_STYLE")?;
@@ -303,6 +308,7 @@ fn escape_name_inner(
 }
 
 /// Escape a filename with respect to the given [`QuotingStyle`].
+#[inline]
 pub fn escape_name(name: &OsStr, style: QuotingStyle, encoding: UEncoding) -> OsString {
     let name = crate::os_str_as_bytes_lossy(name);
     crate::os_string_from_vec(escape_name_inner(&name, style, false, encoding))
@@ -336,6 +342,7 @@ pub fn locale_aware_c_single_escape(name: impl AsRef<OsStr>) -> String {
 /// Escape a directory name with respect to the given style.
 /// This is mainly meant to be used for ls' directory name printing and is not
 /// likely to be used elsewhere.
+#[inline]
 pub fn escape_dir_name(dir_name: &OsStr, style: QuotingStyle, encoding: UEncoding) -> OsString {
     let name = crate::os_str_as_bytes_lossy(dir_name);
     crate::os_string_from_vec(escape_name_inner(&name, style, true, encoding))
@@ -343,6 +350,7 @@ pub fn escape_dir_name(dir_name: &OsStr, style: QuotingStyle, encoding: UEncodin
 }
 
 /// Retrieve the encoding from the locale and pass it to [`escape_dir_name`].
+#[inline]
 pub fn locale_aware_escape_dir_name(name: &OsStr, style: QuotingStyle) -> OsString {
     escape_dir_name(name, style, i18n::get_ctype_encoding())
 }

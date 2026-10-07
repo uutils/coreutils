@@ -90,6 +90,7 @@ pub struct ErrorFormatter<'a> {
 }
 
 impl<'a> ErrorFormatter<'a> {
+    #[inline]
     pub fn new(util_name: &'a str) -> Self {
         Self {
             color_mgr: ColorManager::from_env(),
@@ -103,6 +104,7 @@ impl<'a> ErrorFormatter<'a> {
     }
 
     /// Print error with optional callback before exit
+    #[inline]
     pub fn print_error_and_exit_with_callback<F>(
         &self,
         err: &Error,
@@ -118,6 +120,7 @@ impl<'a> ErrorFormatter<'a> {
     }
 
     /// Print error and return exit code (no exit call)
+    #[inline]
     pub fn print_error(&self, err: &Error, exit_code: i32) -> i32 {
         match err.kind() {
             ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => self.handle_display_errors(err),
@@ -392,6 +395,7 @@ impl<'a> ErrorFormatter<'a> {
 /// let args = vec!["myutil", "--help"];
 /// let result = handle_clap_result(cmd, args);
 /// ```
+#[inline]
 pub fn handle_clap_result<I, T>(cmd: Command, itr: I) -> UResult<ArgMatches>
 where
     I: IntoIterator<Item = T>,
@@ -420,6 +424,7 @@ where
 /// The parsed arguments, and the command line as typed — `None` when
 /// diagnostics are off, so that nothing is copied for a report no one will
 /// see.
+#[inline]
 pub fn handle_clap_result_with_diagnostics(
     cmd: Command,
     args: Vec<OsString>,
@@ -464,6 +469,7 @@ pub fn handle_clap_result_with_diagnostics(
 /// let args = vec!["myutil", "--invalid"];
 /// let result = handle_clap_result_with_exit_code(cmd, args, 125);
 /// ```
+#[inline]
 pub fn handle_clap_result_with_exit_code<I, T>(
     cmd: Command,
     itr: I,
@@ -511,6 +517,7 @@ where
 ///     Err(e) => handle_clap_error_with_exit_code(e, 1),
 /// }
 /// ```
+#[inline]
 pub fn handle_clap_error_with_exit_code(err: Error, exit_code: i32) -> ! {
     let formatter = ErrorFormatter::new(crate::util_name());
     formatter.print_error_and_exit(&err, exit_code);
@@ -548,6 +555,7 @@ pub fn handle_clap_error_with_exit_code(err: Error, exit_code: i32) -> ! {
 ///     .arg(clap::Arg::new("input").short('i'));
 /// let configured_cmd = configure_localized_command(cmd);
 /// ```
+#[inline]
 pub fn configure_localized_command(mut cmd: Command) -> Command {
     let color_choice = get_color_choice();
     cmd = cmd.color(color_choice);

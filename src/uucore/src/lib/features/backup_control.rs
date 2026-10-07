@@ -156,6 +156,7 @@ pub enum BackupError {
 }
 
 impl UError for BackupError {
+    #[inline]
     fn code(&self) -> i32 {
         match self {
             Self::BackupImpossible() => 2,
@@ -163,6 +164,7 @@ impl UError for BackupError {
         }
     }
 
+    #[inline]
     fn usage(&self) -> bool {
         // Suggested by clippy.
         matches!(
@@ -175,6 +177,7 @@ impl UError for BackupError {
 impl Error for BackupError {}
 
 impl Display for BackupError {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidArgument(arg, origin) => write!(
@@ -211,6 +214,7 @@ pub mod arguments {
     pub static OPT_SUFFIX: &str = "backupopt_suffix";
 
     /// '--backup' argument
+    #[inline]
     pub fn backup() -> clap::Arg {
         clap::Arg::new(OPT_BACKUP)
             .long("backup")
@@ -222,6 +226,7 @@ pub mod arguments {
     }
 
     /// '-b' argument
+    #[inline]
     pub fn backup_no_args() -> clap::Arg {
         clap::Arg::new(OPT_BACKUP_NO_ARG)
             .short('b')
@@ -230,6 +235,7 @@ pub mod arguments {
     }
 
     /// '-S, --suffix' argument
+    #[inline]
     pub fn suffix() -> clap::Arg {
         clap::Arg::new(OPT_SUFFIX)
             .short('S')
@@ -251,6 +257,7 @@ pub mod arguments {
 ///
 /// This function directly takes [`ArgMatches`] as argument and looks for
 /// the '-S' and '--suffix' arguments itself.
+#[inline]
 pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
     let supplied_suffix = matches.get_one::<String>(arguments::OPT_SUFFIX);
     let suffix = if let Some(suffix) = supplied_suffix {
@@ -343,6 +350,7 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 ///     show!(err);
 /// }
 /// ```
+#[inline]
 pub fn determine_backup_mode(env_ctl: Option<String>, matches: &ArgMatches) -> UResult<BackupMode> {
     if matches.contains_id(arguments::OPT_BACKUP) {
         // Use method to determine the type of backups to make. When this option
@@ -422,6 +430,7 @@ fn match_method(method: &str, origin: &str) -> UResult<BackupMode> {
     }
 }
 
+#[inline]
 pub fn get_backup_path<S: AsRef<OsStr>>(
     backup_mode: BackupMode,
     backup_path: &Path,
@@ -510,6 +519,7 @@ fn existing_backup_path<S: AsRef<OsStr>>(path: &Path, suffix: S) -> PathBuf {
 /// ));
 /// ```
 ///
+#[inline]
 pub fn backup_would_destroy_source(
     source: &Path,
     target: &Path,

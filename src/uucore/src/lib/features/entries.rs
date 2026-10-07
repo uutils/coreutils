@@ -81,6 +81,7 @@ unsafe extern "C" {
 /// > history of a process and its parents could affect the details of
 /// > the result.)
 #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
+#[inline]
 pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<rustix::process::RawGid>> {
     let groups = rustix::process::getgroups()
         .map(|g| g.into_iter().map(rustix::fs::Gid::as_raw).collect())?;
@@ -184,6 +185,7 @@ impl Passwd {
     /// not update `ngroups` if `ngroups` is too small. Therefore, if not
     /// updated by `getgrouplist`, `ngroups` needs to be increased in a
     /// loop until `getgrouplist` stops returning -1.
+    #[inline]
     pub fn belongs_to(&self) -> Vec<gid_t> {
         let mut ngroups: c_int = 8;
         let mut ngroups_old: c_int;
@@ -255,6 +257,7 @@ static PW_LOCK: Mutex<()> = Mutex::new(());
 macro_rules! f {
     ($fnam:ident, $fid:ident, $t:ident, $st:ident) => {
         impl Locate<$t> for $st {
+            #[inline]
             fn locate(k: $t) -> IOResult<Self> {
                 let _guard = PW_LOCK.lock();
                 // SAFETY: We're holding PW_LOCK.
@@ -278,6 +281,7 @@ macro_rules! f {
         }
 
         impl<'a> Locate<&'a str> for $st {
+            #[inline]
             fn locate(k: &'a str) -> IOResult<Self> {
                 let _guard = PW_LOCK.lock();
                 // SAFETY: We're holding PW_LOCK.

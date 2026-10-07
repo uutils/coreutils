@@ -60,6 +60,7 @@ pub struct Verbosity {
 }
 
 impl Default for Verbosity {
+    #[inline]
     fn default() -> Self {
         Self {
             groups_only: false,
@@ -89,6 +90,7 @@ fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IORes
 /// Perform the change of owner on a path
 /// with the various options
 /// and error messages management
+#[inline]
 pub fn wrap_chown<P: AsRef<Path>>(
     path: P,
     meta: &Metadata,
@@ -218,6 +220,7 @@ pub struct ChownExecutor {
 }
 
 #[cfg(test)]
+#[inline]
 pub fn check_root(path: &Path, would_recurse_symlink: bool) -> bool {
     is_root(path, would_recurse_symlink)
 }
@@ -267,6 +270,7 @@ fn fd_is(dir_fd: &DirFd, meta: &Metadata) -> IOResult<bool> {
     Ok(opened == FileInfo::new(meta.dev(), meta.ino()))
 }
 
+#[inline]
 pub fn get_metadata(file: &Path, follow: bool) -> std::io::Result<Metadata> {
     if follow {
         file.metadata()
@@ -276,6 +280,7 @@ pub fn get_metadata(file: &Path, follow: bool) -> std::io::Result<Metadata> {
 }
 
 impl ChownExecutor {
+    #[inline]
     pub fn exec(&self) -> UResult<()> {
         use std::io::Write;
         let mut ret = 0;
@@ -916,6 +921,7 @@ type GidUidFilterOwnerParser = fn(&ArgMatches) -> UResult<GidUidOwnerFilter>;
 
 /// Determines symbolic link traversal and recursion settings based on flags.
 /// Returns the updated `dereference` and `traverse_symlinks` values.
+#[inline]
 pub fn configure_symlink_and_recursion(
     matches: &ArgMatches,
     default_traverse_symlinks: TraverseSymlinks,
@@ -961,6 +967,7 @@ pub fn configure_symlink_and_recursion(
 /// from `ArgMatches`.
 /// `groups_only` determines whether verbose output will only mention the group.
 #[allow(clippy::cognitive_complexity)]
+#[inline]
 pub fn chown_base(
     mut command: Command,
     args: impl crate::Args,
@@ -1048,6 +1055,7 @@ pub fn chown_base(
     executor.exec()
 }
 
+#[inline]
 pub fn common_args() -> Vec<Arg> {
     vec![
         Arg::new(traverse::TRAVERSE)

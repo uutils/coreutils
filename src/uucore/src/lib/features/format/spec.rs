@@ -143,6 +143,7 @@ impl Flags {
 }
 
 impl Spec {
+    #[inline]
     pub fn parse<'a>(rest: &mut &'a [u8]) -> Result<Self, &'a [u8]> {
         // Based on the C++ reference and the Single UNIX Specification,
         // the spec format looks like:
@@ -335,6 +336,7 @@ impl Spec {
         length
     }
 
+    #[inline]
     pub fn write(
         &self,
         mut writer: impl Write,

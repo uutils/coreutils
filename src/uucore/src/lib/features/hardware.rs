@@ -67,6 +67,7 @@ pub struct InvalidHardwareFeature;
 impl TryFrom<&str> for HardwareFeature {
     type Error = InvalidHardwareFeature;
 
+    #[inline]
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         use HardwareFeature::*;
         match value {
@@ -137,6 +138,7 @@ pub struct CpuFeatures {
     set: BTreeSet<HardwareFeature>,
 }
 impl CpuFeatures {
+    #[inline]
     pub fn detect() -> &'static Self {
         static FEATURES: OnceLock<CpuFeatures> = OnceLock::new();
         FEATURES.get_or_init(Self::detect_impl)
@@ -160,10 +162,12 @@ impl CpuFeatures {
 }
 
 impl HasHardwareFeatures for CpuFeatures {
+    #[inline]
     fn has_feature(&self, feat: HardwareFeature) -> bool {
         self.set.contains(&feat)
     }
 
+    #[inline]
     fn iter_features(&self) -> impl Iterator<Item = HardwareFeature> {
         self.set.iter().copied()
     }
@@ -198,6 +202,7 @@ impl SimdPolicy {
     ///     println!("SIMD disabled by: {:?}", policy.disabled_features());
     /// }
     /// ```
+    #[inline]
     pub fn detect() -> &'static Self {
         static POLICY: OnceLock<SimdPolicy> = OnceLock::new();
         POLICY.get_or_init(Self::detect_impl)
@@ -215,20 +220,24 @@ impl SimdPolicy {
     }
 
     /// Returns true if any SIMD feature remains enabled after applying GLIBC_TUNABLES.
+    #[inline]
     pub fn allows_simd(&self) -> bool {
         self.iter_features().next().is_some()
     }
 
+    #[inline]
     pub fn disabled_features(&self) -> Vec<HardwareFeature> {
         self.disabled_by_env.iter().copied().collect()
     }
 }
 
 impl HasHardwareFeatures for SimdPolicy {
+    #[inline]
     fn has_feature(&self, feat: HardwareFeature) -> bool {
         self.hardware_features.has_feature(feat) && !self.disabled_by_env.contains(&feat)
     }
 
+    #[inline]
     fn iter_features(&self) -> impl Iterator<Item = HardwareFeature> {
         self.hardware_features
             .set

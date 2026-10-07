@@ -298,11 +298,13 @@ pub enum SystemdRecordType {
 
 impl SystemdLoginRecord {
     /// Check if this is a user process record
+    #[inline]
     pub fn is_user_process(&self) -> bool {
         !self.user.is_empty() && self.record_type == SystemdRecordType::UserProcess
     }
 
     /// Get login time as time::OffsetDateTime compatible with utmpx
+    #[inline]
     pub fn login_time_offset(&self) -> time::OffsetDateTime {
         let duration = self
             .login_time
@@ -322,6 +324,7 @@ impl SystemdLoginRecord {
 
 /// Read login records from systemd-logind using safe wrapper functions
 /// This matches the approach used by GNU coreutils read_utmp_from_systemd()
+#[inline]
 pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
     let mut records = Vec::new();
 
@@ -524,37 +527,44 @@ pub struct SystemdUtmpxCompat {
 
 impl SystemdUtmpxCompat {
     /// Create new instance from a SystemdLoginRecord
+    #[inline]
     pub fn new(record: SystemdLoginRecord) -> Self {
         Self { record }
     }
 
     /// A.K.A. ut.ut_type
+    #[inline]
     pub fn record_type(&self) -> i16 {
         self.record.record_type as i16
     }
 
     /// A.K.A. ut.ut_pid
+    #[inline]
     pub fn pid(&self) -> i32 {
         self.record.pid as i32
     }
 
     /// A.K.A. ut.ut_id
+    #[inline]
     pub fn terminal_suffix(&self) -> String {
         // Extract last part of session ID or use session ID
         self.record.session_id.clone()
     }
 
     /// A.K.A. ut.ut_user
+    #[inline]
     pub fn user(&self) -> String {
         self.record.user.clone()
     }
 
     /// A.K.A. ut.ut_host
+    #[inline]
     pub fn host(&self) -> String {
         self.record.host.clone()
     }
 
     /// A.K.A. ut.ut_line
+    #[inline]
     pub fn tty_device(&self) -> String {
         // Return raw device name for device access if available, otherwise formatted seat_or_tty
         if self.record.raw_device.is_empty() {
@@ -565,21 +575,25 @@ impl SystemdUtmpxCompat {
     }
 
     /// Login time
+    #[inline]
     pub fn login_time(&self) -> time::OffsetDateTime {
         self.record.login_time_offset()
     }
 
     /// Exit status (not available from systemd)
+    #[inline]
     pub fn exit_status(&self) -> (i16, i16) {
         (0, 0) // Not available from systemd
     }
 
     /// Check if this is a user process record
+    #[inline]
     pub fn is_user_process(&self) -> bool {
         self.record.is_user_process()
     }
 
     /// Canonical host name
+    #[inline]
     pub fn canon_host(&self) -> String {
         // Simple implementation - just return the host as-is
         // Could be enhanced with DNS lookup like the original
@@ -595,6 +609,7 @@ pub struct SystemdUtmpxIter {
 
 impl SystemdUtmpxIter {
     /// Create new instance and read records from systemd-logind
+    #[inline]
     pub fn new() -> UResult<Self> {
         let records = read_login_records()?;
         Ok(Self {
@@ -604,6 +619,7 @@ impl SystemdUtmpxIter {
     }
 
     /// Create empty iterator (for when systemd initialization fails)
+    #[inline]
     pub fn empty() -> Self {
         Self {
             records: Vec::new(),
@@ -612,6 +628,7 @@ impl SystemdUtmpxIter {
     }
 
     /// Get next record (similar to getutxent)
+    #[inline]
     pub fn next_record(&mut self) -> Option<SystemdUtmpxCompat> {
         if self.current_index >= self.records.len() {
             return None;
@@ -624,6 +641,7 @@ impl SystemdUtmpxIter {
     }
 
     /// Get all records at once
+    #[inline]
     pub fn get_all_records(&self) -> Vec<SystemdUtmpxCompat> {
         self.records
             .iter()
@@ -633,16 +651,19 @@ impl SystemdUtmpxIter {
     }
 
     /// Reset iterator to beginning
+    #[inline]
     pub fn reset(&mut self) {
         self.current_index = 0;
     }
 
     /// Get number of records
+    #[inline]
     pub fn len(&self) -> usize {
         self.records.len()
     }
 
     /// Check if empty
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.records.is_empty()
     }
@@ -651,6 +672,7 @@ impl SystemdUtmpxIter {
 impl Iterator for SystemdUtmpxIter {
     type Item = SystemdUtmpxCompat;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         self.next_record()
     }

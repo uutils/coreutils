@@ -67,6 +67,7 @@ pub struct FileInformation(
 impl FileInformation {
     /// Get information from a currently open file
     #[cfg(any(unix, target_os = "wasi"))]
+    #[inline]
     pub fn from_file(file: &impl AsFd) -> IOResult<Self> {
         let stat = rustix::fs::fstat(file)?;
         Ok(Self(stat))
@@ -87,6 +88,7 @@ impl FileInformation {
     ///
     /// If `path` points to a symlink and `dereference` is true, information about
     /// the link's target will be returned.
+    #[inline]
     pub fn from_path(path: impl AsRef<Path>, dereference: bool) -> IOResult<Self> {
         #[cfg(any(unix, target_os = "wasi"))]
         {
@@ -114,6 +116,7 @@ impl FileInformation {
         }
     }
 
+    #[inline]
     pub fn file_size(&self) -> u64 {
         #[cfg(any(unix, target_os = "wasi"))]
         {
@@ -131,6 +134,7 @@ impl FileInformation {
         ((self.0.nFileIndexHigh as u64) << 32) | (self.0.nFileIndexLow as u64)
     }
 
+    #[inline]
     pub fn number_of_links(&self) -> u64 {
         #[cfg(any(unix, target_os = "wasi"))]
         {
@@ -145,6 +149,7 @@ impl FileInformation {
     }
 
     #[cfg(any(unix, target_os = "wasi"))]
+    #[inline]
     pub fn inode(&self) -> u64 {
         #[cfg(target_os = "haiku")]
         return self.0.st_ino.try_into().unwrap();
@@ -153,6 +158,7 @@ impl FileInformation {
         return self.0.st_ino.into();
     }
 
+    #[inline]
     pub fn dev(&self) -> u64 {
         #[cfg(any(unix, target_os = "wasi"))]
         return self.0.st_dev as _;
@@ -163,6 +169,7 @@ impl FileInformation {
 
 #[cfg(any(unix, target_os = "wasi"))]
 impl PartialEq for FileInformation {
+    #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.0.st_dev == other.0.st_dev && self.0.st_ino == other.0.st_ino
     }
@@ -179,6 +186,7 @@ impl PartialEq for FileInformation {
 impl Eq for FileInformation {}
 
 impl Hash for FileInformation {
+    #[inline]
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         #[cfg(any(unix, target_os = "wasi"))]
         {
@@ -225,6 +233,7 @@ pub enum ResolveMode {
 /// both projects are MIT `<https://github.com/rust-lang/cargo/blob/master/LICENSE-MIT>`
 /// for std impl progress see rfc `<https://github.com/rust-lang/rfcs/issues/2208>`
 /// replace this once that lands
+#[inline]
 pub fn normalize_path(path: &Path) -> PathBuf {
     let mut components = path.components().peekable();
     let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().copied() {
@@ -346,6 +355,7 @@ fn ensure_is_directory(path: &Path) -> IOResult<()> {
 ///   before symlinks
 ///
 #[allow(clippy::cognitive_complexity)]
+#[inline]
 pub fn canonicalize<P: AsRef<Path>>(
     original: P,
     miss_mode: MissingHandling,
@@ -460,6 +470,7 @@ pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> 
 
 /// Display the permissions of a file
 #[cfg(unix)]
+#[inline]
 pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> String {
     display_permissions_unix(metadata.mode(), display_file_type)
 }
@@ -529,6 +540,7 @@ fn get_file_display(mode: u32) -> char {
 /// Display the unix permissions of a file
 #[allow(clippy::if_not_else, reason = "more readable written this way")]
 #[allow(clippy::cognitive_complexity)]
+#[inline]
 pub fn display_permissions_unix(mode: u32, display_file_type: bool) -> String {
     use mode::{
         S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP,
@@ -579,6 +591,7 @@ pub fn display_permissions_unix(mode: u32, display_file_type: bool) -> String {
 /// Special case to match GNU's behavior:
 /// install -d foo/. (and foo/./) should work and just create foo/
 /// std::fs::create_dir("foo/."); fails in pure Rust
+#[inline]
 pub fn dir_strip_dot_for_creation(path: &Path) -> PathBuf {
     let path_str = path.to_string_lossy();
 
@@ -592,6 +605,7 @@ pub fn dir_strip_dot_for_creation(path: &Path) -> PathBuf {
 
 /// Checks if `p1` and `p2` are the same file.
 /// If error happens when trying to get files' metadata, returns false
+#[inline]
 pub fn paths_refer_to_same_file<P: AsRef<Path>>(p1: P, p2: P, dereference: bool) -> bool {
     infos_refer_to_same_file(
         FileInformation::from_path(p1, dereference),
@@ -601,6 +615,7 @@ pub fn paths_refer_to_same_file<P: AsRef<Path>>(p1: P, p2: P, dereference: bool)
 
 /// Checks if `p1` and `p2` are the same file information.
 /// If error happens when trying to get files' metadata, returns false
+#[inline]
 pub fn infos_refer_to_same_file(
     info1: IOResult<FileInformation>,
     info2: IOResult<FileInformation>,
@@ -623,6 +638,7 @@ fn root_file_information() -> Option<&'static FileInformation> {
 /// GNU compares dev/ino for the same reason. `dereference` says whether a
 /// symlink at `path` is about to be followed (only then does a link to `/`
 /// count). Returns `false` if `path` or `/` cannot be stat'd, or off unix.
+#[inline]
 pub fn path_is_root_dir<P: AsRef<Path>>(path: P, dereference: bool) -> bool {
     #[cfg(unix)]
     {
@@ -658,6 +674,7 @@ pub fn path_is_root_dir<P: AsRef<Path>>(path: P, dereference: bool) -> bool {
 ///
 /// assert!(are_files_identical(file1.path(), file2.path()).unwrap());
 /// ```
+#[inline]
 pub fn are_files_identical(path1: impl AsRef<Path>, path2: impl AsRef<Path>) -> IOResult<bool> {
     use std::fs::{File, metadata};
     use std::io::{BufReader, ErrorKind, Read};
@@ -722,6 +739,7 @@ pub fn are_files_identical(path1: impl AsRef<Path>, path2: impl AsRef<Path>) -> 
 }
 
 /// Converts absolute `path` to be relative to absolute `to` path.
+#[inline]
 pub fn make_path_relative_to<P1: AsRef<Path>, P2: AsRef<Path>>(path: P1, to: P2) -> PathBuf {
     let path = path.as_ref();
     let to = to.as_ref();
@@ -758,6 +776,7 @@ pub fn make_path_relative_to<P1: AsRef<Path>, P2: AsRef<Path>>(path: P1, to: P2)
 /// # Returns
 ///
 /// * `bool` - Returns `true` if a symlink loop is detected, `false` otherwise.
+#[inline]
 pub fn is_symlink_loop(path: &Path) -> bool {
     let mut current_path = path.to_path_buf();
 
@@ -794,6 +813,7 @@ pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
 ///
 /// * `bool` - Returns `true` if the paths are hard links to the same file, and `false` otherwise.
 #[cfg(unix)]
+#[inline]
 pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
     // The target is usually the one that does not exist, so look it up first
     // and return early instead of also querying the source for nothing.
@@ -823,6 +843,7 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(_source: &Path, _target: &P
 ///
 /// * `bool` - Returns `true` if either of above conditions are true, and `false` otherwise.
 #[cfg(unix)]
+#[inline]
 pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Path) -> bool {
     // As above, look up the target first: if it does not exist, there is
     // nothing to compare the source with.
@@ -846,6 +867,7 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Pat
 ///
 /// * `path` - A reference to the path to be checked.
 #[cfg(any(unix, target_os = "wasi"))]
+#[inline]
 pub fn path_ends_with_terminator(path: &Path) -> bool {
     #[cfg(unix)]
     use std::os::unix::prelude::OsStrExt;
@@ -884,6 +906,7 @@ pub fn path_ends_with_terminator(path: &Path) -> bool {
 /// # Returns
 ///
 /// * `bool` - Returns `true` if stdin is a directory, `false` otherwise.
+#[inline]
 pub fn is_stdin_directory(stdin: &Stdin) -> bool {
     #[cfg(any(unix, all(target_os = "wasi", target_env = "p2")))]
     {
@@ -929,6 +952,7 @@ pub mod sane_blksize {
     ///
     /// If the provided value is a invalid values a meaningful adaption
     /// of that value is done.
+    #[inline]
     pub fn sane_blksize(st_blksize: u64) -> u64 {
         match st_blksize {
             0 => DEFAULT,
@@ -941,6 +965,7 @@ pub mod sane_blksize {
     ///
     /// If the metadata contain invalid values a meaningful adaption
     /// of that value is done.
+    #[inline]
     pub fn sane_blksize_from_metadata(
         #[cfg(unix)] metadata: &std::fs::Metadata,
         #[cfg(not(unix))] _: &std::fs::Metadata,
@@ -960,6 +985,7 @@ pub mod sane_blksize {
     ///
     /// If the metadata can't be fetched or contain invalid values a
     /// meaningful adaption of that value is done.
+    #[inline]
     pub fn sane_blksize_from_path(path: &Path) -> u64 {
         match metadata(path) {
             Ok(metadata) => sane_blksize_from_metadata(&metadata),
@@ -1089,6 +1115,7 @@ pub fn set_file_sparse(file: &fs::File) -> IOResult<()> {
 /// * `Some(filename)`: If a valid filename exists in the `file` path, where `filename` is the
 ///   extracted filename as a string slice (`&str`).
 /// * `None`: If the `file` path does not contain a valid filename or if the filename is not valid UTF-8.
+#[inline]
 pub fn get_filename(file: &Path) -> Option<&str> {
     file.file_name().and_then(|filename| filename.to_str())
 }
@@ -1104,6 +1131,7 @@ pub fn get_filename(file: &Path) -> Option<&str> {
 ///
 /// Returns an error if the link cannot be created, if the parent directory
 /// cannot be opened, or if no unique temporary name is available.
+#[inline]
 pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> {
     #[cfg(all(unix, not(target_os = "redox")))]
     {

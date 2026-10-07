@@ -162,6 +162,7 @@ impl EscapedChar {
         Self { state: init_state }
     }
 
+    #[inline]
     pub fn hide_control(self) -> Self {
         match self.state {
             EscapeState::Char(c) if c.is_control() => Self {
@@ -175,6 +176,7 @@ impl EscapedChar {
 impl Iterator for EscapedChar {
     type Item = char;
 
+    #[inline]
     fn next(&mut self) -> Option<char> {
         match self.state {
             EscapeState::Backslash(c) => {

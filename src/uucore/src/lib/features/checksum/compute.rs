@@ -81,6 +81,7 @@ impl OutputFormat {
     }
 
     /// Find the correct output format for cksum.
+    #[inline]
     pub fn from_cksum(algo: AlgoKind, tag: bool, binary: bool, raw: bool, base64: bool) -> Self {
         // Raw output format takes precedence over anything else.
         if raw {
@@ -116,6 +117,7 @@ impl OutputFormat {
     ///
     /// Since standalone utils can't use the Raw or Legacy output format, it is
     /// decided only using the --tag, --binary and --text arguments.
+    #[inline]
     pub fn from_standalone(text: bool, tag: bool) -> Self {
         if tag {
             Self::Tagged(DigestFormat::Hexadecimal)
@@ -226,6 +228,7 @@ fn write_untagged_checksum(
 ///
 /// * `options` - CLI options for the assigning checksum algorithm
 /// * `files` - A iterator of [`OsStr`] which is a bunch of files that are using for calculating checksum
+#[inline]
 pub fn perform_checksum_computation<'a, W, I>(
     mut w: W,
     options: ChecksumComputeOptions,

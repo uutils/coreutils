@@ -52,6 +52,7 @@ pub enum FormatSystemTimeFallback {
 }
 
 /// Format a `SystemTime` according to given fmt, and append to vector out.
+#[inline]
 pub fn format_system_time<W: Write>(
     out: &mut W,
     time: SystemTime,

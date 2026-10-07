@@ -19,6 +19,7 @@ use std::sync::OnceLock;
 use crate::i18n::get_locale_from_env;
 
 /// Get the locale for time/date formatting from LC_TIME environment variable
+#[inline]
 pub fn get_time_locale() -> &'static (Locale, super::UEncoding) {
     static TIME_LOCALE: OnceLock<(Locale, super::UEncoding)> = OnceLock::new();
 
@@ -28,6 +29,7 @@ pub fn get_time_locale() -> &'static (Locale, super::UEncoding) {
 /// Check if we should use ICU for locale-aware time/date formatting
 ///
 /// Returns true for non-C/POSIX locales, false otherwise
+#[inline]
 pub fn should_use_icu_locale() -> bool {
     use icu_locale::locale;
 
@@ -39,6 +41,7 @@ pub fn should_use_icu_locale() -> bool {
 }
 
 /// Determine the appropriate calendar system for a given locale
+#[inline]
 pub fn get_locale_calendar_type(locale: &Locale) -> CalendarType {
     let locale_str = locale.to_string();
 
@@ -86,6 +89,7 @@ macro_rules! format_with {
 }
 
 /// Transform a strftime format string to use locale-specific calendar values
+#[inline]
 pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     const PERCENT_PLACEHOLDER: &str = "\x00\x00";
 
@@ -170,6 +174,7 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
 /// Each entry corresponds to months January (index 0) through December (index 11).
 /// Returns `None` for C/POSIX locale (caller should use English defaults).
 /// This matches the GNU coreutils approach of storing uppercased, blank-stripped names.
+#[inline]
 pub fn get_locale_months() -> Option<&'static [Vec<u8>; 12]> {
     static LOCALE_MONTHS: OnceLock<Option<[Vec<u8>; 12]>> = OnceLock::new();
 

@@ -36,6 +36,7 @@ pub enum ChecksumVerbose {
 }
 
 impl ChecksumVerbose {
+    #[inline]
     pub fn new(status: bool, quiet: bool, warn: bool) -> Self {
         use ChecksumVerbose::*;
 
@@ -1004,6 +1005,7 @@ fn process_checksum_file(
 }
 
 /// Do the checksum validation (can be strict or not)
+#[inline]
 pub fn perform_checksum_validation<'a, I>(
     files: I,
     algo_kind: Option<AlgoKind>,

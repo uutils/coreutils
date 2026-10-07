@@ -67,6 +67,7 @@ static EXIT_CODE: AtomicI32 = AtomicI32::new(0);
 
 /// Get the last exit code set with [`set_exit_code`].
 /// The default value is `0`.
+#[inline]
 pub fn get_exit_code() -> i32 {
     EXIT_CODE.load(Ordering::SeqCst)
 }
@@ -90,6 +91,7 @@ pub fn get_exit_code() -> i32 {
 ///     Ok(()) // If any of the operations failed, 1 is returned.
 /// }
 /// ```
+#[inline]
 pub fn set_exit_code(code: i32) {
     EXIT_CODE.store(code, Ordering::SeqCst);
 }
@@ -98,6 +100,7 @@ pub fn set_exit_code(code: i32) {
 ///
 /// stderr is unbuffered, so the line is formatted first and written at once.
 #[doc(hidden)]
+#[inline]
 pub fn print_diagnostic(prefix: &str, msg: std::fmt::Arguments<'_>) {
     let line = format!("{}: {prefix}{msg}\n", crate::util_name());
     let _ = std::io::stderr().write_all(line.as_bytes());
@@ -218,6 +221,7 @@ pub trait UError: Error + Send {
     ///     }
     /// }
     /// ```
+    #[inline]
     fn code(&self) -> i32 {
         1
     }
@@ -272,6 +276,7 @@ pub trait UError: Error + Send {
     ///     }
     /// }
     /// ```
+    #[inline]
     fn usage(&self) -> bool {
         false
     }
@@ -281,6 +286,7 @@ impl<T> From<T> for Box<dyn UError>
 where
     T: UError + 'static,
 {
+    #[inline]
     fn from(t: T) -> Self {
         Box::new(t)
     }
@@ -320,12 +326,14 @@ impl USimpleError {
 impl Error for USimpleError {}
 
 impl Display for USimpleError {
+    #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.message.fmt(f)
     }
 }
 
 impl UError for USimpleError {
+    #[inline]
     fn code(&self) -> i32 {
         self.code
     }
@@ -357,16 +365,19 @@ impl UUsageError {
 impl Error for UUsageError {}
 
 impl Display for UUsageError {
+    #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.message.fmt(f)
     }
 }
 
 impl UError for UUsageError {
+    #[inline]
     fn code(&self) -> i32 {
         self.code
     }
 
+    #[inline]
     fn usage(&self) -> bool {
         true
     }
@@ -407,6 +418,7 @@ pub struct UIoError {
 impl UIoError {
     /// Create a new `UIoError` with a given exit code and message.
     #[allow(clippy::new_ret_no_self)]
+    #[inline]
     pub fn new<S: Into<String>>(kind: std::io::ErrorKind, context: S) -> Box<dyn UError> {
         Box::new(Self {
             context: Some(context.into()),
@@ -420,6 +432,7 @@ impl UError for UIoError {}
 impl Error for UIoError {}
 
 impl Display for UIoError {
+    #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         use std::io::ErrorKind::*;
 
@@ -506,6 +519,7 @@ impl Display for UIoError {
 /// let err = Error::new(ErrorKind::Other, "custom failure");
 /// assert_eq!(strip_errno(&err), "custom failure");
 /// ```
+#[inline]
 pub fn strip_errno(err: &std::io::Error) -> String {
     let mut msg = err.to_string();
     if let Some(pos) = msg.find(" (os error ") {
@@ -522,6 +536,7 @@ pub trait FromIo<T> {
 }
 
 impl FromIo<Box<UIoError>> for std::io::Error {
+    #[inline]
     fn map_err_context(self, context: impl FnOnce() -> String) -> Box<UIoError> {
         Box::new(UIoError {
             context: Some(context()),
@@ -531,12 +546,14 @@ impl FromIo<Box<UIoError>> for std::io::Error {
 }
 
 impl<T> FromIo<UResult<T>> for std::io::Result<T> {
+    #[inline]
     fn map_err_context(self, context: impl FnOnce() -> String) -> UResult<T> {
         self.map_err(|e| e.map_err_context(context) as Box<dyn UError>)
     }
 }
 
 impl FromIo<Box<UIoError>> for std::io::ErrorKind {
+    #[inline]
     fn map_err_context(self, context: impl FnOnce() -> String) -> Box<UIoError> {
         Box::new(UIoError {
             context: Some(context()),
@@ -546,6 +563,7 @@ impl FromIo<Box<UIoError>> for std::io::ErrorKind {
 }
 
 impl From<std::io::Error> for UIoError {
+    #[inline]
     fn from(f: std::io::Error) -> Self {
         Self {
             context: None,
@@ -555,6 +573,7 @@ impl From<std::io::Error> for UIoError {
 }
 
 impl From<std::io::Error> for Box<dyn UError> {
+    #[inline]
     fn from(f: std::io::Error) -> Self {
         let u_error: UIoError = f.into();
         Box::new(u_error) as Self
@@ -577,6 +596,7 @@ impl From<std::io::Error> for Box<dyn UError> {
 /// ```
 #[cfg(unix)]
 impl<T> FromIo<UResult<T>> for Result<T, nix::Error> {
+    #[inline]
     fn map_err_context(self, context: impl FnOnce() -> String) -> UResult<T> {
         self.map_err(|e| {
             Box::new(UIoError {
@@ -589,6 +609,7 @@ impl<T> FromIo<UResult<T>> for Result<T, nix::Error> {
 
 #[cfg(unix)]
 impl<T> FromIo<UResult<T>> for nix::Error {
+    #[inline]
     fn map_err_context(self, context: impl FnOnce() -> String) -> UResult<T> {
         Err(Box::new(UIoError {
             context: Some(context()),
@@ -599,6 +620,7 @@ impl<T> FromIo<UResult<T>> for nix::Error {
 
 #[cfg(unix)]
 impl From<nix::Error> for UIoError {
+    #[inline]
     fn from(f: nix::Error) -> Self {
         Self {
             context: None,
@@ -609,6 +631,7 @@ impl From<nix::Error> for UIoError {
 
 #[cfg(unix)]
 impl From<nix::Error> for Box<dyn UError> {
+    #[inline]
     fn from(f: nix::Error) -> Self {
         let u_error: UIoError = f.into();
         Box::new(u_error) as Self
@@ -737,6 +760,7 @@ impl ExitCode {
 /// let error = quiet_if_reported(reported, USimpleError::new(2, "bad key".to_string()));
 /// assert_eq!(error.code(), 2);
 /// ```
+#[inline]
 pub fn quiet_if_reported<E: Into<Box<dyn UError>>>(reported: bool, error: E) -> Box<dyn UError> {
     let error = error.into();
     if !reported {
@@ -751,18 +775,21 @@ pub fn quiet_if_reported<E: Into<Box<dyn UError>>>(reported: bool, error: E) -> 
 impl Error for ExitCode {}
 
 impl Display for ExitCode {
+    #[inline]
     fn fmt(&self, _: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         Ok(())
     }
 }
 
 impl UError for ExitCode {
+    #[inline]
     fn code(&self) -> i32 {
         self.0
     }
 }
 
 impl From<i32> for Box<dyn UError> {
+    #[inline]
     fn from(i: i32) -> Self {
         ExitCode::new(i)
     }
@@ -801,6 +828,7 @@ pub trait UClapError<T> {
 }
 
 impl From<clap::Error> for Box<dyn UError> {
+    #[inline]
     fn from(e: clap::Error) -> Self {
         Box::new(ClapErrorWrapper {
             code: 1,
@@ -811,6 +839,7 @@ impl From<clap::Error> for Box<dyn UError> {
 }
 
 impl UClapError<ClapErrorWrapper> for clap::Error {
+    #[inline]
     fn with_exit_code(self, code: i32) -> ClapErrorWrapper {
         ClapErrorWrapper {
             code,
@@ -823,12 +852,14 @@ impl UClapError<ClapErrorWrapper> for clap::Error {
 impl UClapError<Result<clap::ArgMatches, ClapErrorWrapper>>
     for Result<clap::ArgMatches, clap::Error>
 {
+    #[inline]
     fn with_exit_code(self, code: i32) -> Result<clap::ArgMatches, ClapErrorWrapper> {
         self.map_err(|e| e.with_exit_code(code))
     }
 }
 
 impl UError for ClapErrorWrapper {
+    #[inline]
     fn code(&self) -> i32 {
         // If the error is a DisplayHelp or DisplayVersion variant,
         // check if printing failed. If it did, return 1, otherwise 0.
@@ -846,6 +877,7 @@ impl Error for ClapErrorWrapper {}
 
 // This is abuse of the Display trait
 impl Display for ClapErrorWrapper {
+    #[inline]
     fn fmt(&self, _f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         // Check if printing succeeds. For DisplayHelp and DisplayVersion,
         // error.print() writes to stdout, so we need to detect write failures

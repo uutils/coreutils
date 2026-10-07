@@ -57,16 +57,19 @@ pub struct SignedNum {
 
 impl SignedNum {
     /// Returns true if the value is zero.
+    #[inline]
     pub fn is_zero(&self) -> bool {
         self.value == 0
     }
 
     /// Returns true if a plus sign was present.
+    #[inline]
     pub fn has_plus(&self) -> bool {
         self.sign == Some(SignPrefix::Plus)
     }
 
     /// Returns true if a minus sign was present.
+    #[inline]
     pub fn has_minus(&self) -> bool {
         self.sign == Some(SignPrefix::Minus)
     }
@@ -101,6 +104,7 @@ impl SignedNum {
 /// assert_eq!(result.value, 100);
 /// assert_eq!(result.sign, Some(SignPrefix::Minus));
 /// ```
+#[inline]
 pub fn parse_signed_num_max(src: &str) -> Result<SignedNum, ParseSizeError> {
     let (sign, size_string) = strip_sign_prefix(src);
 
@@ -138,6 +142,7 @@ pub fn parse_signed_num_max(src: &str) -> Result<SignedNum, ParseSizeError> {
 ///
 /// Note: On parse failure, this returns an error with the raw string (without quotes)
 /// to allow callers to format the error message as needed.
+#[inline]
 pub fn parse_signed_num(src: &str) -> Result<SignedNum, ParseSizeError> {
     let (sign, size_string) = strip_sign_prefix(src);
 
@@ -164,6 +169,7 @@ pub fn parse_signed_num(src: &str) -> Result<SignedNum, ParseSizeError> {
 /// # Arguments
 ///
 /// * `src` - The argument as typed, the one [`parse_signed_num_max`] was given.
+#[inline]
 pub fn number_offset(src: &str) -> usize {
     size_offset(src, |c| matches!(c, '+' | '-'))
 }

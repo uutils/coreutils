@@ -44,6 +44,7 @@ pub use os_display::{Quotable, Quoted};
 /// FIXME: Invalid Unicode will produce an error on Windows. That could be fixed by
 /// using low-level library calls and bypassing `io::Write`. This is not a big priority
 /// because broken filenames are much rarer on Windows than on Unix.
+#[inline]
 pub fn println_verbatim<S: AsRef<OsStr>>(text: S) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
     stdout.write_all_os(text.as_ref())?;
@@ -52,6 +53,7 @@ pub fn println_verbatim<S: AsRef<OsStr>>(text: S) -> io::Result<()> {
 }
 
 /// Like `println_verbatim`, without the trailing newline.
+#[inline]
 pub fn print_verbatim<S: AsRef<OsStr>>(text: S) -> io::Result<()> {
     io::stdout().write_all_os(text.as_ref())
 }
@@ -71,6 +73,7 @@ pub trait OsWrite: io::Write {
     ///
     /// On Windows, if the OS string is not valid Unicode, an error of kind
     /// [`io::ErrorKind::InvalidData`] is returned.
+    #[inline]
     fn write_all_os(&mut self, buf: &OsStr) -> io::Result<()> {
         #[cfg(any(unix, target_os = "wasi"))]
         {
@@ -110,6 +113,7 @@ impl OsWrite for StdoutLock<'_> {}
 impl<W: OsWrite> OsWrite for BufWriter<W> {}
 
 impl OsWrite for Box<dyn OsWrite> {
+    #[inline]
     fn write_all_os(&mut self, buf: &OsStr) -> io::Result<()> {
         let this: &mut dyn OsWrite = self;
         this.write_all_os(buf)
@@ -120,6 +124,7 @@ impl OsWrite for Box<dyn OsWrite> {
 ///
 /// This function handles non-UTF-8 environment variable names and values correctly by using
 /// raw bytes on Unix systems.
+#[inline]
 pub fn print_all_env_vars<T: fmt::Display>(line_ending: T) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
     for (name, value) in env::vars_os() {

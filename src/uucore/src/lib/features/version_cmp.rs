@@ -61,6 +61,7 @@ fn remove_file_ending(a: &[u8]) -> &[u8] {
 }
 
 /// Compare two version strings.
+#[inline]
 pub fn version_cmp(mut a: &[u8], mut b: &[u8]) -> Ordering {
     let str_cmp = a.cmp(b);
     if str_cmp == Ordering::Equal {

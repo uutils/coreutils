@@ -63,6 +63,7 @@ impl SymlinkBehavior {
 }
 
 impl From<bool> for SymlinkBehavior {
+    #[inline]
     fn from(follow: bool) -> Self {
         if follow { Self::Follow } else { Self::NoFollow }
     }
@@ -104,6 +105,7 @@ pub enum SafeTraversalError {
 }
 
 impl From<SafeTraversalError> for io::Error {
+    #[inline]
     fn from(err: SafeTraversalError) -> Self {
         match err {
             SafeTraversalError::PathContainsNull => Self::new(
@@ -237,6 +239,7 @@ impl DirFd {
     /// # Arguments
     /// * `path` - The path to the directory to open
     /// * `symlink_behavior` - Whether to follow symlinks when opening
+    #[inline]
     pub fn open(path: &Path, symlink_behavior: SymlinkBehavior) -> io::Result<Self> {
         let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC | LARGEFILE;
         if !symlink_behavior.should_follow() {
@@ -256,6 +259,7 @@ impl DirFd {
     /// # Arguments
     /// * `name` - The name of the subdirectory to open
     /// * `symlink_behavior` - Whether to follow symlinks when opening
+    #[inline]
     pub fn open_subdir(&self, name: &OsStr, symlink_behavior: SymlinkBehavior) -> io::Result<Self> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
@@ -273,6 +277,7 @@ impl DirFd {
     }
 
     /// Get raw stat data for a file relative to this directory
+    #[inline]
     pub fn stat_at(&self, name: &OsStr, symlink_behavior: SymlinkBehavior) -> io::Result<FileStat> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
@@ -288,6 +293,7 @@ impl DirFd {
     }
 
     /// Get metadata for a file relative to this directory
+    #[inline]
     pub fn metadata_at(
         &self,
         name: &OsStr,
@@ -298,11 +304,13 @@ impl DirFd {
     }
 
     /// Get metadata for this directory
+    #[inline]
     pub fn metadata(&self) -> io::Result<Metadata> {
         self.fstat().map(Metadata::from_stat)
     }
 
     /// Get raw stat data for this directory
+    #[inline]
     pub fn fstat(&self) -> io::Result<FileStat> {
         let stat = fstat_fd(&self.fd).map_err(|e| SafeTraversalError::StatFailed {
             path: translate!("safe-traversal-current-directory").into(),
@@ -312,6 +320,7 @@ impl DirFd {
     }
 
     /// Read directory entries
+    #[inline]
     pub fn read_dir(&self) -> io::Result<Vec<OsString>> {
         read_dir_entries(&self.fd).map_err(|e| {
             SafeTraversalError::ReadDirFailed {
@@ -323,6 +332,7 @@ impl DirFd {
     }
 
     /// Remove a file or empty directory relative to this directory
+    #[inline]
     pub fn unlink_at(&self, name: &OsStr, is_dir: bool) -> io::Result<()> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
@@ -344,6 +354,7 @@ impl DirFd {
 
     /// Change ownership of a file relative to this directory
     /// Use uid/gid of None to keep the current value
+    #[inline]
     pub fn chown_at(
         &self,
         name: &OsStr,
@@ -370,6 +381,7 @@ impl DirFd {
     }
 
     /// Change ownership of this directory
+    #[inline]
     pub fn fchown(&self, uid: Option<u32>, gid: Option<u32>) -> io::Result<()> {
         let uid = uid.map(Uid::from_raw);
         let gid = gid.map(Gid::from_raw);
@@ -384,6 +396,7 @@ impl DirFd {
     /// Goes through the libc `fchmodat()` symbol, which `LD_PRELOAD` tools
     /// (fakeroot, fakechroot, pseudo) interpose and a raw syscall would bypass.
     /// glibc issues `fchmodat2` from there anyway, so nothing is lost.
+    #[inline]
     pub fn chmod_at(
         &self,
         name: &OsStr,
@@ -518,6 +531,7 @@ impl DirFd {
     }
 
     /// Change mode of this directory
+    #[inline]
     pub fn fchmod(&self, mode: u32) -> io::Result<()> {
         let mode = Mode::from_bits_truncate(mode as libc::mode_t);
 
@@ -528,6 +542,7 @@ impl DirFd {
     }
 
     /// Create a directory relative to this directory
+    #[inline]
     pub fn mkdir_at(&self, name: &OsStr, mode: u32) -> io::Result<()> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
@@ -546,6 +561,7 @@ impl DirFd {
 
     /// Create a file for writing relative to this directory
     /// Fails with `EEXIST` if the name already exists
+    #[inline]
     pub fn open_file_at(&self, name: &OsStr) -> io::Result<fs::File> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
@@ -571,6 +587,7 @@ impl DirFd {
     }
 
     /// Create a DirFd from an existing file descriptor (takes ownership)
+    #[inline]
     pub fn from_raw_fd(fd: RawFd) -> io::Result<Self> {
         if fd < 0 {
             return Err(io::Error::new(
@@ -728,6 +745,7 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
 /// A DirFd for the final created directory, or the first existing parent if
 /// all directories already exist.
 #[cfg(unix)]
+#[inline]
 pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
     let (existing_ancestor, components_to_create) = find_existing_ancestor(path)?;
     let mut dir_fd = DirFd::open(&existing_ancestor, SymlinkBehavior::Follow)?;
@@ -740,12 +758,14 @@ pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
 }
 
 impl AsRawFd for DirFd {
+    #[inline]
     fn as_raw_fd(&self) -> RawFd {
         self.fd.as_raw_fd()
     }
 }
 
 impl AsFd for DirFd {
+    #[inline]
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
     }
@@ -759,6 +779,7 @@ pub struct FileInfo {
 }
 
 impl FileInfo {
+    #[inline]
     pub fn from_stat(stat: &FileStat) -> Self {
         // Allow unnecessary cast because st_dev and st_ino have different types on different platforms
         #[allow(clippy::unnecessary_cast)]
@@ -769,16 +790,19 @@ impl FileInfo {
     }
 
     /// Create FileInfo from device and inode numbers
+    #[inline]
     pub fn new(dev: u64, ino: u64) -> Self {
         Self { dev, ino }
     }
 
     /// Get the device number
+    #[inline]
     pub fn device(&self) -> u64 {
         self.dev
     }
 
     /// Get the inode number
+    #[inline]
     pub fn inode(&self) -> u64 {
         self.ino
     }
@@ -794,6 +818,7 @@ pub enum FileType {
 }
 
 impl FileType {
+    #[inline]
     pub fn from_mode(mode: libc::mode_t) -> Self {
         match mode & libc::S_IFMT {
             libc::S_IFDIR => Self::Directory,
@@ -803,14 +828,17 @@ impl FileType {
         }
     }
 
+    #[inline]
     pub fn is_directory(self) -> bool {
         matches!(self, Self::Directory)
     }
 
+    #[inline]
     pub fn is_regular_file(self) -> bool {
         matches!(self, Self::RegularFile)
     }
 
+    #[inline]
     pub fn is_symlink(self) -> bool {
         matches!(self, Self::Symlink)
     }
@@ -823,30 +851,36 @@ pub struct Metadata {
 }
 
 impl Metadata {
+    #[inline]
     pub fn from_stat(stat: FileStat) -> Self {
         Self { stat }
     }
 
+    #[inline]
     pub fn file_type(&self) -> FileType {
         FileType::from_mode(self.stat.st_mode as libc::mode_t)
     }
 
+    #[inline]
     pub fn file_info(&self) -> FileInfo {
         FileInfo::from_stat(&self.stat)
     }
 
     // st_size type varies by platform (i64 vs u64)
     #[allow(clippy::unnecessary_cast)]
+    #[inline]
     pub fn size(&self) -> u64 {
         self.stat.st_size as u64
     }
 
     // st_mode type varies by platform (u16 on macOS, u32 on Linux)
     #[allow(clippy::unnecessary_cast)]
+    #[inline]
     pub fn mode(&self) -> u32 {
         self.stat.st_mode as u32
     }
 
+    #[inline]
     pub fn nlink(&self) -> u64 {
         // st_nlink type varies by platform (u16 on FreeBSD, u32/u64 on others)
         #[allow(clippy::unnecessary_cast)]
@@ -856,14 +890,17 @@ impl Metadata {
     }
 
     /// Compatibility methods to match std::fs::Metadata interface
+    #[inline]
     pub fn is_dir(&self) -> bool {
         self.file_type().is_directory()
     }
 
+    #[inline]
     pub fn len(&self) -> u64 {
         self.size()
     }
 
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -877,14 +914,17 @@ impl Metadata {
         }
     }
 
+    #[inline]
     pub fn modified(&self) -> Option<SystemTime> {
         Self::time_from_secs_nsecs(self.mtime(), self.mtime_nsec())
     }
 
+    #[inline]
     pub fn accessed(&self) -> Option<SystemTime> {
         Self::time_from_secs_nsecs(self.atime(), self.atime_nsec())
     }
 
+    #[inline]
     pub fn changed(&self) -> Option<SystemTime> {
         Self::time_from_secs_nsecs(self.ctime(), self.ctime_nsec())
     }
@@ -894,10 +934,12 @@ impl Metadata {
 impl MetadataExt for Metadata {
     // st_dev type varies by platform (i32 on macOS, u64 on Linux)
     #[allow(clippy::unnecessary_cast)]
+    #[inline]
     fn dev(&self) -> u64 {
         self.stat.st_dev as u64
     }
 
+    #[inline]
     fn ino(&self) -> u64 {
         // st_ino type varies by platform (u32 on FreeBSD, u64 on Linux)
         #[allow(clippy::unnecessary_cast)]
@@ -908,10 +950,12 @@ impl MetadataExt for Metadata {
 
     // st_mode type varies by platform (u16 on macOS, u32 on Linux)
     #[allow(clippy::unnecessary_cast)]
+    #[inline]
     fn mode(&self) -> u32 {
         self.stat.st_mode as u32
     }
 
+    #[inline]
     fn nlink(&self) -> u64 {
         // st_nlink type varies by platform (u16 on FreeBSD, u32/u64 on others)
         #[allow(clippy::unnecessary_cast)]
@@ -920,26 +964,31 @@ impl MetadataExt for Metadata {
         }
     }
 
+    #[inline]
     fn uid(&self) -> u32 {
         self.stat.st_uid
     }
 
+    #[inline]
     fn gid(&self) -> u32 {
         self.stat.st_gid
     }
 
     // st_rdev type varies by platform (i32 on macOS, u64 on Linux)
     #[allow(clippy::unnecessary_cast)]
+    #[inline]
     fn rdev(&self) -> u64 {
         self.stat.st_rdev as u64
     }
 
     // st_size type varies by platform (i64 on some platforms, u64 on others)
     #[allow(clippy::unnecessary_cast)]
+    #[inline]
     fn size(&self) -> u64 {
         self.stat.st_size as u64
     }
 
+    #[inline]
     fn atime(&self) -> i64 {
         // aix and hurd only have the timespec fields
         #[cfg(any(target_os = "aix", target_os = "hurd"))]
@@ -953,6 +1002,7 @@ impl MetadataExt for Metadata {
         }
     }
 
+    #[inline]
     fn atime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
@@ -972,6 +1022,7 @@ impl MetadataExt for Metadata {
         }
     }
 
+    #[inline]
     fn mtime(&self) -> i64 {
         #[cfg(any(target_os = "aix", target_os = "hurd"))]
         {
@@ -984,6 +1035,7 @@ impl MetadataExt for Metadata {
         }
     }
 
+    #[inline]
     fn mtime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
@@ -1001,6 +1053,7 @@ impl MetadataExt for Metadata {
         }
     }
 
+    #[inline]
     fn ctime(&self) -> i64 {
         #[cfg(any(target_os = "aix", target_os = "hurd"))]
         {
@@ -1013,6 +1066,7 @@ impl MetadataExt for Metadata {
         }
     }
 
+    #[inline]
     fn ctime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
@@ -1032,12 +1086,14 @@ impl MetadataExt for Metadata {
 
     // st_blksize type varies by platform (i32/i64/u32/u64 depending on platform)
     #[allow(clippy::unnecessary_cast)]
+    #[inline]
     fn blksize(&self) -> u64 {
         self.stat.st_blksize as u64
     }
 
     // st_blocks type varies by platform (i64 on some platforms, u64 on others)
     #[allow(clippy::unnecessary_cast)]
+    #[inline]
     fn blocks(&self) -> u64 {
         self.stat.st_blocks as u64
     }

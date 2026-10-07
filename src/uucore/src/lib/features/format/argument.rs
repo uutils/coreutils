@@ -47,6 +47,7 @@ pub struct FormatArguments<'a> {
 
 impl<'a> FormatArguments<'a> {
     /// Create a new FormatArguments from a slice of FormatArgument
+    #[inline]
     pub fn new(args: &'a [FormatArgument]) -> Self {
         Self {
             args,
@@ -57,15 +58,18 @@ impl<'a> FormatArguments<'a> {
     }
 
     /// Get the next argument that would be used
+    #[inline]
     pub fn peek_arg(&self) -> Option<&'a FormatArgument> {
         self.args.get(self.next_arg_position)
     }
 
     /// Check if all arguments have been consumed
+    #[inline]
     pub fn is_exhausted(&self) -> bool {
         self.current_offset >= self.args.len()
     }
 
+    #[inline]
     pub fn start_next_batch(&mut self) {
         self.current_offset = self
             .next_arg_position
@@ -73,6 +77,7 @@ impl<'a> FormatArguments<'a> {
         self.next_arg_position = self.current_offset;
     }
 
+    #[inline]
     pub fn next_char(&mut self, position: ArgumentLocation) -> u8 {
         match self.next_arg(position) {
             Some(FormatArgument::Char(c)) => *c as u8,
@@ -84,6 +89,7 @@ impl<'a> FormatArguments<'a> {
         }
     }
 
+    #[inline]
     pub fn next_string(&mut self, position: ArgumentLocation) -> &'a OsStr {
         match self.next_arg(position) {
             Some(FormatArgument::Unparsed(os) | FormatArgument::String(os)) => os,
@@ -91,6 +97,7 @@ impl<'a> FormatArguments<'a> {
         }
     }
 
+    #[inline]
     pub fn next_i64(&mut self, position: ArgumentLocation) -> i64 {
         match self.next_arg(position) {
             Some(FormatArgument::SignedInt(n)) => *n,
@@ -99,6 +106,7 @@ impl<'a> FormatArguments<'a> {
         }
     }
 
+    #[inline]
     pub fn next_u64(&mut self, position: ArgumentLocation) -> u64 {
         match self.next_arg(position) {
             Some(FormatArgument::UnsignedInt(n)) => *n,
@@ -107,6 +115,7 @@ impl<'a> FormatArguments<'a> {
         }
     }
 
+    #[inline]
     pub fn next_extended_big_decimal(&mut self, position: ArgumentLocation) -> ExtendedBigDecimal {
         match self.next_arg(position) {
             Some(FormatArgument::Float(n)) => n.clone(),

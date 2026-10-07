@@ -94,6 +94,7 @@ pub enum AlgoKind {
 impl AlgoKind {
     /// Parses an [`AlgoKind`] from a string, only accepting valid cksum
     /// `--algorithm` values.
+    #[inline]
     pub fn from_cksum(algo: impl AsRef<str>) -> UResult<Self> {
         use AlgoKind::*;
         Ok(match algo.as_ref() {
@@ -123,6 +124,7 @@ impl AlgoKind {
     }
 
     /// Parses an algo kind from a string, accepting standalone binary names.
+    #[inline]
     pub fn from_bin_name(algo: impl AsRef<str>) -> UResult<Self> {
         use AlgoKind::*;
         Ok(match algo.as_ref() {
@@ -140,6 +142,7 @@ impl AlgoKind {
     }
 
     /// Returns a string corresponding to the algorithm kind.
+    #[inline]
     pub fn to_uppercase(self) -> &'static str {
         use AlgoKind::*;
         match self {
@@ -169,6 +172,7 @@ impl AlgoKind {
     }
 
     /// Returns a string corresponding to the algorithm option in cksum `-a`
+    #[inline]
     pub fn to_lowercase(self) -> &'static str {
         use AlgoKind::*;
         match self {
@@ -195,6 +199,7 @@ impl AlgoKind {
         }
     }
 
+    #[inline]
     pub fn is_legacy(self) -> bool {
         use AlgoKind::*;
         matches!(self, Sysv | Bsd | Crc | Crc32b)
@@ -203,6 +208,7 @@ impl AlgoKind {
     /// When checking untagged format lines, non-XOF non-legacy algorithms
     /// should report "improperly formatted lines" if the digest length isn't
     /// equivalent to this.
+    #[inline]
     pub fn expected_digest_bit_len(self) -> Option<HashLength> {
         match self {
             Self::Md5 => Some(HashLength::from_bits(Md5::BIT_SIZE)),
@@ -227,6 +233,7 @@ pub enum ShaLength {
 }
 
 impl ShaLength {
+    #[inline]
     pub fn as_usize(self) -> usize {
         match self {
             Self::Len224 => 224,
@@ -240,6 +247,7 @@ impl ShaLength {
 impl TryFrom<usize> for ShaLength {
     type Error = ChecksumError;
 
+    #[inline]
     fn try_from(value: usize) -> Result<Self, Self::Error> {
         use ShaLength::*;
         match value {
@@ -279,6 +287,7 @@ impl HashLength {
 }
 
 impl From<ShaLength> for HashLength {
+    #[inline]
     fn from(value: ShaLength) -> Self {
         Self {
             bit_len: value.as_usize(),
@@ -305,6 +314,7 @@ pub enum SizedAlgoKind {
 }
 
 impl SizedAlgoKind {
+    #[inline]
     pub fn from_unsized(kind: AlgoKind, output_length: Option<HashLength>) -> UResult<Self> {
         use AlgoKind as ak;
         match (kind, output_length) {
@@ -351,6 +361,7 @@ impl SizedAlgoKind {
         }
     }
 
+    #[inline]
     pub fn to_tag(self) -> String {
         match self {
             Self::Md5 => "MD5".into(),
@@ -375,6 +386,7 @@ impl SizedAlgoKind {
         }
     }
 
+    #[inline]
     pub fn create_digest(&self) -> Box<dyn Digest + 'static> {
         use ShaLength::*;
         match self {
@@ -410,6 +422,7 @@ impl SizedAlgoKind {
         }
     }
 
+    #[inline]
     pub fn bitlen(&self) -> usize {
         match self {
             Self::Sysv | Self::Sm3 => 512,
@@ -424,6 +437,7 @@ impl SizedAlgoKind {
             Self::Shake256(len) => len.map_or(Shake256::DEFAULT_BIT_SIZE, HashLength::as_bits),
         }
     }
+    #[inline]
     pub fn is_legacy(&self) -> bool {
         use SizedAlgoKind::*;
         matches!(self, Sysv | Bsd | Crc | Crc32b)
@@ -475,6 +489,7 @@ pub enum ChecksumError {
 }
 
 impl UError for ChecksumError {
+    #[inline]
     fn code(&self) -> i32 {
         1
     }
@@ -507,6 +522,7 @@ impl ReadingMode {
     }
 }
 
+#[inline]
 pub fn digest_reader<T: Read>(
     digest: &mut Box<dyn Digest>,
     reader: &mut T,
@@ -544,6 +560,7 @@ pub enum BlakeLength<'s> {
 /// Note: when the input is a string, validation may print error messages.
 /// Note: when the algo is Blake2b, values that are above 512
 /// (Blake2b::DEFAULT_BIT_SIZE) are errors.
+#[inline]
 pub fn parse_blake_length(algo: AlgoKind, bit_length: BlakeLength<'_>) -> UResult<HashLength> {
     debug_assert!(matches!(algo, AlgoKind::Blake2b | AlgoKind::Blake3));
 
@@ -586,6 +603,7 @@ pub fn parse_blake_length(algo: AlgoKind, bit_length: BlakeLength<'_>) -> UResul
     Ok(HashLength::from_bits(n))
 }
 
+#[inline]
 pub fn validate_sha2_sha3_length(algo_name: AlgoKind, length: Option<usize>) -> UResult<ShaLength> {
     match length {
         Some(224) => Ok(ShaLength::Len224),
@@ -600,6 +618,7 @@ pub fn validate_sha2_sha3_length(algo_name: AlgoKind, length: Option<usize>) -> 
     }
 }
 
+#[inline]
 pub fn sanitize_sha2_sha3_length_str(algo_kind: AlgoKind, length: &str) -> UResult<HashLength> {
     // There is a difference in the errors sent when the length is not a number
     // vs. its an invalid number.
@@ -625,6 +644,7 @@ pub fn sanitize_sha2_sha3_length_str(algo_kind: AlgoKind, length: &str) -> UResu
     }
 }
 
+#[inline]
 pub fn unescape_filename(filename: &[u8]) -> (Vec<u8>, &'static str) {
     let mut unescaped = Vec::with_capacity(filename.len());
     let mut byte_iter = filename.iter().peekable();
@@ -648,6 +668,7 @@ pub fn unescape_filename(filename: &[u8]) -> (Vec<u8>, &'static str) {
     (unescaped, prefix)
 }
 
+#[inline]
 pub fn escape_filename(filename: &OsStr) -> (String, &'static str) {
     let original = filename.to_string_lossy();
 

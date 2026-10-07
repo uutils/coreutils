@@ -114,6 +114,7 @@ impl Encoding {
 }
 
 /// Byte length of the first character in `bytes` under the current locale encoding.
+#[inline]
 pub fn mb_char_len(bytes: &[u8]) -> usize {
     locale_encoding().char_len(bytes)
 }

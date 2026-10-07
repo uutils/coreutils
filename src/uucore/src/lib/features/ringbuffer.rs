@@ -49,6 +49,7 @@ pub struct RingBuffer<T> {
 
 impl<T> RingBuffer<T> {
     /// Create a new ring buffer with a maximum size of `size`.
+    #[inline]
     pub fn new(size: usize) -> Self {
         Self {
             data: VecDeque::with_capacity(size),
@@ -56,6 +57,7 @@ impl<T> RingBuffer<T> {
     }
 
     /// Create a new ring buffer from an iterator.
+    #[inline]
     pub fn from_iter(iter: impl Iterator<Item = T>, size: usize) -> Self {
         let mut ring_buffer = Self::new(size);
         for value in iter {
@@ -97,6 +99,7 @@ impl<T> RingBuffer<T> {
     /// assert_eq!(Some(1), buf.push_back(1));
     /// assert_eq!(Some(2), buf.push_back(2));
     /// ```
+    #[inline]
     pub fn push_back(&mut self, value: T) -> Option<T> {
         if self.data.capacity() == 0 {
             return Some(value);

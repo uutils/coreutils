@@ -56,6 +56,7 @@ use std::io::BufRead;
 /// assert_eq!(it.next(), Some(Vec::from("z")));
 /// assert_eq!(it.next(), None);
 /// ```
+#[inline]
 pub fn lines<B>(reader: B, sep: u8) -> Lines<B>
 where
     B: BufRead,
@@ -75,6 +76,7 @@ pub struct Lines<B> {
 impl<B: BufRead> Iterator for Lines<B> {
     type Item = std::io::Result<Vec<u8>>;
 
+    #[inline]
     fn next(&mut self) -> Option<std::io::Result<Vec<u8>>> {
         let mut buf = Vec::new();
         match self.buf.read_until(self.sep, &mut buf) {
