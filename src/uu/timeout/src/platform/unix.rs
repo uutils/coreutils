@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sigstr setpgid sigchld sigwait getpid TTIN TTOU
+// spell-checker:ignore (ToDO) sigstr setpgid sigchld sigwait getpid TTIN TTOU prctl rlimit setrlimit DUMPABLE rlim
 
 use std::io;
 use std::os::unix::process::CommandExt;
@@ -136,9 +136,30 @@ pub(crate) fn preserve_signal_info(signal: core::ffi::c_int) -> core::ffi::c_int
     // The easiest way to preserve the latter seems to be to kill
     // ourselves with whatever signal our child exited with, which is
     // what the following is intended to accomplish.
-    if let Some(sig) = signal_from_raw(signal) {
+    //
+    // If the child dumped core, re-raising a signal like SIGSEGV would make
+    // us dump core too and get blamed for the crash, so only do it once
+    // core dumps are off.
+    if let Some(sig) = signal_from_raw(signal)
+        && disable_core_dumps()
+    {
         let _ = unblock_signal(sig);
         let _ = kill_process(getpid(), sig);
     }
     signal
+}
+
+/// Make sure this process won't dump core, returning whether that worked.
+fn disable_core_dumps() -> bool {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    // SAFETY: PR_SET_DUMPABLE only takes an integer argument.
+    if unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0) } == 0 {
+        return true;
+    }
+    let limit = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    // SAFETY: `limit` is a valid rlimit that outlives the call.
+    unsafe { libc::setrlimit(libc::RLIMIT_CORE, &raw const limit) == 0 }
 }
