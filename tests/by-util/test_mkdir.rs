@@ -1090,9 +1090,13 @@ fn test_mkdir_numeric_looking_name_in_error() {
     scene.fixtures.touch("0077");
     scene
         .ucmd()
-        .args(&["--", "0042", "-0042", "7e2", "-0042"])
+        .args(&["--", "0042", "-0042", "7e2", "-0042", "7e2"])
         .fails_with_code(1)
-        .stderr_is("mkdir: 0042: File exists\nmkdir: -0042: File exists\n");
+        .stderr_is(concat!(
+            "mkdir: cannot create directory '0042': File exists\n",
+            "mkdir: cannot create directory '-0042': File exists\n",
+            "mkdir: cannot create directory '7e2': File exists\n",
+        ));
     scene
         .ucmd()
         .args(&["-p", "0077"])
