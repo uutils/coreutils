@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's fchmod EMFILE ENFILE
+// spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's fchmod
 
 #![cfg(unix)]
 
@@ -608,19 +608,14 @@ impl Chmoder {
             TraverseSymlinks::None => false,
         };
 
-        if !((!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir()) {
+        let descend = (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir();
+        if !descend {
             return self.chmod_file(file_path);
         }
 
-        // Change the mode through a descriptor, checked not to be "/", rather than by
-        // pathname: after a rename that lookup could land on something else, "/"
-        // included once the check above has passed. Under `-P` O_NOFOLLOW fails the
-        // open rather than following a swapped-in symlink; `-H`/`-L` follow, which is
-        // what they ask for. `-H --no-dereference` asks for the mode of what
-        // `chmod_file` resolves, and a directory that is not readable until its mode
-        // is changed, or that does not open for lack of descriptors, still has its
-        // mode changed, by path, as GNU does: in both cases the descent below checks
-        // what it opens for "/" itself.
+        // Change the mode through a descriptor checked not to be "/", which a rename
+        // cannot re-point. Under `-h` with `-H`/`-L`, or if it does not open yet, go by
+        // path as GNU does; the descent below then checks for "/" itself.
         let pinned = if should_follow_symlink == self.dereference {
             match DirFd::open(file_path, should_follow_symlink.into())
                 .and_then(|dir_fd| Ok((dir_fd.metadata()?, dir_fd)))
