@@ -351,6 +351,20 @@ fn test_numeric_with_trailing_chars_and_same_number() {
         .pipe_in("1 x\n1 ./b\n1 a\n")
         .succeeds()
         .stdout_is("1 a\n1 ./b\n1 x\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-r")
+        .pipe_in("1 ./b\n1 a\n1 x\n")
+        .succeeds()
+        .stdout_is("1 x\n1 ./b\n1 a\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-nr")
+        .pipe_in("1 ./b\n1 a\n1 x\n")
+        .succeeds()
+        .stdout_is("1 x\n1 ./b\n1 a\n");
 }
 
 #[test]
