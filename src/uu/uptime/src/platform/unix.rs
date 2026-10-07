@@ -170,9 +170,9 @@ fn process_utmpx(file: Option<&OsString>) -> (Option<time_t>, usize) {
         match line.record_type() {
             x if x == USER_PROCESS => nusers += 1,
             x if x == BOOT_TIME => {
-                let dt = line.login_time();
-                if dt.unix_timestamp() > 0 {
-                    boot_time = Some(dt.unix_timestamp() as time_t);
+                let seconds = line.login_time_seconds();
+                if seconds > 0 {
+                    boot_time = Some(seconds as time_t);
                 }
             }
             _ => (),

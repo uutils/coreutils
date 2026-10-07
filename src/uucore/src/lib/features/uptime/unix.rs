@@ -117,7 +117,7 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
     let derived_boot_time = boot_time.or_else(|| {
         Utmpx::iter_all_records()
             .filter(|r| r.record_type() == BOOT_TIME)
-            .map(|r| r.login_time().unix_timestamp())
+            .map(|r| r.login_time_seconds())
             .find(|&ts| ts > 0)
             .map(|ts| ts as time_t)
     });
