@@ -217,7 +217,11 @@ fn format_timestamp(ut: &UtmpxRecord) -> String {
         )
         .unwrap()
     };
-    ut.login_time().format(&pattern).unwrap()
+    // A time that cannot be represented is shown as its raw seconds, as GNU
+    // does when it cannot be broken down into a date either.
+    ut.login_time()
+        .and_then(|time| time.format(&pattern).ok())
+        .unwrap_or_else(|| ut.login_time_seconds().to_string())
 }
 
 fn current_tty() -> String {
