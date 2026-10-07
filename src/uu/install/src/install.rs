@@ -37,7 +37,7 @@ use uucore::translate;
 use uucore::{format_usage, show, show_error, show_if_err, show_warning};
 
 #[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{DirBuilderExt, MetadataExt};
 #[cfg(unix)]
 use std::os::unix::prelude::OsStrExt;
 
@@ -211,10 +211,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let behavior = behavior(&matches, diag_args.as_deref())?;
 
-    match behavior.main_function {
+    // Like GNU, work with the umask cleared: new ancestor directories get
+    // exactly DEFAULT_MODE and the strip program sees a umask of 0.
+    uucore::mode::with_umask(0, || match behavior.main_function {
         MainFunction::Directory => directory(&paths, &behavior),
         MainFunction::Standard => standard(paths, &behavior),
-    }
+    })
 }
 
 pub fn uu_app() -> Command {
@@ -521,11 +523,11 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
             // create all ancestors (or components) of a directory
             // regardless of the presence of the "-D" flag.
             //
-            // NOTE: the GNU "install" sets the expected mode only for the
-            // target directory. All created ancestor directories will have
-            // the default mode. Hence it is safe to use fs::create_dir_all
-            // and then only modify the target's dir mode.
-            if let Err(e) = fs::create_dir_all(&path_to_create).map_err_context(
+            // Only the target gets the requested mode; newly created ancestors
+            // use DEFAULT_MODE, which create_dir_all would request as 0777.
+            let mut builder = fs::DirBuilder::new();
+            builder.recursive(true).mode(DEFAULT_MODE);
+            if let Err(e) = builder.create(&path_to_create).map_err_context(
                 || translate!("install-error-create-dir-failed", "path" => path_to_create.quote()),
             ) {
                 show!(e);
@@ -737,8 +739,6 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
                 #[cfg(all(unix, not(target_os = "redox")))]
                 {
-                    // Use DEFAULT_MODE (0o755) for created directories - this matches GNU install
-                    // behavior. The actual mode will be modified by umask at the kernel level.
                     match create_dir_all_safe(to_create, DEFAULT_MODE) {
                         Ok(dir_fd) => {
                             if b.target_dir.is_none()
@@ -779,7 +779,10 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     }
                 }
                 #[cfg(any(not(unix), target_os = "redox"))]
-                fs::create_dir_all(to_create)
+                fs::DirBuilder::new()
+                    .recursive(true)
+                    .mode(DEFAULT_MODE)
+                    .create(to_create)
                     .map_err(|e| InstallError::CreateDirFailed(to_create.to_path_buf(), e))?;
             }
         }
