@@ -304,10 +304,9 @@ fn test_builtin_database_colorterm_without_term() {
 #[test]
 fn test_print_database_ignores_term() {
     // -p dumps the database itself, so it is not filtered by TERM.
-    let stdout = new_ucmd!()
+    new_ucmd!()
         .env("TERM", "no-such-terminal")
         .arg("-p")
         .succeeds()
-        .stdout_move_str();
-    assert!(stdout.contains("DIR 01;34"), "{stdout}");
+        .stdout_is_fixture("internal.expected");
 }
