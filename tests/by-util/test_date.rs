@@ -3245,6 +3245,61 @@ fn test_locale_names_for_several_dates_in_one_run() {
         .stdout_is("lundi lun. janvier janv\ndimanche dim. juin juin\nsamedi sam. décembre déc\n");
 }
 
+#[uutests::wasi_ignore(NoTzdb)]
+#[rstest]
+#[cfg(unix)]
+#[case("2026-03-21", "+[%^B|%#B|%-B]", "[MARS|MARS|mars]")]
+#[case("2026-03-21", "+[%10B|%010B]", "[      mars|000000mars]")]
+#[case("2026-03-21", "+[%^b|%^A|%#a]", "[MARS|SAMEDI|SAM.]")]
+#[case("2026-02-21", "+[%^B]", "[FéVRIER]")] // spell-checker:disable-line
+fn test_locale_names_with_flags(#[case] date: &str, #[case] fmt: &str, #[case] expected: &str) {
+    // Flags and widths apply to the localized names, and only ASCII letters
+    // change case
+    check_date("fr_FR.UTF-8", date, fmt, expected);
+}
+
+#[uutests::wasi_ignore(NoTzdb)]
+#[rstest]
+#[cfg(unix)]
+// spell-checker:disable
+#[case("fa_IR.UTF-8", "+[%-d %B %Y]", "[1 فروردین 1405]")]
+#[case(
+    "fa_IR.UTF-8",
+    "+[%F|%D|%_m|%0e|%6Y]",
+    "[1405-01-01|01/01/26| 1|01|001405]"
+)]
+#[case("am_ET.UTF-8", "+[%F|%-m|%_d]", "[2018-07-12|7|12]")]
+// Composite conversions are modified as a whole
+#[case("am_ET.UTF-8", "+[%-D|%_D|%10D]", "[07/12/26|07/12/26|  07/12/26]")]
+#[case("th_TH.UTF-8", "+[%F|%-Y]", "[2569-03-21|2569]")]
+// spell-checker:enable
+// ISO 8601 stays Gregorian
+#[case("fa_IR.UTF-8", "--iso-8601", "2026-03-21")]
+fn test_locale_calendar_with_flags(
+    #[case] locale: &str,
+    #[case] fmt: &str,
+    #[case] expected: &str,
+) {
+    // Flags, widths, %F and %D use the date in the calendar of the locale
+    check_date(locale, "2026-03-21", fmt, expected);
+}
+
+#[uutests::wasi_ignore(NoTzdb)]
+#[test]
+#[cfg(unix)]
+fn test_locale_o_modifier() {
+    // The O modifier is dropped, so %OB or %Od are localized like %B or %d
+    // spell-checker:disable
+    check_date("fr_FR.UTF-8", "2026-03-21", "+[%OB|%Ob]", "[mars|mars]");
+    check_date(
+        "fa_IR.UTF-8",
+        "2026-03-21",
+        "+[%Od %OB|%OY]",
+        "[01 فروردین|1405]",
+    );
+    // spell-checker:enable
+}
+
 #[test]
 fn test_percent_percent_not_replaced() {
     let cases = [
