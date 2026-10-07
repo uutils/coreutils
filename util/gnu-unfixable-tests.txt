@@ -44,5 +44,3 @@ cp/nfs-removal-race.log
 df/skip-duplicates.log
 # parses the C code to look for getopt usage
 misc/getopt_vs_usage.sh
-# overrides readdir; std uses readdir64
-rm/rm-readdir-fail.log

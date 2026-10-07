@@ -3,11 +3,18 @@ ver="9.12"
 repo=https://github.com/coreutils/coreutils
 curl -L "${repo}/releases/download/v${ver}/coreutils-${ver}.tar.xz" | tar --strip-components=1 -xJf -
 
+# Pending upstream merge
+curl -L https://raw.githubusercontent.com/oech3/gnu-coreutils/refs/heads/patch-1/tests/dd/nocache_fail.sh > tests/dd/nocache_fail.sh
+curl -L https://raw.githubusercontent.com/oech3/gnu-coreutils/refs/heads/no-mtab/tests/df/no-mtab-status.sh > tests/df/no-mtab-status.sh
+sed -i '/tests\/df\/no-mtab-status-masked-proc.sh/ D' Makefile
+curl -L https://raw.githubusercontent.com/oech3/gnu-coreutils/refs/heads/rm-readdir-fail/tests/rm/rm-readdir-fail.sh > tests/rm/rm-readdir-fail.sh
 # TODO stop backporting tests from master at GNU coreutils > $ver
 backport=(
   # https://github.com/coreutils/coreutils/issues/355
   env/env.sh
   env/printenv.sh
+  # remove LD_PRELOAD
+  ls/getxattr-speedup.sh
 )
 for f in "${backport[@]}"
   do curl -L ${repo}/raw/refs/heads/master/tests/$f > tests/$f
