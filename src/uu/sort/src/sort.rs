@@ -3354,16 +3354,35 @@ fn check_readable(path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// An input that names itself in a read error, so that `read failed: ...`
+/// says which input failed, as GNU does.
+struct NamedReader<R> {
+    name: OsString,
+    inner: R,
+}
+
+impl<R: Read> Read for NamedReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.inner.read(buf).map_err(|error| {
+            std::io::Error::new(
+                error.kind(),
+                format!("{}: {}", self.name.maybe_quote(), strip_errno(&error)),
+            )
+        })
+    }
+}
+
 fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
     let path = path.as_ref();
+    let name = path.to_owned();
     if path == STDIN_FILE {
-        let stdin = stdin();
-        return Ok(Box::new(stdin) as Box<dyn Read + Send>);
+        let inner = stdin();
+        return Ok(Box::new(NamedReader { name, inner }) as Box<dyn Read + Send>);
     }
 
     let path = Path::new(path);
     match File::open(path) {
-        Ok(f) => Ok(Box::new(f) as Box<dyn Read + Send>),
+        Ok(inner) => Ok(Box::new(NamedReader { name, inner }) as Box<dyn Read + Send>),
         Err(error) => Err(SortError::ReadFailed {
             path: path.to_owned(),
             error,

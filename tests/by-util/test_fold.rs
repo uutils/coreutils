@@ -1234,3 +1234,19 @@ fn test_dash_operand_does_not_swallow_the_next_argument() {
         .succeeds()
         .stdout_is("hello\n");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_read_error_names_the_input() {
+    let (at, mut ucmd) = uutests::at_and_ucmd!();
+    at.mkdir("d");
+    ucmd.arg("d")
+        .fails_with_code(1)
+        .stderr_only("fold: d: Is a directory\n");
+
+    let (at, mut ucmd) = uutests::at_and_ucmd!();
+    at.mkdir("d");
+    ucmd.set_stdin(std::fs::File::open(at.plus("d")).unwrap())
+        .fails_with_code(1)
+        .stderr_only("fold: -: Is a directory\n");
+}

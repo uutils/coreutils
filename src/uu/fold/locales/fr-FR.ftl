@@ -6,4 +6,3 @@ fold-spaces-help = couper les lignes aux limites de mots plutôt qu'à une large
 fold-width-help = définir WIDTH comme largeur de ligne maximale au lieu de 80
 fold-error-illegal-width = nombre de colonnes invalide : { $width }
 fold-error-width-out-of-range = nombre de colonnes invalide : { $width } : Le résultat numérique est en dehors de l'intervalle
-fold-error-readline = échec de lecture de la ligne
