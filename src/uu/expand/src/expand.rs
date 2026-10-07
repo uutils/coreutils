@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
@@ -444,16 +444,17 @@ fn expand_file(
     output: &mut BufWriter<std::io::Stdout>,
     options: &Options,
 ) -> UResult<()> {
-    let mut buf = [0u8; 4096];
     let mut input = open(file)?;
     let ts = options.tabstops.as_ref();
     let mut col = 0;
     loop {
-        match input.read(&mut buf) {
-            Ok(0) => break,
-            Ok(n) => {
-                expand_buf(&buf[..n], output, ts, options, &mut col)
+        match input.fill_buf() {
+            Ok([]) => break,
+            Ok(buf) => {
+                expand_buf(buf, output, ts, options, &mut col)
                     .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+                let len = buf.len();
+                input.consume(len);
             }
             Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
         }
