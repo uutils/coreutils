@@ -568,3 +568,41 @@ fn test_couldnt_rename() {
         .fails_with_code(1)
         .stderr_is("shred: /proc/self/mem: Couldn't rename to '/proc/self/000': No such file or directory\n");
 }
+
+#[test]
+fn test_shred_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    ucmd.arg("d")
+        .fails_with_code(1)
+        .stderr_only("shred: d: failed to open for writing: Is a directory\n");
+}
+
+#[test]
+fn test_shred_missing_file() {
+    new_ucmd!()
+        .arg("missing")
+        .fails_with_code(1)
+        .stderr_only("shred: missing: failed to open for writing: No such file or directory\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_shred_fifo() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("p");
+    ucmd.arg("p")
+        .fails_with_code(1)
+        .stderr_only("shred: p: invalid file type\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_shred_socket() {
+    // GNU reaches the open and reports its failure; so does shred here.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let _listener = std::os::unix::net::UnixListener::bind(at.plus("s")).unwrap();
+    ucmd.arg("s")
+        .fails_with_code(1)
+        .stderr_contains("shred: s: failed to open for writing: ");
+}

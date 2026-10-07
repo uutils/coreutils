@@ -612,6 +612,30 @@ fn create_standard_pass_sequence(num_passes: usize) -> Vec<PassType> {
 
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::cognitive_complexity)]
+#[cfg(unix)]
+fn is_fifo(metadata: &fs::Metadata) -> bool {
+    use std::os::unix::fs::FileTypeExt;
+    metadata.file_type().is_fifo()
+}
+
+#[cfg(not(unix))]
+fn is_fifo(_metadata: &fs::Metadata) -> bool {
+    false
+}
+
+/// A character or block device, which shred does not overwrite yet.
+#[cfg(unix)]
+fn is_device(metadata: &fs::Metadata) -> bool {
+    use std::os::unix::fs::FileTypeExt;
+    let file_type = metadata.file_type();
+    file_type.is_char_device() || file_type.is_block_device()
+}
+
+#[cfg(not(unix))]
+fn is_device(metadata: &fs::Metadata) -> bool {
+    !metadata.is_file()
+}
+
 fn wipe_file(
     path_str: &OsString,
     n_passes: usize,
@@ -644,21 +668,33 @@ fn wipe_file(
     // `Path::exists()` and `Path::is_file()` both collapse any metadata error
     // (including a permission error) into `false`, which made shred report a
     // file whose parent directory lacks search permission as "No such file or
-    // directory". Inspect the metadata directly so a genuine `ENOENT` stays a
-    // "no such file" error while a permission error falls through to the
-    // open-for-writing below, which surfaces the real reason.
+    // directory". Inspect the metadata directly: a directory and a missing
+    // file are reported as the failures to open them that GNU meets, a FIFO
+    // as a type GNU refuses before opening, and a permission error falls
+    // through to the open-for-writing below, which surfaces the real reason.
     match fs::metadata(path) {
-        Ok(md) if !md.is_file() => {
+        Ok(md) if md.is_dir() => {
+            return Err(USimpleError::new(
+                1,
+                translate!("shred-failed-to-open-for-writing-is-a-directory", "file" => path.maybe_quote()),
+            ));
+        }
+        Ok(md) if is_fifo(&md) => {
+            return Err(USimpleError::new(
+                1,
+                translate!("shred-invalid-file-type", "file" => path.maybe_quote()),
+            ));
+        }
+        Ok(md) if is_device(&md) => {
             return Err(USimpleError::new(
                 1,
                 translate!("shred-not-a-file", "file" => path.maybe_quote()),
             ));
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            return Err(USimpleError::new(
-                1,
-                translate!("shred-no-such-file-or-directory", "file" => path.maybe_quote()),
-            ));
+            return Err(err).map_err_context(
+                || translate!("shred-failed-to-open-for-writing", "file" => path.maybe_quote()),
+            );
         }
         _ => {}
     }
