@@ -36,7 +36,7 @@ use std::io::Result as IOResult;
 use std::os::unix::fs::MetadataExt;
 
 use std::os::unix::ffi::OsStrExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, thiserror::Error)]
 enum PermsError {
@@ -626,7 +626,6 @@ impl ChownExecutor {
                     Ok(subdir_fd) => {
                         self.safe_traverse_dir(&subdir_fd, &entry_path, ret, ancestors);
                     }
-                    // A directory that does not open cannot be read.
                     Err(e) => {
                         *ret = 1;
                         if self.verbosity.level != VerbosityLevel::Silent {
@@ -662,6 +661,9 @@ impl ChownExecutor {
             .follow_links(self.traverse_symlinks == TraverseSymlinks::All)
             .min_depth(1)
             .into_iter();
+        // The directory whose entry came last: walkdir reports a directory it
+        // cannot read right after that entry, under the same path.
+        let mut last_dir: Option<PathBuf> = None;
         // We can't use a for loop because we need to manipulate the iterator inside the loop.
         while let Some(entry) = iterator.next() {
             let entry = match entry {
@@ -671,9 +673,7 @@ impl ChownExecutor {
                         continue;
                     }
                     if let Some(path) = e.path() {
-                        // A directory that can be reached but not listed is
-                        // reported as unreadable, like GNU does.
-                        let message = if e.io_error().is_some() && path.is_dir() {
+                        let message = if last_dir.as_deref() == Some(path) {
                             "perms-cannot-read-directory"
                         } else {
                             "perms-cannot-access"
@@ -698,6 +698,7 @@ impl ChownExecutor {
                 Ok(entry) => entry,
             };
             let path = entry.path();
+            last_dir = entry.file_type().is_dir().then(|| path.to_path_buf());
 
             let Some(meta) = self.obtain_meta(path, self.dereference) else {
                 ret = 1;
@@ -809,8 +810,7 @@ impl ChownExecutor {
         0
     }
 
-    /// Try to open directory with error reporting: a directory that does
-    /// not open cannot be read.
+    /// Try to open directory with error reporting
     #[cfg(target_os = "linux")]
     fn try_open_dir(&self, path: &Path) -> Option<DirFd> {
         DirFd::open(path, SymlinkBehavior::Follow)
