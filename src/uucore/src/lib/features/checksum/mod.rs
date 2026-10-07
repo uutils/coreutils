@@ -195,6 +195,9 @@ impl AlgoKind {
         }
     }
 
+    /// Legacy algorithms (SYSV, BSD, CRC and CRC32B) print a decimal checksum
+    /// and a size, not a digest. They have no tagged format, and `--check`
+    /// does not support them.
     pub fn is_legacy(self) -> bool {
         use AlgoKind::*;
         matches!(self, Sysv | Bsd | Crc | Crc32b)
