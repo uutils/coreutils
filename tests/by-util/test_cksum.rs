@@ -3280,15 +3280,18 @@ mod debug_flag {
     #[test]
     #[cfg(target_arch = "aarch64")]
     fn test_debug_flag_aarch64() {
+        // The vmull path needs PMULL. ASIMD alone is not enough.
+        let expected = if std::arch::is_aarch64_feature_detected!("pmull") {
+            "using vmull hardware support\n"
+        } else {
+            "vmull support not detected\n"
+        };
         new_ucmd!()
             .arg("--debug")
             .arg("lorem_ipsum.txt")
             .succeeds()
             .stdout_is_fixture("crc_single_file.expected")
-            .stderr_str_check(|stderr| {
-                stderr == "using vmull hardware support\n"
-                    || stderr == "vmull support not detected\n"
-            });
+            .stderr_is(expected);
     }
 
     #[test]
