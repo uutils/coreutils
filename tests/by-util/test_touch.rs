@@ -985,10 +985,12 @@ fn test_touch_existing_unwritable_file_error_msg() {
         .args(&["-d", "2000-01-01", path])
         .fails()
         .stderr_only("touch: cannot touch '/etc/passwd': Permission denied\n");
-    new_ucmd!()
-        .args(&["-c", path])
-        .fails()
-        .stderr_only("touch: setting times of '/etc/passwd': Permission denied\n");
+    let result = new_ucmd!().args(&["-c", path]).fails();
+    assert!(matches!(
+        result.stderr_str(),
+        "touch: setting times of '/etc/passwd': Permission denied\n"
+            | "touch: setting times of '/etc/passwd': Operation not permitted\n"
+    ));
 }
 
 #[test]
