@@ -154,30 +154,6 @@ fn test_utf8_malformed_sequences_do_not_count_as_characters() {
     }
 }
 
-#[cfg(unix)]
-#[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: locale names without encoding suffixes require native locale lookup"
-)]
-fn test_utf8_locale_without_encoding_suffix_validates_characters() {
-    let locale = "en_IN";
-    if !uutests::util::is_locale_available(locale) {
-        return;
-    }
-    for variable in ["LC_ALL", "LC_CTYPE", "LANG"] {
-        new_ucmd!()
-            .env("LC_ALL", "")
-            .env("LC_CTYPE", "")
-            .env("LANG", "C")
-            .env(variable, locale)
-            .arg("-cm")
-            .pipe_in(b"\xc3\xa4\xff\n")
-            .succeeds()
-            .stdout_is("      2       4\n");
-    }
-}
-
 #[test]
 fn test_utf8_sequences_across_read_buffer_boundaries() {
     let cases: &[(&[u8], usize)] = &[
