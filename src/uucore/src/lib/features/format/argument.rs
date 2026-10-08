@@ -126,7 +126,7 @@ impl<'a> FormatArguments<'a> {
             return Err(ExtendedParserError::NotNumeric);
         };
 
-        let (Some((b'"', bytes)) | Some((b'\'', bytes))) = s.split_first() else {
+        let Some((b'"' | b'\'', bytes)) = s.split_first() else {
             // This really can't happen, the string we are given must start with '/".
             debug_assert!(false);
             return Err(ExtendedParserError::NotNumeric);

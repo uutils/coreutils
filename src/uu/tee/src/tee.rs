@@ -280,7 +280,7 @@ fn process_error(
 ) -> Result<(), ()> {
     let ignore_pipe = matches!(
         mode,
-        None | Some(OutputErrorMode::WarnNoPipe) | Some(OutputErrorMode::ExitNoPipe)
+        None | Some(OutputErrorMode::WarnNoPipe | OutputErrorMode::ExitNoPipe)
     );
 
     if ignore_pipe && e.kind() == ErrorKind::BrokenPipe {

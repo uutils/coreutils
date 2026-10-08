@@ -27,9 +27,7 @@ pub(crate) fn effective_access(path: &OsStr, access: Access) -> bool {
 
     match accessat(CWD, path, access, flags) {
         Ok(()) => true,
-        Err(io::Errno::NOSYS) | Err(io::Errno::OPNOTSUPP) => {
-            effective_access_fallback(path, access)
-        }
+        Err(io::Errno::NOSYS | io::Errno::OPNOTSUPP) => effective_access_fallback(path, access),
         Err(_) => false,
     }
 }
