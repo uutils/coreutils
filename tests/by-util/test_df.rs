@@ -1088,9 +1088,15 @@ fn test_path_below_a_regular_file() {
 fn test_symlink_loop() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.relative_symlink_file("loop", "loop");
+    #[cfg(all(not(target_env = "musl"), not(target_os = "android")))]
+    let detail = "Too many levels of symbolic links";
+    #[cfg(all(not(target_env = "musl"), target_os = "android"))]
+    let detail = "Too many symbolic links encountered";
+    #[cfg(target_env = "musl")]
+    let detail = "Symbolic link loop";
     ucmd.arg("loop")
         .fails_with_code(1)
-        .stderr_only("df: loop: Too many levels of symbolic links\n");
+        .stderr_only(format!("df: loop: {detail}\n"));
 }
 
 #[test]
