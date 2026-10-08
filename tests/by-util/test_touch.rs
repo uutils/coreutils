@@ -960,7 +960,7 @@ fn test_touch_permission_denied_error_msg() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: host system file is not visible")]
 fn test_touch_existing_unwritable_file_error_msg() {
     use std::fs::OpenOptions;
@@ -992,7 +992,7 @@ fn test_touch_existing_unwritable_file_error_msg() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: filesystem permissions differ")]
 fn test_touch_inaccessible_parent_error_msg() {
     use std::fs::{Permissions, set_permissions};
@@ -1016,17 +1016,17 @@ fn test_touch_inaccessible_parent_error_msg() {
 
     set_permissions(&dir, Permissions::from_mode(0o700)).unwrap();
 
-    assert!(!default.succeeded());
+    default.failure();
     default.stderr_only(format!(
         "touch: cannot touch '{}': Permission denied\n",
         file.display()
     ));
-    assert!(!no_create.succeeded());
+    no_create.failure();
     no_create.stderr_only(format!(
         "touch: setting times of '{}': Permission denied\n",
         file.display()
     ));
-    assert!(!no_deref.succeeded());
+    no_deref.failure();
     no_deref.stderr_only(format!(
         "touch: setting times of '{}': Permission denied\n",
         file.display()
