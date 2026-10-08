@@ -172,11 +172,80 @@ pub fn get_locale_encoding() -> UEncoding {
     get_collating_locale().1
 }
 
-/// Return the character-type encoding (`LC_CTYPE`) deduced from the environment.
+/// Return the character-type encoding (`LC_CTYPE`) selected by the environment.
+/// Bare locale names are resolved through native locale data where available.
 pub fn get_ctype_encoding() -> UEncoding {
     static CTYPE_ENCODING: OnceLock<UEncoding> = OnceLock::new();
 
-    *CTYPE_ENCODING.get_or_init(|| get_locale_from_env("LC_CTYPE").1)
+    *CTYPE_ENCODING.get_or_init(|| {
+        let name = locale_name_from_env("LC_CTYPE");
+        if let Some(name) = name.as_deref()
+            && !name.contains('.')
+            && !matches!(name, "C" | "POSIX")
+            && let Some(encoding) = encoding_for_bare_locale(name)
+        {
+            return encoding;
+        }
+        locale_from_name(name.as_deref()).1
+    })
+}
+
+fn encoding_for_bare_locale(name: &str) -> Option<UEncoding> {
+    #[cfg(any(
+        target_os = "linux",
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "openbsd",
+        target_os = "illumos",
+        target_os = "solaris",
+        target_os = "aix",
+        target_os = "hurd"
+    ))]
+    {
+        use std::ffi::{CStr, CString};
+        // libc has no nl_langinfo_l binding on Apple and OpenBSD targets.
+        unsafe extern "C" {
+            fn nl_langinfo_l(item: libc::nl_item, locale: libc::locale_t) -> *mut libc::c_char;
+        }
+        let name = CString::new(name).ok()?;
+        // SAFETY: name is a NUL-terminated string. A null base creates an owned
+        // locale, without changing the process-wide locale.
+        let locale =
+            unsafe { libc::newlocale(libc::LC_CTYPE_MASK, name.as_ptr(), std::ptr::null_mut()) };
+        if locale.is_null() {
+            return None;
+        }
+        // SAFETY: locale is owned and live while its CODESET string is read.
+        // It is freed only after the string has been inspected.
+        unsafe {
+            let codeset = nl_langinfo_l(libc::CODESET, locale);
+            let encoding = if codeset.is_null() {
+                None
+            } else if matches!(CStr::from_ptr(codeset).to_bytes(), b"UTF-8" | b"UTF8") {
+                Some(UEncoding::Utf8)
+            } else {
+                Some(UEncoding::Ascii)
+            };
+            libc::freelocale(locale);
+            encoding
+        }
+    }
+    #[cfg(not(any(
+        target_os = "linux",
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "openbsd",
+        target_os = "illumos",
+        target_os = "solaris",
+        target_os = "aix",
+        target_os = "hurd"
+    )))]
+    {
+        let _ = name;
+        None
+    }
 }
 
 #[cfg(test)]
@@ -190,6 +259,33 @@ mod tests {
             ("POSIX", super::UEncoding::Ascii),
         ] {
             assert_eq!(super::locale_from_name(Some(name)).1, expected, "{name}");
+        }
+    }
+
+    #[test]
+    fn locale_names_with_nul_have_no_native_encoding() {
+        assert_eq!(super::encoding_for_bare_locale("en_IN\0"), None);
+    }
+
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    #[test]
+    fn bare_locales_use_their_installed_encoding() {
+        assert_eq!(super::encoding_for_bare_locale("nonexistent_LOCALE"), None);
+        assert_eq!(
+            super::encoding_for_bare_locale("C"),
+            Some(super::UEncoding::Ascii)
+        );
+        assert_eq!(
+            super::encoding_for_bare_locale("POSIX"),
+            Some(super::UEncoding::Ascii)
+        );
+        for (name, expected) in [
+            ("en_IN", super::UEncoding::Utf8),
+            ("en_US", super::UEncoding::Ascii),
+        ] {
+            if let Some(encoding) = super::encoding_for_bare_locale(name) {
+                assert_eq!(encoding, expected, "{name}");
+            }
         }
     }
 
