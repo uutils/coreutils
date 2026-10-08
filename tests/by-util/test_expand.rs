@@ -2,9 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore (ToDO) taaaa tbbbb tcccc
+
 use uucore::display::Quotable;
 use uutests::new_ucmd;
-// spell-checker:ignore (ToDO) taaaa tbbbb tcccc
 
 #[test]
 fn test_invalid_arg() {
@@ -66,21 +68,15 @@ fn test_with_multiple_files() {
 }
 
 #[test]
-fn test_tabs_space_separated_list() {
-    new_ucmd!()
-        .args(&["--tabs", "3 6 9"])
-        .pipe_in("a\tb\tc\td\te")
-        .succeeds()
-        .stdout_is("a  b  c  d e");
-}
-
-#[test]
-fn test_tabs_mixed_style_list() {
-    new_ucmd!()
-        .args(&["--tabs", ", 3,6 9"])
-        .pipe_in("a\tb\tc\td\te")
-        .succeeds()
-        .stdout_is("a  b  c  d e");
+fn test_tabs() {
+    for list in ["3 6 9", "3,6,9", "3\t6\t9", ", \t3,\t6 9,"] {
+        new_ucmd!()
+            .arg("--tabs")
+            .arg(list)
+            .pipe_in("a\tb\tc\td\te")
+            .succeeds()
+            .stdout_is("a  b  c  d e");
+    }
 }
 
 #[test]
@@ -280,12 +276,12 @@ fn test_tabs_with_too_large_size() {
 )]
 #[test]
 fn test_large_tab_stop_without_tabs_does_not_allocate() {
-    use rlimit::Resource;
+    use rustix::process::Resource;
 
     const AS_LIMIT: u64 = 200 * 1024 * 1024;
 
     new_ucmd!()
-        .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
+        .limit(Resource::As, AS_LIMIT, AS_LIMIT)
         .arg("--tabs=267672676527678256")
         .pipe_in("hello\n")
         .succeeds()
@@ -471,6 +467,24 @@ fn test_expand_non_utf8_paths() {
     ucmd.arg(&filename)
         .succeeds()
         .stdout_is("hello   world\ntest    line\n");
+}
+
+#[test]
+fn test_wide_multibyte_char_width() {
+    // A tab following a wide character must expand to the next tab stop based
+    // on the character's display width, not its byte length. Regression for a
+    // bug where the UTF-8 sequence length was derived from the leading byte's
+    // codepoint value, so 3- and 4-byte characters were mis-measured.
+    // U+4E2D (中, 3 bytes, width 2): col 0->2, tab pads 6 spaces to column 8.
+    new_ucmd!()
+        .pipe_in("\u{4E2D}\t|".as_bytes())
+        .succeeds()
+        .stdout_is("\u{4E2D}      |");
+    // U+1F600 (😀, 4 bytes, width 2) behaves the same.
+    new_ucmd!()
+        .pipe_in("\u{1F600}\t|".as_bytes())
+        .succeeds()
+        .stdout_is("\u{1F600}      |");
 }
 
 #[test]

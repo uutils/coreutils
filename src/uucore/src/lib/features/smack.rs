@@ -12,12 +12,10 @@ use std::io::{self, Read, Write};
 use std::path::Path;
 use std::sync::OnceLock;
 
-use thiserror::Error;
-
 use crate::error::{UError, USimpleError, strip_errno};
 use crate::translate;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum SmackError {
     #[error("{}", translate!("smack-error-not-enabled"))]
     SmackNotEnabled,
@@ -25,7 +23,7 @@ pub enum SmackError {
     #[error("{}", translate!("smack-error-label-retrieval-failure", "error" => strip_errno(.0)))]
     LabelRetrievalFailure(io::Error),
 
-    #[error("{}", translate!("smack-error-label-set-failure", "context" => .0.clone(), "error" => strip_errno(.1)))]
+    #[error("{}", translate!("smack-error-label-set-failure", "context" => .0, "error" => strip_errno(.1)))]
     LabelSetFailure(String, io::Error),
 }
 

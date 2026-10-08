@@ -25,7 +25,7 @@ pub(crate) mod error_exit_status {
     pub const ANOTHER_ERROR: i32 = libc::EXIT_FAILURE;
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     #[error("{}", translate!("runcon-error-no-command"))]
     MissingCommand,
@@ -128,14 +128,8 @@ impl Display for RunconError {
 impl UError for Error {
     fn code(&self) -> i32 {
         match self {
-            Self::MissingCommand => error_exit_status::ANOTHER_ERROR,
-            Self::SELinuxNotEnabled => error_exit_status::ANOTHER_ERROR,
-            Self::NotUTF8(_) => error_exit_status::ANOTHER_ERROR,
             Self::CommandLine(e) => e.exit_code(),
-            Self::SELinux { .. } => error_exit_status::ANOTHER_ERROR,
-            Self::Io { .. } => error_exit_status::ANOTHER_ERROR,
-            Self::Io1 { .. } => error_exit_status::ANOTHER_ERROR,
-            Self::Write(_) => error_exit_status::ANOTHER_ERROR,
+            _ => error_exit_status::ANOTHER_ERROR,
         }
     }
 }

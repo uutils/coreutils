@@ -3,12 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore checkfile, testf, ntestf
+
 use rstest::rstest;
 
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
-// spell-checker:ignore checkfile, testf, ntestf
+
 macro_rules! get_hash(
     ($str:expr) => (
         $str.split(' ').collect::<Vec<&str>>()[0]
@@ -173,6 +175,19 @@ fn test_check_b2sum_length_option_8() {
         .arg(at.subdir.join("testf.b2sum"))
         .succeeds()
         .stdout_only("testf: OK\n");
+}
+
+#[test]
+fn test_check_status_reports_unusable_checksum_input() {
+    // --status silences per-file results, but a checksum list with no usable
+    // line is an input error and must still be reported.
+    new_ucmd!()
+        .arg("-c")
+        .arg("--status")
+        .pipe_in("not-a-checksum-line\n")
+        .fails()
+        .no_stdout()
+        .stderr_contains("'standard input': no properly formatted checksum lines found");
 }
 
 #[test]

@@ -18,9 +18,9 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
 use std::path::MAIN_SEPARATOR;
 use std::path::Path;
-use thiserror::Error;
+use std::sync::atomic::{AtomicBool, Ordering};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult};
+use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use uucore::translate;
@@ -30,7 +30,7 @@ mod platform;
 #[cfg(all(unix, not(target_os = "redox")))]
 use platform::{safe_remove_dir_recursive, safe_remove_empty_dir, safe_remove_file};
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum RmError {
     #[error("{}", translate!("rm-error-missing-operand", "util_name" => uucore::execution_phrase()))]
     MissingOperand,
@@ -52,41 +52,69 @@ enum RmError {
 
 impl UError for RmError {}
 
+/// Write one verbose line to standard output, turning a write failure
+/// (e.g. a full device or a closed pipe) into an error instead of
+/// panicking like `println!` would.
+fn write_verbose_line(message: &str) -> UResult<()> {
+    writeln!(io::stdout().lock(), "{message}").map_err(|err| {
+        USimpleError::new(
+            1,
+            translate!("rm-error-standard-output", "error" => strip_errno(&err)),
+        )
+    })?;
+    Ok(())
+}
+
 /// Helper function to print verbose message for removed file
-fn verbose_removed_file(path: &Path, options: &Options) {
+fn verbose_removed_file(path: &Path, options: &Options) -> UResult<()> {
     if options.verbose {
-        println!(
-            "{}",
-            translate!("rm-verbose-removed", "file" => uucore::fs::normalize_path(path).quote())
-        );
+        write_verbose_line(&translate!(
+            "rm-verbose-removed",
+            "file" => uucore::fs::normalize_path(path).quote()
+        ))?;
     }
+    Ok(())
 }
 
 /// Helper function to print verbose message for removed directory
-fn verbose_removed_directory(path: &Path, options: &Options) {
+fn verbose_removed_directory(path: &Path, options: &Options) -> UResult<()> {
     if options.verbose {
-        println!(
-            "{}",
-            translate!("rm-verbose-removed-directory", "file" => uucore::fs::normalize_path(path).quote())
-        );
+        write_verbose_line(&translate!(
+            "rm-verbose-removed-directory",
+            "file" => uucore::fs::normalize_path(path).quote()
+        ))?;
+    }
+    Ok(())
+}
+
+/// Set once a verbose write failure has happened. Like GNU, a broken standard
+/// output neither interrupts the removal nor is reported more than once, but it
+/// does make `rm` exit with a failure status.
+static VERBOSE_WRITE_FAILED: AtomicBool = AtomicBool::new(false);
+
+/// Helper function to report a verbose output write error, at most once
+fn report_verbose_write_error(result: UResult<()>) {
+    if let Err(e) = result
+        && !VERBOSE_WRITE_FAILED.swap(true, Ordering::Relaxed)
+    {
+        show_error!("{e}");
     }
 }
 
 /// Helper function to show error with context and return error status
 fn show_removal_error(error: io::Error, path: &Path) -> bool {
-    if error.kind() == io::ErrorKind::PermissionDenied {
-        show_error!("cannot remove {}: Permission denied", path.quote());
-    } else {
-        let e =
-            error.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
-        show_error!("{e}");
-    }
+    let e = error.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
+    show_error!("{e}");
     true
 }
 
 /// Helper function for permission denied errors
 fn show_permission_denied_error(path: &Path) -> bool {
-    show_error!("cannot remove {}: Permission denied", path.quote());
+    show_error!(
+        "{}",
+        translate!("rm-error-cannot-remove-permission-denied", "file" =>  path.quote())
+    );
+
     true
 }
 
@@ -94,20 +122,21 @@ fn show_permission_denied_error(path: &Path) -> bool {
 fn remove_dir_with_feedback(path: &Path, options: &Options) -> bool {
     match fs::remove_dir(path) {
         Ok(_) => {
-            verbose_removed_directory(path, options);
+            report_verbose_write_error(verbose_removed_directory(path, options));
             false
         }
         Err(e) => show_removal_error(e, path),
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Copy)]
 /// Enum, determining when the `rm` will prompt the user about the file deletion
+#[derive(Eq, PartialEq, Clone, Copy)]
 pub enum InteractiveMode {
     /// Never prompt
     Never,
-    /// Prompt once before removing more than three files, or when removing
-    /// recursively.
+    /// Ask for confirmation a single time, covering the whole operation, when
+    /// the request looks broad: a recursive removal, or more than three
+    /// operands.
     Once,
     /// Prompt before every removal
     Always,
@@ -165,9 +194,9 @@ pub struct Options {
     pub verbose: bool,
     /// `-g`, `--progress`
     pub progress: bool,
-    #[doc(hidden)]
     /// `---presume-input-tty`
     /// Always use `None`; GNU flag for testing use only
+    #[doc(hidden)]
     pub __presume_input_tty: Option<bool>,
 }
 
@@ -295,7 +324,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    if remove(&files, &options) {
+    if remove(&files, &options) || VERBOSE_WRITE_FAILED.load(Ordering::Relaxed) {
         return Err(1.into());
     }
 
@@ -314,7 +343,7 @@ fn handle_parse_error(e: clap::Error, args: &[OsString]) -> Box<dyn UError> {
         // The path is shell-escaped (quoted only if needed), the file name is
         // always quoted, matching GNU's two quoting styles.
         let path = locale_aware_escape_name(file, QuotingStyle::SHELL_ESCAPE);
-        let quoted = locale_aware_escape_name(file, QuotingStyle::SHELL_ESCAPE_QUOTE);
+        let quoted = locale_aware_escape_name(file, QuotingStyle::SHELL_ESCAPE_ALWAYS);
         let _ = writeln!(
             io::stderr(),
             "{}",
@@ -431,12 +460,10 @@ pub fn uu_app() -> Command {
                 .help(translate!("rm-help-progress"))
                 .action(ArgAction::SetTrue),
         )
-        // From the GNU source code:
-        // This is solely for testing.
-        // Do not document.
-        // It is relatively difficult to ensure that there is a tty on stdin.
-        // Since rm acts differently depending on that, without this option,
-        // it'd be harder to test the parts of rm that depend on that setting.
+        // Hidden, and meant only for the test suite: handing the process a real
+        // tty on stdin is awkward to arrange, and the prompting paths behave
+        // differently once it has one, so this switch stands in for that state
+        // and makes those paths reachable from a test.
         // In contrast with Arg::long, Arg::alias does not strip leading
         // hyphens. Therefore it supports 3 leading hyphens.
         .arg(
@@ -504,7 +531,9 @@ fn count_files_in_directory(p: &Path) -> u64 {
         entries
             .flatten()
             .map(|entry| match entry.file_type() {
-                Ok(ft) if ft.is_dir() => count_files_in_directory(&entry.path()),
+                Ok(ft) if ft.is_dir() && !ft.is_symlink() => {
+                    count_files_in_directory(&entry.path())
+                }
                 Ok(_) => 1,
                 Err(_) => 0,
             })
@@ -580,10 +609,10 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
     }
 
     // Only finish progress bar if it was created and files were processed
-    if let Some(pb) = progress_bar {
-        if any_files_processed {
-            pb.finish();
-        }
+    if let Some(pb) = progress_bar
+        && any_files_processed
+    {
+        pb.finish();
     }
 
     had_err
@@ -637,7 +666,14 @@ fn remove_dir_recursive(
     // a directory and we don't want to recurse. In particular, this
     // avoids an infinite recursion in the case of a link to the current
     // directory, like `ln -s . link`.
-    if !path.is_dir() || path.is_symlink() {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(e) => return show_removal_error(e, path),
+    };
+    if is_symlink_dir(&metadata) {
+        return remove_dir(path, options, progress_bar);
+    }
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
         return remove_file(path, options, progress_bar);
     }
 
@@ -659,17 +695,15 @@ fn remove_dir_recursive(
     // Fallback for non-Unix, Redox, or use fs::remove_dir_all for very long paths
     #[cfg(any(not(unix), target_os = "redox"))]
     {
-        if let Some(s) = path.to_str() {
-            if s.len() > 1000 {
-                match fs::remove_dir_all(path) {
-                    Ok(_) => return false,
-                    Err(e) => {
-                        let e = e.map_err_context(
-                            || translate!("rm-error-cannot-remove", "file" => path.quote()),
-                        );
-                        show_error!("{e}");
-                        return true;
-                    }
+        if path.to_str().is_some_and(|s| s.len() > 1000) {
+            match fs::remove_dir_all(path) {
+                Ok(_) => return false,
+                Err(e) => {
+                    let e = e.map_err_context(
+                        || translate!("rm-error-cannot-remove", "file" => path.quote()),
+                    );
+                    show_error!("{e}");
+                    return true;
                 }
             }
         }
@@ -722,27 +756,34 @@ fn remove_dir_recursive(
                 // show another error message as we return from each level
                 // of the recursion.
             }
-            Ok(_) => verbose_removed_directory(path, options),
+            Ok(_) => report_verbose_write_error(verbose_removed_directory(path, options)),
         }
 
         error
     }
 }
 
-/// Check if a path resolves to the root directory.
+/// Check if a path is the root directory.
 /// Returns true if the path is root, false otherwise.
 fn is_root_path(path: &Path) -> bool {
-    // Check simple case: literal "/" path
+    // Check simple case: literal "/" path. Costs no syscall.
     if path.has_root() && path.parent().is_none() {
         return true;
     }
 
-    // Check if path resolves to "/" after following symlinks
-    if let Ok(canonical) = path.canonicalize() {
-        canonical.has_root() && canonical.parent().is_none()
-    } else {
-        false
+    // Otherwise settle by (st_dev, st_ino): a bind mount of "/" is a directory
+    // whose path never resolves to "/", so a name check misses it (symlinks too).
+    if uucore::fs::path_is_root_dir(path, true) {
+        return true;
     }
+
+    // Platforms without (st_dev, st_ino) keep the name-based test.
+    #[cfg(not(unix))]
+    if let Ok(canonical) = path.canonicalize() {
+        return canonical.has_root() && canonical.parent().is_none();
+    }
+
+    false
 }
 
 /// Show error message for attempting to remove root.
@@ -847,7 +888,7 @@ fn remove_file(path: &Path, options: &Options, progress_bar: Option<&ProgressBar
         // Fallback method for non-Unix, Redox, or when safe traversal is unavailable
         match fs::remove_file(path) {
             Ok(_) => {
-                verbose_removed_file(path, options);
+                report_verbose_write_error(verbose_removed_file(path, options));
             }
             Err(e) => {
                 if e.kind() == io::ErrorKind::PermissionDenied {
@@ -999,6 +1040,7 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
         is_writable_metadata(metadata),
         options.interactive,
     ) {
+        #[expect(clippy::match_same_arms)] // needs comment
         (false, _, _, InteractiveMode::PromptProtected) => true,
         (false, false, false, InteractiveMode::Never) => true, // Don't prompt when interactive is never
         (_, false, false, _) => prompt_yes!(
@@ -1015,12 +1057,10 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
     }
 }
 
-// For windows we can use windows metadata trait and file attributes to see if a directory is readonly
+// For Windows, metadata.permissions().readonly() checks FILE_ATTRIBUTE_READONLY
 #[cfg(windows)]
 fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
-    use std::os::windows::prelude::MetadataExt;
-    use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_READONLY;
-    let not_user_writable = (metadata.file_attributes() & FILE_ATTRIBUTE_READONLY) != 0;
+    let not_user_writable = metadata.permissions().readonly();
     let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
     match (stdin_ok, not_user_writable, options.interactive) {
         (false, _, InteractiveMode::PromptProtected) => true,
@@ -1086,11 +1126,9 @@ fn is_symlink_dir(_metadata: &Metadata) -> bool {
 
 #[cfg(windows)]
 fn is_symlink_dir(metadata: &Metadata) -> bool {
-    use std::os::windows::prelude::MetadataExt;
-    use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_DIRECTORY;
+    use std::os::windows::fs::FileTypeExt;
 
-    metadata.file_type().is_symlink()
-        && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY) != 0)
+    metadata.file_type().is_symlink_dir()
 }
 
 mod tests {

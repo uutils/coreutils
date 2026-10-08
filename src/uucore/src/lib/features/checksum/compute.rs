@@ -15,6 +15,7 @@ use crate::checksum::{
 };
 use crate::error::{FromIo, UResult, USimpleError};
 use crate::line_ending::LineEnding;
+use crate::quoting_style::locale_aware_shell_escape;
 use crate::sum::DigestOutput;
 use crate::{show, translate};
 
@@ -256,7 +257,10 @@ where
                 if filepath.is_dir() {
                     show!(USimpleError::new(
                         1,
-                        translate!("error-is-a-directory", "file" => filepath.display())
+                        translate!(
+                            "error-is-a-directory",
+                            "file" => locale_aware_shell_escape(filepath)
+                        )
                     ));
                     continue;
                 }
@@ -271,7 +275,7 @@ where
                         file
                     }
                     Err(err) => {
-                        show!(err.map_err_context(|| filepath.to_string_lossy().into()));
+                        show!(err.map_err_context(|| locale_aware_shell_escape(filepath)));
                         continue;
                     }
                 };
@@ -283,8 +287,13 @@ where
 
         // Always compute the "binary" version of the digest, i.e. on Windows,
         // never handle CRLFs specifically.
-        let (digest_output, sz) = digest_reader(&mut digest, &mut file, ReadingMode::Binary)
-            .map_err_context(|| translate!("checksum-error-failed-to-read-input"))?;
+        let (digest_output, sz) = match digest_reader(&mut digest, &mut file, ReadingMode::Binary) {
+            Ok(result) => result,
+            Err(err) => {
+                show!(err.map_err_context(|| locale_aware_shell_escape(filename)));
+                continue;
+            }
+        };
 
         // Encodes the sum if df is Base64, leaves as-is otherwise.
         let encode_sum = |sum: DigestOutput, df: DigestFormat| {

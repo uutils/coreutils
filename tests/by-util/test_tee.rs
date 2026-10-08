@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore nopipe Fsize Nofile sigxfsz
+
 #![allow(clippy::borrow_as_ptr)]
 
 use uutests::{at_and_ucmd, new_ucmd};
@@ -13,8 +16,6 @@ use std::time::Duration;
 // tests for basic tee functionality.
 // inspired by:
 // https://github.com/coreutils/coreutils/tests/misc/tee.sh
-
-// spell-checker:ignore nopipe
 
 #[test]
 #[cfg(unix)]
@@ -669,7 +670,7 @@ mod linux_only {
             .pipe_in(&content[..])
             .fails()
             .stdout_contains(&content)
-            .stderr_contains("No space left on device");
+            .stderr_is("tee: /dev/full: No space left on device\n");
 
         assert_eq!(at.read(file_out), content);
     }
@@ -696,6 +697,63 @@ mod linux_only {
         assert_eq!(at.read(file_out_a), content);
         assert_eq!(at.read(file_out_b), content);
         assert!(result.stderr_str().contains("No space left on device"));
+    }
+
+    /// Runs tee with 2 outputs that fail part-way, and checks that the bytes they did
+    /// not take do not end up in the other outputs.
+    fn check_failed_outputs_do_not_spill(open_file_limit: Option<u64>) {
+        use rustix::process::Resource;
+
+        const CAP: u64 = 100 * 1024;
+        let (at, mut ucmd) = at_and_ucmd!();
+        let content: Vec<u8> = (0..3 * 1024 * 1024).map(|i| (i % 251) as u8).collect();
+        at.write_bytes("in", &content);
+
+        // stdout and /dev/null are not limited by the file size. "capped" is written
+        // through tee's 2nd pipe, which stdout and /dev/null keep using after it fails;
+        // "capped2", the last output, through its 1st.
+        ucmd.args(&["capped", "/dev/null", "capped2"])
+            .limit(Resource::Fsize, CAP, CAP)
+            .ignore_sigxfsz();
+        if let Some(limit) = open_file_limit {
+            ucmd.limit(Resource::Nofile, limit, limit);
+        }
+        let mut child = ucmd
+            .set_stdin(std::fs::File::open(at.plus("in")).unwrap())
+            .set_stdout(Stdio::piped())
+            .run_no_wait();
+        let stdout = child.stdout_exact_bytes(content.len());
+        // Not `stderr_is`: a coverage build fails to write its profile under the
+        // same file size limit, and says so on stderr.
+        child
+            .wait()
+            .unwrap()
+            .code_is(1)
+            .stderr_contains("tee: capped: File too large\ntee: capped2: File too large\n");
+
+        assert!(stdout == content, "stdout differs from the input");
+        assert_eq!(at.metadata("capped").len(), CAP);
+        assert_eq!(at.metadata("capped2").len(), CAP);
+    }
+
+    #[test]
+    fn test_tee_failed_output_does_not_spill_into_others() {
+        check_failed_outputs_do_not_spill(None);
+    }
+
+    // Just enough file descriptors for stdio, the 3 outputs and tee's 2 pipes: a
+    // failed output's pipe has to be freed before it is replaced.
+    #[test]
+    fn test_tee_failed_output_at_open_file_limit() {
+        check_failed_outputs_do_not_spill(Some(10));
+    }
+
+    #[test]
+    fn test_permission_denied_clean() {
+        new_ucmd!()
+            .arg("/dev/mem")
+            .fails_with_code(1)
+            .stderr_is("tee: /dev/mem: Permission denied\n");
     }
 }
 

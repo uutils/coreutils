@@ -91,7 +91,7 @@ report. A few caveats:
 
 - The package is PATCHED, so it may differ from upstream.
 - NEVER install this package on your system — it isn't meant for daily use.
-  Instead, manually download and extract the [tarball](https://launchpad.net/~bamf0/+archive/ubuntu/coreutils-reference/+files/gnu-coreutils_9.11-0ubuntu1~ppa3_amd64.deb)
+  Instead, manually download and extract the [tarball](https://launchpad.net/~bamf0/+archive/ubuntu/coreutils-reference/+files/gnu-coreutils_9.12-0ubuntu1~ppa1_amd64.deb)
   and run it from there.
 - Bug reports and fixes for this package itself are not accepted here.
 
@@ -280,7 +280,9 @@ gitignore: add temporary files
     `Fix #1234`, but `ls: fix version sort order`.
   - You can prefix the title with the utility the PR concerns.
 - Keep PRs small and self-contained. A set of small PRs is much more likely to
-  get merged quickly than one large PR.
+  get merged quickly than one large PR. If you have a large change to submit,
+  consider using [`gh stack`](https://github.com/github/gh-stack) to split it
+  into a series of stacked PRs that are easier to review.
 - Make sure the CI passes (up to intermittently failing tests).
 - You know your code best, that's why it's best if you can solve merge conflicts
   on your branch yourself.

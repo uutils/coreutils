@@ -33,7 +33,12 @@ use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions};
 
 #[cfg(unix)]
 use uucore::entries;
-#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "netbsd"
+))]
 use uucore::fsxattr::has_acl;
 #[cfg(unix)]
 use uucore::libc::{dev_t, major, minor};
@@ -42,8 +47,8 @@ use uucore::{
     format::human::human_readable,
     fs::display_permissions,
     fsext::metadata_get_time,
-    i18n::{UEncoding, get_ctype_encoding},
-    os_str_as_bytes_lossy,
+    line_ending::LineEnding,
+    os_str_as_bytes_lossy, os_string_from_vec,
     quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
     show,
     time::{FormatSystemTimeFallback, format_system_time},
@@ -51,7 +56,7 @@ use uucore::{
 
 use crate::colors::{StyleManager, color_name};
 use crate::config::Files;
-use crate::dired::{self, DiredOutput};
+use crate::dired::{self, DiredOutput, NameSpan};
 use crate::{Config, ListState, LsError, PathData, get_block_size};
 use lscolors::Indicator;
 
@@ -64,7 +69,6 @@ pub(crate) struct LongFormat {
     pub(crate) author: bool,
     pub(crate) group: bool,
     pub(crate) owner: bool,
-    #[cfg(unix)]
     pub(crate) numeric_uid_gid: bool,
 }
 
@@ -90,7 +94,8 @@ pub(crate) struct PaddingCollection {
 
 pub(crate) struct DisplayItemName {
     pub(crate) displayed: OsString,
-    pub(crate) dired_name_len: usize,
+    /// Where the name sits inside `displayed`, for `--dired`.
+    pub(crate) dired_name: NameSpan,
 
     /// Keep track of whether the quoted name started with a quote, so when
     /// needed, we don't have to look at the `displayed` field and skip
@@ -98,7 +103,7 @@ pub(crate) struct DisplayItemName {
     pub(crate) starts_with_quote: bool,
 }
 
-/// Same as above, but without the `dired_name_len` field.
+/// Same as above, but without the `dired_name` field.
 pub(crate) struct DisplayWithQuote {
     pub(crate) displayed: OsString,
     pub(crate) starts_with_quote: bool,
@@ -108,7 +113,7 @@ impl From<DisplayItemName> for DisplayWithQuote {
     fn from(
         DisplayItemName {
             displayed,
-            dired_name_len: _,
+            dired_name: _,
             starts_with_quote,
         }: DisplayItemName,
     ) -> Self {
@@ -124,12 +129,6 @@ pub(crate) enum IndicatorStyle {
     Slash,
     FileType,
     Classify,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LocaleQuoting {
-    Single,
-    Double,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -157,12 +156,15 @@ enum SizeOrDeviceId {
 /// dir1:               <- This as well
 /// file11
 /// ```
+/// Returns the number of bytes the rendered name occupies, which `--dired`
+/// needs to place the header in `//SUBDIRED//`.
 pub fn show_dir_name(
     path_data: &PathData,
     out: &mut BufWriter<Stdout>,
     config: &Config,
-) -> std::io::Result<()> {
-    let escaped_name = escape_dir_name_with_locale(path_data.path().as_os_str(), config);
+) -> std::io::Result<usize> {
+    let escaped_name =
+        locale_aware_escape_dir_name(path_data.path().as_os_str(), config.quoting_style);
 
     let name = if config.hyperlink && !config.dired {
         create_hyperlink(&escaped_name, path_data)
@@ -171,106 +173,47 @@ pub fn show_dir_name(
     };
 
     write_os_str(out, &name)?;
-    write!(out, ":")
-}
-
-fn escape_with_locale<F>(name: &OsStr, config: &Config, fallback: F) -> OsString
-where
-    F: FnOnce(&OsStr, QuotingStyle) -> OsString,
-{
-    if let Some(locale) = config.locale_quoting {
-        locale_quote(name, locale)
-    } else {
-        fallback(name, config.quoting_style)
-    }
-}
-
-fn escape_dir_name_with_locale(name: &OsStr, config: &Config) -> OsString {
-    escape_with_locale(name, config, locale_aware_escape_dir_name)
+    write!(out, ":")?;
+    Ok(name.len())
 }
 
 fn escape_name_with_locale(name: &OsStr, config: &Config) -> OsString {
-    escape_with_locale(name, config, locale_aware_escape_name)
-}
+    let comma_separated =
+        config.format == Format::Commas && os_str_as_bytes_lossy(name).contains(&b',');
 
-fn locale_quote(name: &OsStr, style: LocaleQuoting) -> OsString {
-    let bytes = os_str_as_bytes_lossy(name);
+    // Format::Commas forces quoting.
+    let style = if comma_separated {
+        config.quoting_style.always_quote(true)
+    } else {
+        config.quoting_style
+    };
 
-    // In a UTF-8 locale GNU's locale/clocale quoting uses Unicode quotation
-    // marks U+2018 (LEFT) and U+2019 (RIGHT) as delimiters for both styles,
-    // keyed off LC_CTYPE. Since the delimiters differ from any ASCII quote,
-    // embedded apostrophes and double quotes are left untouched; only control
-    // characters, backslashes and invalid bytes are escaped.
-    if get_ctype_encoding() == UEncoding::Utf8 {
-        let mut quoted = String::with_capacity(name.len() + 6);
-        quoted.push('\u{2018}');
-        for chunk in bytes.utf8_chunks() {
-            for c in chunk.valid().chars() {
-                if c == '\\' {
-                    quoted.push_str("\\\\");
-                } else if c.is_ascii() && c.is_control() {
-                    push_basic_escape(&mut quoted, c as u8);
-                } else if c.is_control() {
-                    // Non-ASCII control characters (the C1 range, e.g.
-                    // U+0085 NEL) are not printable; octal-escape their
-                    // UTF-8 bytes like GNU does for non-printable chars.
-                    let mut buf = [0u8; 4];
-                    for &byte in c.encode_utf8(&mut buf).as_bytes() {
-                        let _ = write!(quoted, "\\{byte:03o}");
-                    }
-                } else {
-                    quoted.push(c);
-                }
-            }
-            for &byte in chunk.invalid() {
-                let _ = write!(quoted, "\\{byte:03o}");
-            }
-        }
-        quoted.push('\u{2019}');
-        return OsString::from(quoted);
-    }
+    let escaped = locale_aware_escape_name(name, style);
 
-    let mut quoted = String::with_capacity(name.len() + 2);
-    match style {
-        LocaleQuoting::Single => quoted.push('\''),
-        LocaleQuoting::Double => quoted.push('"'),
-    }
-    for &byte in bytes.as_ref() {
-        push_locale_byte(&mut quoted, byte, style);
-    }
-    match style {
-        LocaleQuoting::Single => quoted.push('\''),
-        LocaleQuoting::Double => quoted.push('"'),
-    }
-    OsString::from(quoted)
-}
+    let escaped = if comma_separated && style == QuotingStyle::Escape {
+        escaped.to_string_lossy().replace(',', "\\,").into()
+    } else {
+        escaped
+    };
 
-fn push_locale_byte(buf: &mut String, byte: u8, style: LocaleQuoting) {
-    match (style, byte) {
-        (LocaleQuoting::Single, b'\'') => buf.push_str("'\\''"),
-        (LocaleQuoting::Double, b'"') => buf.push_str("\\\""),
-        (_, b'\\') => buf.push_str("\\\\"),
-        _ => push_basic_escape(buf, byte),
-    }
-}
-
-fn push_basic_escape(buf: &mut String, byte: u8) {
-    match byte {
-        b'\x07' => buf.push_str("\\a"),
-        b'\x08' => buf.push_str("\\b"),
-        b'\t' => buf.push_str("\\t"),
-        b'\n' => buf.push_str("\\n"),
-        b'\x0b' => buf.push_str("\\v"),
-        b'\x0c' => buf.push_str("\\f"),
-        b'\r' => buf.push_str("\\r"),
-        b'\x1b' => buf.push_str("\\e"),
-        b'"' => buf.push('"'),
-        b'\'' => buf.push('\''),
-        b if (0x20..=0x7e).contains(&b) => buf.push(b as char),
-        _ => {
-            let _ = write!(buf, "\\{byte:03o}");
+    if config.format == Format::Commas
+        && config.line_ending == LineEnding::Newline
+        && !config.show_control_chars
+        && config.width != 0
+    {
+        let bytes = os_str_as_bytes_lossy(&escaped);
+        if bytes.contains(&b'\n') {
+            return os_string_from_vec(
+                bytes
+                    .iter()
+                    .map(|&byte| if byte == b'\n' { b'?' } else { byte })
+                    .collect(),
+            )
+            .expect("escaped names are valid on the target platform");
         }
     }
+
+    escaped
 }
 
 pub fn should_display(entry: &DirEntry, config: &Config) -> bool {
@@ -403,15 +346,6 @@ pub fn display_items(
         let padding_collection = calculate_padding_collection(items, config, state);
 
         for item in items {
-            #[cfg(unix)]
-            let should_display_leading_info = config.inode || config.alloc_size;
-            #[cfg(not(unix))]
-            let should_display_leading_info = config.alloc_size;
-
-            if should_display_leading_info {
-                display_additional_leading_info(item, &padding_collection, config, &mut state.out)?;
-            }
-
             display_item_long(item, &padding_collection, config, state, dired, quoted)?;
         }
     } else {
@@ -464,7 +398,7 @@ pub fn display_items(
             names_vec.push(cell.into());
         }
 
-        let mut names = names_vec.into_iter();
+        let mut names = names_vec.into_iter().peekable();
 
         match config.format {
             Format::Columns => {
@@ -493,10 +427,12 @@ pub fn display_items(
                     write_os_str(&mut state.out, &name.displayed)?;
                     current_col = ansi_width(&name.displayed.to_string_lossy()) as u16 + 2;
                 }
-                for name in names {
+                while let Some(name) = names.next() {
                     let name_width = ansi_width(&name.displayed.to_string_lossy()) as u16;
-                    // If the width is 0 we print one single line
-                    if config.width != 0 && current_col + name_width + 1 > config.width {
+                    if config.width != 0
+                        && current_col + name_width + u16::from(names.peek().is_some())
+                            > config.width
+                    {
                         current_col = name_width + 2;
                         writeln!(state.out, ",")?;
                     } else {
@@ -667,12 +603,21 @@ fn display_group<'a>(
 }
 
 #[cfg(not(unix))]
-fn display_uname(_metadata: &Metadata, _config: &Config, _uid_cache: &mut ()) -> &'static str {
-    "somebody"
+fn display_uname(_metadata: &Metadata, config: &Config, _uid_cache: &mut ()) -> &'static str {
+    // No uid to report on this platform; with `-n` fall back to "0" so the
+    // output still looks numeric, matching the intent of --numeric-uid-gid.
+    if config.long.numeric_uid_gid {
+        "0"
+    } else {
+        "somebody"
+    }
 }
 
 #[cfg(not(unix))]
-fn display_group(_metadata: &Metadata, _config: &Config, _gid_cache: &mut ()) -> &'static str {
+fn display_group(_metadata: &Metadata, config: &Config, _gid_cache: &mut ()) -> &'static str {
+    if config.long.numeric_uid_gid {
+        return "0";
+    }
     "somegroup"
 }
 
@@ -755,30 +700,33 @@ fn display_item_name(
         name = create_hyperlink(&name, path);
     }
 
+    // `--dired` reports the name only, so measure it before coloring.
+    let mut dired_name = NameSpan {
+        offset: 0,
+        len: if config.dired { name.len() } else { 0 },
+    };
+
     if let Some(style_manager) = style_manager.as_mut() {
         let len = name.len();
         name = color_name(name, path, style_manager, None, is_wrap(len));
+        dired_name.offset = style_manager.last_style_prefix_len();
     }
 
-    if config.format != Format::Long {
-        if let Some(info) = more_info {
-            let old_name = name;
-            name = info.into();
-            name.push(&old_name);
-        }
+    if config.format != Format::Long
+        && let Some(info) = more_info
+    {
+        let old_name = name;
+        name = info.into();
+        name.push(&old_name);
     }
 
     let is_long_symlink = config.format == Format::Long
         && path.file_type().is_some_and(FileType::is_symlink)
         && !path.must_dereference;
 
-    if !is_long_symlink {
-        if let Some(c) = indicator_char(path, config.indicator_style) {
-            let _ = name.write_char(c);
-        }
+    if !is_long_symlink && let Some(c) = indicator_char(path, config.indicator_style) {
+        let _ = name.write_char(c);
     }
-
-    let dired_name_len = if config.dired { name.len() } else { 0 };
 
     if is_long_symlink {
         let has_mi_or_or = style_manager.as_ref().is_some_and(|sm| {
@@ -877,36 +825,41 @@ fn display_item_name(
                 }
             }
             Err(err) => {
-                show!(LsError::IOErrorContext(
-                    path.path().to_path_buf(),
-                    err,
-                    false
-                ));
+                // When the metadata could not be read either, the failure has already
+                // been reported by `PathData::metadata()`; GNU prints a single
+                // diagnostic and no link target in that case.
+                if path.metadata().is_some() {
+                    show!(LsError::IOErrorContext(
+                        path.path().to_path_buf(),
+                        err,
+                        false
+                    ));
+                }
             }
         }
     }
 
     // Prepend the security context to the `name` and adjust `width` in order
     // to get correct alignment from later calls to`display_grid()`.
-    if config.context {
-        if let Some(pad_count) = prefix_context {
-            let security_context: Cow<'_, str> = if matches!(config.format, Format::Commas) {
-                path.security_context(config).into()
-            } else {
-                pad_left(path.security_context(config), pad_count).into()
-            };
+    if config.context
+        && let Some(pad_count) = prefix_context
+    {
+        let security_context: Cow<'_, str> = if matches!(config.format, Format::Commas) {
+            path.security_context(config).into()
+        } else {
+            pad_left(path.security_context(config), pad_count).into()
+        };
 
-            let old_name = name;
-            name = OsString::with_capacity(security_context.len() + 1 + old_name.len());
-            name.push(security_context.as_ref());
-            name.push(" ");
-            name.push(old_name);
-        }
+        let old_name = name;
+        name = OsString::with_capacity(security_context.len() + 1 + old_name.len());
+        name.push(security_context.as_ref());
+        name.push(" ");
+        name.push(old_name);
     }
 
     DisplayItemName {
         displayed: name,
-        dired_name_len,
+        dired_name,
         starts_with_quote,
     }
 }
@@ -957,12 +910,34 @@ fn display_item_long(
     if config.dired {
         state.display_buf.extend(b"  ");
     }
+
+    #[cfg(unix)]
+    let should_display_leading_info = config.inode || config.alloc_size;
+    #[cfg(not(unix))]
+    let should_display_leading_info = config.alloc_size;
+
+    if should_display_leading_info {
+        // Write into the display buffer, not straight to the output, so that the
+        // --dired byte offsets computed from its length include this prefix.
+        display_additional_leading_info(item, padding, config, &mut state.display_buf)?;
+    }
+
     if let Some(md) = item.metadata() {
-        #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
+        #[cfg(not(any(
+            target_os = "freebsd",
+            target_os = "hurd",
+            target_os = "linux",
+            target_os = "netbsd"
+        )))]
         // TODO: See how Mac should work here
         let is_acl_set = false;
-        #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let is_acl_set = has_acl(item.path());
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "hurd",
+            target_os = "linux",
+            target_os = "netbsd"
+        ))]
+        let is_acl_set = has_acl(item.path(), item.must_dereference);
         state
             .display_buf
             .extend(display_permissions(md, true).as_bytes());
@@ -1054,17 +1029,10 @@ fn display_item_long(
         let needs_space = quoted && !item_display.starts_with_quote;
 
         if config.dired {
-            let mut dired_name_len = item_display.dired_name_len;
-            if needs_space {
-                dired_name_len += 1;
-            }
+            // The alignment space is not part of the name, it only shifts it.
+            let dired_name = item_display.dired_name.shifted(usize::from(needs_space));
             let displayed_len = item_display.displayed.len() + usize::from(needs_space);
-            update_dired_for_item(
-                dired,
-                state.display_buf.len(),
-                displayed_len,
-                dired_name_len,
-            );
+            update_dired_for_item(dired, state.display_buf.len(), displayed_len, dired_name);
         }
 
         let item_name = item_display.displayed;
@@ -1174,7 +1142,7 @@ fn display_item_long(
                 dired,
                 state.display_buf.len(),
                 displayed_item.displayed.len(),
-                displayed_item.dired_name_len,
+                displayed_item.dired_name,
             );
         }
         let displayed_item = displayed_item.displayed;
@@ -1193,14 +1161,8 @@ fn indicator_char(path: &PathData, style: Option<IndicatorStyle>) -> Option<char
 
     match style {
         IndicatorStyle::Classify => sym,
-        IndicatorStyle::FileType => match sym {
-            Some('*') => None,
-            _ => sym,
-        },
-        IndicatorStyle::Slash => match sym {
-            Some('/') => Some('/'),
-            _ => None,
-        },
+        IndicatorStyle::FileType => sym.filter(|&c| c != '*'),
+        IndicatorStyle::Slash => sym.filter(|&c| c == '/'),
     }
 }
 
@@ -1258,9 +1220,9 @@ fn create_hyperlink(name: &OsStr, path: &PathData) -> OsString {
     ret.push(HOSTNAME.as_os_str());
 
     // a set of safe ASCII bytes that don't need encoding
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     let unencoded = |c| matches!(c, '_' | '-' | '.' | '~' | '/');
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     let unencoded = |c| matches!(c, '_' | '-' | '.' | '~' | '/' | '\\' | ':');
 
     for &b in absolute_path.as_os_str().as_encoded_bytes() {
@@ -1295,10 +1257,15 @@ fn update_dired_for_item(
     dired: &mut DiredOutput,
     output_display_len: usize,
     displayed_len: usize,
-    dired_name_len: usize,
+    name: NameSpan,
 ) {
     let line_len = output_display_len + displayed_len + 1; // +1 for line ending
-    dired::calculate_and_update_positions(dired, output_display_len, dired_name_len, line_len);
+    dired::calculate_and_update_positions(
+        dired,
+        output_display_len + name.offset,
+        name.len,
+        line_len,
+    );
 }
 
 #[cfg(unix)]
@@ -1341,11 +1308,11 @@ fn calculate_padding_collection(
             padding_collections.inode = inode_len.max(padding_collections.inode);
         }
 
-        if config.alloc_size {
-            if let Some(md) = item.metadata() {
-                let block_size_len = display_size(get_block_size(md, config), config).len();
-                padding_collections.block_size = block_size_len.max(padding_collections.block_size);
-            }
+        if config.alloc_size
+            && let Some(md) = item.metadata()
+        {
+            let block_size_len = display_size(get_block_size(md, config), config).len();
+            padding_collections.block_size = block_size_len.max(padding_collections.block_size);
         }
 
         if config.format == Format::Long {
@@ -1363,11 +1330,21 @@ fn calculate_padding_collection(
             // the permissions column by one to reserve space for the `+`/`.`
             // indicator.
             {
-                #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
+                #[cfg(not(any(
+                    target_os = "freebsd",
+                    target_os = "hurd",
+                    target_os = "linux",
+                    target_os = "netbsd"
+                )))]
                 // TODO: See how Mac should work here
                 let is_acl_set = false;
-                #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-                let is_acl_set = has_acl(item.path());
+                #[cfg(any(
+                    target_os = "freebsd",
+                    target_os = "hurd",
+                    target_os = "linux",
+                    target_os = "netbsd"
+                ))]
+                let is_acl_set = has_acl(item.path(), item.must_dereference);
                 if context_len > 1 || is_acl_set {
                     padding_collections.permissions = PERMISSIONS_WIDTH + 1;
                 }
@@ -1414,11 +1391,11 @@ fn calculate_padding_collection(
     };
 
     for item in items {
-        if config.alloc_size {
-            if let Some(md) = item.metadata() {
-                let block_size_len = display_size(get_block_size(md, config), config).len();
-                padding_collections.block_size = block_size_len.max(padding_collections.block_size);
-            }
+        if config.alloc_size
+            && let Some(md) = item.metadata()
+        {
+            let block_size_len = display_size(get_block_size(md, config), config).len();
+            padding_collections.block_size = block_size_len.max(padding_collections.block_size);
         }
 
         let context_len = item.security_context(config).len();

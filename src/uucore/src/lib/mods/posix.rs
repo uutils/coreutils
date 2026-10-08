@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (vars)
+
 //! Iterate over lines, including the line ending character(s).
 //!
 //! This module provides the [`posix_version`] function, that returns
@@ -18,6 +20,7 @@
 //! `touch` (TBD)
 //! `uniq`
 //!
+
 use std::env;
 
 /// '199209' for POSIX 1003.2-1992, which would define Obsolete mode

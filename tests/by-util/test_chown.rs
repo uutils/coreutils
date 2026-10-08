@@ -2,12 +2,14 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist cuuser groupname notexisting passgrp
+
+// spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist groupname notexisting passgrp
+
 #[cfg(all(unix, not(target_os = "openbsd")))]
 use std::os::unix::fs::MetadataExt;
 use uutests::util::{CmdResult, TestScenario, is_ci, run_ucmd_as_root};
-use uutests::util_name;
-use uutests::{at_and_ucmd, new_ucmd};
+use uutests::{at_and_ucmd, new_ucmd, util_name};
+
 // Apparently some CI environments have configuration issues, e.g. with 'whoami' and 'id'.
 // If we are running inside the CI and "needle" is in "stderr" skipping this test is
 // considered okay. If we are not inside the CI this calls assert!(result.success).
@@ -35,9 +37,9 @@ fn skipping_test_is_okay(result: &CmdResult, needle: &str) -> bool {
     false
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "android", windows))]
 const ROOT_GROUP: &str = "root";
-#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "windows")))]
+#[cfg(not(any(target_os = "linux", target_os = "android", windows)))]
 const ROOT_GROUP: &str = "wheel";
 
 #[cfg(test)]
@@ -105,7 +107,8 @@ fn test_chown_only_owner() {
         .arg("--verbose")
         .arg(file1)
         .succeeds()
-        .stderr_contains("retained as");
+        .stdout_contains("retained as")
+        .no_stderr();
 
     // try to change to another existing user, e.g. 'root'
     scene
@@ -140,7 +143,8 @@ fn test_chown_only_owner_colon() {
         .arg("--verbose")
         .arg(file1)
         .succeeds()
-        .stderr_contains("retained as");
+        .stdout_contains("retained as")
+        .no_stderr();
 
     scene
         .ucmd()
@@ -148,7 +152,7 @@ fn test_chown_only_owner_colon() {
         .arg("--verbose")
         .arg(file1)
         .succeeds()
-        .stderr_contains("retained as")
+        .stdout_contains("retained as")
         .stderr_contains("warning: '.' should be ':'");
 
     scene
@@ -205,9 +209,10 @@ fn test_chown_dot_separator_warning() {
     result.stderr_contains("warning: '.' should be ':'");
     // "retained as" on Linux, "changed ownership" on BSDs (group inherited from parent dir)
     assert!(
-        result.stderr_str().contains("retained as")
-            || result.stderr_str().contains("changed ownership"),
-        "expected verbose ownership output, got: {}",
+        result.stdout_str().contains("retained as")
+            || result.stdout_str().contains("changed ownership"),
+        "expected verbose ownership output, got stdout={:?} stderr={:?}",
+        result.stdout_str(),
         result.stderr_str()
     );
 
@@ -238,7 +243,8 @@ fn test_chown_only_colon() {
     if skipping_test_is_okay(&result, "No such id") {
         return;
     }
-    result.stderr_contains("retained as"); // TODO: verbose is not printed to stderr in GNU chown
+    result.stdout_contains("retained as");
+    result.no_stderr(); // GNU prints --verbose retained/changed lines to stdout
 
     // test chown : file.txt
     // expected:
@@ -309,7 +315,7 @@ fn test_chown_owner_group() {
     if skipping_test_is_okay(&result, "chown: invalid group:") {
         return;
     }
-    result.stderr_contains("retained as");
+    result.stdout_contains("retained as");
 
     scene
         .ucmd()
@@ -371,7 +377,7 @@ fn test_chown_various_input() {
     if skipping_test_is_okay(&result, "chown: invalid group:") {
         return;
     }
-    result.stderr_contains("retained as");
+    result.stdout_contains("retained as");
 
     // check that username.groupname is understood
     let result = scene
@@ -383,7 +389,7 @@ fn test_chown_various_input() {
     if skipping_test_is_okay(&result, "chown: invalid group:") {
         return;
     }
-    result.stderr_contains("retained as");
+    result.stdout_contains("retained as");
 
     // Fails as user.name doesn't exist in the CI
     // but it is valid
@@ -420,7 +426,7 @@ fn test_chown_only_group() {
         .arg("--verbose")
         .arg(file1)
         .run();
-    result.stderr_contains("retained as");
+    result.stdout_contains("retained as");
     result.success();
 
     // FreeBSD user on CI is part of wheel group
@@ -458,7 +464,7 @@ fn test_chown_only_user_id() {
         // stderr: "chown: invalid user: '1001'
         return;
     }
-    result.stderr_contains("retained as");
+    result.stdout_contains("retained as");
 
     scene
         .ucmd()
@@ -552,11 +558,11 @@ fn test_chown_only_group_id() {
         // With mac into the CI, we can get this answer
         return;
     }
-    result.stderr_contains("retained as");
+    result.stdout_contains("retained as");
 
     // Apparently on CI "macos-latest, x86_64-apple-darwin, feat_os_unix"
     // the process has the rights to change from runner:staff to runner:wheel
-    #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
+    #[cfg(any(windows, all(unix, not(target_vendor = "apple"))))]
     // FreeBSD user on CI is part of wheel group
     if group_id != "0" {
         scene
@@ -628,7 +634,7 @@ fn test_chown_owner_group_id() {
         // stderr: "chown: invalid user: '1001:116'
         return;
     }
-    result.stderr_contains("retained as");
+    result.stdout_contains("retained as");
 
     let result = scene
         .ucmd()
@@ -641,7 +647,7 @@ fn test_chown_owner_group_id() {
         // stderr: "chown: invalid user: '1001.116'
         return;
     }
-    result.stderr_contains("retained as");
+    result.stdout_contains("retained as");
 
     scene
         .ucmd()
@@ -683,7 +689,7 @@ fn test_chown_owner_group_mix() {
         .arg("--verbose")
         .arg(file1)
         .run();
-    result.stderr_contains("retained as");
+    result.stdout_contains("retained as");
 
     scene
         .ucmd()
@@ -721,8 +727,8 @@ fn test_chown_recursive() {
         .arg("a")
         .arg("z")
         .succeeds()
-        .stderr_contains("ownership of 'a/a' retained as")
-        .stderr_contains("ownership of 'z/y' retained as");
+        .stdout_contains("ownership of 'a/a' retained as")
+        .stdout_contains("ownership of 'z/y' retained as");
 }
 
 #[test]
@@ -895,8 +901,28 @@ fn test_chown_reference_file() {
         .arg("a")
         .arg("b")
         .succeeds()
-        .stderr_contains("ownership of 'b' retained as")
-        .no_stdout();
+        .stdout_contains("ownership of 'b' retained as")
+        .no_stderr();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_chown_reference_file_with_non_utf8_path() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+
+    let reference = std::ffi::OsStr::from_bytes(b"reference_\xFF\xFE");
+    std::fs::File::create(at.plus(reference)).unwrap();
+
+    ucmd.arg("--verbose")
+        .arg("--reference")
+        .arg(reference)
+        .arg("file")
+        .succeeds()
+        .stdout_contains("ownership of 'file' retained as")
+        .no_stderr();
 }
 
 #[test]
@@ -920,6 +946,10 @@ fn test_chown_no_dereference_symlink_to_dir() {
 
     let dir_meta_before = std::fs::metadata(at.plus("dir")).unwrap();
     let dir_ctime_before = (dir_meta_before.ctime(), dir_meta_before.ctime_nsec());
+
+    // Let the file system clock move past the link's ctime. On some systems,
+    // such as the Android emulator, it advances in coarse steps.
+    std::thread::sleep(std::time::Duration::from_millis(100));
 
     scene
         .ucmd()
@@ -961,28 +991,28 @@ fn test_chown_symlink_cycles() {
 
     let result = scene.ucmd().arg("-vRL").arg(&user_name).arg("a").run();
 
-    if cfg!(target_os = "macos") || cfg!(target_os = "openbsd") || cfg!(target_os = "android") {
+    if cfg!(target_vendor = "apple") || cfg!(target_os = "openbsd") || cfg!(target_os = "android") {
         result
-            .stderr_contains(format!("ownership of 'a' retained as {user_name}"))
-            .stderr_contains(format!("ownership of 'a/b' retained as {user_name}"))
-            .stderr_contains(format!("ownership of 'a/b/c' retained as {user_name}"))
-            .stderr_does_not_contain(format!("ownership of 'a/b/c/d' retained as {user_name}"))
-            .stderr_does_not_contain(format!("ownership of 'a/b/c/d/b' retained as {user_name}"))
-            .stderr_does_not_contain(format!(
+            .stdout_contains(format!("ownership of 'a' retained as {user_name}"))
+            .stdout_contains(format!("ownership of 'a/b' retained as {user_name}"))
+            .stdout_contains(format!("ownership of 'a/b/c' retained as {user_name}"))
+            .stdout_does_not_contain(format!("ownership of 'a/b/c/d' retained as {user_name}"))
+            .stdout_does_not_contain(format!("ownership of 'a/b/c/d/b' retained as {user_name}"))
+            .stdout_does_not_contain(format!(
                 "ownership of 'a/b/c/d/b/c' retained as {user_name}"
             ));
     } else {
         result
             .success()
-            .stderr_contains(format!("ownership of 'a' retained as {user_name}"))
-            .stderr_contains(format!("ownership of 'a/b' retained as {user_name}"))
-            .stderr_contains(format!("ownership of 'a/b/c' retained as {user_name}"))
-            .stderr_contains(format!("ownership of 'a/b/c/d' retained as {user_name}"))
-            .stderr_does_not_contain(format!("ownership of 'a/b/c/d/b' retained as {user_name}"))
-            .stderr_does_not_contain(format!(
+            .stdout_contains(format!("ownership of 'a' retained as {user_name}"))
+            .stdout_contains(format!("ownership of 'a/b' retained as {user_name}"))
+            .stdout_contains(format!("ownership of 'a/b/c' retained as {user_name}"))
+            .stdout_contains(format!("ownership of 'a/b/c/d' retained as {user_name}"))
+            .stdout_does_not_contain(format!("ownership of 'a/b/c/d/b' retained as {user_name}"))
+            .stdout_does_not_contain(format!(
                 "ownership of 'a/b/c/d/b/c' retained as {user_name}"
             ))
-            .stderr_does_not_contain(format!(
+            .stdout_does_not_contain(format!(
                 "ownership of 'a/b/c/d/b/c/d' retained as {user_name}"
             ));
     }
@@ -1004,7 +1034,7 @@ fn test_chown_symlink_two_links_same_dir() {
     let user_name = String::from(result.stdout_str().trim());
     assert!(!user_name.is_empty());
 
-    // cSpell:disable
+    // spell-checker:disable
     at.mkdir_all("base/realdir");
     at.touch("base/realdir/file");
     at.symlink_dir("base/realdir", "base/link1");
@@ -1017,24 +1047,24 @@ fn test_chown_symlink_two_links_same_dir() {
     if cfg!(target_os = "linux") {
         result
             .success()
-            .stderr_contains(format!(
+            .stdout_contains(format!(
                 "ownership of 'base/realdir/file' retained as {user_name}"
             ))
-            .stderr_contains(format!(
+            .stdout_contains(format!(
                 "ownership of 'base/link1/file' retained as {user_name}"
             ))
-            .stderr_contains(format!(
+            .stdout_contains(format!(
                 "ownership of 'base/link2/file' retained as {user_name}"
             ));
     }
-    // cSpell:enable
+    // spell-checker:enable
 }
 
 #[cfg(target_os = "linux")]
 #[test]
 fn verbose_missing_file_write_error_is_reported_not_panic() {
+    use rustix::process::geteuid;
     use std::fs::OpenOptions;
-    use uucore::process::geteuid;
 
     let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
     new_ucmd!()

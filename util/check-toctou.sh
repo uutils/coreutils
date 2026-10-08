@@ -14,67 +14,20 @@
 
 set -e
 
-: ${PROFILE:=release-small}
-export PROFILE
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-TEMP_DIR=$(mktemp -d)
-
-fail_immediately() {
-    echo "❌ FAILED: $1"
-    echo ""
-    echo "Debug information available in: $TEMP_DIR/strace_*.log"
-    exit 1
-}
-
-cleanup() {
-    rm -rf "$TEMP_DIR"
-}
-trap cleanup EXIT
-
 echo "=== TOCTOU Verification ==="
 
-if [ -f "$PROJECT_ROOT/target/${PROFILE}/coreutils" ]; then
-    echo "Using multicall binary"
-    USE_MULTICALL=1
-    COREUTILS_BIN="$PROJECT_ROOT/target/${PROFILE}/coreutils"
-elif [ -f "$PROJECT_ROOT/target/${PROFILE}/mkfifo" ]; then
-    echo "Using individual binaries"
-    USE_MULTICALL=0
-else
-    echo "Error: No binaries found. Build first with 'cargo build --profile=${PROFILE}'"
-    exit 1
-fi
+# shellcheck disable=SC2034  # read by check-common.sh once sourced
+CHECK_UTILS="mkfifo touch head"
+. "$(dirname "${BASH_SOURCE[0]}")/check-common.sh"
 
 cd "$TEMP_DIR"
-
-util_cmd() {
-    if [ "$USE_MULTICALL" -eq 1 ]; then
-        echo "$COREUTILS_BIN $1"
-    else
-        echo "$PROJECT_ROOT/target/${PROFILE}/$1"
-    fi
-}
-
-if [ "$USE_MULTICALL" -eq 1 ]; then
-    AVAILABLE_UTILS=$($COREUTILS_BIN --list)
-else
-    AVAILABLE_UTILS=""
-    for util in mkfifo touch head; do
-        if [ -f "$PROJECT_ROOT/target/${PROFILE}/$util" ]; then
-            AVAILABLE_UTILS="$AVAILABLE_UTILS $util"
-        fi
-    done
-fi
 
 # mkfifo must not call a path-based chmod after creating the FIFO: the
 # second syscall would re-resolve the path and could be redirected by an
 # attacker who swaps the FIFO for a symlink in between (issue #10020).
 # After the fix, the kernel applies the requested mode atomically via
 # mkfifo with cleared umask.
-if echo "$AVAILABLE_UTILS" | grep -q "mkfifo"; then
-    mkfifo_cmd=$(util_cmd mkfifo)
+if mkfifo_cmd=$(util_cmd mkfifo); then
     rm -f test_fifo
     # mkfifo(3)/mkfifoat(3) are libc wrappers; the underlying syscall
     # is mknodat (or mknod on older kernels). Trace those plus any
@@ -106,10 +59,9 @@ fi
 # Test touch - creating a file must use O_CREAT but never O_TRUNC, so that a
 # symlink planted in the metadata-check/open race window (#10019) is not
 # truncated. This observes the flags directly, which integration tests cannot.
-if echo "$AVAILABLE_UTILS" | grep -q "touch"; then
+if touch_cmd=$(util_cmd touch); then
     echo ""
     echo "Testing touch (create_no_truncate)..."
-    touch_cmd=$(util_cmd touch)
     strace -f -e trace=openat -o strace_touch_create.log $touch_cmd test_touch_new 2>/dev/null || true
     cat strace_touch_create.log
     if ! grep -q 'openat(.*test_touch_new.*O_CREAT' strace_touch_create.log; then
@@ -126,10 +78,9 @@ fi
 # descriptor (fstat/statx on the fd), not from a separate path-based stat
 # performed before the open. A path stat followed by an open is a TOCTOU
 # window (#11972): the object named by the path can be swapped in between.
-if echo "$AVAILABLE_UTILS" | grep -q "head"; then
+if head_cmd=$(util_cmd head); then
     echo ""
     echo "Testing head (fstat_after_open)..."
-    head_cmd=$(util_cmd head)
     echo "headtest" > test_head_file.txt
     strace -f -e trace=openat,fstat,newfstatat,statx,stat,lstat \
         -o strace_head_metadata.log $head_cmd -c 4 test_head_file.txt 2>/dev/null || true

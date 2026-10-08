@@ -3,10 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore checkfile, testf, ntestf
+
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
-// spell-checker:ignore checkfile, testf, ntestf
+
 macro_rules! get_hash(
     ($str:expr) => (
         $str.split(' ').collect::<Vec<&str>>()[0]
@@ -134,8 +136,7 @@ fn test_check_sha1() {
         .arg("-c")
         .arg(at.subdir.join("testf.sha1"))
         .succeeds()
-        .stdout_is("testf: OK\n")
-        .stderr_is("");
+        .stdout_only("testf: OK\n");
 }
 
 #[test]

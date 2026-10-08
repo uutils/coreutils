@@ -18,8 +18,8 @@ use crate::checksum::{
     AlgoKind, BlakeLength, ChecksumError, HashLength, ReadingMode, ShaLength, SizedAlgoKind,
     digest_reader, parse_blake_length, unescape_filename,
 };
-use crate::error::{FromIo, UError, UIoError, UResult, USimpleError};
-use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
+use crate::error::{FromIo, UError, UResult, USimpleError, strip_errno};
+use crate::quoting_style::locale_aware_shell_escape;
 use crate::sum::{self, Blake2b, Blake3, DigestOutput};
 use crate::{
     os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_warning_caps, translate,
@@ -221,8 +221,7 @@ impl FileChecksumResult {
     fn can_display(self, verbose: ChecksumVerbose) -> bool {
         match self {
             Self::Ok => verbose.over_quiet(),
-            Self::Failed => verbose.over_status(),
-            Self::CantOpen => true,
+            Self::Failed | Self::CantOpen => verbose.over_status(),
         }
     }
 }
@@ -246,9 +245,8 @@ fn write_file_report<W: Write>(
     verbose: ChecksumVerbose,
 ) -> io::Result<()> {
     if result.can_display(verbose) {
-        let filename = locale_aware_escape_name(filename, QuotingStyle::SHELL_ESCAPE);
-        // Here, .to_string_lossy() is lossless thanks to the escaping.
-        writeln!(w, "{}: {result}", filename.to_string_lossy())?;
+        let filename = locale_aware_shell_escape(filename);
+        writeln!(w, "{filename}: {result}")?;
     }
     Ok(())
 }
@@ -281,12 +279,13 @@ impl LineFormat {
         // find the next parenthesis  using byte search (not next whitespace) because openssl's
         // tagged format does not put a space before (filename)
 
-        let par_idx = rest.iter().position(|&b| b == b'(')?;
-        // If the parenthesis is the first character (minus whitespace, which has already been stripped out), then,
-        // it's not a validly formatted line.
-        if par_idx == 0 {
-            return None;
-        }
+        let par_idx = rest
+            .iter()
+            .position(|&b| b == b'(')
+            // If the parenthesis is the first character (minus whitespace, which has already been stripped out), then,
+            // it's not a validly formatted line.
+            .filter(|b| *b != 0)?;
+
         let sub_case = if rest[par_idx - 1] == b' ' {
             SubCase::Posix
         } else {
@@ -318,9 +317,23 @@ impl LineFormat {
         let algo_utf8 = unsafe { String::from_utf8_unchecked(algo.to_vec()) };
         // stripping '(' not ' (' since we matched on ( not whitespace because of openssl.
         let after_paren = rest.get(par_idx + 1..)?;
-        let (filename, checksum) = match sub_case {
-            SubCase::Posix => ByteSliceExt::rsplit_once(after_paren, b") = ")?,
-            SubCase::OpenSSL => ByteSliceExt::rsplit_once(after_paren, b")= ")?,
+        let (filename, checksum) = if algo_substring.iter().all(u8::is_ascii_hexdigit) {
+            // This may be the digest of an untagged line with a single space,
+            // like "<HEX DIGEST> (a)= b": only take the exact separators, so
+            // that such a line still reaches the untagged parser.
+            match sub_case {
+                SubCase::Posix => ByteSliceExt::rsplit_once(after_paren, b") = ")?,
+                SubCase::OpenSSL => ByteSliceExt::rsplit_once(after_paren, b")= ")?,
+            }
+        } else {
+            // The file name ends at the last ')'. Like GNU, accept any blanks,
+            // or none, on either side of the '=' that follows it.
+            let (filename, after_name) = ByteSliceExt::rsplit_once(after_paren, b")")?;
+            let checksum = after_name
+                .trim_blanks_start()
+                .strip_prefix(b"=")?
+                .trim_blanks_start();
+            (filename, checksum)
         };
 
         let checksum_utf8 = Self::validate_checksum_format(checksum)?;
@@ -438,6 +451,9 @@ impl LineFormat {
 trait ByteSliceExt {
     /// Look for a pattern from right to left, return surrounding parts if found.
     fn rsplit_once(&self, pattern: &[u8]) -> Option<(&Self, &Self)>;
+
+    /// Remove the leading spaces and tabs.
+    fn trim_blanks_start(&self) -> &Self;
 }
 
 impl ByteSliceExt for [u8] {
@@ -450,6 +466,14 @@ impl ByteSliceExt for [u8] {
             &self[..self.len() - pattern.len() - pos],
             &self[self.len() - pos..],
         ))
+    }
+
+    fn trim_blanks_start(&self) -> &Self {
+        let blanks = self
+            .iter()
+            .take_while(|&&b| b == b' ' || b == b'\t')
+            .count();
+        &self[blanks..]
     }
 }
 
@@ -553,12 +577,7 @@ fn get_file_to_check(
             );
         };
         let print_error = |err: io::Error| {
-            show!(err.map_err_context(|| {
-                locale_aware_escape_name(filename, QuotingStyle::SHELL_ESCAPE)
-                    // This is non destructive thanks to the escaping
-                    .to_string_lossy()
-                    .to_string()
-            }));
+            show!(err.map_err_context(|| { locale_aware_shell_escape(filename) }));
         };
         match File::open(filename) {
             Ok(f) => {
@@ -592,24 +611,24 @@ fn get_file_to_check(
 
 /// Returns a reader to the list of checksums
 fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
-    match File::open(filename) {
-        Ok(f) => {
-            if f.metadata()?.is_dir() {
-                Err(io::Error::other(
-                    translate!("error-is-a-directory", "file" => filename.maybe_quote()),
-                )
-                .into())
-            } else {
-                Ok(Box::new(f))
-            }
-        }
-        Err(_) => Err(io::Error::other(format!(
+    let file = File::open(filename).map_err(|e| match e.kind() {
+        #[cfg(any(target_os = "wasi", windows))]
+        io::ErrorKind::NotFound => io::Error::other(format!(
             "{}: {}",
             filename.maybe_quote(),
             translate!("error-file-not-found")
-        ))
-        .into()),
+        )),
+        _ => io::Error::other(format!("{}: {}", filename.maybe_quote(), strip_errno(&e))),
+    })?;
+    // some platforms shows different read error
+    #[cfg(any(target_os = "wasi", windows))]
+    if file.metadata().is_ok_and(|m| m.is_dir()) {
+        return Err(io::Error::other(
+            translate!("error-is-a-directory", "file" => filename.maybe_quote()),
+        )
+        .into());
     }
+    Ok(Box::new(file))
 }
 
 /// Gets the algorithm name and length from the `LineInfo` if the algo-based format is matched.
@@ -620,10 +639,10 @@ fn identify_algo_name_and_length(
 ) -> Result<(AlgoKind, Option<HashLength>), LineCheckError> {
     use AlgoKind as ak;
     let algo_from_line = line_info.algo_name.clone().unwrap_or_default();
-    let Ok(line_algo) = AlgoKind::from_cksum(algo_from_line.to_lowercase()) else {
-        // Unknown algorithm
-        return Err(LineCheckError::ImproperlyFormatted);
-    };
+    let line_algo = AlgoKind::from_cksum(algo_from_line.to_lowercase())
+        .ok()
+        .filter(|algo| !algo.is_legacy())
+        .ok_or(LineCheckError::ImproperlyFormatted)?;
     *last_algo = Some(algo_from_line);
 
     // check if we are called with XXXsum (example: md5sum) but we detected a
@@ -642,10 +661,9 @@ fn identify_algo_name_and_length(
     let hash_len = if let Some(bitlen) = line_info.algo_bit_len {
         match line_algo {
             algo @ (ak::Blake2b | ak::Blake3) => {
-                match parse_blake_length(algo, BlakeLength::Int(bitlen)) {
-                    Ok(len) => Some(len),
-                    Err(_) => return Err(LineCheckError::ImproperlyFormatted),
-                }
+                let len = parse_blake_length(algo, BlakeLength::Int(bitlen))
+                    .map_err(|_| LineCheckError::ImproperlyFormatted)?;
+                Some(len)
             }
             ak::Sha2 | ak::Sha3 if [224, 256, 384, 512].contains(&bitlen) => {
                 Some(HashLength::from_bits(bitlen))
@@ -687,27 +705,26 @@ fn compute_and_check_digest_from_file(
     let real_filename_to_check = os_str_from_bytes(&filename_to_check_unescaped)?;
 
     // Open the input file
-    let file_to_check = get_file_to_check(&real_filename_to_check, opts)?;
+    let file_to_check = get_file_to_check(real_filename_to_check, opts)?;
     let mut file_reader = BufReader::new(file_to_check);
 
     // Read the file and calculate the checksum
     let mut digest = algo.create_digest();
 
-    // Set binary to false because --binary is not supported with --check
-
+    // Hash the raw bytes, matching the generation path: as decided in #9168,
+    // the text/binary distinction is ignored when computing digests, so on
+    // Windows no CRLF -> LF conversion must happen here either.
     let (calculated_checksum, _) =
-        match digest_reader(&mut digest, &mut file_reader, ReadingMode::Text) {
+        match digest_reader(&mut digest, &mut file_reader, ReadingMode::Binary) {
             Ok(result) => result,
             Err(err) => {
-                show!(err.map_err_context(|| {
-                    locale_aware_escape_name(&real_filename_to_check, QuotingStyle::SHELL_ESCAPE)
-                        .to_string_lossy()
-                        .to_string()
-                }));
+                show!(
+                    err.map_err_context(|| { locale_aware_shell_escape(real_filename_to_check) })
+                );
 
                 let _ = write_file_report(
                     io::stdout(),
-                    &real_filename_to_check,
+                    real_filename_to_check,
                     FileChecksumResult::CantOpen,
                     opts.verbose,
                 );
@@ -723,7 +740,7 @@ fn compute_and_check_digest_from_file(
     };
     let _ = write_file_report(
         io::stdout(),
-        &real_filename_to_check,
+        real_filename_to_check,
         FileChecksumResult::from_bool(checksum_correct),
         opts.verbose,
     );
@@ -792,7 +809,12 @@ fn process_non_algo_based_line(
     // bits except when dealing with blake2b, sha2 and sha3, where we will
     // detect the length.
     let algo_len = match cli_algo_kind {
-        ak::Blake2b | ak::Blake3 => Some(HashLength::from_bytes(expected_checksum.len())),
+        // An over-length digest makes this a malformed line for GNU, not a
+        // fatal error.
+        algo @ (ak::Blake2b | ak::Blake3) => Some(
+            parse_blake_length(algo, BlakeLength::Int(expected_checksum.len() * 8))
+                .map_err(|_| LineCheckError::ImproperlyFormatted)?,
+        ),
         ak::Sha2 | ak::Sha3 => {
             // multiplication by 8 to get the number of bits
             Some(
@@ -880,16 +902,13 @@ fn process_checksum_file(
     // will use the same parser.
     let mut cached_line_format = None;
     // last_algo caches the algorithm used in the last line to print a warning
-    // message for the current line if improperly formatted.
+    // message for the current line if improperly formatted. Defaults to CRC.
     // Behavior tested in gnu_cksum_c::test_warn
-    let mut last_algo = None;
+    let mut last_algo = Some(AlgoKind::Crc.to_uppercase().to_string());
 
     for (i, line_res) in read_os_string_lines(reader).enumerate() {
-        let line = line_res.map_err(|e| {
-            USimpleError::new(
-                UIoError::from(e).code(),
-                format!("{}: read error", filename_input.maybe_quote()),
-            )
+        let line = line_res.map_err(|_| {
+            USimpleError::new(1, format!("{}: read error", filename_input.maybe_quote()))
         })?;
 
         let line_result = process_checksum_line(
@@ -950,9 +969,7 @@ fn process_checksum_file(
     // not a single line correctly formatted found
     // return an error
     if res.total_properly_formatted() == 0 {
-        if opts.verbose.over_status() {
-            log_no_properly_formatted(filename_display());
-        }
+        log_no_properly_formatted(filename_display());
         return Err(FileCheckError::Failed);
     }
 
@@ -1027,29 +1044,38 @@ mod tests {
     fn test_algo_based_parser() {
         #[allow(clippy::type_complexity)]
         let test_cases: &[(&[u8], Option<(&[u8], Option<&[u8]>, &[u8], &[u8])>)] = &[
+            // spell-checker:disable
             (b"SHA256 (example.txt) = d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2", Some((b"SHA256", None, b"example.txt", b"d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2"))),
-            // cspell:disable
             (b"BLAKE2b-512 (file) = abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef", Some((b"BLAKE2b", Some(b"512"), b"file", b"abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef"))),
             (b" MD5 (test) = 9e107d9d372bb6826bd81d3542a419d6", Some((b"MD5", None, b"test", b"9e107d9d372bb6826bd81d3542a419d6"))),
             (b"SHA-1 (anotherfile) = a9993e364706816aba3e25717850c26c9cd0d89d", Some((b"SHA", Some(b"1"), b"anotherfile", b"a9993e364706816aba3e25717850c26c9cd0d89d"))),
             (b" MD5 (anothertest) = fds65dsf46as5df4d6f54asds5d7f7g9", Some((b"MD5", None, b"anothertest", b"fds65dsf46as5df4d6f54asds5d7f7g9"))),
-            (b" MD5(anothertest2) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
+            (b" MD5(anothertest2) = fds65dsf46as5df4d6f54asds5d7f7g9", Some((b"MD5", None, b"anothertest2", b"fds65dsf46as5df4d6f54asds5d7f7g9"))),
             (b" MD5(weirdfilename0)= stillfilename)= fds65dsf46as5df4d6f54asds5d7f7g9", Some((b"MD5", None, b"weirdfilename0)= stillfilename", b"fds65dsf46as5df4d6f54asds5d7f7g9"))),
             (b" MD5(weirdfilename1)= )= fds65dsf46as5df4d6f54asds5d7f7g9", Some((b"MD5", None, b"weirdfilename1)= ", b"fds65dsf46as5df4d6f54asds5d7f7g9"))),
             (b" MD5(weirdfilename2) = )= fds65dsf46as5df4d6f54asds5d7f7g9", Some((b"MD5", None, b"weirdfilename2) = ", b"fds65dsf46as5df4d6f54asds5d7f7g9"))),
             (b" MD5 (weirdfilename3)= ) = fds65dsf46as5df4d6f54asds5d7f7g9", Some((b"MD5", None, b"weirdfilename3)= ", b"fds65dsf46as5df4d6f54asds5d7f7g9"))),
             (b" MD5 (weirdfilename4) = ) = fds65dsf46as5df4d6f54asds5d7f7g9", Some((b"MD5", None, b"weirdfilename4) = ", b"fds65dsf46as5df4d6f54asds5d7f7g9"))),
-            (b" MD5(weirdfilename5)= ) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
-            (b" MD5(weirdfilename6) = ) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
-            (b" MD5 (weirdfilename7)= )= fds65dsf46as5df4d6f54asds5d7f7g9", None),
-            (b" MD5 (weirdfilename8) = )= fds65dsf46as5df4d6f54asds5d7f7g9", None),
+            (b" MD5(weirdfilename5)= ) = fds65dsf46as5df4d6f54asds5d7f7g9", Some((b"MD5", None, b"weirdfilename5)= ", b"fds65dsf46as5df4d6f54asds5d7f7g9"))),
+            (b" MD5(weirdfilename6) = ) = fds65dsf46as5df4d6f54asds5d7f7g9", Some((b"MD5", None, b"weirdfilename6) = ", b"fds65dsf46as5df4d6f54asds5d7f7g9"))),
+            (b" MD5 (weirdfilename7)= )= fds65dsf46as5df4d6f54asds5d7f7g9", Some((b"MD5", None, b"weirdfilename7)= ", b"fds65dsf46as5df4d6f54asds5d7f7g9"))),
+            (b" MD5 (weirdfilename8) = )= fds65dsf46as5df4d6f54asds5d7f7g9", Some((b"MD5", None, b"weirdfilename8) = ", b"fds65dsf46as5df4d6f54asds5d7f7g9"))),
+            // any blanks, or none, around the '='
+            (b"MD5 (tabs)\t=\tfds65dsf46as5df4d6f54asds5d7f7g9", Some((b"MD5", None, b"tabs", b"fds65dsf46as5df4d6f54asds5d7f7g9"))),
+            (b"MD5 (none)=fds65dsf46as5df4d6f54asds5d7f7g9", Some((b"MD5", None, b"none", b"fds65dsf46as5df4d6f54asds5d7f7g9"))),
+            // but no other whitespace next to the '=', and at most one space
+            // before the '('
+            (b"MD5 (f)\x0c= fds65dsf46as5df4d6f54asds5d7f7g9", None),
+            (b"MD5 (f) =\rfds65dsf46as5df4d6f54asds5d7f7g9", None),
+            (b"MD5  (f) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
+            (b"MD5\t(f) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
             // test for missing algorithm
             (b"(filename) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
             (b"filename) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
             (b"filename = fds65dsf46as5df4d6f54asds5d7f7g9", None),
+            // spell-checker:enable
         ];
 
-        // cspell:enable
         for (input, expected) in test_cases {
             let line_info = LineFormat::parse_algo_based(input);
             match expected {
@@ -1238,6 +1264,16 @@ mod tests {
         assert_eq!(line_info.format, LineFormat::AlgoBased);
         assert!(cached_line_format.is_none());
 
+        // Test an upper-case hex digest followed by a single space: the rest of
+        // the line looks like the end of a tagged line, but is a file name
+        let line_single_space_hex = OsString::from("D41D8CD98F00B204E9800998ECF8427E (a)= b");
+        let line_info = LineInfo::parse(&line_single_space_hex, &mut cached_line_format).unwrap();
+        assert_eq!(line_info.format, LineFormat::SingleSpace);
+        assert_eq!(line_info.filename, b"(a)= b");
+        assert_eq!(line_info.checksum, "D41D8CD98F00B204E9800998ECF8427E");
+
+        cached_line_format = None;
+
         // Test trailing space after checksum line (should fail)
         let line_algo_based_leading_space =
             OsString::from("MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e ");
@@ -1289,6 +1325,8 @@ mod tests {
                 FileChecksumResult::CantOpen,
                 b"filename: FAILED open or read\n",
             ),
+            // A non-UTF-8 OsString cannot be built from bytes on Windows.
+            #[cfg(unix)]
             (
                 #[allow(clippy::unwrap_used, reason = "deterministic unwrap does not fail")]
                 os_str_from_bytes(b"funky\xffname").unwrap().to_os_string(),

@@ -2,32 +2,42 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
+
+// spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
+// spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
+// spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot EOVERFLOW chowned chmoded
+// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat
+
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
 //
 // Available on Unix
-//
-// spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
-// spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR
-// spell-checker:ignore atimensec mtimensec ctimensec opath chmods
 
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;
 
-use std::ffi::{CString, OsStr, OsString};
+use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fs;
 use std::io;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::mem::MaybeUninit;
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::MetadataExt;
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 use nix::dir::Dir;
 use nix::fcntl::{OFlag, openat};
 use nix::libc;
-use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat, mkdirat};
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+use nix::sys::stat::fstatat;
+use nix::sys::stat::{FchmodatFlags, Mode, fchmodat, mkdirat};
 use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
 use os_display::Quotable;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use rustix::fs::{RawDir, fstat, statat};
 
 use crate::translate;
 
@@ -59,7 +69,7 @@ impl From<bool> for SymlinkBehavior {
 }
 
 // Custom error types for better error reporting
-#[derive(thiserror::Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum SafeTraversalError {
     #[error("{}", translate!("safe-traversal-error-path-contains-null"))]
     PathContainsNull,
@@ -100,20 +110,62 @@ impl From<SafeTraversalError> for io::Error {
                 io::ErrorKind::InvalidInput,
                 translate!("safe-traversal-error-path-contains-null"),
             ),
-            SafeTraversalError::OpenFailed { source, .. } => source,
-            SafeTraversalError::StatFailed { source, .. } => source,
-            SafeTraversalError::ReadDirFailed { source, .. } => source,
-            SafeTraversalError::UnlinkFailed { source, .. } => source,
+            SafeTraversalError::OpenFailed { source, .. }
+            | SafeTraversalError::StatFailed { source, .. }
+            | SafeTraversalError::ReadDirFailed { source, .. }
+            | SafeTraversalError::UnlinkFailed { source, .. } => source,
         }
     }
 }
 
-// Helper function to read directory entries using nix
-fn read_dir_entries(fd: &OwnedFd) -> io::Result<Vec<OsString>> {
+/// Use rustix's `Stat` on Linux and Android, whose inode and size fields
+/// are 64 bits wide on every architecture, including the 32-bit targets
+/// where the plain libc entry points overflow them. Use nix's `FileStat`
+/// elsewhere.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub type FileStat = rustix::fs::Stat;
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+pub use nix::sys::stat::FileStat;
+
+// RawDir refills this buffer as needed; 8 KiB follows rustix's examples.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const READ_DIR_BUF_SIZE: usize = 8192;
+
+// Helper function to read directory entries using rustix.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn read_dir_entries(fd: impl AsFd) -> io::Result<Vec<OsString>> {
+    let mut buffer = [MaybeUninit::<u8>::uninit(); READ_DIR_BUF_SIZE];
+    let mut dir = RawDir::new(fd.as_fd(), &mut buffer);
+    let mut entries = Vec::new();
+
+    let result = loop {
+        match dir.next() {
+            Some(Ok(entry)) => {
+                let name = OsStr::from_bytes(entry.file_name().to_bytes());
+                if name != "." && name != ".." {
+                    entries.push(name.to_os_string());
+                }
+            }
+            Some(Err(e)) => break Err(e),
+            None => break Ok(()),
+        }
+    };
+
+    // Rewind directory position.
+    let rewind = rustix::fs::seek(fd, rustix::fs::SeekFrom::Start(0));
+    result?;
+    rewind?;
+    Ok(entries)
+}
+
+// Helper function to read directory entries using nix.
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn read_dir_entries(fd: impl AsFd) -> io::Result<Vec<OsString>> {
     let mut entries = Vec::new();
 
     // Duplicate the fd for Dir (it takes ownership)
-    let dup_fd = nix::unistd::dup(fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+    let dup_fd =
+        nix::unistd::dup(fd.as_fd()).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
     let mut dir = Dir::from_fd(dup_fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
     for entry_result in dir.iter() {
         let entry = entry_result.map_err(|e| io::Error::from_raw_os_error(e as i32))?;
@@ -127,10 +179,57 @@ fn read_dir_entries(fd: &OwnedFd) -> io::Result<Vec<OsString>> {
     Ok(entries)
 }
 
+fn fstatat_fd(
+    fd: impl AsFd,
+    name: &CStr,
+    symlink_behavior: SymlinkBehavior,
+) -> io::Result<FileStat> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        let flags = if symlink_behavior.should_follow() {
+            rustix::fs::AtFlags::empty()
+        } else {
+            rustix::fs::AtFlags::SYMLINK_NOFOLLOW
+        };
+        statat(fd, name, flags).map_err(Into::into)
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    {
+        let flags = if symlink_behavior.should_follow() {
+            nix::fcntl::AtFlags::empty()
+        } else {
+            nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW
+        };
+        fstatat(fd, name, flags).map_err(|e| io::Error::from_raw_os_error(e as i32))
+    }
+}
+
+fn fstat_fd(fd: impl AsFd) -> io::Result<FileStat> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        fstat(fd).map_err(Into::into)
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    {
+        nix::sys::stat::fstat(fd).map_err(|e| io::Error::from_raw_os_error(e as i32))
+    }
+}
+
 /// A directory file descriptor that enables safe traversal
 pub struct DirFd {
     fd: OwnedFd,
 }
+
+/// `O_LARGEFILE`, or nothing where the platform has no such flag.
+///
+/// The libc `open`/`openat` bindings do not add it the way glibc's large-file
+/// entry points do, so on 32-bit Linux the kernel rejects anything whose
+/// metadata overflows the 32-bit ranges with `EOVERFLOW`. The flag is 0 on
+/// 64-bit, so adding it unconditionally costs nothing there.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const LARGEFILE: OFlag = OFlag::O_LARGEFILE;
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+const LARGEFILE: OFlag = OFlag::empty();
 
 impl DirFd {
     /// Open a directory and return a file descriptor
@@ -139,7 +238,7 @@ impl DirFd {
     /// * `path` - The path to the directory to open
     /// * `symlink_behavior` - Whether to follow symlinks when opening
     pub fn open(path: &Path, symlink_behavior: SymlinkBehavior) -> io::Result<Self> {
-        let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
+        let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC | LARGEFILE;
         if !symlink_behavior.should_follow() {
             flags |= OFlag::O_NOFOLLOW;
         }
@@ -160,7 +259,7 @@ impl DirFd {
     pub fn open_subdir(&self, name: &OsStr, symlink_behavior: SymlinkBehavior) -> io::Result<Self> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-        let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
+        let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC | LARGEFILE;
         if !symlink_behavior.should_follow() {
             flags |= OFlag::O_NOFOLLOW;
         }
@@ -178,16 +277,10 @@ impl DirFd {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
 
-        let flags = if symlink_behavior.should_follow() {
-            nix::fcntl::AtFlags::empty()
-        } else {
-            nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW
-        };
-
-        let stat = fstatat(&self.fd, name_cstr.as_c_str(), flags).map_err(|e| {
+        let stat = fstatat_fd(&self.fd, name_cstr.as_c_str(), symlink_behavior).map_err(|e| {
             SafeTraversalError::StatFailed {
                 path: name.into(),
-                source: io::Error::from_raw_os_error(e as i32),
+                source: e,
             }
         })?;
 
@@ -211,9 +304,9 @@ impl DirFd {
 
     /// Get raw stat data for this directory
     pub fn fstat(&self) -> io::Result<FileStat> {
-        let stat = nix::sys::stat::fstat(&self.fd).map_err(|e| SafeTraversalError::StatFailed {
+        let stat = fstat_fd(&self.fd).map_err(|e| SafeTraversalError::StatFailed {
             path: translate!("safe-traversal-current-directory").into(),
-            source: io::Error::from_raw_os_error(e as i32),
+            source: e,
         })?;
         Ok(stat)
     }
@@ -287,6 +380,10 @@ impl DirFd {
     }
 
     /// Change mode of a file relative to this directory
+    ///
+    /// Goes through the libc `fchmodat()` symbol, which `LD_PRELOAD` tools
+    /// (fakeroot, fakechroot, pseudo) interpose and a raw syscall would bypass.
+    /// glibc issues `fchmodat2` from there anyway, so nothing is lost.
     pub fn chmod_at(
         &self,
         name: &OsStr,
@@ -296,7 +393,38 @@ impl DirFd {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
 
-        // --- fchmodat2 path (Linux 6.6+, asm-generic arches only) ---
+        let flags = if symlink_behavior.should_follow() {
+            FchmodatFlags::FollowSymlink
+        } else {
+            FchmodatFlags::NoFollowSymlink
+        };
+
+        // nix rather than rustix: rustix defaults to its linux_raw backend, so
+        // its `chmod` is a raw syscall that no LD_PRELOAD wrapper can see.
+        // A libc that cannot honor AT_SYMLINK_NOFOLLOW reports it rather than
+        // following the symlink, so falling back on that error is safe.
+        // Only the non-Linux tail below consumes this; on Linux the O_PATH
+        // fallback takes over instead.
+        #[cfg_attr(target_os = "linux", allow(unused_variables))]
+        let libc_err = match fchmodat(
+            &self.fd,
+            name_cstr.as_c_str(),
+            Mode::from_bits_truncate(mode as libc::mode_t),
+            flags,
+        ) {
+            Ok(()) => return Ok(()),
+            Err(e)
+                if !symlink_behavior.should_follow()
+                    && (e == nix::errno::Errno::ENOSYS
+                        || e == nix::errno::Errno::EOPNOTSUPP
+                        || e == nix::errno::Errno::ENOTSUP) =>
+            {
+                io::Error::from_raw_os_error(e as i32)
+            }
+            Err(e) => return Err(io::Error::from_raw_os_error(e as i32)),
+        };
+
+        // --- fchmodat2 fallback (Linux 6.6+, asm-generic arches only) ---
         // Uses the raw mode value directly; no nix::Mode conversion needed.
         // Only enabled on asm-generic architectures where syscall number 452 is
         // correct (x86_64, x86, arm, aarch64, riscv). MIPS/SPARC/PowerPC/Alpha
@@ -313,7 +441,7 @@ impl DirFd {
                 target_arch = "riscv32",
             ),
         ))]
-        if matches!(symlink_behavior, SymlinkBehavior::NoFollow) {
+        {
             use std::sync::atomic::{AtomicBool, Ordering};
 
             // Cache: if fchmodat2 returned ENOSYS once, the kernel is too old
@@ -322,7 +450,7 @@ impl DirFd {
 
             if !FCHMODAT2_UNAVAILABLE.load(Ordering::Relaxed) {
                 // Syscall number for fchmodat2 on asm-generic architectures.
-                const SYS_FCHMODAT2: libc::c_long = 452;
+                const SYS_FCHMODAT2: core::ffi::c_long = 452;
                 // SAFETY: syscall(2) is an FFI call. We pass valid arguments:
                 // - fd: valid open file descriptor
                 // - name: valid C string pointer (name_cstr lives for the duration)
@@ -344,42 +472,20 @@ impl DirFd {
                 match err.raw_os_error() {
                     Some(libc::ENOSYS) => {
                         FCHMODAT2_UNAVAILABLE.store(true, Ordering::Relaxed);
-                        // Fall through to fchmodat
+                        // Fall through to the O_PATH fallback
                     }
                     _ => return Err(err),
                 }
             }
         }
 
-        // --- fchmodat fallback path ---
-        // nix::Mode conversion is needed here because fchmodat() requires it.
-        let nix_mode = Mode::from_bits_truncate(mode as libc::mode_t);
-
-        let flags = if symlink_behavior.should_follow() {
-            FchmodatFlags::FollowSymlink
-        } else {
-            FchmodatFlags::NoFollowSymlink
-        };
-
-        match fchmodat(&self.fd, name_cstr.as_c_str(), nix_mode, flags) {
-            Ok(()) => Ok(()),
-            Err(e)
-                if !symlink_behavior.should_follow()
-                    && (e == nix::errno::Errno::EOPNOTSUPP || e == nix::errno::Errno::ENOTSUP) =>
-            {
-                // musl does not emulate AT_SYMLINK_NOFOLLOW via /proc/self/fd
-                // like glibc does, so fchmodat returns EOPNOTSUPP on old kernels.
-                // Fall back to O_PATH + /proc/self/fd/{fd} + fchmod.
-                #[cfg(target_os = "linux")]
-                {
-                    self.chmod_at_via_opath(name_cstr.as_c_str(), mode)
-                }
-                #[cfg(not(target_os = "linux"))]
-                {
-                    Err(io::Error::from_raw_os_error(e as i32))
-                }
-            }
-            Err(e) => Err(io::Error::from_raw_os_error(e as i32)),
+        #[cfg(target_os = "linux")]
+        {
+            self.chmod_at_via_opath(name_cstr.as_c_str(), mode)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            Err(libc_err)
         }
     }
 
@@ -391,23 +497,24 @@ impl DirFd {
     /// race because the fd pins the inode.
     ///
     #[cfg(target_os = "linux")]
-    fn chmod_at_via_opath(&self, name: &std::ffi::CStr, mode: u32) -> io::Result<()> {
-        use rustix::fs::{Mode, OFlags, chmod, openat};
+    fn chmod_at_via_opath(&self, name: &CStr, mode: u32) -> io::Result<()> {
+        // Same reason as in chmod_at: rustix's linux_raw backend would make
+        // these raw syscalls, invisible to LD_PRELOAD wrappers.
+        use std::os::unix::fs::PermissionsExt;
 
         let fd = openat(
             &self.fd,
             name,
-            OFlags::PATH | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+            OFlag::O_PATH | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
             Mode::empty(),
         )
-        .map_err(|e| io::Error::from_raw_os_error(e.raw_os_error()))?;
+        .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
 
-        let proc_path = format!("/proc/self/fd/{}\0", fd.as_raw_fd());
-        let proc_cstr = std::ffi::CStr::from_bytes_with_nul(proc_path.as_bytes())
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid proc path"))?;
-
-        chmod(proc_cstr, Mode::from_bits_truncate(mode))
-            .map_err(|e| io::Error::from_raw_os_error(e.raw_os_error()))
+        // set_permissions goes through the libc chmod() symbol.
+        fs::set_permissions(
+            format!("/proc/self/fd/{}", fd.as_raw_fd()),
+            fs::Permissions::from_mode(mode),
+        )
     }
 
     /// Change mode of this directory
@@ -437,13 +544,25 @@ impl DirFd {
         Ok(())
     }
 
-    /// Open a file for writing relative to this directory
-    /// Creates the file if it doesn't exist, truncates if it does
+    /// Create a file for writing relative to this directory
+    /// Fails with `EEXIST` if the name already exists
     pub fn open_file_at(&self, name: &OsStr) -> io::Result<fs::File> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-        let flags = OFlag::O_CREAT | OFlag::O_WRONLY | OFlag::O_TRUNC | OFlag::O_CLOEXEC;
-        let mode = Mode::from_bits_truncate(0o666); // Default file permissions
+        // Callers reach here right after unlinking `name`, which is precisely
+        // the window an attacker races. O_NOFOLLOW alone only refuses a symlink
+        // planted in it; a hard link to a victim file would still be opened and
+        // truncated, then chowned and chmoded by the caller's finalization.
+        // O_EXCL refuses both. Mode 0o600 rather than the umask-derived 0o666,
+        // so no other user can read the content while it is being written —
+        // same reasoning as `safe_copy::DEST_INITIAL_MODE` (issue #10011).
+        let flags = OFlag::O_CREAT
+            | OFlag::O_EXCL
+            | OFlag::O_WRONLY
+            | OFlag::O_CLOEXEC
+            | OFlag::O_NOFOLLOW
+            | LARGEFILE;
+        let mode = Mode::from_bits_truncate(0o600);
 
         let fd: OwnedFd = openat(self.fd.as_fd(), name_cstr.as_c_str(), flags, mode)
             .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
@@ -568,10 +687,16 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
                 )),
             }
         }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            parent_fd.mkdir_at(name, mode)?;
-            parent_fd.open_subdir(name, SymlinkBehavior::NoFollow)
-        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => match parent_fd.mkdir_at(name, mode) {
+            Ok(()) => parent_fd.open_subdir(name, SymlinkBehavior::NoFollow),
+            // Another process created `name` between the stat and the mkdir
+            // (issue #12355). Open what it created; O_NOFOLLOW keeps a symlink
+            // that raced into the name from being followed.
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                parent_fd.open_subdir(name, SymlinkBehavior::NoFollow)
+            }
+            Err(e) => Err(e),
+        },
         Err(e) => Err(e),
     }
 }
@@ -634,7 +759,7 @@ pub struct FileInfo {
 }
 
 impl FileInfo {
-    pub fn from_stat(stat: &libc::stat) -> Self {
+    pub fn from_stat(stat: &FileStat) -> Self {
         // Allow unnecessary cast because st_dev and st_ino have different types on different platforms
         #[allow(clippy::unnecessary_cast)]
         Self {
@@ -742,10 +867,31 @@ impl Metadata {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    fn time_from_secs_nsecs(secs: i64, nsecs: i64) -> Option<SystemTime> {
+        use std::time::{Duration, UNIX_EPOCH};
+        if secs >= 0 {
+            UNIX_EPOCH.checked_add(Duration::new(secs as u64, nsecs as u32))
+        } else {
+            UNIX_EPOCH.checked_sub(Duration::new((-secs) as u64, 0))
+        }
+    }
+
+    pub fn modified(&self) -> Option<SystemTime> {
+        Self::time_from_secs_nsecs(self.mtime(), self.mtime_nsec())
+    }
+
+    pub fn accessed(&self) -> Option<SystemTime> {
+        Self::time_from_secs_nsecs(self.atime(), self.atime_nsec())
+    }
+
+    pub fn changed(&self) -> Option<SystemTime> {
+        Self::time_from_secs_nsecs(self.ctime(), self.ctime_nsec())
+    }
 }
 
 // Add MetadataExt trait implementation for compatibility
-impl std::os::unix::fs::MetadataExt for Metadata {
+impl MetadataExt for Metadata {
     // st_dev type varies by platform (i32 on macOS, u64 on Linux)
     #[allow(clippy::unnecessary_cast)]
     fn dev(&self) -> u64 {
@@ -795,92 +941,92 @@ impl std::os::unix::fs::MetadataExt for Metadata {
     }
 
     fn atime(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
+        // aix and hurd only have the timespec fields
+        #[cfg(any(target_os = "aix", target_os = "hurd"))]
         {
-            self.stat.st_atime.into()
+            self.stat.st_atim.tv_sec as _
         }
-        #[cfg(not(target_pointer_width = "32"))]
+        #[cfg(not(any(target_os = "aix", target_os = "hurd")))]
         {
-            self.stat.st_atime
+            #[allow(clippy::useless_conversion)]
+            self.stat.st_atime.into()
         }
     }
 
     fn atime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_atimensec
+            #[allow(clippy::unnecessary_cast)]
+            (self.stat.st_atimensec as i64)
         }
 
-        #[cfg(not(target_os = "netbsd"))]
+        #[cfg(any(target_os = "aix", target_os = "hurd"))]
         {
-            #[cfg(target_pointer_width = "32")]
-            {
-                self.stat.st_atime_nsec.into()
-            }
-            #[cfg(not(target_pointer_width = "32"))]
-            {
-                self.stat.st_atime_nsec
-            }
+            self.stat.st_atim.tv_nsec as _
+        }
+
+        #[cfg(not(any(target_os = "netbsd", target_os = "aix", target_os = "hurd")))]
+        {
+            #[allow(clippy::unnecessary_cast)]
+            (self.stat.st_atime_nsec as i64)
         }
     }
 
     fn mtime(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
+        #[cfg(any(target_os = "aix", target_os = "hurd"))]
         {
-            self.stat.st_mtime.into()
+            self.stat.st_mtim.tv_sec as _
         }
-        #[cfg(not(target_pointer_width = "32"))]
+        #[cfg(not(any(target_os = "aix", target_os = "hurd")))]
         {
-            self.stat.st_mtime
+            #[allow(clippy::useless_conversion)]
+            self.stat.st_mtime.into()
         }
     }
 
     fn mtime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_mtimensec
+            #[allow(clippy::unnecessary_cast)]
+            (self.stat.st_mtimensec as i64)
         }
-
-        #[cfg(not(target_os = "netbsd"))]
+        #[cfg(any(target_os = "aix", target_os = "hurd"))]
         {
-            #[cfg(target_pointer_width = "32")]
-            {
-                self.stat.st_mtime_nsec.into()
-            }
-            #[cfg(not(target_pointer_width = "32"))]
-            {
-                self.stat.st_mtime_nsec
-            }
+            self.stat.st_mtim.tv_nsec as _
+        }
+        #[cfg(not(any(target_os = "netbsd", target_os = "aix", target_os = "hurd")))]
+        {
+            #[allow(clippy::unnecessary_cast)]
+            (self.stat.st_mtime_nsec as i64)
         }
     }
 
     fn ctime(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
+        #[cfg(any(target_os = "aix", target_os = "hurd"))]
         {
-            self.stat.st_ctime.into()
+            self.stat.st_ctim.tv_sec as _
         }
-        #[cfg(not(target_pointer_width = "32"))]
+        #[cfg(not(any(target_os = "aix", target_os = "hurd")))]
         {
-            self.stat.st_ctime
+            #[allow(clippy::useless_conversion)]
+            self.stat.st_ctime.into()
         }
     }
 
     fn ctime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_ctimensec
+            #[allow(clippy::unnecessary_cast)]
+            (self.stat.st_ctimensec as i64)
         }
-
-        #[cfg(not(target_os = "netbsd"))]
+        #[cfg(any(target_os = "aix", target_os = "hurd"))]
         {
-            #[cfg(target_pointer_width = "32")]
-            {
-                self.stat.st_ctime_nsec.into()
-            }
-            #[cfg(not(target_pointer_width = "32"))]
-            {
-                self.stat.st_ctime_nsec
-            }
+            self.stat.st_ctim.tv_nsec as _
+        }
+        #[cfg(not(any(target_os = "netbsd", target_os = "aix", target_os = "hurd")))]
+        {
+            #[allow(clippy::unnecessary_cast)]
+            (self.stat.st_ctime_nsec as i64)
         }
     }
 
@@ -977,6 +1123,33 @@ mod tests {
         );
     }
 
+    /// A directory fd must end up with the same open-file status flags as one
+    /// `std::fs::File` would produce, `O_LARGEFILE` included. On 32-bit Linux a
+    /// missing `O_LARGEFILE` makes the kernel reject directories whose metadata
+    /// overflows the 32-bit ranges with EOVERFLOW.
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_dirfd_open_status_flags_match_std() {
+        use nix::fcntl::{FcntlArg, fcntl};
+
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir(temp_dir.path().join("nested")).unwrap();
+
+        let reference = fs::File::open(temp_dir.path().join("nested")).unwrap();
+        // F_GETFL reports O_DIRECTORY back for a directory fd; std opens the
+        // same directory as a plain file, so add it to the expected flags.
+        let expected = fcntl(&reference, FcntlArg::F_GETFL).unwrap() | libc::O_DIRECTORY;
+
+        let parent = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        let direct = DirFd::open(&temp_dir.path().join("nested"), SymlinkBehavior::Follow).unwrap();
+        let sub = parent
+            .open_subdir(OsStr::new("nested"), SymlinkBehavior::Follow)
+            .unwrap();
+
+        assert_eq!(fcntl(&direct.fd, FcntlArg::F_GETFL).unwrap(), expected);
+        assert_eq!(fcntl(&sub.fd, FcntlArg::F_GETFL).unwrap(), expected);
+    }
+
     #[test]
     fn test_dirfd_open_nonexistent_subdir() {
         let temp_dir = TempDir::new().unwrap();
@@ -1025,6 +1198,25 @@ mod tests {
         assert_eq!(stat_nofollow.st_mode & libc::S_IFMT, libc::S_IFLNK);
     }
 
+    /// A size of 2^31 overflows the plain 32-bit stat flavor, so this
+    /// fails on 32-bit targets unless the wide one is used.
+    #[test]
+    #[allow(clippy::unnecessary_cast)]
+    fn test_dirfd_stat_and_fstat_large_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let file = fs::File::create(temp_dir.path().join("large")).unwrap();
+        let overflow_size = 1u64 << 31;
+        file.set_len(overflow_size).unwrap();
+        let fstat_size = fstat_fd(file).unwrap().st_size as u64;
+        assert_eq!(fstat_size, overflow_size);
+
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        let stat = dir_fd
+            .stat_at(OsStr::new("large"), SymlinkBehavior::Follow)
+            .unwrap();
+        assert_eq!(stat.st_size as u64, overflow_size);
+    }
+
     #[test]
     fn test_dirfd_fstat() {
         let temp_dir = TempDir::new().unwrap();
@@ -1049,6 +1241,31 @@ mod tests {
         assert_eq!(entries.len(), 2);
         assert!(entries.contains(&OsString::from("file1")));
         assert!(entries.contains(&OsString::from("file2")));
+
+        let entries_again = dir_fd.read_dir().unwrap();
+        assert_eq!(entries_again.len(), 2);
+        assert!(entries_again.contains(&OsString::from("file1")));
+        assert!(entries_again.contains(&OsString::from("file2")));
+    }
+
+    #[test]
+    fn test_dirfd_read_dir_refills_buffer() {
+        let temp_dir = TempDir::new().unwrap();
+        // Enough entries of enough length that a single 8 KiB getdents64
+        // batch cannot hold them all, so the buffer-refill path is covered.
+        let expected: std::collections::HashSet<OsString> = (0..500)
+            .map(|i| {
+                let name = format!("entry_with_a_rather_long_name_{i:03}");
+                fs::write(temp_dir.path().join(&name), "x").unwrap();
+                OsString::from(name)
+            })
+            .collect();
+
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        let entries: std::collections::HashSet<OsString> =
+            dir_fd.read_dir().unwrap().into_iter().collect();
+
+        assert_eq!(entries, expected);
     }
 
     #[test]
@@ -1188,6 +1405,9 @@ mod tests {
         if let Err(e) = result {
             // Should be InvalidInput for null byte error
             assert_eq!(e.kind(), io::ErrorKind::InvalidInput);
+            // Reported as PathContainsNull, not as a raw EINVAL coming back
+            // from the openat call itself.
+            assert_eq!(e.raw_os_error(), None);
         }
     }
 
@@ -1246,20 +1466,45 @@ mod tests {
     }
 
     #[test]
-    fn test_open_file_at_truncates_existing() {
-        use std::io::Write;
-
+    fn test_open_file_at_refuses_existing() {
+        // Including a hard link an attacker planted after the caller's unlink:
+        // without O_EXCL the victim would be truncated and overwritten.
         let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("existing.txt");
-        fs::write(&file_path, "old content that is longer").unwrap();
+        let victim = temp_dir.path().join("victim");
+        fs::write(&victim, "SECRET").unwrap();
+        fs::hard_link(&victim, temp_dir.path().join("planted")).unwrap();
 
         let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
-        let mut file = dir_fd.open_file_at(OsStr::new("existing.txt")).unwrap();
-        file.write_all(b"new").unwrap();
-        drop(file);
+        let err = dir_fd.open_file_at(OsStr::new("planted")).unwrap_err();
 
-        let content = fs::read_to_string(&file_path).unwrap();
-        assert_eq!(content, "new");
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read_to_string(&victim).unwrap(), "SECRET");
+    }
+
+    #[test]
+    fn test_open_file_at_uses_restrictive_mode() {
+        let temp_dir = TempDir::new().unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+
+        let file = dir_fd.open_file_at(OsStr::new("secret")).unwrap();
+        assert_eq!(file.metadata().unwrap().mode() & 0o777, 0o600);
+    }
+
+    #[test]
+    fn test_open_file_at_refuses_symlink() {
+        // A symlink planted at the final component must not be followed:
+        // otherwise the O_TRUNC would destroy the link's target.
+        let temp_dir = TempDir::new().unwrap();
+        let victim = temp_dir.path().join("victim");
+        fs::write(&victim, "SECRET").unwrap();
+        symlink(&victim, temp_dir.path().join("link")).unwrap();
+
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        assert!(
+            dir_fd.open_file_at(OsStr::new("link")).is_err(),
+            "open_file_at followed a symlink at the final component"
+        );
+        assert_eq!(fs::read_to_string(&victim).unwrap(), "SECRET");
     }
 
     #[test]

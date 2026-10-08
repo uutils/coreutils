@@ -12,9 +12,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/false.rs"
 test = false
@@ -22,8 +19,8 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true }
 fluent = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "false"
@@ -32,6 +29,9 @@ path = "src/main.rs"
 [dev-dependencies]
 divan = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
+
+[lints]
+workspace = true
 
 [[bench]]
 name = "false_bench"

@@ -35,7 +35,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -45,9 +45,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mandoc locales-all
           sudo apt-get install -y libselinux1-dev libsystemd-dev libacl1-dev libattr1-dev libcap-dev
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
 
       - name: Build manpages (${{ matrix.locale }})
         run: |

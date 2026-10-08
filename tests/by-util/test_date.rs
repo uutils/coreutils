@@ -2,16 +2,16 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
-// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST KST uueuu ueuu vasárnap június január distros
-// spell-checker: ignore: uppercases
+
+// spell-checker:ignore AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST MESZ KST uueuu ueuu vasárnap június január distros
+// spell-checker:ignore uppercases xffx
 
 use std::cmp::Ordering;
 
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(unix)]
 use rustix::process::geteuid;
 use uutests::util::TestScenario;
 #[cfg(unix)]
@@ -67,6 +67,86 @@ fn test_invalid_short_option() {
 }
 
 #[test]
+fn test_large_year_default_output() {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC0")
+        .args(&["-d", "18978-01-01"])
+        .succeeds()
+        .stdout_is("Thu Jan  1 00:00:00 UTC 18978\n");
+}
+
+#[test]
+fn test_large_year_default_output_boundary() {
+    for (input, expected) in [
+        ("9999-01-01", "Fri Jan  1 00:00:00 UTC 9999\n"),
+        ("10000-01-01", "Sat Jan  1 00:00:00 UTC 10000\n"),
+        ("10000-01-01 00:00 +1400", "Fri Dec 31 10:00:00 UTC 9999\n"),
+        ("9999-12-31 23:00 -1400", "Sat Jan  1 13:00:00 UTC 10000\n"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
+            .args(&["-d", input])
+            .succeeds()
+            .stdout_is(expected);
+    }
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC0")
+        .args(&["-d", "10000-02-30"])
+        .fails_with_code(1)
+        .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_date_rejects_input_that_cannot_take_a_timezone() {
+    // A trailing timezone abbreviation must not rescue an input that already
+    // carries zone information, or that cannot take a zone at all. GNU date
+    // rejects all of these.
+    for input in [
+        "Jan 23 6:00PM GMT-1 EST",    // offset plus abbreviation
+        "023-060 MEST",               // time with offset, plus abbreviation
+        "2024-01-15 12:00 EST EST",   // the same abbreviation twice
+        "@0 EST",                     // a timestamp cannot take a zone
+        "2024-01-15 12:00 UTC EST",   // a named zone whose offset matches TZ
+        "2024-01-15 12:00 GMT EST",   // likewise, spelled differently
+        "2024-01-15 12:00 +0000 EST", // a numeric offset matching TZ
+        "2024-01-15 12:00 -0500 EST", // a standalone negative offset
+        "UTC 2024-01-15 12:00 EST",   // zone stated before the date
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
+            .args(&["-d", input])
+            .fails_with_code(1)
+            .stderr_contains("invalid date");
+    }
+}
+
+#[test]
+fn test_date_accepts_gnu_timezone_abbreviations() {
+    // Abbreviations GNU date accepts, with the UTC time they map to.
+    for (input, expected) in [
+        ("2024-01-15 12:00 MEZ", "11:00\n"),
+        ("2024-01-15 12:00 MESZ", "10:00\n"),
+        ("2024-01-15 12:00 MEST", "10:00\n"),
+        ("2024-01-15 12:00 KST", "03:00\n"),
+        ("2024-01-15 12:00 EST", "17:00\n"),
+        ("2024-01-15 12:00 IST", "06:30\n"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
+            .args(&["-u", "-d", input, "+%H:%M"])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
 fn test_format_option_not_to_capture_other_valid_arguments() {
     new_ucmd!()
         .arg("+%Y%m%d%H%M%S")
@@ -81,6 +161,14 @@ fn test_single_dash_as_date() {
         .arg("-")
         .fails_with_code(1)
         .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_single_dash_as_date_string() {
+    new_ucmd!()
+        .args(&["-u", "-d", "-", "+%T"])
+        .succeeds()
+        .stdout_is("00:00:00\n");
 }
 
 #[test]
@@ -298,6 +386,10 @@ fn test_date_utc_with_d_flag() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_utc_vs_local() {
     let cases = [
         ("-d", "2024-01-01 12:00", "+%H:%M %Z", "12:00 EST\n"),
@@ -423,19 +515,21 @@ fn test_date_format_literal() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(unix)]
 fn test_date_set_valid() {
     if geteuid().is_root() {
         new_ucmd!()
             .arg("--set")
             .arg("2020-03-12 13:30:00+08:00")
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
             .succeeds()
-            .no_output();
+            .stdout_is("Thu Mar 12 05:30:00 UTC 2020\n");
     }
 }
 
 #[test]
-#[cfg(any(windows, all(unix, not(target_os = "macos"))))]
+#[cfg(any(windows, unix))]
 fn test_date_set_invalid() {
     let result = new_ucmd!().arg("--set").arg("123abcd").fails();
     result.no_stdout();
@@ -443,28 +537,65 @@ fn test_date_set_invalid() {
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+fn test_date_error_echoes_input_verbatim() {
+    // Error messages echo what the user typed: numeric-looking input must
+    // not be reformatted as a Fluent number (#14669, #14670).
+    for input in ["1e9", "+1e-2", "+9.e-0", "9.", "-0"] {
+        new_ucmd!()
+            .arg("-d")
+            .arg(input)
+            .fails()
+            .stderr_is(format!("date: invalid date '{input}'\n"));
+    }
+    // Same for the missing '+' message, which echoes the argument too.
+    new_ucmd!()
+        .args(&["--date", "1996-01-31", "1e9"])
+        .fails_with_code(1)
+        .stderr_contains("the argument 1e9 lacks a leading '+'");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: setting the system clock is not supported at all, not just permission-gated"
+)]
 fn test_date_set_permissions_error() {
     if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
         let result = new_ucmd!()
             .arg("--set")
             .arg("2020-03-11 21:45:00+08:00")
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
             .fails();
-        result.no_stdout();
+        // GNU prints the date even when the clock cannot be set.
+        result.stdout_is("Wed Mar 11 13:45:00 UTC 2020\n");
         assert!(result.stderr_str().starts_with("date: cannot set date: "));
     }
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+#[cfg(all(unix, not(target_os = "android")))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: setting the system clock is not supported at all, not just permission-gated"
+)]
 fn test_date_set_hyphen_prefixed_values() {
     // test -s flag accepts hyphen-prefixed values like "-3 days"
     if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
         let test_cases = vec!["-1 hour", "-2 days", "-3 weeks", "-1 month"];
+        // The echoed date is relative to "now", so match its shape only.
+        let re = Regex::new(r"^\w{3} \w{3} {1,2}\d{1,2} \d{2}:\d{2}:\d{2} UTC \d{4}\n$").unwrap();
 
         for date_str in test_cases {
-            let result = new_ucmd!().arg("--set").arg(date_str).fails();
-            result.no_stdout();
+            let result = new_ucmd!()
+                .arg("--set")
+                .arg(date_str)
+                .env("LC_ALL", "C")
+                .env("TZ", "UTC0")
+                .fails();
+            // GNU prints the date even when the clock cannot be set.
+            result.stdout_matches(&re);
             // permission error, not argument parsing error
             assert!(
                 result.stderr_str().starts_with("date: cannot set date: "),
@@ -476,40 +607,59 @@ fn test_date_set_hyphen_prefixed_values() {
 }
 
 #[test]
-#[cfg(target_os = "macos")]
-fn test_date_set_mac_unavailable() {
-    let result = new_ucmd!()
+#[cfg(wasi_runner)]
+fn test_date_set_unsupported_on_wasi() {
+    new_ucmd!()
         .arg("--set")
         .arg("2020-03-11 21:45:00+08:00")
-        .fails();
-    result.no_stdout();
-    assert!(
-        result
-            .stderr_str()
-            .starts_with("date: setting the date is not supported by macOS")
-    );
+        .fails_with_code(1)
+        .stderr_is("date: setting the date is not supported by WASI\n");
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(unix)]
 fn test_date_set_valid_2() {
     if geteuid().is_root() {
         new_ucmd!()
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01 AWST") // spell-checker:disable-line
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
             .succeeds()
-            .no_output();
+            .stdout_is("Sat Mar 20 06:53:01 UTC 2021\n");
     }
 }
 
 #[test]
-fn test_date_for_invalid_file() {
-    let result = new_ucmd!().arg("--file").arg("invalid_file").fails();
-    result.no_stdout();
-    assert_eq!(
-        result.stderr_str().trim(),
-        "date: invalid_file: No such file or directory",
-    );
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_date_set_echo_honors_format_and_utc() {
+    // The echo is printed even when the set fails (GNU does the same), so
+    // the format and `-u` handling can be checked without privileges.
+    if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
+        // The echo goes through the user's format string.
+        new_ucmd!()
+            .args(&["--set", "2020-03-12 13:30:00+08:00", "+%F %T %Z"])
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
+            .fails()
+            .stdout_is("2020-03-12 05:30:00 UTC\n");
+        // `-u` echoes in UTC regardless of the local zone.
+        new_ucmd!()
+            .args(&["-u", "--set", "2020-03-12 13:30:00+08:00"])
+            .env("LC_ALL", "C")
+            .env("TZ", "Europe/Helsinki") // spell-checker:disable-line
+            .fails()
+            .stdout_is("Thu Mar 12 05:30:00 UTC 2020\n");
+    }
+}
+
+#[test]
+fn test_date_for_non_existing_file() {
+    new_ucmd!()
+        .arg("--file")
+        .arg("non_existing_file")
+        .fails()
+        .stderr_only("date: non_existing_file: No such file or directory\n");
 }
 
 #[test]
@@ -528,69 +678,206 @@ fn test_date_for_no_permission_file() {
         .unwrap();
     file.set_permissions(std::fs::Permissions::from_mode(0o222))
         .unwrap();
-    let result = ucmd.arg("--file").arg(FILE).fails();
-    result.no_stdout();
-    assert_eq!(
-        result.stderr_str().trim(),
-        format!("date: {FILE}: Permission denied")
-    );
+
+    ucmd.arg("--file")
+        .arg(FILE)
+        .fails()
+        .stderr_only(format!("date: {FILE}: Permission denied\n"));
 }
 
 #[test]
 fn test_date_for_dir_as_file() {
-    let result = new_ucmd!().arg("--file").arg("/").fails();
-    result.no_stdout();
-    assert_eq!(
-        result.stderr_str().trim(),
-        "date: expected file, got directory '/'",
-    );
+    new_ucmd!()
+        .arg("--file")
+        .arg("/")
+        .fails_with_code(1)
+        .stderr_only("date: expected file, got directory '/'\n");
 }
 
 #[test]
-fn test_date_for_file() {
+fn test_date_for_empty_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_date_for_file";
     at.touch(file);
-    ucmd.arg("--file").arg(file).succeeds();
+    ucmd.arg("--file").arg(file).succeeds().no_output();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
+fn test_date_for_file_with_non_utf8_path() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file = std::ffi::OsStr::from_bytes(b"file_\xFF\xFE.txt");
+    std::fs::File::create(at.plus(file)).unwrap();
+
+    ucmd.arg("--file").arg(file).succeeds().no_output();
+}
+
+#[test]
+fn test_date_multiple_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a", "2022-02-22");
+    at.write("b", "1999-09-19");
+
+    for (files, expected) in [
+        (["a", "b"], "Sun Sep 19 00:00:00 UTC 1999\n"),
+        (["b", "a"], "Tue Feb 22 00:00:00 UTC 2022\n"),
+    ] {
+        scene
+            .ucmd()
+            .args(&["-u", "--file", files[0], "--file", files[1]])
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn test_date_file_invalid_utf8_line() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_date_file_invalid_utf8";
+    // A 0xFF byte makes the whole line invalid UTF-8
+    at.write_bytes(file, b"Hello\xffx\n");
+
+    // GNU date: "date: invalid date 'Hello\377x'" on stderr, exit code 1
+    let result = ucmd.args(&["-u", "-f", file]).fails_with_code(1);
+    result.no_stdout();
+    result.stderr_contains("date: invalid date 'Hello\\377x'");
+}
+
+#[test]
+fn test_date_file_invalid_utf8_line_continues() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_date_file_mixed_invalid_utf8";
+    at.write_bytes(
+        file,
+        b"2024-01-15 12:00:00\nHello\xffx\n2024-01-16 13:00:00\n",
+    );
+
+    // GNU date reports the invalid line but still processes the other lines,
+    // exiting with code 1
+    let result = ucmd.args(&["-u", "-f", file]).fails_with_code(1);
+    result.stdout_contains("Mon Jan 15 12:00:00 UTC 2024");
+    result.stdout_contains("Tue Jan 16 13:00:00 UTC 2024");
+    result.stderr_contains("date: invalid date 'Hello\\377x'");
+}
+
+#[test]
+fn test_date_stdin_invalid_utf8_line() {
+    // `date -f -` reads from stdin through the same path
+    new_ucmd!()
+        .args(&["-u", "-f", "-"])
+        .pipe_in(b"Hello\xffx\n".to_vec())
+        .fails_with_code(1)
+        .stderr_contains("date: invalid date 'Hello\\377x'");
+}
+
+#[test]
+fn test_date_file_line_ends_at_nul() {
+    // GNU-compat, everything after a NUL byte on a line is ignored
+    new_ucmd!()
+        .args(&["-u", "-f", "-"])
+        .pipe_in(b"2024-01-15 12:00:00\0garbage\nbad\0\xff\n".to_vec())
+        .fails_with_code(1)
+        .stdout_is("Mon Jan 15 12:00:00 UTC 2024\n")
+        .stderr_is("date: invalid date 'bad'\n");
 }
 
 #[test]
 fn test_date_for_file_mtime() {
+    use std::time::{Duration, UNIX_EPOCH};
+
     let (at, mut ucmd) = at_and_ucmd!();
-    let file = "reference_file";
-    at.touch(file);
-    std::thread::sleep(std::time::Duration::from_millis(100));
-    let result = ucmd.arg("--reference").arg(file).arg("+%s%N").succeeds();
-    let mtime = at.metadata(file).modified().unwrap();
-    let mtime_nanos = mtime
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos()
-        .to_string();
-    assert_eq!(result.stdout_str().trim(), &mtime_nanos[..]);
+
+    let reference_file = "reference_file";
+    let f = at.make_file(reference_file);
+    let modification_date = UNIX_EPOCH.checked_add(Duration::from_secs(1234)).unwrap();
+    f.set_modified(modification_date).unwrap();
+
+    ucmd.arg("--reference")
+        .arg(reference_file)
+        .arg("+%s")
+        .succeeds()
+        .stdout_only("1234\n");
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
+fn test_date_reference_is_non_utf8_path() {
+    use std::os::unix::ffi::OsStrExt;
+    use std::time::{Duration, UNIX_EPOCH};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let reference_file = std::ffi::OsStr::from_bytes(b"reference_\xFF\xFE.txt");
+    let f = std::fs::File::create(at.plus(reference_file)).unwrap();
+    let modification_date = UNIX_EPOCH.checked_add(Duration::from_secs(1234)).unwrap();
+    f.set_modified(modification_date).unwrap();
+
+    ucmd.arg("--reference")
+        .arg(reference_file)
+        .arg("+%s")
+        .succeeds()
+        .stdout_only("1234\n");
+}
+
+#[test]
+fn test_date_multiple_references() {
+    use std::time::{Duration, UNIX_EPOCH};
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let create_file = |name: &str, secs: u64| {
+        let f = at.make_file(name);
+        let date = UNIX_EPOCH.checked_add(Duration::from_secs(secs)).unwrap();
+        f.set_modified(date).unwrap();
+    };
+
+    create_file("a", 1111);
+    create_file("b", 2222);
+
+    // last ref "wins"
+    for (refs, expected) in [(["a", "b"], "2222\n"), (["b", "a"], "1111\n")] {
+        scene
+            .ucmd()
+            .args(&["--reference", refs[0], "--reference", refs[1]])
+            .arg("+%s")
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+#[cfg(unix)]
 fn test_date_set_valid_3() {
     if geteuid().is_root() {
         new_ucmd!()
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01") // Local timezone
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
             .succeeds()
-            .no_output();
+            .stdout_is("Sat Mar 20 14:53:01 UTC 2021\n");
     }
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(unix)]
 fn test_date_set_valid_4() {
     if geteuid().is_root() {
         new_ucmd!()
             .arg("--set")
             .arg("2020-03-11 21:45:00") // Local timezone
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
             .succeeds()
-            .no_output();
+            .stdout_is("Wed Mar 11 21:45:00 UTC 2020\n");
     }
 }
 
@@ -598,6 +885,14 @@ fn test_date_set_valid_4() {
 fn test_invalid_format_string() {
     // With lenient mode, invalid format sequences are output literally (like GNU date)
     new_ucmd!().arg("+%!").succeeds().stdout_is("%!\n");
+}
+
+#[test]
+fn test_invalid_format_string_with_too_many_colons() {
+    new_ucmd!()
+        .arg("+%_::::z")
+        .succeeds()
+        .stdout_is("%_::::z\n");
 }
 
 #[test]
@@ -710,9 +1005,9 @@ fn test_invalid_date_string() {
 
     new_ucmd!()
         .arg("-d")
-        // cSpell:disable
+        // spell-checker:disable
         .arg("this fooday")
-        // cSpell:enable
+        // spell-checker:enable
         .fails()
         .no_stdout()
         .stderr_contains("invalid date");
@@ -768,8 +1063,11 @@ fn test_date_parse_from_format() {
          2023-04-01 12:00:00\n\
          2023-04-15 18:30:00",
     );
+    // Pass the file relative to the command's working directory. On WASI the
+    // preopened sandbox root is not the same as the host absolute path, so an
+    // absolute `at.plus(FILE)` argument would not resolve inside the sandbox.
     ucmd.arg("-f")
-        .arg(at.plus(FILE))
+        .arg(FILE)
         .arg("+%Y-%m-%d %H:%M:%S")
         .succeeds();
 }
@@ -797,6 +1095,10 @@ const JAN2: &str = "2024-01-02 12:00:00 +0000";
 const JUL2: &str = "2024-07-02 12:00:00 +0000";
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_tz() {
     fn test_tz(tz: &str, date: &str, output: &str) {
         println!("Test with TZ={tz}, date=\"{date}\".");
@@ -843,6 +1145,10 @@ fn test_date_tz_with_utc_flag() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_tz_various_formats() {
     fn test_tz(tz: &str, date: &str, output: &str) {
         println!("Test with TZ={tz}, date=\"{date}\".");
@@ -871,6 +1177,10 @@ fn test_date_tz_various_formats() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_tz_with_relative_time() {
     new_ucmd!()
         .env("TZ", "America/Vancouver")
@@ -882,6 +1192,10 @@ fn test_date_tz_with_relative_time() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_utc_time() {
     // Test that -u flag shows correct UTC time
     // We get 2 UTC times just in case we're really unlucky and this runs around
@@ -1334,7 +1648,7 @@ fn test_date_empty_string() {
 fn test_date_empty_string_variations() {
     // Test multiple variations of empty/whitespace strings
     // All should produce midnight (00:00:00)
-    let test_cases = vec!["", " ", "  ", "\t", "\n", " \t ", "\t\n\t"];
+    let test_cases = vec!["", " ", "  ", "\t", "\n", " \t ", "\t\n\t", "\x0B", "\x0C"];
 
     for input in test_cases {
         new_ucmd!()
@@ -1358,6 +1672,30 @@ fn test_date_empty_string_variations() {
 }
 
 #[test]
+fn test_date_whitespace_between_items() {
+    // GNU date accepts \v and \f as whitespace between items
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC0")
+        .args(&["-d", "Jan 23\x0B 2026 1:00AM"])
+        .succeeds()
+        .stdout_is("Fri Jan 23 01:00:00 UTC 2026\n");
+
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC0")
+        .args(&["-d", "Jan 23\x0C2026 1:00AM"])
+        .succeeds()
+        .stdout_is("Fri Jan 23 01:00:00 UTC 2026\n");
+}
+
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_relative_m9() {
     // Military timezone "m9" should be parsed as noon + 9 hours = 21:00 UTC
     // When displayed in TZ=UTC+9 (which is UTC-9), this shows as 12:00 local time
@@ -1655,6 +1993,10 @@ fn test_date_locale_en_us_vs_c_difference() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_locale_hu_hungarian() {
     // Regression test for uutils/coreutils#11240: the GNU modifier fast-path
     // ("%-e") used to run before ICU localization, so "%b"/"%A" came out in
@@ -1680,7 +2022,7 @@ fn test_date_locale_hu_hungarian() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
 fn test_date_locale_fr_french() {
     // Test French locale (fr_FR.UTF-8) behavior
     // French typically uses 24-hour format and may have localized day/month names
@@ -1738,7 +2080,7 @@ fn test_date_posix_format_specifiers() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
 fn test_date_format_b_french_locale() {
     // Test both %B and %b formats with French locale using a loop
     // This test expects localized month names when i18n support is available
@@ -1773,7 +2115,7 @@ fn test_date_format_b_french_locale() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
 fn test_date_format_a_french_locale() {
     // Test both %A and %a formats with French locale using a loop
     // This test expects localized day names when i18n support is available
@@ -1808,7 +2150,7 @@ fn test_date_format_a_french_locale() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
 fn test_date_french_full_sentence() {
     let result = new_ucmd!()
         .env("LANG", "fr_FR.UTF-8")
@@ -1834,7 +2176,7 @@ fn test_date_french_full_sentence() {
 /// This is a regression test for locale-aware date formatting
 #[test]
 #[ignore = "https://bugs.launchpad.net/ubuntu/+source/rust-coreutils/+bug/2137410"]
-#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
 fn test_date_format_x_locale_aware() {
     // With C locale, %x should output MM/DD/YY (US format)
     new_ucmd!()
@@ -1946,6 +2288,10 @@ fn test_date_input_hhmm_ampm() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_input_trailing_tz_abbrev_rezones() {
     // `TZ=UTC+1 date -d '2024-01-01 EST'` should display the instant in UTC+1
     // (GNU: 04:00:00 -01:00), not leave it in EST (the pre-fix uutils
@@ -2015,7 +2361,6 @@ fn test_date_strftime_flag_on_composite() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/coreutils/issues/11656 — GNU date strips the `O` strftime modifier in C locale (e.g. `%Om` -> `%m`); uutils leaks it as literal `%om`."]
 fn test_date_strftime_o_modifier() {
     // In C locale the `O` modifier is a no-op (alternative numeric symbols).
     // GNU renders `%Om` as `06` for June; uutils renders it as the literal `%Om`.
@@ -2024,9 +2369,9 @@ fn test_date_strftime_o_modifier() {
         .env("TZ", "UTC")
         .arg("-d")
         .arg("2024-06-15")
-        .arg("+%Om-%Oy-%Ol")
+        .arg("+%Om-%Oy-%Od")
         .succeeds()
-        .stdout_is("06-24-12\n");
+        .stdout_is("06-24-15\n");
 }
 
 #[test]
@@ -2075,6 +2420,10 @@ fn test_date_parenthesis_vs_other_special_chars() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_iranian_locale_solar_hijri_calendar() {
     // Test Iranian locale uses Solar Hijri calendar
     // Verify the Solar Hijri calendar is used in the Iranian locale
@@ -2142,6 +2491,10 @@ fn test_date_iranian_locale_solar_hijri_calendar() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_ethiopian_locale_calendar() {
     // Test Ethiopian locale uses Ethiopian calendar
     // Verify the Ethiopian calendar is used in the Ethiopian locale
@@ -2289,6 +2642,10 @@ fn check_date(locale: &str, date: &str, fmt: &str, expected: &str) {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_locale_calendar_conversions() {
     // Persian (Solar Hijri) - Nowruz is March 20/21
     for (d, e) in [
@@ -2340,6 +2697,10 @@ fn test_locale_calendar_conversions() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_locale_month_names() {
     // %B full month names: Jan, Jun, Dec for each locale
     for (loc, jan, jun, dec) in [
@@ -2360,6 +2721,10 @@ fn test_locale_month_names() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_locale_abbreviated_month_names() {
     // %b abbreviated month names: Feb, Jun, Dec for each locale
     // This test ensures we don't get double periods in locales like Hungarian
@@ -2383,6 +2748,10 @@ fn test_locale_abbreviated_month_names() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_locale_day_names() {
     // %A full day names: Mon (26th), Sun (25th), Sat (24th) Jan 2026
     for (loc, mon, sun, sat) in [
@@ -2396,6 +2765,21 @@ fn test_locale_day_names() {
         check_date(loc, "2026-01-25", "+%A", sun);
         check_date(loc, "2026-01-24", "+%A", sat);
     }
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
+fn test_locale_names_for_several_dates_in_one_run() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("dates", "2026-01-26\n2026-06-14\n2026-12-12\n");
+    ucmd.env("LC_ALL", "fr_FR.UTF-8")
+        .args(&["-f", "dates", "+%A %a %B %b"])
+        .succeeds()
+        .stdout_is("lundi lun. janvier janv\ndimanche dim. juin juin\nsamedi sam. décembre déc\n");
 }
 
 #[test]
@@ -2439,41 +2823,41 @@ fn test_date_write_error_dev_full() {
         .stderr_contains("write error");
 }
 
-// Tests for GNU test leap-1: leap year overflow in date arithmetic
+// Tests for leap year overflow in date arithmetic
 #[test]
-fn test_date_leap1_leap_year_overflow() {
-    // GNU test leap-1: Adding years to Feb 29 should overflow to March 1
+fn test_date_leap_year_arithmetic_overflow() {
+    // Adding years to Feb 29 should overflow to March 1
     // if target year is not a leap year
     new_ucmd!()
-        .args(&["--date", "02/29/1996 1 year", "+%Y-%m-%d"])
+        .args(&["--date", "02/29/2000 1 year", "+%Y-%m-%d"])
         .succeeds()
-        .stdout_is("1997-03-01\n");
+        .stdout_is("2001-03-01\n");
 
     // Additional cases: 2 years
     new_ucmd!()
-        .args(&["--date", "1996-02-29 + 2 years", "+%Y-%m-%d"])
+        .args(&["--date", "2000-02-29 + 2 years", "+%Y-%m-%d"])
         .succeeds()
-        .stdout_is("1998-03-01\n");
+        .stdout_is("2002-03-01\n");
 
     // Leap year to leap year should not overflow
     new_ucmd!()
-        .args(&["--date", "1996-02-29 + 4 years", "+%Y-%m-%d"])
+        .args(&["--date", "2000-02-29 + 4 years", "+%Y-%m-%d"])
         .succeeds()
-        .stdout_is("2000-02-29\n");
+        .stdout_is("2004-02-29\n");
 }
 
-// Tests for GNU test rel-2b: month arithmetic precision
+// Tests for month arithmetic precision
 #[test]
-fn test_date_rel2b_month_arithmetic() {
-    // GNU test rel-2b: Subtracting months should maintain same day of month
+fn test_date_month_subtraction_keeps_day() {
+    // Subtracting months should maintain same day of month
     new_ucmd!()
         .args(&[
             "--date",
-            "1997-01-19 08:17:48 +0 7 months ago",
+            "2003-08-31 12:00:00 +0 7 months ago",
             "+%Y-%m-%d %T",
         ])
         .succeeds()
-        .stdout_contains("1996-06-19");
+        .stdout_contains("2003-01-31");
 
     // Month overflow: Adding months should overflow to next month if day doesn't exist
     new_ucmd!()
@@ -2482,37 +2866,41 @@ fn test_date_rel2b_month_arithmetic() {
         .stdout_is("1996-03-02\n");
 }
 
-// Tests for GNU test cross-TZ-mishandled: embedded timezone parsing
+// Tests for embedded timezone parsing
 #[test]
-fn test_date_cross_tz_mishandled() {
-    // GNU test cross-TZ-mishandled: Parse date with embedded timezone
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
+fn test_date_embedded_timezone_conversion() {
     // Date should be interpreted in embedded TZ, then displayed in environment TZ
     new_ucmd!()
-        .env("TZ", "PST8")
+        .env("TZ", "UTC0")
         .env("LC_ALL", "C")
-        .args(&["-d", r#"TZ="EST5" 1970-01-01 00:00"#])
+        .args(&["-d", r#"TZ="CET-1" 1970-01-01 00:00"#])
         .succeeds()
         .stdout_contains("Dec 31")
-        .stdout_contains("21:00:00")
+        .stdout_contains("23:00:00")
         .stdout_contains("1969");
 }
 
-// Tests for GNU test invalid-high-bit-set: invalid UTF-8 in date string
+// Tests for invalid UTF-8 in date string
 #[test]
 #[cfg(unix)]
-fn test_date_invalid_high_bit_set() {
+#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
+fn test_date_invalid_utf8_byte_rejected() {
     use std::os::unix::ffi::OsStrExt;
 
-    // GNU test invalid-high-bit-set: Invalid UTF-8 byte (0xb0) should produce
+    // Invalid UTF-8 byte (0xb0) should produce
     // GNU-compatible error message with octal escape sequence
-    let invalid_bytes = b"\xb0";
+    let invalid_bytes = b"\xe0";
     let invalid_arg = std::ffi::OsStr::from_bytes(invalid_bytes);
 
     new_ucmd!()
         .args(&[std::ffi::OsStr::new("-d"), invalid_arg])
         .fails()
         .code_is(1)
-        .stderr_contains("invalid date '\\260'");
+        .stderr_contains("invalid date '\\340'");
 }
 
 // Tests for GNU format modifiers
@@ -2587,7 +2975,7 @@ fn test_date_format_modifier_combined_flags() {
 
 #[test]
 fn test_date_format_modifier_case_precedence() {
-    // Test that ^ (uppercase) takes precedence over # (swap case) regardless of order
+    // On names, ^ (uppercase) takes precedence over # (swap case) regardless of order
     new_ucmd!()
         .env("TZ", "UTC")
         .env("LC_ALL", "C")
@@ -2601,6 +2989,25 @@ fn test_date_format_modifier_case_precedence() {
         .args(&["-d", "1999-06-01", "+%#^B"])
         .succeeds()
         .stdout_is("JUNE\n");
+}
+
+#[test]
+fn test_date_format_modifier_case_flags_per_conversion() {
+    for (format, expected) in [
+        ("+%#c", "Sat Jun 15 13:05:03 2024\n"),
+        ("+%#r", "01:05:03 PM\n"),
+        ("+%^P", "pm\n"),
+        ("+%^#p", "pm\n"),
+        ("+%#^p", "pm\n"),
+        ("+%^#Z", "utc\n"),
+    ] {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .env("LC_ALL", "C")
+            .args(&["-d", "2024-06-15 13:05:03", format])
+            .succeeds()
+            .stdout_is(expected);
+    }
 }
 
 #[test]
@@ -3097,4 +3504,117 @@ fn test_nanoseconds_width_prefix_ignored_issue12001() {
     let result = new_ucmd!().arg("+%3N").succeeds();
     // compare to 4 because of \n
     assert_eq!(result.stdout().len(), 4);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_write_error() {
+    use std::fs::OpenOptions;
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    new_ucmd!()
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_is("date: write error: No space left on device\n");
+}
+
+#[test]
+#[ignore = "GNU compat: see uutils/coreutils#14648"]
+fn test_date_allow_missing_year() {
+    new_ucmd!().arg("01.01. 03:00 p.m.").succeeds();
+}
+
+#[test]
+#[ignore = "GNU compat: see uutils/coreutils#14649"]
+fn test_date_allow_spaces_after_month() {
+    new_ucmd!().arg("01.01.    2008 03:00 p.m.").succeeds();
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
+fn test_format_with_non_utf8_bytes() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    // Bytes that are not valid UTF-8 carry no conversion specifier, so they
+    // must reach the output untouched, just like any other literal text.
+    let format = OsString::from_vec(b"+\xc5[%Y]\xa7%%\xe4".to_vec());
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("2031-07-23T04:05:06")
+        .arg(format)
+        .succeeds()
+        .stdout_only_bytes(b"\xc5[2031]\xa7%\xe4\n");
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
+fn test_format_percent_before_non_utf8_byte() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    // A '%' whose specifier is an invalid byte is printed as-is.
+    let format = OsString::from_vec(b"+w%\xd0z".to_vec());
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("2031-07-23T04:05:06")
+        .arg(format)
+        .succeeds()
+        .stdout_only_bytes(b"w%\xd0z\n");
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
+fn test_format_with_gb18030_bytes() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    // A realistic legacy-charset format: GB18030 年 (0xC4EA), 月 (0xD4C2) and
+    // 日 (0xC8D5) around the specifiers, as zh_CN.gb18030 spells it.
+    let format = OsString::from_vec(b"+%Y\xc4\xea%-m\xd4\xc2%-d\xc8\xd5".to_vec());
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("2031-07-23T04:05:06")
+        .arg(format)
+        .succeeds()
+        .stdout_only_bytes(b"2031\xc4\xea7\xd4\xc223\xc8\xd5\n");
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
+fn test_non_utf8_operands_are_octal_escaped() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    // Bytes that don't decode must be reported in octal, not as U+FFFD, on
+    // each of the three paths that print back an operand.
+    let cases: [(&[&[u8]], &str); 3] = [
+        (&[b"gr\xf6n"], "invalid date 'gr\\366n'"),
+        (&[b"+%Y", b"\xf1ao"], "extra operand '\\361ao'"),
+        (
+            &[b"-d", b"2031-07-23", b"%Y\xd8"],
+            "the argument %Y\\330 lacks a leading '+'",
+        ),
+    ];
+
+    for (args, expected) in cases {
+        let args: Vec<OsString> = args
+            .iter()
+            .map(|a| OsString::from_vec(a.to_vec()))
+            .collect();
+        new_ucmd!()
+            .args(&args)
+            .fails()
+            .code_is(1)
+            .stderr_contains(expected);
+    }
 }
