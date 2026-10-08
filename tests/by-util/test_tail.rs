@@ -971,6 +971,32 @@ fn test_lines_with_size_suffix() {
 }
 
 #[test]
+fn test_lines_file_size_multiple_of_block_size() {
+    // Files of exactly one and two 64 KiB blocks.
+    for size in [65_536, 131_072] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("f", &"y\n".repeat(size / 2));
+        ucmd.args(&["-n", "1", "f"]).succeeds().stdout_only("y\n");
+    }
+}
+
+#[test]
+fn test_lines_reach_into_first_block() {
+    // 8192 lines of 16 bytes each: a file of exactly two 64 KiB blocks.
+    const LINES: usize = 8192;
+    let lines: Vec<String> = (0..LINES).map(|i| format!("{i:015}\n")).collect();
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("f", &lines.concat());
+    for n in [5000, LINES, LINES + 1] {
+        scene
+            .ucmd()
+            .args(&["-n", &n.to_string(), "f"])
+            .succeeds()
+            .stdout_only(lines[LINES.saturating_sub(n)..].concat());
+    }
+}
+
+#[test]
 fn test_multiple_input_files() {
     new_ucmd!()
         .arg(FOOBAR_TXT)
@@ -1391,6 +1417,18 @@ fn test_positive_bytes_file_offset_past_seek_limit() {
     ucmd.args(&["-c", "+18446744073709551615", "big"])
         .succeeds()
         .no_stdout();
+}
+
+// A `-c -N` count past `i64::MAX` asks for the whole file.
+#[test]
+fn test_negative_bytes_file_count_past_seek_limit() {
+    for count in ["-9223372036854775808", "-18446744073709551615"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("big", &"a".repeat(8192));
+        ucmd.args(&["-c", count, "big"])
+            .succeeds()
+            .stdout_only("a".repeat(8192));
+    }
 }
 
 #[test]

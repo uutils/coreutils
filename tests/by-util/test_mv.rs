@@ -3257,6 +3257,74 @@ fn test_mv_cross_device_dir_xattr_preserved() {
     assert_eq!(out.stdout, b"dirvalue");
 }
 
+/// An xattr the destination refuses must not stop the other xattrs from being
+/// copied in a cross-device move. Each refused one is reported, but the move
+/// still succeeds. tmpfs takes large values while ext4 caps a value at one
+/// block, so the large attributes fail there and the small ones must survive.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_xattr_failure_keeps_the_rest() {
+    use rustc_hash::FxHashMap;
+    use std::ffi::{OsStr, OsString};
+    use tempfile::TempDir;
+    use uucore::fsxattr::{apply_xattrs, retrieve_xattrs};
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let too_big = vec![b'x'; 8000];
+    at.touch("probe");
+    let probe = FxHashMap::from_iter([(OsString::from("user.probe"), too_big.clone())]);
+    if apply_xattrs(at.plus("probe"), probe).is_ok() {
+        println!("test skipped: the destination filesystem accepts large xattr values");
+        return;
+    }
+
+    // tmpfs lists attributes sorted by name, so interleaving the names puts a
+    // refused attribute before a kept one whichever way the list is sorted.
+    let attrs: FxHashMap<OsString, Vec<u8>> = [
+        ("user.a_kept", b"first".to_vec()),
+        ("user.b_too_big", too_big.clone()),
+        ("user.c_kept", b"middle".to_vec()),
+        ("user.d_too_big", too_big),
+        ("user.e_kept", b"last".to_vec()),
+    ]
+    .into_iter()
+    .map(|(name, value)| (OsString::from(name), value))
+    .collect();
+
+    let src_dir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let file = src_dir.path().join("file");
+    let dir = src_dir.path().join("dir");
+    std::fs::write(&file, "content").unwrap();
+    std::fs::create_dir(&dir).unwrap();
+    std::fs::write(dir.join("file"), "content").unwrap();
+    if apply_xattrs(&file, attrs.clone()).is_err() {
+        println!("test skipped: /dev/shm does not accept user xattrs");
+        return;
+    }
+    apply_xattrs(dir.join("file"), attrs.clone()).unwrap();
+
+    // A single file, then a file copied as part of a directory.
+    for (src, dest, moved) in [(&file, "file", "file"), (&dir, "dir", "dir/file")] {
+        scene
+            .ucmd()
+            .arg(src)
+            .arg(dest)
+            .succeeds()
+            .stderr_contains("mv: setting attribute 'user.b_too_big': ")
+            .stderr_contains("mv: setting attribute 'user.d_too_big': ");
+
+        assert!(!src.exists());
+        let copied = retrieve_xattrs(at.plus(moved)).unwrap();
+        for name in ["user.a_kept", "user.c_kept", "user.e_kept"] {
+            let name = OsStr::new(name);
+            assert_eq!(copied.get(name), attrs.get(name), "{name:?} on {moved}");
+        }
+    }
+}
+
 /// Cross-device mv of a symlink onto an existing file must replace the
 /// destination atomically, matching GNU.
 #[test]

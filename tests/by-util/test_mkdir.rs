@@ -842,12 +842,13 @@ fn test_mkdir_environment_expansion() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    unsafe {
-        std::env::set_var("TEST_VAR", "expanded_value");
-    }
-
     // Create directory with literal $VAR (should not expand)
-    scene.ucmd().arg("-p").arg("$TEST_VAR/dir").succeeds();
+    scene
+        .ucmd()
+        .env("TEST_VAR", "expanded_value")
+        .arg("-p")
+        .arg("$TEST_VAR/dir")
+        .succeeds();
     assert!(at.dir_exists("$TEST_VAR/dir"));
 
     // Verify the literal name exists, not the expanded value
@@ -856,18 +857,16 @@ fn test_mkdir_environment_expansion() {
     // Test with braces
     scene
         .ucmd()
+        .env("TEST_VAR", "expanded_value")
         .arg("-p")
         .arg("${TEST_VAR}_braced/dir")
         .succeeds();
     assert!(at.dir_exists("${TEST_VAR}_braced/dir"));
+    assert!(!at.dir_exists("expanded_value_braced/dir"));
 
     // Test with tilde (should not expand to home directory)
     scene.ucmd().arg("-p").arg("~/test_dir").succeeds();
     assert!(at.dir_exists("~/test_dir"));
-
-    unsafe {
-        std::env::remove_var("TEST_VAR");
-    }
 }
 
 /// Test that mkdir -m creates directories with the exact requested mode,

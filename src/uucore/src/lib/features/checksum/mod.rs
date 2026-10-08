@@ -10,7 +10,6 @@ use std::io::{self, Read};
 use std::num::IntErrorKind;
 
 use os_display::Quotable;
-use thiserror::Error;
 
 use crate::error::{UError, UResult, strip_errno};
 use crate::sum::{
@@ -196,6 +195,9 @@ impl AlgoKind {
         }
     }
 
+    /// Legacy algorithms (SYSV, BSD, CRC and CRC32B) print a decimal checksum
+    /// and a size, not a digest. They have no tagged format, and `--check`
+    /// does not support them.
     pub fn is_legacy(self) -> bool {
         use AlgoKind::*;
         matches!(self, Sysv | Bsd | Crc | Crc32b)
@@ -431,7 +433,7 @@ impl SizedAlgoKind {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum ChecksumError {
     #[error("{}", translate!("checksum-error-raw-multiple-files"))]
     RawMultipleFiles,

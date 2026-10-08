@@ -32,7 +32,6 @@ use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
 use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, mode_t};
-use thiserror::Error;
 
 use platform::copy_on_write;
 use uucore::backup_control::backup_would_destroy_source;
@@ -57,7 +56,7 @@ use crate::copydir::copy_directory;
 mod copydir;
 mod platform;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum CpError {
     /// Simple [`io::Error`] wrapper
     #[error("{0}")]
@@ -1482,7 +1481,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
 
     for source in sources {
         let normalized_source = normalize_path(source);
-        if options.backup == BackupMode::None && seen_sources.contains(&normalized_source) {
+        if options.backup == BackupMode::None && !seen_sources.insert(normalized_source) {
             let file_type = if source.symlink_metadata()?.file_type().is_dir() {
                 "directory"
             } else {
@@ -1538,7 +1537,6 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 copied_destinations.insert(dest.clone());
             }
         }
-        seen_sources.insert(normalized_source);
     }
 
     if let Some(pb) = progress_bar {
@@ -1849,6 +1847,9 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
     } else {
         copy_xattrs(source, dest)
     };
+    // Every attribute has been tried; report the first one that failed.
+    let copy_xattrs_result = copy_xattrs_result
+        .and_then(|failed| failed.into_iter().next().map_or(Ok(()), |(_, e)| Err(e)));
 
     // Restore read-only if we changed it.
     if was_readonly {
@@ -2861,7 +2862,9 @@ fn copy_file(
     // and chmod() would follow it and change the mode of the link target,
     // which can live outside the copied tree. Conversely, --remove-destination
     // replaces a symlink with a regular file that still needs its mode set.
-    if !dest.is_symlink() {
+    // With --link, dest shares the source's inode, so chmod would change the
+    // mode of the source file as well.
+    if options.copy_mode != CopyMode::Link && !dest.is_symlink() {
         // Here, to match GNU semantics, we quietly ignore an error
         // if a user does not have the correct ownership to modify
         // the permissions of a file.

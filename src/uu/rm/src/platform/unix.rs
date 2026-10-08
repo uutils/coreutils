@@ -17,7 +17,7 @@ use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
 use uucore::prompt_yes;
-use uucore::safe_traversal::{DirFd, SymlinkBehavior};
+use uucore::safe_traversal::{DirFd, FileStat, SymlinkBehavior};
 use uucore::show_error;
 use uucore::translate;
 
@@ -38,7 +38,7 @@ fn mode_writable(mode: libc::mode_t) -> bool {
 }
 
 /// File prompt that reuses existing stat data to avoid extra statx calls
-fn prompt_file_with_stat(path: &Path, stat: &libc::stat, options: &Options) -> bool {
+fn prompt_file_with_stat(path: &Path, stat: &FileStat, options: &Options) -> bool {
     if options.interactive == InteractiveMode::Never {
         return true;
     }

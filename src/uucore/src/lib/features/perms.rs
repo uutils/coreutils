@@ -12,8 +12,6 @@ use crate::error::{UResult, USimpleError, strip_errno};
 pub use crate::features::entries;
 use crate::{show_error, translate};
 
-use thiserror::Error;
-
 use clap::{Arg, ArgMatches, Command};
 
 use libc::{gid_t, uid_t};
@@ -40,7 +38,7 @@ use std::os::unix::fs::MetadataExt;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum PermsError {
     #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
     Write(IOError),

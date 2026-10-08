@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 //spell-checker:ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
-//spell-checker:ignore (linux) winsize xpixel ypixel setrlimit Fsize SIGBUS SIGSEGV sigbus tmpfs mksocket
+//spell-checker:ignore (linux) winsize xpixel ypixel setrlimit Fsize SIGBUS SIGSEGV SIGXFSZ EFBIG sigbus tmpfs mksocket
 //spell-checker:ignore (ToDO) ttyname
 
 #![allow(dead_code)]
@@ -27,7 +27,7 @@ use pretty_assertions::assert_eq;
 #[cfg(unix)]
 use rustix::process::{Resource, Rlimit, setrlimit};
 use std::borrow::Cow;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, OpenOptions, hard_link, remove_file};
 use std::io::{self, BufWriter, Read, Result, Write};
@@ -1544,6 +1544,8 @@ pub struct UCommand {
     bytes_into_stdin: Option<Vec<u8>>,
     #[cfg(unix)]
     limits: Vec<(Resource, u64, u64)>,
+    #[cfg(unix)]
+    ignore_sigxfsz: bool,
     stderr_to_stdout: bool,
     timeout: Option<Duration>,
     #[cfg(unix)]
@@ -1708,6 +1710,16 @@ impl UCommand {
     #[cfg(unix)]
     pub fn limit(&mut self, resource: Resource, soft_limit: u64, hard_limit: u64) -> &mut Self {
         self.limits.push((resource, soft_limit, hard_limit));
+        self
+    }
+
+    /// Ignore SIGXFSZ in the child, so that exceeding an `Fsize` [`limit`](Self::limit) makes
+    /// the write fail with `EFBIG` instead of killing the process.
+    ///
+    /// Only the child's disposition changes; the test process is left alone.
+    #[cfg(unix)]
+    pub fn ignore_sigxfsz(&mut self) -> &mut Self {
+        self.ignore_sigxfsz = true;
         self
     }
 
@@ -1935,8 +1947,10 @@ impl UCommand {
             cmd.arg(format!("--dir={}::/", work_dir.display()));
             cmd.arg("--argv0");
             cmd.arg(bin.file_name().unwrap_or(bin.as_os_str()));
-            // Forward env vars to the WASI guest via --env flags
-            for (key, val) in &cmd_env {
+            // WASI reads the first duplicate, whereas Command::envs uses the last.
+            // Resolve overrides before forwarding them to the guest.
+            let wasm_env: BTreeMap<_, _> = cmd_env.iter().map(|(key, val)| (key, val)).collect();
+            for (key, val) in &wasm_env {
                 if let (Some(k), Some(v)) = (key.to_str(), val.to_str()) {
                     cmd.arg("--env");
                     cmd.arg(format!("{k}={v}"));
@@ -2062,6 +2076,18 @@ impl UCommand {
             // also, the closure doesn't access stdin, stdout and stderr.
             unsafe {
                 command.pre_exec(closure);
+            }
+        }
+
+        #[cfg(unix)]
+        if self.ignore_sigxfsz {
+            // SAFETY: signal() is async-signal-safe, and an ignored disposition
+            // survives exec.
+            unsafe {
+                command.pre_exec(|| {
+                    libc::signal(libc::SIGXFSZ, libc::SIG_IGN);
+                    Ok(())
+                });
             }
         }
 

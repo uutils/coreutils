@@ -508,6 +508,55 @@ fn test_cp_arg_update_none() {
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
 
+#[cfg(unix)]
+#[rstest]
+#[case::no_clobber("-n", true)]
+#[case::update_none("--update=none", true)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
+#[case::archive_no_clobber("-an", true)]
+#[case::declined_prompt("-i", false)]
+fn test_cp_recursive_continues_after_skipped_file(#[case] arg: &str, #[case] succeeds: bool) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("source");
+    at.mkdir_all("destination/source");
+    at.write("source/first", "first contents");
+    at.write("source/second", "second contents");
+    // Skip whichever file the traversal reaches first, so the other one comes after it.
+    let order = walkdir::WalkDir::new(at.plus("source"))
+        .min_depth(1)
+        .into_iter()
+        .map(|entry| entry.unwrap().file_name().to_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    let (skipped, copied) = (&order[0], &order[1]);
+    at.write(&format!("destination/source/{skipped}"), "old contents");
+
+    ucmd.args(&["-R", arg, "source", "destination"]);
+    // Only the prompt reads stdin; writing to a cp that never reads it can fail.
+    if !succeeds {
+        ucmd.pipe_in("n\n");
+    }
+    let result = ucmd.run();
+    if succeeds {
+        result.success().no_output();
+    } else {
+        result
+            .code_is(1)
+            .stderr_is(format!("cp: overwrite 'destination/source/{skipped}'? "));
+    }
+
+    assert_eq!(
+        at.read(&format!("destination/source/{skipped}")),
+        "old contents"
+    );
+    assert_eq!(
+        at.read(&format!("destination/source/{copied}")),
+        at.read(&format!("source/{copied}"))
+    );
+}
+
 #[test]
 fn test_cp_arg_update_none_fail() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -904,6 +953,33 @@ fn test_cp_arg_link_with_same_file() {
 
     assert_eq!(at.metadata(file).st_nlink(), 1);
     assert!(at.file_exists(file));
+}
+
+// A hard link shares the source's inode, so `cp --link` must not change the
+// mode of the file it links to.
+#[test]
+// Android's app-private filesystem refuses hard links.
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_cp_arg_link_keeps_source_mode() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("src", "a");
+    at.set_mode("src", 0o755);
+    scene
+        .ucmd()
+        .umask(0o077)
+        .args(&["-l", "src", "lnk"])
+        .succeeds();
+    assert_eq!(at.metadata("src").permissions().mode() & 0o777, 0o755);
+
+    at.write("orig", "a");
+    at.set_mode("orig", 0o600);
+    at.write("dest", "b");
+    at.set_mode("dest", 0o777);
+    scene.ucmd().args(&["-lf", "orig", "dest"]).succeeds();
+    assert_eq!(at.metadata("orig").permissions().mode() & 0o777, 0o600);
+    assert_eq!(at.metadata("dest").permissions().mode() & 0o777, 0o600);
 }
 
 #[test]
@@ -9554,6 +9630,76 @@ fn test_cp_xattr_failure_keeps_dest_contents() {
     std_fs::remove_file(&source).ok();
     set_permissions(&out_ro, std_fs::Permissions::from_mode(0o644)).ok();
     std_fs::remove_dir_all(&dest_dir).ok();
+}
+
+/// An xattr the destination refuses must not stop the other xattrs from being
+/// copied. cp still reports the failure and exits 1. tmpfs takes large values
+/// while ext4 caps a value at one block, so the large attributes fail there
+/// and the small ones must survive.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/shm) not visible"
+)]
+fn test_cp_preserve_xattr_failure_keeps_the_rest() {
+    use rustc_hash::FxHashMap;
+    use std::ffi::OsStr;
+    use tempfile::TempDir;
+    use uucore::fsxattr::{apply_xattrs, retrieve_xattrs};
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let too_big = vec![b'x'; 8000];
+    at.touch("probe");
+    let probe = FxHashMap::from_iter([(OsString::from("user.probe"), too_big.clone())]);
+    if apply_xattrs(at.plus("probe"), probe).is_ok() {
+        println!("test skipped: the destination filesystem accepts large xattr values");
+        return;
+    }
+
+    // tmpfs lists attributes sorted by name, so interleaving the names puts a
+    // refused attribute before a kept one whichever way the list is sorted.
+    let attrs: FxHashMap<OsString, Vec<u8>> = [
+        ("user.a_kept", b"first".to_vec()),
+        ("user.b_too_big", too_big.clone()),
+        ("user.c_kept", b"middle".to_vec()),
+        ("user.d_too_big", too_big),
+        ("user.e_kept", b"last".to_vec()),
+    ]
+    .into_iter()
+    .map(|(name, value)| (OsString::from(name), value))
+    .collect();
+
+    let src_dir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let file = src_dir.path().join("file");
+    let dir = src_dir.path().join("dir");
+    std_fs::write(&file, "content").unwrap();
+    std_fs::create_dir(&dir).unwrap();
+    if apply_xattrs(&file, attrs.clone()).is_err() {
+        println!("test skipped: /dev/shm does not accept user xattrs");
+        return;
+    }
+    apply_xattrs(&dir, attrs.clone()).unwrap();
+
+    // A regular file is copied through file descriptors, a directory by path.
+    for (src, dest) in [(&file, "file"), (&dir, "dir")] {
+        scene
+            .ucmd()
+            .args(&["-r", "--preserve=xattr"])
+            .arg(src)
+            .arg(dest)
+            .fails_with_code(1)
+            .stderr_contains(format!("cp: setting attributes for '{dest}"));
+
+        let copied = retrieve_xattrs(at.plus(dest)).unwrap();
+        for name in ["user.a_kept", "user.c_kept", "user.e_kept"] {
+            let name = OsStr::new(name);
+            assert_eq!(copied.get(name), attrs.get(name), "{name:?} on {dest}");
+        }
+    }
 }
 
 #[test]

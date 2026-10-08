@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED Fsize SIGXFSZ sighandler rusage maxrss cdefg ncdefg cdefh
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED Fsize SIGXFSZ rusage maxrss cdefg ncdefg cdefh
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -896,6 +896,25 @@ fn test_etoa_conv_spec_test() {
 }
 
 #[test]
+fn test_etoa_and_lcase() {
+    // "Hello, World!" in EBCDIC.
+    new_ucmd!()
+        .args(&["conv=ascii,lcase", "status=none"])
+        .pipe_in(b"\xc8\x85\x93\x93\x96\x6b\x40\xe6\x96\x99\x93\x84\x5a".to_vec())
+        .succeeds()
+        .stdout_only_bytes(b"hello, world!");
+}
+
+#[test]
+fn test_etoa_and_ucase() {
+    new_ucmd!()
+        .args(&["conv=ascii,ucase", "status=none"])
+        .pipe_in(b"\xc8\x85\x93\x93\x96\x6b\x40\xe6\x96\x99\x93\x84\x5a".to_vec())
+        .succeeds()
+        .stdout_only_bytes(b"HELLO, WORLD!");
+}
+
+#[test]
 fn test_atoibm_conv_spec_test() {
     new_ucmd!()
         .args(&["conv=ibm"])
@@ -940,24 +959,13 @@ fn test_atoe_and_lcase_conv_spec_test() {
         .stdout_is_fixture_bytes("lcase-ebcdic.test");
 }
 
-// TODO I think uppercase and lowercase are unintentionally swapped in
-// the code that parses the command-line arguments. See this line from
-// `parseargs.rs`:
-//
-//     (ConvFlag::FmtAtoI, ConvFlag::UCase) => Some(&ASCII_TO_IBM_UCASE_TO_LCASE),
-//     (ConvFlag::FmtAtoI, ConvFlag::LCase) => Some(&ASCII_TO_IBM_LCASE_TO_UCASE),
-//
-// If my reading is correct and that is a typo, then the
-// UCASE_TO_LCASE and LCASE_TO_UCASE in those lines should be swapped,
-// and the expected output for the following two tests should be
-// updated accordingly.
 #[test]
 fn test_atoibm_and_ucase_conv_spec_test() {
     new_ucmd!()
         .args(&["conv=ibm,ucase"])
         .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
         .succeeds()
-        .stdout_is_fixture_bytes("lcase-ibm.test");
+        .stdout_is_fixture_bytes("ucase-ibm.test");
 }
 
 #[test]
@@ -966,7 +974,7 @@ fn test_atoibm_and_lcase_conv_spec_test() {
         .args(&["conv=ibm,lcase"])
         .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
         .succeeds()
-        .stdout_is_fixture_bytes("ucase-ibm.test");
+        .stdout_is_fixture_bytes("lcase-ibm.test");
 }
 
 #[test]
@@ -2383,30 +2391,6 @@ fn test_count_bytes_with_expanding_block_conv() {
     assert!(!output.contains(&b'Z'));
 }
 
-/// Ignores SIGXFSZ until dropped, even if an assertion panics.
-///
-/// The child inherits the ignored SIGXFSZ, so exceeding RLIMIT_FSIZE shows
-/// up as a short write() instead of killing the process.
-#[cfg(all(unix, not(target_vendor = "apple")))]
-struct SigxfszGuard(libc::sighandler_t);
-
-#[cfg(all(unix, not(target_vendor = "apple")))]
-impl SigxfszGuard {
-    fn ignore() -> Self {
-        // SAFETY: signal() with SIG_IGN is async-signal-safe and `drop` puts
-        // the old handler back.
-        Self(unsafe { libc::signal(libc::SIGXFSZ, libc::SIG_IGN) })
-    }
-}
-
-#[cfg(all(unix, not(target_vendor = "apple")))]
-impl Drop for SigxfszGuard {
-    fn drop(&mut self) {
-        // SAFETY: restoring the disposition saved in `ignore`.
-        unsafe { libc::signal(libc::SIGXFSZ, self.0) };
-    }
-}
-
 // A failed copy still has to report what it transferred, including complete
 // and partial records.
 #[test]
@@ -2416,12 +2400,11 @@ fn test_stats_are_reported_when_a_write_fails() {
 
     const CAP: u64 = 768 * 1024;
 
-    let _sigxfsz = SigxfszGuard::ignore();
-
     let (at, mut ucmd) = at_and_ucmd!();
     let result = ucmd
         .args(&["if=/dev/zero", "of=capped.bin", "bs=512K", "count=3"])
         .limit(Resource::Fsize, CAP, CAP)
+        .ignore_sigxfsz()
         .fails();
 
     // Under a 768 KiB cap, the first 512 KiB block is written in full, the
@@ -2440,13 +2423,12 @@ fn test_block_stats_are_reported_when_a_write_fails() {
 
     const CAP: u64 = 200 * 1024;
 
-    let _sigxfsz = SigxfszGuard::ignore();
-
     let (at, mut ucmd) = at_and_ucmd!();
     let result = ucmd
         .args(&["conv=block", "cbs=1M", "obs=64K", "of=capped.bin"])
         .pipe_in("x\n")
         .limit(Resource::Fsize, CAP, CAP)
+        .ignore_sigxfsz()
         .fails();
 
     // Three 64 KiB pieces are written in full, and the fourth one is cut short.

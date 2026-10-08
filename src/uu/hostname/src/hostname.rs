@@ -101,7 +101,7 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
         let mut output = String::new();
         for addr in addresses {
             // XXX: not sure why this is necessary...
-            if !hashset.contains(&addr) {
+            if hashset.insert(addr) {
                 let mut ip = addr.to_string();
                 if ip.ends_with(":1") {
                     let len = ip.len();
@@ -109,7 +109,6 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
                 }
                 output.push_str(&ip);
                 output.push(' ');
-                hashset.insert(addr);
             }
         }
         let len = output.len();

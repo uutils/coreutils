@@ -157,6 +157,87 @@ fn test_delete_complement_2() {
 }
 
 #[test]
+fn test_delete_one_char_large_input() {
+    // Longer than one read, with no, few, many and only matches. `few` is
+    // sparse enough for the path that copies the runs between matches.
+    let none = vec![b'x'; 40_000];
+    let few = [[b'x'; 999].as_slice(), b","].concat().repeat(40);
+    let many = b"a,".repeat(20_000);
+    let only = vec![b','; 40_000];
+    for input in [none, few, many, only] {
+        let expected: Vec<u8> = input.iter().copied().filter(|&b| b != b',').collect();
+        new_ucmd!()
+            .args(&["-d", ","])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is_bytes(expected);
+    }
+}
+
+#[test]
+fn test_delete_set_large_input() {
+    let input: Vec<u8> = (0..=u8::MAX).cycle().take(40_000).collect();
+
+    let expected: Vec<u8> = input
+        .iter()
+        .copied()
+        .filter(|&b| !matches!(b, 0 | b'a'..=b'f' | u8::MAX))
+        .collect();
+    new_ucmd!()
+        .args(&["-d", "\\000a-f\\377"])
+        .pipe_in(input.clone())
+        .succeeds()
+        .stdout_is_bytes(expected);
+
+    let expected: Vec<u8> = input
+        .iter()
+        .copied()
+        .filter(u8::is_ascii_lowercase)
+        .collect();
+    new_ucmd!()
+        .args(&["-cd", "a-z"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(expected);
+}
+
+#[test]
+fn test_delete_set_mostly_deleted() {
+    // Almost everything deleted, then half, then almost everything again.
+    let few_kept = [[b'a'; 99].as_slice(), b"\n"].concat().repeat(100);
+    let half_kept = b"a\n".repeat(5_000);
+    let input = [few_kept.as_slice(), &half_kept, &few_kept].concat();
+    let expected: Vec<u8> = input
+        .iter()
+        .copied()
+        .filter(|b| !b.is_ascii_lowercase())
+        .collect();
+    new_ucmd!()
+        .args(&["-d", "a-z"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(expected);
+}
+
+#[test]
+fn test_translate_one_char_large_input() {
+    // Longer than one read, with no and some matches.
+    let none = vec![b'x'; 40_000];
+    let some = b"a,".repeat(20_000);
+    for input in [none, some] {
+        let expected: Vec<u8> = input
+            .iter()
+            .map(|&b| if b == b',' { b';' } else { b })
+            .collect();
+        new_ucmd!()
+            .args(&[",", ";"])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is_bytes(expected);
+    }
+}
+
+#[test]
 fn test_complement1() {
     new_ucmd!()
         .args(&["-c", "a", "X"])
@@ -1530,6 +1611,116 @@ fn test_backwards_range() {
         );
 }
 
+#[cfg(target_pointer_width = "64")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: usize is 32-bit, so these repeat counts do not parse"
+)]
+#[test]
+fn test_huge_repeat_count_in_set1() {
+    // A repeat count this large used to be expanded character by character,
+    // which aborted the process before it read any input.
+    new_ucmd!()
+        .args(&["[a*9223372036854775808]", "b"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("bbc");
+    new_ucmd!()
+        .args(&["[a*99999999999999]b", "xy"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("yyc");
+    new_ucmd!()
+        .args(&["-t", "[a*99999999999999]", "x"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("xbc");
+    new_ucmd!()
+        .args(&["-d", "[a*99999999999999]"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("bc");
+}
+
+#[cfg(target_pointer_width = "64")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: usize is 32-bit, so these repeat counts do not parse"
+)]
+#[test]
+fn test_huge_repeat_count_in_set2() {
+    new_ucmd!()
+        .args(&["abc", "[x*99999999999999]"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("xxx");
+    new_ucmd!()
+        .args(&["abcd", "[x*99999999999999]yz"])
+        .pipe_in("abcd")
+        .succeeds()
+        .stdout_only("xxxx");
+    new_ucmd!()
+        .args(&["-c", "a", "[x*99999999999999]"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("axx");
+}
+
+#[cfg(target_pointer_width = "64")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: usize is 32-bit, so these repeat counts do not parse"
+)]
+#[test]
+fn test_repeat_lengths_beyond_usize() {
+    // Set lengths are kept exact when repeat counts add up past usize::MAX,
+    // so positions past that point still line up the way they should.
+    new_ucmd!()
+        .args(&["-c", "[a*18446744073709551614]bc", "x"])
+        .pipe_in("abcd")
+        .succeeds()
+        .stdout_only("abcx");
+    new_ucmd!()
+        .args(&["[a*18446744073709551615]b", "[x*18446744073709551614][y*]z"])
+        .pipe_in("ab")
+        .succeeds()
+        .stdout_only("yz");
+    new_ucmd!()
+        .args(&[
+            "[a*18446744073709551615]b[:upper:]",
+            "[x*18446744073709551615][:upper:]",
+        ])
+        .fails()
+        .stderr_contains("must be matched by");
+}
+
+#[test]
+fn test_repeat_keeps_every_set2_character_for_squeeze() {
+    // The mappings a->x and a->y both come from the one run of `a`, and the
+    // last one wins, but x is still part of set2 and so still squeezed.
+    new_ucmd!()
+        .args(&["-s", "[a*2]", "xy"])
+        .pipe_in("xxaa")
+        .succeeds()
+        .stdout_only("xy");
+    new_ucmd!()
+        .args(&["-s", "a", "xyz"])
+        .pipe_in("aazz")
+        .succeeds()
+        .stdout_only("xz");
+}
+
+#[test]
+fn test_repeat_in_set1_padded_by_star_in_set2() {
+    // The star in set2 is padded to the length of the repeat in set1, and
+    // the last of the mappings for `a` wins.
+    new_ucmd!()
+        .args(&["[a*3]bc", "x[y*]z"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only("yyz");
+}
+
 #[test]
 fn test_non_digit_repeat() {
     new_ucmd!()
@@ -1578,9 +1769,11 @@ fn test_failed_write_is_reported() {
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI: no pipe/signal support")]
 fn test_broken_pipe_no_error() {
+    // More than a pipe buffer, so that the output blocks until the reader is gone.
     new_ucmd!()
         .args(&["e", "a"])
-        .pipe_in("hello".repeat(100))
+        .pipe_in("hello".repeat(100_000))
+        .ignore_stdin_write_error()
         .run_stdout_starts_with(b"")
         .fails_silently();
 }
@@ -1764,5 +1957,25 @@ string2 must map all characters in the domain to one
             .args(&["w[:lowre:]w", "x"])
             .fails_with_code(1)
             .stderr_only("tr: invalid character class 'lowre'\n");
+    }
+
+    #[test]
+    fn test_repeat_hyphen() {
+        new_ucmd!()
+            .args(&["-s", "[:blank:]", "[-*]"])
+            .pipe_in("Base Z\n")
+            .succeeds()
+            .stdout_only("Base-Z\n");
+
+        new_ucmd!()
+            .args(&["-s", "[:blank:]", "[-*5]"])
+            .pipe_in("Base Z\n")
+            .succeeds()
+            .stdout_only("Base-Z\n");
+
+        new_ucmd!()
+            .args(&["[-*]", "a"])
+            .fails_with_code(1)
+            .stderr_only("tr: the [c*] repeat construct may not appear in string1\n");
     }
 }
