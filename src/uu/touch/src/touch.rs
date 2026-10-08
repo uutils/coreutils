@@ -457,16 +457,13 @@ fn create_without_truncate(path: &Path) -> std::io::Result<fs::File> {
 
 // GNU reports ordinary access failures as "cannot touch", while -c and -h
 // report failures to update timestamps as "setting times of".
+#[cfg(unix)]
 fn cannot_touch_on_access_error(opts: &Options, error: &Error) -> bool {
-    if opts.no_create || opts.no_deref || error.kind() != ErrorKind::PermissionDenied {
-        return false;
-    }
+    !opts.no_create && !opts.no_deref && error.raw_os_error() == Some(libc::EACCES)
+}
 
-    #[cfg(unix)]
-    if error.raw_os_error() == Some(libc::EACCES) {
-        return true;
-    }
-
+#[cfg(not(unix))]
+fn cannot_touch_on_access_error(_opts: &Options, _error: &Error) -> bool {
     false
 }
 
