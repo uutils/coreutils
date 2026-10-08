@@ -2469,32 +2469,29 @@ impl UChild {
     where
         F: FnMut(&str, &str) -> bool,
     {
-        self.try_wait_until_bytes(timeout, |stdout, stderr| {
-            predicate(
-                &String::from_utf8_lossy(stdout),
-                &String::from_utf8_lossy(stderr),
-            )
+        self.poll_until("try_wait_until", timeout, |child| {
+            predicate(&child.stdout_all_peek(), &child.stderr_all_peek())
         })
     }
 
-    /// Like [`UChild::try_wait_until`], but `predicate` gets the raw captured bytes.
-    fn try_wait_until_bytes<F>(&mut self, timeout: Duration, mut predicate: F) -> Result<()>
+    /// Call `done` every 10ms until it returns true, or `timeout` elapses.
+    ///
+    /// The timeout error is prefixed with `name` and includes all output captured so far.
+    fn poll_until<F>(&mut self, name: &str, timeout: Duration, mut done: F) -> Result<()>
     where
-        F: FnMut(&[u8], &[u8]) -> bool,
+        F: FnMut(&mut Self) -> bool,
     {
         let start = Instant::now();
         loop {
-            let stdout = self.stdout_all_bytes_peek();
-            let stderr = self.stderr_all_bytes_peek();
-            if predicate(&stdout, &stderr) {
+            if done(self) {
                 return Ok(());
             }
             if start.elapsed() >= timeout {
                 return Err(io::Error::other(format!(
-                    "try_wait_until: timeout of '{}s' reached\nstdout: {}\nstderr: {}",
+                    "{name}: timeout of '{}s' reached\nstdout: {}\nstderr: {}",
                     timeout.as_secs_f64(),
-                    String::from_utf8_lossy(&stdout),
-                    String::from_utf8_lossy(&stderr)
+                    self.stdout_all_peek(),
+                    self.stderr_all_peek()
                 )));
             }
             self.delay(10);
@@ -2530,7 +2527,8 @@ impl UChild {
         bytes: &[u8],
         timeout: Duration,
     ) -> Result<()> {
-        self.try_wait_until_bytes(timeout, |stdout, _| {
+        self.poll_until("try_wait_until", timeout, |child| {
+            let stdout = child.stdout_all_bytes_peek();
             stdout.windows(bytes.len()).any(|sub| sub == bytes)
         })
     }
@@ -2558,21 +2556,7 @@ impl UChild {
 
     /// Poll until the child process has exited, or `timeout` elapses.
     pub fn try_wait_until_exited(&mut self, timeout: Duration) -> Result<()> {
-        let start = Instant::now();
-        loop {
-            if self.is_not_alive() {
-                return Ok(());
-            }
-            if start.elapsed() >= timeout {
-                return Err(io::Error::other(format!(
-                    "try_wait_until_exited: timeout of '{}s' reached\nstdout: {}\nstderr: {}",
-                    timeout.as_secs_f64(),
-                    self.stdout_all_peek(),
-                    self.stderr_all_peek()
-                )));
-            }
-            self.delay(10);
-        }
+        self.poll_until("try_wait_until_exited", timeout, Self::is_not_alive)
     }
 
     /// Like [`UChild::try_wait_until_exited`], but panics on timeout.
