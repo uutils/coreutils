@@ -8,9 +8,10 @@
 #[cfg(unix)]
 mod benches {
     use divan::{Bencher, black_box};
+    use std::ffi::OsStr;
     use std::fs::File;
     use uu_basenc::uumain;
-    use uucore::benchmark::{run_util_function, setup_test_file};
+    use uucore::benchmark::{get_bench_args, setup_test_file};
 
     const INPUT_SIZE: usize = 16 * 1024 * 1024;
     const ENCODED_SIZE: usize = INPUT_SIZE * 2;
@@ -41,12 +42,13 @@ mod benches {
             .open("/dev/null")
             .unwrap();
         let stdout_backup = redirect_stdout(&dev_null);
+        let args = get_bench_args(&[&"--base16", &input]);
 
-        assert_eq!(run_util_function(uumain, &["--base16", input]), 0);
+        assert_eq!(uumain(args.clone().into_iter()), 0);
 
-        bencher.bench_local(|| {
-            black_box(run_util_function(uumain, &["--base16", input]));
-        });
+        bencher
+            .with_inputs(|| args.clone().into_iter())
+            .bench_local_values(|args| black_box(uumain(args)));
 
         restore_stdout(&stdout_backup);
     }
@@ -58,18 +60,18 @@ mod benches {
         let input = input_path.to_str().unwrap();
         let output = tempfile::tempfile().unwrap();
         let stdout_backup = redirect_stdout(&output);
+        let args = get_bench_args(&[&"--base16", &input]);
 
-        assert_eq!(run_util_function(uumain, &["--base16", input]), 0);
+        assert_eq!(uumain(args.clone().into_iter()), 0);
         assert_eq!(output.metadata().unwrap().len(), OUTPUT_SIZE);
 
         bencher
             .with_inputs(|| {
                 output.set_len(0).unwrap();
                 rustix::fs::seek(&output, rustix::fs::SeekFrom::Start(0)).unwrap();
+                args.clone().into_iter()
             })
-            .bench_local_values(|()| {
-                black_box(run_util_function(uumain, &["--base16", input]));
-            });
+            .bench_local_values(|args| black_box(uumain(args)));
 
         restore_stdout(&stdout_backup);
     }
@@ -79,18 +81,19 @@ mod benches {
     const BASE58_ENCODE_INPUT_SIZE: usize = 24 * 1024;
     const BASE58_DECODE_INPUT_SIZE: usize = 64 * 1024;
 
-    fn run_to_dev_null(bencher: Bencher, args: &[&str]) {
+    fn run_to_dev_null(bencher: Bencher, args: &[&dyn AsRef<OsStr>]) {
         let dev_null = std::fs::OpenOptions::new()
             .write(true)
             .open("/dev/null")
             .unwrap();
         let stdout_backup = redirect_stdout(&dev_null);
+        let args = get_bench_args(args);
 
-        assert_eq!(run_util_function(uumain, args), 0);
+        assert_eq!(uumain(args.clone().into_iter()), 0);
 
-        bencher.bench_local(|| {
-            black_box(run_util_function(uumain, args));
-        });
+        bencher
+            .with_inputs(|| args.clone().into_iter())
+            .bench_local_values(|args| black_box(uumain(args)));
 
         restore_stdout(&stdout_backup);
     }
@@ -102,7 +105,7 @@ mod benches {
             .map(|i| (i * 131 + 7) as u8)
             .collect();
         let input_path = setup_test_file(&data);
-        run_to_dev_null(bencher, &["--base58", input_path.to_str().unwrap()]);
+        run_to_dev_null(bencher, &[&"--base58", &input_path]);
     }
 
     /// Decode Base58 to `/dev/null`.
@@ -114,7 +117,7 @@ mod benches {
             .map(|i| ALPHABET[(i * 37) % ALPHABET.len()])
             .collect();
         let input_path = setup_test_file(&data);
-        run_to_dev_null(bencher, &["-d", "--base58", input_path.to_str().unwrap()]);
+        run_to_dev_null(bencher, &[&"-d", &"--base58", &input_path]);
     }
 }
 

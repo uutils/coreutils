@@ -11,7 +11,7 @@
 use divan::{Bencher, black_box};
 use tempfile::NamedTempFile;
 use uu_sort::uumain;
-use uucore::benchmark::{get_bench_args, run_util_function, setup_test_file, text_data};
+use uucore::benchmark::{get_bench_args, setup_test_file, text_data};
 
 /// Benchmark ASCII-only data sorting with UTF-8 locale
 #[divan::bench]
@@ -110,18 +110,18 @@ fn sort_very_long_lines_utf8_locale(bencher: Bencher) {
     let output_file = NamedTempFile::new().unwrap();
     let output_path = output_file.path().to_str().unwrap().to_string();
 
-    let args = [
-        "--parallel",
-        "1",
-        "-o",
+    let args = get_bench_args(&[
+        &"--parallel",
+        &"1",
+        &"-o",
         &output_path,
-        file_path.to_str().unwrap(),
-    ];
+        &file_path.to_str().unwrap(),
+    ]);
     // Warm up
-    black_box(run_util_function(uumain, &args));
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &args));
-    });
+    black_box(uumain(args.clone().into_iter()));
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark sorting lines that share a long common prefix but differ after 8 KB,
@@ -141,17 +141,17 @@ fn sort_long_common_prefix_utf8_locale(bencher: Bencher) {
     let output_file = NamedTempFile::new().unwrap();
     let output_path = output_file.path().to_str().unwrap().to_string();
 
-    let args = [
-        "--parallel",
-        "1",
-        "-o",
+    let args = get_bench_args(&[
+        &"--parallel",
+        &"1",
+        &"-o",
         &output_path,
-        file_path.to_str().unwrap(),
-    ];
-    black_box(run_util_function(uumain, &args));
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &args));
-    });
+        &file_path.to_str().unwrap(),
+    ]);
+    black_box(uumain(args.clone().into_iter()));
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark merging a single pre-sorted file (`sort -m FILE`) with a UTF-8 locale.
@@ -178,11 +178,11 @@ fn merge_single_file_utf8_locale(bencher: Bencher) {
     let output_file = NamedTempFile::new().unwrap();
     let output_path = output_file.path().to_str().unwrap().to_string();
 
-    let args = ["-m", "-o", &output_path, file_path.to_str().unwrap()];
-    black_box(run_util_function(uumain, &args));
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &args));
-    });
+    let args = get_bench_args(&[&"-m", &"-o", &output_path, &file_path.to_str().unwrap()]);
+    black_box(uumain(args.clone().into_iter()));
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark merging several pre-sorted files (`sort -m`) with a UTF-8 locale.
@@ -224,12 +224,17 @@ fn merge_pre_sorted_files_utf8_locale(bencher: Bencher) {
     let output_file = NamedTempFile::new().unwrap();
     let output_path = output_file.path().to_str().unwrap().to_string();
     let file_args: Vec<&str> = file_paths.iter().map(|p| p.to_str().unwrap()).collect();
+    let mut raw_args: Vec<&dyn AsRef<std::ffi::OsStr>> = vec![&"-m", &"-o", &output_path];
+    raw_args.extend(
+        file_args
+            .iter()
+            .map(|arg| arg as &dyn AsRef<std::ffi::OsStr>),
+    );
+    let args = get_bench_args(&raw_args);
 
-    bencher.bench(|| {
-        let mut args = vec!["-m", "-o", output_path.as_str()];
-        args.extend(&file_args);
-        black_box(run_util_function(uumain, &args));
-    });
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark a sort whose input does not fit the buffer (`-S`), so it is
@@ -243,19 +248,19 @@ fn sort_spill_to_tmp_files_utf8_locale(bencher: Bencher) {
     let output_file = NamedTempFile::new().unwrap();
     let output_path = output_file.path().to_str().unwrap().to_string();
 
-    let args = [
-        "--parallel",
-        "1",
-        "-S",
-        "1M",
-        "-o",
+    let args = get_bench_args(&[
+        &"--parallel",
+        &"1",
+        &"-S",
+        &"1M",
+        &"-o",
         &output_path,
-        file_path.to_str().unwrap(),
-    ];
-    black_box(run_util_function(uumain, &args));
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &args));
-    });
+        &file_path.to_str().unwrap(),
+    ]);
+    black_box(uumain(args.clone().into_iter()));
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark `sort -c` on already sorted input under a UTF-8 locale. Checking
@@ -278,16 +283,14 @@ fn check_sorted_utf8_locale(bencher: Bencher) {
     let unsorted_path = setup_test_file(&data);
     let sorted_file = NamedTempFile::new().unwrap();
     let sorted_path = sorted_file.path().to_str().unwrap().to_string();
-    run_util_function(
-        uumain,
-        &["-o", &sorted_path, unsorted_path.to_str().unwrap()],
-    );
+    let sort_args = get_bench_args(&[&"-o", &sorted_path, &unsorted_path.to_str().unwrap()]);
+    uumain(sort_args.into_iter());
 
-    let args = ["-c", &sorted_path];
-    black_box(run_util_function(uumain, &args));
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &args));
-    });
+    let args = get_bench_args(&[&"-c", &sorted_path]);
+    black_box(uumain(args.clone().into_iter()));
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 fn main() {

@@ -6,7 +6,7 @@
 use divan::{Bencher, black_box};
 use tempfile::TempDir;
 use uu_mv::uumain;
-use uucore::benchmark::{fs_tree, run_util_function};
+use uucore::benchmark::{fs_tree, get_bench_args};
 
 /// Benchmark moving a single file (repeated to reach 100ms)
 #[divan::bench]
@@ -15,23 +15,20 @@ fn mv_single_file(bencher: Bencher) {
         .with_inputs(|| {
             let temp_dir = TempDir::new().unwrap();
             fs_tree::create_wide_tree(temp_dir.path(), 1000, 0);
-            let files: Vec<(String, String)> = (0..1000)
+            let args: Vec<_> = (0..1000)
                 .map(|i| {
                     let src = temp_dir.path().join(format!("f{i}"));
                     let dst = temp_dir.path().join(format!("moved_{i}"));
-                    (
-                        src.to_str().unwrap().to_string(),
-                        dst.to_str().unwrap().to_string(),
-                    )
+                    get_bench_args(&[&src, &dst]).into_iter()
                 })
                 .collect();
-            (temp_dir, files)
+            (temp_dir, args)
         })
-        .bench_values(|(temp_dir, files)| {
-            for (src, dst) in &files {
-                black_box(run_util_function(uumain, &[src, dst]));
+        .bench_values(|(temp_dir, args)| {
+            for args in args {
+                black_box(uumain(args));
             }
-            drop(temp_dir);
+            temp_dir
         });
 }
 
@@ -56,12 +53,15 @@ fn mv_multiple_to_dir(bencher: Bencher) {
                 })
                 .collect();
             args.push(dest_dir.to_str().unwrap().to_string());
-            (temp_dir, args)
+            let arg_refs: Vec<&dyn AsRef<std::ffi::OsStr>> = args
+                .iter()
+                .map(|arg| arg as &dyn AsRef<std::ffi::OsStr>)
+                .collect();
+            (temp_dir, get_bench_args(&arg_refs).into_iter())
         })
         .bench_values(|(temp_dir, args)| {
-            let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-            black_box(run_util_function(uumain, &arg_refs));
-            drop(temp_dir);
+            black_box(uumain(args));
+            temp_dir
         });
 }
 
@@ -76,15 +76,12 @@ fn mv_directory(bencher: Bencher) {
             // Increase tree size for longer benchmark
             fs_tree::create_balanced_tree(&src_dir, 5, 5, 10);
             let dst_dir = temp_dir.path().join("dest_tree");
-            (
-                temp_dir,
-                src_dir.to_str().unwrap().to_string(),
-                dst_dir.to_str().unwrap().to_string(),
-            )
+            let args = get_bench_args(&[&src_dir, &dst_dir]).into_iter();
+            (temp_dir, args)
         })
-        .bench_values(|(temp_dir, src, dst)| {
-            black_box(run_util_function(uumain, &[&src, &dst]));
-            drop(temp_dir);
+        .bench_values(|(temp_dir, args)| {
+            black_box(uumain(args));
+            temp_dir
         });
 }
 
@@ -95,23 +92,20 @@ fn mv_force_overwrite(bencher: Bencher) {
         .with_inputs(|| {
             let temp_dir = TempDir::new().unwrap();
             fs_tree::create_wide_tree(temp_dir.path(), 2000, 0);
-            let files: Vec<(String, String)> = (0..1000)
+            let args: Vec<_> = (0..1000)
                 .map(|i| {
                     let src = temp_dir.path().join(format!("f{i}"));
                     let dst = temp_dir.path().join(format!("f{}", i + 1000));
-                    (
-                        src.to_str().unwrap().to_string(),
-                        dst.to_str().unwrap().to_string(),
-                    )
+                    get_bench_args(&[&"-f", &src, &dst]).into_iter()
                 })
                 .collect();
-            (temp_dir, files)
+            (temp_dir, args)
         })
-        .bench_values(|(temp_dir, files)| {
-            for (src, dst) in &files {
-                black_box(run_util_function(uumain, &["-f", src, dst]));
+        .bench_values(|(temp_dir, args)| {
+            for args in args {
+                black_box(uumain(args));
             }
-            drop(temp_dir);
+            temp_dir
         });
 }
 
