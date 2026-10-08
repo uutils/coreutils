@@ -162,9 +162,15 @@ jobs:
     strategy:
       matrix:
         job:
-          - { os: ubuntu-latest , features: feat_os_unix }
+          - { os: ubuntu-latest , features: feat_os_unix, OPENSSL_NO_VENDOR: "" }
           # rustix defaults to raw Linux syscalls; make sure the libc backend works too
-          - { os: ubuntu-latest , features: "feat_os_unix,rustix/use-libc" }
+          # exercises dynamic against system libcrypto.
+          # binaries with static openssl are tested and published at build job
+          - { os: ubuntu-latest , features: "feat_os_unix,openssl,rustix/use-libc", OPENSSL_NO_VENDOR: "1" }
+          # macOS: dynamic linkage against brew-provided openssl is not useful. So it isn't worth to test.
+          # MinGW(UCRT): done at make.yml since actual consumer is MSYS2 only
+    env:
+      OPENSSL_NO_VENDOR: ${{ matrix.job.OPENSSL_NO_VENDOR }}
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -864,45 +870,6 @@ jobs:
         disable_search: true
         flags: coverage,${{ matrix.job.os }}
         fail_ci_if_error: false
-
-  test_openssl_dynamic:
-    name: Build/OpenSSL (dynamic)
-    needs: [ min_version, deps ]
-    runs-on: ${{ matrix.job.os }}
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          # Linux: exercises OPENSSL_NO_VENDOR=1 (dynamic against system libcrypto). ubuntu-latest ships libssl-dev
-          # binaries with OPENSSL_NO_VENDOR=0 are tested and published at build job
-          - { os: ubuntu-latest, features: "md5sum,sha1sum,sha224sum,sha256sum,sha384sum,sha512sum,cksum,openssl" }
-          # macOS: vendored only — system libcrypto needs OPENSSL_DIR
-          # pointing at Homebrew, which isn't worth wiring up for a smoke test.
-          # MinGW(UCRT): done at make.yml as actual consumer is MSYS2 only
-    steps:
-    - uses: actions/checkout@v7
-      with:
-        persist-credentials: false
-    - uses: taiki-e/install-action@nextest
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.11
-      continue-on-error: true
-    - name: Export sccache
-      if: steps.sccache-setup.outcome == 'success'
-      run: |
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-    - name: Test checksum utilities with OpenSSL (system / dynamic)
-      shell: bash
-      env:
-        OPENSSL_NO_VENDOR: "1"
-        RUST_BACKTRACE: "1"
-      run: |
-        cargo nextest run --hide-progress-bar --profile ci \
-          --no-default-features --features "${{ matrix.job.features }}"
 
   test_no_diagnostics:
     name: Build/No-diagnostics
