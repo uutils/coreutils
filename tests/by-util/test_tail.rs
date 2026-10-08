@@ -637,8 +637,9 @@ fn test_follow_multiple() {
         ])
         .run_no_wait();
 
+    let initial = at.read("foobar_follow_multiple.expected");
     child
-        .wait_for_stdout_contains("==> foobar2.txt <==", WAIT_TIMEOUT)
+        .wait_for_stdout_contains(&initial, WAIT_TIMEOUT)
         .make_assertion()
         .is_alive()
         .with_current_output()
@@ -682,8 +683,9 @@ fn test_follow_name_multiple() {
             .run_no_wait();
 
         // Wait until the initial multi-file headers/content have been printed.
+        let initial = at.read("foobar_follow_multiple.expected");
         child
-            .wait_for_stdout_contains("==> foobar2.txt <==", WAIT_TIMEOUT)
+            .wait_for_stdout_contains(&initial, WAIT_TIMEOUT)
             .make_assertion()
             .is_alive()
             .with_all_output()
