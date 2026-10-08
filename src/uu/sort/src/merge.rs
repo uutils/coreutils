@@ -373,14 +373,12 @@ impl FileMerger<'_> {
         settings: &GlobalSettings,
         tmp_dir: &mut TmpDirWrapper,
     ) -> UResult<Tmp::Closed> {
-        let mut tmp_file = Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
-        let write_result = self.write_all_to(settings, tmp_file.as_write(), |error| {
-            SortError::WriteTmpFileFailed { error }.into()
-        });
-        // Close the pipe and wait for the compressor even if writing failed.
-        let finished_result = tmp_file.finished_writing();
-        write_result?;
-        finished_result
+        let tmp_file = Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
+        tmp_file.write_and_finish(|out| {
+            self.write_all_to(settings, out, |error| {
+                SortError::WriteTmpFileFailed { error }.into()
+            })
+        })
     }
 
     /// Write the merged contents to the output file.
@@ -523,6 +521,24 @@ pub trait WriteableTmpFile: Sized {
     /// Closes the temporary file.
     fn finished_writing(self) -> UResult<Self::Closed>;
     fn as_write(&mut self) -> &mut Self::InnerWrite;
+
+    /// Writes and closes the temporary file, including cleanup on write errors.
+    fn write_and_finish(
+        self,
+        write: impl FnOnce(&mut Self::InnerWrite) -> UResult<()>,
+    ) -> UResult<Self::Closed> {
+        write_and_finish_tmp(self, write)
+    }
+}
+
+fn write_and_finish_tmp<Tmp: WriteableTmpFile>(
+    mut tmp_file: Tmp,
+    write: impl FnOnce(&mut Tmp::InnerWrite) -> UResult<()>,
+) -> UResult<Tmp::Closed> {
+    let write_result = write(tmp_file.as_write());
+    // Close the pipe and wait for the compressor even if writing failed.
+    let finished_result = tmp_file.finished_writing();
+    write_result.and(finished_result)
 }
 /// A temporary file that is (temporarily) closed, but can be reopened.
 pub trait ClosedTmpFile {
@@ -597,29 +613,11 @@ impl MergeInput for PlainTmpMergeInput {
     }
 }
 
-/// Protect compression pipe writes without changing the process's SIGPIPE handler.
-pub struct CompressionPipeWriter(ChildStdin);
-
-impl Write for CompressionPipeWriter {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        #[cfg(target_vendor = "apple")]
-        uucore::signals::disable_pipe_errors_for_fd(&self.0)?;
-        #[cfg(all(unix, not(target_vendor = "apple")))]
-        return with_sigpipe_blocked(|| self.0.write(buf));
-        #[cfg(any(not(unix), target_vendor = "apple"))]
-        self.0.write(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.0.flush()
-    }
-}
-
 pub struct WriteableCompressedTmpFile {
     path: PathBuf,
     compress_prog: String,
     child: Child,
-    child_stdin: BufWriter<CompressionPipeWriter>,
+    child_stdin: BufWriter<ChildStdin>,
 }
 pub struct ClosedCompressedTmpFile {
     path: PathBuf,
@@ -633,7 +631,7 @@ pub struct CompressedTmpMergeInput {
 }
 impl WriteableTmpFile for WriteableCompressedTmpFile {
     type Closed = ClosedCompressedTmpFile;
-    type InnerWrite = BufWriter<CompressionPipeWriter>;
+    type InnerWrite = BufWriter<ChildStdin>;
 
     fn create((file, path): (File, PathBuf), compress_prog: Option<&str>) -> UResult<Self> {
         let compress_prog = compress_prog.unwrap();
@@ -646,11 +644,18 @@ impl WriteableTmpFile for WriteableCompressedTmpFile {
                 error: err,
             })?;
         let child_stdin = child.stdin.take().unwrap();
+        #[cfg(target_vendor = "apple")]
+        if let Err(error) = uucore::signals::disable_pipe_errors_for_fd(&child_stdin) {
+            drop(child_stdin);
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(SortError::WriteTmpFileFailed { error }.into());
+        }
         Ok(Self {
             path,
             compress_prog: compress_prog.to_owned(),
             child,
-            child_stdin: BufWriter::new(CompressionPipeWriter(child_stdin)),
+            child_stdin: BufWriter::new(child_stdin),
         })
     }
 
@@ -668,6 +673,19 @@ impl WriteableTmpFile for WriteableCompressedTmpFile {
 
     fn as_write(&mut self) -> &mut Self::InnerWrite {
         &mut self.child_stdin
+    }
+
+    fn write_and_finish(
+        self,
+        write: impl FnOnce(&mut Self::InnerWrite) -> UResult<()>,
+    ) -> UResult<Self::Closed> {
+        // The child has already been spawned, so it does not inherit the blocked
+        // mask. Keep writes, the final flush and pipe closure inside the scope.
+        #[cfg(all(unix, not(target_vendor = "apple")))]
+        return with_sigpipe_blocked(|| Ok(write_and_finish_tmp(self, write)))
+            .map_err(|error| SortError::WriteTmpFileFailed { error })?;
+        #[cfg(any(not(unix), target_vendor = "apple"))]
+        write_and_finish_tmp(self, write)
     }
 }
 impl ClosedTmpFile for ClosedCompressedTmpFile {
@@ -728,6 +746,75 @@ impl<R: Read + Send> MergeInput for PlainMergeInput<R> {
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn compression_pipe_final_flush_error() {
+        const CHILD_MODE: &str = "UU_SORT_TEST_COMPRESSION_PIPE_FLUSH";
+
+        if let Ok(mode) = std::env::var(CHILD_MODE) {
+            // SAFETY: SIG_DFL is a predefined disposition, not a custom handler.
+            unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
+            let dir = tempfile::tempdir().unwrap();
+            let mut tmp_dir = TmpDirWrapper::new(dir.path().to_owned());
+            let mut tmp_file =
+                WriteableCompressedTmpFile::create(tmp_dir.next_file().unwrap(), Some("true"))
+                    .unwrap();
+            // Ensure the reader has closed the pipe before the buffered write.
+            assert!(tmp_file.child.wait().unwrap().success());
+            let error = tmp_file
+                .write_and_finish(|writer| {
+                    writer.write_all(b"x").unwrap();
+                    assert_eq!(writer.buffer(), b"x");
+                    if mode == "write-error" {
+                        Err(uucore::error::USimpleError::new(2, "test write error"))
+                    } else {
+                        Ok(())
+                    }
+                })
+                .err()
+                .unwrap();
+            assert_eq!(error.code(), 2);
+            if mode == "write-error" {
+                assert!(error.to_string().contains("test write error"));
+            }
+            return;
+        }
+
+        // Signal dispositions are process-wide: isolate from the test runner.
+        for mode in ["flush-error", "write-error"] {
+            let output = Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "merge::tests::compression_pipe_final_flush_error",
+                    "--nocapture",
+                ])
+                .env(CHILD_MODE, mode)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{mode}: {output:?}");
+            assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
+        }
+    }
+
+    #[test]
+    #[cfg(target_vendor = "apple")]
+    fn compression_pipe_suppresses_sigpipe_before_writing() {
+        use std::os::fd::AsRawFd;
+
+        // Darwin's <sys/fcntl.h> defines this command, but libc does not expose it.
+        const F_GETNOSIGPIPE: libc::c_int = 74;
+
+        let dir = tempfile::tempdir().unwrap();
+        let mut tmp_dir = TmpDirWrapper::new(dir.path().to_owned());
+        let tmp_file =
+            WriteableCompressedTmpFile::create(tmp_dir.next_file().unwrap(), Some("cat")).unwrap();
+
+        let fd = tmp_file.child_stdin.get_ref().as_raw_fd();
+        // SAFETY: fd is valid and this command takes no additional arguments.
+        let no_sigpipe = unsafe { libc::fcntl(fd, F_GETNOSIGPIPE) };
+        tmp_file.finished_writing().unwrap();
+        assert_eq!(no_sigpipe, 1, "SIGPIPE must be suppressed during creation");
+    }
 
     /// When the output file is also an input it is copied to a temporary file
     /// first. That copy must stay private to the owner: `fs::copy` would carry the

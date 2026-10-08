@@ -614,17 +614,49 @@ pub fn disable_pipe_errors() -> Result<(), Errno> {
     unsafe { signal(SIGPIPE, SigIgn) }.map(|_| ())
 }
 
-/// Runs a pipe write with SIGPIPE blocked only on the calling thread.
-/// Consumes a newly generated SIGPIPE on EPIPE, preserving any already pending
-/// signal and restoring the original mask even if the operation panics.
+/// Runs a sequence of pipe writes with SIGPIPE blocked only on the calling thread.
+/// Consumes a newly generated SIGPIPE even if the operation handles or converts
+/// EPIPE, preserving any already pending signal and restoring the original mask
+/// even if the operation panics. Include buffered flushes in the operation, and
+/// spawn children before calling this function so they do not inherit the mask.
 #[cfg(all(unix, not(target_vendor = "apple")))]
 pub fn with_sigpipe_blocked<T>(write: impl FnOnce() -> std::io::Result<T>) -> std::io::Result<T> {
     use nix::{libc, sys::signal::SigmaskHow};
 
-    struct RestoreMask(SigSet);
+    struct RestoreMask {
+        original: Option<SigSet>,
+        blocked: SigSet,
+        was_pending: bool,
+    }
+
+    impl RestoreMask {
+        fn restore(&mut self) -> std::io::Result<()> {
+            let Some(original) = &self.original else {
+                return Ok(());
+            };
+            let consumed = self.consume_sigpipe();
+            original.thread_set_mask()?;
+            self.original = None;
+            consumed
+        }
+
+        fn consume_sigpipe(&self) -> std::io::Result<()> {
+            if !self.was_pending && pipe_pending()? {
+                let mut received = 0;
+                // SAFETY: SIGPIPE is blocked and pending; the set and output are valid.
+                // Use libc because nix does not expose sigwait on all Unix targets.
+                let error = unsafe { libc::sigwait(self.blocked.as_ref(), &raw mut received) };
+                if error != 0 {
+                    return Err(std::io::Error::from_raw_os_error(error));
+                }
+            }
+            Ok(())
+        }
+    }
+
     impl Drop for RestoreMask {
         fn drop(&mut self) {
-            let _ = self.0.thread_set_mask();
+            let _ = self.restore();
         }
     }
 
@@ -639,24 +671,16 @@ pub fn with_sigpipe_blocked<T>(write: impl FnOnce() -> std::io::Result<T>) -> st
 
     let mut blocked = SigSet::empty();
     blocked.add(SIGPIPE);
-    let restore = RestoreMask(blocked.thread_swap_mask(SigmaskHow::SIG_BLOCK)?);
-    let was_pending = pipe_pending()?;
+    let original = blocked.thread_swap_mask(SigmaskHow::SIG_BLOCK)?;
+    let mut restore = RestoreMask {
+        original: Some(original),
+        blocked,
+        // Preserve pending signals if the initial query fails.
+        was_pending: true,
+    };
+    restore.was_pending = pipe_pending()?;
     let result = write();
-    if result
-        .as_ref()
-        .is_err_and(|error| error.raw_os_error() == Some(libc::EPIPE))
-        && !was_pending
-        && pipe_pending()?
-    {
-        let mut received = 0;
-        // SAFETY: SIGPIPE is blocked and pending; the set and output are valid.
-        // Use libc because nix does not expose sigwait on all Unix targets.
-        let error = unsafe { libc::sigwait(blocked.as_ref(), &raw mut received) };
-        if error != 0 {
-            return Err(std::io::Error::from_raw_os_error(error));
-        }
-    }
-    restore.0.thread_set_mask()?;
+    restore.restore()?;
     result
 }
 
@@ -888,66 +912,161 @@ pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
     Ok(true)
 }
 
-#[test]
-#[cfg(all(unix, not(target_vendor = "apple")))]
-fn test_with_sigpipe_blocked() {
+#[cfg(all(test, unix, not(target_vendor = "apple")))]
+mod with_sigpipe_blocked_tests {
+    use super::*;
     use nix::{libc, sys::signal::raise};
-    use std::io::Write;
+    use std::io::{self, BufWriter, Write};
 
-    const CHILD_MODE: &str = "UUCORE_TEST_WITH_SIGPIPE_BLOCKED";
-    if let Ok(mode) = std::env::var(CHILD_MODE) {
-        // SAFETY: both dispositions are predefined, not custom handlers.
-        unsafe { signal(SIGPIPE, if mode == "ignored" { SigIgn } else { SigDfl }) }.unwrap();
+    /// Isolate process-wide signal changes and check that the mask and pending
+    /// SIGPIPE are preserved after each case.
+    fn run_isolated(name: &str, handler: SigHandler, pending: bool, check: impl FnOnce()) {
+        const CHILD_TEST: &str = "UUCORE_TEST_WITH_SIGPIPE_BLOCKED";
+
+        if std::env::var(CHILD_TEST).as_deref() != Ok(name) {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    &format!("features::signals::with_sigpipe_blocked_tests::{name}"),
+                    "--nocapture",
+                ])
+                .env(CHILD_TEST, name)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{name}: {output:?}");
+            assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
+            return;
+        }
+
+        // SAFETY: callers pass only predefined dispositions, not custom handlers.
+        unsafe { signal(SIGPIPE, handler) }.unwrap();
         let mut original_mask = SigSet::thread_get_mask().unwrap();
         original_mask.add(Signal::SIGUSR1);
-        if mode == "pending" {
+        if pending {
             original_mask.add(SIGPIPE);
         } else {
             original_mask.remove(SIGPIPE);
         }
         original_mask.thread_set_mask().unwrap();
-        assert_eq!(with_sigpipe_blocked(|| Ok(42)).unwrap(), 42);
-        assert_eq!(SigSet::thread_get_mask().unwrap(), original_mask);
-
-        if mode == "panic" {
-            let result = std::panic::catch_unwind(|| {
-                let _: std::io::Result<()> = with_sigpipe_blocked(|| panic!("test panic"));
-            });
-            assert!(result.is_err());
-        } else {
-            if mode == "pending" {
-                raise(SIGPIPE).unwrap();
-            }
-            let (read_end, write_end) = nix::unistd::pipe().unwrap();
-            drop(read_end);
-            let mut writer = std::fs::File::from(write_end);
-            let error = with_sigpipe_blocked(|| writer.write(b"x")).unwrap_err();
-            assert_eq!(error.raw_os_error(), Some(libc::EPIPE));
-
-            let mut pending = std::mem::MaybeUninit::<libc::sigset_t>::uninit();
-            // SAFETY: sigpending initializes valid storage on success.
-            assert_eq!(unsafe { libc::sigpending(pending.as_mut_ptr()) }, 0);
-            // SAFETY: the preceding call succeeded and SIGPIPE is valid.
-            let pending = unsafe { libc::sigismember(pending.as_ptr(), libc::SIGPIPE) };
-            assert_eq!(pending, i32::from(mode == "pending"));
+        if pending {
+            raise(SIGPIPE).unwrap();
         }
+
+        check();
         assert_eq!(SigSet::thread_get_mask().unwrap(), original_mask);
-        return;
+        assert_eq!(sigpipe_pending(), pending);
     }
 
-    // Each child can change SIGPIPE without affecting the parent test runner.
-    for mode in ["default", "ignored", "pending", "panic"] {
-        let output = std::process::Command::new(std::env::current_exe().unwrap())
-            .args([
-                "--exact",
-                "features::signals::test_with_sigpipe_blocked",
-                "--nocapture",
-            ])
-            .env(CHILD_MODE, mode)
-            .output()
+    fn sigpipe_pending() -> bool {
+        let mut pending = std::mem::MaybeUninit::<libc::sigset_t>::uninit();
+        // SAFETY: sigpending initializes valid storage on success.
+        assert_eq!(unsafe { libc::sigpending(pending.as_mut_ptr()) }, 0);
+        // SAFETY: the preceding call succeeded and SIGPIPE is valid.
+        let member = unsafe { libc::sigismember(pending.as_ptr(), libc::SIGPIPE) };
+        assert_ne!(member, -1);
+        member != 0
+    }
+
+    fn broken_pipe() -> std::fs::File {
+        let (read_end, write_end) = nix::unistd::pipe().unwrap();
+        drop(read_end);
+        std::fs::File::from(write_end)
+    }
+
+    fn assert_epipe(error: io::Error) {
+        assert_eq!(error.raw_os_error(), Some(libc::EPIPE));
+    }
+
+    fn check_broken_pipe() {
+        let mut writer = broken_pipe();
+        assert_epipe(with_sigpipe_blocked(|| writer.write(b"x")).unwrap_err());
+    }
+
+    #[test]
+    fn returns_value() {
+        run_isolated("returns_value", SigDfl, false, || {
+            assert_eq!(with_sigpipe_blocked(|| Ok(42)).unwrap(), 42);
+        });
+    }
+
+    #[test]
+    fn default_sigpipe() {
+        run_isolated("default_sigpipe", SigDfl, false, check_broken_pipe);
+    }
+
+    #[test]
+    fn ignored_sigpipe() {
+        run_isolated("ignored_sigpipe", SigIgn, false, check_broken_pipe);
+    }
+
+    #[test]
+    fn pending_sigpipe() {
+        run_isolated("pending_sigpipe", SigDfl, true, check_broken_pipe);
+    }
+
+    #[test]
+    fn panic() {
+        run_isolated("panic", SigDfl, false, || {
+            let result = std::panic::catch_unwind(|| {
+                let _: io::Result<()> = with_sigpipe_blocked(|| panic!("test panic"));
+            });
+            assert!(result.is_err());
+        });
+    }
+
+    #[test]
+    fn panic_after_broken_pipe() {
+        run_isolated("panic_after_broken_pipe", SigDfl, false, || {
+            let result = std::panic::catch_unwind(|| {
+                let mut writer = broken_pipe();
+                let _: io::Result<()> = with_sigpipe_blocked(|| {
+                    assert_epipe(writer.write(b"x").unwrap_err());
+                    panic!("panic after a broken pipe");
+                });
+            });
+            assert!(result.is_err());
+        });
+    }
+
+    #[test]
+    fn handled_errors() {
+        run_isolated("handled_errors", SigDfl, false, || {
+            let mut writer = broken_pipe();
+            with_sigpipe_blocked(|| {
+                for _ in 0..3 {
+                    assert_epipe(writer.write(b"x").unwrap_err());
+                }
+                Ok(())
+            })
             .unwrap();
-        assert!(output.status.success(), "{mode}: {output:?}");
-        assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
+        });
+    }
+
+    #[test]
+    fn mapped_error() {
+        run_isolated("mapped_error", SigDfl, false, || {
+            let mut writer = broken_pipe();
+            let error = with_sigpipe_blocked(|| {
+                writer
+                    .write(b"x")
+                    .map_err(|error| io::Error::other(error.to_string()))
+            })
+            .unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::Other);
+        });
+    }
+
+    #[test]
+    fn buffered_flush() {
+        run_isolated("buffered_flush", SigDfl, false, || {
+            let error = with_sigpipe_blocked(|| {
+                let mut writer = BufWriter::new(broken_pipe());
+                writer.write_all(b"x")?;
+                writer.flush()
+            })
+            .unwrap_err();
+            assert_epipe(error);
+        });
     }
 }
 

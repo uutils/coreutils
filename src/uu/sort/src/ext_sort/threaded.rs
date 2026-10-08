@@ -295,12 +295,11 @@ fn write<I: WriteableTmpFile>(
     compress_prog: Option<&str>,
     separator: u8,
 ) -> UResult<I::Closed> {
-    let mut tmp_file = I::create(file, compress_prog)?;
-    let write_result = write_lines(chunk.lines(), tmp_file.as_write(), separator);
-    // Close the pipe and wait for the compressor even if writing failed.
-    let finished_result = tmp_file.finished_writing();
-    write_result.map_err(|error| SortError::WriteTmpFileFailed { error })?;
-    finished_result
+    let tmp_file = I::create(file, compress_prog)?;
+    tmp_file.write_and_finish(|out| {
+        write_lines(chunk.lines(), out, separator)
+            .map_err(|error| SortError::WriteTmpFileFailed { error }.into())
+    })
 }
 
 fn write_lines<T: Write>(lines: &[Line], writer: &mut T, separator: u8) -> io::Result<()> {
