@@ -947,6 +947,10 @@ fn test_chown_no_dereference_symlink_to_dir() {
     let dir_meta_before = std::fs::metadata(at.plus("dir")).unwrap();
     let dir_ctime_before = (dir_meta_before.ctime(), dir_meta_before.ctime_nsec());
 
+    // Let the file system clock move past the link's ctime. On some systems,
+    // such as the Android emulator, it advances in coarse steps.
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
     scene
         .ucmd()
         .arg("--no-dereference")
