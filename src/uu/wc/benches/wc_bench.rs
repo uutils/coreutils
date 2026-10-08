@@ -78,17 +78,6 @@ fn wc_chars_large_line_count(bencher: Bencher, num_lines: usize) {
         .bench_values(|args| black_box(uumain(args)));
 }
 
-#[divan::bench(args = [100_000])]
-fn wc_chars_utf8(bencher: Bencher, num_lines: usize) {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let data = "hello ä € 💩\n".repeat(num_lines);
-    let file_path = create_test_file(data.as_bytes(), temp_dir.path());
-
-    bencher
-        .with_inputs(|| get_bench_args(&[&"-cm", &file_path]).into_iter())
-        .bench_values(|args| black_box(uumain(args)));
-}
-
 /// Benchmark word counting on large line counts
 #[divan::bench(args = [100_000])]
 fn wc_words_large_line_count(bencher: Bencher, num_lines: usize) {

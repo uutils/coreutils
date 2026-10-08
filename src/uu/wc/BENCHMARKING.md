@@ -82,12 +82,6 @@ candidate as it's fairly large.
 Use [`hyperfine`](https://github.com/sharkdp/hyperfine) to compare the
 performance. For example, `hyperfine 'wc somefile' 'uuwc somefile'`.
 
-Run the UTF-8 character-count benchmark with an explicit UTF-8 locale:
-
-```shell
-LC_ALL=C.UTF-8 cargo bench -p uu_wc --bench wc_bench -- wc_chars_utf8
-```
-
 If you want to get fancy and exhaustive, generate a table:
 
 |                         |   moby64.txt |   odyssey256.txt |   25Mshortlines |   /usr/bin/docker |
