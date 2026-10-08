@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDOs) ncount routput
 
 use clap::{Arg, ArgAction, Command};
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
@@ -52,9 +53,7 @@ struct FoldContext<'a, W: Write> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_lossy();
-
-    let args = handle_obsolete(&args[..]);
+    let args = handle_obsolete(&args.collect::<Vec<_>>());
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let bytes = matches.get_flag(options::BYTES);
@@ -87,9 +86,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => 80,
     };
 
-    let files = match matches.get_many::<String>(options::FILE) {
+    let files = match matches.get_many::<OsString>(options::FILE) {
         Some(v) => v.cloned().collect(),
-        None => vec!["-".to_owned()],
+        None => vec![OsString::from("-")],
     };
 
     fold(&files, bytes, characters, spaces, width)
@@ -138,7 +137,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE)
                 .hide(true)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
 }
 
@@ -147,27 +147,27 @@ pub fn uu_app() -> Command {
 /// The check is deliberately loose: GNU rejects `-5x` with
 /// `invalid number of columns: '5x'` rather than treating it as a file, so
 /// anything starting with a digit is taken as a (possibly invalid) width.
-fn is_obsolete_width(arg: &str) -> bool {
-    arg.strip_prefix('-')
-        .and_then(|rest| rest.chars().next())
-        .is_some_and(|c| c.is_ascii_digit())
+fn is_obsolete_width(arg: &OsStr) -> bool {
+    let bytes = arg.as_encoded_bytes();
+    bytes.first() == Some(&b'-') && bytes.get(1).is_some_and(u8::is_ascii_digit)
 }
 
 /// Whether `arg` is a `-w`/`--width` spelling that consumes the *next*
 /// argument as its value.
-fn takes_width_value(arg: &str) -> bool {
-    if let Some(long) = arg.strip_prefix("--") {
+fn takes_width_value(arg: &OsStr) -> bool {
+    let bytes = arg.as_encoded_bytes();
+    if let Some(long) = bytes.strip_prefix(b"--") {
         // `--width=5` carries its own value. A bare `--width`, or an
         // unambiguous abbreviation of it (`infer_long_args` is enabled),
         // takes the following argument.
-        !long.is_empty() && !long.contains('=') && options::WIDTH.starts_with(long)
-    } else if let Some(short) = arg.strip_prefix('-') {
+        !long.is_empty() && !long.contains(&b'=') && options::WIDTH.as_bytes().starts_with(long)
+    } else if let Some(short) = bytes.strip_prefix(b"-") {
         // Only a trailing `w` takes the next argument: in `-sw` it does, but
         // in `-w3` and `-wb` the value is attached to the flag instead. A
         // bare `-` has no trailing `w` either -- `ends_with` on an empty
         // string is false, where comparing two `find`/`checked_sub` failures
         // (both `None`) would wrongly call it a match.
-        short.ends_with('w')
+        short.ends_with(b"w")
     } else {
         false
     }
@@ -185,7 +185,7 @@ fn takes_width_value(arg: &str) -> bool {
 /// terminator. Otherwise `fold -w -1` would misreport the file name as the
 /// invalid width, and `fold -- -3` would silently read stdin instead of
 /// failing to open the file named `-3`.
-fn handle_obsolete(args: &[String]) -> Vec<String> {
+fn handle_obsolete(args: &[OsString]) -> Vec<OsString> {
     let mut result = Vec::with_capacity(args.len());
     let mut iter = args.iter();
 
@@ -196,13 +196,17 @@ fn handle_obsolete(args: &[String]) -> Vec<String> {
 
     let mut end_of_options = false;
     let mut expecting_width = false;
+
     for arg in iter {
         if end_of_options || expecting_width {
             expecting_width = false;
         } else if arg == "--" {
             end_of_options = true;
         } else if is_obsolete_width(arg) {
-            result.push(format!("--{}={}", options::WIDTH, &arg[1..]));
+            let width = arg.to_string_lossy();
+            let width = width.trim_start_matches('-');
+
+            result.push(OsString::from(format!("--{}={width}", options::WIDTH)));
             continue;
         } else {
             expecting_width = takes_width_value(arg);
@@ -214,7 +218,7 @@ fn handle_obsolete(args: &[String]) -> Vec<String> {
 }
 
 fn fold(
-    filenames: &[String],
+    filenames: &[OsString],
     bytes: bool,
     characters: bool,
     spaces: bool,
@@ -223,7 +227,6 @@ fn fold(
     let mut output = BufWriter::new(stdout());
 
     for filename in filenames {
-        let filename: &str = filename;
         let mut stdin_buf;
         let mut file_buf;
         let buffer = BufReader::new(if filename == "-" {
@@ -234,7 +237,9 @@ fn fold(
             match File::open(Path::new(filename)) {
                 Ok(f) => file_buf = f,
                 Err(e) => {
-                    show!(e.map_err_context(|| filename.to_string()));
+                    show!(e.map_err_context(|| {
+                        uucore::quoting_style::locale_aware_shell_escape(filename)
+                    }));
                     continue;
                 }
             }

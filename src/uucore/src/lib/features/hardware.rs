@@ -54,7 +54,7 @@ pub enum HardwareFeature {
     Avx2,
     /// PCLMULQDQ support for CRC acceleration (x86/x86_64 only)
     PclMul,
-    /// VMULL support for CRC acceleration (ARM only)
+    /// PMULL (polynomial multiply) support for CRC acceleration (aarch64 only)
     Vmull,
     /// SSE2 support (x86/x86_64 only)
     Sse2,
@@ -312,9 +312,13 @@ fn detect_asimd() -> bool {
 
 #[cfg(target_arch = "aarch64")]
 fn detect_vmull() -> bool {
-    // VMULL is part of ARM NEON/ASIMD
-    // For now, we use ASIMD as a proxy
-    detect_asimd()
+    // VMULL on 64-bit lanes needs PMULL, an optional extension.
+    // ASIMD alone is not enough.
+    if cfg!(target_os = "android") {
+        false
+    } else {
+        std::arch::is_aarch64_feature_detected!("pmull")
+    }
 }
 
 #[cfg(not(target_arch = "aarch64"))]

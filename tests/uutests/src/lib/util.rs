@@ -27,7 +27,7 @@ use pretty_assertions::assert_eq;
 #[cfg(unix)]
 use rustix::process::{Resource, Rlimit, setrlimit};
 use std::borrow::Cow;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, OpenOptions, hard_link, remove_file};
 use std::io::{self, BufWriter, Read, Result, Write};
@@ -1947,8 +1947,10 @@ impl UCommand {
             cmd.arg(format!("--dir={}::/", work_dir.display()));
             cmd.arg("--argv0");
             cmd.arg(bin.file_name().unwrap_or(bin.as_os_str()));
-            // Forward env vars to the WASI guest via --env flags
-            for (key, val) in &cmd_env {
+            // WASI reads the first duplicate, whereas Command::envs uses the last.
+            // Resolve overrides before forwarding them to the guest.
+            let wasm_env: BTreeMap<_, _> = cmd_env.iter().map(|(key, val)| (key, val)).collect();
+            for (key, val) in &wasm_env {
                 if let (Some(k), Some(v)) = (key.to_str(), val.to_str()) {
                     cmd.arg("--env");
                     cmd.arg(format!("{k}={v}"));
