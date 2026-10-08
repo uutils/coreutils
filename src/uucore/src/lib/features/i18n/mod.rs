@@ -36,10 +36,16 @@ const DEFAULT_LOCALE: Locale = locale!("und");
 ///
 /// Or fallback on Posix locale, with ASCII encoding.
 pub fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
-    let locale_var = ["LC_ALL", locale_name, "LANG"]
-        .iter()
-        .find_map(|&key| std::env::var(key).ok().filter(|l| !l.is_empty()));
+    locale_from_name(locale_name_from_env(locale_name).as_deref())
+}
 
+fn locale_name_from_env(locale_name: &str) -> Option<String> {
+    ["LC_ALL", locale_name, "LANG"]
+        .iter()
+        .find_map(|&key| std::env::var(key).ok().filter(|name| !name.is_empty()))
+}
+
+fn locale_from_name(locale_var: Option<&str>) -> (Locale, UEncoding) {
     if let Some(locale_var_str) = locale_var {
         let mut split = locale_var_str.split(&['.', '@']);
 
@@ -175,6 +181,18 @@ pub fn get_ctype_encoding() -> UEncoding {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn locale_suffixes_keep_their_encoding() {
+        for (name, expected) in [
+            ("C.UTF-8", super::UEncoding::Utf8),
+            ("en_IN.UTF8", super::UEncoding::Utf8),
+            ("en_US.ISO-8859-1", super::UEncoding::Ascii),
+            ("POSIX", super::UEncoding::Ascii),
+        ] {
+            assert_eq!(super::locale_from_name(Some(name)).1, expected, "{name}");
+        }
+    }
+
     #[cfg(windows)]
     #[test]
     fn test_get_locale_from_os() {
