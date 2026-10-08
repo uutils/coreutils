@@ -220,7 +220,7 @@ fn locale_charmap(locale: &str) -> Option<String> {
             .arg("charmap")
             .output()
             .ok()
-            .filter(|o| o.status.success())
+            .filter(|o| o.status.success() && o.stderr.is_empty())
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_uppercase())
     }
     #[cfg(not(unix))]
@@ -252,6 +252,12 @@ fn is_locale_single_byte(locale: &str) -> bool {
     } else {
         matches!(locale, "C" | "POSIX")
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn test_unavailable_locale_is_not_reported_as_single_byte() {
+    assert_eq!(locale_charmap("uutests_missing_LOCALE"), None);
 }
 
 #[test]
