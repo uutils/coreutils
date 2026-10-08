@@ -2469,17 +2469,32 @@ impl UChild {
     where
         F: FnMut(&str, &str) -> bool,
     {
+        self.try_wait_until_bytes(timeout, |stdout, stderr| {
+            predicate(
+                &String::from_utf8_lossy(stdout),
+                &String::from_utf8_lossy(stderr),
+            )
+        })
+    }
+
+    /// Like [`UChild::try_wait_until`], but `predicate` gets the raw captured bytes.
+    fn try_wait_until_bytes<F>(&mut self, timeout: Duration, mut predicate: F) -> Result<()>
+    where
+        F: FnMut(&[u8], &[u8]) -> bool,
+    {
         let start = Instant::now();
         loop {
-            let stdout = self.stdout_all_peek();
-            let stderr = self.stderr_all_peek();
+            let stdout = self.stdout_all_bytes_peek();
+            let stderr = self.stderr_all_bytes_peek();
             if predicate(&stdout, &stderr) {
                 return Ok(());
             }
             if start.elapsed() >= timeout {
                 return Err(io::Error::other(format!(
-                    "try_wait_until: timeout of '{}s' reached\nstdout: {stdout}\nstderr: {stderr}",
-                    timeout.as_secs_f64()
+                    "try_wait_until: timeout of '{}s' reached\nstdout: {}\nstderr: {}",
+                    timeout.as_secs_f64(),
+                    String::from_utf8_lossy(&stdout),
+                    String::from_utf8_lossy(&stderr)
                 )));
             }
             self.delay(10);
@@ -2506,6 +2521,25 @@ impl UChild {
     #[track_caller]
     pub fn wait_for_stdout_contains(&mut self, s: &str, timeout: Duration) -> &mut Self {
         self.try_wait_for_stdout_contains(s, timeout).unwrap();
+        self
+    }
+
+    /// Poll until accumulated stdout contains the byte sequence `bytes`, or `timeout` elapses.
+    pub fn try_wait_for_stdout_contains_bytes(
+        &mut self,
+        bytes: &[u8],
+        timeout: Duration,
+    ) -> Result<()> {
+        self.try_wait_until_bytes(timeout, |stdout, _| {
+            stdout.windows(bytes.len()).any(|sub| sub == bytes)
+        })
+    }
+
+    /// Like [`UChild::try_wait_for_stdout_contains_bytes`], but panics on timeout.
+    #[track_caller]
+    pub fn wait_for_stdout_contains_bytes(&mut self, bytes: &[u8], timeout: Duration) -> &mut Self {
+        self.try_wait_for_stdout_contains_bytes(bytes, timeout)
+            .unwrap();
         self
     }
 

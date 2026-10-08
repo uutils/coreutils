@@ -589,21 +589,8 @@ fn test_follow_non_utf8_bytes() {
     let expected = [INVALID_UTF8, b'\n'];
     at.append_bytes(FOOBAR_TXT, &expected);
 
-    // Poll raw bytes (invalid UTF-8 is not representable via the str helpers).
-    let start = std::time::Instant::now();
-    loop {
-        let all = child.stdout_all_bytes_peek();
-        if all.windows(expected.len()).any(|w| w == expected) {
-            break;
-        }
-        assert!(
-            start.elapsed() < WAIT_TIMEOUT,
-            "timeout waiting for non-utf8 bytes in stdout"
-        );
-        child.delay(10);
-    }
-
     child
+        .wait_for_stdout_contains_bytes(&expected, WAIT_TIMEOUT)
         .make_assertion()
         .with_current_output()
         .stdout_only_bytes(expected);
@@ -1537,6 +1524,7 @@ fn test_retry_descriptor_detects_truncation() {
         at.truncate(missing, "greetings\n");
         p.wait_for_stdout_contains("greetings\n", WAIT_TIMEOUT);
 
+        // shorter than the previous content, so tail sees the shrink as a truncation
         at.truncate(missing, "hi\n");
         p.wait_for_stderr_contains("file truncated", WAIT_TIMEOUT)
             .wait_for_stdout_contains("greetings\nhi\n", WAIT_TIMEOUT);
