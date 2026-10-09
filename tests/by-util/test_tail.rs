@@ -5569,11 +5569,10 @@ fn test_follow_proc_fd_path() {
     // `/proc/<pid>/fd/N` is a symlink to the open file, and is followed
     // like one: inotify follows it, where the directory of the link
     // reports nothing.
-    use std::io::Write;
     use std::os::unix::io::AsRawFd;
 
     let (at, mut ucmd) = at_and_ucmd!();
-    let mut file = std::fs::File::create(at.plus("log")).unwrap();
+    let mut file = File::create(at.plus("log")).unwrap();
     writeln!(file, "a").unwrap();
     let path = format!("/proc/{}/fd/{}", std::process::id(), file.as_raw_fd());
     let mut p = ucmd.args(&["-s.1", "-f", &path]).run_no_wait();
