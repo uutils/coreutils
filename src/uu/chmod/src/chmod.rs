@@ -418,17 +418,15 @@ impl Chmoder {
         }
     }
 
-    /// Report a failure met while walking a tree under `-R`.
+    /// Report a failure met on one file.
     ///
-    /// The walk goes on after a failure, so each one is reported where it
-    /// happens rather than returned, which would keep only one of them. `-f`
-    /// hides the message; the failure still decides the exit status, as in
-    /// GNU. An error whose message was already printed (`change_file`) has
-    /// nothing left to show.
-    fn report_walk_failure(&self, error: Box<dyn UError>) {
-        let message = error.to_string();
-        if !self.quiet && !message.is_empty() {
-            show_error!("{message}");
+    /// The remaining operands, and the rest of a tree under `-R`, are still
+    /// processed after a failure, so each one is reported where it happens
+    /// rather than returned, which would keep only one of them. `-f` hides
+    /// the message; the failure still decides the exit status, as in GNU.
+    fn report_failure(&self, error: Box<dyn UError>) {
+        if !self.quiet {
+            show_error!("{error}");
         }
         set_exit_code(error.code());
     }
@@ -437,7 +435,7 @@ impl Chmoder {
     /// changed before the attempt, so with `-v` GNU also says that the
     /// subtree was left alone.
     fn report_unreadable_dir(&self, path: &Path, err: std::io::Error) {
-        self.report_walk_failure(ChmodError::CannotReadDirectory(path.into(), err).into());
+        self.report_failure(ChmodError::CannotReadDirectory(path.into(), err).into());
         if self.verbose {
             println!(
                 "{}",
@@ -460,8 +458,6 @@ impl Chmoder {
         // once before any file is touched: a bad mode is reported once and
         // changes nothing, as in GNU.
         self.calculate_new_mode(0, false)?;
-
-        let mut r = Ok(());
 
         for filename in files {
             let file = Path::new(filename);
@@ -533,11 +529,11 @@ impl Chmoder {
             if self.recursive {
                 let mut ancestors = HashSet::new();
                 self.walk_dir_with_context(file, true, &mut ancestors);
-            } else {
-                r = self.chmod_file(file).and(r);
+            } else if let Err(err) = self.chmod_file(file) {
+                self.report_failure(err);
             }
         }
-        r
+        Ok(())
     }
 
     /// Whether `file` is `/`, by `(st_dev, st_ino)` rather than by name, so a
@@ -569,7 +565,7 @@ impl Chmoder {
         }
 
         if let Err(err) = self.chmod_file(file_path) {
-            self.report_walk_failure(err);
+            self.report_failure(err);
         }
 
         // Determine whether to traverse symlinks based on context and traversal mode
@@ -606,7 +602,7 @@ impl Chmoder {
             for dir_entry in entries {
                 match dir_entry {
                     Ok(entry) => paths_in_this_dir.push(entry.path()),
-                    Err(err) => self.report_walk_failure(err.into()),
+                    Err(err) => self.report_failure(err.into()),
                 }
             }
             for path in paths_in_this_dir {
@@ -636,7 +632,7 @@ impl Chmoder {
         }
 
         if let Err(err) = self.chmod_file(file_path) {
-            self.report_walk_failure(err);
+            self.report_failure(err);
         }
 
         // Determine whether to traverse symlinks based on context and traversal mode
@@ -703,7 +699,7 @@ impl Chmoder {
                     } else {
                         err.into()
                     };
-                    self.report_walk_failure(error);
+                    self.report_failure(error);
                     continue;
                 }
             };
@@ -715,7 +711,7 @@ impl Chmoder {
                     &entry_name,
                     ancestors,
                 ) {
-                    self.report_walk_failure(err);
+                    self.report_failure(err);
                 }
             } else {
                 // For regular files and directories, chmod them.
@@ -729,7 +725,7 @@ impl Chmoder {
                     meta.mode() & 0o7777,
                     SymlinkBehavior::NoFollow,
                 ) {
-                    self.report_walk_failure(err);
+                    self.report_failure(err);
                 }
 
                 // Recurse into subdirectories using the existing directory fd.
@@ -882,25 +878,23 @@ impl Chmoder {
             && self.option_like_mode
             && (new_mode & !naively_expected_new_mode) != 0
         {
-            return Err(ChmodError::NewPermissions(
+            // Shown even under `-f`, as GNU does: it is about the mode as
+            // typed, not about this file.
+            show!(ChmodError::NewPermissions(
                 file.into(),
                 display_permissions_unix(new_mode, false),
                 display_permissions_unix(naively_expected_new_mode, false),
-            )
-            .into());
+            ));
         }
 
         Ok(())
     }
 
-    fn change_file(&self, fperm: u32, mode: u32, file: &Path) -> Result<(), i32> {
+    fn change_file(&self, fperm: u32, mode: u32, file: &Path) -> UResult<()> {
         // Always issue the chmod(2) call, even when the bits are unchanged: the
         // syscall can still fail (e.g. lacking permission on the file) and that
         // failure must be reported, matching GNU.
         if let Err(err) = fs::set_permissions(file, fs::Permissions::from_mode(mode)) {
-            if !self.quiet {
-                show_error!("{}", ChmodError::ChangingPermissions(file.into(), err));
-            }
             if self.verbose {
                 println!(
                     "failed to change mode of file {} from {fperm:04o} ({}) to {mode:04o} ({})",
@@ -909,12 +903,12 @@ impl Chmoder {
                     display_permissions_unix(mode, false)
                 );
             }
-            Err(1)
-        } else {
-            // Use the helper method for consistent reporting
-            self.report_permission_change(file, fperm, mode);
-            Ok(())
+            return Err(ChmodError::ChangingPermissions(file.into(), err).into());
         }
+
+        // Use the helper method for consistent reporting
+        self.report_permission_change(file, fperm, mode);
+        Ok(())
     }
 }
 
