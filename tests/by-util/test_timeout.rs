@@ -61,6 +61,20 @@ fn test_command_with_args() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_command_with_non_utf8_args() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let (ts, bin) = scenario_with_bin();
+    ts.ucmd()
+        .args(&["1700", &bin, "echo"])
+        .arg(OsStr::from_bytes(b"a\xffb"))
+        .succeeds()
+        .stdout_only_bytes(b"a\xffb\n");
+}
+
+#[test]
 fn test_verbose() {
     let (ts, bin) = scenario_with_bin();
     for verbose_flag in ["-v", "--verbose"] {
@@ -130,6 +144,31 @@ fn test_kill_after_preserves_timeout_exit_without_preserve_status() {
         .fails_with_code(124)
         .no_output();
 }
+
+/// A timeout signal of KILL reports 128 + 9 rather than 124, with or
+/// without `--kill-after`; other signals keep reporting 124.
+#[test]
+fn test_kill_signal_reports_signal_exit_code() {
+    let (ts, bin) = scenario_with_bin();
+    for args in [
+        &["-s", "KILL", ".05"][..],
+        &["--signal=9", ".05"],
+        &["-s", "SIGKILL", "--kill-after=3", ".05"],
+        // Only the child is signaled here, but the status is still 128+9.
+        &["--foreground", "-s", "KILL", ".05"],
+    ] {
+        ts.ucmd()
+            .args(args)
+            .args(&[bin.as_str(), "sleep", "20"])
+            .fails_with_code(128 + 9)
+            .no_output();
+    }
+    ts.ucmd()
+        .args(&["-s", "HUP", ".05", &bin, "sleep", "20"])
+        .fails_with_code(124)
+        .no_output();
+}
+
 #[test]
 fn test_preserve_status_even_when_send_signal() {
     let (ts, bin) = scenario_with_bin();
@@ -273,6 +312,39 @@ fn test_command_not_found() {
     new_ucmd!()
         .args(&["1", "/this/command/definitely/does/not/exist"])
         .fails_with_code(127);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_non_utf8_command_not_found() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .arg("1")
+        .arg(ts.fixtures.plus(OsStr::from_bytes(b"absent-\xff")))
+        .fails_with_code(127)
+        .no_stdout();
+}
+
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+fn test_non_utf8_command_path() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let ts = TestScenario::new(util_name!());
+    let dir = ts.fixtures.plus(OsStr::from_bytes(b"dir-\xff"));
+    std::fs::create_dir(&dir).unwrap();
+    let cmd = dir.join("coreutils");
+    std::os::unix::fs::symlink(&ts.bin_path, &cmd).unwrap();
+    ts.ucmd()
+        .arg("10")
+        .arg(&cmd)
+        .args(&["echo", "ran"])
+        .succeeds()
+        .stdout_only("ran\n");
 }
 
 #[test]

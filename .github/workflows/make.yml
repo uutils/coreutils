@@ -182,14 +182,14 @@ jobs:
               --arg multisize "$SIZE_MULTI" \
               '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
     - name: Download the previous individual size result
-      uses: dawidd6/action-download-artifact@v24
+      uses: dawidd6/action-download-artifact@v27
       with:
         workflow: make.yml
         name: individual-size-result
         repo: uutils/coreutils
         path: dl
     - name: Download the previous size result
-      uses: dawidd6/action-download-artifact@v24
+      uses: dawidd6/action-download-artifact@v27
       with:
         workflow: make.yml
         name: size-result
@@ -337,7 +337,7 @@ jobs:
         ! test -f /tmp/c/usr/local/share/fish/vendor_completions.d/uu-cat.fish
         # package
         mv target/release-small/deps/stdbuf.dll -t /tmp/c/usr/local/bin
-        bsdtar -caf x86_64-pc-cygwin.tar.zst -C /tmp/c/usr/local bin
+        bsdtar -caf individual-x86_64-pc-cygwin.tar.zst -C /tmp/c/usr/local bin
       env:
         CHERE_INVOKING: 1
         OPENSSL_NO_VENDOR: "1"

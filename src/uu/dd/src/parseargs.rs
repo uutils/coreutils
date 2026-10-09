@@ -11,7 +11,6 @@ mod unit_tests;
 use super::{ConversionMode, IConvFlags, IFlags, Num, OConvFlags, OFlags, Settings, StatusLevel};
 use crate::conversion_tables::ConversionTable;
 use std::ffi::OsString;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
 use uucore::parser::parse_size::{ParseSizeError, Parser as SizeParser};
@@ -19,7 +18,7 @@ use uucore::show_warning;
 use uucore::translate;
 
 /// Parser Errors describe errors with parser input
-#[derive(Debug, PartialEq, Eq, Error)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ParseError {
     #[error("{}", translate!("dd-error-unrecognized-operand", "operand" => .0))]
     UnrecognizedOperand(String),
@@ -226,7 +225,7 @@ impl Parser {
         };
 
         let iconv = IConvFlags {
-            mode: conversion_mode(conversion_table, block, non_ascii, conv.sync),
+            mode: conversion_mode(conversion_table, block, non_ascii),
             swab: conv.swab,
             sync: if conv.sync {
                 if block.is_some() {
@@ -614,8 +613,8 @@ fn get_ctable(
             (Conversion::Ascii, Case::Lower) => &EBCDIC_TO_ASCII_UCASE_TO_LCASE,
             (Conversion::Ebcdic, Case::Upper) => &ASCII_TO_EBCDIC_LCASE_TO_UCASE,
             (Conversion::Ebcdic, Case::Lower) => &ASCII_TO_EBCDIC_UCASE_TO_LCASE,
-            (Conversion::Ibm, Case::Upper) => &ASCII_TO_IBM_UCASE_TO_LCASE,
-            (Conversion::Ibm, Case::Lower) => &ASCII_TO_IBM_LCASE_TO_UCASE,
+            (Conversion::Ibm, Case::Upper) => &ASCII_TO_IBM_LCASE_TO_UCASE,
+            (Conversion::Ibm, Case::Lower) => &ASCII_TO_IBM_UCASE_TO_LCASE,
         },
     })
 }
@@ -632,15 +631,14 @@ fn conversion_mode(
     ctable: Option<&'static ConversionTable>,
     block: Option<Block>,
     is_ascii: bool,
-    is_sync: bool,
 ) -> Option<ConversionMode> {
     match (ctable, block) {
         (Some(ct), None) => Some(ConversionMode::ConvertOnly(ct)),
         (Some(ct), Some(Block::Block(cbs))) => {
             if is_ascii {
-                Some(ConversionMode::ConvertThenBlock(ct, cbs, is_sync))
+                Some(ConversionMode::ConvertThenBlock(ct, cbs))
             } else {
-                Some(ConversionMode::BlockThenConvert(ct, cbs, is_sync))
+                Some(ConversionMode::BlockThenConvert(ct, cbs))
             }
         }
         (Some(ct), Some(Block::Unblock(cbs))) => {
@@ -650,7 +648,7 @@ fn conversion_mode(
                 Some(ConversionMode::UnblockThenConvert(ct, cbs))
             }
         }
-        (None, Some(Block::Block(cbs))) => Some(ConversionMode::BlockOnly(cbs, is_sync)),
+        (None, Some(Block::Block(cbs))) => Some(ConversionMode::BlockOnly(cbs)),
         (None, Some(Block::Unblock(cbs))) => Some(ConversionMode::UnblockOnly(cbs)),
         (None, None) => None,
     }

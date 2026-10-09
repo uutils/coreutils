@@ -72,6 +72,19 @@ impl Drop for Target {
 }
 
 #[test]
+fn test_command_environment_uses_last_override() {
+    new_ucmd!()
+        .env("LC_ALL", "POSIX")
+        .env("UUTESTS_ENV_OVERRIDE", "first")
+        .env("UUTESTS_ENV_OVERRIDE", "last")
+        .succeeds()
+        .stdout_contains_line("LC_ALL=POSIX")
+        .stdout_does_not_contain("LC_ALL=C")
+        .stdout_contains_line("UUTESTS_ENV_OVERRIDE=last")
+        .stdout_does_not_contain("UUTESTS_ENV_OVERRIDE=first");
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(125);
 }
@@ -86,14 +99,14 @@ fn test_flags_after_command() {
         .no_stderr()
         .stdout_is("-u=v\n");
 
+    // spell-checker:disable
     new_ucmd!()
         // Ensure the string isn't split
-        // cSpell:disable
         .args(&["printf", "%s-%s", "-Sfoo bar"])
         .succeeds()
         .no_stderr()
         .stdout_is("-Sfoo bar-");
-    // cSpell:enable
+    // spell-checker:enable
 
     new_ucmd!()
         // Ensure -- is recognized

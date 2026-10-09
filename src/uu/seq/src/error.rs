@@ -8,12 +8,11 @@
 //! Errors returned by seq.
 
 use crate::numberparse::ParseNumberError;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
 use uucore::translate;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum SeqError {
     /// An error parsing the input arguments.
     ///

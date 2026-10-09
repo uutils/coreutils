@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
-//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit Fsize SIGBUS SIGSEGV sigbus tmpfs mksocket
-//spell-checker: ignore (ToDO) ttyname
+//spell-checker:ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
+//spell-checker:ignore (linux) winsize xpixel ypixel setrlimit Fsize SIGBUS SIGSEGV SIGXFSZ EFBIG sigbus tmpfs mksocket
+//spell-checker:ignore (ToDO) ttyname
 
 #![allow(dead_code)]
 #![allow(
@@ -17,7 +17,7 @@
 use core::str;
 #[cfg(unix)]
 use libc::mode_t;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 use nix::pty::OpenptyResult;
 #[cfg(unix)]
 use nix::sys;
@@ -27,7 +27,7 @@ use pretty_assertions::assert_eq;
 #[cfg(unix)]
 use rustix::process::{Resource, Rlimit, setrlimit};
 use std::borrow::Cow;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, OpenOptions, hard_link, remove_file};
 use std::io::{self, BufWriter, Read, Result, Write};
@@ -1353,6 +1353,14 @@ impl AtPath {
 
     pub fn root_dir_resolved(&self) -> String {
         log_info("current_directory_resolved", "");
+
+        // Under a WASM runner the fixtures directory is mapped to the guest's
+        // preopened root ("--dir=<subdir>::/"), so the binary under test sees
+        // it as "/" rather than the host's absolute path.
+        if env::var("UUTESTS_WASM_RUNNER").is_ok() {
+            return "/".to_owned();
+        }
+
         let s = self
             .subdir
             .canonicalize()
@@ -1486,8 +1494,8 @@ impl TestScenario {
         Ok(())
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
     /// Unmounts the temporary filesystem if it is currently mounted.
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
     pub fn umount_temp_fs(&mut self) {
         if let Some(mount_point) = self.tmp_fs_mountpoint.as_ref() {
             self.cmd("umount").arg(mount_point).succeeds();
@@ -1544,6 +1552,8 @@ pub struct UCommand {
     bytes_into_stdin: Option<Vec<u8>>,
     #[cfg(unix)]
     limits: Vec<(Resource, u64, u64)>,
+    #[cfg(unix)]
+    ignore_sigxfsz: bool,
     stderr_to_stdout: bool,
     timeout: Option<Duration>,
     #[cfg(unix)]
@@ -1711,8 +1721,18 @@ impl UCommand {
         self
     }
 
+    /// Ignore SIGXFSZ in the child, so that exceeding an `Fsize` [`limit`](Self::limit) makes
+    /// the write fail with `EFBIG` instead of killing the process.
+    ///
+    /// Only the child's disposition changes; the test process is left alone.
     #[cfg(unix)]
+    pub fn ignore_sigxfsz(&mut self) -> &mut Self {
+        self.ignore_sigxfsz = true;
+        self
+    }
+
     /// The umask is a value that restricts the permissions of newly created files and directories.
+    #[cfg(unix)]
     pub fn umask(&mut self, umask: mode_t) -> &mut Self {
         self.umask = Some(umask);
         self
@@ -1935,8 +1955,10 @@ impl UCommand {
             cmd.arg(format!("--dir={}::/", work_dir.display()));
             cmd.arg("--argv0");
             cmd.arg(bin.file_name().unwrap_or(bin.as_os_str()));
-            // Forward env vars to the WASI guest via --env flags
-            for (key, val) in &cmd_env {
+            // WASI reads the first duplicate, whereas Command::envs uses the last.
+            // Resolve overrides before forwarding them to the guest.
+            let wasm_env: BTreeMap<_, _> = cmd_env.iter().map(|(key, val)| (key, val)).collect();
+            for (key, val) in &wasm_env {
                 if let (Some(k), Some(v)) = (key.to_str(), val.to_str()) {
                     cmd.arg("--env");
                     cmd.arg(format!("{k}={v}"));
@@ -1952,15 +1974,23 @@ impl UCommand {
         command.env_clear();
         command.envs(cmd_env);
 
+        // Guest env uses --env, but wasmtime itself requires an absolute HOME
+        // for its module cache to avoid runner aborts.
+        if wasm_runner.is_some()
+            && let Some(host_home) = env::var_os("HOME")
+        {
+            command.env("HOME", host_home);
+        }
+
         if self.timeout.is_none() {
             self.timeout = Some(Duration::from_secs(30));
         }
 
         let mut captured_stdout = None;
         let mut captured_stderr = None;
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "redox")))]
         let mut stdin_pty: Option<File> = None;
-        #[cfg(not(unix))]
+        #[cfg(not(all(unix, not(target_os = "redox"))))]
         let stdin_pty: Option<File> = None;
         if self.stderr_to_stdout {
             let mut output = CapturedOutput::default();
@@ -1995,7 +2025,7 @@ impl UCommand {
                 .stderr(stderr);
         }
 
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "redox")))]
         if let Some(simulated_terminal) = &self.terminal_simulation {
             let terminal_size = simulated_terminal.size.unwrap_or(libc::winsize {
                 ws_col: 80,
@@ -2062,6 +2092,18 @@ impl UCommand {
             // also, the closure doesn't access stdin, stdout and stderr.
             unsafe {
                 command.pre_exec(closure);
+            }
+        }
+
+        #[cfg(unix)]
+        if self.ignore_sigxfsz {
+            // SAFETY: signal() is async-signal-safe, and an ignored disposition
+            // survives exec.
+            unsafe {
+                command.pre_exec(|| {
+                    libc::signal(libc::SIGXFSZ, libc::SIG_IGN);
+                    Ok(())
+                });
             }
         }
 
@@ -3002,7 +3044,7 @@ pub fn whoami() -> String {
 /// - path: The filesystem path to the PTY replica device
 /// - controller: The controller file
 /// - replica: The replica file
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 pub fn pty_path() -> (String, File, File) {
     use nix::pty::openpty;
     use nix::unistd::ttyname;

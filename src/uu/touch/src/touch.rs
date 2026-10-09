@@ -37,7 +37,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use uucore::libc;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
@@ -142,6 +142,12 @@ mod format {
 
 fn timestamp_to_filetime(ts: Timestamp) -> FileTime {
     FileTime::from_system_time(SystemTime::from(ts))
+}
+
+/// A [`FileTime`] holding the `UTIME_NOW` sentinel, which only needs write permission.
+#[cfg(target_os = "linux")]
+fn utime_now() -> FileTime {
+    FileTime::from_unix_time(0, libc::UTIME_NOW as u32)
 }
 
 fn filetime_to_zoned(ft: &FileTime) -> Option<Zoned> {
@@ -395,7 +401,7 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
             #[cfg(target_os = "linux")]
             {
                 if opts.date.is_none() {
-                    now = FileTime::from_unix_time(0, libc::UTIME_NOW as u32);
+                    now = utime_now();
                 } else {
                     now = timestamp_to_filetime(Timestamp::now());
                 }
@@ -410,16 +416,29 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
     };
 
     let (atime, mtime) = if let Some(date) = &opts.date {
-        (
-            parse_date(
-                filetime_to_zoned(&atime).ok_or_else(|| TouchError::InvalidFiletime(atime))?,
-                date,
-            )?,
-            parse_date(
-                filetime_to_zoned(&mtime).ok_or_else(|| TouchError::InvalidFiletime(mtime))?,
-                date,
-            )?,
-        )
+        let parsed_atime = parse_date(
+            filetime_to_zoned(&atime).ok_or(TouchError::InvalidFiletime(atime))?,
+            date,
+        )?;
+        let parsed_mtime = parse_date(
+            filetime_to_zoned(&mtime).ok_or(TouchError::InvalidFiletime(mtime))?,
+            date,
+        )?;
+
+        // `-d now` -> UTIME_NOW so write permission is enough (#15019).
+        #[cfg(target_os = "linux")]
+        {
+            if opts.source == Source::Now && parsed_atime == atime {
+                let now = utime_now();
+                (now, now)
+            } else {
+                (parsed_atime, parsed_mtime)
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            (parsed_atime, parsed_mtime)
+        }
     } else {
         (atime, mtime)
     };
@@ -455,6 +474,18 @@ fn create_without_truncate(path: &Path) -> std::io::Result<fs::File> {
         .open(path)
 }
 
+// GNU reports ordinary access failures as "cannot touch", while -c and -h
+// report failures to update timestamps as "setting times of".
+#[cfg(unix)]
+fn cannot_touch_on_access_error(opts: &Options, error: &Error) -> bool {
+    !opts.no_create && !opts.no_deref && error.raw_os_error() == Some(libc::EACCES)
+}
+
+#[cfg(not(unix))]
+fn cannot_touch_on_access_error(_opts: &Options, _error: &Error) -> bool {
+    false
+}
+
 /// Create or update the timestamp for a single file.
 ///
 /// # Arguments
@@ -484,9 +515,12 @@ fn touch_file(
 
     if let Err(e) = metadata_result {
         if e.kind() != ErrorKind::NotFound {
-            return Err(e.map_err_context(
-                || translate!("touch-error-setting-times-of", "filename" => filename.quote()),
-            ));
+            let context = if cannot_touch_on_access_error(opts, &e) {
+                translate!("touch-error-cannot-touch", "filename" => filename.quote())
+            } else {
+                translate!("touch-error-setting-times-of", "filename" => filename.quote())
+            };
+            return Err(e.map_err_context(|| context));
         }
 
         if opts.no_create {
@@ -625,15 +659,29 @@ fn update_times(
         }
 
         // Open write-only and use futimens to trigger IN_CLOSE_WRITE on Linux.
-        if try_futimens_via_write_fd(path, atime, mtime).is_ok() {
-            return Ok(());
-        }
+        let write_error = match try_futimens_via_write_fd(path, atime, mtime) {
+            Ok(()) => return Ok(()),
+            Err(e) => e,
+        };
         // The write-FD approach fails on special files such as FIFOs (the
         // write-only open returns ENXIO when there is no reader). Set the times
         // by path with utimensat, which never opens the file and so never
         // blocks — unlike filetime::set_file_times, which opens O_RDONLY and
         // would hang on a reader-less FIFO.
-        set_times_by_path(path, atime, mtime)
+        match set_times_by_path(path, atime, mtime) {
+            Ok(()) => Ok(()),
+            Err(e)
+                if e.kind() == ErrorKind::PermissionDenied
+                    && cannot_touch_on_access_error(opts, &write_error) =>
+            {
+                Err(write_error.map_err_context(
+                    || translate!("touch-error-cannot-touch", "filename" => path.quote()),
+                ))
+            }
+            Err(e) => Err(e.map_err_context(
+                || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
+            )),
+        }
     }
 
     #[cfg(not(unix))]
@@ -644,9 +692,9 @@ fn update_times(
     }
 }
 
-#[cfg(unix)]
 /// Build a rustix `Timestamps` from the access and modification `FileTime`s,
 /// preserving the `UTIME_NOW`/`UTIME_OMIT` sentinels in the nanoseconds field.
+#[cfg(unix)]
 fn build_timestamps(atime: FileTime, mtime: FileTime) -> Timestamps {
     Timestamps {
         last_access: rustix::fs::Timespec {
@@ -660,12 +708,12 @@ fn build_timestamps(atime: FileTime, mtime: FileTime) -> Timestamps {
     }
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
 /// Set file times by path using `utimensat`, following symlinks.
 ///
 /// This never opens the file, so it does not block on special files such as
 /// FIFOs.
-fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<()> {
+#[cfg(all(unix, not(target_os = "redox")))]
+fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> std::io::Result<()> {
     let timestamps = build_timestamps(atime, mtime);
     rustix::fs::utimensat(
         rustix::fs::CWD,
@@ -674,26 +722,24 @@ fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<(
         rustix::fs::AtFlags::empty(),
     )
     .map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
-    .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
 }
 
-#[cfg(target_os = "redox")]
 /// Set file times by path on Redox, which lacks `rustix::fs::utimensat`.
 ///
 /// Falls back to `filetime::set_file_times`; unlike on other unixes this may
 /// block on a reader-less FIFO, but Redox has no FIFO support so the FIFO
 /// edge case the `utimensat` path guards against does not arise here.
-fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<()> {
+#[cfg(target_os = "redox")]
+fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> std::io::Result<()> {
     set_file_times(path, atime, mtime)
-        .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
 }
 
-#[cfg(unix)]
 /// Set file times via file descriptor using `futimens`.
 ///
 /// This opens the file write-only and uses the POSIX `futimens` call to set
 /// access and modification times on the open FD (not by path), which also
 /// triggers `IN_CLOSE_WRITE` on Linux when the FD is closed.
+#[cfg(unix)]
 fn try_futimens_via_write_fd(path: &Path, atime: FileTime, mtime: FileTime) -> std::io::Result<()> {
     let file = OpenOptions::new()
         .write(true)
@@ -953,6 +999,20 @@ mod tests {
                 .to_string()
                 .contains("GetFinalPathNameByHandleW failed with code 1")
         );
+    }
+
+    #[test]
+    fn test_parse_date_now_returns_the_reference_instant() {
+        // `-d now` must parse back to the reference instant, so `touch()` can spot it (#15019).
+        let now = super::timestamp_to_filetime(jiff::Timestamp::now());
+        let reference = super::filetime_to_zoned(&now).unwrap();
+
+        assert_eq!(super::parse_date(reference.clone(), "now").unwrap(), now);
+        assert_eq!(
+            super::parse_date(reference.clone(), "0 seconds").unwrap(),
+            now
+        );
+        assert_ne!(super::parse_date(reference, "2000-01-01").unwrap(), now);
     }
 
     #[test]

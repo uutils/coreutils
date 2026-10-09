@@ -16,13 +16,13 @@ use std::os::fd::AsFd;
 #[cfg(windows)]
 use std::path::Path;
 use std::path::PathBuf;
-use thiserror::Error;
 use uucore::diagnostics::OptionValue;
-use uucore::display::{Quotable, print_verbatim};
-use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::display::Quotable;
+use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use uucore::line_ending::LineEnding;
 use uucore::parser::parse_signed_num::number_offset;
 use uucore::parser::parse_size::ParseSizeError;
+use uucore::quoting_style::locale_aware_shell_escape;
 use uucore::show;
 use uucore::translate;
 
@@ -38,7 +38,7 @@ use take::copy_all_but_n_bytes;
 use take::copy_all_but_n_lines;
 use take::take_lines;
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 enum HeadError {
     /// Wrapper around `io::Error`
     #[error("{}", translate!("head-error-reading-file", "name" => name.quote(), "err" => err))]
@@ -208,7 +208,7 @@ impl HeadOptions {
 fn wrap_in_stdout_error(err: io::Error) -> io::Error {
     io::Error::new(
         err.kind(),
-        translate!("head-error-writing-stdout", "err" => uucore::error::strip_errno(&err)),
+        translate!("head-error-writing-stdout", "err" => strip_errno(&err)),
     )
 }
 
@@ -255,13 +255,9 @@ fn print_n_lines(input: &mut impl io::BufRead, n: u64, separator: u8) -> io::Res
     Ok(bytes_written)
 }
 
-fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> {
-    usize::try_from(n).ok()
-}
-
 fn print_but_last_n_bytes(mut input: impl Read, n: u64) -> io::Result<u64> {
     let mut bytes_written: u64 = 0;
-    if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
+    if let Ok(n) = usize::try_from(n) {
         let stdout = io::stdout();
         let mut stdout = stdout.lock();
 
@@ -285,7 +281,7 @@ fn print_but_last_n_lines(mut input: impl Read, n: u64, separator: u8) -> io::Re
         return io::copy(&mut input, &mut stdout).map_err(wrap_in_stdout_error);
     }
     let mut bytes_written: u64 = 0;
-    if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
+    if let Ok(n) = usize::try_from(n) {
         bytes_written = copy_all_but_n_lines(input, &mut stdout, n, separator)
             .map_err(wrap_in_stdout_error)?
             .try_into()
@@ -453,7 +449,8 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 if !first {
                     writeln!(stdout)?;
                 }
-                writeln!(stdout, "{}", translate!("head-header-stdin"))?;
+                let name = locale_aware_shell_escape(translate!("head-name-stdin"));
+                writeln!(stdout, "==> {name} <==")?;
             }
             let stdin = io::stdin();
 
@@ -503,9 +500,8 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     if !first {
                         writeln!(stdout)?;
                     }
-                    write!(stdout, "==> ")?;
-                    print_verbatim(file)?;
-                    writeln!(stdout, " <==")?;
+                    let name = locale_aware_shell_escape(file);
+                    writeln!(stdout, "==> {name} <==")?;
                     first = false;
                 }
                 Ok(())

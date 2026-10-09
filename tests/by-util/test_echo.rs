@@ -682,7 +682,7 @@ fn nine_bit_octal() {
 }
 
 #[test]
-#[cfg(target_family = "unix")]
+#[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn non_utf_8() {
     use std::ffi::OsStr;

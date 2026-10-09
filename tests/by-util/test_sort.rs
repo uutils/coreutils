@@ -69,6 +69,33 @@ fn test_buffer_sizes() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
+fn test_buffer_size_limits_both_chunks() {
+    let line = format!("{}\n", "b".repeat(1022));
+    let input = line.repeat(1200);
+
+    for args in [vec![], vec!["-k1,1"]] {
+        new_ucmd!()
+            .args(&["-u", "-T", "missing-directory"])
+            .args(&args)
+            .pipe_in(input.as_bytes())
+            .succeeds()
+            .stdout_only(&line);
+
+        // The input fits in two buffers of 768 KiB each, but exceeds the
+        // requested total. Spilling must fail when no temp directory exists.
+        new_ucmd!()
+            .args(&["-u", "-T", "missing-directory", "-S", "768K"])
+            .args(&args)
+            .pipe_in(input.as_bytes())
+            .ignore_stdin_write_error()
+            .fails_with_code(2)
+            .no_stdout()
+            .stderr_contains("cannot create temporary file");
+    }
+}
+
+#[test]
 fn test_invalid_buffer_size() {
     new_ucmd!()
         .arg("-S")
@@ -1377,6 +1404,22 @@ fn test_read_error_message() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_merge_flush_error_is_reported() {
+    use std::fs::File;
+
+    let ts = TestScenario::new("sort");
+    ts.fixtures.write("input.txt", "line\n");
+
+    let dev_full = File::create("/dev/full").expect("Failed to open /dev/full");
+    ts.ucmd()
+        .args(&["-m", "input.txt"])
+        .set_stdout(dev_full)
+        .fails()
+        .stderr_is("sort: write failed: 'standard output': No space left on device\n");
+}
+
+#[test]
 fn test_merge_unique() {
     new_ucmd!()
         .arg("-m")
@@ -2616,7 +2659,7 @@ fn test_g_float_hex() {
         .stdout_is(output);
 }
 
-/* spell-checker: disable */
+// spell-checker:disable
 #[test]
 fn test_french_translations() {
     // Test that French translations work for clap error messages
@@ -3584,6 +3627,53 @@ fn test_consistent_sorting_with_i18n_collate() {
 }
 
 #[test]
+fn test_merge_locale_collation() {
+    // `sort -m` compares lines lazily with the collator instead of precomputed
+    // sort keys; the result must match what a full sort produces.
+    let ts = TestScenario::new("sort");
+    ts.fixtures
+        .write("a.txt", "0_1\n01\napple\nbanana\nzebra\n");
+    ts.fixtures
+        .write("b.txt", "0_1\n01\nApple\nBanana\nZebra\n");
+    ts.fixtures
+        .write("single.txt", "apple\nApple\nbanana\nBanana\n");
+    ts.fixtures
+        .write("rev_a.txt", "zebra\nbanana\napple\n01\n0_1\n");
+    ts.fixtures
+        .write("rev_b.txt", "Zebra\nBanana\nApple\n01\n0_1\n");
+
+    let cases: [(&[&str], &str); 4] = [
+        (
+            &["-m", "a.txt", "b.txt"],
+            "0_1\n0_1\n01\n01\napple\nApple\nbanana\nBanana\nzebra\nZebra\n",
+        ),
+        (
+            &["-m", "-u", "a.txt", "b.txt"],
+            "0_1\n01\napple\nApple\nbanana\nBanana\nzebra\nZebra\n",
+        ),
+        (&["-m", "single.txt"], "apple\nApple\nbanana\nBanana\n"),
+        (
+            &["-m", "-r", "rev_a.txt", "rev_b.txt"],
+            "Zebra\nzebra\nBanana\nbanana\nApple\napple\n01\n01\n0_1\n0_1\n",
+        ),
+    ];
+    for (args, expected) in cases {
+        ts.ucmd()
+            .env("LC_ALL", "en_US.UTF-8")
+            .args(args)
+            .succeeds()
+            .stdout_is(expected);
+        // A full sort of the same input yields the same output.
+        let sort_args: Vec<&str> = args.iter().filter(|a| **a != "-m").copied().collect();
+        ts.ucmd()
+            .env("LC_ALL", "en_US.UTF-8")
+            .args(&sort_args)
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
 fn test_sort_locale_punctuation() {
     // Punctuation gets a distinguishing collation weight, so lines differing
     // only by punctuation sort in a stable order (issue #12542) and are never
@@ -3624,6 +3714,38 @@ fn test_sort_locale_punctuation() {
                 .stdout_is(expected);
         }
     }
+}
+
+#[test]
+fn test_locale_empty_env_vars_hungarian_lc_collate() {
+    // Regression test for issue #11136
+    let input = "gx\ngy\ngz\n";
+    let output = "gx\ngz\ngy\n";
+
+    let hungarian = "hu_HU.UTF-8";
+    let env_vars_combos = [
+        vec![("LC_ALL", ""), ("LC_COLLATE", hungarian)],
+        vec![("LC_ALL", ""), ("LANG", hungarian)],
+        vec![("LC_ALL", ""), ("LC_COLLATE", ""), ("LANG", hungarian)],
+    ];
+
+    for vars in env_vars_combos {
+        new_ucmd!()
+            .envs(vars)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is(output);
+    }
+
+    // check that LC_ALL, LC_COLLATE, LANG being all empty implies
+    // that locale falls back to C locale
+    new_ucmd!()
+        .env("LC_ALL", "")
+        .env("LC_COLLATE", "")
+        .env("LANG", "")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(input);
 }
 
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
@@ -3837,4 +3959,4 @@ sort: invalid suffix in --buffer-size argument '8zz'
     }
 }
 
-/* spell-checker: enable */
+// spell-checker:enable

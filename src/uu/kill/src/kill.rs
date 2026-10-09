@@ -9,7 +9,6 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::io::{self, BufWriter, Write};
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use uucore::translate;
@@ -41,7 +40,7 @@ pub enum Mode {
     List,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum KillError {
     #[error("{}", translate!("kill-error-write", "error" => strip_errno(.0)))]
     Write(io::Error),

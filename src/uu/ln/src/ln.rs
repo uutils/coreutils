@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) srcpath targetpath EEXIST
+// spell-checker:ignore (ToDO) srcpath targetpath EEXIST renameat
 
 use clap::{Arg, ArgAction, Command};
 use std::io::{self, Write, stdout};
@@ -19,7 +19,6 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs;
-use thiserror::Error;
 
 use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
@@ -47,7 +46,7 @@ pub enum OverwriteMode {
     Force,
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum LnError {
     #[error("{}", translate!("ln-error-target-is-not-directory", "target" => _0.quote()))]
     TargetIsNotADirectory(PathBuf),

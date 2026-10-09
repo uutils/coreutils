@@ -10,6 +10,7 @@ use std::ops::Range as ByteRange;
 use std::str::{CharIndices, FromStr};
 
 use crate::units::Unit;
+use uucore::quoting_style::locale_aware_c_single_escape;
 use uucore::ranges::Range;
 use uucore::translate;
 
@@ -223,6 +224,7 @@ impl FromStr for FormatOptions {
         // can say where in the format it gave up.
         let mut iter = s.char_indices().peekable();
         let mut options = Self::default();
+        let quoted = locale_aware_c_single_escape(s);
         let error = |message: String, span: ByteRange<usize>, kind: FormatErrorKind| FormatError {
             message,
             span,
@@ -261,13 +263,13 @@ impl FromStr for FormatOptions {
             // format, or it is the trailing '%' that never became one.
             return Err(if options.prefix == s {
                 error(
-                    translate!("numfmt-error-format-no-percent", "format" => s),
+                    translate!("numfmt-error-format-no-percent", "format" => quoted.as_str()),
                     0..s.len(),
                     FormatErrorKind::MissingDirective,
                 )
             } else {
                 error(
-                    translate!("numfmt-error-format-ends-in-percent", "format" => s),
+                    translate!("numfmt-error-format-ends-in-percent", "format" => quoted.as_str()),
                     s.len().saturating_sub(1)..s.len(),
                     FormatErrorKind::MissingDirective,
                 )
@@ -291,7 +293,7 @@ impl FromStr for FormatOptions {
                 Some((_, c)) if c.is_ascii_digit() => padding.push('-'),
                 _ => {
                     return Err(error(
-                        translate!("numfmt-error-invalid-format-directive", "format" => s),
+                        translate!("numfmt-error-invalid-format-directive", "format" => quoted.as_str()),
                         at(&mut iter, s),
                         FormatErrorKind::UnexpectedCharacter,
                     ));
@@ -314,7 +316,7 @@ impl FromStr for FormatOptions {
                 options.padding = Some(p);
             } else {
                 return Err(error(
-                    translate!("numfmt-error-invalid-format-width-overflow", "format" => s),
+                    translate!("numfmt-error-invalid-format-width-overflow", "format" => quoted.as_str()),
                     padding_start..offset(&mut iter, s),
                     FormatErrorKind::NumberOverflow,
                 ));
@@ -326,7 +328,7 @@ impl FromStr for FormatOptions {
 
             if matches!(iter.peek(), Some((_, ' ' | '+' | '-'))) {
                 return Err(error(
-                    translate!("numfmt-error-invalid-precision", "format" => s),
+                    translate!("numfmt-error-invalid-precision", "format" => quoted.as_str()),
                     at(&mut iter, s),
                     FormatErrorKind::UnexpectedCharacter,
                 ));
@@ -348,7 +350,7 @@ impl FromStr for FormatOptions {
                 options.precision = Some(p);
             } else {
                 return Err(error(
-                    translate!("numfmt-error-invalid-precision", "format" => s),
+                    translate!("numfmt-error-invalid-precision", "format" => quoted.as_str()),
                     precision_start..offset(&mut iter, s),
                     FormatErrorKind::NumberOverflow,
                 ));
@@ -367,7 +369,7 @@ impl FromStr for FormatOptions {
                 FormatErrorKind::UnexpectedConversion
             };
             return Err(error(
-                translate!("numfmt-error-invalid-format-directive", "format" => s),
+                translate!("numfmt-error-invalid-format-directive", "format" => quoted.as_str()),
                 at(&mut iter, s),
                 kind,
             ));
@@ -385,7 +387,7 @@ impl FromStr for FormatOptions {
                 iter.next();
             } else {
                 return Err(error(
-                    translate!("numfmt-error-format-too-many-percent", "format" => s),
+                    translate!("numfmt-error-format-too-many-percent", "format" => quoted.as_str()),
                     i..i + 1,
                     FormatErrorKind::StrayPercent,
                 ));

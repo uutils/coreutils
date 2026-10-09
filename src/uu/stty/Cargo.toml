@@ -17,9 +17,9 @@ doctest = false
 
 [target.'cfg(unix)'.dependencies]
 clap = { workspace = true }
+fluent = { workspace = true }
 nix = { workspace = true, features = ["ioctl", "term"] }
 uucore = { workspace = true, features = ["parser"] }
-fluent = { workspace = true }
 
 [build-dependencies]
 cfg_aliases = { workspace = true }

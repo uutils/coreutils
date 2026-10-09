@@ -44,7 +44,6 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
 use std::sync::OnceLock;
-use thiserror::Error;
 use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
@@ -134,7 +133,7 @@ const MIN_AUTOMATIC_BUF_SIZE: usize = 512 * 1024; // 512 KiB
 const FALLBACK_AUTOMATIC_BUF_SIZE: usize = 32 * 1024 * 1024; // 32 MiB
 const MAX_AUTOMATIC_BUF_SIZE: usize = 1024 * 1024 * 1024; // 1 GiB
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum SortError {
     #[error("{}", format_disorder(.file, .line_number, .line, .silent))]
     Disorder {
@@ -283,6 +282,15 @@ impl Output {
             None => None,
         }
     }
+
+    /// Error context for a failed write to this output, naming the file or standard output.
+    fn write_failed_context(&self) -> impl Fn() -> String + use<> {
+        let output_name = self
+            .as_output_name()
+            .unwrap_or(OsStr::new("standard output"))
+            .to_owned();
+        move || translate!("sort-error-write-failed", "output" => output_name.maybe_quote())
+    }
 }
 
 #[derive(Clone)]
@@ -427,14 +435,15 @@ impl GlobalSettings {
     /// which the line as a whole stands for. A key of its own `r` also has to
     /// go the long way, since the shortcut only knows the global one.
     fn can_use_whole_line_numeric(&self) -> bool {
-        self.mode == SortMode::Numeric && self.selectors.len() == 1 && {
-            let selector = &self.selectors[0];
-            selector.settings.mode == SortMode::Numeric
-                && !selector.settings.reverse
-                && selector.from.field == 1
-                && selector.from.char == 1
-                && selector.to.is_none()
-        }
+        let [selector] = &self.selectors[..] else {
+            return false;
+        };
+        self.mode == SortMode::Numeric
+            && selector.settings.mode == SortMode::Numeric
+            && !selector.settings.reverse
+            && selector.from.field == 1
+            && selector.from.char == 1
+            && selector.to.is_none()
     }
 
     /// Returns true when the fast lexicographic path can be used safely.
@@ -442,40 +451,38 @@ impl GlobalSettings {
     /// whether locale-aware collation is needed (via checking if we're in a UTF-8 locale).
     /// This check is performed in uumain() before init_precomputed() is called.
     fn can_use_fast_lexicographic(&self) -> bool {
+        let [selector] = &self.selectors[..] else {
+            return false;
+        };
         self.mode == SortMode::Default
             && !self.ignore_case
             && !self.dictionary_order
             && !self.ignore_non_printing
             && !self.ignore_leading_blanks
-            && self.selectors.len() == 1
-            && {
-                let selector = &self.selectors[0];
-                !selector.needs_selection
-                    && matches!(selector.settings.mode, SortMode::Default)
-                    && !selector.settings.ignore_case
-                    && !selector.settings.dictionary_order
-                    && !selector.settings.ignore_non_printing
-                    && !selector.settings.ignore_blanks
-            }
+            && !selector.needs_selection
+            && matches!(selector.settings.mode, SortMode::Default)
+            && !selector.settings.ignore_case
+            && !selector.settings.dictionary_order
+            && !selector.settings.ignore_non_printing
+            && !selector.settings.ignore_blanks
     }
 
     /// Returns true when the ASCII case-insensitive fast path is valid.
     fn can_use_fast_ascii_insensitive(&self) -> bool {
+        let [selector] = &self.selectors[..] else {
+            return false;
+        };
         self.mode == SortMode::Default
             && self.ignore_case
             && !self.dictionary_order
             && !self.ignore_non_printing
             && !self.ignore_leading_blanks
-            && self.selectors.len() == 1
-            && {
-                let selector = &self.selectors[0];
-                !selector.needs_selection
-                    && matches!(selector.settings.mode, SortMode::Default)
-                    && selector.settings.ignore_case
-                    && !selector.settings.dictionary_order
-                    && !selector.settings.ignore_non_printing
-                    && !selector.settings.ignore_blanks
-            }
+            && !selector.needs_selection
+            && matches!(selector.settings.mode, SortMode::Default)
+            && selector.settings.ignore_case
+            && !selector.settings.dictionary_order
+            && !selector.settings.ignore_non_printing
+            && !selector.settings.ignore_blanks
     }
 }
 
@@ -650,6 +657,8 @@ fn incompatible_options_message(opts: &str) -> String {
     )
 }
 
+#[cold]
+#[inline(never)]
 fn incompatible_options_error(opts: &str) -> Box<dyn UError> {
     USimpleError::new(2, incompatible_options_message(opts))
 }
@@ -1081,7 +1090,7 @@ fn parse_field_count<'a>(
 ) -> Result<(usize, &'a str), KeyError> {
     let bytes = input.as_bytes();
     let mut idx = 0;
-    while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+    while bytes.get(idx).is_some_and(u8::is_ascii_digit) {
         idx += 1;
     }
     if idx == 0 {
@@ -1206,8 +1215,8 @@ fn parse_ordering_options<'a>(
     let mut ignore_blanks = false;
     let bytes = input.as_bytes();
     let mut idx = 0;
-    while idx < bytes.len() {
-        match bytes[idx] {
+    while let Some(byte) = bytes.get(idx) {
+        match byte {
             b'b' => ignore_blanks = true,
             b'd' => {
                 settings.dictionary_order = true;
@@ -1844,12 +1853,7 @@ fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [Leg
 
     let mut key_index = 0usize;
     let mut i = 0usize;
-    while i < processed_args.len() {
-        let arg = &processed_args[i];
-        if arg == OsStr::new("--") {
-            break;
-        }
-
+    while let Some(arg) = processed_args.get(i).filter(|&a| a != OsStr::new("--")) {
         let mut matched_key = false;
         if arg == OsStr::new("-k") || arg == OsStr::new("--key") {
             if i + 1 < processed_args.len() {
@@ -2798,6 +2802,47 @@ fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_dat
     }
 }
 
+/// Comparison used by the merge path.
+///
+/// This is result-identical to `compare_by`, but for the whole-line locale-collation
+/// case it compares the two lines lazily with the ICU collator instead of relying on
+/// precomputed collation keys. Merging only performs O(n log k) comparisons (and none at
+/// all when merging a single file), so computing a full sort key for every line — as the
+/// regular sort path does to amortize O(n log n) comparisons — is pure overhead here.
+/// Skipping that per-line work (see `merge_without_limit`) is what makes `sort -m` of
+/// already-sorted input fast.
+#[inline]
+pub fn merge_compare<'a>(
+    a: &Line<'a>,
+    b: &Line<'a>,
+    settings: &GlobalSettings,
+    a_line_data: &LineData<'a>,
+    b_line_data: &LineData<'a>,
+) -> Ordering {
+    #[cfg(feature = "i18n-collator")]
+    if settings.precomputed.fast_locale_collation {
+        return compare_lines_with_collator(a, b, settings);
+    }
+    compare_by(a, b, settings, a_line_data, b_line_data)
+}
+
+/// Lazy counterpart of the `fast_locale_collation` branch of `compare_by`: compare the
+/// line bytes directly rather than precomputed keys. `locale_cmp` (ICU `compare_utf8`)
+/// and the sort-key comparison agree on ordering by construction.
+///
+/// Kept out of line so that `merge_compare` stays small enough to be inlined into the
+/// merge heap's comparator, which keeps the non-locale merge paths as fast as before.
+#[cfg(feature = "i18n-collator")]
+#[inline(never)]
+fn compare_lines_with_collator(a: &Line<'_>, b: &Line<'_>, settings: &GlobalSettings) -> Ordering {
+    let mut cmp = locale_cmp(a.line, b.line);
+    if cmp == Ordering::Equal {
+        // Equal keys for inputs like `01` and `0_1`; fall back to (reversed) byte order.
+        cmp = b.line.cmp(a.line);
+    }
+    if settings.reverse { cmp.reverse() } else { cmp }
+}
+
 fn compare_by<'a>(
     a: &Line<'a>,
     b: &Line<'a>,
@@ -3266,8 +3311,9 @@ fn month_parse(line: &[u8]) -> (Month, usize) {
     if let Some(table) = get_locale_month_table() {
         let mut best = None;
         for (name, month) in table {
-            if line.len() >= name.len()
-                && line[..name.len()].eq_ignore_ascii_case(name)
+            if line
+                .get(..name.len())
+                .is_some_and(|l| l.eq_ignore_ascii_case(name))
                 && best.as_ref().is_none_or(|&(len, _)| name.len() > len)
             {
                 best = Some((name.len(), *month));
@@ -3308,15 +3354,10 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
     settings: &GlobalSettings,
     output: Output,
 ) -> UResult<()> {
-    let output_name = output
-        .as_output_name()
-        .unwrap_or(OsStr::new("standard output"))
-        .to_owned();
-    let ctx = || translate!("sort-error-write-failed", "output" => output_name.maybe_quote());
-
+    let ctx = output.write_failed_context();
     let mut writer = output.into_write()?;
     for line in iter {
-        line.write(&mut writer, settings).map_err_context(ctx)?;
+        line.write(&mut writer, settings).map_err_context(&ctx)?;
     }
     writer.flush().map_err_context(ctx)?;
     Ok(())

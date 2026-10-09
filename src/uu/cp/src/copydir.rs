@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf, StripPrefixError};
 
 use indicatif::ProgressBar;
 use uucore::display::Quotable;
-use uucore::error::UIoError;
+use uucore::error::{UIoError, set_exit_code};
 use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, canonicalize, path_ends_with_terminator,
 };
@@ -33,7 +33,7 @@ use walkdir::{DirEntry, WalkDir};
 use crate::set_selinux_context;
 use crate::{
     CopyMode, CopyResult, CpError, Options, aligned_ancestors, context_for, copy_attributes,
-    copy_file,
+    copy_file, create_parent_dirs, set_parent_dirs_attributes,
 };
 
 /// Represents a directory that needs permission fixup after copying its contents.
@@ -246,7 +246,6 @@ impl Entry {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 /// Copy a single entry during a directory traversal.
 ///
 /// # Returns
@@ -254,6 +253,7 @@ impl Entry {
 /// Returns `Ok(true)` if this function created a new directory, `Ok(false)` otherwise.
 /// This information is used to determine whether default directory permissions should
 /// be preserved during attribute copying.
+#[allow(clippy::too_many_arguments)]
 fn copy_direntry(
     progress_bar: Option<&ProgressBar>,
     entry: &Entry,
@@ -319,6 +319,14 @@ fn copy_direntry(
             false,
         )
     {
+        // A file left alone by --no-clobber, --update=none or a declined prompt
+        // does not stop the traversal; only a declined prompt is a failure.
+        if let CpError::Skipped(exit_with_error) = err {
+            if exit_with_error {
+                set_exit_code(crate::EXIT_ERR);
+            }
+            return Ok(false);
+        }
         if preserve_hard_links {
             if !source_is_symlink {
                 return Err(err);
@@ -405,154 +413,109 @@ pub(crate) fn copy_directory(
     // a -> d/a
     // a/b -> d/a/b
     //
-    let tmp = if options.parents {
-        if let Some(parent) = root.parent() {
-            let new_target = target.join(parent);
-            build_dir(&new_target, true, options, None)?;
-            if root
-                .components()
-                .next_back()
-                .is_some_and(|component| matches!(component, std::path::Component::ParentDir))
-            {
-                let dest = target.join(root);
-                build_dir(&dest, false, options, Some(root)).map_err(|err| match err {
-                    CpError::IoErr(io_err) => CpError::IoErrContext(
-                        io_err,
-                        format!("cannot create directory {}", dest.quote()),
-                    ),
-                    err => err,
-                })?;
-            }
-            if options.verbose {
-                // For example, if copying file `a/b/c` and its parents
-                // to directory `d/`, then print
-                //
-                //     a -> d/a
-                //     a/b -> d/a/b
-                //
-                for (x, y) in aligned_ancestors(root, &target.join(root)) {
-                    println!("{} -> {}", x.display(), y.display());
-                }
-            }
-
-            new_target
-        } else {
-            target.to_path_buf()
-        }
-    } else {
-        target.to_path_buf()
-    };
-    let target = tmp.as_path();
-
-    let preserve_hard_links = options.preserve_hard_links();
-
-    // Collect some paths here that are invariant during the traversal
-    // of the given directory, like the current working directory and
-    // the target directory.
-    let context = match Context::new(root, target) {
-        Ok(c) => c,
-        Err(e) => {
-            return Err(translate!("cp-error-failed-get-current-dir", "error" => e).into());
-        }
-    };
-
-    // The directory we were in during the previous iteration
-    let mut last_iter: Option<DirEntry> = None;
-
-    // Keep track of all directories we've created that need permission fixes
-    let mut dirs_needing_permissions: Vec<DirNeedingPermissions> = Vec::new();
-
-    // Traverse the contents of the directory, copying each one.
-    for direntry_result in WalkDir::new(root)
-        .same_file_system(options.one_file_system)
-        .follow_links(options.dereference)
-    {
-        match direntry_result {
-            Ok(direntry) => {
-                let direntry_type = direntry.file_type();
-                let direntry_path = direntry.path();
-                let (entry_is_symlink, entry_is_dir_no_follow) =
-                    match direntry_path.symlink_metadata() {
-                        Ok(metadata) => {
-                            let file_type = metadata.file_type();
-                            (file_type.is_symlink(), file_type.is_dir())
-                        }
-                        Err(_) => (direntry_type.is_symlink(), direntry_type.is_dir()),
-                    };
-                let entry = Entry::new(&context, direntry_path, options.no_target_dir)?;
-
-                let created = copy_direntry(
-                    progress_bar,
-                    &entry,
-                    entry_is_symlink,
-                    entry_is_dir_no_follow,
-                    options,
-                    symlinked_files,
-                    preserve_hard_links,
-                    copied_destinations,
-                    copied_files,
-                    created_parent_dirs,
-                )?;
-
-                // We omit certain permissions when creating directories
-                // to prevent other users from accessing them before they're done.
-                // We thus need to fix the permissions of each directory we copy
-                // once it's contents are ready.
-                // This "fixup" is implemented here in a memory-efficient manner.
-                //
-                // We detect iterations where we "walk up" the directory tree,
-                // and fix permissions on all the directories we exited.
-                // (Note that there can be more than one! We might step out of
-                // `./a/b/c` into `./a/`, in which case we'll need to fix the
-                // permissions of both `./a/b/c` and `./a/b`, in that order.)
-                let is_dir_for_permissions =
-                    entry_is_dir_no_follow || (options.dereference && direntry_path.is_dir());
-                if is_dir_for_permissions {
-                    // For --link mode, copy attributes immediately to avoid O(n) memory
-                    if options.copy_mode == CopyMode::Link {
-                        copy_attributes(
-                            &entry.source_absolute,
-                            &entry.local_to_target,
-                            &options.attributes,
-                            false,
-                            options.set_selinux_context,
+    let parents_dest = options.parents.then(|| target.join(root));
+    let mut parent_dirs = Vec::new();
+    let mut copy_tree = || -> CopyResult<()> {
+        let tmp =
+            match (parents_dest.as_ref(), root.parent()) {
+                (Some(parents_dest), Some(parent)) => {
+                    create_parent_dirs(root, parents_dest, options, &mut parent_dirs)?;
+                    if root.components().next_back().is_some_and(|component| {
+                        matches!(component, std::path::Component::ParentDir)
+                    }) {
+                        build_dir(parents_dest, false, options, Some(root)).map_err(
+                            |err| match err {
+                                CpError::IoErr(io_err) => CpError::IoErrContext(
+                                    io_err,
+                                    format!("cannot create directory {}", parents_dest.quote()),
+                                ),
+                                err => err,
+                            },
                         )?;
-                        continue;
                     }
-                    // Add this directory to our list for permission fixing later
-                    dirs_needing_permissions.push(DirNeedingPermissions {
-                        source: entry.source_absolute.clone(),
-                        dest: entry.local_to_target.clone(),
-                        was_created: created,
-                    });
-
-                    // If true, last_iter is not a parent of this iter.
-                    // The means we just exited a directory.
-                    let went_up = if let Some(last_iter) = &last_iter {
-                        last_iter.path().strip_prefix(direntry_path).is_ok()
-                    } else {
-                        false
-                    };
-
-                    if went_up {
-                        // Compute the "difference" between `last_iter` and `direntry`.
-                        // For example, if...
-                        // - last_iter = `a/b/c/d`
-                        // - direntry = `a/b`
-                        // then diff = `c/d`
+                    if options.verbose {
+                        // For example, if copying file `a/b/c` and its parents
+                        // to directory `d/`, then print
                         //
-                        // All the unwraps() here are unreachable.
-                        let last_iter = last_iter.as_ref().unwrap();
-                        let diff = last_iter.path().strip_prefix(direntry_path).unwrap();
+                        //     a -> d/a
+                        //     a/b -> d/a/b
+                        //
+                        for (x, y) in aligned_ancestors(root, parents_dest) {
+                            println!("{} -> {}", x.display(), y.display());
+                        }
+                    }
+                    target.join(parent)
+                }
+                _ => target.to_path_buf(),
+            };
+        let target = tmp.as_path();
 
-                        // Fix permissions for every entry in `diff`, inside-out.
-                        // We skip the last directory (which will be `.`) because
-                        // its permissions will be fixed when we walk _out_ of it.
-                        // (at this point, we might not be done copying `.`!)
-                        for p in skip_last(diff.ancestors()) {
-                            let src = direntry_path.join(p);
-                            let entry = Entry::new(&context, &src, options.no_target_dir)?;
+        let preserve_hard_links = options.preserve_hard_links();
 
+        // Collect some paths here that are invariant during the traversal
+        // of the given directory, like the current working directory and
+        // the target directory.
+        let context = match Context::new(root, target) {
+            Ok(c) => c,
+            Err(e) => {
+                return Err(translate!("cp-error-failed-get-current-dir", "error" => e).into());
+            }
+        };
+
+        // The directory we were in during the previous iteration
+        let mut last_iter: Option<DirEntry> = None;
+
+        // Keep track of all directories we've created that need permission fixes
+        let mut dirs_needing_permissions: Vec<DirNeedingPermissions> = Vec::new();
+
+        // Traverse the contents of the directory, copying each one.
+        for direntry_result in WalkDir::new(root)
+            .same_file_system(options.one_file_system)
+            .follow_links(options.dereference)
+        {
+            match direntry_result {
+                Ok(direntry) => {
+                    let direntry_type = direntry.file_type();
+                    let direntry_path = direntry.path();
+                    let (entry_is_symlink, entry_is_dir_no_follow) =
+                        match direntry_path.symlink_metadata() {
+                            Ok(metadata) => {
+                                let file_type = metadata.file_type();
+                                (file_type.is_symlink(), file_type.is_dir())
+                            }
+                            Err(_) => (direntry_type.is_symlink(), direntry_type.is_dir()),
+                        };
+                    let entry = Entry::new(&context, direntry_path, options.no_target_dir)?;
+
+                    let created = copy_direntry(
+                        progress_bar,
+                        &entry,
+                        entry_is_symlink,
+                        entry_is_dir_no_follow,
+                        options,
+                        symlinked_files,
+                        preserve_hard_links,
+                        copied_destinations,
+                        copied_files,
+                        created_parent_dirs,
+                    )?;
+
+                    // We omit certain permissions when creating directories
+                    // to prevent other users from accessing them before they're done.
+                    // We thus need to fix the permissions of each directory we copy
+                    // once it's contents are ready.
+                    // This "fixup" is implemented here in a memory-efficient manner.
+                    //
+                    // We detect iterations where we "walk up" the directory tree,
+                    // and fix permissions on all the directories we exited.
+                    // (Note that there can be more than one! We might step out of
+                    // `./a/b/c` into `./a/`, in which case we'll need to fix the
+                    // permissions of both `./a/b/c` and `./a/b`, in that order.)
+                    let is_dir_for_permissions =
+                        entry_is_dir_no_follow || (options.dereference && direntry_path.is_dir());
+                    if is_dir_for_permissions {
+                        // For --link mode, copy attributes immediately to avoid O(n) memory
+                        if options.copy_mode == CopyMode::Link {
                             copy_attributes(
                                 &entry.source_absolute,
                                 &entry.local_to_target,
@@ -560,60 +523,94 @@ pub(crate) fn copy_directory(
                                 false,
                                 options.set_selinux_context,
                             )?;
+                            continue;
                         }
+                        // Add this directory to our list for permission fixing later
+                        dirs_needing_permissions.push(DirNeedingPermissions {
+                            source: entry.source_absolute.clone(),
+                            dest: entry.local_to_target.clone(),
+                            was_created: created,
+                        });
+
+                        // If true, last_iter is not a parent of this iter.
+                        // The means we just exited a directory.
+                        let went_up = if let Some(last_iter) = &last_iter {
+                            last_iter.path().strip_prefix(direntry_path).is_ok()
+                        } else {
+                            false
+                        };
+
+                        if went_up {
+                            // Compute the "difference" between `last_iter` and `direntry`.
+                            // For example, if...
+                            // - last_iter = `a/b/c/d`
+                            // - direntry = `a/b`
+                            // then diff = `c/d`
+                            //
+                            // All the unwraps() here are unreachable.
+                            let last_iter = last_iter.as_ref().unwrap();
+                            let diff = last_iter.path().strip_prefix(direntry_path).unwrap();
+
+                            // Fix permissions for every entry in `diff`, inside-out.
+                            // We skip the last directory (which will be `.`) because
+                            // its permissions will be fixed when we walk _out_ of it.
+                            // (at this point, we might not be done copying `.`!)
+                            for p in skip_last(diff.ancestors()) {
+                                let src = direntry_path.join(p);
+                                let entry = Entry::new(&context, &src, options.no_target_dir)?;
+
+                                copy_attributes(
+                                    &entry.source_absolute,
+                                    &entry.local_to_target,
+                                    &options.attributes,
+                                    false,
+                                    options.set_selinux_context,
+                                )?;
+                            }
+                        }
+
+                        last_iter = Some(direntry);
                     }
-
-                    last_iter = Some(direntry);
                 }
-            }
 
-            // Print an error message, but continue traversing the directory.
-            Err(e) => show!(CpError::WalkDirErr(e)),
-        }
-    }
-
-    // Fix permissions for all directories we created
-    // This ensures that even sibling directories get their permissions fixed
-    for dir in dirs_needing_permissions {
-        copy_attributes(
-            &dir.source,
-            &dir.dest,
-            &options.attributes,
-            dir.was_created,
-            options.set_selinux_context,
-        )?;
-
-        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-        if options.set_selinux_context {
-            set_selinux_context(&dir.dest, options.context.as_ref())?;
-        }
-    }
-
-    // Also fix permissions for parent directories,
-    // if we were asked to create them.
-    if options.parents {
-        let dest = root
-            .file_name()
-            .map_or_else(|| target.to_path_buf(), |name| target.join(name));
-        for (x, y) in aligned_ancestors(root, dest.as_path()) {
-            if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
-                copy_attributes(
-                    &src,
-                    y,
-                    &options.attributes,
-                    false,
-                    options.set_selinux_context,
-                )?;
-
-                #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-                if options.set_selinux_context {
-                    set_selinux_context(y, options.context.as_ref())?;
-                }
+                // Print an error message, but continue traversing the directory.
+                Err(e) => show!(CpError::WalkDirErr(e)),
             }
         }
-    }
 
-    Ok(())
+        // Fix permissions for all directories we created
+        // This ensures that even sibling directories get their permissions fixed
+        for dir in dirs_needing_permissions {
+            copy_attributes(
+                &dir.source,
+                &dir.dest,
+                &options.attributes,
+                dir.was_created,
+                options.set_selinux_context,
+            )?;
+
+            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+            if options.set_selinux_context {
+                set_selinux_context(&dir.dest, options.context.as_ref())?;
+            }
+        }
+
+        Ok(())
+    };
+    let result = copy_tree();
+
+    // Even after a failed copy, so that no `--parents` directory stays owner-only.
+    let fixed = set_parent_dirs_attributes(&parent_dirs, options);
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    let fixed = fixed.and_then(|()| {
+        if !options.set_selinux_context {
+            return Ok(());
+        }
+        parent_dirs
+            .iter()
+            .try_for_each(|&(_, dst, _)| set_selinux_context(dst, options.context.as_ref()))
+    });
+    result.and(fixed)
 }
 
 /// Decide whether the second path is a prefix of the first.
@@ -653,7 +650,7 @@ pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {
 // we need to allow unused_variable since `options` might be unused in non unix systems
 #[allow(unused_variables)]
 fn build_dir(
-    path: &PathBuf,
+    path: &Path,
     recursive: bool,
     options: &Options,
     copy_attributes_from: Option<&Path>,

@@ -13,7 +13,6 @@ use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{
     ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code, strip_errno,
@@ -22,13 +21,13 @@ use uucore::fs::{FileInformation, display_permissions_unix, path_is_root_dir};
 use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
 
-#[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+#[cfg(not(target_os = "redox"))]
 use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 use uucore::{format_usage, show, show_error};
 
 use uucore::translate;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum ChmodError {
     #[error("{}", translate!("chmod-error-cannot-stat", "file" => _0.quote()))]
     CannotStat(PathBuf),
@@ -417,37 +416,6 @@ impl Chmoder {
         }
     }
 
-    /// Handle symlinks during directory traversal based on traversal mode
-    #[cfg(target_os = "aix")]
-    fn handle_symlink_during_traversal(
-        &self,
-        path: &Path,
-        is_command_line_arg: bool,
-        ancestors: &mut HashSet<FileInformation>,
-    ) -> UResult<()> {
-        let should_follow_symlink = match self.traverse_symlinks {
-            TraverseSymlinks::All => true,
-            TraverseSymlinks::First => is_command_line_arg,
-            TraverseSymlinks::None => false,
-        };
-
-        if !should_follow_symlink {
-            return self.chmod_file_internal(path, false);
-        }
-
-        match fs::metadata(path) {
-            Ok(meta) if meta.is_dir() => self.walk_dir_with_context(path, false, ancestors),
-            Ok(_) => {
-                // It's a file symlink, chmod it
-                self.chmod_file(path)
-            }
-            Err(_) => {
-                // Dangling symlink, chmod it without dereferencing
-                self.chmod_file_internal(path, false)
-            }
-        }
-    }
-
     fn print_neither_changed(file: OsString) -> std::io::Result<()> {
         use std::io::{Write as _, stdout};
         writeln!(
@@ -553,7 +521,7 @@ impl Chmoder {
     }
 
     // Non-safe traversal implementation for platforms without safe_traversal support
-    #[cfg(any(target_os = "aix", target_os = "hurd", target_os = "redox"))]
+    #[cfg(target_os = "redox")]
     fn walk_dir_with_context(
         &self,
         file_path: &Path,
@@ -599,24 +567,9 @@ impl Chmoder {
                 }
             }
             for path in paths_in_this_dir {
-                #[cfg(target_os = "aix")]
-                {
-                    if path.is_symlink() {
-                        r = self
-                            .handle_symlink_during_recursion(&path, ancestors)
-                            .and(r);
-                    } else {
-                        r = self
-                            .walk_dir_with_context(path.as_path(), false, ancestors)
-                            .and(r);
-                    }
-                }
-                #[cfg(any(target_os = "hurd", target_os = "redox"))]
-                {
-                    r = self
-                        .walk_dir_with_context(path.as_path(), false, ancestors)
-                        .and(r);
-                }
+                r = self
+                    .walk_dir_with_context(path.as_path(), false, ancestors)
+                    .and(r);
             }
 
             // Backtrack: remove this directory from ancestors so sibling subtrees
@@ -628,7 +581,7 @@ impl Chmoder {
         r
     }
 
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn walk_dir_with_context(
         &self,
         file_path: &Path,
@@ -651,9 +604,12 @@ impl Chmoder {
             TraverseSymlinks::None => false,
         };
 
-        // If the path is a directory (or we should follow symlinks), recurse into it using safe traversal
+        // Recurse via safe traversal, opening under the same symlink policy the checks
+        // above used: the pathname is resolved again here, so under `-P` (the `-R`
+        // default) O_NOFOLLOW fails the open rather than redirecting the descent into a
+        // swapped-in symlink. `-H`/`-L` still follow, which is what they ask for.
         if (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir() {
-            match DirFd::open(file_path, SymlinkBehavior::Follow) {
+            match DirFd::open(file_path, should_follow_symlink.into()) {
                 Ok(dir_fd) => {
                     r = self.safe_traverse_dir(&dir_fd, file_path, ancestors).and(r);
                 }
@@ -670,7 +626,7 @@ impl Chmoder {
         r
     }
 
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn safe_traverse_dir(
         &self,
         dir_fd: &DirFd,
@@ -768,7 +724,7 @@ impl Chmoder {
         r
     }
 
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn handle_symlink_during_safe_recursion(
         &self,
         path: &Path,
@@ -811,7 +767,7 @@ impl Chmoder {
         }
     }
 
-    #[cfg(not(any(target_os = "aix", target_os = "hurd", target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn safe_chmod_file(
         &self,
         file_path: &Path,
@@ -838,16 +794,6 @@ impl Chmoder {
         self.report_permission_change(file_path, current_mode, new_mode);
 
         Ok(())
-    }
-
-    #[cfg(target_os = "aix")]
-    fn handle_symlink_during_recursion(
-        &self,
-        path: &Path,
-        ancestors: &mut HashSet<FileInformation>,
-    ) -> UResult<()> {
-        // Use the common symlink handling logic
-        self.handle_symlink_during_traversal(path, false, ancestors)
     }
 
     fn chmod_file(&self, file: &Path) -> UResult<()> {

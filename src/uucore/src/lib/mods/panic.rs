@@ -14,6 +14,7 @@
 //! $ seq inf | head -n 1
 //! ```
 //!
+
 use std::panic::{self, PanicHookInfo};
 
 /// Decide whether a panic was caused by a broken pipe (SIGPIPE) error.

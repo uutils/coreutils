@@ -19,7 +19,6 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::MAIN_SEPARATOR;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
@@ -31,7 +30,7 @@ mod platform;
 #[cfg(all(unix, not(target_os = "redox")))]
 use platform::{safe_remove_dir_recursive, safe_remove_empty_dir, safe_remove_file};
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum RmError {
     #[error("{}", translate!("rm-error-missing-operand", "util_name" => uucore::execution_phrase()))]
     MissingOperand,
@@ -130,8 +129,8 @@ fn remove_dir_with_feedback(path: &Path, options: &Options) -> bool {
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Copy)]
 /// Enum, determining when the `rm` will prompt the user about the file deletion
+#[derive(Eq, PartialEq, Clone, Copy)]
 pub enum InteractiveMode {
     /// Never prompt
     Never,
@@ -195,9 +194,9 @@ pub struct Options {
     pub verbose: bool,
     /// `-g`, `--progress`
     pub progress: bool,
-    #[doc(hidden)]
     /// `---presume-input-tty`
     /// Always use `None`; GNU flag for testing use only
+    #[doc(hidden)]
     pub __presume_input_tty: Option<bool>,
 }
 
@@ -344,7 +343,7 @@ fn handle_parse_error(e: clap::Error, args: &[OsString]) -> Box<dyn UError> {
         // The path is shell-escaped (quoted only if needed), the file name is
         // always quoted, matching GNU's two quoting styles.
         let path = locale_aware_escape_name(file, QuotingStyle::SHELL_ESCAPE);
-        let quoted = locale_aware_escape_name(file, QuotingStyle::SHELL_ESCAPE_QUOTE);
+        let quoted = locale_aware_escape_name(file, QuotingStyle::SHELL_ESCAPE_ALWAYS);
         let _ = writeln!(
             io::stderr(),
             "{}",

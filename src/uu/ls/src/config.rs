@@ -9,7 +9,7 @@
 use std::{
     borrow::Cow,
     ffi::{OsStr, OsString},
-    io::{self, IsTerminal, Write as _, stdout},
+    io::{IsTerminal, stdout},
     num::IntErrorKind,
 };
 
@@ -18,17 +18,23 @@ use lscolors::LsColors;
 use term_grid::SPACES_IN_TAB;
 
 use uucore::{
-    diagnostics::OptionValue, display::Quotable, error::UResult, format::human::SizeFormat,
-    fsext::MetadataTimeField, line_ending::LineEnding, parser::parse_block_size,
-    parser::parse_glob, parser::parse_size::parse_size_non_zero_u64, quoting_style::QuotingStyle,
-    show_error, show_warning, time::format, translate,
+    diagnostics::OptionValue,
+    display::Quotable,
+    error::UResult,
+    format::human::SizeFormat,
+    fsext::MetadataTimeField,
+    line_ending::LineEnding,
+    parser::{parse_block_size, parse_glob, parse_size::parse_size_non_zero_u64},
+    quoting_style::{QuotingStyle, quoting_style_from_env},
+    show_error, show_warning,
+    time::format,
+    translate,
 };
 
 use crate::{
     LsError,
     colors::{LsColorsParseError, validate_ls_colors_env},
-    dired::is_dired_arg_present,
-    display::{Format, IndicatorStyle, LocaleQuoting, LongFormat},
+    display::{Format, IndicatorStyle, LongFormat},
     options::QUOTING_STYLE,
 };
 
@@ -227,7 +233,6 @@ pub struct Config {
     // Dir and vdir needs access to this field
     pub quoting_style: QuotingStyle,
     pub(crate) show_control_chars: bool,
-    pub(crate) locale_quoting: Option<LocaleQuoting>,
     pub(crate) indicator_style: Option<IndicatorStyle>,
     pub(crate) time_format_recent: String, // Time format for recent dates
     pub(crate) time_format_older: Option<String>, // Time format for older dates (optional, if not present, time_format_recent is used)
@@ -498,73 +503,6 @@ fn extract_hyperlink(options: &clap::ArgMatches) -> bool {
     }
 }
 
-/// Match the argument given to --quoting-style or the [`QUOTING_STYLE`] env variable.
-///
-/// # Arguments
-///
-/// * `style`: the actual argument string
-/// * `show_control` - A boolean value representing whether to show control characters.
-///
-/// # Returns
-///
-/// * An option with None if the style string is invalid, or a `QuotingStyle` wrapped in `Some`.
-struct QuotingStyleSpec {
-    style: QuotingStyle,
-    fixed_control: bool,
-    locale: Option<LocaleQuoting>,
-}
-
-impl QuotingStyleSpec {
-    fn new(style: QuotingStyle) -> Self {
-        Self {
-            style,
-            fixed_control: false,
-            locale: None,
-        }
-    }
-
-    fn with_locale(style: QuotingStyle, locale: LocaleQuoting) -> Self {
-        Self {
-            style,
-            fixed_control: true,
-            locale: Some(locale),
-        }
-    }
-}
-fn match_quoting_style_name(
-    style: &str,
-    show_control: bool,
-) -> Option<(QuotingStyle, Option<LocaleQuoting>)> {
-    let spec = match style {
-        "literal" => QuotingStyleSpec::new(QuotingStyle::Literal {
-            show_control: false,
-        }),
-        "shell" => QuotingStyleSpec::new(QuotingStyle::SHELL),
-        "shell-always" => QuotingStyleSpec::new(QuotingStyle::SHELL_QUOTE),
-        "shell-escape" => QuotingStyleSpec::new(QuotingStyle::SHELL_ESCAPE),
-        "shell-escape-always" => QuotingStyleSpec::new(QuotingStyle::SHELL_ESCAPE_QUOTE),
-        "c" => QuotingStyleSpec::new(QuotingStyle::C_DOUBLE),
-        "escape" => QuotingStyleSpec::new(QuotingStyle::C_NO_QUOTES),
-        "locale" => QuotingStyleSpec {
-            style: QuotingStyle::Literal {
-                show_control: false,
-            },
-            fixed_control: true,
-            locale: Some(LocaleQuoting::Single),
-        },
-        "clocale" => QuotingStyleSpec::with_locale(QuotingStyle::C_DOUBLE, LocaleQuoting::Double),
-        _ => return None,
-    };
-
-    let style = if spec.fixed_control {
-        spec.style
-    } else {
-        spec.style.show_control(show_control)
-    };
-
-    Some((style, spec.locale))
-}
-
 /// Extracts the quoting style to use based on the options provided.
 /// If no options are given, it looks if a default quoting style is provided
 /// through the [`QUOTING_STYLE`] environment variable.
@@ -581,39 +519,32 @@ fn extract_quoting_style(
     options: &clap::ArgMatches,
     show_control: bool,
     mode: ProgramMode,
-) -> (QuotingStyle, Option<LocaleQuoting>) {
+) -> QuotingStyle {
     let opt_quoting_style = options.get_one::<String>(QUOTING_STYLE);
 
     if let Some(style) = opt_quoting_style {
-        match match_quoting_style_name(style, show_control) {
-            Some(pair) => pair,
+        match QuotingStyle::parse(style) {
+            Some(qs) => qs.show_control(show_control),
             None => unreachable!("Should have been caught by Clap"),
         }
     } else if options.get_flag(options::quoting::LITERAL) {
-        (QuotingStyle::Literal { show_control }, None)
+        QuotingStyle::Literal { show_control }
     } else if options.get_flag(options::quoting::ESCAPE) {
-        (QuotingStyle::C_NO_QUOTES, None)
+        QuotingStyle::Escape
     } else if options.get_flag(options::quoting::C) {
-        (QuotingStyle::C_DOUBLE, None)
+        QuotingStyle::C_DOUBLE
     } else {
         // If set, the QUOTING_STYLE environment variable specifies a default style.
-        if let Ok(style) = std::env::var("QUOTING_STYLE") {
-            if let Some(pair) = match_quoting_style_name(style.as_str(), show_control) {
-                return pair;
-            }
-            let _ = writeln!(
-                io::stderr(),
-                "{}",
-                translate!("ls-invalid-quoting-style", "program" => std::env::args().next().unwrap_or_else(|| "ls".to_string()), "style" => style)
-            );
+        if let Some(qs) = quoting_style_from_env() {
+            return qs.show_control(show_control);
         }
 
         match mode {
-            ProgramMode::Dir | ProgramMode::Vdir => (QuotingStyle::C_NO_QUOTES, None),
-            ProgramMode::Ls if !options.get_flag(options::DIRED) && stdout().is_terminal() => {
-                (QuotingStyle::SHELL_ESCAPE.show_control(show_control), None)
+            ProgramMode::Dir | ProgramMode::Vdir => QuotingStyle::Escape,
+            ProgramMode::Ls if stdout().is_terminal() => {
+                QuotingStyle::SHELL_ESCAPE.show_control(show_control)
             }
-            ProgramMode::Ls => (QuotingStyle::Literal { show_control }, None),
+            ProgramMode::Ls => QuotingStyle::Literal { show_control },
         }
     }
 }
@@ -744,6 +675,11 @@ impl Config {
         // requested. This makes it distinct from the --format=singe-column option,
         // which always applies.
         //
+        // --dired (-D) implies long format the same way -g, -o and -n do: it
+        // wins over earlier format options, loses to later ones, and a -1
+        // after it has no effect. Whether dired output is actually emitted is
+        // decided below, once the final format is known.
+        //
         // The idea here is to not let these options override with the other
         // options, but manually whether they have an index that's greater than
         // the other format options. If so, we set the appropriate format.
@@ -756,6 +692,7 @@ impl Config {
                 options::format::LONG_NO_GROUP,
                 options::format::LONG_NUMERIC_UID_GID,
                 options::FULL_TIME,
+                options::DIRED,
             ]
             .iter()
             .filter_map(|opt| {
@@ -855,8 +792,7 @@ impl Config {
                 || !stdout().is_terminal()
         };
 
-        let (mut quoting_style, mut locale_quoting) =
-            extract_quoting_style(options, show_control, mode);
+        let mut quoting_style = extract_quoting_style(options, show_control, mode);
         let indicator_style = extract_indicator_style(options);
 
         let mut ignore_patterns: Vec<Pattern> = Vec::new();
@@ -925,52 +861,29 @@ impl Config {
             options::quoting::LITERAL,
         ];
         let get_last = |flag: &str| -> usize {
-            if options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine) {
-                options.index_of(flag).unwrap_or(0)
-            } else {
-                0
-            }
+            (options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine))
+                .then(|| options.index_of(flag))
+                .flatten()
+                .unwrap_or(0)
         };
-        if get_last(options::ZERO)
-            > zero_formats_opts
-                .into_iter()
-                .map(get_last)
-                .max()
-                .unwrap_or(0)
-        {
-            format = if explicit_long {
-                format
-            } else {
-                Format::OneLine
-            };
+        let zero_idx = get_last(options::ZERO);
+        let last_of =
+            |flag_list: &[&str]| flag_list.iter().copied().map(get_last).max().unwrap_or(0);
+
+        if zero_idx > last_of(&zero_formats_opts) && !explicit_long {
+            format = Format::OneLine;
         }
-        if get_last(options::ZERO)
-            > zero_colors_opts
-                .into_iter()
-                .map(get_last)
-                .max()
-                .unwrap_or(0)
-        {
+
+        if zero_idx > last_of(&zero_colors_opts) {
             needs_color = false;
         }
-        if get_last(options::ZERO)
-            > zero_show_control_opts
-                .into_iter()
-                .map(get_last)
-                .max()
-                .unwrap_or(0)
-        {
+
+        if zero_idx > last_of(&zero_show_control_opts) {
             show_control = true;
         }
-        if get_last(options::ZERO)
-            > zero_quoting_style_opts
-                .into_iter()
-                .map(get_last)
-                .max()
-                .unwrap_or(0)
-        {
+
+        if zero_idx > last_of(&zero_quoting_style_opts) {
             quoting_style = QuotingStyle::Literal { show_control };
-            locale_quoting = None;
         }
 
         if needs_color && let Err(err) = validate_ls_colors_env() {
@@ -993,13 +906,13 @@ impl Config {
             None
         };
 
-        let dired = options.get_flag(options::DIRED);
-        if dired || is_dired_arg_present() {
-            // --dired implies --format=long
-            // if we have --dired --hyperlink, we don't show dired but we still want to see the
-            // long format
-            format = Format::Long;
-        }
+        // Hyperlinks enabled after the last --dired cancel the dired output,
+        // and a --dired after --hyperlink disables them again. Dired output
+        // also requires the final format to be long: a later -C, -x, -m or
+        // --format= cancels it.
+        let dired_idx = get_last(options::DIRED);
+        let hyperlink = hyperlink && get_last(options::HYPERLINK) > dired_idx;
+        let dired = dired_idx > 0 && format == Format::Long && !hyperlink;
         if dired && options.get_flag(options::ZERO) {
             return Err(Box::new(LsError::DiredAndZeroAreIncompatible));
         }
@@ -1057,7 +970,6 @@ impl Config {
             width,
             quoting_style,
             show_control_chars: options.get_flag(options::SHOW_CONTROL_CHARS),
-            locale_quoting,
             indicator_style,
             time_format_recent,
             time_format_older,
@@ -1072,6 +984,19 @@ impl Config {
             hyperlink,
             tab_size: tab_size.unwrap_or(SPACES_IN_TAB),
         })
+    }
+
+    /// Check if leading info (inode and/or block size) should be displayed
+    #[inline]
+    pub(crate) fn should_display_leading_info(&self) -> bool {
+        #[cfg(unix)]
+        {
+            self.inode || self.alloc_size
+        }
+        #[cfg(not(unix))]
+        {
+            self.alloc_size
+        }
     }
 }
 
@@ -1113,6 +1038,16 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                 &field
             };
 
+            // Resolve only unique prefixes, leaving ambiguous or invalid values
+            // unchanged so they produce the existing time-style error.
+            let mut styles = ["full-iso", "long-iso", "iso", "locale"]
+                .into_iter()
+                .filter(|style| style.starts_with(field));
+            let field = match (styles.next(), styles.next()) {
+                (Some(style), None) => style,
+                _ => field,
+            };
+
             match field {
                 "full-iso" => ok((format::FULL_ISO, None)),
                 "long-iso" => ok((format::LONG_ISO, None)),
@@ -1125,13 +1060,14 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                 // `field` can be empty here (e.g. --time-style=posix-), so test
                 // the prefix instead of unwrapping the first char.
                 _ if field.starts_with('+') => {
-                    // recent/older formats are (optionally) separated by a newline
-                    let mut it = field[1..].split('\n');
-                    let recent = it.next().unwrap_or_default();
-                    let older = it.next();
-                    match it.next() {
-                        None => ok((recent, older)),
-                        Some(_) => Err(LsError::TimeStyleParseError(String::from(field))),
+                    // Formats are (optionally) separated by a newline:
+                    // FORMAT1 NEWLINE FORMAT2 -> FORMAT1 for older files, FORMAT2 for recent.
+                    // A single format applies to all files (stored as recent).
+                    let formats: Vec<_> = field[1..].split('\n').collect();
+                    match formats.as_slice() {
+                        [format] => ok((*format, None)),
+                        [older, recent] => ok((*recent, Some(*older))),
+                        _ => Err(LsError::TimeStyleParseError(String::from(field))),
                     }
                 }
                 _ => Err(LsError::TimeStyleParseError(String::from(field))),

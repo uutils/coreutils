@@ -61,9 +61,11 @@ static TEST_MOUNT_MOUNTPOINT: &str = "mount";
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
 static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
-#[cfg(all(
-    unix,
-    not(any(target_vendor = "apple", target_os = "android", target_os = "openbsd"))
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "netbsd"
 ))]
 use uutests::util::compare_xattrs;
 
@@ -506,6 +508,55 @@ fn test_cp_arg_update_none() {
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
 
+#[cfg(unix)]
+#[rstest]
+#[case::no_clobber("-n", true)]
+#[case::update_none("--update=none", true)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so required mode/ownership preservation always fails"
+)]
+#[case::archive_no_clobber("-an", true)]
+#[case::declined_prompt("-i", false)]
+fn test_cp_recursive_continues_after_skipped_file(#[case] arg: &str, #[case] succeeds: bool) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("source");
+    at.mkdir_all("destination/source");
+    at.write("source/first", "first contents");
+    at.write("source/second", "second contents");
+    // Skip whichever file the traversal reaches first, so the other one comes after it.
+    let order = walkdir::WalkDir::new(at.plus("source"))
+        .min_depth(1)
+        .into_iter()
+        .map(|entry| entry.unwrap().file_name().to_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    let (skipped, copied) = (&order[0], &order[1]);
+    at.write(&format!("destination/source/{skipped}"), "old contents");
+
+    ucmd.args(&["-R", arg, "source", "destination"]);
+    // Only the prompt reads stdin; writing to a cp that never reads it can fail.
+    if !succeeds {
+        ucmd.pipe_in("n\n");
+    }
+    let result = ucmd.run();
+    if succeeds {
+        result.success().no_output();
+    } else {
+        result
+            .code_is(1)
+            .stderr_is(format!("cp: overwrite 'destination/source/{skipped}'? "));
+    }
+
+    assert_eq!(
+        at.read(&format!("destination/source/{skipped}")),
+        "old contents"
+    );
+    assert_eq!(
+        at.read(&format!("destination/source/{copied}")),
+        at.read(&format!("source/{copied}"))
+    );
+}
+
 #[test]
 fn test_cp_arg_update_none_fail() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -902,6 +953,33 @@ fn test_cp_arg_link_with_same_file() {
 
     assert_eq!(at.metadata(file).st_nlink(), 1);
     assert!(at.file_exists(file));
+}
+
+// A hard link shares the source's inode, so `cp --link` must not change the
+// mode of the file it links to.
+#[test]
+// Android's app-private filesystem refuses hard links.
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_cp_arg_link_keeps_source_mode() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("src", "a");
+    at.set_mode("src", 0o755);
+    scene
+        .ucmd()
+        .umask(0o077)
+        .args(&["-l", "src", "lnk"])
+        .succeeds();
+    assert_eq!(at.metadata("src").permissions().mode() & 0o777, 0o755);
+
+    at.write("orig", "a");
+    at.set_mode("orig", 0o600);
+    at.write("dest", "b");
+    at.set_mode("dest", 0o777);
+    scene.ucmd().args(&["-lf", "orig", "dest"]).succeeds();
+    assert_eq!(at.metadata("orig").permissions().mode() & 0o777, 0o600);
+    assert_eq!(at.metadata("dest").permissions().mode() & 0o777, 0o600);
 }
 
 #[test]
@@ -2040,6 +2118,187 @@ fn test_cp_parents_with_permissions_copy_dir() {
         assert_metadata_eq!(p2_metadata, at.metadata("dir/p1/p2"));
         assert_metadata_eq!(file_metadata, at.metadata("dir/p1/p2/file"));
     }
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so source modes cannot be set up"
+)]
+fn test_cp_parents_created_dirs_take_source_mode() {
+    // Without -p, a directory that --parents creates gets the mode of the
+    // source directory it stands for, filtered through the umask, whether
+    // the operand is a file or a directory. --no-preserve=mode gives it the
+    // default mode instead.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("a/b/sub");
+    at.touch("a/b/f");
+    at.touch("a/b/sub/f");
+    at.mkdir("ro");
+    at.touch("ro/f");
+    at.set_mode("a", 0o777);
+    at.set_mode("a/b", 0o700);
+    at.set_mode("ro", 0o500);
+    for dest in ["file", "dir", "default"] {
+        at.mkdir(dest);
+    }
+
+    scene
+        .ucmd()
+        .umask(0o022)
+        .args(&["--parents", "a/b/f", "ro/f", "file"])
+        .succeeds();
+    scene
+        .ucmd()
+        .umask(0o022)
+        .args(&["-r", "--parents", "a/b/sub", "dir"])
+        .succeeds();
+    scene
+        .ucmd()
+        .umask(0o022)
+        .args(&["--parents", "--no-preserve=mode", "a/b/f", "default"])
+        .succeeds();
+
+    for (path, mode) in [
+        ("file/a", 0o755),
+        ("file/a/b", 0o700),
+        // Created writable for the copy, then given the source's mode.
+        ("file/ro", 0o500),
+        ("dir/a", 0o755),
+        ("dir/a/b", 0o700),
+        ("default/a", 0o755),
+        ("default/a/b", 0o755),
+    ] {
+        assert_eq!(
+            at.metadata(path).permissions().mode() & 0o7777,
+            mode,
+            "{path}"
+        );
+    }
+    assert!(at.file_exists("file/ro/f"));
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so source modes cannot be set up"
+)]
+fn test_cp_parents_existing_dirs() {
+    // Directories already in the destination keep their attributes when
+    // --parents has nothing to create. Once it creates one, -a/-p refreshes
+    // the whole path from the source, existing directories included, while a
+    // copy that does not preserve the mode still leaves them alone.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("a/b/sub");
+    at.mkdir("a/sub");
+    at.touch("a/f");
+    at.touch("a/b/f");
+    at.touch("a/sub/f");
+    at.set_mode("a", 0o777);
+    at.set_mode("a/b", 0o750);
+    for dest in ["none_file", "none_dir", "new_file", "new_dir", "new_plain"] {
+        at.mkdir_all(&format!("{dest}/a"));
+        at.set_mode(&format!("{dest}/a"), 0o700);
+    }
+
+    for args in [
+        &["-a", "--parents", "a/f", "none_file"][..],
+        &["-a", "-r", "--parents", "a/sub", "none_dir"],
+        &["-a", "--parents", "a/b/f", "new_file"],
+        &["-a", "-r", "--parents", "a/b/sub", "new_dir"],
+        &["--parents", "a/b/f", "new_plain"],
+    ] {
+        scene.ucmd().umask(0o022).args(args).succeeds();
+    }
+
+    for (path, mode) in [
+        ("none_file/a", 0o700),
+        ("none_dir/a", 0o700),
+        ("new_file/a", 0o777),
+        ("new_file/a/b", 0o750),
+        ("new_dir/a", 0o777),
+        ("new_dir/a/b", 0o750),
+        ("new_plain/a", 0o700),
+        ("new_plain/a/b", 0o750),
+    ] {
+        assert_eq!(
+            at.metadata(path).permissions().mode() & 0o7777,
+            mode,
+            "{path}"
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so source modes cannot be set up"
+)]
+fn test_cp_parents_dirs_take_source_mode_when_copy_fails() {
+    // The --parents directories still get the source's mode when the copy
+    // stops part-way, and when a directory above the working directory is
+    // not searchable, so the source ancestors have no realpath.
+    if rustix::process::geteuid().is_root() {
+        return; // root ignores the permissions this relies on
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("p/w/a/b/sub");
+    at.mkdir("p/w/file");
+    at.mkdir("p/w/dir");
+    at.touch("p/w/a/b/f");
+    at.touch("p/w/a/b/sub/secret");
+    at.set_mode("p/w/a/b/sub/secret", 0);
+    at.set_mode("p/w/a", 0o750);
+    at.set_mode("p/w/a/b", 0o705);
+
+    // -d makes the unreadable file fatal, so the copy stops early.
+    scene
+        .ucmd()
+        .current_dir(at.plus("p/w"))
+        .umask(0o022)
+        .args(&["-r", "-d", "--parents", "a/b/sub", "dir"])
+        .fails();
+    scene
+        .cmd("sh")
+        .current_dir(at.plus("p/w"))
+        .umask(0o022)
+        .env("PATH", std::env::var_os("PATH").unwrap())
+        .args(&[
+            "-c",
+            "chmod 0 .. && \"$0\" cp --parents a/b/f file; s=$?; chmod 755 ..; exit $s",
+        ])
+        .arg(&scene.bin_path)
+        .succeeds();
+
+    for (path, mode) in [
+        ("p/w/dir/a", 0o750),
+        ("p/w/dir/a/b", 0o705),
+        ("p/w/file/a", 0o750),
+        ("p/w/file/a/b", 0o705),
+    ] {
+        assert_eq!(
+            at.metadata(path).permissions().mode() & 0o7777,
+            mode,
+            "{path}"
+        );
+    }
+    assert!(at.file_exists("p/w/file/a/b/f"));
+}
+
+#[test]
+fn test_cp_parents_failed_source_creates_nothing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    at.mkdir("d");
+    ucmd.args(&["--parents", "f/g", "missing/x", "d"]).fails();
+    assert!(!at.dir_exists("d/f"));
+    assert!(!at.dir_exists("d/missing"));
 }
 
 #[test]
@@ -5480,9 +5739,11 @@ fn test_cp_no_such() {
         .stderr_is("cp: 'no-such/' is not a directory\n");
 }
 
-#[cfg(all(
-    unix,
-    not(any(target_vendor = "apple", target_os = "android", target_os = "openbsd"))
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "netbsd"
 ))]
 #[test]
 #[cfg_attr(
@@ -6219,9 +6480,9 @@ fn test_cp_no_dereference_attributes_only_with_symlink() {
         "file2 content does not match expected"
     );
 }
+/// contains the test for cp when the source and destination points to the same file
 #[cfg(all(unix, not(target_os = "android")))]
 #[cfg(test)]
-/// contains the test for cp when the source and destination points to the same file
 mod same_file {
 
     use std::os::unix::fs::MetadataExt;
@@ -7940,9 +8201,11 @@ fn test_cp_no_file() {
 }
 
 #[test]
-#[cfg(all(
-    unix,
-    not(any(target_vendor = "apple", target_os = "android", target_os = "openbsd"))
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "netbsd"
 ))]
 fn test_cp_preserve_xattr_readonly_source() {
     use std::process::Command;
@@ -9548,6 +9811,76 @@ fn test_cp_xattr_failure_keeps_dest_contents() {
     std_fs::remove_file(&source).ok();
     set_permissions(&out_ro, std_fs::Permissions::from_mode(0o644)).ok();
     std_fs::remove_dir_all(&dest_dir).ok();
+}
+
+/// An xattr the destination refuses must not stop the other xattrs from being
+/// copied. cp still reports the failure and exits 1. tmpfs takes large values
+/// while ext4 caps a value at one block, so the large attributes fail there
+/// and the small ones must survive.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/shm) not visible"
+)]
+fn test_cp_preserve_xattr_failure_keeps_the_rest() {
+    use rustc_hash::FxHashMap;
+    use std::ffi::OsStr;
+    use tempfile::TempDir;
+    use uucore::fsxattr::{apply_xattrs, retrieve_xattrs};
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let too_big = vec![b'x'; 8000];
+    at.touch("probe");
+    let probe = FxHashMap::from_iter([(OsString::from("user.probe"), too_big.clone())]);
+    if apply_xattrs(at.plus("probe"), probe).is_ok() {
+        println!("test skipped: the destination filesystem accepts large xattr values");
+        return;
+    }
+
+    // tmpfs lists attributes sorted by name, so interleaving the names puts a
+    // refused attribute before a kept one whichever way the list is sorted.
+    let attrs: FxHashMap<OsString, Vec<u8>> = [
+        ("user.a_kept", b"first".to_vec()),
+        ("user.b_too_big", too_big.clone()),
+        ("user.c_kept", b"middle".to_vec()),
+        ("user.d_too_big", too_big),
+        ("user.e_kept", b"last".to_vec()),
+    ]
+    .into_iter()
+    .map(|(name, value)| (OsString::from(name), value))
+    .collect();
+
+    let src_dir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let file = src_dir.path().join("file");
+    let dir = src_dir.path().join("dir");
+    std_fs::write(&file, "content").unwrap();
+    std_fs::create_dir(&dir).unwrap();
+    if apply_xattrs(&file, attrs.clone()).is_err() {
+        println!("test skipped: /dev/shm does not accept user xattrs");
+        return;
+    }
+    apply_xattrs(&dir, attrs.clone()).unwrap();
+
+    // A regular file is copied through file descriptors, a directory by path.
+    for (src, dest) in [(&file, "file"), (&dir, "dir")] {
+        scene
+            .ucmd()
+            .args(&["-r", "--preserve=xattr"])
+            .arg(src)
+            .arg(dest)
+            .fails_with_code(1)
+            .stderr_contains(format!("cp: setting attributes for '{dest}"));
+
+        let copied = retrieve_xattrs(at.plus(dest)).unwrap();
+        for name in ["user.a_kept", "user.c_kept", "user.e_kept"] {
+            let name = OsStr::new(name);
+            assert_eq!(copied.get(name), attrs.get(name), "{name:?} on {dest}");
+        }
+    }
 }
 
 #[test]

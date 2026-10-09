@@ -3,11 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED Fsize SIGXFSZ sighandler
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED Fsize SIGXFSZ rusage maxrss cdefg ncdefg cdefh
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
+#[cfg(all(unix, not(target_os = "redox")))]
+use uutests::util::pty_path;
 #[cfg(all(unix, not(feature = "selinux")))]
 use uutests::util::run_ucmd_as_root_with_stdin_stdout;
 #[cfg(not(windows))]
@@ -173,6 +175,19 @@ fn test_huge_obs_reports_memory_error_instead_of_aborting() {
         .arg("obs=1PB")
         .fails_with_code(1)
         .stderr_contains("memory");
+}
+
+#[test]
+// A petabyte `cbs` does not fit in a 32-bit `usize`.
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+fn test_huge_cbs_pads_without_allocating() {
+    // Regression test for #14814: a valid but huge `cbs` used to abort; like GNU,
+    // the padding is written as it goes, until /dev/full refuses it.
+    new_ucmd!()
+        .args(&["conv=block", "cbs=1PB", "of=/dev/full"])
+        .pipe_in("x\n")
+        .fails_with_code(1)
+        .stderr_contains("No space left on device");
 }
 
 #[test]
@@ -722,6 +737,21 @@ fn test_seek_bytes() {
         .stdout_is("\0\0\0\0\0\0\0\0abcdefghijklm\n");
 }
 
+#[cfg(all(unix, not(target_os = "redox")))]
+#[test]
+fn test_seek_zero_on_non_seekable_output() {
+    for args in [&["status=none"][..], &["seek=0", "status=none"][..]] {
+        let (path, _controller, _replica) = pty_path();
+
+        new_ucmd!()
+            .arg(of!(path))
+            .args(args)
+            .pipe_in("hello\n")
+            .succeeds()
+            .no_output();
+    }
+}
+
 /// Test for skipping beyond the number of bytes in a file.
 #[test]
 fn test_skip_beyond_file() {
@@ -800,6 +830,26 @@ fn test_partial_records_out() {
 }
 
 #[test]
+fn test_block_record_across_reads() {
+    // With ibs=2, each record spans several reads.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "1234\n56\n123456789\n78");
+    ucmd.args(&["if=in", "conv=block", "cbs=6", "ibs=2", "obs=2"])
+        .succeeds()
+        .stdout_is("1234  56    12345678    ")
+        .stderr_contains("1 truncated record");
+}
+
+#[test]
+fn test_block_keeps_trailing_record_of_spaces() {
+    new_ucmd!()
+        .args(&["conv=block", "cbs=4"])
+        .pipe_in("ab\n  ")
+        .succeeds()
+        .stdout_is("ab      ");
+}
+
+#[test]
 fn test_block_cbs16() {
     new_ucmd!()
         .args(&["conv=block", "cbs=16"])
@@ -863,6 +913,25 @@ fn test_etoa_conv_spec_test() {
 }
 
 #[test]
+fn test_etoa_and_lcase() {
+    // "Hello, World!" in EBCDIC.
+    new_ucmd!()
+        .args(&["conv=ascii,lcase", "status=none"])
+        .pipe_in(b"\xc8\x85\x93\x93\x96\x6b\x40\xe6\x96\x99\x93\x84\x5a".to_vec())
+        .succeeds()
+        .stdout_only_bytes(b"hello, world!");
+}
+
+#[test]
+fn test_etoa_and_ucase() {
+    new_ucmd!()
+        .args(&["conv=ascii,ucase", "status=none"])
+        .pipe_in(b"\xc8\x85\x93\x93\x96\x6b\x40\xe6\x96\x99\x93\x84\x5a".to_vec())
+        .succeeds()
+        .stdout_only_bytes(b"HELLO, WORLD!");
+}
+
+#[test]
 fn test_atoibm_conv_spec_test() {
     new_ucmd!()
         .args(&["conv=ibm"])
@@ -907,24 +976,13 @@ fn test_atoe_and_lcase_conv_spec_test() {
         .stdout_is_fixture_bytes("lcase-ebcdic.test");
 }
 
-// TODO I think uppercase and lowercase are unintentionally swapped in
-// the code that parses the command-line arguments. See this line from
-// `parseargs.rs`:
-//
-//     (ConvFlag::FmtAtoI, ConvFlag::UCase) => Some(&ASCII_TO_IBM_UCASE_TO_LCASE),
-//     (ConvFlag::FmtAtoI, ConvFlag::LCase) => Some(&ASCII_TO_IBM_LCASE_TO_UCASE),
-//
-// If my reading is correct and that is a typo, then the
-// UCASE_TO_LCASE and LCASE_TO_UCASE in those lines should be swapped,
-// and the expected output for the following two tests should be
-// updated accordingly.
 #[test]
 fn test_atoibm_and_ucase_conv_spec_test() {
     new_ucmd!()
         .args(&["conv=ibm,ucase"])
         .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
         .succeeds()
-        .stdout_is_fixture_bytes("lcase-ibm.test");
+        .stdout_is_fixture_bytes("ucase-ibm.test");
 }
 
 #[test]
@@ -933,7 +991,7 @@ fn test_atoibm_and_lcase_conv_spec_test() {
         .args(&["conv=ibm,lcase"])
         .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
         .succeeds()
-        .stdout_is_fixture_bytes("ucase-ibm.test");
+        .stdout_is_fixture_bytes("lcase-ibm.test");
 }
 
 #[test]
@@ -1274,6 +1332,24 @@ fn test_block_sync() {
         // blocks:    1    2    3
         .stdout_is("012  abcde     ")
         .stderr_is("2+1 records in\n0+1 records out\n1 truncated record\n");
+}
+
+#[test]
+fn test_block_sync_small_ibs() {
+    // With ibs=3, "cdefg" spans two reads, and the last read "h" is padded
+    // with spaces by sync before being blocked.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "ab\ncdefg\nh");
+    ucmd.args(&[
+        "if=in",
+        "ibs=3",
+        "cbs=4",
+        "conv=block,sync",
+        "status=noxfer",
+    ])
+    .succeeds()
+    .stdout_is("ab  cdefh   ")
+    .stderr_is("3+1 records in\n0+1 records out\n1 truncated record\n");
 }
 
 #[test]
@@ -1866,6 +1942,40 @@ fn test_iflag_direct_read_uses_aligned_buffer() {
     assert_eq!(at.read_bytes("direct-out.bin"), data);
 }
 
+// `dd` has to accept a `bs=` far larger than the data it will copy, the way
+// GNU dd does, so the copy buffer must not fault in its pages.
+#[test]
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+fn test_large_bs_does_not_fault_in_copy_buffer() {
+    // `wait4` reports the peak RSS of this one child, so a test running in
+    // parallel cannot inflate the reading the way `/proc/self` would.
+    fn peak_rss_kib(bs: &str) -> i64 {
+        let child = Command::new(get_tests_binary())
+            .args(["dd", bs, "if=/dev/null", "of=/dev/null"])
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let pid = child.id() as libc::pid_t;
+        // Dropping a `Child` does not reap it, so `wait4` still finds it.
+        drop(child);
+
+        let mut status = 0;
+        let mut usage: libc::rusage = unsafe { std::mem::zeroed() };
+        assert_eq!(
+            unsafe { libc::wait4(pid, &raw mut status, 0, &raw mut usage) },
+            pid
+        );
+        assert_eq!(status, 0, "dd {bs} exited with status {status}");
+        usage.ru_maxrss
+    }
+
+    let growth = peak_rss_kib("bs=4G") - peak_rss_kib("bs=4K");
+    assert!(
+        growth < 64 << 10,
+        "a 4 GiB copy buffer raised peak RSS by {growth} KiB"
+    );
+}
+
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
@@ -2305,33 +2415,42 @@ fn test_count_bytes_with_expanding_block_conv() {
 fn test_stats_are_reported_when_a_write_fails() {
     use rustix::process::Resource;
 
-    // Restores the previous SIGXFSZ disposition even if an assertion panics.
-    struct SigxfszGuard(libc::sighandler_t);
-    impl Drop for SigxfszGuard {
-        fn drop(&mut self) {
-            // SAFETY: restoring the disposition saved below.
-            unsafe { libc::signal(libc::SIGXFSZ, self.0) };
-        }
-    }
-
     const CAP: u64 = 768 * 1024;
-
-    // The child inherits the ignored SIGXFSZ, so exceeding RLIMIT_FSIZE shows
-    // up as a short write() instead of killing the process.
-    // SAFETY: signal() with SIG_IGN is async-signal-safe and the guard puts
-    // the old handler back.
-    let _sigxfsz = SigxfszGuard(unsafe { libc::signal(libc::SIGXFSZ, libc::SIG_IGN) });
 
     let (at, mut ucmd) = at_and_ucmd!();
     let result = ucmd
         .args(&["if=/dev/zero", "of=capped.bin", "bs=512K", "count=3"])
         .limit(Resource::Fsize, CAP, CAP)
+        .ignore_sigxfsz()
         .fails();
 
     // Under a 768 KiB cap, the first 512 KiB block is written in full, the
     // second one is cut short at 256 KiB, and the third write fails.
     result.stderr_contains("1+1 records out");
     result.stderr_contains("786432 bytes");
+    assert_eq!(at.metadata("capped.bin").len(), CAP);
+}
+
+// `conv=block` writes a huge record in several pieces: those written before
+// the error still count.
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+fn test_block_stats_are_reported_when_a_write_fails() {
+    use rustix::process::Resource;
+
+    const CAP: u64 = 200 * 1024;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd
+        .args(&["conv=block", "cbs=1M", "obs=64K", "of=capped.bin"])
+        .pipe_in("x\n")
+        .limit(Resource::Fsize, CAP, CAP)
+        .ignore_sigxfsz()
+        .fails();
+
+    // Three 64 KiB pieces are written in full, and the fourth one is cut short.
+    result.stderr_contains("3+1 records out");
+    result.stderr_contains("204800 bytes");
     assert_eq!(at.metadata("capped.bin").len(), CAP);
 }
 
