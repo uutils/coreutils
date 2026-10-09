@@ -108,11 +108,7 @@ struct Options<'a> {
     program: Vec<&'a OsStr>,
     argv0: Option<&'a OsStr>,
     #[cfg(all(unix, not(target_os = "fuchsia")))]
-    ignore_signal: SignalRequest,
-    #[cfg(all(unix, not(target_os = "fuchsia")))]
-    default_signal: SignalRequest,
-    #[cfg(all(unix, not(target_os = "fuchsia")))]
-    block_signal: SignalRequest,
+    signal_actions: Vec<(SignalActionKind, SignalRequest)>,
     #[cfg(all(unix, not(target_os = "fuchsia")))]
     list_signal_handling: bool,
 }
@@ -264,34 +260,48 @@ impl SignalActionLog {
 }
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
-fn build_signal_request(
+fn build_signal_actions(
     matches: &clap::ArgMatches,
-    option: &str,
     signal_apply_all: &BTreeSet<&str>,
-) -> UResult<SignalRequest> {
-    let mut request = SignalRequest::default();
-    let mut provided_values = 0usize;
+) -> UResult<Vec<(SignalActionKind, SignalRequest)>> {
+    let mut actions = Vec::new();
 
-    let mut explicit_empty = false;
-    if let Some(iter) = matches.get_many::<OsString>(option) {
-        for opt in iter {
+    for (option, action_kind) in [
+        (options::IGNORE_SIGNAL, SignalActionKind::Ignore),
+        (options::DEFAULT_SIGNAL, SignalActionKind::Default),
+        (options::BLOCK_SIGNAL, SignalActionKind::Block),
+    ] {
+        let (Some(values), Some(indices)) = (
+            matches.get_many::<OsString>(option),
+            matches.indices_of(option),
+        ) else {
+            continue;
+        };
+
+        for (opt, index) in values.zip(indices) {
+            let mut request = SignalRequest::default();
+
             if opt.is_empty() {
+                // An empty value means every signal only when the option was also used
+                // without a value; an empty value after the equals sign does nothing.
                 if !signal_apply_all.contains(option) {
-                    explicit_empty = true;
+                    continue;
                 }
-                continue;
+                request.apply_all = true;
+            } else {
+                parse_signal_opt(&mut request, opt)?;
             }
-            provided_values += 1;
-            parse_signal_opt(&mut request, opt)?;
+
+            actions.push((index, action_kind, request));
         }
     }
 
-    let present = matches.contains_id(option);
-    if present && provided_values == 0 && !explicit_empty {
-        request.apply_all = true;
-    }
+    actions.sort_by_key(|(index, _, _)| *index);
 
-    Ok(request)
+    Ok(actions
+        .into_iter()
+        .map(|(_, action_kind, request)| (action_kind, request))
+        .collect())
 }
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
@@ -794,24 +804,20 @@ impl EnvAppData {
         #[cfg(all(unix, not(target_os = "fuchsia")))]
         {
             let mut signal_action_log = SignalActionLog::default();
-            apply_signal_action(
-                &opts.default_signal,
-                &mut signal_action_log,
-                SignalActionKind::Default,
-                reset_signal,
-            )?;
-            apply_signal_action(
-                &opts.ignore_signal,
-                &mut signal_action_log,
-                SignalActionKind::Ignore,
-                ignore_signal,
-            )?;
-            apply_signal_action(
-                &opts.block_signal,
-                &mut signal_action_log,
-                SignalActionKind::Block,
-                block_signal,
-            )?;
+            // GNU applies the options in the order they are given, so the last one for a
+            // signal wins.
+            for (action_kind, request) in &opts.signal_actions {
+                apply_signal_action(
+                    request,
+                    &mut signal_action_log,
+                    *action_kind,
+                    match *action_kind {
+                        SignalActionKind::Default => reset_signal,
+                        SignalActionKind::Ignore => ignore_signal,
+                        SignalActionKind::Block => block_signal,
+                    },
+                )?;
+            }
             if opts.list_signal_handling {
                 list_signal_handling(&signal_action_log);
             }
@@ -972,11 +978,7 @@ fn make_options<'a>(
         .map(OsString::as_os_str);
 
     #[cfg(all(unix, not(target_os = "fuchsia")))]
-    let ignore_signal = build_signal_request(matches, options::IGNORE_SIGNAL, signal_apply_all)?;
-    #[cfg(all(unix, not(target_os = "fuchsia")))]
-    let default_signal = build_signal_request(matches, options::DEFAULT_SIGNAL, signal_apply_all)?;
-    #[cfg(all(unix, not(target_os = "fuchsia")))]
-    let block_signal = build_signal_request(matches, options::BLOCK_SIGNAL, signal_apply_all)?;
+    let signal_actions = build_signal_actions(matches, signal_apply_all)?;
     #[cfg(all(unix, not(target_os = "fuchsia")))]
     let list_signal_handling = matches.get_flag(options::LIST_SIGNAL_HANDLING);
 
@@ -989,11 +991,7 @@ fn make_options<'a>(
         program: vec![],
         argv0,
         #[cfg(all(unix, not(target_os = "fuchsia")))]
-        ignore_signal,
-        #[cfg(all(unix, not(target_os = "fuchsia")))]
-        default_signal,
-        #[cfg(all(unix, not(target_os = "fuchsia")))]
-        block_signal,
+        signal_actions,
         #[cfg(all(unix, not(target_os = "fuchsia")))]
         list_signal_handling,
     };
