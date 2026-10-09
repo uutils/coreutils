@@ -695,7 +695,11 @@ impl Dest {
         let Self::File(f, _) = self else {
             return Ok(());
         };
-        let pos = f.stream_position()?;
+        let pos = match f.stream_position() {
+            Ok(pos) => pos,
+            Err(e) if e.kind() == io::ErrorKind::NotSeekable => return Ok(()),
+            Err(e) => return Err(e),
+        };
         // `set_len()` can fail with EINVAL on special outputs such as
         // `/dev/null`; GNU ignores that. But on a regular file a
         // truncate failure (e.g. ENOSPC, read-only fs) means silent data
@@ -891,8 +895,10 @@ impl<'a> Output<'a> {
             Density::Dense
         };
         let mut dst = Dest::File(dst, density);
-        dst.seek(settings.seek, settings.obs)
-            .map_err_context(|| translate!("dd-error-failed-to-seek"))?;
+        if settings.seek > 0 {
+            dst.seek(settings.seek, settings.obs)
+                .map_err_context(|| translate!("dd-error-failed-to-seek"))?;
+        }
         Ok(Self { dst, settings })
     }
 
