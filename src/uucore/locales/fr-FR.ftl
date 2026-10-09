@@ -33,6 +33,7 @@ error-no-such-process = Aucun processus de ce type
 error-invalid-argument = Argument invalide
 error-is-a-directory-text = Est un répertoire
 error-is-a-directory = { $file }: { error-is-a-directory-text }
+error-too-many-symlink-levels = Trop de niveaux de liens symboliques
 
 # Actions communes
 action-copying = copie

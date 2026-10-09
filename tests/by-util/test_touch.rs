@@ -827,6 +827,25 @@ fn test_touch_system_fails() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: guest root is a writable preopen, not the protected system root"
+)]
+fn test_touch_explicit_time_on_root_owned_file_eperm() {
+    // Setting explicit timestamps on a file we do not own fails with EPERM
+    // (not EACCES), which GNU reports as "Operation not permitted" (#15020).
+    if rustix::process::geteuid().is_root() {
+        println!("Skipping test when running as root");
+        return;
+    }
+    new_ucmd!()
+        .args(&["-d", "2000-01-01", "/"])
+        .fails()
+        .stderr_only("touch: setting times of '/': Operation not permitted\n");
+}
+
+#[test]
 #[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: no FIFO support")]
 fn test_touch_fifo() {
@@ -937,6 +956,82 @@ fn test_touch_permission_denied_error_msg() {
     let full_path = at.plus_as_string(path_str);
     ucmd.arg(&full_path).fails().stderr_only(format!(
         "touch: cannot touch '{full_path}': Permission denied\n",
+    ));
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: host system file is not visible")]
+fn test_touch_existing_unwritable_file_error_msg() {
+    use std::fs::OpenOptions;
+    use std::path::Path;
+
+    let path = "/etc/passwd";
+    let write_error = OpenOptions::new().write(true).open(path).err();
+    if rustix::process::geteuid().is_root()
+        || !Path::new(path).is_file()
+        || write_error.as_ref().and_then(std::io::Error::raw_os_error)
+            != Some(rustix::io::Errno::ACCESS.raw_os_error())
+    {
+        println!("Skipping test without a protected system file");
+        return;
+    }
+
+    new_ucmd!()
+        .arg(path)
+        .fails()
+        .stderr_only("touch: cannot touch '/etc/passwd': Permission denied\n");
+    new_ucmd!()
+        .args(&["-d", "2000-01-01", path])
+        .fails()
+        .stderr_only("touch: cannot touch '/etc/passwd': Permission denied\n");
+    let result = new_ucmd!().args(&["-c", path]).fails();
+    assert!(matches!(
+        result.stderr_str(),
+        "touch: setting times of '/etc/passwd': Permission denied\n"
+            | "touch: setting times of '/etc/passwd': Operation not permitted\n"
+    ));
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: filesystem permissions differ")]
+fn test_touch_inaccessible_parent_error_msg() {
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::PermissionsExt;
+
+    if rustix::process::geteuid().is_root() {
+        println!("Skipping test when running as root");
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("private");
+    at.touch("private/file");
+    let dir = at.plus("private");
+    let file = at.plus("private/file");
+    set_permissions(&dir, Permissions::from_mode(0o000)).unwrap();
+
+    let default = ucmd.arg(&file).run();
+    let no_create = new_ucmd!().args(&["-c"]).arg(&file).run();
+    let no_deref = new_ucmd!().args(&["-h"]).arg(&file).run();
+
+    set_permissions(&dir, Permissions::from_mode(0o700)).unwrap();
+
+    default.failure();
+    default.stderr_only(format!(
+        "touch: cannot touch '{}': Permission denied\n",
+        file.display()
+    ));
+    no_create.failure();
+    no_create.stderr_only(format!(
+        "touch: setting times of '{}': Permission denied\n",
+        file.display()
+    ));
+    no_deref.failure();
+    no_deref.stderr_only(format!(
+        "touch: setting times of '{}': Permission denied\n",
+        file.display()
     ));
 }
 

@@ -37,7 +37,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use uucore::libc;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
@@ -455,6 +455,18 @@ fn create_without_truncate(path: &Path) -> std::io::Result<fs::File> {
         .open(path)
 }
 
+// GNU reports ordinary access failures as "cannot touch", while -c and -h
+// report failures to update timestamps as "setting times of".
+#[cfg(unix)]
+fn cannot_touch_on_access_error(opts: &Options, error: &Error) -> bool {
+    !opts.no_create && !opts.no_deref && error.raw_os_error() == Some(libc::EACCES)
+}
+
+#[cfg(not(unix))]
+fn cannot_touch_on_access_error(_opts: &Options, _error: &Error) -> bool {
+    false
+}
+
 /// Create or update the timestamp for a single file.
 ///
 /// # Arguments
@@ -484,9 +496,12 @@ fn touch_file(
 
     if let Err(e) = metadata_result {
         if e.kind() != ErrorKind::NotFound {
-            return Err(e.map_err_context(
-                || translate!("touch-error-setting-times-of", "filename" => filename.quote()),
-            ));
+            let context = if cannot_touch_on_access_error(opts, &e) {
+                translate!("touch-error-cannot-touch", "filename" => filename.quote())
+            } else {
+                translate!("touch-error-setting-times-of", "filename" => filename.quote())
+            };
+            return Err(e.map_err_context(|| context));
         }
 
         if opts.no_create {
@@ -625,15 +640,29 @@ fn update_times(
         }
 
         // Open write-only and use futimens to trigger IN_CLOSE_WRITE on Linux.
-        if try_futimens_via_write_fd(path, atime, mtime).is_ok() {
-            return Ok(());
-        }
+        let write_error = match try_futimens_via_write_fd(path, atime, mtime) {
+            Ok(()) => return Ok(()),
+            Err(e) => e,
+        };
         // The write-FD approach fails on special files such as FIFOs (the
         // write-only open returns ENXIO when there is no reader). Set the times
         // by path with utimensat, which never opens the file and so never
         // blocks — unlike filetime::set_file_times, which opens O_RDONLY and
         // would hang on a reader-less FIFO.
-        set_times_by_path(path, atime, mtime)
+        match set_times_by_path(path, atime, mtime) {
+            Ok(()) => Ok(()),
+            Err(e)
+                if e.kind() == ErrorKind::PermissionDenied
+                    && cannot_touch_on_access_error(opts, &write_error) =>
+            {
+                Err(write_error.map_err_context(
+                    || translate!("touch-error-cannot-touch", "filename" => path.quote()),
+                ))
+            }
+            Err(e) => Err(e.map_err_context(
+                || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
+            )),
+        }
     }
 
     #[cfg(not(unix))]
@@ -665,7 +694,7 @@ fn build_timestamps(atime: FileTime, mtime: FileTime) -> Timestamps {
 /// This never opens the file, so it does not block on special files such as
 /// FIFOs.
 #[cfg(all(unix, not(target_os = "redox")))]
-fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<()> {
+fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> std::io::Result<()> {
     let timestamps = build_timestamps(atime, mtime);
     rustix::fs::utimensat(
         rustix::fs::CWD,
@@ -674,7 +703,6 @@ fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<(
         rustix::fs::AtFlags::empty(),
     )
     .map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
-    .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
 }
 
 /// Set file times by path on Redox, which lacks `rustix::fs::utimensat`.
@@ -683,9 +711,8 @@ fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<(
 /// block on a reader-less FIFO, but Redox has no FIFO support so the FIFO
 /// edge case the `utimensat` path guards against does not arise here.
 #[cfg(target_os = "redox")]
-fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<()> {
+fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> std::io::Result<()> {
     set_file_times(path, atime, mtime)
-        .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
 }
 
 /// Set file times via file descriptor using `futimens`.

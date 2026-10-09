@@ -22,10 +22,10 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
 use std::time::SystemTime;
-use thiserror::Error;
 use uucore::diagnostics::OptionValue;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::fs::SYMLINK_FOLLOW_LIMIT;
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
 use uucore::line_ending::LineEnding;
 #[cfg(all(unix, not(target_os = "redox")))]
@@ -537,11 +537,11 @@ fn safe_du(
         }
 
         // Handle inodes
-        if let Some(inode) = this_stat.inode {
-            if seen_inodes.contains(&inode) && !options.count_links {
-                continue;
-            }
-            seen_inodes.insert(inode);
+        if let Some(inode) = this_stat.inode
+            && !seen_inodes.insert(inode)
+            && !options.count_links
+        {
+            continue;
         }
 
         // Process directories recursively
@@ -615,9 +615,6 @@ fn du_regular(
     ancestors: Option<&mut FxHashSet<FileInfo>>,
     symlink_depth: Option<usize>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
-    // Maximum symlink depth to prevent infinite loops
-    const MAX_SYMLINK_DEPTH: usize = 40;
-
     let mut default_ancestors = FxHashSet::default();
     let ancestors = ancestors.unwrap_or(&mut default_ancestors);
     let symlink_depth = symlink_depth.unwrap_or(0);
@@ -660,7 +657,7 @@ fn du_regular(
                         current_symlink_depth += 1;
 
                         // Check symlink depth limit
-                        if current_symlink_depth > MAX_SYMLINK_DEPTH {
+                        if current_symlink_depth > SYMLINK_FOLLOW_LIMIT {
                             print_tx.send(Err(io::Error::new(
                                 io::ErrorKind::InvalidData,
                                 "Too many levels of symbolic links",
@@ -704,14 +701,11 @@ fn du_regular(
                                 }
                             }
 
-                            if let Some(inode) = this_stat.inode {
-                                // Check if the inode has been seen before and if we should skip it
-                                if seen_inodes.contains(&inode) && !options.count_links {
-                                    // Skip further processing for this inode
-                                    continue;
-                                }
-                                // Mark this inode as seen
-                                seen_inodes.insert(inode);
+                            if let Some(inode) = this_stat.inode
+                                && !seen_inodes.insert(inode)
+                                && !options.count_links
+                            {
+                                continue;
                             }
 
                             if this_stat.metadata.is_dir() {
@@ -786,7 +780,7 @@ fn du_regular(
     Ok(my_stat)
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum DuError {
     #[error("{}", translate!("du-error-invalid-max-depth", "depth" => _0.quote()))]
     InvalidMaxDepthArg(String),
@@ -1204,11 +1198,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let stat = Stat::new(&path, None, &traversal_options);
         if let Ok(stat) = stat.as_ref()
             && let Some(inode) = stat.inode
+            && !traversal_options.count_links
+            && !seen_inodes.insert(inode)
         {
-            if !traversal_options.count_links && seen_inodes.contains(&inode) {
-                continue 'loop_file;
-            }
-            seen_inodes.insert(inode);
+            continue 'loop_file;
         }
 
         if use_safe_traversal {

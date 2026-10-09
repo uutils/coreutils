@@ -4,14 +4,11 @@
 // file that was distributed with this source code.
 
 use std::ffi::{OsStr, OsString};
-use thiserror::Error;
 use uucore::translate;
 
 /// Represents an error encountered while parsing a test expression
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum ParseErrorKind {
-    #[error("{}", translate!("test-error-expected-value"))]
-    ExpectedValue,
     #[error("{}", translate!("test-error-expected", "value" => .0))]
     Expected(String),
     #[error("{}", translate!("test-error-extra-argument", "argument" => .0))]
@@ -27,6 +24,12 @@ pub enum ParseErrorKind {
     InvalidFileDescriptor(String),
     #[error("{}", translate!("test-error-unary-operator-expected", "operator" => .0))]
     UnaryOperatorExpected(String),
+    #[error("{}", translate!("test-error-binary-operator-expected", "operator" => .0))]
+    BinaryOperatorExpected(String),
+    #[error("{}", translate!("test-error-expected-found", "expected" => .0, "found" => .1))]
+    ExpectedFound(String, String),
+    #[error("{}", translate!("test-error-does-not-accept-length", "operator" => .0))]
+    DoesNotAcceptLength(String),
 }
 
 /// Where in the original argument list an error occurred.
@@ -44,7 +47,7 @@ pub enum ErrorAt {
 }
 
 /// A parse or evaluation error, together with the position it points at.
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 #[error("{kind}")]
 pub struct ParseError {
     pub kind: ParseErrorKind,

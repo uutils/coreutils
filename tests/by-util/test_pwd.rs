@@ -34,6 +34,10 @@ fn test_ignores_non_option_arguments() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: spawns a host shell (sh) with host absolute paths, which the guest cannot access"
+)]
 fn test_deleted_dir() {
     use std::process::Command;
     use uutests::util::TestScenario;
@@ -86,24 +90,40 @@ fn symlinked_env() -> Env {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: runs from a subdirectory (via a symlinked cwd/PWD), which the guest maps only at its preopened root"
+)]
 fn test_symlinked_logical() {
     let mut env = symlinked_env();
     env.ucmd.arg("-L").succeeds().stdout_is(env.symdir + "\n");
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: runs from a subdirectory (via a symlinked cwd/PWD), which the guest maps only at its preopened root"
+)]
 fn test_symlinked_physical() {
     let mut env = symlinked_env();
     env.ucmd.arg("-P").succeeds().stdout_is(env.subdir + "\n");
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: runs from a subdirectory (via a symlinked cwd/PWD), which the guest maps only at its preopened root"
+)]
 fn test_symlinked_default() {
     let mut env = symlinked_env();
     env.ucmd.succeeds().stdout_is(env.subdir + "\n");
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: runs from a subdirectory (via a symlinked cwd/PWD), which the guest maps only at its preopened root"
+)]
 fn test_symlinked_default_posix() {
     let mut env = symlinked_env();
     env.ucmd
@@ -113,6 +133,10 @@ fn test_symlinked_default_posix() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: runs from a subdirectory (via a symlinked cwd/PWD), which the guest maps only at its preopened root"
+)]
 fn test_symlinked_default_posix_l() {
     let mut env = symlinked_env();
     env.ucmd
@@ -123,6 +147,10 @@ fn test_symlinked_default_posix_l() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: runs from a subdirectory (via a symlinked cwd/PWD), which the guest maps only at its preopened root"
+)]
 fn test_symlinked_default_posix_p() {
     let mut env = symlinked_env();
     env.ucmd
@@ -139,6 +167,10 @@ pub mod untrustworthy_pwd_var {
     use super::*;
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: runs from a subdirectory (via a symlinked cwd/PWD), which the guest maps only at its preopened root"
+    )]
     fn test_nonexistent_logical() {
         let (at, mut ucmd) = at_and_ucmd!();
         ucmd.arg("-L")
@@ -148,6 +180,10 @@ pub mod untrustworthy_pwd_var {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: runs from a subdirectory (via a symlinked cwd/PWD), which the guest maps only at its preopened root"
+    )]
     fn test_wrong_logical() {
         let mut env = symlinked_env();
         env.ucmd
@@ -158,6 +194,10 @@ pub mod untrustworthy_pwd_var {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: runs from a subdirectory (via a symlinked cwd/PWD), which the guest maps only at its preopened root"
+    )]
     fn test_redundant_logical() {
         let mut env = symlinked_env();
         env.ucmd
@@ -168,6 +208,10 @@ pub mod untrustworthy_pwd_var {
     }
 
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: runs from a subdirectory (via a symlinked cwd/PWD), which the guest maps only at its preopened root"
+    )]
     fn test_relative_logical() {
         let mut env = symlinked_env();
         env.ucmd
