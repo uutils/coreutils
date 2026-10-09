@@ -1237,6 +1237,7 @@ fn test_dash_operand_does_not_swallow_the_next_argument() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: reading a directory gives EBADF")]
 fn test_read_error_names_the_input() {
     let (at, mut ucmd) = uutests::at_and_ucmd!();
     at.mkdir("d");
