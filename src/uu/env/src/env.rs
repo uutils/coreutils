@@ -45,7 +45,7 @@ use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, strip_
 use uucore::line_ending::LineEnding;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::signals::{
-    ALL_SIGNALS, realtime_signal_bounds, signal_by_name_or_value, signal_name_by_value,
+    realtime_signal_bounds, signal_by_name_or_value, signal_name_by_value,
     signal_number_upper_bound,
 };
 use uucore::translate;
@@ -201,13 +201,13 @@ impl SignalRequest {
 
     fn for_each_signal<F>(&self, mut f: F) -> UResult<()>
     where
-        F: FnMut(usize, bool) -> UResult<()>,
+        F: FnMut(usize) -> UResult<()>,
     {
         if self.is_empty() {
             return Ok(());
         }
         for &sig in &self.signals {
-            f(sig, true)?;
+            f(sig)?;
         }
         if self.apply_all {
             for sig_value in 1..=signal_number_upper_bound() {
@@ -218,7 +218,7 @@ impl SignalRequest {
                 if sig_value == libc::SIGKILL as usize || sig_value == libc::SIGSTOP as usize {
                     continue;
                 }
-                f(sig_value, false)?;
+                f(sig_value)?;
             }
         }
         Ok(())
@@ -1069,7 +1069,7 @@ fn apply_signal_action<F>(
 where
     F: Fn(usize) -> UResult<()>,
 {
-    request.for_each_signal(|sig_value, _explicit| {
+    request.for_each_signal(|sig_value| {
         // On some platforms ALL_SIGNALS may contain values that are not valid in libc.
         // Skip those invalid ones and continue (GNU env also ignores undefined signals).
         if !signal_is_valid(sig_value) {
@@ -1179,9 +1179,8 @@ fn block_signal(sig: usize) -> UResult<()> {
 /// whether env was asked for that or inherited it, as GNU does.
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 fn list_signal_handling() {
-    let blocked = SigSet::thread_get_mask().unwrap_or_else(|_| SigSet::empty());
-    let last = realtime_signal_bounds().map_or(ALL_SIGNALS.len() - 1, |(_, rtmax)| rtmax);
-    for sig_value in 1..=last {
+    let mask = SigSet::thread_get_mask().unwrap_or_else(|_| SigSet::empty());
+    for sig_value in 1..=signal_number_upper_bound() {
         let Some(signal_name) = signal_name_by_value(sig_value) else {
             continue;
         };
@@ -1197,14 +1196,14 @@ fn list_signal_handling() {
                 && current.sa_sigaction == libc::SIG_IGN
         };
         // SAFETY: `sigismember` only reads the set it is given.
-        let blocked = unsafe { libc::sigismember(blocked.as_ref(), sig) == 1 };
-        let states: Vec<&str> = [(blocked, "BLOCK"), (ignored, "IGNORE")]
-            .into_iter()
-            .filter_map(|(set, state)| set.then_some(state))
-            .collect();
-        if !states.is_empty() {
-            eprintln!("{signal_name:<10} ({sig:2}): {}", states.join(","));
-        }
+        let blocked = unsafe { libc::sigismember(mask.as_ref(), sig) == 1 };
+        let state = match (blocked, ignored) {
+            (true, true) => "BLOCK,IGNORE",
+            (true, false) => "BLOCK",
+            (false, true) => "IGNORE",
+            (false, false) => continue,
+        };
+        eprintln!("{signal_name:<10} ({sig:2}): {state}");
     }
 }
 

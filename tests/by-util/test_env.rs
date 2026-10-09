@@ -1056,15 +1056,17 @@ fn test_env_list_signal_handling_states() {
 #[test]
 #[cfg(unix)]
 fn test_env_list_signal_handling_reports_inherited_ignore() {
-    // The listing is the state of the signals, not only what env changed.
-    // SIGUSR1 rather than SIGPIPE, which a spawned child gets reset.
-    let previous = unsafe { libc::signal(libc::SIGUSR1, libc::SIG_IGN) };
-    let result = new_ucmd!()
+    // The listing is the state of the signals, not only what env changed:
+    // the outer env ignores USR1, the inner one lists it. Tests share one
+    // process, so the disposition is changed in a child, not here.
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
         .env("PATH", PATH)
-        .args(&["--list-signal-handling", "true"])
-        .succeeds();
-    unsafe { libc::signal(libc::SIGUSR1, previous) };
-    result.stderr_contains(format!("USR1       ({:2}): IGNORE\n", libc::SIGUSR1));
+        .arg("--ignore-signal=USR1")
+        .arg(&ts.bin_path)
+        .args(&["env", "--list-signal-handling", "true"])
+        .succeeds()
+        .stderr_contains(format!("USR1       ({:2}): IGNORE\n", libc::SIGUSR1));
 }
 
 #[cfg(unix)]
