@@ -95,6 +95,7 @@ fn test_null_separator() {
 #[test]
 #[cfg(unix)]
 #[cfg(not(any(target_os = "freebsd", target_os = "android", target_os = "openbsd")))]
+#[cfg_attr(wasi_runner, ignore = "WASI: env values must be valid UTF-8")]
 fn test_non_utf8_value() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -121,6 +122,7 @@ fn test_non_utf8_value() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: env values must be valid UTF-8")]
 fn test_non_utf8_env_vars() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
