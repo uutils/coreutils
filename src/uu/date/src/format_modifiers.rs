@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore strtime Yhello
 
 //! GNU date format modifier support
@@ -19,7 +20,8 @@
 //! - `_`: Pad with spaces instead of zeros
 //! - `0`: Pad with zeros (default for numeric fields)
 //! - `^`: Convert to uppercase
-//! - `#`: Use opposite case (uppercase becomes lowercase and vice versa)
+//! - `#`: Swap the case of names; lowercase %p and %Z, even with `^`;
+//!   no effect on %c and %r (%P is always lowercase)
 //! - `+`: Force display of sign (+ for positive, - for negative)
 //!
 //! ### Width
@@ -391,10 +393,8 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
             }
             '^' => {
                 uppercase = true;
-                swap_case = false; // ^ overrides #
             }
-            '#' if !uppercase => {
-                // Only apply # if ^ hasn't been set
+            '#' => {
                 swap_case = true;
             }
             '+' => {
@@ -406,10 +406,14 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
         }
     }
 
-    // Apply case modifications (uppercase takes precedence over swap_case)
-    if uppercase {
+    // `#` only acts on names, %p and %Z; on %p and %Z it lowercases and wins
+    // over `^`. %P is always lowercase.
+    let conversion = specifier.chars().last();
+    if swap_case && matches!(conversion, Some('p' | 'Z')) {
+        result = result.to_lowercase();
+    } else if uppercase && conversion != Some('P') {
         result = result.to_uppercase();
-    } else if swap_case {
+    } else if swap_case && matches!(conversion, Some('a' | 'A' | 'b' | 'B' | 'h')) {
         if result
             .chars()
             .all(|c| !c.is_alphabetic() || c.is_uppercase())

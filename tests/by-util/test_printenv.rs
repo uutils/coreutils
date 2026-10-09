@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use uutests::new_ucmd;
 
 #[test]
@@ -26,7 +27,7 @@ fn test_get_var() {
 
 #[test]
 fn test_ignore_equal_var() {
-    // tested by gnu/tests/misc/printenv.sh
+    // Basic printenv functionality
     new_ucmd!().env("a=b", "c").arg("a=b").fails().no_stdout();
 }
 
@@ -94,6 +95,7 @@ fn test_null_separator() {
 #[test]
 #[cfg(unix)]
 #[cfg(not(any(target_os = "freebsd", target_os = "android", target_os = "openbsd")))]
+#[cfg_attr(wasi_runner, ignore = "WASI: env values must be valid UTF-8")]
 fn test_non_utf8_value() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -120,6 +122,7 @@ fn test_non_utf8_value() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: env values must be valid UTF-8")]
 fn test_non_utf8_env_vars() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;

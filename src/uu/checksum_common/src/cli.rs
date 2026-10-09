@@ -44,7 +44,7 @@ pub trait ChecksumCommand {
 
     fn with_binary(self) -> Self;
 
-    fn with_text(self, is_default: bool) -> Self;
+    fn with_text(self) -> Self;
 
     fn with_tag(self, is_default: bool) -> Self;
 
@@ -136,19 +136,15 @@ impl ChecksumCommand for Command {
         )
     }
 
-    fn with_text(self, is_default: bool) -> Self {
-        let mut arg = Arg::new(options::TEXT)
-            .long(options::TEXT)
-            .short('t')
-            .action(ArgAction::SetTrue);
-
-        arg = if is_default {
-            arg.help(translate!("ck-common-help-text"))
-        } else {
-            arg.hide(true)
-        };
-
-        self.arg(arg)
+    fn with_text(self) -> Self {
+        self.arg(
+            Arg::new(options::TEXT)
+                .long(options::TEXT)
+                .short('t')
+                // deliberately hide the unrecommended feature from all *sum even GNU hides it only from cksum
+                .hide(true)
+                .action(ArgAction::SetTrue),
+        )
     }
 
     fn with_tag(self, default: bool) -> Self {

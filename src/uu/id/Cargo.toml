@@ -18,9 +18,9 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-rustix = { workspace = true }
-uucore = { workspace = true, features = ["entries", "process"] }
 fluent = { workspace = true }
+rustix = { workspace = true, features = ["process"] }
+uucore = { workspace = true, features = ["entries", "process"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 selinux = { workspace = true, optional = true }
@@ -30,7 +30,7 @@ name = "id"
 path = "src/main.rs"
 
 [features]
-feat_selinux = ["selinux"]
+selinux = ["dep:selinux"]
 smack = ["uucore/smack"]
 
 [lints]

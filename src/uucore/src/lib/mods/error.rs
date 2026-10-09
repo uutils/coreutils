@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore uioerror rustdoc
+
 //! All utils return exit with an exit code. Usually, the following scheme is used:
 //! * `0`: succeeded
 //! * `1`: minor problems
@@ -52,8 +55,6 @@
 //! * Using [`ExitCode`] is not recommended but can be useful for converting utils to use
 //!   [`UResult`].
 
-// spell-checker:ignore uioerror rustdoc
-
 use std::{
     cell::Cell,
     error::Error,
@@ -91,6 +92,15 @@ pub fn get_exit_code() -> i32 {
 /// ```
 pub fn set_exit_code(code: i32) {
     EXIT_CODE.store(code, Ordering::SeqCst);
+}
+
+/// Print `<util>: <prefix><msg>` to stderr, used by [`crate::show!`] and friends.
+///
+/// stderr is unbuffered, so the line is formatted first and written at once.
+#[doc(hidden)]
+pub fn print_diagnostic(prefix: &str, msg: std::fmt::Arguments<'_>) {
+    let line = format!("{}: {prefix}{msg}\n", crate::util_name());
+    let _ = std::io::stderr().write_all(line.as_bytes());
 }
 
 /// Result type that should be returned by all utils.
@@ -296,6 +306,8 @@ pub struct USimpleError {
 
 impl USimpleError {
     /// Create a new `USimpleError` with a given exit code and message.
+    #[cold]
+    #[inline(never)]
     #[allow(clippy::new_ret_no_self)]
     pub fn new<S: Into<String>>(code: i32, message: S) -> Box<dyn UError> {
         Box::new(Self {
@@ -330,8 +342,10 @@ pub struct UUsageError {
 }
 
 impl UUsageError {
-    #[allow(clippy::new_ret_no_self)]
     /// Create a new `UUsageError` with a given exit code and message.
+    #[cold]
+    #[inline(never)]
+    #[allow(clippy::new_ret_no_self)]
     pub fn new<S: Into<String>>(code: i32, message: S) -> Box<dyn UError> {
         Box::new(Self {
             code,
@@ -391,8 +405,8 @@ pub struct UIoError {
 }
 
 impl UIoError {
-    #[allow(clippy::new_ret_no_self)]
     /// Create a new `UIoError` with a given exit code and message.
+    #[allow(clippy::new_ret_no_self)]
     pub fn new<S: Into<String>>(kind: std::io::ErrorKind, context: S) -> Box<dyn UError> {
         Box::new(Self {
             context: Some(context.into()),
@@ -416,6 +430,16 @@ impl Display for UIoError {
             // and we want to strip the "(os error X)" suffix.
             match self.inner.kind() {
                 NotFound => "No such file or directory",
+                // Rust maps both EACCES and EPERM to PermissionDenied. GNU
+                // prints "Operation not permitted" for EPERM (e.g. touch on a
+                // writable file owned by someone else) and "Permission denied"
+                // for EACCES. Prefer the errno when available (#15020).
+                #[cfg(unix)]
+                PermissionDenied
+                    if self.inner.raw_os_error() == Some(nix::errno::Errno::EPERM as i32) =>
+                {
+                    "Operation not permitted"
+                }
                 PermissionDenied => "Permission denied",
                 ConnectionRefused => "Connection refused",
                 ConnectionReset => "Connection reset",
@@ -424,7 +448,9 @@ impl Display for UIoError {
                 AddrInUse => "Address in use",
                 AddrNotAvailable => "Address not available",
                 BrokenPipe => "Broken pipe",
-                AlreadyExists => "Already exists",
+                // strerror(EEXIST); GNU prints "File exists", not the Rust
+                // ErrorKind name.
+                AlreadyExists => "File exists",
                 WouldBlock => "Would block",
                 InvalidInput => "Invalid input",
                 InvalidData => "Invalid data",
@@ -470,8 +496,11 @@ impl Display for UIoError {
 /// use std::io::{Error, ErrorKind};
 /// use uucore::error::strip_errno;
 ///
-/// let err = Error::from_raw_os_error(2);
-/// assert_eq!(strip_errno(&err), "No such file or directory");
+/// #[cfg(unix)]
+/// {
+///     let err = Error::from_raw_os_error(2);
+///     assert_eq!(strip_errno(&err), "No such file or directory");
+/// }
 ///
 /// // Errors without an errno are returned unchanged.
 /// let err = Error::new(ErrorKind::Other, "custom failure");
@@ -671,11 +700,52 @@ macro_rules! uio_error(
 pub struct ExitCode(pub i32);
 
 impl ExitCode {
-    #[allow(clippy::new_ret_no_self)]
     /// Create a new `ExitCode` with a given exit code.
+    #[cold]
+    #[inline(never)]
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(code: i32) -> Box<dyn UError> {
         Box::new(Self(code))
     }
+}
+
+/// The error to return once its message may already have reached stderr.
+///
+/// A utility that renders its own report — a caret diagnostic, a warning it
+/// printed itself — has already said everything the error would say, and
+/// returning the error too would print the message twice. This keeps the exit
+/// code without the second message: the code is taken from the error itself,
+/// so both paths always agree on it.
+///
+/// # Arguments
+///
+/// * `reported` - Whether the message has already been written to stderr.
+/// * `error` - The error that would otherwise be printed.
+///
+/// # Returns
+///
+/// A bare [`ExitCode`] carrying `error`'s code when `reported`, and `error`
+/// itself otherwise. An error that asks for a usage hint still gets one: the
+/// hint is not part of the message the report replaced.
+///
+/// # Examples
+///
+/// ```
+/// use uucore::error::{USimpleError, quiet_if_reported};
+///
+/// let reported = false; // e.g. a caret diagnostic could not be rendered
+/// let error = quiet_if_reported(reported, USimpleError::new(2, "bad key".to_string()));
+/// assert_eq!(error.code(), 2);
+/// ```
+pub fn quiet_if_reported<E: Into<Box<dyn UError>>>(reported: bool, error: E) -> Box<dyn UError> {
+    let error = error.into();
+    if !reported {
+        return error;
+    }
+    if error.usage() {
+        return UUsageError::new(error.code(), String::new());
+    }
+    ExitCode::new(error.code())
 }
 
 impl Error for ExitCode {}
@@ -785,7 +855,7 @@ impl Display for ClapErrorWrapper {
             self.print_failed.set(true);
             // Try to display this error to stderr, but ignore if that fails too
             // since we're already in an error state.
-            let _ = writeln!(std::io::stderr(), "{}: {print_fail}", crate::util_name());
+            print_diagnostic("", format_args!("{print_fail}"));
             // Mirror GNU behavior: when failing to print help or version, exit with error code.
             // This avoids silent failures when stdout is full or closed.
             set_exit_code(1);
@@ -797,6 +867,34 @@ impl Display for ClapErrorWrapper {
 
 #[cfg(test)]
 mod tests {
+    use super::{USimpleError, UUsageError, quiet_if_reported};
+
+    /// A quieted error keeps its code but says nothing: the report already did.
+    #[test]
+    fn a_reported_error_carries_only_its_code() {
+        let error = quiet_if_reported(true, USimpleError::new(3, "bad size".to_string()));
+        assert_eq!(error.code(), 3);
+        assert_eq!(error.to_string(), "");
+        assert!(!error.usage());
+    }
+
+    /// Quieting a usage error must not swallow its "Try --help" hint, or the
+    /// output would depend on whether a caret happened to be drawn.
+    #[test]
+    fn a_reported_usage_error_still_asks_for_the_hint() {
+        let error = quiet_if_reported(true, UUsageError::new(125, "bad mode".to_string()));
+        assert_eq!(error.code(), 125);
+        assert_eq!(error.to_string(), "");
+        assert!(error.usage());
+    }
+
+    #[test]
+    fn an_unreported_error_is_left_alone() {
+        let error = quiet_if_reported(false, UUsageError::new(125, "bad mode".to_string()));
+        assert_eq!(error.to_string(), "bad mode");
+        assert!(error.usage());
+    }
+
     #[test]
     #[cfg(unix)]
     fn test_nix_error_conversion() {
@@ -815,6 +913,13 @@ mod tests {
         assert_eq!(
             "test: Permission denied",
             Err::<(), nix::Error>(Errno::EACCES)
+                .map_err_context(|| String::from("test"))
+                .unwrap_err()
+                .to_string()
+        );
+        assert_eq!(
+            "test: Operation not permitted",
+            Err::<(), nix::Error>(Errno::EPERM)
                 .map_err_context(|| String::from("test"))
                 .unwrap_err()
                 .to_string()

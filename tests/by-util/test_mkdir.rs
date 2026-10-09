@@ -11,10 +11,7 @@
 use libc::mode_t;
 #[cfg(not(windows))]
 use std::os::unix::fs::PermissionsExt;
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
 #[cfg(not(windows))]
 use uutests::at_and_ucmd;
@@ -28,6 +25,10 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "spawns the binary directly via std::process::Command, bypassing the wasmtime runner"
+)]
 fn test_version_no_path() {
     use std::process::Command;
     use uutests::get_tests_binary;
@@ -82,7 +83,7 @@ fn test_mkdir_non_unicode() {
 
     let target = uucore::os_str_from_bytes(b"some-\xc0-dir-\xf3")
         .expect("Only unix platforms can test non-unicode names");
-    ucmd.arg(&target).succeeds();
+    ucmd.arg(target).succeeds();
 
     assert!(at.dir_exists(target));
 }
@@ -150,6 +151,10 @@ fn test_mkdir_dup_dir_parent() {
 
 #[cfg(not(windows))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: umask() only affects the wasmtime host process, not the guest sandbox"
+)]
 fn test_mkdir_parent_mode() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -177,6 +182,10 @@ fn test_mkdir_parent_mode() {
 
 #[cfg(not(windows))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: umask() only affects the wasmtime host process, not the guest sandbox"
+)]
 fn test_mkdir_parent_mode_check_existing_parent() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -241,6 +250,7 @@ fn test_mkdir_dup_file() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
 fn test_symbolic_mode() {
     let (at, mut ucmd) = at_and_ucmd!();
     let test_dir = "test_dir";
@@ -252,6 +262,7 @@ fn test_symbolic_mode() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
 fn test_symbolic_alteration() {
     let (at, mut ucmd) = at_and_ucmd!();
     let test_dir = "test_dir";
@@ -269,6 +280,7 @@ fn test_symbolic_alteration() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
 fn test_multi_symbolic() {
     let (at, mut ucmd) = at_and_ucmd!();
     let test_dir = "test_dir";
@@ -409,7 +421,7 @@ fn test_mkdir_acl_inheritance_with_restrictive_mask() {
 
     // Verify the child itself has an ACL (indicated by presence of xattr)
     assert!(
-        uucore::fsxattr::has_acl(at.plus("parent/child")),
+        uucore::fsxattr::has_acl(at.plus("parent/child"), true),
         "Child directory should have inherited ACL entries"
     );
 }
@@ -426,6 +438,7 @@ fn test_mkdir_p_respects_umask_without_acl() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
 fn test_mkdir_explicit_mode_zero() {
     use std::os::unix::fs::PermissionsExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -436,6 +449,10 @@ fn test_mkdir_explicit_mode_zero() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: umask() only affects the wasmtime host process, not the guest sandbox"
+)]
 fn test_mkdir_explicit_mode_with_umask() {
     // -m must win over umask: requesting 0o777 with a restrictive umask must
     // still yield 0o777, since the umask is shaped to not block requested bits.
@@ -538,10 +555,7 @@ fn test_empty_argument() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_selinux() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -565,10 +579,7 @@ fn test_selinux() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_selinux_invalid() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -824,6 +835,10 @@ fn test_mkdir_case_sensitivity() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: UNC-style path resolves differently inside the guest root than on the host"
+)]
 fn test_mkdir_network_paths() {
     // Test network path formats (UNC paths on Windows)
     let scene = TestScenario::new(util_name!());
@@ -851,12 +866,13 @@ fn test_mkdir_environment_expansion() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    unsafe {
-        std::env::set_var("TEST_VAR", "expanded_value");
-    }
-
     // Create directory with literal $VAR (should not expand)
-    scene.ucmd().arg("-p").arg("$TEST_VAR/dir").succeeds();
+    scene
+        .ucmd()
+        .env("TEST_VAR", "expanded_value")
+        .arg("-p")
+        .arg("$TEST_VAR/dir")
+        .succeeds();
     assert!(at.dir_exists("$TEST_VAR/dir"));
 
     // Verify the literal name exists, not the expanded value
@@ -865,18 +881,16 @@ fn test_mkdir_environment_expansion() {
     // Test with braces
     scene
         .ucmd()
+        .env("TEST_VAR", "expanded_value")
         .arg("-p")
         .arg("${TEST_VAR}_braced/dir")
         .succeeds();
     assert!(at.dir_exists("${TEST_VAR}_braced/dir"));
+    assert!(!at.dir_exists("expanded_value_braced/dir"));
 
     // Test with tilde (should not expand to home directory)
     scene.ucmd().arg("-p").arg("~/test_dir").succeeds();
     assert!(at.dir_exists("~/test_dir"));
-
-    unsafe {
-        std::env::remove_var("TEST_VAR");
-    }
 }
 
 /// Test that mkdir -m creates directories with the exact requested mode,
@@ -887,6 +901,10 @@ fn test_mkdir_environment_expansion() {
 /// Now it temporarily sets umask to 0 and creates with the exact mode.
 #[cfg(not(windows))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: umask() only affects the wasmtime host process, not the guest sandbox"
+)]
 fn test_mkdir_mode_ignores_umask() {
     // Test that -m 0700 with restrictive umask still creates 0700
     {
@@ -960,6 +978,10 @@ fn test_mkdir_mode_ignores_umask() {
 /// - Final directory uses the exact requested mode (ignoring umask)
 #[cfg(not(windows))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: umask() only affects the wasmtime host process, not the guest sandbox"
+)]
 fn test_mkdir_parent_mode_with_explicit_mode() {
     let (at, mut ucmd) = at_and_ucmd!();
     let umask: mode_t = 0o022;
@@ -1026,6 +1048,10 @@ fn test_mkdir_parent_inherits_setgid() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "spawns the binary directly via std::process::Command, bypassing the wasmtime runner"
+)]
 fn test_mkdir_concurrent_creation() {
     // Test concurrent mkdir -p operations: 10 iterations, 8 threads, 40 levels nesting
     use std::thread;
@@ -1082,17 +1108,20 @@ fn test_mkdir_concurrent_creation() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn test_mkdir_inside_inexistent_dir() {
+    new_ucmd!()
+        .arg("a/b")
+        .fails_with_code(1)
+        .stderr_is("mkdir: cannot create directory 'a/b': No such file or directory\n");
+}
+
 // The mode is only parsed where a mode means something.
 #[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     use super::*;
-    /// Column of the caret in a report header such as `[ mkdir:1:8 ]`.
-    fn caret_column(stderr: &str) -> Option<usize> {
-        let header = stderr.lines().find(|line| line.contains("mkdir:1:"))?;
-        let column = header.rsplit(':').next()?;
-        column.trim_end_matches(" ]").parse().ok()
-    }
-
     #[test]
     fn test_snippet_points_at_the_bad_operator() {
         let result = new_ucmd!()
@@ -1103,7 +1132,7 @@ mod diagnostics {
 
         assert!(stderr.contains("invalid operator"), "{stderr}");
         // The caret lands on `?`: three columns of `-m ` and four of mode.
-        assert_eq!(caret_column(stderr), Some(8), "{stderr}");
+        assert_eq!(result.caret_column(), Some(8), "{stderr}");
     }
 
     #[test]
@@ -1116,7 +1145,7 @@ mod diagnostics {
 
         // Clauses are parsed one at a time, but the caret is placed in the
         // whole mode: `!` is its sixth character, after `-m `.
-        assert_eq!(caret_column(stderr), Some(9), "{stderr}");
+        assert_eq!(result.caret_column(), Some(9), "{stderr}");
     }
 
     #[test]
@@ -1149,7 +1178,88 @@ mod diagnostics {
             "{stderr}"
         );
         assert!(stderr.contains("1 │ -m a=\\001 some_dir"), "{stderr}");
-        assert_eq!(caret_column(stderr), Some(6), "{stderr}");
+        assert_eq!(result.caret_column(), Some(6), "{stderr}");
         assert!(!stderr.contains('\x01'), "{stderr:?}");
+    }
+
+    #[test]
+    fn test_terminal_message_quotes_attached_mode() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--mode=a=\x01", "some_dir"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("--mode=a=\\001 some_dir"), "{stderr}");
+        assert_eq!(result.caret_column(), Some(10), "{stderr}");
+        assert!(!stderr.contains('\x01'), "{stderr:?}");
+    }
+
+    #[test]
+    fn test_terminal_message_quotes_mode_after_matching_operand() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["a=\x01", "--mode=a=\x01", "some_dir"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("--mode=a=\\001 some_dir"), "{stderr}");
+        assert_eq!(result.caret_column(), Some(14), "{stderr}");
+    }
+}
+
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "spawns the binary directly via std::process::Command, bypassing the wasmtime runner"
+)]
+fn test_mkdir_concurrent_non_recursive() {
+    // Test concurrent mkdir operations without -p: exactly one process must succeed per round
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::thread;
+
+    for round in 0..10 {
+        let scene = TestScenario::new(util_name!());
+        let target_dir = scene.fixtures.plus(format!("concurrent_target_{round}"));
+        let path_str = target_dir.to_string_lossy().to_string();
+        let bin_path = scene.bin_path.clone();
+
+        let winners = Arc::new(AtomicUsize::new(0));
+        let mut handles = vec![];
+
+        for _ in 0..16 {
+            let path_clone = path_str.clone();
+            let bin_path_clone = bin_path.clone();
+            let winners_clone = Arc::clone(&winners);
+
+            let handle = thread::spawn(move || {
+                let result = std::process::Command::new(&bin_path_clone)
+                    .arg("mkdir")
+                    .arg(&path_clone)
+                    .current_dir(std::env::current_dir().unwrap())
+                    .output()
+                    .expect("failed to run binary");
+                if result.status.success() {
+                    winners_clone.fetch_add(1, Ordering::SeqCst);
+                }
+            });
+            handles.push(handle);
+        }
+
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        assert_eq!(
+            winners.load(Ordering::SeqCst),
+            1,
+            "round {round}: expected exactly 1 winner for concurrent non-recursive mkdir"
+        );
+        assert!(
+            scene
+                .fixtures
+                .dir_exists(format!("concurrent_target_{round}"))
+        );
     }
 }

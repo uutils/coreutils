@@ -2,12 +2,12 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (ToDO) conv
 
 use std::ffi::OsString;
 
 use crate::options;
-use uucore::translate;
 
 // parse_options loads the options into the settings, returning an array of
 // error messages.
@@ -67,10 +67,8 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
         Some(Ok(style)) => settings.footer_numbering = style,
         Some(Err(message)) => errs.push(message),
     }
-    match opts.get_one::<usize>(options::NUMBER_WIDTH) {
-        None => {}
-        Some(num) if *num > 0 => settings.number_width = *num,
-        Some(_) => errs.push(translate!("nl-error-invalid-line-width", "value" => "0")),
+    if let Some(&num) = opts.get_one::<u64>(options::NUMBER_WIDTH) {
+        settings.number_width = num as usize;
     }
     if let Some(num) = opts.get_one::<u64>(options::JOIN_BLANK_LINES) {
         settings.join_blank_lines = *num;

@@ -1,6 +1,6 @@
 name: OpenBSD
 
-# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc sccache nextest copyback logind bindgen libclang
+# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc sccache nextest copyback logind
 
 env:
   # * style job configuration
@@ -47,7 +47,7 @@ jobs:
         prepare: |
           # Clean up disk space before installing packages
           df -h
-          pkg_add curl sudo-- jq coreutils bash rust rust-clippy rust-rustfmt llvm-- python3
+          pkg_add curl sudo-- jq coreutils bash rust rust-clippy rust-rustfmt python3
           rm -rf /usr/share/relink/* /usr/X11R6/* /usr/share/doc/* /usr/share/man/* &
           # Clean up package cache after installation
           pkg_delete -a &
@@ -72,9 +72,6 @@ jobs:
           sudo -i -u ${TEST_USER} bash << EOF
           set -e
           whoami
-          # Rust is installed from packages, no need for rustup
-          # Set up PATH for cargo
-          export PATH="/usr/local/bin:$PATH"
           ## VARs setup
           cd "${WORKSPACE}"
           unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
@@ -148,7 +145,7 @@ jobs:
         sync: rsync
         copyback: false
         mem: 6144
-        # Install rust and build dependencies from OpenBSD packages (llvm provides libclang for bindgen)
+        # Install rust and build dependencies
         prepare: |
           # Clean up disk space before installing packages
           df -h
@@ -157,7 +154,7 @@ jobs:
           rsync -a --delete empty/ /usr/X11R6/
           rsync -a --delete empty/ /usr/share/doc/
           rsync -a --delete empty/ /usr/share/man/
-          pkg_add curl gmake sudo-- jq rust llvm--
+          pkg_add curl gmake sudo-- jq rust
           # Clean up package cache after installation
           pkg_delete -a
           df -h
@@ -185,12 +182,8 @@ jobs:
           whoami
           # Increase max open files (512 by default)
           ulimit -n 1024
-          # Rust is installed from packages, no need for rustup
-          # Set up PATH for cargo
-          export PATH="/usr/local/bin:$PATH"
-          # Install nextest
-          mkdir -p ~/.cargo/bin
-          # Note: nextest might not have OpenBSD builds, so we'll use regular cargo test
+          # todo: install nextest if official OpenBSD package was provided
+          # Use regular cargo test currently
           ## Info
           echo "::group::environment"
           echo "CI='${CI}'"
@@ -210,11 +203,12 @@ jobs:
           cd "${WORKSPACE}"
           unset FAULT
           # openbsd is very slow. Omit duplicated cargo build and do test only
-          export PATH=~/.cargo/bin:${PATH}
           export RUST_BACKTRACE=1
           export CARGO_TERM_COLOR=always
           # Avoid filling disk space
           export RUSTFLAGS="-C strip=symbols"
+          # vendored OpenSSL takes many times to build. Use system one (LibreSSL is supported).
+          export OPENSSL_NO_VENDOR=1 OPENSSL_DIR=/usr
           # Use cargo test since nextest might not support OpenBSD
           if (test -z "\$FAULT"); then
             echo "::group::cargo test (workspace)"

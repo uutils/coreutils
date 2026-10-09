@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore bigdecimal extendedbigdecimal biguint
+
 //! An arbitrary precision float that can also represent infinity, NaN, etc.
 //!
 //! The finite values are stored as [`BigDecimal`] instances. Because
@@ -20,6 +22,7 @@
 //! let summand2 = ExtendedBigDecimal::Infinity;
 //! assert_eq!(summand1 + summand2, ExtendedBigDecimal::Infinity);
 //! ```
+
 use std::cmp::Ordering;
 use std::ops::Add;
 use std::ops::Neg;

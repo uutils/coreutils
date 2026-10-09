@@ -5,11 +5,14 @@
 
 // spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld getpid TTIN TTOU
 
+#![cfg(not(target_os = "fuchsia"))]
+
 mod platform;
 mod status;
 
 use crate::status::ExitStatus;
 use clap::{Arg, ArgAction, Command};
+use std::ffi::{OsStr, OsString};
 use std::io::{ErrorKind, Write};
 use std::process::{self, Child, Stdio};
 use std::time::Duration;
@@ -44,7 +47,7 @@ struct Config {
     preserve_status: bool,
     verbose: bool,
 
-    command: Vec<String>,
+    command: Vec<OsString>,
 }
 
 impl Config {
@@ -82,9 +85,9 @@ impl Config {
         let verbose = options.get_flag(options::VERBOSE);
 
         let command = options
-            .get_many::<String>(options::COMMAND)
+            .get_many::<OsString>(options::COMMAND)
             .unwrap()
-            .map(String::from)
+            .cloned()
             .collect::<Vec<_>>();
 
         Ok(Self {
@@ -166,7 +169,8 @@ pub fn uu_app() -> Command {
                 .required(true)
                 .action(ArgAction::Append)
                 .help(translate!("timeout-help-command"))
-                .value_hint(clap::ValueHint::CommandName),
+                .value_hint(clap::ValueHint::CommandName)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .trailing_var_arg(true)
         .infer_long_args(true)
@@ -174,7 +178,7 @@ pub fn uu_app() -> Command {
 }
 
 /// Report that a signal is being sent if the verbose flag is set.
-fn report_if_verbose(signal: usize, cmd: &str, verbose: bool) {
+fn report_if_verbose(signal: usize, cmd: &OsStr, verbose: bool) {
     if verbose {
         let s = if signal == 0 {
             "0".to_string()
@@ -213,7 +217,7 @@ fn report_if_verbose(signal: usize, cmd: &str, verbose: bool) {
 /// the process after that signal is sent.
 fn wait_or_kill_process(
     process: &mut Child,
-    cmd: &str,
+    cmd: &OsStr,
     duration: Duration,
     preserve_status: bool,
     foreground: bool,
@@ -248,7 +252,7 @@ fn wait_or_kill_process(
 }
 
 fn timeout(
-    cmd: &[String],
+    cmd: &[OsString],
     duration: Duration,
     signal: usize,
     kill_after: Option<Duration>,
@@ -307,7 +311,12 @@ fn timeout(
             report_if_verbose(signal, &cmd[0], verbose);
             platform::send_signal(process, signal, foreground, None, &spawn_state);
 
-            if let Some(kill_after) = kill_after {
+            // KILL cannot be caught, so a later kill is pointless and the
+            // exit status reports the signal instead of the timeout.
+            let sent_kill = signal_by_name_or_value("KILL") == Some(signal);
+            if let Some(kill_after) = kill_after
+                && !sent_kill
+            {
                 return match wait_or_kill_process(
                     process,
                     &cmd[0],
@@ -335,6 +344,8 @@ fn timeout(
                     })
                     .unwrap_or_else(|| ExitStatus::CommandTimedOut.into());
                 Err(exit_code.into())
+            } else if sent_kill {
+                Err(ExitStatus::SignalSent(signal).into())
             } else {
                 Err(ExitStatus::CommandTimedOut.into())
             }

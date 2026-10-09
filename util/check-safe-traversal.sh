@@ -6,41 +6,13 @@
 
 set -e
 
-: ${PROFILE:=release-small}
-export PROFILE
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-TEMP_DIR=$(mktemp -d)
-
-# Function to exit immediately on error
-fail_immediately() {
-    echo "❌ FAILED: $1"
-    echo ""
-    echo "Debug information available in: $TEMP_DIR/strace_*.log"
-    exit 1
-}
-
-cleanup() {
-    rm -rf "$TEMP_DIR"
-}
-trap cleanup EXIT
-
 echo "=== Safe Traversal Verification ==="
 
-# Assume binaries are already built (for CI usage)
-# Prefer individual binaries for more accurate testing
-if [ -f "$PROJECT_ROOT/target/${PROFILE}/rm" ]; then
-    echo "Using individual binaries"
-    USE_MULTICALL=0
-elif [ -f "$PROJECT_ROOT/target/${PROFILE}/coreutils" ]; then
-    echo "Using multicall binary"
-    USE_MULTICALL=1
-    COREUTILS_BIN="$PROJECT_ROOT/target/${PROFILE}/coreutils"
-else
-    echo "Error: No binaries found. Please build first with 'cargo build --profile=${PROFILE}'"
-    exit 1
-fi
+# shellcheck disable=SC2034  # read by check-common.sh once sourced
+CHECK_UTILS="rm chmod chown chgrp du mv cp chcon split"
+. "$(dirname "${BASH_SOURCE[0]}")/check-common.sh"
+
+require_command strace
 
 cd "$TEMP_DIR"
 
@@ -63,20 +35,12 @@ check_utility() {
 
     local strace_log="strace_${util}_${test_name}.log"
 
-    # Choose binary to use
-    if [ "$USE_MULTICALL" -eq 1 ]; then
-        local util_cmd="$COREUTILS_BIN $util"
-    else
-        local util_path="$PROJECT_ROOT/target/${PROFILE}/$util"
-        if [ ! -f "$util_path" ]; then
-            fail_immediately "$util binary not found at $util_path"
-        fi
-        local util_cmd="$util_path"
-    fi
+    local cmd
+    cmd=$(util_cmd "$util") || fail_immediately "$util binary not found in $BIN_DIR"
 
     # Run utility under strace
     strace -f -e trace="$trace_syscalls" -o "$strace_log" \
-        $util_cmd $test_args 2>/dev/null || true
+        $cmd $test_args 2>/dev/null || true
     cat $strace_log
     # Check for expected safe syscalls
     local found_safe=0
@@ -186,20 +150,8 @@ assert_descent_nofollow() {
     echo "✓ $util descent opens use O_NOFOLLOW"
 }
 
-# Get list of available utilities
-if [ "$USE_MULTICALL" -eq 1 ]; then
-    AVAILABLE_UTILS=$($COREUTILS_BIN --list)
-else
-    AVAILABLE_UTILS=""
-    for util in rm chmod chown chgrp du mv cp chcon split; do
-        if [ -f "$PROJECT_ROOT/target/${PROFILE}/$util" ]; then
-            AVAILABLE_UTILS="$AVAILABLE_UTILS $util"
-        fi
-    done
-fi
-
 # Test rm - should use openat, unlinkat, newfstatat
-if echo "$AVAILABLE_UTILS" | grep -q "rm"; then
+if have_util rm; then
     cp -r test_dir test_rm
     check_utility "rm" "openat,unlinkat,newfstatat,unlink,rmdir" "openat" "-rf test_rm" "recursive_remove"
 
@@ -214,7 +166,7 @@ if echo "$AVAILABLE_UTILS" | grep -q "rm"; then
 fi
 
 # Test chmod - should use openat, fchmodat, newfstatat
-if echo "$AVAILABLE_UTILS" | grep -q "chmod"; then
+if have_util chmod; then
     cp -r test_dir test_chmod
     check_utility "chmod" "openat,fchmodat,fchmodat2,newfstatat,chmod" "openat fchmodat" "-R 755 test_chmod" "recursive_chmod"
 
@@ -226,7 +178,7 @@ if echo "$AVAILABLE_UTILS" | grep -q "chmod"; then
 fi
 
 # Test chown - should use openat, fchownat, newfstatat
-if echo "$AVAILABLE_UTILS" | grep -q "chown"; then
+if have_util chown; then
     cp -r test_dir test_chown
     USER_ID=$(id -u)
     GROUP_ID=$(id -g)
@@ -235,7 +187,7 @@ if echo "$AVAILABLE_UTILS" | grep -q "chown"; then
 fi
 
 # Test chgrp - should use openat, fchownat, newfstatat
-if echo "$AVAILABLE_UTILS" | grep -q "chgrp"; then
+if have_util chgrp; then
     cp -r test_dir test_chgrp
     check_utility "chgrp" "openat,fchownat,newfstatat,chown,lchown" "openat fchownat" "-R $GROUP_ID test_chgrp" "recursive_chgrp"
     assert_descent_nofollow "chgrp" strace_chgrp_recursive_chgrp.log
@@ -247,12 +199,8 @@ fi
 # rename/symlink race could redirect a privileged recursive relabel off-tree
 # (issue #11402). This holds even without SELinux: the fd-anchored open happens
 # before the SELinux get/set, so the syscalls are observable regardless.
-if echo "$AVAILABLE_UTILS" | grep -q "chcon"; then
-    if [ "$USE_MULTICALL" -eq 1 ]; then
-        chcon_cmd="$COREUTILS_BIN chcon"
-    else
-        chcon_cmd="$PROJECT_ROOT/target/${PROFILE}/chcon"
-    fi
+if have_util chcon; then
+    chcon_cmd=$(util_cmd chcon)
 
     mkdir -p chcon_tree/sub
     echo a > chcon_tree/file
@@ -286,13 +234,13 @@ if echo "$AVAILABLE_UTILS" | grep -q "chcon"; then
 fi
 
 # Test du - should use openat, newfstatat
-if echo "$AVAILABLE_UTILS" | grep -q "du"; then
+if have_util du; then
     cp -r test_dir test_du
     check_utility "du" "openat,newfstatat,stat,lstat" "openat" "-a test_du" "directory_usage"
 fi
 
 # Test mv - should use openat, renameat for directory moves
-if echo "$AVAILABLE_UTILS" | grep -q "mv"; then
+if have_util mv; then
     mkdir -p test_mv_src/sub
     echo "test" > test_mv_src/file.txt
     echo "test" > test_mv_src/sub/file2.txt
@@ -302,12 +250,8 @@ fi
 # cp invariant checks. Both #10011 (restrictive 0600 destination mode) and
 # #10017 (O_NOFOLLOW on the -P source) need to hold; verify each on its own
 # strace.
-if echo "$AVAILABLE_UTILS" | grep -q "cp"; then
-    if [ "$USE_MULTICALL" -eq 1 ]; then
-        cp_cmd="$COREUTILS_BIN cp"
-    else
-        cp_cmd="$PROJECT_ROOT/target/${PROFILE}/cp"
-    fi
+if have_util cp; then
+    cp_cmd=$(util_cmd cp)
 
     # #10011: destination created with mode 0600 so other users cannot open
     # the file through its umask-derived initial mode before cp narrows it.
@@ -343,12 +287,8 @@ fi
 # O_CREAT|O_EXCL and only ever truncates via ftruncate after an fd-based check
 # that the opened output is not the input -- so a split that would overwrite its
 # own input is refused.
-if echo "$AVAILABLE_UTILS" | grep -q "split"; then
-    if [ "$USE_MULTICALL" -eq 1 ]; then
-        split_cmd="$COREUTILS_BIN split"
-    else
-        split_cmd="$PROJECT_ROOT/target/${PROFILE}/split"
-    fi
+if have_util split; then
+    split_cmd=$(util_cmd split)
 
     printf '0123456789abcdef' > split_input
     strace -f -e trace=openat -o strace_split_output_open.log \
@@ -380,7 +320,7 @@ if echo "$AVAILABLE_UTILS" | grep -q "split"; then
 fi
 
 # mv cross-device (EXDEV) must use fd-based *xattr ops (issue #10014).
-if echo "$AVAILABLE_UTILS" | grep -q "mv" && [ -d /dev/shm ]; then
+if have_util mv && [ -d /dev/shm ]; then
     # Need different filesystems for the EXDEV fallback to fire.
     temp_fs_id=$(stat -f -c %i "$TEMP_DIR" 2>/dev/null || echo "")
     shm_fs_id=$(stat -f -c %i /dev/shm 2>/dev/null || echo "")
@@ -394,11 +334,7 @@ if echo "$AVAILABLE_UTILS" | grep -q "mv" && [ -d /dev/shm ]; then
         cross_dst=$(mktemp -u -p /dev/shm cross_dst.XXXXXX)
         echo "cross-device payload" > "$cross_src"
         if setfattr -n user.tag -v pinned "$cross_src" 2>/dev/null; then
-            if [ "$USE_MULTICALL" -eq 1 ]; then
-                mv_cmd="$COREUTILS_BIN mv"
-            else
-                mv_cmd="$PROJECT_ROOT/target/${PROFILE}/mv"
-            fi
+            mv_cmd=$(util_cmd mv)
             strace -f -e trace='%file,fgetxattr,fsetxattr,flistxattr,getxattr,setxattr,listxattr' \
                 -o strace_mv_xattr.log \
                 $mv_cmd "$cross_src" "$cross_dst" 2>/dev/null || true
@@ -431,7 +367,7 @@ fi
 # attacker racing in a planted symlink would otherwise let the copy write
 # through to the symlink's target. rustix may emit either open(2) or
 # openat(2) depending on the path, so the check accepts both.
-if echo "$AVAILABLE_UTILS" | grep -q "mv" && [ -d /dev/shm ]; then
+if have_util mv && [ -d /dev/shm ]; then
     temp_fs_id=$(stat -f -c %i "$TEMP_DIR" 2>/dev/null || echo "")
     shm_fs_id=$(stat -f -c %i /dev/shm 2>/dev/null || echo "")
     if [ -z "$temp_fs_id" ] || [ -z "$shm_fs_id" ] || [ "$temp_fs_id" = "$shm_fs_id" ]; then
@@ -442,11 +378,7 @@ if echo "$AVAILABLE_UTILS" | grep -q "mv" && [ -d /dev/shm ]; then
         echo "payload" > "$nofollow_src"
         echo "existing" > "$nofollow_dst"
 
-        if [ "$USE_MULTICALL" -eq 1 ]; then
-            mv_cmd="$COREUTILS_BIN mv"
-        else
-            mv_cmd="$PROJECT_ROOT/target/${PROFILE}/mv"
-        fi
+        mv_cmd=$(util_cmd mv)
         strace -f -e trace=open,openat,openat2 -o strace_mv_nofollow.log \
             $mv_cmd -f "$nofollow_src" "$nofollow_dst" 2>/dev/null || true
 
@@ -473,7 +405,7 @@ fi
 # of the parent directory cannot redirect the temp-and-rename dance, and
 # the temp name must come from /dev/urandom rather than a guessable
 # pid+nanos pattern.
-if echo "$AVAILABLE_UTILS" | grep -q "mv" && [ -d /dev/shm ]; then
+if have_util mv && [ -d /dev/shm ]; then
     temp_fs_id=$(stat -f -c %i "$TEMP_DIR" 2>/dev/null || echo "")
     shm_fs_id=$(stat -f -c %i /dev/shm 2>/dev/null || echo "")
     if [ -z "$temp_fs_id" ] || [ -z "$shm_fs_id" ] || [ "$temp_fs_id" = "$shm_fs_id" ]; then
@@ -485,11 +417,7 @@ if echo "$AVAILABLE_UTILS" | grep -q "mv" && [ -d /dev/shm ]; then
         # Pre-existing dest forces the EEXIST branch into create_symlink_replace.
         ln -s /elsewhere "$sym_dst"
 
-        if [ "$USE_MULTICALL" -eq 1 ]; then
-            mv_cmd="$COREUTILS_BIN mv"
-        else
-            mv_cmd="$PROJECT_ROOT/target/${PROFILE}/mv"
-        fi
+        mv_cmd=$(util_cmd mv)
         strace -f -e trace=openat,symlink,symlinkat,rename,renameat,renameat2,unlink,unlinkat,read \
             -o strace_mv_symlink_replace.log \
             $mv_cmd "$sym_src" "$sym_dst" 2>/dev/null || true
@@ -529,8 +457,10 @@ echo "Checking for dangerous path resolution patterns..."
 echo "Checking path resolution frequency..."
 for log in strace_*.log; do
     if [ -f "$log" ]; then
-        path_resolutions=$(grep -c "test_" "$log" 2>/dev/null || echo "0")
-        if [ "$path_resolutions" -gt 20 ]; then
+        # grep -c already prints 0 when nothing matches, so a `|| echo 0`
+        # here would make the variable "0\n0" and break the comparison.
+        path_resolutions=$(grep -c "test_" "$log" 2>/dev/null || true)
+        if [ "${path_resolutions:-0}" -gt 20 ]; then
             echo "⚠ $log: High path resolution count ($path_resolutions) - potential TOCTOU risk"
         fi
     fi

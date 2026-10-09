@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:disable
 
 use crate::error::UError;
@@ -9,17 +10,17 @@ use crate::error::UError;
 use fluent::{FluentArgs, FluentBundle, FluentResource};
 use fluent_syntax::parser::ParserError;
 
-use std::cell::Cell;
+use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock, PoisonError};
 
 use os_display::Quotable;
-use thiserror::Error;
 use unic_langid::LanguageIdentifier;
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum LocalizationError {
     #[error("I/O error loading '{path}': {source}")]
     Io {
@@ -102,24 +103,125 @@ impl Localizer {
                 .to_string();
         }
 
+        // Only now, once nothing common has matched, is it worth parsing the
+        // strings that only an error path asks for.
+        if let Some(message) = errors_message(self.primary_bundle.locales.as_slice(), id, args) {
+            return message;
+        }
+
         // Return the key ID if not found anywhere
         id.to_string()
     }
 }
 
+/// Look `id` up among the strings only an error path ever asks for.
+///
+/// Their resource is deliberately not part of the bundle every utility builds
+/// at startup: parsing it costs every binary, while almost no run reads one of
+/// these. It is parsed here instead, on the first lookup that reaches it, and
+/// kept for the rest of the process.
+fn errors_message(
+    locales: &[LanguageIdentifier],
+    id: &str,
+    args: Option<&FluentArgs>,
+) -> Option<String> {
+    ERRORS_BUNDLE.with(|cell| {
+        let bundle = cell.get_or_init(|| build_errors_bundle(locales)).as_ref()?;
+        let message = bundle.get_message(id)?.value()?;
+        let mut errs = Vec::new();
+        Some(bundle.format_pattern(message, args, &mut errs).to_string())
+    })
+}
+
+/// The error strings for `locale`, from the locales directory when there is
+/// one to read and from the embedded copy otherwise.
+fn errors_resource(locale: &LanguageIdentifier) -> Option<String> {
+    let from_disk = get_locales_dir("uucore")
+        .ok()
+        .and_then(|dir| fs::read_to_string(dir.join("errors").join(format!("{locale}.ftl"))).ok());
+    from_disk
+        .or_else(|| get_embedded_locale(&format!("uucore-errors/{locale}.ftl")).map(str::to_owned))
+}
+
+/// Build the bundle behind [`errors_message`]: English underneath, so a locale
+/// that has not translated one of these still says something, and the
+/// requested locale over the top of it.
+fn build_errors_bundle(locales: &[LanguageIdentifier]) -> Option<FluentBundle<FluentResource>> {
+    build_errors_bundle_with(locales, errors_resource)
+}
+
+fn build_errors_bundle_with(
+    locales: &[LanguageIdentifier],
+    mut resource_for: impl FnMut(&LanguageIdentifier) -> Option<String>,
+) -> Option<FluentBundle<FluentResource>> {
+    let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
+        .expect("Default locale should always be valid");
+    let locale = locales.first().unwrap_or(&default_locale).clone();
+
+    // Own the resources in this thread-local bundle so one thread's requested
+    // locale cannot populate a process-wide cache used by another locale.
+    let mut bundle: FluentBundle<FluentResource> = FluentBundle::new(vec![locale.clone()]);
+    bundle.set_use_isolating(false);
+
+    let mut any = false;
+    if let Some(content) = resource_for(&default_locale)
+        && let Ok(resource) = parse_fluent_resource_owned(&content)
+    {
+        bundle.add_resource_overriding(resource);
+        any = true;
+    }
+    if locale != default_locale
+        && let Some(content) = resource_for(&locale)
+        && let Ok(resource) = parse_fluent_resource_owned(&content)
+    {
+        bundle.add_resource_overriding(resource);
+        any = true;
+    }
+
+    any.then_some(bundle)
+}
+
 // Cache localizer. FluentResource cannot be shared between threads while FluentBundle can be shared
 static UUCORE_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 static CHECKSUM_FLUENT: OnceLock<FluentResource> = OnceLock::new();
-static UTIL_FLUENT: OnceLock<FluentResource> = OnceLock::new();
+// Other resources, keyed by their source (a file path or an embedded key). A
+// process can host several utilities (e.g. nushell) and switch between them, so
+// each source is parsed and leaked once instead of on every switch
+static RESOURCES: Mutex<BTreeMap<String, &'static FluentResource>> = Mutex::new(BTreeMap::new());
 thread_local! {
     #[cfg_attr(
-        target_os = "android",
-        expect(
+        any(
+            target_os = "android",
+            target_os = "haiku",
+            target_os = "illumos",
+            all(target_os = "linux", target_env = "ohos"),
+            target_os = "openbsd",
+            target_os = "solaris",
+            all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))),
+        allow(
             clippy::missing_const_for_thread_local,
             reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
         )
     )]
-    static LOCALIZER: OnceLock<Localizer> = const { OnceLock::new() };
+    static LOCALIZER: RefCell<Option<Localizer>> = const { RefCell::new(None) };
+    /// Built on the first lookup that misses every ordinary bundle; `None`
+    /// when there are no error strings to be found at all.
+    #[cfg_attr(
+        any(
+            target_os = "android",
+            target_os = "haiku",
+            target_os = "illumos",
+            all(target_os = "linux", target_env = "ohos"),
+            target_os = "openbsd",
+            target_os = "solaris",
+            all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))),
+        allow(
+            clippy::missing_const_for_thread_local,
+            reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
+        )
+    )]
+    static ERRORS_BUNDLE: OnceLock<Option<FluentBundle<FluentResource>>> =
+        const { OnceLock::new() };
 }
 
 /// Helper function to find the uucore locales directory from a utility's locales directory
@@ -129,16 +231,24 @@ fn find_uucore_locales_dir(utility_locales_dir: &Path) -> Option<PathBuf> {
         .canonicalize()
         .unwrap_or_else(|_| utility_locales_dir.to_path_buf());
 
-    // Walk up: locales -> printenv -> uu -> src
-    let uucore_locales = normalized_dir
-        .parent()? // printenv
-        .parent()? // uu
-        .parent()? // src
-        .join("uucore")
-        .join("locales");
+    // In the source tree, walk up: locales -> printenv -> uu -> src
+    let in_source_tree = normalized_dir
+        .parent() // printenv
+        .and_then(Path::parent) // uu
+        .and_then(Path::parent) // src
+        .map(|src| src.join("uucore").join("locales"));
 
-    // Only return if the directory actually exists
-    uucore_locales.exists().then_some(uucore_locales)
+    // Next to an installed binary, the directory sits beside the one of the
+    // utility: <locales>/printenv -> <locales>/uucore
+    let installed = normalized_dir
+        .parent()
+        .map(|locales| locales.join("uucore"));
+
+    // Only return a directory that actually exists
+    [in_source_tree, installed]
+        .into_iter()
+        .flatten()
+        .find(|dir| dir.exists())
 }
 
 /// Create a bundle that combines common and utility-specific strings
@@ -153,15 +263,20 @@ fn create_bundle(
     bundle.set_use_isolating(false);
 
     let mut try_add_resource_from = |dir_opt: Option<PathBuf>| -> bool {
-        if let Some(resource) = dir_opt
-            .map(|dir| dir.join(format!("{locale}.ftl")))
-            .and_then(|locale_path| fs::read_to_string(locale_path).ok())
-            // On parse errors, use the partial resource which contains all
-            // successfully parsed messages
-            .map(|ftl| FluentResource::try_new(ftl).unwrap_or_else(|(partial, _)| partial))
-        {
-            // use Box::leak to provide 'static lifetime for shared FluentBundle between threads
-            bundle.add_resource_overriding(Box::leak(Box::new(resource)));
+        let Some(locale_path) = dir_opt.map(|dir| dir.join(format!("{locale}.ftl"))) else {
+            return false;
+        };
+        let resource = cached_resource(
+            locale_path.to_string_lossy().into_owned(),
+            || -> Result<_, ()> {
+                let ftl = fs::read_to_string(&locale_path).map_err(|_| ())?;
+                // On parse errors, use the partial resource which contains all
+                // successfully parsed messages
+                Ok(FluentResource::try_new(ftl).unwrap_or_else(|(partial, _)| partial))
+            },
+        );
+        if let Ok(resource) = resource {
+            bundle.add_resource_overriding(resource);
             true
         } else {
             false
@@ -233,25 +348,12 @@ fn init_localization(
         }
     };
 
-    LOCALIZER.with(|lock| {
-        lock.set(loc)
-            .map_err(|_| LocalizationError::Bundle("Localizer already initialized".into()))
-    })?;
+    set_localizer(loc);
     Ok(())
 }
 
-/// Helper function to parse FluentResource from content string
-fn parse_fluent_resource(
-    content: &str,
-    cache: &'static OnceLock<FluentResource>,
-) -> Result<&'static FluentResource, LocalizationError> {
-    // global cache breaks unit tests
-    #[cfg(not(test))]
-    if let Some(res) = cache.get() {
-        return Ok(res);
-    }
-
-    let resource = FluentResource::try_new(content.to_string()).map_err(
+fn parse_fluent_resource_owned(content: &str) -> Result<FluentResource, LocalizationError> {
+    FluentResource::try_new(content.to_string()).map_err(
         |(_partial_resource, errs): (FluentResource, Vec<ParserError>)| {
             if let Some(first_err) = errs.into_iter().next() {
                 let snippet = first_err
@@ -268,13 +370,42 @@ fn parse_fluent_resource(
                 LocalizationError::LocalesDirNotFound("Parse error without details".to_string())
             }
         },
-    )?;
+    )
+}
+
+/// Helper function to parse FluentResource from content string
+fn parse_fluent_resource(
+    content: &str,
+    cache: &'static OnceLock<FluentResource>,
+) -> Result<&'static FluentResource, LocalizationError> {
+    // global cache breaks unit tests
+    #[cfg(not(test))]
+    if let Some(res) = cache.get() {
+        return Ok(res);
+    }
+
+    let resource = parse_fluent_resource_owned(content)?;
     // global cache breaks unit tests
     if cfg!(not(test)) {
         Ok(cache.get_or_init(|| resource))
     } else {
         Ok(Box::leak(Box::new(resource)))
     }
+}
+
+/// Return the resource cached under `key`, parsing and caching it on first use.
+/// Bundles shared between threads need `&'static` resources, so they are leaked.
+fn cached_resource<E>(
+    key: String,
+    parse: impl FnOnce() -> Result<FluentResource, E>,
+) -> Result<&'static FluentResource, E> {
+    let mut cache = RESOURCES.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(res) = cache.get(&key) {
+        return Ok(res);
+    }
+    let resource: &'static FluentResource = Box::leak(Box::new(parse()?));
+    cache.insert(key, resource);
+    Ok(resource)
 }
 
 /// Create a bundle from embedded English locale files with common uucore strings
@@ -309,7 +440,9 @@ fn create_english_bundle_from_embedded(
     // Then, try to load utility-specific strings
     let locale_key = format!("{util_name}/en-US.ftl");
     if let Some(ftl_content) = get_embedded_locale(&locale_key) {
-        let resource = parse_fluent_resource(ftl_content, &UTIL_FLUENT)?;
+        let resource = cached_resource(format!("embedded:{locale_key}"), || {
+            parse_fluent_resource_owned(ftl_content)
+        })?;
         bundle.add_resource_overriding(resource);
     }
 
@@ -326,8 +459,8 @@ fn create_english_bundle_from_embedded(
 }
 
 /// Create a bundle from embedded locale files for any locale on WASI.
-/// Bypasses the global OnceLock cache (uses Box::leak) so it can be
-/// called for multiple locales in the same process.
+/// Resources are cached per key, so it can be called for multiple locales
+/// in the same process.
 #[cfg(target_os = "wasi")]
 fn create_wasi_bundle_from_embedded(
     locale: &LanguageIdentifier,
@@ -339,9 +472,11 @@ fn create_wasi_bundle_from_embedded(
 
     let mut try_add = |key: &str| {
         if let Some(content) = get_embedded_locale(key)
-            && let Ok(resource) = FluentResource::try_new(content.to_string())
+            && let Ok(resource) = cached_resource(format!("embedded:{key}"), || {
+                FluentResource::try_new(content.to_string()).map_err(|_| ())
+            })
         {
-            bundle.add_resource_overriding(Box::leak(Box::new(resource)));
+            bundle.add_resource_overriding(resource);
         }
     };
 
@@ -360,9 +495,13 @@ fn create_wasi_bundle_from_embedded(
     }
 }
 
+fn set_localizer(localizer: Localizer) {
+    LOCALIZER.with_borrow_mut(|slot| *slot = Some(localizer));
+}
+
 fn get_message_internal(id: &str, args: Option<FluentArgs>) -> String {
-    LOCALIZER.with(|lock| {
-        lock.get()
+    LOCALIZER.with_borrow(|slot| {
+        slot.as_ref()
             .map_or_else(|| id.to_string(), |loc| loc.format(id, args.as_ref())) // Return the key ID if localizer not initialized
     })
 }
@@ -430,6 +569,25 @@ pub fn get_message_with_args(id: &str, ftl_args: FluentArgs) -> String {
     get_message_internal(id, Some(ftl_args))
 }
 
+/// The value as an `i64` when Fluent can represent it exactly, else `None`.
+#[doc(hidden)]
+pub fn exact_fluent_integer(s: &str) -> Option<i64> {
+    // Fluent stores numbers as f64, which represents integers exactly only up
+    // to 2^53. Anything beyond that has to travel as a string.
+    const MAX_EXACT: i64 = 1 << 53;
+    s.parse::<i64>().ok().filter(|n| n.abs() <= MAX_EXACT)
+}
+
+/// Whether `s` is a plain decimal integer literal, with an optional sign.
+///
+/// Used by [`translate!`] to tell an integer that Fluent cannot hold exactly
+/// from a genuine float, so the former can bypass Fluent's number type.
+#[doc(hidden)]
+pub fn is_integer_literal(s: &str) -> bool {
+    let digits = s.strip_prefix(['-', '+']).unwrap_or(s);
+    !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
+}
+
 /// Function to detect system locale from environment variables
 fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
     let locale_str = std::env::var("LANG")
@@ -484,15 +642,32 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     // Avoid duplicated and high-cost localizer setup
     thread_local! {
         #[cfg_attr(
-            target_os = "android",
-            expect(
+            any(
+                target_os = "android",
+                target_os = "haiku",
+                target_os = "illumos",
+                all(target_os = "linux", target_env = "ohos"),
+                target_os = "openbsd",
+                target_os = "solaris",
+                all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))),
+            allow(
                 clippy::missing_const_for_thread_local,
                 reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
             )
         )]
-        static LOCALIZER_IS_SET: Cell<bool> = const { Cell::new(false) };
+        static LOCALIZED_UTIL: RefCell<Option<String>> = const { RefCell::new(None) };
     }
-    if LOCALIZER_IS_SET.with(Cell::get) {
+    if LOCALIZED_UTIL.with_borrow(|util| util.as_deref() == Some(p)) {
+        return Ok(());
+    }
+    let locales_dir = get_locales_dir(p);
+    // Callers such as the help template pass the invoked name (`dir`, `[`,
+    // a prefixed binary name...), which has no strings of its own: keep the
+    // utility that is already set up instead of switching to nothing
+    if LOCALIZED_UTIL.with_borrow(Option::is_some)
+        && locales_dir.is_err()
+        && get_embedded_locale(&format!("{p}/{DEFAULT_LOCALE}.ftl")).is_none()
+    {
         return Ok(());
     }
 
@@ -501,7 +676,7 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     });
 
     // Load common strings along with utility-specific strings
-    if let Ok(locales_dir) = get_locales_dir(p) {
+    if let Ok(locales_dir) = locales_dir {
         // Load both utility-specific and common strings
         init_localization(&locale, &locales_dir, p)?;
     } else {
@@ -527,12 +702,9 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
             Localizer::new(english_bundle)
         };
 
-        LOCALIZER.with(|lock| {
-            lock.set(localizer)
-                .map_err(|_| LocalizationError::Bundle("Localizer already initialized".into()))
-        })?;
+        set_localizer(localizer);
     }
-    LOCALIZER_IS_SET.with(|f| f.set(true));
+    LOCALIZED_UTIL.with_borrow_mut(|util| *util = Some(p.to_string()));
     Ok(())
 }
 
@@ -567,6 +739,13 @@ fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
     {
         // During development, use the project's locales directory
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        if p == "uucore" {
+            let uucore_path = PathBuf::from(manifest_dir).join("locales");
+            if uucore_path.exists() {
+                return Ok(uucore_path);
+            }
+        }
+
         // from uucore path, load the locales directory from the program directory
         let dev_path = PathBuf::from(manifest_dir)
             .join("../uu")
@@ -613,11 +792,53 @@ fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
     }
 }
 
+/// Macro for retrieving localized messages, substituting arguments as text.
+///
+/// [`translate!`] hands Fluent a number whenever an argument parses as one,
+/// and the locale then formats it: a length of `123456` comes back as
+/// `123 456` wherever thousands are grouped. Use this macro instead whenever
+/// the argument is text the user typed or a value that must be echoed
+/// unchanged — a file name, an escape, a width — and [`translate!`] when the
+/// value really is a number the reader should see in their own conventions,
+/// or when a plural selector needs one.
+///
+/// # Arguments
+///
+/// * `$id` - The message identifier string
+/// * Key-value pairs in the format `"key" => value`, each substituted with
+///   its [`ToString`] rendering
+///
+/// # Examples
+///
+/// ```
+/// use uucore::translate_text;
+/// use fluent::FluentArgs;
+///
+/// // '17' stays '17', whatever the locale does to numbers
+/// let error = translate_text!("checksum-error-invalid-length", "length" => "17");
+/// ```
+#[macro_export]
+macro_rules! translate_text {
+    ($id:expr, $($key:expr => $value:expr),+ $(,)?) => {
+        {
+            let mut args = fluent::FluentArgs::new();
+            $(
+                args.set($key, $value.to_string());
+            )+
+            $crate::locale::get_message_with_args($id, args)
+        }
+    };
+}
+
 /// Macro for retrieving localized messages with optional arguments.
 ///
 /// This macro provides a unified interface for both simple message retrieval
 /// and message retrieval with variable substitution. It accepts a message ID
 /// and optionally key-value pairs using the `"key" => value` syntax.
+///
+/// An argument that parses as a number is handed to Fluent as one, so the
+/// locale formats it — grouping its digits, for instance. When the value has
+/// to come back exactly as it went in, reach for [`translate_text!`].
 ///
 /// # Arguments
 ///
@@ -659,8 +880,13 @@ macro_rules! translate {
             let mut args = fluent::FluentArgs::new();
             $(
                 let value_str = $value.to_string();
-                if let Ok(num_val) = value_str.parse::<i64>() {
+                if let Some(num_val) = $crate::locale::exact_fluent_integer(&value_str) {
                     args.set($key, num_val);
+                } else if $crate::locale::is_integer_literal(&value_str) {
+                    // An integer Fluent cannot hold exactly. Its number type is
+                    // f64-backed, so setting it as a number would round it; keep
+                    // the exact decimal string instead.
+                    args.set($key, value_str);
                 } else if let Ok(float_val) = value_str.parse::<f64>() {
                     args.set($key, float_val);
                 } else {
@@ -673,16 +899,49 @@ macro_rules! translate {
     };
 }
 
-// Re-export the macro for easier access
-pub use translate;
+// Re-export the macros for easier access
+pub use {translate, translate_text};
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn embedded_locales_are_escaped_not_raw() {
+        // `.ftl` content is untrusted: translations sync into the tree from a
+        // public translation platform. A raw string ends at `"#`, so content
+        // holding that pair would close the literal and be compiled as Rust.
+        let generated = include_str!(concat!(env!("OUT_DIR"), "/embedded_locales.rs"));
+        assert!(
+            !generated.contains("Some(r\""),
+            "locale table uses a raw string; content containing `\"#` becomes code"
+        );
+    }
     use std::env;
     use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
+
+    #[test]
+    fn integers_beyond_f64_precision_stay_exact() {
+        // Fluent's number type is f64-backed, so values past 2^53 must travel
+        // as strings to survive intact.
+        assert_eq!(exact_fluent_integer("3"), Some(3));
+        assert_eq!(exact_fluent_integer("-3"), Some(-3));
+        assert_eq!(exact_fluent_integer("9007199254740992"), Some(1 << 53));
+        assert_eq!(exact_fluent_integer("9007199254740993"), None);
+        assert_eq!(exact_fluent_integer("-9007199254740993"), None);
+        assert_eq!(exact_fluent_integer("18446744073709551615"), None);
+        assert_eq!(exact_fluent_integer("1.5"), None);
+
+        assert!(is_integer_literal("18446744073709551615"));
+        assert!(is_integer_literal("-7"));
+        assert!(is_integer_literal("+7"));
+        assert!(!is_integer_literal("1.5"));
+        assert!(!is_integer_literal(""));
+        assert!(!is_integer_literal("-"));
+        assert!(!is_integer_literal("12a"));
+    }
 
     /// Test-specific helper function to create a bundle from test directory only
     #[cfg(test)]
@@ -734,10 +993,7 @@ mod tests {
             }
         };
 
-        LOCALIZER.with(|lock| {
-            lock.set(loc)
-                .map_err(|_| LocalizationError::Bundle("Localizer already initialized".into()))
-        })?;
+        set_localizer(loc);
         Ok(())
     }
 
@@ -919,6 +1175,28 @@ invalid-syntax = This is { $missing
         }
     }
 
+    /// The common strings also have to be found next to an installed binary,
+    /// where there is no source tree to walk up and the uucore directory sits
+    /// beside the one of the utility.
+    #[test]
+    fn test_find_uucore_locales_dir_installed_layout() {
+        //   <temp>/share/locales/fake_util/ <- locales directory of the utility
+        //   <temp>/share/locales/uucore/    <- common strings
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let locales = temp_dir.path().join("share").join("locales");
+        let util_dir = locales.join("fake_util");
+        let uucore_dir = locales.join("uucore");
+
+        fs::create_dir_all(&util_dir).expect("Failed to create fake util locales dir");
+        assert_eq!(find_uucore_locales_dir(&util_dir), None);
+
+        fs::create_dir_all(&uucore_dir).expect("Failed to create fake uucore locales dir");
+        assert_eq!(
+            find_uucore_locales_dir(&util_dir),
+            Some(uucore_dir.canonicalize().unwrap())
+        );
+    }
+
     #[test]
     fn test_localizer_format_primary_bundle() {
         let temp_dir = create_test_locales_dir();
@@ -1047,25 +1325,17 @@ invalid-syntax = This is { $missing
     }
 
     #[test]
-    fn test_init_localization_already_initialized() {
+    fn test_init_localization_twice_replaces_localizer() {
         std::thread::spawn(|| {
             let temp_dir = create_test_locales_dir();
-            let locale = LanguageIdentifier::from_str("en-US").unwrap();
+            let en_us = LanguageIdentifier::from_str("en-US").unwrap();
+            let fr_fr = LanguageIdentifier::from_str("fr-FR").unwrap();
 
-            // Initialize once
-            let result1 = init_test_localization(&locale, temp_dir.path());
-            assert!(result1.is_ok());
+            init_test_localization(&en_us, temp_dir.path()).unwrap();
+            assert_eq!(get_message("greeting"), "Hello, world!");
 
-            // Try to initialize again - should fail
-            let result2 = init_test_localization(&locale, temp_dir.path());
-            assert!(result2.is_err());
-
-            match result2 {
-                Err(LocalizationError::Bundle(msg)) => {
-                    assert!(msg.contains("already initialized"));
-                }
-                _ => panic!("Expected Bundle error"),
-            }
+            init_test_localization(&fr_fr, temp_dir.path()).unwrap();
+            assert_eq!(get_message("greeting"), "Bonjour, le monde!");
         })
         .join()
         .unwrap();
@@ -1364,6 +1634,56 @@ invalid-syntax = This is { $missing
     }
 
     #[test]
+    fn test_lazy_error_resources_follow_runtime_locale() {
+        fn resource_for(locale: &LanguageIdentifier) -> Option<String> {
+            match locale.to_string().as_str() {
+                "en-US" => Some(include_str!("../../../locales/errors/en-US.ftl").to_string()),
+                "fr-FR" => Some(include_str!("../../../locales/errors/fr-FR.ftl").to_string()),
+                _ => None,
+            }
+        }
+
+        fn message_for(locale: &str, id: &str) -> String {
+            let locale = LanguageIdentifier::from_str(locale).unwrap();
+            let bundle = build_errors_bundle_with(&[locale], resource_for).unwrap();
+            let message = bundle
+                .get_message(id)
+                .and_then(|message| message.value())
+                .unwrap();
+            let mut errors = Vec::new();
+            bundle
+                .format_pattern(message, None, &mut errors)
+                .to_string()
+        }
+
+        assert_eq!(
+            message_for("en-US", "size-diag-label-invalid-suffix"),
+            "not a known unit"
+        );
+        assert_eq!(
+            message_for("fr-FR", "size-diag-label-invalid-suffix"),
+            "unité inconnue"
+        );
+        assert_eq!(
+            message_for("en-US", "checksum-error-need-algorithm-to-hash"),
+            "Needs an algorithm to hash with.\nUse --help for more information."
+        );
+        assert_eq!(
+            message_for("fr-FR", "checksum-error-need-algorithm-to-hash"),
+            "Un algorithme de hachage est nécessaire.\nUtilisez --help pour plus d'informations."
+        );
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn test_uucore_locale_directory_in_development() {
+        assert_eq!(
+            get_locales_dir("uucore").unwrap(),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("locales")
+        );
+    }
+
+    #[test]
     fn test_localization_error_from_io_error() {
         let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "File not found");
         let loc_error = LocalizationError::from(io_error);
@@ -1522,6 +1842,69 @@ invalid-syntax = This is { $missing
         })
         .join()
         .unwrap();
+    }
+
+    #[test]
+    fn test_setup_localization_second_util_on_same_thread() {
+        // A process hosting several utilities (e.g. nushell) sets them up one
+        // after another on the same thread
+        std::thread::spawn(|| {
+            unsafe {
+                env::set_var("LANG", "en-US");
+            }
+
+            setup_localization("test").unwrap();
+            assert_eq!(
+                get_message("test-about"),
+                "Check file types and compare values."
+            );
+
+            setup_localization("whoami").unwrap();
+            assert_eq!(get_message("whoami-about"), "Print the current username.");
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn test_setup_localization_keeps_util_for_name_without_strings() {
+        // e.g. `dir` or a prefixed binary name passed by the help template
+        std::thread::spawn(|| {
+            unsafe {
+                env::set_var("LANG", "en-US");
+            }
+
+            setup_localization("test").unwrap();
+            setup_localization("no-such-util").unwrap();
+            assert_eq!(
+                get_message("test-about"),
+                "Check file types and compare values."
+            );
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn test_bundles_reuse_cached_resources() {
+        // Switching utilities rebuilds bundles; the resources must come from
+        // the cache instead of being parsed and leaked again
+        fn assert_cached(key: String) {
+            cached_resource(key, || -> Result<FluentResource, ()> {
+                panic!("resource is not cached")
+            })
+            .unwrap();
+        }
+        let en_us = LanguageIdentifier::from_str("en-US").unwrap();
+
+        let bundle = create_english_bundle_from_embedded(&en_us, "whoami").unwrap();
+        assert!(bundle.has_message("whoami-about"));
+        assert_cached("embedded:whoami/en-US.ftl".to_string());
+
+        let locales_dir = get_locales_dir("test").unwrap();
+        let bundle = create_bundle(&en_us, &locales_dir, "test").unwrap();
+        assert!(bundle.has_message("test-about"));
+        assert_cached(locales_dir.join("en-US.ftl").to_string_lossy().into_owned());
     }
 
     #[test]

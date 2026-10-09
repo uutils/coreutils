@@ -46,6 +46,7 @@ rm-error-dangerous-recursive-operation-same-as-root = il est dangereux d'opérer
 rm-error-use-no-preserve-root = utilisez --no-preserve-root pour outrepasser cette protection
 rm-error-refusing-to-remove-directory = refus de supprimer le répertoire '.' ou '..' : ignorer {$path}
 rm-error-cannot-remove = impossible de supprimer {$file}
+rm-error-cannot-remove-changed = impossible de supprimer {$file} : Le fichier a changé pendant la suppression
 rm-error-may-not-abbreviate-no-preserve-root = Vous ne pouvez pas abréger l'option --no-preserve-root
 rm-error-standard-output = sortie standard : {$error}
 

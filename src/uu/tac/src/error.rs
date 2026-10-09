@@ -2,15 +2,15 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 //! Errors returned by tac during processing of a file.
 
 use std::ffi::OsString;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, strip_errno};
 use uucore::translate;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum TacError {
     /// A regular expression given by the user is invalid.
     #[error("{}", translate!("tac-error-invalid-regex", "error" => .0))]

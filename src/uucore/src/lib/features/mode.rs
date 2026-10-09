@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//! Set of functions to parse modes
-
 // spell-checker:ignore (vars) fperm srwx
+
+//! Set of functions to parse modes
 
 use std::ffi::{OsStr, OsString};
 use std::fmt::{self, Display};
@@ -58,12 +58,14 @@ impl ModeError {
         }
     }
 
-    /// Render this error against `args`, with a caret under the part of the
-    /// mode that is at fault.
+    /// Render this error against `args`, where the mode is the value of the
+    /// `-m`/`--mode` option.
     ///
     /// # Arguments
     ///
-    /// * `args` - The argument list the mode came from.
+    /// * `args` - The argument list the mode came from, without the program
+    ///   name — as [`crate::diagnostics::operands`] returns it, since the other
+    ///   renderer here takes a positional index into the same list.
     /// * `mode` - The whole mode operand.
     /// * `clause_start` - Where the clause that failed begins inside `mode`,
     ///   since a mode is parsed one comma-separated clause at a time.
@@ -73,40 +75,36 @@ impl ModeError {
     ///
     /// `false` when the mode cannot be found among the arguments, in which case
     /// the caller should fall back to the plain one-line message.
-    pub fn render(
+    pub fn render_mode_value(
         &self,
         args: &[OsString],
         mode: &str,
         clause_start: usize,
         message: &str,
     ) -> bool {
-        let label = match self.kind {
-            ModeErrorKind::InvalidOperator => "mode-diag-label-invalid-operator",
-            ModeErrorKind::MissingOperator => "mode-diag-label-missing-operator",
-            ModeErrorKind::InvalidNumber => "mode-diag-label-invalid-number",
-        };
-
-        let range = clause_start + self.span.start..clause_start + self.span.end;
-        let label = translate!(label);
-        let help = translate!("mode-diag-help-syntax");
-
+        let (label, help) = self.describe();
+        let snapshot = crate::diagnostics::Snapshot::new(args);
+        let range = self.clause_span(clause_start);
         if !mode.chars().any(char::is_control) && !message.chars().any(char::is_control) {
-            return crate::diagnostics::Snapshot::new(args).render_inside(
+            return snapshot.render_option_value(
                 mode,
+                Some('m'),
+                Some("mode"),
                 range,
                 message,
-                &label,
-                Some(&help),
+                label.as_deref(),
+                help.as_deref(),
             );
         }
 
-        let Some(prefix) = mode.get(..range.start) else {
+        let Some(index) = snapshot.index_of_value(mode, Some('m'), Some("mode")) else {
             return false;
         };
-        let Some(fault) = mode.get(range.clone()) else {
-            return false;
-        };
-        let Some(suffix) = mode.get(range.end..) else {
+        let (Some(prefix), Some(fault), Some(suffix)) = (
+            mode.get(..range.start),
+            mode.get(range.clone()),
+            mode.get(range.end..),
+        ) else {
             return false;
         };
         let escaped_prefix = escape_diagnostic_text(prefix);
@@ -117,26 +115,83 @@ impl ModeError {
         );
         let escaped_range = escaped_prefix.len()..escaped_prefix.len() + escaped_fault.len();
 
-        let Some(index) = args
-            .iter()
-            .position(|arg| arg.as_encoded_bytes().ends_with(mode.as_bytes()))
-        else {
-            return false;
-        };
         let Some(arg) = args[index].to_str() else {
             return false;
         };
-        let arg_prefix = &arg[..arg.len() - mode.len()];
-        let mut escaped_args: Vec<OsString> = args.to_vec();
+        let Some(arg_prefix) = arg.strip_suffix(mode) else {
+            return false;
+        };
+        let mut escaped_args = args.to_vec();
         escaped_args[index] = format!("{arg_prefix}{escaped_mode}").into();
 
-        crate::diagnostics::Snapshot::new(&escaped_args).render_inside(
+        crate::diagnostics::Snapshot::new(&escaped_args).render_inside_at(
+            index,
             &escaped_mode,
             escaped_range,
             &escape_diagnostic_text(message),
-            &label,
-            Some(&help),
+            label.as_deref(),
+            help.as_deref(),
         )
+    }
+
+    /// Render this error against `args`, with the argument carrying the mode
+    /// already located by the caller.
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - The argument list the mode came from, without the program
+    ///   name.
+    /// * `index` - Position of the argument carrying the mode inside `args`.
+    /// * `mode` - The mode as it appears in that argument.
+    /// * `clause_start` - Where the clause that failed begins inside `mode`,
+    ///   since a mode is parsed one comma-separated clause at a time.
+    /// * `message` - The headline, already localized.
+    ///
+    /// # Returns
+    ///
+    /// `false` when nothing could be rendered, in which case the caller should
+    /// fall back to the plain one-line message.
+    pub fn render_at(
+        &self,
+        args: &[OsString],
+        index: usize,
+        mode: &str,
+        clause_start: usize,
+        message: &str,
+    ) -> bool {
+        let (label, help) = self.describe();
+        crate::diagnostics::Snapshot::new(args).render_inside_at(
+            index,
+            mode,
+            self.clause_span(clause_start),
+            message,
+            label.as_deref(),
+            help.as_deref(),
+        )
+    }
+
+    /// The caret label for this error, translated, and the advice that goes
+    /// under it.
+    ///
+    /// Labelled only where a label would add to the message, per the
+    /// convention in [`crate::diagnostics`].
+    fn describe(&self) -> (Option<String>, Option<String>) {
+        let label = match self.kind {
+            // The message already names the expected operators.
+            ModeErrorKind::InvalidOperator => None,
+            ModeErrorKind::MissingOperator => Some("mode-diag-label-missing-operator"),
+            ModeErrorKind::InvalidNumber => Some("mode-diag-label-invalid-number"),
+        };
+        (
+            label.map(|label| translate!(label)),
+            Some(translate!("mode-diag-help-syntax")),
+        )
+    }
+
+    /// Where this error sits inside the whole mode, given where the clause it
+    /// was raised in begins.
+    fn clause_span(&self, clause_start: usize) -> Range<usize> {
+        clause_start + self.span.start..clause_start + self.span.end
     }
 }
 
@@ -146,7 +201,7 @@ fn escape_diagnostic_text(text: &str) -> String {
         if character.is_control() {
             let mut buffer = [0; 4];
             let character = character.encode_utf8(&mut buffer);
-            let quoted = locale_aware_escape_name(OsStr::new(character), QuotingStyle::C_NO_QUOTES)
+            let quoted = locale_aware_escape_name(OsStr::new(character), QuotingStyle::Escape)
                 .into_string()
                 .expect("C-style quoting always produces valid UTF-8");
             escaped.push_str(&quoted);

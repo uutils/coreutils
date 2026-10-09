@@ -23,7 +23,7 @@ use fluent_syntax::{
     },
     parser,
 };
-use jiff::Zoned;
+use jiff::{Timestamp, Zoned, tz::TimeZone};
 use regex::Regex;
 use textwrap::{fill, indent, termwidth};
 use zip::ZipArchive;
@@ -60,13 +60,12 @@ fn post_process_manpage(manpage: String, date: &str) -> String {
     let lines: Vec<&str> = result.lines().map(str::trim_end).collect();
     let mut fixed_lines: Vec<&str> = Vec::with_capacity(lines.len());
 
-    for i in 0..lines.len() {
-        let line = lines[i];
-
+    for (i, &line) in lines.iter().enumerate() {
         if line == ".br" {
-            let preceded_by_empty_line = i > 0 && lines[i - 1].is_empty();
-            let followed_by_empty_line = i + 1 < lines.len() && lines[i + 1].is_empty();
-            let followed_by_br = i + 1 < lines.len() && lines[i + 1] == ".br";
+            let preceded_by_empty_line = lines.get(i - 1).is_some_and(|l| l.is_empty());
+            let line_next = lines.get(i + 1);
+            let followed_by_empty_line = line_next.is_some_and(|l| l.is_empty());
+            let followed_by_br = line_next == Some(&".br");
 
             if preceded_by_empty_line || followed_by_empty_line || followed_by_br {
                 // skip this ".br"
@@ -168,8 +167,15 @@ fn gen_manpage<T: Args>(
     // Convert to string for processing
     let manpage = String::from_utf8(buffer).expect("Invalid UTF-8 in manpage");
 
+    // Use `SOURCE_DATE_EPOCH` for reproducible builds if set and valid; otherwise use the current time.
+    let now = std::env::var("SOURCE_DATE_EPOCH")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .and_then(|s| Timestamp::new(s, 0).ok())
+        .map_or_else(Zoned::now, |t| t.to_zoned(TimeZone::UTC));
+
     // Post-process the manpage to fix mandoc lint issues
-    let date = Zoned::now().strftime("%Y-%m-%d").to_string();
+    let date = now.strftime("%Y-%m-%d").to_string();
     let processed_manpage = post_process_manpage(manpage, &date);
 
     // Write the processed manpage to stdout
@@ -273,8 +279,10 @@ fn main() -> io::Result<()> {
         * [Contributing](CONTRIBUTING.md)\n\
         \t* [Development](DEVELOPMENT.md)\n\
         \t* [Code of Conduct](CODE_OF_CONDUCT.md)\n\
+        \t* [Localization](l10n.md)\n\
         * [GNU test coverage](test_coverage.md)\n\
         * [Extensions](extensions.md)\n\
+        \t* [Error diagnostics](extensions-errors.md)\n\
         \n\
         # Reference\n\
         * [Multi-call binary](multicall.md)\n",
@@ -296,7 +304,7 @@ fn main() -> io::Result<()> {
             )
             .unwrap()
             .trim()
-            .split(' ')
+            .split_ascii_whitespace()
             .map(ToString::to_string)
             .collect();
             map.insert(platform, platform_utils);
@@ -311,7 +319,7 @@ fn main() -> io::Result<()> {
         )
         .unwrap()
         .trim()
-        .split(' ')
+        .split_ascii_whitespace()
         .map(ToString::to_string)
         .collect();
         map.insert("linux", platform_utils);

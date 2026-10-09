@@ -17,10 +17,10 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["libc", "fsext", "parser-size", "fs"] }
-unicode-width = { workspace = true }
-thiserror = { workspace = true }
 fluent = { workspace = true }
+thiserror = { workspace = true }
+unicode-width = { workspace = true }
+uucore = { workspace = true, features = ["libc", "fsext", "parser-size", "fs"] }
 
 [dev-dependencies]
 divan = { workspace = true }
@@ -30,8 +30,8 @@ uucore = { workspace = true, features = ["benchmark"] }
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["fs"] }
 
-[target.'cfg(unix)'.dev-dependencies]
-rustix = { workspace = true, features = ["stdio"] }
+[features]
+diagnostics = ["uucore/diagnostics"]
 
 [lints]
 workspace = true

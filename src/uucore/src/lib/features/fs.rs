@@ -3,13 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore backport Ioctl absolutized linkat symlinkat renameat unlinkat openat urandom NOFOLLOW CLOEXEC RDONLY unguessability
+
 //! Set of functions to manage regular files, special files, and links.
 
-// spell-checker:ignore backport Ioctl absolutized
-
-#[cfg(all(unix, not(target_os = "redox")))]
+use crate::translate;
+#[cfg(all(unix, not(target_os = "haiku")))]
 pub use libc::{major, makedev, minor};
-use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -27,16 +27,24 @@ use std::os::windows::ffi::{OsStrExt, OsStringExt};
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 use std::path::{Component, MAIN_SEPARATOR, Path, PathBuf};
-#[cfg(target_os = "windows")]
-use winapi_util::AsHandleRef;
+#[cfg(unix)]
+use std::sync::OnceLock;
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::MAX_PATH;
 #[cfg(windows)]
-use windows_sys::Win32::Storage::FileSystem::{GetDiskFreeSpaceW, GetVolumePathNameW};
+use windows_sys::Win32::Storage::FileSystem::{
+    BY_HANDLE_FILE_INFORMATION, GetDiskFreeSpaceW, GetFileInformationByHandle, GetVolumePathNameW,
+};
 #[cfg(windows)]
 use windows_sys::Win32::System::IO::DeviceIoControl;
 #[cfg(windows)]
 use windows_sys::Win32::System::Ioctl::FSCTL_SET_SPARSE;
+
+/// Maximum number of symlinks followed while resolving a single path.
+///
+/// Matches the limit Linux enforces during path lookup; going past it is
+/// reported as "Too many levels of symbolic links".
+pub const SYMLINK_FOLLOW_LIMIT: usize = 40;
 
 /// Used to check if the `mode` has its `perm` bit set.
 ///
@@ -53,7 +61,7 @@ macro_rules! has {
 #[derive(Clone)]
 pub struct FileInformation(
     #[cfg(any(unix, target_os = "wasi"))] rustix::fs::Stat,
-    #[cfg(windows)] winapi_util::file::Information,
+    #[cfg(windows)] BY_HANDLE_FILE_INFORMATION,
 );
 
 impl FileInformation {
@@ -65,9 +73,13 @@ impl FileInformation {
     }
 
     /// Get information from a currently open file
-    #[cfg(target_os = "windows")]
-    pub fn from_file(file: &impl AsHandleRef) -> IOResult<Self> {
-        let info = winapi_util::file::information(file.as_handle_ref())?;
+    #[cfg(windows)]
+    pub fn from_file(file: &impl AsRawHandle) -> IOResult<Self> {
+        let mut info = BY_HANDLE_FILE_INFORMATION::default();
+        // SAFETY: `info` is a valid pointer to be populated by GetFileInformationByHandle.
+        if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &raw mut info) } == 0 {
+            return Err(Error::last_os_error());
+        }
         Ok(Self(info))
     }
 
@@ -85,10 +97,10 @@ impl FileInformation {
             };
             Ok(Self(stat?))
         }
-        #[cfg(target_os = "windows")]
+        #[cfg(windows)]
         {
             use std::fs::OpenOptions;
-            use std::os::windows::prelude::*;
+            use std::os::windows::fs::OpenOptionsExt;
             let mut open_options = OpenOptions::new();
             let mut custom_flags = 0;
             if !dereference {
@@ -108,71 +120,44 @@ impl FileInformation {
             assert!(self.0.st_size >= 0, "File size is negative");
             self.0.st_size.try_into().unwrap()
         }
-        #[cfg(target_os = "windows")]
+        #[cfg(windows)]
         {
-            self.0.file_size()
+            ((self.0.nFileSizeHigh as u64) << 32) | (self.0.nFileSizeLow as u64)
         }
     }
 
     #[cfg(windows)]
     pub fn file_index(&self) -> u64 {
-        self.0.file_index()
+        ((self.0.nFileIndexHigh as u64) << 32) | (self.0.nFileIndexLow as u64)
     }
 
     pub fn number_of_links(&self) -> u64 {
-        #[cfg(all(
-            unix,
-            not(target_vendor = "apple"),
-            not(target_os = "aix"),
-            not(target_os = "android"),
-            not(target_os = "freebsd"),
-            not(target_os = "netbsd"),
-            not(target_os = "openbsd"),
-            not(target_os = "illumos"),
-            not(target_os = "solaris"),
-            not(target_os = "cygwin"),
-            not(target_arch = "aarch64"),
-            not(target_arch = "riscv64"),
-            not(target_arch = "loongarch64"),
-            not(target_arch = "sparc64"),
-            target_pointer_width = "64"
-        ))]
-        return self.0.st_nlink;
-        #[cfg(target_os = "wasi")]
-        return self.0.st_nlink;
-        #[cfg(all(
-            unix,
-            any(
-                target_vendor = "apple",
-                target_os = "android",
-                target_os = "netbsd",
-                target_os = "openbsd",
-                target_os = "illumos",
-                target_os = "solaris",
-                target_os = "cygwin",
-                target_arch = "aarch64",
-                target_arch = "riscv64",
-                target_arch = "loongarch64",
-                target_arch = "sparc64",
-                not(target_pointer_width = "64")
-            )
-        ))]
-        return self.0.st_nlink.into();
-        #[cfg(target_os = "freebsd")]
-        return self.0.st_nlink;
-        #[cfg(target_os = "aix")]
-        return self.0.st_nlink.try_into().unwrap();
+        #[cfg(any(unix, target_os = "wasi"))]
+        {
+            #[cfg(any(target_os = "aix", target_os = "haiku"))]
+            return self.0.st_nlink.try_into().unwrap();
+            #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
+            #[allow(clippy::useless_conversion)]
+            return self.0.st_nlink.into();
+        }
         #[cfg(windows)]
-        return self.0.number_of_links();
+        return self.0.nNumberOfLinks as u64;
     }
 
     #[cfg(any(unix, target_os = "wasi"))]
     pub fn inode(&self) -> u64 {
-        #[cfg(all(not(any(target_os = "netbsd")), target_pointer_width = "64"))]
-        return self.0.st_ino;
-        #[cfg(any(target_os = "netbsd", not(target_pointer_width = "64")))]
+        #[cfg(target_os = "haiku")]
+        return self.0.st_ino.try_into().unwrap();
+        #[cfg(not(target_os = "haiku"))]
         #[allow(clippy::useless_conversion)]
         return self.0.st_ino.into();
+    }
+
+    pub fn dev(&self) -> u64 {
+        #[cfg(any(unix, target_os = "wasi"))]
+        return self.0.st_dev as _;
+        #[cfg(windows)]
+        return self.0.dwVolumeSerialNumber as _;
     }
 }
 
@@ -183,11 +168,11 @@ impl PartialEq for FileInformation {
     }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 impl PartialEq for FileInformation {
     fn eq(&self, other: &Self) -> bool {
-        self.0.volume_serial_number() == other.0.volume_serial_number()
-            && self.0.file_index() == other.0.file_index()
+        self.0.dwVolumeSerialNumber == other.0.dwVolumeSerialNumber
+            && self.file_index() == other.file_index()
     }
 }
 
@@ -200,10 +185,10 @@ impl Hash for FileInformation {
             self.0.st_dev.hash(state);
             self.0.st_ino.hash(state);
         }
-        #[cfg(target_os = "windows")]
+        #[cfg(windows)]
         {
-            self.0.volume_serial_number().hash(state);
-            self.0.file_index().hash(state);
+            self.0.dwVolumeSerialNumber.hash(state);
+            self.file_index().hash(state);
         }
     }
 }
@@ -366,7 +351,6 @@ pub fn canonicalize<P: AsRef<Path>>(
     miss_mode: MissingHandling,
     res_mode: ResolveMode,
 ) -> IOResult<PathBuf> {
-    const SYMLINKS_TO_LOOK_FOR_LOOPS: i32 = 20;
     let original = original.as_ref();
     let has_to_be_directory =
         (miss_mode == MissingHandling::Normal || miss_mode == MissingHandling::Existing) && {
@@ -387,7 +371,6 @@ pub fn canonicalize<P: AsRef<Path>>(
     let mut parts: VecDeque<OwningComponent> = path.components().map(Into::into).collect();
     let mut result = PathBuf::new();
     let mut followed_symlinks = 0;
-    let mut visited_files = HashSet::new();
     while let Some(part) = parts.pop_front() {
         match part {
             OwningComponent::Prefix(s) => {
@@ -410,21 +393,14 @@ pub fn canonicalize<P: AsRef<Path>>(
                 for link_part in link_path.components().rev() {
                     parts.push_front(link_part.into());
                 }
-                if followed_symlinks < SYMLINKS_TO_LOOK_FOR_LOOPS {
-                    followed_symlinks += 1;
-                } else {
-                    let file_info =
-                        FileInformation::from_path(result.parent().unwrap(), false).unwrap();
-                    let mut path_to_follow = PathBuf::new();
-                    for part in &parts {
-                        path_to_follow.push(part.as_os_str());
-                    }
-                    if !visited_files.insert((file_info, path_to_follow)) {
-                        return Err(Error::new(
-                            ErrorKind::InvalidInput,
-                            "Too many levels of symbolic links",
-                        )); // TODO use ErrorKind::FilesystemLoop when stable
-                    }
+                // A fixed cap rather than tracking visited links: loops such
+                // as `foo -> foo/bar` never revisit the same state.
+                followed_symlinks += 1;
+                if followed_symlinks > SYMLINK_FOLLOW_LIMIT {
+                    return Err(Error::new(
+                        ErrorKind::InvalidInput,
+                        translate!("error-too-many-symlink-levels"),
+                    )); // TODO use ErrorKind::FilesystemLoop when stable
                 }
                 result.pop();
             }
@@ -458,8 +434,8 @@ pub fn canonicalize<P: AsRef<Path>>(
     Ok(result)
 }
 
-#[cfg(not(unix))]
 /// Display the permissions of a file
+#[cfg(not(unix))]
 pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> String {
     let write = if metadata.permissions().readonly() {
         '-'
@@ -482,8 +458,8 @@ pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> 
     }
 }
 
-#[cfg(unix)]
 /// Display the permissions of a file
+#[cfg(unix)]
 pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> String {
     display_permissions_unix(metadata.mode(), display_file_type)
 }
@@ -550,10 +526,9 @@ fn get_file_display(mode: u32) -> char {
     }
 }
 
-// The logic below is more readable written this way.
-#[allow(clippy::if_not_else)]
-#[allow(clippy::cognitive_complexity)]
 /// Display the unix permissions of a file
+#[allow(clippy::if_not_else, reason = "more readable written this way")]
+#[allow(clippy::cognitive_complexity)]
 pub fn display_permissions_unix(mode: u32, display_file_type: bool) -> String {
     use mode::{
         S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP,
@@ -633,6 +608,119 @@ pub fn infos_refer_to_same_file(
     info1.is_ok() && info1.ok() == info2.ok()
 }
 
+/// The identity of `/`, stat'd once per process (like GNU's `get_root_dev_ino`).
+#[cfg(unix)]
+fn root_file_information() -> Option<&'static FileInformation> {
+    static ROOT: OnceLock<Option<FileInformation>> = OnceLock::new();
+    ROOT.get_or_init(|| FileInformation::from_path(Path::new("/"), true).ok())
+        .as_ref()
+}
+
+/// Whether `path` *is* `/`, by `(st_dev, st_ino)` rather than by name.
+///
+/// A bind mount of `/` (`mount --bind / /mnt`) is a real directory whose path
+/// never resolves to `/`, so a name-based `--preserve-root` check misses it;
+/// GNU compares dev/ino for the same reason. `dereference` says whether a
+/// symlink at `path` is about to be followed (only then does a link to `/`
+/// count). Returns `false` if `path` or `/` cannot be stat'd, or off unix.
+pub fn path_is_root_dir<P: AsRef<Path>>(path: P, dereference: bool) -> bool {
+    #[cfg(unix)]
+    {
+        let Some(root) = root_file_information() else {
+            return false;
+        };
+        FileInformation::from_path(path, dereference).is_ok_and(|info| &info == root)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (path, dereference);
+        false
+    }
+}
+
+/// Check if two files are identical by comparing their contents.
+///
+/// Returns `Ok(true)` if both files exist, are regular files, and have identical contents.
+/// Returns `Ok(false)` if the files differ in size, aren't both regular files, or have different contents.
+/// Returns `Err` if an I/O error occurs while opening or reading either file.
+///
+/// # Examples
+///
+/// ```
+/// use std::io::Write;
+/// use tempfile::NamedTempFile;
+/// use uucore::fs::are_files_identical;
+///
+/// let mut file1 = NamedTempFile::new().unwrap();
+/// let mut file2 = NamedTempFile::new().unwrap();
+/// file1.write_all(b"hello world").unwrap();
+/// file2.write_all(b"hello world").unwrap();
+///
+/// assert!(are_files_identical(file1.path(), file2.path()).unwrap());
+/// ```
+pub fn are_files_identical(path1: impl AsRef<Path>, path2: impl AsRef<Path>) -> IOResult<bool> {
+    use std::fs::{File, metadata};
+    use std::io::{BufReader, ErrorKind, Read};
+
+    let path1 = path1.as_ref();
+    let path2 = path2.as_ref();
+
+    // First compare file sizes
+    let metadata1 = metadata(path1)?;
+    let metadata2 = metadata(path2)?;
+
+    if metadata1.len() != metadata2.len() {
+        return Ok(false);
+    }
+
+    // only proceed if both are regular files
+    if !metadata1.is_file() || !metadata2.is_file() {
+        return Ok(false);
+    }
+
+    let file1 = File::open(path1)?;
+    let file2 = File::open(path2)?;
+
+    let mut reader1 = BufReader::new(file1);
+    let mut reader2 = BufReader::new(file2);
+
+    let mut buffer1 = [0; 8192];
+    let mut buffer2 = [0; 8192];
+
+    loop {
+        // Read from first file with EINTR retry handling
+        // This loop retries the read operation if it's interrupted by signals (e.g., SIGUSR1)
+        // instead of failing, which is the POSIX-compliant way to handle interrupted I/O
+        let bytes1 = loop {
+            match reader1.read(&mut buffer1) {
+                Err(e) if e.kind() == ErrorKind::Interrupted => {}
+                result => break result?,
+            }
+        };
+
+        // Read from second file with EINTR retry handling
+        // Same retry logic as above for the second file to ensure consistent behavior
+        let bytes2 = loop {
+            match reader2.read(&mut buffer2) {
+                Err(e) if e.kind() == ErrorKind::Interrupted => {}
+                result => break result?,
+            }
+        };
+
+        if bytes1 != bytes2 {
+            return Ok(false);
+        }
+
+        if bytes1 == 0 {
+            return Ok(true);
+        }
+
+        if buffer1[..bytes1] != buffer2[..bytes2] {
+            return Ok(false);
+        }
+    }
+}
+
 /// Converts absolute `path` to be relative to absolute `to` path.
 pub fn make_path_relative_to<P1: AsRef<Path>, P2: AsRef<Path>>(path: P1, to: P2) -> PathBuf {
     let path = path.as_ref();
@@ -661,6 +749,7 @@ pub fn make_path_relative_to<P1: AsRef<Path>, P2: AsRef<Path>>(path: P1, to: P2)
 /// Checks if there is a symlink loop in the given path.
 ///
 /// A symlink loop is a chain of symlinks where the last symlink points back to one of the previous symlinks in the chain.
+/// Like the kernel, a chain longer than [`SYMLINK_FOLLOW_LIMIT`] is treated as a loop.
 ///
 /// # Arguments
 ///
@@ -670,23 +759,22 @@ pub fn make_path_relative_to<P1: AsRef<Path>, P2: AsRef<Path>>(path: P1, to: P2)
 ///
 /// * `bool` - Returns `true` if a symlink loop is detected, `false` otherwise.
 pub fn is_symlink_loop(path: &Path) -> bool {
-    let mut visited_symlinks = HashSet::new();
     let mut current_path = path.to_path_buf();
 
-    while let (Ok(metadata), Ok(link)) = (
-        current_path.symlink_metadata(),
-        fs::read_link(&current_path),
-    ) {
+    for _ in 0..=SYMLINK_FOLLOW_LIMIT {
+        let (Ok(metadata), Ok(link)) = (
+            current_path.symlink_metadata(),
+            fs::read_link(&current_path),
+        ) else {
+            return false;
+        };
         if !metadata.file_type().is_symlink() {
             return false;
-        }
-        if !visited_symlinks.insert(current_path.clone()) {
-            return true;
         }
         current_path = link;
     }
 
-    false
+    true
 }
 
 #[cfg(not(unix))]
@@ -800,7 +888,7 @@ pub fn is_stdin_directory(stdin: &Stdin) -> bool {
     #[cfg(any(unix, all(target_os = "wasi", target_env = "p2")))]
     {
         use mode::{S_IFDIR, S_IFMT};
-        if let Ok(stat) = rustix::fs::fstat(stdin.as_fd()) {
+        if let Ok(stat) = rustix::fs::fstat(stdin) {
             #[allow(clippy::unnecessary_cast)]
             let mode = stat.st_mode as u32;
             // We use the S_IFMT mask ala S_ISDIR() to avoid mistaking
@@ -1005,22 +1093,127 @@ pub fn get_filename(file: &Path) -> Option<&str> {
     file.file_name().and_then(|filename| filename.to_str())
 }
 
-// Redox's libc appears not to include the following utilities
+/// Atomically replace `dest` with a new link to `target` — symbolic if
+/// `symbolic` is set, hard otherwise.
+///
+/// Never unlinks `dest` first, which would briefly free the name for another
+/// user to claim. Try the create; if the name is taken, build the link under a
+/// random temporary name in the same directory and `renameat(2)` it over.
+///
+/// # Errors
+///
+/// Returns an error if the link cannot be created, if the parent directory
+/// cannot be opened, or if no unique temporary name is available.
+pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> {
+    #[cfg(all(unix, not(target_os = "redox")))]
+    {
+        use rustix::fs::{AtFlags, CWD, Mode, OFlags, openat, renameat, unlinkat};
+        use std::ffi::OsStr;
+        use std::io::Read;
+        use std::os::unix::ffi::OsStrExt;
 
-#[cfg(target_os = "redox")]
-pub fn major(dev: libc::dev_t) -> core::ffi::c_uint {
-    (((dev >> 8) & 0xFFF) | ((dev >> 32) & 0xFFFFF000)) as _
+        // GNU's template is `CuXXXXXX`: a 2-char prefix plus 6 random chars
+        // from a 62-char alphabet. The ~3% modulo bias per slot is irrelevant
+        // for an 8-char unguessability budget.
+        const ALPHABET: &[u8; 62] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+        match link_at(target, CWD, dest.as_os_str(), symbolic) {
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
+            res => return res,
+        }
+
+        let parent = dest
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        let basename = dest
+            .file_name()
+            .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid link path"))?;
+        // No NOFOLLOW: the parent may be a symlink to a directory, which the
+        // create attempt above already followed.
+        let dir = openat(
+            CWD,
+            parent,
+            OFlags::DIRECTORY | OFlags::RDONLY | OFlags::CLOEXEC,
+            Mode::empty(),
+        )?;
+        let mut urandom = fs::File::open("/dev/urandom")?;
+
+        for _ in 0..32 {
+            let mut name = *b"Cu------";
+            let mut raw = [0u8; 6];
+            urandom.read_exact(&mut raw)?;
+            for (slot, byte) in name[2..].iter_mut().zip(raw) {
+                *slot = ALPHABET[byte as usize % ALPHABET.len()];
+            }
+            let tmp = OsStr::from_bytes(&name);
+
+            match link_at(target, &dir, tmp, symbolic) {
+                Ok(()) => {
+                    let renamed = renameat(&dir, tmp, &dir, basename);
+                    // Renaming onto an existing link to the same inode is a
+                    // no-op, which leaves the temp behind.
+                    let _ = unlinkat(&dir, tmp, AtFlags::empty());
+                    return renamed.map_err(Into::into);
+                }
+                Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Err(Error::new(
+            ErrorKind::AlreadyExists,
+            "no unique temporary name available in the destination directory",
+        ))
+    }
+    #[cfg(any(windows, target_os = "redox", target_os = "wasi"))]
+    {
+        // No atomic replace available here; this leaves the window described
+        // above, accepted only where the platform offers nothing better.
+        match create_link_std(target, dest, symbolic) {
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                fs::remove_file(dest)?;
+                create_link_std(target, dest, symbolic)
+            }
+            res => res,
+        }
+    }
 }
 
-#[cfg(target_os = "redox")]
-pub fn minor(dev: libc::dev_t) -> core::ffi::c_uint {
-    ((dev & 0xFF) | ((dev >> 12) & 0xFFFFF00)) as _
+/// `symlinkat`/`linkat` relative to an open directory.
+#[cfg(all(unix, not(target_os = "redox")))]
+fn link_at<Fd: AsFd>(target: &Path, dir: Fd, name: &OsStr, symbolic: bool) -> IOResult<()> {
+    use rustix::fs::{AtFlags, CWD, linkat, symlinkat};
+
+    if symbolic {
+        symlinkat(target, dir, name).map_err(Into::into)
+    } else {
+        // `AtFlags::empty()` matches `std::fs::hard_link`: not dereferenced.
+        linkat(CWD, target, dir, name, AtFlags::empty()).map_err(Into::into)
+    }
 }
 
-#[cfg(target_os = "redox")]
-pub fn makedev(maj: core::ffi::c_uint, min: core::ffi::c_uint) -> libc::dev_t {
-    let [maj, min] = [maj as libc::dev_t, min as libc::dev_t];
-    (min & 0xff) | ((maj & 0xfff) << 8) | ((min & !0xff) << 12) | ((maj & !0xfff) << 32)
+#[cfg(any(windows, target_os = "redox", target_os = "wasi"))]
+fn create_link_std(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> {
+    if !symbolic {
+        return fs::hard_link(target, dest);
+    }
+    #[cfg(windows)]
+    {
+        if target.is_dir() {
+            std::os::windows::fs::symlink_dir(target, dest)
+        } else {
+            std::os::windows::fs::symlink_file(target, dest)
+        }
+    }
+    #[cfg(target_os = "redox")]
+    {
+        std::os::unix::fs::symlink(target, dest)
+    }
+    #[cfg(target_os = "wasi")]
+    {
+        rustix::fs::symlinkat(target, rustix::fs::CWD, dest).map_err(Into::into)
+    }
 }
 
 #[cfg(test)]
@@ -1210,6 +1403,40 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn test_is_symlink_loop_follow_limit() {
+        let temp_dir = tempdir().unwrap();
+        let link = |i: usize| temp_dir.path().join(format!("link{i}"));
+        let target = temp_dir.path().join("target");
+        fs::File::create(&target).unwrap();
+        unix::fs::symlink(&target, link(1)).unwrap();
+        for i in 2..=SYMLINK_FOLLOW_LIMIT + 1 {
+            unix::fs::symlink(link(i - 1), link(i)).unwrap();
+        }
+
+        assert!(!is_symlink_loop(&link(SYMLINK_FOLLOW_LIMIT)));
+        assert!(is_symlink_loop(&link(SYMLINK_FOLLOW_LIMIT + 1)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_canonicalize_growing_symlink_loop() {
+        let temp_dir = tempdir().unwrap();
+        let foo = temp_dir.path().join("foo");
+        unix::fs::symlink("foo/bar", &foo).unwrap();
+
+        for miss_mode in [
+            MissingHandling::Normal,
+            MissingHandling::Existing,
+            MissingHandling::Missing,
+        ] {
+            for res_mode in [ResolveMode::Physical, ResolveMode::Logical] {
+                assert!(canonicalize(&foo, miss_mode, res_mode).is_err());
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn test_are_hardlinks_to_same_file_same_file() {
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(temp_file, "Test content").unwrap();
@@ -1334,5 +1561,60 @@ mod tests {
         set_file_sparse(file.as_file()).unwrap();
         let attributes = file.as_file().metadata().unwrap().file_attributes();
         assert_ne!(attributes & FILE_ATTRIBUTE_SPARSE_FILE, 0);
+    }
+
+    #[test]
+    fn test_are_files_identical() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let mut file1 = NamedTempFile::new().unwrap();
+        let mut file2 = NamedTempFile::new().unwrap();
+        let mut file3 = NamedTempFile::new().unwrap();
+
+        file1.write_all(b"hello world").unwrap();
+        file2.write_all(b"hello world").unwrap();
+        file3.write_all(b"hello rust!").unwrap();
+
+        // Identical contents
+        assert!(are_files_identical(file1.path(), file2.path()).unwrap());
+
+        // Same size, different contents
+        assert!(!are_files_identical(file1.path(), file3.path()).unwrap());
+
+        // Different size
+        let mut file4 = NamedTempFile::new().unwrap();
+        file4.write_all(b"hello").unwrap();
+        assert!(!are_files_identical(file1.path(), file4.path()).unwrap());
+
+        // Non-existent file
+        assert!(are_files_identical(file1.path(), "non_existent_file_path").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_path_is_root_dir() {
+        assert!(path_is_root_dir("/", true));
+        assert!(path_is_root_dir("/", false));
+        // Reached by a different name, still the same directory.
+        assert!(path_is_root_dir("/..", true));
+        assert!(path_is_root_dir("/tmp/..", true));
+
+        let dir = tempdir().unwrap();
+        assert!(!path_is_root_dir(dir.path(), true));
+        assert!(!path_is_root_dir(dir.path().join("nonexistent"), true));
+        assert!(!path_is_root_dir("", true));
+    }
+
+    /// A symlink to `/` counts only when the caller would follow it.
+    #[cfg(unix)]
+    #[test]
+    fn test_path_is_root_dir_symlink() {
+        let dir = tempdir().unwrap();
+        let link = dir.path().join("root-link");
+        unix::fs::symlink("/", &link).unwrap();
+
+        assert!(path_is_root_dir(&link, true));
+        assert!(!path_is_root_dir(&link, false));
     }
 }

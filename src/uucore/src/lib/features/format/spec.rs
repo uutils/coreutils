@@ -6,18 +6,14 @@
 // spell-checker:ignore (vars) intmax ptrdiff padlen
 
 use super::{
-    ExtendedBigDecimal, FormatChar, FormatError, OctalParsing, check_precision,
+    EscapeSet, ExtendedBigDecimal, FormatChar, FormatError, OctalParsing, check_precision,
     num_format::{
         self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
         UnsignedIntVariant,
     },
     parse_escape_only,
 };
-use crate::{
-    format::FormatArguments,
-    os_str_as_bytes,
-    quoting_style::{QuotingStyle, locale_aware_escape_name},
-};
+use crate::{format::FormatArguments, os_str_as_bytes, quoting_style::locale_aware_shell_escape};
 use std::{io::Write, num::NonZero, ops::ControlFlow};
 
 /// A parsed specification for formatting a value
@@ -343,7 +339,8 @@ impl Spec {
         &self,
         mut writer: impl Write,
         args: &mut FormatArguments,
-    ) -> Result<(), FormatError> {
+    ) -> Result<ControlFlow<()>, FormatError> {
+        let mut control_flow = ControlFlow::Continue(());
         match self {
             Self::Char {
                 width,
@@ -387,11 +384,17 @@ impl Spec {
                 let bytes = os_str_as_bytes(os_str)?;
                 let mut parsed = Vec::<u8>::new();
 
-                for c in parse_escape_only(bytes, OctalParsing::ThreeDigits) {
+                for c in parse_escape_only(
+                    bytes,
+                    OctalParsing::ThreeDigits,
+                    EscapeSet::WithUnicodeAndQuote,
+                ) {
                     match c.write(&mut parsed)? {
                         ControlFlow::Continue(()) => {}
                         ControlFlow::Break(()) => {
-                            // TODO: This should break the _entire execution_ of printf
+                            // A `\c` inside the argument stops output for the
+                            // rest of the printf invocation, not just this spec.
+                            control_flow = ControlFlow::Break(());
                             break;
                         }
                     }
@@ -399,12 +402,8 @@ impl Spec {
                 writer.write_all(&parsed).map_err(FormatError::IoError)
             }
             Self::QuotedString { position } => {
-                let s = locale_aware_escape_name(
-                    args.next_string(*position),
-                    QuotingStyle::SHELL_ESCAPE,
-                );
-                let bytes = os_str_as_bytes(&s)?;
-                writer.write_all(bytes).map_err(FormatError::IoError)
+                let s = locale_aware_shell_escape(args.next_string(*position));
+                writer.write_all(s.as_bytes()).map_err(FormatError::IoError)
             }
             Self::SignedInt {
                 width,
@@ -496,7 +495,8 @@ impl Spec {
                 .fmt(writer, &f)
                 .map_err(FormatError::IoError)
             }
-        }
+        }?;
+        Ok(control_flow)
     }
 }
 
@@ -511,7 +511,8 @@ fn resolve_asterisk_width(
         Some(CanAsterisk::Asterisk(loc)) => {
             let nb = args.next_i64(loc);
             if nb < 0 {
-                Some((usize::try_from(-(nb as isize)).ok().unwrap_or(0), true))
+                // Unsigned arithmetic, so `i64::MIN` (magnitude 2^63) doesn't overflow.
+                Some((usize::try_from(nb.unsigned_abs()).ok().unwrap_or(0), true))
             } else {
                 Some((usize::try_from(nb).ok().unwrap_or(0), false))
             }
@@ -550,12 +551,29 @@ fn write_padded(
 
     if left {
         writer.write_all(text)?;
-        write!(writer, "{: <padlen$}", "")
+        write_spaces(&mut writer, padlen)
     } else {
-        write!(writer, "{: >padlen$}", "")?;
+        write_spaces(&mut writer, padlen)?;
         writer.write_all(text)
     }
     .map_err(FormatError::IoError)
+}
+
+/// Write `n` space bytes directly to `writer`.
+///
+/// Unlike `write!(writer, "{: <n$}", "")`, this does not feed `n` into Rust's
+/// dynamic-width formatting, which panics with "Formatting argument out of
+/// range" once the width exceeds `u16::MAX`. A `%s`/`%c` field width above that
+/// bound is valid input for `printf`, so it must not panic (#12593, #12900).
+fn write_spaces(mut writer: impl Write, n: usize) -> std::io::Result<()> {
+    const SPACES: [u8; 64] = [b' '; 64];
+    let mut remaining = n;
+    while remaining > 0 {
+        let chunk = remaining.min(SPACES.len());
+        writer.write_all(&SPACES[..chunk])?;
+        remaining -= chunk;
+    }
+    Ok(())
 }
 
 /// Check for a number ending with a '$'
@@ -669,6 +687,26 @@ mod tests {
                     ]),
                 )
             );
+        }
+
+        #[test]
+        fn asterisk_i64_min_width() {
+            // Regression test for https://github.com/uutils/coreutils/issues/13766
+            // |i64::MIN| = 2^63 overflows i64, so the magnitude of a negative
+            // `*` width must be computed in unsigned arithmetic.
+            let expected = usize::try_from(i64::MIN.unsigned_abs()).unwrap_or(0);
+            for arg in [
+                FormatArgument::SignedInt(i64::MIN),
+                FormatArgument::Unparsed(i64::MIN.to_string().into()),
+            ] {
+                assert_eq!(
+                    Some((expected, true)),
+                    resolve_asterisk_width(
+                        Some(CanAsterisk::Asterisk(ArgumentLocation::NextArgument)),
+                        &mut FormatArguments::new(&[arg]),
+                    )
+                );
+            }
         }
     }
 

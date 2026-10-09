@@ -3,28 +3,42 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) egid euid FiletestOp StrlenOp
+// spell-checker:ignore (vars) egid euid faccessat
 
 mod diagnostics;
 pub(crate) mod error;
+#[cfg(not(any(windows, target_os = "wasi")))]
+mod faccessat;
 mod parser;
-#[cfg(windows)]
+
+#[cfg(any(windows, target_os = "wasi"))]
 mod platform;
 
+#[cfg(not(any(windows, target_os = "wasi")))]
+use crate::faccessat::effective_access;
 use clap::Command;
 use error::{ParseError, ParseErrorKind, ParseResult};
-use parser::{Operator, Symbol, UnaryOperator, parse};
+use parser::{BinaryOp, Evaluator, Operand, UnaryOp, evaluate};
+#[cfg(windows)]
+use platform::fd_is_terminal;
+#[cfg(target_os = "wasi")]
+use platform::path;
+#[cfg(not(any(windows, target_os = "wasi")))]
+use rustix::fs::Access;
+#[cfg(not(any(windows, target_os = "wasi")))]
+use rustix::process::{getegid, geteuid};
 use std::cmp::Ordering;
 use std::ffi::{OsStr, OsString};
 use std::fs;
+use std::mem::size_of;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
-#[cfg(not(windows))]
-use uucore::process::{getegid, geteuid};
-
+#[cfg(not(any(windows, target_os = "wasi")))]
+use uucore::fs::mode::{S_ISGID, S_ISUID, S_ISVTX};
+use uucore::i18n::collator::{init_locale_collation, locale_cmp};
 use uucore::translate;
 
 // The help_usage method replaces util name (the first word) with {}.
@@ -73,125 +87,87 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         // Show actual name with error
         let _ = uu_app().name("test");
     }
-    // `parse` consumes the arguments, so keep a copy for the diagnostic — but
-    // only when one could actually be rendered.
-    let expression = uucore::diagnostics::enabled().then(|| args.clone());
+    let expression = uucore::diagnostics::capture(&args);
 
-    match parse(args).and_then(|mut stack| eval(&mut stack)) {
+    match evaluate(&args, TestEvaluator) {
         Ok(true) => Ok(()),
         Ok(false) => Err(1.into()),
-        Err(e) => {
-            if let Some(expression) = &expression
-                && diagnostics::render(expression, &e)
-            {
-                // The diagnostic is already on stderr; exit quietly.
-                return Err(uucore::error::ExitCode::new(2));
-            }
-            Err(e.into())
-        }
+        Err(e) => Err(uucore::diagnostics::error_after_report(
+            expression.as_deref(),
+            e,
+            diagnostics::render,
+        )),
     }
 }
 
-/// Evaluate a stack of Symbols, returning the result of the evaluation or
-/// an error message if evaluation failed.
-fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
-    macro_rules! pop_literal {
-        () => {
-            match stack.pop() {
-                Some(Symbol::Literal(s)) => s,
-                _ => panic!(),
-            }
-        };
+struct TestEvaluator;
+
+fn operand_value(operand: Operand<'_>) -> &OsStr {
+    match operand {
+        Operand::Value(value) => value,
+        Operand::Length(_) => unreachable!("length operand passed to non-integer operator"),
+    }
+}
+
+impl Evaluator for TestEvaluator {
+    fn unary(&mut self, op: UnaryOp, arg: &OsStr) -> ParseResult<bool> {
+        Ok(match op {
+            UnaryOp::BlockSpecial => path(arg, &PathCondition::BlockSpecial),
+            UnaryOp::CharacterSpecial => path(arg, &PathCondition::CharacterSpecial),
+            UnaryOp::Directory => path(arg, &PathCondition::Directory),
+            UnaryOp::Exists => path(arg, &PathCondition::Exists),
+            UnaryOp::Regular => path(arg, &PathCondition::Regular),
+            UnaryOp::GroupIdFlag => path(arg, &PathCondition::GroupIdFlag),
+            UnaryOp::GroupOwns => path(arg, &PathCondition::GroupOwns),
+            UnaryOp::SymLink => path(arg, &PathCondition::SymLink),
+            UnaryOp::Sticky => path(arg, &PathCondition::Sticky),
+            UnaryOp::ModifiedSinceRead => path(arg, &PathCondition::ExistsModifiedLastRead),
+            UnaryOp::UserOwns => path(arg, &PathCondition::UserOwns),
+            UnaryOp::Fifo => path(arg, &PathCondition::Fifo),
+            UnaryOp::Readable => path(arg, &PathCondition::Readable),
+            UnaryOp::NonEmpty => path(arg, &PathCondition::NonEmpty),
+            UnaryOp::Socket => path(arg, &PathCondition::Socket),
+            UnaryOp::Tty => isatty(arg)?,
+            UnaryOp::UserIdFlag => path(arg, &PathCondition::UserIdFlag),
+            UnaryOp::Writable => path(arg, &PathCondition::Writable),
+            UnaryOp::Executable => path(arg, &PathCondition::Executable),
+            UnaryOp::StrNonEmpty => !arg.is_empty(),
+            UnaryOp::StrEmpty => arg.is_empty(),
+        })
     }
 
-    let s = stack.pop();
-
-    match s {
-        Some(Symbol::Bang) => {
-            let result = eval(stack)?;
-
-            Ok(!result)
-        }
-        Some(Symbol::Op(Operator::String(op))) => {
-            let b = pop_literal!();
-            let a = pop_literal!();
-            match op.as_encoded_bytes() {
-                b"!=" => Ok(a != b),
-                b"<" => Ok(a < b),
-                b">" => Ok(a > b),
-                _ => Ok(a == b),
+    fn binary(&mut self, op: BinaryOp, lhs: Operand<'_>, rhs: Operand<'_>) -> ParseResult<bool> {
+        match op {
+            BinaryOp::StrEq => Ok(operand_value(lhs) == operand_value(rhs)),
+            BinaryOp::StrNe => Ok(operand_value(lhs) != operand_value(rhs)),
+            BinaryOp::StrLt => {
+                let _ = init_locale_collation();
+                Ok(locale_cmp(
+                    operand_value(lhs).as_encoded_bytes(),
+                    operand_value(rhs).as_encoded_bytes(),
+                )
+                .is_lt())
             }
-        }
-        Some(Symbol::Op(Operator::Int(op))) => {
-            let b = pop_literal!();
-            let a = pop_literal!();
-
-            Ok(integers(&a, &b, &op)?)
-        }
-        Some(Symbol::Op(Operator::File(op))) => {
-            let b = pop_literal!();
-            let a = pop_literal!();
-            Ok(files(&a, &b, &op)?)
-        }
-        Some(Symbol::UnaryOp(UnaryOperator::StrlenOp(op))) => {
-            let s = match stack.pop() {
-                Some(Symbol::Literal(s)) => s,
-                Some(Symbol::None) => OsString::from(""),
-                None => return Ok(true),
-                _ => {
-                    return Err(ParseError::at_value(
-                        ParseErrorKind::MissingArgument(op.quote().to_string()),
-                        &op,
-                    ));
-                }
-            };
-
-            Ok((op == "-z") == s.is_empty())
-        }
-        Some(Symbol::UnaryOp(UnaryOperator::FiletestOp(op))) => {
-            let op = op.to_str().unwrap();
-
-            let f = pop_literal!();
-
-            Ok(match op {
-                "-b" => path(&f, &PathCondition::BlockSpecial),
-                "-c" => path(&f, &PathCondition::CharacterSpecial),
-                "-d" => path(&f, &PathCondition::Directory),
-                "-e" => path(&f, &PathCondition::Exists),
-                "-f" => path(&f, &PathCondition::Regular),
-                "-g" => path(&f, &PathCondition::GroupIdFlag),
-                "-G" => path(&f, &PathCondition::GroupOwns),
-                "-h" | "-L" => path(&f, &PathCondition::SymLink),
-                "-k" => path(&f, &PathCondition::Sticky),
-                "-N" => path(&f, &PathCondition::ExistsModifiedLastRead),
-                "-O" => path(&f, &PathCondition::UserOwns),
-                "-p" => path(&f, &PathCondition::Fifo),
-                "-r" => path(&f, &PathCondition::Readable),
-                "-S" => path(&f, &PathCondition::Socket),
-                "-s" => path(&f, &PathCondition::NonEmpty),
-                "-t" => isatty(&f)?,
-                "-u" => path(&f, &PathCondition::UserIdFlag),
-                "-w" => path(&f, &PathCondition::Writable),
-                "-x" => path(&f, &PathCondition::Executable),
-                _ => panic!(),
-            })
-        }
-        Some(Symbol::Literal(s)) => Ok(!s.is_empty()),
-        Some(Symbol::None) | None => Ok(false),
-        Some(Symbol::BoolOp(op)) => {
-            if (op == "-a" || op == "-o") && stack.len() < 2 {
-                return Err(ParseError::at_value(
-                    ParseErrorKind::UnaryOperatorExpected(op.quote().to_string()),
-                    &op,
-                ));
+            BinaryOp::StrGt => {
+                let _ = init_locale_collation();
+                Ok(locale_cmp(
+                    operand_value(lhs).as_encoded_bytes(),
+                    operand_value(rhs).as_encoded_bytes(),
+                )
+                .is_gt())
             }
-
-            let b = eval(stack)?;
-            let a = eval(stack)?;
-
-            Ok(if op == "-a" { a && b } else { a || b })
+            BinaryOp::IntEq
+            | BinaryOp::IntNe
+            | BinaryOp::IntLt
+            | BinaryOp::IntLe
+            | BinaryOp::IntGt
+            | BinaryOp::IntGe => compare_integer_operands(lhs, rhs, op),
+            BinaryOp::FileEf | BinaryOp::FileNt | BinaryOp::FileOt => files(
+                operand_value(lhs),
+                operand_value(rhs),
+                OsStr::new(op.as_str()),
+            ),
         }
-        _ => Err(ParseErrorKind::ExpectedValue.into()),
     }
 }
 
@@ -210,8 +186,12 @@ struct Integer<'a> {
 impl<'a> Integer<'a> {
     /// Parse an operand of the form `[+-]?[0-9]+`, surrounded by optional
     /// whitespace, returning [`None`] when it has any other shape.
+    /// The [POSIX locale convention](https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_06_05)
+    /// includes U+000B VERTICAL TAB as whitespace.
     fn parse(value: &'a OsStr) -> Option<Self> {
-        let value = value.to_str()?.trim();
+        let value = value
+            .to_str()?
+            .trim_matches(|c: char| c.is_ascii_whitespace() || c == '\u{000b}');
 
         // Only ASCII `+`/`-` are sliced off, so this always cuts on a char boundary.
         let (negative, digits) = match value.as_bytes().first()? {
@@ -264,42 +244,82 @@ impl PartialOrd for Integer<'_> {
     }
 }
 
-/// Operations to compare integers
-/// `a` is the left hand side
-/// `b` is the right hand side
-/// `op` the operation (ex: -eq, -lt, etc)
-fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
-    // Parse the two inputs
-    let left = Integer::parse(a).ok_or_else(|| {
-        ParseError::at_value(ParseErrorKind::InvalidInteger(a.quote().to_string()), a)
-    })?;
-    let right = Integer::parse(b).ok_or_else(|| {
-        ParseError::at_value(ParseErrorKind::InvalidInteger(b.quote().to_string()), b)
-    })?;
+#[derive(Debug)]
+enum IntegerOperand<'a> {
+    Parsed(Integer<'a>),
+    Length(usize),
+}
 
-    // Do the maths
-    let order = left.cmp(&right);
+fn integer_operand(operand: Operand<'_>) -> ParseResult<IntegerOperand<'_>> {
+    match operand {
+        Operand::Length(value) => Ok(IntegerOperand::Length(value.as_encoded_bytes().len())),
+        Operand::Value(value) => Integer::parse(value)
+            .map(IntegerOperand::Parsed)
+            .ok_or_else(|| {
+                ParseError::at_value(
+                    ParseErrorKind::InvalidInteger(value.quote().to_string()),
+                    value,
+                )
+            }),
+    }
+}
 
-    Ok(match op.to_str() {
-        Some("-eq") => order.is_eq(),
-        Some("-ne") => order.is_ne(),
-        Some("-gt") => order.is_gt(),
-        Some("-ge") => order.is_ge(),
-        Some("-lt") => order.is_lt(),
-        Some("-le") => order.is_le(),
-        _ => {
-            return Err(ParseError::at_value(
-                ParseErrorKind::UnknownOperator(op.quote().to_string()),
-                op,
-            ));
+fn integer_cmp_usize(value: &Integer<'_>, other: usize) -> Ordering {
+    if value.negative {
+        return Ordering::Less;
+    }
+
+    let mut buf = [0_u8; 3 * size_of::<usize>()];
+    let mut n = other;
+    let mut start = buf.len();
+    loop {
+        start -= 1;
+        buf[start] = b'0' + (n % 10) as u8;
+        n /= 10;
+        if n == 0 {
+            break;
         }
+    }
+
+    let digits = if value.digits.is_empty() {
+        b"0".as_slice()
+    } else {
+        value.digits.as_bytes()
+    };
+    let other = &buf[start..];
+    digits
+        .len()
+        .cmp(&other.len())
+        .then_with(|| digits.cmp(other))
+}
+
+fn compare_integer_operands(lhs: Operand<'_>, rhs: Operand<'_>, op: BinaryOp) -> ParseResult<bool> {
+    let lhs = integer_operand(lhs)?;
+    let rhs = integer_operand(rhs)?;
+    let order = match (&lhs, &rhs) {
+        (IntegerOperand::Parsed(lhs), IntegerOperand::Parsed(rhs)) => lhs.cmp(rhs),
+        (IntegerOperand::Parsed(lhs), IntegerOperand::Length(rhs)) => integer_cmp_usize(lhs, *rhs),
+        (IntegerOperand::Length(lhs), IntegerOperand::Parsed(rhs)) => {
+            integer_cmp_usize(rhs, *lhs).reverse()
+        }
+        (IntegerOperand::Length(lhs), IntegerOperand::Length(rhs)) => lhs.cmp(rhs),
+    };
+
+    Ok(match op {
+        BinaryOp::IntEq => order.is_eq(),
+        BinaryOp::IntNe => order.is_ne(),
+        BinaryOp::IntLt => order.is_lt(),
+        BinaryOp::IntLe => order.is_le(),
+        BinaryOp::IntGt => order.is_gt(),
+        BinaryOp::IntGe => order.is_ge(),
+        _ => unreachable!("non-integer operator passed to integer comparison"),
     })
 }
 
 /// Operations to compare files metadata
 /// `a` is the left hand side
 /// `b` is the right hand side
-/// `op` the operation (ex: -ef, -nt, etc)
+/// `op` the operation (ex: -ef, -nt, etc.)
 fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
     let f_a = fs::metadata(a);
     let f_b = fs::metadata(b);
@@ -307,8 +327,8 @@ fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
     let result = match (op.to_str(), f_a, f_b) {
         #[cfg(unix)]
         (Some("-ef"), Ok(f_a), Ok(f_b)) => f_a.ino() == f_b.ino() && f_a.dev() == f_b.dev(),
-        #[cfg(not(unix))]
-        (Some("-ef"), Ok(_), Ok(_)) => unimplemented!(),
+        #[cfg(any(windows, target_os = "wasi"))]
+        (Some("-ef"), Ok(_), Ok(_)) => platform::same_file(a, b),
         (Some("-nt"), Ok(f_a), Ok(f_b)) => f_a.modified().unwrap() > f_b.modified().unwrap(),
         (Some("-nt"), Ok(_), _) => true,
         (Some("-ot"), Ok(f_a), Ok(f_b)) => f_a.modified().unwrap() < f_b.modified().unwrap(),
@@ -326,20 +346,38 @@ fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
 }
 
 fn isatty(fd: &OsStr) -> ParseResult<bool> {
-    fd.to_str()
-        .map(str::trim)
-        .and_then(|s| s.parse().ok())
-        .ok_or_else(|| {
-            ParseError::at_value(
-                ParseErrorKind::InvalidFileDescriptor(fd.quote().to_string()),
-                fd,
-            )
-        })
-        .map(|i| unsafe { libc::isatty(i) == 1 })
+    let value = Integer::parse(fd).ok_or_else(|| {
+        ParseError::at_value(
+            ParseErrorKind::InvalidFileDescriptor(fd.quote().to_string()),
+            fd,
+        )
+    })?;
+
+    if value.negative {
+        return Ok(false);
+    }
+    let descriptor = if value.digits.is_empty() {
+        0
+    } else {
+        let Ok(descriptor) = value.digits.parse::<u32>() else {
+            return Ok(false);
+        };
+        if descriptor > i32::MAX as u32 {
+            return Ok(false);
+        }
+        descriptor as i32
+    };
+    Ok(fd_is_terminal(descriptor))
+}
+
+#[cfg(not(windows))]
+fn fd_is_terminal(fd: i32) -> bool {
+    // SAFETY: isatty only inspects the descriptor number it is given.
+    unsafe { libc::isatty(fd) == 1 }
 }
 
 #[derive(Eq, PartialEq)]
-enum PathCondition {
+pub(crate) enum PathCondition {
     BlockSpecial,
     CharacterSpecial,
     Directory,
@@ -363,37 +401,64 @@ enum PathCondition {
 /// Whether the file was modified more recently than it was last read, the
 /// condition behind `-N`. A timestamp the platform cannot report counts as
 /// "not modified since read" rather than aborting.
-fn modified_since_read(metadata: &fs::Metadata) -> bool {
+pub(crate) fn modified_since_read(metadata: &fs::Metadata) -> bool {
     matches!(
         (metadata.accessed(), metadata.modified()),
         (Ok(read), Ok(modified)) if read < modified
     )
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "wasi")))]
 fn path(path: &OsStr, condition: &PathCondition) -> bool {
-    use std::fs::Metadata;
     use std::os::unix::fs::FileTypeExt;
 
-    const S_ISUID: u32 = 0o4000;
-    const S_ISGID: u32 = 0o2000;
-    const S_ISVTX: u32 = 0o1000;
-
-    enum Permission {
-        Read = 0o4,
-        Write = 0o2,
-        Execute = 0o1,
-    }
-
-    let perm = |metadata: Metadata, p: Permission| {
-        if geteuid() == metadata.uid() {
-            metadata.mode() & ((p as u32) << 6) != 0
-        } else if getegid() == metadata.gid() {
-            metadata.mode() & ((p as u32) << 3) != 0
+    let metadata = || {
+        if matches!(condition, PathCondition::SymLink) {
+            fs::symlink_metadata(path)
         } else {
-            metadata.mode() & (p as u32) != 0
+            fs::metadata(path)
         }
     };
+
+    match condition {
+        PathCondition::Readable => effective_access(path, Access::READ_OK),
+        PathCondition::Writable => effective_access(path, Access::WRITE_OK),
+        PathCondition::Executable => effective_access(path, Access::EXEC_OK),
+
+        PathCondition::BlockSpecial => metadata().is_ok_and(|m| m.file_type().is_block_device()),
+
+        PathCondition::CharacterSpecial => metadata().is_ok_and(|m| m.file_type().is_char_device()),
+
+        PathCondition::Directory => metadata().is_ok_and(|m| m.file_type().is_dir()),
+
+        PathCondition::Exists => metadata().is_ok(),
+
+        PathCondition::ExistsModifiedLastRead => metadata().is_ok_and(|m| modified_since_read(&m)),
+
+        PathCondition::Regular => metadata().is_ok_and(|m| m.file_type().is_file()),
+
+        PathCondition::GroupIdFlag => metadata().is_ok_and(|m| m.mode() & S_ISGID != 0),
+
+        PathCondition::GroupOwns => metadata().is_ok_and(|m| m.gid() == getegid().as_raw()),
+
+        PathCondition::SymLink => metadata().is_ok_and(|m| m.file_type().is_symlink()),
+
+        PathCondition::Sticky => metadata().is_ok_and(|m| m.mode() & S_ISVTX != 0),
+
+        PathCondition::UserOwns => metadata().is_ok_and(|m| m.uid() == geteuid().as_raw()),
+
+        PathCondition::Fifo => metadata().is_ok_and(|m| m.file_type().is_fifo()),
+
+        PathCondition::Socket => metadata().is_ok_and(|m| m.file_type().is_socket()),
+
+        PathCondition::NonEmpty => metadata().is_ok_and(|m| m.size() > 0),
+
+        PathCondition::UserIdFlag => metadata().is_ok_and(|m| m.mode() & S_ISUID != 0),
+    }
+}
+#[cfg(windows)]
+fn path(path: &OsStr, condition: &PathCondition) -> bool {
+    use crate::platform::{is_executable, is_readable, is_writable, owned_by_current_token};
 
     let metadata = if condition == &PathCondition::SymLink {
         fs::symlink_metadata(path)
@@ -405,68 +470,56 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         return false;
     };
 
-    let file_type = metadata.file_type();
-
     match condition {
-        PathCondition::BlockSpecial => file_type.is_block_device(),
-        PathCondition::CharacterSpecial => file_type.is_char_device(),
-        PathCondition::Directory => file_type.is_dir(),
+        PathCondition::Directory => metadata.is_dir(),
         PathCondition::Exists => true,
         PathCondition::ExistsModifiedLastRead => modified_since_read(&metadata),
-        PathCondition::Regular => file_type.is_file(),
-        PathCondition::GroupIdFlag => metadata.mode() & S_ISGID != 0,
-        PathCondition::GroupOwns => metadata.gid() == getegid(),
-        PathCondition::SymLink => metadata.file_type().is_symlink(),
-        PathCondition::Sticky => metadata.mode() & S_ISVTX != 0,
-        PathCondition::UserOwns => metadata.uid() == geteuid(),
-        PathCondition::Fifo => file_type.is_fifo(),
-        PathCondition::Readable => perm(metadata, Permission::Read),
-        PathCondition::Socket => file_type.is_socket(),
-        PathCondition::NonEmpty => metadata.size() > 0,
-        PathCondition::UserIdFlag => metadata.mode() & S_ISUID != 0,
-        PathCondition::Writable => perm(metadata, Permission::Write),
-        PathCondition::Executable => perm(metadata, Permission::Execute),
-    }
-}
-
-#[cfg(windows)]
-fn path(path: &OsStr, condition: &PathCondition) -> bool {
-    use crate::platform::owned_by_current_token;
-    use std::fs::metadata;
-
-    let Ok(stat) = metadata(path) else {
-        return false;
-    };
-
-    match condition {
-        PathCondition::Directory => stat.is_dir(),
-        PathCondition::Exists | PathCondition::Readable => true,
-        PathCondition::ExistsModifiedLastRead => modified_since_read(&stat),
         PathCondition::GroupOwns => owned_by_current_token(path, true),
         PathCondition::UserOwns => owned_by_current_token(path, false),
-        PathCondition::Regular => stat.is_file(),
-        PathCondition::NonEmpty => stat.len() > 0,
-        PathCondition::Writable => !stat.permissions().readonly(),
-        PathCondition::Executable => std::path::Path::new(path)
-            .extension()
-            .and_then(|e| e.to_str())
-            .is_some_and(|e| matches!(e, "exe" | "bat" | "cmd" | "com")),
+        PathCondition::Regular => metadata.is_file(),
+        PathCondition::SymLink => metadata.file_type().is_symlink(),
+        PathCondition::NonEmpty => metadata.len() > 0,
+        PathCondition::Readable => is_readable(path),
+        PathCondition::Writable => is_writable(path, &metadata),
+        PathCondition::Executable => is_executable(path, &metadata),
         PathCondition::BlockSpecial
         | PathCondition::CharacterSpecial
         | PathCondition::Fifo
         | PathCondition::GroupIdFlag
         | PathCondition::Socket
         | PathCondition::Sticky
-        | PathCondition::SymLink
         | PathCondition::UserIdFlag => false,
     }
 }
 
-#[cfg(test)]
+// Every test here needs a temporary file, and a WASI guest only sees the
+// directories it was granted, so there is no temporary directory to use.
+#[cfg(all(test, not(target_os = "wasi")))]
 mod tests {
     use super::*;
     use std::{ffi::OsStr, time::UNIX_EPOCH};
     use tempfile::NamedTempFile;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_root_access_is_not_owner_mode_bits() {
+        use std::os::unix::fs::PermissionsExt;
+
+        if geteuid().as_raw() != 0 {
+            return;
+        }
+
+        let file = NamedTempFile::new().unwrap();
+        fs::set_permissions(file.path(), fs::Permissions::from_mode(0o000)).unwrap();
+        let path = file.path().as_os_str();
+
+        assert!(effective_access(path, Access::READ_OK));
+        assert!(effective_access(path, Access::WRITE_OK));
+        assert!(!effective_access(path, Access::EXEC_OK));
+
+        fs::set_permissions(file.path(), fs::Permissions::from_mode(0o001)).unwrap();
+        assert!(effective_access(path, Access::EXEC_OK));
+    }
 
     #[test]
     fn test_files_with_unknown_op() {
@@ -480,7 +533,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
     fn test_files_with_ef_op() {
         let a = NamedTempFile::new().unwrap();
         let b = NamedTempFile::new().unwrap();
@@ -544,19 +596,34 @@ mod tests {
     fn test_integer_op() {
         let a = OsStr::new("18446744073709551616");
         let b = OsStr::new("0");
-        assert!(!integers(a, b, OsStr::new("-lt")).unwrap());
+        assert!(
+            !compare_integer_operands(Operand::Value(a), Operand::Value(b), BinaryOp::IntLt)
+                .unwrap()
+        );
         let a = OsStr::new("18446744073709551616");
         let b = OsStr::new("0");
-        assert!(integers(a, b, OsStr::new("-gt")).unwrap());
+        assert!(
+            compare_integer_operands(Operand::Value(a), Operand::Value(b), BinaryOp::IntGt)
+                .unwrap()
+        );
         let a = OsStr::new("-1");
         let b = OsStr::new("0");
-        assert!(integers(a, b, OsStr::new("-lt")).unwrap());
+        assert!(
+            compare_integer_operands(Operand::Value(a), Operand::Value(b), BinaryOp::IntLt)
+                .unwrap()
+        );
         let a = OsStr::new("42");
         let b = OsStr::new("42");
-        assert!(integers(a, b, OsStr::new("-eq")).unwrap());
+        assert!(
+            compare_integer_operands(Operand::Value(a), Operand::Value(b), BinaryOp::IntEq)
+                .unwrap()
+        );
         let a = OsStr::new("42");
         let b = OsStr::new("42");
-        assert!(!integers(a, b, OsStr::new("-ne")).unwrap());
+        assert!(
+            !compare_integer_operands(Operand::Value(a), Operand::Value(b), BinaryOp::IntNe)
+                .unwrap()
+        );
     }
 
     /// The 71-digit operand reported in the GNU compatibility issue, which is
@@ -576,23 +643,79 @@ mod tests {
         let smaller = OsStr::new(SMALLER);
         let one = OsStr::new("1");
 
-        assert!(integers(big, big, OsStr::new("-eq")).unwrap());
-        assert!(!integers(big, big, OsStr::new("-ne")).unwrap());
-        assert!(integers(big, big, OsStr::new("-ge")).unwrap());
-        assert!(integers(big, big, OsStr::new("-le")).unwrap());
+        assert!(
+            compare_integer_operands(Operand::Value(big), Operand::Value(big), BinaryOp::IntEq)
+                .unwrap()
+        );
+        assert!(
+            !compare_integer_operands(Operand::Value(big), Operand::Value(big), BinaryOp::IntNe)
+                .unwrap()
+        );
+        assert!(
+            compare_integer_operands(Operand::Value(big), Operand::Value(big), BinaryOp::IntGe)
+                .unwrap()
+        );
+        assert!(
+            compare_integer_operands(Operand::Value(big), Operand::Value(big), BinaryOp::IntLe)
+                .unwrap()
+        );
 
-        assert!(integers(one, big, OsStr::new("-ne")).unwrap());
-        assert!(integers(one, big, OsStr::new("-lt")).unwrap());
-        assert!(integers(big, one, OsStr::new("-gt")).unwrap());
+        assert!(
+            compare_integer_operands(Operand::Value(one), Operand::Value(big), BinaryOp::IntNe)
+                .unwrap()
+        );
+        assert!(
+            compare_integer_operands(Operand::Value(one), Operand::Value(big), BinaryOp::IntLt)
+                .unwrap()
+        );
+        assert!(
+            compare_integer_operands(Operand::Value(big), Operand::Value(one), BinaryOp::IntGt)
+                .unwrap()
+        );
 
         // Same width, differing only in the least significant digit.
-        assert!(integers(big_plus_one, big, OsStr::new("-gt")).unwrap());
-        assert!(integers(big, big_plus_one, OsStr::new("-lt")).unwrap());
-        assert!(!integers(big, big_plus_one, OsStr::new("-eq")).unwrap());
+        assert!(
+            compare_integer_operands(
+                Operand::Value(big_plus_one),
+                Operand::Value(big),
+                BinaryOp::IntGt
+            )
+            .unwrap()
+        );
+        assert!(
+            compare_integer_operands(
+                Operand::Value(big),
+                Operand::Value(big_plus_one),
+                BinaryOp::IntLt
+            )
+            .unwrap()
+        );
+        assert!(
+            !compare_integer_operands(
+                Operand::Value(big),
+                Operand::Value(big_plus_one),
+                BinaryOp::IntEq
+            )
+            .unwrap()
+        );
 
         // Differing widths.
-        assert!(integers(big, smaller, OsStr::new("-gt")).unwrap());
-        assert!(integers(smaller, big, OsStr::new("-lt")).unwrap());
+        assert!(
+            compare_integer_operands(
+                Operand::Value(big),
+                Operand::Value(smaller),
+                BinaryOp::IntGt
+            )
+            .unwrap()
+        );
+        assert!(
+            compare_integer_operands(
+                Operand::Value(smaller),
+                Operand::Value(big),
+                BinaryOp::IntLt
+            )
+            .unwrap()
+        );
     }
 
     #[test]
@@ -603,14 +726,56 @@ mod tests {
         let neg_smaller =
             OsStr::new("-1626727727812627722772878217278288262727828288217276267762367276278378");
 
-        assert!(integers(neg_big, neg_big, OsStr::new("-eq")).unwrap());
-        assert!(integers(neg_big, OsStr::new("0"), OsStr::new("-lt")).unwrap());
-        assert!(integers(neg_big, big, OsStr::new("-lt")).unwrap());
-        assert!(integers(big, neg_big, OsStr::new("-gt")).unwrap());
+        assert!(
+            compare_integer_operands(
+                Operand::Value(neg_big),
+                Operand::Value(neg_big),
+                BinaryOp::IntEq
+            )
+            .unwrap()
+        );
+        assert!(
+            compare_integer_operands(
+                Operand::Value(neg_big),
+                Operand::Value(OsStr::new("0")),
+                BinaryOp::IntLt
+            )
+            .unwrap()
+        );
+        assert!(
+            compare_integer_operands(
+                Operand::Value(neg_big),
+                Operand::Value(big),
+                BinaryOp::IntLt
+            )
+            .unwrap()
+        );
+        assert!(
+            compare_integer_operands(
+                Operand::Value(big),
+                Operand::Value(neg_big),
+                BinaryOp::IntGt
+            )
+            .unwrap()
+        );
 
         // A wider negative number is the smaller of the two.
-        assert!(integers(neg_big, neg_smaller, OsStr::new("-lt")).unwrap());
-        assert!(integers(neg_smaller, neg_big, OsStr::new("-gt")).unwrap());
+        assert!(
+            compare_integer_operands(
+                Operand::Value(neg_big),
+                Operand::Value(neg_smaller),
+                BinaryOp::IntLt
+            )
+            .unwrap()
+        );
+        assert!(
+            compare_integer_operands(
+                Operand::Value(neg_smaller),
+                Operand::Value(neg_big),
+                BinaryOp::IntGt
+            )
+            .unwrap()
+        );
     }
 
     #[test]
@@ -665,11 +830,21 @@ mod tests {
         ] {
             let operand = OsStr::new(operand);
             assert!(
-                integers(operand, OsStr::new("0"), OsStr::new("-eq")).is_err(),
+                compare_integer_operands(
+                    Operand::Value(operand),
+                    Operand::Value(OsStr::new("0")),
+                    BinaryOp::IntEq,
+                )
+                .is_err(),
                 "{operand:?} should not parse as an integer"
             );
             assert!(
-                integers(OsStr::new("0"), operand, OsStr::new("-eq")).is_err(),
+                compare_integer_operands(
+                    Operand::Value(OsStr::new("0")),
+                    Operand::Value(operand),
+                    BinaryOp::IntEq,
+                )
+                .is_err(),
                 "{operand:?} should not parse as an integer"
             );
         }

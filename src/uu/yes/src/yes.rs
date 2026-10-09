@@ -98,8 +98,8 @@ pub fn exec(bytes: &[u8]) -> io::Result<()> {
     let _ = rustix::pipe::fcntl_setpipe_size(stdout, MAX_ROOTLESS_PIPE_SIZE);
     // tee() cannot control offset. We can do tee only if original bytes.len() is multiple of PIPE_BUF,
     // but it is slower than mixing splice even it reduces syscalls...
-    let bytes_len = bytes.len();
-    if let Ok((p_read, mut p_write)) = pipe::<true>()
+    if let bytes_len @ ..=MAX_ROOTLESS_PIPE_SIZE = bytes.len()
+        && let Ok((p_read, mut p_write)) = pipe::<true>()
         && p_write.write_all(bytes).is_ok()
         && let Ok((broker_read, broker_write)) = pipe::<true>()
         // GNU catches all strace injections for splice expect for 1st one (checking support of it)

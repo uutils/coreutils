@@ -1,4 +1,5 @@
 # spell-checker:ignore (libs) kqueue
+
 [package]
 name = "uu_tail"
 description = "tail ~ (uutils) display the last lines of input"
@@ -18,10 +19,14 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-memchr = { workspace = true }
-uucore = { workspace = true, features = ["fs", "parser-size", "signals"] }
-same-file = { workspace = true }
 fluent = { workspace = true }
+memchr = { workspace = true }
+uucore = { workspace = true, features = [
+  "fs",
+  "parser-size",
+  "quoting-style",
+  "signals",
+] }
 
 [target.'cfg(not(target_os = "wasi"))'.dependencies]
 libc = { workspace = true }
@@ -41,6 +46,9 @@ windows-sys = { workspace = true, features = [
 
 [dev-dependencies]
 rstest = { workspace = true }
+
+[features]
+diagnostics = ["uucore/diagnostics"]
 
 [lints]
 workspace = true

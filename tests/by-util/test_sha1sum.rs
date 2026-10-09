@@ -3,10 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore checkfile, testf, ntestf
+
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
-// spell-checker:ignore checkfile, testf, ntestf
+
 macro_rules! get_hash(
     ($str:expr) => (
         $str.split(' ').collect::<Vec<&str>>()[0]
@@ -132,10 +134,9 @@ fn test_check_sha1() {
     scene
         .ccmd("sha1sum")
         .arg("-c")
-        .arg(at.subdir.join("testf.sha1"))
+        .arg("testf.sha1")
         .succeeds()
-        .stdout_is("testf: OK\n")
-        .stderr_is("");
+        .stdout_only("testf: OK\n");
 }
 
 #[test]
@@ -152,7 +153,7 @@ fn test_check_file_not_found_warning() {
     scene
         .ccmd("sha1sum")
         .arg("-c")
-        .arg(at.subdir.join("testf.sha1"))
+        .arg("testf.sha1")
         .fails()
         .stdout_is("testf: FAILED open or read\n")
         .stderr_is("sha1sum: testf: No such file or directory\nsha1sum: WARNING: 1 listed file could not be read\n");

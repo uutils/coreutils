@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -54,17 +55,26 @@ fn test_uname_kernel_version() {
 fn test_uname_kernel() {
     let (_, mut ucmd) = at_and_ucmd!();
 
-    #[cfg(target_os = "linux")]
+    // Under the WASI runner the binary under test is the wasm guest, which
+    // reports "WASI" regardless of the host OS.
+    #[cfg(wasi_runner)]
+    ucmd.arg("-o").succeeds().stdout_is("WASI\n");
+
+    #[cfg(all(target_os = "linux", not(wasi_runner)))]
     {
         let result = ucmd.arg("-o").succeeds();
         assert!(result.stdout_str().to_lowercase().contains("linux"));
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(all(not(target_os = "linux"), not(wasi_runner)))]
     ucmd.arg("-o").succeeds();
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: uname reports the guest OS (WASI), not the host's"
+)]
 fn test_uname_operating_system() {
     #[cfg(target_os = "android")]
     new_ucmd!()
@@ -111,7 +121,7 @@ fn test_uname_operating_system() {
         .arg("--operating-system")
         .succeeds()
         .stdout_is("Redox\n");
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
         let result = new_ucmd!().arg("--operating-system").succeeds();
         println!("{:?}", result.stdout_str());
@@ -133,4 +143,34 @@ fn test_uname_output_for_invisible_chars() {
     let re = regex::Regex::new("[^[[:print:]]\\p{Other_Symbol}]").unwrap(); // matches invisible (not emojis)
     let result = new_ucmd!().arg("--all").succeeds();
     assert_eq!(re.find(result.stdout_str().trim_end()), None);
+}
+
+#[test]
+fn test_uname_all_labeled() {
+    let result = new_ucmd!().arg("-A").succeeds();
+    let stdout = result.stdout_str();
+    // One labeled "Label: value" line per item. Like GNU, an unknown processor or
+    // hardware platform is omitted, and we never determine either one.
+    assert_eq!(stdout.lines().count(), 6);
+    for label in [
+        "Kernel name: ",
+        "Node name: ",
+        "Kernel release: ",
+        "Kernel version: ",
+        "Machine: ",
+        "Operating system: ",
+    ] {
+        assert!(stdout.contains(label), "missing {label:?}");
+    }
+    assert!(!stdout.contains("Processor:"));
+    assert!(!stdout.contains("Hardware platform:"));
+}
+
+#[test]
+fn test_uname_all_labeled_long_flag() {
+    let short = new_ucmd!().arg("-A").succeeds();
+    new_ucmd!()
+        .arg("--all-labeled")
+        .succeeds()
+        .stdout_is(short.stdout_str());
 }

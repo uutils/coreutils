@@ -8,16 +8,18 @@
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use std::ffi::{OsStr, OsString};
+#[cfg(not(windows))]
+use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
 #[cfg(not(windows))]
 use uucore::error::ExitCode;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UResult, USimpleError, strip_errno};
 #[cfg(not(windows))]
 use uucore::mode;
 #[cfg(not(windows))]
-use uucore::quoting_style::{Quotes, QuotingStyle, locale_aware_escape_name};
+use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use uucore::translate;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
 use uucore::{format_usage, show_if_err};
@@ -72,18 +74,13 @@ fn get_mode(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Opt
     mode::parse_chmod(DEFAULT_PERM, m, true, mode::get_umask())
         .map(Some)
         .map_err(|err| {
-            if diag_args.is_some_and(|args| err.render(args, m, 0, &err.to_string())) {
+            if diag_args.is_some_and(|args| err.render_mode_value(args, m, 0, &err.to_string())) {
                 // The diagnostic is already on stderr; exit quietly.
                 ExitCode::new(1)
             } else {
-                let quoted_mode = locale_aware_escape_name(
-                    OsStr::new(m),
-                    QuotingStyle::C {
-                        quotes: Quotes::Single,
-                    },
-                )
-                .into_string()
-                .expect("C-style quoting always produces valid UTF-8");
+                let quoted_mode = locale_aware_escape_name(OsStr::new(m), QuotingStyle::C_SINGLE)
+                    .into_string()
+                    .expect("C-style quoting always produces valid UTF-8");
                 USimpleError::new(
                     1,
                     translate!("mkdir-error-invalid-mode", "mode" => quoted_mode),
@@ -222,14 +219,13 @@ pub fn mkdir(path: &Path, config: &Config) -> UResult<()> {
 // Create a directory at the given path.
 // Uses iterative approach instead of recursion to avoid stack overflow with deep nesting.
 fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
-    let path_exists = path.exists();
-    if path_exists && !config.recursive {
+    if path.exists() && !config.recursive {
         return Err(USimpleError::new(
             1,
             translate!("mkdir-error-file-exists", "path" => path.maybe_quote()),
         ));
     }
-    if path == Path::new("") {
+    if path.as_os_str().is_empty() {
         return Ok(());
     }
 
@@ -238,24 +234,21 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
     if config.recursive {
         // Pre-allocate approximate capacity to avoid reallocations
         let mut dirs_to_create = Vec::with_capacity(16);
-        let mut current = path;
 
         // First pass: collect all parent directories
-        while let Some(parent) = current.parent() {
-            if parent == Path::new("") {
-                break;
-            }
-            dirs_to_create.push(parent);
-            current = parent;
-        }
+        dirs_to_create.extend(
+            path.ancestors()
+                .skip(1)
+                .take_while(|path| !path.as_os_str().is_empty()),
+        );
 
         // Second pass: create directories from root to leaf
         // Only create those that don't exist
-        for dir in dirs_to_create.iter().rev() {
-            if !dir.exists() {
-                create_single_dir(dir, true, config)?;
-            }
-        }
+        dirs_to_create
+            .iter()
+            .rev()
+            .filter(|dir| !dir.exists())
+            .try_for_each(|dir| create_single_dir(dir, true, config))?;
     }
 
     // Create the target directory
@@ -366,7 +359,7 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             Ok(())
         }
 
-        Err(_) if path.is_dir() => {
+        Err(_) if config.recursive && path.is_dir() => {
             // Directory already exists - check if this is a logical directory creation
             // (i.e., not just a parent reference like "test_dir/..")
             let ends_with_parent_dir = matches!(
@@ -385,6 +378,9 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             }
             Ok(())
         }
-        Err(e) => Err(e.into()),
+        Err(e) => Err(USimpleError::new(
+            1,
+            translate!("mkdir-error-cannot-create-directory", "path" => path.display(), "error" => strip_errno(&e)),
+        )),
     }
 }
