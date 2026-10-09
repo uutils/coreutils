@@ -27,7 +27,7 @@ use pretty_assertions::assert_eq;
 #[cfg(unix)]
 use rustix::process::{Resource, Rlimit, setrlimit};
 use std::borrow::Cow;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, OpenOptions, hard_link, remove_file};
 use std::io::{self, BufWriter, Read, Result, Write};
@@ -1353,6 +1353,14 @@ impl AtPath {
 
     pub fn root_dir_resolved(&self) -> String {
         log_info("current_directory_resolved", "");
+
+        // Under a WASM runner the fixtures directory is mapped to the guest's
+        // preopened root ("--dir=<subdir>::/"), so the binary under test sees
+        // it as "/" rather than the host's absolute path.
+        if env::var("UUTESTS_WASM_RUNNER").is_ok() {
+            return "/".to_owned();
+        }
+
         let s = self
             .subdir
             .canonicalize()
@@ -1947,8 +1955,10 @@ impl UCommand {
             cmd.arg(format!("--dir={}::/", work_dir.display()));
             cmd.arg("--argv0");
             cmd.arg(bin.file_name().unwrap_or(bin.as_os_str()));
-            // Forward env vars to the WASI guest via --env flags
-            for (key, val) in &cmd_env {
+            // WASI reads the first duplicate, whereas Command::envs uses the last.
+            // Resolve overrides before forwarding them to the guest.
+            let wasm_env: BTreeMap<_, _> = cmd_env.iter().map(|(key, val)| (key, val)).collect();
+            for (key, val) in &wasm_env {
                 if let (Some(k), Some(v)) = (key.to_str(), val.to_str()) {
                     cmd.arg("--env");
                     cmd.arg(format!("{k}={v}"));
@@ -1963,6 +1973,14 @@ impl UCommand {
         command.current_dir(&work_dir);
         command.env_clear();
         command.envs(cmd_env);
+
+        // Guest env uses --env, but wasmtime itself requires an absolute HOME
+        // for its module cache to avoid runner aborts.
+        if wasm_runner.is_some()
+            && let Some(host_home) = env::var_os("HOME")
+        {
+            command.env("HOME", host_home);
+        }
 
         if self.timeout.is_none() {
             self.timeout = Some(Duration::from_secs(30));
