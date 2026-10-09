@@ -390,7 +390,7 @@ impl LineFormat {
     /// This parser accounts for this variation
     ///
     /// [untagged output format]: https://www.gnu.org/software/coreutils/manual/html_node/cksum-output-modes.html#cksum-output-modes-1
-    fn parse_single_space(line: &[u8]) -> Option<LineInfo> {
+    fn parse_single_blank(line: &[u8]) -> Option<LineInfo> {
         let line = line.trim_blanks_start();
         let blank_idx = line.iter().position(|&b| b == b' ' || b == b'\t')?;
         let checksum = &line[..blank_idx];
@@ -509,8 +509,8 @@ impl LineInfo {
     ) -> Option<Self> {
         let line_bytes = os_str_as_bytes(s.as_ref()).ok()?;
 
-        let parse_single_space = || {
-            LineFormat::parse_single_space(line_bytes)
+        let parse_single_blank = || {
+            LineFormat::parse_single_blank(line_bytes)
                 .filter(|info| allow_empty_filename || !info.filename.is_empty())
         };
         if let Some(info) = LineFormat::parse_algo_based(line_bytes) {
@@ -519,13 +519,13 @@ impl LineInfo {
         if let Some(cached_format) = cached_line_format {
             match cached_format {
                 LineFormat::Untagged => LineFormat::parse_untagged(line_bytes),
-                LineFormat::SingleSpace => parse_single_space(),
+                LineFormat::SingleSpace => parse_single_blank(),
                 LineFormat::AlgoBased => unreachable!("we never catch the algo based format"),
             }
         } else if let Some(info) = LineFormat::parse_untagged(line_bytes) {
             *cached_line_format = Some(LineFormat::Untagged);
             Some(info)
-        } else if let Some(info) = parse_single_space() {
+        } else if let Some(info) = parse_single_blank() {
             *cached_line_format = Some(LineFormat::SingleSpace);
             Some(info)
         } else {
@@ -1229,7 +1229,7 @@ mod tests {
         ];
 
         for (input, expected) in test_cases {
-            let line_info = LineFormat::parse_single_space(input);
+            let line_info = LineFormat::parse_single_blank(input);
             match expected {
                 Some((checksum, filename)) => {
                     assert!(line_info.is_some());
