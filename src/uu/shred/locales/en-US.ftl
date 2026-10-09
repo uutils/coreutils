@@ -71,5 +71,4 @@ shred-failed-to-remove-file = {$file}: failed to remove
 shred-failed-to-clone-file-handle = failed to clone file handle
 shred-failed-to-seek-file = failed to seek in file
 shred-failed-to-read-seed-bytes = failed to read seed bytes from file
-shred-failed-to-get-metadata = failed to get file metadata
 shred-failed-to-set-permissions = failed to set file permissions
