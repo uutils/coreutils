@@ -2134,14 +2134,15 @@ fn stop_child(child: &mut uutests::util::UChild) -> StoppedChild<'_> {
     kill_process(Pid::from_raw(pid).unwrap(), Signal::STOP).unwrap();
     let stopped = StoppedChild(child);
     for _ in 0..500 {
-        let all_stopped = std::fs::read_dir(format!("/proc/{pid}/task"))
-            .unwrap()
-            .all(|task| {
-                let stat = std::fs::read_to_string(task.unwrap().path().join("stat")).unwrap();
-                // The state comes right after the command name, which is in parentheses.
-                let state = stat.rsplit(')').next().unwrap().trim_start();
-                state.starts_with('T')
-            });
+        let all_stopped = std::fs::read_dir(format!("/proc/{pid}/task")).is_ok_and(|tasks| {
+            tasks.filter_map(Result::ok).all(|task| {
+                std::fs::read_to_string(task.path().join("stat")).is_ok_and(|stat| {
+                    // The state comes right after the command name, which is in parentheses.
+                    let state = stat.rsplit(')').next().unwrap().trim_start();
+                    state.starts_with('T')
+                })
+            })
+        });
         if all_stopped {
             return stopped;
         }
@@ -2155,7 +2156,8 @@ fn stop_child(child: &mut uutests::util::UChild) -> StoppedChild<'_> {
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_descriptor_written_then_rotated() {
     // A write followed by rotation must not panic on the queued old path
-    // or lose output from the renamed file.
+    // or lose output from the renamed file. Only inotify hits this: polling
+    // (--use-polling) reads every followed file, not the queued paths.
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.write("a", "a\n");
