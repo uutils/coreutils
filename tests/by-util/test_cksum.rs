@@ -694,6 +694,62 @@ fn test_check_tagged_blanks_around_equal_sign() {
         .stdout_only("f: OK\n".repeat(lines.len()));
 }
 
+#[test]
+fn test_check_tagged_legacy_algo() {
+    // The legacy algorithms have no tagged format. Report a line that uses one
+    // of their tags as improperly formatted, and do not check the digest.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello\n");
+    // The digests of "f", in decimal and in hexadecimal.
+    let lines = [
+        "CRC (f) = 3015617425",
+        "CRC (f) = b3beab91",
+        "CRC32B (f) = 909783072",
+        "CRC32B (f) = 363a3020",
+        "BSD (f) = 9073",
+        "SYSV (f) = 021e",
+    ];
+    at.write("CHECKSUMS", &(lines.join("\n") + "\n"));
+
+    ucmd.arg("--check")
+        .arg("--warn")
+        .arg("CHECKSUMS")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is(
+            "cksum: CHECKSUMS: 1: improperly formatted CRC checksum line\n\
+             cksum: CHECKSUMS: 2: improperly formatted CRC checksum line\n\
+             cksum: CHECKSUMS: 3: improperly formatted CRC checksum line\n\
+             cksum: CHECKSUMS: 4: improperly formatted CRC checksum line\n\
+             cksum: CHECKSUMS: 5: improperly formatted CRC checksum line\n\
+             cksum: CHECKSUMS: 6: improperly formatted CRC checksum line\n\
+             cksum: CHECKSUMS: no properly formatted checksum lines found\n",
+        );
+}
+
+#[test]
+fn test_check_tagged_legacy_algo_keeps_warning_algo() {
+    // A line with a legacy tag is improperly formatted. The warning keeps the
+    // algorithm of the last valid tag.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    at.write(
+        "CHECKSUMS",
+        "MD5 (f) = d41d8cd98f00b204e9800998ecf8427e\n\
+         CRC (f) = ffffffff\n",
+    );
+
+    ucmd.arg("--check")
+        .arg("--warn")
+        .arg("CHECKSUMS")
+        .succeeds()
+        .stdout_is("f: OK\n")
+        .stderr_is(
+            "cksum: CHECKSUMS: 2: improperly formatted MD5 checksum line\n\
+             cksum: WARNING: 1 line is improperly formatted\n",
+        );
+}
+
 #[rstest]
 #[case::md5("md5", "d41d8cd98f00b204e9800998ecf8427e")]
 #[case::sha1("sha1", "da39a3ee5e6b4b0d3255bfef95601890afd80709")]
@@ -3259,13 +3315,19 @@ mod debug_flag {
     fn test_debug_with_glibc_tunables() {
         if is_x86_feature_detected!("avx2") {
             for (tunables, expected) in [
-                ("glibc.cpu.hwcaps=-AVX2", "avx2 support not detected"), // correctly disabling AVX2
-                ("glibc.cpu.hwcaps=-avx2", "using avx2 hardware support"), // lowercase invalidates AVX2 disabling
+                ("glibc.cpu.hwcaps=-AVX2", "cksum: avx2 support not detected"), // correctly disabling AVX2
+                (
+                    "glibc.cpu.hwcaps=-avx2",
+                    "cksum: using avx2 hardware support",
+                ), // lowercase invalidates AVX2 disabling
                 (
                     "glibc.cpu.hwcaps=-AVX2:glibc.cpu.hwcaps=-AVX512F",
-                    "using avx2 hardware support",
+                    "cksum: using avx2 hardware support",
                 ), // last wins
-                ("glibc.cpu.hwcaps=-AVX2 ", "using avx2 hardware support"), // trailing spaces invalidate AVX2 disabling
+                (
+                    "glibc.cpu.hwcaps=-AVX2 ",
+                    "cksum: using avx2 hardware support",
+                ), // trailing spaces invalidate AVX2 disabling
             ] {
                 new_ucmd!()
                     .arg("--debug")
@@ -3282,9 +3344,9 @@ mod debug_flag {
     fn test_debug_flag_aarch64() {
         // The vmull path needs PMULL. ASIMD alone is not enough.
         let expected = if std::arch::is_aarch64_feature_detected!("pmull") {
-            "using vmull hardware support\n"
+            "cksum: using vmull hardware support\n"
         } else {
-            "vmull support not detected\n"
+            "cksum: vmull support not detected\n"
         };
         new_ucmd!()
             .arg("--debug")

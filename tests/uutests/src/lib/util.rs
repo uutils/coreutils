@@ -1353,6 +1353,14 @@ impl AtPath {
 
     pub fn root_dir_resolved(&self) -> String {
         log_info("current_directory_resolved", "");
+
+        // Under a WASM runner the fixtures directory is mapped to the guest's
+        // preopened root ("--dir=<subdir>::/"), so the binary under test sees
+        // it as "/" rather than the host's absolute path.
+        if env::var("UUTESTS_WASM_RUNNER").is_ok() {
+            return "/".to_owned();
+        }
+
         let s = self
             .subdir
             .canonicalize()
@@ -1965,6 +1973,14 @@ impl UCommand {
         command.current_dir(&work_dir);
         command.env_clear();
         command.envs(cmd_env);
+
+        // Guest env uses --env, but wasmtime itself requires an absolute HOME
+        // for its module cache to avoid runner aborts.
+        if wasm_runner.is_some()
+            && let Some(host_home) = env::var_os("HOME")
+        {
+            command.env("HOME", host_home);
+        }
 
         if self.timeout.is_none() {
             self.timeout = Some(Duration::from_secs(30));
