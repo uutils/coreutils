@@ -589,6 +589,13 @@ fn test_offset_invalid() {
         .args(&["-o", "abc"])
         .fails_with_code(1)
         .stderr_is("pr: '-o MARGIN' invalid line offset: 'abc'\n");
+
+    // A negative zero is a margin of zero, as in GNU.
+    new_ucmd!()
+        .args(&["-t", "-o", "-0"])
+        .pipe_in("a\n")
+        .succeeds()
+        .stdout_only("a\n");
 }
 
 #[test]
@@ -1350,6 +1357,10 @@ fn test_numeric_option_diagnostics() {
             "pr: '-l PAGE_LENGTH' invalid number of lines: '-1': Numerical result out of range\n",
         ),
         (
+            &["-l", "-0"],
+            "pr: '-l PAGE_LENGTH' invalid number of lines: '-0': Numerical result out of range\n",
+        ),
+        (
             &["-w", "+0"],
             "pr: '-w PAGE_WIDTH' invalid number of characters: '+0': Numerical result out of range\n",
         ),
@@ -1364,6 +1375,7 @@ fn test_numeric_option_diagnostics() {
         (&["--columns=x"], "pr: invalid number of columns: 'x'\n"),
         (&["--pages=1:x"], "pr: invalid --pages argument '1:x'\n"),
         (&["--pages=1:0"], "pr: invalid page range '1:0'\n"),
+        (&["--pages=1x"], "pr: invalid page range '1x'\n"),
         (
             &["--pages=99999999999999999999"],
             "pr: --pages argument '99999999999999999999' too large\n",
@@ -1374,6 +1386,10 @@ fn test_numeric_option_diagnostics() {
         (
             &["+99999999999999999999"],
             "pr: + argument '99999999999999999999' too large\n",
+        ),
+        (
+            &["+99999999999999999999:3"],
+            "pr: invalid suffix in + argument '99999999999999999999:3'\n",
         ),
     ];
     for (args, stderr) in cases {
@@ -1397,16 +1413,40 @@ fn test_option_value_is_not_an_operand() {
         .args(&["-N", "-1", "test_one_page.log"])
         .fails()
         .stderr_only("pr: '-N NUMBER' invalid starting line number: '-1'\n");
+    // The option may end a cluster, or be cut short.
+    for args in [&["-tl", "-1"][..], &["--len", "-1"]] {
+        new_ucmd!()
+            .args(args)
+            .arg("test_one_page.log")
+            .fails()
+            .stderr_only(
+                "pr: '-l PAGE_LENGTH' invalid number of lines: '-1': Numerical result out of range\n",
+            );
+    }
+    new_ucmd!()
+        .args(&["-h", "-1"])
+        .pipe_in("a")
+        .succeeds()
+        .stdout_contains(" -1 ");
+    // A value attached to the option leaves the next argument an operand,
+    // also for `-e`, whose value is filled in before the scan.
+    for args in [&["-tl1", "+2"][..], &["-e", "+2", "-l", "1"]] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("a\nb\nc\n")
+            .succeeds()
+            .stdout_only("b\nc\n");
+    }
 }
 
 #[test]
 fn test_plus_operand_that_is_not_a_page_range_names_a_file() {
     // GNU takes a first page of 0, a last page before the first, or digits
     // followed by other characters for a file name.
-    for operand in ["+0", "+2:1", "+1x"] {
+    for operand in ["+0", "+2:1", "+1x", "+1x:3"] {
         new_ucmd!()
             .args(&[operand, "test_one_page.log"])
             .fails()
-            .stderr_contains("No such file or directory");
+            .stderr_contains(format!("pr: {operand}: "));
     }
 }
