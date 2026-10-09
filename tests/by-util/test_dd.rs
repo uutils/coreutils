@@ -740,14 +740,16 @@ fn test_seek_bytes() {
 #[cfg(all(unix, not(target_os = "redox")))]
 #[test]
 fn test_seek_zero_on_non_seekable_output() {
-    let (path, _controller, _replica) = pty_path();
+    for args in [&["status=none"][..], &["seek=0", "status=none"][..]] {
+        let (path, _controller, _replica) = pty_path();
 
-    new_ucmd!()
-        .arg(of!(path))
-        .args(&["seek=0", "status=none"])
-        .pipe_in("hello\n")
-        .succeeds()
-        .no_output();
+        new_ucmd!()
+            .arg(of!(path))
+            .args(args)
+            .pipe_in("hello\n")
+            .succeeds()
+            .no_output();
+    }
 }
 
 /// Test for skipping beyond the number of bytes in a file.
