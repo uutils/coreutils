@@ -4576,9 +4576,13 @@ fn test_cp_recursive_dest_subdir_is_file() {
     at.mkdir_all("dst/src");
     at.write("dst/src/sub", "kept");
 
+    let dest = path_concat!("dst", "src", "sub");
+    let source = path_concat!("src", "sub");
     ucmd.args(&["-r", "src", "dst"])
         .fails()
-        .stderr_only("cp: cannot overwrite non-directory 'dst/src/sub' with directory 'src/sub'\n");
+        .stderr_only(format!(
+            "cp: cannot overwrite non-directory '{dest}' with directory '{source}'\n"
+        ));
     assert_eq!(at.read("dst/src/sub"), "kept");
     assert_eq!(at.read("dst/src/other"), "other");
 }
