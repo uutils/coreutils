@@ -833,3 +833,31 @@ fn test_hyphen_leading_field_number_is_reported_as_invalid() {
             .stderr_contains("invalid field number: '-1'");
     }
 }
+
+#[test]
+fn test_invalid_file_number() {
+    for (option, value) in [("-a", "3"), ("-a", "x"), ("-v", "0")] {
+        new_ucmd!()
+            .args(&[option, value, "fields_1.txt", "fields_2.txt"])
+            .fails_with_code(1)
+            .stderr_only(format!("join: invalid file number: '{value}'\n"));
+    }
+}
+
+#[test]
+fn test_operand_count() {
+    new_ucmd!()
+        .fails_with_code(1)
+        .stderr_contains("join: missing operand\n")
+        .stderr_contains("--help");
+    new_ucmd!()
+        .args(&["-t", "x", "fields_1.txt"])
+        .fails_with_code(1)
+        .stderr_contains("join: missing operand after 'fields_1.txt'\n")
+        .stderr_contains("--help");
+    new_ucmd!()
+        .args(&["fields_1.txt", "fields_2.txt", "fields_3.txt"])
+        .fails_with_code(1)
+        .stderr_contains("join: extra operand 'fields_3.txt'\n")
+        .stderr_contains("--help");
+}

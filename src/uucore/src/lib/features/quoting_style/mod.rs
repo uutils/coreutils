@@ -107,7 +107,7 @@ impl QuotingStyle {
     /// > This is a no-op for variants others than [`QuotingStyle::Shell`]
     /// > and [`QuotingStyle::Literal`].
     pub fn show_control(self, show_control: bool) -> Self {
-        use QuotingStyle::*;
+        use QuotingStyle::{C, CLocale, Escape, Literal, Locale, Shell};
         match self {
             Shell {
                 escape,

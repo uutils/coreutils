@@ -55,17 +55,26 @@ fn test_uname_kernel_version() {
 fn test_uname_kernel() {
     let (_, mut ucmd) = at_and_ucmd!();
 
-    #[cfg(target_os = "linux")]
+    // Under the WASI runner the binary under test is the wasm guest, which
+    // reports "WASI" regardless of the host OS.
+    #[cfg(wasi_runner)]
+    ucmd.arg("-o").succeeds().stdout_is("WASI\n");
+
+    #[cfg(all(target_os = "linux", not(wasi_runner)))]
     {
         let result = ucmd.arg("-o").succeeds();
         assert!(result.stdout_str().to_lowercase().contains("linux"));
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(all(not(target_os = "linux"), not(wasi_runner)))]
     ucmd.arg("-o").succeeds();
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: uname reports the guest OS (WASI), not the host's"
+)]
 fn test_uname_operating_system() {
     #[cfg(target_os = "android")]
     new_ucmd!()
