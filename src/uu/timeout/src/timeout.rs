@@ -195,6 +195,14 @@ fn report_if_verbose(signal: usize, cmd: &OsStr, verbose: bool) {
     }
 }
 
+/// The exit status that `--preserve-status` reports for a child that
+/// has exited: its exit code, or 128 + the signal that terminated it.
+fn preserved_exit_code(status: process::ExitStatus) -> Option<i32> {
+    status.code().or_else(|| {
+        platform::status_signal(status).map(|s| ExitStatus::SignalSent(s as usize).into())
+    })
+}
+
 /// Wait for a child process and send a kill signal if it does not terminate.
 ///
 /// This function waits for the child `process` for the time period
@@ -227,17 +235,11 @@ fn wait_or_kill_process(
     match process.wait_or_timeout(duration, true) {
         Ok(TimeoutRet::Exited(status)) => {
             if preserve_status {
-                let exit_code = status
-                    .code()
-                    .or_else(|| {
-                        platform::status_signal(status)
-                            .map(|s| ExitStatus::SignalSent(s as usize).into())
-                    })
-                    .unwrap_or_else(|| {
-                        // Extremely rare: process exited but we have neither exit code nor signal.
-                        // This can happen on some platforms or in unusual termination scenarios.
-                        ExitStatus::TimeoutFailed.into()
-                    });
+                let exit_code = preserved_exit_code(status).unwrap_or_else(|| {
+                    // Extremely rare: process exited but we have neither exit code nor signal.
+                    // This can happen on some platforms or in unusual termination scenarios.
+                    ExitStatus::TimeoutFailed.into()
+                });
                 Ok(exit_code)
             } else {
                 Ok(ExitStatus::CommandTimedOut.into())
@@ -340,12 +342,7 @@ fn timeout(
 
             let status = process.wait()?;
             if preserve_status {
-                let exit_code = status
-                    .code()
-                    .or_else(|| {
-                        platform::status_signal(status)
-                            .map(|s| ExitStatus::SignalSent(s as usize).into())
-                    })
+                let exit_code = preserved_exit_code(status)
                     .unwrap_or_else(|| ExitStatus::CommandTimedOut.into());
                 Err(exit_code.into())
             } else if sent_kill {
