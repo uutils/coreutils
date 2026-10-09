@@ -630,7 +630,9 @@ mod tests {
         let record = record_with_time(1_700_000_000);
         assert_eq!(record.login_time_seconds(), 1_700_000_000);
         assert_eq!(
-            record.login_time().map(|time| time.unix_timestamp()),
+            record
+                .login_time()
+                .map(time::OffsetDateTime::unix_timestamp),
             Some(1_700_000_000)
         );
     }
