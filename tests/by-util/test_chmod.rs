@@ -1139,6 +1139,8 @@ fn test_umask_conflict_reported_only_for_option_like_mode() {
         (&["-w", "--", "file"], 0o466, true),
         (&["file", "-w"], 0o466, true),
         (&["-w", "-w", "--", "file"], 0o466, true),
+        // `-f` hides most diagnostics, but not this one, as in GNU.
+        (&["-f", "-w", "file"], 0o466, true),
         (&["--", "-w", "file"], 0o466, false),
         (&["--", "-rw", "file"], 0o022, false),
         // What matters is whether the argument itself began with a hyphen, not whether the mode
@@ -1697,6 +1699,34 @@ fn test_chmod_operator_only_still_calls_syscall() {
             .code_is(1)
             .stderr_contains("changing permissions of '/'");
     }
+}
+
+#[test]
+fn test_chmod_reports_every_failing_operand() {
+    use rustix::process::geteuid;
+
+    // Every operand is tried and every failure reported, as GNU does: '-f'
+    // hides the messages but keeps the exit status, and '-v' still says what
+    // could not be changed. As above, '/' is a file a non-root user cannot
+    // chmod.
+    if geteuid().is_root() || metadata("/").map_or(0, |m| m.uid()) != 0 {
+        return;
+    }
+
+    let error = "chmod: changing permissions of '/': Operation not permitted\n";
+    new_ucmd!()
+        .args(&["0", "/", "/"])
+        .fails_with_code(1)
+        .stderr_only(format!("{error}{error}"));
+    new_ucmd!()
+        .args(&["-f", "0", "/", "/"])
+        .fails_with_code(1)
+        .no_output();
+    new_ucmd!()
+        .args(&["-v", "-f", "0", "/", "/"])
+        .fails_with_code(1)
+        .no_stderr()
+        .stdout_contains("failed to change mode of file '/' from");
 }
 
 #[test]
