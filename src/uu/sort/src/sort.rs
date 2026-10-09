@@ -3397,20 +3397,33 @@ fn check_readable(path: &Path) -> std::io::Result<()> {
 
 /// An input that names itself in a read error, so that `read failed: ...`
 /// says which input failed, as GNU does.
-struct NamedReader<R> {
+pub struct NamedReader<R> {
     name: OsString,
     inner: R,
 }
 
 impl<R: Read> Read for NamedReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.inner.read(buf).map_err(|error| {
+        self.inner.read(buf).map_err(|source| {
             std::io::Error::new(
-                error.kind(),
-                format!("{}: {}", self.name.maybe_quote(), strip_errno(&error)),
+                source.kind(),
+                NamedReadError {
+                    name: self.name.clone(),
+                    source,
+                },
             )
         })
     }
+}
+
+/// The error a [`NamedReader`] fails with. The name and the underlying error
+/// are kept apart so the message can put them in whatever order it wants.
+#[derive(Debug, thiserror::Error)]
+#[error("{}: {}", .name.maybe_quote(), strip_errno(.source))]
+struct NamedReadError {
+    name: OsString,
+    #[source]
+    source: std::io::Error,
 }
 
 fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
