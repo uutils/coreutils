@@ -134,16 +134,25 @@ fn test_chown_only_owner_colon() {
     let user_name = String::from(result.stdout_str().trim());
     assert!(!user_name.is_empty());
 
+    let result = scene.cmd("id").arg("-gn").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
+        return;
+    }
+    let login_group_name = String::from(result.stdout_str().trim());
+    let expected = format!("{user_name}:{login_group_name}");
+
     let file1 = "test_chown_file1";
     at.touch(file1);
 
+    // "username:" sets the owner and the owner's login group; the
+    // ownership is "retained" only if the group already matches.
     scene
         .ucmd()
         .arg(format!("{user_name}:"))
         .arg("--verbose")
         .arg(file1)
         .succeeds()
-        .stdout_contains("retained as")
+        .stdout_contains(&expected)
         .no_stderr();
 
     scene
@@ -152,7 +161,7 @@ fn test_chown_only_owner_colon() {
         .arg("--verbose")
         .arg(file1)
         .succeeds()
-        .stdout_contains("retained as")
+        .stdout_contains(&expected)
         .stderr_contains("warning: '.' should be ':'");
 
     scene
