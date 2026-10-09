@@ -15,6 +15,7 @@ use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
+use uucore::quoting_style::locale_aware_shell_escape;
 use uucore::show;
 use uucore::translate;
 
@@ -237,9 +238,7 @@ fn fold(
             match File::open(Path::new(filename)) {
                 Ok(f) => file_buf = f,
                 Err(e) => {
-                    show!(e.map_err_context(|| {
-                        uucore::quoting_style::locale_aware_shell_escape(filename)
-                    }));
+                    show!(e.map_err_context(|| locale_aware_shell_escape(filename)));
                     continue;
                 }
             }
@@ -290,7 +289,7 @@ fn fold_file_bytewise<T: Read, W: Write>(
         while line.len() <= width {
             let buf = file
                 .fill_buf()
-                .map_err_context(|| filename.maybe_quote().to_string())?;
+                .map_err_context(|| locale_aware_shell_escape(filename))?;
             if buf.is_empty() {
                 break;
             }
@@ -769,7 +768,7 @@ fn fold_file<T: Read, W: Write>(
         loop {
             let buffer = file
                 .fill_buf()
-                .map_err_context(|| filename.maybe_quote().to_string())?;
+                .map_err_context(|| locale_aware_shell_escape(filename))?;
             if buffer.is_empty() {
                 break;
             }
