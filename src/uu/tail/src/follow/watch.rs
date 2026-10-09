@@ -39,15 +39,9 @@ impl WatcherRx {
         let mut path = path.to_owned();
         #[cfg(target_os = "linux")]
         if path.is_file() {
-            // The directory watch below reports a write to the target of a
-            // symlink under the target's own name, which is not a followed
-            // path. Watching the link as well follows it to the target, whose
-            // events then arrive under the link's name.
-            //
-            // Unlike the file-and-parent pair the NOTE below warns about,
-            // these two watches are on different inodes and never report the
-            // same event: the directory watch covers the link itself (made,
-            // removed, renamed), the link watch covers the target's contents.
+            // The directory watch reports a write to a symlink's target under
+            // the target's name, not the link's, so also watch the link: it is
+            // another inode than the directory and nothing is reported twice.
             if path.is_symlink() {
                 self.watch(&path, RecursiveMode::NonRecursive)?;
             }
