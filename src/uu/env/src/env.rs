@@ -807,16 +807,7 @@ impl EnvAppData {
             // GNU applies the options in the order they are given, so the last one for a
             // signal wins.
             for (action_kind, request) in &opts.signal_actions {
-                apply_signal_action(
-                    request,
-                    &mut signal_action_log,
-                    *action_kind,
-                    match *action_kind {
-                        SignalActionKind::Default => reset_signal,
-                        SignalActionKind::Ignore => ignore_signal,
-                        SignalActionKind::Block => block_signal,
-                    },
-                )?;
+                apply_signal_action(request, &mut signal_action_log, *action_kind)?;
             }
             if opts.list_signal_handling {
                 list_signal_handling(&signal_action_log);
@@ -1101,15 +1092,11 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
 }
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
-fn apply_signal_action<F>(
+fn apply_signal_action(
     request: &SignalRequest,
     log: &mut SignalActionLog,
     action_kind: SignalActionKind,
-    signal_fn: F,
-) -> UResult<()>
-where
-    F: Fn(usize) -> UResult<()>,
-{
+) -> UResult<()> {
     request.for_each_signal(|sig_value, explicit| {
         // On some platforms ALL_SIGNALS may contain values that are not valid in libc.
         // Skip those invalid ones and continue (GNU env also ignores undefined signals).
@@ -1117,7 +1104,11 @@ where
             return Ok(());
         }
 
-        signal_fn(sig_value)?;
+        match action_kind {
+            SignalActionKind::Default => reset_signal(sig_value)?,
+            SignalActionKind::Ignore => ignore_signal(sig_value)?,
+            SignalActionKind::Block => block_signal(sig_value)?,
+        }
         log.record(sig_value, action_kind, explicit);
 
         // Set environment variable to communicate to Rust child processes
