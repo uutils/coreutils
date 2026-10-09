@@ -246,6 +246,12 @@ macro_rules! bin_inner {
         }
     };
 }
+
+/// Report a stdout flush failure on the given writer without the "(os error N)" suffix.
+pub fn report_stdout_flush_error_to<W: std::io::Write>(w: &mut W, e: &std::io::Error) {
+    let _ = writeln!(w, "Error flushing stdout: {}", error::strip_errno(e));
+}
+
 /// Execute utility code for `util`.
 ///
 /// This macro expands to a main function that invokes the `uumain` function in `util`
@@ -259,7 +265,7 @@ macro_rules! bin {
         ::uucore::bin_inner! {$util, {
             // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
             if let Err(e) = std::io::stdout().flush() {
-                eprintln!("Error flushing stdout: {e}");
+                ::uucore::report_stdout_flush_error_to(&mut std::io::stderr(), &e);
             }
         }}
     };
@@ -803,5 +809,27 @@ mod tests {
             format_usage("expr EXPRESSION\nexpr OPTION"),
             "expr EXPRESSION\n       expr OPTION"
         );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn report_stdout_flush_error_strips_errno() {
+        use std::io::Error;
+
+        // ENOSPC and EPIPE (Linux); same values on other Unix targets we test.
+        for raw in [28, 32] {
+            let err = Error::from_raw_os_error(raw);
+            let mut buf = Vec::new();
+            report_stdout_flush_error_to(&mut buf, &err);
+            let line = String::from_utf8(buf).unwrap();
+            assert!(
+                line.starts_with("Error flushing stdout: "),
+                "unexpected line: {line}"
+            );
+            assert!(
+                !line.contains("os error"),
+                "line must not contain os error: {line}"
+            );
+        }
     }
 }

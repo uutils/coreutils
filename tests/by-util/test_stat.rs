@@ -990,6 +990,8 @@ stat: '%.3': invalid directive
     }
 }
 
+// stdout flush + strip_errno on exit is covered by uucore stdout-flush unit tests.
+
 #[test]
 #[cfg(unix)]
 fn test_error_message_preserves_non_utf8_filename() {
