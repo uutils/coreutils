@@ -226,6 +226,7 @@ fn test_version_empty_lines() {
 #[test]
 fn test_parallel_invalid() {
     for (value, stderr) in [
+        ("", "sort: invalid --parallel argument ''\n"),
         ("0", "sort: number in parallel must be nonzero\n"),
         ("NaN", "sort: invalid --parallel argument 'NaN'\n"),
         ("-1", "sort: invalid --parallel argument '-1'\n"),
@@ -237,6 +238,12 @@ fn test_parallel_invalid() {
     ] {
         new_ucmd!()
             .arg(format!("--parallel={value}"))
+            .pipe_in("b\na\n")
+            .fails_with_code(2)
+            .stderr_only(stderr);
+        // the value as a separate argument, which is how GNU's sort.pl passes it
+        new_ucmd!()
+            .args(&["--parallel", value])
             .pipe_in("b\na\n")
             .fails_with_code(2)
             .stderr_only(stderr);
