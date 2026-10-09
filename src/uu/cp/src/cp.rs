@@ -2469,7 +2469,7 @@ pub(crate) fn set_parent_dirs_attributes(
     result
 }
 
-fn print_verbose_output(
+pub(crate) fn print_verbose_output(
     parents: bool,
     progress_bar: Option<&ProgressBar>,
     source: &Path,

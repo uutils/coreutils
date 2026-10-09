@@ -32,8 +32,8 @@ use walkdir::{DirEntry, WalkDir};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use crate::set_selinux_context;
 use crate::{
-    CopyMode, CopyResult, CpError, Options, aligned_ancestors, context_for, copy_attributes,
-    copy_file, create_parent_dirs, set_parent_dirs_attributes,
+    CopyMode, CopyResult, CpError, Options, aligned_ancestors, copy_attributes, copy_file,
+    create_parent_dirs, print_verbose_output, set_parent_dirs_attributes,
 };
 
 /// Represents a directory that needs permission fixup after copying its contents.
@@ -279,7 +279,7 @@ fn copy_direntry(
         if !dest.exists() {
             build_dir(dest, false, options, Some(&entry.source_absolute))?;
             if options.verbose {
-                println!("{}", context_for(&entry.source_relative, dest));
+                print_verbose_output(false, progress_bar, &entry.source_relative, dest)?;
             }
             return Ok(true);
         }
