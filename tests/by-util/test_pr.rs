@@ -558,6 +558,10 @@ fn test_large_page_width_does_not_panic() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: wasmtime itself needs more memory than the guest's rlimit allows"
+)]
 fn test_offset_large_value_does_not_abort_under_memory_limit() {
     use rustix::process::Resource;
     use std::process::Stdio;
@@ -627,6 +631,7 @@ fn test_with_date_format() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: locale database not visible")]
 fn test_with_date_format_env() {
     // POSIXLY_CORRECT + LC_ALL/TIME=POSIX uses "%b %e %H:%M %Y" date format
     let whitespace = " ".repeat(49);
@@ -751,6 +756,10 @@ fn test_version() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/null) not visible"
+)]
 fn test_pr_char_device_dev_null() {
     new_ucmd!().arg("/dev/null").succeeds();
 }
@@ -1304,6 +1313,10 @@ fn test_negative_expand_tabs() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/null) not visible"
+)]
 fn test_merge_empty_input() {
     new_ucmd!()
         .args(&["-m", "/dev/null", "/dev/null"])

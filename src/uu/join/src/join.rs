@@ -17,7 +17,7 @@ use std::num::IntErrorKind;
 use std::os::unix::ffi::OsStrExt;
 use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::i18n::collator::{
     AlternateHandling, CollatorOptions, locale_cmp, should_use_locale_collation, try_init_collator,
 };
@@ -862,8 +862,30 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let settings = parse_settings(&matches, diag_args.as_deref())?;
 
-    let file1 = matches.get_one::<OsString>("file1").unwrap();
-    let file2 = matches.get_one::<OsString>("file2").unwrap();
+    let (file1, file2) = match (
+        matches.get_one::<OsString>("file1"),
+        matches.get_one::<OsString>("file2"),
+    ) {
+        (Some(file1), Some(file2)) => (file1, file2),
+        (Some(file1), None) => {
+            return Err(UUsageError::new(
+                1,
+                translate!("join-error-missing-operand-after", "file" => file1.quote()),
+            ));
+        }
+        _ => {
+            return Err(UUsageError::new(
+                1,
+                translate!("join-error-missing-operand"),
+            ));
+        }
+    };
+    if let Some(extra) = matches.get_one::<OsString>("extra") {
+        return Err(UUsageError::new(
+            1,
+            translate!("join-error-extra-operand", "operand" => extra.quote()),
+        ));
+    }
 
     if file1 == "-" && file2 == "-" {
         return Err(USimpleError::new(
@@ -900,7 +922,6 @@ pub fn uu_app() -> Command {
                 .short('a')
                 .action(ArgAction::Append)
                 .num_args(1)
-                .value_parser(["1", "2"])
                 .value_name("FILENUM")
                 .help(translate!("join-help-a")),
         )
@@ -909,7 +930,6 @@ pub fn uu_app() -> Command {
                 .short('v')
                 .action(ArgAction::Append)
                 .num_args(1)
-                .value_parser(["1", "2"])
                 .value_name("FILENUM")
                 .help(translate!("join-help-v")),
         )
@@ -990,7 +1010,6 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new("file1")
-                .required(true)
                 .value_name("FILE1")
                 .value_hint(clap::ValueHint::FilePath)
                 .value_parser(clap::value_parser!(OsString))
@@ -998,9 +1017,14 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new("file2")
-                .required(true)
                 .value_name("FILE2")
                 .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString))
+                .hide(true),
+        )
+        .arg(
+            Arg::new("extra")
+                .num_args(0..)
                 .value_parser(clap::value_parser!(OsString))
                 .hide(true),
         )

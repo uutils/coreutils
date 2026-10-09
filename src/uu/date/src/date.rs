@@ -953,7 +953,8 @@ fn write_formatted_date<W: Write>(
     write_formatted_bytes(
         writer,
         format_chunks(&output.chunks, |fmt| {
-            format_date_with_locale_aware_months(&date, fmt, &output.config, skip_localization)
+            let fmt = expand_locale_formats(&date, fmt, &output.config, skip_localization, 0)?;
+            format_date_with_locale_aware_months(&date, &fmt, &output.config, skip_localization)
         }),
         output,
     )
@@ -1035,7 +1036,9 @@ fn format_extended_default(
     .map_err(str::to_string)?;
     let mut year_replaced = false;
     let formatted = format_chunks(chunks, |fmt| {
-        let (fmt, replaced) = substitute_extended_year(fmt, output.year);
+        // Expand %x, %X and %r first, so that a %Y they hold is replaced too.
+        let fmt = expand_locale_formats(&surrogate, fmt, config, false, 0)?;
+        let (fmt, replaced) = substitute_extended_year(&fmt, output.year);
         year_replaced |= replaced;
         format_date_with_locale_aware_months(&surrogate, &fmt, config, false)
     })?;
@@ -1081,6 +1084,86 @@ fn substitute_extended_year(format_string: &str, year: u32) -> (String, bool) {
     }
 
     (output, replaced)
+}
+
+/// Expand `%x`, `%X` and `%r` to the locale's formats, which jiff hardcodes to
+/// the C ones, and `%p` and `%P` to the locale's AM/PM markers. GNU pads and
+/// cases a modified `%x`, `%X` or `%r` (`%10X`, `%^r`) as a whole, so that one
+/// is formatted here and kept as literal text. `depth` counts the expansions
+/// around `format`: a locale format may use one of them in turn (glibc's
+/// `en_US` `%X` is `%r`).
+fn expand_locale_formats<'a>(
+    date: &Zoned,
+    format: &'a str,
+    config: &Config<PosixCustom>,
+    skip_localization: bool,
+    depth: u8,
+) -> Result<Cow<'a, str>, String> {
+    let mut output = String::new();
+    let mut copied = 0;
+    let mut i = 0;
+    while let Some(offset) = format[i..].find('%') {
+        i += offset;
+        // jiff reads `%%`, also with flags or a width (`%10%`), as a literal `%`.
+        let rest = format[i + 1..]
+            .trim_start_matches(|c: char| "_0^#+-".contains(c) || c.is_ascii_digit());
+        if rest.starts_with('%') {
+            i = format.len() - rest.len() + 1;
+            continue;
+        }
+        let Some(parsed) = format_modifiers::parse_format_spec(&format[i..]) else {
+            i += 1;
+            continue;
+        };
+        if let Some(marker) = locale::get_locale_ampm_marker(parsed.spec, date.hour() >= 12) {
+            let marker = if parsed.flags.is_empty() && parsed.width.is_none() {
+                marker
+            } else {
+                Cow::Owned(
+                    format_modifiers::apply_modifiers(&marker, &parsed)
+                        .map_err(|e| e.to_string())?,
+                )
+            };
+            output.push_str(&format[copied..i]);
+            // The marker is put into a format, so a `%` in it has to be doubled.
+            output.push_str(&marker.replace('%', "%%"));
+            i += parsed.len;
+            copied = i;
+            continue;
+        }
+        let locale_format = match locale::get_locale_format(parsed.spec) {
+            Some(locale_format) if depth < 2 => locale_format,
+            _ => {
+                i += parsed.len;
+                continue;
+            }
+        };
+        let locale_format =
+            expand_locale_formats(date, locale_format, config, skip_localization, depth + 1)?;
+
+        output.push_str(&format[copied..i]);
+        if parsed.flags.is_empty() && parsed.width.is_none() {
+            output.push_str(&locale_format);
+        } else {
+            let formatted = format_date_with_locale_aware_months(
+                date,
+                &locale_format,
+                config,
+                skip_localization,
+            )?;
+            let modified = format_modifiers::apply_composite_modifiers(&formatted, &parsed)
+                .map_err(|e| e.to_string())?;
+            output.push_str(&modified.replace('%', "%%"));
+        }
+        i += parsed.len;
+        copied = i;
+    }
+
+    if copied == 0 {
+        return Ok(Cow::Borrowed(format));
+    }
+    output.push_str(&format[copied..]);
+    Ok(Cow::Owned(output))
 }
 
 fn format_date_with_locale_aware_months(
