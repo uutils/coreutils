@@ -8,6 +8,8 @@
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
+#[cfg(all(unix, not(target_os = "redox")))]
+use uutests::util::pty_path;
 #[cfg(all(unix, not(feature = "selinux")))]
 use uutests::util::run_ucmd_as_root_with_stdin_stdout;
 #[cfg(not(windows))]
@@ -733,6 +735,21 @@ fn test_seek_bytes() {
         .pipe_in("abcdefghijklm\n")
         .succeeds()
         .stdout_is("\0\0\0\0\0\0\0\0abcdefghijklm\n");
+}
+
+#[cfg(all(unix, not(target_os = "redox")))]
+#[test]
+fn test_seek_zero_on_non_seekable_output() {
+    for args in [&["status=none"][..], &["seek=0", "status=none"][..]] {
+        let (path, _controller, _replica) = pty_path();
+
+        new_ucmd!()
+            .arg(of!(path))
+            .args(args)
+            .pipe_in("hello\n")
+            .succeeds()
+            .no_output();
+    }
 }
 
 /// Test for skipping beyond the number of bytes in a file.
