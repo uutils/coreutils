@@ -116,10 +116,10 @@ fn test_symlink_overwrite_force() {
 
 /// A forced replace must be atomic, so a concurrent creator always loses.
 /// Fails reliably if unlink-then-create ever comes back.
+#[uutests::wasi_ignore(RenameNotAtomicReplace)]
 #[test]
 // Android's app-private filesystem refuses hard links.
 #[cfg(all(unix, not(any(target_os = "redox", target_os = "android"))))]
-#[cfg_attr(wasi_runner, ignore)]
 fn test_force_replace_never_leaves_the_destination_name_free() {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -196,12 +196,9 @@ fn test_force_replace_same_inode_leaves_no_temp_file() {
 /// The destination can sit inside a directory reached through a symlink, as
 /// when the target argument is a symlink to a directory. The replace must
 /// follow it the same way the first create attempt does.
+#[uutests::wasi_ignore(LinkInSymlinkedDirectoryDenied)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: creating a link inside a symlinked directory is denied"
-)]
 fn test_force_replace_in_symlinked_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("real");
@@ -214,13 +211,10 @@ fn test_force_replace_in_symlinked_directory() {
 }
 
 /// Same as above for a hard link, which goes through the same replace path.
+#[uutests::wasi_ignore(LinkInSymlinkedDirectoryDenied)]
 #[test]
 // Android's app-private filesystem refuses hard links.
 #[cfg(all(unix, not(any(target_os = "redox", target_os = "android"))))]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: creating a link inside a symlinked directory is denied"
-)]
 fn test_force_replace_hard_link_in_symlinked_directory() {
     use std::os::unix::fs::MetadataExt;
 
@@ -502,12 +496,9 @@ fn test_symlink_target_dir() {
     assert_eq!(at.resolve_link(file_b_link), file_b);
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: non-utf8 arguments cannot be passed through the spawned test harness"
-)]
 fn test_symlink_target_dir_non_utf8_source_name() {
     use std::ffi::OsStr;
     use std::fs;
@@ -673,8 +664,8 @@ fn test_symlink_implicit_target_dir() {
     assert_eq!(at.resolve_link(filename), *file);
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_symlink_to_dir_2args() {
     let (at, mut ucmd) = at_and_ucmd!();
     let filename = "test_symlink_to_dir_2args_file";
@@ -947,11 +938,8 @@ fn test_relative_dst_already_symlink() {
     at.is_symlink("file2");
 }
 
+#[uutests::wasi_ignore(ReadLinkAbsoluteFailsViaHarness)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: read_link on absolute paths fails under wasmtime via spawned test harness"
-)]
 fn test_relative_src_already_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file1");
@@ -1195,9 +1183,9 @@ fn test_ln_seen_file() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_ln_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;

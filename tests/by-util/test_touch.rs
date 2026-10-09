@@ -166,11 +166,8 @@ fn test_touch_2_digit_years_2038() {
     assert_eq!(mtime, expected);
 }
 
+#[uutests::wasi_ignore(PreEpochTimestampsUnrepresentable)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: pre-epoch timestamps not representable by path_filestat_set_times"
-)]
 fn test_touch_2_digit_years_69() {
     // 69 and after are 19xx
     let (at, mut ucmd) = at_and_ucmd!();
@@ -648,11 +645,8 @@ fn test_touch_set_date7() {
     assert_eq!(mtime, expected);
 }
 
+#[uutests::wasi_ignore(NoTzdb)]
 #[test]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: no tzdb; TZ env var is not honoured so timezone-dependent timestamps differ"
-)]
 fn test_touch_set_date_without_leading_zeroes() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_date_without_leading_zeroes";
@@ -674,12 +668,9 @@ fn test_touch_set_date_without_leading_zeroes() {
 /// because the i64 Unix timestamp (~-62 billion) overflowed the i32 `tv_sec`
 /// expected by the old nix-based implementation. After switching to rustix
 /// (which uses i64 `tv_sec` natively), this should succeed on all targets.
+#[uutests::wasi_ignore(PreEpochTimestampsUnrepresentable)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: pre-epoch timestamps not representable by path_filestat_set_times"
-)]
 fn test_touch_set_date_year_zero() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_year_zero";
@@ -812,12 +803,9 @@ fn test_touch_mtime_dst_succeeds() {
     assert_eq!(target_time, mtime);
 }
 
+#[uutests::wasi_ignore(NoTzdb)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: no tzdb; TZ env var is not honoured so DST validation is skipped"
-)]
 fn test_touch_mtime_dst_fails() {
     let file = "test_touch_set_mtime_dst_fails";
 
@@ -833,12 +821,9 @@ fn test_touch_mtime_dst_fails() {
         .fails();
 }
 
+#[uutests::wasi_ignore(GuestRootWritablePreopen)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: guest root is a writable preopen, not the protected system root"
-)]
 fn test_touch_system_fails() {
     let file = "/";
     new_ucmd!()
@@ -847,12 +832,9 @@ fn test_touch_system_fails() {
         .stderr_contains("setting times of '/'");
 }
 
+#[uutests::wasi_ignore(GuestRootWritablePreopen)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: guest root is a writable preopen, not the protected system root"
-)]
 fn test_touch_explicit_time_on_root_owned_file_eperm() {
     // Setting explicit timestamps on a file we do not own fails with EPERM
     // (not EACCES), which GNU reports as "Operation not permitted" (#15020).
@@ -866,6 +848,7 @@ fn test_touch_explicit_time_on_root_owned_file_eperm() {
         .stderr_only("touch: setting times of '/': Operation not permitted\n");
 }
 
+#[uutests::wasi_ignore(NoFifo)]
 #[test]
 #[cfg(target_os = "linux")]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
@@ -882,7 +865,6 @@ fn test_touch_date_now_on_writable_file_owned_by_other() {
 
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO support")]
 fn test_touch_fifo() {
     // touch must not hang on a reader-less FIFO and must update its times.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -893,9 +875,9 @@ fn test_touch_fifo() {
     assert!(at.is_fifo("fifo"));
 }
 
+#[uutests::wasi_ignore(NoStdoutFileRedirection)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: no stdout-to-file redirection")]
 fn test_touch_dash_updates_stdout_file() {
     // `touch -` must update the times of the file open as stdout (fd 1), even
     // when it is read-only, and set them to "now" rather than a 1970 sentinel.
@@ -947,9 +929,9 @@ fn test_touch_no_such_file_error_msg() {
     ));
 }
 
+#[uutests::wasi_ignore(StdoutDashUnsupported)]
 #[test]
 #[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))]
-#[cfg_attr(wasi_runner, ignore = "WASI: touch - (stdout) is unsupported")]
 fn test_touch_changes_time_of_file_in_stdout() {
     // command like: `touch - 1< ./c`
     // should change the timestamp of c
@@ -970,12 +952,9 @@ fn test_touch_changes_time_of_file_in_stdout() {
     assert_ne!(mtime_after, mtime);
 }
 
+#[uutests::wasi_ignore(PermissionErrorsSurfaceAsEnoent)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: filesystem permission errors surface as ENOENT rather than EACCES"
-)]
 fn test_touch_permission_denied_error_msg() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -994,9 +973,9 @@ fn test_touch_permission_denied_error_msg() {
     ));
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: host system file is not visible")]
 fn test_touch_existing_unwritable_file_error_msg() {
     use std::fs::OpenOptions;
     use std::path::Path;
@@ -1028,9 +1007,9 @@ fn test_touch_existing_unwritable_file_error_msg() {
     ));
 }
 
+#[uutests::wasi_ignore(NoPermissionBits)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: filesystem permissions differ")]
 fn test_touch_inaccessible_parent_error_msg() {
     use std::fs::{Permissions, set_permissions};
     use std::os::unix::fs::PermissionsExt;
@@ -1170,9 +1149,9 @@ fn test_touch_no_dereference_dangling() {
     ucmd.args(&["-h", "dangling"]).succeeds();
 }
 
+#[uutests::wasi_ignore(StdoutDashUnsupported)]
 #[test]
 #[cfg(not(target_os = "openbsd"))]
-#[cfg_attr(wasi_runner, ignore = "WASI: touch - (stdout) is unsupported")]
 fn test_touch_dash() {
     new_ucmd!().args(&["-h", "-"]).succeeds().no_output();
 }
@@ -1295,9 +1274,9 @@ fn test_touch_f_option() {
     at.remove(file);
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_touch_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1312,9 +1291,9 @@ fn test_touch_non_utf8_paths() {
     assert!(std::fs::metadata(at.plus(non_utf8_name)).is_ok());
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_touch_device_files() {
     let (_, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["/dev/null", "/dev/zero", "/dev/full", "/dev/random"])
@@ -1328,12 +1307,9 @@ fn test_touch_device_files() {
 // truncates" contract. The create-path fix itself is covered by the
 // create_without_truncate unit tests in src/touch.rs and the syscall-flag
 // check in util/check-safe-traversal.sh.
+#[uutests::wasi_ignore(AbsoluteSymlinkTargetsUnfollowable)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: absolute symlink targets cannot be followed"
-)]
 fn test_touch_does_not_truncate_symlink_target() {
     use std::os::unix::fs::symlink;
 
@@ -1347,12 +1323,9 @@ fn test_touch_does_not_truncate_symlink_target() {
 }
 
 // Touching a dangling symlink creates its target as an empty file, like GNU.
+#[uutests::wasi_ignore(AbsoluteSymlinkTargetsUnfollowable)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: absolute symlink targets cannot be followed"
-)]
 fn test_touch_through_dangling_symlink_creates_target() {
     use std::os::unix::fs::symlink;
 

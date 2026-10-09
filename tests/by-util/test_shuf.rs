@@ -15,9 +15,9 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+#[uutests::wasi_ignore(NoSubprocessSpawning)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore)]
 fn test_getrandom_fail() {
     // getrandom is missing from legacy kernel
     use std::process::Command;
@@ -434,8 +434,8 @@ fn test_echo_separators_in_arguments() {
 }
 
 #[cfg(unix)]
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_echo_invalid_unicode_in_arguments() {
     use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
@@ -450,8 +450,8 @@ fn test_echo_invalid_unicode_in_arguments() {
 
 #[cfg(unix)]
 #[cfg(not(target_vendor = "apple"))]
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_invalid_unicode_in_filename() {
     use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
@@ -928,9 +928,9 @@ fn test_range_repeat_empty_minus_one() {
 }
 
 // This test fails if we forget to flush the `BufWriter`.
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn write_errors_are_reported() {
     new_ucmd!()
         .arg("-i1-10")

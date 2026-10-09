@@ -207,8 +207,8 @@ fn test_delimiter_with_byte_and_char() {
     }
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_too_large() {
     new_ucmd!()
         .args(&["-b1-18446744073709551615", "/dev/null"])
@@ -643,9 +643,9 @@ fn test_multiple_mode_args() {
     }
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_8bit_non_utf8_delimiter() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -773,8 +773,8 @@ fn test_whitespace_delimited_trimmed_zero_terminated() {
         .stdout_only_bytes(&b"amber\0"[..]);
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
 #[cfg(target_os = "linux")]
 fn test_byte_no_split_partially_selected_char() {
     // -b -n: the selected bytes of a character must reach its end without a
@@ -849,8 +849,8 @@ fn test_newline_delim_suppress_missing_field() {
         .stdout_only("");
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
 #[cfg(target_os = "linux")]
 fn test_byte_no_split_with_output_delimiter() {
     // -b -n with an output delimiter: a range covering only part of a
@@ -864,8 +864,8 @@ fn test_byte_no_split_with_output_delimiter() {
         .stdout_only_bytes(b"Z\n");
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
 #[cfg(target_os = "linux")]
 fn test_field_delimiter_not_split_inside_multibyte_char() {
     use std::os::unix::ffi::OsStrExt;
@@ -890,8 +890,8 @@ fn test_field_delimiter_not_split_inside_multibyte_char() {
         .stdout_only_bytes(b"1\xe2\x82\xac2\n");
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
 #[cfg(target_os = "linux")]
 fn test_whitespace_delimiter_unicode_blank() {
     // U+2002 (EN SPACE) is a Unicode blank and splits fields under -w.
@@ -922,8 +922,8 @@ fn test_delimiter_multibyte_rejected_in_c_locale() {
         .stderr_contains("cut: the delimiter must be a single character");
 }
 
+#[uutests::wasi_ignore(NoLocaleData)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
 fn test_emoji_delim() {
     // A multibyte delimiter is only a single character in a UTF-8 locale.
     new_ucmd!()
@@ -952,9 +952,9 @@ fn test_failed_write_is_reported() {
         .stderr_is("cut: write error: No space left on device\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_cut_non_utf8_paths() {
     use std::fs::File;
     use std::io::Write;
@@ -986,9 +986,9 @@ const GB_LOCALE: &str = "zh_CN.gb18030";
 #[cfg(target_os = "linux")]
 const A: &[u8] = b"\xB0\xA1"; // 啊
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_cut_fields_gb18030_delimiter() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
@@ -1019,9 +1019,9 @@ fn test_cut_fields_gb18030_delimiter() {
         .stdout_only_bytes(b"red\xB0\xA1blue\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_cut_fields_gb18030_complement_and_gaps() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
@@ -1050,12 +1050,9 @@ fn test_cut_fields_gb18030_complement_and_gaps() {
         .stdout_only("||z\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI sandbox: non-UTF-8 arguments can't be passed through wasmtime"
-)]
 fn test_cut_fields_single_byte_delimiter_in_mb_locale() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
@@ -1072,9 +1069,9 @@ fn test_cut_fields_single_byte_delimiter_in_mb_locale() {
         .stdout_only("a-c\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_cut_chars_gb18030() {
     // "啊w中": -c counts characters, so the second one is the ASCII 'w'.
     let line = b"\xB0\xA1w\xD6\xD0\n";
@@ -1103,9 +1100,9 @@ fn test_cut_chars_gb18030() {
         .stdout_only_bytes(b"\xB0\xA1w\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_cut_chars_gb18030_ranges_and_complement() {
     // "啊w中": list of two single-char ranges joined by a custom delimiter.
     new_ucmd!()
@@ -1124,9 +1121,9 @@ fn test_cut_chars_gb18030_ranges_and_complement() {
         .stdout_only_bytes(b"\xB0\xA1\xD6\xD0\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_cut_bytes_no_split_gb18030() {
     // -n forbids splitting a multibyte character: a byte index landing inside
     // 啊 only produces output once its final byte is included.
@@ -1151,9 +1148,9 @@ fn test_cut_bytes_no_split_gb18030() {
 
 // `-c` also operates on whole characters in a UTF-8 locale. The harness runs
 // under `LC_ALL=C`, so the locale is forced here. "naïve" is n a ï(2 bytes) v e.
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_cut_chars_utf8() {
     // The third character is the accented 'ï', returned in full.
     new_ucmd!()
@@ -1182,9 +1179,9 @@ fn test_cut_chars_utf8() {
 
 // Lines with no byte above 0x7F take a byte-wise shortcut in a multi-byte
 // locale; mixing them with multi-byte ones checks both paths agree on offsets.
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_cut_chars_utf8_mixed_ascii_lines() {
     let input = "quokka\nfjärd\nwombat\ntøys\n";
 
@@ -1205,9 +1202,9 @@ fn test_cut_chars_utf8_mixed_ascii_lines() {
         .stdout_only("okk\när\nmba\nøys\n");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_read_error() {
     new_ucmd!()
         .args(&["-c1", "/proc/self/mem"])

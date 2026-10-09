@@ -56,7 +56,9 @@ jobs:
         cargo build --target ${{ matrix.job.target }} --no-default-features --features feat_wasm
         # Run host-compiled integration tests against the WASI binary.
         # Tests incompatible with WASI are annotated with
-        # #[cfg_attr(wasi_runner, ignore)] in the test source files.
+        # #[uutests::wasi_ignore(ReasonKey)] in the test source files, which
+        # expands to #[cfg_attr(wasi_runner, ignore = "...")]; the reason keys
+        # live in tests/uutests_procs/src/lib.rs.
         # The binary above is built without default features, so it has no
         # caret diagnostics; the host test crate does have them, hence the
         # not(wasi_runner) in the cfg guarding every `mod diagnostics`.
