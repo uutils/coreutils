@@ -29,7 +29,7 @@ use std::{
 use uucore::error::{FromIo, UResult};
 
 use crate::{
-    GlobalSettings, Output, SortError,
+    GlobalSettings, NamedReader, Output, SortError,
     chunks::{self, Chunk, RecycledChunk},
     current_open_fd_count, fd_soft_limit, merge_compare, open,
     tmp_dir::{TmpDirWrapper, TmpPath},
@@ -504,7 +504,7 @@ pub struct ClosedPlainTmpFile {
 }
 pub struct PlainTmpMergeInput {
     path: TmpPath,
-    file: File,
+    file: NamedReader<File>,
 }
 impl WriteableTmpFile for WriteablePlainTmpFile {
     type Closed = ClosedPlainTmpFile;
@@ -528,17 +528,21 @@ impl WriteableTmpFile for WriteablePlainTmpFile {
 impl ClosedTmpFile for ClosedPlainTmpFile {
     type Reopened = PlainTmpMergeInput;
     fn reopen(self) -> UResult<Self::Reopened> {
+        let file = self
+            .path
+            .open()
+            .map_err(|error| SortError::OpenTmpFileFailed { error })?;
         Ok(PlainTmpMergeInput {
-            file: self
-                .path
-                .open()
-                .map_err(|error| SortError::OpenTmpFileFailed { error })?,
+            file: NamedReader {
+                name: self.path.path().as_os_str().to_owned(),
+                inner: file,
+            },
             path: self.path,
         })
     }
 }
 impl MergeInput for PlainTmpMergeInput {
-    type InnerRead = File;
+    type InnerRead = NamedReader<File>;
 
     fn finished_reading(self) -> UResult<()> {
         // we ignore failures to delete the temporary file,
@@ -569,7 +573,7 @@ pub struct CompressedTmpMergeInput {
     path: TmpPath,
     compress_prog: String,
     child: Child,
-    child_stdout: ChildStdout,
+    child_stdout: NamedReader<ChildStdout>,
 }
 impl WriteableTmpFile for WriteableCompressedTmpFile {
     type Closed = ClosedCompressedTmpFile;
@@ -624,7 +628,10 @@ impl ClosedTmpFile for ClosedCompressedTmpFile {
                 prog: self.compress_prog.clone(),
                 error: err,
             })?;
-        let child_stdout = child.stdout.take().unwrap();
+        let child_stdout = NamedReader {
+            name: self.path.path().as_os_str().to_owned(),
+            inner: child.stdout.take().unwrap(),
+        };
         Ok(CompressedTmpMergeInput {
             path: self.path,
             compress_prog: self.compress_prog,
@@ -634,7 +641,7 @@ impl ClosedTmpFile for ClosedCompressedTmpFile {
     }
 }
 impl MergeInput for CompressedTmpMergeInput {
-    type InnerRead = ChildStdout;
+    type InnerRead = NamedReader<ChildStdout>;
 
     fn finished_reading(self) -> UResult<()> {
         // Explicitly close stdout before waiting on the child process.
