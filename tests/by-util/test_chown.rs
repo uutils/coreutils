@@ -165,6 +165,63 @@ fn test_chown_only_owner_colon() {
         .stderr_contains("failed to change");
 }
 
+/// Test that `chown USER:` sets the group to USER's login group.
+#[test]
+#[cfg(all(unix, not(target_os = "openbsd")))]
+fn test_chown_login_group() {
+    use chown::entries::usr2gid;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let file1 = "test_chown_login_group";
+    at.touch(file1);
+
+    let Ok(root_gid) = usr2gid("root") else {
+        print!("Test skipped; no root user");
+        return;
+    };
+    let other_gid = root_gid.wrapping_add(1).to_string();
+
+    // Move the file's group out of root's login group. Changing the
+    // ownership to root requires root privileges.
+    let Ok(result) = run_ucmd_as_root(&ts, &[&format!("0:{other_gid}"), file1]) else {
+        print!("Test skipped; requires root user");
+        return;
+    };
+    result.success().no_output();
+
+    // "root:" must set the group back to root's login group.
+    let Ok(result) = run_ucmd_as_root(&ts, &["root:", file1]) else {
+        print!("Test skipped; requires root user");
+        return;
+    };
+    result.success().no_output();
+
+    assert_eq!(at.metadata(file1).gid(), root_gid);
+}
+
+/// Test that an owner whose login group cannot be resolved is an invalid spec.
+#[test]
+fn test_chown_invalid_spec() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .arg("auserthatdoesntexist:")
+        .arg("f")
+        .fails()
+        .stderr_contains("chown: invalid spec: 'auserthatdoesntexist:'");
+
+    scene
+        .ucmd()
+        .arg("12345:")
+        .arg("f")
+        .fails()
+        .stderr_contains("chown: invalid spec: '12345:'");
+}
+
 #[test]
 fn test_chown_dot_separator_warning() {
     // test that using '.' as separator emits a warning
