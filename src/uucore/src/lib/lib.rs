@@ -389,17 +389,15 @@ fn with_wasi_argv_fallback(mut argv: Vec<OsString>) -> Vec<OsString> {
     argv
 }
 
-// WASI embeddings may omit argv; provide a stable utility-name fallback.
+// Always non-empty on WASI (embeddings may omit argv); `UTIL_NAME`/`EXECUTION_PHRASE` rely on it.
 #[cfg(all(not(windows), target_os = "wasi"))]
 static ARGV: LazyLock<Vec<OsString>> =
     LazyLock::new(|| with_wasi_argv_fallback(std::env::args_os().collect()));
 
 static UTIL_NAME: LazyLock<String> = LazyLock::new(|| {
-    // `ARGV` may be shorter than the multicall layout assumes (e.g. the WASI fallback).
-    let last = ARGV.len().saturating_sub(1);
-    let base_index = usize::from(get_utility_is_second_arg()).min(last);
+    let base_index = usize::from(get_utility_is_second_arg());
     let is_man = usize::from(ARGV[base_index].eq("manpage"));
-    let argv_index = (base_index + is_man).min(last);
+    let argv_index = base_index + is_man;
 
     // Strip directory path to show only utility name
     // (e.g., "mkdir" instead of "./target/debug/mkdir")
