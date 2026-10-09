@@ -36,7 +36,7 @@ use std::io::Result as IOResult;
 use std::os::unix::fs::MetadataExt;
 
 use std::os::unix::ffi::OsStrExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 #[derive(Debug, thiserror::Error)]
 enum PermsError {
@@ -662,8 +662,9 @@ impl ChownExecutor {
             .min_depth(1)
             .into_iter();
         // The directory whose entry came last: walkdir reports a directory it
-        // cannot read right after that entry, under the same path.
-        let mut last_dir: Option<PathBuf> = None;
+        // cannot read right after that entry, under the same path. The root is
+        // below min_depth, so it never comes out as an entry: start from it.
+        let mut last_dir = Some(root.to_path_buf());
         // We can't use a for loop because we need to manipulate the iterator inside the loop.
         while let Some(entry) = iterator.next() {
             let entry = match entry {
