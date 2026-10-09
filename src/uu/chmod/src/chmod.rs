@@ -456,6 +456,11 @@ impl Chmoder {
     }
 
     fn chmod(&self, files: &[OsString]) -> UResult<()> {
+        // Whether the mode parses does not depend on the file, so check it
+        // once before any file is touched: a bad mode is reported once and
+        // changes nothing, as in GNU.
+        self.calculate_new_mode(0, false)?;
+
         let mut r = Ok(());
 
         for filename in files {

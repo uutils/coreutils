@@ -973,6 +973,18 @@ fn test_gnu_invalid_mode() {
 }
 
 #[test]
+fn test_chmod_invalid_mode_checked_before_any_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("d/a");
+    at.touch("d/a/f");
+
+    // The mode is checked once, up front: one message, and no walk.
+    ucmd.args(&["-R", "g+rw?x", "d"])
+        .fails_with_code(1)
+        .stderr_only("chmod: invalid operator (expected +, -, or =, but found ?)\n");
+}
+
+#[test]
 #[cfg(not(target_os = "android"))]
 fn test_gnu_options() {
     let scene = TestScenario::new(util_name!());
