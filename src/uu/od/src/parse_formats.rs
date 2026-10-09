@@ -253,16 +253,6 @@ fn is_format_size_decimal(
     }
 }
 
-fn is_format_dump_char(ch: Option<char>, show_ascii_dump: &mut bool) -> bool {
-    match ch {
-        Some('z') => {
-            *show_ascii_dump = true;
-            true
-        }
-        _ => false,
-    }
-}
-
 fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, String> {
     let mut formats = Vec::new();
 
@@ -329,7 +319,8 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
                 })?;
             }
         }
-        if is_format_dump_char(ch, &mut show_ascii_dump) {
+        if ch == Some('z') {
+            show_ascii_dump = true;
             ch = chars.next();
         }
 
