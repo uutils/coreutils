@@ -235,11 +235,10 @@ fn wait_or_kill_process(
     match process.wait_or_timeout(duration, true) {
         Ok(TimeoutRet::Exited(status)) => {
             if preserve_status {
-                let exit_code = preserved_exit_code(status).unwrap_or_else(|| {
-                    // Extremely rare: process exited but we have neither exit code nor signal.
-                    // This can happen on some platforms or in unusual termination scenarios.
-                    ExitStatus::TimeoutFailed.into()
-                });
+                // Extremely rare: process exited but we have neither exit code nor signal.
+                // This can happen on some platforms or in unusual termination scenarios.
+                let exit_code =
+                    preserved_exit_code(status).unwrap_or(ExitStatus::TimeoutFailed.into());
                 Ok(exit_code)
             } else {
                 Ok(ExitStatus::CommandTimedOut.into())
@@ -342,8 +341,8 @@ fn timeout(
 
             let status = process.wait()?;
             if preserve_status {
-                let exit_code = preserved_exit_code(status)
-                    .unwrap_or_else(|| ExitStatus::CommandTimedOut.into());
+                let exit_code =
+                    preserved_exit_code(status).unwrap_or(ExitStatus::CommandTimedOut.into());
                 Err(exit_code.into())
             } else if sent_kill {
                 Err(ExitStatus::SignalSent(signal).into())
