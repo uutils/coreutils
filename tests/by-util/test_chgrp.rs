@@ -115,6 +115,15 @@ fn test_chgrp_recursive_unreadable_directory() {
         .fails_with_code(1)
         .no_output();
     set_permissions(at.plus_as_string("d/a"), Permissions::from_mode(0o755)).unwrap();
+
+    // The operand itself.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    set_permissions(at.plus_as_string("d"), Permissions::from_mode(0o311)).unwrap();
+    ucmd.args(&["-R", "--reference=d", "d"])
+        .fails_with_code(1)
+        .stderr_is("chgrp: cannot read directory 'd': Permission denied\n");
+    set_permissions(at.plus_as_string("d"), Permissions::from_mode(0o755)).unwrap();
 }
 
 #[test]
