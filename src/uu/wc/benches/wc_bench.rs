@@ -85,7 +85,7 @@ fn wc_chars_utf8(bencher: Bencher, num_lines: usize) {
     let file_path = create_test_file(data.as_bytes(), temp_dir.path());
 
     bencher
-        .with_inputs(|| get_bench_args(&[&"-cm", &file_path]).into_iter())
+        .with_inputs(|| get_bench_args(&[&"-m", &file_path]).into_iter())
         .bench_values(|args| black_box(uumain(args)));
 }
 
@@ -126,5 +126,10 @@ fn wc_lines_extreme_line_lengths(bencher: Bencher, (num_lines, line_len): (usize
 }
 
 fn main() {
+    // Set the locale before its first use, since character encoding is cached.
+    // SAFETY: The benchmark runner has not started any threads yet.
+    unsafe {
+        std::env::set_var("LC_ALL", "C.UTF-8");
+    }
     divan::main();
 }
