@@ -71,5 +71,4 @@ shred-failed-to-remove-file = {$file} : impossible de supprimer le fichier
 shred-failed-to-clone-file-handle = échec du clonage du descripteur de fichier
 shred-failed-to-seek-file = échec de la recherche dans le fichier
 shred-failed-to-read-seed-bytes = échec de la lecture des octets de graine du fichier
-shred-failed-to-get-metadata = échec de l'obtention des métadonnées du fichier
 shred-failed-to-set-permissions = échec de la définition des permissions du fichier

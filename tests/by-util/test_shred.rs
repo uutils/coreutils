@@ -485,13 +485,11 @@ fn test_shred_inaccessible_file_reports_real_error() {
     at.touch("locked/file");
     set_permissions(at.plus_as_string("locked"), Permissions::from_mode(0o000)).unwrap();
 
-    let result = scene.ucmd().arg("locked/file").fails();
-    result.stderr_contains("Permission denied");
-    assert!(
-        !result.stderr_str().contains("No such file"),
-        "shred misreported an inaccessible file as missing: {}",
-        result.stderr_str()
-    );
+    scene
+        .ucmd()
+        .arg("locked/file")
+        .fails_with_code(1)
+        .stderr_only("shred: locked/file: failed to open for writing: Permission denied\n");
 
     // Restore search permission so the fixture directory can be cleaned up.
     set_permissions(at.plus_as_string("locked"), Permissions::from_mode(0o755)).unwrap();
