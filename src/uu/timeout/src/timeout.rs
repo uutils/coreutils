@@ -76,6 +76,7 @@ impl Config {
             },
         };
 
+        // COMMAND is required with num_args(2..), so it holds DURATION and a command.
         let mut operands = options.get_many::<OsString>(options::COMMAND).unwrap();
         let duration = parse_time::from_str(&operands.next().unwrap().to_string_lossy(), true)
             .map_err(|err| UUsageError::new(ExitStatus::TimeoutFailed.into(), err))?;
