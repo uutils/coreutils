@@ -53,10 +53,7 @@ pub(crate) enum FsError {
         error: String,
     },
     /// The path could not be resolved; holds the OS error saying why.
-    #[cfg(not(windows))]
     InvalidPath(std::io::Error),
-    #[cfg(windows)]
-    InvalidPath,
     MountMissing,
 }
 

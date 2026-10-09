@@ -34,7 +34,6 @@ df-error-invalid-block-size = argument --block-size invalide { $size }
 df-error-invalid-suffix = suffixe invalide dans l'argument --block-size { $size }
 df-error-field-used-more-than-once = option --output : champ { $field } utilisé plus d'une fois
 df-error-filesystem-type-both-selected-and-excluded = type de système de fichiers { $type } à la fois sélectionné et exclu
-df-error-no-such-file-or-directory = { $path } : aucun fichier ou répertoire de ce type
 df-error-no-file-systems-processed = aucun système de fichiers traité
 df-error-cannot-access-over-mounted = impossible d'accéder à { $path } : sur-monté par un autre périphérique
 df-error-cannot-read-table-of-mounted-filesystems = impossible de lire la table des systèmes de fichiers montés
