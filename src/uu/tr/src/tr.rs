@@ -23,6 +23,7 @@ use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, show};
 
 mod options {
+    pub const ASCII: &str = "ascii";
     pub const COMPLEMENT: &str = "complement";
     pub const DELETE: &str = "delete";
     pub const SQUEEZE: &str = "squeeze-repeats";
@@ -170,6 +171,16 @@ pub fn uu_app() -> Command {
         .after_help(translate!("tr-after-help"))
         .infer_long_args(true)
         .trailing_var_arg(true)
+        .arg(
+            // AIX's -A, which GNU also accepts without documenting it: use byte
+            // values for ranges and ASCII for classes instead of the locale.
+            // This tr never consults the locale, so the flag changes nothing.
+            Arg::new(options::ASCII)
+                .short('A')
+                .hide(true)
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::ASCII),
+        )
         .arg(
             Arg::new(options::COMPLEMENT)
                 .visible_short_alias('C')

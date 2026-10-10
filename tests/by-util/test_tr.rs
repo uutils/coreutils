@@ -456,6 +456,38 @@ fn test_truncate_multi() {
 }
 
 #[test]
+fn test_ascii_flag() {
+    new_ucmd!()
+        .args(&["-A", "k-o", "K-O"])
+        .pipe_in("monkey")
+        .succeeds()
+        .stdout_is("MONKey");
+
+    new_ucmd!()
+        .args(&["-AA", "-sAd", "[:digit:]", "q"])
+        .pipe_in("qq7q8qqr")
+        .succeeds()
+        .stdout_is("qr");
+}
+
+#[test]
+fn test_ascii_flag_works_on_bytes() {
+    // 0xd6 is an upper case letter in Latin-1, but not in ASCII.
+    new_ucmd!()
+        .args(&["-A", "[:upper:]", "[:lower:]"])
+        .pipe_in([b'T', 0xd6, b'P'])
+        .succeeds()
+        .stdout_is_bytes([b't', 0xd6, b'p']);
+
+    // The complement covers every byte value.
+    new_ucmd!()
+        .args(&["-Acd", "a-z"])
+        .pipe_in([b'w', 0xd6, b'k', 0xff])
+        .succeeds()
+        .stdout_is_bytes(*b"wk");
+}
+
+#[test]
 fn test_truncate_with_set1_shorter_than_set2() {
     new_ucmd!()
         .args(&["-t", "ab", "xyz"])
