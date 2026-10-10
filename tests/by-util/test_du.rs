@@ -2938,3 +2938,48 @@ du: invalid suffix in --block-size argument '1fb'
             .stderr_is("du: invalid suffix in --block-size argument '1fb'\n");
     }
 }
+
+#[test]
+#[cfg(unix)]
+fn test_deep_directory_traversal_no_stack_overflow() {
+    use rustix::process::{Resource, Rlimit, getrlimit, setrlimit};
+
+    // Raise RLIMIT_NOFILE so 1500 open file descriptors are allowed during deep traversal
+    let lim = getrlimit(Resource::Nofile);
+    let max = lim.maximum.unwrap_or(4096);
+    let soft = max.min(4096);
+    let _ = setrlimit(
+        Resource::Nofile,
+        Rlimit {
+            current: Some(soft),
+            maximum: Some(max),
+        },
+    );
+    let nofile = soft;
+
+    // On macOS and BSD, PATH_MAX is 1024, so depth cannot exceed ~480 without hitting ENAMETOOLONG.
+    // On Linux, PATH_MAX is 4096, allowing 1500+ levels.
+    let target_depth = if cfg!(target_os = "linux") { 1500 } else { 400 };
+
+    let ts = TestScenario::new(util_name!());
+    let mut current = ts.fixtures.subdir.clone();
+    let mut depth = 0;
+    for _ in 0..target_depth {
+        current.push("d");
+        if std::fs::create_dir(&current).is_ok() {
+            depth += 1;
+        } else {
+            break;
+        }
+    }
+    assert_eq!(
+        depth, target_depth,
+        "failed to create nested directories: depth was {depth}"
+    );
+
+    let mut cmd = ts.ucmd();
+    if nofile >= 2000 {
+        cmd.limit(Resource::Nofile, nofile, nofile);
+    }
+    cmd.arg("-s").succeeds();
+}
