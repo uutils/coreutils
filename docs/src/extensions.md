@@ -184,6 +184,11 @@ double floating point numbers.
 Extremely large or small values can still overflow or underflow to infinity or zero,
 see note in `seq`.
 
+## `tr`
+
+Just like on FreeBSD and macOS, `tr` accepts `-u` to guarantee that any output
+is unbuffered: each chunk is written as soon as it has been read and translated.
+
 ## `unexpand`
 
 GNU `unexpand` provides `--first-only` to convert only leading sequences of blanks. We support a
