@@ -2274,6 +2274,17 @@ impl CapturedOutput {
         buffer
     }
 
+    /// Return all captured output so far without advancing the consuming cursor.
+    ///
+    /// Unlike [`CapturedOutput::output_all_bytes`], later calls to consuming methods such as
+    /// [`CapturedOutput::output_bytes`] still see the same unread data.
+    fn output_all_bytes_peek(&mut self) -> Vec<u8> {
+        let mut buffer = Vec::<u8>::new();
+        let mut file = self.output.reopen().unwrap();
+        file.read_to_end(&mut buffer).unwrap();
+        buffer
+    }
+
     /// Return the exact amount of bytes.
     ///
     /// Subsequent calls to any of the other output methods will operate on the subsequent output.
@@ -2462,6 +2473,146 @@ impl UChild {
     /// Convenience method for `sleep(Duration::from_millis(millis))`
     pub fn delay(&mut self, millis: u64) -> &mut Self {
         sleep(Duration::from_millis(millis));
+        self
+    }
+
+    /// Return all stdout captured so far as a [`String`] without consuming it.
+    ///
+    /// Subsequent consuming reads (`stdout`, `stdout_bytes`, …) are unaffected.
+    pub fn stdout_all_peek(&mut self) -> String {
+        String::from_utf8_lossy(&self.stdout_all_bytes_peek()).into_owned()
+    }
+
+    /// Return all stdout captured so far as bytes without consuming it.
+    pub fn stdout_all_bytes_peek(&mut self) -> Vec<u8> {
+        match self.captured_stdout.as_mut() {
+            Some(output) => output.output_all_bytes_peek(),
+            None => {
+                panic!("Usage error: This method cannot be used if the output wasn't captured.")
+            }
+        }
+    }
+
+    /// Return all stderr captured so far as a [`String`] without consuming it.
+    ///
+    /// Subsequent consuming reads (`stderr`, `stderr_bytes`, …) are unaffected.
+    pub fn stderr_all_peek(&mut self) -> String {
+        String::from_utf8_lossy(&self.stderr_all_bytes_peek()).into_owned()
+    }
+
+    /// Return all stderr captured so far as bytes without consuming it.
+    pub fn stderr_all_bytes_peek(&mut self) -> Vec<u8> {
+        match self.captured_stderr.as_mut() {
+            Some(output) => output.output_all_bytes_peek(),
+            None if self.stderr_to_stdout => vec![],
+            None => {
+                panic!("Usage error: This method cannot be used if the output wasn't captured.")
+            }
+        }
+    }
+
+    /// Poll until `predicate(stdout_all_peek, stderr_all_peek)` is true, or `timeout` elapses.
+    ///
+    /// Uses short sleeps between polls so tests finish as soon as the child produces the expected
+    /// output, while still allowing a generous timeout for slow CI hosts.
+    pub fn try_wait_until<F>(&mut self, timeout: Duration, mut predicate: F) -> Result<()>
+    where
+        F: FnMut(&str, &str) -> bool,
+    {
+        self.poll_until("try_wait_until", timeout, |child| {
+            predicate(&child.stdout_all_peek(), &child.stderr_all_peek())
+        })
+    }
+
+    /// Call `done` every 10ms until it returns true, or `timeout` elapses.
+    ///
+    /// The timeout error is prefixed with `name` and includes all output captured so far.
+    fn poll_until<F>(&mut self, name: &str, timeout: Duration, mut done: F) -> Result<()>
+    where
+        F: FnMut(&mut Self) -> bool,
+    {
+        let start = Instant::now();
+        loop {
+            if done(self) {
+                return Ok(());
+            }
+            if start.elapsed() >= timeout {
+                return Err(io::Error::other(format!(
+                    "{name}: timeout of '{}s' reached\nstdout: {}\nstderr: {}",
+                    timeout.as_secs_f64(),
+                    self.stdout_all_peek(),
+                    self.stderr_all_peek()
+                )));
+            }
+            self.delay(10);
+        }
+    }
+
+    /// Like [`UChild::try_wait_until`], but panics on timeout.
+    #[track_caller]
+    pub fn wait_until<F>(&mut self, timeout: Duration, predicate: F) -> &mut Self
+    where
+        F: FnMut(&str, &str) -> bool,
+    {
+        self.try_wait_until(timeout, predicate).unwrap();
+        self
+    }
+
+    /// Poll until accumulated stdout contains `s`, or `timeout` elapses.
+    pub fn try_wait_for_stdout_contains(&mut self, s: &str, timeout: Duration) -> Result<()> {
+        let expected = s.to_owned();
+        self.try_wait_until(timeout, move |stdout, _| stdout.contains(&expected))
+    }
+
+    /// Like [`UChild::try_wait_for_stdout_contains`], but panics on timeout.
+    #[track_caller]
+    pub fn wait_for_stdout_contains(&mut self, s: &str, timeout: Duration) -> &mut Self {
+        self.try_wait_for_stdout_contains(s, timeout).unwrap();
+        self
+    }
+
+    /// Poll until accumulated stdout contains the byte sequence `bytes`, or `timeout` elapses.
+    pub fn try_wait_for_stdout_contains_bytes(
+        &mut self,
+        bytes: &[u8],
+        timeout: Duration,
+    ) -> Result<()> {
+        self.poll_until("try_wait_until", timeout, |child| {
+            let stdout = child.stdout_all_bytes_peek();
+            stdout.windows(bytes.len()).any(|sub| sub == bytes)
+        })
+    }
+
+    /// Like [`UChild::try_wait_for_stdout_contains_bytes`], but panics on timeout.
+    #[track_caller]
+    pub fn wait_for_stdout_contains_bytes(&mut self, bytes: &[u8], timeout: Duration) -> &mut Self {
+        self.try_wait_for_stdout_contains_bytes(bytes, timeout)
+            .unwrap();
+        self
+    }
+
+    /// Poll until accumulated stderr contains `s`, or `timeout` elapses.
+    pub fn try_wait_for_stderr_contains(&mut self, s: &str, timeout: Duration) -> Result<()> {
+        let expected = s.to_owned();
+        self.try_wait_until(timeout, move |_, stderr| stderr.contains(&expected))
+    }
+
+    /// Like [`UChild::try_wait_for_stderr_contains`], but panics on timeout.
+    #[track_caller]
+    pub fn wait_for_stderr_contains(&mut self, s: &str, timeout: Duration) -> &mut Self {
+        self.try_wait_for_stderr_contains(s, timeout).unwrap();
+        self
+    }
+
+    /// Poll until the child process has exited, or `timeout` elapses.
+    pub fn try_wait_until_exited(&mut self, timeout: Duration) -> Result<()> {
+        self.poll_until("try_wait_until_exited", timeout, Self::is_not_alive)
+    }
+
+    /// Like [`UChild::try_wait_until_exited`], but panics on timeout.
+    #[track_caller]
+    pub fn wait_until_exited(&mut self, timeout: Duration) -> &mut Self {
+        self.try_wait_until_exited(timeout).unwrap();
         self
     }
 
