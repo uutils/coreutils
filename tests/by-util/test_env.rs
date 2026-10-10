@@ -1885,6 +1885,23 @@ fn test_simulation_of_terminal_pty_pipes_into_data_and_sends_eot_automatically()
     std::assert_eq!(String::from_utf8_lossy(out.stderr()), "");
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_simulation_of_terminal_not_inherited_by_other_commands() {
+    let scene = TestScenario::new("util");
+
+    let mut cmd = scene.ccmd("env");
+    cmd.args(&["sleep", "10"]);
+    cmd.terminal_simulation(true);
+    let mut child = cmd.run_no_wait();
+    scene
+        .ccmd("env")
+        .args(&["ls", "-l", "/proc/self/fd/"])
+        .succeeds()
+        .stdout_does_not_contain("/dev/ptmx");
+    child.kill();
+}
+
 #[test]
 #[cfg(not(windows))]
 fn test_emoji_env_vars() {
