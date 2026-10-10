@@ -474,6 +474,32 @@ fn test_date_rejects_multiple_output_formats() {
 }
 
 #[test]
+fn test_date_rejects_setting_with_date_sources() {
+    // Setting the clock cannot be combined with another date source.
+    for args in [
+        ["-d", "@now", "-s", ""],
+        ["-r", ".", "-s", ""],
+        ["-f", ".", "-s", ""],
+    ] {
+        new_ucmd!()
+            .env("LANG", "C")
+            .env("LC_ALL", "C")
+            .args(&args)
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("cannot be used with");
+    }
+
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .args(&["-s", "a", "--resolution"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("cannot be used with");
+}
+
+#[test]
 fn test_date_missing_format_plus_precedes_format_conflict() {
     new_ucmd!()
         .env("LANG", "C")
