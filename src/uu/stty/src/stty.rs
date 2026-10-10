@@ -693,10 +693,15 @@ fn print_terminal_size(
         );
     }
 
-    #[cfg(any(target_os = "linux", target_os = "redox"))]
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "haiku"))]
     {
-        // For some reason the normal nix Termios struct does not expose the line,
-        // so we get the underlying libc::termios struct to get that information.
+        let line = termios.line_discipline;
+        printer.print(&translate!("stty-output-line", "line" => line));
+    }
+    #[cfg(target_os = "redox")]
+    {
+        // nix does not expose the line discipline on Redox, so we get the
+        // underlying libc::termios struct to read that information.
         let libc_termios: nix::libc::termios = termios.clone().into();
         let line = libc_termios.c_line;
         printer.print(&translate!("stty-output-line", "line" => line));
@@ -1056,7 +1061,7 @@ fn apply_special_setting(
         SpecialSetting::Rows(n) => size.rows = *n,
         SpecialSetting::Cols(n) => size.columns = *n,
         #[cfg_attr(
-            not(any(target_os = "linux", target_os = "android")),
+            not(any(target_os = "linux", target_os = "android", target_os = "haiku")),
             expect(unused_variables)
         )]
         SpecialSetting::Line(n) => {
@@ -1064,6 +1069,12 @@ fn apply_special_setting(
             #[cfg(any(target_os = "linux", target_os = "android"))]
             {
                 _termios.line_discipline = *n;
+            }
+            // On Haiku the field is a `c_char`, so convert from `u8` first.
+            #[cfg(target_os = "haiku")]
+            {
+                _termios.line_discipline =
+                    (*n).try_into().map_err(|_| nix::errno::Errno::ERANGE)?;
             }
         }
     }
@@ -1224,6 +1235,28 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
                 (S::VWERASE, "^W"),
                 (S::VLNEXT, "^V"),
                 (S::VDISCARD, "^O"),
+                #[cfg(any(
+                    target_os = "freebsd",
+                    target_os = "dragonfly",
+                    target_os = "ios",
+                    target_os = "macos",
+                    target_os = "netbsd",
+                    target_os = "openbsd",
+                    target_os = "aix",
+                    target_os = "illumos",
+                    target_os = "solaris"
+                ))]
+                (S::VDSUSP, "^Y"),
+                #[cfg(any(
+                    target_os = "freebsd",
+                    target_os = "dragonfly",
+                    target_os = "ios",
+                    target_os = "macos",
+                    target_os = "netbsd",
+                    target_os = "openbsd",
+                    target_os = "illumos",
+                ))]
+                (S::VSTATUS, "^T"),
             ];
         }
         "tabs" => {
@@ -1265,6 +1298,29 @@ fn get_sane_control_char(cc_index: S) -> u8 {
         S::VTIME => 0,
         #[cfg(target_os = "linux")]
         S::VSWTC => 0,
+        // BSD-family sane defaults (GNU uses CDSUSP = ^Y, CSTATUS = ^T).
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd",
+            target_os = "aix",
+            target_os = "illumos",
+            target_os = "solaris"
+        ))]
+        S::VDSUSP => 25, // ^Y
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd",
+            target_os = "illumos",
+        ))]
+        S::VSTATUS => 20, // ^T
         _ => 0,
     }
 }
@@ -1404,6 +1460,36 @@ mod tests {
     fn test_combo_to_flags_sane() {
         let flags = combo_to_flags("sane");
         assert!(flags.len() > 5); // sane sets multiple flags
+
+        let has_mapping = |cc: S, val: u8| {
+            flags
+                .iter()
+                .any(|f| matches!(f, ArgOptions::Mapping((idx, v)) if *idx == cc && *v == val))
+        };
+        // sane always resets the standard control characters.
+        assert!(has_mapping(S::VINTR, 3)); // ^C
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd",
+            target_os = "aix",
+            target_os = "illumos",
+            target_os = "solaris"
+        ))]
+        assert!(has_mapping(S::VDSUSP, 25)); // ^Y
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd",
+            target_os = "illumos",
+        ))]
+        assert!(has_mapping(S::VSTATUS, 20)); // ^T
     }
 
     #[test]
@@ -1596,6 +1682,36 @@ mod tests {
         assert_eq!(get_sane_control_char(S::VWERASE), 23); // ^W
         assert_eq!(get_sane_control_char(S::VLNEXT), 22); // ^V
         assert_eq!(get_sane_control_char(S::VDISCARD), 15); // ^O
+    }
+
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "aix",
+        target_os = "illumos",
+        target_os = "solaris"
+    ))]
+    #[test]
+    fn test_get_sane_control_char_dsusp() {
+        assert_eq!(get_sane_control_char(S::VDSUSP), 25); // ^Y
+    }
+
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "illumos",
+    ))]
+    #[test]
+    fn test_get_sane_control_char_status() {
+        assert_eq!(get_sane_control_char(S::VSTATUS), 20); // ^T
     }
 
     // Tests for parse_u8_or_err
