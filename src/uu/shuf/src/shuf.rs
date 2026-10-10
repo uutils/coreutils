@@ -26,11 +26,9 @@ use uucore::translate;
 
 mod compat_random_source;
 mod nonrepeating_iterator;
-mod random_seed;
 
 use compat_random_source::RandomSourceAdapter;
 use nonrepeating_iterator::NonrepeatingIterator;
-use random_seed::SeededRng;
 
 enum Mode {
     Default(PathBuf),
@@ -50,7 +48,6 @@ struct Options {
 
 enum RandomSource {
     None,
-    Seed(String),
     File(PathBuf),
 }
 
@@ -60,7 +57,6 @@ mod options {
     pub static HEAD_COUNT: &str = "head-count";
     pub static OUTPUT: &str = "output";
     pub static RANDOM_SOURCE: &str = "random-source";
-    pub static RANDOM_SEED: &str = "random-seed";
     pub static REPEAT: &str = "repeat";
     pub static ZERO_TERMINATED: &str = "zero-terminated";
     pub static FILE_OR_ARGS: &str = "file-or-args";
@@ -96,8 +92,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let random_source = if let Some(filename) = matches.get_one(options::RANDOM_SOURCE).cloned() {
         RandomSource::File(filename)
-    } else if let Some(seed) = matches.get_one(options::RANDOM_SEED).cloned() {
-        RandomSource::Seed(seed)
     } else {
         RandomSource::None
     };
@@ -145,7 +139,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 .unwrap_or_else(|_| SmallRng::seed_from_u64(&raw const options as u64));
             WrappedRng::Default(r)
         }
-        RandomSource::Seed(ref seed) => WrappedRng::Seed(SeededRng::new(seed)),
         RandomSource::File(ref r) => {
             let file = File::open(r).map_err_context(
                 || translate!("shuf-error-failed-to-open-random-source", "file" => r.quote()),
@@ -222,15 +215,6 @@ pub fn uu_app() -> Command {
                 .help(translate!("shuf-help-output"))
                 .value_parser(ValueParser::path_buf())
                 .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::RANDOM_SEED)
-                .long(options::RANDOM_SEED)
-                .value_name("STRING")
-                .help(translate!("shuf-help-random-seed"))
-                .value_parser(ValueParser::string())
-                .value_hint(clap::ValueHint::Other)
-                .conflicts_with(options::RANDOM_SOURCE),
         )
         .arg(
             Arg::new(options::RANDOM_SOURCE)
@@ -466,7 +450,6 @@ fn parse_range(input_range: &str) -> Result<RangeInclusive<u64>, String> {
 
 enum WrappedRng {
     Default(SmallRng),
-    Seed(SeededRng),
     File(RandomSourceAdapter<BufReader<File>>),
 }
 
@@ -474,7 +457,6 @@ impl WrappedRng {
     fn choose<T: Copy>(&mut self, vals: &[T]) -> UResult<T> {
         match self {
             Self::Default(rng) => Ok(*vals.choose(rng).unwrap()),
-            Self::Seed(rng) => Ok(rng.choose_from_slice(vals)),
             Self::File(rng) => rng.choose_from_slice(vals),
         }
     }
@@ -482,7 +464,6 @@ impl WrappedRng {
     fn shuffle<'a, T>(&mut self, vals: &'a mut [T], amount: usize) -> UResult<&'a mut [T]> {
         match self {
             Self::Default(rng) => Ok(vals.partial_shuffle(rng, amount).0),
-            Self::Seed(rng) => Ok(rng.shuffle(vals, amount)),
             Self::File(rng) => rng.shuffle(vals, amount),
         }
     }
@@ -490,7 +471,6 @@ impl WrappedRng {
     fn choose_from_range(&mut self, range: RangeInclusive<u64>) -> UResult<u64> {
         match self {
             Self::Default(rng) => Ok(rng.random_range(range)),
-            Self::Seed(rng) => Ok(rng.choose_from_range(range)),
             Self::File(rng) => rng.choose_from_range(range),
         }
     }
