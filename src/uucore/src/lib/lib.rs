@@ -177,8 +177,6 @@ use std::io::{BufRead, BufReader};
 use std::iter;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
-#[cfg(all(target_os = "wasi", target_env = "p1"))]
-use std::os::wasi::ffi::{OsStrExt, OsStringExt};
 use std::str;
 use std::str::Utf8Chunk;
 use std::sync::{LazyLock, atomic::Ordering};
@@ -508,17 +506,19 @@ pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<'_, [u8]> {
 
 /// Converts a `&[u8]` to an `&OsStr`.
 ///
-/// This always succeeds on unix platforms,
+/// This always succeeds on unix and WASI platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
-#[cfg_attr(
-    any(unix, all(target_os = "wasi", target_env = "p1")),
-    expect(clippy::unnecessary_wraps)
-)]
+#[cfg_attr(any(unix, target_os = "wasi"), expect(clippy::unnecessary_wraps))]
 pub fn os_str_from_bytes(bytes: &[u8]) -> error::UResult<&OsStr> {
-    #[cfg(any(unix, all(target_os = "wasi", target_env = "p1")))]
+    #[cfg(unix)]
     return Ok(OsStr::from_bytes(bytes));
 
-    #[cfg(not(any(unix, all(target_os = "wasi", target_env = "p1"))))]
+    #[cfg(target_os = "wasi")]
+    // SAFETY: on WASI `OsStr` is a plain byte string with no encoding
+    // invariant, so every byte sequence is a valid `OsStr`.
+    return Ok(unsafe { OsStr::from_encoded_bytes_unchecked(bytes) });
+
+    #[cfg(not(any(unix, target_os = "wasi")))]
     Ok(OsStr::new(str::from_utf8(bytes).map_err(|_| {
         error::UUsageError::new(1, "Unable to transform bytes into OsStr")
     })?))
@@ -526,17 +526,19 @@ pub fn os_str_from_bytes(bytes: &[u8]) -> error::UResult<&OsStr> {
 
 /// Converts a `Vec<u8>` into an `OsString`, parsing as UTF-8 on non-unix platforms.
 ///
-/// This always succeeds on unix platforms,
+/// This always succeeds on unix and WASI platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
-#[cfg_attr(
-    any(unix, all(target_os = "wasi", target_env = "p1")),
-    expect(clippy::unnecessary_wraps)
-)]
+#[cfg_attr(any(unix, target_os = "wasi"), expect(clippy::unnecessary_wraps))]
 pub fn os_string_from_vec(vec: Vec<u8>) -> error::UResult<OsString> {
-    #[cfg(any(unix, all(target_os = "wasi", target_env = "p1")))]
+    #[cfg(unix)]
     return Ok(OsString::from_vec(vec));
 
-    #[cfg(not(any(unix, all(target_os = "wasi", target_env = "p1"))))]
+    #[cfg(target_os = "wasi")]
+    // SAFETY: on WASI `OsString` is a plain byte string with no encoding
+    // invariant, so every byte sequence is a valid `OsString`.
+    return Ok(unsafe { OsString::from_encoded_bytes_unchecked(vec) });
+
+    #[cfg(not(any(unix, target_os = "wasi")))]
     Ok(OsString::from(String::from_utf8(vec).map_err(|_| {
         error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
     })?))
@@ -544,16 +546,15 @@ pub fn os_string_from_vec(vec: Vec<u8>) -> error::UResult<OsString> {
 
 /// Converts an `OsString` into a `Vec<u8>`, parsing as UTF-8 on non-unix platforms.
 ///
-/// This always succeeds on unix platforms,
+/// This always succeeds on unix and WASI platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
-#[cfg_attr(
-    any(unix, all(target_os = "wasi", target_env = "p1")),
-    expect(clippy::unnecessary_wraps)
-)]
+#[cfg_attr(any(unix, target_os = "wasi"), expect(clippy::unnecessary_wraps))]
 pub fn os_string_to_vec(s: OsString) -> error::UResult<Vec<u8>> {
-    #[cfg(any(unix, all(target_os = "wasi", target_env = "p1")))]
+    #[cfg(unix)]
     let v = s.into_vec();
-    #[cfg(not(any(unix, all(target_os = "wasi", target_env = "p1"))))]
+    #[cfg(target_os = "wasi")]
+    let v = s.into_encoded_bytes();
+    #[cfg(not(any(unix, target_os = "wasi")))]
     let v = s
         .into_string()
         .map_err(|_| {
@@ -794,6 +795,35 @@ mod tests {
         assert_eq!(lines.next().unwrap().unwrap(), OsStr::new("valid"));
         assert!(lines.next().unwrap().is_err());
         assert!(lines.next().is_none());
+    }
+
+    /// On byte-oriented platforms — unix and every WASI environment — the
+    /// `OsString` helpers must round-trip arbitrary bytes, including sequences
+    /// that are not valid UTF-8. This regressed on wasm32-wasip2 and
+    /// wasm32-wasip3, where the conversions fell back to the UTF-8-validating
+    /// path and returned an error instead.
+    #[cfg(any(unix, target_os = "wasi"))]
+    #[test]
+    fn os_string_from_vec_roundtrips_non_utf8() {
+        let source = vec![0x66, 0x6f, 0x80, 0x6f];
+
+        let os_string = os_string_from_vec(source.clone()).unwrap();
+        // The value really does hold bytes that are not valid UTF-8.
+        assert!(os_string.to_str().is_none());
+        assert_eq!(os_string_to_vec(os_string).unwrap(), source);
+    }
+
+    /// Same invariant for the borrowed `OsStr` conversions, which must agree
+    /// with `os_string_from_vec` on what is representable.
+    #[cfg(any(unix, target_os = "wasi"))]
+    #[test]
+    fn os_str_from_bytes_roundtrips_non_utf8() {
+        let source = [0x66, 0x6f, 0x80, 0x6f];
+
+        let os_str = os_str_from_bytes(&source).unwrap();
+        assert!(os_str.to_str().is_none());
+        assert_eq!(os_str_as_bytes(os_str).unwrap(), &source);
+        assert_eq!(os_str_as_bytes_lossy(os_str).into_owned(), source);
     }
 
     #[test]
