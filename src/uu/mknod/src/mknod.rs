@@ -268,13 +268,13 @@ pub fn uu_app() -> Command {
             Arg::new(options::MAJOR)
                 .value_name(options::MAJOR)
                 .help(translate!("mknod-help-major"))
-                .value_parser(value_parser!(u32)),
+                .value_parser(parse_u32_allow_hex),
         )
         .arg(
             Arg::new(options::MINOR)
                 .value_name(options::MINOR)
                 .help(translate!("mknod-help-minor"))
-                .value_parser(value_parser!(u32)),
+                .value_parser(parse_u32_allow_hex),
         )
         .arg(
             Arg::new(options::SECURITY_CONTEXT)
@@ -306,4 +306,11 @@ fn parse_type(tpe: &str) -> Result<FileType, String> {
             'p' => Ok(FileType::Fifo),
             _ => Err(translate!("mknod-error-invalid-device-type", "type" => tpe.quote())),
         })
+}
+
+fn parse_u32_allow_hex(s: &str) -> Result<u32, String> {
+    let Some(hex_str) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) else {
+        return s.parse::<u32>().map_err(|e| e.to_string());
+    };
+    u32::from_str_radix(hex_str, 16).map_err(|e| e.to_string())
 }
