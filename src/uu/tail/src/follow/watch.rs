@@ -10,7 +10,8 @@ use crate::follow::files::{FileHandling, PathData};
 use crate::paths::{Input, InputKind, MetadataExtTail, PathExtTail};
 use crate::{platform, text};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
-use std::io::BufRead;
+use std::fs::File;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, channel};
 use uucore::display::Quotable;
@@ -141,7 +142,7 @@ impl Observer {
         &mut self,
         path: &Path,
         display_name: &str,
-        reader: Option<Box<dyn BufRead>>,
+        reader: Option<BufReader<File>>,
         update_last: bool,
     ) -> UResult<()> {
         if self.follow.is_some() {

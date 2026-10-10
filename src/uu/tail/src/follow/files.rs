@@ -12,7 +12,7 @@ use crate::text;
 use std::collections::HashMap;
 use std::collections::hash_map::Keys;
 use std::fs::{File, Metadata};
-use std::io::{BufRead, BufReader, BufWriter, Write, stdout};
+use std::io::{BufReader, BufWriter, Write, stdout};
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
 
@@ -114,15 +114,9 @@ impl FileHandling {
 
     /// Reopen the file at the monitored `path`
     pub fn update_reader(&mut self, path: &Path) -> UResult<()> {
-        /*
-        BUG: If it's not necessary to reopen a file, GNU's tail calls seek to offset 0.
-        However, we can't call seek here because `BufRead` does not implement `Seek`.
-        As a workaround, we always reopen the file even though this might not always
-        be necessary.
-        */
         self.get_mut(path)
             .reader
-            .replace(Box::new(BufReader::new(File::open(path)?)));
+            .replace(BufReader::new(File::open(path)?));
         Ok(())
     }
 
@@ -176,14 +170,14 @@ impl FileHandling {
 /// Data structure to keep a handle on the [`BufReader`], [`Metadata`]
 /// and the `display_name` (`header_name`) of files that are being followed.
 pub struct PathData {
-    pub reader: Option<Box<dyn BufRead>>,
+    pub reader: Option<BufReader<File>>,
     pub metadata: Option<Metadata>,
     pub display_name: String,
 }
 
 impl PathData {
     pub fn new(
-        reader: Option<Box<dyn BufRead>>,
+        reader: Option<BufReader<File>>,
         metadata: Option<Metadata>,
         display_name: &str,
     ) -> Self {
@@ -201,7 +195,7 @@ impl PathData {
             old_reader
         } else if let Ok(file) = File::open(path) {
             // Open new file tail from start
-            Some(Box::new(BufReader::new(file)) as Box<dyn BufRead>)
+            Some(BufReader::new(file))
         } else {
             // Probably file was renamed/moved or removed again
             None

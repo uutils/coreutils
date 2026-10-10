@@ -169,31 +169,16 @@ fn tail_file(
         let open_result = File::open(path);
 
         match open_result {
-            Ok(mut file) => {
-                let st = file.metadata()?;
-                let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
-                header_printer.print_input(input);
-                let mut reader;
-                if !settings.presume_input_pipe
-                    && file.is_seekable(if input.is_stdin() { offset } else { 0 })
-                    && (!st.is_file() || st.len() > blksize_limit)
-                {
-                    bounded_tail(&mut file, settings)?;
-                    reader = BufReader::new(file);
-                } else {
-                    reader = BufReader::new(file);
-                    unbounded_tail(&mut reader, settings)?;
-                }
-                if input.is_tailable() {
-                    observer.add_path(
-                        path,
-                        input.display_name.as_str(),
-                        Some(Box::new(reader)),
-                        true,
-                    )?;
-                } else {
-                    observer.add_bad_path(path, input.display_name.as_str(), false)?;
-                }
+            Ok(file) => {
+                tail_opened_file(
+                    settings,
+                    header_printer,
+                    input,
+                    path,
+                    observer,
+                    offset,
+                    file,
+                )?;
             }
             Err(e) if e.kind() == ErrorKind::PermissionDenied => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
@@ -208,6 +193,38 @@ fn tail_file(
                 }));
             }
         }
+    }
+
+    Ok(())
+}
+
+fn tail_opened_file(
+    settings: &Settings,
+    header_printer: &mut HeaderPrinter,
+    input: &Input,
+    path: &Path,
+    observer: &mut Observer,
+    offset: u64,
+    mut file: File,
+) -> UResult<()> {
+    let st = file.metadata()?;
+    let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
+    header_printer.print_input(input);
+    let mut reader;
+    if !settings.presume_input_pipe
+        && file.is_seekable(if input.is_stdin() { offset } else { 0 })
+        && (!st.is_file() || st.len() > blksize_limit)
+    {
+        bounded_tail(&mut file, settings)?;
+        reader = BufReader::new(file);
+    } else {
+        reader = BufReader::new(file);
+        unbounded_tail(&mut reader, settings)?;
+    }
+    if input.is_tailable() {
+        observer.add_path(path, input.display_name.as_str(), Some(reader), true)?;
+    } else {
+        observer.add_bad_path(path, input.display_name.as_str(), false)?;
     }
 
     Ok(())
