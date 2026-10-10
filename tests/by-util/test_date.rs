@@ -3,14 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST MESZ KST uueuu ueuu vasárnap június január distros Wednes
-// spell-checker:ignore uppercases xffx
+// spell-checker:ignore AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST MESZ KST uueuu ueuu vasárnap június január distros Wednes Ihours uppercases xffx
 
 use std::cmp::Ordering;
 
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
+use rstest::rstest;
 #[cfg(unix)]
 use rustix::process::geteuid;
 use uutests::util::TestScenario;
@@ -1140,6 +1140,35 @@ fn test_weekday_items_are_ignored_with_explicit_dates() {
             .succeeds()
             .stdout_is("2024-06-15\n");
     }
+}
+
+#[rstest]
+#[case::weekday_before_month("WEDNESDAY August 17", "+%m-%d", "08-17\n")]
+#[case::weekday_after_month("August 17 Monday", "+%m-%d", "08-17\n")]
+#[case::weekday_before_day_month("Monday 17 August 2026", "+%F", "2026-08-17\n")]
+#[case::weekday_before_day_month_incorrect("Wednesday 17 August 2026", "+%F", "2026-08-17\n")]
+#[case::relative_weekday_before_date(
+    "Next Friday Sep 25 12:00:00 AM EDT 2026",
+    "+%F %T %Z",
+    "2026-09-25 04:00:00 UTC\n"
+)]
+#[case::relative_weekday_before_date_incorrect(
+    "Next Sunday Sep 25 12:00:00 AM EDT 2026",
+    "+%F %T %Z",
+    "2026-09-25 04:00:00 UTC\n"
+)]
+fn test_weekday_items_are_ignored_with_named_dates(
+    #[case] input: &str,
+    #[case] format: &str,
+    #[case] expected: &str,
+) {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .args(&["-u", "-d", input, format])
+        .succeeds()
+        .stdout_is(expected);
 }
 
 #[test]
