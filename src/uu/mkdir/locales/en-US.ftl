@@ -5,7 +5,7 @@ mkdir-after-help = Each MODE is of the form [ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+
 # Help messages
 mkdir-help-mode = set file mode (not implemented on windows)
 mkdir-help-parents = make parent directories as needed
-mkdir-help-verbose = print a message for each printed directory
+mkdir-help-verbose = print a message for each created directory
 mkdir-help-selinux = set SELinux security context of each created directory to the default type
 mkdir-help-context = like -Z, or if CTX is specified then set the SELinux or SMACK security context to CTX
 
