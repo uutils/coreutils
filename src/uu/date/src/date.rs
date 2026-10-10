@@ -4,19 +4,20 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz unparseable
-// spell-checker:ignore ohos OHOS tzdata tzdb tzif zoneinfo euctw
+// spell-checker:ignore ohos OHOS tzdata tzdb tzif zoneinfo euctw nonrelative wednes
 
 mod format_modifiers;
 mod locale;
 
 use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime::{self, BrokenDownTime, Config, PosixCustom};
-use jiff::tz::{Offset, TimeZone, TimeZoneDatabase};
+use jiff::tz::{AmbiguousOffset, Offset, TimeZone, TimeZoneDatabase};
 use jiff::{Timestamp, Zoned};
 use parse_datetime::{ExtendedDateTime, ParsedDateTime};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
+use std::fmt::Write as _;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stderr};
 use std::path::PathBuf;
@@ -26,6 +27,7 @@ use uucore::error::FromIo;
 use uucore::error::{UError, UResult, strip_errno};
 #[cfg(feature = "i18n-datetime")]
 use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
+use uucore::i18n::{UEncoding, get_locale_from_env};
 use uucore::translate;
 use uucore::translate_text;
 use uucore::{format_usage, show, show_if_err};
@@ -96,6 +98,8 @@ enum DateError {
     InvalidDate { date: String },
     #[error("{}", translate_text!("date-error-format-missing-plus", "arg" => .arg))]
     FormatMissingPlus { arg: String },
+    #[error("{}", translate!("date-error-multiple-output-formats"))]
+    MultipleOutputFormats,
     #[error("{}", translate!("date-error-expected-file-got-directory", "path" => .path))]
     ExpectedFileGotDirectory { path: String },
     #[error("{}", translate!("date-error-cannot-set-date", "path" => .path, "error" => .error))]
@@ -231,28 +235,58 @@ enum DayDelta {
 /// assert_eq!(escape_invalid_bytes(invalid), "\\260");
 /// ```
 fn escape_invalid_bytes(bytes: &[u8]) -> String {
-    let escaped = bytes
-        .iter()
-        .flat_map(|&b| {
-            // Preserve printable ASCII except backslash
-            if (0x20..0x7f).contains(&b) && b != b'\\' {
-                vec![b]
+    let mut output = String::new();
+    let mut rest = bytes;
+    let preserve_utf8 = get_locale_from_env("LC_CTYPE").1 == UEncoding::Utf8;
+
+    // Decode valid runs so UTF-8 locales preserve user-facing text while
+    // legacy locales retain GNU's byte-oriented octal escaping.
+    let append_valid = |output: &mut String, valid: &str| {
+        for ch in valid.chars() {
+            if !ch.is_ascii() && !preserve_utf8 {
+                let mut bytes = [0; 4];
+                for &byte in ch.encode_utf8(&mut bytes).as_bytes() {
+                    let _ = write!(output, "\\{byte:03o}");
+                }
+            } else if ch.is_ascii() && (!(0x20..0x7f).contains(&(ch as u8)) || ch == '\\') {
+                let _ = write!(output, "\\{:03o}", ch as u8);
             } else {
-                // Escape as octal: \NNN
-                format!("\\{b:03o}").into_bytes()
+                output.push(ch);
             }
-        })
-        .collect::<Vec<u8>>();
-    String::from_utf8_lossy(&escaped).into_owned()
+        }
+    };
+
+    while !rest.is_empty() {
+        match std::str::from_utf8(rest) {
+            Ok(valid) => {
+                append_valid(&mut output, valid);
+                break;
+            }
+            Err(error) => {
+                let valid_len = error.valid_up_to();
+                if valid_len > 0 {
+                    append_valid(
+                        &mut output,
+                        std::str::from_utf8(&rest[..valid_len]).unwrap_or_default(),
+                    );
+                }
+                let invalid_len = error.error_len().unwrap_or(rest.len() - valid_len);
+                for &byte in &rest[valid_len..valid_len + invalid_len] {
+                    let _ = write!(output, "\\{byte:03o}");
+                }
+                rest = &rest[valid_len + invalid_len..];
+            }
+        }
+    }
+
+    output
 }
 
 /// Renders a command-line operand for an error message the way GNU does:
-/// valid UTF-8 is kept as-is, anything else is octal-escaped.
+/// valid UTF-8 is kept as-is in UTF-8 locales; non-UTF-8 locale bytes and
+/// invalid UTF-8 are octal-escaped.
 fn operand_for_error(operand: &OsStr) -> String {
-    operand.to_str().map_or_else(
-        || escape_invalid_bytes(operand.as_encoded_bytes()),
-        ToOwned::to_owned,
-    )
+    escape_invalid_bytes(operand.as_encoded_bytes())
 }
 
 /// Strip parenthesized comments from a date string.
@@ -304,15 +338,14 @@ fn strip_parenthesized_comments(input: &str) -> Cow<'_, str> {
 /// The hour offset from digits is added to the base military timezone offset.
 /// Examples: "m" -> 12 (noon UTC), "m9" -> 21 (9pm UTC), "a5" -> 4 (4am UTC next day)
 fn parse_military_timezone_with_offset(s: &str) -> Option<(i32, DayDelta)> {
-    if s.is_empty() || s.len() > 3 {
-        return None;
-    }
-
     let mut chars = s.chars();
     let letter = chars.next()?.to_ascii_lowercase();
 
     // Check if first character is a letter (a-z, except j which is handled separately)
     if !letter.is_ascii_lowercase() || letter == 'j' {
+        return None;
+    }
+    if s.len() > 3 {
         return None;
     }
 
@@ -353,7 +386,10 @@ fn parse_military_timezone_with_offset(s: &str) -> Option<(i32, DayDelta)> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let date_source = if let Some(date_os) = matches.get_one::<OsString>(OPT_DATE) {
+    let date_source = if let Some(date_os) = matches
+        .get_many::<OsString>(OPT_DATE)
+        .and_then(|mut dates| dates.next_back())
+    {
         // Convert OsString to String, handling invalid UTF-8 with GNU-compatible error
         let date = date_os.to_str().ok_or_else(|| DateError::InvalidDate {
             date: operand_for_error(date_os),
@@ -399,7 +435,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Format::Custom(rest.to_vec())
     } else if let Some(fmt) = matches
         .get_many::<String>(OPT_ISO_8601)
-        .map(|mut iter| iter.next().unwrap_or(&DATE.to_string()).as_str().into())
+        .and_then(|mut iter| iter.next_back())
+        .map(|fmt| fmt.as_str().into())
     {
         Format::Iso8601(fmt)
     } else if matches.get_flag(OPT_RFC_EMAIL) {
@@ -414,6 +451,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         Format::Default
     };
+
+    let has_custom_format = matches.get_one::<OsString>(OPT_FORMAT).is_some();
+    let has_option_format = matches.get_many::<String>(OPT_ISO_8601).is_some()
+        || matches.get_flag(OPT_RFC_EMAIL)
+        || matches.get_one::<String>(OPT_RFC_3339).is_some();
+    if has_custom_format && has_option_format {
+        return Err(Box::new(DateError::MultipleOutputFormats));
+    }
 
     let utc = matches.get_flag(OPT_UNIVERSAL);
     let debug_mode = matches.get_flag(OPT_DEBUG);
@@ -443,7 +488,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return set_and_echo(input, &now, &settings);
     }
 
-    let allow_extended = matches!(settings.format, Format::Default);
     let output_time_zone = now.time_zone().clone();
 
     // Iterate over all dates - whether it's a single date or a file.
@@ -451,31 +495,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         DateSource::Human(ref input) => {
             // GNU compatibility (Comments in parentheses)
             let input = strip_parenthesized_comments(input);
-            let input = input.trim();
+            let input = input.as_ref();
+            let trimmed = input.trim();
             let parse = |input: &str, warn_midnight| {
                 parse_date(
                     input,
                     &now,
                     DebugOptions::new(settings.debug, warn_midnight),
-                    allow_extended,
                 )
             };
 
             // GNU compatibility (Empty string):
             // An empty string (or whitespace-only) should be treated as midnight today.
-            let is_empty_or_whitespace = input.is_empty();
+            let is_empty_or_whitespace = trimmed.is_empty();
 
             // GNU compatibility (Military timezone 'J'):
             // 'J' is reserved for local time in military timezones.
             // GNU date accepts it and treats it as midnight today (00:00:00).
-            let is_military_j = input.eq_ignore_ascii_case("j");
+            let is_military_j = trimmed.eq_ignore_ascii_case("j");
 
             // GNU compatibility (Military timezone with optional hour offset):
             // Single letter (a-z except j) optionally followed by 1-2 digits.
             // Letter represents midnight in that military timezone (UTC offset).
             // Digits represent additional hours to add.
             // Examples: "m" -> noon UTC (12:00); "m9" -> 21:00 UTC; "a5" -> 04:00 UTC
-            let military_tz_with_offset = parse_military_timezone_with_offset(input);
+            let military_tz_with_offset = parse_military_timezone_with_offset(trimmed);
 
             // GNU compatibility (Pure numbers in date strings):
             // - Manual: https://www.gnu.org/software/coreutils/manual/html_node/Pure-numbers-in-date-strings.html
@@ -486,85 +530,86 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // GNU compatibility (Military timezone 'J' after a time):
             // 'J' is local time, so "<digits>j"/"<digits>J" is the same time-of-day form
             // as the bare "<digits>" input ("9j" == "9"). Strip it before the digit check.
-            let time_digits = input.strip_suffix(['j', 'J']).unwrap_or(input);
+            let time_digits = trimmed.strip_suffix(['j', 'J']).unwrap_or(trimmed);
             let is_pure_digits = !time_digits.is_empty()
                 && time_digits.len() <= 4
                 && time_digits.chars().all(|c| c.is_ascii_digit());
 
-            let date = if is_empty_or_whitespace || input == "-" || is_military_j {
-                // Treat empty string, single hyphen, or 'J' as midnight today in local time
-                let date_part =
-                    strtime::format("%F", &now).unwrap_or_else(|_| String::from("1970-01-01"));
-                let offset = if settings.utc {
-                    String::from("+00:00")
-                } else {
-                    strtime::format("%:z", &now).unwrap_or_default()
-                };
-                let composed = if offset.is_empty() {
-                    format!("{date_part} 00:00")
-                } else {
-                    format!("{date_part} 00:00 {offset}")
-                };
-                if settings.debug {
-                    let _ = writeln!(
-                        stderr(),
-                        "date: warning: using midnight as starting time: 00:00:00"
-                    );
-                }
-                parse(&composed, false)
-            } else if let Some((total_hours, day_delta)) = military_tz_with_offset {
-                // Military timezone with optional hour offset
-                // Convert to UTC time: midnight + military_tz_offset + additional_hours
-
-                // When calculating a military timezone with an optional hour offset, midnight may
-                // be crossed in either direction. `day_delta` indicates whether the date remains
-                // the same, moves to the previous day, or advances to the next day.
-                // Changing day can result in error, this closure will help handle these errors
-                // gracefully.
-                let format_date_with_epoch_fallback = |date: Result<Zoned, _>| -> String {
-                    date.and_then(|d| strtime::format("%F", &d))
-                        .unwrap_or_else(|_| String::from("1970-01-01"))
-                };
-                let date_part = match day_delta {
-                    DayDelta::Same => format_date_with_epoch_fallback(Ok(now.clone())),
-                    DayDelta::Next => format_date_with_epoch_fallback(now.tomorrow()),
-                    DayDelta::Previous => format_date_with_epoch_fallback(now.yesterday()),
-                };
-                let composed = format!("{date_part} {total_hours:02}:00:00 +00:00");
-                parse(&composed, false)
-            } else if is_pure_digits {
-                // Derive HH and MM from the digits
-                let (hh_opt, mm_opt) = if time_digits.len() <= 2 {
-                    (time_digits.parse::<u32>().ok(), Some(0u32))
-                } else {
-                    let (h, m) = time_digits.split_at(time_digits.len() - 2);
-                    (h.parse::<u32>().ok(), m.parse::<u32>().ok())
-                };
-
-                if let (Some(hh), Some(mm)) = (hh_opt, mm_opt) {
-                    // Compose a concrete datetime string for today with zone offset.
-                    // Use the already-determined 'now' and settings.utc to select offset.
+            let date =
+                if is_empty_or_whitespace || trimmed == "-" || trimmed == "+" || is_military_j {
+                    // Treat empty string, single hyphen, or 'J' as midnight today in local time
                     let date_part =
                         strtime::format("%F", &now).unwrap_or_else(|_| String::from("1970-01-01"));
-                    // If -u, force +00:00; otherwise use the local offset of 'now'.
                     let offset = if settings.utc {
                         String::from("+00:00")
                     } else {
                         strtime::format("%:z", &now).unwrap_or_default()
                     };
                     let composed = if offset.is_empty() {
-                        format!("{date_part} {hh:02}:{mm:02}")
+                        format!("{date_part} 00:00")
                     } else {
-                        format!("{date_part} {hh:02}:{mm:02} {offset}")
+                        format!("{date_part} 00:00 {offset}")
                     };
+                    if settings.debug {
+                        let _ = writeln!(
+                            stderr(),
+                            "date: warning: using midnight as starting time: 00:00:00"
+                        );
+                    }
                     parse(&composed, false)
+                } else if let Some((total_hours, day_delta)) = military_tz_with_offset {
+                    // Military timezone with optional hour offset
+                    // Convert to UTC time: midnight + military_tz_offset + additional_hours
+
+                    // When calculating a military timezone with an optional hour offset, midnight may
+                    // be crossed in either direction. `day_delta` indicates whether the date remains
+                    // the same, moves to the previous day, or advances to the next day.
+                    // Changing day can result in error, this closure will help handle these errors
+                    // gracefully.
+                    let format_date_with_epoch_fallback = |date: Result<Zoned, _>| -> String {
+                        date.and_then(|d| strtime::format("%F", &d))
+                            .unwrap_or_else(|_| String::from("1970-01-01"))
+                    };
+                    let date_part = match day_delta {
+                        DayDelta::Same => format_date_with_epoch_fallback(Ok(now.clone())),
+                        DayDelta::Next => format_date_with_epoch_fallback(now.tomorrow()),
+                        DayDelta::Previous => format_date_with_epoch_fallback(now.yesterday()),
+                    };
+                    let composed = format!("{date_part} {total_hours:02}:00:00 +00:00");
+                    parse(&composed, false)
+                } else if is_pure_digits {
+                    // Derive HH and MM from the digits
+                    let (hh_opt, mm_opt) = if time_digits.len() <= 2 {
+                        (time_digits.parse::<u32>().ok(), Some(0u32))
+                    } else {
+                        let (h, m) = time_digits.split_at(time_digits.len() - 2);
+                        (h.parse::<u32>().ok(), m.parse::<u32>().ok())
+                    };
+
+                    if let (Some(hh), Some(mm)) = (hh_opt, mm_opt) {
+                        // Compose a concrete datetime string for today with zone offset.
+                        // Use the already-determined 'now' and settings.utc to select offset.
+                        let date_part = strtime::format("%F", &now)
+                            .unwrap_or_else(|_| String::from("1970-01-01"));
+                        // If -u, force +00:00; otherwise use the local offset of 'now'.
+                        let offset = if settings.utc {
+                            String::from("+00:00")
+                        } else {
+                            strtime::format("%:z", &now).unwrap_or_default()
+                        };
+                        let composed = if offset.is_empty() {
+                            format!("{date_part} {hh:02}:{mm:02}")
+                        } else {
+                            format!("{date_part} {hh:02}:{mm:02} {offset}")
+                        };
+                        parse(&composed, false)
+                    } else {
+                        // Fallback on parse failure of digits
+                        parse(input, true)
+                    }
                 } else {
-                    // Fallback on parse failure of digits
                     parse(input, true)
-                }
-            } else {
-                parse(input, true)
-            };
+                };
 
             let iter = std::iter::once(date);
             Box::new(iter)
@@ -573,7 +618,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             std::io::stdin(),
             &now,
             DebugOptions::new(settings.debug, true),
-            allow_extended,
         ),
         DateSource::File(ref path) => {
             if path.is_dir() {
@@ -583,12 +627,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             let file =
                 File::open(path).map_err_context(|| path.as_os_str().maybe_quote().to_string())?;
-            parse_dates_from_reader(
-                file,
-                &now,
-                DebugOptions::new(settings.debug, true),
-                allow_extended,
-            )
+            parse_dates_from_reader(file, &now, DebugOptions::new(settings.debug, true))
         }
         DateSource::FileMtime(ref path) => {
             let metadata = std::fs::metadata(path)
@@ -635,6 +674,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     &output.chunks,
                     &output.config,
                     &output_time_zone,
+                    matches!(&settings.format, Format::Custom(_)),
                 );
                 write_formatted_bytes(&mut stdout, formatted, &output)?;
             }
@@ -665,7 +705,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_DATE)
                 .value_name("STRING")
                 .allow_hyphen_values(true)
-                .overrides_with(OPT_DATE)
+                .action(ArgAction::Append)
                 .value_parser(clap::value_parser!(OsString))
                 .help(translate!("date-help-date")),
         )
@@ -690,6 +730,7 @@ pub fn uu_app() -> Command {
                 ]))
                 .num_args(0..=1)
                 .default_missing_value(OPT_DATE)
+                .action(ArgAction::Append)
                 .help(translate!("date-help-iso-8601")),
         )
         .arg(
@@ -775,35 +816,130 @@ pub fn uu_app() -> Command {
 /// timestamps, whereas jiff's `%s` truncates toward zero. `%%` escapes are
 /// preserved and every other specifier is left untouched for jiff to render.
 fn substitute_epoch_seconds(fmt: &str, date: &Zoned) -> String {
-    if !fmt.contains("%s") {
+    if !fmt.contains('%') || !fmt.contains('s') {
         return fmt.to_string();
     }
 
-    let seconds = ParsedDateTime::InRange(date.clone())
-        .unix_epoch_second()
-        .to_string();
+    let seconds = timestamp_seconds_floor(date.timestamp());
+    substitute_epoch_seconds_value(fmt, seconds)
+}
 
-    let mut out = String::with_capacity(fmt.len());
-    let mut chars = fmt.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c != '%' {
-            out.push(c);
+fn timestamp_seconds_floor(timestamp: Timestamp) -> i64 {
+    timestamp.as_second() - i64::from(timestamp.subsec_nanosecond() < 0)
+}
+
+struct FormatSpec<'a> {
+    flags: &'a str,
+    width: Option<usize>,
+    index: usize,
+}
+
+fn scan_format_spec(format_string: &str, start: usize) -> FormatSpec<'_> {
+    let bytes = format_string.as_bytes();
+    let mut index = start + 1;
+    let flags_start = index;
+    while bytes
+        .get(index)
+        .is_some_and(|byte| b"_0^#+-".contains(byte))
+    {
+        index += 1;
+    }
+    let width_start = index;
+    while bytes.get(index).is_some_and(u8::is_ascii_digit) {
+        index += 1;
+    }
+
+    let width_text = &format_string[width_start..index];
+    let width = if width_text.is_empty() {
+        None
+    } else {
+        Some(width_text.parse::<usize>().unwrap_or(usize::MAX))
+    };
+
+    FormatSpec {
+        flags: &format_string[flags_start..width_start],
+        width,
+        index,
+    }
+}
+
+/// Rewrite selected format specifiers while preserving escaped percent signs.
+/// Returning `None` leaves an unrecognized specifier for the normal formatter.
+fn rewrite_format_specifiers(
+    format_string: &str,
+    mut rewrite: impl FnMut(usize, u8, &FormatSpec<'_>) -> Option<String>,
+) -> String {
+    let mut output = String::with_capacity(format_string.len());
+    let bytes = format_string.as_bytes();
+    let mut index = 0;
+
+    while index < bytes.len() {
+        if bytes[index] != b'%' {
+            let ch = format_string[index..].chars().next().unwrap_or_default();
+            output.push(ch);
+            index += ch.len_utf8();
             continue;
         }
-        match chars.peek() {
-            Some('s') => {
-                chars.next();
-                out.push_str(&seconds);
-            }
-            // Keep `%%` intact so jiff still renders it as a literal percent.
-            Some('%') => {
-                chars.next();
-                out.push_str("%%");
-            }
-            _ => out.push('%'),
+
+        let start = index;
+        index += 1;
+        if bytes.get(index) == Some(&b'%') {
+            output.push_str("%%");
+            index += 1;
+            continue;
+        }
+
+        let spec = scan_format_spec(format_string, start);
+        let Some(&specifier) = bytes.get(spec.index) else {
+            output.push('%');
+            break;
+        };
+
+        if let Some(replacement) = rewrite(start, specifier, &spec) {
+            output.push_str(&replacement);
+            index = spec.index + 1;
+        } else {
+            output.push('%');
+            index = start + 1;
         }
     }
-    out
+
+    output
+}
+
+/// Expand `%s` conversions that carry GNU flags or a width before the regular
+/// formatter sees them. Other conversions are left intact for jiff.
+fn substitute_epoch_seconds_value(fmt: &str, seconds: i64) -> String {
+    if !fmt.contains('%') || !fmt.contains('s') {
+        return fmt.to_string();
+    }
+
+    rewrite_format_specifiers(fmt, |start, specifier, spec| {
+        if specifier != b's' {
+            return None;
+        }
+        if spec.width.is_some_and(|width| width > u16::MAX as usize) {
+            // Leave oversized fields for the normal modifier path, which
+            // reports the bounded-allocation error instead of allocating.
+            Some(fmt[start..=spec.index].to_string())
+        } else {
+            Some(format_epoch_seconds(seconds, spec.flags, spec.width))
+        }
+    })
+}
+
+/// Format epoch seconds while keeping the sign ahead of zero padding and
+/// applying GNU's special no-padding and space-padding modes.
+fn format_epoch_seconds(seconds: i64, flags: &str, width: Option<usize>) -> String {
+    let Some(width) = width.filter(|_| !flags.ends_with('-')) else {
+        return seconds.to_string();
+    };
+
+    if flags.ends_with('_') {
+        format!("{seconds:width$}")
+    } else {
+        format!("{seconds:0width$}")
+    }
 }
 
 /// Remove the `O` strftime modifier from `fmt`.
@@ -986,7 +1122,7 @@ fn write_formatted_bytes<W: Write>(
 /// Set the clock, then echo the resulting date like GNU does (issue #14677).
 /// Report a set failure first, so it isn't lost when the echo write fails.
 fn set_and_echo(input: &str, now: &Zoned, settings: &Settings) -> UResult<()> {
-    match parse_date(input, now, DebugOptions::new(settings.debug, true), false) {
+    match parse_date(input, now, DebugOptions::new(settings.debug, true)) {
         Ok(ParsedDateTime::InRange(date)) => {
             show_if_err!(set_system_datetime(convert_for_set(
                 date.clone(),
@@ -999,9 +1135,10 @@ fn set_and_echo(input: &str, now: &Zoned, settings: &Settings) -> UResult<()> {
             stdout.flush().map_err(DateError::Write)?;
             Ok(())
         }
-        Ok(ParsedDateTime::Extended(_)) | Err(_) => Err(Box::new(DateError::InvalidDate {
-            date: input.to_owned(),
+        Ok(ParsedDateTime::Extended(_)) => Err(Box::new(DateError::InvalidDate {
+            date: escape_invalid_bytes(input.as_bytes()),
         })),
+        Err((input, _)) => Err(Box::new(DateError::InvalidDate { date: input })),
     }
 }
 
@@ -1010,6 +1147,7 @@ fn format_extended_default(
     chunks: &[FormatChunk],
     config: &Config<PosixCustom>,
     output_time_zone: &TimeZone,
+    plus_extended_year: bool,
 ) -> Result<Vec<u8>, String> {
     // Apply the output timezone to an equivalent in-range instant, then let the
     // existing formatter handle every field except the real extended year.
@@ -1034,47 +1172,42 @@ fn format_extended_default(
         surrogate.offset().seconds(),
     )
     .map_err(str::to_string)?;
-    let mut year_replaced = false;
+    let iso_year = extended_iso_week_year(&output);
+    // Keep the real timestamp for `%s`; only calendar fields use the surrogate
+    // year that makes the timezone formatter accept an extended date.
     let formatted = format_chunks(chunks, |fmt| {
         // Expand %x, %X and %r first, so that a %Y they hold is replaced too.
         let fmt = expand_locale_formats(&surrogate, fmt, config, false, 0)?;
-        let (fmt, replaced) = substitute_extended_year(&fmt, output.year);
-        year_replaced |= replaced;
+        let fmt = expand_extended_composites(fmt.as_ref(), output.year, plus_extended_year);
+        let fmt = substitute_extended_year(&fmt, output.year, iso_year);
+        let fmt = substitute_epoch_seconds_value(&fmt, date.unix_seconds());
         format_date_with_locale_aware_months(&surrogate, &fmt, config, false)
     })?;
 
-    if year_replaced {
-        Ok(formatted)
-    } else {
-        Err("default date format does not contain %Y".to_string())
-    }
+    Ok(formatted)
 }
 
-fn surrogate_year(year: u32) -> i16 {
-    // The Gregorian calendar and recurring timezone rules repeat every 400 years.
-    const BASE: i64 = 9_599;
-    (BASE + (i64::from(year) - BASE).rem_euclid(400)) as i16
-}
-
-/// Expand `%Y` to an out-of-range year, reporting whether it occurred at all.
-fn substitute_extended_year(format_string: &str, year: u32) -> (String, bool) {
-    let mut output = String::with_capacity(format_string.len() + 8);
+/// Expand composites that embed year fields before extended-year substitution.
+/// This lets `%F` and `%c` use the same out-of-range year as their components.
+fn expand_extended_composites(format_string: &str, year: u32, plus_extended_year: bool) -> String {
+    let mut output = String::with_capacity(format_string.len());
     let mut chars = format_string.chars().peekable();
-    let year = year.to_string();
-    let mut replaced = false;
 
     while let Some(ch) = chars.next() {
         if ch != '%' {
             output.push(ch);
             continue;
         }
-
         match chars.next() {
             Some('%') => output.push_str("%%"),
-            Some('Y') => {
-                output.push_str(&year);
-                replaced = true;
+            Some('F') => {
+                if year > 9999 && plus_extended_year {
+                    output.push_str("+%Y-%m-%d");
+                } else {
+                    output.push_str("%Y-%m-%d");
+                }
             }
+            Some('c') => output.push_str("%a %b %e %T %Y"),
             Some(specifier) => {
                 output.push('%');
                 output.push(specifier);
@@ -1083,7 +1216,83 @@ fn substitute_extended_year(format_string: &str, year: u32) -> (String, bool) {
         }
     }
 
-    (output, replaced)
+    output
+}
+
+/// Calculate the ISO week-year separately because the formatter only receives
+/// a surrogate in-range date for extended years.
+fn extended_iso_week_year(date: &ExtendedDateTime) -> u32 {
+    let year = date.year;
+    let weekday = i32::from(date.weekday_monday0());
+    let day_of_year = i32::from(date.day_of_year());
+    let week = (day_of_year - weekday + 10) / 7;
+
+    if week < 1 {
+        year.saturating_sub(1)
+    } else if week > i32::from(iso_weeks_in_year(year)) {
+        year.saturating_add(1)
+    } else {
+        year
+    }
+}
+
+fn iso_weeks_in_year(year: u32) -> u8 {
+    ExtendedDateTime::new(
+        parse_datetime::DateParts {
+            year,
+            month: 1,
+            day: 1,
+        },
+        parse_datetime::TimeParts {
+            hour: 0,
+            minute: 0,
+            second: 0,
+            nanosecond: 0,
+        },
+        0,
+    )
+    .map_or(52, |date| {
+        let weekday = date.weekday_monday0();
+        if weekday == 3 || (weekday == 2 && is_leap_year(year)) {
+            53
+        } else {
+            52
+        }
+    })
+}
+
+fn surrogate_year(year: u32) -> i16 {
+    // The Gregorian calendar and recurring timezone rules repeat every 400 years.
+    const BASE: i64 = 9_599;
+    (BASE + (i64::from(year) - BASE).rem_euclid(400)) as i16
+}
+
+fn is_leap_year(year: u32) -> bool {
+    (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
+}
+
+/// Expand year conversions to an out-of-range year.
+fn substitute_extended_year(format_string: &str, year: u32, iso_year: u32) -> String {
+    rewrite_format_specifiers(format_string, |start, specifier, spec| {
+        let (value, default_width) = (match specifier {
+            b'Y' => Some((year, 4)),
+            b'C' => Some((year / 100, 2)),
+            b'G' => Some((iso_year, 4)),
+            b'g' => Some((iso_year % 100, 2)),
+            _ => None,
+        })?;
+
+        if spec.width.is_some_and(|width| width > u16::MAX as usize) {
+            return Some(format_string[start..=spec.index].to_string());
+        }
+
+        Some(format_extended_year_value(
+            value,
+            default_width,
+            spec.flags,
+            spec.width,
+        ))
+    })
 }
 
 /// Expand `%x`, `%X` and `%r` to the locale's formats, which jiff hardcodes to
@@ -1164,6 +1373,47 @@ fn expand_locale_formats<'a>(
     }
     output.push_str(&format[copied..]);
     Ok(Cow::Owned(output))
+}
+
+fn format_extended_year_value(
+    value: u32,
+    default_width: usize,
+    flags: &str,
+    width: Option<usize>,
+) -> String {
+    let mut digits = value.to_string();
+    let force_sign = flags.contains('+');
+    let add_sign = force_sign && (width.is_some() || digits.len() > default_width);
+    let mut pad = format_modifiers::Pad::Zero;
+    for flag in flags.chars() {
+        match flag {
+            '-' => pad = format_modifiers::Pad::None,
+            '_' => pad = format_modifiers::Pad::Space,
+            '0' | '+' => pad = format_modifiers::Pad::Zero,
+            _ => {}
+        }
+    }
+    if add_sign {
+        digits.insert(0, '+');
+    }
+    let Some(width) = width else {
+        return digits;
+    };
+    if matches!(pad, format_modifiers::Pad::None) || width <= digits.len() {
+        return digits;
+    }
+
+    let padding = width - digits.len();
+    if matches!(pad, format_modifiers::Pad::Zero) && digits.starts_with('+') {
+        format!("+{}{}", "0".repeat(padding), &digits[1..])
+    } else {
+        let pad_char = match pad {
+            format_modifiers::Pad::Space => ' ',
+            format_modifiers::Pad::Zero => '0',
+            format_modifiers::Pad::None => unreachable!(),
+        };
+        format!("{}{digits}", pad_char.to_string().repeat(padding))
+    }
 }
 
 fn format_date_with_locale_aware_months(
@@ -1380,7 +1630,6 @@ fn parse_dates_from_reader<R: Read + 'static>(
     reader: R,
     now: &Zoned,
     dbg_opts: DebugOptions,
-    allow_extended: bool,
 ) -> Box<
     dyn Iterator<Item = Result<ParsedDateTime, (String, parse_datetime::ParseDateTimeError)>> + '_,
 > {
@@ -1395,7 +1644,7 @@ fn parse_dates_from_reader<R: Read + 'static>(
             bytes.pop();
         }
         match String::from_utf8(bytes) {
-            Ok(s) => parse_date(s, now, dbg_opts, allow_extended),
+            Ok(s) => parse_date(s, now, dbg_opts),
             // Report lines with invalid UTF-8 (with non-printable bytes
             // octal-escaped like GNU) instead of silently stopping the input
             Err(e) => Err((
@@ -1406,21 +1655,525 @@ fn parse_dates_from_reader<R: Read + 'static>(
     }))
 }
 
+/// Apply a token rewrite without changing the whitespace around each token.
+/// Returning `None` avoids allocating when no token matched.
+fn rewrite_whitespace_tokens(
+    input: &str,
+    mut rewrite: impl FnMut(&str) -> Option<String>,
+) -> Option<String> {
+    let mut output = String::with_capacity(input.len());
+    let mut changed = false;
+    let bytes = input.as_bytes();
+    let mut start = 0;
+
+    while start < bytes.len() {
+        let whitespace = bytes[start].is_ascii_whitespace();
+        let mut end = start + 1;
+        while end < bytes.len() && bytes[end].is_ascii_whitespace() == whitespace {
+            end += 1;
+        }
+
+        let part = &input[start..end];
+        if whitespace {
+            output.push_str(part);
+        } else if let Some(replacement) = rewrite(part) {
+            output.push_str(&replacement);
+            changed = true;
+        } else {
+            output.push_str(part);
+        }
+        start = end;
+    }
+
+    changed.then_some(output)
+}
+
+/// Convert the European `DD.MM[.][YYYY]` spelling to the slash-separated form
+/// understood by the underlying parser, preserving a missing year.
+fn rewrite_european_date_token(token: &str) -> Option<String> {
+    let trailing_dot = token.ends_with('.');
+    let core = token.strip_suffix('.').unwrap_or(token);
+    let parts: Vec<&str> = core.split('.').collect();
+    let (day, month, year) = match parts.as_slice() {
+        [day, month, year]
+            if day.chars().all(|c| c.is_ascii_digit())
+                && month.chars().all(|c| c.is_ascii_digit())
+                && year.chars().all(|c| c.is_ascii_digit()) =>
+        {
+            (*day, *month, Some(*year))
+        }
+        [day, month]
+            if trailing_dot
+                && day.chars().all(|c| c.is_ascii_digit())
+                && month.chars().all(|c| c.is_ascii_digit()) =>
+        {
+            (*day, *month, None)
+        }
+        _ => return None,
+    };
+
+    let day_number = day.parse::<u16>().ok()?;
+    let month_number = month.parse::<u16>().ok()?;
+    if !(1..=31).contains(&day_number) || !(1..=12).contains(&month_number) {
+        return None;
+    }
+
+    Some(match year {
+        Some(year) => format!("{month}/{day}/{year}"),
+        None => format!("{month}/{day}"),
+    })
+}
+
+/// Normalize European dates and the compact times commonly following them.
+fn normalize_european_dates(input: &str) -> Option<String> {
+    let rewritten = rewrite_whitespace_tokens(input, rewrite_european_date_token)?;
+    let has_short_date = input.split_whitespace().any(|token| {
+        let core = token.strip_suffix('.').unwrap_or(token);
+        core.split('.').count() == 2 && token.ends_with('.')
+    });
+    if !has_short_date {
+        return Some(rewritten);
+    }
+
+    let mut after_date = false;
+    let mut after_year = false;
+    let time_rewritten = rewrite_whitespace_tokens(&rewritten, |token| {
+        if token.split_once('/').is_some_and(|(month, day)| {
+            month.chars().all(|c| c.is_ascii_digit()) && day.chars().all(|c| c.is_ascii_digit())
+        }) {
+            after_date = true;
+            after_year = false;
+            return None;
+        }
+        if after_date && token.len() <= 4 && token.chars().all(|c| c.is_ascii_digit()) {
+            let value = token.parse::<u16>().ok()?;
+            if token.len() == 4 && value >= 1000 {
+                after_date = false;
+                after_year = true;
+                return None;
+            }
+            if value <= 2359 && (token.len() <= 2 || value % 100 < 60) {
+                after_date = false;
+                after_year = false;
+                return Some(if token.len() <= 2 {
+                    format!("{value:02}:00")
+                } else {
+                    format!("{:02}:{:02}", value / 100, value % 100)
+                });
+            }
+        }
+        if after_year && is_clock_with_seconds(token) {
+            after_year = false;
+            return None;
+        }
+        after_date = false;
+        after_year = false;
+        None
+    });
+    time_rewritten.or(Some(rewritten))
+}
+
+fn is_weekday_name(token: &str) -> bool {
+    // GNU documents these forms in its "Day of week items" section:
+    // https://www.gnu.org/software/coreutils/manual/html_node/Day-of-week-items.html
+    // Full names, three-letter abbreviations with an optional period, and the
+    // special `tues`, `wednes`, `thur`, and `thurs` forms are accepted. Single-
+    // letter forms are intentionally excluded because they are ambiguous with
+    // other syntax.
+    matches!(
+        token.to_ascii_lowercase().as_str(),
+        "monday"
+            | "mon"
+            | "mon."
+            | "tuesday"
+            | "tue"
+            | "tue."
+            | "tues"
+            | "wednesday"
+            | "wed"
+            | "wed."
+            | "wednes"
+            | "thursday"
+            | "thu"
+            | "thu."
+            | "thur"
+            | "thurs"
+            | "friday"
+            | "fri"
+            | "fri."
+            | "saturday"
+            | "sat"
+            | "sat."
+            | "sunday"
+            | "sun"
+            | "sun."
+    )
+}
+
+fn looks_like_explicit_calendar_date(input: &str) -> bool {
+    let Some(token) = input.split_whitespace().next() else {
+        return false;
+    };
+    if token.starts_with(['+', '-']) {
+        return false;
+    }
+    let separators = token
+        .chars()
+        .filter(|c| matches!(c, '-' | '/' | '.'))
+        .count();
+    separators >= 2
+        || token.contains('/')
+        || (token.chars().all(|c| c.is_ascii_digit()) && token.len() >= 6)
+}
+
+fn is_weekday_prefix(token: &str) -> bool {
+    token.parse::<u32>().is_ok()
+        || matches!(
+            token.to_ascii_lowercase().as_str(),
+            "first"
+                | "second"
+                | "third"
+                | "fourth"
+                | "fifth"
+                | "sixth"
+                | "seventh"
+                | "eighth"
+                | "ninth"
+                | "tenth"
+                | "eleventh"
+                | "twelfth"
+                | "last"
+                | "next"
+                | "this"
+        )
+}
+
+/// Drop weekday items when an explicit calendar date is present.
+/// Relative-only inputs must remain untouched because the weekday can matter.
+fn strip_weekday_for_explicit_date(input: &str) -> Option<String> {
+    let mut spans = Vec::new();
+    let mut token_start = None;
+    for (index, character) in input.char_indices() {
+        if character.is_whitespace() {
+            if let Some(start) = token_start.take() {
+                spans.push((start, index));
+            }
+        } else if token_start.is_none() {
+            token_start = Some(index);
+        }
+    }
+    if let Some(start) = token_start {
+        spans.push((start, input.len()));
+    }
+
+    let tokens: Vec<&str> = spans
+        .iter()
+        .map(|&(start, end)| &input[start..end])
+        .collect();
+    let date_index = tokens.iter().position(|token| {
+        !token.starts_with("TZ=\"")
+            && !token.ends_with(',')
+            && looks_like_explicit_calendar_date(token)
+    })?;
+    let weekday_index = tokens.iter().enumerate().find_map(|(index, token)| {
+        let weekday = token.strip_suffix(',').unwrap_or(token);
+        (index != date_index && is_weekday_name(weekday)).then_some(index)
+    })?;
+
+    let mut removed = vec![false; tokens.len()];
+    removed[weekday_index] = true;
+    if weekday_index > 0
+        && weekday_index - 1 != date_index
+        && is_weekday_prefix(tokens[weekday_index - 1])
+    {
+        removed[weekday_index - 1] = true;
+    }
+
+    let mut result = String::with_capacity(input.len());
+    let mut cursor = 0;
+    for (index, &(start, end)) in spans.iter().enumerate() {
+        result.push_str(&input[cursor..start]);
+        if !removed[index] {
+            result.push_str(&input[start..end]);
+        }
+        cursor = end;
+    }
+    result.push_str(&input[cursor..]);
+    Some(result)
+}
+
+/// Normalize offsets whose minute component exceeds 59 into total minutes.
+fn rewrite_large_offset_token(token: &str) -> Option<String> {
+    if !token.starts_with(['+', '-']) {
+        return None;
+    }
+    let (sign, rest) = token.split_at(1);
+    let (hours, minutes) = rest.split_once(':')?;
+    if hours.is_empty()
+        || minutes.is_empty()
+        || !hours.chars().all(|c| c.is_ascii_digit())
+        || !minutes.chars().all(|c| c.is_ascii_digit())
+    {
+        return None;
+    }
+    let hours = hours.parse::<u64>().ok()?;
+    let minutes = minutes.parse::<u64>().ok()?;
+    if minutes < 60 {
+        return None;
+    }
+    let total_minutes = hours.checked_mul(60)?.checked_add(minutes)?;
+    Some(format!(
+        "{sign}{:02}:{:02}",
+        total_minutes / 60,
+        total_minutes % 60
+    ))
+}
+
+fn normalize_large_offsets(input: &str) -> Option<String> {
+    rewrite_whitespace_tokens(input, rewrite_large_offset_token)
+}
+
+fn is_clock_with_seconds(token: &str) -> bool {
+    let mut parts = token.split(':');
+    let (Some(hour), Some(minute), Some(second)) = (parts.next(), parts.next(), parts.next())
+    else {
+        return false;
+    };
+    if parts.next().is_some() || hour.is_empty() || minute.is_empty() || second.is_empty() {
+        return false;
+    }
+
+    let valid_second = match second.split_once('.') {
+        Some((seconds, fraction)) => {
+            !seconds.is_empty()
+                && !fraction.is_empty()
+                && seconds.chars().all(|c| c.is_ascii_digit())
+                && fraction.chars().all(|c| c.is_ascii_digit())
+        }
+        None => second.chars().all(|c| c.is_ascii_digit()),
+    };
+
+    hour.chars().all(|c| c.is_ascii_digit())
+        && minute.chars().all(|c| c.is_ascii_digit())
+        && valid_second
+}
+
+/// Parse the ambiguous `+N unit` form after an absolute time using the same
+/// parser for its timezone offset and relative item, rather than rewriting the
+/// input into unrelated syntax.
+fn parse_relative_plus(input: &str, now: &Zoned) -> Option<ParsedDateTime> {
+    let words: Vec<&str> = input.split_whitespace().collect();
+    if !words.iter().any(|word| is_clock_with_seconds(word))
+        || words.iter().any(|word| {
+            word.eq_ignore_ascii_case("utc")
+                || word.eq_ignore_ascii_case("gmt")
+                || word.starts_with("TZ=\"")
+        })
+    {
+        return None;
+    }
+
+    let relative_marker = words.iter().position(|word| {
+        matches!(
+            word.to_ascii_lowercase().as_str(),
+            "today" | "tomorrow" | "yesterday" | "now"
+        )
+    });
+    for (index, pair) in words.windows(2).enumerate() {
+        let number = pair[0];
+        let unit = pair[1];
+        let Some(number) = number.strip_prefix('+') else {
+            continue;
+        };
+        if number.is_empty()
+            || !number.chars().all(|c| c.is_ascii_digit())
+            || !unit.chars().all(|c| c.is_ascii_alphabetic())
+            || relative_marker.is_some_and(|marker| index >= marker)
+        {
+            continue;
+        }
+
+        let mut base_input = String::with_capacity(input.len());
+        for (word_index, word) in words.iter().enumerate() {
+            if word_index == index + 1 {
+                continue;
+            }
+            if !base_input.is_empty() {
+                base_input.push(' ');
+            }
+            base_input.push_str(word);
+        }
+
+        let Some(base) = parse_datetime::parse_datetime_at_date(now.clone(), base_input)
+            .ok()
+            .and_then(ParsedDateTime::into_zoned)
+        else {
+            continue;
+        };
+        if let Ok(parsed) = parse_datetime::parse_datetime_at_date(base, unit) {
+            return Some(parsed);
+        }
+    }
+
+    None
+}
+
+/// Apply only the targeted syntax rewrites needed before parse_datetime.
+/// Keeping the input borrowed when possible also preserves the original text
+/// for diagnostics.
+fn normalize_parse_input(input: &str) -> Cow<'_, str> {
+    let mut current = Cow::Borrowed(input);
+
+    for rewrite in [
+        strip_weekday_for_explicit_date,
+        normalize_european_dates,
+        normalize_large_offsets,
+    ] {
+        if let Some(rewritten) = rewrite(current.as_ref()) {
+            current = Cow::Owned(rewritten);
+        }
+    }
+    current
+}
+
+/// Extract a local wall-clock value for the DST-gap check and its diagnostics.
+/// This is intentionally narrower than the full date parser.
+fn parse_local_datetime(input: &str) -> Option<jiff::civil::DateTime> {
+    let normalized = input.replace(['T', 't'], " ");
+    let (year, month, day) = normalized.split_whitespace().find_map(|token| {
+        let parts: Vec<&str> = if token.contains('-') {
+            token.split('-').collect()
+        } else if token.contains('/') {
+            token.split('/').collect()
+        } else {
+            return None;
+        };
+        let (year, month, day) = match parts.as_slice() {
+            [year, month, day] if token.contains('-') => (*year, *month, *day),
+            [month, day, year] if token.contains('/') => (*year, *month, *day),
+            _ => return None,
+        };
+        if !year.chars().all(|c| c.is_ascii_digit())
+            || !month.chars().all(|c| c.is_ascii_digit())
+            || !day.chars().all(|c| c.is_ascii_digit())
+        {
+            return None;
+        }
+        Some((
+            year.parse::<i16>().ok()?,
+            month.parse::<i8>().ok()?,
+            day.parse::<i8>().ok()?,
+        ))
+    })?;
+    let (hour, minute, second, nanosecond) = normalized.split_whitespace().find_map(|token| {
+        let token = token
+            .char_indices()
+            .skip(1)
+            .find(|&(index, ch)| {
+                (ch == '+' || ch == '-')
+                    && token[..index].contains(':')
+                    && is_numeric_timezone(&token[index..])
+            })
+            .map_or(token, |(index, _)| &token[..index]);
+        let mut parts = token.split(':');
+        let (Some(hour), Some(minute)) = (parts.next(), parts.next()) else {
+            return None;
+        };
+        let second = parts.next().unwrap_or("0");
+        if parts.next().is_some() {
+            return None;
+        }
+        let (second, fraction) = second.split_once('.').unwrap_or((second, ""));
+        let fraction = if fraction.is_empty() {
+            0
+        } else {
+            let mut digits = fraction.as_bytes().to_vec();
+            digits.truncate(9);
+            while digits.len() < 9 {
+                digits.push(b'0');
+            }
+            std::str::from_utf8(&digits).ok()?.parse::<i32>().ok()?
+        };
+        Some((
+            hour.parse::<i8>().ok()?,
+            minute.parse::<i8>().ok()?,
+            second.parse::<i8>().ok()?,
+            fraction,
+        ))
+    })?;
+    jiff::civil::DateTime::new(year, month, day, hour, minute, second, nanosecond).ok()
+}
+
+fn input_timezone(input: &str, now: &Zoned) -> TimeZone {
+    let trimmed = input.trim_start();
+    if let Some(rest) = trimmed.strip_prefix("TZ=\"")
+        && let Some(end) = rest.find('"')
+    {
+        let name = &rest[..end];
+        TimeZone::get(name)
+            .or_else(|_| TimeZone::posix(name))
+            .unwrap_or_else(|_| now.time_zone().clone())
+    } else {
+        now.time_zone().clone()
+    }
+}
+
+fn has_explicit_numeric_timezone(input: &str) -> bool {
+    input.split_whitespace().any(|token| {
+        if is_numeric_timezone(token) {
+            return true;
+        }
+
+        token.char_indices().skip(1).any(|(index, ch)| {
+            (ch == '+' || ch == '-')
+                && token[..index].contains(':')
+                && is_numeric_timezone(&token[index..])
+        })
+    })
+}
+
+fn is_numeric_timezone(offset: &str) -> bool {
+    let rest = offset.strip_prefix(['+', '-']).unwrap_or("");
+    !rest.is_empty()
+        && rest.chars().all(|c| c.is_ascii_digit() || c == ':')
+        && (rest.contains(':') || (1..=4).contains(&rest.len()))
+}
+
+/// Detect a local wall-clock time that falls inside a timezone transition gap.
+/// Explicit numeric offsets are absolute instants and therefore cannot be gaps.
+fn is_nonexistent_local_time(input: &str, now: &Zoned) -> bool {
+    if has_explicit_numeric_timezone(input) {
+        return false;
+    }
+    let normalized = normalize_parse_input(input);
+    let Some(local) = parse_local_datetime(normalized.as_ref()) else {
+        return false;
+    };
+    matches!(
+        input_timezone(input, now)
+            .to_ambiguous_zoned(local)
+            .offset(),
+        AmbiguousOffset::Gap { .. }
+    )
+}
+
 /// Parse a string into either an in-range [`Zoned`] value or an extended date.
 fn parse_date<S: AsRef<str>>(
     s: S,
     now: &Zoned,
     dbg_opts: DebugOptions,
-    allow_extended: bool,
 ) -> Result<ParsedDateTime, (String, parse_datetime::ParseDateTimeError)> {
     let input_str = s.as_ref();
-
     if dbg_opts.debug {
         let _ = writeln!(stderr(), "date: input string: {input_str}");
     }
 
+    // Normalize parser-specific compatibility forms before parsing.
+    let normalized = normalize_parse_input(input_str);
+    let parse_input = normalized.as_ref();
+
     // First, try to parse any timezone abbreviations
-    if let Some(zoned) = try_parse_with_abbreviation(input_str, now) {
+    if let Some(zoned) = try_parse_with_abbreviation(parse_input, now) {
         if dbg_opts.debug {
             let mut err = stderr().lock();
             let _ = writeln!(
@@ -1439,10 +2192,23 @@ fn parse_date<S: AsRef<str>>(
         return Ok(ParsedDateTime::InRange(zoned));
     }
 
-    match parse_datetime::parse_datetime_at_date(now.clone(), input_str) {
+    let parsed = parse_relative_plus(parse_input, now).map_or_else(
+        || parse_datetime::parse_datetime_at_date(now.clone(), parse_input),
+        Ok,
+    );
+
+    match parsed {
         // Convert to system timezone for display
         // (parse_datetime returns a value in the input's timezone)
         Ok(ParsedDateTime::InRange(date)) => {
+            // parse_datetime may normalize a nonexistent wall-clock time;
+            // reject that result so DST gaps are not silently accepted.
+            if is_nonexistent_local_time(input_str, now) {
+                return Err((
+                    escape_invalid_bytes(input_str.as_bytes()),
+                    parse_datetime::ParseDateTimeError::InvalidInput,
+                ));
+            }
             let result = date.timestamp().to_zoned(now.time_zone().clone());
             if dbg_opts.debug {
                 // Show final parsed date and time
@@ -1477,12 +2243,8 @@ fn parse_date<S: AsRef<str>>(
             }
             Ok(ParsedDateTime::InRange(result))
         }
-        Ok(ParsedDateTime::Extended(date)) if allow_extended => Ok(ParsedDateTime::Extended(date)),
-        Ok(ParsedDateTime::Extended(_)) => Err((
-            input_str.into(),
-            parse_datetime::ParseDateTimeError::InvalidInput,
-        )),
-        Err(e) => Err((input_str.into(), e)),
+        Ok(ParsedDateTime::Extended(date)) => Ok(ParsedDateTime::Extended(date)),
+        Err(e) => Err((escape_invalid_bytes(input_str.as_bytes()), e)),
     }
 }
 
@@ -1663,14 +2425,9 @@ mod tests {
     #[test]
     fn test_abbreviation_resolves_relative_date_against_now() {
         let now = "2025-03-15T20:00:00+00:00[UTC]".parse::<Zoned>().unwrap();
-        let result = parse_date(
-            "yesterday 10:00 GMT",
-            &now,
-            DebugOptions::new(false, false),
-            false,
-        )
-        .unwrap()
-        .expect_in_range();
+        let result = parse_date("yesterday 10:00 GMT", &now, DebugOptions::new(false, false))
+            .unwrap()
+            .expect_in_range();
         assert_eq!(result.date(), jiff::civil::date(2025, 3, 14));
     }
 
@@ -1682,12 +2439,21 @@ mod tests {
             "Sat 20 Mar 2021 14:53:01 AWST",
             &now,
             DebugOptions::new(false, false),
-            false,
         )
         .unwrap()
         .expect_in_range();
         let utc = convert_for_set(date, true);
         assert_eq!((utc.hour(), utc.minute(), utc.second()), (6, 53, 1)); // AWST(+08:00) -> -8h
+    }
+
+    #[test]
+    fn test_is_clock_with_seconds_rejects_empty_components() {
+        for input in ["::..", "::", ":12:34", "12::34", "12:34:"] {
+            assert!(!is_clock_with_seconds(input), "unexpected clock: {input}");
+        }
+        for input in ["12:34:56", "12:34:56.789"] {
+            assert!(is_clock_with_seconds(input), "missing clock: {input}");
+        }
     }
 
     #[test]
