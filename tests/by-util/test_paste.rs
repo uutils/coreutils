@@ -192,6 +192,20 @@ fn test_combine_pairs_of_lines() {
     }
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_write_error_on_full_device() {
+    // The output is small enough to stay in the buffer until the final flush.
+    for args in [&["-", "-"][..], &["-s", "-d+", "-"], &["-"]] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("kiwi\nmango\nplum")
+            .set_stdout(std::fs::File::create("/dev/full").unwrap())
+            .fails_with_code(1)
+            .stderr_only("paste: write error: No space left on device\n");
+    }
+}
+
 #[test]
 fn test_multi_stdin() {
     for d in ["-d", "--delimiters"] {
