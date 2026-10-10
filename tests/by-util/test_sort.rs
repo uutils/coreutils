@@ -2041,6 +2041,44 @@ fn test_separator_attached_equals_double() {
 }
 
 #[test]
+fn test_separator_clustered_attached() {
+    // `-nt=5`: -n is a flag, -t takes the rest of the argument (`=5`)
+    // verbatim, which GNU rejects as multi-character.
+    // `sort` exits as soon as it rejects the suffix, so the stdin write races
+    // the exit and can lose with EPIPE. The write is not what is under test
+    // here, so tolerate it.
+    new_ucmd!()
+        .ignore_stdin_write_error()
+        .args(&["-nt=5"])
+        .pipe_in("a=b=c\n")
+        .fails()
+        .stderr_contains("'=5'");
+}
+
+#[test]
+fn test_separator_clustered_attached_b() {
+    // Same race as above: the child exits before stdin is drained.
+    new_ucmd!()
+        .ignore_stdin_write_error()
+        .args(&["-bt=x"])
+        .pipe_in("a=b=c\n")
+        .fails()
+        .stderr_contains("'=x'");
+}
+
+#[test]
+fn test_separator_clustered_still_sorts() {
+    // The rewrite must not disturb value-taking shorts inside clusters'
+    // siblings: -n plus a working attached separator. #14120
+    // Uses numeric field values so -n actually sorts.
+    new_ucmd!()
+        .args(&["-nt=", "-k", "2"])
+        .pipe_in("3=b\n1=a\n2=c\n")
+        .succeeds()
+        .stdout_only("1=a\n2=c\n3=b\n");
+}
+
+#[test]
 fn test_separator_attached_equals_multi_char() {
     // `-t=a` selects the two-character separator `=a`, which GNU rejects.
     new_ucmd!()
@@ -3960,3 +3998,22 @@ sort: invalid suffix in --buffer-size argument '8zz'
 }
 
 // spell-checker:enable
+
+#[test]
+fn test_double_dash_operand_that_looks_like_attached_separator() {
+    // `--` ends option parsing, so here `-t=x` names a file. It used to be
+    // rewritten into `--separator=x`, and sort looked for that instead.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("-t=x", "b\na\n");
+    ucmd.args(&["--", "-t=x"]).succeeds().stdout_only("a\nb\n");
+}
+
+#[test]
+fn test_attached_separator_still_split_before_double_dash() {
+    // The rewrite still applies ahead of `--`.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "b=a\na=b\n");
+    ucmd.args(&["-t=", "--", "in"])
+        .succeeds()
+        .stdout_only("a=b\nb=a\n");
+}
