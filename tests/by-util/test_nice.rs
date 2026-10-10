@@ -5,8 +5,10 @@
 
 // spell-checker:ignore getpriority setpriority
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use uutests::new_ucmd;
+#[cfg(windows)]
+use uutests::util::get_tests_binary;
 
 #[test]
 #[cfg(unix)]
@@ -133,3 +135,77 @@ fn test_sign_middle() {
 //uu: "-2+4" is not a valid number: invalid digit found in string
 //gnu: invalid adjustment `-2+4'
 //Both message is fine
+
+/// The nice values Cygwin reports for the six Windows priority classes.
+#[cfg(windows)]
+const CYGWIN_NICENESS_VALUES: [i32; 6] = [-20, -16, -8, 0, 8, 16];
+
+#[test]
+#[cfg(windows)]
+fn test_get_current_niceness_windows() {
+    let niceness: i32 = new_ucmd!()
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .expect("nice should print the current niceness");
+    assert!(
+        CYGWIN_NICENESS_VALUES.contains(&niceness),
+        "{niceness} is not the niceness of a Windows priority class"
+    );
+}
+
+#[test]
+#[cfg(windows)]
+fn test_nice_reports_the_priority_class_it_set_windows() {
+    // `-n` adds to the current niceness, so read it first to ask for an
+    // absolute value regardless of the class the test runner is at.
+    let current: i32 = new_ucmd!()
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .expect("nice should print the current niceness");
+
+    // Both sides of every boundary of Cygwin's table, with the niceness it
+    // reports for that class. REALTIME is left out: it needs elevation.
+    for (niceness, reported) in [
+        (-19, -16),
+        (-13, -16),
+        (-12, -8),
+        (-5, -8),
+        (-4, 0),
+        (3, 0),
+        (4, 8),
+        (11, 8),
+        (12, 16),
+        (19, 16),
+    ] {
+        new_ucmd!()
+            .args(&[
+                "-n",
+                &(niceness - current).to_string(),
+                get_tests_binary(),
+                "nice",
+            ])
+            .succeeds()
+            .stdout_is(format!("{reported}\n"));
+    }
+}
+
+#[test]
+#[cfg(windows)]
+fn test_exit_status_of_command_windows() {
+    new_ucmd!()
+        .args(&["-n", "0", get_tests_binary(), "false"])
+        .fails_with_code(1);
+}
+
+#[test]
+#[cfg(windows)]
+fn test_missing_command_windows() {
+    new_ucmd!()
+        .args(&["-n", "0", "this-command-does-not-exist"])
+        .fails_with_code(127)
+        .no_stdout();
+}
