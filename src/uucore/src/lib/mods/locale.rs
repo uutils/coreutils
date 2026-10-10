@@ -125,6 +125,15 @@ fn errors_message(
     id: &str,
     args: Option<&FluentArgs>,
 ) -> Option<String> {
+    // Only an id this resource defines is worth that parse. Lookups reach here
+    // whenever they miss every ordinary bundle, which is not only error paths:
+    // a binary that cannot find its own strings misses on all of them, and a
+    // bench binary calling `uumain` directly is exactly that. The ids come
+    // from the English resource, the one every locale is a translation of.
+    if !is_error_locale_id(id) {
+        return None;
+    }
+
     ERRORS_BUNDLE.with(|cell| {
         let bundle = cell.get_or_init(|| build_errors_bundle(locales)).as_ref()?;
         let message = bundle.get_message(id)?.value()?;
