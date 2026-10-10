@@ -54,6 +54,18 @@ jobs:
     - name: Checkout code (GNU coreutils)
       run: (mkdir -p gnu && cd gnu && bash ../uutils/util/fetch-gnu.sh)
     #### Build environment setup
+    - name: Use GNU as the system coreutils
+      shell: bash
+      run: |
+        ## Images such as ubuntu-26.04 ship uutils as the system coreutils; switch to GNU, or fail.
+        sudo apt-get update
+        if apt-cache show coreutils-from-gnu >/dev/null 2>&1; then
+          sudo apt-get install -y --allow-remove-essential coreutils-from-gnu coreutils-from-uutils-
+        fi
+        if dpkg -s coreutils-from-uutils >/dev/null 2>&1; then
+          echo "::error::coreutils-from-uutils is still installed"
+          exit 1
+        fi
     - name: Install dependencies
       shell: bash
       run: |

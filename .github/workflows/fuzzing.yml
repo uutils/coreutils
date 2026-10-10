@@ -1,7 +1,7 @@
 name: Fuzzing
 
 # spell-checker:ignore (people) taiki-e
-# spell-checker:ignore (misc) fuzzer PIPESTATUS
+# spell-checker:ignore (misc) dpkg fuzzer PIPESTATUS
 
 env:
   CARGO_INCREMENTAL: "0"
@@ -118,6 +118,18 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
+    - name: Use GNU as the system coreutils
+      shell: bash
+      run: |
+        ## Images such as ubuntu-26.04 ship uutils as the system coreutils; switch to GNU, or fail.
+        sudo apt-get update
+        if apt-cache show coreutils-from-gnu >/dev/null 2>&1; then
+          sudo apt-get install -y --allow-remove-essential coreutils-from-gnu coreutils-from-uutils-
+        fi
+        if dpkg -s coreutils-from-uutils >/dev/null 2>&1; then
+          echo "::error::coreutils-from-uutils is still installed"
+          exit 1
+        fi
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: "fuzz -> target"
@@ -186,6 +198,18 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
+    - name: Use GNU as the system coreutils
+      shell: bash
+      run: |
+        ## Images such as ubuntu-26.04 ship uutils as the system coreutils; switch to GNU, or fail.
+        sudo apt-get update
+        if apt-cache show coreutils-from-gnu >/dev/null 2>&1; then
+          sudo apt-get install -y --allow-remove-essential coreutils-from-gnu coreutils-from-uutils-
+        fi
+        if dpkg -s coreutils-from-uutils >/dev/null 2>&1; then
+          echo "::error::coreutils-from-uutils is still installed"
+          exit 1
+        fi
     - name: Install `cargo-fuzz`
       uses: taiki-e/install-action@v2
       with:
