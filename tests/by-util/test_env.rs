@@ -1031,6 +1031,77 @@ fn test_env_list_signal_handling_reports_ignore() {
     );
 }
 
+#[test]
+#[cfg(unix)]
+fn test_env_signal_options_are_applied_in_the_order_given() {
+    for (args, expected) in [
+        (
+            &["--ignore-signal=INT", "--default-signal=INT"][..],
+            "DEFAULT",
+        ),
+        (
+            &["--default-signal=INT", "--ignore-signal=INT"][..],
+            "IGNORE",
+        ),
+        (
+            &["--block-signal=INT", "--default-signal=INT"][..],
+            "DEFAULT",
+        ),
+        (&["--ignore-signal=INT", "--default-signal"][..], "DEFAULT"),
+        (&["--default-signal", "--ignore-signal=INT"][..], "IGNORE"),
+        (&["--block-signal=INT", "--ignore-signal=INT"][..], "IGNORE"),
+    ] {
+        let mut cmd_args = args.to_vec();
+        cmd_args.extend(["--list-signal-handling", "true"]);
+
+        let result = new_ucmd!().env("PATH", PATH).args(&cmd_args).succeeds();
+        let stderr = result.stderr_str();
+
+        assert!(
+            stderr.contains("INT") && stderr.contains(expected),
+            "{args:?}: expected INT to be {expected}, got: {stderr}"
+        );
+        for other in ["DEFAULT", "IGNORE", "BLOCK"] {
+            assert!(
+                other == expected || !stderr.contains(other),
+                "{args:?}: unexpected {other} for INT in: {stderr}"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_signal_option_without_value_applies_to_every_signal() {
+    // A bare option applies to every signal, so a signal another option set earlier is
+    // ignored again, and one given later still wins.
+    new_ucmd!()
+        .env("PATH", PATH)
+        .args(&[
+            "--ignore-signal=TERM",
+            "--ignore-signal",
+            "sh",
+            "-c",
+            "kill -INT $$",
+        ])
+        .succeeds();
+
+    let result = new_ucmd!()
+        .env("PATH", PATH)
+        .args(&[
+            "--ignore-signal",
+            "--default-signal=INT",
+            "--list-signal-handling",
+            "true",
+        ])
+        .succeeds();
+    let stderr = result.stderr_str();
+    assert!(
+        stderr.contains("INT") && stderr.contains("DEFAULT"),
+        "a later explicit option must win over a bare one, got: {stderr}"
+    );
+}
+
 #[cfg(unix)]
 fn run_sigpipe_script(ts: &TestScenario, extra_args: &[&str]) {
     let shell = env::var("SHELL").unwrap_or_else(|_| String::from("sh"));
