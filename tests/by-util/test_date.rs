@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST MESZ KST uueuu ueuu vasárnap június január distros
+// spell-checker:ignore AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST MESZ KST uueuu ueuu vasárnap június január distros Wednes
 // spell-checker:ignore uppercases xffx
 
 use std::cmp::Ordering;
@@ -46,7 +46,7 @@ fn test_bad_format_option_missing_leading_plus_after_d_flag() {
         new_ucmd!()
             .args(&["--date", "1996-01-31", bad_argument])
             .fails_with_code(1)
-            .stderr_contains(format!("the argument {bad_argument} lacks a leading '+';\nwhen using an option to specify date(s), any non-option\nargument must be a format string beginning with '+'"), );
+            .stderr_contains(format!("the argument '{bad_argument}' lacks a leading '+';\nwhen using an option to specify date(s), any non-option\nargument must be a format string beginning with '+'"), );
     }
 }
 
@@ -99,6 +99,44 @@ fn test_large_year_default_output_boundary() {
         .args(&["-d", "10000-02-30"])
         .fails_with_code(1)
         .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_large_year_custom_formats_match_gnu() {
+    for (format, expected) in [
+        ("+%F", "+10000-01-01\n"),
+        ("+%s", "253402300800\n"),
+        ("+%C", "100\n"),
+        ("+%G", "9999\n"),
+        ("+%10Y", "0000010000\n"),
+        ("+%_10Y", "     10000\n"),
+        ("+%-10Y", "10000\n"),
+        ("+%10C", "0000000100\n"),
+        ("+%10G", "0000009999\n"),
+        ("+%c", "Sat Jan  1 00:00:00 10000\n"),
+        ("+hello", "hello\n"),
+    ] {
+        new_ucmd!()
+            .env("LANG", "C")
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .args(&["-d", "10000-01-01", format])
+            .succeeds()
+            .stdout_is(expected);
+    }
+
+    for args in [
+        vec!["-I", "-d", "10000-01-01"],
+        vec!["--rfc-3339=date", "-d", "10000-01-01"],
+    ] {
+        new_ucmd!()
+            .env("LANG", "C")
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .args(&args)
+            .succeeds()
+            .stdout_is("10000-01-01\n");
+    }
 }
 
 #[test]
@@ -425,6 +463,71 @@ fn test_date_utc_output_formats() {
 }
 
 #[test]
+fn test_date_rejects_multiple_output_formats() {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .args(&["-I", "-d", "2024-01-01", "+%F"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("date: multiple output formats specified\n");
+}
+
+#[test]
+fn test_date_missing_format_plus_precedes_format_conflict() {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .args(&["-I", "-d", "2024-01-01", "%Y"])
+        .fails_with_code(1)
+        .stderr_contains("the argument '%Y' lacks a leading '+'");
+}
+
+#[test]
+fn test_date_iso_numeric_timezone() {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .env("TZ", "America/New_York")
+        .args(&["-d", "2024-03-10T02:30+0", "+%F %T %z"])
+        .succeeds()
+        .stdout_is("2024-03-09 21:30:00 -0500\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_date_rejects_nonexistent_dst_inputs() {
+    for input in ["2024-03-10 02:30", "03/10/2024 02:30", "10.03.2024 02:30"] {
+        new_ucmd!()
+            .env("LANG", "C")
+            .env("LC_ALL", "C")
+            .env("TZ", "America/New_York")
+            .args(&["-d", input, "+%F %T %Z"])
+            .fails_with_code(1)
+            .stderr_contains("invalid date");
+    }
+}
+
+#[test]
+fn test_date_relative_plus_after_today() {
+    for (input, expected) in [
+        ("2024-06-15 12:00:00 today +1 hour", "2024-06-15 13:00:00\n"),
+        ("2024-06-15 12:00:00 +1 hour", "2024-06-15 12:00:00\n"),
+        ("2024-06-15 12:00:00 +1 hour today", "2024-06-15 12:00:00\n"),
+        ("2024-06-15 12:00:00 +1 day", "2024-06-16 11:00:00\n"),
+        ("2024-06-15 12:00:00 +2 minutes", "2024-06-15 10:01:00\n"),
+    ] {
+        new_ucmd!()
+            .env("LANG", "C")
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .args(&["-d", input, "+%F %T"])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
 fn test_date_utc_stdin() {
     new_ucmd!()
         .env("TZ", "America/New_York")
@@ -537,6 +640,16 @@ fn test_date_set_invalid() {
 }
 
 #[test]
+fn test_date_set_invalid_date_uses_locale_escaping() {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .args(&["--set", "−1 day"])
+        .fails_with_code(1)
+        .stderr_contains("invalid date '\\342\\210\\2221 day'");
+}
+
+#[test]
 fn test_date_error_echoes_input_verbatim() {
     // Error messages echo what the user typed: numeric-looking input must
     // not be reformatted as a Fluent number (#14669, #14670).
@@ -551,7 +664,7 @@ fn test_date_error_echoes_input_verbatim() {
     new_ucmd!()
         .args(&["--date", "1996-01-31", "1e9"])
         .fails_with_code(1)
-        .stderr_contains("the argument 1e9 lacks a leading '+'");
+        .stderr_contains("the argument '1e9' lacks a leading '+'");
 }
 
 #[test]
@@ -991,6 +1104,37 @@ fn test_relative_weekdays() {
                     result == expected_ts
                 });
         }
+    }
+}
+
+#[test]
+fn test_weekday_items_are_ignored_with_explicit_dates() {
+    for input in [
+        "Monday 2024-06-15",
+        "Mon. 2024-06-15",
+        "Tues 2024-06-15",
+        "Wednes 2024-06-15",
+        "Thur 2024-06-15",
+        "Thurs 2024-06-15",
+        "Monday, 2024-06-15",
+        "next Monday 2024-06-15",
+        "last Monday 2024-06-15",
+        "2 Monday 2024-06-15",
+        "third Monday 2024-06-15",
+        "2024-06-15 Monday",
+        "2024-06-15 Monday,",
+        "2024-06-15 next Monday",
+        "2024-06-15 last Monday",
+        "2024-06-15 2 Monday",
+        "2024-06-15 third Monday",
+    ] {
+        new_ucmd!()
+            .env("LANG", "C")
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .args(&["-d", input, "+%F"])
+            .succeeds()
+            .stdout_is("2024-06-15\n");
     }
 }
 
@@ -2176,6 +2320,10 @@ fn test_date_french_full_sentence() {
 /// The Linux values are GNU date's, the macOS ones follow its locale data.
 #[test]
 #[cfg(any(target_vendor = "apple", all(target_os = "linux", target_env = "gnu")))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_format_locale_date_and_time() {
     #[cfg(target_os = "linux")]
     let cases = [
@@ -2242,6 +2390,10 @@ fn test_date_format_locale_date_and_time_no_pad_large_width() {
 /// values are GNU date's, the macOS ones follow its locale data.
 #[test]
 #[cfg(any(target_vendor = "apple", all(target_os = "linux", target_env = "gnu")))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
 fn test_date_format_locale_ampm_markers() {
     #[cfg(target_os = "linux")]
     let cases = [
@@ -2343,6 +2495,8 @@ fn test_date_negative_fractional_epoch_flooring() {
         ("@-0.25", "+%s", "-1\n"),
         ("@-2.75", "+%s.%N", "-3.250000000\n"),
         ("@-100.5", "+%s", "-101\n"),
+        ("@-0.5", "+%5s", "-0001\n"),
+        ("@-0.5", "+%_5s", "   -1\n"),
         // Positive fractions and whole seconds are unaffected.
         ("@42.9", "+%s", "42\n"),
         ("@-7", "+%s", "-7\n"),
@@ -2417,9 +2571,8 @@ fn test_date_strftime_case_flag_on_alt_ampm() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/coreutils/issues/11658 — GNU date applies flags/widths to `%N` (nanoseconds); uutils ignores/mishandles them."]
 fn test_date_strftime_n_width_and_flags() {
-    // `%_3N` should space-pad nanoseconds to width 3. GNU outputs `0  `; uutils outputs `0`.
+    // `%_3N` should space-pad nanoseconds to width 3. GNU outputs `0  `.
     new_ucmd!()
         .env("LC_ALL", "C")
         .env("TZ", "UTC")
@@ -2429,7 +2582,7 @@ fn test_date_strftime_n_width_and_flags() {
         .succeeds()
         .stdout_is("0  \n");
     // `%-N` (no-padding flag) should still output the full 9-digit default.
-    // GNU: `000000000`; uutils: `0`.
+    // GNU outputs `000000000`.
     new_ucmd!()
         .env("LC_ALL", "C")
         .env("TZ", "UTC")
@@ -2441,18 +2594,40 @@ fn test_date_strftime_n_width_and_flags() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/coreutils/issues/11657 — GNU date treats composite strftime specifiers (%D, %F, %T, ...) as atomic; flags like `-` should not propagate to sub-fields."]
 fn test_date_strftime_flag_on_composite() {
-    // GNU `%-D` keeps `06/15/24` (flag ignored on composite).
-    // uutils applies `-` to inner `%m`, producing `6/15/24`.
-    new_ucmd!()
-        .env("LC_ALL", "C")
-        .env("TZ", "UTC")
-        .arg("-d")
-        .arg("2024-06-15")
-        .arg("+%-D")
-        .succeeds()
-        .stdout_is("06/15/24\n");
+    // GNU treats composite strftime specifiers atomically.
+    for (format, expected) in [
+        ("+%-D", "06/15/24\n"),
+        ("+%-30c", "Sat Jun 15 00:00:00 2024\n"),
+        ("+%#c", "Sat Jun 15 00:00:00 2024\n"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg("2024-06-15")
+            .arg(format)
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+fn test_date_strftime_timezone_flag_precedence() {
+    for (format, expected) in [
+        ("+%_0z", "+0000\n"),
+        ("+%-_z", "   +0\n"),
+        ("+%0-z", "+0\n"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg("2024-06-15")
+            .arg(format)
+            .succeeds()
+            .stdout_is(expected);
+    }
 }
 
 #[test]
@@ -2470,10 +2645,8 @@ fn test_date_strftime_o_modifier() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/parse_datetime/issues/280 — GNU date accepts bare timezone abbreviations (UT, GMT, ...) meaning `now in that TZ`; parse_datetime rejects them."]
 fn test_date_bare_timezone_abbreviation() {
-    // GNU: `date -d ut`, `date -d UT`, `date -d gmt` → current time in UTC.
-    // uutils: "invalid date" error.
+    // GNU and uutils accept bare UT/GMT abbreviations as UTC.
     for input in ["ut", "UT", "gmt", "GMT"] {
         new_ucmd!()
             .env("TZ", "UTC+1")
@@ -2486,10 +2659,9 @@ fn test_date_bare_timezone_abbreviation() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/parse_datetime/issues/279. GNU date silently ignores unrecognized trailing tokens (e.g. `8 j`), but parse_datetime rejects them."]
 fn test_date_ignores_unrecognized_trailing_tokens() {
     // GNU compatibility: trailing unknown word-tokens after a valid number are ignored.
-    // GNU parses `8 j` (number, space, token) as hour 8; our parse_datetime crate errors out.
+    // `8 j` (number, space, token) is parsed as hour 8.
     // The no-space `8j` form is handled directly (see test_date_military_timezone_j_with_time).
     new_ucmd!()
         .env("TZ", "UTC")
@@ -3629,15 +3801,16 @@ fn test_write_error() {
 }
 
 #[test]
-#[ignore = "GNU compat: see uutils/coreutils#14648"]
 fn test_date_allow_missing_year() {
-    new_ucmd!().arg("01.01. 03:00 p.m.").succeeds();
+    new_ucmd!().arg("-d").arg("01.01. 03:00 p.m.").succeeds();
 }
 
 #[test]
-#[ignore = "GNU compat: see uutils/coreutils#14649"]
 fn test_date_allow_spaces_after_month() {
-    new_ucmd!().arg("01.01.    2008 03:00 p.m.").succeeds();
+    new_ucmd!()
+        .arg("-d")
+        .arg("01.01.    2008 03:00 p.m.")
+        .succeeds();
 }
 
 #[test]
@@ -3710,7 +3883,7 @@ fn test_non_utf8_operands_are_octal_escaped() {
         (&[b"+%Y", b"\xf1ao"], "extra operand '\\361ao'"),
         (
             &[b"-d", b"2031-07-23", b"%Y\xd8"],
-            "the argument %Y\\330 lacks a leading '+'",
+            "the argument '%Y\\330' lacks a leading '+'",
         ),
     ];
 
@@ -3725,4 +3898,20 @@ fn test_non_utf8_operands_are_octal_escaped() {
             .code_is(1)
             .stderr_contains(expected);
     }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_date_c_locale_escapes_non_ascii_operands() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let input = OsString::from_vec("−1 day".as_bytes().to_vec());
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .arg("-d")
+        .arg(input)
+        .fails()
+        .stderr_contains("invalid date '\\342\\210\\2221 day'");
 }

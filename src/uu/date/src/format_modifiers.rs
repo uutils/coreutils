@@ -47,6 +47,13 @@ use uucore::translate;
 /// elsewhere.
 const MAX_FORMAT_WIDTH: usize = u16::MAX as usize;
 
+#[derive(Clone, Copy)]
+pub(super) enum Pad {
+    None,
+    Space,
+    Zero,
+}
+
 /// Error type for format modifier operations
 #[derive(Debug)]
 pub enum FormatError {
@@ -238,7 +245,15 @@ fn format_with_modifiers(
                 let formatted = broken_down.to_string_with_config(config, &base_format)?;
 
                 if !parsed.flags.is_empty() || parsed.width.is_some() {
-                    let modified = apply_modifiers(&formatted, &parsed)?;
+                    // Composite conversions are already expanded as a whole;
+                    // timezone conversions need sign-aware width handling.
+                    let modified = if is_composite_specifier(parsed.spec) {
+                        apply_composite_modifiers(&formatted, &parsed)?
+                    } else if parsed.spec.ends_with('z') && !parsed.flags.is_empty() {
+                        apply_timezone_modifiers(&formatted, &parsed)?
+                    } else {
+                        apply_modifiers(&formatted, &parsed)?
+                    };
                     result.push_str(&modified);
                 } else {
                     result.push_str(&formatted);
@@ -256,6 +271,147 @@ fn format_with_modifiers(
     }
 
     Ok(result)
+}
+
+/// Composite strftime conversions are expanded atomically by GNU date. In
+/// particular, `-` and `_` do not alter the padding of the fields inside an
+/// expansion such as `%D` or `%T`; an explicit width applies to the complete
+/// expansion instead.
+fn is_composite_specifier(specifier: &str) -> bool {
+    matches!(
+        specifier,
+        "c" | "D" | "F" | "R" | "r" | "T" | "x" | "X" | "v"
+    )
+}
+
+/// Apply flags and an optional width to the complete composite value rather
+/// than changing the padding of the fields inside it.
+pub fn apply_composite_modifiers(
+    value: &str,
+    parsed: &ParsedSpec<'_>,
+) -> Result<String, FormatError> {
+    let mut pad = Pad::Space;
+    let mut uppercase = false;
+
+    for flag in parsed.flags.chars() {
+        match flag {
+            '-' => pad = Pad::None,
+            '_' => pad = Pad::Space,
+            '0' | '+' => pad = Pad::Zero,
+            '^' => {
+                uppercase = true;
+            }
+            _ => {}
+        }
+    }
+
+    let result = if uppercase {
+        value.to_uppercase()
+    } else {
+        value.to_string()
+    };
+
+    if matches!(pad, Pad::None) {
+        return Ok(result);
+    }
+
+    let Some(width) = parsed.width else {
+        return Ok(result);
+    };
+    if width > MAX_FORMAT_WIDTH {
+        return Err(field_width_too_large(width, parsed.spec));
+    }
+    if width <= result.len() {
+        return Ok(result);
+    }
+
+    let padding = width - result.len();
+    let mut padded_result = try_alloc_padded(result.len(), padding, width, parsed.spec)?;
+    let pad_char = match pad {
+        Pad::Space => ' ',
+        Pad::Zero => '0',
+        Pad::None => unreachable!(),
+    };
+    padded_result.extend(std::iter::repeat_n(pad_char, padding));
+    padded_result.push_str(&result);
+    Ok(padded_result)
+}
+
+/// Remove the zero padding from the hour component of a numeric timezone.
+/// GNU still keeps the minute and second components, if present.
+fn strip_timezone_hour_padding(value: &str) -> String {
+    if !value.starts_with(['+', '-']) {
+        return value.to_string();
+    }
+
+    let (sign, body) = value.split_at(1);
+    if body.chars().all(|c| c == '0') {
+        return format!("{sign}0");
+    }
+
+    // `%z` has a four-digit hour/minute form. `%:::z` may instead contain
+    // only the hour, so both forms are handled here.
+    let (hour, rest) = match body.find(':') {
+        Some(i) => (&body[..i], &body[i..]),
+        None if body.len() >= 4 => (&body[..body.len() - 2], &body[body.len() - 2..]),
+        None => (body, ""),
+    };
+
+    let hour = hour.trim_start_matches('0');
+    let hour = if hour.is_empty() { "0" } else { hour };
+    format!("{sign}{hour}{rest}")
+}
+
+/// Return the natural width of each timezone spelling before modifiers apply.
+fn timezone_default_width(specifier: &str) -> usize {
+    match specifier {
+        "z" => 5,
+        ":z" => 6,
+        "::z" => 9,
+        ":::z" => 3,
+        _ => 0,
+    }
+}
+
+/// Apply modifiers to timezone offsets without separating a sign from its
+/// numeric field or losing the variable-width colon forms.
+fn apply_timezone_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, FormatError> {
+    let mode = parsed
+        .flags
+        .chars()
+        .rfind(|&flag| matches!(flag, '-' | '_' | '0' | '+'));
+
+    let result = if matches!(mode, Some('-' | '_')) {
+        strip_timezone_hour_padding(value)
+    } else {
+        value.to_string()
+    };
+
+    if mode == Some('-') {
+        return Ok(result);
+    }
+
+    let width = parsed
+        .width
+        .unwrap_or_else(|| timezone_default_width(parsed.spec));
+    if width > MAX_FORMAT_WIDTH {
+        return Err(field_width_too_large(width, parsed.spec));
+    }
+    if width <= result.len() {
+        return Ok(result);
+    }
+
+    let padding = width - result.len();
+    let mut padded = try_alloc_padded(result.len(), padding, width, parsed.spec)?;
+    if mode == Some('0') && result.starts_with(['+', '-']) {
+        padded.push_str(&result[..1]);
+        padded.extend(std::iter::repeat_n('0', padding));
+        padded.push_str(&result[1..]);
+    } else {
+        padded.extend(std::iter::repeat_n(' ', padding));
+        padded.push_str(&result);
+    }
+    Ok(padded)
 }
 
 /// Returns true if the specifier produces text output (default pad is space)
@@ -429,6 +585,17 @@ pub fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, F
 
     // If no_pad flag is active, suppress all padding and return
     if no_pad {
+        if specifier.ends_with('N') {
+            if let Some(width) = width {
+                if width > MAX_FORMAT_WIDTH {
+                    return Err(field_width_too_large(width, specifier));
+                }
+                if width < result.len() {
+                    result.truncate(width);
+                }
+            }
+            return Ok(result);
+        }
         return Ok(strip_default_padding(&result));
     }
 
@@ -482,7 +649,13 @@ pub fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, F
         let padding = effective_width - result.len();
         let has_sign = result.starts_with('+') || result.starts_with('-');
 
-        if pad_char == '0' && has_sign {
+        if specifier.ends_with('N') && pad_char == ' ' {
+            // GNU treats `_` on `%N` as a right-padded, zero-stripped value.
+            let mut padded = try_alloc_padded(result.len(), padding, effective_width, specifier)?;
+            padded.push_str(&result);
+            padded.extend(std::iter::repeat_n(' ', padding));
+            result = padded;
+        } else if pad_char == '0' && has_sign {
             // Zero padding: sign first, then zeros (e.g., "-0022")
             let sign = result.chars().next().unwrap();
             let rest = &result[1..];
@@ -506,49 +679,6 @@ pub fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, F
     }
 
     Ok(result)
-}
-
-/// Apply flags and width to the expansion of `%x`, `%X` or `%r` as a whole,
-/// like GNU: the width pads it with spaces (zeros for `0` and `+`, nothing for
-/// `-`) and `^` converts it to uppercase, while the fields inside keep their
-/// padding and `#` changes nothing.
-pub fn apply_composite_modifiers(
-    value: &str,
-    parsed: &ParsedSpec<'_>,
-) -> Result<String, FormatError> {
-    let mut pad_char = Some(' ');
-    let mut uppercase = false;
-    for flag in parsed.flags.chars() {
-        match flag {
-            '-' => pad_char = None,
-            '_' => pad_char = Some(' '),
-            '0' | '+' => pad_char = Some('0'),
-            '^' => uppercase = true,
-            _ => {}
-        }
-    }
-
-    let value = if uppercase {
-        value.to_uppercase()
-    } else {
-        value.to_string()
-    };
-    // `-` drops the padding and with it the width, however large.
-    let Some(pad_char) = pad_char else {
-        return Ok(value);
-    };
-    let width = parsed.width.unwrap_or(0);
-    if width > MAX_FORMAT_WIDTH {
-        return Err(field_width_too_large(width, parsed.spec));
-    }
-    if width <= value.len() {
-        return Ok(value);
-    }
-    let padding = width - value.len();
-    let mut padded = try_alloc_padded(value.len(), padding, width, parsed.spec)?;
-    padded.extend(std::iter::repeat_n(pad_char, padding));
-    padded.push_str(&value);
-    Ok(padded)
 }
 
 /// Allocate a `String` with enough capacity for `current_len + padding`,
