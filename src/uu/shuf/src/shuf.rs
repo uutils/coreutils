@@ -472,9 +472,21 @@ enum WrappedRng {
 
 impl WrappedRng {
     fn choose<T: Copy>(&mut self, vals: &[T]) -> UResult<T> {
+        if vals.is_empty() {
+            return Err(USimpleError::new(
+                1,
+                translate!("shuf-error-no-lines-to-repeat"),
+            ));
+        }
+
         match self {
-            Self::Default(rng) => Ok(*vals.choose(rng).unwrap()),
-            Self::Seed(rng) => Ok(rng.choose_from_slice(vals)),
+            Self::Default(rng) => vals
+                .choose(rng)
+                .copied()
+                .ok_or_else(|| USimpleError::new(1, translate!("shuf-error-no-lines-to-repeat"))),
+            Self::Seed(rng) => rng
+                .choose_from_slice(vals)
+                .ok_or_else(|| USimpleError::new(1, translate!("shuf-error-no-lines-to-repeat"))),
             Self::File(rng) => rng.choose_from_slice(vals),
         }
     }
@@ -488,10 +500,21 @@ impl WrappedRng {
     }
 
     fn choose_from_range(&mut self, range: RangeInclusive<u64>) -> UResult<u64> {
+        self.choose_from_bounds(*range.start(), *range.end())
+    }
+
+    fn choose_from_bounds(&mut self, start: u64, end: u64) -> UResult<u64> {
+        if start > end {
+            return Err(USimpleError::new(
+                1,
+                translate!("shuf-error-no-lines-to-repeat"),
+            ));
+        }
+
         match self {
-            Self::Default(rng) => Ok(rng.random_range(range)),
-            Self::Seed(rng) => Ok(rng.choose_from_range(range)),
-            Self::File(rng) => rng.choose_from_range(range),
+            Self::Default(rng) => Ok(rng.random_range(start..=end)),
+            Self::Seed(rng) => Ok(rng.choose_from_range(start..=end)),
+            Self::File(rng) => rng.choose_from_range(start..=end),
         }
     }
 }
