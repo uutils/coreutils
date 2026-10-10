@@ -59,6 +59,8 @@ use uucore::fs::{
     target_os = "netbsd"
 ))]
 use uucore::fsxattr;
+#[cfg(all(unix, not(target_os = "redox")))]
+use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::set_selinux_security_context;
 use uucore::translate;
@@ -924,13 +926,17 @@ fn is_directory_not_empty_error(err: &io::Error) -> bool {
     err.kind() == io::ErrorKind::DirectoryNotEmpty
 }
 
+/// Fifos, sockets and device nodes are recreated rather than copied.
 #[cfg(unix)]
-fn is_fifo(filetype: fs::FileType) -> bool {
+fn is_special_file(filetype: fs::FileType) -> bool {
     filetype.is_fifo()
+        || filetype.is_socket()
+        || filetype.is_block_device()
+        || filetype.is_char_device()
 }
 
 #[cfg(not(unix))]
-fn is_fifo(_filetype: fs::FileType) -> bool {
+fn is_special_file(_filetype: fs::FileType) -> bool {
     false
 }
 
@@ -983,8 +989,8 @@ fn rename_with_fallback(
             {
                 rename_dir_fallback(from, to, display_manager, verbose)
             }
-        } else if is_fifo(file_type) {
-            rename_fifo_fallback(from, to)
+        } else if is_special_file(file_type) {
+            rename_special_fallback(from, to, &metadata)
         } else {
             #[cfg(unix)]
             {
@@ -1002,15 +1008,115 @@ fn rename_with_fallback(
     })
 }
 
-/// Replace the destination with a new pipe with the same name as the source.
+/// Replace the destination with a new special file like the source.
 #[cfg(unix)]
-fn rename_fifo_fallback(from: &Path, to: &Path) -> io::Result<()> {
-    if to.try_exists()? {
+fn rename_special_fallback(from: &Path, to: &Path, metadata: &fs::Metadata) -> io::Result<()> {
+    copy_special_file(to, metadata)?;
+    fs::remove_file(from)
+}
+
+/// Create the fifo, socket or device node that `metadata` describes at `to`,
+/// with its ownership and permissions.
+///
+/// An entry at `to` is replaced atomically, so it is kept if the node cannot
+/// be created.
+#[cfg(all(unix, not(target_os = "redox")))]
+fn copy_special_file(to: &Path, metadata: &fs::Metadata) -> io::Result<()> {
+    let parent = to
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let name = to.file_name().ok_or(io::ErrorKind::InvalidInput)?;
+    // Follows symlinks in `parent`, as creating the node by path would.
+    let dir = DirFd::open_anchor(parent)?;
+    create_special_file_at(&dir, name, metadata)
+}
+
+/// Create the special file that `metadata` describes as `name` in `dir`, with
+/// its ownership and permissions, replacing an entry already there.
+///
+/// The node gets its ownership and mode inside a new private directory in
+/// `dir` and is then renamed into place. In `dir` itself, whoever else can
+/// write there could link another file over the name between those calls.
+#[cfg(all(unix, not(target_os = "redox")))]
+fn create_special_file_at(
+    dir: &DirFd,
+    name: &std::ffi::OsStr,
+    metadata: &fs::Metadata,
+) -> io::Result<()> {
+    use rustix::fs::renameat;
+    use rustix::process::geteuid;
+    use std::os::unix::fs::MetadataExt;
+
+    let (staging, staging_name) = uucore::fs::create_temp_at(dir, |dir, tmp| {
+        dir.mkdir_at(tmp, 0o700)?;
+        // Whatever the umask, the owner must be able to create entries inside.
+        dir.chmod_at(tmp, 0o700, SymlinkBehavior::NoFollow)
+            .and_then(|()| dir.open_subdir(tmp, SymlinkBehavior::NoFollow))
+            .and_then(|staging| {
+                // Another directory may have been moved to `tmp` since.
+                let stat = staging.metadata()?;
+                if stat.uid() == geteuid().as_raw() && stat.mode() & 0o777 == 0o700 {
+                    Ok(staging)
+                } else {
+                    Err(io::ErrorKind::AlreadyExists.into())
+                }
+            })
+            .inspect_err(|_| {
+                // Removes only an empty directory: the one made above, or at
+                // worst an empty one moved to `tmp` since.
+                let _ = dir.unlink_at(tmp, true);
+            })
+    })?;
+
+    let created = staging
+        .mknod_at(name, metadata.mode(), metadata.rdev())
+        .and_then(|()| {
+            let (uid, gid) = (metadata.uid(), metadata.gid());
+            let node = staging.metadata_at(name, SymlinkBehavior::NoFollow)?;
+            // Ownership is best effort for unprivileged callers. As for
+            // regular files, if it did not take, the node belongs to whoever
+            // ran mv, so setuid and setgid are dropped. The rest of the mode,
+            // which the umask reduced, is restored.
+            let owned = (node.uid(), node.gid()) == (uid, gid)
+                || staging
+                    .chown_at(name, Some(uid), Some(gid), SymlinkBehavior::NoFollow)
+                    .is_ok();
+            let mode = if owned { 0o7777 } else { 0o1777 };
+            staging.chmod_at(name, metadata.mode() & mode, SymlinkBehavior::NoFollow)
+        })
+        .and_then(|()| Ok(renameat(&staging, name, dir, name)?))
+        .inspect_err(|_| {
+            let _ = staging.unlink_at(name, false);
+        });
+    let _ = dir.unlink_at(&staging_name, true);
+    created
+}
+
+/// Without `safe_traversal`, the node is created by path after removing the
+/// destination, as `uucore::fs::replace_link` does on Redox.
+#[cfg(target_os = "redox")]
+fn copy_special_file(to: &Path, metadata: &fs::Metadata) -> io::Result<()> {
+    use nix::sys::stat::{Mode, SFlag, mknod};
+    use std::os::unix::fs::MetadataExt;
+
+    if to.symlink_metadata().is_ok() {
         fs::remove_file(to)?;
     }
-    // rustix::fs::mkfifoat is linux only
-    nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666))?;
-    fs::remove_file(from)
+    let mode = metadata.mode() as nix::libc::mode_t;
+    mknod(
+        to,
+        SFlag::from_bits_truncate(mode & nix::libc::S_IFMT),
+        Mode::from_bits_truncate(mode),
+        metadata.rdev() as nix::libc::dev_t,
+    )?;
+    let (uid, gid) = (metadata.uid(), metadata.gid());
+    let node = to.symlink_metadata()?;
+    // Setuid and setgid are dropped if the ownership did not take.
+    let owned = (node.uid(), node.gid()) == (uid, gid)
+        || unix::fs::lchown(to, Some(uid), Some(gid)).is_ok();
+    let mode = if owned { 0o7777 } else { 0o1777 };
+    fs::set_permissions(to, fs::Permissions::from_mode(metadata.mode() & mode))
 }
 
 #[cfg(not(unix))]
@@ -1018,7 +1124,7 @@ fn rename_fifo_fallback(from: &Path, to: &Path) -> io::Result<()> {
     clippy::unnecessary_wraps,
     reason = "fn sig must match on all platforms"
 )]
-fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
+fn rename_special_fallback(_from: &Path, _to: &Path, _metadata: &fs::Metadata) -> io::Result<()> {
     Ok(())
 }
 
@@ -1365,15 +1471,13 @@ fn copy_file_with_hardlinks_helper(
         return Ok(());
     }
 
-    if from.is_symlink() {
+    let metadata = from.symlink_metadata()?;
+    if metadata.is_symlink() {
         // Copy a symlink file (no-follow).
         // rename_symlink_fallback already preserves ownership and removes the source.
         rename_symlink_fallback(from, to)?;
-    } else if is_fifo(from.symlink_metadata()?.file_type()) {
-        // rustix::fs::mkfifoat is linux only
-        nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666))?;
-        // Preserve ownership (uid/gid) from the source
-        let _ = preserve_ownership(from, to);
+    } else if is_special_file(metadata.file_type()) {
+        copy_special_file(to, &metadata)?;
     } else {
         // Copy a regular file.
         fs::copy(from, to)?;

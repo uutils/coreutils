@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore dirlink
+
 #![allow(clippy::similar_names)]
 
 use std::path::PathBuf;
@@ -112,6 +114,35 @@ fn test_symlink_overwrite_force() {
     ucmd.args(&["--force", "-s", file_b, link]).succeeds();
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file_b);
+}
+
+/// Replacing a link needs write and search permission on its directory, like
+/// creating one, not read permission.
+#[test]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "netbsd"
+))]
+fn test_symlink_overwrite_force_in_write_search_only_dir() {
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::PermissionsExt;
+
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.symlink_file("old", "dir/link");
+    set_permissions(at.plus("dir"), Permissions::from_mode(0o300)).unwrap();
+
+    let result = ucmd.args(&["-sf", "new", "dir/link"]).run();
+
+    set_permissions(at.plus("dir"), Permissions::from_mode(0o755)).unwrap();
+    result.success();
+    assert_eq!(at.resolve_link("dir/link"), "new");
 }
 
 /// A forced replace must be atomic, so a concurrent creator always loses.
