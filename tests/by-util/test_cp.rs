@@ -4349,9 +4349,11 @@ fn test_cp_dir_vs_file() {
         ));
 }
 
-#[test]
+#[rstest]
+#[case::recursive("-r")]
+#[case::no_target_dir("-rT")]
 #[cfg(unix)]
-fn test_cp_dir_vs_dangling_symlink() {
+fn test_cp_dir_vs_dangling_symlink(#[case] flags: &str) {
     // A symlink that leads nowhere is not a directory to copy into: following
     // it would create its target.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -4359,7 +4361,7 @@ fn test_cp_dir_vs_dangling_symlink() {
     at.touch("src/file");
     at.symlink_file("nowhere", "dangling");
 
-    ucmd.args(&["-r", "src", "dangling"])
+    ucmd.args(&[flags, "src", "dangling"])
         .fails()
         .stderr_only("cp: cannot overwrite non-directory 'dangling' with directory 'src'\n");
     assert!(!at.dir_exists("nowhere"));
@@ -7297,6 +7299,79 @@ fn test_cp_recursive_dest_subdir_symlink_not_followed() {
     );
 }
 
+/// With `-T` the target is the destination itself, so a target that is a
+/// symlink to a directory is a non-directory and must not be written through.
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
+#[rstest]
+#[case::dir("src")]
+#[case::dot("src/.")]
+#[case::dot_dot("src/sub/..")]
+#[cfg(unix)]
+fn test_cp_recursive_no_target_dir_refuses_symlink_target(#[case] src: &str) {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("src/sub");
+    at.write("src/f", "SOURCE");
+    at.mkdir("real");
+    at.write("real/f", "REAL");
+    at.symlink_dir("real", "dst");
+
+    scene
+        .ucmd()
+        .args(&["-rT", src, "dst"])
+        .fails()
+        .stderr_only(format!(
+            "cp: cannot overwrite non-directory 'dst' with directory '{src}'\n"
+        ));
+    assert_eq!(at.read("real/f"), "REAL");
+    assert!(!at.dir_exists("real/sub"));
+}
+
+/// A trailing slash asks for what the symlink resolves to, as in GNU.
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
+#[test]
+#[cfg(unix)]
+fn test_cp_recursive_no_target_dir_follows_trailing_slash() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("src");
+    at.write("src/f", "SOURCE");
+    at.mkdir("real");
+    at.symlink_dir("real", "dst");
+
+    scene
+        .ucmd()
+        .args(&["-rT", "src", "dst/"])
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("real/f"), "SOURCE");
+}
+
+/// Without `-T`, a source ending in `.` or `..` copies into what a symlinked
+/// target resolves to, as in GNU.
+#[uutests::wasi_ignore(SymlinkHardlinkCaps)]
+#[rstest]
+#[case::dot("src/.")]
+#[case::dot_dot("src/sub/..")]
+#[cfg(unix)]
+fn test_cp_recursive_dot_source_into_symlink_target(#[case] src: &str) {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("src/sub");
+    at.write("src/f", "SOURCE");
+    at.mkdir("real");
+    at.symlink_dir("real", "dst");
+
+    scene
+        .ucmd()
+        .args(&["-r", src, "dst"])
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("real/f"), "SOURCE");
+    assert!(at.dir_exists("real/sub"));
+    assert!(at.is_symlink("dst"));
+}
+
 /// A symlinked directory named as the *target* is still a legitimate
 /// destination -- only entries discovered inside the tree are refused.
 #[uutests::wasi_ignore(SymlinkHardlinkCaps)]
@@ -8567,11 +8642,11 @@ fn test_cp_recurse_verbose_output() {
     let file = "file";
     #[cfg(not(windows))]
     let output = format!(
-        "'{source_dir}' -> '{target_dir}/'\n'{source_dir}/{file}' -> '{target_dir}/{file}'\n"
+        "'{source_dir}' -> '{target_dir}'\n'{source_dir}/{file}' -> '{target_dir}/{file}'\n"
     );
     #[cfg(windows)]
     let output = format!(
-        "'{source_dir}' -> '{target_dir}\\'\n'{source_dir}\\{file}' -> '{target_dir}\\{file}'\n"
+        "'{source_dir}' -> '{target_dir}'\n'{source_dir}\\{file}' -> '{target_dir}\\{file}'\n"
     );
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -8596,11 +8671,11 @@ fn test_cp_recurse_verbose_output_with_symlink() {
     let symlink = "symlink";
     #[cfg(not(windows))]
     let output = format!(
-        "'{source_dir}' -> '{target_dir}/'\n'{source_dir}/{symlink}' -> '{target_dir}/{symlink}'\n"
+        "'{source_dir}' -> '{target_dir}'\n'{source_dir}/{symlink}' -> '{target_dir}/{symlink}'\n"
     );
     #[cfg(windows)]
     let output = format!(
-        "'{source_dir}' -> '{target_dir}\\'\n'{source_dir}\\{symlink}' -> '{target_dir}\\{symlink}'\n"
+        "'{source_dir}' -> '{target_dir}'\n'{source_dir}\\{symlink}' -> '{target_dir}\\{symlink}'\n"
     );
     let (at, mut ucmd) = at_and_ucmd!();
 
