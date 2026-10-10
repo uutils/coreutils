@@ -17,7 +17,7 @@ use std::path::Path;
 /// True if the error is `ENOTSUP` / `EOPNOTSUPP` (same errno on Linux,
 /// distinct on the BSDs).
 #[cfg(unix)]
-fn is_xattr_unsupported(err: &std::io::Error) -> bool {
+pub fn is_xattr_unsupported(err: &std::io::Error) -> bool {
     matches!(
         err.raw_os_error(),
         Some(e) if e == libc::ENOTSUP || e == libc::EOPNOTSUPP
@@ -25,7 +25,7 @@ fn is_xattr_unsupported(err: &std::io::Error) -> bool {
 }
 
 #[cfg(not(unix))]
-fn is_xattr_unsupported(_err: &std::io::Error) -> bool {
+pub fn is_xattr_unsupported(_err: &std::io::Error) -> bool {
     false
 }
 
