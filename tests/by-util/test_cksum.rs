@@ -655,6 +655,24 @@ fn test_check_sha2_tagged_missing_hint() {
 }
 
 #[test]
+fn test_check_tagged_leading_whitespace() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    at.touch("c");
+
+    let digest = "d41d8cd98f00b204e9800998ecf8427e";
+
+    ucmd.arg("-c")
+        .pipe_in(format!(
+            " \tMD5 (a) = {digest}\n\x0cMD5 (b) = {digest}\n\rMD5 (c) = {digest}\n"
+        ))
+        .succeeds()
+        .stdout_is("a: OK\n")
+        .stderr_contains("WARNING: 2 lines are improperly formatted");
+}
+
+#[test]
 fn test_check_tagged_missing_algo() {
     // When checking tagged lines, if the algorithm is missing, print an "improperly
     // formatted" message rather than panic.
