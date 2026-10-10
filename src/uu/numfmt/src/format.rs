@@ -616,7 +616,11 @@ fn consider_suffix(
 
     // check if rounding pushed us into the next base
     if v.abs() >= bases[1] {
-        Ok((v / bases[1], Some((suffixes[i], with_i))))
+        // Rounding past the largest suffix leaves no suffix to promote to.
+        let Some(&suffix) = suffixes.get(i) else {
+            return Err(translate!("numfmt-error-number-too-big"));
+        };
+        Ok((v / bases[1], Some((suffix, with_i))))
     } else {
         Ok((v, Some((suffixes[i - 1], with_i))))
     }
