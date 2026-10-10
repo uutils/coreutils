@@ -224,7 +224,16 @@ impl Entry {
             }
         }
 
-        let local_to_target = context.target.join(descendant);
+        // `join("")` would append a separator, and the symlink check in `copy_direntry`
+        // would then look through a symlinked target. Keep the separator for `src/.`
+        // without `-T`, which copies into whatever the target resolves to.
+        let local_to_target = if descendant.as_os_str().is_empty()
+            && (no_target_dir || !ends_with_curdir(context.root))
+        {
+            context.target.to_path_buf()
+        } else {
+            context.target.join(descendant)
+        };
         Ok(Self {
             source_absolute,
             source_relative,
