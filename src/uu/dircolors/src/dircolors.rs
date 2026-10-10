@@ -176,7 +176,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let result = if *file_arg == "-" {
                 let fin = BufReader::new(std::io::stdin());
                 // For example, for echo "owt 40;33"|dircolors -b -
-                parse(fin.lines().map_while(Result::ok), &out_format, "-")
+                parse(config_lines(fin), &out_format, "-")
             } else {
                 let path = Path::new(&file_arg);
                 if path.is_dir() {
@@ -188,11 +188,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let file = File::open(path)
                     .map_err(|e| USimpleError::new(1, format!("{}: {e}", path.maybe_quote())))?;
                 let fin = BufReader::new(file);
-                parse(
-                    fin.lines().map_while(Result::ok),
-                    &out_format,
-                    &path.to_string_lossy(),
-                )
+                parse(config_lines(fin), &out_format, &path.to_string_lossy())
             };
 
             let string = result.map_err(|s| USimpleError::new(1, s))?;
@@ -311,6 +307,18 @@ enum ParseState {
     Matched,
     Continue,
     Pass,
+}
+
+/// Iterate over the lines of a config file.
+/// GNU dircolors is byte-oriented; invalid UTF-8 maps to an empty line,
+/// which the parser skips but still counts — line numbers stay aligned.
+fn config_lines(fin: impl BufRead) -> impl Iterator<Item = String> {
+    fin.split(b'\n').map_while(Result::ok).map(|mut line| {
+        if line.last() == Some(&b'\r') {
+            line.pop();
+        }
+        String::from_utf8(line).unwrap_or_default()
+    })
 }
 
 fn parse<T>(user_input: T, fmt: &OutputFmt, fp: &str) -> Result<String, String>
