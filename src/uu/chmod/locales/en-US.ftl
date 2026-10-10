@@ -12,6 +12,7 @@ chmod-error-preserve-root = it is dangerous to operate recursively on {$file}
 chmod-error-preserve-root-same-as = it is dangerous to operate recursively on {$file} (same as '/')
   chmod: use --no-preserve-root to override this failsafe
 chmod-error-permission-denied = cannot access {$file}: Permission denied
+chmod-error-cannot-read-directory = cannot read directory {$file}: {$err}
 chmod-error-new-permissions = {$file}: new permissions are {$actual}, not {$expected}
 chmod-error-changing-permissions = changing permissions of {$file}: {$err}
 chmod-error-missing-operand = missing operand
@@ -32,3 +33,4 @@ chmod-verbose-neither-changed = neither symbolic link {$file} nor referent has b
 chmod-verbose-mode-retained = mode of {$file} retained as {$mode_octal} ({$mode_display})
 chmod-verbose-failed-change = failed to change mode of file {$file} from {$old_mode} ({$old_mode_display}) to {$new_mode} ({$new_mode_display})
 chmod-verbose-mode-changed = mode of {$file} changed from {$old_mode} ({$old_mode_display}) to {$new_mode} ({$new_mode_display})
+chmod-verbose-could-not-be-accessed = {$file} could not be accessed
