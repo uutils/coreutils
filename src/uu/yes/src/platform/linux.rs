@@ -35,7 +35,7 @@ pub fn exec(bytes: &[u8]) -> io::Result<()> {
     }
 
     // fallback
-    let mut stdout = RawWriter(stdout);
+    let mut stdout = RawWriter::from_borrowed_fd(stdout);
     loop {
         stdout.write_all(bytes)?;
     }
