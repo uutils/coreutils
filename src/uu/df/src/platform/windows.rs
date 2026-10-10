@@ -5,17 +5,13 @@
 
 // spell-checker:ignore SUBST
 
-//! Windows backend of `df`: volume usage probes, path resolution and the `-i` notice.
+//! Windows backend of `df`: volume usage probes and path resolution.
 
 use std::ffi::OsString;
 use std::path::Path;
 
-use clap::ArgMatches;
-use uucore::error::UResult;
 use uucore::fsext::{FsUsage, MountInfo};
-use uucore::translate;
 
-use crate::OPT_INODES;
 use crate::filesystem::{Filesystem, FsError};
 
 /// Windows has no call to flush every filesystem for `--sync`.
@@ -63,16 +59,4 @@ where
         MountInfo::from_mount_dir(root.into_os_string())
     };
     Filesystem::new(mount_info, Some(file)).ok_or(FsError::MountMissing)
-}
-
-/// `-i` is not supported: say so and stop successfully.
-pub(crate) fn maybe_unsupported_options(matches: &ArgMatches) -> Option<UResult<()>> {
-    if matches.get_flag(OPT_INODES) {
-        println!(
-            "{}",
-            translate!("df-error-inodes-not-supported-windows", "program" => "df")
-        );
-        return Some(Ok(()));
-    }
-    None
 }
