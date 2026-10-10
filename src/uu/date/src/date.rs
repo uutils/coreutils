@@ -89,6 +89,64 @@ const OPT_REFERENCE: &str = "reference";
 const OPT_UNIVERSAL: &str = "universal";
 const OPT_UNIVERSAL_2: &str = "utc";
 
+// GNU treats `-I` followed by a space as a flag and the next word as a format operand. Clap would
+// consume that word as the optional value, so translate attached `-I<fmt>` forms, including short
+// option groups such as `-uIhours`, to `--iso-8601=<fmt>` and let Clap handle bare `-I`. A preceding
+// value-taking short option owns the rest of the group, so stop before its attached value.
+fn normalize_iso_8601_args(args: impl uucore::Args) -> impl Iterator<Item = OsString> {
+    args.scan(false, |options_ended, arg| {
+        if *options_ended {
+            return Some(vec![arg]);
+        }
+
+        let Some(arg_str) = arg.to_str() else {
+            return Some(vec![arg]);
+        };
+
+        if arg_str == "--" {
+            *options_ended = true;
+            return Some(vec![arg]);
+        }
+
+        let Some(iso_index) = arg_str
+            .strip_prefix('-')
+            .filter(|arg| !arg.starts_with('-'))
+            .and_then(|arg| {
+                let bytes = arg.as_bytes();
+                let mut index = 0;
+                while let Some(&byte) = bytes.get(index) {
+                    match byte {
+                        b'I' => return Some(index),
+                        b'd' | b'f' | b'r' | b's' => return None,
+                        _ => index += 1,
+                    }
+                }
+                None
+            })
+        else {
+            return Some(vec![arg]);
+        };
+
+        let prefix = &arg_str[..=iso_index];
+        let value = &arg_str[iso_index + 2..];
+        let mut normalized = Vec::with_capacity(2);
+        if prefix.len() > 1 {
+            normalized.push(OsString::from(prefix));
+        }
+        if value.is_empty() && prefix.len() == 1 {
+            normalized.push(arg);
+        } else if value.is_empty() {
+            normalized.push(OsString::from("-I"));
+        } else {
+            let value = value.strip_prefix('=').unwrap_or(value);
+            normalized.push(OsString::from(format!("--{OPT_ISO_8601}={value}")));
+        }
+
+        Some(normalized)
+    })
+    .flatten()
+}
+
 #[derive(Debug, thiserror::Error)]
 enum DateError {
     #[error("{}", translate!("date-error-write", "error" => strip_errno(.0)))]
@@ -328,7 +386,8 @@ fn parse_military_timezone_with_offset(s: &str) -> Option<(i32, DayDelta)> {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let matches =
+        uucore::clap_localization::handle_clap_result(uu_app(), normalize_iso_8601_args(args))?;
 
     let date_source = if let Some(date_os) = matches
         .get_many::<OsString>(OPT_DATE)
@@ -368,7 +427,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let arg = operand_for_error(fmt);
             // if an optional Format String was found but the user has not provided an input date
             // GNU prints an invalid date Error
-            if !matches!(date_source, DateSource::Human(_)) {
+            if matches!(date_source, DateSource::Now) {
                 return Err(Box::new(DateError::InvalidDate { date: arg }));
             }
             // If the user did provide an input date with the --date flag and the Format String is
@@ -673,8 +732,9 @@ pub fn uu_app() -> Command {
                     DATE, HOURS, MINUTES, SECONDS, NS,
                 ]))
                 .num_args(0..=1)
+                .require_equals(true)
                 .default_missing_value(OPT_DATE)
-                .action(ArgAction::Append)
+                .overrides_with(OPT_ISO_8601)
                 .help(translate!("date-help-iso-8601")),
         )
         .arg(

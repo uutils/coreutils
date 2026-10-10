@@ -355,6 +355,8 @@ fn test_date_rfc_8601_hour() {
             .succeeds()
             .stdout_matches(&re);
     }
+
+    new_ucmd!().arg("-uIhours").succeeds().stdout_matches(&re);
 }
 
 #[test]
@@ -471,6 +473,22 @@ fn test_date_rejects_multiple_output_formats() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("date: multiple output formats specified\n");
+}
+
+#[rstest]
+#[case::format_with_plus("+hours", "date: multiple output formats specified\n")]
+#[case::format_without_plus("hours", "lacks a leading '+'")]
+fn test_date_rejects_iso_format_with_positional_format(
+    #[case] format: &str,
+    #[case] expected_stderr: &str,
+) {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .args(&["-r", ".", "-I", format])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains(expected_stderr);
 }
 
 #[test]
@@ -939,6 +957,22 @@ fn test_date_for_file_mtime() {
 
     ucmd.arg("--reference")
         .arg(reference_file)
+        .arg("+%s")
+        .succeeds()
+        .stdout_only("1234\n");
+}
+
+#[test]
+fn test_date_reference_attached_value_containing_iso_flag() {
+    use std::time::{Duration, UNIX_EPOCH};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let reference_file = "Ifile";
+    let f = at.make_file(reference_file);
+    f.set_modified(UNIX_EPOCH + Duration::from_secs(1234))
+        .unwrap();
+
+    ucmd.arg("-rIfile")
         .arg("+%s")
         .succeeds()
         .stdout_only("1234\n");
