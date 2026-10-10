@@ -817,19 +817,15 @@ mod tests {
         use std::io::Error;
 
         // ENOSPC and EPIPE (Linux); same values on other Unix targets we test.
-        for raw in [28, 32] {
+        for (raw, expected) in [
+            (28, "Error flushing stdout: No space left on device\n"),
+            (32, "Error flushing stdout: Broken pipe\n"),
+        ] {
             let err = Error::from_raw_os_error(raw);
             let mut buf = Vec::new();
             report_stdout_flush_error_to(&mut buf, &err);
             let line = String::from_utf8(buf).unwrap();
-            assert!(
-                line.starts_with("Error flushing stdout: "),
-                "unexpected line: {line}"
-            );
-            assert!(
-                !line.contains("os error"),
-                "line must not contain os error: {line}"
-            );
+            assert_eq!(line, expected);
         }
     }
 }
