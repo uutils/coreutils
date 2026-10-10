@@ -1,4 +1,4 @@
-printf-about = Print output based off of the format string and proceeding arguments.
+printf-about = Print output based off of the format string and following arguments.
 printf-usage = printf FORMAT [ARGUMENT]...
   printf OPTION
 printf-after-help = basic anonymous string templating:
@@ -7,7 +7,7 @@ printf-after-help = basic anonymous string templating:
   output prints escaped literals in the format string as character literals
   output replaces anonymous fields with the next unused argument, formatted according to the field.
 
-  Prints the , replacing escaped character sequences with character literals
+  Prints the FORMAT string, replacing escaped character sequences with character literals
   and substitution field sequences with passed arguments
 
   literally, with the exception of the below
@@ -20,19 +20,19 @@ printf-after-help = basic anonymous string templating:
 
     - \" double quote
     - \\ backslash
-    - \\a alert (BEL)
-    - \\b backspace
-    - \\c End-of-Input
-    - \\e escape
-    - \\f form feed
-    - \\n new line
-    - \\r carriage return
-    - \\t horizontal tab
-    - \\v vertical tab
-    - \\NNN byte with value expressed in octal value NNN (1 to 3 digits) values greater than 256 will be treated
-    - \\xHH byte with value expressed in hexadecimal value NN (1 to 2 digits)
-    - \\uHHHH Unicode (IEC 10646) character with value expressed in hexadecimal value HHHH (4 digits)
-    - \\uHHHH Unicode character with value expressed in hexadecimal value HHHH (8 digits)
+    - \a alert (BEL)
+    - \b backspace
+    - \c End-of-Input
+    - \e escape
+    - \f form feed
+    - \n new line
+    - \r carriage return
+    - \t horizontal tab
+    - \v vertical tab
+    - \NNN byte with value expressed in octal value NNN (1 to 3 digits) values greater than 256 will be treated
+    - \xHH byte with value expressed in hexadecimal value HH (1 to 2 digits)
+    - \uHHHH Unicode (IEC 10646) character with value expressed in hexadecimal value HHHH (4 digits)
+    - \UHHHHHHHH Unicode character with value expressed in hexadecimal value HHHHHHHH (8 digits)
     - %% a single %
 
   SUBSTITUTIONS:
@@ -78,7 +78,7 @@ printf-after-help = basic anonymous string templating:
 
   printf '%4c' q
 
-  It has a first parameter of 4 and no second parameter and will result in ' q'
+  It has a first parameter of 4 and no second parameter and will result in '   q'
 
   The first parameter of a field is the minimum width to pad the output to
   if the output is less than this absolute value of this width,
@@ -111,13 +111,13 @@ printf-after-help = basic anonymous string templating:
   Passing more arguments than are in the format string will cause the format string to be
   repeated for the remaining substitutions
 
-  printf 'it is %i F in %s \n' 22 Portland 25 Boston 27 New York
+  printf 'it is %i F in %s \n' 22 Portland 25 Boston 27 'New York'
 
   will print
 
       it is 22 F in Portland
       it is 25 F in Boston
-      it is 27 F in Boston
+      it is 27 F in New York
 
   If a format string is printed but there are less arguments remaining
   than there are substitution fields, substitution fields without
@@ -139,12 +139,12 @@ printf-after-help = basic anonymous string templating:
 
   - %b: escaped string - the string will be checked for any escaped literals from
   the escaped literal list above, and translate them to literal characters.
-  e.g. \\n will be transformed into a newline character.
+  e.g. \n will be transformed into a newline character.
   One special rule about %b mode is that octal literals are interpreted differently.
-  In arguments passed by %b, pass octal-interpreted literals must be in the form of \\0NNN
-  instead of \\NNN. (Although, for legacy reasons, octal literals in the form of \\NNN will
+  In arguments passed by %b, octal-interpreted literals must be in the form of \0NNN
+  instead of \NNN. (Although, for legacy reasons, octal literals in the form of \NNN will
   still be interpreted and not throw a warning, you will have problems if you use this for a
-  literal whose code begins with zero, as it will be viewed as in \\0NNN form.)
+  literal whose code begins with zero, as it will be viewed as in \0NNN form.)
 
   - %q: escaped string - the string in a format that can be reused as input by most shells.
   Non-printable characters are escaped with the POSIX proposed ‘$''’ syntax,
@@ -171,12 +171,12 @@ printf-after-help = basic anonymous string templating:
   FLOATING POINT SUBSTITUTIONS:
 
   All floating point fields have a 'max decimal places / max significant digits' parameter
-  %.10f means a decimal floating point with 7 decimal places past 0
+  %.10f means a decimal floating point with 10 decimal places past 0
   %.10e means a scientific notation number with 10 significant digits
   %.10g means the same behavior for decimal and Sci. Note, respectively, and provides the shortest
   of each's output.
 
-  Like with GNU coreutils, the value after the decimal point is these outputs is parsed as a
+  Like with GNU coreutils, the value after the decimal point in these outputs is parsed as a
   double first before being rendered to text. For both implementations do not expect meaningful
   precision past the 18th decimal place. When using a number of decimal places that is 18 or
   higher, you can expect variation in output between GNU coreutils printf and this printf at the
@@ -188,7 +188,7 @@ printf-after-help = basic anonymous string templating:
 
   - %e or %E: floating point value presented in scientific notation
   7 significant digits by default.
-  %E means use to use uppercase E for the mantissa.
+  %E means to use uppercase E for the mantissa.
 
   - %g or %G: floating point value presented in the shortest of decimal and scientific notation
   behaves differently from %f and %E, please see posix printf spec for full details,
@@ -210,18 +210,18 @@ printf-after-help = basic anonymous string templating:
   The 1st parameter always indicates the minimum width of output, it is useful for creating
   columnar output. Any output that would be less than this minimum width is padded with
   leading spaces
-  The 2nd parameter is proceeded by a dot.
+  The 2nd parameter is preceded by a dot.
   You do not have to use parameters
 
   SPECIAL FORMS OF INPUT:
 
   For numeric input, the following additional forms of input are accepted besides decimal:
 
-  Octal (only with integer): if the argument begins with a 0 the proceeding characters
+  Octal (only with integer): if the argument begins with a 0 the following characters
   will be interpreted as octal (base 8) for integer fields
 
-  Hexadecimal: if the argument begins with 0x the proceeding characters will be interpreted
-  will be interpreted as hex (base 16) for any numeric fields
+  Hexadecimal: if the argument begins with 0x the following characters will be interpreted
+  as hex (base 16) for any numeric fields
   for float fields, hexadecimal input results in a precision
   limit (in converting input past the decimal point) of 10^-15
 
