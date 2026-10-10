@@ -241,6 +241,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::UNBUFFERED)
                 .short('u')
+                .hide(true)
                 .help(translate!("tr-help-unbuffered"))
                 .action(ArgAction::SetTrue),
         )
