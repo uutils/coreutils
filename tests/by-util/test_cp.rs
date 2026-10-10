@@ -773,6 +773,182 @@ fn test_cp_arg_update_all_then_none() {
     assert_eq!(at.read(new), "new content\n");
 }
 
+#[rstest]
+#[case::preserve(&["-u", "-p"])]
+#[case::attributes_only(&["-u", "-p", "--attributes-only"])]
+#[case::backup(&["--update=older", "--backup"])]
+#[case::remove_destination(&["--update=older", "--remove-destination"])]
+#[case::link(&["-l", "-u"])]
+#[case::symbolic_link(&["-s", "-u"])]
+#[case::update_none_attributes_only(&["--update=none", "-p", "--attributes-only"])]
+#[cfg(unix)]
+fn test_cp_update_leaves_skipped_destination_untouched(#[case] args: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source_time = std::time::UNIX_EPOCH + Duration::from_secs(1_000_000_000);
+    let dest_time = source_time + Duration::from_secs(3600);
+
+    let mut source = at.make_file("source");
+    source.write_all(b"new contents").unwrap();
+    source.set_modified(source_time).unwrap();
+    at.set_mode("source", 0o600);
+    let mut dest = at.make_file("destination");
+    dest.write_all(b"old contents").unwrap();
+    dest.set_modified(dest_time).unwrap();
+    at.set_mode("destination", 0o644);
+
+    ucmd.args(args)
+        .args(&["source", "destination"])
+        .succeeds()
+        .no_output();
+
+    let metadata = at.metadata("destination");
+    assert_eq!(at.read("destination"), "old contents");
+    assert_eq!(metadata.permissions().mode() & 0o777, 0o644);
+    assert_eq!(metadata.modified().unwrap(), dest_time);
+    assert!(!at.file_exists("destination~"));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_update_older_keeps_newer_dangling_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.relative_symlink_file("target", "source");
+    // Created second, so the destination link is not older than the source.
+    at.relative_symlink_file("nowhere", "destination");
+
+    ucmd.args(&["-P", "--update=older", "source", "destination"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.resolve_link("destination"), "nowhere");
+}
+
+#[test]
+fn test_cp_update_older_interactive_prompts_before_removing_destination() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut dest = at.make_file("destination");
+    dest.write_all(b"old contents").unwrap();
+    dest.set_modified(std::time::UNIX_EPOCH).unwrap();
+    at.write("source", "new contents");
+
+    ucmd.args(&[
+        "--update=older",
+        "-i",
+        "--remove-destination",
+        "source",
+        "destination",
+    ])
+    .pipe_in("n\n")
+    .fails()
+    .stderr_is("cp: overwrite 'destination'? ");
+
+    assert_eq!(at.read("destination"), "old contents");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_update_older_remove_destination_replaces_older_link_to_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("source", "soft");
+    // The early `--remove-destination` handling removes the link before the
+    // age check, which must then copy rather than fail.
+    let mut source = at.make_file("source");
+    source.write_all(b"contents").unwrap();
+    source
+        .set_modified(std::time::SystemTime::now() + Duration::from_secs(3600))
+        .unwrap();
+
+    ucmd.args(&["--update=older", "--remove-destination", "source", "soft"])
+        .succeeds()
+        .no_output();
+
+    assert!(!at.is_symlink("soft"));
+    assert_eq!(at.read("soft"), "contents");
+}
+
+#[test]
+fn test_cp_update_older_missing_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("destination");
+    ucmd.args(&["--update=older", "missing", "destination"])
+        .fails()
+        .stderr_contains("cannot stat 'missing'");
+}
+
+#[test]
+fn test_cp_update_older_skipped_destination_is_not_just_created() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("dest");
+    let mut older = at.make_file("a/f");
+    older.write_all(b"older").unwrap();
+    older.set_modified(std::time::UNIX_EPOCH).unwrap();
+    let mut dest = at.make_file("dest/f");
+    dest.write_all(b"destination").unwrap();
+    dest.set_modified(std::time::UNIX_EPOCH + Duration::from_secs(1_000_000_000))
+        .unwrap();
+    at.write("b/f", "newer");
+
+    // Skipping a/f leaves dest/f as it was, so b/f may still replace it.
+    ucmd.args(&["--update=older", "a/f", "b/f", "dest"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("dest/f"), "newer");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_cp_preserve_links_update_older_keeps_destination_shared_by_links() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("dest");
+    let mut source = at.make_file("a/f");
+    source.write_all(b"source").unwrap();
+    source.set_modified(std::time::UNIX_EPOCH).unwrap();
+    at.hard_link("a/f", "b/f");
+    at.write("dest/f", "destination");
+
+    // Both sources are older than `dest/f`, so neither replaces it.
+    ucmd.args(&["-u", "--preserve=links", "a/f", "b/f", "dest"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("dest/f"), "destination");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_cp_preserve_links_update_older_links_to_skipped_destination() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source_time = std::time::UNIX_EPOCH + Duration::from_secs(1_000_000_000);
+    let dest_time = source_time + Duration::from_secs(3600);
+    at.mkdir("src");
+    at.make_file("src/f").set_modified(source_time).unwrap();
+    at.hard_link("src/f", "src/g");
+    at.mkdir("dest");
+    at.make_file("dest/f").set_modified(dest_time).unwrap();
+    at.make_file("dest/g").set_modified(dest_time).unwrap();
+
+    // No prompt either: the second name is linked, as GNU does.
+    ucmd.args(&[
+        "-i",
+        "--update=older",
+        "--preserve=links",
+        "src/f",
+        "src/g",
+        "dest",
+    ])
+    .succeeds()
+    .no_output();
+
+    let metadata = at.metadata("dest/f");
+    assert_eq!(metadata.ino(), at.metadata("dest/g").ino());
+    assert_eq!(metadata.modified().unwrap(), dest_time);
+}
+
 #[test]
 fn test_cp_arg_interactive() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -8422,6 +8598,20 @@ fn test_cp_update_older_interactive_prompt_no() {
         .stderr_to_stdout()
         .fails()
         .stdout_is("cp: overwrite 'old'? ");
+}
+
+#[test]
+fn test_cp_update_older_attributes_only_interactive_prompt_no() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.make_file("old")
+        .set_modified(std::time::UNIX_EPOCH)
+        .unwrap();
+    at.touch("new");
+
+    ucmd.args(&["-i", "--attributes-only", "--update=older", "new", "old"])
+        .pipe_in("N\n")
+        .fails()
+        .stderr_is("cp: overwrite 'old'? ");
 }
 
 #[test]

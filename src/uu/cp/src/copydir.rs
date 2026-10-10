@@ -299,7 +299,7 @@ fn copy_direntry(
             false,
         )
     {
-        // A file left alone by --no-clobber, --update=none or a declined prompt
+        // A file left alone by --no-clobber, --update or a declined prompt
         // does not stop the traversal; only a declined prompt is a failure.
         if let CpError::Skipped(exit_with_error) = err {
             if exit_with_error {
