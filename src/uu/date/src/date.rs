@@ -4,8 +4,9 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz unparseable
-// spell-checker:ignore ohos OHOS tzdata tzdb tzif zoneinfo euctw nonrelative wednes
+// spell-checker:ignore ohos OHOS tzdata tzdb tzif zoneinfo euctw nonrelative wednes Ihours
 
+mod date_names;
 mod format_modifiers;
 mod locale;
 
@@ -1655,9 +1656,7 @@ fn rewrite_european_date_token(token: &str) -> Option<String> {
         _ => return None,
     };
 
-    let day_number = day.parse::<u16>().ok()?;
-    let month_number = month.parse::<u16>().ok()?;
-    if !(1..=31).contains(&day_number) || !(1..=12).contains(&month_number) {
+    if !is_calendar_day(day) || !is_calendar_month(month) {
         return None;
     }
 
@@ -1716,43 +1715,6 @@ fn normalize_european_dates(input: &str) -> Option<String> {
     time_rewritten.or(Some(rewritten))
 }
 
-fn is_weekday_name(token: &str) -> bool {
-    // GNU documents these forms in its "Day of week items" section:
-    // https://www.gnu.org/software/coreutils/manual/html_node/Day-of-week-items.html
-    // Full names, three-letter abbreviations with an optional period, and the
-    // special `tues`, `wednes`, `thur`, and `thurs` forms are accepted. Single-
-    // letter forms are intentionally excluded because they are ambiguous with
-    // other syntax.
-    matches!(
-        token.to_ascii_lowercase().as_str(),
-        "monday"
-            | "mon"
-            | "mon."
-            | "tuesday"
-            | "tue"
-            | "tue."
-            | "tues"
-            | "wednesday"
-            | "wed"
-            | "wed."
-            | "wednes"
-            | "thursday"
-            | "thu"
-            | "thu."
-            | "thur"
-            | "thurs"
-            | "friday"
-            | "fri"
-            | "fri."
-            | "saturday"
-            | "sat"
-            | "sat."
-            | "sunday"
-            | "sun"
-            | "sun."
-    )
-}
-
 fn looks_like_explicit_calendar_date(input: &str) -> bool {
     let Some(token) = input.split_whitespace().next() else {
         return false;
@@ -1769,26 +1731,42 @@ fn looks_like_explicit_calendar_date(input: &str) -> bool {
         || (token.chars().all(|c| c.is_ascii_digit()) && token.len() >= 6)
 }
 
-fn is_weekday_prefix(token: &str) -> bool {
-    token.parse::<u32>().is_ok()
-        || matches!(
-            token.to_ascii_lowercase().as_str(),
-            "first"
-                | "second"
-                | "third"
-                | "fourth"
-                | "fifth"
-                | "sixth"
-                | "seventh"
-                | "eighth"
-                | "ninth"
-                | "tenth"
-                | "eleventh"
-                | "twelfth"
-                | "last"
-                | "next"
-                | "this"
-        )
+fn is_calendar_number(token: &str, range: std::ops::RangeInclusive<u8>) -> bool {
+    let token = token.strip_suffix(',').unwrap_or(token);
+    token
+        .parse::<u8>()
+        .is_ok_and(|value| range.contains(&value))
+}
+
+fn is_calendar_day(token: &str) -> bool {
+    is_calendar_number(token, 1..=31)
+}
+
+fn is_calendar_month(token: &str) -> bool {
+    is_calendar_number(token, 1..=12)
+}
+
+fn is_calendar_year(token: &str) -> bool {
+    let token = token.strip_suffix(',').unwrap_or(token);
+    (2..=4).contains(&token.len()) && token.chars().all(|c| c.is_ascii_digit())
+}
+
+fn named_date_end(tokens: &[&str], date_index: usize) -> Option<usize> {
+    // Keep the day, month, and optional year together so a following number is
+    // not mistaken for an ordinal weekday prefix.
+    let first = tokens.get(date_index)?;
+    let second = tokens.get(date_index + 1)?;
+
+    let month_day = date_names::is_month_name(first) && is_calendar_day(second);
+    let day_month = is_calendar_day(first) && date_names::is_month_name(second);
+    if !month_day && !day_month {
+        return None;
+    }
+
+    let has_year = tokens
+        .get(date_index + 2)
+        .is_some_and(|year| is_calendar_year(year));
+    Some(date_index + if has_year { 2 } else { 1 })
 }
 
 /// Drop weekday items when an explicit calendar date is present.
@@ -1813,23 +1791,29 @@ fn strip_weekday_for_explicit_date(input: &str) -> Option<String> {
         .iter()
         .map(|&(start, end)| &input[start..end])
         .collect();
-    let date_index = tokens.iter().position(|token| {
-        !token.starts_with("TZ=\"")
+    let (date_index, named_date_end) = tokens.iter().enumerate().find_map(|(index, token)| {
+        let numeric_date = !token.starts_with("TZ=\"")
             && !token.ends_with(',')
-            && looks_like_explicit_calendar_date(token)
+            && looks_like_explicit_calendar_date(token);
+        if numeric_date {
+            Some((index, None))
+        } else {
+            named_date_end(&tokens, index).map(|end| (index, Some(end)))
+        }
     })?;
     let weekday_index = tokens.iter().enumerate().find_map(|(index, token)| {
         let weekday = token.strip_suffix(',').unwrap_or(token);
-        (index != date_index && is_weekday_name(weekday)).then_some(index)
+        (index != date_index && date_names::is_weekday_name(weekday)).then_some(index)
     })?;
 
     let mut removed = vec![false; tokens.len()];
     removed[weekday_index] = true;
-    if weekday_index > 0
-        && weekday_index - 1 != date_index
-        && is_weekday_prefix(tokens[weekday_index - 1])
+    if let Some(prefix_index) = weekday_index.checked_sub(1)
+        && prefix_index != date_index
+        && !named_date_end.is_some_and(|end| (date_index + 1..=end).contains(&prefix_index))
+        && date_names::is_weekday_prefix(tokens[prefix_index])
     {
-        removed[weekday_index - 1] = true;
+        removed[prefix_index] = true;
     }
 
     let mut result = String::with_capacity(input.len());
@@ -1842,7 +1826,7 @@ fn strip_weekday_for_explicit_date(input: &str) -> Option<String> {
         cursor = end;
     }
     result.push_str(&input[cursor..]);
-    Some(result)
+    Some(result.trim().to_owned())
 }
 
 /// Normalize offsets whose minute component exceeds 59 into total minutes.
@@ -2431,6 +2415,16 @@ mod tests {
         assert_eq!(strip_parenthesized_comments("a(b(c)d)e"), "ae"); // Nested balanced
         assert_eq!(strip_parenthesized_comments("a(b(c)d"), "a"); // Nested unbalanced
         assert_eq!(strip_parenthesized_comments("a(b)c(d)e(f"), "ace"); // Multiple groups, last unmatched
+    }
+
+    #[test]
+    fn test_strip_weekday_from_day_month_dates() {
+        for input in ["Monday 17 August 2026", "Wednesday 17 August 2026"] {
+            assert_eq!(
+                strip_weekday_for_explicit_date(input).as_deref(),
+                Some("17 August 2026")
+            );
+        }
     }
 
     /// Run one date through the shared writer used by the display loop and
