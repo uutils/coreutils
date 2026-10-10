@@ -299,6 +299,7 @@ pub fn uu_app() -> Command {
                 .short('b')
                 .long(options::BODY_NUMBERING)
                 .help(translate!("nl-help-body-numbering"))
+                .allow_hyphen_values(true)
                 .value_name("STYLE"),
         )
         .arg(
@@ -307,6 +308,7 @@ pub fn uu_app() -> Command {
                 .long(options::SECTION_DELIMITER)
                 .help(translate!("nl-help-section-delimiter"))
                 .value_parser(clap::value_parser!(OsString))
+                .allow_hyphen_values(true)
                 .value_name("CC"),
         )
         .arg(
@@ -314,6 +316,7 @@ pub fn uu_app() -> Command {
                 .short('f')
                 .long(options::FOOTER_NUMBERING)
                 .help(translate!("nl-help-footer-numbering"))
+                .allow_hyphen_values(true)
                 .value_name("STYLE"),
         )
         .arg(
@@ -321,6 +324,7 @@ pub fn uu_app() -> Command {
                 .short('h')
                 .long(options::HEADER_NUMBERING)
                 .help(translate!("nl-help-header-numbering"))
+                .allow_hyphen_values(true)
                 .value_name("STYLE"),
         )
         .arg(
@@ -329,6 +333,7 @@ pub fn uu_app() -> Command {
                 .long(options::LINE_INCREMENT)
                 .help(translate!("nl-help-line-increment"))
                 .value_name("NUMBER")
+                .allow_hyphen_values(true)
                 .value_parser(clap::value_parser!(i64)),
         )
         .arg(
@@ -337,6 +342,7 @@ pub fn uu_app() -> Command {
                 .long(options::JOIN_BLANK_LINES)
                 .help(translate!("nl-help-join-blank-lines"))
                 .value_name("NUMBER")
+                .allow_hyphen_values(true)
                 .value_parser(clap::value_parser!(u64)),
         )
         .arg(
@@ -360,6 +366,7 @@ pub fn uu_app() -> Command {
                 .long(options::NUMBER_SEPARATOR)
                 .help(translate!("nl-help-number-separator"))
                 .value_parser(clap::value_parser!(OsString))
+                .allow_hyphen_values(true)
                 .value_name("STRING"),
         )
         .arg(
@@ -368,6 +375,7 @@ pub fn uu_app() -> Command {
                 .long(options::STARTING_LINE_NUMBER)
                 .help(translate!("nl-help-starting-line-number"))
                 .value_name("NUMBER")
+                .allow_hyphen_values(true)
                 .value_parser(clap::value_parser!(i64)),
         )
         .arg(
@@ -376,6 +384,7 @@ pub fn uu_app() -> Command {
                 .long(options::NUMBER_WIDTH)
                 .help(translate!("nl-help-number-width"))
                 .value_name("NUMBER")
+                .allow_hyphen_values(true)
                 .value_parser(clap::value_parser!(u64).range(1..=(i32::MAX as u64))),
         )
 }
