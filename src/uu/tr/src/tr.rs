@@ -100,7 +100,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Write straight to the file descriptor: `Stdout` is line buffered, which
     // costs a search for the last newline and an extra write per chunk.
     #[cfg(any(unix, target_os = "wasi"))]
-    let mut output = uucore::io::RawWriter(stdout());
+    let stdout = stdout();
+    #[cfg(any(unix, target_os = "wasi"))]
+    let mut output = uucore::io::RawWriter::new(&stdout);
     #[cfg(not(any(unix, target_os = "wasi")))]
     let mut output = stdout().lock();
 

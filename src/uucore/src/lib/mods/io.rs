@@ -14,6 +14,8 @@
 //! Even though they are distinct classes, they share common functionality.
 //! Access to this common functionality is provided in `OwnedFileDescriptorOrHandle`.
 
+#[cfg(any(unix, target_os = "wasi"))]
+use std::os::fd::BorrowedFd;
 #[cfg(not(windows))]
 use std::os::fd::{AsFd, OwnedFd};
 #[cfg(windows)]
@@ -30,24 +32,44 @@ type NativeType = OwnedHandle;
 #[cfg(not(windows))]
 type NativeType = OwnedFd;
 
-// create reader without buffering
 #[cfg(any(unix, target_os = "wasi"))]
-pub struct RawReader<T: AsFd>(pub T);
+pub struct RawReader<'a>(pub BorrowedFd<'a>);
+
 #[cfg(any(unix, target_os = "wasi"))]
-impl<T: AsFd> io::Read for RawReader<T> {
-    fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
-        rustix::io::read(&self.0, b).map_err(Into::into)
+impl<'a> RawReader<'a> {
+    #[inline]
+    pub fn new(fd: &'a impl AsFd) -> Self {
+        Self(fd.as_fd())
     }
 }
 
-// create writer without buffering
 #[cfg(any(unix, target_os = "wasi"))]
-pub struct RawWriter<T: AsFd>(pub T);
-#[cfg(any(unix, target_os = "wasi"))]
-impl<T: AsFd> io::Write for RawWriter<T> {
-    fn write(&mut self, b: &[u8]) -> io::Result<usize> {
-        rustix::io::write(&self.0, b).map_err(Into::into)
+impl io::Read for RawReader<'_> {
+    #[inline]
+    fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
+        rustix::io::read(self.0, b).map_err(Into::into)
     }
+}
+
+#[cfg(any(unix, target_os = "wasi"))]
+pub struct RawWriter<'a>(pub BorrowedFd<'a>);
+
+#[cfg(any(unix, target_os = "wasi"))]
+impl<'a> RawWriter<'a> {
+    #[inline]
+    pub fn new(fd: &'a impl AsFd) -> Self {
+        Self(fd.as_fd())
+    }
+}
+
+#[cfg(any(unix, target_os = "wasi"))]
+impl io::Write for RawWriter<'_> {
+    #[inline]
+    fn write(&mut self, b: &[u8]) -> io::Result<usize> {
+        rustix::io::write(self.0, b).map_err(Into::into)
+    }
+
+    #[inline]
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
