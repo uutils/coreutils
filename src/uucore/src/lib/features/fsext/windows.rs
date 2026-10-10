@@ -20,55 +20,63 @@ pub(super) fn read_fs_list() -> UResult<Vec<MountInfo>> {
     let _quiet = sys::ErrorMode::fail_critical_errors();
     let mut mounts = Vec::new();
     for volume in sys::volumes()? {
-        for mount_dir in sys::volume_mount_paths(&volume).unwrap_or_default() {
-            mounts.push(MountInfo::from_mount_dir(mount_dir));
+        let paths = sys::volume_mount_paths(&volume).unwrap_or_default();
+        let mut mount = MountInfo::from_mount_dir(OsString::from(&volume));
+
+        if paths.is_empty() {
+            mount.mount_dir.clear();
+            mounts.push(mount);
+        } else {
+            for mount_dir in paths {
+                mounts.push(MountInfo {
+                    mount_dir,
+                    ..mount.clone()
+                });
+            }
         }
     }
+
+    // Add mapped network drives, SUBST drives, etc., to the list.
     for drive in sys::logical_drives() {
         if !mounts.iter().any(|m| m.mount_dir == drive) {
             mounts.push(MountInfo::from_mount_dir(drive));
         }
     }
+
     Ok(mounts)
 }
 
 impl MountInfo {
     /// The filesystem mounted at `mount_dir` (`C:\`, `C:\mount\`, `\\server\share\`).
     pub fn from_mount_dir(mount_dir: OsString) -> Self {
-        let remote = sys::is_remote_drive(&mount_dir);
-        let dev_name = remote
-            .then(|| sys::remote_name(&mount_dir))
-            .flatten()
-            .unwrap_or_else(|| mount_dir.to_string_lossy().into_owned());
-        let (dev_id, fs_type) = match sys::volume_information(&mount_dir) {
-            Ok(info) => (info.serial.to_string(), info.fs_type),
-            Err(_) => (dev_name.clone(), String::new()),
-        };
+        let info = sys::volume_information(&mount_dir).unwrap_or_default();
         Self {
-            dev_id,
-            dev_name,
-            fs_type,
+            dev_id: info.dev_id,
+            dev_name: info.dev_name,
+            fs_type: info.fs_type,
             mount_root: OsString::new(),
             mount_dir,
             mount_option: String::new(),
-            remote,
+            remote: info.remote,
             dummy: false,
         }
     }
 }
 
 impl FsUsage {
-    /// Usage of the volume mounted at `root`; Windows reports no inode counts.
+    /// Usage of the filesystem at the NT path `root`; Windows reports no inode counts.
     pub fn new(root: &Path) -> io::Result<Self> {
         let _quiet = sys::ErrorMode::fail_critical_errors();
-        let root = root.as_os_str();
-        let space = sys::disk_space(root)?;
-        let blocksize = sys::cluster_size(root).unwrap_or(1).max(1);
+        let info = sys::disk_space(root)?;
+        let blocksize = info.SectorsPerAllocationUnit as u64 * info.BytesPerSector as u64;
+        let blocks = info.TotalAllocationUnits.max(0) as u64;
+        let bfree = info.ActualAvailableAllocationUnits.max(0) as u64;
+        let bavail = info.CallerAvailableAllocationUnits.max(0) as u64;
         Ok(Self {
             blocksize,
-            blocks: space.total / blocksize,
-            bfree: space.free / blocksize,
-            bavail: space.available / blocksize,
+            blocks,
+            bfree,
+            bavail,
             bavail_top_bit_set: false,
             files: 0,
             ffree: 0,
@@ -81,32 +89,23 @@ mod sys {
     use std::ffi::{OsStr, OsString};
     use std::io;
     use std::os::windows::ffi::OsStringExt;
+    use std::path::Path;
     use std::ptr;
 
+    use crate::features::nt;
     use crate::wide::{FromWide, ToWide};
     use windows_sys::Win32::Foundation::{
-        ERROR_MORE_DATA, ERROR_NO_MORE_FILES, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH, NO_ERROR,
+        ERROR_MORE_DATA, ERROR_NO_MORE_FILES, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
     };
-    use windows_sys::Win32::NetworkManagement::WNet::WNetGetConnectionW;
     use windows_sys::Win32::Storage::FileSystem::{
-        FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDiskFreeSpaceExW, GetDiskFreeSpaceW,
-        GetDriveTypeW, GetLogicalDrives, GetVolumeInformationW, GetVolumePathNamesForVolumeNameW,
+        FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetLogicalDrives,
+        GetVolumePathNamesForVolumeNameW,
     };
     use windows_sys::Win32::System::Diagnostics::Debug::{
         SEM_FAILCRITICALERRORS, SetThreadErrorMode,
     };
-    use windows_sys::Win32::System::WindowsProgramming::DRIVE_REMOTE;
-    use windows_sys::core::BOOL;
 
     const BUF_LEN: usize = MAX_PATH as usize + 1;
-
-    fn cvt(result: BOOL) -> io::Result<()> {
-        if result == 0 {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(())
-        }
-    }
 
     /// Keeps the "no disk in drive" dialog away while probing drives without
     /// media; the previous mode is restored on drop.
@@ -202,96 +201,57 @@ mod sys {
             .map(|letter| OsString::from(format!("{}:\\", letter as char)))
     }
 
+    #[derive(Default)]
     pub struct VolumeInformation {
+        pub dev_id: String,
+        pub dev_name: String,
         pub fs_type: String,
-        pub serial: u32,
+        pub remote: bool,
     }
 
     pub fn volume_information(root: &OsStr) -> io::Result<VolumeInformation> {
-        let root = root.to_wide_null();
-        let mut serial = 0;
-        let mut fs_type = [0u16; BUF_LEN];
-        // SAFETY: `root` is NUL-terminated; `serial` and `fs_type` are valid
-        // out-buffers and the remaining out-pointers may be null.
-        cvt(unsafe {
-            GetVolumeInformationW(
-                root.as_ptr(),
-                ptr::null_mut(),
-                0,
-                &raw mut serial,
-                ptr::null_mut(),
-                ptr::null_mut(),
-                fs_type.as_mut_ptr(),
-                fs_type.len() as u32,
+        let handle = nt::open_file_win32(
+            Path::new(root),
+            nt::SYNCHRONIZE,
+            nt::FILE_SYNCHRONOUS_IO_NONALERT | nt::FILE_DIRECTORY_FILE,
+        )?;
+
+        // This returns a path such as "\Device\HarddiskVolume3\".
+        let dev_id = nt::query_nt_path(&handle)?.to_string_lossy().into_owned();
+
+        // It's more pleasant to read without the trailing backslash.
+        let dev_name = dev_id.trim_end_matches('\\').to_owned();
+
+        let fs_type = nt::query_filesystem_name(&handle).unwrap_or_default();
+
+        // SAFETY: The information class matches FILE_FS_DEVICE_INFORMATION.
+        let remote = unsafe {
+            nt::query_volume_information::<nt::FILE_FS_DEVICE_INFORMATION>(
+                &handle,
+                nt::FileFsDeviceInformation,
             )
-        })?;
+        }
+        .is_ok_and(|info| info.Characteristics & nt::FILE_REMOTE_DEVICE != 0);
+
         Ok(VolumeInformation {
-            fs_type: String::from_wide_null(&fs_type),
-            serial,
+            dev_id,
+            dev_name,
+            fs_type,
+            remote,
         })
     }
 
-    pub fn is_remote_drive(root: &OsStr) -> bool {
-        let root = root.to_wide_null();
-        // SAFETY: `root` is NUL-terminated.
-        unsafe { GetDriveTypeW(root.as_ptr()) == DRIVE_REMOTE }
-    }
-
-    /// The UNC name a drive letter is mapped to, `\\server\share`.
-    pub fn remote_name(root: &OsStr) -> Option<String> {
-        // `X:` only; the API rejects the trailing separator.
-        let local: Vec<u16> = root.to_wide().into_iter().take(2).chain([0]).collect();
-        let mut remote = [0u16; BUF_LEN];
-        let mut len = remote.len() as u32;
-        // SAFETY: `local` is NUL-terminated; `remote` is a valid buffer of `len` units.
-        let status =
-            unsafe { WNetGetConnectionW(local.as_ptr(), remote.as_mut_ptr(), &raw mut len) };
-        (status == NO_ERROR).then(|| String::from_wide_null(&remote))
-    }
-
-    pub struct DiskSpace {
-        pub total: u64,
-        pub free: u64,
-        pub available: u64,
-    }
-
-    /// Byte counts of the volume at `root`; `available` honours quotas.
-    pub fn disk_space(root: &OsStr) -> io::Result<DiskSpace> {
-        let root = root.to_wide_null();
-        let mut space = DiskSpace {
-            total: 0,
-            free: 0,
-            available: 0,
-        };
-        // SAFETY: `root` is NUL-terminated; the three out-pointers are valid.
-        cvt(unsafe {
-            GetDiskFreeSpaceExW(
-                root.as_ptr(),
-                &raw mut space.available,
-                &raw mut space.total,
-                &raw mut space.free,
-            )
-        })?;
-        Ok(space)
-    }
-
-    /// Bytes per allocation unit of the volume at `root`.
-    pub fn cluster_size(root: &OsStr) -> io::Result<u64> {
-        let root = root.to_wide_null();
-        let mut sectors_per_cluster = 0;
-        let mut bytes_per_sector = 0;
-        // SAFETY: `root` is NUL-terminated; the two out-pointers are valid and
-        // the remaining ones may be null.
-        cvt(unsafe {
-            GetDiskFreeSpaceW(
-                root.as_ptr(),
-                &raw mut sectors_per_cluster,
-                &raw mut bytes_per_sector,
-                ptr::null_mut(),
-                ptr::null_mut(),
-            )
-        })?;
-        Ok(u64::from(sectors_per_cluster) * u64::from(bytes_per_sector))
+    /// `FILE_FS_FULL_SIZE_INFORMATION` for the filesystem at the NT path `root`.
+    pub fn disk_space(root: &Path) -> io::Result<nt::FILE_FS_FULL_SIZE_INFORMATION> {
+        let handle = nt::open_file_nt(
+            root,
+            nt::SYNCHRONIZE,
+            nt::FILE_SYNCHRONOUS_IO_NONALERT
+                | nt::FILE_DIRECTORY_FILE
+                | nt::FILE_OPEN_FOR_FREE_SPACE_QUERY,
+        )?;
+        // SAFETY: The information class matches FILE_FS_FULL_SIZE_INFORMATION.
+        unsafe { nt::query_volume_information(&handle, nt::FileFsFullSizeInformation) }
     }
 }
 
@@ -307,10 +267,10 @@ mod tests {
         assert!(
             mounts
                 .iter()
-                .all(|m| m.mount_dir.to_string_lossy().ends_with('\\'))
+                .all(|m| m.mount_dir.is_empty() || m.mount_dir.to_string_lossy().ends_with('\\'))
         );
         let system = mounts.iter().find(|m| m.mount_dir == system_drive).unwrap();
-        assert!(!system.fs_type.is_empty());
-        assert_eq!(system.dev_name, system_drive.to_string_lossy());
+        assert_ne!(system.fs_type, "");
+        assert!(system.dev_name.starts_with("\\Device\\"));
     }
 }
