@@ -167,46 +167,79 @@ fn test_error_messages_have_colors() {
     }
 }
 
-/// Test that help messages are translated to French
-#[test]
-fn test_help_messages_french_translation() {
-    let utilities = get_all_enabled_utilities();
+/// Check that `--help` is translated to French for `utilities` when the locale
+/// environment variables in `locale_env` are set.
+///
+/// Every other locale variable is removed first, so a case only passes if the
+/// variables it names are enough on their own to select the French catalog.
+fn assert_help_messages_are_french(locale_env: &[(&str, &str)], utilities: &[String]) {
     let skip_utilities = get_utilities_to_skip();
 
-    for utility in &utilities {
+    for utility in utilities {
         if skip_utilities.contains(utility.as_str()) {
             continue;
         }
-        println!("Testing French translation for {utility}");
+        println!("Testing French translation for {utility} ({locale_env:?})");
 
-        let output = create_utility_command(utility)
+        let mut command = create_utility_command(utility);
+        command
             .arg("--help")
             .env("CLICOLOR_FORCE", "1")
-            .env("LANG", "fr_FR.UTF-8")
-            .env("LC_ALL", "fr_FR.UTF-8")
-            .output();
+            .env_remove("LC_ALL")
+            .env_remove("LC_MESSAGES")
+            .env_remove("LANG");
+        for (key, value) in locale_env {
+            command.env(key, value);
+        }
 
-        match output {
-            Ok(result) => {
-                let stdout = str::from_utf8(&result.stdout).unwrap_or("");
-
-                // Check for French translation of "Usage:" -> "Utilisation:"
-                let has_french_usage = stdout.contains("Utilisation:");
-
-                if !has_french_usage {
-                    println!("Help output for {utility} (French):\n{stdout}");
-                }
-
-                assert!(
-                    has_french_usage,
-                    "Utility '{utility}' help message should be translated to French (contain 'Utilisation:')"
-                );
-            }
+        let output = match command.output() {
+            Ok(result) => result,
             Err(e) => {
                 panic!("Failed to execute {utility} --help in French: {e}");
             }
+        };
+        let stdout = str::from_utf8(&output.stdout).unwrap_or("");
+
+        // Check for French translation of "Usage:" -> "Utilisation:"
+        let has_french_usage = stdout.contains("Utilisation:");
+
+        if !has_french_usage {
+            println!("Help output for {utility} (French):\n{stdout}");
         }
+
+        assert!(
+            has_french_usage,
+            "Utility '{utility}' help message should be translated to French (contain 'Utilisation:')"
+        );
     }
+}
+
+/// Test that help messages are translated to French
+#[test]
+fn test_help_messages_french_translation() {
+    assert_help_messages_are_french(
+        &[("LANG", "fr_FR.UTF-8"), ("LC_ALL", "fr_FR.UTF-8")],
+        &get_all_enabled_utilities(),
+    );
+}
+
+/// A couple of utilities, for the cases that only need to show which variable
+/// selected the catalogue. Taken from the build so that a feature subset which
+/// leaves out a hardcoded name still works.
+fn sample_utilities() -> Vec<String> {
+    get_all_enabled_utilities().into_iter().take(2).collect()
+}
+
+/// `LC_ALL` selects the message locale on its own, as it does for GNU.
+#[test]
+fn test_help_messages_french_translation_from_lc_all() {
+    assert_help_messages_are_french(&[("LC_ALL", "fr_FR.UTF-8")], &sample_utilities());
+}
+
+/// `LC_MESSAGES` is used when `LC_ALL` is not set.
+#[test]
+fn test_help_messages_french_translation_from_lc_messages() {
+    assert_help_messages_are_french(&[("LC_MESSAGES", "fr_FR.UTF-8")], &sample_utilities());
 }
 
 /// Test that error messages are translated to French
