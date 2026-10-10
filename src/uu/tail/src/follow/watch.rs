@@ -656,6 +656,11 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
 
         // main print loop
         for path in &paths {
+            // A later event of the same batch can have renamed the file, or made tail
+            // stop following it; nothing is followed under this path then.
+            if !observer.files.contains_key(path) {
+                continue;
+            }
             _read_some = observer.files.tail_file(path, settings.verbose)?;
         }
 

@@ -2112,6 +2112,76 @@ fn test_follow_descriptor_vs_rename2() {
     }
 }
 
+#[cfg(target_os = "linux")]
+struct StoppedChild<'a>(&'a mut uutests::util::UChild);
+
+#[cfg(target_os = "linux")]
+impl Drop for StoppedChild<'_> {
+    fn drop(&mut self) {
+        let pid = i32::try_from(self.0.id()).unwrap();
+        let _ = kill_process(Pid::from_raw(pid).unwrap(), Signal::CONT);
+        if std::thread::panicking() {
+            let _ = self.0.try_kill();
+        }
+    }
+}
+
+/// Stop all threads of `child` with SIGSTOP so file events accumulate
+/// until the returned guard is dropped.
+#[cfg(target_os = "linux")]
+fn stop_child(child: &mut uutests::util::UChild) -> StoppedChild<'_> {
+    let pid = i32::try_from(child.id()).unwrap();
+    kill_process(Pid::from_raw(pid).unwrap(), Signal::STOP).unwrap();
+    let stopped = StoppedChild(child);
+    for _ in 0..500 {
+        let all_stopped = std::fs::read_dir(format!("/proc/{pid}/task")).is_ok_and(|tasks| {
+            tasks.filter_map(Result::ok).all(|task| {
+                std::fs::read_to_string(task.path().join("stat")).is_ok_and(|stat| {
+                    // The state comes right after the command name, which is in parentheses.
+                    let state = stat.rsplit(')').next().unwrap().trim_start();
+                    state.starts_with('T')
+                })
+            })
+        });
+        if all_stopped {
+            return stopped;
+        }
+        stopped.0.delay(10);
+    }
+    panic!("{pid} did not stop");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+fn test_follow_descriptor_written_then_rotated() {
+    // A write followed by rotation must not panic on the queued old path
+    // or lose output from the renamed file. Only inotify hits this: polling
+    // (--use-polling) reads every followed file, not the queued paths.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("a", "a\n");
+
+    let mut child = ts.ucmd().args(&["-f", "a"]).run_no_wait();
+    wait_for_output(&mut child, "a\n", "");
+
+    let stopped = stop_child(&mut child);
+    at.append("a", "b\n");
+    at.rename("a", "c");
+    at.write("a", "new\n");
+    drop(stopped);
+    wait_for_output(&mut child, "a\nb\n", "");
+
+    at.append("c", "c\n");
+    wait_for_output(&mut child, "a\nb\nc\n", "");
+    child.make_assertion().is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_only("a\nb\nc\n");
+}
+
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
@@ -2299,28 +2369,30 @@ fn test_follow_name_truncate1() {
         .stdout_is(expected_stdout);
 }
 
+/// Wait until `child` has printed exactly `expected_stdout` and `expected_stderr`.
+#[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))]
+fn wait_for_output(
+    child: &mut uutests::util::UChild,
+    expected_stdout: &str,
+    expected_stderr: &str,
+) {
+    for _ in 0..500 {
+        if child.stdout_all() == expected_stdout && child.stderr_all() == expected_stderr {
+            return;
+        }
+        child.delay(10);
+    }
+    child
+        .make_assertion()
+        .with_all_output()
+        .stdout_is(expected_stdout)
+        .stderr_is(expected_stderr);
+}
+
 #[test]
 #[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))] // FIXME: for currently not working platforms
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_truncate2() {
-    fn wait_for_output(
-        child: &mut uutests::util::UChild,
-        expected_stdout: &str,
-        expected_stderr: &str,
-    ) {
-        for _ in 0..500 {
-            if child.stdout_all() == expected_stdout && child.stderr_all() == expected_stderr {
-                return;
-            }
-            child.delay(10);
-        }
-        child
-            .make_assertion()
-            .with_all_output()
-            .stdout_is(expected_stdout)
-            .stderr_is(expected_stderr);
-    }
-
     // This test triggers a truncate event while `tail --follow=name file` is running.
     // $ ((sleep 1 && echo -n "x\nx\nx\n" >> file && sleep 1 && \
     // echo -n "x\n" > file &)>/dev/null 2>&1 &) ; tail --follow=name file
