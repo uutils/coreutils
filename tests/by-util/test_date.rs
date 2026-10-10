@@ -1139,6 +1139,34 @@ fn test_weekday_items_are_ignored_with_explicit_dates() {
 }
 
 #[test]
+fn test_weekday_items_are_ignored_with_named_dates() {
+    for (input, format, expected) in [
+        ("WEDNESDAY August 17", "+%m-%d", "08-17\n"),
+        ("August 17 Monday", "+%m-%d", "08-17\n"),
+        ("Monday 17 August 2026", "+%F", "2026-08-17\n"),
+        ("Wednesday 17 August 2026", "+%F", "2026-08-17\n"),
+        (
+            "Next Friday Sep 25 12:00:00 AM EDT 2026",
+            "+%F %T %Z",
+            "2026-09-25 04:00:00 UTC\n",
+        ),
+        (
+            "Next Sunday Sep 25 12:00:00 AM EDT 2026",
+            "+%F %T %Z",
+            "2026-09-25 04:00:00 UTC\n",
+        ),
+    ] {
+        new_ucmd!()
+            .env("LANG", "C")
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .args(&["-u", "-d", input, format])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
 fn test_invalid_date_string() {
     new_ucmd!()
         .arg("-d")
