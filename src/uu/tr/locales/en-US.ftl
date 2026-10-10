@@ -7,7 +7,7 @@ tr-help-complement = use the complement of SET1
 tr-help-delete = delete characters in SET1, do not translate
 tr-help-squeeze = replace each sequence of a repeated character that is listed in the last specified SET, with a single occurrence of that character
 tr-help-truncate-set1 = first truncate SET1 to length of SET2
-tr-help-unbuffered = guarantee that any output is unbuffered
+tr-help-unbuffered = do not buffer output
 
 # Error messages
 tr-error-missing-operand = missing operand
