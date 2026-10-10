@@ -1909,6 +1909,35 @@ fn test_precision_above_formatter_limit() {
 }
 
 #[test]
+// Windows caps the command line at 32767 characters.
+#[cfg(not(windows))]
+fn test_fraction_digits_above_formatter_limit() {
+    let threes = "3".repeat(70000);
+    new_ucmd!()
+        .args(&["%.69999f", &format!("0.{threes}")])
+        .succeeds()
+        .stdout_only(format!("0.{}", &threes[1..]));
+    new_ucmd!()
+        .args(&["%.70002f", &format!("0.{threes}")])
+        .succeeds()
+        .stdout_only(format!("0.{threes}00"));
+    let fives = "5".repeat(70000);
+    new_ucmd!()
+        .args(&["%.69999f", &format!("0.{fives}")])
+        .succeeds()
+        .stdout_only(format!("0.{}6", &fives[2..]));
+    // Rounding carries into the integer part.
+    new_ucmd!()
+        .args(&["%.69999f", &format!("0.{}", "9".repeat(70000))])
+        .succeeds()
+        .stdout_only(format!("1.{}", "0".repeat(69999)));
+    new_ucmd!()
+        .args(&["%.69999f", &format!("12.{threes}")])
+        .succeeds()
+        .stdout_only(format!("12.{}", &threes[1..]));
+}
+
+#[test]
 fn test_integer_precision_above_padding_limit() {
     new_ucmd!()
         .args(&["%.1500f", "1"])
