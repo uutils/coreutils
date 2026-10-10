@@ -185,7 +185,7 @@ fn exec(dirs: ValuesRef<OsString>, config: &Config) {
 /// * `recursive` --- create parent directories for the `path`, if they do not
 ///   exist.
 /// * `mode` --- file mode for the directories (not implemented on windows).
-/// * `verbose` --- print a message for each printed directory.
+/// * `verbose` --- print a message for each created directory.
 ///
 /// ## Trailing dot
 ///
