@@ -2124,6 +2124,187 @@ fn test_cp_parents_with_permissions_copy_dir() {
 #[cfg(unix)]
 #[cfg_attr(
     wasi_runner,
+    ignore = "WASI: no chmod syscall, so source modes cannot be set up"
+)]
+fn test_cp_parents_created_dirs_take_source_mode() {
+    // Without -p, a directory that --parents creates gets the mode of the
+    // source directory it stands for, filtered through the umask, whether
+    // the operand is a file or a directory. --no-preserve=mode gives it the
+    // default mode instead.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("a/b/sub");
+    at.touch("a/b/f");
+    at.touch("a/b/sub/f");
+    at.mkdir("ro");
+    at.touch("ro/f");
+    at.set_mode("a", 0o777);
+    at.set_mode("a/b", 0o700);
+    at.set_mode("ro", 0o500);
+    for dest in ["file", "dir", "default"] {
+        at.mkdir(dest);
+    }
+
+    scene
+        .ucmd()
+        .umask(0o022)
+        .args(&["--parents", "a/b/f", "ro/f", "file"])
+        .succeeds();
+    scene
+        .ucmd()
+        .umask(0o022)
+        .args(&["-r", "--parents", "a/b/sub", "dir"])
+        .succeeds();
+    scene
+        .ucmd()
+        .umask(0o022)
+        .args(&["--parents", "--no-preserve=mode", "a/b/f", "default"])
+        .succeeds();
+
+    for (path, mode) in [
+        ("file/a", 0o755),
+        ("file/a/b", 0o700),
+        // Created writable for the copy, then given the source's mode.
+        ("file/ro", 0o500),
+        ("dir/a", 0o755),
+        ("dir/a/b", 0o700),
+        ("default/a", 0o755),
+        ("default/a/b", 0o755),
+    ] {
+        assert_eq!(
+            at.metadata(path).permissions().mode() & 0o7777,
+            mode,
+            "{path}"
+        );
+    }
+    assert!(at.file_exists("file/ro/f"));
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so source modes cannot be set up"
+)]
+fn test_cp_parents_existing_dirs() {
+    // Directories already in the destination keep their attributes when
+    // --parents has nothing to create. Once it creates one, -a/-p refreshes
+    // the whole path from the source, existing directories included, while a
+    // copy that does not preserve the mode still leaves them alone.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("a/b/sub");
+    at.mkdir("a/sub");
+    at.touch("a/f");
+    at.touch("a/b/f");
+    at.touch("a/sub/f");
+    at.set_mode("a", 0o777);
+    at.set_mode("a/b", 0o750);
+    for dest in ["none_file", "none_dir", "new_file", "new_dir", "new_plain"] {
+        at.mkdir_all(&format!("{dest}/a"));
+        at.set_mode(&format!("{dest}/a"), 0o700);
+    }
+
+    for args in [
+        &["-a", "--parents", "a/f", "none_file"][..],
+        &["-a", "-r", "--parents", "a/sub", "none_dir"],
+        &["-a", "--parents", "a/b/f", "new_file"],
+        &["-a", "-r", "--parents", "a/b/sub", "new_dir"],
+        &["--parents", "a/b/f", "new_plain"],
+    ] {
+        scene.ucmd().umask(0o022).args(args).succeeds();
+    }
+
+    for (path, mode) in [
+        ("none_file/a", 0o700),
+        ("none_dir/a", 0o700),
+        ("new_file/a", 0o777),
+        ("new_file/a/b", 0o750),
+        ("new_dir/a", 0o777),
+        ("new_dir/a/b", 0o750),
+        ("new_plain/a", 0o700),
+        ("new_plain/a/b", 0o750),
+    ] {
+        assert_eq!(
+            at.metadata(path).permissions().mode() & 0o7777,
+            mode,
+            "{path}"
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no chmod syscall, so source modes cannot be set up"
+)]
+fn test_cp_parents_dirs_take_source_mode_when_copy_fails() {
+    // The --parents directories still get the source's mode when the copy
+    // stops part-way, and when a directory above the working directory is
+    // not searchable, so the source ancestors have no realpath.
+    if rustix::process::geteuid().is_root() {
+        return; // root ignores the permissions this relies on
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("p/w/a/b/sub");
+    at.mkdir("p/w/file");
+    at.mkdir("p/w/dir");
+    at.touch("p/w/a/b/f");
+    at.touch("p/w/a/b/sub/secret");
+    at.set_mode("p/w/a/b/sub/secret", 0);
+    at.set_mode("p/w/a", 0o750);
+    at.set_mode("p/w/a/b", 0o705);
+
+    // -d makes the unreadable file fatal, so the copy stops early.
+    scene
+        .ucmd()
+        .current_dir(at.plus("p/w"))
+        .umask(0o022)
+        .args(&["-r", "-d", "--parents", "a/b/sub", "dir"])
+        .fails();
+    scene
+        .cmd("sh")
+        .current_dir(at.plus("p/w"))
+        .umask(0o022)
+        .env("PATH", std::env::var_os("PATH").unwrap())
+        .args(&[
+            "-c",
+            "chmod 0 .. && \"$0\" cp --parents a/b/f file; s=$?; chmod 755 ..; exit $s",
+        ])
+        .arg(&scene.bin_path)
+        .succeeds();
+
+    for (path, mode) in [
+        ("p/w/dir/a", 0o750),
+        ("p/w/dir/a/b", 0o705),
+        ("p/w/file/a", 0o750),
+        ("p/w/file/a/b", 0o705),
+    ] {
+        assert_eq!(
+            at.metadata(path).permissions().mode() & 0o7777,
+            mode,
+            "{path}"
+        );
+    }
+    assert!(at.file_exists("p/w/file/a/b/f"));
+}
+
+#[test]
+fn test_cp_parents_failed_source_creates_nothing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    at.mkdir("d");
+    ucmd.args(&["--parents", "f/g", "missing/x", "d"]).fails();
+    assert!(!at.dir_exists("d/f"));
+    assert!(!at.dir_exists("d/missing"));
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
     ignore = "WASI sandbox: host paths (/dev, /private) not visible"
 )]
 fn test_cp_writable_special_file_permissions() {
@@ -4363,7 +4544,47 @@ fn test_cp_dir_vs_file() {
         .arg(TEST_COPY_FROM_FOLDER)
         .arg(TEST_EXISTING_FILE)
         .fails()
-        .stderr_only("cp: cannot overwrite non-directory with directory\n");
+        .stderr_only(format!(
+            "cp: cannot overwrite non-directory '{TEST_EXISTING_FILE}' with directory '{TEST_COPY_FROM_FOLDER}'\n"
+        ));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_dir_vs_dangling_symlink() {
+    // A symlink that leads nowhere is not a directory to copy into: following
+    // it would create its target.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("src");
+    at.touch("src/file");
+    at.symlink_file("nowhere", "dangling");
+
+    ucmd.args(&["-r", "src", "dangling"])
+        .fails()
+        .stderr_only("cp: cannot overwrite non-directory 'dangling' with directory 'src'\n");
+    assert!(!at.dir_exists("nowhere"));
+}
+
+#[test]
+fn test_cp_recursive_dest_subdir_is_file() {
+    // A directory whose destination already exists as a file is reported
+    // and left alone; the other entries are still copied.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("src/sub");
+    at.write("src/sub/x", "x");
+    at.write("src/other", "other");
+    at.mkdir_all("dst/src");
+    at.write("dst/src/sub", "kept");
+
+    let dest = path_concat!("dst", "src", "sub");
+    let source = path_concat!("src", "sub");
+    ucmd.args(&["-r", "src", "dst"])
+        .fails()
+        .stderr_only(format!(
+            "cp: cannot overwrite non-directory '{dest}' with directory '{source}'\n"
+        ));
+    assert_eq!(at.read("dst/src/sub"), "kept");
+    assert_eq!(at.read("dst/src/other"), "other");
 }
 
 #[test]
