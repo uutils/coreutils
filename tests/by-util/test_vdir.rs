@@ -26,9 +26,10 @@ fn test_default_output() {
     let at = &scene.fixtures;
     at.mkdir("some-dir1");
     at.touch("some-file1");
-    filetime::set_file_mtime(
+    let mtime = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(978_307_200);
+    std::fs::set_times(
         at.plus("some-file1"),
-        filetime::FileTime::from_unix_time(978_307_200, 0),
+        std::fs::FileTimes::new().set_modified(mtime),
     )
     .unwrap();
 
@@ -121,9 +122,10 @@ fn test_time_selection_preserves_name_sort() {
     let scene = TestScenario::new(util_name!());
     for (name, seconds) in [("a", 978_307_200), ("b", 1_009_843_200)] {
         scene.fixtures.touch(name);
-        filetime::set_file_atime(
+        let atime = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(seconds);
+        std::fs::set_times(
             scene.fixtures.plus(name),
-            filetime::FileTime::from_unix_time(seconds, 0),
+            std::fs::FileTimes::new().set_accessed(atime),
         )
         .unwrap();
     }

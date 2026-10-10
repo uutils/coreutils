@@ -33,7 +33,7 @@ members = [
 [workspace.package]
 categories = ["command-line-utilities"]
 edition = "2024"
-rust-version = "1.88.0"
+rust-version = "1.99.0"
 homepage = "https://github.com/uutils/coreutils"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 license = "MIT"
@@ -64,7 +64,6 @@ data-encoding-macro = "0.1.15"
 divan = { package = "codspeed-divan-compat", version = "5.0.0" }
 dns-lookup = { version = "4.0.0" }
 dunce = "1.0.4"
-filetime = "0.2.29"
 foldhash = "0.2.0"
 glob = "0.3.1"
 half = "2.4.1"
@@ -210,6 +209,7 @@ inline_always = "allow"                      # 6
 fn_params_excessive_bools = "allow"          # 6
 should_panic_without_expect = "allow"        # 2
 assert_is_empty = "allow"
+duration_suboptimal_units = "allow"
 
 doc_markdown = "allow"
 unused_self = "allow"
@@ -348,7 +348,6 @@ yes = { optional = true, version = "0.13.0", package = "uu_yes", path = "src/uu/
 
 [dev-dependencies]
 ctor.workspace = true
-filetime.workspace = true
 glob.workspace = true
 jiff.workspace = true
 libc.workspace = true
