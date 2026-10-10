@@ -169,6 +169,24 @@ fn test_kill_signal_reports_signal_exit_code() {
         .no_output();
 }
 
+/// When the child dumps core, timeout re-raises its signal without dumping
+/// core itself.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn test_child_core_dump_not_repeated() {
+    use std::os::unix::process::ExitStatusExt;
+    let ts = TestScenario::new(util_name!());
+    let script = r#"ulimit -c unlimited 2>/dev/null; exec "$0" timeout 5 sh -c 'kill -SEGV $$'"#;
+    let status = std::process::Command::new("sh")
+        .args(["-c", script])
+        .arg(&ts.bin_path)
+        .current_dir(ts.fixtures.as_string())
+        .status()
+        .unwrap();
+    assert_eq!(status.signal(), Some(libc::SIGSEGV));
+    assert!(!status.core_dumped());
+}
+
 #[test]
 fn test_preserve_status_even_when_send_signal() {
     let (ts, bin) = scenario_with_bin();
