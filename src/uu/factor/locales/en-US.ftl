@@ -7,7 +7,7 @@ factor-help-exponents = Print factors in the form p^e
 factor-help-help = Print help information.
 
 # Error messages
-factor-error-factorization-incomplete = Factorization incomplete. Remainders exists.
+factor-error-factorization-incomplete = Factorization incomplete. Remainders exist.
 factor-error-write-error = write error
 factor-error-reading-input = error reading input: { $error }
 factor-error-invalid-int = is not a valid positive integer
