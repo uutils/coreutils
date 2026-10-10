@@ -16,7 +16,8 @@ pub use watch::{Observer, follow};
 #[cfg(target_os = "wasi")]
 mod wasi_stubs {
     use crate::args::Settings;
-    use std::io::BufRead;
+    use std::fs::File;
+    use std::io::BufReader;
     use std::path::Path;
     use uucore::error::{UResult, USimpleError};
 
@@ -39,7 +40,7 @@ mod wasi_stubs {
             &mut self,
             _path: &Path,
             _display_name: &str,
-            _reader: Option<Box<dyn BufRead>>,
+            _reader: Option<BufReader<File>>,
             _update_last: bool,
         ) -> UResult<()> {
             Ok(())

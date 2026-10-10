@@ -11,7 +11,9 @@ use std::fs::{File, Metadata};
 use std::io::{Seek, SeekFrom};
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
-use std::path::{Path, PathBuf};
+#[cfg(not(target_os = "wasi"))]
+use std::path::Path;
+use std::path::PathBuf;
 #[cfg(not(target_os = "wasi"))]
 use uucore::error::UResult;
 use uucore::quoting_style::locale_aware_shell_escape;
@@ -81,28 +83,56 @@ impl Input {
                 path.canonicalize().ok()
             }
             InputKind::File(_) | InputKind::Stdin => {
-                // on macOS, /dev/fd isn't backed by /proc and canonicalize()
-                // on dev/fd/0 (or /dev/stdin) will fail (NotFound),
-                // so we treat stdin as a pipe here
-                // https://github.com/rust-lang/rust/issues/95239
                 #[cfg(target_vendor = "apple")]
                 {
-                    None
+                    use std::os::unix::ffi::OsStrExt;
+
+                    // /dev/fd/0 cannot be canonicalized on macOS; query the descriptor instead.
+                    let path = rustix::fs::getpath(std::io::stdin()).ok()?;
+                    Path::new(OsStr::from_bytes(path.to_bytes()))
+                        .canonicalize()
+                        .ok()
                 }
-                #[cfg(not(target_vendor = "apple"))]
+                #[cfg(windows)]
+                {
+                    resolve_stdin_path()
+                }
+                #[cfg(not(any(target_vendor = "apple", windows)))]
                 {
                     PathBuf::from(text::FD0).canonicalize().ok()
                 }
             }
         }
     }
+}
 
-    pub fn is_tailable(&self) -> bool {
-        match &self.kind {
-            InputKind::File(path) => path_is_tailable(path),
-            InputKind::Stdin => self.resolve().is_some_and(|path| path_is_tailable(&path)),
-        }
+#[cfg(windows)]
+fn resolve_stdin_path() -> Option<PathBuf> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Foundation::MAX_PATH;
+    use windows_sys::Win32::Storage::FileSystem::{FILE_NAME_OPENED, GetFinalPathNameByHandleW};
+
+    let handle = std::io::stdin().lock().as_raw_handle();
+    if handle.is_null() {
+        return None;
     }
+
+    let mut buffer = [0u16; MAX_PATH as usize];
+    // SAFETY: the handle is borrowed from stdin and the buffer is valid for the given length.
+    let len = unsafe {
+        GetFinalPathNameByHandleW(
+            handle,
+            buffer.as_mut_ptr(),
+            buffer.len() as u32,
+            FILE_NAME_OPENED,
+        )
+    } as usize;
+
+    if len == 0 || len >= buffer.len() {
+        return None;
+    }
+
+    String::from_utf16(&buffer[..len]).ok().map(PathBuf::from)
 }
 
 impl Default for Input {
@@ -234,6 +264,7 @@ impl PathExtTail for Path {
     }
 }
 
+#[cfg(not(target_os = "wasi"))]
 pub fn path_is_tailable(path: &Path) -> bool {
     path.is_file() || path.exists() && path.metadata().is_ok_and(|meta| meta.is_tailable())
 }
