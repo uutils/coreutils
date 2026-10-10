@@ -161,6 +161,8 @@ else
     # Remove tests checking for --version & --help
     # Not really interesting for us and logs are too big
     sed -i '/tests\/help\/help-version.sh/ D' Makefile
+    # GNU/Hurd specific
+    sed -i '/tests\/id\/gnu-zero-uids.sh/ D' Makefile
     touch gnu-built
 fi
 
