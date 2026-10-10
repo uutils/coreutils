@@ -28,10 +28,6 @@ rm/r-root.log
 tail/inotify-race.log
 tail/inotify-race2.log
 
-# require_gnu_ is "test $(uname) = GNU"; skipped on Linux for GNU coreutils too.
-id/gnu-zero-uids.log
-
-
 # --- Require matching GNU's libc entry points ----------------------------
 # LD_PRELOAD does fire for Rust binaries, but each of these overrides the one
 # symbol GNU happens to call and self-skips otherwise. We would have to route
