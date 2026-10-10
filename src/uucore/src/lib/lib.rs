@@ -378,8 +378,21 @@ pub fn set_utility_is_second_arg() {
 // So if we want only the first arg or so it's overkill. We cache it.
 #[cfg(windows)]
 static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| wild::args_os().collect());
-#[cfg(not(windows))]
+#[cfg(all(not(windows), not(target_os = "wasi")))]
 static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| std::env::args_os().collect());
+
+#[cfg(any(test, target_os = "wasi"))]
+fn with_wasi_argv_fallback(mut argv: Vec<OsString>) -> Vec<OsString> {
+    if argv.is_empty() {
+        argv.push(OsString::from("coreutils"));
+    }
+    argv
+}
+
+// Always non-empty on WASI (embeddings may omit argv); `UTIL_NAME`/`EXECUTION_PHRASE` rely on it.
+#[cfg(all(not(windows), target_os = "wasi"))]
+static ARGV: LazyLock<Vec<OsString>> =
+    LazyLock::new(|| with_wasi_argv_fallback(std::env::args_os().collect()));
 
 static UTIL_NAME: LazyLock<String> = LazyLock::new(|| {
     let base_index = usize::from(get_utility_is_second_arg());
@@ -728,6 +741,17 @@ mod tests {
             OsString::from("สวัสดี"), // spell-checker:disable-line
             os_str.to_os_string(),
         ]
+    }
+
+    #[test]
+    fn wasi_argv_fallback_prevents_empty_argv() {
+        assert_eq!(
+            with_wasi_argv_fallback(Vec::new()),
+            vec![OsString::from("coreutils")]
+        );
+
+        let argv = vec![OsString::from("env"), OsString::from("--version")];
+        assert_eq!(with_wasi_argv_fallback(argv.clone()), argv);
     }
 
     #[cfg(unix)]
