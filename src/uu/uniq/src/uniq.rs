@@ -198,14 +198,6 @@ impl Uniq {
         }
     }
 
-    fn is_c_locale() -> bool {
-        ["LC_ALL", "LC_CTYPE", "LANG"]
-            .iter()
-            .find_map(|&key| std::env::var_os(key))
-            .filter(|v| !v.is_empty())
-            .is_none_or(|v| v == "C" || v == "POSIX")
-    }
-
     fn key_end_index(&self, line: &[u8], key_start: usize) -> usize {
         let remainder = &line[key_start..];
         match self.slice_stop {
@@ -706,7 +698,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         slice_stop: opt_parsed(options::CHECK_CHARS, &matches)?,
         ignore_case: matches.get_flag(options::IGNORE_CASE),
         zero_terminated: matches.get_flag(options::ZERO_TERMINATED),
-        is_c_locale: Uniq::is_c_locale(),
+        is_c_locale: uucore::locale::is_c_locale("LC_CTYPE"),
     };
 
     if uniq.show_counts && uniq.all_repeated {
