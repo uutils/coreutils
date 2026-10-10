@@ -8082,6 +8082,63 @@ fn test_cp_recursive_dest_subdir_symlink_not_followed() {
     );
 }
 
+/// With `-T` the target is the destination itself, so a target that is a
+/// symlink to a directory is a non-directory and must not be written through.
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
+fn test_cp_recursive_no_target_dir_refuses_symlink_target() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("src/sub");
+    at.write("src/f", "SOURCE");
+    at.mkdir("real");
+    at.write("real/f", "REAL");
+    at.symlink_dir("real", "dst");
+
+    for args in [["-rT", "src", "dst"], ["-rT", "src/.", "dst"]] {
+        scene
+            .ucmd()
+            .args(&args)
+            .fails()
+            .stderr_contains("cannot overwrite non-directory");
+    }
+    assert_eq!(at.read("real/f"), "REAL");
+    assert!(!at.dir_exists("real/sub"));
+
+    // A trailing slash asks for what the symlink resolves to, as in GNU.
+    scene.ucmd().args(&["-rT", "src", "dst/"]).succeeds();
+    assert_eq!(at.read("real/f"), "SOURCE");
+}
+
+/// A dangling symlink at the target is a non-directory too: the copy must not
+/// create the directory it points at.
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
+fn test_cp_recursive_refuses_dangling_symlink_target() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("src");
+    at.write("src/f", "SOURCE");
+    at.symlink_dir("nowhere", "dst");
+
+    for flags in ["-r", "-rT"] {
+        scene
+            .ucmd()
+            .args(&[flags, "src", "dst"])
+            .fails()
+            .stderr_contains("cannot overwrite non-directory");
+    }
+    assert!(!at.dir_exists("nowhere"));
+}
+
 /// A symlinked directory named as the *target* is still a legitimate
 /// destination -- only entries discovered inside the tree are refused.
 #[test]
@@ -9361,11 +9418,11 @@ fn test_cp_recurse_verbose_output() {
     let file = "file";
     #[cfg(not(windows))]
     let output = format!(
-        "'{source_dir}' -> '{target_dir}/'\n'{source_dir}/{file}' -> '{target_dir}/{file}'\n"
+        "'{source_dir}' -> '{target_dir}'\n'{source_dir}/{file}' -> '{target_dir}/{file}'\n"
     );
     #[cfg(windows)]
     let output = format!(
-        "'{source_dir}' -> '{target_dir}\\'\n'{source_dir}\\{file}' -> '{target_dir}\\{file}'\n"
+        "'{source_dir}' -> '{target_dir}'\n'{source_dir}\\{file}' -> '{target_dir}\\{file}'\n"
     );
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -9393,11 +9450,11 @@ fn test_cp_recurse_verbose_output_with_symlink() {
     let symlink = "symlink";
     #[cfg(not(windows))]
     let output = format!(
-        "'{source_dir}' -> '{target_dir}/'\n'{source_dir}/{symlink}' -> '{target_dir}/{symlink}'\n"
+        "'{source_dir}' -> '{target_dir}'\n'{source_dir}/{symlink}' -> '{target_dir}/{symlink}'\n"
     );
     #[cfg(windows)]
     let output = format!(
-        "'{source_dir}' -> '{target_dir}\\'\n'{source_dir}\\{symlink}' -> '{target_dir}\\{symlink}'\n"
+        "'{source_dir}' -> '{target_dir}'\n'{source_dir}\\{symlink}' -> '{target_dir}\\{symlink}'\n"
     );
     let (at, mut ucmd) = at_and_ucmd!();
 
