@@ -248,6 +248,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::SETS)
                 .num_args(1..)
+                .help(translate!("tr-help-sets"))
                 .value_parser(value_parser!(OsString)),
         )
 }
