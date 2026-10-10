@@ -3,12 +3,18 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use cfg_aliases::cfg_aliases;
 use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+    cfg_aliases! {
+        // Where `safe_traversal`, and the descriptor walk built on it, exist.
+        has_safe_traversal: { all(unix, not(target_os = "redox")) },
+    }
+
     let out_dir = env::var("OUT_DIR")?;
 
     let mut embedded_file = File::create(Path::new(&out_dir).join("embedded_locales.rs"))?;
