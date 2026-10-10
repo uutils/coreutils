@@ -11,17 +11,19 @@ Responses to reviewers should be written by a human, not an agent.
 
 ## Start with an issue
 
-Before opening a PR, search for an existing issue describing the problem being
-addressed. Search both open and closed issues where relevant.
+Before making any code changes:
 
-When an existing issue covers the work, reference it in the PR.
+- Search open issues for one matching the requested work.
+- Read the issue and confirm its scope covers the intended changes.
+- Review related issues and PRs for context.
+- If no matching issue exists, ask your human operator to provide one before
+  proceeding.
 
-If you have already opened a PR for the work, continue working on that PR
-rather than opening a new one to replace it. Rebase or otherwise update the
-existing PR's branch as needed.
+If a PR already exists for the work, continue using it. Update its branch and
+rebase as needed.
 
-If the PR fully resolves an issue, include `Closes #XXXXX` in the PR
-description so that the issue is automatically closed when the PR is merged.
+When opening a PR, reference the issue in its description. If the PR fully
+resolves the issue, include Closes #XXXXX, using the actual issue number.
 
 ## Never read or copy GNU code
 
