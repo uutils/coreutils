@@ -79,6 +79,8 @@ enum CatError {
     /// Wrapper around `io::Error`
     #[error("{}", strip_errno(.0))]
     Io(#[from] io::Error),
+    #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
+    Write(io::Error),
     /// Unknown file type; it's not a regular file, socket, etc.
     #[error("{}", translate!("cat-error-unknown-filetype", "ft_debug" => .ft_debug))]
     UnknownFiletype {
@@ -97,6 +99,16 @@ enum CatError {
 }
 
 type CatResult<T> = Result<T, CatError>;
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl From<uucore::pipes::PipeError> for CatError {
+    fn from(error: uucore::pipes::PipeError) -> Self {
+        match error {
+            uucore::pipes::PipeError::Read(error) => Self::Io(error),
+            uucore::pipes::PipeError::Write(error) => Self::Write(error),
+        }
+    }
+}
 
 #[derive(PartialEq)]
 enum NumberingMode {
@@ -402,6 +414,11 @@ where
 
     for path in files {
         if let Err(err) = cat_path(path, options, &mut state) {
+            if let CatError::Write(ref io_err) = err {
+                handle_broken_pipe(io_err);
+                error_messages.push(err.to_string());
+                break;
+            }
             error_messages.push(format!("{}: {err}", path.maybe_quote()));
         }
     }
@@ -496,13 +513,11 @@ fn print_unbuffered<R: FdReadable>(
         match handle.reader.read(&mut buf) {
             Ok(0) => return Ok(()),
             Ok(n) => {
-                stdout
-                    .write_all(&buf[..n])
-                    .inspect_err(handle_broken_pipe)?;
+                stdout.write_all(&buf[..n]).map_err(CatError::Write)?;
                 // cannot use rustix::io on Windows
                 // really bad workaround for unbuffered write <https://github.com/uutils/coreutils/issues/12188>
                 #[cfg(not(any(unix, target_os = "wasi")))]
-                stdout.flush().inspect_err(handle_broken_pipe)?;
+                stdout.flush().map_err(CatError::Write)?;
             }
             Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e.into()),
             _ => {}
@@ -535,24 +550,29 @@ fn print_lines<R: FdReadable>(
         while let Some(in_buf_pos) = in_buf.get(pos) {
             // skip empty line_number enumerating them if needed
             if in_buf_pos == &b'\n' {
-                write_new_line(&mut writer, options, state, handle.is_interactive)?;
+                write_new_line(&mut writer, options, state, handle.is_interactive)
+                    .map_err(CatError::Write)?;
                 state.at_line_start = true;
                 pos += 1;
                 continue;
             }
             if state.skipped_carriage_return {
-                writer.write_all(b"\r")?;
+                writer.write_all(b"\r").map_err(CatError::Write)?;
                 state.skipped_carriage_return = false;
                 state.at_line_start = false;
             }
             state.one_blank_kept = false;
             if state.at_line_start && options.number != NumberingMode::None {
-                state.line_number.write(&mut writer)?;
+                state
+                    .line_number
+                    .write(&mut writer)
+                    .map_err(CatError::Write)?;
                 state.line_number.increment();
             }
 
             // print to end of line or end of buffer
-            let offset = write_end(&mut writer, &in_buf[pos..], options)?;
+            let offset =
+                write_end(&mut writer, &in_buf[pos..], options).map_err(CatError::Write)?;
 
             let Some(in_buf_pos_off) = in_buf.get(offset + pos) else {
                 // end of buffer
@@ -569,7 +589,8 @@ fn print_lines<R: FdReadable>(
                     &mut writer,
                     options.end_of_line().as_bytes(),
                     handle.is_interactive,
-                )?;
+                )
+                .map_err(CatError::Write)?;
                 state.at_line_start = true;
             }
             pos += offset + 1;
@@ -581,7 +602,7 @@ fn print_lines<R: FdReadable>(
         // and not be buffered internally to the `cat` process.
         // Hence it's necessary to flush our buffer before every time we could potentially block
         // on a `std::io::Read::read` call.
-        writer.flush().inspect_err(handle_broken_pipe)?;
+        writer.flush().map_err(CatError::Write)?;
     }
 
     Ok(())
@@ -593,7 +614,7 @@ fn write_new_line<W: Write>(
     options: &OutputOptions,
     state: &mut OutputState,
     is_interactive: bool,
-) -> CatResult<()> {
+) -> io::Result<()> {
     if state.skipped_carriage_return {
         if options.show_ends {
             writer.write_all(b"^M")?;
@@ -693,10 +714,10 @@ fn write_end_of_line<W: Write>(
     writer: &mut W,
     end_of_line: &[u8],
     is_interactive: bool,
-) -> CatResult<()> {
+) -> io::Result<()> {
     writer.write_all(end_of_line)?;
     if is_interactive {
-        writer.flush().inspect_err(handle_broken_pipe)?;
+        writer.flush()?;
     }
     Ok(())
 }
