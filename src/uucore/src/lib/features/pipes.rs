@@ -8,12 +8,17 @@
 use crate::io::{RawReader, RawWriter};
 use rustix::pipe::{SpliceFlags, fcntl_setpipe_size};
 use std::{
+    cell::Cell,
     io::{PipeReader, PipeWriter, Read, Write},
     os::fd::AsFd,
-    sync::OnceLock,
 };
 pub const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
 const KERNEL_DEFAULT_PIPE_SIZE: usize = 64 * 1024;
+
+thread_local! {
+    /// Cache empty pipe pair to avoid calling `pipe2` at each copy.
+    static PIPE_CACHE: Cell<Option<(PipeReader, PipeWriter)>> = const { Cell::new(None) };
+}
 
 /// A type allows to
 /// - check that zero-copy succeed by ?.is_ok()
@@ -54,6 +59,8 @@ pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io:
 }
 
 /// splice `len` bytes from `pipe` into `dest`.
+///
+/// On error, `pipe` may still hold bytes that were not written: don't reuse it.
 #[inline]
 pub fn drain_pipe(pipe: &PipeReader, dest: &impl AsFd, len: usize) -> PipeRes {
     debug_assert!(len <= MAX_ROOTLESS_PIPE_SIZE, "unexpected RAM usage");
@@ -81,10 +88,10 @@ pub fn drain_pipe(pipe: &PipeReader, dest: &impl AsFd, len: usize) -> PipeRes {
 /// This includes read ahead and optimization for stdout's pipe size
 #[inline]
 pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRes {
-    static PIPE_CACHE: OnceLock<Option<(PipeReader, PipeWriter)>> = OnceLock::new();
-    let Some((pipe_rd, pipe_wr)) = PIPE_CACHE.get_or_init(|| pipe::<false>().ok()) else {
+    let Ok(pipe) = PIPE_CACHE.take().map_or_else(pipe::<false>, Ok) else {
         return Ok(Err(()));
     };
+    let (pipe_rd, pipe_wr) = &pipe;
 
     // fcntl for input would not improve throughput since
     // - sender with splice probably increased size already
@@ -92,37 +99,41 @@ pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRe
     let _ = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
     // pre-generate page caches for splice
     let _ = rustix::fs::fadvise(source, 0, None, rustix::fs::Advice::Sequential);
-    // 1st error is used to detect missing support for splice
-    match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
-        Ok(0) => return Ok(Ok(())),
-        Ok(n) => {
-            if drain_pipe(pipe_rd, dest, n)?.is_err() {
-                return Ok(Err(()));
+    // an error returns without caching the pipe: a failed write can leave bytes in it
+    let res = 'copy: {
+        // 1st error is used to detect missing support for splice
+        match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
+            Ok(0) => break 'copy Ok(()),
+            Ok(n) => {
+                if drain_pipe(pipe_rd, dest, n)?.is_err() {
+                    break 'copy Err(());
+                }
+            }
+            Err(_) => break 'copy Err(()),
+        }
+        // GNU cat catches all strace injections for 2nd+ splice
+        while let mut n @ 1.. = splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE)? {
+            while n > 0 {
+                n -= splice(pipe_rd, dest, n)?;
             }
         }
-        Err(_) => return Ok(Err(())),
-    }
-    // GNU cat catches all strace injections for 2nd+ splice
-    while let mut n @ 1.. = splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE)? {
-        while n > 0 {
-            n -= splice(pipe_rd, dest, n)?;
-        }
-    }
-    Ok(Ok(()))
+        Ok(())
+    };
+    PIPE_CACHE.set(Some(pipe));
+    Ok(res)
 }
 
 /// splice `n` bytes with read/write fallback
 /// return actually sent bytes
 #[inline]
 pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Result<u64> {
-    static PIPE_CACHE: OnceLock<Option<(PipeReader, PipeWriter)>> = OnceLock::new();
     let pipe_size = n.min(MAX_ROOTLESS_PIPE_SIZE as u64) as usize;
     // improve throughput if output is pipe
     // expected that input is already extended if it is coming from splice
     if pipe_size > KERNEL_DEFAULT_PIPE_SIZE {
         let _ = fcntl_setpipe_size(&target, pipe_size);
     }
-    let Some((broker_r, broker_w)) = PIPE_CACHE.get_or_init(|| {
+    let Some(pipe) = PIPE_CACHE.take().or_else(|| {
         // use std::io::pipe to avoid unnecessary fcntl
         let pair = std::io::pipe().ok()?;
         if pipe_size > KERNEL_DEFAULT_PIPE_SIZE {
@@ -132,11 +143,16 @@ pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Res
     }) else {
         return std::io::copy(&mut RawReader(input).take(n), &mut RawWriter(target));
     };
+    let (broker_r, broker_w) = &pipe;
     let mut n = n;
     let mut bytes_written: u64 = 0;
+    // an error returns without caching the pipe: a failed write can leave bytes in it
     while n > 0 {
         match splice(&input, &broker_w, usize::try_from(n).unwrap_or(usize::MAX)) {
-            Ok(0) => return Ok(bytes_written),
+            Ok(0) => {
+                PIPE_CACHE.set(Some(pipe));
+                return Ok(bytes_written);
+            }
             Ok(s) => {
                 n -= s as u64;
                 bytes_written += s as u64;
@@ -147,6 +163,7 @@ pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Res
             Err(_) => break,
         }
     }
+    PIPE_CACHE.set(Some(pipe));
     // remove buffering from this fallback by RawReader, or order of output would be wrong with multiple input
     bytes_written += std::io::copy(&mut RawReader(input).take(n), &mut RawWriter(target))?;
     Ok(bytes_written)
