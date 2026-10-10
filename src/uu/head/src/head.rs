@@ -554,9 +554,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 continue;
             }
             if let Err(err) = head_file(&mut file_handle, options) {
-                if !zero_output {
-                    show!(USimpleError::new(1, err.to_string()));
-                }
+                show!(USimpleError::new(1, err.to_string()));
                 continue;
             }
             Ok(())
