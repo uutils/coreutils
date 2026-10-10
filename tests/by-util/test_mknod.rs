@@ -184,6 +184,49 @@ fn test_mknod_mode_comma_separated() {
 }
 
 #[test]
+fn test_mknod_fifo_with_mode_and_umask() {
+    use uucore::fs::display_permissions;
+    let ts = TestScenario::new(util_name!());
+
+    let test_fifo_creation = |mode: &str, umask: u16, expected: &str| {
+        ts.ucmd()
+            .args(&["-m", mode, "fifo_test", "p"])
+            .umask(libc::mode_t::from(umask))
+            .succeeds();
+
+        let metadata = ts.fixtures.metadata("fifo_test");
+        assert_eq!(display_permissions(&metadata, true), expected);
+        ts.fixtures.remove("fifo_test");
+    };
+
+    test_fifo_creation("734", 0o077, "prwx-wxr--"); // spell-checker:disable-line
+    test_fifo_creation("706", 0o777, "prwx---rw-"); // spell-checker:disable-line
+    test_fifo_creation("a=r", 0o022, "pr--r--r--"); // spell-checker:disable-line
+    test_fifo_creation("u+x", 0o022, "prwxrw-rw-"); // spell-checker:disable-line
+}
+
+#[test]
+fn test_mknod_fifo_with_umask() {
+    use uucore::fs::display_permissions;
+    let ts = TestScenario::new(util_name!());
+
+    let test_fifo_creation = |umask: u16, expected: &str| {
+        ts.ucmd()
+            .args(&["fifo_test", "p"])
+            .umask(libc::mode_t::from(umask))
+            .succeeds();
+
+        let metadata = ts.fixtures.metadata("fifo_test");
+        assert_eq!(display_permissions(&metadata, true), expected);
+        ts.fixtures.remove("fifo_test");
+    };
+
+    test_fifo_creation(0o022, "prw-r--r--"); // spell-checker:disable-line
+    test_fifo_creation(0o077, "prw-------"); // spell-checker:disable-line
+    test_fifo_creation(0o777, "p---------"); // spell-checker:disable-line
+}
+
+#[test]
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mknod_selinux() {
     let ts = TestScenario::new(util_name!());
