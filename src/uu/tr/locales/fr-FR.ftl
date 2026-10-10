@@ -7,6 +7,7 @@ tr-help-complement = utiliser le complément d'ENSEMBLE1
 tr-help-delete = supprimer les caractères dans ENSEMBLE1, ne pas traduire
 tr-help-squeeze = remplacer chaque séquence d'un caractère répété qui est listé dans le dernier ENSEMBLE spécifié, avec une seule occurrence de ce caractère
 tr-help-truncate-set1 = d'abord tronquer ENSEMBLE1 à la longueur d'ENSEMBLE2
+tr-help-unbuffered = garantir que la sortie n'est pas mise en mémoire tampon
 
 # Messages d'erreur
 tr-error-missing-operand = opérande manquant

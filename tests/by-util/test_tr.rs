@@ -1767,6 +1767,53 @@ fn test_failed_write_is_reported() {
 }
 
 #[test]
+fn test_unbuffered_flag() {
+    new_ucmd!()
+        .args(&["-u", "a-z", "A-Z"])
+        .pipe_in("hello\n")
+        .succeeds()
+        .stdout_only("HELLO\n");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no pipe support")]
+fn test_unbuffered_partial_line() {
+    // With -u, a chunk without a trailing newline must come out before more
+    // input arrives, as in `tail -f log | tr -u a-z A-Z | consumer`.
+    //
+    // Run in a separate thread so that the test fails via timeout rather
+    // than hanging if tr holds the output back.
+    let handle = std::thread::spawn(|| {
+        for (args, out1, out2) in [
+            (&["-u", "a-z", "A-Z"][..], "ABC", "DEF\nXY"),
+            (&["-u", "-d", "e"][..], "abc", "df\nxy"),
+            (&["-u", "-s", "a-z"][..], "abc", "def\nxy"),
+        ] {
+            let mut child = new_ucmd!()
+                .args(args)
+                .set_stdin(std::process::Stdio::piped())
+                .set_stdout(std::process::Stdio::piped())
+                .run_no_wait();
+            child.write_in(b"abc");
+            assert_eq!(child.stdout_exact_bytes(out1.len()), out1.as_bytes());
+            child.write_in(b"def\nxy");
+            assert_eq!(child.stdout_exact_bytes(out2.len()), out2.as_bytes());
+            child.wait().unwrap().success();
+        }
+    });
+
+    for _ in 0..500 {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        if handle.is_finished() {
+            break;
+        }
+    }
+
+    assert!(handle.is_finished(), "tr -u held back a partial line");
+    handle.join().unwrap();
+}
+
+#[test]
 #[cfg_attr(wasi_runner, ignore = "WASI: no pipe/signal support")]
 fn test_broken_pipe_no_error() {
     // More than a pipe buffer, so that the output blocks until the reader is gone.
