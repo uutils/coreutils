@@ -488,7 +488,7 @@ fn print_unbuffered<R: FdReadable>(
     stdout: io::Stdout,
 ) -> CatResult<()> {
     #[cfg(any(unix, target_os = "wasi"))]
-    let mut stdout = uucore::io::RawWriter(stdout); // use raw syscall to remove buffering
+    let mut stdout = uucore::io::RawWriter::new(&stdout); // use raw syscall to remove buffering
     #[cfg(not(any(unix, target_os = "wasi")))]
     let mut stdout = stdout.lock();
     let mut buf = [0; 1024 * 64];

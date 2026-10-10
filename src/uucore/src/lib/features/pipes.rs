@@ -65,7 +65,7 @@ pub fn drain_pipe(pipe: &PipeReader, dest: &impl AsFd, len: usize) -> PipeRes {
         // use read_to_end to make pipe empty for the case write failed
         let mut drain = Vec::with_capacity(len);
         pipe.take(len as u64).read_to_end(&mut drain)?;
-        RawWriter(&dest).write_all(&drain)?;
+        RawWriter::new(&dest).write_all(&drain)?;
         return Ok(Err(()));
     };
     // GNU cat catches all strace injections for 2nd+ splice
@@ -130,7 +130,10 @@ pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Res
         }
         Some(pair)
     }) else {
-        return std::io::copy(&mut RawReader(input).take(n), &mut RawWriter(target));
+        return std::io::copy(
+            &mut RawReader::new(&input).take(n),
+            &mut RawWriter::new(&target),
+        );
     };
     let mut n = n;
     let mut bytes_written: u64 = 0;
@@ -148,7 +151,10 @@ pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Res
         }
     }
     // remove buffering from this fallback by RawReader, or order of output would be wrong with multiple input
-    bytes_written += std::io::copy(&mut RawReader(input).take(n), &mut RawWriter(target))?;
+    bytes_written += std::io::copy(
+        &mut RawReader::new(&input).take(n),
+        &mut RawWriter::new(&target),
+    )?;
     Ok(bytes_written)
 }
 

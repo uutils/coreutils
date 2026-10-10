@@ -299,7 +299,7 @@ enum Writer {
     File(std::fs::File),
     // remove buffering for posix requirement and improve throughput
     #[cfg(any(unix, target_os = "wasi"))]
-    Stdout(uucore::io::RawWriter<rustix::fd::BorrowedFd<'static>>),
+    Stdout(uucore::io::RawWriter<'static>),
     #[cfg(not(any(unix, target_os = "wasi")))]
     Stdout(io::Stdout),
 }
