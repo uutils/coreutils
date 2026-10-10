@@ -23,6 +23,7 @@ use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, show};
 
 mod options {
+    pub const ASCII: &str = "ascii";
     pub const COMPLEMENT: &str = "complement";
     pub const DELETE: &str = "delete";
     pub const SQUEEZE: &str = "squeeze-repeats";
@@ -170,6 +171,14 @@ pub fn uu_app() -> Command {
         .after_help(translate!("tr-after-help"))
         .infer_long_args(true)
         .trailing_var_arg(true)
+        .arg(
+            // GNU supports -A which does noop
+            Arg::new(options::ASCII)
+                .short('A')
+                .hide(true)
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::ASCII),
+        )
         .arg(
             Arg::new(options::COMPLEMENT)
                 .visible_short_alias('C')
