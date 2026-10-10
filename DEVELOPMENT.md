@@ -1,4 +1,5 @@
 <!-- spell-checker:ignore (flags) Ccodegen Coverflow Cpanic Cinstrument Zpanic reimplementing toybox RUNTEST CARGOFLAGS nextest prereq autopoint gettext texinfo automake findutils shellenv libexec gnubin toolchains gsed -->
+<!-- spell-checker:ignore fakeroot setid -->
 
 # Setting up your local development environment
 
@@ -134,6 +135,15 @@ If you would prefer to test a select few utilities:
 
 ```shell
 cargo test --features "chmod mv tail" --no-default-features
+```
+
+The Linux cross-device `mv` ownership regression additionally uses the optional
+`fakeroot` executable and requires a writable `/dev/shm`. Run it as a non-root
+user; it reports a skip when fakeroot is unavailable or `/dev/shm` is on the
+source filesystem:
+
+```shell
+cargo test --no-default-features --features mv test_mv_cross_device_fakeroot_ownership_and_setid
 ```
 
 If you also want to test the core utilities:

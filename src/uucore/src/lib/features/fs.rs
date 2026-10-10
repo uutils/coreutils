@@ -1107,16 +1107,7 @@ pub fn get_filename(file: &Path) -> Option<&str> {
 pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> {
     #[cfg(all(unix, not(target_os = "redox")))]
     {
-        use rustix::fs::{AtFlags, CWD, Mode, OFlags, openat, renameat, unlinkat};
-        use std::ffi::OsStr;
-        use std::io::Read;
-        use std::os::unix::ffi::OsStrExt;
-
-        // GNU's template is `CuXXXXXX`: a 2-char prefix plus 6 random chars
-        // from a 62-char alphabet. The ~3% modulo bias per slot is irrelevant
-        // for an 8-char unguessability budget.
-        const ALPHABET: &[u8; 62] =
-            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        use rustix::fs::CWD;
 
         match link_at(target, CWD, dest.as_os_str(), symbolic) {
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
@@ -1132,39 +1123,10 @@ pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> 
             .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid link path"))?;
         // No NOFOLLOW: the parent may be a symlink to a directory, which the
         // create attempt above already followed.
-        let dir = openat(
-            CWD,
-            parent,
-            OFlags::DIRECTORY | OFlags::RDONLY | OFlags::CLOEXEC,
-            Mode::empty(),
-        )?;
-        let mut urandom = fs::File::open("/dev/urandom")?;
-
-        for _ in 0..32 {
-            let mut name = *b"Cu------";
-            let mut raw = [0u8; 6];
-            urandom.read_exact(&mut raw)?;
-            for (slot, byte) in name[2..].iter_mut().zip(raw) {
-                *slot = ALPHABET[byte as usize % ALPHABET.len()];
-            }
-            let tmp = OsStr::from_bytes(&name);
-
-            match link_at(target, &dir, tmp, symbolic) {
-                Ok(()) => {
-                    let renamed = renameat(&dir, tmp, &dir, basename);
-                    // Renaming onto an existing link to the same inode is a
-                    // no-op, which leaves the temp behind.
-                    let _ = unlinkat(&dir, tmp, AtFlags::empty());
-                    return renamed.map_err(Into::into);
-                }
-                Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
-                Err(e) => return Err(e),
-            }
-        }
-        Err(Error::new(
-            ErrorKind::AlreadyExists,
-            "no unique temporary name available in the destination directory",
-        ))
+        let dir = crate::safe_traversal::DirFd::open_anchor(parent)?;
+        replace_existing_entry_at(&dir, basename, |dir, name| {
+            link_at(target, dir, name, symbolic)
+        })
     }
     #[cfg(any(windows, target_os = "redox", target_os = "wasi"))]
     {
@@ -1180,9 +1142,103 @@ pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> 
     }
 }
 
-/// `symlinkat`/`linkat` relative to an open directory.
+/// Create the entry `name` in `dir` with `create`, replacing an entry already
+/// there, and return what `create` returned.
+///
+/// Never unlinks the existing entry first, which would briefly free the name
+/// for another user to claim. Try the create; if the name is taken, create the
+/// entry under a random temporary name in `dir` and `renameat(2)` it over.
+/// `create` must fail with `EEXIST` when its name is taken, must not leave an
+/// entry behind when it fails otherwise, and must not create a directory.
+///
+/// # Errors
+///
+/// Returns an error if `create` or the rename fails, or if no unique temporary
+/// name is available.
 #[cfg(all(unix, not(target_os = "redox")))]
-fn link_at<Fd: AsFd>(target: &Path, dir: Fd, name: &OsStr, symbolic: bool) -> IOResult<()> {
+pub fn replace_entry_at<D: AsFd, T>(
+    dir: &D,
+    name: &OsStr,
+    mut create: impl FnMut(&D, &OsStr) -> IOResult<T>,
+) -> IOResult<T> {
+    match create(dir, name) {
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
+        res => return res,
+    }
+    replace_existing_entry_at(dir, name, create)
+}
+
+/// [`replace_entry_at`] once creating `name` itself failed with `EEXIST`.
+#[cfg(all(unix, not(target_os = "redox")))]
+fn replace_existing_entry_at<D: AsFd, T>(
+    dir: &D,
+    name: &OsStr,
+    create: impl FnMut(&D, &OsStr) -> IOResult<T>,
+) -> IOResult<T> {
+    use rustix::fs::{AtFlags, renameat, unlinkat};
+
+    let (created, tmp) = create_temp_at(dir, create)?;
+    let renamed = renameat(dir, &tmp, dir, name);
+    // Renaming onto an existing link to the same inode is a no-op, which
+    // leaves the temp behind.
+    let _ = unlinkat(dir, &tmp, AtFlags::empty());
+    renamed.map(|()| created).map_err(Into::into)
+}
+
+/// Create an entry in `dir` under a random name that is not taken, and return
+/// what `create` returned along with the name.
+///
+/// `create` must fail with `EEXIST` when its name is taken; another name is
+/// tried then.
+///
+/// # Errors
+///
+/// Returns an error if `create` fails otherwise, or if no unique name is
+/// available.
+#[cfg(all(unix, not(target_os = "redox")))]
+pub fn create_temp_at<D: AsFd, T>(
+    dir: &D,
+    mut create: impl FnMut(&D, &OsStr) -> IOResult<T>,
+) -> IOResult<(T, OsString)> {
+    use std::io::Read;
+    use std::os::unix::ffi::OsStrExt;
+
+    // GNU's template is `CuXXXXXX`: a 2-char prefix plus 6 random chars
+    // from a 62-char alphabet. The ~3% modulo bias per slot is irrelevant
+    // for an 8-char unguessability budget.
+    const ALPHABET: &[u8; 62] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+    let mut urandom = fs::File::open("/dev/urandom")?;
+
+    for _ in 0..32 {
+        let mut tmp = *b"Cu------";
+        let mut raw = [0u8; 6];
+        urandom.read_exact(&mut raw)?;
+        for (slot, byte) in tmp[2..].iter_mut().zip(raw) {
+            *slot = ALPHABET[byte as usize % ALPHABET.len()];
+        }
+        let tmp = OsStr::from_bytes(&tmp);
+
+        match create(dir, tmp) {
+            Ok(created) => return Ok((created, tmp.to_owned())),
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Err(Error::new(
+        ErrorKind::AlreadyExists,
+        translate!("error-no-unique-temp-name"),
+    ))
+}
+
+/// `symlinkat`/`linkat` relative to an open directory: create `name` in `dir`
+/// as a link to `target`, symbolic if `symbolic` is set.
+///
+/// # Errors
+///
+/// Fails with `EEXIST` if `name` exists, without following it.
+#[cfg(all(unix, not(target_os = "redox")))]
+pub fn link_at<Fd: AsFd>(target: &Path, dir: Fd, name: &OsStr, symbolic: bool) -> IOResult<()> {
     use rustix::fs::{AtFlags, CWD, linkat, symlinkat};
 
     if symbolic {

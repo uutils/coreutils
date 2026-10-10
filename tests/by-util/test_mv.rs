@@ -4,7 +4,8 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore mydir hardlinked tmpfs notty unwriteable myfolder SRCDATA DSTDATA REALDATA realfile
-// spell-checker:ignore dirattr dirvalue setfattr getfattr
+// spell-checker:ignore dirattr dirvalue setfattr getfattr Nofile
+// spell-checker:ignore fakeroot setid
 
 use rstest::rstest;
 use std::io::Write;
@@ -2973,6 +2974,427 @@ fn test_mv_cross_device_dir_refuses_symlink_at_recreated_dest() {
     assert_eq!(at.read("victim/guard"), "PROTECTED_DATA");
 }
 
+/// A cross-device move of a socket used to remove the destination and then
+/// fail to copy the socket. Like GNU, the socket is recreated instead (#13145).
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_socket_replaces_dest() {
+    use std::os::unix::fs::FileTypeExt;
+    use std::os::unix::net::UnixListener;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    UnixListener::bind(at.plus("sock")).expect("bind socket");
+    let other_fs = TempDir::new_in("/dev/shm/").expect("create temp dir in /dev/shm");
+    let dest = other_fs.path().join("dest");
+    std::fs::write(&dest, "old content").unwrap();
+
+    scene.ucmd().arg("sock").arg(&dest).succeeds().no_output();
+
+    assert!(at.plus("sock").symlink_metadata().is_err());
+    assert!(dest.symlink_metadata().unwrap().file_type().is_socket());
+}
+
+/// A fifo moved across devices replaces the destination and keeps its mode.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_fifo_replaces_dest_and_preserves_mode() {
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkfifo("fifo");
+    set_permissions(at.plus("fifo"), Permissions::from_mode(0o604)).unwrap();
+    let other_fs = TempDir::new_in("/dev/shm/").expect("create temp dir in /dev/shm");
+    let dest = other_fs.path().join("dest");
+    std::fs::write(&dest, "old content").unwrap();
+
+    scene.ucmd().arg("fifo").arg(&dest).succeeds().no_output();
+
+    let metadata = dest.symlink_metadata().unwrap();
+    assert!(metadata.file_type().is_fifo());
+    assert_eq!(metadata.permissions().mode() & 0o7777, 0o604);
+}
+
+/// A destination reached through a symlinked directory is followed, as it is
+/// for any other move.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_special_file_into_symlinked_parent() {
+    use std::os::unix::fs::{FileTypeExt, symlink};
+    use std::os::unix::net::UnixListener;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    UnixListener::bind(at.plus("sock")).expect("bind socket");
+    at.mkfifo("fifo");
+    let other_fs = TempDir::new_in("/dev/shm/").expect("create temp dir in /dev/shm");
+    let real = other_fs.path().join("real");
+    let link = other_fs.path().join("link");
+    std::fs::create_dir(&real).unwrap();
+    symlink(&real, &link).unwrap();
+    std::fs::write(real.join("sock_dest"), "old content").unwrap();
+
+    for (source, dest) in [("sock", "sock_dest"), ("fifo", "fifo_dest")] {
+        scene
+            .ucmd()
+            .arg(source)
+            .arg(link.join(dest))
+            .succeeds()
+            .no_output();
+    }
+
+    let sock = real.join("sock_dest").symlink_metadata().unwrap();
+    assert!(sock.file_type().is_socket());
+    let fifo = real.join("fifo_dest").symlink_metadata().unwrap();
+    assert!(fifo.file_type().is_fifo());
+    assert!(link.symlink_metadata().unwrap().is_symlink());
+}
+
+/// Like a same-device move, a cross-device move of a special file only needs
+/// write and search permission on the parent directories, not read.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_special_file_write_search_only_parents() {
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+    use tempfile::TempDir;
+
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("src");
+    at.mkfifo("src/fifo");
+    let other_fs = TempDir::new_in("/dev/shm/").expect("create temp dir in /dev/shm");
+    let dst = other_fs.path().join("dst");
+    std::fs::create_dir(&dst).unwrap();
+    std::fs::write(dst.join("fifo"), "old content").unwrap();
+    set_permissions(at.plus("src"), Permissions::from_mode(0o300)).unwrap();
+    set_permissions(&dst, Permissions::from_mode(0o300)).unwrap();
+
+    let result = scene.ucmd().arg("src/fifo").arg(dst.join("fifo")).run();
+
+    set_permissions(at.plus("src"), Permissions::from_mode(0o700)).unwrap();
+    set_permissions(&dst, Permissions::from_mode(0o700)).unwrap();
+    result.success().no_output();
+    assert!(at.plus("src/fifo").symlink_metadata().is_err());
+    let fifo = dst.join("fifo").symlink_metadata().unwrap();
+    assert!(fifo.file_type().is_fifo());
+}
+
+/// The mode of a special file moved across devices is set before the file
+/// appears at the destination name, so a file linked over that name in the
+/// meantime keeps its own mode.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_special_file_mode_not_applied_to_swapped_entry() {
+    use std::fs::{Permissions, hard_link, remove_file, rename, set_permissions};
+    use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::thread;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let other_fs = TempDir::new_in("/dev/shm/").expect("create temp dir in /dev/shm");
+    let victim = other_fs.path().join("victim");
+    std::fs::write(&victim, "").unwrap();
+    set_permissions(&victim, Permissions::from_mode(0o600)).unwrap();
+    let dest = other_fs.path().join("dest");
+
+    // Whenever a fifo shows up at `dest`, link `victim` over it. The link is
+    // made ahead of time, so that only a rename follows the check.
+    let done = Arc::new(AtomicBool::new(false));
+    let swapper = thread::spawn({
+        let (victim, dest, done) = (victim.clone(), dest.clone(), Arc::clone(&done));
+        let link = other_fs.path().join("link");
+        move || {
+            let mut linked = false;
+            while !done.load(Ordering::Relaxed) {
+                linked = linked || hard_link(&victim, &link).is_ok();
+                if linked
+                    && dest
+                        .symlink_metadata()
+                        .is_ok_and(|m| m.file_type().is_fifo())
+                {
+                    linked = rename(&link, &dest).is_err();
+                }
+            }
+        }
+    });
+
+    for i in 0..1000 {
+        let fifo = format!("fifo{i}");
+        at.mkfifo(&fifo);
+        set_permissions(at.plus(&fifo), Permissions::from_mode(0o646)).unwrap();
+        scene.ucmd().arg(&fifo).arg(&dest).run();
+        let _ = remove_file(&dest);
+        if victim.metadata().unwrap().permissions().mode() & 0o7777 != 0o600 {
+            break;
+        }
+    }
+    done.store(true, Ordering::Relaxed);
+    swapper.join().unwrap();
+
+    assert_eq!(
+        victim.metadata().unwrap().permissions().mode() & 0o7777,
+        0o600,
+        "the fifo's mode was applied to a file linked over the destination"
+    );
+}
+
+/// Like GNU, a special file keeps its mode whatever the umask, including one
+/// that takes the owner's write or search permission, which creating the
+/// node in its private staging directory needs.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_special_file_under_owner_umask() {
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let other_fs = TempDir::new_in("/dev/shm/").expect("create temp dir in /dev/shm");
+
+    for umask in [0o100, 0o200, 0o400] {
+        let name = format!("fifo{umask:o}");
+        at.mkfifo(&name);
+        set_permissions(at.plus(&name), Permissions::from_mode(0o646)).unwrap();
+        let dest = other_fs.path().join(&name);
+
+        scene
+            .ucmd()
+            .arg(&name)
+            .arg(&dest)
+            .umask(umask)
+            .succeeds()
+            .no_output();
+
+        let metadata = dest.symlink_metadata().unwrap();
+        assert!(metadata.file_type().is_fifo());
+        assert_eq!(metadata.permissions().mode() & 0o7777, 0o646);
+    }
+    assert_eq!(std::fs::read_dir(other_fs.path()).unwrap().count(), 3);
+}
+
+/// The private directory a special file is staged in is removed again when
+/// opening it fails, here because no descriptor is left for it.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_special_file_staging_removed_at_fd_limit() {
+    use rustix::process::Resource;
+    use std::os::unix::fs::FileTypeExt;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let other_fs = TempDir::new_in("/dev/shm/").expect("create temp dir in /dev/shm");
+    let dest = other_fs.path().join("dest");
+    std::fs::write(&dest, "old content").unwrap();
+    at.mkfifo("fifo");
+
+    // Raise the limit one descriptor at a time: each run fails at a later
+    // step, one of them right after creating the staging directory, until
+    // the move succeeds.
+    for limit in 3..64 {
+        scene
+            .ucmd()
+            .arg("fifo")
+            .arg(&dest)
+            .limit(Resource::Nofile, limit, limit)
+            .run();
+
+        let entries: Vec<_> = std::fs::read_dir(other_fs.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(entries, ["dest"], "left behind at a limit of {limit}");
+        if !at.plus("fifo").exists() {
+            break;
+        }
+    }
+    assert!(dest.symlink_metadata().unwrap().file_type().is_fifo());
+}
+
+/// Special files inside a directory moved across devices are recreated with
+/// their mode, not copied by content.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_dir_with_special_files() {
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+    use std::os::unix::net::UnixListener;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    UnixListener::bind(at.plus("dir/sock")).expect("bind socket");
+    at.mkfifo("dir/fifo");
+    set_permissions(at.plus("dir/fifo"), Permissions::from_mode(0o604)).unwrap();
+    let other_fs = TempDir::new_in("/dev/shm/").expect("create temp dir in /dev/shm");
+
+    scene
+        .ucmd()
+        .arg("dir")
+        .arg(other_fs.path())
+        .succeeds()
+        .no_output();
+
+    assert!(!at.dir_exists("dir"));
+    let sock = other_fs.path().join("dir/sock").symlink_metadata().unwrap();
+    assert!(sock.file_type().is_socket());
+    let fifo = other_fs.path().join("dir/fifo").symlink_metadata().unwrap();
+    assert!(fifo.file_type().is_fifo());
+    assert_eq!(fifo.permissions().mode() & 0o7777, 0o604);
+}
+
+/// A cross-device directory move must not write through an entry that appears
+/// in the destination while it is being copied: `fs::copy` followed such a symlink and
+/// let it redirect the content anywhere the caller could write. GNU replaces the
+/// entry and finishes the move, and so do we, by renaming a new entry over it.
+/// Whether a symlink lands before mv reaches its name depends on timing, so a
+/// run where none does passes without proving anything.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_dir_replaces_symlink_entry_created_mid_copy() {
+    use std::ffi::OsString;
+    use std::os::unix::fs::symlink;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::thread;
+    use std::time::{Duration, Instant};
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir");
+    // Many entries, so the copy is still running when the symlink lands
+    // wherever it does: readdir order decides which names come first, not us.
+    let mut names: Vec<OsString> = Vec::new();
+    for i in 0..200 {
+        let name = format!("f{i:03}");
+        at.write(&format!("dir/{name}"), "SOURCE_DATA");
+        names.push(name.into());
+    }
+    at.write("outside", "OUTSIDE_DATA");
+
+    let dst_dir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let dest = dst_dir.path().join("moved");
+    let outside = at.plus_as_string("outside");
+
+    let done = Arc::new(AtomicBool::new(false));
+    let linker_dest = dest.clone();
+    let linker_names = names.clone();
+    let linker_done = Arc::clone(&done);
+    let linker = thread::spawn(move || {
+        let linker_outside = outside.clone();
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let mut created = 0;
+        while created == 0 && !linker_done.load(Ordering::Relaxed) && Instant::now() < deadline {
+            if linker_dest.is_dir() {
+                for name in &linker_names {
+                    if symlink(&linker_outside, linker_dest.join(name)).is_ok() {
+                        created += 1;
+                    }
+                }
+            }
+            thread::yield_now();
+        }
+        created
+    });
+
+    let result = scene.ucmd().arg("dir").arg(&dest).run();
+    done.store(true, Ordering::Relaxed);
+
+    linker.join().expect("symlink thread panicked");
+    assert_eq!(
+        at.read("outside"),
+        "OUTSIDE_DATA",
+        "cross-device dir move must not write through a symlink created in the destination"
+    );
+    result.success();
+    for name in &names {
+        let metadata = dest.join(name).symlink_metadata().unwrap();
+        assert!(
+            !metadata.is_symlink(),
+            "{} is still a symlink; the move must replace it, not leave it",
+            name.to_string_lossy()
+        );
+    }
+}
+
+/// A cross-device directory move keeps one descriptor open per directory
+/// level, so a deep tree fits in a small descriptor limit.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_deep_dir_with_low_fd_limit() {
+    use rustix::process::Resource;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let deep = format!("dir{}", "/d".repeat(40));
+    at.mkdir_all(&deep);
+    at.write(&format!("{deep}/file"), "deep");
+    let other_fs = TempDir::new_in("/dev/shm/").expect("create temp dir in /dev/shm");
+
+    scene
+        .ucmd()
+        .arg("dir")
+        .arg(other_fs.path())
+        .limit(Resource::Nofile, 64, 64)
+        .succeeds()
+        .no_output();
+
+    assert!(!at.dir_exists("dir"));
+    let moved = std::fs::read_to_string(other_fs.path().join(format!("{deep}/file"))).unwrap();
+    assert_eq!(moved, "deep");
+}
+
+/// Creating entries in a directory needs write and search permission only, so
+/// a cross-device directory move copies the whole tree when the umask takes
+/// the owner's read permission from the new directories.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_dir_with_owner_read_masked() {
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::PermissionsExt;
+    use tempfile::TempDir;
+
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("dir/sub");
+    at.write("dir/sub/file", "content");
+    let other_fs = TempDir::new_in("/dev/shm/").expect("create temp dir in /dev/shm");
+    let moved = other_fs.path().join("dir");
+
+    scene.ucmd().arg("dir").arg(&moved).umask(0o400).run();
+
+    for dir in [&moved, &moved.join("sub")] {
+        let _ = set_permissions(dir, Permissions::from_mode(0o700));
+    }
+    // The exit status is not checked: on Linux, copying the moved directory's
+    // xattrs still opens it for reading afterwards and fails, as it did before.
+    assert_eq!(
+        std::fs::read_to_string(moved.join("sub/file")).unwrap(),
+        "content"
+    );
+}
+
 #[test]
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mv_selinux_context() {
@@ -3556,6 +3978,73 @@ fn find_other_group(current: u32) -> Option<u32> {
         let gid = group.as_raw();
         (gid != current).then_some(gid)
     })
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_mv_cross_device_fakeroot_ownership_and_setid() {
+    use std::fs;
+    use std::os::unix::fs::MetadataExt;
+    use std::process::Command;
+    use tempfile::TempDir;
+
+    if rustix::process::geteuid().is_root() {
+        println!("SKIPPED: fakeroot regression requires a non-root user");
+        return;
+    }
+    if Command::new("fakeroot").arg("--version").output().is_err() {
+        println!("SKIPPED: fakeroot is not installed");
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let target_dir = TempDir::new_in("/dev/shm").unwrap();
+    if fs::metadata(at.plus(".")).unwrap().dev() == fs::metadata(target_dir.path()).unwrap().dev() {
+        println!("SKIPPED: /dev/shm is on the source filesystem");
+        return;
+    }
+
+    // Exercise the standalone and fd-relative directory-copy consumers.
+    for (source, relative_file) in [("single", ""), ("tree", "nested/file")] {
+        let destination = target_dir.path().join(source);
+        scene
+            .cmd("fakeroot")
+            .args(&["--", "sh", "-eu", "-c"])
+            .arg(
+                r#"
+source=$1
+relative_file=$2
+destination=$3
+binary=$4
+if [ -n "$relative_file" ]; then
+    mkdir -p "$source/nested"
+    file="$source/$relative_file"
+else
+    file=$source
+fi
+printf 'emulated ownership payload\n' > "$file"
+chown 321:654 "$file"
+chmod 6751 "$file"
+test "$(stat -c '%u:%g %a' "$file")" = '321:654 6751'
+"$binary" mv "$source" "$destination"
+test ! -e "$source"
+if [ -n "$relative_file" ]; then
+    destination="$destination/$relative_file"
+fi
+stat -c '%u:%g %a' "$destination"
+cat "$destination"
+"#,
+            )
+            .arg("fakeroot-mv")
+            .arg(source)
+            .arg(relative_file)
+            .arg(&destination)
+            .arg(&scene.bin_path)
+            .succeeds()
+            .stdout_only("321:654 6751\nemulated ownership payload\n");
+    }
 }
 
 /// Test that group ownership is preserved during cross-device file moves.
