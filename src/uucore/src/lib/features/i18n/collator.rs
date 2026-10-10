@@ -16,11 +16,14 @@ pub use icu_collator::options::{
 static COLLATOR: OnceLock<CollatorBorrowed> = OnceLock::new();
 
 /// Will initialize the collator if not already initialized.
-/// returns `true` if initialization happened
+/// Returns `true` once a collator is in place, whether this call set it up.
 pub fn try_init_collator(opts: CollatorOptions) -> bool {
-    COLLATOR
-        .set(CollatorBorrowed::try_new(get_collating_locale().0.clone().into(), opts).unwrap())
-        .is_ok()
+    // A second call in the same process (an embedded utility run twice) keeps
+    // the collator already set up and still reports that collation is active.
+    COLLATOR.get_or_init(|| {
+        CollatorBorrowed::try_new(get_collating_locale().0.clone().into(), opts).unwrap()
+    });
+    true
 }
 
 /// Will initialize the collator and panic if already initialized.
