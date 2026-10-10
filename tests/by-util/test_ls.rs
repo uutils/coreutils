@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons Nofile NOTCAPABLE iproduct newfstatat isox
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons Nofile NOTCAPABLE iproduct newfstatat isox llistxattr
 
 #![allow(
     clippy::similar_names,
@@ -8185,6 +8185,44 @@ fn test_long_options_detached() {
     new_ucmd!().arg("--format").arg("single-column").succeeds();
     new_ucmd!().arg("--time").arg("mtime").succeeds();
     new_ucmd!().arg("--block-size").arg("512").succeeds();
+}
+
+/// `-l --color` used to call `llistxattr` twice per file (padding ACL check +
+/// display/color). Each listed file must be queried only once.
+/// See https://github.com/uutils/coreutils/issues/15207
+#[test]
+#[cfg(target_os = "linux")]
+fn test_long_color_lists_xattrs_once_per_file() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("file");
+    scene.fixtures.touch("file2");
+
+    let output = Command::new("strace")
+        .args(["-qq", "-e", "trace=llistxattr"])
+        .arg(&scene.bin_path)
+        .arg(scene.util_name.as_str())
+        .args(["--color=always", "-l", "."])
+        .current_dir(scene.fixtures.as_string())
+        .output();
+    let Ok(output) = output else {
+        return; // missing strace
+    };
+    let trace = String::from_utf8_lossy(&output.stderr);
+    if !trace.contains("llistxattr") {
+        return; // strace unavailable, e.g. restricted ptrace
+    }
+
+    for name in ["file", "file2"] {
+        // Match the path argument specifically so "file" does not count "file2".
+        let needle = format!("\"./{name}\"");
+        let count = trace.lines().filter(|l| l.contains(&needle)).count();
+        assert_eq!(
+            count, 1,
+            "expected a single llistxattr for {name}, got {count} in:\n{trace}"
+        );
+    }
 }
 
 // Without -R a directory can never be revisited, so ls should not spend a stat

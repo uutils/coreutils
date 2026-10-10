@@ -810,6 +810,15 @@ pub struct PathData<'a> {
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
     de: RefCell<Option<DirEntry>>,
     security_context: OnceCell<Box<str>>,
+    // Shared across `-l` ACL/`+` checks and `--color` capability styling so
+    // each file only pays one `llistxattr`.
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "hurd",
+        target_os = "linux",
+        target_os = "netbsd"
+    ))]
+    xattr_summary: OnceCell<uucore::fsxattr::XattrSummary>,
     // Name of the file - will be empty for . or ..
     display_name: PathDataDisplayName<'a>,
     // PathBuf that all above data corresponds to
@@ -894,12 +903,54 @@ impl<'a> PathData<'a> {
             ft,
             de,
             security_context,
+            #[cfg(any(
+                target_os = "freebsd",
+                target_os = "hurd",
+                target_os = "linux",
+                target_os = "netbsd"
+            ))]
+            xattr_summary: OnceCell::new(),
             display_name,
             p_buf,
             must_dereference,
             command_line,
             is_dot_dir,
         }
+    }
+
+    /// Lists the xattrs on first use; later calls reuse the cached result.
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "hurd",
+        target_os = "linux",
+        target_os = "netbsd"
+    ))]
+    fn xattr_summary(&self) -> uucore::fsxattr::XattrSummary {
+        *self
+            .xattr_summary
+            .get_or_init(|| uucore::fsxattr::summarize_xattrs(&self.p_buf, self.must_dereference))
+    }
+
+    /// Whether this path has extended attributes (ACL / `+` indicator).
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "hurd",
+        target_os = "linux",
+        target_os = "netbsd"
+    ))]
+    pub(crate) fn has_acl(&self) -> bool {
+        self.xattr_summary().has_acl
+    }
+
+    /// Whether this path has a `security.capability` xattr (color `ca` style).
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "hurd",
+        target_os = "linux",
+        target_os = "netbsd"
+    ))]
+    pub(crate) fn has_security_capability(&self) -> bool {
+        self.xattr_summary().has_capability
     }
 
     fn metadata(&self) -> Option<&Metadata> {

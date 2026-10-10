@@ -33,13 +33,6 @@ use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions};
 
 #[cfg(unix)]
 use uucore::entries;
-#[cfg(any(
-    target_os = "freebsd",
-    target_os = "hurd",
-    target_os = "linux",
-    target_os = "netbsd"
-))]
-use uucore::fsxattr::has_acl;
 #[cfg(unix)]
 use uucore::libc::{dev_t, major, minor};
 use uucore::{
@@ -962,7 +955,7 @@ fn display_item_long(
             target_os = "linux",
             target_os = "netbsd"
         ))]
-        let is_acl_set = has_acl(item.path(), item.must_dereference);
+        let is_acl_set = item.has_acl();
         state
             .display_buf
             .extend(display_permissions(md, true).as_bytes());
@@ -1391,7 +1384,7 @@ fn calculate_padding_collection(
                 target_os = "linux",
                 target_os = "netbsd"
             ))]
-            let is_acl_set = has_acl(item.path(), item.must_dereference);
+            let is_acl_set = item.has_acl();
             if context_len > 1 || is_acl_set {
                 padding_collections.permissions = PERMISSIONS_WIDTH + 1;
             }

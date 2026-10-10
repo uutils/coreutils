@@ -542,11 +542,12 @@ pub(crate) fn color_name(
         target_os = "netbsd"
     ))]
     {
-        // Skip checking capabilities if LS_COLORS=ca=:
+        // Skip checking capabilities if LS_COLORS=ca=:; reuse PathData's
+        // cached xattr summary so this does not add a second llistxattr.
         let has_capabilities = style_manager
             .colors
             .has_explicit_style_for(Indicator::Capabilities)
-            && uucore::fsxattr::has_security_cap_acl(&path.p_buf, path.must_dereference);
+            && path.has_security_capability();
 
         // If the file has capabilities, use a specific style for `ca` (capabilities)
         if has_capabilities {
