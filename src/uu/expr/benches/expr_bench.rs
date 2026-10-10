@@ -5,7 +5,7 @@
 
 use divan::{Bencher, black_box};
 use uu_expr::uumain;
-use uucore::benchmark::run_util_function;
+use uucore::benchmark::get_bench_args;
 
 /// Benchmark `expr index` worst case: the needle char set never matches, so the
 /// whole string is scanned. This is the input that exercised the old O(N * M)
@@ -14,10 +14,11 @@ use uucore::benchmark::run_util_function;
 fn index_no_match(bencher: Bencher) {
     let left = "A".repeat(100_000);
     let right = "B".repeat(100_000);
+    let args = get_bench_args(&[&"index", &left, &right]);
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &["index", &left, &right]));
-    });
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark `expr index` with a match near the end of the string.
@@ -26,10 +27,11 @@ fn index_match_at_end(bencher: Bencher) {
     let mut left = "A".repeat(100_000);
     left.push('Z');
     let right = "Z".repeat(100_000);
+    let args = get_bench_args(&[&"index", &left, &right]);
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &["index", &left, &right]));
-    });
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 fn main() {

@@ -5,7 +5,7 @@
 
 use divan::{Bencher, black_box};
 use uu_timeout::uumain;
-use uucore::benchmark::run_util_function;
+use uucore::benchmark::get_bench_args;
 
 /// First-arg marker that re-runs this bench binary as its own child command,
 /// a portable `sleep`/`true` stand-in (`cargo bench` builds no other binary
@@ -23,9 +23,10 @@ fn self_exe() -> String {
 #[cfg(unix)]
 #[divan::bench]
 fn timeout_quick_exit(bencher: Bencher) {
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &["0.02", "true"]));
-    });
+    let args = get_bench_args(&[&"0.02", &"true"]);
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark the fast path where the command exits immediately.
@@ -33,21 +34,20 @@ fn timeout_quick_exit(bencher: Bencher) {
 #[divan::bench]
 fn timeout_quick_exit(bencher: Bencher) {
     let exe = self_exe();
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["0.02", &exe, CHILD_MARKER, "0"],
-        ));
-    });
+    let args = get_bench_args(&[&"0.02", &exe, &CHILD_MARKER, &"0"]);
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark a command that runs longer than the threshold and receives the default signal.
 #[cfg(unix)]
 #[divan::bench]
 fn timeout_enforced(bencher: Bencher) {
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &["0.02", "sleep", "0.2"]));
-    });
+    let args = get_bench_args(&[&"0.02", &"sleep", &"0.2"]);
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark a command that runs longer than the threshold: timer expiry,
@@ -56,12 +56,10 @@ fn timeout_enforced(bencher: Bencher) {
 #[divan::bench]
 fn timeout_enforced(bencher: Bencher) {
     let exe = self_exe();
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["0.02", &exe, CHILD_MARKER, "0.2"],
-        ));
-    });
+    let args = get_bench_args(&[&"0.02", &exe, &CHILD_MARKER, &"0.2"]);
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Track timeout-firing latency across small durations; a regression from the
@@ -71,12 +69,10 @@ fn timeout_enforced(bencher: Bencher) {
 #[divan::bench(args = ["0.001", "0.005", "0.02"])]
 fn timer_expiry_latency(bencher: Bencher, duration: &str) {
     let exe = self_exe();
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &[duration, &exe, CHILD_MARKER, "5"],
-        ));
-    });
+    let args = get_bench_args(&[&duration, &exe, &CHILD_MARKER, &"5"]);
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 fn main() {

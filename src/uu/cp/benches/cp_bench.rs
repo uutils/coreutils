@@ -8,32 +8,33 @@ use std::fs;
 use std::path::Path;
 use tempfile::TempDir;
 use uu_cp::uumain;
-use uucore::benchmark::{binary_data, fs_tree, fs_utils, get_bench_args, run_util_function};
+use uucore::benchmark::{binary_data, fs_tree, get_bench_args};
 
 fn bench_cp_directory<F>(bencher: Bencher, args: &[&str], setup_source: F)
 where
     F: Fn(&Path),
 {
-    let temp_dir = TempDir::new().unwrap();
-    let source = temp_dir.path().join("source");
-    let dest = temp_dir.path().join("dest");
-
+    let source_dir = TempDir::new().unwrap();
+    let source = source_dir.path().join("source");
     fs::create_dir(&source).unwrap();
     setup_source(&source);
 
-    let source_str = source.to_str().unwrap();
-    let dest_str = dest.to_str().unwrap();
+    let mut base_args = get_bench_args(&[]);
+    base_args.extend(args.iter().map(|arg| (*arg).into()));
+    base_args.push(source.into_os_string());
 
-    bencher.bench(|| {
-        fs_utils::remove_path(&dest);
-
-        let mut full_args = Vec::with_capacity(args.len() + 2);
-        full_args.extend_from_slice(args);
-        full_args.push(source_str);
-        full_args.push(dest_str);
-
-        black_box(run_util_function(uumain, &full_args));
-    });
+    bencher
+        .with_inputs(|| {
+            let dest_dir = TempDir::new_in(source_dir.path()).unwrap();
+            let dest = dest_dir.path().join("dest");
+            let mut args = base_args.clone();
+            args.push(dest.into_os_string());
+            (dest_dir, args.into_iter())
+        })
+        .bench_values(|(dest_dir, args)| {
+            black_box(uumain(args));
+            dest_dir
+        });
 }
 
 #[divan::bench(args = [(5, 4, 10)])]
