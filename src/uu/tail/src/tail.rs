@@ -26,7 +26,7 @@ use args::{FilterMode, Settings, Signum, parse_args};
 use chunks::ReverseChunks;
 use follow::Observer;
 use memchr::{memchr_iter, memrchr_iter};
-use paths::{FileExtTail, HeaderPrinter, Input, InputKind};
+use paths::{FileExtTail, HeaderPrinter, Input, InputKind, MetadataExtTail};
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin, stdout};
@@ -62,6 +62,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 fn uu_tail(settings: &Settings) -> UResult<()> {
     let mut printer = HeaderPrinter::new(settings.verbose, true);
     let mut observer = Observer::from(settings);
+    let mut stdin_is_tailable = false;
 
     observer.start(settings)?;
 
@@ -79,13 +80,13 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
     for input in &settings.inputs {
         match input.kind() {
             InputKind::Stdin => {
-                tail_stdin(settings, &mut printer, input, &mut observer)?;
+                stdin_is_tailable |= tail_stdin(settings, &mut printer, input, &mut observer)?;
             }
             InputKind::File(path) if cfg!(unix) && path == &PathBuf::from(text::DEV_STDIN) => {
-                tail_stdin(settings, &mut printer, input, &mut observer)?;
+                stdin_is_tailable |= tail_stdin(settings, &mut printer, input, &mut observer)?;
             }
             InputKind::File(path) => {
-                if let Err(err) = tail_file(settings, &mut printer, input, path, &mut observer, 0) {
+                if let Err(err) = tail_file(settings, &mut printer, input, path, &mut observer) {
                     show!(err);
                 }
             }
@@ -102,7 +103,10 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
         the input file is not a FIFO, pipe, or regular file, it is unspecified whether or
         not the -f option shall be ignored.
         */
-        if !settings.has_only_stdin() || settings.pid.is_some_and(|pid| pid != 0) {
+        if !settings.has_only_stdin()
+            || settings.pid.is_some_and(|pid| pid != 0)
+            || stdin_is_tailable
+        {
             follow::follow(observer, settings)?;
         }
     }
@@ -116,7 +120,6 @@ fn tail_file(
     input: &Input,
     path: &Path,
     observer: &mut Observer,
-    offset: u64,
 ) -> UResult<()> {
     // some platform has different read error message
     #[cfg(not(unix))]
@@ -170,15 +173,7 @@ fn tail_file(
 
         match open_result {
             Ok(file) => {
-                tail_opened_file(
-                    settings,
-                    header_printer,
-                    input,
-                    path,
-                    observer,
-                    offset,
-                    file,
-                )?;
+                tail_opened_file(settings, header_printer, input, path, observer, file)?;
             }
             Err(e) if e.kind() == ErrorKind::PermissionDenied => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
@@ -204,15 +199,15 @@ fn tail_opened_file(
     input: &Input,
     path: &Path,
     observer: &mut Observer,
-    offset: u64,
     mut file: File,
 ) -> UResult<()> {
     let st = file.metadata()?;
     let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
+    let offset = file.stream_position().unwrap_or(0);
     header_printer.print_input(input);
     let mut reader;
     if !settings.presume_input_pipe
-        && file.is_seekable(if input.is_stdin() { offset } else { 0 })
+        && file.is_seekable(offset)
         && (!st.is_file() || st.len() > blksize_limit)
     {
         bounded_tail(&mut file, settings)?;
@@ -221,12 +216,11 @@ fn tail_opened_file(
         reader = BufReader::new(file);
         unbounded_tail(&mut reader, settings)?;
     }
-    if input.is_tailable() {
+    if st.is_tailable() {
         observer.add_path(path, input.display_name.as_str(), Some(reader), true)?;
     } else {
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
     }
-
     Ok(())
 }
 
@@ -263,28 +257,13 @@ fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
     }
 }
 
+/// Print stdin and return whether it resolves to a regular file that can be followed.
 fn tail_stdin(
     settings: &Settings,
     header_printer: &mut HeaderPrinter,
     input: &Input,
     observer: &mut Observer,
-) -> UResult<()> {
-    // on macOS, resolve() will always return None for stdin,
-    // we need to detect if stdin is a directory ourselves.
-    // fstat-ing certain descriptors under /dev/fd fails with
-    // bad file descriptor or might not catch directory cases
-    // e.g. see the differences between running ls -l /dev/stdin /dev/fd/0
-    // on macOS and Linux.
-    #[cfg(target_vendor = "apple")]
-    if uucore::fs::is_stdin_directory(&stdin()) {
-        set_exit_code(1);
-        show_error!(
-            "{}",
-            translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name, "error" => translate!("tail-no-such-file-or-directory"))
-        );
-        return Ok(());
-    }
-
+) -> UResult<bool> {
     // Check if stdin was closed before Rust reopened it as /dev/null
     if paths::stdin_is_bad_fd() {
         set_exit_code(1);
@@ -293,46 +272,56 @@ fn tail_stdin(
             translate!("tail-error-cannot-fstat", "file" => translate!("tail-stdin-header").quote(), "error" => translate!("tail-bad-fd"))
         );
         show_error!("{}", translate!("tail-no-files-remaining"));
-        return Ok(());
+        return Ok(false);
     }
 
-    if let Some(path) = input.resolve() {
-        #[cfg(not(unix))]
-        let stdin_offset = 0;
-        // Save the current seek position/offset of a stdin redirected file.
-        // This is needed to pass "gnu/tests/tail-2/start-middle.sh"
-        #[cfg(unix)]
-        let stdin_offset = rustix::fs::tell(stdin()).unwrap_or(0); // fifo
-        tail_file(
-            settings,
-            header_printer,
-            input,
-            &path,
-            observer,
-            stdin_offset,
-        )?;
-    } else {
-        // pipe
-        header_printer.print_input(input);
-        if paths::stdin_is_bad_fd() {
-            set_exit_code(1);
-            show_error!(
-                "{}",
-                translate!("tail-error-cannot-fstat", "file" => translate!("tail-stdin-header"), "error" => translate!("tail-bad-fd"))
-            );
-            if settings.follow.is_some() {
-                show_error!(
-                    "{}",
-                    translate!("tail-error-reading-file", "file" => translate!("tail-stdin-header"), "error" => translate!("tail-bad-fd"))
-                );
+    let resolved_stdin = input.resolve();
+
+    if let Some(ref path) = resolved_stdin {
+        #[cfg(any(unix, windows))]
+        {
+            // Duplicating stdin preserves its offset and access rights, even after a rename
+            // or permission change. The resolved path is only used to register the watch.
+            let file = uucore::io::OwnedFileDescriptorOrHandle::from(stdin())?.into_file();
+            if file.metadata()?.is_file() {
+                observer.watch_stdin_file(path)?;
+                tail_opened_file(settings, header_printer, input, path, observer, file)?;
+                return Ok(true);
             }
-        } else {
-            let mut reader = BufReader::new(stdin());
-            unbounded_tail(&mut reader, settings)?;
+        }
+        if path.is_dir() {
+            tail_file(settings, header_printer, input, path, observer)?;
+            return Ok(false);
         }
     }
 
-    Ok(())
+    header_printer.print_input(input);
+    if paths::stdin_is_bad_fd() {
+        set_exit_code(1);
+        show_error!(
+            "{}",
+            translate!(
+                "tail-error-cannot-fstat",
+                "file" => translate!("tail-stdin-header"),
+                "error" => translate!("tail-bad-fd")
+            )
+        );
+        if settings.follow.is_some() {
+            show_error!(
+                "{}",
+                translate!(
+                    "tail-error-reading-file",
+                    "file" => translate!("tail-stdin-header"),
+                    "error" => translate!("tail-bad-fd")
+                )
+            );
+        }
+    } else {
+        let mut reader = BufReader::new(stdin());
+        unbounded_tail(&mut reader, settings)?;
+    }
+
+    Ok(false)
 }
 
 /// Find the index after the given number of instances of a given byte.

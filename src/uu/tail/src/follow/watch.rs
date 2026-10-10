@@ -140,6 +140,14 @@ impl Observer {
         )
     }
 
+    /// Watch the same resolved stdin path that is used for the initial read.
+    pub fn watch_stdin_file(&mut self, path: &Path) -> UResult<()> {
+        if let Some(watcher_rx) = &mut self.watcher_rx {
+            watcher_rx.watch_with_parent(path)?;
+        }
+        Ok(())
+    }
+
     pub fn add_path(
         &mut self,
         path: &Path,
@@ -148,7 +156,7 @@ impl Observer {
         update_last: bool,
     ) -> UResult<()> {
         if self.follow.is_some() {
-            let path = if path.is_relative() {
+            let path = if path.is_relative() && !path.is_stdin() {
                 std::env::current_dir()?.join(path)
             } else {
                 path.to_owned()
@@ -265,33 +273,38 @@ impl Observer {
     fn init_files(&mut self, inputs: &Vec<Input>) -> UResult<()> {
         if let Some(watcher_rx) = &mut self.watcher_rx {
             for input in inputs {
-                match input.kind() {
-                    InputKind::Stdin => (),
-                    InputKind::File(path) => {
-                        #[cfg(all(unix, not(target_os = "linux")))]
-                        if !path.is_file() {
-                            continue;
-                        }
-                        let mut path = path.clone();
-                        if path.is_relative() {
-                            path = std::env::current_dir()?.join(path);
-                        }
-
-                        if path.is_tailable() {
-                            // Add existing regular files to `Watcher` (InotifyWatcher).
-                            watcher_rx.watch_with_parent(&path)?;
-                        } else if let Some(active_parent) = path.parent().filter(|p| p.is_dir()) {
-                            // If `path` is not a tailable file, add its parent to `Watcher`.
-                            watcher_rx.watch(active_parent, RecursiveMode::NonRecursive)?;
-                            // Add symlinks to orphans for retry polling (target may not exist)
-                            if path.is_symlink() {
-                                self.orphans.push(path);
-                            }
-                        } else {
-                            // If there is no parent, add `path` to `orphans`.
-                            self.orphans.push(path);
-                        }
+                let path = match input.kind() {
+                    // stdin is registered when it is read, using the same resolved path.
+                    InputKind::Stdin => None,
+                    InputKind::File(path) if cfg!(unix) && path == Path::new(text::DEV_STDIN) => {
+                        None
                     }
+                    InputKind::File(path) => Some(path.clone()),
+                };
+                let Some(mut path) = path else {
+                    continue;
+                };
+                #[cfg(all(unix, not(target_os = "linux")))]
+                if !path.is_file() {
+                    continue;
+                }
+                if path.is_relative() {
+                    path = std::env::current_dir()?.join(path);
+                }
+
+                if path.is_tailable() {
+                    // Add existing regular files to `Watcher` (InotifyWatcher).
+                    watcher_rx.watch_with_parent(&path)?;
+                } else if let Some(active_parent) = path.parent().filter(|p| p.is_dir()) {
+                    // If `path` is not a tailable file, add its parent to `Watcher`.
+                    watcher_rx.watch(active_parent, RecursiveMode::NonRecursive)?;
+                    // Add symlinks to orphans for retry polling (target may not exist)
+                    if path.is_symlink() {
+                        self.orphans.push(path);
+                    }
+                } else {
+                    // If there is no parent, add `path` to `orphans`.
+                    self.orphans.push(path);
                 }
             }
         }

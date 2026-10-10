@@ -40,6 +40,7 @@ uucore = { workspace = true, features = ["pipes"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
+  "Win32_Storage_FileSystem",
   "Win32_System_Threading",
   "Win32_Foundation",
 ] }

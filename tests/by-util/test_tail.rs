@@ -126,11 +126,27 @@ fn test_stdin_redirect_file() {
         .stdout_only("==> 'standard input' <==\nfoo");
 }
 
-#[test]
-// FIXME: the -f test fails with: Assertion failed. Expected 'tail' to be running but exited with status=exit status: 0
-#[ignore = "disabled until fixed"]
-#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
-fn test_stdin_redirect_file_follow() {
+#[rstest]
+#[case::notification(false)]
+#[case::polling(true)]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+fn test_stdin_redirect_file_follow(
+    #[case] use_polling: bool,
+    #[values(None, Some("-"))] stdin_operand: Option<&str>,
+) {
+    check_stdin_redirect_file_follow(use_polling, stdin_operand);
+}
+
+#[rstest]
+#[case::notification(false)]
+#[case::polling(true)]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+fn test_stdin_redirect_file_follow_dev_stdin(#[case] use_polling: bool) {
+    check_stdin_redirect_file_follow(use_polling, Some("/dev/stdin"));
+}
+
+fn check_stdin_redirect_file_follow(use_polling: bool, stdin_operand: Option<&str>) {
     // $ echo foo > f
 
     // $ tail -f < f
@@ -139,18 +155,84 @@ fn test_stdin_redirect_file_follow() {
 
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.write("f", "foo");
+    at.write("f", "foo\n");
 
+    ucmd.arg("-f");
+    if let Some(operand) = stdin_operand {
+        ucmd.arg(operand);
+    }
+    if use_polling {
+        ucmd.arg("---disable-inotify");
+    } else {
+        // A long timeout ensures that appends are detected by change events.
+        ucmd.arg("--sleep-interval=30");
+    }
     let mut p = ucmd
-        .arg("-f")
         .set_stdin(File::open(at.plus("f")).unwrap())
         .run_no_wait();
 
     p.make_assertion_with_delay(500).is_alive();
+    at.append("f", "bar\n");
+
+    p.make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .with_current_output()
+        .stdout_only("foo\nbar\n");
+
+    // Further appends must not reopen the file and replay earlier output.
+    at.append("f", "baz\n");
+    p.make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .with_current_output()
+        .stdout_only("baz\n");
+
     p.kill()
         .make_assertion()
         .with_all_output()
-        .stdout_only("foo");
+        .stdout_only("foo\nbar\nbaz\n");
+}
+
+#[rstest]
+#[case::notification(false)]
+#[case::polling(true)]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+fn test_stdin_redirect_file_follow_renamed_before_read(
+    #[case] use_polling: bool,
+    #[values("-", "/dev/stdin")] stdin_operand: &str,
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "foo\n");
+    at.mkdir("moved");
+    at.mkfifo("fifo");
+
+    ucmd.args(&["-q", "-f", "fifo", stdin_operand]);
+    if use_polling {
+        ucmd.arg("--use-polling");
+    } else {
+        ucmd.arg("--sleep-interval=30");
+    }
+    let mut p = ucmd
+        .set_stdin(File::open(at.plus("f")).unwrap())
+        .run_no_wait();
+
+    // Opening the writer waits until tail has initialized its watches and opened the FIFO.
+    // Keep it open so tail cannot read stdin until after the rename.
+    let mut writer = File::create(at.plus("fifo")).unwrap();
+    // Move to another directory so watching the old parent cannot detect later appends.
+    at.rename("f", "moved/f");
+    writer.write_all(b"fifo\n").unwrap();
+    drop(writer);
+
+    p.make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .with_current_output()
+        .stdout_only("fifo\nfoo\n");
+    at.append("moved/f", "bar\n");
+    p.make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .with_current_output()
+        .stdout_only("bar\n");
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_only("fifo\nfoo\nbar\n");
 }
 
 #[test]
@@ -187,6 +269,42 @@ fn test_stdin_redirect_offset2() {
 }
 
 #[rstest]
+#[case::small(2)]
+#[case::large(100_000)]
+#[cfg(not(target_os = "wasi"))]
+fn test_stdin_redirect_repeated_consumes_input(#[case] lines: usize) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", &"line\n".repeat(lines));
+    let mut file = File::open(at.plus("f")).unwrap();
+
+    ucmd.args(&["-q", "-", "-"])
+        .set_stdin(file.try_clone().unwrap())
+        .succeeds()
+        .stdout_only("line\n".repeat(lines.min(10)));
+    assert_eq!(file.stream_position().unwrap(), (lines * 5) as u64);
+}
+
+#[rstest]
+#[case::lines(&["-n", "10"], "two\n")]
+#[case::bytes(&["-c", "10"], "two\n")]
+#[case::from_line(&["-n", "+2"], "")]
+#[case::from_byte(&["-c", "+2"], "wo\n")]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: /dev/stdin unavailable")]
+fn test_stdin_redirect_dev_stdin_offset(#[case] args: &[&str], #[case] expected: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "one\ntwo\n");
+    let mut file = File::open(at.plus("f")).unwrap();
+    file.seek(SeekFrom::Start(4)).unwrap();
+
+    ucmd.args(args)
+        .arg("/dev/stdin")
+        .set_stdin(file)
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[rstest]
 #[case::lines(4, &["-n", "10"], "two\n")]
 #[case::last_line(1, &["-n", "1"], "two\n")]
 #[case::bytes(4, &["-c", "10"], "two\n")]
@@ -218,6 +336,20 @@ fn test_stdin_redirect_large_offset(
         .stdout_only(expected);
 }
 
+#[test]
+#[cfg(unix)]
+fn test_stdin_redirect_read_permission_removed() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "foo\n");
+    let file = File::open(at.plus("f")).unwrap();
+    file.set_permissions(PermissionsExt::from_mode(0o000))
+        .unwrap();
+
+    ucmd.set_stdin(file).succeeds().stdout_only("foo\n");
+}
+
 #[rstest]
 #[case::notification(false)]
 #[case::polling(true)]
@@ -225,7 +357,7 @@ fn test_stdin_redirect_large_offset(
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_stdin_redirect_follow_replaced_with_shorter_file(
     #[case] use_polling: bool,
-    #[values(Some("f"))] operand: Option<&str>,
+    #[values(None, Some("-"), Some("/dev/stdin"), Some("f"))] operand: Option<&str>,
 ) {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("f", "initial-long-line\n");
@@ -466,15 +598,26 @@ fn test_follow_redirect_stdin_name_retry() {
     }
 }
 
-#[test]
+#[rstest]
+#[case::plain(&[], "tail: error reading 'standard input': Is a directory\n")]
+#[case::follow(
+    &["-f"],
+    "tail: error reading 'standard input': Is a directory\n\
+     tail: standard input: cannot follow end of this type of file; giving up on this name\n"
+)]
+#[case::retry(
+    &["-f", "--retry"],
+    "tail: warning: --retry only effective for the initial open\n\
+     tail: error reading 'standard input': Is a directory\n\
+     tail: standard input: cannot follow end of this type of file\n"
+)]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
-fn test_stdin_redirect_dir() {
+fn test_stdin_redirect_dir(#[case] args: &[&str], #[case] expected_stderr: &str) {
     // $ mkdir dir
     // $ tail < dir, $ tail - < dir
     // tail: error reading 'standard input': Is a directory
@@ -483,54 +626,30 @@ fn test_stdin_redirect_dir() {
     let at = &ts.fixtures;
     at.mkdir("dir");
 
-    let expected = if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
-        "tail: Is a directory\n"
+    let expected_stderr = if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
+        if args.contains(&"--retry") {
+            "tail: warning: --retry only effective for the initial open\n\
+             tail: Is a directory\n"
+        } else {
+            "tail: Is a directory\n"
+        }
     } else {
-        "tail: error reading 'standard input': Is a directory\n"
+        expected_stderr
     };
 
     ts.ucmd()
         .set_stdin(File::open(at.plus("dir")).unwrap())
+        .args(args)
         .fails_with_code(1)
         .no_stdout()
-        .stderr_is(expected);
+        .stderr_is(expected_stderr);
     ts.ucmd()
         .set_stdin(File::open(at.plus("dir")).unwrap())
+        .args(args)
         .arg("-")
         .fails_with_code(1)
         .no_stdout()
-        .stderr_is(expected);
-}
-
-// On macOS path.is_dir() can be false for directories if it was a redirect,
-// e.g. `$ tail < DIR. The library feature to detect the
-// std::io::ErrorKind::IsADirectory isn't stable so we currently show the a wrong
-// error message.
-// FIXME: If `std::io::ErrorKind::IsADirectory` becomes stable or macos handles
-//  redirected directories like linux show the correct message like in
-//  `test_stdin_redirect_dir`
-#[test]
-#[cfg(target_vendor = "apple")]
-fn test_stdin_redirect_dir_when_target_os_is_macos() {
-    // $ mkdir dir
-    // $ tail < dir, $ tail - < dir
-    // tail: error reading 'standard input': Is a directory
-
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
-    at.mkdir("dir");
-
-    ts.ucmd()
-        .set_stdin(File::open(at.plus("dir")).unwrap())
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory\n");
-    ts.ucmd()
-        .set_stdin(File::open(at.plus("dir")).unwrap())
-        .arg("-")
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory\n");
+        .stderr_is(expected_stderr);
 }
 
 #[test]
