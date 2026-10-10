@@ -172,9 +172,7 @@ pub fn uu_app() -> Command {
         .infer_long_args(true)
         .trailing_var_arg(true)
         .arg(
-            // AIX's -A, which GNU also accepts without documenting it: use byte
-            // values for ranges and ASCII for classes instead of the locale.
-            // This tr never consults the locale, so the flag changes nothing.
+            // GNU supports -A which does noop
             Arg::new(options::ASCII)
                 .short('A')
                 .hide(true)
