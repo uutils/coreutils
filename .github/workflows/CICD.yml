@@ -207,7 +207,11 @@ jobs:
       shell: bash
       run: |
         # Install a package for one of the tests
-        sudo apt-get -y update ; sudo apt-get -y install attr
+        # Some tests are silently skipped if strace is missing
+        sudo apt-get -y update ; sudo apt-get -y install attr strace
+        # Some tests are silently skipped if unshare failed
+        sudo sysctl -w kernel.unprivileged_userns_clone=1
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
     - name: Info
       shell: bash
       run: |
