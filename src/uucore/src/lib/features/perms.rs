@@ -541,9 +541,8 @@ impl ChownExecutor {
                 *ret = 1;
                 if self.verbosity.level != VerbosityLevel::Silent {
                     show_error!(
-                        "cannot read directory {}: {}",
-                        dir_path.quote(),
-                        strip_errno(&e)
+                        "{}",
+                        translate!("perms-cannot-read-directory", "file" => dir_path.quote(), "error" => strip_errno(&e))
                     );
                 }
                 return;
@@ -632,7 +631,7 @@ impl ChownExecutor {
                         if self.verbosity.level != VerbosityLevel::Silent {
                             show_error!(
                                 "{}",
-                                translate!("perms-cannot-access", "file" => entry_path.quote(), "error" => strip_errno(&e))
+                                translate!("perms-cannot-read-directory", "file" => entry_path.quote(), "error" => strip_errno(&e))
                             );
                         }
                     }
@@ -662,16 +661,28 @@ impl ChownExecutor {
             .follow_links(self.traverse_symlinks == TraverseSymlinks::All)
             .min_depth(1)
             .into_iter();
+        // The directory whose entry came last: walkdir reports a directory it
+        // cannot read right after that entry, under the same path. The root is
+        // below min_depth, so it never comes out as an entry: start from it.
+        let mut last_dir = Some(root.to_path_buf());
         // We can't use a for loop because we need to manipulate the iterator inside the loop.
         while let Some(entry) = iterator.next() {
             let entry = match entry {
                 Err(e) => {
                     ret = 1;
+                    if self.verbosity.level == VerbosityLevel::Silent {
+                        continue;
+                    }
                     if let Some(path) = e.path() {
+                        let message = if last_dir.as_deref() == Some(path) {
+                            "perms-cannot-read-directory"
+                        } else {
+                            "perms-cannot-access"
+                        };
                         show_error!(
                             "{}",
                             translate!(
-                                "perms-cannot-access",
+                                message,
                                 "file" => path.quote(),
                                 "error" => if let Some(error) = e.io_error() {
                                     strip_errno(error)
@@ -688,6 +699,7 @@ impl ChownExecutor {
                 Ok(entry) => entry,
             };
             let path = entry.path();
+            last_dir = entry.file_type().is_dir().then(|| path.to_path_buf());
 
             let Some(meta) = self.obtain_meta(path, self.dereference) else {
                 ret = 1;
@@ -807,7 +819,7 @@ impl ChownExecutor {
                 if self.verbosity.level != VerbosityLevel::Silent {
                     show_error!(
                         "{}",
-                        translate!("perms-cannot-access", "file" => path.quote(), "error" => strip_errno(&e))
+                        translate!("perms-cannot-read-directory", "file" => path.quote(), "error" => strip_errno(&e))
                     );
                 }
             })

@@ -767,6 +767,46 @@ fn test_chown_owner_group_mix() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_chown_recursive_unreadable_directory() {
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::PermissionsExt;
+
+    if rustix::process::geteuid().is_root() {
+        // root can read any directory
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("d/a/y");
+    set_permissions(at.plus_as_string("d/a"), Permissions::from_mode(0o311)).unwrap();
+
+    scene
+        .ucmd()
+        .args(&["-R", "--reference=d", "d"])
+        .fails_with_code(1)
+        .stderr_is("chown: cannot read directory 'd/a': Permission denied\n");
+
+    // -f hides the message; the failure still sets the exit status.
+    scene
+        .ucmd()
+        .args(&["-f", "-R", "--reference=d", "d"])
+        .fails_with_code(1)
+        .no_output();
+
+    set_permissions(at.plus_as_string("d/a"), Permissions::from_mode(0o755)).unwrap();
+
+    // The operand itself.
+    set_permissions(at.plus_as_string("d"), Permissions::from_mode(0o311)).unwrap();
+    scene
+        .ucmd()
+        .args(&["-R", "--reference=d", "d"])
+        .fails_with_code(1)
+        .stderr_is("chown: cannot read directory 'd': Permission denied\n");
+    set_permissions(at.plus_as_string("d"), Permissions::from_mode(0o755)).unwrap();
+}
+
+#[test]
 fn test_chown_recursive() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
