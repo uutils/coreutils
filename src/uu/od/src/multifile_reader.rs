@@ -10,6 +10,8 @@ use std::fs::File;
 use std::io;
 #[cfg(unix)]
 use std::io::{Seek, SeekFrom};
+#[cfg(any(unix, target_os = "wasi"))]
+use std::os::fd::BorrowedFd;
 
 use uucore::{display::Quotable, error::strip_errno, show_error, translate};
 
@@ -27,7 +29,7 @@ pub enum InputSource<'a> {
 enum CurrentReader {
     File(File),
     #[cfg(any(unix, target_os = "wasi"))]
-    Stdin(uucore::io::RawReader<rustix::fd::BorrowedFd<'static>>),
+    Stdin(BorrowedFd<'static>),
     #[cfg(not(any(unix, target_os = "wasi")))]
     Stdin(io::Stdin),
 }
@@ -36,17 +38,20 @@ impl io::Read for CurrentReader {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Self::File(f) => f.read(buf),
+            #[cfg(any(unix, target_os = "wasi"))]
+            Self::Stdin(r) => uucore::io::RawReader::new(r).read(buf),
+            #[cfg(not(any(unix, target_os = "wasi")))]
             Self::Stdin(r) => r.read(buf),
         }
     }
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-impl rustix::fd::AsFd for CurrentReader {
-    fn as_fd(&self) -> rustix::fd::BorrowedFd<'_> {
+impl std::os::fd::AsFd for CurrentReader {
+    fn as_fd(&self) -> BorrowedFd<'_> {
         match self {
             Self::File(f) => f.as_fd(),
-            Self::Stdin(s) => s.0,
+            Self::Stdin(s) => *s,
         }
     }
 }
@@ -92,7 +97,7 @@ impl MultifileReader<'_> {
                     // limit.
                     #[cfg(any(unix, target_os = "wasi"))]
                     {
-                        let stdin = uucore::io::RawReader(rustix::stdio::stdin());
+                        let stdin = rustix::stdio::stdin();
                         self.curr_file = Some(CurrentReader::Stdin(stdin));
                     }
 

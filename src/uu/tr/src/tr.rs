@@ -106,7 +106,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Every chunk is written as soon as it is translated, so `-u` has nothing
     // left to do here.
     #[cfg(any(unix, target_os = "wasi"))]
-    let mut output = uucore::io::RawWriter(stdout());
+    let stdout = stdout();
+    #[cfg(any(unix, target_os = "wasi"))]
+    let mut output = uucore::io::RawWriter::new(&stdout);
     #[cfg(not(any(unix, target_os = "wasi")))]
     let mut output = FlushEachChunk {
         inner: stdout().lock(),
