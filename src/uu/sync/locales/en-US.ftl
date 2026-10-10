@@ -2,8 +2,9 @@ sync-about = Synchronize cached writes to persistent storage
 sync-usage = sync [OPTION]... FILE...
 
 # Help messages
-sync-help-file-system = sync the file systems that contain the files (Linux and Windows only)
-sync-help-data = sync only file data, no unneeded metadata (Linux only)
+sync-help-file-system = sync the file systems that contain the files
+sync-help-files = sync files (due to platform's limitation)
+sync-help-data = sync only file data, no unneeded metadata
 
 # Error messages
 sync-error-data-needs-argument = --data needs at least one argument
