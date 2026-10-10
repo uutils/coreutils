@@ -518,6 +518,70 @@ fn test_random_source_is_not_read_without_random_sort() {
 }
 
 #[test]
+fn test_random_source_larger_than_the_salt() {
+    let ts = TestScenario::new(uutests::util_name!());
+    let at = &ts.fixtures;
+    at.write("input", "b\na\nc\n");
+    let mut source_a = vec![b'a'; 32];
+    let mut source_b = source_a.clone();
+    source_a[16] = b'b';
+    source_b[16] = b'c';
+    at.write_bytes("source-a", &source_a);
+    at.write_bytes("source-b", &source_b);
+
+    let first = ts
+        .ucmd()
+        .args(&["-R", "--random-source=source-a", "input"])
+        .succeeds()
+        .stdout_move_str();
+    let second = ts
+        .ucmd()
+        .args(&["-R", "--random-source=source-b", "input"])
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(first, second);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_random_source_named_pipe_does_not_overread() {
+    // GNU reads exactly the 128-bit salt from the source and keeps the file
+    // open while shuffling. An over-read on a named pipe would block forever
+    // on a writer that only supplied the salt.
+    use std::io::Write;
+
+    let ts = TestScenario::new(uutests::util_name!());
+    ts.fixtures.write("input", "b\na\nc\n");
+    ts.fixtures.mkdir("d");
+    ts.fixtures.mkfifo("d/source");
+
+    let fifo_w = ts.fixtures.plus("d/source");
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    let writer = std::thread::spawn(move || {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&fifo_w)
+            .unwrap();
+        file.write_all(&[b'x'; SALT_TEST_LEN]).unwrap();
+        // Keep the descriptor open until sort has finished. An over-read
+        // would block here waiting for bytes beyond the salt.
+        done_rx.recv().unwrap();
+        drop(file);
+    });
+
+    ts.ucmd()
+        .args(&["-R", "--random-source=d/source", "input"])
+        .succeeds()
+        .stdout_matches(&regex::Regex::new("[abc]\n[abc]\n[abc]\n").unwrap());
+    done_tx.send(()).unwrap();
+    writer.join().unwrap();
+}
+
+#[cfg(unix)]
+const SALT_TEST_LEN: usize = 16;
+
+#[test]
 fn test_random_ignore_case() {
     let input = "ABC\nABc\nAbC\nAbc\naBC\naBc\nabC\nabc\n";
     new_ucmd!()
