@@ -63,6 +63,8 @@ footgun
 freeram
 fsxattr
 fullblock
+getdents
+getdents64
 getfacl
 getfattr
 getopt

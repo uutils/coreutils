@@ -1927,3 +1927,60 @@ fn test_dash_hint_is_shell_escaped() {
         .fails_with_code(1)
         .stderr_contains("./'-a'$'\\t''b'\\''c'' to remove the file '-a'$'\\t''b'\\''c'.");
 }
+
+/// When a mid-traversal getdents fails with EIO, GNU reports "traversal failed"
+/// even under `-f`. Without that, rm later fails with "Directory not empty".
+/// Reproduces https://github.com/uutils/coreutils/issues/15206 via strace.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_recursive_getdents_eio_reports_traversal_failed() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir_all("dir/nonempty");
+
+    let Ok(probe) = Command::new("strace")
+        .args(["-e", "fault=getdents64:error=EIO:when=2", "true"])
+        .output()
+    else {
+        return; // missing strace
+    };
+    if !probe.status.success() {
+        return; // fault injection unsupported
+    }
+
+    // Keep tracing getdents64 so fault injection stays active; silence the
+    // trace itself with -o /dev/null so only rm's stderr remains.
+    let out = Command::new("strace")
+        .args([
+            "-qq",
+            "-o",
+            "/dev/null",
+            "-e",
+            "trace=getdents64",
+            "-e",
+            "fault=getdents64:error=EIO:when=2",
+        ])
+        .arg(&scene.bin_path)
+        .arg(scene.util_name.as_str())
+        .args(["-Rf", "dir"])
+        .current_dir(scene.fixtures.as_string())
+        .output()
+        .expect("failed to run rm under strace");
+
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success(),
+        "expected failure on getdents EIO; stderr={stderr}"
+    );
+    assert!(
+        stderr.contains("traversal failed: 'dir':")
+            && (stderr.contains("Input/output error") || stderr.contains("I/O error")),
+        "expected traversal-failed message, got: {stderr}"
+    );
+    assert!(
+        !stderr.contains("Directory not empty"),
+        "must not fall through to Directory not empty; stderr={stderr}"
+    );
+}

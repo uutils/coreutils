@@ -481,7 +481,13 @@ pub fn safe_remove_dir_recursive_impl(
             return !options.force;
         }
         Err(e) => {
-            return handle_error_with_force(e, path, options);
+            // Always report traversal failure (even with -f). Swallowing it lets a
+            // later remove_dir fail with "Directory not empty" instead.
+            show_error!(
+                "{}",
+                translate!("rm-error-traversal-failed", "file" => path.quote(), "error" => strip_errno(&e))
+            );
+            return true;
         }
     };
 
@@ -624,10 +630,13 @@ pub fn safe_remove_dir_recursive_impl(
                     }
                     (Vec::new().into_iter(), !options.force)
                 }
-                Err(e) => (
-                    Vec::new().into_iter(),
-                    handle_error_with_force(e, path_of(&path_buf), options),
-                ),
+                Err(e) => {
+                    show_error!(
+                        "{}",
+                        translate!("rm-error-traversal-failed", "file" => path_of(&path_buf).quote(), "error" => strip_errno(&e))
+                    );
+                    (Vec::new().into_iter(), true)
+                }
             };
 
             // Suspend this directory and empty the subdirectory first.
