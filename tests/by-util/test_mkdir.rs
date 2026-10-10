@@ -1117,6 +1117,28 @@ fn test_mkdir_inside_inexistent_dir() {
         .stderr_is("mkdir: cannot create directory 'a/b': No such file or directory\n");
 }
 
+#[cfg(unix)]
+#[test]
+fn test_mkdir_numeric_looking_name_in_error() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("0042");
+    scene.fixtures.touch("0077");
+    scene
+        .ucmd()
+        .args(&["--", "0042", "-0042", "7e2", "-0042", "7e2"])
+        .fails_with_code(1)
+        .stderr_is(concat!(
+            "mkdir: cannot create directory '0042': File exists\n",
+            "mkdir: cannot create directory '-0042': File exists\n",
+            "mkdir: cannot create directory '7e2': File exists\n",
+        ));
+    scene
+        .ucmd()
+        .args(&["-p", "0077"])
+        .fails_with_code(1)
+        .stderr_is("mkdir: cannot create directory '0077': File exists\n");
+}
+
 // The mode is only parsed where a mode means something.
 #[cfg(unix)]
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]

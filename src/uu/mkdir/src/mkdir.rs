@@ -16,9 +16,9 @@ use uucore::error::ExitCode;
 use uucore::error::{UResult, USimpleError, strip_errno};
 #[cfg(not(windows))]
 use uucore::mode;
-use uucore::translate;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
 use uucore::{format_usage, show_if_err};
+use uucore::{translate, translate_text};
 
 static DEFAULT_PERM: u32 = 0o777;
 
@@ -209,12 +209,6 @@ pub fn mkdir(path: &Path, config: &Config) -> UResult<()> {
 // Create a directory at the given path.
 // Uses iterative approach instead of recursion to avoid stack overflow with deep nesting.
 fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
-    if path.exists() && !config.recursive {
-        return Err(USimpleError::new(
-            1,
-            translate!("mkdir-error-file-exists", "path" => path.maybe_quote()),
-        ));
-    }
     if path.as_os_str().is_empty() {
         return Ok(());
     }
@@ -370,7 +364,7 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
         }
         Err(e) => Err(USimpleError::new(
             1,
-            translate!("mkdir-error-cannot-create-directory", "path" => path.display(), "error" => strip_errno(&e)),
+            translate_text!("mkdir-error-cannot-create-directory", "path" => path.quote(), "error" => strip_errno(&e)),
         )),
     }
 }
