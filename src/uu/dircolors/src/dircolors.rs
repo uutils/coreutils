@@ -86,7 +86,26 @@ fn generate_type_output(fmt: &OutputFmt) -> String {
     }
 }
 
+/// The built-in database is guarded by `COLORTERM ?*` followed by one `TERM`
+/// entry per known terminal. Those entries only take effect when one of them
+/// matches the environment, so reproduce that check before emitting anything.
+fn builtin_database_applies() -> bool {
+    let (term, colorterm) = term_and_colorterm();
+    !colorterm.is_empty() || TERMS.iter().any(|pattern| term.fnmatch(pattern))
+}
+
+/// `TERM` (defaulting to "none") and `COLORTERM` (defaulting to empty).
+fn term_and_colorterm() -> (String, String) {
+    let term = env::var("TERM").unwrap_or_else(|_| "none".to_owned());
+    let colorterm = env::var("COLORTERM").unwrap_or_default();
+    (term, colorterm)
+}
+
 fn generate_ls_colors(fmt: &OutputFmt, sep: &str) -> String {
+    if !builtin_database_applies() {
+        let (prefix, suffix) = get_colors_format_strings(fmt);
+        return format!("{prefix}{suffix}");
+    }
     if let OutputFmt::Display = fmt {
         let mut display_parts = vec![];
         let type_output = generate_type_output(fmt);
@@ -324,8 +343,7 @@ where
     result.push_str(&prefix);
 
     // Get environment variables once at the start
-    let term = env::var("TERM").unwrap_or_else(|_| "none".to_owned());
-    let colorterm = env::var("COLORTERM").unwrap_or_default();
+    let (term, colorterm) = term_and_colorterm();
 
     let mut state = ParseState::Global;
     let mut saw_colorterm_match = false;
