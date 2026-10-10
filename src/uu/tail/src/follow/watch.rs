@@ -14,6 +14,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, channel};
+use std::time::Instant;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, set_exit_code};
 #[cfg(target_os = "linux")]
@@ -97,6 +98,7 @@ pub struct Observer {
     pub use_polling: bool,
 
     pub watcher_rx: Option<WatcherRx>,
+    /// Paths requiring periodic checks after their watch is lost.
     pub orphans: Vec<PathBuf>,
     pub files: FileHandling,
 
@@ -151,7 +153,11 @@ impl Observer {
             } else {
                 path.to_owned()
             };
-            let metadata = path.metadata().ok();
+
+            let metadata = reader
+                .as_ref()
+                .and_then(|reader| reader.get_ref().metadata().ok())
+                .or_else(|| path.metadata().ok());
             self.files.insert(
                 &path,
                 PathData::new(reader, metadata, display_name),
@@ -306,6 +312,26 @@ impl Observer {
         let mut paths: Vec<PathBuf> = vec![];
         let display_name = self.files.get(event_path).display_name.clone();
 
+        if self.follow_descriptor()
+            && self.files.get(event_path).reader.is_some()
+            && matches!(
+                event.kind,
+                EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_)
+            )
+            && event.kind != EventKind::Modify(ModifyKind::Name(RenameMode::Both))
+        {
+            if matches!(
+                event.kind,
+                EventKind::Remove(_) | EventKind::Modify(ModifyKind::Name(_))
+            ) && !self.orphans.contains(event_path)
+            {
+                self.orphans.push(event_path.clone());
+            }
+            // Keep the open file on replacement/removal events. Truncation is checked
+            // against the descriptor when it is read, rather than against this path.
+            return Ok(vec![event_path.clone()]);
+        }
+
         match event.kind {
             // NOTE: `ModifyKind::Any` is emitted by the Windows `ReadDirectoryChangesW`
             // backend (for `FILE_ACTION_MODIFIED`) and by the macOS/BSD `kqueue` backend
@@ -343,8 +369,9 @@ impl Observer {
                                     translate!("tail-status-has-appeared-following-new-file", "file" => display_name.quote())
                                 );
                                 self.files.update_reader(event_path)?;
-                            } else if event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To))
-                            || (self.use_polling && !old_md.file_id_eq(&new_md)) {
+                            } else if self.follow_name()
+                                && (event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To))
+                                    || (self.use_polling && !old_md.file_id_eq(&new_md))) {
                                 show_error!(
                                     "{}",
                                     translate!("tail-status-has-been-replaced-following-new-file", "file" => display_name.quote())
@@ -446,36 +473,11 @@ impl Observer {
                     // --retry only effective for the initial open
                     let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
                     self.files.remove(event_path);
-                } else if self.use_polling && event.kind == EventKind::Remove(RemoveKind::Any) {
-                    /*
-                    BUG: The watched file was removed. Since we're using Polling, this
-                    could be a rename. We can't tell because `notify::PollWatcher` doesn't
-                    recognize renames properly.
-                    Ideally we want to call seek to offset 0 on the file handle.
-                    But because we only have access to `PathData::reader` as `BufRead`,
-                    we cannot seek to 0 with `BufReader::seek_relative`.
-                    Also because we don't have the new name, we cannot work around this
-                    by simply reopening the file.
-                    */
                 }
             }
             EventKind::Modify(ModifyKind::Name(RenameMode::Both))
-                /*
-                NOTE: For `tail -f a`, keep tracking additions to b after `mv a b`
-                (gnu/tests/tail-2/descriptor-vs-rename.sh)
-                NOTE: The File/BufReader doesn't need to be updated.
-                However, we need to update our `files.map`.
-                This can only be done for inotify, because this EventKind does not
-                trigger for the PollWatcher.
-                BUG: As a result, there's a bug if polling is used:
-                $ tail -f file_a ---disable-inotify
-                $ mv file_a file_b
-                $ echo A >> file_b
-                $ echo A >> file_a
-                The last append to file_a is printed, however this shouldn't be because
-                after the "mv" tail should only follow "file_b".
-                TODO: [2022-05; jhscheer] add test for this bug
-                */
+                // Inotify can move the watch to the new path while keeping the reader.
+                // Other backends continue reading the descriptor on events or timeouts.
 
                 if self.follow_descriptor() => {
                     let new_path = event.paths.last().unwrap();
@@ -490,7 +492,11 @@ impl Observer {
 
                     // Unwatch old path and watch new path
                     let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
-                    self.watcher_rx.as_mut().unwrap().watch_with_parent(new_path)?;
+                    self.orphans.retain(|path| path != event_path);
+                    if self.watcher_rx.as_mut().unwrap().watch_with_parent(new_path).is_err() {
+                        // Another rename may have already made the new path unavailable.
+                        self.orphans.push(new_path.clone());
+                    }
                 }
             _ => {}
         }
@@ -507,6 +513,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
     let process = platform::ProcessChecker::new(observer.pid);
 
     let mut timeout_counter = 0;
+    let mut last_descriptor_poll = Instant::now();
 
     // main follow loop
     loop {
@@ -536,7 +543,9 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                         );
                         observer.files.update_metadata(new_path, Some(md));
                         observer.files.update_reader(new_path)?;
-                        _read_some = observer.files.tail_file(new_path, settings.verbose)?;
+                        _read_some = observer
+                            .files
+                            .tail_file(new_path, settings.verbose, false)?;
                         observer
                             .watcher_rx
                             .as_mut()
@@ -549,12 +558,22 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
 
         // With  -f, sleep for approximately N seconds (default 1.0) between iterations;
         // We wake up if Notify sends an Event or if we wait more than `sleep_sec`.
+        let wait = if !observer.use_polling
+            && observer.follow_descriptor()
+            && !observer.orphans.is_empty()
+        {
+            settings
+                .sleep_sec
+                .saturating_sub(last_descriptor_poll.elapsed())
+        } else {
+            settings.sleep_sec
+        };
         let rx_result = observer
             .watcher_rx
             .as_mut()
             .unwrap()
             .receiver
-            .recv_timeout(settings.sleep_sec);
+            .recv_timeout(wait);
 
         if rx_result.is_ok() {
             timeout_counter = 0;
@@ -609,6 +628,9 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                 paths,
             })) if e.kind() == std::io::ErrorKind::NotFound => {
                 if let Some(event_path) = paths.first().filter(|p| observer.files.contains_key(p)) {
+                    if observer.follow_descriptor() && !observer.orphans.contains(event_path) {
+                        observer.orphans.push(event_path.clone());
+                    }
                     let _ = observer
                         .watcher_rx
                         .as_mut()
@@ -648,16 +670,34 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             }
         }
 
-        if observer.use_polling && settings.follow.is_some() {
+        if settings.follow.is_some() && observer.use_polling {
             // Consider all files to potentially have new content.
-            // This is a workaround because `Notify::PollWatcher`
-            // does not recognize the "renaming" of files.
+            // PollWatcher cannot recognize renames.
             paths = observer.files.keys().cloned().collect::<Vec<_>>();
+        } else if observer.follow_descriptor()
+            && !observer.orphans.is_empty()
+            && last_descriptor_poll.elapsed() >= settings.sleep_sec
+        {
+            // Only descriptors that lost their watch need periodic reads. Use elapsed
+            // time so unrelated events cannot postpone these reads indefinitely.
+            for path in &observer.orphans {
+                if !paths.contains(path) {
+                    paths.push(path.clone());
+                }
+            }
+            last_descriptor_poll = Instant::now();
         }
 
         // main print loop
         for path in &paths {
-            _read_some = observer.files.tail_file(path, settings.verbose)?;
+            // A later rename in the same event batch may have moved this entry.
+            if !observer.files.contains_key(path) {
+                continue;
+            }
+            _read_some =
+                observer
+                    .files
+                    .tail_file(path, settings.verbose, observer.follow_descriptor())?;
         }
 
         if timeout_counter == settings.max_unchanged_stats {

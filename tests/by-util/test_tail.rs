@@ -218,6 +218,105 @@ fn test_stdin_redirect_large_offset(
         .stdout_only(expected);
 }
 
+#[rstest]
+#[case::notification(false)]
+#[case::polling(true)]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+fn test_stdin_redirect_follow_replaced_with_shorter_file(
+    #[case] use_polling: bool,
+    #[values(Some("f"))] operand: Option<&str>,
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "initial-long-line\n");
+    ucmd.args(&["-f", "--sleep-interval=0.1"]);
+    if let Some(operand) = operand {
+        ucmd.arg(operand);
+    }
+    if use_polling {
+        ucmd.arg("--use-polling");
+    }
+    let mut p = ucmd
+        .set_stdin(File::open(at.plus("f")).unwrap())
+        .run_no_wait();
+
+    p.make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .with_current_output()
+        .stdout_only("initial-long-line\n");
+    at.rename("f", "old");
+    at.write("f", "new\n");
+    p.make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .with_current_output()
+        .stdout_only("");
+    at.append("old", "old-append\n");
+    p.make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .with_current_output()
+        .stdout_only("old-append\n");
+
+    // Truncation must rewind the same descriptor even after its path was replaced.
+    let display_name = match operand {
+        None | Some("-") => "standard input",
+        Some(name) => name,
+    };
+    let expected_stderr = format!("tail: {display_name}: file truncated\n");
+    at.truncate("old", "truncated\n");
+    p.make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .with_current_output()
+        .stdout_is("truncated\n")
+        .stderr_is(&expected_stderr);
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_is("initial-long-line\nold-append\ntruncated\n")
+        .stderr_is(expected_stderr);
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+fn test_follow_descriptor_moved_while_other_file_changes() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::Duration;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "initial\n");
+    at.write("busy", "");
+    at.mkdir("moved");
+    let mut p = ucmd
+        .args(&["-q", "-f", "--sleep-interval=0.1", "f", "busy"])
+        .run_no_wait();
+    p.make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .with_current_output()
+        .stdout_only("initial\n");
+    at.rename("f", "moved/f");
+    p.make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .with_current_output()
+        .no_output();
+
+    let stop = Arc::new(AtomicBool::new(false));
+    let writer_stop = Arc::clone(&stop);
+    let mut busy = std::fs::OpenOptions::new()
+        .append(true)
+        .open(at.plus("busy"))
+        .unwrap();
+    let writer = std::thread::spawn(move || {
+        while !writer_stop.load(Ordering::Relaxed) {
+            busy.write_all(b"busy\n").unwrap();
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    });
+    at.append("moved/f", "followed-after-move\n");
+    // There must be no dependency on an idle timeout while other events arrive.
+    let output = p
+        .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .with_current_output();
+    stop.store(true, Ordering::Relaxed);
+    writer.join().unwrap();
+    p.kill().make_assertion().with_all_output().no_stderr();
+    output.stdout_contains("followed-after-move\n").no_stderr();
+}
+
 #[test]
 fn test_nc_0_wo_follow() {
     // verify that -[nc]0 without -f, exit without reading

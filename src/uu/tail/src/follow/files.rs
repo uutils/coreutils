@@ -7,14 +7,15 @@
 
 use crate::args::Settings;
 use crate::chunks::BytesChunkBuffer;
-use crate::paths::{HeaderPrinter, PathExtTail};
+use crate::paths::{HeaderPrinter, MetadataExtTail, PathExtTail};
 use crate::text;
 use std::collections::HashMap;
 use std::collections::hash_map::Keys;
 use std::fs::{File, Metadata};
-use std::io::{BufReader, BufWriter, Write, stdout};
+use std::io::{BufReader, BufWriter, Seek, Write, stdout};
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
+use uucore::{show_error, translate};
 
 /// Data structure to keep a handle on files to follow.
 /// `last` always holds the path/key of the last file that was printed from.
@@ -130,9 +131,30 @@ impl FileHandling {
     }
 
     /// Read new data from `path` and print it to stdout
-    pub fn tail_file(&mut self, path: &Path, verbose: bool) -> UResult<bool> {
+    pub fn tail_file(
+        &mut self,
+        path: &Path,
+        verbose: bool,
+        follow_descriptor: bool,
+    ) -> UResult<bool> {
         let mut chunks = BytesChunkBuffer::new(u64::MAX);
-        if let Some(reader) = self.get_mut(path).reader.as_mut() {
+        let pd = self.get_mut(path);
+        if let Some(reader) = pd.reader.as_mut() {
+            if follow_descriptor {
+                // A path may now refer to a replacement file. Only the open descriptor
+                // can tell us whether the file we are actually reading was truncated.
+                let metadata = reader.get_ref().metadata()?;
+                if let Some(old) = &pd.metadata
+                    && old.got_truncated(&metadata)?
+                {
+                    show_error!(
+                        "{}",
+                        translate!("tail-status-file-truncated", "file" => pd.display_name)
+                    );
+                    reader.rewind()?;
+                }
+                pd.metadata = Some(metadata);
+            }
             chunks.fill(reader)?;
         }
         if chunks.has_data() {
@@ -146,7 +168,9 @@ impl FileHandling {
             writer.flush()?;
 
             self.last.replace(path.to_owned());
-            self.update_metadata(path, None);
+            if !follow_descriptor {
+                self.update_metadata(path, None);
+            }
             Ok(true)
         } else {
             Ok(false)
@@ -201,6 +225,10 @@ impl PathData {
             None
         };
 
-        Self::new(reader, path.metadata().ok(), data.display_name.as_str())
+        let metadata = reader
+            .as_ref()
+            .and_then(|reader| reader.get_ref().metadata().ok())
+            .or_else(|| path.metadata().ok());
+        Self::new(reader, metadata, data.display_name.as_str())
     }
 }
