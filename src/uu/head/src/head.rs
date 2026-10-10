@@ -553,7 +553,10 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 }
                 continue;
             }
-            head_file(&mut file_handle, options)?;
+            if let Err(err) = head_file(&mut file_handle, options) {
+                show!(USimpleError::new(1, err.to_string()));
+                continue;
+            }
             Ok(())
         };
         if let Err(err) = res {

@@ -1253,3 +1253,15 @@ fn test_header_quotes_name_with_control_char() {
         .succeeds()
         .stdout_only("==> 'tab'$'\\t''here' <==\nt\n");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_no_skip_after_error() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("f", "hello");
+    ts.ucmd()
+        .args(&["/proc/self/mem", "f"])
+        .fails()
+        .stdout_contains("hello");
+}
