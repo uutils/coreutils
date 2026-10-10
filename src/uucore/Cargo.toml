@@ -183,7 +183,7 @@ i18n-datetime = [
   "jiff-icu",
   "jiff",
 ]
-mode = ["libc", "rustix/process"]
+mode = ["libc", "quoting-style", "rustix/process"]
 perms = ["entries", "libc", "safe-traversal", "walkdir"]
 buf-copy = ["pipes"]
 parser-num = ["extendedbigdecimal", "num-traits"]

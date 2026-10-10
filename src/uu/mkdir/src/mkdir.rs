@@ -8,6 +8,8 @@
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
 use clap::{Arg, ArgAction, ArgMatches, Command};
+#[cfg(not(windows))]
+use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
@@ -16,6 +18,8 @@ use uucore::error::ExitCode;
 use uucore::error::{UResult, USimpleError, strip_errno};
 #[cfg(not(windows))]
 use uucore::mode;
+#[cfg(not(windows))]
+use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use uucore::translate;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
 use uucore::{format_usage, show_if_err};
@@ -74,7 +78,13 @@ fn get_mode(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Opt
                 // The diagnostic is already on stderr; exit quietly.
                 ExitCode::new(1)
             } else {
-                USimpleError::new(1, err.to_string())
+                let quoted_mode = locale_aware_escape_name(OsStr::new(m), QuotingStyle::C_SINGLE)
+                    .into_string()
+                    .expect("C-style quoting always produces valid UTF-8");
+                USimpleError::new(
+                    1,
+                    translate!("mkdir-error-invalid-mode", "mode" => quoted_mode),
+                )
             }
         })
 }

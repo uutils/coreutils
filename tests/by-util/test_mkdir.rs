@@ -1151,13 +1151,60 @@ mod diagnostics {
     #[test]
     fn test_plain_message_when_stderr_is_a_pipe() {
         // The test harness pipes stderr, so the report must not appear.
-        let result = new_ucmd!()
+        new_ucmd!()
             .args(&["-m", "u+rw?x", "some_dir"])
+            .fails_with_code(1)
+            .stderr_only("mkdir: invalid mode 'u+rw?x'\n");
+    }
+
+    #[test]
+    fn test_plain_message_quotes_control_character() {
+        new_ucmd!()
+            .args(&["-m", "a=\x01", "some_dir"])
+            .fails_with_code(1)
+            .stderr_only("mkdir: invalid mode 'a=\\001'\n");
+    }
+
+    #[test]
+    fn test_terminal_message_quotes_control_character() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-m", "a=\x01", "some_dir"])
             .fails_with_code(1);
         let stderr = result.stderr_str();
 
-        assert!(stderr.starts_with("mkdir: "), "{stderr}");
-        assert!(!stderr.contains(":1:"), "{stderr}");
+        assert!(
+            stderr.contains("invalid operator (expected +, -, or =, but found \\001)"),
+            "{stderr}"
+        );
+        assert!(stderr.contains("1 │ -m a=\\001 some_dir"), "{stderr}");
+        assert_eq!(result.caret_column(), Some(6), "{stderr}");
+        assert!(!stderr.contains('\x01'), "{stderr:?}");
+    }
+
+    #[test]
+    fn test_terminal_message_quotes_attached_mode() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--mode=a=\x01", "some_dir"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("--mode=a=\\001 some_dir"), "{stderr}");
+        assert_eq!(result.caret_column(), Some(10), "{stderr}");
+        assert!(!stderr.contains('\x01'), "{stderr:?}");
+    }
+
+    #[test]
+    fn test_terminal_message_quotes_mode_after_matching_operand() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["a=\x01", "--mode=a=\x01", "some_dir"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("--mode=a=\\001 some_dir"), "{stderr}");
+        assert_eq!(result.caret_column(), Some(14), "{stderr}");
     }
 }
 
