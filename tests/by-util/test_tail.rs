@@ -186,6 +186,38 @@ fn test_stdin_redirect_offset2() {
         );
 }
 
+#[rstest]
+#[case::lines(4, &["-n", "10"], "two\n")]
+#[case::last_line(1, &["-n", "1"], "two\n")]
+#[case::bytes(4, &["-c", "10"], "two\n")]
+#[case::last_bytes(1, &["-c", "2"], "o\n")]
+#[case::from_line(1, &["-n", "+2"], "two\n")]
+#[case::from_byte(4, &["-c", "+2"], "wo\n")]
+#[case::at_eof(8, &["-n", "10"], "")]
+#[case::past_eof_lines(9, &["-n", "10"], "")]
+#[case::past_eof_bytes(9, &["-c", "10"], "")]
+fn test_stdin_redirect_large_offset(
+    #[case] offset: u64,
+    #[case] args: &[&str],
+    #[case] expected: &str,
+    #[values(false, true)] presume_input_pipe: bool,
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // Exercise the reverse-reading path, including a final partial block.
+    let prefix = "prefix\n".repeat(100_000);
+    at.write("f", &format!("{prefix}one\ntwo\n"));
+    let mut file = File::open(at.plus("f")).unwrap();
+    file.seek(SeekFrom::Start(prefix.len() as u64 + offset))
+        .unwrap();
+    if presume_input_pipe {
+        ucmd.arg("---presume-input-pipe");
+    }
+    ucmd.args(args)
+        .set_stdin(file)
+        .succeeds()
+        .stdout_only(expected);
+}
+
 #[test]
 fn test_nc_0_wo_follow() {
     // verify that -[nc]0 without -f, exit without reading

@@ -471,6 +471,7 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
 /// being a nice performance win for very large files.
 fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
     debug_assert!(!settings.presume_input_pipe);
+    let start = file.stream_position()?;
     let mut limit = None;
 
     // Find the position in the file to start printing from.
@@ -480,20 +481,15 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
         }
         FilterMode::Lines(Signum::Positive(count), delimiter) if count > &1 => {
             let i = forwards_thru_file(file, *count - 1, *delimiter).unwrap();
-            file.seek(SeekFrom::Start(i as u64)).unwrap();
+            file.seek(SeekFrom::Start(start + i as u64))?;
         }
         FilterMode::Lines(Signum::MinusZero, _) | FilterMode::Bytes(Signum::MinusZero) => {
             file.seek(SeekFrom::End(0)).unwrap();
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
-            // A count that does not fit into an `i64` cannot be negated for
-            // the seek; like a seek before the start, it means the whole file.
-            match i64::try_from(*count) {
-                Ok(count) if file.seek(SeekFrom::End(-count)).is_ok() => {}
-                _ => {
-                    file.seek(SeekFrom::Start(0)).unwrap();
-                }
-            }
+            // Never include bytes preceding the current input position.
+            let end = file.seek(SeekFrom::End(0))?;
+            file.seek(SeekFrom::Start(end.saturating_sub(*count).max(start)))?;
             limit = Some(*count);
         }
         FilterMode::Bytes(Signum::Positive(count)) if count > &1 => {
@@ -502,7 +498,7 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
             // A start offset past the largest seekable position makes the
             // underlying `lseek` fail with `EINVAL`; treat that like a start
             // beyond the end of the file and produce no output.
-            file.seek(SeekFrom::Start(*count - 1))
+            file.seek(SeekFrom::Start(start.saturating_add(*count - 1)))
                 .or_else(|_| file.seek(SeekFrom::End(0)))
                 .unwrap();
         }
