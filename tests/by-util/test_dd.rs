@@ -1707,6 +1707,23 @@ fn test_nocache_stdin_error() {
         .stderr_only(format!("dd: failed to discard cache for: 'standard input': {detail}\n0+0 records in\n0+0 records out\n"));
 }
 
+/// Test that discarding system file cache fails for an output FIFO.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_nocache_output_fifo_error() {
+    #[cfg(not(target_env = "musl"))]
+    let detail = "Illegal seek";
+    #[cfg(target_env = "musl")]
+    let detail = "Invalid seek";
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    ucmd.args(&["oflag=nocache", "count=0", "of=fifo", "status=noxfer"])
+        .fails_with_code(1)
+        .stderr_only(format!(
+            "dd: failed to discard cache for: fifo: {detail}\n0+0 records in\n0+0 records out\n"
+        ));
+}
+
 /// Test that dd fails when no number in count.
 #[test]
 fn test_empty_count_number() {
@@ -2007,6 +2024,20 @@ fn test_iflag_directory_fails_when_file_is_piped_via_std_in() {
         .pipe_in("")
         .fails()
         .stderr_only("dd: setting flags for 'standard input': Not a directory\n");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_nocache_on_a_pipe_is_silent() {
+    // "" ends the copy on the first read, "abc" goes through the per-block
+    // path; neither may diagnose the failed cache drop on a pipe
+    for input in ["", "abc"] {
+        new_ucmd!()
+            .args(&["iflag=nocache", "oflag=nocache", "status=none"])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(input);
+    }
 }
 
 #[test]
