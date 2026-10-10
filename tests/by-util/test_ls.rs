@@ -8439,3 +8439,14 @@ fn test_ls_dereference_sibling_alias_not_already_listed() {
         .stdout_contains("link:\nfile")
         .no_stderr();
 }
+
+#[test]
+fn test_ls_broken_pipe_is_silent() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // More output than a pipe buffer holds, so ls is still writing when the reader goes away.
+    for i in 0..3000 {
+        at.touch(format!("{i:0>80}"));
+    }
+
+    ucmd.arg("-l").run_stdout_starts_with(b"total").no_stderr();
+}

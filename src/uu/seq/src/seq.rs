@@ -225,6 +225,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match result {
         Ok(()) => Ok(()),
+        // Windows has no SIGPIPE; the broken pipe is handled in `uucore::main`.
+        #[cfg(not(windows))]
         Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
             // GNU seq prints the Broken pipe message but still exits with status 0
             // unless SIGPIPE was explicitly ignored, in which case it should fail.
