@@ -2410,6 +2410,35 @@ fn test_ls_time_styles() {
         .stdout_matches(&re_custom_format_recent_2)
         .stdout_matches(&re_custom_format_old);
 
+    // Empty halves must preserve the order in both --time-style and TIME_STYLE.
+    for (style, expected_recent, expected_old) in [
+        ("+OLD\nNEW", "NEW", "OLD"),
+        ("+\nNEW", "NEW", ""),
+        ("+OLD\n", "", "OLD"),
+        ("+SAME", "SAME", "SAME"),
+    ] {
+        for use_env in [false, true] {
+            for (file, expected) in [("test", expected_recent), ("test-old", expected_old)] {
+                let mut cmd = scene.ucmd();
+                cmd.arg("-ln");
+                if use_env {
+                    cmd.env("TIME_STYLE", style);
+                } else {
+                    cmd.arg(format!("--time-style={style}"));
+                }
+                let result = cmd.arg(file).succeeds();
+                let fields: Vec<_> = result.stdout_str().split_ascii_whitespace().collect();
+                assert_eq!(fields.last(), Some(&file), "unexpected output: {fields:?}");
+                if expected.is_empty() {
+                    assert_eq!(fields.len(), 6, "unexpected output: {fields:?}");
+                } else {
+                    assert_eq!(fields.len(), 7, "unexpected output: {fields:?}");
+                    assert_eq!(fields[5], expected, "unexpected output: {fields:?}");
+                }
+            }
+        }
+    }
+
     // Also fails due to not having full clap support for time_styles
     scene
         .ucmd()
