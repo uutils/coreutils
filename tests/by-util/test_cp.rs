@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) filefrag rlimit Rlim Nofile clob btrfs neve ROOTDIR USERDIR outfile subvolume uufs xattrs ELOOP
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) filefrag rlimit Rlim Nofile Fsize SIGXFSZ clob btrfs neve ROOTDIR USERDIR outfile subvolume uufs xattrs ELOOP
 // spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx dstlink mcstransd
 
 #[cfg(unix)]
@@ -3472,9 +3472,35 @@ fn test_closes_file_descriptors() {
         .succeeds();
 }
 
+// When writing one file fails part-way, the rest of its data must not end up
+// in the files copied after it.
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(not(wasi_runner))] // linux specific
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: --sparse is only supported on linux")]
+fn test_cp_failed_write_does_not_spill_into_next_file() {
+    use rustix::process::Resource;
+
+    const CAP: u64 = 100 * 1024;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("big", &vec![b'x'; 3 * CAP as usize]);
+    at.write("small", "small file\n");
+    at.write("small2", "another small file\n");
+    at.mkdir("out");
+    ucmd.args(&["--reflink=never", "big", "small", "small2", "out"])
+        .limit(Resource::Fsize, CAP, CAP)
+        .ignore_sigxfsz()
+        .fails()
+        .stderr_contains("'big'");
+
+    assert_eq!(at.metadata("out/big").len(), CAP);
+    assert_eq!(at.read("out/small"), "small file\n");
+    assert_eq!(at.read("out/small2"), "another small file\n");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(not(wasi_runner))] // linux specific
+#[test]
 fn test_cp_sparse_never_empty() {
     const BUFFER_SIZE: usize = 4096 * 4;
     let (at, mut ucmd) = at_and_ucmd!();
