@@ -58,7 +58,7 @@ mod exact_searcher_tests {
         let matcher = ExactMatcher::new("a".as_bytes());
         let iter = Searcher::new(&matcher, "".as_bytes());
         let items: Vec<(usize, usize)> = iter.collect();
-        assert!(items.is_empty());
+        assert_eq!(items, [] as [_; 0]);
     }
 
     fn test_multibyte(line: &[u8], expected: &[(usize, usize)]) {
@@ -137,7 +137,7 @@ mod whitespace_searcher_tests {
         let matcher = WhitespaceMatcher {};
         let iter = Searcher::new(&matcher, "".as_bytes());
         let items: Vec<(usize, usize)> = iter.collect();
-        assert!(items.is_empty());
+        assert_eq!(items, [] as [_; 0]);
     }
 
     fn test_multispace(line: &[u8], expected: &[(usize, usize)]) {

@@ -21,7 +21,7 @@ pub struct ExactMatcher<'a> {
 
 impl<'a> ExactMatcher<'a> {
     pub fn new(needle: &'a [u8]) -> Self {
-        assert!(!needle.is_empty());
+        assert_ne!(needle, []);
         Self { needle }
     }
 }
@@ -51,7 +51,7 @@ pub struct MbExactMatcher<'a> {
 
 impl<'a> MbExactMatcher<'a> {
     pub fn new(needle: &'a [u8]) -> Self {
-        assert!(!needle.is_empty());
+        assert_ne!(needle, []);
         Self { needle }
     }
 }

@@ -2227,10 +2227,10 @@ fn test_du_safe_traversal_with_symlinks() {
     at.symlink_file(&format!("{deep_path}/target.txt"), "shallow_link.txt");
 
     let result = ts.ucmd().arg("-L").arg("shallow_link.txt").succeeds();
-    assert!(!result.stdout_str().is_empty());
+    assert_ne!(result.stdout_str(), "");
 
     let result = ts.ucmd().arg("shallow_link.txt").succeeds();
-    assert!(!result.stdout_str().is_empty());
+    assert_ne!(result.stdout_str(), "");
 }
 #[test]
 #[cfg(unix)]
