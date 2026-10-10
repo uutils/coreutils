@@ -67,14 +67,19 @@ struct LineMeta {
 }
 
 impl Uniq {
-    pub fn write_uniq(&self, mut reader: impl BufRead, mut writer: impl Write) -> UResult<()> {
+    pub fn write_uniq(
+        &self,
+        mut reader: impl BufRead,
+        mut writer: impl Write,
+        input_name: &OsStr,
+    ) -> UResult<()> {
         let mut first_line_printed = false;
         let mut group_count = 1;
         let line_terminator = self.get_line_terminator();
         let writer = &mut writer;
 
         let mut current_buf = Vec::with_capacity(1024);
-        if !Self::read_line(&mut reader, &mut current_buf, line_terminator)? {
+        if !Self::read_line(&mut reader, &mut current_buf, line_terminator, input_name)? {
             return Ok(());
         }
         let mut current_meta = LineMeta::default();
@@ -84,7 +89,7 @@ impl Uniq {
         let mut next_meta = LineMeta::default();
         let mut line_out = Vec::with_capacity(1024);
 
-        while Self::read_line(&mut reader, &mut next_buf, line_terminator)? {
+        while Self::read_line(&mut reader, &mut next_buf, line_terminator, input_name)? {
             self.build_meta(&next_buf, &mut next_meta);
 
             if self.keys_are_equal(&current_buf, &current_meta, &next_buf, &next_meta) {
@@ -248,11 +253,12 @@ impl Uniq {
         reader: &mut impl BufRead,
         buffer: &mut Vec<u8>,
         line_terminator: u8,
+        input_name: &OsStr,
     ) -> UResult<bool> {
         buffer.clear();
-        let bytes_read = reader
-            .read_until(line_terminator, buffer)
-            .map_err_context(|| translate!("uniq-error-read-error"))?;
+        let bytes_read = reader.read_until(line_terminator, buffer).map_err_context(
+            || translate!("uniq-error-read-error", "file" => input_name.quote()),
+        )?;
         if bytes_read == 0 {
             return Ok(false);
         }
@@ -719,6 +725,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     uniq.write_uniq(
         open_input_file(in_file_name)?,
         open_output_file(out_file_name)?,
+        in_file_name.unwrap_or(OsStr::new("-")),
     )
 }
 

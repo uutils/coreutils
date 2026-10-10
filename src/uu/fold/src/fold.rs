@@ -15,6 +15,7 @@ use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
+use uucore::quoting_style::locale_aware_shell_escape;
 use uucore::show;
 use uucore::translate;
 
@@ -237,9 +238,7 @@ fn fold(
             match File::open(Path::new(filename)) {
                 Ok(f) => file_buf = f,
                 Err(e) => {
-                    show!(e.map_err_context(|| {
-                        uucore::quoting_style::locale_aware_shell_escape(filename)
-                    }));
+                    show!(e.map_err_context(|| locale_aware_shell_escape(filename)));
                     continue;
                 }
             }
@@ -247,14 +246,14 @@ fn fold(
         });
 
         if bytes {
-            fold_file_bytewise(buffer, spaces, width, &mut output)?;
+            fold_file_bytewise(buffer, filename, spaces, width, &mut output)?;
         } else {
             let mode = if characters {
                 WidthMode::Characters
             } else {
                 WidthMode::Columns
             };
-            fold_file(buffer, spaces, width, mode, &mut output)?;
+            fold_file(buffer, filename, spaces, width, mode, &mut output)?;
         }
     }
 
@@ -274,6 +273,7 @@ fn fold(
 ///  If `spaces` is `true`, attempt to break lines at whitespace boundaries.
 fn fold_file_bytewise<T: Read, W: Write>(
     mut file: BufReader<T>,
+    filename: &OsStr,
     spaces: bool,
     width: usize,
     output: &mut W,
@@ -289,7 +289,7 @@ fn fold_file_bytewise<T: Read, W: Write>(
         while line.len() <= width {
             let buf = file
                 .fill_buf()
-                .map_err_context(|| translate!("fold-error-readline"))?;
+                .map_err_context(|| locale_aware_shell_escape(filename))?;
             if buf.is_empty() {
                 break;
             }
@@ -743,6 +743,7 @@ fn process_pending_chunk<W: Write>(
 #[allow(clippy::cognitive_complexity)]
 fn fold_file<T: Read, W: Write>(
     mut file: BufReader<T>,
+    filename: &OsStr,
     spaces: bool,
     width: usize,
     mode: WidthMode,
@@ -767,7 +768,7 @@ fn fold_file<T: Read, W: Write>(
         loop {
             let buffer = file
                 .fill_buf()
-                .map_err_context(|| translate!("fold-error-readline"))?;
+                .map_err_context(|| locale_aware_shell_escape(filename))?;
             if buffer.is_empty() {
                 break;
             }

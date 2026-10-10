@@ -1250,3 +1250,19 @@ fn test_obsolete_skip_fields_not_read_after_double_dash() {
         .fails()
         .stderr_contains("-1");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_read_error_names_the_input() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    ucmd.arg("d")
+        .fails_with_code(1)
+        .stderr_only("uniq: error reading 'd': Is a directory\n");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    ucmd.set_stdin(std::fs::File::open(at.plus("d")).unwrap())
+        .fails_with_code(1)
+        .stderr_only("uniq: error reading '-': Is a directory\n");
+}

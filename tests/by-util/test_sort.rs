@@ -1397,10 +1397,26 @@ fn test_read_error_message() {
     // "Input/output error" while musl says "I/O error".
     let stderr = result.stderr_str();
     assert!(
-        stderr == "sort: read failed: Input/output error\n"
-            || stderr == "sort: read failed: I/O error\n",
+        stderr == "sort: read failed: /proc/self/mem: Input/output error\n"
+            || stderr == "sort: read failed: /proc/self/mem: I/O error\n",
         "unexpected stderr: {stderr}"
     );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_read_error_names_the_input() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    ucmd.arg("d")
+        .fails_with_code(2)
+        .stderr_only("sort: read failed: d: Is a directory\n");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    ucmd.set_stdin(std::fs::File::open(at.plus("d")).unwrap())
+        .fails_with_code(2)
+        .stderr_only("sort: read failed: -: Is a directory\n");
 }
 
 #[test]
