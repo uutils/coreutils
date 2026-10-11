@@ -65,6 +65,12 @@ fn test_sane() {
 }
 
 /// Returns the settings from `group` that `stty --all` reports for the terminal at `path`.
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "android",
+    target_os = "haiku",
+    target_os = "linux"
+))]
 fn shown_settings(path: &str, group: &[&'static str]) -> Vec<&'static str> {
     let stdout = new_ucmd!()
         .args(&["--all", "--file", path])
@@ -76,25 +82,6 @@ fn shown_settings(path: &str, group: &[&'static str]) -> Vec<&'static str> {
         .copied()
         .filter(|s| words.contains(s))
         .collect()
-}
-
-#[test]
-fn test_grouped_flag_replaces_previous_value() {
-    let (path, _controller, _replica) = pty_path();
-    let csize = ["cs5", "cs6", "cs7", "cs8"];
-
-    for (setting, expected) in [
-        ("cs8", "cs8"),
-        ("cs7", "cs7"),
-        ("cs5", "cs5"),
-        ("cs6", "cs6"),
-        ("cs8", "cs8"),
-        ("evenp", "cs7"),
-        ("-evenp", "cs8"),
-    ] {
-        new_ucmd!().args(&["--file", &path, setting]).succeeds();
-        assert_eq!(shown_settings(&path, &csize), [expected], "after {setting}");
-    }
 }
 
 #[test]

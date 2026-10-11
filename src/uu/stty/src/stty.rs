@@ -1587,6 +1587,40 @@ mod tests {
         assert!(!check_flag_group(&flag_without_group, false));
     }
 
+    // The character size is tested here rather than on a pseudo-terminal,
+    // because Linux pseudo-terminals always keep cs8.
+    #[test]
+    fn test_apply_grouped_flag_replaces_previous_value() {
+        // SAFETY: all-zero bytes are a valid `termios`.
+        let mut termios = Termios::from(unsafe { std::mem::zeroed::<nix::libc::termios>() });
+        let apply = |termios: &mut Termios, arg: &str| {
+            let flags = string_to_flag(arg)
+                .map_or_else(|| combo_to_flags(arg), |flag| vec![ArgOptions::Flags(flag)]);
+            for flag in flags {
+                if let ArgOptions::Flags(flag) = flag {
+                    apply_setting(termios, &flag).unwrap();
+                }
+            }
+        };
+
+        for (arg, expected) in [
+            ("cs8", ControlFlags::CS8),
+            ("cs7", ControlFlags::CS7),
+            ("cs5", ControlFlags::CS5),
+            ("cs6", ControlFlags::CS6),
+            ("cs8", ControlFlags::CS8),
+            ("evenp", ControlFlags::CS7),
+            ("-evenp", ControlFlags::CS8),
+        ] {
+            apply(&mut termios, arg);
+            assert_eq!(
+                termios.control_flags & ControlFlags::CSIZE,
+                expected,
+                "after {arg}"
+            );
+        }
+    }
+
     // Additional tests for get_sane_control_char
     #[test]
     fn test_get_sane_control_char_all_defined() {
