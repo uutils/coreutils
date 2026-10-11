@@ -2196,6 +2196,7 @@ fn test_nocache_eof() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
 fn test_nocache_eof_fadvise_zero_length() {
     use std::process::Command;
     let (at, _ucmd) = at_and_ucmd!();
