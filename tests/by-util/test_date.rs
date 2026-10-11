@@ -2176,6 +2176,7 @@ fn test_date_french_full_sentence() {
 /// The Linux values are GNU date's, the macOS ones follow its locale data.
 #[test]
 #[cfg(any(target_vendor = "apple", all(target_os = "linux", target_env = "gnu")))]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
 fn test_date_format_locale_date_and_time() {
     #[cfg(target_os = "linux")]
     let cases = [
