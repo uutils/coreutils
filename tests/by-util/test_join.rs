@@ -463,6 +463,27 @@ fn empty_fields_kept_without_empty_filler() {
 }
 
 #[test]
+fn repeated_empty_filler() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("a", "1 a\n2 b\n");
+    at.write("b", "1 c\n");
+
+    // -e may be given more than once with the same string.
+    ts.ucmd()
+        .args(&["-a1", "-e", "d", "-e", "d", "-o", "1.1,1.2,2.2", "a", "b"])
+        .succeeds()
+        .stdout_only("1 a c\n2 b d\n");
+
+    // Different strings conflict.
+    ts.ucmd()
+        .args(&["-a1", "-e", "d", "-e", "e", "-o", "1.1,1.2,2.2", "a", "b"])
+        .fails_with_code(1)
+        .stderr_only("join: conflicting empty-field replacement strings\n");
+}
+
+#[test]
 fn nocheck_order() {
     new_ucmd!()
         .arg("fields_1.txt")
