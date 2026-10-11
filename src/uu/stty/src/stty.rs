@@ -980,20 +980,21 @@ fn print_flags<T: TermiosFlag>(
 fn apply_setting(termios: &mut Termios, setting: &AllFlags) -> nix::Result<()> {
     match setting {
         AllFlags::Baud(_, _) => apply_baud_rate_flag(termios, setting)?,
-        AllFlags::ControlFlags((setting, disable)) => {
-            setting.flag.apply(termios, !disable);
-        }
-        AllFlags::InputFlags((setting, disable)) => {
-            setting.flag.apply(termios, !disable);
-        }
-        AllFlags::LocalFlags((setting, disable)) => {
-            setting.flag.apply(termios, !disable);
-        }
-        AllFlags::OutputFlags((setting, disable)) => {
-            setting.flag.apply(termios, !disable);
-        }
+        AllFlags::ControlFlags((setting, disable)) => apply_flag(termios, setting, !disable),
+        AllFlags::InputFlags((setting, disable)) => apply_flag(termios, setting, !disable),
+        AllFlags::LocalFlags((setting, disable)) => apply_flag(termios, setting, !disable),
+        AllFlags::OutputFlags((setting, disable)) => apply_flag(termios, setting, !disable),
     }
     Ok(())
+}
+
+fn apply_flag<T: TermiosFlag>(termios: &mut Termios, setting: &Flag<T>, val: bool) {
+    // A grouped flag selects one value of a multi-bit field (e.g. `cs7` in CSIZE),
+    // so the bits of the previously selected value have to be cleared first.
+    if let (Some(group), true) = (setting.group, val) {
+        group.apply(termios, false);
+    }
+    setting.flag.apply(termios, val);
 }
 
 fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) -> nix::Result<()> {

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar ispeed ospeed NCCS nonhex gstty notachar cbreak evenp oddp CSIZE
+// spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar ispeed ospeed NCCS nonhex gstty notachar cbreak evenp oddp CSIZE tabdly
 
 #![cfg(unix)]
 
@@ -62,6 +62,66 @@ fn test_sane() {
         .args(&["--file", &path])
         .succeeds()
         .stdout_str_check(|s| !s.contains("intr = ^A"));
+}
+
+/// Returns the settings from `group` that `stty --all` reports for the terminal at `path`.
+fn shown_settings(path: &str, group: &[&'static str]) -> Vec<&'static str> {
+    let stdout = new_ucmd!()
+        .args(&["--all", "--file", path])
+        .succeeds()
+        .stdout_move_str();
+    let words: Vec<&str> = stdout.split_whitespace().collect();
+    group
+        .iter()
+        .copied()
+        .filter(|s| words.contains(s))
+        .collect()
+}
+
+#[test]
+fn test_grouped_flag_replaces_previous_value() {
+    let (path, _controller, _replica) = pty_path();
+    let csize = ["cs5", "cs6", "cs7", "cs8"];
+
+    for (setting, expected) in [
+        ("cs8", "cs8"),
+        ("cs7", "cs7"),
+        ("cs5", "cs5"),
+        ("cs6", "cs6"),
+        ("cs8", "cs8"),
+        ("evenp", "cs7"),
+        ("-evenp", "cs8"),
+    ] {
+        new_ucmd!().args(&["--file", &path, setting]).succeeds();
+        assert_eq!(shown_settings(&path, &csize), [expected], "after {setting}");
+    }
+}
+
+#[test]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "android",
+    target_os = "haiku",
+    target_os = "linux"
+))]
+fn test_grouped_output_flag_replaces_previous_value() {
+    let (path, _controller, _replica) = pty_path();
+    let tabdly = ["tab0", "tab1", "tab2", "tab3"];
+
+    for (setting, expected) in [
+        ("tab1", "tab1"),
+        ("tab2", "tab2"),
+        ("tab0", "tab0"),
+        ("tab3", "tab3"),
+        ("sane", "tab0"),
+    ] {
+        new_ucmd!().args(&["--file", &path, setting]).succeeds();
+        assert_eq!(
+            shown_settings(&path, &tabdly),
+            [expected],
+            "after {setting}"
+        );
+    }
 }
 
 #[test]
