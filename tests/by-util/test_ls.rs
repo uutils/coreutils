@@ -8191,6 +8191,7 @@ fn test_long_options_detached() {
 // recording it for the loop detection that only recursion consults.
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
 fn test_no_extra_stat_without_recursion() {
     use std::process::Command;
 
