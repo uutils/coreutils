@@ -89,7 +89,19 @@ macro_rules! get_tests_binary {
     };
 }
 
-pub const PATH: &str = env!("PATH");
+/// The `PATH` to use when running commands with a cleared environment
+///
+/// This is the `PATH` of the process running the tests, read at runtime.
+/// It must not be read at compile time (`env!("PATH")`): with `cargo test`
+/// both happen in the same shell so the values are identical, but when the
+/// test binaries are built separately from where they are run (e.g.
+/// `cargo test --no-run` in a build sandbox, or cross-compiling), a
+/// compile-time value would embed the build machine's `PATH` in the binaries.
+/// That breaks reproducible builds and points at directories that may not
+/// exist on the machine running the tests.
+pub fn path() -> OsString {
+    env::var_os("PATH").unwrap_or_default()
+}
 
 /// Default environment variables to run the commands with
 const DEFAULT_ENV: [(&str, &str); 2] = [("LC_ALL", "C"), ("TZ", "UTC")];
@@ -3258,7 +3270,7 @@ pub fn gnu_cmd_result(
 
     let result = ts
         .cmd(util_name.as_ref())
-        .env("PATH", PATH)
+        .env("PATH", path())
         .envs(DEFAULT_ENV)
         .envs(envs.iter().copied())
         .args(args)
@@ -3368,7 +3380,7 @@ pub fn run_ucmd_as_root_with_stdin_stdout(
                 // we can run sudo and we're root
                 // run ucmd as root:
                 let mut cmd = ts.cmd("sudo");
-                cmd.env("PATH", PATH)
+                cmd.env("PATH", path())
                     .envs(DEFAULT_ENV)
                     .arg("-E")
                     .arg("--non-interactive")

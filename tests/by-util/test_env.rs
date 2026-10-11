@@ -20,12 +20,12 @@ use std::process::Command;
 use tempfile::tempdir;
 use uutests::new_ucmd;
 #[cfg(unix)]
-use uutests::util::PATH;
-#[cfg(unix)]
 use uutests::util::TerminalSimulation;
 use uutests::util::TestScenario;
 #[cfg(unix)]
 use uutests::util::UChild;
+#[cfg(unix)]
+use uutests::util::path;
 use uutests::util_name;
 
 #[cfg(unix)]
@@ -996,7 +996,7 @@ fn test_env_default_signal_all_signals() {
 #[cfg(unix)]
 fn test_env_block_signal_flag() {
     new_ucmd!()
-        .env("PATH", PATH)
+        .env("PATH", path())
         .args(&["--block-signal", "true"])
         .succeeds()
         .no_stderr();
@@ -1006,12 +1006,12 @@ fn test_env_block_signal_flag() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_env_block_realtime_signal() {
     new_ucmd!()
-        .env("PATH", PATH)
+        .env("PATH", path())
         .args(&["--block-signal=SIGRTMIN+7", "true"])
         .succeeds()
         .no_stderr();
     new_ucmd!()
-        .env("PATH", PATH)
+        .env("PATH", path())
         .args(&["--block-signal=SIGRTMAX-7", "true"])
         .succeeds()
         .no_stderr();
@@ -1021,7 +1021,7 @@ fn test_env_block_realtime_signal() {
 #[cfg(unix)]
 fn test_env_list_signal_handling_reports_ignore() {
     let result = new_ucmd!()
-        .env("PATH", PATH)
+        .env("PATH", path())
         .args(&["--ignore-signal=INT", "--list-signal-handling", "true"])
         .succeeds();
     let stderr = result.stderr_str();
@@ -1036,7 +1036,7 @@ fn run_sigpipe_script(ts: &TestScenario, extra_args: &[&str]) {
     let shell = env::var("SHELL").unwrap_or_else(|_| String::from("sh"));
     let _guard = SigpipeGuard::new();
     let mut cmd = ts.ucmd();
-    cmd.env("PATH", PATH);
+    cmd.env("PATH", path());
     cmd.args(extra_args);
     cmd.arg(shell);
     cmd.arg("-c");
