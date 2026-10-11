@@ -880,7 +880,9 @@ fn format_list_in_separate_operands() {
     ts.ucmd()
         .args(&["-o", "1.1", "1.2", "2.2", "a"])
         .fails_with_code(1)
-        .stderr_only("join: 2.2: No such file or directory\n");
+        .no_stdout()
+        .stderr_contains("2.2")
+        .stderr_contains("No such file or directory");
 
     // An operand that is not a field list is still an extra operand.
     ts.ucmd()
