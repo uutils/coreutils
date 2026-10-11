@@ -61,6 +61,12 @@ jobs:
         sudo apt-get update
         ## Check that build-gnu.sh works on the non SELinux system by installing libselinux only on lima
         sudo apt-get install -y gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
+    - name: Use GNU as the system coreutils
+      shell: bash
+      run: |
+        if dpkg -s coreutils-from-uutils >/dev/null 2>&1; then
+          sudo apt-get install -y --allow-remove-essential coreutils-from-gnu coreutils-from-uutils-
+        fi
     - name: Add various locales
       shell: bash
       run: |
