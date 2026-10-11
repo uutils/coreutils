@@ -93,6 +93,37 @@ fn test_non_existing_file() {
     new_ucmd!().arg("non_existing_file").fails();
 }
 
+// A file operand that is not valid UTF-8 must not be dropped, which made od read stdin instead.
+#[test]
+#[cfg(unix)]
+fn test_non_utf8_non_existing_file() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    new_ucmd!()
+        .arg(OsStr::from_bytes(b"\xff"))
+        .pipe_in("abc")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("No such file or directory");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_non_utf8_file() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = OsStr::from_bytes(b"\xff");
+    std::fs::write(at.plus(name), "abcdefghijklmnopqrstuvwxyz\n").unwrap();
+    ucmd.arg("--endian=little")
+        .arg(name)
+        .pipe_in("not read")
+        .succeeds()
+        .stdout_only(unindent(ALPHA_OUT));
+}
+
 // Test that od reads from stdin instead of a file
 #[test]
 fn test_from_stdin() {
