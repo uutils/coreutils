@@ -861,3 +861,30 @@ fn test_operand_count() {
         .stderr_contains("join: extra operand 'fields_3.txt'\n")
         .stderr_contains("--help");
 }
+
+#[test]
+fn format_list_in_separate_operands() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("a", "1 a x\n2 b y\n");
+    at.write("b", "1 d u\n2 e v\n");
+
+    // The fields of -o may be given as separate operands before the files.
+    ts.ucmd()
+        .args(&["-o", "1.1", "1.2", "1.3", "2.1", "2.2", "2.3", "a", "b"])
+        .succeeds()
+        .stdout_only("1 a x 1 d u\n2 b y 2 e v\n");
+
+    // Only as many operands as needed to leave two files are taken as fields.
+    ts.ucmd()
+        .args(&["-o", "1.1", "1.2", "2.2", "a"])
+        .fails_with_code(1)
+        .stderr_only("join: 2.2: No such file or directory\n");
+
+    // An operand that is not a field list is still an extra operand.
+    ts.ucmd()
+        .args(&["-o", "1.1", "a", "b", "c"])
+        .fails_with_code(1)
+        .stderr_contains("join: extra operand 'c'\n");
+}
