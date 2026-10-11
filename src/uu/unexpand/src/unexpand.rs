@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufReader, BufWriter, Read, Stdin, Stdout, Write, stdin, stdout};
+use std::io::{self, BufRead, BufReader, BufWriter, Read, Stdin, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use uucore::char_width::char_info_at;
 use uucore::display::Quotable;
@@ -643,7 +643,6 @@ fn unexpand_file(
     options: &Options,
     lastcol: usize,
     tab_config: &TabConfig,
-    buf: &mut [u8],
 ) -> UResult<()> {
     let mut input = open(file)?;
     let mut print_state = PrintState {
@@ -654,23 +653,24 @@ fn unexpand_file(
         pending_wide: Vec::new(),
     };
 
-    while let n @ 1.. = input
-        .read(buf)
+    while let buf @ [_, ..] = input
+        .fill_buf()
         .map_err(|e| e.map_err_context(|| file.maybe_quote().to_string()) as Box<dyn UError>)?
     {
-        for line in buf[..n].split_inclusive(|b| *b == b'\n') {
+        for line in buf.split_inclusive(|b| *b == b'\n') {
             unexpand_buf(line, output, options, lastcol, tab_config, &mut print_state)?;
             if let Some(b'\n') = line.last() {
                 print_state.new_line();
             }
         }
+        let len = buf.len();
+        input.consume(len);
     }
     // write out anything remaining
     write_tabs(output, tab_config, &mut print_state, options.aflag)
 }
 
 fn unexpand(options: &Options) -> UResult<()> {
-    let mut buf = [0u8; 128];
     let mut output = BufWriter::new(stdout());
     let tab_config = &options.tab_config;
     let lastcol = if tab_config.tabstops.len() > 1
@@ -683,7 +683,7 @@ fn unexpand(options: &Options) -> UResult<()> {
     };
 
     for file in &options.files {
-        if let Err(e) = unexpand_file(file, &mut output, options, lastcol, tab_config, &mut buf) {
+        if let Err(e) = unexpand_file(file, &mut output, options, lastcol, tab_config) {
             show!(e);
             set_exit_code(1);
         }

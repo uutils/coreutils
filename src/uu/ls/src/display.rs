@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
-// spell-checker:ignore nohash strtime clocale ilog drwxr
+// spell-checker:ignore nohash strtime clocale ilog drwxr oneline
 
 use core::ops::RangeInclusive;
 use std::cell::LazyCell;
@@ -47,7 +47,6 @@ use uucore::{
     format::human::human_readable,
     fs::display_permissions,
     fsext::metadata_get_time,
-    i18n::{UEncoding, get_ctype_encoding},
     line_ending::LineEnding,
     os_str_as_bytes_lossy, os_string_from_vec,
     quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
@@ -132,12 +131,6 @@ pub(crate) enum IndicatorStyle {
     Classify,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LocaleQuoting {
-    Single,
-    Double,
-}
-
 #[derive(PartialEq, Eq, Debug)]
 pub enum Format {
     Columns,
@@ -170,7 +163,8 @@ pub fn show_dir_name(
     out: &mut BufWriter<Stdout>,
     config: &Config,
 ) -> std::io::Result<usize> {
-    let escaped_name = escape_dir_name_with_locale(path_data.path().as_os_str(), config);
+    let escaped_name =
+        locale_aware_escape_dir_name(path_data.path().as_os_str(), config.quoting_style);
 
     let name = if config.hyperlink && !config.dired {
         create_hyperlink(&escaped_name, path_data)
@@ -183,48 +177,24 @@ pub fn show_dir_name(
     Ok(name.len())
 }
 
-fn escape_with_locale<F>(name: &OsStr, config: &Config, fallback: F) -> OsString
-where
-    F: FnOnce(&OsStr, QuotingStyle) -> OsString,
-{
-    if let Some(locale) = config.locale_quoting {
-        locale_quote(name, locale)
-    } else {
-        fallback(name, config.quoting_style)
-    }
-}
-
-fn escape_dir_name_with_locale(name: &OsStr, config: &Config) -> OsString {
-    escape_with_locale(name, config, locale_aware_escape_dir_name)
-}
-
 fn escape_name_with_locale(name: &OsStr, config: &Config) -> OsString {
     let comma_separated =
         config.format == Format::Commas && os_str_as_bytes_lossy(name).contains(&b',');
-    let style = match config.quoting_style {
-        QuotingStyle::Shell {
-            escape,
-            show_control,
-            ..
-        } if comma_separated => QuotingStyle::Shell {
-            escape,
-            always_quote: true,
-            show_control,
-        },
-        style => style,
+
+    // Format::Commas forces quoting.
+    let style = if comma_separated {
+        config.quoting_style.always_quote(true)
+    } else {
+        config.quoting_style
     };
 
-    let escaped = escape_with_locale(name, config, |name, _| {
-        locale_aware_escape_name(name, style)
-    });
+    let escaped = locale_aware_escape_name(name, style);
 
-    let escaped =
-        if comma_separated && config.locale_quoting.is_none() && style == QuotingStyle::C_NO_QUOTES
-        {
-            escaped.to_string_lossy().replace(',', "\\,").into()
-        } else {
-            escaped
-        };
+    let escaped = if comma_separated && style == QuotingStyle::Escape {
+        escaped.to_string_lossy().replace(',', "\\,").into()
+    } else {
+        escaped
+    };
 
     if config.format == Format::Commas
         && config.line_ending == LineEnding::Newline
@@ -244,86 +214,6 @@ fn escape_name_with_locale(name: &OsStr, config: &Config) -> OsString {
     }
 
     escaped
-}
-
-fn locale_quote(name: &OsStr, style: LocaleQuoting) -> OsString {
-    let bytes = os_str_as_bytes_lossy(name);
-
-    // In a UTF-8 locale GNU's locale/clocale quoting uses Unicode quotation
-    // marks U+2018 (LEFT) and U+2019 (RIGHT) as delimiters for both styles,
-    // keyed off LC_CTYPE. Since the delimiters differ from any ASCII quote,
-    // embedded apostrophes and double quotes are left untouched; only control
-    // characters, backslashes and invalid bytes are escaped.
-    if get_ctype_encoding() == UEncoding::Utf8 {
-        let mut quoted = String::with_capacity(name.len() + 6);
-        quoted.push('\u{2018}');
-        for chunk in bytes.utf8_chunks() {
-            for c in chunk.valid().chars() {
-                if c == '\\' {
-                    quoted.push_str("\\\\");
-                } else if c.is_ascii() && c.is_control() {
-                    push_basic_escape(&mut quoted, c as u8);
-                } else if c.is_control() {
-                    // Non-ASCII control characters (the C1 range, e.g.
-                    // U+0085 NEL) are not printable; octal-escape their
-                    // UTF-8 bytes like GNU does for non-printable chars.
-                    let mut buf = [0u8; 4];
-                    for &byte in c.encode_utf8(&mut buf).as_bytes() {
-                        let _ = write!(quoted, "\\{byte:03o}");
-                    }
-                } else {
-                    quoted.push(c);
-                }
-            }
-            for &byte in chunk.invalid() {
-                let _ = write!(quoted, "\\{byte:03o}");
-            }
-        }
-        quoted.push('\u{2019}');
-        return OsString::from(quoted);
-    }
-
-    let mut quoted = String::with_capacity(name.len() + 2);
-    match style {
-        LocaleQuoting::Single => quoted.push('\''),
-        LocaleQuoting::Double => quoted.push('"'),
-    }
-    for &byte in bytes.as_ref() {
-        push_locale_byte(&mut quoted, byte, style);
-    }
-    match style {
-        LocaleQuoting::Single => quoted.push('\''),
-        LocaleQuoting::Double => quoted.push('"'),
-    }
-    OsString::from(quoted)
-}
-
-fn push_locale_byte(buf: &mut String, byte: u8, style: LocaleQuoting) {
-    match (style, byte) {
-        (LocaleQuoting::Single, b'\'') => buf.push_str("'\\''"),
-        (LocaleQuoting::Double, b'"') => buf.push_str("\\\""),
-        (_, b'\\') => buf.push_str("\\\\"),
-        _ => push_basic_escape(buf, byte),
-    }
-}
-
-fn push_basic_escape(buf: &mut String, byte: u8) {
-    match byte {
-        b'\x07' => buf.push_str("\\a"),
-        b'\x08' => buf.push_str("\\b"),
-        b'\t' => buf.push_str("\\t"),
-        b'\n' => buf.push_str("\\n"),
-        b'\x0b' => buf.push_str("\\v"),
-        b'\x0c' => buf.push_str("\\f"),
-        b'\r' => buf.push_str("\\r"),
-        b'\x1b' => buf.push_str("\\e"),
-        b'"' => buf.push('"'),
-        b'\'' => buf.push('\''),
-        b if (0x20..=0x7e).contains(&b) => buf.push(b as char),
-        _ => {
-            let _ = write!(buf, "\\{byte:03o}");
-        }
-    }
 }
 
 pub fn should_display(entry: &DirEntry, config: &Config) -> bool {
@@ -436,136 +326,166 @@ fn alt_access_indicator(item: &PathData, config: &Config, is_acl_set: bool) -> u
     }
 }
 
-#[allow(clippy::cognitive_complexity)]
+/// Checks if any item names will be displayed with quotes.
+fn has_quoted_names(items: &[PathData], config: &Config) -> bool {
+    items.iter().any(|item| {
+        let name = escape_name_with_locale(item.display_name(), config);
+        os_str_starts_with(&name, b"'")
+    })
+}
+
+/// Calculates padding for security context display if context is enabled.
+fn calculate_context_padding(items: &[PathData], config: &Config) -> Option<usize> {
+    config.context.then(|| {
+        items
+            .iter()
+            .map(|item| item.security_context(config).len())
+            .fold(1, usize::max)
+    })
+}
+
+/// Displays items in long format (-l).
+fn display_items_long(
+    items: &[PathData],
+    config: &Config,
+    state: &mut ListState,
+    dired: &mut DiredOutput,
+    quoted: bool,
+) -> UResult<()> {
+    let padding_collection = calculate_padding_collection(items, config, state);
+
+    for item in items {
+        display_item_long(item, &padding_collection, config, state, dired, quoted)?;
+    }
+    Ok(())
+}
+
+/// Displays items in non-long formats (columns, across, commas, oneline).
+fn display_items_non_long(
+    items: &[PathData],
+    config: &Config,
+    state: &mut ListState,
+    quoted: bool,
+) -> UResult<()> {
+    // `-Z`, `--context`:
+    // Display the SELinux security context or '?' if none is found.
+    let prefix_context = calculate_context_padding(items, config);
+    let padding = calculate_padding_collection(items, config, state);
+
+    // Apply normal color to non-filename output
+    if let Some(style_manager) = &mut state.style_manager {
+        write!(state.out, "{}", style_manager.apply_normal())?;
+    }
+
+    let display_leading = config.should_display_leading_info();
+    let mut names: Vec<DisplayWithQuote> = Vec::with_capacity(items.len());
+
+    for item in items {
+        let more_info = if display_leading {
+            let mut s = Vec::new();
+            display_additional_leading_info(item, &padding, config, &mut s)?;
+            Some(String::from_utf8(s).unwrap()) // Should always be UTF-8
+        } else {
+            None
+        };
+        // Column zero is used to decide whether text will wrap;
+        // grid/column formats place items on new lines if they wrap.
+        let cell = display_item_name(
+            item,
+            config,
+            prefix_context,
+            more_info,
+            state.style_manager.as_mut(),
+            LazyCell::new(|| 0),
+        );
+        names.push(cell.into());
+    }
+
+    match config.format {
+        Format::Columns => display_grid(
+            names.into_iter(),
+            config.width,
+            Direction::TopToBottom,
+            &mut state.out,
+            quoted,
+            config.tab_size,
+        ),
+        Format::Across => display_grid(
+            names.into_iter(),
+            config.width,
+            Direction::LeftToRight,
+            &mut state.out,
+            quoted,
+            config.tab_size,
+        ),
+        Format::Commas => display_commas_format(
+            names.into_iter(),
+            config.width,
+            config.line_ending,
+            &mut state.out,
+        ),
+        _ => display_oneline_format(names.into_iter(), config.line_ending, &mut state.out),
+    }
+}
+
 pub fn display_items(
     items: &[PathData],
     config: &Config,
     state: &mut ListState,
     dired: &mut DiredOutput,
 ) -> UResult<()> {
-    // `-Z`, `--context`:
-    // Display the SELinux security context or '?' if none is found. When used with the `-l`
-    // option, print the security context to the left of the size column.
-
-    let quoted = items.iter().any(|item| {
-        let name = escape_name_with_locale(item.display_name(), config);
-        os_str_starts_with(&name, b"'")
-    });
+    let quoted = has_quoted_names(items, config);
 
     if config.format == Format::Long {
-        let padding_collection = calculate_padding_collection(items, config, state);
-
-        for item in items {
-            display_item_long(item, &padding_collection, config, state, dired, quoted)?;
-        }
+        display_items_long(items, config, state, dired, quoted)
     } else {
-        let mut longest_context_len = 1;
-        let prefix_context = if config.context {
-            for item in items {
-                let context_len = item.security_context(config).len();
-                longest_context_len = context_len.max(longest_context_len);
-            }
-            Some(longest_context_len)
-        } else {
-            None
-        };
-
-        let padding = calculate_padding_collection(items, config, state);
-
-        // we need to apply normal color to non filename output
-        if let Some(style_manager) = &mut state.style_manager {
-            write!(state.out, "{}", style_manager.apply_normal())?;
-        }
-
-        let mut names_vec: Vec<DisplayWithQuote> = Vec::with_capacity(items.len());
-
-        #[cfg(unix)]
-        let should_display_leading_info = config.inode || config.alloc_size;
-        #[cfg(not(unix))]
-        let should_display_leading_info = config.alloc_size;
-
-        for i in items {
-            let more_info = if should_display_leading_info {
-                let mut s = Vec::new();
-                display_additional_leading_info(i, &padding, config, &mut s)?;
-                Some(String::from_utf8(s).unwrap()) // Should always be UTF-8
-            } else {
-                None
-            };
-            // it's okay to set current column to zero which is used to decide
-            // whether text will wrap or not, because when format is grid or
-            // column ls will try to place the item name in a new line if it
-            // wraps.
-            let cell = display_item_name(
-                i,
-                config,
-                prefix_context,
-                more_info,
-                state.style_manager.as_mut(),
-                LazyCell::new(|| 0),
-            );
-
-            names_vec.push(cell.into());
-        }
-
-        let mut names = names_vec.into_iter().peekable();
-
-        match config.format {
-            Format::Columns => {
-                display_grid(
-                    names,
-                    config.width,
-                    Direction::TopToBottom,
-                    &mut state.out,
-                    quoted,
-                    config.tab_size,
-                )?;
-            }
-            Format::Across => {
-                display_grid(
-                    names,
-                    config.width,
-                    Direction::LeftToRight,
-                    &mut state.out,
-                    quoted,
-                    config.tab_size,
-                )?;
-            }
-            Format::Commas => {
-                let mut current_col = 0;
-                if let Some(name) = names.next() {
-                    write_os_str(&mut state.out, &name.displayed)?;
-                    current_col = ansi_width(&name.displayed.to_string_lossy()) as u16 + 2;
-                }
-                while let Some(name) = names.next() {
-                    let name_width = ansi_width(&name.displayed.to_string_lossy()) as u16;
-                    if config.width != 0
-                        && current_col + name_width + u16::from(names.peek().is_some())
-                            > config.width
-                    {
-                        current_col = name_width + 2;
-                        writeln!(state.out, ",")?;
-                    } else {
-                        current_col += name_width + 2;
-                        write!(state.out, ", ")?;
-                    }
-                    write_os_str(&mut state.out, &name.displayed)?;
-                }
-                // Current col is never zero again if names have been printed.
-                // So we print a newline.
-                if current_col > 0 {
-                    write!(state.out, "{}", config.line_ending)?;
-                }
-            }
-            _ => {
-                for name in names {
-                    write_os_str(&mut state.out, &name.displayed)?;
-                    write!(state.out, "{}", config.line_ending)?;
-                }
-            }
-        }
+        display_items_non_long(items, config, state, quoted)
     }
+}
 
+/// Displays items in comma-separated format, wrapping at terminal width.
+fn display_commas_format(
+    names: impl Iterator<Item = DisplayWithQuote>,
+    width: u16,
+    line_ending: LineEnding,
+    out: &mut BufWriter<Stdout>,
+) -> UResult<()> {
+    let mut names = names.peekable();
+    let mut current_col = 0;
+    if let Some(name) = names.next() {
+        write_os_str(out, &name.displayed)?;
+        current_col = ansi_width(&name.displayed.to_string_lossy()) as u16 + 2;
+    }
+    while let Some(name) = names.next() {
+        let name_width = ansi_width(&name.displayed.to_string_lossy()) as u16;
+        // If the width is 0 we print one single line
+        if width != 0 && current_col + name_width + u16::from(names.peek().is_some()) > width {
+            current_col = name_width + 2;
+            writeln!(out, ",")?;
+        } else {
+            current_col += name_width + 2;
+            write!(out, ", ")?;
+        }
+        write_os_str(out, &name.displayed)?;
+    }
+    // Current col is never zero again if names have been printed.
+    // So we print a newline.
+    if current_col > 0 {
+        write!(out, "{line_ending}")?;
+    }
+    Ok(())
+}
+
+/// Displays items one per line.
+fn display_oneline_format(
+    names: impl Iterator<Item = DisplayWithQuote>,
+    line_ending: LineEnding,
+    out: &mut BufWriter<Stdout>,
+) -> UResult<()> {
+    for name in names {
+        write_os_str(out, &name.displayed)?;
+        write!(out, "{line_ending}")?;
+    }
     Ok(())
 }
 
@@ -1021,12 +941,7 @@ fn display_item_long(
         state.display_buf.extend(b"  ");
     }
 
-    #[cfg(unix)]
-    let should_display_leading_info = config.inode || config.alloc_size;
-    #[cfg(not(unix))]
-    let should_display_leading_info = config.alloc_size;
-
-    if should_display_leading_info {
+    if config.should_display_leading_info() {
         // Write into the display buffer, not straight to the output, so that the
         // --dired byte offsets computed from its length include this prefix.
         display_additional_leading_info(item, padding, config, &mut state.display_buf)?;
@@ -1388,20 +1303,29 @@ fn display_inode(metadata: &Metadata) -> impl Display {
     metadata.ino().to_string()
 }
 
-#[cfg(unix)]
+#[cfg(not(unix))]
+fn display_symlink_count(_metadata: &Metadata) -> String {
+    // Currently not sure of how to get this on Windows, so I'm punting.
+    // Git Bash looks like it may do the same thing.
+    String::from("1")
+}
+
 fn calculate_padding_collection(
     items: &[PathData],
     config: &Config,
     state: &mut ListState,
 ) -> PaddingCollection {
     let mut padding_collections = PaddingCollection {
+        #[cfg(unix)]
         inode: 1,
         link_count: 1,
         uname: 1,
         group: 1,
         context: 1,
         size: 1,
+        #[cfg(unix)]
         major: 1,
+        #[cfg(unix)]
         minor: 1,
         block_size: 1,
         permissions: PERMISSIONS_WIDTH,
@@ -1425,39 +1349,51 @@ fn calculate_padding_collection(
             padding_collections.block_size = block_size_len.max(padding_collections.block_size);
         }
 
-        if config.format == Format::Long {
-            let context_len = item.security_context(config).len();
-            let (link_count_len, uname_len, group_len, size_len, major_len, minor_len) =
-                display_dir_entry_size(item, config, state);
-            padding_collections.link_count = link_count_len.max(padding_collections.link_count);
-            padding_collections.uname = uname_len.max(padding_collections.uname);
-            padding_collections.group = group_len.max(padding_collections.group);
-            if config.context {
-                padding_collections.context = context_len.max(padding_collections.context);
-            }
+        // On unix, only compute these for Long format.
+        // On non-unix, compute unconditionally to trigger errors for dangling symlinks.
+        #[cfg(unix)]
+        if config.format != Format::Long {
+            continue;
+        }
 
+        let context_len = item.security_context(config).len();
+        #[cfg_attr(not(unix), allow(unused_variables))]
+        let (link_count_len, uname_len, group_len, size_len, major_len, minor_len) =
+            display_dir_entry_size(item, config, state);
+        padding_collections.link_count = link_count_len.max(padding_collections.link_count);
+        padding_collections.uname = uname_len.max(padding_collections.uname);
+        padding_collections.group = group_len.max(padding_collections.group);
+        if config.context {
+            padding_collections.context = context_len.max(padding_collections.context);
+        }
+
+        #[cfg(not(unix))]
+        {
+            padding_collections.size = size_len.max(padding_collections.size);
+        }
+
+        #[cfg(unix)]
+        {
             // If any item has an ACL or non-trivial security context, widen
             // the permissions column by one to reserve space for the `+`/`.`
             // indicator.
-            {
-                #[cfg(not(any(
-                    target_os = "freebsd",
-                    target_os = "hurd",
-                    target_os = "linux",
-                    target_os = "netbsd"
-                )))]
-                // TODO: See how Mac should work here
-                let is_acl_set = false;
-                #[cfg(any(
-                    target_os = "freebsd",
-                    target_os = "hurd",
-                    target_os = "linux",
-                    target_os = "netbsd"
-                ))]
-                let is_acl_set = has_acl(item.path(), item.must_dereference);
-                if context_len > 1 || is_acl_set {
-                    padding_collections.permissions = PERMISSIONS_WIDTH + 1;
-                }
+            #[cfg(not(any(
+                target_os = "freebsd",
+                target_os = "hurd",
+                target_os = "linux",
+                target_os = "netbsd"
+            )))]
+            // TODO: See how Mac should work here
+            let is_acl_set = false;
+            #[cfg(any(
+                target_os = "freebsd",
+                target_os = "hurd",
+                target_os = "linux",
+                target_os = "netbsd"
+            ))]
+            let is_acl_set = has_acl(item.path(), item.must_dereference);
+            if context_len > 1 || is_acl_set {
+                padding_collections.permissions = PERMISSIONS_WIDTH + 1;
             }
 
             if items.len() == 1usize {
@@ -1472,52 +1408,6 @@ fn calculate_padding_collection(
                     .max(padding_collections.major);
             }
         }
-    }
-
-    padding_collections
-}
-
-#[cfg(not(unix))]
-fn display_symlink_count(_metadata: &Metadata) -> String {
-    // Currently not sure of how to get this on Windows, so I'm punting.
-    // Git Bash looks like it may do the same thing.
-    String::from("1")
-}
-
-#[cfg(not(unix))]
-fn calculate_padding_collection(
-    items: &[PathData],
-    config: &Config,
-    state: &mut ListState,
-) -> PaddingCollection {
-    let mut padding_collections = PaddingCollection {
-        link_count: 1,
-        uname: 1,
-        group: 1,
-        context: 1,
-        size: 1,
-        block_size: 1,
-        permissions: PERMISSIONS_WIDTH,
-    };
-
-    for item in items {
-        if config.alloc_size
-            && let Some(md) = item.metadata()
-        {
-            let block_size_len = display_size(get_block_size(md, config), config).len();
-            padding_collections.block_size = block_size_len.max(padding_collections.block_size);
-        }
-
-        let context_len = item.security_context(config).len();
-        let (link_count_len, uname_len, group_len, size_len, _major_len, _minor_len) =
-            display_dir_entry_size(item, config, state);
-        padding_collections.link_count = link_count_len.max(padding_collections.link_count);
-        padding_collections.uname = uname_len.max(padding_collections.uname);
-        padding_collections.group = group_len.max(padding_collections.group);
-        if config.context {
-            padding_collections.context = context_len.max(padding_collections.context);
-        }
-        padding_collections.size = size_len.max(padding_collections.size);
     }
 
     padding_collections

@@ -3,13 +3,29 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use super::{EscapeState, EscapedChar, Quoter, Quotes};
 use crate::i18n::UEncoding;
+
+use super::{EscapeState, EscapedChar, Quoter};
 
 // These are characters with special meaning in the shell (e.g. bash). The
 // first const contains characters that only have a special meaning when they
 // appear at the beginning of a name.
 const SPECIAL_SHELL_CHARS_START: &[u8] = b"~#";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ShellQuotes {
+    Single,
+    Double,
+}
+
+impl ShellQuotes {
+    pub fn as_u8(self) -> u8 {
+        match self {
+            Self::Single => b'\'',
+            Self::Double => b'"',
+        }
+    }
+}
 
 // Escaped and NonEscaped shell quoting strategies are very different.
 // Therefore, we are using separate Quoter structures for each of them.
@@ -20,7 +36,7 @@ pub(super) struct NonEscapedShellQuoter<'a> {
     reference: &'a [u8],
 
     /// The quotes to be used if necessary
-    quotes: Quotes,
+    quotes: ShellQuotes,
 
     /// Whether to show control and non-unicode characters, or replace them
     /// with `?`.
@@ -95,7 +111,7 @@ pub(super) struct EscapedShellQuoter<'a> {
     reference: &'a [u8],
 
     /// The quotes to be used if necessary
-    quotes: Quotes,
+    quotes: ShellQuotes,
 
     // INTERNAL STATE
     /// Whether the name should be quoted.
@@ -117,13 +133,13 @@ impl<'a> EscapedShellQuoter<'a> {
     ) -> Self {
         let (mut quotes, must_quote) = initial_quoting(reference, dirname, always_quote, true);
         // Dollar-quoted byte escapes cannot be nested in double quotes.
-        if quotes == Quotes::Double {
+        if quotes == ShellQuotes::Double {
             let invalid = match encoding {
                 UEncoding::Ascii => !reference.is_ascii(),
                 UEncoding::Utf8 => std::str::from_utf8(reference).is_err(),
             };
             if invalid {
-                quotes = Quotes::Single;
+                quotes = ShellQuotes::Single;
             }
         }
         Self {
@@ -207,19 +223,19 @@ fn initial_quoting(
     dirname: bool,
     always_quote: bool,
     check_control_chars: bool,
-) -> (Quotes, bool) {
+) -> (ShellQuotes, bool) {
     let has_special_chars = input.iter().any(|c| {
         shell_escaped_char_set(dirname).contains(c) || (check_control_chars && c.is_ascii_control())
     });
 
     if has_special_chars {
-        (Quotes::Single, true)
+        (ShellQuotes::Single, true)
     } else if input.contains(&b'\'') {
-        (Quotes::Double, true)
+        (ShellQuotes::Double, true)
     } else if always_quote || input.is_empty() {
-        (Quotes::Single, true)
+        (ShellQuotes::Single, true)
     } else {
-        (Quotes::Single, false)
+        (ShellQuotes::Single, false)
     }
 }
 
@@ -243,17 +259,13 @@ fn finalize_shell_quoter(
     buffer: Vec<u8>,
     reference: &[u8],
     must_quote: bool,
-    quotes: Quotes,
+    quotes: ShellQuotes,
 ) -> Vec<u8> {
     let contains_quote_chars = must_quote || bytes_start_with(reference, SPECIAL_SHELL_CHARS_START);
 
-    if must_quote | contains_quote_chars && quotes != Quotes::None {
+    if must_quote | contains_quote_chars {
         let mut quoted = Vec::<u8>::with_capacity(buffer.len() + 2);
-        let quote = if quotes == Quotes::Single {
-            b'\''
-        } else {
-            b'"'
-        };
+        let quote = quotes.as_u8();
         quoted.push(quote);
         quoted.extend(buffer);
         quoted.push(quote);
@@ -272,63 +284,63 @@ mod tests {
         // Control chars (0-31 and 0x7F) force single quotes in escape mode
         assert_eq!(
             initial_quoting(b"\x01", false, false, true),
-            (Quotes::Single, true)
+            (ShellQuotes::Single, true)
         );
 
         // Control + quote uses single quotes (segmented) in escape mode
         assert_eq!(
             initial_quoting(b"\x01'\x01", false, false, true),
-            (Quotes::Single, true)
+            (ShellQuotes::Single, true)
         );
 
         // Simple quote uses double quotes in escape mode
         assert_eq!(
             initial_quoting(b"a'b", false, false, true),
-            (Quotes::Double, true)
+            (ShellQuotes::Double, true)
         );
 
         // Shell special chars force single quotes in escape mode
         assert_eq!(
             initial_quoting(b"test$var", false, false, true),
-            (Quotes::Single, true)
+            (ShellQuotes::Single, true)
         );
         assert_eq!(
             initial_quoting(b"test\nline", false, false, true),
-            (Quotes::Single, true)
+            (ShellQuotes::Single, true)
         );
 
         // Empty string forces quotes in escape mode
         assert_eq!(
             initial_quoting(b"", false, false, true),
-            (Quotes::Single, true)
+            (ShellQuotes::Single, true)
         );
 
         // Always quote flag works in escape mode
         assert_eq!(
             initial_quoting(b"normal", false, true, true),
-            (Quotes::Single, true)
+            (ShellQuotes::Single, true)
         );
 
         // Normal text doesn't need quoting in escape mode
         assert_eq!(
             initial_quoting(b"hello", false, false, true),
-            (Quotes::Single, false)
+            (ShellQuotes::Single, false)
         );
 
         // Dirname affects colon handling in escape mode
         assert_eq!(
             initial_quoting(b"dir:name", true, false, true),
-            (Quotes::Single, true)
+            (ShellQuotes::Single, true)
         );
         assert_eq!(
             initial_quoting(b"file:name", false, false, true),
-            (Quotes::Single, false)
+            (ShellQuotes::Single, false)
         );
 
         // Control chars ignored in non-escape mode
         assert_eq!(
             initial_quoting(b"\x01", false, false, false),
-            (Quotes::Single, false)
+            (ShellQuotes::Single, false)
         );
     }
 }

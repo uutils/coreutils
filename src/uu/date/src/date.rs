@@ -105,6 +105,9 @@ enum DateError {
     #[cfg(target_os = "redox")]
     #[error("{}", translate!("date-error-setting-date-not-supported-redox"))]
     SettingDateNotSupportedRedox,
+    #[cfg(target_os = "wasi")]
+    #[error("{}", translate!("date-error-setting-date-not-supported-wasi"))]
+    SettingDateNotSupportedWasi,
 }
 
 impl UError for DateError {}
@@ -1054,7 +1057,8 @@ fn write_formatted_date<W: Write>(
     write_formatted_bytes(
         writer,
         format_chunks(&output.chunks, |fmt| {
-            format_date_with_locale_aware_months(&date, fmt, &output.config, skip_localization)
+            let fmt = expand_locale_formats(&date, fmt, &output.config, skip_localization, 0)?;
+            format_date_with_locale_aware_months(&date, &fmt, &output.config, skip_localization)
         }),
         output,
     )
@@ -1136,7 +1140,9 @@ fn format_extended_default(
     .map_err(str::to_string)?;
     let mut year_replaced = false;
     let formatted = format_chunks(chunks, |fmt| {
-        let (fmt, replaced) = substitute_extended_year(fmt, output.year);
+        // Expand %x, %X and %r first, so that a %Y they hold is replaced too.
+        let fmt = expand_locale_formats(&surrogate, fmt, config, false, 0)?;
+        let (fmt, replaced) = substitute_extended_year(&fmt, output.year);
         year_replaced |= replaced;
         format_date_with_locale_aware_months(&surrogate, &fmt, config, false)
     })?;
@@ -1182,6 +1188,86 @@ fn substitute_extended_year(format_string: &str, year: u32) -> (String, bool) {
     }
 
     (output, replaced)
+}
+
+/// Expand `%x`, `%X` and `%r` to the locale's formats, which jiff hardcodes to
+/// the C ones, and `%p` and `%P` to the locale's AM/PM markers. GNU pads and
+/// cases a modified `%x`, `%X` or `%r` (`%10X`, `%^r`) as a whole, so that one
+/// is formatted here and kept as literal text. `depth` counts the expansions
+/// around `format`: a locale format may use one of them in turn (glibc's
+/// `en_US` `%X` is `%r`).
+fn expand_locale_formats<'a>(
+    date: &Zoned,
+    format: &'a str,
+    config: &Config<PosixCustom>,
+    skip_localization: bool,
+    depth: u8,
+) -> Result<Cow<'a, str>, String> {
+    let mut output = String::new();
+    let mut copied = 0;
+    let mut i = 0;
+    while let Some(offset) = format[i..].find('%') {
+        i += offset;
+        // jiff reads `%%`, also with flags or a width (`%10%`), as a literal `%`.
+        let rest = format[i + 1..]
+            .trim_start_matches(|c: char| "_0^#+-".contains(c) || c.is_ascii_digit());
+        if rest.starts_with('%') {
+            i = format.len() - rest.len() + 1;
+            continue;
+        }
+        let Some(parsed) = format_modifiers::parse_format_spec(&format[i..]) else {
+            i += 1;
+            continue;
+        };
+        if let Some(marker) = locale::get_locale_ampm_marker(parsed.spec, date.hour() >= 12) {
+            let marker = if parsed.flags.is_empty() && parsed.width.is_none() {
+                marker
+            } else {
+                Cow::Owned(
+                    format_modifiers::apply_modifiers(&marker, &parsed)
+                        .map_err(|e| e.to_string())?,
+                )
+            };
+            output.push_str(&format[copied..i]);
+            // The marker is put into a format, so a `%` in it has to be doubled.
+            output.push_str(&marker.replace('%', "%%"));
+            i += parsed.len;
+            copied = i;
+            continue;
+        }
+        let locale_format = match locale::get_locale_format(parsed.spec) {
+            Some(locale_format) if depth < 2 => locale_format,
+            _ => {
+                i += parsed.len;
+                continue;
+            }
+        };
+        let locale_format =
+            expand_locale_formats(date, locale_format, config, skip_localization, depth + 1)?;
+
+        output.push_str(&format[copied..i]);
+        if parsed.flags.is_empty() && parsed.width.is_none() {
+            output.push_str(&locale_format);
+        } else {
+            let formatted = format_date_with_locale_aware_months(
+                date,
+                &locale_format,
+                config,
+                skip_localization,
+            )?;
+            let modified = format_modifiers::apply_composite_modifiers(&formatted, &parsed)
+                .map_err(|e| e.to_string())?;
+            output.push_str(&modified.replace('%', "%%"));
+        }
+        i += parsed.len;
+        copied = i;
+    }
+
+    if copied == 0 {
+        return Ok(Cow::Borrowed(format));
+    }
+    output.push_str(&format[copied..]);
+    Ok(Cow::Owned(output))
 }
 
 fn format_date_with_locale_aware_months(
@@ -1505,7 +1591,33 @@ fn parse_date<S: AsRef<str>>(
     }
 }
 
-#[cfg(not(any(unix, windows)))]
+#[cfg(target_os = "wasi")]
+/// Returns the resolution of the system's realtime clock.
+///
+/// `rustix::time::clock_getres` excludes WASI, so `libc::clock_getres` is
+/// used directly as a workaround.
+fn get_clock_resolution() -> Timestamp {
+    let mut timespec = std::mem::MaybeUninit::<libc::timespec>::uninit();
+
+    // SAFETY: `clock_getres` writes a complete `timespec` into the provided
+    // pointer when it returns 0. We only read `timespec` after checking for
+    // success, so it is always fully initialized before use.
+    let timespec = unsafe {
+        let ret = libc::clock_getres(libc::CLOCK_REALTIME, timespec.as_mut_ptr());
+        assert_eq!(
+            ret,
+            0,
+            "clock_getres(CLOCK_REALTIME) failed: {}",
+            std::io::Error::last_os_error()
+        );
+        timespec.assume_init()
+    };
+
+    #[allow(clippy::unnecessary_cast, reason = "needed for 32 bit target")]
+    Timestamp::constant(timespec.tv_sec as _, timespec.tv_nsec as _)
+}
+
+#[cfg(not(any(unix, windows, target_os = "wasi")))]
 fn get_clock_resolution() -> Timestamp {
     unimplemented!("getting clock resolution not implemented (unsupported target)");
 }
@@ -1544,7 +1656,7 @@ fn get_clock_resolution() -> Timestamp {
     Timestamp::constant(0, 100)
 }
 
-#[cfg(not(any(unix, windows)))]
+#[cfg(not(any(unix, windows, target_os = "wasi")))]
 fn set_system_datetime(_date: Zoned) -> UResult<()> {
     unimplemented!("setting date not implemented (unsupported target)");
 }
@@ -1556,6 +1668,12 @@ fn convert_for_set(date: Zoned, utc: bool) -> Zoned {
     } else {
         date
     }
+}
+
+#[cfg(target_os = "wasi")]
+/// The WASI sandbox has no syscall for setting the wall clock.
+fn set_system_datetime(_date: Zoned) -> UResult<()> {
+    Err(Box::new(DateError::SettingDateNotSupportedWasi))
 }
 
 #[cfg(target_os = "redox")]
@@ -1886,5 +2004,17 @@ mod tests {
         );
         let d = parse(&format!("9:15:30.25 {}.", "6.4")).expect_in_range();
         assert_eq!((d.month(), d.day(), d.hour()), (4, 6, 9));
+    }
+
+    #[test]
+    fn test_get_clock_resolution() {
+        let res = get_clock_resolution();
+
+        // Every supported platform reports a resolution of at least 1ns.
+        let nanos = res.as_second() as i128 * 1_000_000_000 + i128::from(res.subsec_nanosecond());
+        assert!(
+            (1..=1_000_000_000).contains(&nanos),
+            "unexpected clock resolution: {nanos}ns"
+        );
     }
 }

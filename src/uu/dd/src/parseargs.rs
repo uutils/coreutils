@@ -613,8 +613,8 @@ fn get_ctable(
             (Conversion::Ascii, Case::Lower) => &EBCDIC_TO_ASCII_UCASE_TO_LCASE,
             (Conversion::Ebcdic, Case::Upper) => &ASCII_TO_EBCDIC_LCASE_TO_UCASE,
             (Conversion::Ebcdic, Case::Lower) => &ASCII_TO_EBCDIC_UCASE_TO_LCASE,
-            (Conversion::Ibm, Case::Upper) => &ASCII_TO_IBM_UCASE_TO_LCASE,
-            (Conversion::Ibm, Case::Lower) => &ASCII_TO_IBM_LCASE_TO_UCASE,
+            (Conversion::Ibm, Case::Upper) => &ASCII_TO_IBM_LCASE_TO_UCASE,
+            (Conversion::Ibm, Case::Lower) => &ASCII_TO_IBM_UCASE_TO_LCASE,
         },
     })
 }

@@ -1445,7 +1445,7 @@ fn get_default_context_for_path(path: &Path) -> Result<Option<String>, SeLinuxEr
             break;
         }
 
-        if current_path == Path::new("/") || current_path == Path::new("") {
+        if current_path == Path::new("/") || current_path.as_os_str().is_empty() {
             break;
         }
     }

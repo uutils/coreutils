@@ -208,6 +208,7 @@ fn test_rmdir_ignore_nonempty_no_permissions() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: read_link() not supported for symlinks")]
 fn test_rmdir_remove_symlink_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -222,6 +223,7 @@ fn test_rmdir_remove_symlink_file() {
 // This behavior is known to happen on Linux but not all Unixes
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: read_link() not supported for symlinks")]
 fn test_rmdir_remove_symlink_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -235,6 +237,7 @@ fn test_rmdir_remove_symlink_dir() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: read_link() not supported for symlinks")]
 fn test_rmdir_remove_symlink_dangling() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -247,6 +250,7 @@ fn test_rmdir_remove_symlink_dangling() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: read_link() not supported for symlinks")]
 fn test_rmdir_remove_symlink_dir_with_trailing_slashes() {
     // a symlink with trailing slashes should still be printing the 'Symbolic link not followed'
     // message
