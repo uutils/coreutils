@@ -2251,13 +2251,12 @@ fn test_follow_name_remove() {
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_truncate1() {
     // This test triggers a truncate event while `tail --follow=name file` is running.
-    // $ cp file backup && head file > file && sleep 1 && cp backup file
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
     let source = FOLLOW_NAME_TXT;
-    let backup = "backup";
+    let original_contents = at.read(source);
 
     let expected_stdout = at.read(FOLLOW_NAME_EXP);
     // `expected_stdout` starts with tail's initial static output (the last 10 lines);
@@ -2267,29 +2266,16 @@ fn test_follow_name_truncate1() {
 
     let args = ["--follow=name", source];
     let mut p = ts.ucmd().args(&args).run_no_wait();
-    let delay = 1000;
     p.make_assertion().is_alive();
 
-    // Wait for tail's initial read of `source` to finish before mutating it below.
-    // Watch registration happens before this initial output is printed, so once it
-    // appears the truncate/restore below are guaranteed to be observed as events.
-    // A fixed delay isn't enough here: a slow-starting child process (observed on
-    // macOS CI, see #12335) can otherwise race ahead of tail's own startup.
-    for _ in 0..500 {
-        if p.stdout_all() == initial_stdout {
-            break;
-        }
-        p.delay(10);
-    }
-
-    at.copy(source, backup);
-    p.delay(delay);
+    wait_for_output(&mut p, initial_stdout, "");
 
     at.touch(source); // trigger truncate
-    p.delay(delay);
+    wait_for_output(&mut p, initial_stdout, &expected_stderr);
 
-    at.copy(backup, source);
-    p.delay(delay);
+    // Windows file copies can expose zero-filled content while restoring a file.
+    at.append(source, &original_contents);
+    wait_for_output(&mut p, &expected_stdout, &expected_stderr);
 
     p.make_assertion().is_alive();
     p.kill()
@@ -2299,28 +2285,29 @@ fn test_follow_name_truncate1() {
         .stdout_is(expected_stdout);
 }
 
+#[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))]
+fn wait_for_output(
+    child: &mut uutests::util::UChild,
+    expected_stdout: &str,
+    expected_stderr: &str,
+) {
+    for _ in 0..500 {
+        if child.stdout_all() == expected_stdout && child.stderr_all() == expected_stderr {
+            return;
+        }
+        child.delay(10);
+    }
+    child
+        .make_assertion()
+        .with_all_output()
+        .stdout_is(expected_stdout)
+        .stderr_is(expected_stderr);
+}
+
 #[test]
 #[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))] // FIXME: for currently not working platforms
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_truncate2() {
-    fn wait_for_output(
-        child: &mut uutests::util::UChild,
-        expected_stdout: &str,
-        expected_stderr: &str,
-    ) {
-        for _ in 0..500 {
-            if child.stdout_all() == expected_stdout && child.stderr_all() == expected_stderr {
-                return;
-            }
-            child.delay(10);
-        }
-        child
-            .make_assertion()
-            .with_all_output()
-            .stdout_is(expected_stdout)
-            .stderr_is(expected_stderr);
-    }
-
     // This test triggers a truncate event while `tail --follow=name file` is running.
     // $ ((sleep 1 && echo -n "x\nx\nx\n" >> file && sleep 1 && \
     // echo -n "x\n" > file &)>/dev/null 2>&1 &) ; tail --follow=name file
