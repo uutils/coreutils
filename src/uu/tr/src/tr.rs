@@ -207,7 +207,8 @@ pub fn uu_app() -> Command {
         .infer_long_args(true)
         .trailing_var_arg(true)
         .arg(
-            // GNU supports -A which does noop
+            // GNU's undocumented -A acts like LC_ALL=C. Our classes are
+            // ASCII-only anyway, so there is nothing to switch.
             Arg::new(options::ASCII)
                 .short('A')
                 .hide(true)
