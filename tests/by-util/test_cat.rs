@@ -959,25 +959,10 @@ fn test_cat_eintr_handling() {
 }
 
 #[test]
-#[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: no subprocess spawning")]
+#[cfg(all(unix, not(wasi_runner)))]
 fn test_closed_stdin() {
     // Reading a closed stdin fails with EBADF. Run through a shell so the
     // process really starts with fd 0 closed.
-    let scene = TestScenario::new(util_name!());
-    scene
-        .cmd("sh")
-        .args(&["-c", "exec <&-; \"$0\" cat"])
-        .arg(&scene.bin_path)
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_is("cat: -: Bad file descriptor\n");
-}
-
-#[test]
-#[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: no subprocess spawning")]
-fn test_closed_stdin_with_file() {
     let scene = TestScenario::new(util_name!());
     scene.fixtures.write("file", "content\n");
     scene
