@@ -18,21 +18,18 @@ fn invalid_input() {
 
 // linux-gated to match the `at_and_ucmd` import above; the check itself is not
 // platform-specific.
+/// Linux embeds libstdbuf in a memfd (`/proc/self/fd/N`), so a TMPDIR that
+/// contains ':' is ignored and must not break stdbuf.
 #[cfg(all(target_os = "linux", not(feature = "feat_external_libstdbuf")))]
 #[test]
-fn test_tmpdir_with_colon_is_rejected() {
-    // The preload variable is a colon-separated list with no escaping, so a
-    // libstdbuf path containing ':' would be split by the loader and its leading
-    // component loaded as a library of its own. With $TMPDIR under an attacker's
-    // control that component is attacker-chosen, so refuse instead.
+fn test_tmpdir_with_colon_is_ignored_on_linux() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("evil.so:x");
 
     ucmd.env("TMPDIR", at.plus("evil.so:x"))
         .arg("-o0")
         .arg("true")
-        .fails_with_code(125)
-        .stderr_contains("contains ':'");
+        .succeeds();
 }
 
 #[cfg(all(unix, not(feature = "feat_external_libstdbuf")))]
@@ -318,9 +315,11 @@ fn test_libstdbuf_preload() {
             .lines()
             .any(|line| line.contains("calling init function") && line.contains("libstdbuf"))
     } else {
+        // Tempdir builds mention `libstdbuf.so`; Linux memfd builds use
+        // `/proc/self/fd/N` (and may show `memfd:libstdbuf.so` in the name).
         uutils_debug.contains("symbol=setvbuf")
             && uutils_debug.contains("lookup in file=")
-            && uutils_debug.contains("libstdbuf")
+            && (uutils_debug.contains("libstdbuf") || uutils_debug.contains("/proc/self/fd/"))
     };
 
     // Check for lack of architecture mismatch error. The potential error message with GLIBC is:
@@ -366,82 +365,84 @@ fn test_stdbuf_non_utf8_paths() {
         .stdout_is("test content for stdbuf\n");
 }
 
-// stdbuf uses spawn()+wait() (not exec()) so that the TempDir holding
-// libstdbuf.so is cleaned up after the child exits.  The stdbuf process
-// itself therefore stays in the process table as a thin waiter; the child
-// immediately execs the requested command.
-// See: https://github.com/uutils/coreutils/issues/13939
+// On Linux, stdbuf execs the command (memfd-backed LD_PRELOAD) so the process
+// in the table is `sleep`, not a long-lived `stdbuf` waiter (#11302 / #13939).
 #[test]
 #[cfg(target_os = "linux")]
-fn test_stdbuf_child_execs_command() {
+fn test_stdbuf_execs_command() {
     use std::process::{Command, Stdio};
     use std::thread;
     use std::time::Duration;
 
     let scene = TestScenario::new(util_name!());
 
-    // Start stdbuf with a long-running command
-    let mut parent = Command::new(&scene.bin_path)
+    let mut child = Command::new(&scene.bin_path)
         .args(["stdbuf", "-o0", "sleep", "5"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
         .expect("Failed to start stdbuf");
 
-    let parent_pid = parent.id();
-
-    // Poll until the child process appears or timeout
+    let pid = child.id();
     let timeout = Duration::from_secs(3);
-    let poll_interval = Duration::from_millis(10);
-    let start_time = std::time::Instant::now();
-
-    let child_comm = loop {
-        if start_time.elapsed() > timeout {
-            parent.kill().ok();
-            panic!("TIMEOUT: child of {parent_pid} did not appear within {timeout:?}");
+    let start = std::time::Instant::now();
+    let mut saw_sleep = false;
+    while start.elapsed() < timeout {
+        if let Ok(comm) = std::fs::read_to_string(format!("/proc/{pid}/comm"))
+            && comm.trim() == "sleep"
+        {
+            saw_sleep = true;
+            break;
         }
+        thread::sleep(Duration::from_millis(10));
+    }
 
-        // Find children of our stdbuf process
-        let found = std::fs::read_dir("/proc").ok().and_then(|entries| {
-            entries.flatten().find_map(|entry| {
-                let pid: u32 = entry.file_name().to_string_lossy().parse().ok()?;
-                let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
-                let mut parts = stat.splitn(5, ' ');
-                let _pid = parts.next();
-                let comm = parts
-                    .next()
-                    .unwrap_or("")
-                    .trim_matches(|c| c == '(' || c == ')')
-                    .to_string();
-                let _state = parts.next();
-                let ppid: u32 = parts.next().unwrap_or("0").parse().unwrap_or(0);
-                if ppid == parent_pid && comm.contains("sleep") {
-                    Some(comm)
-                } else {
-                    None
-                }
-            })
-        });
-        if found.is_some() {
-            break found;
-        }
-        thread::sleep(poll_interval);
-
-        if start_time.elapsed() > timeout {
-            break None;
-        }
-    };
-
-    parent.kill().ok();
-    parent.wait().ok();
+    child.kill().ok();
+    child.wait().ok();
 
     assert!(
-        child_comm.is_some(),
-        "stdbuf should have spawned a child running 'sleep' (pid={parent_pid})"
+        saw_sleep,
+        "stdbuf should exec into 'sleep' (pid={pid} still named stdbuf?)"
     );
+}
+
+/// `killall stdbuf` must not kill the buffered command after stdbuf has exec'd.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_stdbuf_killall_does_not_hit_command() {
+    use std::process::{Command, Stdio};
+    use std::thread;
+    use std::time::Duration;
+
+    let scene = TestScenario::new(util_name!());
+    let mut child = Command::new(&scene.bin_path)
+        .args(["stdbuf", "-oL", "sleep", "30"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("Failed to start stdbuf");
+    let pid = child.id();
+
+    // Wait until we have become sleep.
+    let start = std::time::Instant::now();
+    while start.elapsed() < Duration::from_secs(3) {
+        if std::fs::read_to_string(format!("/proc/{pid}/comm"))
+            .ok()
+            .is_some_and(|c| c.trim() == "sleep")
+        {
+            break;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+
+    let _ = Command::new("killall").arg("stdbuf").status();
+    thread::sleep(Duration::from_millis(200));
+    let still_alive = std::path::Path::new(&format!("/proc/{pid}")).exists();
+    child.kill().ok();
+    child.wait().ok();
     assert!(
-        child_comm.as_deref().unwrap_or("").contains("sleep"),
-        "Expected child to be 'sleep', got: {child_comm:?}"
+        still_alive,
+        "sleep under former stdbuf pid {pid} should survive killall stdbuf"
     );
 }
 
@@ -485,7 +486,13 @@ fn test_stdbuf_no_tmpdir_leak() {
 /// and the embedded library file is owner read/write only (0600).
 /// Regression test for <https://github.com/uutils/coreutils/issues/13939>
 #[test]
-#[cfg(all(target_os = "linux", not(feature = "feat_external_libstdbuf")))]
+// Linux uses a memfd instead of a temporary directory.
+#[cfg(all(
+    unix,
+    not(target_os = "linux"),
+    not(target_os = "android"),
+    not(feature = "feat_external_libstdbuf")
+))]
 fn test_stdbuf_tmpdir_is_private() {
     use std::os::unix::fs::PermissionsExt;
 
@@ -544,9 +551,8 @@ fn test_stdbuf_tmpdir_is_private() {
     }
 }
 
-/// stdbuf waits on the command instead of exec'ing it, so it has to translate
-/// the child's fate back into its own exit status: a command killed by a
-/// signal must still be reported as `128 + signal`, not as a clean 0.
+/// On Linux/Android (exec path) a signalled command is observed as a signal.
+/// Elsewhere stdbuf still spawns and waits, so it must report `128 + signal`.
 #[test]
 #[cfg(unix)]
 #[cfg_attr(target_os = "freebsd", ignore = "failed on freebsd-vm@v1.6.0")]
@@ -555,6 +561,13 @@ fn test_stdbuf_reports_signalled_command() {
     // the shell is guaranteed to die from it. Other signals are not reliable
     // here: bash, when it is /bin/sh, ignores SIGQUIT for `sh -c`, and any
     // signal ignored by the parent is inherited as ignored.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    new_ucmd!()
+        .args(&["-o0", "sh", "-c", "kill -KILL $$"])
+        .fails()
+        .signal_is(9);
+
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     new_ucmd!()
         .args(&["-o0", "sh", "-c", "kill -KILL $$"])
         .fails_with_code(137);
