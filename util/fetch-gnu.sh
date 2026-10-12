@@ -8,6 +8,8 @@ backport=(
   # https://github.com/coreutils/coreutils/issues/355
   env/env.sh
   env/printenv.sh
+  # avoid incorrect PASS on non-SELinux <https://github.com/coreutils/coreutils/commit/ce0f62f6088f206cc3f60504a7c0695bc89fb636>
+  ls/getxattr-speedup.sh
 )
 for f in "${backport[@]}"
   do curl -L ${repo}/raw/refs/heads/master/tests/$f > tests/$f
