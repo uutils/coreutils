@@ -316,7 +316,7 @@ pub fn locale_aware_escape_name(name: &OsStr, style: QuotingStyle) -> OsString {
 }
 
 /// Escape control characters with C-style escapes, leaving other characters unchanged.
-#[cfg(any(feature = "mode", test))]
+#[cfg(any(all(not(windows), feature = "mode"), test))]
 pub(crate) fn escape_control_chars(text: &str) -> String {
     let mut escaped = String::with_capacity(text.len());
     for character in text.chars() {
