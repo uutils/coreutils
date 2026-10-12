@@ -802,7 +802,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                 {
                     show_error!(
                         "{}",
-                        translate!("install-error-failed-to-remove", "path" => target.quote(), "error" => format!("{e:?}"))
+                        translate!("install-error-failed-to-remove", "path" => target.quote(), "error" => strip_errno(&e))
                     );
                 }
 
@@ -1032,7 +1032,7 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
             }
             _ => show_error!(
                 "{}",
-                translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => format!("{e:?}"))
+                translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => strip_errno(&e))
             ),
         }
     }
@@ -1445,7 +1445,7 @@ fn get_default_context_for_path(path: &Path) -> Result<Option<String>, SeLinuxEr
             break;
         }
 
-        if current_path == Path::new("/") || current_path == Path::new("") {
+        if current_path == Path::new("/") || current_path.as_os_str().is_empty() {
             break;
         }
     }

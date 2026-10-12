@@ -306,6 +306,8 @@ pub struct USimpleError {
 
 impl USimpleError {
     /// Create a new `USimpleError` with a given exit code and message.
+    #[cold]
+    #[inline(never)]
     #[allow(clippy::new_ret_no_self)]
     pub fn new<S: Into<String>>(code: i32, message: S) -> Box<dyn UError> {
         Box::new(Self {
@@ -340,8 +342,10 @@ pub struct UUsageError {
 }
 
 impl UUsageError {
-    #[allow(clippy::new_ret_no_self)]
     /// Create a new `UUsageError` with a given exit code and message.
+    #[cold]
+    #[inline(never)]
+    #[allow(clippy::new_ret_no_self)]
     pub fn new<S: Into<String>>(code: i32, message: S) -> Box<dyn UError> {
         Box::new(Self {
             code,
@@ -401,8 +405,8 @@ pub struct UIoError {
 }
 
 impl UIoError {
-    #[allow(clippy::new_ret_no_self)]
     /// Create a new `UIoError` with a given exit code and message.
+    #[allow(clippy::new_ret_no_self)]
     pub fn new<S: Into<String>>(kind: std::io::ErrorKind, context: S) -> Box<dyn UError> {
         Box::new(Self {
             context: Some(context.into()),
@@ -417,7 +421,12 @@ impl Error for UIoError {}
 
 impl Display for UIoError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        use std::io::ErrorKind::*;
+        use std::io::ErrorKind::{
+            AddrInUse, AddrNotAvailable, AlreadyExists, BrokenPipe, ConnectionAborted,
+            ConnectionRefused, ConnectionReset, Interrupted, InvalidData, InvalidInput,
+            IsADirectory, NotConnected, NotFound, PermissionDenied, TimedOut, UnexpectedEof,
+            WouldBlock, WriteZero,
+        };
 
         let message;
         let message = if self.inner.raw_os_error().is_some() {
@@ -426,6 +435,16 @@ impl Display for UIoError {
             // and we want to strip the "(os error X)" suffix.
             match self.inner.kind() {
                 NotFound => "No such file or directory",
+                // Rust maps both EACCES and EPERM to PermissionDenied. GNU
+                // prints "Operation not permitted" for EPERM (e.g. touch on a
+                // writable file owned by someone else) and "Permission denied"
+                // for EACCES. Prefer the errno when available (#15020).
+                #[cfg(unix)]
+                PermissionDenied
+                    if self.inner.raw_os_error() == Some(nix::errno::Errno::EPERM as i32) =>
+                {
+                    "Operation not permitted"
+                }
                 PermissionDenied => "Permission denied",
                 ConnectionRefused => "Connection refused",
                 ConnectionReset => "Connection reset",
@@ -686,8 +705,10 @@ macro_rules! uio_error(
 pub struct ExitCode(pub i32);
 
 impl ExitCode {
-    #[allow(clippy::new_ret_no_self)]
     /// Create a new `ExitCode` with a given exit code.
+    #[cold]
+    #[inline(never)]
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(code: i32) -> Box<dyn UError> {
         Box::new(Self(code))
     }
@@ -897,6 +918,13 @@ mod tests {
         assert_eq!(
             "test: Permission denied",
             Err::<(), nix::Error>(Errno::EACCES)
+                .map_err_context(|| String::from("test"))
+                .unwrap_err()
+                .to_string()
+        );
+        assert_eq!(
+            "test: Operation not permitted",
+            Err::<(), nix::Error>(Errno::EPERM)
                 .map_err_context(|| String::from("test"))
                 .unwrap_err()
                 .to_string()

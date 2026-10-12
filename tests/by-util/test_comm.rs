@@ -823,3 +823,16 @@ fn test_identical_unsorted_prefix_check_order_fails() {
         .stdout_is("\t\tb\n")
         .stderr_is("comm: file 1 is not in sorted order\n");
 }
+
+#[test]
+fn test_both_inputs_stdin() {
+    // Both operands read the same standard input, so lines are taken from it
+    // alternately as the comparison advances. This used to hang.
+    new_ucmd!()
+        .args(&["-", "-"])
+        .pipe_in("b\na\nc\nc\n")
+        .timeout(std::time::Duration::from_secs(10))
+        .succeeds()
+        .stdout_is("\ta\nb\n\t\tc\n")
+        .no_stderr();
+}

@@ -73,6 +73,13 @@ mod benches {
         let data = text_data::generate_by_size(SIZE_MB, 80);
         bench_tr_with_stdin(bencher, &data, &["-d", "a-z"]);
     }
+
+    /// Delete a single character (the newlines).
+    #[divan::bench]
+    fn tr_delete_single_char(bencher: Bencher) {
+        let data = text_data::generate_by_size(SIZE_MB, 80);
+        bench_tr_with_stdin(bencher, &data, &["-d", "\\n"]);
+    }
 }
 
 fn main() {

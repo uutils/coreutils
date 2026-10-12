@@ -5,8 +5,6 @@
 
 // spell-checker:ignore (ToDO) fname, algo, bitlen
 
-use std::io::{Write, stderr};
-
 use clap::Command;
 use uu_checksum_common::{ChecksumCommand, checksum_main, default_checksum_app, options};
 
@@ -17,7 +15,7 @@ use uucore::checksum::{
 };
 use uucore::error::UResult;
 use uucore::hardware::{HasHardwareFeatures as _, SimdPolicy};
-use uucore::translate;
+use uucore::{show_error, translate};
 
 /// Print CPU hardware capability detection information to stderr
 /// 2>/dev/full does not abort
@@ -25,9 +23,9 @@ use uucore::translate;
 fn print_cpu_debug_info() {
     fn print_feature(name: &str, available: bool) {
         if available {
-            let _ = writeln!(stderr(), "using {name} hardware support");
+            show_error!("using {name} hardware support");
         } else {
-            let _ = writeln!(stderr(), "{name} support not detected");
+            show_error!("{name} support not detected");
         }
     }
 
@@ -118,7 +116,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         print_cpu_debug_info();
     }
 
-    checksum_main(algo_cli, length, matches, output_format)
+    checksum_main(algo_cli, length, matches, output_format, true)
 }
 
 pub fn uu_app() -> Command {

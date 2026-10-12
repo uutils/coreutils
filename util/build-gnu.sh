@@ -239,6 +239,11 @@ grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r "${SED}
 # we should not regress our project just to match what GNU is going.
 # So, do some changes on the fly
 
+# GNU uses read/write and the test depends on the fact that write:retval=1 losts byte due to read.
+# However, splice:retval=1 does not consume bytes in pipe. So verifying splice path needs different setup.
+# Fire read/write code path by disabling splice
+sed -i 's/-e trace=write /-e trace=write,splice -e fault=splice /' tests/tee/short-write.sh
+
 sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
 # 'rel' doesn't exist. Our implementation is giving a better message.
