@@ -32,7 +32,7 @@ use uutests::unwrap_or_return;
 use uutests::util::TestScenario;
 #[cfg(any(unix, feature = "selinux"))]
 use uutests::util::expected_result;
-use uutests::{at_and_ucmd, util_name};
+use uutests::{at_and_ucmd, path, util_name};
 
 const LONG_ARGS: &[&str] = &[
     "-l",
@@ -3511,17 +3511,10 @@ mod quoting {
 fn test_ls_color() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.mkdir("a");
-    let nested_dir = Path::new("a")
-        .join("nested_dir")
-        .to_string_lossy()
-        .to_string();
-    at.mkdir(nested_dir);
+    let nested_dir = Path::new("a").join("nested_dir");
+    at.mkdir_all(nested_dir);
     at.mkdir("z");
-    let nested_file = Path::new("a")
-        .join("nested_file")
-        .to_string_lossy()
-        .to_string();
+    let nested_file = Path::new("a").join("nested_file");
     at.touch(nested_file);
     at.touch("test-color");
 
@@ -5537,7 +5530,7 @@ fn test_ls_dereference_looped_symlinks_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.mkdir("loop");
-    at.relative_symlink_dir("../loop", "loop/sub");
+    at.relative_symlink_dir(path!("..", "loop"), path!("loop", "sub"));
 
     ucmd.args(&["-RL", "loop"])
         .fails_with_code(2)
@@ -5561,14 +5554,17 @@ fn test_dereference_dangling_color() {
 #[test]
 fn test_dereference_symlink_dir_color() {
     let (at, mut ucmd) = at_and_ucmd!();
+    let dir1_link = &path!("dir1", "link");
+    let parent_dir2 = path!("..", "dir2");
+
     at.mkdir("dir1");
-    at.mkdir("dir1/link");
+    at.mkdir(dir1_link);
     let out_exp = ucmd.args(&["--color", "dir1"]).succeeds().stdout_move_str();
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir1");
     at.mkdir("dir2");
-    at.relative_symlink_dir("../dir2", "dir1/link");
+    at.relative_symlink_dir(parent_dir2, dir1_link);
     ucmd.args(&["-L", "--color", "dir1"])
         .succeeds()
         .stdout_is(out_exp);
@@ -5577,14 +5573,16 @@ fn test_dereference_symlink_dir_color() {
 #[test]
 fn test_dereference_symlink_file_color() {
     let (at, mut ucmd) = at_and_ucmd!();
+    let dir1_link = &path!("dir1", "link");
+
     at.mkdir("dir1");
-    at.touch("dir1/link");
+    at.touch(dir1_link);
     let out_exp = ucmd.args(&["--color", "dir1"]).succeeds().stdout_move_str();
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir1");
     at.touch("file");
-    at.relative_symlink_file("../file", "dir1/link");
+    at.relative_symlink_file(path!("..", "file"), dir1_link);
     ucmd.args(&["-L", "--color", "dir1"])
         .succeeds()
         .stdout_is(out_exp);
@@ -8543,10 +8541,13 @@ fn test_ls_dereference_looped_symlinks_recursive_nested() {
 fn test_ls_dereference_cross_branch_alias_after_first_branch_completes() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.mkdir_all("top/a/target");
-    at.touch("top/a/target/file");
-    at.mkdir_all("top/b");
-    at.relative_symlink_dir("../a/target", "top/b/link");
+    let top_a_target = &path!("top", "a", "target");
+    let top_b = &path!("top", "b");
+
+    at.mkdir_all(top_a_target);
+    at.touch(top_a_target.join("file"));
+    at.mkdir_all(top_b);
+    at.relative_symlink_dir(path!("..", "a", "target"), top_b.join("link"));
 
     let result = ucmd.args(&["-RL", "top"]).succeeds();
     result
