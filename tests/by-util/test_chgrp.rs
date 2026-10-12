@@ -63,6 +63,18 @@ fn test_invalid_group() {
 }
 
 #[test]
+fn test_invalid_group_with_colon_prefix() {
+    // The `:gid` format is only accepted by --from, not for the group operand
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    let gid = getegid().as_raw();
+    ucmd.arg(format!(":{gid}"))
+        .arg("file")
+        .fails_with_code(1)
+        .stderr_is(format!("chgrp: invalid group: ':{gid}'\n"));
+}
+
+#[test]
 fn test_error_1() {
     if !getegid().is_root() {
         new_ucmd!().arg("bin").arg(DIR).fails().stderr_contains(
