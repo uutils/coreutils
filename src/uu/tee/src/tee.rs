@@ -158,10 +158,10 @@ impl MultiWriter {
         {
             use rustix::pipe::fcntl_setpipe_size;
             use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe};
-            // improve throughput. 2nd pipe should be larger than 1st one for proper tee() length.
-            let sized = fcntl_setpipe_size(&pipe2_read, MAX_ROOTLESS_PIPE_SIZE).is_ok();
+            // improve throughput. 2nd pipe should not be smaller than 1st one for proper tee() length.
+            let sized = fcntl_setpipe_size(&pipe2_read, MAX_ROOTLESS_PIPE_SIZE).is_ok()
+                && fcntl_setpipe_size(&pipe_read, MAX_ROOTLESS_PIPE_SIZE).is_ok();
             if sized {
-                let _ = fcntl_setpipe_size(&pipe_read, MAX_ROOTLESS_PIPE_SIZE);
                 let _ = fcntl_setpipe_size(&self.writers[0], MAX_ROOTLESS_PIPE_SIZE); // stdout
             }
             macro_rules! splice_or_detach {
@@ -178,7 +178,7 @@ impl MultiWriter {
                         // Free it first, so that the new one does not need more file descriptors.
                         drop($pipe_read);
                         drop($pipe_write);
-                        // same size as the 2nd pipe got, so the 2nd is never smaller than the 1st
+                        // same size as the 1st pipe got, so the 2nd is not smaller than the 1st
                         match if sized { pipe::<true>() } else { io::pipe() } {
                             Ok(pipe) => ($pipe_read, $pipe_write) = pipe,
                             Err(e) => {
