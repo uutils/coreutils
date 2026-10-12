@@ -881,7 +881,7 @@ fn test_mv_backup_control(#[case] args: &[&str], #[case] backup_suffix: Option<&
     assert!(!at.file_exists(source));
     assert_eq!(at.read(dest), "new");
     match backup_suffix {
-        Some(suffix) => assert_eq!(at.read(&format!("{dest}{suffix}")), "old"),
+        Some(suffix) => assert_eq!(at.read(format!("{dest}{suffix}")), "old"),
         None => assert!(!at.file_exists(format!("{dest}~"))),
     }
 }

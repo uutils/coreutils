@@ -454,7 +454,7 @@ fn test_symlink_suffix_without_backup_option() {
     assert_eq!(at.read("a"), "a\n");
     assert_eq!(at.read("b"), "a\n");
     // we should have created backup for b file
-    assert_eq!(at.read(&format!("b{suffix}")), "b2\n");
+    assert_eq!(at.read(format!("b{suffix}")), "b2\n");
 }
 
 #[test]
