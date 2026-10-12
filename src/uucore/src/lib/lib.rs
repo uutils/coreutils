@@ -390,7 +390,7 @@ fn with_wasi_argv_fallback(mut argv: Vec<OsString>) -> Vec<OsString> {
 }
 
 // Always non-empty on WASI (embeddings may omit argv); `UTIL_NAME`/`EXECUTION_PHRASE` rely on it.
-#[cfg(all(not(windows), target_os = "wasi"))]
+#[cfg(target_os = "wasi")]
 static ARGV: LazyLock<Vec<OsString>> =
     LazyLock::new(|| with_wasi_argv_fallback(std::env::args_os().collect()));
 
