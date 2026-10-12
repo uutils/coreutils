@@ -601,6 +601,64 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
     })
 }
 
+/// Pick the translation file in `locales_dir` that serves `locale`.
+///
+/// `LANG` usually names a region (`ru_RU`, `de_DE`, `zh_CN`, `es_MX`) while
+/// translations are filed under the language alone (`ru.ftl`), the script
+/// (`zh-Hans.ftl`) or some other region (`es-ES.ftl`). Try the full identifier,
+/// then the language with its script, then the bare language, then any other
+/// file of that language and script. Keep `locale` when nothing matches, so
+/// English is used as before.
+fn resolve_locale(locale: &LanguageIdentifier, locales_dir: &Path) -> LanguageIdentifier {
+    if *locale == DEFAULT_LOCALE {
+        return locale.clone();
+    }
+    let mut with_script = locale.clone();
+    with_script.region = None;
+    with_script.clear_variants();
+    if with_script.language == "zh" && with_script.script.is_none() {
+        let traditional = locale
+            .region
+            .is_some_and(|region| ["TW", "HK", "MO"].contains(&region.as_str()));
+        with_script.script = Some(
+            if traditional { "Hant" } else { "Hans" }
+                .parse()
+                .expect("Hans and Hant are valid scripts"),
+        );
+    }
+    let mut language = with_script.clone();
+    language.script = None;
+
+    let exists =
+        |candidate: &LanguageIdentifier| locales_dir.join(format!("{candidate}.ftl")).is_file();
+    if let Some(found) = [locale, &with_script, &language]
+        .into_iter()
+        .find(|c| exists(c))
+    {
+        return found.clone();
+    }
+
+    // Another region of the same language, e.g. es-ES for es-MX. Sorted so the
+    // choice does not depend on the order the directory is listed in.
+    let mut same_language: Vec<LanguageIdentifier> = fs::read_dir(locales_dir)
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.ok()?.file_name();
+            LanguageIdentifier::from_str(name.to_str()?.strip_suffix(".ftl")?).ok()
+        })
+        .filter(|found| {
+            found.language == with_script.language
+                && (with_script.script.is_none() || found.script == with_script.script)
+        })
+        .collect();
+    same_language.sort_by_key(ToString::to_string);
+    same_language
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| locale.clone())
+}
+
 /// Sets up localization using the system locale with English fallback.
 /// Always loads common strings in addition to utility-specific strings.
 ///
@@ -678,6 +736,7 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     // Load common strings along with utility-specific strings
     if let Ok(locales_dir) = locales_dir {
         // Load both utility-specific and common strings
+        let locale = resolve_locale(&locale, &locales_dir);
         init_localization(&locale, &locales_dir, p)?;
     } else {
         // No locales directory found, use embedded locales
@@ -1731,6 +1790,49 @@ invalid-syntax = This is { $missing
         // Test that DEFAULT_LOCALE is valid
         let default_lang_id = LanguageIdentifier::from_str(DEFAULT_LOCALE).unwrap();
         assert_eq!(default_lang_id.to_string(), "en-US");
+    }
+
+    #[test]
+    fn test_resolve_locale_to_existing_file() {
+        let temp_dir = TempDir::new().unwrap();
+        for name in [
+            "en-US", "es-ES", "fr-FR", "ru", "pt", "pt-BR", "zh-Hans", "zh-Hant",
+        ] {
+            fs::write(temp_dir.path().join(format!("{name}.ftl")), "").unwrap();
+        }
+        let resolve = |lang: &str| {
+            let locale = LanguageIdentifier::from_str(lang).unwrap();
+            resolve_locale(&locale, temp_dir.path()).to_string()
+        };
+
+        // An exact file wins
+        assert_eq!(resolve("fr_FR"), "fr-FR");
+        assert_eq!(resolve("pt_BR"), "pt-BR");
+        // Otherwise the bare language
+        assert_eq!(resolve("ru_RU"), "ru");
+        assert_eq!(resolve("ru"), "ru");
+        assert_eq!(resolve("pt_PT"), "pt");
+        // Chinese is filed by script, which the region implies
+        assert_eq!(resolve("zh_CN"), "zh-Hans");
+        assert_eq!(resolve("zh_SG"), "zh-Hans");
+        assert_eq!(resolve("zh_TW"), "zh-Hant");
+        assert_eq!(resolve("zh_HK"), "zh-Hant");
+        assert_eq!(resolve("zh-Hant-TW"), "zh-Hant");
+        // Then another region of the language
+        assert_eq!(resolve("es_MX"), "es-ES");
+        assert_eq!(resolve("fr_CA"), "fr-FR");
+        assert_eq!(resolve("en_GB"), "en-US");
+        // Nothing to load: keep the request, English is used
+        assert_eq!(resolve("de_DE"), "de-DE");
+
+        // Traditional Chinese is not a stand-in for Simplified
+        let only_hant = TempDir::new().unwrap();
+        fs::write(only_hant.path().join("zh-Hant.ftl"), "").unwrap();
+        let zh_cn = LanguageIdentifier::from_str("zh_CN").unwrap();
+        assert_eq!(
+            resolve_locale(&zh_cn, only_hant.path()).to_string(),
+            "zh-CN"
+        );
     }
 
     #[test]
