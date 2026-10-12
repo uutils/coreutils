@@ -1,6 +1,6 @@
 <!-- markdownlint-disable MD033 MD041 MD002 -->
 <!-- markdownlint-disable commands-show-output no-duplicate-heading -->
-<!-- spell-checker:ignore markdownlint ; (options) DESTDIR UTILNAME manpages reimplementation oranda libclang libcrypto FIPS -->
+<!-- spell-checker:ignore markdownlint ; (options) DESTDIR UTILNAME manpages reimplementation oranda libclang libcrypto FIPS fakeroot -->
 <div class="oranda-hide">
 <div align="center">
 
@@ -170,6 +170,25 @@ build selected individual utilities, use the `--package` [aka `-p`] option. For 
 ```shell
 cargo build -p uu_base32 -p uu_cat -p uu_echo -p uu_rm
 ```
+
+#### libc interposition (`LD_PRELOAD`)
+
+On Linux, rustix's raw syscall backend bypasses libc function interposition, so
+an `LD_PRELOAD` interceptor such as `fakeroot` cannot override affected calls.
+`id` is one of those utilities: `fakeroot coreutils id -u` reports the real UID
+instead of `0`.
+
+To build the multicall binary with rustix's libc wrappers, enable the libc
+backend:
+
+```shell
+cargo build --release --features unix,rustix/use-libc
+```
+
+That choice is fixed at build time. No runtime setting selects the rustix
+backend. Selecting the libc backend does not enable `LD_PRELOAD` for a
+statically linked executable, and it does not guarantee interception of every
+operation.
 
 ### GNU Make
 
