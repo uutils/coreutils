@@ -432,13 +432,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::CHECK_ORDER)
                 .long(options::CHECK_ORDER)
                 .help(translate!("comm-help-check-order"))
+                .overrides_with(options::NO_CHECK_ORDER)
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_CHECK_ORDER)
                 .long(options::NO_CHECK_ORDER)
                 .help(translate!("comm-help-no-check-order"))
-                .action(ArgAction::SetTrue)
-                .conflicts_with(options::CHECK_ORDER),
+                .overrides_with(options::CHECK_ORDER)
+                .action(ArgAction::SetTrue),
         )
 }
