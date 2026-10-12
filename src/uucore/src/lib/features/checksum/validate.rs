@@ -103,7 +103,7 @@ impl ChecksumResult {
 /// Represents a reason for which the processing of a checksum line
 /// could not proceed to digest comparison.
 enum LineCheckError {
-    /// a generic UError was encountered in sub-functions
+    /// a generic `UError` was encountered in sub-functions
     UError(Box<dyn UError>),
     /// the computed checksum digest differs from the expected one
     DigestMismatch,
@@ -133,7 +133,7 @@ impl From<ChecksumError> for LineCheckError {
 
 /// Represents an error that was encountered when processing a checksum file.
 enum FileCheckError {
-    /// a generic UError was encountered in sub-functions
+    /// a generic `UError` was encountered in sub-functions
     UError(Box<dyn UError>),
     /// reading of the checksum file failed
     CantOpenChecksumFile,

@@ -22,7 +22,7 @@ use sha3::{Digest as _, Sha3_256};
 ///
 /// - Take the SHA3-256 hash of the encoded seed.
 ///
-/// - Use that hash as the input for a [`rand_chacha`] ChaCha12 RNG.
+/// - Use that hash as the input for a [`rand_chacha`] `ChaCha12` RNG.
 ///   (We don't touch the nonce, so that's probably zero.)
 ///
 /// - Take 64-bit samples from the RNG.
@@ -46,9 +46,9 @@ use sha3::{Digest as _, Sha3_256};
 /// - UTF-8: That's what Rust likes and it's the least unreasonable Unicode encoding.
 ///
 /// - SHA3-256: We want to make good use of the entire user input and SHA-3 is
-///   state of the art. ChaCha12 takes a 256-bit seed.
+///   state of the art. `ChaCha12` takes a 256-bit seed.
 ///
-/// - ChaCha12: [`rand`]'s default rng as of writing. Seems state of the art.
+/// - `ChaCha12`: [`rand`]'s default rng as of writing. Seems state of the art.
 ///
 /// - 64-bit samples: We could often get away with 32-bit samples but let's keep things
 ///   simple and only use one width. (There doesn't seem to be much of a performance hit.)

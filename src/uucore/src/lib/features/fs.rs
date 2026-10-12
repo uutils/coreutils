@@ -578,7 +578,7 @@ pub fn display_permissions_unix(mode: u32, display_file_type: bool) -> String {
 /// For some programs like install or mkdir, dir/. or dir/./ can be provided
 /// Special case to match GNU's behavior:
 /// install -d foo/. (and foo/./) should work and just create foo/
-/// std::fs::create_dir("foo/."); fails in pure Rust
+/// `std::fs::create_dir("foo/.");` fails in pure Rust
 pub fn dir_strip_dot_for_creation(path: &Path) -> PathBuf {
     let path_str = path.to_string_lossy();
 

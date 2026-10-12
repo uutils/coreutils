@@ -345,7 +345,7 @@ fn parse_fluent_resource_owned(content: &str) -> Result<FluentResource, Localiza
     )
 }
 
-/// Helper function to parse FluentResource from content string
+/// Helper function to parse `FluentResource` from content string
 fn parse_fluent_resource(
     content: &str,
     cache: &'static OnceLock<FluentResource>,
@@ -1085,7 +1085,7 @@ invalid-syntax = This is { $missing
     /// have been loaded (`util_loaded`) and returns `Err` otherwise, allowing
     /// the embedded-locale fallback path to kick in.
     ///
-    /// https://github.com/uutils/coreutils/issues/11854
+    /// <https://github.com/uutils/coreutils/issues/11854>
     #[test]
     fn test_create_bundle_returns_err_when_util_locale_missing() {
         // Build a temporary directory structure that mimics the repo layout

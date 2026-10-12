@@ -42,7 +42,7 @@ mod platform {
         Ok(())
     }
 
-    /// Opens a file and resets its O_NONBLOCK flag to match GNU behavior.
+    /// Opens a file and resets its `O_NONBLOCK` flag to match GNU behavior.
     /// Returns the opened file or an error if opening fails.
     /// Logs a warning if fcntl fails but doesn't abort the operation.
     #[cfg(any(target_os = "linux", target_os = "android"))]

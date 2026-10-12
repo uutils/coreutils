@@ -4931,7 +4931,7 @@ fn test_copy_dir_preserve_subdir_permissions() {
 }
 
 /// cp should successfully copy a read-only source directory containing files.
-/// Regression test: build_dir previously created the destination with the source's
+/// Regression test: `build_dir` previously created the destination with the source's
 /// read-only mode, causing EPERM when copying files into it.
 #[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
 #[test]
@@ -9131,7 +9131,7 @@ fn test_cp_archive_deref_flag_ordering() {
 }
 
 /// Regression test: -a keeps recursion when combined with -L/-H/-d.
-/// https://github.com/uutils/coreutils/issues/13207
+/// <https://github.com/uutils/coreutils/issues/13207>
 #[test]
 #[cfg(unix)]
 #[cfg_attr(
@@ -9326,7 +9326,7 @@ fn test_cp_circular_symbolic_links_in_directory() {
         ));
 }
 
-/// Test that copying to an existing file maintains its permissions, unix only because .mode() only
+/// Test that copying to an existing file maintains its permissions, unix only because `.mode()` only
 /// works on Unix
 #[test]
 #[cfg(unix)]

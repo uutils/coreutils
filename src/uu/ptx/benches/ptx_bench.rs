@@ -21,7 +21,7 @@ fn bench_ptx(bencher: Bencher, data: &[u8], args: &[&str]) {
     });
 }
 
-/// Build a fixed ~1 MiB input spread across num_lines lines.
+/// Build a fixed ~1 MiB input spread across `num_lines` lines.
 fn fixed_size_data(num_lines: usize) -> Vec<u8> {
     let line_len = (1024 * 1024 / num_lines).max(1);
     text_data::generate_by_lines(num_lines, line_len)

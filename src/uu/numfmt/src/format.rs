@@ -101,7 +101,7 @@ fn find_valid_number_with_suffix(s: &str, unit: Unit) -> Option<&str> {
     }
 }
 
-/// Given a string like "5 K Field2" with unit_separator=" ", returns the length
+/// Given a string like "5 K Field2" with `unit_separator=" "`, returns the length
 /// of the valid prefix including the separator and suffix (e.g. "5 K" → 4).
 fn valid_end_with_unit_separator(
     s: &str,

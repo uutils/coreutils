@@ -215,12 +215,12 @@ fn tail_file(
 
 /// Opens a file, using non-blocking mode for FIFOs when `use_nonblock_for_fifo` is true.
 ///
-/// When opening a FIFO with `--pid`, we need to use O_NONBLOCK so that:
-/// 1. The open() call doesn't block waiting for a writer
+/// When opening a FIFO with `--pid`, we need to use `O_NONBLOCK` so that:
+/// 1. The `open()` call doesn't block waiting for a writer
 /// 2. We can periodically check if the monitored process is still alive
 ///
-/// After opening, we clear O_NONBLOCK so subsequent reads block normally.
-/// Without `--pid`, FIFOs block on open() until a writer connects (GNU behavior).
+/// After opening, we clear `O_NONBLOCK` so subsequent reads block normally.
+/// Without `--pid`, FIFOs block on `open()` until a writer connects (GNU behavior).
 #[cfg(unix)]
 fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
     use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};

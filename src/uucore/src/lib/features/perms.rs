@@ -226,13 +226,13 @@ pub fn check_root(path: &Path, would_recurse_symlink: bool) -> bool {
 ///
 /// Prohibit further traversal only if:
 ///     (--preserve-root and -R present) &&
-///     (path *is* "/" by (st_dev, st_ino), so a bind mount of "/" counts too) &&
+///     (path *is* "/" by (`st_dev`, `st_ino`), so a bind mount of "/" counts too) &&
 ///     (
 ///         (path is a symlink && would traverse/recurse this symlink) ||
 ///         (path is not a symlink)
 ///     )
 /// The first clause is checked by the caller, the second and third here.
-/// The caller has to evaluate -P/-H/-L into 'would_recurse_symlink'.
+/// The caller has to evaluate -P/-H/-L into `would_recurse_symlink`.
 fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
     // Compare by (st_dev, st_ino), not name: a bind mount of "/" is an ordinary
     // directory whose path never resolves to "/", so the old syntactic "looks
