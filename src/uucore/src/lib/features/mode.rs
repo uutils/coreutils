@@ -7,14 +7,14 @@
 
 //! Set of functions to parse modes
 
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::fmt::{self, Display};
 use std::ops::Range;
 
 #[cfg(windows)]
 use libc::umask;
 
-use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
+use crate::quoting_style::escape_control_chars;
 use crate::translate;
 
 /// A mode string that does not parse, and the part of it that is at fault.
@@ -107,11 +107,11 @@ impl ModeError {
         ) else {
             return false;
         };
-        let escaped_prefix = escape_diagnostic_text(prefix);
-        let escaped_fault = escape_diagnostic_text(fault);
+        let escaped_prefix = escape_control_chars(prefix);
+        let escaped_fault = escape_control_chars(fault);
         let escaped_mode = format!(
             "{escaped_prefix}{escaped_fault}{}",
-            escape_diagnostic_text(suffix)
+            escape_control_chars(suffix)
         );
         let escaped_range = escaped_prefix.len()..escaped_prefix.len() + escaped_fault.len();
 
@@ -128,7 +128,7 @@ impl ModeError {
             index,
             &escaped_mode,
             escaped_range,
-            &escape_diagnostic_text(message),
+            &escape_control_chars(message),
             label.as_deref(),
             help.as_deref(),
         )
@@ -193,23 +193,6 @@ impl ModeError {
     fn clause_span(&self, clause_start: usize) -> Range<usize> {
         clause_start + self.span.start..clause_start + self.span.end
     }
-}
-
-fn escape_diagnostic_text(text: &str) -> String {
-    let mut escaped = String::with_capacity(text.len());
-    for character in text.chars() {
-        if character.is_control() {
-            let mut buffer = [0; 4];
-            let character = character.encode_utf8(&mut buffer);
-            let quoted = locale_aware_escape_name(OsStr::new(character), QuotingStyle::Escape)
-                .into_string()
-                .expect("C-style quoting always produces valid UTF-8");
-            escaped.push_str(&quoted);
-        } else {
-            escaped.push(character);
-        }
-    }
-    escaped
 }
 
 impl Display for ModeError {
