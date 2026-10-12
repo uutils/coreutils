@@ -7,7 +7,7 @@ use clap::{Arg, ArgAction, Command};
 use std::cell::{OnceCell, RefCell};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Stdin, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Read, Stdin, Write, stdin, stdout};
 use std::iter::Cycle;
 use std::path::Path;
 use std::rc::Rc;
@@ -116,19 +116,22 @@ fn paste(
 
     let line_ending_byte = u8::from(line_ending);
     let input_source_vec_len = input_source_vec.len();
-    let mut stdout = stdout().lock();
+    // Match cat/head: block-buffer stdout so each output line is not a write(2).
+    let mut stdout = BufWriter::with_capacity(64 * 1024, stdout().lock());
 
     if !serial && input_source_vec_len == 1 {
         // With a single input source (no -s), `paste` output is identical to input,
         // except that a missing final line ending must be added.
         // Stream directly to avoid unbounded line buffering on inputs like /dev/zero.
-        return write_single_input_source(
+        write_single_input_source(
             &mut stdout,
             input_source_vec
                 .pop()
                 .expect("input_source_vec_len was checked to be exactly one"),
             line_ending_byte,
-        );
+        )?;
+        stdout.flush()?;
+        return Ok(());
     }
 
     let line_ending_byte_array_ref = &[line_ending_byte];
@@ -200,6 +203,7 @@ fn paste(
         }
     }
 
+    stdout.flush()?;
     Ok(())
 }
 

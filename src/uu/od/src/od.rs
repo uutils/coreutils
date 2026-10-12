@@ -23,7 +23,7 @@ mod prn_float;
 mod prn_int;
 
 use std::cmp;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, BufWriter, Read, Write};
 
 use crate::byteorder_io::ByteOrder;
 use crate::formatter_item_info::FormatWriter;
@@ -263,10 +263,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Kept for the caret in SIZE diagnostics, which echoes the command line.
     let diag_args = uucore::diagnostics::capture(&raw_args);
     let od_options = OdOptions::new(&clap_matches, &args, diag_args.as_deref())?;
-    let mut out = std::io::stdout().lock();
+    // Block-buffer stdout so each formatted line is not a separate write(2).
+    let mut out = BufWriter::with_capacity(64 * 1024, std::io::stdout().lock());
 
     // Check if we're in strings mode
-    if let Some(min_length) = od_options.string_min_length {
+    let result = if let Some(min_length) = od_options.string_min_length {
         extract_strings_from_input(
             &od_options.input_strings,
             od_options.skip_bytes,
@@ -303,7 +304,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             &output_info,
             &mut out,
         )
-    }
+    };
+    out.flush()?;
+    result
 }
 
 pub fn uu_app() -> Command {
@@ -527,7 +530,7 @@ fn odfunc<I, W>(
 ) -> UResult<()>
 where
     I: PeekRead + HasError,
-    W: std::io::Write,
+    W: Write,
 {
     let mut duplicate_line = false;
     let mut previous_bytes: Vec<u8> = Vec::new();
@@ -584,6 +587,8 @@ where
                 input_offset.increase_position(length as u64);
             }
             Err(e) => {
+                // Keep stdout ahead of the stderr diagnostic.
+                let _ = writer.flush();
                 show_error!("{e}");
                 input_offset.write_final_offset(writer)?;
                 return Err(1.into());
@@ -605,7 +610,7 @@ fn extract_strings_from_input(
     read_bytes: Option<u64>,
     min_length: usize,
     radix: Radix,
-    writer: &mut impl std::io::Write,
+    writer: &mut impl Write,
 ) -> UResult<()> {
     let inputs = map_input_strings(input_strings);
     let mut mf = MultifileReader::new(inputs);
@@ -670,6 +675,7 @@ fn extract_strings_from_input(
                 // Note: GNU od does not output unterminated strings at EOF
                 // Strings must be null-terminated to be output
                 if mf.has_error() {
+                    let _ = writer.flush();
                     show_error!("{e}");
                     return Err(1.into());
                 }
@@ -692,7 +698,7 @@ fn extract_strings_from_input(
 ///
 /// The padding in front of an ascii dump grows with `-w`, which accepts huge
 /// values, so it has to be written in chunks rather than materialized.
-fn write_spaces(writer: &mut impl std::io::Write, n: usize) -> std::io::Result<()> {
+fn write_spaces(writer: &mut impl Write, n: usize) -> std::io::Result<()> {
     const SPACES: [u8; 512] = [b' '; 512];
 
     let mut remaining = n;
@@ -706,7 +712,7 @@ fn write_spaces(writer: &mut impl std::io::Write, n: usize) -> std::io::Result<(
 
 /// Writes `s` to `writer`, adding its width in characters to `line_width`.
 fn write_field(
-    writer: &mut impl std::io::Write,
+    writer: &mut impl Write,
     s: &str,
     line_width: &mut usize,
 ) -> std::io::Result<()> {
@@ -717,7 +723,7 @@ fn write_field(
 
 /// Outputs a single line of input, into one or more lines human readable output.
 fn write_bytes(
-    writer: &mut impl std::io::Write,
+    writer: &mut impl Write,
     prefix: &str,
     input_decoder: &MemoryDecoder,
     output_info: &OutputInfo,
