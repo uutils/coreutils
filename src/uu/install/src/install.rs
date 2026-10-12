@@ -27,7 +27,9 @@ use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
 use uucore::fs::{are_files_identical, dir_strip_dot_for_creation};
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 #[cfg(all(unix, not(target_os = "redox")))]
-use uucore::safe_traversal::{DirFd, SymlinkBehavior, create_dir_all_safe};
+use uucore::safe_traversal::{
+    DirFd, SymlinkBehavior, create_dir_all_safe, failed_create_dir_prefix,
+};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::{
     SeLinuxError, contexts_differ, get_selinux_security_context, is_selinux_enabled,
@@ -71,7 +73,7 @@ enum InstallError {
     #[error("{}", translate!("install-error-dir-needs-arg", "util_name" => "install"))]
     DirNeedsArg,
 
-    #[error("{}", translate!("install-error-create-dir-failed", "path" => .0.quote()))]
+    #[error("{}", translate!("install-error-create-dir-failed", "path" => .0.quote(), "error" => strip_errno(.1)))]
     CreateDirFailed(PathBuf, #[source] std::io::Error),
 
     #[error("{}", translate!("install-error-chmod-failed", "path" => .0.quote()))]
@@ -516,10 +518,16 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
             // target directory. All created ancestor directories will have
             // the default mode. Hence it is safe to use fs::create_dir_all
             // and then only modify the target's dir mode.
-            if let Err(e) = fs::create_dir_all(&path_to_create).map_err_context(
-                || translate!("install-error-create-dir-failed", "path" => path_to_create.quote()),
-            ) {
-                show!(e);
+            //
+            // This stays path-based on purpose. mkdir only needs write and
+            // execute on the parent, but without O_PATH or O_SEARCH an fd walk
+            // cannot anchor on a write-only directory, where GNU succeeds.
+            if let Err(e) = fs::create_dir_all(&path_to_create) {
+                #[cfg(all(unix, not(target_os = "redox")))]
+                let failed = failed_create_dir_prefix(&path_to_create);
+                #[cfg(any(not(unix), target_os = "redox"))]
+                let failed = path_to_create.clone();
+                show!(InstallError::CreateDirFailed(failed, e));
                 continue;
             }
 
@@ -680,8 +688,6 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         }
 
         if let Some(to_create) = to_create {
-            #[cfg(all(unix, not(target_os = "redox")))]
-            let to_create_original = to_create;
             let to_create_owned;
             let to_create = match uucore::os_str_as_bytes(to_create.as_os_str()) {
                 Ok(path_bytes) if path_bytes.ends_with(b"/") => {
@@ -752,20 +758,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                             }
                         }
                         Err(e) => {
-                            if e.kind() == std::io::ErrorKind::AlreadyExists
-                                && to_create.exists()
-                                && !to_create.is_dir()
-                            {
-                                return Err(InstallError::NotADirectory(
-                                    to_create_original.to_path_buf(),
-                                )
-                                .into());
-                            }
-                            return Err(InstallError::CreateDirFailed(
-                                to_create_original.to_path_buf(),
-                                e,
-                            )
-                            .into());
+                            return Err(InstallError::CreateDirFailed(e.path, e.error).into());
                         }
                     }
                 }
