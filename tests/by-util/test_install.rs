@@ -993,12 +993,9 @@ fn test_install_on_invalid_link_at_destination() {
     let dst_dir = at.plus("dest");
 
     at.touch("test.sh");
-    at.symlink_file(
-        "/opt/FakeDestination",
-        &dst_dir.join("test.sh").to_string_lossy(),
-    );
+    at.symlink_file("/opt/FakeDestination", dst_dir.join("test.sh"));
     scene.ccmd("chmod").arg("+x").arg("test.sh").succeeds();
-    at.symlink_file("test.sh", &src_dir.join("test.sh").to_string_lossy());
+    at.symlink_file("test.sh", src_dir.join("test.sh"));
 
     scene
         .ucmd()
@@ -1021,12 +1018,9 @@ fn test_install_on_invalid_link_at_destination_and_dev_null_at_source() {
     let dst_dir = at.plus("dest");
 
     at.touch("test.sh");
-    at.symlink_file(
-        "/opt/FakeDestination",
-        &dst_dir.join("test.sh").to_string_lossy(),
-    );
+    at.symlink_file("/opt/FakeDestination", dst_dir.join("test.sh"));
     scene.ccmd("chmod").arg("+x").arg("test.sh").succeeds();
-    at.symlink_file("test.sh", &src_dir.join("test.sh").to_string_lossy());
+    at.symlink_file("test.sh", src_dir.join("test.sh"));
 
     scene
         .ucmd()
@@ -1301,7 +1295,7 @@ fn test_install_backup_control(#[case] args: &[&str], #[case] backup_suffix: Opt
     assert_eq!(at.read(source), "new");
     assert_eq!(at.read(dest), "new");
     match backup_suffix {
-        Some(suffix) => assert_eq!(at.read(&format!("{dest}{suffix}")), "old"),
+        Some(suffix) => assert_eq!(at.read(format!("{dest}{suffix}")), "old"),
         None => assert!(!at.file_exists(format!("{dest}~"))),
     }
 }
@@ -2126,7 +2120,7 @@ fn test_install_failing_copy_file_to_target_contain_subdir_with_same_name() {
     let dir1 = "dir1";
 
     at.touch(file);
-    at.mkdir_all(&format!("{dir1}/{file}"));
+    at.mkdir_all(format!("{dir1}/{file}"));
     ucmd.arg(file)
         .arg(dir1)
         .fails()
@@ -2434,7 +2428,7 @@ fn test_selinux() {
 
         let Ok(context_value) = context_value else {
             println!("Skipping SELinux test: getfattr not available or failed");
-            at.remove(&at.plus_as_string(dest));
+            at.remove(at.plus_as_string(dest));
             continue;
         };
 
@@ -2442,7 +2436,7 @@ fn test_selinux() {
             context_value.contains("unconfined_u"),
             "Expected 'unconfined_u' not found in getfattr output:\n{context_value}"
         );
-        at.remove(&at.plus_as_string(dest));
+        at.remove(at.plus_as_string(dest));
     }
 }
 
@@ -2474,7 +2468,7 @@ fn test_selinux_invalid_args() {
             .fails()
             .stderr_contains("failed to set default file creation");
 
-        at.remove(&at.plus_as_string(dest));
+        at.remove(at.plus_as_string(dest));
     }
 }
 

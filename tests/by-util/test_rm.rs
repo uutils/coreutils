@@ -1289,7 +1289,7 @@ fn test_rm_recursive_long_path_safe_traversal() {
     }
 
     at.write("rm_deep/test1.txt", "content1");
-    at.write(&format!("{deep_path}/test2.txt"), "content2");
+    at.write(format!("{deep_path}/test2.txt"), "content2");
 
     ts.ucmd().arg("-rf").arg("rm_deep").succeeds();
 
