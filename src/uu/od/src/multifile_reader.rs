@@ -239,7 +239,10 @@ impl io::Read for MultifileReader<'_> {
                             Err(e) => {
                                 show_error!(
                                     "{}: {}",
-                                    self.file_name.map_or("I/O".into(), OsStr::to_string_lossy),
+                                    self.file_name
+                                        .unwrap_or(OsStr::new("I/O"))
+                                        .maybe_quote()
+                                        .external(true),
                                     strip_errno(&e)
                                 );
                                 self.any_err = true;

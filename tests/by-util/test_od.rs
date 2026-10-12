@@ -126,6 +126,30 @@ fn test_non_utf8_file() {
         .stdout_only(unindent(ALPHA_OUT));
 }
 
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
+fn test_traditional_non_utf8_file_with_offset() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = OsStr::from_bytes(b"\xff");
+    std::fs::write(at.plus(name), "abcdefghijklmnopq").unwrap();
+    ucmd.arg("--traditional")
+        .arg("-c")
+        .arg(name)
+        .arg("10")
+        .pipe_in("not read")
+        .succeeds()
+        .stdout_only(unindent(
+            "
+            0000010   i   j   k   l   m   n   o   p   q
+            0000021
+            ",
+        ));
+}
+
 // Test that od reads from stdin instead of a file
 #[test]
 fn test_from_stdin() {
