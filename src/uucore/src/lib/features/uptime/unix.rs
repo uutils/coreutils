@@ -21,7 +21,7 @@ use libc::time_t;
 ///
 /// # Returns
 ///
-/// Returns Some(time_t) if successful, None if the call fails.
+/// Returns `Some(time_t)` if successful, None if the call fails.
 #[cfg(target_vendor = "apple")]
 fn get_macos_boot_time_sysctl() -> Option<time_t> {
     use std::process::Command;
@@ -59,11 +59,11 @@ fn get_macos_boot_time_sysctl() -> Option<time_t> {
 ///
 /// # Arguments
 ///
-/// boot_time: Option<time_t> - Manually specify the boot time, or None to try to get it from the system.
+/// `boot_time`: `Option<time_t>` - Manually specify the boot time, or None to try to get it from the system.
 ///
 /// # Returns
 ///
-/// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
+/// Returns a `UResult` with the uptime in seconds if successful, otherwise an `UptimeError`.
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
@@ -83,11 +83,11 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
 ///
 /// # Arguments
 ///
-/// boot_time: Option<time_t> - Manually specify the boot time, or None to try to get it from the system.
+/// `boot_time`: `Option<time_t>` - Manually specify the boot time, or None to try to get it from the system.
 ///
 /// # Returns
 ///
-/// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
+/// Returns a `UResult` with the uptime in seconds if successful, otherwise an `UptimeError`.
 #[cfg(not(any(
     target_os = "linux",
     target_os = "android",
@@ -220,7 +220,7 @@ pub(crate) fn default_nusers() -> usize {
 ///
 /// # Returns
 ///
-/// Returns a UResult with the load average if successful, otherwise an UptimeError.
+/// Returns a `UResult` with the load average if successful, otherwise an `UptimeError`.
 /// The load average is a tuple of three floating point numbers representing the 1-minute, 5-minute, and 15-minute load averages.
 #[cfg(not(any(target_arch = "wasm32", target_os = "android")))]
 pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
@@ -278,7 +278,7 @@ mod tests {
         assert!(boot_time < now, "Boot time should be before current time");
     }
 
-    /// Test that get_uptime always succeeds on macOS due to sysctl fallback.
+    /// Test that `get_uptime` always succeeds on macOS due to sysctl fallback.
     /// This addresses the intermittent failures reported in issue #3621.
     #[test]
     fn test_get_uptime_always_succeeds_on_macos() {
@@ -302,7 +302,7 @@ mod tests {
         );
     }
 
-    /// Test get_uptime consistency by calling it multiple times.
+    /// Test `get_uptime` consistency by calling it multiple times.
     /// Verifies the sysctl fallback produces stable results.
     #[test]
     fn test_get_uptime_macos_consistency() {

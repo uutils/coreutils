@@ -225,7 +225,7 @@ pub trait SupportsFastDecodeAndEncode {
     ///
     /// is 15 characters (divisible by 3), so it is encoded in Base64 without padding:
     ///
-    /// "VGhlIHF1aWNrIGJyb3du"
+    /// `"VGhlIHF1aWNrIGJyb3du"`
     ///
     /// While:
     ///
@@ -233,7 +233,7 @@ pub trait SupportsFastDecodeAndEncode {
     ///
     /// is 19 characters, which is not divisible by 3, so its Base64 representation has padding:
     ///
-    /// "VGhlIHF1aWNrIGJyb3duIGZveA=="
+    /// `"VGhlIHF1aWNrIGJyb3duIGZveA=="`
     ///
     /// The encoding performed by `fast_encode` depends on this number being correct.
     fn unpadded_multiple(&self) -> usize;

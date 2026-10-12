@@ -2428,7 +2428,7 @@ fn test_date_format_locale_ampm_markers() {
     }
 }
 
-/// bg_BG's `date_fmt` has the year only inside `%x`, which therefore has to
+/// `bg_BG`'s `date_fmt` has the year only inside `%x`, which therefore has to
 /// be expanded before an out-of-range year is put in.
 #[test]
 #[cfg(all(target_os = "linux", target_env = "gnu"))]

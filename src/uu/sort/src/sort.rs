@@ -449,7 +449,7 @@ impl GlobalSettings {
     /// Returns true when the fast lexicographic path can be used safely.
     /// Note: When i18n-collator is enabled, the caller must have already determined
     /// whether locale-aware collation is needed (via checking if we're in a UTF-8 locale).
-    /// This check is performed in uumain() before init_precomputed() is called.
+    /// This check is performed in `uumain()` before `init_precomputed()` is called.
     fn can_use_fast_lexicographic(&self) -> bool {
         let [selector] = &self.selectors[..] else {
             return false;
@@ -3263,7 +3263,7 @@ enum Month {
 }
 
 /// Cached locale month lookup table.
-/// Each entry is (uppercased_name, month_value).
+/// Each entry is (`uppercased_name`, `month_value`).
 type MonthTable = Vec<(Vec<u8>, Month)>;
 
 fn get_locale_month_table() -> Option<&'static MonthTable> {

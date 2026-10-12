@@ -733,8 +733,8 @@ fn is_sparse(buf: &[u8]) -> bool {
     buf.iter().all(|&e| e == 0u8)
 }
 
-/// Handle O_DIRECT write errors by temporarily removing the flag and retrying.
-/// This follows GNU dd behavior for partial block writes with O_DIRECT.
+/// Handle `O_DIRECT` write errors by temporarily removing the flag and retrying.
+/// This follows GNU dd behavior for partial block writes with `O_DIRECT`.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) -> io::Result<usize> {
     use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};

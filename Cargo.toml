@@ -212,7 +212,6 @@ fn_params_excessive_bools = "allow"          # 6
 should_panic_without_expect = "allow"        # 2
 assert_is_empty = "allow"
 
-doc_markdown = "allow"
 unused_self = "allow"
 implicit_hasher = "allow"
 doc_link_with_quotes = "allow"

@@ -981,7 +981,7 @@ fn test_do_not_attempt_to_read_a_directory() {
         .stderr_contains("error reading '.'");
 }
 
-/// Regression test for https://github.com/uutils/coreutils/issues/12215
+/// Regression test for <https://github.com/uutils/coreutils/issues/12215>
 /// `head -c0 <directory>` should succeed (nothing to read), matching GNU.
 #[test]
 fn test_zero_bytes_on_directory_succeeds() {

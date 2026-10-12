@@ -1029,7 +1029,7 @@ impl Attributes {
 
 /// Flags in the mutual-exclusion group for symlink handling.
 /// The last one on the command line determines dereference behavior.
-/// Note: CLI_SYMBOLIC_LINKS (-H) is excluded here — it only affects
+/// Note: `CLI_SYMBOLIC_LINKS` (-H) is excluded here — it only affects
 /// CLI-level symlinks, not recursive traversal.
 const DEREF_FLAGS: &[&str] = &[
     options::DEREFERENCE,

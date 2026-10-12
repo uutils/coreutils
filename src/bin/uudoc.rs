@@ -685,7 +685,7 @@ fn write_zip_examples(
     }
 }
 
-/// Format examples using std::fmt::Write
+/// Format examples using `std::fmt::Write`
 fn format_examples(content: String, output_markdown: bool) -> Result<String, std::fmt::Error> {
     use std::fmt::Write;
     let mut s = String::new();

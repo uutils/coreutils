@@ -24,11 +24,11 @@ use windows_sys::Win32::System::RemoteDesktop::{
 ///
 /// # Arguments
 ///
-/// boot_time will be ignored, pass None.
+/// `boot_time` will be ignored, pass None.
 ///
 /// # Returns
 ///
-/// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
+/// Returns a `UResult` with the uptime in seconds if successful, otherwise an `UptimeError`.
 #[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
 pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
     // GetTickCount64 (unlike GetTickCount) does not wrap after 49.7 days.
@@ -148,7 +148,7 @@ pub(crate) fn default_nusers() -> usize {
 ///
 /// # Returns
 ///
-/// Returns a UResult with an UptimeError.
+/// Returns a `UResult` with an `UptimeError`.
 pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
     Err(UptimeError::WindowsLoadavg)?
 }

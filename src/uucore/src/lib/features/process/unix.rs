@@ -119,7 +119,7 @@ pub fn unblock_signal(signal: RixSignal) -> io::Result<()> {
     set.thread_unblock().map_err(Into::into)
 }
 
-/// Ensures there is no overflow on time_t operations. Some BSDs (notably XNU)
+/// Ensures there is no overflow on `time_t` operations. Some BSDs (notably XNU)
 /// will return EINVAL otherwise; POSIX only defines it up to 10e8, so we cap
 /// it on all targets we do not trust to support the full integer range.
 #[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]

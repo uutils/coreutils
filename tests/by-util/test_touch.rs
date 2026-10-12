@@ -668,7 +668,7 @@ fn test_touch_set_date_without_leading_zeroes() {
     assert_eq!(mtime, expected);
 }
 
-/// Regression test for https://github.com/uutils/coreutils/issues/11804
+/// Regression test for <https://github.com/uutils/coreutils/issues/11804>
 ///
 /// Setting a pre-epoch date like `0000-01-01` used to panic on 32-bit targets
 /// because the i64 Unix timestamp (~-62 billion) overflowed the i32 `tv_sec`

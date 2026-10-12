@@ -234,7 +234,7 @@ fn set_buffer(stream: *mut FILE, value: &str) {
 }
 
 /// # Safety
-/// This function is intended to be called automatically when the library is loaded via LD_PRELOAD.
+/// This function is intended to be called automatically when the library is loaded via `LD_PRELOAD`.
 /// It assumes that the standard streams are valid and that calling setvbuf on them is safe.
 /// The caller must ensure this function is only called in a compatible runtime environment.
 #[unsafe(no_mangle)]

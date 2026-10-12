@@ -821,7 +821,7 @@ pub struct PathData<'a> {
 }
 
 impl<'a> PathData<'a> {
-    /// Convert this PathData to an EntryInfo for programmatic access
+    /// Convert this `PathData` to an `EntryInfo` for programmatic access
     pub fn to_entry_info(&self, config: &Config) -> EntryInfo {
         EntryInfo {
             path: self.p_buf.clone().into_owned(),
