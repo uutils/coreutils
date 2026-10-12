@@ -91,21 +91,21 @@ dd-error-not-directory = définir les indicateurs pour '{ $file }' : N'est pas u
 dd-error-failed-discard-cache = échec de la suppression du cache pour : { $file }
 
 # Parse errors
-dd-error-unrecognized-operand = opérande non reconnue '{ $operand }'
+dd-error-unrecognized-operand = opérande non reconnue { $operand }
 dd-error-multiple-format-table = impossible de combiner deux options parmi {"{"}ascii,ebcdic,ibm{"}"}
 dd-error-multiple-case = impossible de combiner lcase et ucase
 dd-error-multiple-block = impossible de combiner block et unblock
 dd-error-multiple-excl = impossible de combiner excl et nocreat
-dd-error-invalid-flag = indicateur d'entrée invalide : '{ $flag }'
-dd-error-invalid-output-flag = indicateur de sortie invalide : '{ $flag }'
-dd-error-conv-flag-no-match = conversion invalide : '{ $flag }'
-dd-error-multiplier-parse-failure = nombre invalide : '{ $input }'
+dd-error-invalid-flag = indicateur d'entrée invalide : { $flag }
+dd-error-invalid-output-flag = indicateur de sortie invalide : { $flag }
+dd-error-conv-flag-no-match = conversion invalide : { $flag }
+dd-error-multiplier-parse-failure = nombre invalide : { $input }
 dd-error-multiplier-overflow = La chaîne de multiplicateur déborderait sur le système actuel -> { $input }
 dd-error-block-without-cbs = conv=block ou conv=unblock spécifié sans cbs=N
-dd-error-status-not-recognized = niveau d'état invalide : '{ $level }'
+dd-error-status-not-recognized = niveau d'état invalide : { $level }
 dd-error-unimplemented = fonctionnalité non implémentée sur ce système -> { $feature }
 dd-error-bs-out-of-range = { $param }=N ne peut pas tenir en mémoire
-dd-error-invalid-number = nombre invalide : '{ $input }'
+dd-error-invalid-number = nombre invalide : { $input }
 
 # Progress messages
 dd-progress-records-in = { $complete }+{ $partial } enregistrements en entrée
