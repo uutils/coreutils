@@ -69,6 +69,8 @@ pub struct LineData<'a> {
     pub collation_key_buffer: Vec<u8>,
     /// End offsets into `collation_key_buffer`; the high bit marks lines that use lazy collation.
     pub collation_key_ends: Vec<usize>,
+    /// Input bytes used to precompute keys for long lines in this chunk.
+    pub long_collation_input_bytes: usize,
 }
 
 impl LineData<'_> {
@@ -271,6 +273,7 @@ pub fn read<T: Read>(
                 line_num_floats,
                 collation_key_buffer,
                 collation_key_ends,
+                long_collation_input_bytes: 0,
             };
             parse_lines(
                 read,

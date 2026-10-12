@@ -3718,14 +3718,11 @@ fn test_sort_locale_punctuation() {
 
 #[test]
 fn test_locale_collation_long_lines() {
-    // Lines longer than 64 KiB skip collation-key precomputation and are
-    // compared lazily with the locale collator (issue #12138). Interleave
-    // long and short lines so lazy lines are compared against precomputed
-    // ones, and precomputed lines follow lazy ones (validating that key
-    // offsets stay correct after a skipped entry).
-    const LONG: usize = 70_000; // > MAX_PRECOMPUTED_COLLATION_KEY_LINE_LEN
+    // Long lines within the per-chunk budget still reuse collation keys.
+    // Interleave them with short lines and exercise case and accent ordering.
+    const LONG: usize = 70_000;
 
-    let long_e_acute = "é".repeat(LONG / 2); // 2 bytes per char => above the cap
+    let long_e_acute = "é".repeat(LONG / 2);
     let long_upper_a = "A".repeat(LONG);
     let long_lower_a = "a".repeat(LONG);
     let input = format!("f\n{long_upper_a}\nb\n{long_lower_a}\n{long_e_acute}\na\n");
@@ -3742,11 +3739,9 @@ fn test_locale_collation_long_lines() {
 
 #[test]
 fn test_locale_collation_long_line_boundary() {
-    // Lines of exactly 65,535 bytes still get a precomputed collation key,
-    // while 65,536-byte lines take the lazy path. Both paths must agree on
-    // locale-aware order: shorter prefixes first, lowercase before uppercase
-    // within the same length.
-    const AT_CAP: usize = 65_535; // == MAX_PRECOMPUTED_COLLATION_KEY_LINE_LEN
+    // Crossing the short-line threshold must preserve locale-aware order:
+    // shorter prefixes first, lowercase before uppercase at the same length.
+    const AT_CAP: usize = 65_535;
 
     let lower_at = "a".repeat(AT_CAP);
     let upper_at = "A".repeat(AT_CAP);
@@ -3757,6 +3752,24 @@ fn test_locale_collation_long_line_boundary() {
 
     new_ucmd!()
         .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_locale_collation_over_budget_line() {
+    // A line exceeding the entire long-line budget is compared lazily.
+    // Keys recorded after it must retain correct arena offsets, and skipping
+    // it must leave room in the budget for later, smaller long lines.
+    let huge = "A".repeat(17 * 1024 * 1024);
+    let long = "a".repeat(70_000);
+    let input = format!("b\n{huge}\na\n{long}\n");
+    let expected = format!("a\n{long}\n{huge}\nb\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["--parallel", "1", "-S", "64M"])
         .pipe_in(input)
         .succeeds()
         .stdout_is(expected);
