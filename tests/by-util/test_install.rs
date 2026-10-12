@@ -2840,13 +2840,25 @@ fn test_install_d_dangling_symlink_in_path_errors() {
 
     at.write("file.txt", "hello");
 
-    // install -D file.txt dangling/subdir/file.txt should fail
+    // install -D file.txt dangling/subdir/file.txt should fail, naming the
+    // dangling component, like GNU does.
     scene
         .ucmd()
         .args(&["-D", "-m", "644"])
         .arg(at.plus("file.txt"))
         .arg(at.plus("dangling/subdir/file.txt"))
-        .fails();
+        .fails()
+        .stderr_only(format!(
+            "install: cannot create directory '{}': File exists\n",
+            at.plus_as_string("dangling")
+        ));
+
+    // `install -d` creates by path, but names the same component.
+    scene
+        .ucmd()
+        .args(&["-d", "dangling/subdir"])
+        .fails()
+        .stderr_only("install: cannot create directory 'dangling': File exists\n");
 
     // The dangling symlink must not have been replaced with a real directory
     assert!(
@@ -2899,6 +2911,100 @@ fn test_install_d_leading_dirs_in_write_only_directory() {
         fs::read_to_string(at.plus("wx/a/b/file.txt")).unwrap(),
         "hello"
     );
+}
+
+/// A plain file in the path is named as the failing component, with the errno
+/// of descending into it, as GNU does.
+#[rstest]
+#[case::leading_parent(&["-D", "file.txt", "regular/file.txt"])]
+#[case::leading(&["-D", "file.txt", "regular/sub/file.txt"])]
+#[case::leading_deeper(&["-D", "file.txt", "regular/sub/deeper/file.txt"])]
+#[case::dir(&["-d", "regular/sub"])]
+#[case::dir_deeper(&["-d", "regular/sub/deeper"])]
+#[cfg(unix)]
+fn test_install_leading_dir_names_non_directory_component(#[case] args: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("regular");
+    at.write("file.txt", "hello");
+
+    ucmd.args(args)
+        .fails()
+        .stderr_only("install: cannot create directory 'regular': Not a directory\n");
+}
+
+/// A symlink loop in the path is named the same way, with the libc's ELOOP text.
+#[rstest]
+#[case::leading(&["-D", "file.txt", "loop/sub/file.txt"])]
+#[case::dir(&["-d", "loop/sub"])]
+#[cfg(unix)]
+fn test_install_leading_dir_names_symlink_loop(#[case] args: &[&str]) {
+    #[cfg(all(not(target_env = "musl"), not(target_os = "android")))]
+    let expected = "install: cannot create directory 'loop': Too many levels of symbolic links\n";
+    #[cfg(all(not(target_env = "musl"), target_os = "android"))]
+    let expected = "install: cannot create directory 'loop': Too many symbolic links encountered\n";
+    #[cfg(all(target_env = "musl", not(target_os = "android")))]
+    let expected = "install: cannot create directory 'loop': Symbolic link loop\n";
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("file.txt", "hello");
+    at.symlink_file("loop", "loop");
+
+    ucmd.args(args).fails().stderr_only(expected);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_directory_in_write_only_directory() {
+    // mkdir only needs write and execute on the parent, so `install -d` must
+    // keep working in a directory it cannot read.
+    use std::os::unix::fs::PermissionsExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    if geteuid().is_root() {
+        println!("Test skipped; root ignores directory permissions");
+        return;
+    }
+
+    at.mkdir("wx");
+    fs::set_permissions(at.plus("wx"), fs::Permissions::from_mode(0o300)).unwrap();
+
+    scene.ucmd().args(&["-d", "wx/sub"]).succeeds().no_output();
+    assert!(at.dir_exists("wx/sub"));
+}
+
+/// A parent that cannot be searched is what gets named, like GNU does; one
+/// that can be searched but not written leaves the component to blame.
+#[rstest]
+#[case::read_only_dir("r--", &["-d", "r--/x"], "r--")]
+#[case::read_only_leading("r--", &["-D", "f", "r--/x/f"], "r--")]
+#[case::no_access_dir("000", &["-d", "000/x"], "000")]
+#[case::no_access_leading("000", &["-D", "f", "000/x/f"], "000")]
+#[case::searchable_dir("r-x", &["-d", "r-x/x"], "r-x/x")]
+#[case::searchable_leading("r-x", &["-D", "f", "r-x/x/f"], "r-x/x")]
+#[cfg(unix)]
+fn test_install_leading_dir_blames_unsearchable_parent(
+    #[case] parent: &str,
+    #[case] args: &[&str],
+    #[case] named: &str,
+) {
+    if geteuid().is_root() {
+        println!("Test skipped; root ignores directory permissions");
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    at.mkdir(parent);
+    let mode = match parent {
+        "r--" => 0o444,
+        "000" => 0o000,
+        _ => 0o555,
+    };
+    fs::set_permissions(at.plus(parent), fs::Permissions::from_mode(mode)).unwrap();
+
+    ucmd.args(args).fails().stderr_only(format!(
+        "install: cannot create directory '{named}': Permission denied\n"
+    ));
 }
 
 #[test]
