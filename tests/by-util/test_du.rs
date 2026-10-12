@@ -165,7 +165,7 @@ fn test_du_with_posixly_correct() {
     let dir = "a";
 
     at.mkdir(dir);
-    at.write(&format!("{dir}/file"), "some content");
+    at.write(format!("{dir}/file"), "some content");
 
     let expected = ts
         .ucmd()
@@ -206,7 +206,7 @@ fn test_du_zero_env_block_size() {
     let dir = "a";
 
     at.mkdir(dir);
-    at.write(&format!("{dir}/file"), "some content");
+    at.write(format!("{dir}/file"), "some content");
 
     let expected = ts
         .ucmd()
@@ -232,7 +232,7 @@ fn test_du_zero_env_block_size_hierarchy() {
     let dir = "a";
 
     at.mkdir(dir);
-    at.write(&format!("{dir}/file"), "some content");
+    at.write(format!("{dir}/file"), "some content");
 
     let expected = ts
         .ucmd()
@@ -269,7 +269,7 @@ fn test_du_env_block_size_hierarchy() {
     let dir = "a";
 
     at.mkdir(dir);
-    at.write(&format!("{dir}/file"), "some content");
+    at.write(format!("{dir}/file"), "some content");
 
     let expected = ts
         .ucmd()
@@ -396,7 +396,7 @@ fn test_du_invalid_env_block_size_stops_lookup() {
     let dir = "a";
 
     at.mkdir(dir);
-    at.write(&format!("{dir}/file"), "some content");
+    at.write(format!("{dir}/file"), "some content");
 
     let default_output = ts
         .ucmd()
@@ -436,7 +436,7 @@ fn test_du_posixly_correct_default() {
     let dir = "a";
 
     at.mkdir(dir);
-    at.write(&format!("{dir}/file"), "some content");
+    at.write(format!("{dir}/file"), "some content");
 
     let expected = ts
         .ucmd()
@@ -2198,7 +2198,7 @@ fn test_du_very_deep_directory() {
         at.mkdir_all(&current_path);
     }
 
-    at.write(&format!("{current_path}/file.txt"), "deep file");
+    at.write(format!("{current_path}/file.txt"), "deep file");
 
     let result = ts.ucmd().arg("-s").arg("x").succeeds();
     assert!(result.stdout_str().contains('x'));
@@ -2222,9 +2222,9 @@ fn test_du_safe_traversal_with_symlinks() {
         at.mkdir_all(&deep_path);
     }
 
-    at.write(&format!("{deep_path}/target.txt"), "target content");
+    at.write(format!("{deep_path}/target.txt"), "target content");
 
-    at.symlink_file(&format!("{deep_path}/target.txt"), "shallow_link.txt");
+    at.symlink_file(format!("{deep_path}/target.txt"), "shallow_link.txt");
 
     let result = ts.ucmd().arg("-L").arg("shallow_link.txt").succeeds();
     assert!(!result.stdout_str().is_empty());
@@ -2357,7 +2357,7 @@ fn test_du_long_path_from_unreadable() {
         at.mkdir_all(&current_path);
     }
 
-    at.write(&format!("{current_path}/test.txt"), "test content");
+    at.write(format!("{current_path}/test.txt"), "test content");
 
     at.mkdir("inaccessible");
 
