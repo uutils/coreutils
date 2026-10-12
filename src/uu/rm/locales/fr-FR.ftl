@@ -35,22 +35,22 @@ rm-progress-removing = Suppression
 
 # Messages de confirmation
 rm-prompt-remove-arguments = supprimer { $count ->
-    [one] { $count } argument ?
-   *[other] { $count } arguments ?
+    [one] { $count } argument ? (y/N)
+   *[other] { $count } arguments ? (y/N)
 }
 rm-prompt-remove-arguments-recursive = supprimer { $count ->
-    [one] { $count } argument récursivement ?
-   *[other] { $count } arguments récursivement ?
+    [one] { $count } argument récursivement ? (y/N)
+   *[other] { $count } arguments récursivement ? (y/N)
 }
-rm-prompt-remove-symbolic-link = supprimer le lien symbolique { $file } ?
-rm-prompt-remove-regular-empty-file = supprimer le fichier ordinaire vide { $file } ?
-rm-prompt-remove-file = supprimer le fichier { $file } ?
-rm-prompt-remove-write-protected-regular-empty-file = supprimer le fichier ordinaire vide protégé en écriture { $file } ?
-rm-prompt-remove-write-protected-regular-file = supprimer le fichier ordinaire protégé en écriture { $file } ?
-rm-prompt-attempt-remove-inaccessible-directory = tenter de supprimer le répertoire inaccessible { $path } ?
-rm-prompt-remove-write-protected-directory = supprimer le répertoire protégé en écriture { $path } ?
-rm-prompt-remove-directory = supprimer le répertoire { $path } ?
-rm-prompt-descend-into-directory = descendre dans le répertoire { $path } ?
+rm-prompt-remove-symbolic-link = supprimer le lien symbolique { $file } ? (y/N)
+rm-prompt-remove-regular-empty-file = supprimer le fichier ordinaire vide { $file } ? (y/N)
+rm-prompt-remove-file = supprimer le fichier { $file } ? (y/N)
+rm-prompt-remove-write-protected-regular-empty-file = supprimer le fichier ordinaire vide protégé en écriture { $file } ? (y/N)
+rm-prompt-remove-write-protected-regular-file = supprimer le fichier ordinaire protégé en écriture { $file } ? (y/N)
+rm-prompt-attempt-remove-inaccessible-directory = tenter de supprimer le répertoire inaccessible { $path } ? (y/N)
+rm-prompt-remove-write-protected-directory = supprimer le répertoire protégé en écriture { $path } ? (y/N)
+rm-prompt-remove-directory = supprimer le répertoire { $path } ? (y/N)
+rm-prompt-descend-into-directory = descendre dans le répertoire { $path } ? (y/N)
 
 # Messages d'erreur
 rm-error-missing-operand = opérande manquant
