@@ -89,6 +89,42 @@ fn test_stdin() {
         .stdout_is_fixture("crc_stdin.expected");
 }
 
+/// Closed stdin must error with EBADF (GNU), not hash /dev/null as empty (#10153).
+#[test]
+#[cfg(unix)]
+fn test_closed_stdin() {
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+    use uutests::util::TestScenario;
+    use uutests::util_name;
+
+    let scene = TestScenario::new(util_name!());
+    let mut cmd = Command::new(&scene.bin_path);
+    cmd.arg(scene.util_name.as_str()).args(["-a", "md5"]);
+    // SAFETY: close(0) is async-signal-safe; runs after fork, before exec.
+    unsafe {
+        cmd.pre_exec(|| {
+            libc::close(0);
+            Ok(())
+        });
+    }
+    let output = cmd.output().expect("failed to run cksum");
+    assert!(
+        !output.status.success(),
+        "expected failure on closed stdin, got {:?}",
+        output.status
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Bad file descriptor"),
+        "stderr={stderr:?}"
+    );
+    assert!(
+        stderr.contains("standard input"),
+        "stderr={stderr:?}"
+    );
+}
+
 #[test]
 fn test_stdin_with_dash_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
