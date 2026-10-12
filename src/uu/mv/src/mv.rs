@@ -1057,7 +1057,9 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
         target_os = "netbsd"
     ))]
     {
-        let _ = fsxattr::copy_xattrs_ignore_unsupported(from, to);
+        if let Ok(failed) = fsxattr::copy_xattrs_ignore_unsupported(from, to) {
+            show_xattr_failures(failed);
+        }
     }
     let _ = preserve_ownership(from, to);
     fs::remove_file(from)
@@ -1390,7 +1392,9 @@ fn copy_file_with_hardlinks_helper(
             target_os = "netbsd"
         ))]
         {
-            let _ = fsxattr::copy_xattrs_ignore_unsupported(from, to);
+            if let Ok(failed) = fsxattr::copy_xattrs_ignore_unsupported(from, to) {
+                show_xattr_failures(failed);
+            }
         }
         // Preserve ownership (uid/gid) from the source
         let _ = preserve_ownership(from, to);
@@ -1461,7 +1465,9 @@ fn rename_file_fallback(
             target_os = "netbsd"
         ))]
         {
-            let _ = fsxattr::copy_xattrs_fd_ignore_unsupported(&src_file, &dst_file);
+            if let Ok(failed) = fsxattr::copy_xattrs_fd_ignore_unsupported(&src_file, &dst_file) {
+                show_xattr_failures(failed);
+            }
         }
 
         // chown before chmod: chown(2) clears setuid/setgid for non-root,
@@ -1489,6 +1495,31 @@ fn rename_file_fallback(
     fs::remove_file(from)
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
     Ok(())
+}
+
+/// Report each xattr that a cross-device move could not copy. Like GNU, these
+/// are only warnings: the move itself still succeeds.
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "android",
+    target_os = "netbsd"
+))]
+fn show_xattr_failures(failed: Vec<(OsString, io::Error)>) {
+    use uucore::error::strip_errno;
+    use uucore::show_error;
+
+    for (name, err) in failed {
+        show_error!(
+            "{}",
+            translate!(
+                "mv-error-setting-attribute",
+                "name" => name.quote(),
+                "err" => strip_errno(&err)
+            )
+        );
+    }
 }
 
 /// Preserve ownership (uid/gid) from source to destination.

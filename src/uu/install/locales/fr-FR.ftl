@@ -13,7 +13,7 @@ install-help-owner = définir la propriété (super-utilisateur uniquement)
 install-help-preserve-timestamps = appliquer les temps d'accès/modification des fichiers SOURCE aux fichiers de destination correspondants
 install-help-strip = supprimer les tables de symboles
 install-help-strip-program = programme utilisé pour supprimer les binaires
-install-help-target-directory = déplacer tous les arguments SOURCE dans RÉPERTOIRE
+install-help-target-directory = copier tous les arguments SOURCE dans RÉPERTOIRE
 install-help-no-target-directory = traiter DEST comme un fichier normal
 install-help-verbose = expliquer ce qui est fait
 install-help-preserve-context = préserver le contexte de sécurité
@@ -39,6 +39,7 @@ install-error-invalid-user = utilisateur invalide : { $user }
 install-error-invalid-group = groupe invalide : { $group }
 install-error-omitting-directory = omission du répertoire { $path }
 install-error-not-a-directory = échec de l'accès à { $path } : N'est pas un répertoire
+install-error-target-dir-access = échec de l'accès à { $path } : { $error }
 install-error-existing-file-not-directory = impossible de créer le répertoire { $path } : Le fichier existe
 install-error-override-directory-failed = impossible d'écraser le répertoire { $dir } avec un non-répertoire { $file }
 install-error-same-file = { $file1 } et { $file2 } sont le même fichier
@@ -49,7 +50,7 @@ install-error-mutually-exclusive-target = Les options --target-directory et --no
 install-error-mutually-exclusive-compare-strip = Les options --compare et --strip sont mutuellement exclusives
 install-error-missing-file-operand = opérande de fichier manquant
 install-error-missing-destination-operand = opérande de fichier de destination manquant après { $path }
-install-error-failed-to-remove = Échec de la suppression du fichier existant { $path }. Erreur : { $error }
+install-error-failed-to-remove = Échec de la suppression du fichier existant { $path }. { $error }
 install-error-will-not-overwrite-just-created = n'écrasera pas le fichier tout juste créé { $dest } avec { $source }
 
 # Messages d'avertissement

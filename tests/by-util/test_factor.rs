@@ -1676,7 +1676,7 @@ fn succeeds_with_numbers_larger_than_u256() {
 }
 
 // A 301-bit product of ten primes just above 2^30. This used to come back as
-// "Factorization incomplete. Remainders exists." because the Pollard's rho
+// "Factorization incomplete. Remainders exist." because the Pollard's rho
 // budget underneath was shared by the whole factorization rather than by each
 // cofactor, so everything past the fourth split was given up on.
 #[test]

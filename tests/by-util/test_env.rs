@@ -72,6 +72,19 @@ impl Drop for Target {
 }
 
 #[test]
+fn test_command_environment_uses_last_override() {
+    new_ucmd!()
+        .env("LC_ALL", "POSIX")
+        .env("UUTESTS_ENV_OVERRIDE", "first")
+        .env("UUTESTS_ENV_OVERRIDE", "last")
+        .succeeds()
+        .stdout_contains_line("LC_ALL=POSIX")
+        .stdout_does_not_contain("LC_ALL=C")
+        .stdout_contains_line("UUTESTS_ENV_OVERRIDE=last")
+        .stdout_does_not_contain("UUTESTS_ENV_OVERRIDE=first");
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(125);
 }
@@ -1870,6 +1883,23 @@ fn test_simulation_of_terminal_pty_pipes_into_data_and_sends_eot_automatically()
         format!("{message}\r\n")
     );
     std::assert_eq!(String::from_utf8_lossy(out.stderr()), "");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_simulation_of_terminal_not_inherited_by_other_commands() {
+    let scene = TestScenario::new("util");
+
+    let mut cmd = scene.ccmd("env");
+    cmd.args(&["sleep", "1"]);
+    cmd.terminal_simulation(true);
+    let mut child = cmd.run_no_wait();
+    scene
+        .ccmd("env")
+        .args(&["ls", "-l", "/proc/self/fd/"])
+        .succeeds()
+        .stdout_does_not_contain("/dev/ptmx");
+    child.kill();
 }
 
 #[test]

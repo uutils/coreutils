@@ -3,12 +3,32 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore tvos watchos visionos
+
+use cfg_aliases::cfg_aliases;
 use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+    cfg_aliases! {
+        // Directory open flags that grant search but not read access.
+        // tests/by-util/test_install.rs repeats the union of these targets.
+        has_o_path: { any(target_os = "linux", target_os = "android") },
+        has_o_search: { any(
+            target_os = "macos",
+            target_os = "ios",
+            target_os = "tvos",
+            target_os = "watchos",
+            target_os = "visionos",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "illumos",
+            target_os = "solaris"
+        ) },
+    }
+
     let out_dir = env::var("OUT_DIR")?;
 
     let mut embedded_file = File::create(Path::new(&out_dir).join("embedded_locales.rs"))?;

@@ -655,6 +655,24 @@ fn test_check_sha2_tagged_missing_hint() {
 }
 
 #[test]
+fn test_check_tagged_leading_whitespace() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    at.touch("c");
+
+    let digest = "d41d8cd98f00b204e9800998ecf8427e";
+
+    ucmd.arg("-c")
+        .pipe_in(format!(
+            " \tMD5 (a) = {digest}\n\x0cMD5 (b) = {digest}\n\rMD5 (c) = {digest}\n"
+        ))
+        .succeeds()
+        .stdout_is("a: OK\n")
+        .stderr_contains("WARNING: 2 lines are improperly formatted");
+}
+
+#[test]
 fn test_check_tagged_missing_algo() {
     // When checking tagged lines, if the algorithm is missing, print an "improperly
     // formatted" message rather than panic.
@@ -670,6 +688,84 @@ fn test_check_tagged_missing_algo() {
         .pipe_in(format!("{invalid1}\n{invalid2}\n{invalid3}"))
         .fails()
         .stderr_contains("no properly formatted checksum lines found");
+}
+
+#[test]
+fn test_check_tagged_blanks_around_equal_sign() {
+    // Like GNU, accept any blanks, or none, around the '=' of a tagged line,
+    // with or without a space before the '('.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    let digest = "d41d8cd98f00b204e9800998ecf8427e";
+    let lines = [
+        format!("MD5(f) = {digest}"),
+        format!("MD5 (f)= {digest}"),
+        format!("MD5 (f) ={digest}"),
+        format!("MD5 (f)={digest}"),
+        format!("MD5 (f)\t=\t{digest}"),
+        format!("MD5 (f)  =  {digest}"),
+    ];
+
+    ucmd.arg("-c")
+        .pipe_in(lines.join("\n"))
+        .succeeds()
+        .stdout_only("f: OK\n".repeat(lines.len()));
+}
+
+#[test]
+fn test_check_tagged_legacy_algo() {
+    // The legacy algorithms have no tagged format. Report a line that uses one
+    // of their tags as improperly formatted, and do not check the digest.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello\n");
+    // The digests of "f", in decimal and in hexadecimal.
+    let lines = [
+        "CRC (f) = 3015617425",
+        "CRC (f) = b3beab91",
+        "CRC32B (f) = 909783072",
+        "CRC32B (f) = 363a3020",
+        "BSD (f) = 9073",
+        "SYSV (f) = 021e",
+    ];
+    at.write("CHECKSUMS", &(lines.join("\n") + "\n"));
+
+    ucmd.arg("--check")
+        .arg("--warn")
+        .arg("CHECKSUMS")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is(
+            "cksum: CHECKSUMS: 1: improperly formatted CRC checksum line\n\
+             cksum: CHECKSUMS: 2: improperly formatted CRC checksum line\n\
+             cksum: CHECKSUMS: 3: improperly formatted CRC checksum line\n\
+             cksum: CHECKSUMS: 4: improperly formatted CRC checksum line\n\
+             cksum: CHECKSUMS: 5: improperly formatted CRC checksum line\n\
+             cksum: CHECKSUMS: 6: improperly formatted CRC checksum line\n\
+             cksum: CHECKSUMS: no properly formatted checksum lines found\n",
+        );
+}
+
+#[test]
+fn test_check_tagged_legacy_algo_keeps_warning_algo() {
+    // A line with a legacy tag is improperly formatted. The warning keeps the
+    // algorithm of the last valid tag.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    at.write(
+        "CHECKSUMS",
+        "MD5 (f) = d41d8cd98f00b204e9800998ecf8427e\n\
+         CRC (f) = ffffffff\n",
+    );
+
+    ucmd.arg("--check")
+        .arg("--warn")
+        .arg("CHECKSUMS")
+        .succeeds()
+        .stdout_is("f: OK\n")
+        .stderr_is(
+            "cksum: CHECKSUMS: 2: improperly formatted MD5 checksum line\n\
+             cksum: WARNING: 1 line is improperly formatted\n",
+        );
 }
 
 #[rstest]
@@ -1574,6 +1670,85 @@ fn test_check_md5_format() {
         .succeeds()
         .stdout_contains("empty: OK")
         .stdout_contains("not-empty: OK");
+}
+
+#[test]
+fn test_check_untagged_blanks() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("a");
+    let digest = "d41d8cd98f00b204e9800998ecf8427e";
+
+    for line in [
+        format!(" {digest}  a"),
+        format!("{digest}\t*a"),
+        format!("{digest}\ta"),
+    ] {
+        scene
+            .ucmd()
+            .args(&["-a", "md5", "--check"])
+            .pipe_in(format!("{line}\n"))
+            .succeeds()
+            .stdout_only("a: OK\n");
+    }
+}
+
+#[test]
+fn test_check_untagged_flag_without_file_name() {
+    // Once the first line sets the two-space format, such a line is improperly
+    // formatted rather than a check of the file "".
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    let digest = "d41d8cd98f00b204e9800998ecf8427e";
+
+    ucmd.arg("-a")
+        .arg("md5")
+        .arg("--check")
+        .pipe_in(format!("{digest}  a\n{digest}  \n{digest} *\n"))
+        .succeeds()
+        .stdout_is("a: OK\n")
+        .stderr_contains("WARNING: 2 lines are improperly formatted");
+}
+
+#[test]
+#[cfg(all(not(windows), feature = "b2sum"))]
+fn test_check_untagged_without_file_name() {
+    let scene = TestScenario::new(util_name!());
+    let digest = "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce";
+
+    for (util, args) in [("cksum", vec!["-a", "blake2b"]), ("b2sum", vec![])] {
+        for line in [format!("{digest} "), format!(" {digest}\t")] {
+            scene
+                .ccmd(util)
+                .args(&args)
+                .arg("--check")
+                .pipe_in(format!("{line}\n"))
+                .fails_with_code(1)
+                .stdout_is("'': FAILED open or read\n")
+                .stderr_is(format!(
+                    "{util}: '': No such file or directory\n\
+                    {util}: WARNING: 1 listed file could not be read\n"
+                ));
+        }
+    }
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_check_untagged_blank_or_star_as_file_name() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write(" ", "a\n");
+    at.write("*", "a\n");
+    let digest = "60b725f10c9c85c70d97880dfe8191b3";
+
+    for (line, name) in [(format!("{digest}  "), " "), (format!(" {digest}\t*"), "*")] {
+        scene
+            .ucmd()
+            .args(&["-a", "md5", "--check"])
+            .pipe_in(format!("{line}\n"))
+            .succeeds()
+            .stdout_only(format!("'{name}': OK\n"));
+    }
 }
 
 // The digest in check mode must be computed over the raw bytes of the file:
@@ -2802,11 +2977,50 @@ mod cksum_check_mode {
     }
 
     #[test]
+    fn test_status_with_directory() {
+        let scene = make_scene();
+        scene.fixtures.mkdir("dir");
+        scene
+            .fixtures
+            .write("CHECKSUMS2", &format!("SM3 (dir) = {INVALID_SUM}\n"));
+
+        #[cfg(not(windows))]
+        let err_msg = "cksum: dir: Is a directory\n";
+        #[cfg(windows)]
+        let err_msg = "cksum: dir: Permission denied\n";
+
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("--status")
+            .arg("CHECKSUMS2")
+            .fails_with_code(1)
+            .stderr_only(err_msg);
+    }
+
+    #[test]
     fn test_check_with_non_existing_file() {
         let scene = make_scene();
         scene
             .fixtures
             .write("CHECKSUMS2", &format!("SM3 (input2) = {INVALID_SUM}\n"));
+
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("--status")
+            .arg("CHECKSUMS2")
+            .fails_with_code(1)
+            .stderr_only("cksum: input2: No such file or directory\n");
+
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("--quiet")
+            .arg("CHECKSUMS2")
+            .fails_with_code(1)
+            .stdout_contains("input2: FAILED open or read")
+            .stderr_contains("input2: No such file or directory");
 
         scene
             .ucmd()
@@ -2850,6 +3064,28 @@ mod cksum_check_mode {
             .fails()
             .stderr_contains("CHECKSUMS: 6: improperly formatted SM3 checksum line")
             .stderr_contains("CHECKSUMS: 9: improperly formatted BLAKE2b checksum line");
+    }
+
+    #[test]
+    fn test_warn_malformed_line_before_first_tagged_checksum() {
+        let ts = TestScenario::new(util_name!());
+        let at = &ts.fixtures;
+
+        at.touch("empty");
+        at.write(
+            "CHECKSUMS",
+            "invalid line\nMD5 (empty) = d41d8cd98f00b204e9800998ecf8427e\ninvalid line\n",
+        );
+
+        ts.ucmd()
+            .arg("--warn")
+            .arg("--check")
+            .arg("CHECKSUMS")
+            .succeeds()
+            .stdout_contains("empty: OK")
+            .stderr_contains("CHECKSUMS: 1: improperly formatted CRC checksum line")
+            .stderr_contains("CHECKSUMS: 3: improperly formatted MD5 checksum line")
+            .stderr_contains("WARNING: 2 lines are improperly formatted");
     }
 
     fn make_scene_with_checksum_missing() -> TestScenario {
@@ -3171,18 +3407,50 @@ mod debug_flag {
             .stderr_contains("pclmul");
     }
 
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[test]
+    fn test_debug_with_glibc_tunables() {
+        if is_x86_feature_detected!("avx2") {
+            for (tunables, expected) in [
+                ("glibc.cpu.hwcaps=-AVX2", "cksum: avx2 support not detected"), // correctly disabling AVX2
+                (
+                    "glibc.cpu.hwcaps=-avx2",
+                    "cksum: using avx2 hardware support",
+                ), // lowercase invalidates AVX2 disabling
+                (
+                    "glibc.cpu.hwcaps=-AVX2:glibc.cpu.hwcaps=-AVX512F",
+                    "cksum: using avx2 hardware support",
+                ), // last wins
+                (
+                    "glibc.cpu.hwcaps=-AVX2 ",
+                    "cksum: using avx2 hardware support",
+                ), // trailing spaces invalidate AVX2 disabling
+            ] {
+                new_ucmd!()
+                    .arg("--debug")
+                    .arg("lorem_ipsum.txt")
+                    .env("GLIBC_TUNABLES", tunables)
+                    .succeeds()
+                    .stderr_contains(expected);
+            }
+        }
+    }
+
     #[test]
     #[cfg(target_arch = "aarch64")]
     fn test_debug_flag_aarch64() {
+        // The vmull path needs PMULL. ASIMD alone is not enough.
+        let expected = if std::arch::is_aarch64_feature_detected!("pmull") {
+            "cksum: using vmull hardware support\n"
+        } else {
+            "cksum: vmull support not detected\n"
+        };
         new_ucmd!()
             .arg("--debug")
             .arg("lorem_ipsum.txt")
             .succeeds()
             .stdout_is_fixture("crc_single_file.expected")
-            .stderr_str_check(|stderr| {
-                stderr == "using vmull hardware support\n"
-                    || stderr == "vmull support not detected\n"
-            });
+            .stderr_is(expected);
     }
 
     #[test]

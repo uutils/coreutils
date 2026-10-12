@@ -1190,6 +1190,7 @@ fn uniq_basic_dedup_cases() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: locale database not visible")]
 fn test_stdin_w1_multibyte() {
     let input = "à\ná\n";
     new_ucmd!()

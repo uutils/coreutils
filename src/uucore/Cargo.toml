@@ -84,6 +84,9 @@ fluent-syntax = { workspace = true }
 unic-langid = { workspace = true }
 thiserror = { workspace = true }
 
+[build-dependencies]
+cfg_aliases = { workspace = true }
+
 [dev-dependencies]
 tempfile = { workspace = true }
 
@@ -197,7 +200,7 @@ quoting-style = ["i18n-common"]
 ranges = []
 ringbuffer = []
 safe-copy = ["rustix/fs"]
-safe-traversal = ["libc", "nix/fs", "nix/dir", "nix/user"]
+safe-traversal = ["libc", "nix/fs", "nix/dir", "nix/user", "rustix/fs"]
 selinux = ["dep:selinux"]
 smack = ["xattr"]
 signals = ["nix/fs", "nix/signal", "nix/poll"]

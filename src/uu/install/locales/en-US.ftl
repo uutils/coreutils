@@ -13,7 +13,7 @@ install-help-owner = set ownership (super-user only)
 install-help-preserve-timestamps = apply access/modification times of SOURCE files to corresponding destination files
 install-help-strip = strip symbol tables
 install-help-strip-program = program used to strip binaries
-install-help-target-directory = move all SOURCE arguments into DIRECTORY
+install-help-target-directory = copy all SOURCE arguments into DIRECTORY
 install-help-no-target-directory = treat DEST as a normal file
 install-help-verbose = explain what is being done
 install-help-preserve-context = preserve security context
@@ -39,6 +39,7 @@ install-error-invalid-user = invalid user: { $user }
 install-error-invalid-group = invalid group: { $group }
 install-error-omitting-directory = omitting directory { $path }
 install-error-not-a-directory = failed to access { $path }: Not a directory
+install-error-target-dir-access = failed to access { $path }: { $error }
 install-error-existing-file-not-directory = cannot create directory { $path }: File exists
 install-error-override-directory-failed = cannot overwrite directory { $dir } with non-directory { $file }
 install-error-same-file = { $file1 } and { $file2 } are the same file
@@ -50,7 +51,7 @@ install-error-mutually-exclusive-target = Options --target-directory and --no-ta
 install-error-mutually-exclusive-compare-strip = Options --compare and --strip are mutually exclusive
 install-error-missing-file-operand = missing file operand
 install-error-missing-destination-operand = missing destination file operand after { $path }
-install-error-failed-to-remove = Failed to remove existing file { $path }. Error: { $error }
+install-error-failed-to-remove = Failed to remove existing file { $path }. { $error }
 install-error-will-not-overwrite-just-created = will not overwrite just-created { $dest } with { $source }
 
 # Warning messages

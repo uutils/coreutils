@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore lowre punct aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase fooclass Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer mnop mnopq pqopq pqqqq ppqqrr pqrr ppqr ppqqpp
+// spell-checker:ignore lowre punct aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase fooclass Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer mnop mnopq pqopq pqqqq ppqqrr pqrr ppqr ppqqpp abcx xxaa aazz
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -154,6 +154,87 @@ fn test_delete_complement_2() {
         .pipe_in("Phone: 01234 567890")
         .succeeds()
         .stdout_is("01234567890");
+}
+
+#[test]
+fn test_delete_one_char_large_input() {
+    // Longer than one read, with no, few, many and only matches. `few` is
+    // sparse enough for the path that copies the runs between matches.
+    let none = vec![b'x'; 40_000];
+    let few = [[b'x'; 999].as_slice(), b","].concat().repeat(40);
+    let many = b"a,".repeat(20_000);
+    let only = vec![b','; 40_000];
+    for input in [none, few, many, only] {
+        let expected: Vec<u8> = input.iter().copied().filter(|&b| b != b',').collect();
+        new_ucmd!()
+            .args(&["-d", ","])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is_bytes(expected);
+    }
+}
+
+#[test]
+fn test_delete_set_large_input() {
+    let input: Vec<u8> = (0..=u8::MAX).cycle().take(40_000).collect();
+
+    let expected: Vec<u8> = input
+        .iter()
+        .copied()
+        .filter(|&b| !matches!(b, 0 | b'a'..=b'f' | u8::MAX))
+        .collect();
+    new_ucmd!()
+        .args(&["-d", "\\000a-f\\377"])
+        .pipe_in(input.clone())
+        .succeeds()
+        .stdout_is_bytes(expected);
+
+    let expected: Vec<u8> = input
+        .iter()
+        .copied()
+        .filter(u8::is_ascii_lowercase)
+        .collect();
+    new_ucmd!()
+        .args(&["-cd", "a-z"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(expected);
+}
+
+#[test]
+fn test_delete_set_mostly_deleted() {
+    // Almost everything deleted, then half, then almost everything again.
+    let few_kept = [[b'a'; 99].as_slice(), b"\n"].concat().repeat(100);
+    let half_kept = b"a\n".repeat(5_000);
+    let input = [few_kept.as_slice(), &half_kept, &few_kept].concat();
+    let expected: Vec<u8> = input
+        .iter()
+        .copied()
+        .filter(|b| !b.is_ascii_lowercase())
+        .collect();
+    new_ucmd!()
+        .args(&["-d", "a-z"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(expected);
+}
+
+#[test]
+fn test_translate_one_char_large_input() {
+    // Longer than one read, with no and some matches.
+    let none = vec![b'x'; 40_000];
+    let some = b"a,".repeat(20_000);
+    for input in [none, some] {
+        let expected: Vec<u8> = input
+            .iter()
+            .map(|&b| if b == b',' { b';' } else { b })
+            .collect();
+        new_ucmd!()
+            .args(&[",", ";"])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is_bytes(expected);
+    }
 }
 
 #[test]
@@ -372,6 +453,38 @@ fn test_truncate_multi() {
         .pipe_in("abcde")
         .succeeds()
         .stdout_is("xycde");
+}
+
+#[test]
+fn test_ascii_flag() {
+    new_ucmd!()
+        .args(&["-A", "k-o", "K-O"])
+        .pipe_in("monkey")
+        .succeeds()
+        .stdout_is("MONKey");
+
+    new_ucmd!()
+        .args(&["-AA", "-sAd", "[:digit:]", "q"])
+        .pipe_in("qq7q8qqr")
+        .succeeds()
+        .stdout_is("qr");
+}
+
+#[test]
+fn test_ascii_flag_works_on_bytes() {
+    // 0xd6 is an upper case letter in Latin-1, but not in ASCII.
+    new_ucmd!()
+        .args(&["-A", "[:upper:]", "[:lower:]"])
+        .pipe_in([b'T', 0xd6, b'P'])
+        .succeeds()
+        .stdout_is_bytes([b't', 0xd6, b'p']);
+
+    // The complement covers every byte value.
+    new_ucmd!()
+        .args(&["-Acd", "a-z"])
+        .pipe_in([b'w', 0xd6, b'k', 0xff])
+        .succeeds()
+        .stdout_is_bytes(*b"wk");
 }
 
 #[test]
@@ -1686,11 +1799,60 @@ fn test_failed_write_is_reported() {
 }
 
 #[test]
+fn test_unbuffered_flag() {
+    new_ucmd!()
+        .args(&["-u", "a-z", "A-Z"])
+        .pipe_in("hello\n")
+        .succeeds()
+        .stdout_only("HELLO\n");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no pipe support")]
+fn test_unbuffered_partial_line() {
+    // With -u, a chunk without a trailing newline must come out before more
+    // input arrives, as in `tail -f log | tr -u a-z A-Z | consumer`.
+    //
+    // Run in a separate thread so that the test fails via timeout rather
+    // than hanging if tr holds the output back.
+    let handle = std::thread::spawn(|| {
+        for (args, out1, out2) in [
+            (&["-u", "a-z", "A-Z"][..], "ABC", "DEF\nXY"),
+            (&["-u", "-d", "e"][..], "abc", "df\nxy"),
+            (&["-u", "-s", "a-z"][..], "abc", "def\nxy"),
+        ] {
+            let mut child = new_ucmd!()
+                .args(args)
+                .set_stdin(std::process::Stdio::piped())
+                .set_stdout(std::process::Stdio::piped())
+                .run_no_wait();
+            child.write_in(b"abc");
+            assert_eq!(child.stdout_exact_bytes(out1.len()), out1.as_bytes());
+            child.write_in(b"def\nxy");
+            assert_eq!(child.stdout_exact_bytes(out2.len()), out2.as_bytes());
+            child.wait().unwrap().success();
+        }
+    });
+
+    for _ in 0..500 {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        if handle.is_finished() {
+            break;
+        }
+    }
+
+    assert!(handle.is_finished(), "tr -u held back a partial line");
+    handle.join().unwrap();
+}
+
+#[test]
 #[cfg_attr(wasi_runner, ignore = "WASI: no pipe/signal support")]
 fn test_broken_pipe_no_error() {
+    // More than a pipe buffer, so that the output blocks until the reader is gone.
     new_ucmd!()
         .args(&["e", "a"])
-        .pipe_in("hello".repeat(100))
+        .pipe_in("hello".repeat(100_000))
+        .ignore_stdin_write_error()
         .run_stdout_starts_with(b"")
         .fails_silently();
 }
@@ -1874,5 +2036,25 @@ string2 must map all characters in the domain to one
             .args(&["w[:lowre:]w", "x"])
             .fails_with_code(1)
             .stderr_only("tr: invalid character class 'lowre'\n");
+    }
+
+    #[test]
+    fn test_repeat_hyphen() {
+        new_ucmd!()
+            .args(&["-s", "[:blank:]", "[-*]"])
+            .pipe_in("Base Z\n")
+            .succeeds()
+            .stdout_only("Base-Z\n");
+
+        new_ucmd!()
+            .args(&["-s", "[:blank:]", "[-*5]"])
+            .pipe_in("Base Z\n")
+            .succeeds()
+            .stdout_only("Base-Z\n");
+
+        new_ucmd!()
+            .args(&["[-*]", "a"])
+            .fails_with_code(1)
+            .stderr_only("tr: the [c*] repeat construct may not appear in string1\n");
     }
 }
