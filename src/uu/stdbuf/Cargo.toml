@@ -28,6 +28,10 @@ uucore = { workspace = true, features = ["parser-size"] }
 [target.'cfg(unix)'.dependencies]
 libstdbuf = { package = "uu_stdbuf_libstdbuf", version = "0.13.0", path = "src/libstdbuf" }
 
+# memfd_create for embedding libstdbuf without a temp file (Linux).
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
+
 # "feat_external_libstdbuf": use an external libstdbuf.so for stdbuf instead of embedding it into
 # the stdbuf binary.
 # There are 2 use-cases:
