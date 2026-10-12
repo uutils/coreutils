@@ -17,7 +17,7 @@ fn test_invalid_arg() {
 
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore)]
+#[cfg(not(wasi_runner))]
 fn test_getrandom_fail() {
     // getrandom is missing from legacy kernel
     use std::process::Command;

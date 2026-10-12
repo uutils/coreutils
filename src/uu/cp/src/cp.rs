@@ -117,6 +117,10 @@ pub enum CpError {
 
     #[error("{}", translate!("cp-error-not-a-directory", "path" => .0.quote()))]
     NotADirectory(PathBuf),
+
+    /// A directory would have to replace something that is not one.
+    #[error("{}", translate!("cp-error-cannot-overwrite-non-directory-with-directory", "dest" => .0.quote(), "source" => .1.quote()))]
+    CannotOverwriteNonDirectory(PathBuf, PathBuf),
 }
 
 // Manual impl for &str
@@ -2465,7 +2469,7 @@ pub(crate) fn set_parent_dirs_attributes(
     result
 }
 
-fn print_verbose_output(
+pub(crate) fn print_verbose_output(
     parents: bool,
     progress_bar: Option<&ProgressBar>,
     source: &Path,

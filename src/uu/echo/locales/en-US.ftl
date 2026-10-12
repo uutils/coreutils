@@ -4,7 +4,7 @@ echo-after-help = Echo the STRING(s) to standard output.
 
   If -e is in effect, the following sequences are recognized:
 
-    - \ backslash
+    - \\ backslash
     - \a alert (BEL)
     - \b backspace
     - \c produce no further output

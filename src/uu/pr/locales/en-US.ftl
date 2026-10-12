@@ -53,7 +53,7 @@ pr-help-page-width =
                   truncate lines, except -J option is set, no interference
                   with -S or -s
 pr-help-across =
-  Modify the effect of the - column option so that the columns are filled
+  Modify the effect of the -COLUMN option so that the columns are filled
                   across the page in a  round-robin  order (for example, when column is 2, the
                   first input line heads column 1, the second heads column 2, the third is the
                   second line in column 1, and so on).

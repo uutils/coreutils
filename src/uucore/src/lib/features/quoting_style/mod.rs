@@ -315,6 +315,20 @@ pub fn locale_aware_escape_name(name: &OsStr, style: QuotingStyle) -> OsString {
     escape_name(name, style, i18n::get_ctype_encoding())
 }
 
+/// Escape control characters with C-style escapes, leaving other characters unchanged.
+#[cfg(any(all(not(windows), feature = "mode"), test))]
+pub(crate) fn escape_control_chars(text: &str) -> String {
+    let mut escaped = String::with_capacity(text.len());
+    for character in text.chars() {
+        if character.is_control() {
+            escaped.extend(EscapedChar::new_c(character, None, false));
+        } else {
+            escaped.push(character);
+        }
+    }
+    escaped
+}
+
 /// Shorthand function for [`locale_aware_escape_name`]
 /// Useful for quoting filenames in error messages.
 #[inline(always)]
@@ -351,7 +365,7 @@ pub fn locale_aware_escape_dir_name(name: &OsStr, style: QuotingStyle) -> OsStri
 mod tests {
     use crate::{
         i18n::UEncoding,
-        quoting_style::{QuotingStyle, escape_name_inner},
+        quoting_style::{QuotingStyle, escape_control_chars, escape_name_inner},
     };
 
     // spell-checker:ignore (tests/words) one\'two one'two
@@ -395,6 +409,14 @@ mod tests {
     fn check_names_raw_both(name: &[u8], map: &[(&[u8], &str)]) {
         check_names_encoding_raw(UEncoding::Utf8, name, map);
         check_names_encoding_raw(UEncoding::Ascii, name, map);
+    }
+
+    #[test]
+    fn test_escape_control_chars_preserves_other_characters() {
+        assert_eq!(
+            escape_control_chars("a b\\c'\x01\n\t"),
+            "a b\\c'\\001\\n\\t"
+        );
     }
 
     #[test]
