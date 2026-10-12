@@ -68,7 +68,7 @@ static NO_STDIN_MEANINGLESS: &str = "Setting this flag has no effect if there is
 static END_OF_TRANSMISSION_SEQUENCE: &[u8] = b"\n\x04";
 
 static TESTS_BINARY_PATH: OnceLock<PathBuf> = OnceLock::new();
-/// This function needs the env variable UUTESTS_BINARY_PATH
+/// This function needs the env variable `UUTESTS_BINARY_PATH`
 /// which will very probably be env!("`CARGO_BIN_EXE_<program>`")
 /// because here, we are in a crate but we need the name of the final binary
 pub fn get_tests_binary() -> &'static str {
@@ -558,7 +558,7 @@ impl CmdResult {
     /// but you might find yourself using this function if
     /// 1.  you can not know exactly what stderr will be or
     /// 2.  you know that stderr will also be empty
-    ///     new_ucmd!()
+    ///     `new_ucmd!()`
     ///
     /// # Examples
     ///
@@ -2996,7 +2996,7 @@ impl UChild {
 
     /// Close the child process stdout.
     ///
-    /// Note this will have no effect if the output was captured with CapturedOutput which is the
+    /// Note this will have no effect if the output was captured with `CapturedOutput` which is the
     /// default if [`UCommand::set_stdout`] wasn't called.
     pub fn close_stdout(&mut self) -> &mut Self {
         self.raw.stdout.take();
@@ -3005,7 +3005,7 @@ impl UChild {
 
     /// Close the child process stderr.
     ///
-    /// Note this will have no effect if the output was captured with CapturedOutput which is the
+    /// Note this will have no effect if the output was captured with `CapturedOutput` which is the
     /// default if [`UCommand::set_stderr`] wasn't called.
     pub fn close_stderr(&mut self) -> &mut Self {
         self.raw.stderr.take();

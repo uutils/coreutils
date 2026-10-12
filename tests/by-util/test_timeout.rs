@@ -491,7 +491,7 @@ fn test_windows_kills_process_tree() {
     );
 }
 
-/// `-s INT` is delivered as a CTRL_BREAK to the child's group (or termination
+/// `-s INT` is delivered as a `CTRL_BREAK` to the child's group (or termination
 /// without a console); either way the child dies and timeout reports 124.
 #[test]
 #[cfg(windows)]

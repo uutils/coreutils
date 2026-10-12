@@ -430,7 +430,7 @@ enum Disposition {
     Probe,
     /// Discarded-by-default and stop signals: accepted, nothing to do.
     Ignore,
-    /// `INT`/`QUIT`: deliverable to a console process group as CTRL_BREAK.
+    /// `INT`/`QUIT`: deliverable to a console process group as `CTRL_BREAK`.
     Interrupt,
     Terminate,
 }
