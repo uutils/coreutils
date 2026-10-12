@@ -863,7 +863,7 @@ fn test_operand_count() {
 }
 
 #[test]
-fn format_list_in_separate_operands() {
+fn test_format_list_in_separate_operands() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
@@ -876,17 +876,67 @@ fn format_list_in_separate_operands() {
         .succeeds()
         .stdout_only("1 a x 1 d u\n2 b y 2 e v\n");
 
+    // An operand that follows the -o fields is one too, even after a file.
+    ts.ucmd()
+        .args(&["a", "-o", "1.1", "1.2", "b"])
+        .succeeds()
+        .stdout_only("1 a\n2 b\n");
+
     // Only as many operands as needed to leave two files are taken as fields.
+    #[cfg(not(windows))]
+    let missing = "join: 2.2: No such file or directory\n";
+    #[cfg(windows)]
+    let missing = "join: '2.2': No such file or directory\n";
     ts.ucmd()
         .args(&["-o", "1.1", "1.2", "2.2", "a"])
         .fails_with_code(1)
-        .no_stdout()
-        .stderr_contains("2.2")
-        .stderr_contains("No such file or directory");
+        .stderr_only(missing);
 
-    // An operand that is not a field list is still an extra operand.
+    // The operand taken as fields must be a field list, as with GNU join.
     ts.ucmd()
         .args(&["-o", "1.1", "a", "b", "c"])
         .fails_with_code(1)
-        .stderr_contains("join: extra operand 'c'\n");
+        .stderr_only("join: invalid file number in field spec: 'a'\n");
+
+    // An operand that doesn't follow -o is still an extra operand.
+    ts.ucmd()
+        .args(&["-o", "auto", "1.1", "a", "b"])
+        .fails_with_code(1)
+        .stderr_contains("join: extra operand 'b'\n");
+}
+
+#[test]
+fn test_format_list_operands_around_other_options() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("a", "1,a\n2,b\n");
+    at.write("b", "1,d\n2,e\n");
+
+    // The field operand only has to follow -o, not to come right before the files.
+    ts.ucmd()
+        .args(&["-o", "1.1", "1.2", "-t", ",", "a", "b"])
+        .succeeds()
+        .stdout_only("1,a\n2,b\n");
+
+    // `1.2` comes before -o, so the operand taken as fields is `a`.
+    ts.ucmd()
+        .args(&["-t", ",", "1.2", "-o", "1.1", "a", "b"])
+        .fails_with_code(1)
+        .stderr_only("join: invalid file number in field spec: 'a'\n");
+}
+
+#[test]
+fn test_format_list_operand_order() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("a", "1 a\n2 b\n");
+    at.write("b", "1 d\n2 e\n");
+
+    // `2.2` is taken as fields when `b` comes, so before the later `-o 1.2`.
+    ts.ucmd()
+        .args(&["-o", "1.1", "2.2", "a", "b", "-o", "1.2"])
+        .succeeds()
+        .stdout_only("1 d a\n2 e b\n");
 }

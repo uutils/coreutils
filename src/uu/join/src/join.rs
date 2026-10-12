@@ -774,7 +774,7 @@ fn get_and_parse_field_number(matches: &clap::ArgMatches, key: &str) -> UResult<
 #[allow(clippy::field_reassign_with_default)]
 fn parse_settings(
     matches: &clap::ArgMatches,
-    operand_formats: Vec<(usize, Vec<Spec>)>,
+    formats: &[FieldList<'_>],
     diag_args: Option<&[OsString]>,
 ) -> UResult<Settings> {
     let keys = get_and_parse_field_number(matches, "j")?;
@@ -795,22 +795,28 @@ fn parse_settings(
     if let Some(value_os) = matches.get_one::<OsString>("t") {
         settings.separator = parse_separator(value_os)?;
     }
-    if let Some(formats) = matches.get_many::<String>("o") {
-        let formats: Vec<&String> = formats.collect();
+    if !formats.is_empty() {
         // GNU lets `-o` repeat and accumulates the fields. Auto mode applies only
         // when every value is exactly `auto`; otherwise each `auto` is ignored.
-        if formats.iter().all(|f| *f == "auto") && operand_formats.is_empty() {
+        if formats
+            .iter()
+            .all(|format| matches!(format, FieldList::Option(format) if *format == "auto"))
+        {
             settings.autoformat = true;
         } else {
             let mut specs = vec![];
-            let mut operand_formats = operand_formats.into_iter().peekable();
-            let indices = matches.indices_of("o").into_iter().flatten();
-            for (format, index) in formats.into_iter().zip(indices) {
-                // Field lists taken from the operands keep their place among the `-o` values.
-                while let Some((_, taken)) = operand_formats.next_if(|(i, _)| *i < index) {
-                    specs.extend(taken);
-                }
-                if format == "auto" {
+            for format in formats {
+                let format = match format {
+                    FieldList::Option(format) => *format,
+                    FieldList::Operand(list) => {
+                        let list = list.to_string_lossy();
+                        for (part, _) in uucore::diagnostics::list_items(&list, &[' ', ',', '\t']) {
+                            specs.push(Spec::parse(part)?);
+                        }
+                        continue;
+                    }
+                };
+                if *format == "auto" {
                     continue;
                 }
                 // `-o` has no long form.
@@ -832,7 +838,6 @@ fn parse_settings(
                     })?);
                 }
             }
-            specs.extend(operand_formats.flat_map(|(_, taken)| taken));
             settings.format = specs;
         }
     }
@@ -858,90 +863,101 @@ fn parse_settings(
     Ok(settings)
 }
 
-/// The two file operands, and the field lists taken from the operands as
-/// part of `-o`, each with the place at which it was taken.
-struct Operands<'a> {
-    file1: &'a OsString,
-    file2: &'a OsString,
-    formats: Vec<(usize, Vec<Spec>)>,
+/// A `-o` field list, given as the option's value or as an operand.
+enum FieldList<'a> {
+    Option(&'a String),
+    Operand(&'a OsString),
 }
 
-/// Like GNU join, when an operand comes on top of two pending ones right after
-/// `-o`, the oldest pending operand is taken as more of the `-o` field list if
-/// it is one, so that `join -o 1.1 2.2 file1 file2` works.
-fn split_operands(matches: &clap::ArgMatches) -> UResult<Operands<'_>> {
-    const OPERANDS: [&str; 3] = ["file1", "file2", "extra"];
+/// The two file operands, and the `-o` field lists in the order GNU join adds them.
+struct Operands<'a> {
+    files: UResult<(&'a OsString, &'a OsString)>,
+    formats: Vec<FieldList<'a>>,
+}
 
-    let mut operands: Vec<(usize, &OsString)> = OPERANDS
-        .iter()
-        .flat_map(|id| {
-            let indices = matches.indices_of(id).into_iter().flatten();
-            indices.zip(matches.get_many::<OsString>(id).into_iter().flatten())
-        })
-        .collect();
-    operands.sort_by_key(|(index, _)| *index);
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum OperandStatus {
+    MustBeOperand,
+    MightBeFieldList,
+}
 
-    let options: Vec<(usize, &str)> = matches
-        .ids()
-        .map(clap::Id::as_str)
-        .filter(|id| {
-            !OPERANDS.contains(id) && matches.value_source(id) == Some(ValueSource::CommandLine)
-        })
-        .flat_map(|id| {
-            let indices = matches.indices_of(id).into_iter().flatten();
-            indices.map(move |index| (index, id))
-        })
-        .collect();
-    let follows_o = |index: usize| {
-        options
-            .iter()
-            .filter(|(option_index, _)| *option_index < index)
-            .max_by_key(|(option_index, _)| *option_index)
-            .is_some_and(|(_, id)| *id == "o")
-    };
-
-    let mut names: Vec<&OsString> = Vec::with_capacity(2);
-    let mut formats = vec![];
-    for (index, name) in operands {
-        if names.len() == 2 {
-            match names[0].to_str().and_then(parse_field_list) {
-                Some(specs) if follows_o(index) => {
-                    formats.push((index, specs));
-                    names.remove(0);
-                }
-                _ => {
-                    return Err(UUsageError::new(
-                        1,
-                        translate!("join-error-extra-operand", "operand" => name.quote()),
-                    ));
-                }
-            }
-        }
-        names.push(name);
+/// Splits the operands like GNU join: an operand that directly follows a `-o`
+/// field list, or another such operand, might be more of that list. When a
+/// third operand comes, the older pending operand that might be a field list is
+/// taken as one, so that `join -o 1.1 2.2 file1 file2` works.
+fn split_operands(matches: &clap::ArgMatches) -> Operands<'_> {
+    enum Token<'a> {
+        Option(Option<&'a String>),
+        Operand(&'a OsString),
     }
 
-    match names[..] {
-        [file1, file2] => Ok(Operands {
-            file1,
-            file2,
-            formats,
-        }),
-        [file1] => Err(UUsageError::new(
+    let mut tokens: Vec<(usize, Token<'_>)> = vec![];
+    for id in matches.ids().map(clap::Id::as_str) {
+        if matches.value_source(id) != Some(ValueSource::CommandLine) {
+            continue;
+        }
+        let indices = matches.indices_of(id).into_iter().flatten();
+        match id {
+            "file1" | "file2" | "extra" => {
+                let names = matches.get_many::<OsString>(id).into_iter().flatten();
+                tokens.extend(indices.zip(names.map(Token::Operand)));
+            }
+            "o" => {
+                let formats = matches.get_many::<String>(id).into_iter().flatten();
+                tokens.extend(indices.zip(formats.map(|format| Token::Option(Some(format)))));
+            }
+            _ => tokens.extend(indices.map(|index| (index, Token::Option(None)))),
+        }
+    }
+    tokens.sort_by_key(|(index, _)| *index);
+
+    let mut status = OperandStatus::MustBeOperand;
+    let mut pending: Vec<(&OsString, OperandStatus)> = Vec::with_capacity(2);
+    let mut formats = vec![];
+    let mut error = None;
+    for (_, token) in tokens {
+        match token {
+            Token::Option(format) => {
+                status = OperandStatus::MustBeOperand;
+                if let Some(format) = format {
+                    formats.push(FieldList::Option(format));
+                    if format != "auto" {
+                        status = OperandStatus::MightBeFieldList;
+                    }
+                }
+            }
+            Token::Operand(name) => {
+                if pending.len() == 2 {
+                    let taken = usize::from(pending[0].1 == OperandStatus::MustBeOperand);
+                    if pending[taken].1 == OperandStatus::MustBeOperand {
+                        error.get_or_insert_with(|| {
+                            UUsageError::new(
+                                1,
+                                translate!("join-error-extra-operand", "operand" => name.quote()),
+                            )
+                        });
+                        continue;
+                    }
+                    formats.push(FieldList::Operand(pending.remove(taken).0));
+                }
+                pending.push((name, status));
+            }
+        }
+    }
+
+    let files = match (error, &pending[..]) {
+        (Some(error), _) => Err(error),
+        (None, [(file1, _), (file2, _)]) => Ok((*file1, *file2)),
+        (None, [(file1, _)]) => Err(UUsageError::new(
             1,
             translate!("join-error-missing-operand-after", "file" => file1.quote()),
         )),
-        _ => Err(UUsageError::new(
+        (None, _) => Err(UUsageError::new(
             1,
             translate!("join-error-missing-operand"),
         )),
-    }
-}
-
-/// Parses a `-o` field list, or returns `None` if `list` is not one.
-fn parse_field_list(list: &str) -> Option<Vec<Spec>> {
-    uucore::diagnostics::list_items(list, &[' ', ',', '\t'])
-        .map(|(item, _)| Spec::parse(item).ok())
-        .collect()
+    };
+    Operands { files, formats }
 }
 
 #[uucore::main]
@@ -958,14 +974,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     opts.alternate_handling = Some(AlternateHandling::Shifted);
     let _ = try_init_collator(opts);
 
-    // Operand errors are reported after option errors, as before.
-    let mut operands = split_operands(&matches);
-    let operand_formats = operands
-        .as_mut()
-        .map(|operands| std::mem::take(&mut operands.formats))
-        .unwrap_or_default();
-    let settings = parse_settings(&matches, operand_formats, diag_args.as_deref())?;
-    let Operands { file1, file2, .. } = operands?;
+    let operands = split_operands(&matches);
+    let settings = parse_settings(&matches, &operands.formats, diag_args.as_deref())?;
+    let (file1, file2) = operands.files?;
 
     if file1 == "-" && file2 == "-" {
         return Err(USimpleError::new(
