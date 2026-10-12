@@ -991,7 +991,7 @@ fn apply_setting(termios: &mut Termios, setting: &AllFlags) -> nix::Result<()> {
 fn apply_flag<T: TermiosFlag>(termios: &mut Termios, setting: &Flag<T>, val: bool) {
     // A grouped flag selects one value of a multi-bit field (e.g. `cs7` in CSIZE),
     // so the bits of the previously selected value have to be cleared first.
-    if let (Some(group), true) = (setting.group, val) {
+    if val && let Some(group) = setting.group {
         group.apply(termios, false);
     }
     setting.flag.apply(termios, val);
