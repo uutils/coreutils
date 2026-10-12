@@ -2,11 +2,14 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore tmpfs Pcent Itotal Iused Iavail Ipcent nosuid nodev
+
 //! The filesystem usage data table.
 //!
 //! A table ([`Table`]) comprises a header row ([`Header`]) and a
 //! collection of data rows ([`Row`]), one per filesystem.
+
 use unicode_width::UnicodeWidthStr;
 
 use crate::blocks::{SuffixType, to_magnitude_and_suffix};
@@ -56,7 +59,7 @@ pub(crate) struct Row {
     /// These are the bytes that are available to non-privileged processes.
     ///
     /// If the filesystem has zero bytes, then this is `None`.
-    #[cfg(target_os = "macos")]
+    #[cfg(target_vendor = "apple")]
     bytes_capacity: Option<f64>,
 
     /// Total number of inodes in the filesystem.
@@ -85,7 +88,7 @@ impl Row {
             bytes_used: BytesCell::default(),
             bytes_avail: BytesCell::default(),
             bytes_usage: None,
-            #[cfg(target_os = "macos")]
+            #[cfg(target_vendor = "apple")]
             bytes_capacity: None,
             inodes: 0,
             inodes_used: 0,
@@ -123,7 +126,7 @@ impl AddAssign for Row {
                 Some(bytes_used.bytes as f64 / (bytes_used.bytes + bytes_avail.bytes) as f64)
             },
             // TODO Figure out how to compute this.
-            #[cfg(target_os = "macos")]
+            #[cfg(target_vendor = "apple")]
             bytes_capacity: None,
             inodes,
             inodes_used,
@@ -174,7 +177,7 @@ impl Row {
                 // https://www.gnu.org/software/coreutils/faq/coreutils-faq.html#df-Size-and-Used-and-Available-do-not-add-up
                 Some(bused as f64 / (bused + bavail) as f64)
             },
-            #[cfg(target_os = "macos")]
+            #[cfg(target_vendor = "apple")]
             bytes_capacity: if bavail == 0 {
                 None
             } else {
@@ -379,7 +382,7 @@ impl<'a> RowFormatter<'a> {
                     .map_or(Cell::from_ascii_string("-"), Cell::from_os_string),
 
                 Column::Fstype => Cell::from_string(&self.row.fs_type),
-                #[cfg(target_os = "macos")]
+                #[cfg(target_vendor = "apple")]
                 Column::Capacity => Self::percentage(self.row.bytes_capacity),
             };
 
@@ -449,7 +452,7 @@ impl Header {
                 Column::Ipcent => translate!("df-header-iuse-percent"),
                 Column::File => translate!("df-header-file"),
                 Column::Fstype => translate!("df-header-type"),
-                #[cfg(target_os = "macos")]
+                #[cfg(target_vendor = "apple")]
                 Column::Capacity => translate!("df-header-capacity"),
             };
 
@@ -470,12 +473,7 @@ pub(crate) struct Table {
 impl Table {
     pub(crate) fn new(options: &Options, filesystems: Vec<Filesystem>) -> Self {
         let headers = Header::get_headers(options);
-        let mut widths: Vec<_> = options
-            .columns
-            .iter()
-            .enumerate()
-            .map(|(i, col)| col.min_width().max(headers[i].len()))
-            .collect();
+        let mut widths: Vec<_> = options.columns.iter().map(|col| col.min_width()).collect();
 
         let mut rows = vec![headers.iter().map(Cell::from_string).collect()];
 
@@ -506,7 +504,8 @@ impl Table {
             rows.push(total_row.get_cells());
         }
 
-        // extend the column widths (in chars) for long values in rows
+        // extend the column widths (in display columns) for long values in rows,
+        // the header row included
         // do it here, after total row was added to the list of rows
         for row in &rows {
             for (i, value) in row.iter().enumerate() {
@@ -618,7 +617,7 @@ mod tests {
                 bytes_avail: BytesCell::new(75, &BlockSize::Bytes(1)),
                 bytes_usage: Some(0.25),
 
-                #[cfg(target_os = "macos")]
+                #[cfg(target_vendor = "apple")]
                 bytes_capacity: Some(0.5),
 
                 inodes: 10,

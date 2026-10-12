@@ -27,3 +27,8 @@ csplit-warning-line-number-same-as-previous = line number '{ $line_number }' is 
 csplit-stream-not-utf8 = stream did not contain valid UTF-8
 csplit-read-error = read error
 csplit-write-split-not-created = trying to write to a split that was not created
+
+csplit-diag-help-pattern = a pattern is a line number N, /REGEXP/[OFFSET] or %REGEXP%[OFFSET], each optionally followed by { "{" }N{ "}" } or { "{" }*{ "}" }
+csplit-diag-help-line-number = line numbers start at 1 and must not decrease from one pattern to the next
+csplit-diag-help-digits = --digits takes a decimal number of digits, as in -n 3
+csplit-diag-help-suffix-format = a suffix format is one printf conversion for an unsigned integer, as in %03u

@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore bigdecimal prec cppreference bignums
+
 //! Utilities for formatting numbers in various formats
 
 use bigdecimal::BigDecimal;
@@ -73,7 +75,9 @@ pub enum NumberAlignment {
 
 pub struct SignedInt {
     pub width: usize,
-    pub precision: usize,
+    // None if no precision is given. Some(0) is an explicit `.0`, which prints
+    // no digits at all for a zero value.
+    pub precision: Option<usize>,
     pub positive_sign: PositiveSign,
     pub alignment: NumberAlignment,
 }
@@ -82,10 +86,10 @@ impl Formatter<i64> for SignedInt {
     fn fmt(&self, writer: impl Write, x: i64) -> std::io::Result<()> {
         // -i64::MIN is actually 1 larger than i64::MAX, so we need to cast to i128 first.
         let abs = (x as i128).abs();
-        let s = if self.precision > 0 {
-            zero_pad_to(&abs.to_string(), self.precision)
-        } else {
-            abs.to_string()
+        let s = match (self.precision, abs) {
+            (Some(0), 0) => String::new(),
+            (Some(precision), _) => zero_pad_to(&abs.to_string(), precision),
+            (None, _) => abs.to_string(),
         };
 
         let sign_indicator = get_sign_indicator(self.positive_sign, x.is_negative());
@@ -112,8 +116,8 @@ impl Formatter<i64> for SignedInt {
         };
 
         let precision = match precision {
-            Some(CanAsterisk::Fixed(x)) => x,
-            None => 0,
+            Some(CanAsterisk::Fixed(x)) => Some(x),
+            None => None,
             Some(CanAsterisk::Asterisk(_)) => return Err(FormatError::WrongSpecType),
         };
 
@@ -129,7 +133,9 @@ impl Formatter<i64> for SignedInt {
 pub struct UnsignedInt {
     pub variant: UnsignedIntVariant,
     pub width: usize,
-    pub precision: usize,
+    // None if no precision is given. Some(0) is an explicit `.0`, which prints
+    // no digits at all for a zero value.
+    pub precision: Option<usize>,
     pub alignment: NumberAlignment,
 }
 
@@ -149,11 +155,22 @@ impl Formatter<u64> for UnsignedInt {
         let prefix = match (x, self.variant) {
             (1.., UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::Yes)) => "0x",
             (1.., UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::Yes)) => "0X",
-            (1.., UnsignedIntVariant::Octal(Prefix::Yes)) if s.len() >= self.precision => "0",
+            (1.., UnsignedIntVariant::Octal(Prefix::Yes))
+                if s.len() >= self.precision.unwrap_or(0) =>
+            {
+                "0"
+            }
             _ => "",
         };
 
-        s = format!("{prefix}{}", zero_pad_to(&s, self.precision));
+        // `%#o` is the exception: the `#` flag still forces a single `0`.
+        s = match (self.precision, x) {
+            (Some(0), 0) => match self.variant {
+                UnsignedIntVariant::Octal(Prefix::Yes) => String::from("0"),
+                _ => String::new(),
+            },
+            (precision, _) => format!("{prefix}{}", zero_pad_to(&s, precision.unwrap_or(0))),
+        };
         write_output(writer, String::new(), s, self.width, self.alignment)
     }
 
@@ -196,8 +213,8 @@ impl Formatter<u64> for UnsignedInt {
         };
 
         let precision = match precision {
-            Some(CanAsterisk::Fixed(x)) => x,
-            None => 0,
+            Some(CanAsterisk::Fixed(x)) => Some(x),
+            None => None,
             Some(CanAsterisk::Asterisk(_)) => return Err(FormatError::WrongSpecType),
         };
 
@@ -263,21 +280,21 @@ impl Formatter<&ExtendedBigDecimal> for Float {
         // overflow/underflow, so this only guards values built without going
         // through it; treat them the same way a real float would (as +-inf/0)
         // rather than erroring.
-        if let ExtendedBigDecimal::BigDecimal(bd) = &abs {
-            if i32::try_from(bd.fractional_digit_count()).is_err() {
-                let overflow = bd.fractional_digit_count().is_negative();
-                let abs = if overflow {
-                    ExtendedBigDecimal::Infinity
-                } else {
-                    ExtendedBigDecimal::zero()
-                };
-                if alignment == NumberAlignment::RightZero {
-                    alignment = NumberAlignment::RightSpace;
-                }
-                let s = format_float_non_finite(&abs, self.case);
-                let sign_indicator = get_sign_indicator(self.positive_sign, negative);
-                return write_output(writer, sign_indicator, s, self.width, alignment);
+        if let ExtendedBigDecimal::BigDecimal(bd) = &abs
+            && i32::try_from(bd.fractional_digit_count()).is_err()
+        {
+            let overflow = bd.fractional_digit_count().is_negative();
+            let abs = if overflow {
+                ExtendedBigDecimal::Infinity
+            } else {
+                ExtendedBigDecimal::zero()
+            };
+            if alignment == NumberAlignment::RightZero {
+                alignment = NumberAlignment::RightSpace;
             }
+            let s = format_float_non_finite(&abs, self.case);
+            let sign_indicator = get_sign_indicator(self.positive_sign, negative);
+            return write_output(writer, sign_indicator, s, self.width, alignment);
         }
 
         let s = if let ExtendedBigDecimal::BigDecimal(bd) = abs {
@@ -370,6 +387,16 @@ fn zero_pad_to(s: &str, width: usize) -> String {
     }
 }
 
+/// Like `format!("{:.precision$}", 0.0)`, which panics past `u16::MAX`.
+fn zero_with_fraction_digits(precision: usize) -> String {
+    if precision == 0 {
+        return String::from("0");
+    }
+    let mut s = String::from("0.");
+    s.extend(std::iter::repeat_n('0', precision));
+    s
+}
+
 fn get_sign_indicator(sign: PositiveSign, negative: bool) -> String {
     if negative {
         String::from("-")
@@ -398,6 +425,27 @@ fn format_float_non_finite(e: &ExtendedBigDecimal, case: Case) -> String {
     s
 }
 
+/// Largest precision `format!` accepts; beyond it the formatter panics.
+const MAX_FMT_PRECISION: usize = u16::MAX as usize;
+
+/// `{bd:.0}` switches to exponent notation past 1000 zeros, so write integers
+/// out ourselves, up to `MAX_FORMAT_WIDTH` digits.
+fn integer_digits(bd: &BigDecimal) -> Option<String> {
+    let (bi, scale) = bd.as_bigint_and_scale();
+    if scale > 0 {
+        return None;
+    }
+    if bi.is_zero() {
+        return Some(String::from("0"));
+    }
+    let zeros = usize::try_from(scale.unsigned_abs())
+        .ok()
+        .filter(|zeros| *zeros <= super::MAX_FORMAT_WIDTH)?;
+    let mut s = bi.to_str_radix(10);
+    s.extend(std::iter::repeat_n('0', zeros));
+    Some(s)
+}
+
 fn format_float_decimal(
     bd: &BigDecimal,
     precision: Option<usize>,
@@ -406,14 +454,30 @@ fn format_float_decimal(
     debug_assert!(!bd.is_negative());
     let precision = precision.unwrap_or(6); // Default %f precision (C standard)
     if precision == 0 {
-        let (bi, scale) = bd.as_bigint_and_scale();
-        if scale == 0 && force_decimal != ForceDecimal::Yes {
-            // Optimization when printing integers.
-            return bi.to_str_radix(10);
-        } else if force_decimal == ForceDecimal::Yes {
-            return format!("{bd:.0}.");
-        }
+        let s = integer_digits(bd).unwrap_or_else(|| format!("{bd:.0}"));
+        return if force_decimal == ForceDecimal::Yes {
+            format!("{s}.")
+        } else {
+            s
+        };
     }
+    // `format!` panics past `MAX_FMT_PRECISION` and `bigdecimal` stops padding
+    // past 1000 zeros, so pad the rest ourselves.
+    let digits = usize::try_from(bd.fractional_digit_count().max(0)).unwrap_or(usize::MAX);
+    let written = digits.min(MAX_FMT_PRECISION);
+    if precision > written {
+        let mut s = if written > 0 {
+            format!("{bd:.written$}")
+        } else if let Some(s) = integer_digits(bd) {
+            s + "."
+        } else {
+            // Past `MAX_FORMAT_WIDTH` zeros, print exponent form and skip the precision and `.`.
+            return format!("{bd:.0}");
+        };
+        s.extend(std::iter::repeat_n('0', precision - written));
+        return s;
+    }
+
     format!("{bd:.precision$}")
 }
 
@@ -469,7 +533,7 @@ fn format_float_scientific(
         return if force_decimal == ForceDecimal::Yes && precision == 0 {
             format!("0.{exp_char}+00")
         } else {
-            format!("{:.precision$}{exp_char}+00", 0.0)
+            format!("{}{exp_char}+00", zero_with_fraction_digits(precision))
         };
     }
 
@@ -506,9 +570,7 @@ fn format_float_shortest(
     if BigDecimal::zero().eq(bd) {
         return match (force_decimal, precision) {
             (ForceDecimal::Yes, 1) => "0.".into(),
-            (ForceDecimal::Yes, _) => {
-                format!("{:.*}", precision - 1, 0.0)
-            }
+            (ForceDecimal::Yes, _) => zero_with_fraction_digits(precision - 1),
             (ForceDecimal::No, _) => "0".into(),
         };
     }
@@ -607,9 +669,12 @@ fn format_float_hexadecimal(
         // To print 0, we don't ever need any digits after the decimal point, so default to
         // that if precision is not specified.
         return if force_decimal == ForceDecimal::Yes && precision.unwrap_or(0) == 0 {
-            format!("0x0.{exp_char}+0")
+            format!("{prefix}0.{exp_char}+0")
         } else {
-            format!("0x{:.*}{exp_char}+0", precision.unwrap_or(0), 0.0)
+            format!(
+                "{prefix}{}{exp_char}+0",
+                zero_with_fraction_digits(precision.unwrap_or(0))
+            )
         };
     }
 
@@ -734,6 +799,18 @@ fn strip_fractional_zeroes_and_dot(s: &mut String) {
     }
 }
 
+fn write_padding(writer: &mut impl Write, byte: u8, mut len: usize) -> std::io::Result<()> {
+    // One KiB keeps stack use small while amortizing writes for large field widths.
+    const BUFFER_SIZE: usize = 1024;
+    let buffer = [byte; BUFFER_SIZE];
+
+    while len >= BUFFER_SIZE {
+        writer.write_all(&buffer)?;
+        len -= BUFFER_SIZE;
+    }
+    writer.write_all(&buffer[..len])
+}
+
 fn write_output(
     mut writer: impl Write,
     sign_indicator: String,
@@ -754,17 +831,18 @@ fn write_output(
     // Check if the width is too large for formatting
     super::check_width(remaining_width)?;
 
+    let padding = width.saturating_sub(sign_indicator.len().saturating_add(s.len()));
+
     match alignment {
-        NumberAlignment::Left => write!(writer, "{sign_indicator}{s:<remaining_width$}"),
+        NumberAlignment::Left => {
+            writer.write_all(sign_indicator.as_bytes())?;
+            writer.write_all(s.as_bytes())?;
+            write_padding(&mut writer, b' ', padding)
+        }
         NumberAlignment::RightSpace => {
-            let is_sign = sign_indicator.starts_with('-') || sign_indicator.starts_with('+'); // When sign_indicator is in ['-', '+']
-            if is_sign && remaining_width > 0 {
-                // Make sure sign_indicator is just next to number, e.g. "% +5.1f" 1 ==> $ +1.0
-                let s = sign_indicator + s.as_str();
-                write!(writer, "{s:>width$}", width = remaining_width + 1) // Since we now add sign_indicator and s together, plus 1
-            } else {
-                write!(writer, "{sign_indicator}{s:>remaining_width$}")
-            }
+            write_padding(&mut writer, b' ', padding)?;
+            writer.write_all(sign_indicator.as_bytes())?;
+            writer.write_all(s.as_bytes())
         }
         NumberAlignment::RightZero => {
             // Add the padding after "0x" for hexadecimals
@@ -773,8 +851,10 @@ fn write_output(
             } else {
                 ("", s.as_str())
             };
-            let remaining_width = remaining_width.saturating_sub(prefix.len());
-            write!(writer, "{sign_indicator}{prefix}{rest:0>remaining_width$}")
+            writer.write_all(sign_indicator.as_bytes())?;
+            writer.write_all(prefix.as_bytes())?;
+            write_padding(&mut writer, b'0', padding)?;
+            writer.write_all(rest.as_bytes())
         }
     }
 }
@@ -800,7 +880,7 @@ mod test {
             UnsignedInt {
                 variant: UnsignedIntVariant::Octal(Prefix::Yes),
                 width: 0,
-                precision: 0,
+                precision: Some(0),
                 alignment: NumberAlignment::Left,
             }
             .fmt(&mut s, x)
@@ -823,6 +903,29 @@ mod test {
         let f = |x| format_float_non_finite(x, Case::Uppercase);
         assert_eq!(f(&ExtendedBigDecimal::Nan), "NAN");
         assert_eq!(f(&ExtendedBigDecimal::Infinity), "INF");
+    }
+
+    #[test]
+    fn decimal_float_precision_beyond_formatter_limit() {
+        use super::format_float_decimal;
+        // A precision above u16::MAX cannot go through `format!` directly.
+        let f = |x: &str, precision| {
+            format_float_decimal(
+                &BigDecimal::from_str(x).unwrap(),
+                Some(precision),
+                ForceDecimal::No,
+            )
+        };
+
+        let s = f("3.25", 70_123);
+        assert_eq!(s.len(), 70_125);
+        assert!(s.starts_with("3.25"));
+        assert!(s[4..].bytes().all(|b| b == b'0'));
+
+        let s = f("7", 65_536);
+        assert_eq!(s.len(), 65_538);
+        assert!(s.starts_with("7."));
+        assert!(s[2..].bytes().all(|b| b == b'0'));
     }
 
     #[test]
@@ -1254,12 +1357,24 @@ mod test {
     }
 
     #[test]
-    #[ignore = "Need issue #7509 to be fixed"]
     fn format_signed_int_precision_zero() {
         let format = Format::<SignedInt, i64>::parse("%.0d").unwrap();
         assert_eq!(fmt(&format, 123i64), "123");
         // From cppreference.com: "If both the converted value and the precision are ​0​ the conversion results in no characters."
         assert_eq!(fmt(&format, 0i64), "");
+        assert_eq!(fmt(&format, -5i64), "-5");
+        assert_eq!(
+            fmt(&Format::<SignedInt, i64>::parse("%+.0d").unwrap(), 0i64),
+            "+"
+        );
+        assert_eq!(
+            fmt(&Format::<SignedInt, i64>::parse("% .0d").unwrap(), 0i64),
+            " "
+        );
+        assert_eq!(
+            fmt(&Format::<SignedInt, i64>::parse("X%6.0dX").unwrap(), 0i64),
+            "X      X"
+        );
     }
 
     #[test]
@@ -1278,23 +1393,18 @@ mod test {
         assert_eq!(f("%+6u", 123u64), "   123"); // '+' is ignored for unsigned numbers.
         assert_eq!(f("% u", 123u64), "123"); // ' ' is ignored for unsigned numbers.
         assert_eq!(f("%#x", 0), "0"); // No prefix for 0
-    }
-
-    #[test]
-    #[ignore = "Need issues #7509 and #7510 to be fixed"]
-    fn format_unsigned_int_broken() {
-        // TODO: Merge this back into format_unsigned_int.
-        let f = |fmt_str: &str, n: u64| {
-            let format = Format::<UnsignedInt, u64>::parse(fmt_str).unwrap();
-            fmt(&format, n)
-        };
-
-        // #7509
-        assert_eq!(f("%.0o", 0), "");
-        assert_eq!(f("%#0o", 0), "0"); // Already correct, but probably an accident.
-        assert_eq!(f("%.0x", 0), "");
-        // #7510
+        assert_eq!(f("%u", 0), "0");
         assert_eq!(f("%#06x", 123u64), "0x007b");
+        // A zero value with an explicit precision of zero prints no digits.
+        assert_eq!(f("%.0u", 0), "");
+        assert_eq!(f("%.0o", 0), "");
+        assert_eq!(f("%.0x", 0), "");
+        assert_eq!(f("%#.0x", 0), "");
+        assert_eq!(f("%#.0o", 0), "0"); // `#` still forces a single 0
+        assert_eq!(f("%#0o", 0), "0");
+        assert_eq!(f("X%#6.0oX", 0), "X     0X");
+        assert_eq!(f("%.0u", 123u64), "123");
+        assert_eq!(f("%#.0o", 5), "05");
     }
 
     #[test]

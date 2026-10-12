@@ -67,6 +67,24 @@ pub enum CalendarType {
     Ethiopian,
 }
 
+thread_local! {
+    // Not a `static OnceLock`: ICU formatters are neither `Send` nor `Sync`.
+    static MONTH_LONG: Option<DateTimeFormatter<fieldsets::M>> =
+        DateTimeFormatter::try_new(get_time_locale().0.clone().into(), fieldsets::M::long()).ok();
+    static MONTH_MEDIUM: Option<DateTimeFormatter<fieldsets::M>> =
+        DateTimeFormatter::try_new(get_time_locale().0.clone().into(), fieldsets::M::medium()).ok();
+    static WEEKDAY_LONG: Option<DateTimeFormatter<fieldsets::E>> =
+        DateTimeFormatter::try_new(get_time_locale().0.clone().into(), fieldsets::E::long()).ok();
+    static WEEKDAY_SHORT: Option<DateTimeFormatter<fieldsets::E>> =
+        DateTimeFormatter::try_new(get_time_locale().0.clone().into(), fieldsets::E::short()).ok();
+}
+
+macro_rules! format_with {
+    ($formatter:ident, $date:expr) => {
+        $formatter.with(|f| Some(f.as_ref()?.format($date).to_string()))
+    };
+}
+
 /// Transform a strftime format string to use locale-specific calendar values
 pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     const PERCENT_PLACEHOLDER: &str = "\x00\x00";
@@ -114,36 +132,33 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     }
 
     // Format localized names using ICU DateTimeFormatter
-    let locale_prefs = locale.clone().into();
-
-    if fmt.contains("%B") {
-        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::long()) {
-            fmt = fmt.replace("%B", &f.format(&iso_date).to_string());
-        }
+    if fmt.contains("%B")
+        && let Some(name) = format_with!(MONTH_LONG, &iso_date)
+    {
+        fmt = fmt.replace("%B", &name);
     }
-    if fmt.contains("%b") || fmt.contains("%h") {
-        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::medium()) {
-            // ICU's medium format may include trailing periods (e.g., "febr." for Hungarian),
-            // which when combined with locale format strings that also add periods after
-            // %b (e.g., "%Y. %b. %d") results in double periods ("febr..").
-            // The standard C/POSIX locale via nl_langinfo returns abbreviations
-            // WITHOUT trailing periods, so we strip them here for consistency.
-            let month_abbrev = f.format(&iso_date).to_string();
-            let month_abbrev = month_abbrev.trim_end_matches('.').to_string();
-            fmt = fmt
-                .replace("%b", &month_abbrev)
-                .replace("%h", &month_abbrev);
-        }
+    if (fmt.contains("%b") || fmt.contains("%h"))
+        && let Some(month_abbrev) = format_with!(MONTH_MEDIUM, &iso_date)
+    {
+        // ICU's medium format may include trailing periods (e.g., "febr." for Hungarian),
+        // which when combined with locale format strings that also add periods after
+        // %b (e.g., "%Y. %b. %d") results in double periods ("febr..").
+        // The standard C/POSIX locale via nl_langinfo returns abbreviations
+        // WITHOUT trailing periods, so we strip them here for consistency.
+        let month_abbrev = month_abbrev.trim_end_matches('.').to_string();
+        fmt = fmt
+            .replace("%b", &month_abbrev)
+            .replace("%h", &month_abbrev);
     }
-    if fmt.contains("%A") {
-        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::long()) {
-            fmt = fmt.replace("%A", &f.format(&iso_date).to_string());
-        }
+    if fmt.contains("%A")
+        && let Some(name) = format_with!(WEEKDAY_LONG, &iso_date)
+    {
+        fmt = fmt.replace("%A", &name);
     }
-    if fmt.contains("%a") {
-        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::short()) {
-            fmt = fmt.replace("%a", &f.format(&iso_date).to_string());
-        }
+    if fmt.contains("%a")
+        && let Some(name) = format_with!(WEEKDAY_SHORT, &iso_date)
+    {
+        fmt = fmt.replace("%a", &name);
     }
 
     fmt.replace(PERCENT_PLACEHOLDER, "%%")
@@ -176,8 +191,8 @@ pub fn get_locale_months() -> Option<&'static [Vec<u8>; 12]> {
     not(target_os = "redox")
 ))]
 fn get_locale_months_inner() -> Option<[Vec<u8>; 12]> {
+    use core::ffi::CStr;
     use nix::libc;
-    use std::ffi::CStr;
 
     let abmon_items: [libc::nl_item; 12] = [
         libc::ABMON_1,

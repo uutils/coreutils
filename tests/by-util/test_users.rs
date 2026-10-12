@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use uutests::new_ucmd;
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
 use uutests::{util::TestScenario, util_name};

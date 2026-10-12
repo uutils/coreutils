@@ -2,12 +2,14 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
+
 // spell-checker:ignore wstat towrite cdefg bufferedoutput
+
 //! Buffer partial output blocks until they are completed.
 //!
 //! Use the [`BufferedOutput`] struct to create a buffered form of the
 //! [`Output`] writer.
+
 use crate::{Output, WriteStat};
 
 /// Buffer partial output blocks until they are completed.
@@ -67,6 +69,8 @@ impl<'a> BufferedOutput<'a> {
     /// buffered until enough bytes have been provided to complete a
     /// block. The returned [`WriteStat`] object will include the
     /// number of blocks written during execution of this function.
+    // See `BlockWriter::write_blocks`.
+    #[inline(always)]
     pub(crate) fn write_blocks(&mut self, buf: &[u8]) -> std::io::Result<WriteStat> {
         // Split the incoming buffer into two parts: the bytes to write
         // and the bytes to buffer for next time.
@@ -74,6 +78,14 @@ impl<'a> BufferedOutput<'a> {
         // If `buf` does not include enough bytes to form a full block,
         // just buffer the whole thing and write zero blocks.
         let n = self.buf.len() + buf.len();
+        if n < self.inner.settings.obs {
+            // Not even one complete block can be formed: buffer everything.
+            // Falling through would pass the pending bytes to the inner
+            // writer and emit them as a premature partial write (reachable
+            // once short reads end a fill early, see issue #13458).
+            self.buf.extend_from_slice(buf);
+            return Ok(WriteStat::default());
+        }
         let rem = n % self.inner.settings.obs;
         let i = buf.len().saturating_sub(rem);
         let (to_write, to_buffer) = buf.split_at(i);
@@ -142,6 +154,28 @@ mod tests {
         assert_eq!(wstat.writes_partial, 0);
         assert_eq!(wstat.bytes_total, 0);
         assert_eq!(output.buf, b"ab");
+    }
+
+    #[test]
+    fn test_buffered_output_write_blocks_lone_partial_accumulates() {
+        let settings = Settings {
+            obs: 6,
+            ..Default::default()
+        };
+        let inner = Output {
+            dst: Dest::Sink,
+            settings: &settings,
+        };
+        let mut output = BufferedOutput::new(inner).unwrap();
+        // Two writes that together still do not fill one block must both
+        // be buffered; the second call must not flush the pending partial
+        // block prematurely.
+        output.write_blocks(b"ab").unwrap();
+        let wstat = output.write_blocks(b"cd").unwrap();
+        assert_eq!(wstat.writes_complete, 0);
+        assert_eq!(wstat.writes_partial, 0);
+        assert_eq!(wstat.bytes_total, 0);
+        assert_eq!(output.buf, b"abcd");
     }
 
     #[test]

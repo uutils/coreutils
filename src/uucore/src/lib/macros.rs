@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore sourcepath targetpath rustdoc
+
 //! Macros for the uucore utilities.
 //!
 //! This module bundles all macros used across the uucore utilities. These
@@ -30,8 +32,6 @@
 //!     [`crate::show_if_err!`]
 //!   - From custom messages: [`crate::show_error!`]
 //! - Print warnings: [`crate::show_warning!`]
-
-// spell-checker:ignore sourcepath targetpath rustdoc
 
 use std::sync::atomic::AtomicBool;
 
@@ -89,11 +89,10 @@ macro_rules! show(
     ($err:expr) => ({
         #[allow(unused_imports)]
         use $crate::error::UError;
-        use std::io::Write as _;
 
         let e = $err;
         $crate::error::set_exit_code(e.code());
-        let _ = writeln!(std::io::stderr().lock(), "{}: {e}", $crate::util_name());
+        $crate::error::print_diagnostic("", format_args!("{e}"));
     })
 );
 
@@ -153,10 +152,7 @@ macro_rules! show_if_err(
 #[macro_export]
 macro_rules! show_error(
     ($($args:tt)+) => ({
-		use std::io::Write as _;
-		let mut error = std::io::stderr().lock();
-        let _ = write!(error, "{}: ", $crate::util_name());
-        let _ = writeln!(error, $($args)+);
+        $crate::error::print_diagnostic("", format_args!($($args)+));
     })
 );
 
@@ -178,10 +174,7 @@ macro_rules! show_error(
 #[macro_export]
 macro_rules! show_warning(
     ($($args:tt)+) => ({
-		use std::io::Write as _;
-		let mut error = std::io::stderr().lock();
-        let _ = write!(error, "{}: warning: ", $crate::util_name());
-        let _ = writeln!(error, $($args)+);
+        $crate::error::print_diagnostic("warning: ", format_args!($($args)+));
     })
 );
 
@@ -189,9 +182,6 @@ macro_rules! show_warning(
 #[macro_export]
 macro_rules! show_warning_caps(
     ($($args:tt)+) => ({
-		use std::io::Write as _;
-		let mut error = std::io::stderr().lock();
-        let _ = write!(error, "{}: WARNING: ", $crate::util_name());
-        let _ = writeln!(error, $($args)+);
+        $crate::error::print_diagnostic("WARNING: ", format_args!($($args)+));
     })
 );

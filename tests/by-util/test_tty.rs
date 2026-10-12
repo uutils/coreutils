@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 #[cfg(unix)]
 use std::fs::File;
 
@@ -23,7 +24,7 @@ fn test_dev_null_silent() {
         .args(&["-s"])
         .set_stdin(File::open("/dev/null").unwrap())
         .fails_with_code(1)
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
@@ -99,4 +100,18 @@ fn test_version_pipe_no_stderr() {
     let mut child = new_ucmd!().arg("--version").run_no_wait();
     child.close_stdout();
     child.wait().unwrap().no_stderr();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error() {
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+
+    new_ucmd!()
+        .set_stdout(dev_full)
+        .fails()
+        .stderr_is("tty: No space left on device\n");
 }

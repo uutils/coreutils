@@ -24,29 +24,40 @@ use std::fs::{File, metadata};
 use std::io;
 use std::io::{BufRead, BufReader, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
 use std::path::Path;
-use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code, strip_errno};
 use uucore::parser::parse_size::parse_size_u64;
 use uucore::translate;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let (args, obs_lines) = handle_obsolete(args);
+    let raw_args: Vec<OsString> = args.collect();
+    // Capture before the obsolete `-22` spelling is rewritten to `-l 22`.
+    let diag_args = uucore::diagnostics::capture(&raw_args);
+    let (args, obs_lines) = handle_obsolete(raw_args.into_iter());
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let settings = Settings::from(&matches, obs_lines.as_deref()).map_err(|e| {
+        let message = format!("{e}");
         if e.requires_usage() {
-            UUsageError::new(1, format!("{e}"))
-        } else {
-            USimpleError::new(1, format!("{e}"))
+            return UUsageError::new(1, message);
         }
+        uucore::diagnostics::error_after_report(
+            diag_args.as_deref(),
+            USimpleError::new(1, message.clone()),
+            |args, _| match &e {
+                SettingsError::Strategy(error) => error.render(args, &message),
+                // The rest is about how the options combine rather than about
+                // one of them, so there is nothing to point a caret at.
+                _ => false,
+            },
+        )
     })?;
 
     // When using --filter, we write to a child process's stdin which may
     // close early. Disable SIGPIPE so we get EPIPE errors instead of
     // being terminated, allowing graceful handling of broken pipes.
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     if settings.filter.is_some() {
         let _ = uucore::signals::disable_pipe_errors();
     }
@@ -64,6 +75,7 @@ fn handle_obsolete(args: impl uucore::Args) -> (Vec<OsString>, Option<String>) {
     let mut obs_lines = None;
     let mut preceding_long_opt_req_value = false;
     let mut preceding_short_opt_req_value = false;
+    let mut after_double_dash = false;
 
     let filtered_args = args
         .filter_map(|os_slice| {
@@ -72,6 +84,7 @@ fn handle_obsolete(args: impl uucore::Args) -> (Vec<OsString>, Option<String>) {
                 &mut obs_lines,
                 &mut preceding_long_opt_req_value,
                 &mut preceding_short_opt_req_value,
+                &mut after_double_dash,
             )
         })
         .collect();
@@ -86,9 +99,19 @@ fn filter_args(
     obs_lines: &mut Option<String>,
     preceding_long_opt_req_value: &mut bool,
     preceding_short_opt_req_value: &mut bool,
+    after_double_dash: &mut bool,
 ) -> Option<OsString> {
     let filter: Option<OsString>;
     if let Some(slice) = os_slice.to_str() {
+        if *after_double_dash {
+            // Past `--` everything is an operand, so `split -- -1` names a file
+            // rather than setting the line count.
+            return Some(OsString::from(slice));
+        }
+        if slice == "--" {
+            *after_double_dash = true;
+            return Some(OsString::from(slice));
+        }
         if should_extract_obs_lines(
             slice,
             *preceding_long_opt_req_value,
@@ -234,8 +257,8 @@ struct Settings {
     io_blksize: Option<u64>,
 }
 
-#[derive(Debug, Error)]
 /// An error when parsing settings from command-line arguments.
+#[derive(Debug, thiserror::Error)]
 enum SettingsError {
     /// Invalid chunking strategy.
     #[error("{0}")]
@@ -310,7 +333,7 @@ impl Settings {
             if let Some(s) = matches.get_one::<String>(options::IO_BLKSIZE) {
                 match parse_size_u64(s) {
                     Ok(0) => return Err(SettingsError::InvalidIOBlockSize(s.to_owned())),
-                    Ok(n) if n <= uucore::fs::sane_blksize::MAX => Some(n),
+                    Ok(n @ ..=uucore::fs::sane_blksize::MAX) => Some(n),
                     _ => return Err(SettingsError::InvalidIOBlockSize(s.to_owned())),
                 }
             } else {
@@ -521,6 +544,12 @@ struct ByteChunkWriter<'a> {
 
     /// Iterator that yields filenames for each chunk.
     filename_iterator: FilenameIterator<'a>,
+
+    /// Current filename being written to.
+    current_filename: OsString,
+
+    /// Whether an error has already been reported for the current file.
+    error_reported: bool,
 }
 
 impl<'a> ByteChunkWriter<'a> {
@@ -530,7 +559,7 @@ impl<'a> ByteChunkWriter<'a> {
             USimpleError::new(1, translate!("split-error-output-file-suffixes-exhausted"))
         })?;
         if settings.verbose {
-            writeln!(io::stdout(), "creating file {}", filename.quote())?;
+            print_creating_file(&filename)?;
         }
         let inner = settings.instantiate_current_writer(&filename, true)?;
         Ok(ByteChunkWriter {
@@ -540,71 +569,112 @@ impl<'a> ByteChunkWriter<'a> {
             num_chunks_written: 0,
             inner,
             filename_iterator,
+            current_filename: filename,
+            error_reported: false,
         })
+    }
+
+    /// Report a write error on the current chunk, at most once per chunk.
+    ///
+    /// Returns an empty error: the message is already out, so the caller only
+    /// has to stop, without printing anything else.
+    fn report_error(&mut self, e: &io::Error) -> io::Error {
+        if !self.error_reported {
+            uucore::show_error!("{}: {}", self.current_filename.display(), strip_errno(e));
+            set_exit_code(1);
+            self.error_reported = true;
+        }
+        io::Error::other("")
+    }
+
+    /// Write to the current chunk, flushing right away.
+    ///
+    /// Without the flush, a write failure on a full device would only surface
+    /// when the buffer happens to be flushed, by which point we have moved on
+    /// to another chunk and would blame the wrong file.
+    fn write_chunk(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let written = custom_write(bytes, &mut self.inner, self.settings)
+            .and_then(|n| self.inner.flush().map(|()| n));
+        match written {
+            Err(e) if ignorable_io_error(&e, self.settings) => Ok(bytes.len()),
+            Err(e) => Err(self.report_error(&e)),
+            ok => ok,
+        }
     }
 }
 
-impl Write for ByteChunkWriter<'_> {
-    /// Implements `--bytes=SIZE`
-    fn write(&mut self, mut buf: &[u8]) -> io::Result<usize> {
+impl Drop for ByteChunkWriter<'_> {
+    fn drop(&mut self) {
+        // Safety net: a buffered error must not be lost when the writer goes away.
+        let _ = self.inner.flush().map_err(|e| self.report_error(&e));
+    }
+}
+
+impl ByteChunkWriter<'_> {
+    /// Implements `--bytes=SIZE`. GNU is unbuffered.
+    // todo: distinct read error and write error and show
+    fn copy(&mut self, mut reader: impl Read, io_blksize: usize) -> io::Result<()> {
         // If the length of `buf` exceeds the number of bytes remaining
         // in the current chunk, we will need to write to multiple
         // different underlying writers. In that case, each iteration of
         // this loop writes to the underlying writer that corresponds to
         // the current chunk number.
-        let mut carryover_bytes_written: usize = 0;
-        while !buf.is_empty() {
-            if self.num_bytes_remaining_in_current_chunk == 0 {
-                // Increment the chunk number, reset the number of bytes remaining, and instantiate the new underlying writer.
-                self.num_chunks_written += 1;
-                self.num_bytes_remaining_in_current_chunk = self.chunk_size;
+        let mut io_blk = vec![0u8; io_blksize];
+        while let mut buf = reader.read(&mut io_blk).map(|n| &io_blk[..n])?
+            && !buf.is_empty()
+        {
+            while !buf.is_empty() {
+                if self.num_bytes_remaining_in_current_chunk == 0 {
+                    // Flush before switching file, so a delayed write error is
+                    // still attributed to the chunk it belongs to.
+                    self.inner.flush().map_err(|e| self.report_error(&e))?;
 
-                // Allocate the new file, since at this point we know there are bytes to be written to it.
-                let filename = self.filename_iterator.next().ok_or_else(|| {
-                    io::Error::other(translate!("split-error-output-file-suffixes-exhausted"))
-                })?;
-                if self.settings.verbose {
-                    writeln!(io::stdout(), "creating file {}", filename.quote())?;
+                    // Increment the chunk number, reset the number of bytes remaining, and instantiate the new underlying writer.
+                    self.num_chunks_written += 1;
+                    self.num_bytes_remaining_in_current_chunk = self.chunk_size;
+
+                    // Allocate the new file, since at this point we know there are bytes to be written to it.
+                    let filename = self.filename_iterator.next().ok_or_else(|| {
+                        io::Error::other(translate!("split-error-output-file-suffixes-exhausted"))
+                    })?;
+                    if self.settings.verbose {
+                        print_creating_file(&filename)?;
+                    }
+                    self.inner = self.settings.instantiate_current_writer(&filename, true)?;
+                    self.current_filename = filename;
+                    self.error_reported = false;
                 }
-                self.inner = self.settings.instantiate_current_writer(&filename, true)?;
-            }
 
-            // If the capacity of this chunk is greater than the number of
-            // bytes in `buf`, then write all the bytes in `buf`. Otherwise,
-            // write enough bytes to fill the current chunk, then increment
-            // the chunk number and repeat.
-            let buf_len = buf.len();
-            if (buf_len as u64) < self.num_bytes_remaining_in_current_chunk {
-                let num_bytes_written = custom_write(buf, &mut self.inner, self.settings)?;
+                // If the capacity of this chunk is greater than the number of
+                // bytes in `buf`, then write all the bytes in `buf`. Otherwise,
+                // write enough bytes to fill the current chunk, then increment
+                // the chunk number and repeat.
+                if (buf.len() as u64) < self.num_bytes_remaining_in_current_chunk {
+                    let num_bytes_written = self.write_chunk(buf)?;
+                    self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
+                    break;
+                }
+
+                // Write enough bytes to fill the current chunk.
+                //
+                // Conversion to usize is safe because we checked that
+                // self.num_bytes_remaining_in_current_chunk is lower than
+                // n, which is already usize.
+                let i = self.num_bytes_remaining_in_current_chunk as usize;
+                let num_bytes_written = self.write_chunk(&buf[..i])?;
                 self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
-                return Ok(carryover_bytes_written + num_bytes_written);
+
+                // It's possible that the underlying writer did not
+                // write all the bytes.
+                if num_bytes_written < i {
+                    break;
+                }
+
+                // Move the window to look at only the remaining bytes.
+                buf = &buf[i..];
             }
-
-            // Write enough bytes to fill the current chunk.
-            //
-            // Conversion to usize is safe because we checked that
-            // self.num_bytes_remaining_in_current_chunk is lower than
-            // n, which is already usize.
-            let i = self.num_bytes_remaining_in_current_chunk as usize;
-            let num_bytes_written = custom_write(&buf[..i], &mut self.inner, self.settings)?;
-            self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
-
-            // It's possible that the underlying writer did not
-            // write all the bytes.
-            if num_bytes_written < i {
-                return Ok(carryover_bytes_written + num_bytes_written);
-            }
-
-            // Move the window to look at only the remaining bytes.
-            buf = &buf[i..];
-
-            // Remember for the next iteration that we wrote these bytes.
-            carryover_bytes_written += num_bytes_written;
         }
-        Ok(carryover_bytes_written)
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        self.inner.flush()
+        Ok(())
     }
 }
 
@@ -666,7 +736,7 @@ impl<'a> LineChunkWriter<'a> {
             io::Error::other(translate!("split-error-output-file-suffixes-exhausted"))
         })?;
         if settings.verbose {
-            writeln!(io::stdout(), "creating file {}", filename.quote())?;
+            print_creating_file(&filename)?;
         }
         settings.instantiate_current_writer(&filename, true)
     }
@@ -1089,20 +1159,28 @@ fn n_chunks_by_line(
         // empty files in place(s) of skipped chunk(s)
         let num_line_bytes = bytes.len() as u64;
         num_bytes_written += num_line_bytes;
-        let mut skipped = -1;
-        while num_bytes_should_be_written <= num_bytes_written {
-            num_bytes_should_be_written +=
-                chunk_size_base + (chunk_size_reminder > chunk_number) as u64;
+        let first_chunk_number = chunk_number;
+        // Cap at the last chunk to avoid an infinite loop when trailing chunks are
+        // zero-sized, and keep excess input from indexing past out_files.
+        while chunk_number < num_chunks && num_bytes_should_be_written <= num_bytes_written {
+            let chunk_size = chunk_size_base + (chunk_size_reminder > chunk_number) as u64;
+            if chunk_size == 0 {
+                // Every remaining chunk is zero-sized as well, so all of them
+                // would be skipped one at a time, which takes prohibitively
+                // long for a huge number of chunks. Jump to the last one.
+                chunk_number = num_chunks;
+                break;
+            }
+            num_bytes_should_be_written += chunk_size;
             chunk_number += 1;
-            skipped += 1;
         }
 
         // If a chunk was skipped and `elide_empty_files` flag is set,
         // roll chunk_number back to preserve sequential continuity
         // of file names for files written to,
         // except for Kth chunk of N mode
-        if settings.elide_empty_files && skipped > 0 && kth_chunk.is_none() {
-            chunk_number -= skipped as u64;
+        if settings.elide_empty_files && kth_chunk.is_none() {
+            chunk_number = chunk_number.min(first_chunk_number + 1);
         }
         if kth_chunk.is_some_and(|k| chunk_number > k) {
             break;
@@ -1167,9 +1245,10 @@ fn n_chunks_by_line_round_robin(
     let mut closed_writers = 0;
 
     let mut i = 0;
+    let mut line = Vec::new();
     loop {
-        let line = &mut Vec::new();
-        let num_bytes_read = reader.by_ref().read_until(sep, line)?;
+        line.clear();
+        let num_bytes_read = reader.by_ref().read_until(sep, &mut line)?;
 
         // if there is nothing else to read - exit the loop
         if num_bytes_read == 0 {
@@ -1251,11 +1330,7 @@ fn line_bytes(
             USimpleError::new(1, translate!("split-error-output-file-suffixes-exhausted"))
         })?;
         if settings.verbose {
-            writeln!(
-                io::stdout(),
-                "{}",
-                translate!("split-creating-file", "file" => name.quote())
-            )?;
+            print_creating_file(&name)?;
         }
         Ok(settings.instantiate_current_writer(&name, true)?)
     };
@@ -1311,7 +1386,7 @@ fn line_bytes(
 }
 
 fn split(settings: &Settings) -> UResult<()> {
-    let mut reader = if settings.input == "-" {
+    let reader = if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
     } else {
         let r = File::open(Path::new(&settings.input)).map_err_context(
@@ -1322,6 +1397,17 @@ fn split(settings: &Settings) -> UResult<()> {
         Box::new(r) as Box<dyn Read>
     };
     let io_blksize: usize = settings.io_blksize.unwrap_or(8 * 1024).try_into().unwrap();
+    let mut reader = BufReader::with_capacity(io_blksize, reader);
+
+    // Fixed-size modes only open an output when there is data to split.
+    // Keep the first block buffered so the selected strategy can consume it.
+    if matches!(
+        settings.strategy,
+        Strategy::Lines(_) | Strategy::Bytes(_) | Strategy::LineBytes(_)
+    ) && reader.fill_buf()?.is_empty()
+    {
+        return Ok(());
+    }
 
     match settings.strategy {
         Strategy::Number(NumberType::Bytes(num_chunks)) => {
@@ -1359,11 +1445,26 @@ fn split(settings: &Settings) -> UResult<()> {
         Strategy::Bytes(chunk_size) => {
             let mut writer = ByteChunkWriter::new(chunk_size, settings)?;
             // todo: distinct read error and write error
-            io::copy(&mut reader, &mut writer)?;
-            Ok(())
+            match writer.copy(&mut reader, io_blksize) {
+                Ok(()) => Ok(()),
+                // The writer already reported the write error and set the exit
+                // code, and signals that with an empty error: stay quiet here.
+                Err(e) if e.kind() == ErrorKind::Other && e.to_string().is_empty() => {
+                    Err(USimpleError::new(1, ""))
+                }
+                Err(e) => Err(e.into()),
+            }
         }
         Strategy::LineBytes(chunk_size) => {
             line_bytes(settings, &mut reader, chunk_size as usize, io_blksize)
         }
     }
+}
+
+fn print_creating_file(name: &OsString) -> io::Result<()> {
+    writeln!(
+        io::stdout(),
+        "{}",
+        translate!("split-creating-file", "file" => name.quote())
+    )
 }

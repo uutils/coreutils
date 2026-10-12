@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/pathchk.rs"
 test = false
@@ -21,9 +18,12 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
+fluent = { workspace = true }
 libc = { workspace = true }
 uucore = { workspace = true }
-fluent = { workspace = true }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "pathchk"

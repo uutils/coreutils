@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore hardlinked
 
 //! Hardlink preservation utilities for mv operations
@@ -121,7 +122,7 @@ impl HardlinkTracker {
     ) -> Option<PathBuf> {
         use std::os::unix::fs::MetadataExt;
 
-        let metadata = match source.metadata() {
+        let metadata = match source.symlink_metadata() {
             Ok(meta) => meta,
             Err(e) => {
                 // Gracefully handle metadata errors by logging and continuing without hardlink tracking
@@ -181,15 +182,15 @@ impl HardlinkGroupScanner {
         self.source_files = files.to_vec();
 
         for file in files {
-            if let Err(e) = self.scan_single_path(file) {
-                if options.verbose {
-                    // Only show warnings for verbose mode
-                    let _ = writeln!(
-                        io::stderr(),
-                        "warning: failed to scan {}: {e}",
-                        file.quote()
-                    );
-                }
+            if let Err(e) = self.scan_single_path(file)
+                && options.verbose
+            {
+                // Only show warnings for verbose mode
+                let _ = writeln!(
+                    io::stderr(),
+                    "warning: failed to scan {}: {e}",
+                    file.quote()
+                );
                 // For non-verbose mode, silently continue for missing files
                 // This provides graceful degradation - we'll lose hardlink info for this file
                 // but can still preserve hardlinks for other files
@@ -215,18 +216,16 @@ impl HardlinkGroupScanner {
     fn scan_single_path(&mut self, path: &Path) -> io::Result<()> {
         use std::os::unix::fs::MetadataExt;
 
-        if path.is_dir() {
+        let metadata = path.symlink_metadata()?;
+        if metadata.is_dir() {
             // Recursively scan directory contents
             self.scan_directory_recursive(path)?;
-        } else {
-            let metadata = path.metadata()?;
-            if metadata.nlink() > 1 {
-                let key = (metadata.dev(), metadata.ino());
-                self.hardlink_groups
-                    .entry(key)
-                    .or_default()
-                    .push(path.to_path_buf());
-            }
+        } else if metadata.is_file() && metadata.nlink() > 1 {
+            let key = (metadata.dev(), metadata.ino());
+            self.hardlink_groups
+                .entry(key)
+                .or_default()
+                .push(path.to_path_buf());
         }
         Ok(())
     }
@@ -238,15 +237,17 @@ impl HardlinkGroupScanner {
         let entries = std::fs::read_dir(dir)?;
         for entry in entries {
             let entry = entry?;
-            let path = entry.path();
 
-            if path.is_dir() {
-                self.scan_directory_recursive(&path)?;
+            if entry.file_type()?.is_dir() {
+                self.scan_directory_recursive(&entry.path())?;
             } else {
-                let metadata = path.metadata()?;
-                if metadata.nlink() > 1 {
+                let metadata = entry.metadata()?;
+                if metadata.is_file() && metadata.nlink() > 1 {
                     let key = (metadata.dev(), metadata.ino());
-                    self.hardlink_groups.entry(key).or_default().push(path);
+                    self.hardlink_groups
+                        .entry(key)
+                        .or_default()
+                        .push(entry.path());
                 }
             }
         }

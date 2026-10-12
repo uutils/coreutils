@@ -11,6 +11,6 @@ unexpand-help-no-utf8 = interpréter le fichier d'entrée comme ASCII 8-bit plut
 # Messages d'erreur
 unexpand-error-invalid-character = la taille de tabulation contient des caractères invalides : { $char }
 unexpand-error-tab-size-cannot-be-zero = la taille de tabulation ne peut pas être 0
-unexpand-error-tab-size-too-large = la valeur d'arrêt de tabulation est trop grande
+unexpand-error-tab-size-too-large = l'arrêt de tabulation est trop grand
 unexpand-error-tab-sizes-must-be-ascending = les tailles de tabulation doivent être croissantes
 unexpand-error-is-directory = { $path } : Est un répertoire

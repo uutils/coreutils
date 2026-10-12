@@ -11,17 +11,17 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/dircolors.rs"
 doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["colors", "parser"] }
 fluent = { workspace = true }
+uucore = { workspace = true, features = ["colors", "parser"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "dircolors"

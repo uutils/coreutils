@@ -27,3 +27,4 @@ touch-error-unable-to-parse-date = Impossible d'analyser la date : { $date }
 touch-error-windows-stdout-path-failed = GetFinalPathNameByHandleW a échoué avec le code { $code }
 touch-error-invalid-filetime = La source a un temps d'accès ou de modification invalide : { $time }
 touch-error-reference-file-inaccessible = échec d'obtention des attributs de { $path } : { $error }
+touch-error-stdout-unsupported = touch - (sortie standard) n'est pas pris en charge sur WASI

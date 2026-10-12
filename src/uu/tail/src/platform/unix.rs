@@ -20,14 +20,8 @@ impl ProcessChecker {
     }
 
     pub fn is_dead(&self) -> bool {
-        let Some(pid) = RustixPid::from_raw(self.pid) else {
-            return true;
-        };
-        match test_kill_process(pid) {
-            Ok(()) => false,
-            Err(rustix::io::Errno::PERM) => false,
-            Err(_) => true,
-        }
+        RustixPid::from_raw(self.pid)
+            .is_none_or(|pid| test_kill_process(pid).is_err_and(|e| e != rustix::io::Errno::PERM))
     }
 }
 

@@ -12,29 +12,12 @@
 //  http://ftp-archive.freebsd.org/mirror/FreeBSD-Archive/old-releases/i386/1.0-RELEASE/ports/shellutils/src/id.c
 //  http://www.opensource.apple.com/source/shell_cmds/shell_cmds-118/id/id.c
 //
-// * This was partially rewritten in order for stdout/stderr/exit_code
-//   to be conform with GNU coreutils (8.32) test suite for `id`.
-//
-// * This supports multiple users (a feature that was introduced in coreutils 8.31)
-//
-// * This passes GNU's coreutils Test suite (8.32)
-//   for "tests/id/uid.sh" and "tests/id/zero/sh".
-//
-// * Option '--zero' does not exist for BSD's `id`, therefore '--zero' is only
-//   allowed together with other options that are available on GNU's `id`.
-//
-// * Help text based on BSD's `id` manpage and GNU's `id` manpage.
-//
-// * This passes GNU's coreutils Test suite (8.32) for "tests/id/context.sh" if compiled with
-//   `--features feat_selinux`. It should also pass "tests/id/no-context.sh", but that depends on
-//   `uu_ls -Z` being implemented and therefore fails at the moment
-//
 
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
 
 use clap::{Arg, ArgAction, Command};
-use std::ffi::CStr;
+use core::ffi::CStr;
 use std::io::{self, Write};
 use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
@@ -315,11 +298,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             )?;
         }
 
-        let groups = entries::get_groups_gnu(Some(gid))?;
+        // GNU heads the two forms with opposite gids: `groups=` with the
+        // effective gid, `-G` with the real gid. Don't share one list.
         let groups = if state.user_specified {
             possible_pw.as_ref().map(Passwd::belongs_to).unwrap()
+        } else if state.gsflag {
+            group_list_real_gid_first()?
         } else {
-            groups.clone()
+            entries::get_groups_gnu(Some(getegid().as_raw()))?
         };
 
         if state.gsflag {
@@ -630,6 +616,29 @@ fn auditid() -> io::Result<()> {
     Ok(())
 }
 
+/// The group list as `id -G` prints it. `-r` does not affect it, matching GNU.
+fn group_list_real_gid_first() -> io::Result<Vec<u32>> {
+    Ok(sort_real_gid_first(
+        getgid().as_raw(),
+        getegid().as_raw(),
+        entries::get_groups_gnu(None)?,
+    ))
+}
+
+/// Real gid, then effective gid when it differs, then `getgroups()` minus those.
+fn sort_real_gid_first(rgid: u32, egid: u32, supplementary: Vec<u32>) -> Vec<u32> {
+    let mut ordered = vec![rgid];
+    if egid != rgid {
+        ordered.push(egid);
+    }
+    for group in supplementary {
+        if !ordered.contains(&group) {
+            ordered.push(group);
+        }
+    }
+    ordered
+}
+
 fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
     let uid = state.ids.as_ref().unwrap().uid;
     let gid = state.ids.as_ref().unwrap().gid;
@@ -638,6 +647,10 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
 
     let mut lock = io::stdout().lock();
 
+    // Name lookup failures in the default output are non-fatal: GNU `id`
+    // happily prints just the numeric id and exits 0. Docker containers
+    // routinely run as uids that don't have a /etc/passwd entry, and exit
+    // 1 here breaks init scripts that probe with `id`.
     write!(
         lock,
         "uid={uid}({})",
@@ -646,7 +659,6 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
                 "{}",
                 translate!("id-error-cannot-find-user-name", "uid" => uid)
             );
-            set_exit_code(1);
             uid.to_string()
         })
     )?;
@@ -658,7 +670,6 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
                 "{}",
                 translate!("id-error-cannot-find-group-name", "gid" => gid)
             );
-            set_exit_code(1);
             gid.to_string()
         })
     )?;
@@ -671,7 +682,6 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
                     "{}",
                     translate!("id-error-cannot-find-user-name", "uid" => euid)
                 );
-                set_exit_code(1);
                 euid.to_string()
             })
         )?;
@@ -686,7 +696,6 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
                     "{}",
                     translate!("id-error-cannot-find-group-name", "gid" => egid)
                 );
-                set_exit_code(1);
                 egid.to_string()
             })
         )?;
@@ -703,7 +712,6 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
                         "{}",
                         translate!("id-error-cannot-find-group-name", "gid" => gr)
                     );
-                    set_exit_code(1);
                     gr.to_string()
                 })
             ))

@@ -2,13 +2,16 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore btotal sigval
+
 //! Read and write progress tracking for dd.
 //!
 //! The [`ProgUpdate`] struct represents summary statistics for the
 //! read and write progress of a running `dd` process. The
 //! [`gen_prog_updater`] function can be used to implement a progress
 //! updater that runs in its own thread.
+
 use std::io::Write;
 #[cfg(target_os = "linux")]
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -454,7 +457,7 @@ pub(crate) fn check_and_reset_sigusr1() -> bool {
 }
 
 #[cfg(target_os = "linux")]
-extern "C" fn sigusr1_handler(_: std::os::raw::c_int) {
+extern "C" fn sigusr1_handler(_: core::ffi::c_int) {
     SIGUSR1_RECEIVED.store(true, Ordering::Relaxed);
 }
 

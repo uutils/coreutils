@@ -76,7 +76,7 @@ fn open(name: &OsString) -> UResult<Reader> {
     } else {
         let path = Path::new(name);
         // some platforms cannot catch those errors when open or read. needs additional cost
-        #[cfg(any(target_os = "wasi", target_os = "windows"))]
+        #[cfg(any(target_os = "wasi", windows))]
         match path.metadata() {
             Ok(_) => {
                 if path.is_dir() {
@@ -137,12 +137,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 continue;
             }
         };
-        let (blocks, sum) = if sysv {
+        let result = if sysv {
             sysv_sum(reader)
         } else {
             bsd_sum(reader)
-        }
-        .map_err(|e| USimpleError::new(1, format!("{}: {1}", file.display(), strip_errno(&e))))?;
+        };
+        let (blocks, sum) = match result {
+            Ok(r) => r,
+            Err(e) => {
+                show!(USimpleError::new(
+                    1,
+                    format!("{}: {}", file.display(), strip_errno(&e))
+                ));
+                continue;
+            }
+        };
         let mut stdout = stdout().lock();
         if print_names {
             write!(stdout, "{sum:0width$} {blocks:width$} ")?;

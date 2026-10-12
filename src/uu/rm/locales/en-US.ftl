@@ -48,7 +48,9 @@ rm-error-refusing-to-remove-directory = refusing to remove '.' or '..' directory
 rm-error-skipping-different-device = skipping {$file}, since it's on a different device
 rm-error-and-preserve-root-all-in-effect = and --preserve-root=all is in effect
 rm-error-cannot-remove = cannot remove {$file}
+rm-error-cannot-remove-changed = cannot remove {$file}: File changed while removing
 rm-error-may-not-abbreviate-no-preserve-root = you may not abbreviate the --no-preserve-root option
+rm-error-standard-output = standard output: {$error}
 
 # Verbose messages
 rm-verbose-removed = removed {$file}

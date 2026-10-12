@@ -11,22 +11,17 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/chown.rs"
 doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = [
-  "entries",
-  "fs",
-  "perms",
-  "safe-traversal",
-] }
 fluent = { workspace = true }
+uucore = { workspace = true, features = ["entries", "fs", "perms"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "chown"

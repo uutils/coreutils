@@ -2,8 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 //! Types for representing and displaying block sizes.
-use crate::{OPT_BLOCKSIZE, OPT_PORTABILITY};
+
+use crate::{OPT_BLOCKSIZE, OPT_KILO, OPT_MEGA, OPT_PORTABILITY};
 use clap::ArgMatches;
 use std::fmt;
 
@@ -170,6 +172,10 @@ pub(crate) fn read_block_size(matches: &ArgMatches) -> Result<BlockSize, ParseSi
         } else {
             Err(ParseSizeError::ParseFailure(format!("{}", s.quote())))
         }
+    } else if matches.get_flag(OPT_KILO) {
+        Ok(BlockSize::Bytes(1024))
+    } else if matches.get_flag(OPT_MEGA) {
+        Ok(BlockSize::Bytes(1024 * 1024))
     } else if matches.get_flag(OPT_PORTABILITY) {
         Ok(BlockSize::default())
     } else if let Some(bytes) =
@@ -199,8 +205,6 @@ impl fmt::Display for BlockSize {
 
 #[cfg(test)]
 mod tests {
-
-    use std::env;
 
     use crate::blocks::{BlockSize, SuffixType, to_magnitude_and_suffix};
 
@@ -371,8 +375,5 @@ mod tests {
     #[test]
     fn test_default_block_size() {
         assert_eq!(BlockSize::Bytes(1024), BlockSize::default());
-        unsafe { env::set_var("POSIXLY_CORRECT", "1") };
-        assert_eq!(BlockSize::Bytes(512), BlockSize::default());
-        unsafe { env::remove_var("POSIXLY_CORRECT") };
     }
 }

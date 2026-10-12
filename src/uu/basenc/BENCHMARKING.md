@@ -19,6 +19,15 @@ Build the `basenc` binary using the release profile:
 cargo build --package uu_basenc --profile release
 ```
 
+## Base16 output benchmark
+
+This benchmark measures buffered Base16 output. 16 MiB input for every run. Writes to `/dev/null`
+and a temporary file. Runs only on Unix.
+
+```Shell
+cargo bench --package uu_basenc --bench basenc_bench
+```
+
 ## Expected performance
 
 uutils' `basenc` performs streaming decoding and encoding, and therefore should perform all operations with a constant

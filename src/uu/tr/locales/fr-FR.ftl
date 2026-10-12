@@ -7,13 +7,14 @@ tr-help-complement = utiliser le complément d'ENSEMBLE1
 tr-help-delete = supprimer les caractères dans ENSEMBLE1, ne pas traduire
 tr-help-squeeze = remplacer chaque séquence d'un caractère répété qui est listé dans le dernier ENSEMBLE spécifié, avec une seule occurrence de ce caractère
 tr-help-truncate-set1 = d'abord tronquer ENSEMBLE1 à la longueur d'ENSEMBLE2
+tr-help-unbuffered = ne pas mettre la sortie en mémoire tampon
 
 # Messages d'erreur
 tr-error-missing-operand = opérande manquant
 tr-error-missing-operand-translating = opérande manquant après { $set }
   Deux chaînes doivent être données lors de la traduction.
 tr-error-missing-operand-deleting-squeezing = opérande manquant après { $set }
-  Deux chaînes doivent être données lors de la suppression et compression.
+  Deux chaînes doivent être données lors de la suppression et de la compression des répétitions.
 tr-error-extra-operand-deleting-without-squeezing = opérande supplémentaire { $operand }
   Une seule chaîne peut être donnée lors de la suppression sans compression des répétitions.
 tr-error-extra-operand-simple = opérande supplémentaire { $operand }
@@ -42,3 +43,12 @@ tr-error-complement-more-than-one-unique = lors de la traduction avec des classe
   string2 doit mapper tous les caractères du domaine vers un seul
 tr-error-backwards-range = les points de fin de plage de '{ $start }-{ $end }' sont dans l'ordre inverse de la séquence de collation
 tr-error-multiple-char-in-equivalence = { $chars } : l'opérande de classe d'équivalence doit être un seul caractère
+
+# Étiquettes de diagnostic : ce que le caret désigne dans un ensemble
+tr-diag-label-backwards-range = vouliez-vous dire '{ $suggestion }' ?
+tr-diag-label-set1-longer-set2-ends-in-class = cet ensemble est plus long que SET2
+tr-diag-label-complement-more-than-one-unique = un seul caractère peut être la cible du complément
+tr-diag-help-char-class = les classes sont alnum, alpha, blank, cntrl, digit, graph, lower, print, punct, space, upper et xdigit
+tr-diag-help-equivalence = [=c=] désigne tout caractère équivalent à c
+tr-diag-help-repeat = [c*N] répète c N fois, [c*] complète SET2 à la longueur de SET1
+tr-diag-help-backwards-range = un intervalle va du caractère le plus petit au plus grand, comme a-z

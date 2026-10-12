@@ -27,3 +27,8 @@ csplit-warning-line-number-same-as-previous = le numéro de ligne '{ $line_numbe
 csplit-stream-not-utf8 = le flux ne contenait pas d'UTF-8 valide
 csplit-read-error = erreur de lecture
 csplit-write-split-not-created = tentative d'écriture dans une division qui n'a pas été créée
+
+csplit-diag-help-pattern = un motif est un numéro de ligne N, /EXPR/[DÉCALAGE] ou %EXPR%[DÉCALAGE], chacun pouvant être suivi de { "{" }N{ "}" } ou { "{" }*{ "}" }
+csplit-diag-help-line-number = les numéros de ligne commencent à 1 et ne doivent pas décroître d'un motif au suivant
+csplit-diag-help-digits = --digits attend un nombre décimal de chiffres, comme -n 3
+csplit-diag-help-suffix-format = un format de suffixe est une seule conversion printf pour un entier non signé, comme %03u

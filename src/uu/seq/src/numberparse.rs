@@ -2,11 +2,14 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore extendedbigdecimal bigdecimal numberparse hexadecimalfloat
+
 //! Parsing numbers for use in `seq`.
 //!
 //! This module provides an implementation of [`FromStr`] for the
 //! [`PreciseNumber`] struct.
+
 use std::str::FromStr;
 
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
