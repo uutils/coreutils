@@ -38,7 +38,7 @@ uucore = { workspace = true, features = [
 ] }
 
 [target.'cfg(all(unix, not(any(target_os = "redox", target_os = "fuchsia", target_os = "haiku", target_os = "solaris", target_os = "illumos"))))'.dependencies]
-rustix = { workspace = true, features = ["fs", "system", "process"] }
+rustix = { workspace = true, features = ["system", "process"] }
 
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
 rlimit = { workspace = true }
