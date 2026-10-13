@@ -976,33 +976,6 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
 #[cfg(test)]
 mod tests {
     use jiff::Timestamp;
-    use jiff::tz::TimeZone;
-
-    #[test]
-    fn test_parse_date_without_offset_uses_local_zone() {
-        // "2026-08-01 12:00:00" has no offset, so it must mean 12:00 in the
-        // system zone (as GNU touch does), not 12:00 UTC.
-        let now = Timestamp::now().to_zoned(TimeZone::UTC);
-        let expected = TimeZone::system()
-            .to_ambiguous_zoned(jiff::civil::date(2026, 8, 1).at(12, 0, 0, 0))
-            .unambiguous()
-            .unwrap()
-            .timestamp();
-        let got = super::parse_date(now, "2026-08-01 12:00:00").unwrap();
-        assert_eq!(got.unix_seconds(), expected.as_second());
-    }
-
-    #[test]
-    fn test_parse_posix_locale_date_without_offset_uses_local_zone() {
-        let now = Timestamp::now().to_zoned(TimeZone::UTC);
-        let expected = TimeZone::system()
-            .to_ambiguous_zoned(jiff::civil::date(2015, 1, 1).at(12, 34, 0, 0))
-            .unambiguous()
-            .unwrap()
-            .timestamp();
-        let got = super::parse_date(now, "Thu Jan 01 12:34:00 2015").unwrap();
-        assert_eq!(got.unix_seconds(), expected.as_second());
-    }
 
     use filetime::FileTime;
 

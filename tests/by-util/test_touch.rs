@@ -675,6 +675,27 @@ fn test_touch_set_posix_locale_date_uses_system_timezone() {
     wasi_runner,
     ignore = "WASI: no tzdb; TZ env var is not honoured so timezone-dependent timestamps differ"
 )]
+fn test_touch_set_date_without_offset_uses_system_timezone() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_date_without_offset";
+
+    ucmd.env("TZ", "UTC-8")
+        .args(&["-d", "2026-08-01 12:00:00", file])
+        .succeeds()
+        .no_stderr();
+
+    // 12:00 in a zone eight hours east of UTC is 04:00 UTC.
+    let expected = FileTime::from_unix_time(1_785_556_800, 0);
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
+}
+
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no tzdb; TZ env var is not honoured so timezone-dependent timestamps differ"
+)]
 fn test_touch_set_date_without_leading_zeroes() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_date_without_leading_zeroes";
