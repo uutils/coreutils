@@ -595,7 +595,7 @@ fn test_zero_increment_after_a_tab_list() {
 }
 
 /// Interactive / line-at-a-time stdin must show each expanded line before the
-/// next input arrives. BufWriter alone only flushes on exit. Regression for #11091.
+/// next input arrives. BufWriter alone only flushes on exit.
 #[cfg(unix)]
 #[test]
 fn test_stdin_tty_flushes_each_line() {

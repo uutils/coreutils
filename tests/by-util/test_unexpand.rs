@@ -640,7 +640,7 @@ fn test_multibyte_char_split_across_reads() {
 }
 
 /// Interactive / line-at-a-time stdin must show each unexpanded line before the
-/// next input arrives. Regression for #11091.
+/// next input arrives.
 #[cfg(unix)]
 #[test]
 fn test_stdin_tty_flushes_each_line() {
