@@ -1686,14 +1686,8 @@ fn test_preserve_root_literal_root() {
         .stderr_contains("use --no-preserve-root to override this failsafe");
 }
 
-/// `rm -rf / --no-preserve-root` must get past the failsafe and start removing.
-///
-/// GNU's `tests/rm/r-root.sh` cannot run against us, so this covers it. To keep
-/// it harmless, `strace` fakes success for every `unlink`/`unlinkat`/`rmdir`
-/// (the real syscall is skipped) and sends SIGINT on the first one, which stops
-/// `rm` at once. **Never run this without the injection**: a probe on a scratch
-/// file first proves the injection really skips the syscall, otherwise the test
-/// skips.
+/// `rm -rf / --no-preserve-root` must get past the failsafe. `strace` fakes the
+/// removals and sends SIGINT on the first one, so nothing is deleted.
 #[cfg(target_os = "linux")]
 #[test]
 fn test_no_preserve_root_literal_root() {
@@ -1718,11 +1712,8 @@ fn test_no_preserve_root_literal_root() {
     let ts = TestScenario::new(util_name!());
     let bin = ts.bin_path.to_string_lossy().into_owned();
 
-    // Safety net: the injection must leave a real file in place, and strace
-    // must really have run `rm` (it dies of SIGINT); if strace cannot trace
-    // at all, `rm` never ran and the file survives for the wrong reason.
-    // Remove a/b recursively: that is `unlinkat`, like the real run below,
-    // whereas removing a plain file is `unlink`.
+    // Probe: the injection must stop `rm -r a` (unlinkat, as below) with SIGINT
+    // and leave a/b in place, else skip.
     ts.fixtures.mkdir("a");
     ts.fixtures.touch("a/b");
     let probe = Command::new("strace")
@@ -1740,12 +1731,8 @@ fn test_no_preserve_root_literal_root() {
         .output()
         .expect("failed to spawn strace");
 
+    // A refusal exits 1; SIGINT means rm reached its first (faked) removal.
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        !stderr.contains("it is dangerous to operate recursively"),
-        "--no-preserve-root was refused: {stderr}"
-    );
-    // rm got as far as its first (faked) removal and was interrupted by it.
     assert_eq!(output.status.signal(), Some(libc::SIGINT), "{stderr}");
 }
 
