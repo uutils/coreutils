@@ -957,3 +957,19 @@ fn test_cat_eintr_handling() {
     // Verify that the interruption was encountered and handled
     assert_eq!(*interrupt_count.lock().unwrap(), 1);
 }
+
+#[test]
+#[cfg(all(unix, not(wasi_runner)))]
+fn test_closed_stdin() {
+    // Reading a closed stdin fails with EBADF. Run through a shell so the
+    // process really starts with fd 0 closed.
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("file", "content\n");
+    scene
+        .cmd("sh")
+        .args(&["-c", "exec <&-; \"$0\" cat - file"])
+        .arg(&scene.bin_path)
+        .fails_with_code(1)
+        .stdout_is("content\n")
+        .stderr_is("cat: -: Bad file descriptor\n");
+}

@@ -102,7 +102,7 @@ fancy-regex = { version = "0.19.2", default-features = false, features = [
   "leftmost_longest",
 ] }
 os_display = "0.1.3"
-parse_datetime = "0.16.0"
+parse_datetime = "0.17.0"
 phf = "0.14.0"
 phf_codegen = "0.14.0"
 platform-info = "2.0.3"
@@ -213,7 +213,6 @@ assert_is_empty = "allow"
 
 doc_markdown = "allow"
 unused_self = "allow"
-unnested_or_patterns = "allow"
 implicit_hasher = "allow"
 doc_link_with_quotes = "allow"
 # TODO lint is deprecated since Rust 1.98, can be removed when we have a MSRV >= 1.98

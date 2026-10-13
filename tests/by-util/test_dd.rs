@@ -2196,6 +2196,7 @@ fn test_nocache_eof() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
 fn test_nocache_eof_fadvise_zero_length() {
     use std::process::Command;
     let (at, _ucmd) = at_and_ucmd!();
@@ -2640,5 +2641,74 @@ dd: unrecognized operand 'bsx=1'
             .fails_with_code(1)
             .stderr_contains("dd: unrecognized operand 'bsx=1'\n")
             .stderr_does_not_contain("╭─");
+    }
+}
+
+// Conversion conflicts are reported in a fixed order: ascii/ebcdic/ibm,
+// block/unblock, lcase/ucase, then excl/nocreat. ascii implies unblock;
+// ebcdic and ibm imply block, so with cbs an explicit flag in the other
+// direction is a block/unblock conflict as well.
+#[test]
+fn test_block_unblock_conflicts() {
+    for conv in [
+        // block/unblock is reported before the later pairs.
+        "block,unblock,lcase,ucase",
+        "block,unblock,excl,nocreat",
+        // The implied direction conflicts with the explicit flag.
+        "ascii,block",
+        "ebcdic,unblock",
+        "ibm,unblock",
+        "ascii,block,unblock",
+    ] {
+        new_ucmd!()
+            .args(&[
+                format!("conv={conv}"),
+                "cbs=1".into(),
+                "if=/dev/null".into(),
+            ])
+            .fails_with_code(1)
+            .stderr_only("dd: cannot combine block and unblock\n");
+    }
+}
+
+#[test]
+fn test_implied_block_direction_agrees_with_explicit_flag() {
+    for conv in ["ascii,unblock", "ebcdic,block", "ibm,block"] {
+        new_ucmd!()
+            .args(&[format!("conv={conv}"), "cbs=1".into(), "status=none".into()])
+            .pipe_in("")
+            .succeeds()
+            .no_output();
+    }
+}
+
+// Without cbs, block and unblock have no record length to work with and are
+// ignored rather than rejected.
+#[test]
+fn test_block_unblock_without_cbs_is_ignored() {
+    for conv in ["block", "unblock", "block,unblock"] {
+        new_ucmd!()
+            .args(&[format!("conv={conv}"), "status=none".into()])
+            .pipe_in("ab\ncd\n")
+            .succeeds()
+            .stdout_only("ab\ncd\n");
+    }
+}
+
+// Without cbs, ascii and ebcdic still convert the bytes; only the implied
+// unblock or block step is skipped, so the trailing space survives and no
+// newline is added.
+#[test]
+fn test_ascii_ebcdic_without_cbs_still_convert() {
+    let cases: [(&str, &[u8], &[u8]); 2] = [
+        ("ascii", b"\xc1\xc2\x40", b"AB "),
+        ("ebcdic", b"AB ", b"\xc1\xc2\x40"),
+    ];
+    for (conv, input, expected) in cases {
+        new_ucmd!()
+            .args(&[format!("conv={conv}"), "status=none".into()])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only_bytes(expected);
     }
 }

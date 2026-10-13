@@ -78,7 +78,10 @@ def build_clippy_command(
         # (show-utils.sh over-resolves due to default features)
         extra.append("-pcoreutils")
     else:
-        extra.extend(["--all-targets", "--tests", "--benches", "-pcoreutils"])
+        # -puucore is required: a dependency's own tests aren't compiled otherwise.
+        extra.extend(
+            ["--all-targets", "--tests", "--benches", "-pcoreutils", "-puucore"],
+        )
         utilities = get_utility_list(features)
         extra.extend(f"-puu_{u}" for u in utilities)
 

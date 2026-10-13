@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore lowre punct aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase fooclass Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer mnop mnopq pqopq pqqqq ppqqrr pqrr ppqr ppqqpp
+// spell-checker:ignore lowre punct aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase fooclass Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer mnop mnopq pqopq pqqqq ppqqrr pqrr ppqr ppqqpp abcx xxaa aazz
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -453,6 +453,38 @@ fn test_truncate_multi() {
         .pipe_in("abcde")
         .succeeds()
         .stdout_is("xycde");
+}
+
+#[test]
+fn test_ascii_flag() {
+    new_ucmd!()
+        .args(&["-A", "k-o", "K-O"])
+        .pipe_in("monkey")
+        .succeeds()
+        .stdout_is("MONKey");
+
+    new_ucmd!()
+        .args(&["-AA", "-sAd", "[:digit:]", "q"])
+        .pipe_in("qq7q8qqr")
+        .succeeds()
+        .stdout_is("qr");
+}
+
+#[test]
+fn test_ascii_flag_works_on_bytes() {
+    // 0xd6 is an upper case letter in Latin-1, but not in ASCII.
+    new_ucmd!()
+        .args(&["-A", "[:upper:]", "[:lower:]"])
+        .pipe_in([b'T', 0xd6, b'P'])
+        .succeeds()
+        .stdout_is_bytes([b't', 0xd6, b'p']);
+
+    // The complement covers every byte value.
+    new_ucmd!()
+        .args(&["-Acd", "a-z"])
+        .pipe_in([b'w', 0xd6, b'k', 0xff])
+        .succeeds()
+        .stdout_is_bytes(*b"wk");
 }
 
 #[test]
@@ -1764,6 +1796,53 @@ fn test_failed_write_is_reported() {
         .set_stdout(std::fs::File::create("/dev/full").unwrap())
         .fails()
         .stderr_is("tr: write error: No space left on device\n");
+}
+
+#[test]
+fn test_unbuffered_flag() {
+    new_ucmd!()
+        .args(&["-u", "a-z", "A-Z"])
+        .pipe_in("hello\n")
+        .succeeds()
+        .stdout_only("HELLO\n");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no pipe support")]
+fn test_unbuffered_partial_line() {
+    // With -u, a chunk without a trailing newline must come out before more
+    // input arrives, as in `tail -f log | tr -u a-z A-Z | consumer`.
+    //
+    // Run in a separate thread so that the test fails via timeout rather
+    // than hanging if tr holds the output back.
+    let handle = std::thread::spawn(|| {
+        for (args, out1, out2) in [
+            (&["-u", "a-z", "A-Z"][..], "ABC", "DEF\nXY"),
+            (&["-u", "-d", "e"][..], "abc", "df\nxy"),
+            (&["-u", "-s", "a-z"][..], "abc", "def\nxy"),
+        ] {
+            let mut child = new_ucmd!()
+                .args(args)
+                .set_stdin(std::process::Stdio::piped())
+                .set_stdout(std::process::Stdio::piped())
+                .run_no_wait();
+            child.write_in(b"abc");
+            assert_eq!(child.stdout_exact_bytes(out1.len()), out1.as_bytes());
+            child.write_in(b"def\nxy");
+            assert_eq!(child.stdout_exact_bytes(out2.len()), out2.as_bytes());
+            child.wait().unwrap().success();
+        }
+    });
+
+    for _ in 0..500 {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        if handle.is_finished() {
+            break;
+        }
+    }
+
+    assert!(handle.is_finished(), "tr -u held back a partial line");
+    handle.join().unwrap();
 }
 
 #[test]

@@ -260,7 +260,7 @@ fn test_nohup_stderr_to_stdout() {
     // Create a script that outputs to both stdout and stderr
     at.write(
         "both_streams.sh",
-        "#!/bin/bash\necho 'stdout message'\necho 'stderr message' >&2",
+        "#!/bin/sh\necho 'stdout message'\necho 'stderr message' >&2",
     );
     at.set_mode("both_streams.sh", 0o755);
 

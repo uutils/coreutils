@@ -26,7 +26,7 @@ use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
 use uucore::fs::{are_files_identical, dir_strip_dot_for_creation};
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 use uucore::safe_traversal::{DirFd, SymlinkBehavior, create_dir_all_safe};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::{
@@ -644,9 +644,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
     let sources = &paths.iter().map(PathBuf::from).collect::<Vec<_>>();
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "redox")))]
     let mut target_parent_fd: Option<DirFd> = None;
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "redox")))]
     let mut target_filename: Option<OsString> = None;
 
     if b.create_leading {
@@ -666,6 +666,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         }
 
         if let Some(to_create) = to_create {
+            #[cfg(all(unix, not(target_os = "redox")))]
             let to_create_original = to_create;
             let to_create_owned;
             let to_create = match uucore::os_str_as_bytes(to_create.as_os_str()) {
@@ -684,7 +685,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             let dir_exists = to_create.exists() && metadata(to_create).is_ok_and(|m| m.is_dir());
 
             if dir_exists {
-                #[cfg(unix)]
+                #[cfg(all(unix, not(target_os = "redox")))]
                 if b.target_dir.is_none()
                     && sources.len() == 1
                     && !is_potential_directory_path(&target)
@@ -711,7 +712,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     }
                 }
 
-                #[cfg(unix)]
+                #[cfg(all(unix, not(target_os = "redox")))]
                 {
                     // Use DEFAULT_MODE (0o755) for created directories - this matches GNU install
                     // behavior. The actual mode will be modified by umask at the kernel level.
@@ -754,7 +755,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                         }
                     }
                 }
-                #[cfg(not(unix))]
+                #[cfg(any(not(unix), target_os = "redox"))]
                 fs::create_dir_all(to_create)
                     .map_err(|e| InstallError::CreateDirFailed(to_create.to_path_buf(), e))?;
             }
@@ -789,7 +790,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         }
 
         if is_valid_target(&target) {
-            #[cfg(unix)]
+            #[cfg(all(unix, not(target_os = "redox")))]
             if let (Some(ref parent_fd), Some(ref filename)) = (target_parent_fd, target_filename) {
                 if b.compare && !need_copy(source, &target, b) {
                     return Ok(());
@@ -802,7 +803,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                 {
                     show_error!(
                         "{}",
-                        translate!("install-error-failed-to-remove", "path" => target.quote(), "error" => format!("{e:?}"))
+                        translate!("install-error-failed-to-remove", "path" => target.quote(), "error" => strip_errno(&e))
                     );
                 }
 
@@ -812,7 +813,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             } else {
                 copy(source, &target, b)
             }
-            #[cfg(not(unix))]
+            #[cfg(any(not(unix), target_os = "redox"))]
             {
                 copy(source, &target, b)
             }
@@ -975,7 +976,7 @@ fn perform_backup(from: &Path, to: &Path, b: &Behavior) -> UResult<Option<PathBu
 /// be consolidated because they use fundamentally different APIs:
 /// - `copy_file_safe` uses fd-based `DirFd::open_file_at()` (openat syscall)
 /// - `copy_file` uses path-based `OpenOptions::new().create_new().open()`
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsStr) -> UResult<()> {
     let from_meta = metadata(from)?;
 
@@ -1032,7 +1033,7 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
             }
             _ => show_error!(
                 "{}",
-                translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => format!("{e:?}"))
+                translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => strip_errno(&e))
             ),
         }
     }
