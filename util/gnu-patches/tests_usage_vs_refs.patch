@@ -1,0 +1,18 @@
+Skip usage_vs_refs.sh: it cross-checks every option printed by --help against
+references in GNU's doc/coreutils.texi. That manual is not part of this
+implementation, so the test can only ever report our own options (-V, uptime
+--pretty, hostname --fqdn, ...) as undocumented.
+
+Index: gnu/tests/misc/usage_vs_refs.sh
+===================================================================
+--- gnu.orig/tests/misc/usage_vs_refs.sh
++++ gnu/tests/misc/usage_vs_refs.sh
+@@ -18,6 +18,8 @@
+
+ . "${srcdir=.}/tests/init.sh";
+
++skip_ 'options are documented outside doc/coreutils.texi'
++
+
+ getopts() {
+   skip='--help|--version'              # These refs treated specially

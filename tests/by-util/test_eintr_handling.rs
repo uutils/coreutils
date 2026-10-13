@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore EINTR worl
+
 //! Tests for EINTR (ErrorKind::Interrupted) handling across utilities
 //!
 //! This module provides test utilities and integration tests to verify that
@@ -20,7 +22,6 @@
 //!
 //! # Note
 //! EINTR is a POSIX error code for interrupted system calls
-//! cspell:ignore EINTR worl
 
 use std::io::{self, Read, Write};
 

@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, Command, value_parser};
 use nix::libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t};
-use nix::sys::stat::{Mode, SFlag, mknod as nix_mknod, umask as nix_umask};
+use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, umask as nix_umask};
 use std::ffi::OsString;
 use std::io::{self, Write as _};
 
@@ -56,7 +56,7 @@ struct Config {
     /// when false, the exact mode bits will be set
     use_umask: bool,
 
-    dev: u64,
+    dev: dev_t,
 
     /// Set security context (SELinux/SMACK).
     #[cfg(any(
@@ -104,7 +104,7 @@ fn mknod(file_name: &str, config: Config) -> i32 {
         file_name,
         config.file_type.as_sflag(),
         config.mode,
-        config.dev as _,
+        config.dev,
     )
     .err();
     let errno = if mknod_err.is_some() { -1 } else { 0 };
@@ -204,7 +204,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 translate!("mknod-error-fifo-no-major-minor"),
             ));
         }
-        (_, Some(&major), Some(&minor)) => makedev(major as _, minor as _) as u64,
+        (_, Some(&major), Some(&minor)) => makedev(major as _, minor as _),
         _ => {
             return Err(UUsageError::new(
                 1,
@@ -294,8 +294,9 @@ pub fn uu_app() -> Command {
 }
 
 fn parse_type(tpe: &str) -> Result<FileType, String> {
-    // Only check the first character, to allow mnemonic usage like
-    // 'mknod /dev/rst0 character 18 0'.
+    // Dispatch on the leading character alone, so a spelled-out type works
+    // wherever its initial does: `character` is read like `c` in
+    // `mknod /dev/ttyS0 character 4 64`.
     tpe.chars()
         .next()
         .ok_or_else(|| translate!("mknod-error-missing-device-type"))

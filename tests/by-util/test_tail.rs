@@ -3,10 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile file siette ocho nueve diez MULT
-// spell-checker:ignore (libs) kqueue
+// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile file siette ocho nueve diez MULT watchme nofile wxyz
+// spell-checker:ignore (libs) kqueue ELOOP EISDIR
 // spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
 // spell-checker:ignore (cmd) taskkill
+
 #![allow(
     clippy::unicode_not_nfc,
     clippy::cast_lossless,
@@ -16,17 +17,11 @@
 use pretty_assertions::assert_eq;
 use rand::distr::Alphanumeric;
 use rstest::rstest;
-#[cfg(all(
-    not(target_vendor = "apple"),
-    not(target_os = "android"),
-    not(target_os = "freebsd"),
-    not(windows)
-))]
+#[cfg(all(not(target_os = "android"), not(target_os = "freebsd"), not(windows)))]
 use rustix::process::{Pid, Signal, kill_process};
 use std::char::from_digit;
 use std::fs::File;
 use std::io::Write;
-#[cfg(not(target_vendor = "apple"))]
 use std::io::{Seek, SeekFrom};
 #[cfg(all(
     not(target_vendor = "apple"),
@@ -111,7 +106,6 @@ fn test_stdin_explicit() {
 }
 
 #[test]
-#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_file() {
     // $ echo foo > f
 
@@ -134,7 +128,7 @@ fn test_stdin_redirect_file() {
         .set_stdin(File::open(at.plus("f")).unwrap())
         .arg("-v")
         .succeeds()
-        .stdout_only("==> standard input <==\nfoo");
+        .stdout_only("==> 'standard input' <==\nfoo");
 }
 
 #[test]
@@ -165,7 +159,6 @@ fn test_stdin_redirect_file_follow() {
 }
 
 #[test]
-#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_offset() {
     // Test following a file from the middle
 
@@ -179,7 +172,6 @@ fn test_stdin_redirect_offset() {
 }
 
 #[test]
-#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_offset2() {
     // like test_stdin_redirect_offset but with multiple files
 
@@ -195,7 +187,7 @@ fn test_stdin_redirect_offset2() {
         .args(&["k", "-", "l", "m"])
         .succeeds()
         .stdout_only(
-            "==> k <==\n1\n2\n\n==> standard input <==\n2\n\n==> l <==\n3\n4\n\n==> m <==\n5\n6\n",
+            "==> k <==\n1\n2\n\n==> 'standard input' <==\n2\n\n==> l <==\n3\n4\n\n==> m <==\n5\n6\n",
         );
 }
 
@@ -255,6 +247,7 @@ fn test_nc_0_wo_follow2() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_n0_with_follow() {
     let (at, mut ucmd) = at_and_ucmd!();
     let test_file = "test.txt";
@@ -288,11 +281,14 @@ fn test_permission_denied() {
         .set_permissions(PermissionsExt::from_mode(0o000))
         .unwrap();
 
-    ts.ucmd()
-        .arg("unreadable")
-        .fails_with_code(1)
-        .stderr_is("tail: cannot open 'unreadable' for reading: Permission denied\n")
-        .no_stdout();
+    let cmd = ts.ucmd().arg("unreadable").fails_with_code(1);
+    cmd.no_stdout();
+
+    if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
+        cmd.stderr_contains("tail: cannot open 'unreadable' for reading:");
+    } else {
+        cmd.stderr_is("tail: cannot open 'unreadable' for reading: Permission denied\n");
+    }
 }
 
 // TODO: Add similar test for windows
@@ -310,10 +306,16 @@ fn test_permission_denied_multiple() {
         .set_permissions(PermissionsExt::from_mode(0o000))
         .unwrap();
 
-    ucmd.args(&["file1", "unreadable", "file2"])
-        .fails_with_code(1)
-        .stderr_is("tail: cannot open 'unreadable' for reading: Permission denied\n")
-        .stdout_is("==> file1 <==\n\n==> file2 <==\n");
+    let cmd = ucmd
+        .args(&["file1", "unreadable", "file2"])
+        .fails_with_code(1);
+    cmd.stdout_is("==> file1 <==\n\n==> file2 <==\n");
+
+    if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
+        cmd.stderr_contains("tail: cannot open 'unreadable' for reading:");
+    } else {
+        cmd.stderr_is("tail: cannot open 'unreadable' for reading: Permission denied\n");
+    }
 }
 
 #[test]
@@ -355,17 +357,23 @@ fn test_stdin_redirect_dir() {
     let at = &ts.fixtures;
     at.mkdir("dir");
 
+    let expected = if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
+        "tail: Is a directory\n"
+    } else {
+        "tail: error reading 'standard input': Is a directory\n"
+    };
+
     ts.ucmd()
         .set_stdin(File::open(at.plus("dir")).unwrap())
         .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: error reading 'standard input': Is a directory\n");
+        .stderr_is(expected);
     ts.ucmd()
         .set_stdin(File::open(at.plus("dir")).unwrap())
         .arg("-")
         .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: error reading 'standard input': Is a directory\n");
+        .stderr_is(expected);
 }
 
 // On macOS path.is_dir() can be false for directories if it was a redirect,
@@ -528,6 +536,7 @@ fn test_null_default() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_single() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -560,9 +569,21 @@ fn test_follow_single() {
         .stdout_only(expected);
 }
 
+#[test]
+#[cfg(wasi_runner)]
+fn test_follow_file_unsupported() {
+    new_ucmd!()
+        .arg("-f")
+        .arg(FOOBAR_TXT)
+        .fails_with_code(1)
+        .stdout_is_fixture("foobar_single_default.expected")
+        .stderr_is("tail: follow mode is not supported on this platform\n");
+}
+
 /// Test for following when bytes are written that are not valid UTF-8.
 #[test]
 #[cfg(not(windows))] // FIXME: test times out
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_non_utf8_bytes() {
     // Tail the test file and start following it.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -625,6 +646,7 @@ fn test_permission_denied_is_not_reported_as_not_found() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut child = ucmd
@@ -668,6 +690,7 @@ fn test_follow_multiple() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_multiple() {
     // spell-checker:disable-next-line
     for argument in ["--follow=name", "--follo=nam", "--f=n"] {
@@ -715,6 +738,7 @@ fn test_follow_name_multiple() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_multiple_untailable() {
     // $ tail -f DIR1 DIR2
     // ==> DIR1 <==
@@ -757,17 +781,29 @@ fn test_follow_stdin_pipe() {
 #[test]
 #[cfg(not(windows))] // FIXME: for currently not working platforms
 fn test_follow_invalid_pid() {
+    let wasm = std::env::var("UUTESTS_WASM_RUNNER").is_ok();
+    let negative_pid_error = if wasm {
+        "tail: invalid PID: '-1234': invalid digit found in string\n"
+    } else {
+        "tail: invalid PID: '-1234'\n"
+    };
+
     new_ucmd!()
         .args(&["-f", "--pid=-1234"])
         .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: invalid PID: '-1234'\n");
+        .stderr_is(negative_pid_error);
     new_ucmd!()
         .args(&["-f", "--pid=abc"])
         .fails()
         .no_stdout()
         .stderr_is("tail: invalid PID: 'abc': invalid digit found in string\n");
-    let max_pid = (i32::MAX as i64 + 1).to_string();
+
+    let max_pid = if wasm {
+        (u128::from(u64::MAX) + 1).to_string()
+    } else {
+        (i64::from(i32::MAX) + 1).to_string()
+    };
     new_ucmd!()
         .args(&["-f", "--pid", &max_pid])
         .fails()
@@ -787,6 +823,7 @@ fn test_follow_invalid_pid() {
     not(target_os = "freebsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_with_pid() {
     use std::process::Command;
 
@@ -959,6 +996,32 @@ fn test_lines_with_size_suffix() {
 }
 
 #[test]
+fn test_lines_file_size_multiple_of_block_size() {
+    // Files of exactly one and two 64 KiB blocks.
+    for size in [65_536, 131_072] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("f", &"y\n".repeat(size / 2));
+        ucmd.args(&["-n", "1", "f"]).succeeds().stdout_only("y\n");
+    }
+}
+
+#[test]
+fn test_lines_reach_into_first_block() {
+    // 8192 lines of 16 bytes each: a file of exactly two 64 KiB blocks.
+    const LINES: usize = 8192;
+    let lines: Vec<String> = (0..LINES).map(|i| format!("{i:015}\n")).collect();
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("f", &lines.concat());
+    for n in [5000, LINES, LINES + 1] {
+        scene
+            .ucmd()
+            .args(&["-n", &n.to_string(), "f"])
+            .succeeds()
+            .stdout_only(lines[LINES.saturating_sub(n)..].concat());
+    }
+}
+
+#[test]
 fn test_multiple_input_files() {
     new_ucmd!()
         .arg(FOOBAR_TXT)
@@ -984,6 +1047,7 @@ fn test_multiple_input_files_missing() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_missing() {
     // Ensure that --follow=name does not imply --retry.
     // Ensure that --follow={descriptor,name} (without --retry) does *not wait* for the
@@ -1052,6 +1116,7 @@ fn test_dir() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_dir_follow() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1071,6 +1136,7 @@ fn test_dir_follow() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_dir_follow_retry() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1223,6 +1289,30 @@ fn test_obsolete_syntax_zero_lines_file() {
         .no_output();
 }
 
+/// Test for obsolete syntax `tail +0`: like `+1`, print the whole input.
+#[test]
+fn test_obsolete_syntax_positive_zero_lines() {
+    for arg in ["+0", "+00", "+0l"] {
+        new_ucmd!()
+            .args(&[arg])
+            .pipe_in("a\nb\nc\nd\ne\n")
+            .succeeds()
+            .no_stderr()
+            .stdout_is("a\nb\nc\nd\ne\n");
+    }
+}
+
+/// Test for obsolete syntax `tail +0c`: like `+1c`, print the whole input.
+#[test]
+fn test_obsolete_syntax_positive_zero_bytes() {
+    new_ucmd!()
+        .args(&["+0c"])
+        .pipe_in("a\nb\nc\nd\ne\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_is("a\nb\nc\nd\ne\n");
+}
+
 /// Test for reading all lines, specified by `tail -n +0`.
 #[test]
 fn test_positive_zero_lines() {
@@ -1354,6 +1444,18 @@ fn test_positive_bytes_file_offset_past_seek_limit() {
         .no_stdout();
 }
 
+// A `-c -N` count past `i64::MAX` asks for the whole file.
+#[test]
+fn test_negative_bytes_file_count_past_seek_limit() {
+    for count in ["-9223372036854775808", "-18446744073709551615"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("big", &"a".repeat(8192));
+        ucmd.args(&["-c", count, "big"])
+            .succeeds()
+            .stdout_only("a".repeat(8192));
+    }
+}
+
 #[test]
 fn test_num_with_undocumented_sign_bytes() {
     // tail: '-' is not documented (8.32 man pages)
@@ -1378,6 +1480,7 @@ fn test_num_with_undocumented_sign_bytes() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_bytes_for_funny_unix_files() {
     // Test tail with byte count
     let ts = TestScenario::new(util_name!());
@@ -1439,6 +1542,7 @@ fn test_retry_missing_file_error() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_retry_follow_name_waits_for_creation() {
     // Test tail --retry behavior
     // Ensure that `tail --retry --follow=name` waits for the file to appear.
@@ -1491,6 +1595,7 @@ fn test_retry_follow_name_waits_for_creation() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_retry_descriptor_detects_truncation() {
     // Test tail --retry behavior
     // Ensure that `tail --retry --follow=descriptor` waits for the file to appear.
@@ -1551,6 +1656,7 @@ fn test_retry_descriptor_detects_truncation() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_retry_descriptor_gives_up_on_untailable() {
     // Test tail --retry behavior
     // Ensure that `tail --follow=descriptor --retry` exits when the file appears untailable.
@@ -1598,6 +1704,7 @@ fn test_retry_descriptor_gives_up_on_untailable() {
 // >here
 #[test]
 #[cfg(all(not(windows), not(target_os = "android")))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_descriptor_no_retry_skips_late_file() {
     // Test tail --retry behavior
     // Ensure that --follow=descriptor (without --retry) does *not* try
@@ -1651,6 +1758,7 @@ fn test_descriptor_no_retry_skips_late_file() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_capital_f_recovers_after_dir_swap() {
     // Test tail --retry behavior
     // Ensure that `tail -F` retries when the file is initially untailable.
@@ -1728,6 +1836,7 @@ fn test_capital_f_recovers_after_dir_swap() {
 #[test]
 #[cfg(unix)]
 #[cfg(not(target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_replaced_by_symlink_is_untailable() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1786,6 +1895,7 @@ fn test_follow_name_replaced_by_symlink_is_untailable() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_retry8() {
     // Ensure that inotify will switch to polling mode if directory
     // of the watched file was initially missing and later created.
@@ -1859,6 +1969,7 @@ fn test_retry8() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_retry9() {
     // Test inotify behavior when directory is recreated
     // Ensure that inotify will switch to polling mode if directory
@@ -1949,6 +2060,7 @@ fn test_retry9() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_descriptor_vs_rename1() {
     // Test file descriptor behavior vs rename
     // $ ((rm -f A && touch A && sleep 1 && echo -n "A\n" >> A && sleep 1 && \
@@ -2012,6 +2124,7 @@ fn test_follow_descriptor_vs_rename1() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_descriptor_vs_rename2() {
     // Ensure the headers are correct for --verbose.
     // NOTE: GNU's tail does not update the header from FILE_A to FILE_C after `mv FILE_A FILE_C`
@@ -2069,6 +2182,7 @@ fn test_follow_descriptor_vs_rename2() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_shows_headers_on_creation() {
     // Test -F flag with file headers
     // Ensure tail -F distinguishes output with the
@@ -2137,6 +2251,7 @@ fn test_follow_name_shows_headers_on_creation() {
 
 #[test]
 #[cfg(all(not(windows), not(target_os = "android")))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_remove() {
     // This test triggers a remove event while `tail --follow=name file` is running.
     // ((sleep 2 && rm file &)>/dev/null 2>&1 &) ; tail --follow=name file
@@ -2197,6 +2312,7 @@ fn test_follow_name_remove() {
 
 #[test]
 #[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_truncate1() {
     // This test triggers a truncate event while `tail --follow=name file` is running.
     // $ cp file backup && head file > file && sleep 1 && cp backup file
@@ -2208,12 +2324,27 @@ fn test_follow_name_truncate1() {
     let backup = "backup";
 
     let expected_stdout = at.read(FOLLOW_NAME_EXP);
+    // `expected_stdout` starts with tail's initial static output (the last 10 lines);
+    // everything after that only appears once the truncate/restore below are observed.
+    let initial_stdout = &expected_stdout[..expected_stdout.find("END(25)\n").unwrap() + 8];
     let expected_stderr = format!("{}: {source}: file truncated\n", ts.util_name);
 
     let args = ["--follow=name", source];
     let mut p = ts.ucmd().args(&args).run_no_wait();
     let delay = 1000;
     p.make_assertion().is_alive();
+
+    // Wait for tail's initial read of `source` to finish before mutating it below.
+    // Watch registration happens before this initial output is printed, so once it
+    // appears the truncate/restore below are guaranteed to be observed as events.
+    // A fixed delay isn't enough here: a slow-starting child process (observed on
+    // macOS CI, see #12335) can otherwise race ahead of tail's own startup.
+    for _ in 0..500 {
+        if p.stdout_all() == initial_stdout {
+            break;
+        }
+        p.delay(10);
+    }
 
     at.copy(source, backup);
     p.delay(delay);
@@ -2234,7 +2365,26 @@ fn test_follow_name_truncate1() {
 
 #[test]
 #[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_truncate2() {
+    fn wait_for_output(
+        child: &mut uutests::util::UChild,
+        expected_stdout: &str,
+        expected_stderr: &str,
+    ) {
+        for _ in 0..500 {
+            if child.stdout_all() == expected_stdout && child.stderr_all() == expected_stderr {
+                return;
+            }
+            child.delay(10);
+        }
+        child
+            .make_assertion()
+            .with_all_output()
+            .stdout_is(expected_stdout)
+            .stderr_is(expected_stderr);
+    }
+
     // This test triggers a truncate event while `tail --follow=name file` is running.
     // $ ((sleep 1 && echo -n "x\nx\nx\n" >> file && sleep 1 && \
     // echo -n "x\n" > file &)>/dev/null 2>&1 &) ; tail --follow=name file
@@ -2251,20 +2401,19 @@ fn test_follow_name_truncate2() {
     let args = ["--follow=name", source];
     let mut p = ts.ucmd().args(&args).run_no_wait();
 
-    let delay = 1000;
     p.make_assertion().is_alive();
 
     at.append(source, "x\n");
-    p.delay(delay);
+    wait_for_output(&mut p, "x\n", "");
 
     at.append(source, "x\n");
-    p.delay(delay);
+    wait_for_output(&mut p, "x\nx\n", "");
 
     at.append(source, "x\n");
-    p.delay(delay);
+    wait_for_output(&mut p, "x\nx\nx\n", "");
 
     at.truncate(source, "x\n");
-    p.delay(delay);
+    wait_for_output(&mut p, expected_stdout, &expected_stderr);
 
     p.make_assertion().is_alive();
 
@@ -2276,6 +2425,7 @@ fn test_follow_name_truncate2() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_truncate3() {
     // Opening an empty file in truncate mode should not trigger a truncate event while
     // `tail --follow=name file` is running.
@@ -2312,6 +2462,7 @@ fn test_follow_name_truncate3() {
     not(windows),
     not(feature = "selinux") // flaky
 ))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_truncate4() {
     // Truncating a file with the same content it already has should not trigger a truncate event
 
@@ -2347,6 +2498,7 @@ fn test_follow_name_truncate4() {
 
 #[test]
 #[cfg(not(windows))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_detects_file_truncation() {
     // Test tail behavior on file truncation
     // Ensure all logs are output upon file truncation
@@ -2406,6 +2558,7 @@ fn test_follow_detects_file_truncation() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_move_create1() {
     // This test triggers a move/create event while `tail --follow=name file` is running.
     // ((sleep 2 && mv file backup && sleep 2 && cp backup file &)>/dev/null 2>&1 &) ; tail --follow=name file
@@ -2473,6 +2626,7 @@ fn test_follow_name_move_create1() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_hash_table_stress() {
     // Test inotify hash table under heavy file churn by watching 9 files simultaneously.
     // Exercises an abort-inducing flaw in inotify-enabled tail -F
@@ -2552,6 +2706,7 @@ fn test_follow_name_hash_table_stress() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_move1() {
     // This test triggers a move event while `tail --follow=name file` is running.
     // ((sleep 2 && mv file backup &)>/dev/null 2>&1 &) ; tail --follow=name file
@@ -2615,6 +2770,7 @@ fn test_follow_name_move1() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_move2() {
     // Like test_follow_name_move1, but move to a name that's already monitored.
 
@@ -2711,6 +2867,7 @@ fn test_follow_name_move2() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_move_retry1() {
     // Similar to test_follow_name_move1 but with `--retry` (`-F`)
     // This test triggers two move/rename events while `tail --follow=name --retry file` is running.
@@ -2776,6 +2933,7 @@ fn test_follow_name_move_retry1() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_rename_chain() {
     // Test -F flag behavior across file renames
     // Similar to test_follow_name_move2 (move to a name that's already monitored)
@@ -2878,6 +3036,7 @@ fn test_follow_name_rename_chain() {
 
 #[test]
 #[cfg(not(windows))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_inotify_only_regular() {
     // The GNU test inotify-only-regular.sh uses strace to ensure that `tail -f`
     // doesn't make inotify syscalls and only uses inotify for regular files or fifos.
@@ -2951,12 +3110,12 @@ fn test_fifo() {
 /// Without non-blocking FIFO open, tail would block forever waiting for a writer.
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
     not(windows)
 ))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
 fn test_fifo_with_pid() {
     use std::process::{Command, Stdio};
 
@@ -3850,7 +4009,7 @@ fn test_when_argument_file_is_a_symlink() {
 
     let mut file = at.make_file("target");
 
-    at.symlink_file("target", "link");
+    at.relative_symlink_file("target", "link");
 
     ts.ucmd().args(&["-c", "+0", "link"]).succeeds().no_output();
 
@@ -3862,16 +4021,6 @@ fn test_when_argument_file_is_a_symlink() {
         .args(&["-c", "+0", "link"])
         .succeeds()
         .stdout_only(random_string);
-
-    at.mkdir("dir");
-
-    at.symlink_file("dir", "dir_link");
-
-    let expected = "tail: error reading 'dir_link': Is a directory\n";
-    ts.ucmd()
-        .arg("dir_link")
-        .fails_with_code(1)
-        .stderr_only(expected);
 }
 
 // TODO: make this work on windows
@@ -3882,13 +4031,12 @@ fn test_when_argument_file_is_a_symlink_to_directory_then_error() {
     let at = &ts.fixtures;
 
     at.mkdir("dir");
-    at.symlink_file("dir", "dir_link");
+    at.relative_symlink_file("dir", "dir_link");
 
-    let expected = "tail: error reading 'dir_link': Is a directory\n";
     ts.ucmd()
         .arg("dir_link")
         .fails_with_code(1)
-        .stderr_only(expected);
+        .stderr_only("tail: error reading 'dir_link': Is a directory\n");
 }
 
 // TODO: make this work on windows
@@ -3985,7 +4133,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
     at.write("data", "file data");
     at.write("fifo", "fifo data");
 
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
                 fifo data\n\
                 ==> empty <==\n";
     scene
@@ -3995,7 +4143,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .succeeds()
         .stdout_only(expected);
 
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
                 \n\
                 ==> empty <==\n";
     scene
@@ -4007,7 +4155,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
 
     let expected = "==> empty <==\n\
                 \n\
-                ==> standard input <==\n";
+                ==> 'standard input' <==\n";
     scene
         .ucmd()
         .args(&["-c", "+0", "empty", "-"])
@@ -4017,7 +4165,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
 
     let expected = "==> empty <==\n\
                 \n\
-                ==> standard input <==\n\
+                ==> 'standard input' <==\n\
                 fifo data";
     scene
         .ucmd()
@@ -4026,7 +4174,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .succeeds()
         .stdout_only(expected);
 
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
                 pipe data\n\
                 ==> data <==\n\
                 file data";
@@ -4039,7 +4187,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
 
     let expected = "==> data <==\n\
                 file data\n\
-                ==> standard input <==\n\
+                ==> 'standard input' <==\n\
                 pipe data";
     scene
         .ucmd()
@@ -4048,9 +4196,9 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .succeeds()
         .stdout_only(expected);
 
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
                 pipe data\n\
-                ==> standard input <==\n";
+                ==> 'standard input' <==\n";
     scene
         .ucmd()
         .args(&["-c", "+0", "-", "-"])
@@ -4058,9 +4206,9 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .succeeds()
         .stdout_only(expected);
 
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
                 fifo data\n\
-                ==> standard input <==\n";
+                ==> 'standard input' <==\n";
     scene
         .ucmd()
         .args(&["-c", "+0", "-", "-"])
@@ -4079,11 +4227,11 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
     at.write("data", "file data");
     at.write("fifo", "fifo data");
 
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
                 \n\
                 ==> empty <==\n\
                 \n\
-                ==> standard input <==\n";
+                ==> 'standard input' <==\n";
 
     scene
         .ucmd()
@@ -4092,11 +4240,11 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
         .succeeds()
         .stdout_only(expected);
 
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
                 \n\
                 ==> empty <==\n\
                 \n\
-                ==> standard input <==\n";
+                ==> 'standard input' <==\n";
     scene
         .ucmd()
         .args(&["-c", "+0", "-", "empty", "-"])
@@ -4105,11 +4253,11 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
         .succeeds()
         .stdout_only(expected);
 
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
                 pipe data\n\
                 ==> data <==\n\
                 file data\n\
-                ==> standard input <==\n";
+                ==> 'standard input' <==\n";
     scene
         .ucmd()
         .args(&["-c", "+0", "-", "data", "-"])
@@ -4128,18 +4276,18 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
     // the pipe. Seems that windows `cmd` (like posix shells) ignores pipes when a fifo is present.
     // This is actually the wished behavior and the test therefore succeeds.
     #[cfg(windows)]
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
         fifo data\n\
         ==> data <==\n\
         file data\n\
-        ==> standard input <==\n\
+        ==> 'standard input' <==\n\
         (The process tried to write to a nonexistent pipe.\r\n)?";
     #[cfg(unix)]
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
         fifo data\n\
         ==> data <==\n\
         file data\n\
-        ==> standard input <==\n";
+        ==> 'standard input' <==\n";
 
     #[cfg(windows)]
     let cmd = ["cmd", "/C"];
@@ -4156,11 +4304,11 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
         .succeeds()
         .stdout_only(expected);
 
-    let expected = "==> standard input <==\n\
+    let expected = "==> 'standard input' <==\n\
                 fifo data\n\
                 ==> data <==\n\
                 file data\n\
-                ==> standard input <==\n";
+                ==> 'standard input' <==\n";
     scene
         .ucmd()
         .args(&["-c", "+0", "-", "data", "-"])
@@ -4218,23 +4366,6 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
         .stdout_only(expected_stdout);
 
     let expected_stdout = format!(
-        "tail: warning: --retry only effective for the initial open\n\
-        {file_data}"
-    );
-    let mut child = scene
-        .ucmd()
-        .args(&["--follow=descriptor", "--retry", "data"])
-        .stderr_to_stdout()
-        .run_no_wait();
-
-    child
-        .delay(500)
-        .kill()
-        .make_assertion()
-        .with_current_output()
-        .stdout_only(expected_stdout);
-
-    let expected_stdout = format!(
         "tail: warning: PID ignored; --pid=PID is useful only when following\n\
         {file_data}"
     );
@@ -4264,16 +4395,55 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
         .stdout_only(expected_stdout);
 }
 
+#[test]
+fn test_args_when_settings_check_warnings_follow_retry() {
+    let scene = TestScenario::new(util_name!());
+    let file_data = "file data\n";
+    scene.fixtures.write("data", file_data);
+
+    if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
+        scene
+            .ucmd()
+            .args(&["--follow=descriptor", "--retry", "data"])
+            .stderr_to_stdout()
+            .fails_with_code(1)
+            .stdout_only(format!(
+                "tail: warning: --retry only effective for the initial open\n\
+                {file_data}\
+                tail: follow mode is not supported on this platform\n"
+            ));
+        return;
+    }
+
+    let expected_stdout = format!(
+        "tail: warning: --retry only effective for the initial open\n\
+        {file_data}"
+    );
+    let mut child = scene
+        .ucmd()
+        .args(&["--follow=descriptor", "--retry", "data"])
+        .stderr_to_stdout()
+        .run_no_wait();
+
+    child
+        .delay(500)
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stdout_only(expected_stdout);
+}
+
 /// TODO: Write similar tests for windows
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_args_when_settings_check_warnings_follow_indefinitely_then_warning() {
     let scene = TestScenario::new(util_name!());
 
     let file_data = "file data\n";
     scene.fixtures.write("data", file_data);
 
-    let expected_stdout = "==> standard input <==\n";
+    let expected_stdout = "==> 'standard input' <==\n";
     let expected_stderr = "tail: warning: following standard input indefinitely is ineffective\n";
 
     // `tail -f - data` (without any redirect) would also print this warning in a terminal but we're
@@ -4298,7 +4468,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_warning() {
         .stdout_is(expected_stdout);
 
     let expected_stdout = "tail: warning: following standard input indefinitely is ineffective\n\
-                                 ==> standard input <==\n";
+                                 ==> 'standard input' <==\n";
     // same like above but this time the order of the output matters and we're redirecting stderr to
     // stdout
     // tail -f - data < /dev/ptmx
@@ -4320,7 +4490,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_warning() {
         "tail: warning: following standard input indefinitely is ineffective\n\
         ==> data <==\n\
         {file_data}\n\
-        ==> standard input <==\n"
+        ==> 'standard input' <==\n"
     );
     // tail -f data - < /dev/ptmx
     let mut child = scene
@@ -4338,7 +4508,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_warning() {
         .stdout_only(expected_stdout);
 
     let expected_stdout = "tail: warning: following standard input indefinitely is ineffective\n\
-                                 ==> standard input <==\n";
+                                 ==> 'standard input' <==\n";
     // tail -f - - < /dev/ptmx
     let mut child = scene
         .ucmd()
@@ -4355,7 +4525,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_warning() {
         .stdout_only(expected_stdout);
 
     let expected_stdout = "tail: warning: following standard input indefinitely is ineffective\n\
-                                 ==> standard input <==\n";
+                                 ==> 'standard input' <==\n";
     // tail -f - - data < /dev/ptmx
     let mut child = scene
         .ucmd()
@@ -4372,7 +4542,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_warning() {
         .stdout_only(expected_stdout);
 
     let expected_stdout = "tail: warning: following standard input indefinitely is ineffective\n\
-                                 ==> standard input <==\n";
+                                 ==> 'standard input' <==\n";
     // tail --pid=100000 -f - data < /dev/ptmx
     let mut child = scene
         .ucmd()
@@ -4391,6 +4561,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_warning() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4409,7 +4580,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
 
     let pipe_data = "pipe data";
     let expected_stdout = format!(
-        "==> standard input <==\n\
+        "==> 'standard input' <==\n\
         {pipe_data}\n\
         ==> {file_name} <==\n\
         {file_data}"
@@ -4432,7 +4603,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
     // Fails currently on macos with
     // Diff < left / right > :
     // <tail: cannot open 'standard input' for reading: No such file or directory
-    // >==> standard input <==
+    // >==> 'standard input' <==
     // >fifo data
     // >
     //  ==> data <==
@@ -4440,7 +4611,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
     #[cfg(not(target_vendor = "apple"))]
     {
         let expected_stdout = format!(
-            "==> standard input <==\n\
+            "==> 'standard input' <==\n\
         {fifo_data}\n\
         ==> {file_name} <==\n\
         {file_data}"
@@ -4460,7 +4631,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
             .stdout_only(expected_stdout);
 
         let expected_stdout = format!(
-            "==> standard input <==\n\
+            "==> 'standard input' <==\n\
         {fifo_data}\n\
         ==> {file_name} <==\n\
         {file_data}"
@@ -4705,6 +4876,7 @@ fn test_follow_when_file_and_symlink_are_pointing_to_same_file_and_append_data()
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4765,6 +4937,7 @@ fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
     not(target_os = "openbsd"),
     not(feature = "selinux") // flaky
 ))]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_stays_same_size() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5038,6 +5211,7 @@ fn test_tail_obsolete_error_cases() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_tail_obsolete_f_flag() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5059,6 +5233,7 @@ fn test_tail_obsolete_f_flag() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_obsolete_encoding_unix() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -5092,7 +5267,7 @@ fn test_obsolete_encoding_windows() {
 }
 
 #[test]
-#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_following_with_pid() {
     use std::process::Command;
 
@@ -5169,10 +5344,16 @@ fn test_when_piped_input_then_no_broken_pipe() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: closed stdout reports a generic I/O error rather than BrokenPipe"
+)]
 fn test_when_output_closed_then_no_broken_pipe() {
-    let mut cmd = new_ucmd!();
+    let (at, mut cmd) = at_and_ucmd!();
+    at.make_file("input").set_len(10_000_000).unwrap();
+
     let mut child = cmd
-        .args(&["-c", "10000000", "/dev/zero"])
+        .args(&["-c", "10000000", "input"])
         .set_stdout(Stdio::piped())
         .run_no_wait();
     // Dropping the stdout should not lead to an error.
@@ -5234,6 +5415,7 @@ fn test_failed_write_is_reported_on_seekable_input() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_dev_zero() {
     new_ucmd!()
         .args(&["-c", "1", "/dev/zero"])
@@ -5278,6 +5460,7 @@ fn test_follow_pipe_f() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_stdout_pipe_close() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("f", "line1\nline2\n");
@@ -5293,6 +5476,7 @@ fn test_follow_stdout_pipe_close() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_debug_flag_with_polling() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -5313,6 +5497,7 @@ fn test_debug_flag_with_polling() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_debug_flag_with_inotify() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -5330,6 +5515,7 @@ fn test_debug_flag_with_inotify() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_dangling_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("target", "link");
@@ -5344,6 +5530,7 @@ fn test_follow_dangling_symlink() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_symlink_target_change() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("t1", "A\n");
@@ -5417,4 +5604,28 @@ fn test_invalid_count_keeps_its_leading_zeros() {
         .args(&["-c-0fb", "/dev/null"])
         .fails_with_code(1)
         .stderr_is("tail: invalid number of bytes: '0fb'\n");
+}
+
+#[test]
+fn test_header_quotes_names_needing_it() {
+    // Same quoting rules as head: only names that need it are quoted.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("plain", "p\n");
+    at.write("two words", "w\n");
+
+    ucmd.args(&["-n1", "plain", "two words"])
+        .succeeds()
+        .stdout_only("==> plain <==\np\n\n==> 'two words' <==\nw\n");
+}
+
+// Windows rejects control characters in file names, so this one is unix-only.
+#[test]
+#[cfg(unix)]
+fn test_header_quotes_name_with_control_char() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("tab\there", "t\n");
+
+    ucmd.args(&["-v", "-n1", "tab\there"])
+        .succeeds()
+        .stdout_only("==> 'tab'$'\\t''here' <==\nt\n");
 }

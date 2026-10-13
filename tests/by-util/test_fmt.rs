@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore plass samp FFFD
+
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use uutests::new_ucmd;
@@ -341,6 +342,56 @@ fn prefix_equal_skip_prefix_equal_two() {
 }
 
 #[test]
+fn prefix_ignores_leading_whitespace_without_exact_prefix() {
+    for prefix_args in [vec!["-p", "> "], vec!["--prefix", "> "]] {
+        new_ucmd!()
+            .args(&prefix_args)
+            .pipe_in("  > alpha\n  > beta\n")
+            .succeeds()
+            .stdout_only("  > alpha beta\n");
+    }
+}
+
+#[test]
+fn exact_prefix_requires_the_prefix_to_start_the_line() {
+    for prefix_args in [
+        vec!["-x", "-p", "> "],
+        vec!["--exact-prefix", "--prefix", "> "],
+    ] {
+        new_ucmd!()
+            .args(&prefix_args)
+            .pipe_in("  > alpha\n  > beta\n")
+            .succeeds()
+            .stdout_only("  > alpha\n  > beta\n");
+    }
+}
+
+#[test]
+fn skip_prefix_ignores_leading_whitespace_without_exact_skip_prefix() {
+    for prefix_args in [vec!["-P", "#"], vec!["--skip-prefix", "#"]] {
+        new_ucmd!()
+            .args(&prefix_args)
+            .pipe_in("  # note\n  # more\n")
+            .succeeds()
+            .stdout_only("  # note\n  # more\n");
+    }
+}
+
+#[test]
+fn exact_skip_prefix_requires_the_prefix_to_start_the_line() {
+    for prefix_args in [
+        vec!["-X", "-P", "#"],
+        vec!["--exact-skip-prefix", "--skip-prefix", "#"],
+    ] {
+        new_ucmd!()
+            .args(&prefix_args)
+            .pipe_in("  # note\n  # more\n")
+            .succeeds()
+            .stdout_only("  # note # more\n");
+    }
+}
+
+#[test]
 fn test_fmt_unicode_whitespace_handling() {
     // Character classification fix: Test that Unicode whitespace characters like non-breaking space
     // are NOT treated as whitespace by fmt, maintaining GNU fmt compatibility.
@@ -454,4 +505,33 @@ fn test_fmt_width_multiplication_overflow() {
         .args(&["-w", "267672676527678256"])
         .fails_with_code(1)
         .stderr_is("fmt: invalid width: '267672676527678256'\n");
+}
+
+#[test]
+fn test_fmt_goal_only_defaults_width_to_goal_plus_ten() {
+    // GNU defaults the width to goal + 10 when only --goal is given, so `-g G`
+    // has to lay a paragraph out exactly as `-w G+10 -g G` does.
+    for goal in [5, 10, 20, 30, 50, 65] {
+        let widened = new_ucmd!()
+            .args(&[
+                "one-word-per-line.txt",
+                "-w",
+                &(goal + 10).to_string(),
+                "-g",
+                &goal.to_string(),
+            ])
+            .succeeds()
+            .stdout_move_str();
+
+        new_ucmd!()
+            .args(&["one-word-per-line.txt", "-g", &goal.to_string()])
+            .succeeds()
+            .stdout_is(&widened);
+    }
+
+    // The whole 37-column paragraph therefore fits on one line at goal 30.
+    new_ucmd!()
+        .args(&["one-word-per-line.txt", "--goal", "30"])
+        .succeeds()
+        .stdout_is("this is a file with one word per line\n");
 }

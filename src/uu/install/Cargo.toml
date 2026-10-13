@@ -16,21 +16,24 @@ path = "src/install.rs"
 
 [dependencies]
 clap = { workspace = true }
+fluent = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, default-features = true, features = [
   "backup-control",
   "buf-copy",
+  "entries",
   "fs",
   "mode",
   "perms",
-  "entries",
   "process",
 ] }
-fluent = { workspace = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-rustix = { workspace = true }
+rustix = { workspace = true, features = ["fs"] }
 selinux = { workspace = true, optional = true }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["process"] }
 
 [features]
 diagnostics = ["uucore/diagnostics"]

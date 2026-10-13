@@ -63,15 +63,13 @@ jobs:
             sudo locale-gen --keep-existing fr_FR.UTF-8
             sudo locale-gen --keep-existing es_ES.UTF-8
             sudo locale-gen --keep-existing en_US.UTF-8
+            sudo locale-gen --keep-existing en_GB.UTF-8
+            sudo locale-gen --keep-existing bg_BG.UTF-8 # Bulgaria
             sudo locale-gen --keep-existing fa_IR.UTF-8 # Iran
             sudo locale-gen --keep-existing am_ET.UTF-8 # Ethiopia
             sudo locale-gen --keep-existing th_TH.UTF-8 # Thailand
             sudo locale-gen --keep-existing hu_HU.UTF-8 # Hungary
             sudo update-locale
-          ;;
-          macos-*)
-            # needed for testing
-            brew install coreutils
           ;;
         esac
     - name: Test l10n functionality
@@ -428,9 +426,6 @@ jobs:
           ubuntu-*)
             sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
           ;;
-          macos-*)
-            brew install coreutils
-          ;;
         esac
     - name: Install via make and test multi-call binary
       shell: bash
@@ -583,9 +578,6 @@ jobs:
             # Generate French locale for testing
             sudo locale-gen --keep-existing fr_FR.UTF-8
             locale -a | grep -i fr || echo "French locale generation may have failed"
-          ;;
-          macos-*)
-            brew install coreutils
           ;;
         esac
     - name: Test Make installation

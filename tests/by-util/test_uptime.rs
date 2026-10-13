@@ -2,8 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
+
 // spell-checker:ignore utmp runlevel testusr testx boottime
+
 #![allow(clippy::cast_possible_wrap, clippy::unreadable_literal)]
 
 #[cfg(unix)]
@@ -336,7 +337,7 @@ fn test_uptime_pretty_print() {
         .arg("-p")
         .succeeds()
         .stdout_contains("up")
-        .stdout_contains("minute");
+        .stdout_matches(&Regex::new(r"hour|minute").unwrap());
 }
 
 /// Test uptime reliability on macOS with sysctl kern.boottime fallback.

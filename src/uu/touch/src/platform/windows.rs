@@ -10,8 +10,7 @@ use std::os::windows::prelude::AsRawHandle;
 use std::path::PathBuf;
 
 use windows_sys::Win32::Foundation::{
-    ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND, GetLastError, HANDLE,
-    MAX_PATH,
+    ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND, HANDLE, MAX_PATH,
 };
 use windows_sys::Win32::Storage::FileSystem::{FILE_NAME_OPENED, GetFinalPathNameByHandleW};
 
@@ -50,13 +49,9 @@ pub fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
         }
         0 => {
             return Err(TouchError::WindowsStdoutPathError(translate!(
-            "touch-error-windows-stdout-path-failed",
+                "touch-error-windows-stdout-path-failed",
                 "code".to_string() =>
-                format!(
-                    "{}",
-                    // SAFETY: GetLastError is thread-safe and has no documented memory unsafety.
-                    unsafe { GetLastError() }
-                ),
+                    format!("{}", std::io::Error::last_os_error().raw_os_error().unwrap_or(0)),
             )));
         }
         e => e as usize,

@@ -5,28 +5,29 @@
 
 // spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's
 
+#![cfg(unix)]
+
 use clap::{Arg, ArgAction, Command};
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{
     ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code, strip_errno,
 };
-use uucore::fs::{FileInformation, display_permissions_unix};
+use uucore::fs::{FileInformation, display_permissions_unix, path_is_root_dir};
 use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
 
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(not(target_os = "redox"))]
 use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 use uucore::{format_usage, show, show_error};
 
 use uucore::translate;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum ChmodError {
     #[error("{}", translate!("chmod-error-cannot-stat", "file" => _0.quote()))]
     CannotStat(PathBuf),
@@ -415,37 +416,6 @@ impl Chmoder {
         }
     }
 
-    /// Handle symlinks during directory traversal based on traversal mode
-    #[cfg(not(unix))]
-    fn handle_symlink_during_traversal(
-        &self,
-        path: &Path,
-        is_command_line_arg: bool,
-        ancestors: &mut HashSet<FileInformation>,
-    ) -> UResult<()> {
-        let should_follow_symlink = match self.traverse_symlinks {
-            TraverseSymlinks::All => true,
-            TraverseSymlinks::First => is_command_line_arg,
-            TraverseSymlinks::None => false,
-        };
-
-        if !should_follow_symlink {
-            return self.chmod_file_internal(path, false);
-        }
-
-        match fs::metadata(path) {
-            Ok(meta) if meta.is_dir() => self.walk_dir_with_context(path, false, ancestors),
-            Ok(_) => {
-                // It's a file symlink, chmod it
-                self.chmod_file(path)
-            }
-            Err(_) => {
-                // Dangling symlink, chmod it without dereferencing
-                self.chmod_file_internal(path, false)
-            }
-        }
-    }
-
     fn print_neither_changed(file: OsString) -> std::io::Result<()> {
         use std::io::{Write as _, stdout};
         writeln!(
@@ -516,7 +486,14 @@ impl Chmoder {
                 }
             }
             if self.recursive && self.preserve_root && Self::is_root(file) {
-                return Err(ChmodError::PreserveRoot("/".into()).into());
+                // Name the operand the user gave: with a bind mount of "/" it is
+                // not spelled "/", so say which path it is the same as.
+                return Err(if file.as_os_str() == "/" {
+                    ChmodError::PreserveRoot("/".into())
+                } else {
+                    ChmodError::PreserveRootSameAs(file.into())
+                }
+                .into());
             }
             if self.recursive {
                 let mut ancestors = HashSet::new();
@@ -530,30 +507,29 @@ impl Chmoder {
         r
     }
 
+    /// Whether `file` is `/`, by `(st_dev, st_ino)` rather than by name, so a
+    /// bind mount of `/` cannot slip past `--preserve-root` (as GNU does).
     fn is_root(file: impl AsRef<Path>) -> bool {
-        matches!(fs::canonicalize(&file), Ok(p) if p == Path::new("/"))
+        path_is_root_dir(file, true)
     }
 
-    /// `--preserve-root` guard for the recursive descent.
-    ///
-    /// The operand loop in [`Self::chmod`] only checks the paths named on the
-    /// command line. With `-L`, a symlink met *inside* the tree can resolve to
-    /// `/`, so the failsafe has to be re-checked at every descent or the
-    /// recursion walks straight into the real root. Only symlinks are
-    /// canonicalized, so ordinary trees pay nothing for this.
+    /// `--preserve-root` guard re-checked at every descent: a symlink to `/`
+    /// (under `-L`) or a bind mount of `/` met inside the tree is still `/`, so
+    /// the operand-only check is not enough. GNU re-checks every entry too.
     fn descends_into_root(&self, path: &Path) -> bool {
-        self.preserve_root && path.is_symlink() && Self::is_root(path)
+        self.preserve_root && Self::is_root(path)
     }
 
     // Non-safe traversal implementation for platforms without safe_traversal support
-    #[cfg(any(not(unix), target_os = "redox"))]
+    #[cfg(target_os = "redox")]
     fn walk_dir_with_context(
         &self,
         file_path: &Path,
         is_command_line_arg: bool,
         ancestors: &mut HashSet<FileInformation>,
     ) -> UResult<()> {
-        // Skip (and diagnose) a symlink that resolves to '/' before touching it.
+        // Skip (and diagnose) an entry that is '/' (a symlink to it, or a bind
+        // mount) before touching it.
         if self.descends_into_root(file_path) {
             show!(ChmodError::PreserveRootSameAs(file_path.into()));
             return Ok(());
@@ -575,10 +551,10 @@ impl Chmoder {
             // don't stat the same directory twice. If it's already on the current path,
             // it's a cycle.
             let dir_info = FileInformation::from_path(file_path, true).ok();
-            if let Some(info) = &dir_info {
-                if !ancestors.insert(info.clone()) {
-                    return r;
-                }
+            if let Some(info) = &dir_info
+                && !ancestors.insert(info.clone())
+            {
+                return r;
             }
 
             // We buffer all paths in this dir to not keep too many fd's open during recursion
@@ -587,31 +563,13 @@ impl Chmoder {
             for dir_entry in file_path.read_dir()? {
                 match dir_entry {
                     Ok(entry) => paths_in_this_dir.push(entry.path()),
-                    Err(err) => {
-                        r = r.and(Err(err.into()));
-                        continue;
-                    }
+                    Err(err) => r = r.and(Err(err.into())),
                 }
             }
             for path in paths_in_this_dir {
-                #[cfg(not(unix))]
-                {
-                    if path.is_symlink() {
-                        r = self
-                            .handle_symlink_during_recursion(&path, ancestors)
-                            .and(r);
-                    } else {
-                        r = self
-                            .walk_dir_with_context(path.as_path(), false, ancestors)
-                            .and(r);
-                    }
-                }
-                #[cfg(target_os = "redox")]
-                {
-                    r = self
-                        .walk_dir_with_context(path.as_path(), false, ancestors)
-                        .and(r);
-                }
+                r = self
+                    .walk_dir_with_context(path.as_path(), false, ancestors)
+                    .and(r);
             }
 
             // Backtrack: remove this directory from ancestors so sibling subtrees
@@ -623,14 +581,15 @@ impl Chmoder {
         r
     }
 
-    #[cfg(all(unix, not(target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn walk_dir_with_context(
         &self,
         file_path: &Path,
         is_command_line_arg: bool,
         ancestors: &mut HashSet<FileInformation>,
     ) -> UResult<()> {
-        // Skip (and diagnose) a symlink that resolves to '/' before touching it.
+        // Skip (and diagnose) an entry that is '/' (a symlink to it, or a bind
+        // mount) before touching it.
         if self.descends_into_root(file_path) {
             show!(ChmodError::PreserveRootSameAs(file_path.into()));
             return Ok(());
@@ -645,9 +604,12 @@ impl Chmoder {
             TraverseSymlinks::None => false,
         };
 
-        // If the path is a directory (or we should follow symlinks), recurse into it using safe traversal
+        // Recurse via safe traversal, opening under the same symlink policy the checks
+        // above used: the pathname is resolved again here, so under `-P` (the `-R`
+        // default) O_NOFOLLOW fails the open rather than redirecting the descent into a
+        // swapped-in symlink. `-H`/`-L` still follow, which is what they ask for.
         if (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir() {
-            match DirFd::open(file_path, SymlinkBehavior::Follow) {
+            match DirFd::open(file_path, should_follow_symlink.into()) {
                 Ok(dir_fd) => {
                     r = self.safe_traverse_dir(&dir_fd, file_path, ancestors).and(r);
                 }
@@ -664,7 +626,7 @@ impl Chmoder {
         r
     }
 
-    #[cfg(all(unix, not(target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn safe_traverse_dir(
         &self,
         dir_fd: &DirFd,
@@ -762,7 +724,7 @@ impl Chmoder {
         r
     }
 
-    #[cfg(all(unix, not(target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn handle_symlink_during_safe_recursion(
         &self,
         path: &Path,
@@ -805,7 +767,7 @@ impl Chmoder {
         }
     }
 
-    #[cfg(all(unix, not(target_os = "redox")))]
+    #[cfg(not(target_os = "redox"))]
     fn safe_chmod_file(
         &self,
         file_path: &Path,
@@ -832,16 +794,6 @@ impl Chmoder {
         self.report_permission_change(file_path, current_mode, new_mode);
 
         Ok(())
-    }
-
-    #[cfg(not(unix))]
-    fn handle_symlink_during_recursion(
-        &self,
-        path: &Path,
-        ancestors: &mut HashSet<FileInformation>,
-    ) -> UResult<()> {
-        // Use the common symlink handling logic
-        self.handle_symlink_during_traversal(path, false, ancestors)
     }
 
     fn chmod_file(&self, file: &Path) -> UResult<()> {
@@ -883,9 +835,10 @@ impl Chmoder {
             if self.verbose {
                 Self::print_neither_changed(file.into())?;
             }
-        } else {
-            self.change_file(fperm, self.fmode.unwrap_or(new_mode), file)?;
+            return Ok(());
         }
+
+        self.change_file(fperm, self.fmode.unwrap_or(new_mode), file)?;
 
         // A bare mode such as `-w` is umask-relative, so the umask can keep permissions that
         // the user asked to drop. GNU reports that as an error, but only when the mode was

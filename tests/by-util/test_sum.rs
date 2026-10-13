@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use uutests::at_and_ucmd;
@@ -72,6 +73,20 @@ fn test_invalid_file() {
     at.mkdir("a");
 
     ucmd.arg("a").fails().stderr_is("sum: a: Is a directory\n");
+}
+
+#[test]
+fn test_invalid_file_does_not_stop_other_files() {
+    // https://github.com/uutils/coreutils/issues/13131
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("d");
+    at.write("f", "hello\n");
+
+    ucmd.args(&["d", "f"])
+        .fails_with_code(1)
+        .stdout_is("36979     1 f\n")
+        .stderr_is("sum: d: Is a directory\n");
 }
 
 #[test]

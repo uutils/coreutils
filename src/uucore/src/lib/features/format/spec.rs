@@ -6,18 +6,14 @@
 // spell-checker:ignore (vars) intmax ptrdiff padlen
 
 use super::{
-    ExtendedBigDecimal, FormatChar, FormatError, OctalParsing, check_precision,
+    EscapeSet, ExtendedBigDecimal, FormatChar, FormatError, OctalParsing, check_precision,
     num_format::{
         self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
         UnsignedIntVariant,
     },
     parse_escape_only,
 };
-use crate::{
-    format::FormatArguments,
-    os_str_as_bytes,
-    quoting_style::{QuotingStyle, locale_aware_escape_name},
-};
+use crate::{format::FormatArguments, os_str_as_bytes, quoting_style::locale_aware_shell_escape};
 use std::{io::Write, num::NonZero, ops::ControlFlow};
 
 /// A parsed specification for formatting a value
@@ -388,7 +384,11 @@ impl Spec {
                 let bytes = os_str_as_bytes(os_str)?;
                 let mut parsed = Vec::<u8>::new();
 
-                for c in parse_escape_only(bytes, OctalParsing::ThreeDigits) {
+                for c in parse_escape_only(
+                    bytes,
+                    OctalParsing::ThreeDigits,
+                    EscapeSet::WithUnicodeAndQuote,
+                ) {
                     match c.write(&mut parsed)? {
                         ControlFlow::Continue(()) => {}
                         ControlFlow::Break(()) => {
@@ -402,12 +402,8 @@ impl Spec {
                 writer.write_all(&parsed).map_err(FormatError::IoError)
             }
             Self::QuotedString { position } => {
-                let s = locale_aware_escape_name(
-                    args.next_string(*position),
-                    QuotingStyle::SHELL_ESCAPE,
-                );
-                let bytes = os_str_as_bytes(&s)?;
-                writer.write_all(bytes).map_err(FormatError::IoError)
+                let s = locale_aware_shell_escape(args.next_string(*position));
+                writer.write_all(s.as_bytes()).map_err(FormatError::IoError)
             }
             Self::SignedInt {
                 width,

@@ -1,4 +1,5 @@
-# spell-checker:ignore bigdecimal extendedbigdecimal
+# spell-checker:ignore extendedbigdecimal
+
 [package]
 name = "uu_seq"
 description = "seq ~ (uutils) display a sequence of numbers"
@@ -19,6 +20,7 @@ doctest = false
 [dependencies]
 bigdecimal = { workspace = true }
 clap = { workspace = true }
+fluent = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 thiserror = { workspace = true }
@@ -30,7 +32,6 @@ uucore = { workspace = true, features = [
   "quoting-style",
   "signals",
 ] }
-fluent = { workspace = true }
 
 [[bin]]
 name = "seq"

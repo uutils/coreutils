@@ -24,7 +24,6 @@ use std::fs::{File, metadata};
 use std::io;
 use std::io::{BufRead, BufReader, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
 use std::path::Path;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code, strip_errno};
 use uucore::parser::parse_size::parse_size_u64;
@@ -76,6 +75,7 @@ fn handle_obsolete(args: impl uucore::Args) -> (Vec<OsString>, Option<String>) {
     let mut obs_lines = None;
     let mut preceding_long_opt_req_value = false;
     let mut preceding_short_opt_req_value = false;
+    let mut after_double_dash = false;
 
     let filtered_args = args
         .filter_map(|os_slice| {
@@ -84,6 +84,7 @@ fn handle_obsolete(args: impl uucore::Args) -> (Vec<OsString>, Option<String>) {
                 &mut obs_lines,
                 &mut preceding_long_opt_req_value,
                 &mut preceding_short_opt_req_value,
+                &mut after_double_dash,
             )
         })
         .collect();
@@ -98,9 +99,19 @@ fn filter_args(
     obs_lines: &mut Option<String>,
     preceding_long_opt_req_value: &mut bool,
     preceding_short_opt_req_value: &mut bool,
+    after_double_dash: &mut bool,
 ) -> Option<OsString> {
     let filter: Option<OsString>;
     if let Some(slice) = os_slice.to_str() {
+        if *after_double_dash {
+            // Past `--` everything is an operand, so `split -- -1` names a file
+            // rather than setting the line count.
+            return Some(OsString::from(slice));
+        }
+        if slice == "--" {
+            *after_double_dash = true;
+            return Some(OsString::from(slice));
+        }
         if should_extract_obs_lines(
             slice,
             *preceding_long_opt_req_value,
@@ -246,8 +257,8 @@ struct Settings {
     io_blksize: Option<u64>,
 }
 
-#[derive(Debug, Error)]
 /// An error when parsing settings from command-line arguments.
+#[derive(Debug, thiserror::Error)]
 enum SettingsError {
     /// Invalid chunking strategy.
     #[error("{0}")]
@@ -322,7 +333,7 @@ impl Settings {
             if let Some(s) = matches.get_one::<String>(options::IO_BLKSIZE) {
                 match parse_size_u64(s) {
                     Ok(0) => return Err(SettingsError::InvalidIOBlockSize(s.to_owned())),
-                    Ok(n) if n <= uucore::fs::sane_blksize::MAX => Some(n),
+                    Ok(n @ ..=uucore::fs::sane_blksize::MAX) => Some(n),
                     _ => return Err(SettingsError::InvalidIOBlockSize(s.to_owned())),
                 }
             } else {
@@ -1148,22 +1159,28 @@ fn n_chunks_by_line(
         // empty files in place(s) of skipped chunk(s)
         let num_line_bytes = bytes.len() as u64;
         num_bytes_written += num_line_bytes;
-        let mut skipped = -1;
+        let first_chunk_number = chunk_number;
         // Cap at the last chunk to avoid an infinite loop when trailing chunks are
         // zero-sized, and keep excess input from indexing past out_files.
         while chunk_number < num_chunks && num_bytes_should_be_written <= num_bytes_written {
-            num_bytes_should_be_written +=
-                chunk_size_base + (chunk_size_reminder > chunk_number) as u64;
+            let chunk_size = chunk_size_base + (chunk_size_reminder > chunk_number) as u64;
+            if chunk_size == 0 {
+                // Every remaining chunk is zero-sized as well, so all of them
+                // would be skipped one at a time, which takes prohibitively
+                // long for a huge number of chunks. Jump to the last one.
+                chunk_number = num_chunks;
+                break;
+            }
+            num_bytes_should_be_written += chunk_size;
             chunk_number += 1;
-            skipped += 1;
         }
 
         // If a chunk was skipped and `elide_empty_files` flag is set,
         // roll chunk_number back to preserve sequential continuity
         // of file names for files written to,
         // except for Kth chunk of N mode
-        if settings.elide_empty_files && skipped > 0 && kth_chunk.is_none() {
-            chunk_number -= skipped as u64;
+        if settings.elide_empty_files && kth_chunk.is_none() {
+            chunk_number = chunk_number.min(first_chunk_number + 1);
         }
         if kth_chunk.is_some_and(|k| chunk_number > k) {
             break;
@@ -1228,9 +1245,10 @@ fn n_chunks_by_line_round_robin(
     let mut closed_writers = 0;
 
     let mut i = 0;
+    let mut line = Vec::new();
     loop {
-        let line = &mut Vec::new();
-        let num_bytes_read = reader.by_ref().read_until(sep, line)?;
+        line.clear();
+        let num_bytes_read = reader.by_ref().read_until(sep, &mut line)?;
 
         // if there is nothing else to read - exit the loop
         if num_bytes_read == 0 {
@@ -1368,7 +1386,7 @@ fn line_bytes(
 }
 
 fn split(settings: &Settings) -> UResult<()> {
-    let mut reader = if settings.input == "-" {
+    let reader = if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
     } else {
         let r = File::open(Path::new(&settings.input)).map_err_context(
@@ -1379,6 +1397,17 @@ fn split(settings: &Settings) -> UResult<()> {
         Box::new(r) as Box<dyn Read>
     };
     let io_blksize: usize = settings.io_blksize.unwrap_or(8 * 1024).try_into().unwrap();
+    let mut reader = BufReader::with_capacity(io_blksize, reader);
+
+    // Fixed-size modes only open an output when there is data to split.
+    // Keep the first block buffered so the selected strategy can consume it.
+    if matches!(
+        settings.strategy,
+        Strategy::Lines(_) | Strategy::Bytes(_) | Strategy::LineBytes(_)
+    ) && reader.fill_buf()?.is_empty()
+    {
+        return Ok(());
+    }
 
     match settings.strategy {
         Strategy::Number(NumberType::Bytes(num_chunks)) => {

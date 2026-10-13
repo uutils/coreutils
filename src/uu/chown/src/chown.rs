@@ -3,19 +3,17 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) COMFOLLOW Passwd RFILE RFILE's derefer dgid duid groupname
+// spell-checker:ignore (ToDO) Passwd RFILE RFILE's derefer dgid duid groupname
 
 use uucore::display::Quotable;
 pub use uucore::entries::{self, Group, Locate, Passwd};
-use uucore::format_usage;
-use uucore::perms::{GidUidOwnerFilter, IfFrom, chown_base, options};
-use uucore::show_warning;
-use uucore::translate;
-
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::perms::{GidUidOwnerFilter, IfFrom, chown_base, options};
+use uucore::{format_usage, show_warning, translate};
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
+use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 
@@ -34,7 +32,7 @@ fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> 
     let dest_uid: Option<u32>;
     let dest_gid: Option<u32>;
     let raw_owner: String;
-    if let Some(file) = matches.get_one::<String>(options::REFERENCE) {
+    if let Some(file) = matches.get_one::<OsString>(options::REFERENCE) {
         let meta = fs::metadata(file).map_err_context(
             || translate!("chown-error-failed-to-get-attributes", "file" => file.quote()),
         )?;
@@ -132,7 +130,8 @@ pub fn uu_app() -> Command {
                 .long(options::REFERENCE)
                 .help(translate!("chown-help-reference"))
                 .value_name("RFILE")
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::verbosity::SILENT)
@@ -194,11 +193,13 @@ fn parse_gid(group: &str, spec: &str) -> UResult<Option<u32>> {
 /// * `"owner:group"`,
 /// * `"owner"`,
 /// * `":group"`,
+/// * `"owner:"`,
 ///
 /// and the owner or group can be specified either as an ID or a
 /// name. The `sep` argument specifies which character to use as a
 /// separator between the owner and group; calling code should set
-/// this to `':'`.
+/// this to `':'`. If a separator is given but the group is omitted
+/// (as in `"owner:"`), the group is set to the owner's login group.
 fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
     assert!(['.', ':'].contains(&sep));
     let mut args = spec.splitn(2, sep);
@@ -218,19 +219,20 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
         return parse_spec(spec, '.');
     }
 
-    let uid = parse_uid(user, spec)?;
-    let gid = parse_gid(group, spec)?;
-
-    if user.chars().next().is_some_and(char::is_numeric) && group.is_empty() && spec != user {
-        // if the arg starts with an id numeric value, the group isn't set but the separator is provided,
-        // we should fail with an error
-        return Err(USimpleError::new(
-            1,
-            translate!("chown-error-invalid-spec", "spec" => spec.quote()),
-        ));
+    if !user.is_empty() && group.is_empty() && spec != user {
+        // A separator was given but the group was not ("owner:"), so the
+        // group is set to the owner's login group.
+        return match Passwd::locate(user) {
+            // Lookup must occur through name, not ID, to be valid here.
+            Ok(passwd) if passwd.name == user => Ok((Some(passwd.uid), Some(passwd.gid))),
+            _ => Err(USimpleError::new(
+                1,
+                translate!("chown-error-invalid-spec", "spec" => spec.quote()),
+            )),
+        };
     }
 
-    Ok((uid, gid))
+    Ok((parse_uid(user, spec)?, parse_gid(group, spec)?))
 }
 
 #[cfg(test)]
@@ -250,6 +252,16 @@ mod test {
         assert!(matches!(parse_spec(".", '.'), Ok((None, None))));
         assert!(format!("{}", parse_spec("::", ':').err().unwrap()).starts_with("invalid group: "));
         assert!(format!("{}", parse_spec("..", ':').err().unwrap()).starts_with("invalid group: "));
+    }
+
+    /// Test that "USER:" sets the group to the user's login group.
+    #[test]
+    fn test_parse_spec_login_group() {
+        if let Ok(passwd) = Passwd::locate("root") {
+            let (uid, gid) = parse_spec("root:", ':').unwrap();
+            assert_eq!(uid, Some(passwd.uid));
+            assert_eq!(gid, Some(passwd.gid));
+        }
     }
 
     /// Test for parsing IDs that don't correspond to a named user or group.

@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore cmdline dyld dylib PDEATHSIG setvbuf ppid
 
 #[cfg(target_os = "linux")]
@@ -310,7 +311,7 @@ fn test_libstdbuf_preload() {
     // With GLIBC, the log should contain something like:
     //   "symbol=setvbuf;  lookup in file=/tmp/.tmp0mfmCg/libstdbuf.so [0]"
     // With FreeBSD dynamic loader, the log should contain something like:
-    // cspell:disable-next-line
+    // spell-checker:disable-next-line
     //   "calling init function for /tmp/.tmpu11rhP/libstdbuf.so at ..."
     let libstdbuf_in_path = if cfg!(target_os = "freebsd") {
         uutils_debug
@@ -323,7 +324,7 @@ fn test_libstdbuf_preload() {
     };
 
     // Check for lack of architecture mismatch error. The potential error message with GLIBC is:
-    // cspell:disable-next-line
+    // spell-checker:disable-next-line
     // "ERROR: ld.so: object '/tmp/.tmpCLq8jl/libstdbuf.so' from LD_PRELOAD cannot be preloaded (cannot open shared object file): ignored."
     let arch_mismatch_line = uutils_debug
         .lines()

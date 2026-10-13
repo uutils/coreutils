@@ -91,7 +91,7 @@ report. A few caveats:
 
 - The package is PATCHED, so it may differ from upstream.
 - NEVER install this package on your system — it isn't meant for daily use.
-  Instead, manually download and extract the [tarball](https://launchpad.net/~bamf0/+archive/ubuntu/coreutils-reference/+files/gnu-coreutils_9.11-0ubuntu1~ppa3_amd64.deb)
+  Instead, manually download and extract the [tarball](https://launchpad.net/~bamf0/+archive/ubuntu/coreutils-reference/+files/gnu-coreutils_9.12-0ubuntu1~ppa1_amd64.deb)
   and run it from there.
 - Bug reports and fixes for this package itself are not accepted here.
 

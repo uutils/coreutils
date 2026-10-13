@@ -12,3 +12,5 @@ test_mkdir_restorecon.patch
 error_msg_uniq.diff
 tests_numfmt.patch
 tests_pwd-long.patch
+tests_getopt_vs_usage.patch
+tests_usage_vs_refs.patch

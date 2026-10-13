@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore lmnop xlmnop
+
 use rstest::rstest;
 use uutests::new_ucmd;
 #[cfg(unix)]
@@ -1233,4 +1235,21 @@ seq: %5.2c: invalid conversion specification
             .fails_with_code(1)
             .stderr_is("seq: %5.2c: invalid conversion specification\n");
     }
+}
+
+#[test]
+fn test_format_precision_above_formatter_limit() {
+    let result = new_ucmd!().args(&["-f", "%.66000f", "4", "4"]).succeeds();
+    let out = result.stdout_str();
+    assert_eq!(out.len(), 66_003); // "4." + 66000 zeros + newline
+    assert!(out.starts_with("4."));
+    assert!(out[2..].trim_end().bytes().all(|b| b == b'0'));
+}
+
+#[test]
+fn test_format_zero_precision_above_formatter_limit() {
+    new_ucmd!()
+        .args(&["-f", "%.70000e", "0", "0"])
+        .succeeds()
+        .stdout_only(format!("0.{}e+00\n", "0".repeat(70000)));
 }

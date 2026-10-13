@@ -6,13 +6,12 @@
 use clap::{Arg, ArgAction, Command};
 use std::io::{Write, stdout};
 use syntax_tree::{AstNode, is_truthy};
-use thiserror::Error;
 use uucore::os_string_to_vec;
 use uucore::translate;
 use uucore::{
     display::Quotable,
-    error::{UError, UResult},
-    format_usage,
+    error::{UError, UResult, strip_errno},
+    format_usage, show_error,
 };
 
 mod diagnostics;
@@ -27,7 +26,7 @@ mod options {
 
 pub type ExprResult<T> = Result<T, ExprError>;
 
-#[derive(Error, Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ExprError {
     #[error("{}", translate!("expr-error-unexpected-argument", "arg" => _0.quote()))]
     UnexpectedArgument(String),
@@ -146,7 +145,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 uucore::error::quiet_if_reported(reported, e)
             })?;
             stdout().write_all(&res)?;
-            stdout().write_all(b"\n")?;
+            if let Err(e) = stdout().write_all(b"\n") {
+                show_error!("{}", strip_errno(&e));
+                return Err(3.into());
+            }
             if !is_truthy(&res.into()) {
                 return Err(1.into());
             }

@@ -53,6 +53,6 @@ Index: gnu/tests/uniq/uniq.pl
 +  {ERR=>"error: invalid value 'badoption' for '--group[=<group-method>]'\n\n" .
 +        "  [possible values: separate, prepend, append, both]\n\n" .
 +        "For more information, try '--help'.\n"}],
- );
-
- # Locale related tests
+  # Test for read buffer overrun.
+  do { my $longline = "\360\237\230\200" . "A" x 255 . "\n";
+       ['146', '-w256', {IN  => $longline x 2}, {OUT => $longline}] },

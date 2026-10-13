@@ -163,7 +163,7 @@ impl Range {
                     RangeErrorKind::ZeroBound,
                 )),
                 // GNU fails when we are at the limit. Match their behavior
-                Ok(n) if n == usize::MAX => Err(at(
+                Ok(usize::MAX) => Err(at(
                     "byte/character offset is too large",
                     RangeErrorKind::TooLarge,
                 )),
@@ -245,17 +245,15 @@ impl Range {
     ///
     /// Is guaranteed to return only disjoint ranges in a sorted order.
     pub fn merge(mut ranges: Vec<Self>) -> Vec<Self> {
-        ranges.sort();
-
-        // merge overlapping ranges
-        for i in 0..ranges.len() {
-            let j = i + 1;
-
-            while j < ranges.len() && ranges[j].low <= ranges[i].high {
-                let j_high = ranges.remove(j).high;
-                ranges[i].high = max(ranges[i].high, j_high);
+        ranges.sort_unstable_by_key(|r| r.low);
+        ranges.dedup_by(|a, b| {
+            if a.low <= b.high {
+                b.high = max(b.high, a.high);
+                true
+            } else {
+                false
             }
-        }
+        });
         ranges
     }
 }

@@ -648,21 +648,21 @@ fn print_terminal_size(
 
     let mut printer = WrappedPrinter::new(window_size);
 
-    // BSDs and Linux (not ppc/big-endian ppc64) use a u32 for the baud rate, so we can simply
+    // BSDs and Linux (not ppc/ppc64) use a u32 for the baud rate, so we can simply
     // print it.
-    #[cfg(any(target_os = "linux", bsd))]
-    #[cfg(all(
-        not(target_arch = "powerpc"),
-        not(all(target_arch = "powerpc64", target_endian = "big"))
+    #[cfg(any(
+        bsd,
+        all(
+            target_os = "linux",
+            not(target_arch = "powerpc"),
+            not(target_arch = "powerpc64")
+        )
     ))]
     printer.print(&translate!("stty-output-speed", "speed" => speed));
 
-    // Big-endian Linux PowerPC uses BaudRate enum, need to convert to display format
+    // Linux PowerPC uses the BaudRate enum, need to convert to display format
     #[cfg(target_os = "linux")]
-    #[cfg(any(
-        target_arch = "powerpc",
-        all(target_arch = "powerpc64", target_endian = "big")
-    ))]
+    #[cfg(any(target_arch = "powerpc", target_arch = "powerpc64"))]
     {
         // On PowerPC, find the corresponding baud rate string for display
         let speed_str = BAUD_RATES
@@ -1024,21 +1024,19 @@ fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
 /// check that should never trigger since `parse_saved_state` rejects such states.
 fn apply_saved_state(termios: &mut Termios, state: &[u32]) {
     // Require at least 4 elements for the flags (defensive check)
-    if state.len() < 4 {
+    let [s0, s1, s2, s3, rest @ ..] = state else {
         return; // No-op for invalid state (already validated by parser)
-    }
+    };
 
     // Apply the four flag groups, done (as _) for MacOS size compatibility
-    termios.input_flags = InputFlags::from_bits_truncate(state[0] as _);
-    termios.output_flags = OutputFlags::from_bits_truncate(state[1] as _);
-    termios.control_flags = ControlFlags::from_bits_truncate(state[2] as _);
-    termios.local_flags = LocalFlags::from_bits_truncate(state[3] as _);
+    termios.input_flags = InputFlags::from_bits_truncate(*s0 as _);
+    termios.output_flags = OutputFlags::from_bits_truncate(*s1 as _);
+    termios.control_flags = ControlFlags::from_bits_truncate(*s2 as _);
+    termios.local_flags = LocalFlags::from_bits_truncate(*s3 as _);
 
     // Apply control characters if present (stored as u32 but used as u8)
-    for (i, &cc_val) in state.iter().skip(4).enumerate() {
-        if i < termios.control_chars.len() {
-            termios.control_chars[i] = cc_val as u8;
-        }
+    for (c, &cc_val) in termios.control_chars.iter_mut().zip(rest) {
+        *c = cc_val as u8;
     }
 }
 

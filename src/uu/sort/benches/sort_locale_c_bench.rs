@@ -52,6 +52,33 @@ fn sort_german_c_locale(bencher: Bencher) {
         .bench_values(|args| black_box(uumain(args)));
 }
 
+/// Benchmark whole-line sorting of lines that all share a long prefix, such as
+/// timestamped log lines or paths under one directory. The sorter has to find
+/// and skip that prefix before it can key each line on the bytes that differ.
+#[divan::bench]
+fn sort_shared_prefix_c_locale(bencher: Bencher) {
+    const PREFIX: &[u8] = b"/srv/data/2026/09/03/node-07/service/events/request-";
+    let mut data = Vec::new();
+    let mut state: u32 = 0x9e37_79b9;
+    for _ in 0..500_000 {
+        // Cheap deterministic pseudo-random suffix.
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        data.extend_from_slice(PREFIX);
+        data.extend_from_slice(format!("{state:08x}.json\n").as_bytes());
+    }
+    let file_path = setup_test_file(&data);
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path();
+
+    bencher
+        .with_inputs(|| {
+            get_bench_args(&[&"--parallel=1", &"-o", &output_path, &file_path]).into_iter()
+        })
+        .bench_values(|args| black_box(uumain(args)));
+}
+
 fn main() {
     // Set C locale BEFORE any benchmarks run.
     // This must happen before divan::main() because the locale is cached

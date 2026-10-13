@@ -17,10 +17,10 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
+fluent = { workspace = true }
 itoa = { workspace = true }
 regex = { workspace = true }
 uucore = { workspace = true }
-fluent = { workspace = true }
 
 [dev-dependencies]
 divan = { workspace = true }

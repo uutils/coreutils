@@ -17,9 +17,9 @@ doctest = false
 
 [target.'cfg(not(target_os = "fuchsia"))'.dependencies]
 clap = { workspace = true }
+fluent = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["process", "signals"] }
-fluent = { workspace = true }
 
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
 libc = { workspace = true }

@@ -5,12 +5,13 @@
 
 // spell-checker:ignore (vars) DACL PSECURITY PSID
 
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fs::{Metadata, OpenOptions};
 use std::io::{self, IsTerminal};
 use std::os::windows::fs::OpenOptionsExt;
 use std::os::windows::io::{AsHandle, OwnedHandle};
 use std::path::Path;
+use std::sync::LazyLock;
 use uucore::fs::{FileInformation, infos_refer_to_same_file};
 use windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED;
 use windows_sys::Win32::Security::{
@@ -316,15 +317,47 @@ pub fn is_writable(path: &OsStr, metadata: &Metadata) -> bool {
         && has_access(path, FILE_GENERIC_WRITE)
 }
 
+struct PathExt {
+    #[allow(dead_code)]
+    raw: Option<Box<OsStr>>,
+    parsed: Box<[&'static OsStr]>, // self-referential slice into `raw`
+}
+
+static PATHEXT: LazyLock<PathExt> = LazyLock::new(|| {
+    let raw = std::env::var_os("PATHEXT").map(OsString::into_boxed_os_str);
+
+    let parsed = raw
+        // Turn PATHEXT into a &[u8] slice with some fallback values.
+        .as_deref()
+        .unwrap_or_else(|| OsStr::new(".COM;.EXE;.BAT;.CMD"))
+        .as_encoded_bytes()
+        // Split into individual extensions.
+        .split(|b| *b == b';')
+        // Ensure that they look valid: /\..+/
+        .filter_map(|s| s.strip_prefix(b"."))
+        .filter(|s| !s.is_empty())
+        // SAFETY: We have only removed ASCII bytes (; and .), which means
+        // the remaining bytes form a valid OsStr on this platform.
+        .map(|s| unsafe { OsStr::from_encoded_bytes_unchecked(s) })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+
+    // SAFETY: We're going to return a self-referential struct,
+    // which requires lifetime trickery in Rust. We return a self-referential
+    // struct, because `PATHEXT` typically contains numerous extensions and
+    // there's no good reason to have numerous persistent allocations.
+    let parsed = unsafe { std::mem::transmute::<Box<[&OsStr]>, Box<[&OsStr]>>(parsed) };
+
+    PathExt { raw, parsed }
+});
+
 fn has_executable_extension(path: &OsStr) -> bool {
-    Path::new(path)
-        .extension()
-        .and_then(OsStr::to_str)
-        .is_some_and(|extension| {
-            ["exe", "bat", "cmd", "com"]
-                .iter()
-                .any(|known| extension.eq_ignore_ascii_case(known))
-        })
+    Path::new(path).extension().is_some_and(|extension| {
+        PATHEXT
+            .parsed
+            .iter()
+            .any(|c| c.eq_ignore_ascii_case(extension))
+    })
 }
 
 /// For a directory this is permission to enter it: FILE_EXECUTE doubles as

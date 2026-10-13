@@ -2,8 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore roff
 // spell-checker:ignore funnnnnnnnnnnnnnnnn
+
 use uutests::new_ucmd;
 
 #[test]
@@ -484,4 +486,17 @@ fn test_invalid_utf8_input_is_not_an_error() {
         .pipe_in(b"ab\xFFcd\n".to_vec())
         .succeeds()
         .no_stderr();
+}
+
+#[test]
+fn test_nullable_word_regexp_no_empty_matches() {
+    let expected = concat!(
+        "                                       aa bb cc\n",
+        "                                  aa   bb cc\n"
+    );
+    new_ucmd!()
+        .args(&["-W", "[ab]{0,}"])
+        .pipe_in("aa bb cc\n")
+        .succeeds()
+        .stdout_only(expected);
 }

@@ -3,8 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use uutests::new_ucmd;
 // spell-checker:ignore checkfile, testf, ntestf
+
+use uutests::new_ucmd;
+
 macro_rules! get_hash(
     ($str:expr) => (
         $str.split(' ').collect::<Vec<&str>>()[0]

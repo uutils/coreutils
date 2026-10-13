@@ -2,13 +2,13 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 //! Determine the strategy for breaking up the input (file or stdin) into chunks
 //! based on the command line options
 
 use crate::cli::options;
 use clap::{ArgMatches, parser::ValueSource};
 use std::ffi::OsString;
-use thiserror::Error;
 use uucore::{
     diagnostics::OptionValue,
     display::Quotable,
@@ -57,7 +57,7 @@ impl NumberType {
 }
 
 /// An error due to an invalid parameter to the `-n` command-line option.
-#[derive(Debug, PartialEq, Error)]
+#[derive(Debug, PartialEq, thiserror::Error)]
 pub enum NumberTypeError {
     /// The number of chunks was invalid.
     ///
@@ -208,7 +208,7 @@ pub enum Strategy {
 /// A bad size carries the option it was given to, so that a caret can point
 /// inside it — `None` when it came from no option, as with the obsolete
 /// `split -22` spelling.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum StrategyError {
     /// Invalid number of lines.
     #[error("{}", translate!("split-error-invalid-number-of-lines", "error" => .0))]

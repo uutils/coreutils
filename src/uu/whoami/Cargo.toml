@@ -18,8 +18,11 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["entries", "process"] }
 fluent = { workspace = true }
+uucore = { workspace = true, features = ["entries"] }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["process"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [

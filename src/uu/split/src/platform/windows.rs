@@ -2,11 +2,13 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use crate::platform::Writer;
 use std::ffi::OsStr;
 use std::io::{Error, ErrorKind, Result};
 use std::path::Path;
 use uucore::display::Quotable;
+use uucore::error::strip_errno;
 use uucore::fs;
 use uucore::translate;
 
@@ -71,7 +73,7 @@ fn create_or_truncate_output_file(input: &OsStr, filename: &OsStr) -> Result<std
 }
 
 fn open_file_error(filename: &OsStr, e: Error) -> Error {
-    let e = uucore::error::strip_errno(&e);
+    let e = strip_errno(&e);
     Error::other(format!("{}: {e}", filename.quote()))
 }
 

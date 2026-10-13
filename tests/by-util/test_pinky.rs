@@ -19,14 +19,14 @@ fn test_invalid_arg() {
 #[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_long_format() {
-    use pinky::Capitalize;
+    use pinky::capitalize;
 
     let login = "root";
     let pw: Passwd = Passwd::locate(login).unwrap();
     let user_info = pw.user_info.unwrap_or_default();
     let user_dir = pw.user_dir.unwrap_or_default();
     let user_shell = pw.user_shell.unwrap_or_default();
-    let real_name = user_info.replace('&', &pw.name.capitalize());
+    let real_name = user_info.replace('&', &capitalize(&pw.name));
     let ts = TestScenario::new(util_name!());
     ts.ucmd().arg("-l").arg(login).succeeds().stdout_is(format!(
         "Login name: {login:<28}In real life:  {real_name}\nDirectory: {user_dir:<29}Shell:  {user_shell}\n\n"

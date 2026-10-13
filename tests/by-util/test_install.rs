@@ -2,8 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) helloworld nodir objdump n'source nconfined testdir
 
+// spell-checker:ignore (words) helloworld nodir n'source nconfined testdir ETXTBSY Cryptfs
+// spell-checker:ignore tvos watchos visionos
+
+use rustix::process::{getegid, geteuid};
 use std::env::current_exe;
 use std::fs;
 #[cfg(target_os = "linux")]
@@ -12,13 +15,10 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
 use uucore::error::strip_errno;
-use uucore::process::{getegid, geteuid};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
 use uutests::util::{TestScenario, is_ci, run_ucmd_as_root};
-use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 #[test]
 fn test_invalid_arg() {
@@ -409,7 +409,7 @@ fn test_install_target_new_file_with_group() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
     let dir = "target_dir";
-    let gid = getegid();
+    let gid = getegid().as_raw();
 
     at.touch(file);
     at.mkdir(dir);
@@ -436,7 +436,7 @@ fn test_install_target_new_file_with_owner() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
     let dir = "target_dir";
-    let uid = geteuid();
+    let uid = geteuid().as_raw();
 
     at.touch(file);
     at.mkdir(dir);
@@ -558,6 +558,22 @@ fn test_install_target_file_dev_null() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_install_replaces_special_target() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "source_file";
+    let target = "target_fifo";
+
+    at.write(source, "contents");
+    at.mkfifo(target);
+
+    ucmd.arg(source).arg(target).succeeds().no_stderr();
+
+    assert!(at.file_exists(target));
+    assert_eq!(at.read(target), "contents");
+}
+
+#[test]
 fn test_install_nested_paths_copy_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file1 = "source_file";
@@ -582,8 +598,8 @@ fn test_multiple_mode_arguments_override_not_error() {
     let dir = "source_dir";
 
     let file = "source_file";
-    let gid = getegid();
-    let uid = geteuid();
+    let gid = getegid().as_raw();
+    let uid = geteuid().as_raw();
 
     at.touch(file);
     at.mkdir(dir);
@@ -800,13 +816,27 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
 const STRIP_TARGET_FILE: &str = "helloworld_installed";
 const STRIP_PROGRAM: &str = "#!/bin/sh\n: > \"$1\"\n";
 
+/// Create the fake strip program from a child process. Tests run as threads of
+/// one process: if this process held the script open for writing, a sibling
+/// test forking at that moment would inherit the fd, and exec'ing the script
+/// would then fail with ETXTBSY.
+fn write_strip_program(scene: &TestScenario, name: &str) {
+    scene
+        .cmd("sh")
+        .env("STRIP_SCRIPT", STRIP_PROGRAM)
+        .arg("-c")
+        .arg(format!(
+            "printf '%s' \"$STRIP_SCRIPT\" > {name} && chmod 755 {name}"
+        ))
+        .succeeds();
+}
+
 #[test]
 fn test_install_and_strip() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.write("strip", STRIP_PROGRAM);
-    at.set_mode("strip", 0o755);
+    write_strip_program(&scene, "strip");
     at.write("source", "file contents");
     let path = format!(
         "{}:{}",
@@ -846,8 +876,7 @@ fn test_install_and_strip_with_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.write("strip-program", STRIP_PROGRAM);
-    at.set_mode("strip-program", 0o755);
+    write_strip_program(&scene, "strip-program");
     at.write("source", "file contents");
 
     scene
@@ -1171,7 +1200,28 @@ fn test_install_dir() {
     assert!(at.file_exists(format!("{dir}/{file1}")));
     assert!(at.file_exists(format!("{dir}/{file2}")));
 }
-//
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_non_utf8_dir() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = std::ffi::OsStr::from_bytes(b"target_dir_\xFF\xFE");
+    let file = "source";
+
+    at.touch(file);
+    fs::create_dir(at.plus(dir)).unwrap();
+
+    ucmd.arg(file)
+        .arg("--target-directory")
+        .arg(dir)
+        .succeeds()
+        .no_output();
+
+    assert!(at.plus(dir).join(file).exists());
+}
+
 // test backup functionality
 #[test]
 fn test_install_backup_short_no_args_files() {
@@ -2167,6 +2217,32 @@ fn test_target_file_ends_with_slash() {
         .stderr_contains("failed to access 'dir/target_file/': Not a directory");
 }
 
+/// Without `-D`, a `-t` target that is not a directory is refused, even with a
+/// single source, rather than installed over or created as a file.
+#[test]
+fn test_install_target_dir_not_a_directory() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("source", "new");
+    at.write("regular", "old");
+    at.symlink_file("nowhere", "dangling");
+
+    for (target, reason) in [
+        ("regular", "Not a directory"),
+        ("dangling", "No such file or directory"),
+        ("missing", "No such file or directory"),
+    ] {
+        scene
+            .ucmd()
+            .args(&["-t", target, "source"])
+            .fails()
+            .stderr_only(format!("install: failed to access '{target}': {reason}\n"));
+    }
+    assert_eq!(at.read("regular"), "old");
+    assert!(at.is_symlink("dangling"));
+    assert!(!at.file_exists("missing"));
+}
+
 #[test]
 fn test_install_root_combined() {
     let ts = TestScenario::new(util_name!());
@@ -2645,7 +2721,7 @@ fn test_install_non_utf8_paths() {
 #[test]
 fn test_install_failed_chown_does_not_leave_setuid() {
     // Only meaningful when the chown can actually fail.
-    if geteuid() == 0 {
+    if geteuid().is_root() {
         return;
     }
 
@@ -2703,7 +2779,7 @@ fn test_install_setuid_mode_applied_without_chown() {
 #[test]
 fn test_install_unprivileged_option_u_skips_chown() {
     // This test only makes sense when not running as root.
-    if geteuid() == 0 {
+    if geteuid().is_root() {
         return;
     }
 
@@ -2729,7 +2805,7 @@ fn test_install_unprivileged_option_u_skips_chown() {
         .no_stderr();
 
     assert!(at.file_exists(dst_ok));
-    assert_eq!(at.metadata(dst_ok).uid(), geteuid());
+    assert_eq!(at.metadata(dst_ok).uid(), geteuid().as_raw());
 }
 
 #[test]
@@ -2867,6 +2943,52 @@ fn test_install_d_dangling_symlink_in_path_errors() {
     assert!(
         !at.plus("nonexistent").exists(),
         "The symlink target must not have been created"
+    );
+}
+
+#[test]
+// The targets with O_PATH or O_SEARCH, as named by the `has_o_path` and
+// `has_o_search` cfg aliases in src/uucore/build.rs. Elsewhere install cannot
+// anchor on an unreadable directory and fails with EACCES.
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "tvos",
+    target_os = "watchos",
+    target_os = "visionos",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris"
+))]
+fn test_install_d_leading_dirs_in_write_only_directory() {
+    // mkdir needs write and execute on the parent, not read, so -D must be
+    // able to create leading directories inside a directory it cannot read.
+    use std::os::unix::fs::PermissionsExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    if geteuid().is_root() {
+        println!("Test skipped; root ignores directory permissions");
+        return;
+    }
+
+    at.write("file.txt", "hello");
+    at.mkdir("wx");
+    fs::set_permissions(at.plus("wx"), fs::Permissions::from_mode(0o300)).unwrap();
+
+    scene
+        .ucmd()
+        .args(&["-D", "file.txt", "wx/a/b/file.txt"])
+        .succeeds();
+
+    fs::set_permissions(at.plus("wx"), fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(
+        fs::read_to_string(at.plus("wx/a/b/file.txt")).unwrap(),
+        "hello"
     );
 }
 
@@ -3113,4 +3235,79 @@ mod diagnostics {
         assert!(stderr.starts_with("install: "), "{stderr}");
         assert!(!stderr.contains(":1:"), "{stderr}");
     }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_d_parallel_mkdir_race() {
+    // Regression test for issue #12355: concurrent `install -D` invocations
+    // that share parent directories must all succeed instead of one losing
+    // the stat/mkdir race and failing with `cannot create directory`.
+    const PARALLEL: usize = 32;
+    const ROUNDS: usize = 10;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("s");
+
+    for round in 0..ROUNDS {
+        let mut children = Vec::with_capacity(PARALLEL);
+        for k in 0..PARALLEL {
+            let mut cmd = scene.ucmd();
+            cmd.arg("-D").arg("s").arg(format!("o{round}/q/f{k}"));
+            children.push(cmd.run_no_wait());
+        }
+
+        for child in children {
+            child.wait().unwrap().success().no_stderr();
+        }
+
+        for k in 0..PARALLEL {
+            assert!(at.file_exists(format!("o{round}/q/f{k}")));
+        }
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_target_without_splice_support() {
+    // Does eCryptfs not support splice on some kernel?
+    use std::process::Command;
+    if Command::new("strace")
+        .args(["-e", "inject=splice:error=EINVAL:when=2", "true"])
+        .output()
+        .is_err()
+    {
+        return; // missing strace
+    }
+    let coreutils = uutests::util::get_tests_binary();
+    Command::new("strace")
+        .args([
+            "-e",
+            "inject=splice:error=EINVAL:when=2",
+            coreutils,
+            "install",
+            coreutils,
+            "target_file",
+        ])
+        .output()
+        .unwrap();
+    // properly copied with fallback from splice?
+    assert!(uucore::fs::are_files_identical(coreutils, "target_file").unwrap());
+}
+
+#[test]
+fn test_install_will_not_overwrite_just_created() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+    at.write("a/f", "a");
+    at.write("b/f", "b");
+
+    ucmd.args(&["a/f", "b/f", "c/"])
+        .fails()
+        .stderr_contains("will not overwrite just-created 'c/f' with 'b/f'");
+
+    assert_eq!(at.read("c/f"), "a");
 }

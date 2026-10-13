@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore defaultcon setfscreatecon
+
 //! Set of functions to manage SELinux security contexts
 
 use std::borrow::Cow;
@@ -12,11 +14,10 @@ use std::path::Path;
 
 use crate::translate;
 use selinux::SecurityContext;
-use thiserror::Error;
 
 use crate::error::UError;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum SeLinuxError {
     #[error("{}", translate!("selinux-error-not-enabled"))]
     SELinuxNotEnabled,
@@ -795,11 +796,14 @@ mod tests {
         let tmp_dir = tempdir().expect("Failed to create temporary directory");
         let dir_path = tmp_dir.path();
 
-        // Create a FIFO (pipe)
+        // Create a named FIFO
         let fifo_path = dir_path.join("my_fifo");
-        // todo: use rustix::fs::mkfifoat since selinux is linux specific
-        nix::unistd::mkfifo(&fifo_path, nix::sys::stat::Mode::from_bits_truncate(0o666))
-            .expect("Failed to create FIFO");
+        rustix::fs::mkfifoat(
+            rustix::fs::CWD,
+            &fifo_path,
+            rustix::fs::Mode::from_bits_truncate(0o666),
+        )
+        .expect("Failed to create FIFO");
 
         // Just getting a context is good enough
         get_selinux_security_context(&fifo_path, false).expect("Cannot get fifo context");

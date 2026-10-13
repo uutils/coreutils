@@ -8,13 +8,20 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::io::{ErrorKind, Write, stdout};
-use std::num::IntErrorKind;
-use std::os::unix::process::CommandExt;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt as _;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt as _;
 use std::process;
+#[cfg(windows)]
+use windows_sys::Win32::System::Threading::{
+    ABOVE_NORMAL_PRIORITY_CLASS, BELOW_NORMAL_PRIORITY_CLASS, HIGH_PRIORITY_CLASS,
+    IDLE_PRIORITY_CLASS, NORMAL_PRIORITY_CLASS, REALTIME_PRIORITY_CLASS,
+};
 
 use uucore::translate;
 use uucore::{
-    error::{UResult, USimpleError, UUsageError, set_exit_code, strip_errno},
+    error::{UResult, UUsageError, set_exit_code},
     format_usage, show_error,
 };
 
@@ -99,8 +106,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches =
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
+    #[cfg(not(unix))]
+    let current_niceness = 0i32; // todo: what we can do?
+    #[cfg(unix)]
     let current_niceness = rustix::process::getpriority_process(None)
-        .map_err(|e| USimpleError::new(125, format!("getpriority: {e}")))?;
+        .map_err(|e| uucore::error::USimpleError::new(125, format!("getpriority: {e}")))?;
 
     let Some(mut cmd_iter) = matches.get_many::<String>(options::COMMAND) else {
         if matches.contains_id(options::ADJUSTMENT) {
@@ -114,14 +124,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Ok(());
     };
 
+    #[cfg(any(unix, windows))]
     let adjustment = match matches.get_one::<String>(options::ADJUSTMENT) {
         None => 10,
         Some(nstr) => match nstr.parse::<i32>() {
             Ok(num) => num,
-            Err(e) if *e.kind() == IntErrorKind::PosOverflow => i32::MAX,
-            Err(e) if *e.kind() == IntErrorKind::NegOverflow => i32::MIN,
+            Err(e) if *e.kind() == std::num::IntErrorKind::PosOverflow => i32::MAX,
+            Err(e) if *e.kind() == std::num::IntErrorKind::NegOverflow => i32::MIN,
             Err(e) => {
-                return Err(USimpleError::new(
+                return Err(uucore::error::USimpleError::new(
                     125,
                     translate!("nice-error-invalid-number", "value" => nstr, "error" => e),
                 ));
@@ -129,13 +140,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
     };
 
+    #[cfg(any(unix, windows))]
     let new_niceness = current_niceness.saturating_add(adjustment);
     // We can't use `show_warning` because that will panic if stderr
     // isn't writable. The GNU test suite checks specifically that the
     // exit code when failing to write the advisory is 125, but Rust
     // will produce an exit code of 101 when it panics.
+    #[cfg(unix)]
     if let Err(e) = rustix::process::setpriority_process(None, new_niceness) {
-        let warning_msg = translate!("nice-warning-setpriority", "util_name" => "nice", "error" => strip_errno(&e.into()) );
+        let warning_msg = translate!("nice-warning-setpriority", "util_name" => "nice", "error" => uucore::error::strip_errno(&e.into()) );
 
         if writeln!(std::io::stderr(), "{warning_msg}").is_err() {
             set_exit_code(125);
@@ -143,10 +156,30 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
+    #[cfg(windows)]
+    let priority_class = match new_niceness {
+        ..=-20 => REALTIME_PRIORITY_CLASS,
+        -19 => HIGH_PRIORITY_CLASS,
+        -18..=-1 => ABOVE_NORMAL_PRIORITY_CLASS,
+        0 => NORMAL_PRIORITY_CLASS,
+        1..=18 => BELOW_NORMAL_PRIORITY_CLASS,
+        19.. => IDLE_PRIORITY_CLASS,
+    };
+
     let cmd = cmd_iter.next().unwrap();
     let args: Vec<&String> = cmd_iter.collect();
-
-    let err = process::Command::new(cmd).args(args).exec();
+    let mut command = process::Command::new(cmd);
+    command.args(args);
+    #[cfg(unix)]
+    let err = command.exec();
+    #[cfg(windows)]
+    let Err(err) = command.creation_flags(priority_class).spawn() else {
+        return Ok(());
+    };
+    #[cfg(not(any(unix, windows)))]
+    let Err(err) = command.status() else {
+        return Ok(());
+    };
 
     show_error!("{cmd}: {err}");
 

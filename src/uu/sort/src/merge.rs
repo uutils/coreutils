@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 //! Merge already sorted files.
 //!
 //! We achieve performance by splitting the tasks of sorting and writing, and reading and parsing between two threads.
@@ -16,7 +17,7 @@ use std::{
     collections::BinaryHeap,
     ffi::{OsStr, OsString},
     fs::{self, File},
-    io::{BufWriter, Read, Write},
+    io::{self, BufWriter, Read, Write},
     iter,
     path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
@@ -30,7 +31,7 @@ use uucore::error::{FromIo, UResult};
 use crate::{
     GlobalSettings, Output, SortError,
     chunks::{self, Chunk, RecycledChunk},
-    compare_by, current_open_fd_count, fd_soft_limit, open,
+    current_open_fd_count, fd_soft_limit, merge_compare, open,
     tmp_dir::TmpDirWrapper,
 };
 
@@ -51,8 +52,13 @@ fn replace_output_file_in_input_files(
                 if let Some(copy) = &copy {
                     *file = copy.clone().into_os_string();
                 } else {
-                    let (_file, copy_path) = tmp_dir.next_file()?;
-                    fs::copy(&output_path, &copy_path)
+                    // Write through the descriptor `next_file` just opened rather
+                    // than `fs::copy`, which would put the source's permission bits
+                    // on the temporary file and undo the 0600 it was created with.
+                    let (mut copy_file, copy_path) = tmp_dir.next_file()?;
+                    let mut source = File::open(&output_path)
+                        .map_err(|error| SortError::OpenTmpFileFailed { error })?;
+                    io::copy(&mut source, &mut copy_file)
                         .map_err(|error| SortError::OpenTmpFileFailed { error })?;
                     *file = copy_path.clone().into_os_string();
                     copy = Some(copy_path);
@@ -140,7 +146,7 @@ pub fn merge_with_file_limit<
 
                 let mut tmp_file =
                     Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
-                merger.write_all_to(settings, tmp_file.as_write())?;
+                merger.write_all_to(settings, tmp_file.as_write(), || "write failed".into())?;
                 temporary_files.push(tmp_file.finished_writing()?);
             }
         }
@@ -151,7 +157,7 @@ pub fn merge_with_file_limit<
 
             let mut tmp_file =
                 Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
-            merger.write_all_to(settings, tmp_file.as_write())?;
+            merger.write_all_to(settings, tmp_file.as_write(), || "write failed".into())?;
             temporary_files.push(tmp_file.finished_writing()?);
         }
         merge_with_file_limit::<_, _, Tmp>(
@@ -201,7 +207,13 @@ fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
     }
 
     let reader_join_handle = thread::spawn({
-        let settings = settings.clone();
+        // The merge comparator (`merge_compare`) compares whole-line locale keys lazily
+        // with the ICU collator, so the reader does not need to precompute per-line sort
+        // keys. Disabling `fast_locale_collation` here turns `Line::create` into a no-op
+        // for that (whole-line, default) mode and avoids the dominant cost of merging
+        // already-sorted input. Other modes are unaffected (the flag is already false).
+        let mut settings = settings.clone();
+        settings.precomputed.fast_locale_collation = false;
         move || {
             reader(
                 &request_receiver,
@@ -292,14 +304,16 @@ impl PartialEq for MergeableFile<'_> {
 impl Eq for MergeableFile<'_> {}
 
 impl PartialOrd for MergeableFile<'_> {
+    #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl Ord for MergeableFile<'_> {
+    #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
-        let mut cmp = compare_by(
+        let mut cmp = merge_compare(
             &self.current_chunk.lines()[self.line_idx],
             &other.current_chunk.lines()[other.line_idx],
             self.settings,
@@ -336,16 +350,21 @@ struct FileMerger<'a> {
 impl FileMerger<'_> {
     /// Write the merged contents to the output file.
     fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
-        let mut out = output.into_write();
-        self.write_all_to(settings, &mut out)
+        let ctx = output.write_failed_context();
+        let mut out = output.into_write()?;
+        self.write_all_to(settings, &mut out, &ctx)?;
+        out.flush().map_err_context(ctx)
     }
 
-    fn write_all_to(mut self, settings: &GlobalSettings, out: &mut impl Write) -> UResult<()> {
+    /// Write the merged contents to `out`, reporting write errors with `ctx`.
+    fn write_all_to(
+        mut self,
+        settings: &GlobalSettings,
+        out: &mut impl Write,
+        ctx: impl FnOnce() -> String,
+    ) -> UResult<()> {
         let write_result = loop {
-            match self
-                .write_next(out, settings)
-                .map_err_context(|| "write failed".into())
-            {
+            match self.write_next(out, settings) {
                 Ok(true) => (),
                 Ok(false) => break Ok(()),
                 Err(error) => {
@@ -380,14 +399,14 @@ impl FileMerger<'_> {
         let reader_result = reader_join_handle.join().unwrap();
         // A write failure is what the user needs to hear about; the reader hitting an error
         // on the way down is secondary.
-        write_result.and(reader_result)
+        write_result.map_err_context(ctx).and(reader_result)
     }
 
     fn write_next(
         &mut self,
         writer: &mut impl Write,
         settings: &GlobalSettings,
-    ) -> std::io::Result<bool> {
+    ) -> io::Result<bool> {
         if let Some(file) = self.heap.peek() {
             let prev = self.prev.replace(PreviousLine {
                 chunk: file.current_chunk.clone(),
@@ -400,7 +419,7 @@ impl FileMerger<'_> {
                 if settings.unique
                     && let Some(prev) = &prev
                 {
-                    let cmp = compare_by(
+                    let cmp = merge_compare(
                         &prev.chunk.lines()[prev.line_idx],
                         current_line,
                         settings,
@@ -637,5 +656,35 @@ impl<R: Read + Send> MergeInput for PlainMergeInput<R> {
     }
     fn as_read(&mut self) -> &mut Self::InnerRead {
         &mut self.inner
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    /// When the output file is also an input it is copied to a temporary file
+    /// first. That copy must stay private to the owner: `fs::copy` would carry the
+    /// source's 0644 over and undo what `next_file` created the file with.
+    #[test]
+    fn output_copy_keeps_the_tmp_file_private() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("out");
+        fs::write(&out, b"a\n").unwrap();
+        fs::set_permissions(&out, fs::Permissions::from_mode(0o644)).unwrap();
+
+        let mut tmp_dir = TmpDirWrapper::new(dir.path().to_owned());
+        let mut files = vec![out.clone().into_os_string()];
+        replace_output_file_in_input_files(&mut files, Some(out.as_os_str()), &mut tmp_dir)
+            .unwrap();
+
+        let copy = Path::new(&files[0]);
+        assert_ne!(copy, out, "the input was not replaced by a copy");
+        assert_eq!(
+            fs::metadata(copy).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(fs::read(copy).unwrap(), b"a\n");
     }
 }

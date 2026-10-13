@@ -16,13 +16,13 @@ use std::os::fd::AsFd;
 #[cfg(windows)]
 use std::path::Path;
 use std::path::PathBuf;
-use thiserror::Error;
 use uucore::diagnostics::OptionValue;
-use uucore::display::{Quotable, print_verbatim};
-use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::display::Quotable;
+use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use uucore::line_ending::LineEnding;
 use uucore::parser::parse_signed_num::number_offset;
 use uucore::parser::parse_size::ParseSizeError;
+use uucore::quoting_style::locale_aware_shell_escape;
 use uucore::show;
 use uucore::translate;
 
@@ -38,7 +38,7 @@ use take::copy_all_but_n_bytes;
 use take::copy_all_but_n_lines;
 use take::take_lines;
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 enum HeadError {
     /// Wrapper around `io::Error`
     #[error("{}", translate!("head-error-reading-file", "name" => name.quote(), "err" => err))]
@@ -84,6 +84,7 @@ impl Default for Mode {
 /// The message is built where it always was; the rest is what a caret needs:
 /// the value as typed, the option it was given to, and what the size parser
 /// made of it.
+#[derive(Debug)]
 pub struct SizeError {
     pub message: String,
     option: OptionValue,
@@ -172,7 +173,7 @@ fn arg_iterate<'a>(
     }
 }
 
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, PartialEq)]
 struct HeadOptions {
     pub quiet: bool,
     pub verbose: bool,
@@ -183,22 +184,21 @@ struct HeadOptions {
 }
 
 impl HeadOptions {
-    ///Construct options from matches
+    /// Construct options from matches
     pub fn get_from(matches: &ArgMatches) -> Result<Self, SizeError> {
-        let mut options = Self::default();
-
-        options.quiet = matches.get_flag(options::QUIET);
-        options.verbose = matches.get_flag(options::VERBOSE);
-        options.line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
-        options.presume_input_pipe = matches.get_flag(options::PRESUME_INPUT_PIPE);
-
-        options.mode = Mode::from(matches)?;
-        // #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")] <https://github.com/rust-lang/rust/issues/15701>
-        options.files = matches
-            .get_many::<OsString>(options::FILES)
-            .unwrap()
-            .cloned()
-            .collect();
+        let options = Self {
+            quiet: matches.get_flag(options::QUIET),
+            verbose: matches.get_flag(options::VERBOSE),
+            line_ending: LineEnding::from_zero_flag(matches.get_flag(options::ZERO)),
+            presume_input_pipe: matches.get_flag(options::PRESUME_INPUT_PIPE),
+            mode: Mode::from(matches)?,
+            // #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")] <https://github.com/rust-lang/rust/issues/15701>
+            files: matches
+                .get_many::<OsString>(options::FILES)
+                .unwrap()
+                .cloned()
+                .collect(),
+        };
 
         Ok(options)
     }
@@ -208,7 +208,7 @@ impl HeadOptions {
 fn wrap_in_stdout_error(err: io::Error) -> io::Error {
     io::Error::new(
         err.kind(),
-        translate!("head-error-writing-stdout", "err" => uucore::error::strip_errno(&err)),
+        translate!("head-error-writing-stdout", "err" => strip_errno(&err)),
     )
 }
 
@@ -255,13 +255,9 @@ fn print_n_lines(input: &mut impl io::BufRead, n: u64, separator: u8) -> io::Res
     Ok(bytes_written)
 }
 
-fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> {
-    usize::try_from(n).ok()
-}
-
 fn print_but_last_n_bytes(mut input: impl Read, n: u64) -> io::Result<u64> {
     let mut bytes_written: u64 = 0;
-    if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
+    if let Ok(n) = usize::try_from(n) {
         let stdout = io::stdout();
         let mut stdout = stdout.lock();
 
@@ -285,7 +281,7 @@ fn print_but_last_n_lines(mut input: impl Read, n: u64, separator: u8) -> io::Re
         return io::copy(&mut input, &mut stdout).map_err(wrap_in_stdout_error);
     }
     let mut bytes_written: u64 = 0;
-    if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
+    if let Ok(n) = usize::try_from(n) {
         bytes_written = copy_all_but_n_lines(input, &mut stdout, n, separator)
             .map_err(wrap_in_stdout_error)?
             .try_into()
@@ -453,7 +449,8 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 if !first {
                     writeln!(stdout)?;
                 }
-                writeln!(stdout, "{}", translate!("head-header-stdin"))?;
+                let name = locale_aware_shell_escape(translate!("head-name-stdin"));
+                writeln!(stdout, "==> {name} <==")?;
             }
             let stdin = io::stdin();
 
@@ -503,9 +500,8 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     if !first {
                         writeln!(stdout)?;
                     }
-                    write!(stdout, "==> ")?;
-                    print_verbatim(file)?;
-                    writeln!(stdout, " <==")?;
+                    let name = locale_aware_shell_escape(file);
+                    writeln!(stdout, "==> {name} <==")?;
                     first = false;
                 }
                 Ok(())
@@ -650,13 +646,14 @@ mod tests {
 
     #[test]
     fn test_options_correct_defaults() {
-        let opts = HeadOptions::default();
+        let matches = uu_app().get_matches();
+        let opts = HeadOptions::get_from(&matches).unwrap();
 
         assert!(!opts.verbose);
         assert!(!opts.quiet);
         assert_eq!(opts.line_ending, LineEnding::Newline);
         assert_eq!(opts.mode, Mode::FirstLines(10));
-        assert!(opts.files.is_empty());
+        assert_eq!(opts.files, vec!(OsString::from("-")));
     }
 
     fn arg_outputs(src: &str) -> Result<String, ()> {

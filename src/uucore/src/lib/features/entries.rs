@@ -77,14 +77,14 @@ unsafe extern "C" {
 /// > variations and administrative sequences cause the set of groups
 /// > appearing in the result of getgroups() to vary in order and as to
 /// > whether the effective group ID is included, even when the set of
-/// > groups is the same (in the mathematical sense of ``set''). (The
+/// > groups is the same (in the mathematical sense of "set"). (The
 /// > history of a process and its parents could affect the details of
 /// > the result.)
 #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
 pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<rustix::process::RawGid>> {
     let groups = rustix::process::getgroups()
         .map(|g| g.into_iter().map(rustix::fs::Gid::as_raw).collect())?;
-    let egid = arg_id.unwrap_or_else(crate::features::process::getegid);
+    let egid = arg_id.unwrap_or_else(|| rustix::process::getegid().as_raw());
     Ok(sort_groups(groups, egid))
 }
 
@@ -100,38 +100,41 @@ fn sort_groups(mut groups: Vec<gid_t>, egid: gid_t) -> Vec<gid_t> {
 
 #[derive(Clone, Debug)]
 pub struct Passwd {
-    /// AKA passwd.pw_name
+    /// AKA `passwd.pw_name`
     pub name: String,
-    /// AKA passwd.pw_uid
+    /// AKA `passwd.pw_uid`
     pub uid: uid_t,
-    /// AKA passwd.pw_gid
+    /// AKA `passwd.pw_gid`
     pub gid: gid_t,
-    /// AKA passwd.pw_gecos
+    /// AKA `passwd.pw_gecos`
     pub user_info: Option<String>,
-    /// AKA passwd.pw_shell
+    /// AKA `passwd.pw_shell`
     pub user_shell: Option<String>,
-    /// AKA passwd.pw_dir
+    /// AKA `passwd.pw_dir`
     pub user_dir: Option<String>,
-    /// AKA passwd.pw_passwd
+    /// AKA `passwd.pw_passwd`
     #[expect(clippy::struct_field_names)]
     pub user_passwd: Option<String>,
-    /// AKA passwd.pw_class
+    /// AKA `passwd.pw_class`
     #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     pub user_access_class: Option<String>,
-    /// AKA passwd.pw_change
+    /// AKA `passwd.pw_change`
     #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     #[expect(clippy::struct_field_names)]
     pub passwd_change_time: time_t,
-    /// AKA passwd.pw_expire
+    /// AKA `passwd.pw_expire`
     #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     pub expiration: time_t,
 }
 
 /// # Safety
-/// ptr must point to a valid C string.
 ///
-/// Returns None if ptr is null.
-fn cstr2string(ptr: *const c_char) -> Option<String> {
+/// If `ptr` is non-null, it must point to a valid, NUL-terminated C string
+///
+/// # Returns
+///
+/// Returns `None` if `ptr` is null.
+unsafe fn cstr2string(ptr: *const c_char) -> Option<String> {
     if ptr.is_null() {
         None
     } else {
@@ -142,24 +145,24 @@ fn cstr2string(ptr: *const c_char) -> Option<String> {
 impl Passwd {
     /// # Safety
     /// All the pointed-to strings must be valid and not change while
-    /// the function runs. That means PW_LOCK must be held.
+    /// the function runs. That means `PW_LOCK` must be held.
     unsafe fn from_raw(raw: passwd) -> Self {
         Self {
-            name: cstr2string(raw.pw_name).expect("passwd without name"),
+            name: unsafe { cstr2string(raw.pw_name).expect("passwd without name") },
             uid: raw.pw_uid,
             gid: raw.pw_gid,
             #[cfg(not(all(
                 target_os = "android",
                 any(target_arch = "x86", target_arch = "arm")
             )))]
-            user_info: cstr2string(raw.pw_gecos),
+            user_info: unsafe { cstr2string(raw.pw_gecos) },
             #[cfg(all(target_os = "android", any(target_arch = "x86", target_arch = "arm")))]
             user_info: None,
-            user_shell: cstr2string(raw.pw_shell),
-            user_dir: cstr2string(raw.pw_dir),
-            user_passwd: cstr2string(raw.pw_passwd),
+            user_shell: unsafe { cstr2string(raw.pw_shell) },
+            user_dir: unsafe { cstr2string(raw.pw_dir) },
+            user_passwd: unsafe { cstr2string(raw.pw_passwd) },
             #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
-            user_access_class: cstr2string(raw.pw_class),
+            user_access_class: unsafe { cstr2string(raw.pw_class) },
             #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
             passwd_change_time: raw.pw_change,
             #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
@@ -214,19 +217,19 @@ impl Passwd {
 
 #[derive(Clone, Debug)]
 pub struct Group {
-    /// AKA group.gr_name
+    /// AKA `group.gr_name`
     pub name: String,
-    /// AKA group.gr_gid
+    /// AKA `group.gr_gid`
     pub gid: gid_t,
 }
 
 impl Group {
     /// # Safety
-    /// gr_name must be valid and not change while
-    /// the function runs. That means PW_LOCK must be held.
+    /// `gr_name` must be valid and not change while
+    /// the function runs. That means `PW_LOCK` must be held.
     unsafe fn from_raw(raw: group) -> Self {
         Self {
-            name: cstr2string(raw.gr_name).expect("group without name"),
+            name: unsafe { cstr2string(raw.gr_name).expect("group without name") },
             gid: raw.gr_gid,
         }
     }
@@ -336,9 +339,11 @@ pub fn grp2gid(name: &str) -> IOResult<gid_t> {
 
 #[cfg(test)]
 mod test {
+    #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
     use super::*;
 
     #[test]
+    #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
     fn test_sort_groups() {
         assert_eq!(sort_groups(vec![1, 2, 3], 4), vec![4, 1, 2, 3]);
         assert_eq!(sort_groups(vec![1, 2, 3], 3), vec![3, 1, 2]);
@@ -348,6 +353,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
     fn test_entries_get_groups_gnu() {
         if let Ok(mut groups) = rustix::process::getgroups().map(|g| {
             g.into_iter()

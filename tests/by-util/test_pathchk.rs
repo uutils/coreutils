@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 #[cfg(unix)]
@@ -32,15 +33,20 @@ fn test_default_mode() {
     new_ucmd!().args(&["dir#/$file"]).succeeds().no_stdout();
 
     // fail on empty path
-    new_ucmd!()
-        .args(&[""])
-        .fails()
-        .stderr_only("pathchk: '': No such file or directory\n");
+    // WASI's symlink_metadata("") returns Ok instead of ENOENT, so pathchk
+    // accepts the empty operand there.
+    #[cfg(not(wasi_runner))]
+    {
+        new_ucmd!()
+            .args(&[""])
+            .fails()
+            .stderr_only("pathchk: '': No such file or directory\n");
 
-    new_ucmd!().args(&["", ""]).fails().stderr_only(
-        "pathchk: '': No such file or directory\n\
-        pathchk: '': No such file or directory\n",
-    );
+        new_ucmd!().args(&["", ""]).fails().stderr_only(
+            "pathchk: '': No such file or directory\n\
+            pathchk: '': No such file or directory\n",
+        );
+    }
 
     // fail on long path
     new_ucmd!()
@@ -171,11 +177,28 @@ fn test_posix_all() {
         .no_stdout();
 
     // fail on empty path
-    new_ucmd!().args(&["-p", "-P", ""]).fails().no_stdout();
+    new_ucmd!()
+        .args(&["-p", "-P", ""])
+        .fails()
+        .stderr_only("pathchk: empty file name\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_empty_path_portability_message() {
+    // In every portability mode (-p, -P, --portability) GNU reports an empty
+    // file name with the program-name prefix and before any filesystem check.
+    for flag in ["-p", "-P", "--portability"] {
+        new_ucmd!()
+            .args(&[flag, ""])
+            .fails()
+            .stderr_only("pathchk: empty file name\n");
+    }
 }
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_pathchk_non_utf8_paths() {
     let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
     new_ucmd!().arg(&filename).succeeds();
@@ -183,6 +206,10 @@ fn test_pathchk_non_utf8_paths() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/full) not visible"
+)]
 fn test_not_a_directory_clean() {
     // https://github.com/uutils/coreutils/issues/13888
     new_ucmd!()

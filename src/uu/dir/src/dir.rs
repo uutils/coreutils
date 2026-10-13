@@ -6,8 +6,8 @@
 use clap::Command;
 use std::ffi::OsString;
 use std::path::Path;
-use uu_ls::{Config, Format, options};
-use uucore::{error::UResult, format_usage, quoting_style::QuotingStyle, translate};
+use uu_ls::{Config, options};
+use uucore::{error::UResult, format_usage, translate};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -18,40 +18,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (matches, diag_args) =
         uucore::clap_localization::handle_clap_result_with_diagnostics(command, args.collect(), 2)?;
 
-    let mut default_quoting_style = false;
-    let mut default_format_style = false;
-
-    // We check if any options on formatting or quoting style have been given.
-    // If not, we will use dir default formatting and quoting style options
-
-    if !matches.contains_id(options::QUOTING_STYLE)
-        && !matches.get_flag(options::quoting::C)
-        && !matches.get_flag(options::quoting::ESCAPE)
-        && !matches.get_flag(options::quoting::LITERAL)
-    {
-        default_quoting_style = true;
-    }
-    if !matches.contains_id(options::FORMAT)
-        && !matches.get_flag(options::format::ACROSS)
-        && !matches.get_flag(options::format::COLUMNS)
-        && !matches.get_flag(options::format::COMMAS)
-        && !matches.get_flag(options::format::LONG)
-        && !matches.get_flag(options::format::LONG_NO_GROUP)
-        && !matches.get_flag(options::format::LONG_NO_OWNER)
-        && !matches.get_flag(options::format::LONG_NUMERIC_UID_GID)
-        && !matches.get_flag(options::format::ONE_LINE)
-    {
-        default_format_style = true;
-    }
-
-    let mut config = Config::from(&matches, diag_args.as_deref())?;
-
-    if default_quoting_style {
-        config.quoting_style = QuotingStyle::C_NO_QUOTES;
-    }
-    if default_format_style {
-        config.format = Format::Columns;
-    }
+    let config = Config::from_dir(&matches, diag_args.as_deref())?;
 
     let locs = matches
         .get_many::<OsString>(options::PATHS)

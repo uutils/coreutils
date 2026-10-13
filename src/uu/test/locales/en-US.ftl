@@ -155,13 +155,15 @@ test-after-help = Exit with the status determined by EXPRESSION.
 
 # Error messages
 test-error-missing-closing-bracket = missing '{"]"}'
-test-error-expected = expected { $value }
-test-error-expected-value = expected value
+test-error-expected = { $value } expected
 test-error-missing-argument = missing argument after { $argument }
 test-error-extra-argument = extra argument { $argument }
 test-error-unknown-operator = unknown operator { $operator }
 test-error-invalid-integer = invalid integer { $value }
 test-error-unary-operator-expected = { $operator }: unary operator expected
+test-error-binary-operator-expected = { $operator }: binary operator expected
+test-error-expected-found = { $expected } expected, found { $found }
+test-error-does-not-accept-length = { $operator } does not accept -l
 
 # Diagnostic labels, used when errors are rendered with a source snippet
 test-diag-label-unary-operator-expected = this needs an expression on both sides

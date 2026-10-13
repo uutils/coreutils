@@ -3,13 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) srcpath targetpath EEXIST
+// spell-checker:ignore (ToDO) srcpath targetpath EEXIST renameat
 
 use clap::{Arg, ArgAction, Command};
 use std::io::{self, Write, stdout};
 use uucore::display::Quotable;
 use uucore::error::{UError, UIoError, UResult};
 
+use uucore::fs::replace_link;
 use uucore::fs::{make_path_relative_to, paths_refer_to_same_file};
 use uucore::translate;
 use uucore::{format_usage, prompt_yes, show_error};
@@ -18,7 +19,6 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs;
-use thiserror::Error;
 
 use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
@@ -46,7 +46,7 @@ pub enum OverwriteMode {
     Force,
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum LnError {
     #[error("{}", translate!("ln-error-target-is-not-directory", "target" => _0.quote()))]
     TargetIsNotADirectory(PathBuf),
@@ -393,6 +393,8 @@ fn is_same_entry(src: &Path, dst: &Path) -> bool {
 #[allow(clippy::cognitive_complexity)]
 pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
     let mut backup_path = None;
+    // Remove an existing destination only after a link attempt fails with EEXIST.
+    let mut overwrite_on_conflict = false;
     let source: Cow<'_, Path> = if settings.relative {
         relative_path(src, dst)
     } else {
@@ -422,8 +424,7 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
                     return Err(LnError::SomeLinksFailed);
                 }
 
-                let _ = fs::remove_file(dst);
-                // In case of error, don't do anything
+                overwrite_on_conflict = true;
             }
             OverwriteMode::Force => {
                 if !dst.is_symlink()
@@ -433,14 +434,38 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
                     // Even in force overwrite mode, verify we are not targeting the same entry and return a SameFile error if so
                     return Err(LnError::SameFile(src.to_owned(), dst.to_owned()));
                 }
-                let _ = fs::remove_file(dst);
-                // In case of error, don't do anything
+                overwrite_on_conflict = true;
             }
         }
     }
 
-    let res = if settings.symbolic {
-        symlink(&source, dst).map_err(|e| {
+    // Resolved once: this can fail independently of the destination.
+    let hard_link_src = if settings.symbolic {
+        None
+    } else if settings.logical && source.is_symlink() {
+        Some(fs::canonicalize(&source).map_err(|e| {
+            LnError::IoContext(
+                UIoError::from(e),
+                translate!("ln-failed-to-access", "file" => source.quote()),
+            )
+        })?)
+    } else {
+        Some(source.to_path_buf())
+    };
+
+    // Link first, matching GNU. Replacing uses a temp name + `renameat`, so
+    // `dst` is never briefly free for another user to claim.
+    let link_target = hard_link_src.as_deref().unwrap_or(&source);
+    let raw = if overwrite_on_conflict {
+        replace_link(link_target, dst, settings.symbolic)
+    } else if settings.symbolic {
+        symlink(&source, dst)
+    } else {
+        fs::hard_link(link_target, dst)
+    };
+
+    let res = raw.map_err(|e| {
+        if settings.symbolic {
             LnError::IoContext(
                 UIoError::from(e),
                 translate!(
@@ -448,31 +473,19 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
                     "dest" => dst.quote()
                 ),
             )
-        })
-    } else {
-        let p = if settings.logical && source.is_symlink() {
-            fs::canonicalize(&source).map_err(|e| {
-                LnError::IoContext(
-                    UIoError::from(e),
-                    translate!("ln-failed-to-access", "file" => source.quote()),
-                )
-            })?
+        } else if hard_link_src.as_ref().is_some_and(|p| p.is_dir()) {
+            LnError::FailedToCreateHardLinkDir(source.to_path_buf())
         } else {
-            source.to_path_buf()
-        };
-        match fs::hard_link(&p, dst) {
-            Ok(()) => Ok(()),
-            Err(_) if p.is_dir() => Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf())),
-            Err(e) => Err(LnError::IoContext(
+            LnError::IoContext(
                 UIoError::from(e),
                 translate!(
                     "ln-failed-to-create-hard-link",
                     "source" => source.quote(),
                     "dest" => dst.quote()
                 ),
-            )),
+            )
         }
-    };
+    });
 
     if let Err(e) = res {
         if let Some(ref p) = backup_path {

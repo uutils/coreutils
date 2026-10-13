@@ -15,14 +15,11 @@ readme.workspace = true
 path = "src/chmod.rs"
 doctest = false
 
-[dependencies]
+[target.'cfg(unix)'.dependencies]
 clap = { workspace = true }
-thiserror = { workspace = true }
-uucore = { workspace = true, features = ["entries", "fs", "mode", "perms"] }
 fluent = { workspace = true }
-
-[target.'cfg(all(unix, not(target_os = "redox")))'.dependencies]
-uucore = { workspace = true, features = ["safe-traversal"] }
+thiserror = { workspace = true }
+uucore = { workspace = true, features = ["fs", "mode", "perms"] }
 
 [features]
 diagnostics = ["uucore/diagnostics"]
@@ -33,3 +30,4 @@ workspace = true
 [[bin]]
 name = "chmod"
 path = "src/main.rs"
+required-features = ["uucore/default"]

@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (words) autoformat nocheck FILENUM
 
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
@@ -231,7 +232,21 @@ fn tab_multi_character() {
         .arg("-t")
         .arg("ab")
         .fails()
-        .stderr_is("join: multi-character tab ab\n");
+        .stderr_is("join: multi-character tab 'ab'\n");
+}
+
+#[test]
+fn tab_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading separator value passed as its own argument (not
+    // attached with `-t-x`/`=`) must not be mistaken for a new,
+    // unrecognized flag.
+    new_ucmd!()
+        .arg("semicolon_fields_1.txt")
+        .arg("semicolon_fields_2.txt")
+        .arg("-t")
+        .arg("-x")
+        .fails()
+        .stderr_is("join: multi-character tab '-x'\n");
 }
 
 #[test]
@@ -445,6 +460,27 @@ fn empty_fields_kept_without_empty_filler() {
         .args(&["-t", ",", "-e", "", "-o", "0,1.1,1.2,1.3", "gap", "gap"])
         .succeeds()
         .stdout_only("a,a,,b\n");
+}
+
+#[test]
+fn repeated_empty_filler() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("a", "1 a\n2 b\n");
+    at.write("b", "1 c\n");
+
+    // -e may be given more than once with the same string.
+    ts.ucmd()
+        .args(&["-a1", "-e", "d", "-e", "d", "-o", "1.1,1.2,2.2", "a", "b"])
+        .succeeds()
+        .stdout_only("1 a c\n2 b d\n");
+
+    // Different strings conflict.
+    ts.ucmd()
+        .args(&["-a1", "-e", "d", "-e", "e", "-o", "1.1,1.2,2.2", "a", "b"])
+        .fails_with_code(1)
+        .stderr_only("join: conflicting empty-field replacement strings\n");
 }
 
 #[test]
@@ -817,4 +853,32 @@ fn test_hyphen_leading_field_number_is_reported_as_invalid() {
             .fails()
             .stderr_contains("invalid field number: '-1'");
     }
+}
+
+#[test]
+fn test_invalid_file_number() {
+    for (option, value) in [("-a", "3"), ("-a", "x"), ("-v", "0")] {
+        new_ucmd!()
+            .args(&[option, value, "fields_1.txt", "fields_2.txt"])
+            .fails_with_code(1)
+            .stderr_only(format!("join: invalid file number: '{value}'\n"));
+    }
+}
+
+#[test]
+fn test_operand_count() {
+    new_ucmd!()
+        .fails_with_code(1)
+        .stderr_contains("join: missing operand\n")
+        .stderr_contains("--help");
+    new_ucmd!()
+        .args(&["-t", "x", "fields_1.txt"])
+        .fails_with_code(1)
+        .stderr_contains("join: missing operand after 'fields_1.txt'\n")
+        .stderr_contains("--help");
+    new_ucmd!()
+        .args(&["fields_1.txt", "fields_2.txt", "fields_3.txt"])
+        .fails_with_code(1)
+        .stderr_contains("join: extra operand 'fields_3.txt'\n")
+        .stderr_contains("--help");
 }

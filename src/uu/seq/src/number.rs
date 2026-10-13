@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore extendedbigdecimal
+
 use num_traits::Zero;
 
 use uucore::extendedbigdecimal::ExtendedBigDecimal;

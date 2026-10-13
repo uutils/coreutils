@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore bigdecimal prec cppreference bignums
+
 //! Utilities for formatting numbers in various formats
 
 use bigdecimal::BigDecimal;
@@ -385,6 +387,16 @@ fn zero_pad_to(s: &str, width: usize) -> String {
     }
 }
 
+/// Like `format!("{:.precision$}", 0.0)`, which panics past `u16::MAX`.
+fn zero_with_fraction_digits(precision: usize) -> String {
+    if precision == 0 {
+        return String::from("0");
+    }
+    let mut s = String::from("0.");
+    s.extend(std::iter::repeat_n('0', precision));
+    s
+}
+
 fn get_sign_indicator(sign: PositiveSign, negative: bool) -> String {
     if negative {
         String::from("-")
@@ -413,6 +425,27 @@ fn format_float_non_finite(e: &ExtendedBigDecimal, case: Case) -> String {
     s
 }
 
+/// Largest precision `format!` accepts; beyond it the formatter panics.
+const MAX_FMT_PRECISION: usize = u16::MAX as usize;
+
+/// `{bd:.0}` switches to exponent notation past 1000 zeros, so write integers
+/// out ourselves, up to `MAX_FORMAT_WIDTH` digits.
+fn integer_digits(bd: &BigDecimal) -> Option<String> {
+    let (bi, scale) = bd.as_bigint_and_scale();
+    if scale > 0 {
+        return None;
+    }
+    if bi.is_zero() {
+        return Some(String::from("0"));
+    }
+    let zeros = usize::try_from(scale.unsigned_abs())
+        .ok()
+        .filter(|zeros| *zeros <= super::MAX_FORMAT_WIDTH)?;
+    let mut s = bi.to_str_radix(10);
+    s.extend(std::iter::repeat_n('0', zeros));
+    Some(s)
+}
+
 fn format_float_decimal(
     bd: &BigDecimal,
     precision: Option<usize>,
@@ -421,14 +454,30 @@ fn format_float_decimal(
     debug_assert!(!bd.is_negative());
     let precision = precision.unwrap_or(6); // Default %f precision (C standard)
     if precision == 0 {
-        let (bi, scale) = bd.as_bigint_and_scale();
-        if scale == 0 && force_decimal != ForceDecimal::Yes {
-            // Optimization when printing integers.
-            return bi.to_str_radix(10);
-        } else if force_decimal == ForceDecimal::Yes {
-            return format!("{bd:.0}.");
-        }
+        let s = integer_digits(bd).unwrap_or_else(|| format!("{bd:.0}"));
+        return if force_decimal == ForceDecimal::Yes {
+            format!("{s}.")
+        } else {
+            s
+        };
     }
+    // `format!` panics past `MAX_FMT_PRECISION` and `bigdecimal` stops padding
+    // past 1000 zeros, so pad the rest ourselves.
+    let digits = usize::try_from(bd.fractional_digit_count().max(0)).unwrap_or(usize::MAX);
+    let written = digits.min(MAX_FMT_PRECISION);
+    if precision > written {
+        let mut s = if written > 0 {
+            format!("{bd:.written$}")
+        } else if let Some(s) = integer_digits(bd) {
+            s + "."
+        } else {
+            // Past `MAX_FORMAT_WIDTH` zeros, print exponent form and skip the precision and `.`.
+            return format!("{bd:.0}");
+        };
+        s.extend(std::iter::repeat_n('0', precision - written));
+        return s;
+    }
+
     format!("{bd:.precision$}")
 }
 
@@ -484,7 +533,7 @@ fn format_float_scientific(
         return if force_decimal == ForceDecimal::Yes && precision == 0 {
             format!("0.{exp_char}+00")
         } else {
-            format!("{:.precision$}{exp_char}+00", 0.0)
+            format!("{}{exp_char}+00", zero_with_fraction_digits(precision))
         };
     }
 
@@ -521,9 +570,7 @@ fn format_float_shortest(
     if BigDecimal::zero().eq(bd) {
         return match (force_decimal, precision) {
             (ForceDecimal::Yes, 1) => "0.".into(),
-            (ForceDecimal::Yes, _) => {
-                format!("{:.*}", precision - 1, 0.0)
-            }
+            (ForceDecimal::Yes, _) => zero_with_fraction_digits(precision - 1),
             (ForceDecimal::No, _) => "0".into(),
         };
     }
@@ -622,9 +669,12 @@ fn format_float_hexadecimal(
         // To print 0, we don't ever need any digits after the decimal point, so default to
         // that if precision is not specified.
         return if force_decimal == ForceDecimal::Yes && precision.unwrap_or(0) == 0 {
-            format!("0x0.{exp_char}+0")
+            format!("{prefix}0.{exp_char}+0")
         } else {
-            format!("0x{:.*}{exp_char}+0", precision.unwrap_or(0), 0.0)
+            format!(
+                "{prefix}{}{exp_char}+0",
+                zero_with_fraction_digits(precision.unwrap_or(0))
+            )
         };
     }
 
@@ -853,6 +903,29 @@ mod test {
         let f = |x| format_float_non_finite(x, Case::Uppercase);
         assert_eq!(f(&ExtendedBigDecimal::Nan), "NAN");
         assert_eq!(f(&ExtendedBigDecimal::Infinity), "INF");
+    }
+
+    #[test]
+    fn decimal_float_precision_beyond_formatter_limit() {
+        use super::format_float_decimal;
+        // A precision above u16::MAX cannot go through `format!` directly.
+        let f = |x: &str, precision| {
+            format_float_decimal(
+                &BigDecimal::from_str(x).unwrap(),
+                Some(precision),
+                ForceDecimal::No,
+            )
+        };
+
+        let s = f("3.25", 70_123);
+        assert_eq!(s.len(), 70_125);
+        assert!(s.starts_with("3.25"));
+        assert!(s[4..].bytes().all(|b| b == b'0'));
+
+        let s = f("7", 65_536);
+        assert_eq!(s.len(), 65_538);
+        assert!(s.starts_with("7."));
+        assert!(s[2..].bytes().all(|b| b == b'0'));
     }
 
     #[test]

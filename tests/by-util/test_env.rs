@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel Secho sighandler putenv
+
 #![allow(clippy::missing_errors_doc)]
 
 #[cfg(unix)]
@@ -70,6 +72,19 @@ impl Drop for Target {
 }
 
 #[test]
+fn test_command_environment_uses_last_override() {
+    new_ucmd!()
+        .env("LC_ALL", "POSIX")
+        .env("UUTESTS_ENV_OVERRIDE", "first")
+        .env("UUTESTS_ENV_OVERRIDE", "last")
+        .succeeds()
+        .stdout_contains_line("LC_ALL=POSIX")
+        .stdout_does_not_contain("LC_ALL=C")
+        .stdout_contains_line("UUTESTS_ENV_OVERRIDE=last")
+        .stdout_does_not_contain("UUTESTS_ENV_OVERRIDE=first");
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(125);
 }
@@ -84,14 +99,14 @@ fn test_flags_after_command() {
         .no_stderr()
         .stdout_is("-u=v\n");
 
+    // spell-checker:disable
     new_ucmd!()
         // Ensure the string isn't split
-        // cSpell:disable
         .args(&["printf", "%s-%s", "-Sfoo bar"])
         .succeeds()
         .no_stderr()
         .stdout_is("-Sfoo bar-");
-    // cSpell:enable
+    // spell-checker:enable
 
     new_ucmd!()
         // Ensure -- is recognized
@@ -271,53 +286,6 @@ fn test_debug2_part_of_string_arg() {
             r"   arg\[2\]= 'hello2'"
         ))
         .unwrap(),
-    );
-}
-
-#[test]
-fn test_file_option() {
-    let out = new_ucmd!()
-        .arg("-f")
-        .arg("vars.conf.txt")
-        .succeeds()
-        .stdout_move_str();
-
-    assert_eq!(
-        out.lines()
-            .filter(|&line| line == "FOO=bar" || line == "BAR=bamf this")
-            .count(),
-        2
-    );
-}
-
-#[test]
-fn test_combined_file_set() {
-    let out = new_ucmd!()
-        .arg("-f")
-        .arg("vars.conf.txt")
-        .arg("FOO=bar.alt")
-        .succeeds()
-        .stdout_move_str();
-
-    assert_eq!(out.lines().filter(|&line| line == "FOO=bar.alt").count(), 1);
-}
-
-#[test]
-fn test_combined_file_set_unset() {
-    let out = new_ucmd!()
-        .arg("-u")
-        .arg("BAR")
-        .arg("-f")
-        .arg("vars.conf.txt")
-        .arg("FOO=bar.alt")
-        .succeeds()
-        .stdout_move_str();
-
-    assert_eq!(
-        out.lines()
-            .filter(|&line| line == "FOO=bar.alt" || line.starts_with("BAR="))
-            .count(),
-        1
     );
 }
 
@@ -507,35 +475,6 @@ fn test_fail_change_directory() {
         .fails()
         .stderr_move_str();
     assert!(out.contains("env: cannot change directory to "));
-}
-
-#[test]
-fn test_chdir_happens_after_relative_file_loading() {
-    let scene = TestScenario::new(util_name!());
-    scene.fixtures.mkdir("target");
-    scene
-        .fixtures
-        .write("config.env", "CONFIG_SOURCE=from-root\n");
-    scene
-        .fixtures
-        .write("target/config.env", "CONFIG_SOURCE=from-target\n");
-
-    let out = scene
-        .ucmd()
-        .args(&["--chdir", "target", "--file", "config.env", "-i"])
-        .arg(uutests::util::get_tests_binary())
-        .arg(util_name!())
-        .succeeds()
-        .stdout_move_str();
-
-    assert!(
-        out.contains("CONFIG_SOURCE=from-root\n"),
-        "expected config file from invocation directory, got: {out:?}"
-    );
-    assert!(
-        !out.contains("CONFIG_SOURCE=from-target\n"),
-        "unexpectedly loaded config from --chdir target directory: {out:?}"
-    );
 }
 
 #[cfg(not(windows))] // windows has no executable "echo", its only supported as part of a batch-file
@@ -1944,6 +1883,23 @@ fn test_simulation_of_terminal_pty_pipes_into_data_and_sends_eot_automatically()
         format!("{message}\r\n")
     );
     std::assert_eq!(String::from_utf8_lossy(out.stderr()), "");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_simulation_of_terminal_not_inherited_by_other_commands() {
+    let scene = TestScenario::new("util");
+
+    let mut cmd = scene.ccmd("env");
+    cmd.args(&["sleep", "1"]);
+    cmd.terminal_simulation(true);
+    let mut child = cmd.run_no_wait();
+    scene
+        .ccmd("env")
+        .args(&["ls", "-l", "/proc/self/fd/"])
+        .succeeds()
+        .stdout_does_not_contain("/dev/ptmx");
+    child.kill();
 }
 
 #[test]

@@ -8,11 +8,10 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
-use thiserror::Error;
 use uucore::char_width::char_width_at;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
@@ -42,7 +41,7 @@ fn is_digit_or_comma(c: char) -> bool {
 }
 
 /// Errors that can occur when parsing a `--tabs` argument.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum ParseError {
     #[error("{}", translate!("expand-error-invalid-character", "char" => .0.quote()))]
     InvalidCharacter(String),
@@ -445,16 +444,17 @@ fn expand_file(
     output: &mut BufWriter<std::io::Stdout>,
     options: &Options,
 ) -> UResult<()> {
-    let mut buf = [0u8; 4096];
     let mut input = open(file)?;
     let ts = options.tabstops.as_ref();
     let mut col = 0;
     loop {
-        match input.read(&mut buf) {
-            Ok(0) => break,
-            Ok(n) => {
-                expand_buf(&buf[..n], output, ts, options, &mut col)
+        match input.fill_buf() {
+            Ok([]) => break,
+            Ok(buf) => {
+                expand_buf(buf, output, ts, options, &mut col)
                     .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+                let len = buf.len();
+                input.consume(len);
             }
             Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
         }

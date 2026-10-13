@@ -33,7 +33,10 @@ pub fn render(args: &[OsString], err: &ParseError) -> bool {
     // Labelled only where a label would add to the message, per the convention
     // in `uucore::diagnostics`.
     let (label, help) = match &err.kind {
-        ParseErrorKind::Expected(_) => (None, None),
+        ParseErrorKind::Expected(_)
+        | ParseErrorKind::ExpectedFound(_, _)
+        | ParseErrorKind::BinaryOperatorExpected(_)
+        | ParseErrorKind::DoesNotAcceptLength(_) => (None, None),
         ParseErrorKind::ExtraArgument(_) => (
             Some(translate!("diagnostics-label-expression-complete")),
             Some(translate!("test-diag-help-extra-argument")),
@@ -63,8 +66,6 @@ pub fn render(args: &[OsString], err: &ParseError) -> bool {
                 "name" => uucore::util_name()
             )),
         ),
-        // Never carries a position, so it is filtered out above.
-        ParseErrorKind::ExpectedValue => return false,
     };
 
     snapshot.render(

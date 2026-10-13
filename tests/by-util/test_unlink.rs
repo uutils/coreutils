@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -47,10 +48,14 @@ fn test_unlink_directory() {
 
     let res = ucmd.arg(dir).fails();
     let stderr = res.stderr_str();
-    assert!(
-        stderr == "unlink: cannot unlink 'dir': Is a directory\n"
-            || stderr == "unlink: cannot unlink 'dir': Permission denied\n"
-    );
+    // Linux returns EISDIR; macOS and the BSDs return EPERM, which GNU
+    // reports as "Operation not permitted"; Windows reports access denied.
+    assert!(matches!(
+        stderr,
+        "unlink: cannot unlink 'dir': Is a directory\n"
+            | "unlink: cannot unlink 'dir': Operation not permitted\n"
+            | "unlink: cannot unlink 'dir': Permission denied\n"
+    ));
 }
 
 #[test]

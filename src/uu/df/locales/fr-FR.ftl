@@ -18,6 +18,7 @@ df-help-human-readable = afficher les tailles dans un format lisible par l'homme
 df-help-si = pareillement, mais utiliser les puissances de 1000 pas 1024
 df-help-inodes = lister les informations d'inode au lieu de l'utilisation des blocs
 df-help-kilo = comme --block-size=1K
+df-help-mega = comme --block-size=1M
 df-help-local = limiter l'affichage aux systèmes de fichiers locaux
 df-help-no-sync = ne pas invoquer sync avant d'obtenir les informations d'utilisation (par défaut)
 df-help-output = utiliser le format de sortie défini par LISTE_CHAMPS, ou afficher tous les champs si LISTE_CHAMPS est omise.

@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore nabcd badoption schar
+// spell-checker:ignore nabcd badoption schar nosuchfile
+
 use uucore::posix::OBSOLETE;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -1189,6 +1190,7 @@ fn uniq_basic_dedup_cases() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: locale database not visible")]
 fn test_stdin_w1_multibyte() {
     let input = "à\ná\n";
     new_ucmd!()
@@ -1229,4 +1231,22 @@ fn test_repeated_skip_fields_takes_the_last() {
         .pipe_in("x y a\nz w a\n")
         .succeeds()
         .stdout_is("x y a\n");
+}
+
+#[test]
+fn test_nonexistent_input_file_error_matches_gnu() {
+    new_ucmd!()
+        .arg("nosuchfile.txt")
+        .fails_with_code(1)
+        .stderr_only("uniq: nosuchfile.txt: No such file or directory\n");
+}
+
+#[test]
+fn test_obsolete_skip_fields_not_read_after_double_dash() {
+    // After `--` there are no more options, so `-1` names a file rather than
+    // being taken as the obsolete "skip 1 field" spelling.
+    new_ucmd!()
+        .args(&["--", "-1"])
+        .fails()
+        .stderr_contains("-1");
 }

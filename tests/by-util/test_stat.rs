@@ -25,6 +25,25 @@ fn test_invalid_option() {
     new_ucmd!().arg("-w").arg("-q").arg("/").fails();
 }
 
+#[test]
+fn test_format_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading format string passed as its own argument (not
+    // attached with `=`) must not be mistaken for a new, unrecognized
+    // flag.
+    new_ucmd!()
+        .args(&["--format", "-%n", "/"])
+        .succeeds()
+        .stdout_is("-/\n");
+    new_ucmd!()
+        .args(&["--printf", "-%n", "/"])
+        .succeeds()
+        .stdout_is("-/");
+    new_ucmd!()
+        .args(&["-c", "-%n", "/"])
+        .succeeds()
+        .stdout_is("-/\n");
+}
+
 #[cfg(unix)]
 const NORMAL_FORMAT_STR: &str =
     "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s %u %U %x %X %y %Y %z %Z"; // avoid "%w %W" (birth/creation) due to `stat` limitations and linux kernel & rust version capability variations
@@ -62,6 +81,23 @@ fn test_fs_default_format_block_size_label() {
         .args(&["-f", "/"])
         .succeeds()
         .stdout_contains("Block size:");
+}
+
+#[test]
+// `stat -f` is only implemented for these targets; elsewhere `fs_type` is
+// still `unimplemented!()`.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_fs_default_format_quotes_name() {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.touch("a b");
+    ts.ucmd()
+        .args(&["-f", "a b"])
+        .succeeds()
+        .stdout_contains("  File: 'a b'\n");
+    ts.ucmd()
+        .args(&["-f", "-t", "a b"])
+        .succeeds()
+        .stdout_str_check(|s| s.starts_with("'a b' "));
 }
 
 #[cfg(unix)]
@@ -309,7 +345,30 @@ fn test_timestamp_format_before_epoch() {
     ts.ucmd()
         .args(&["-c", "%.1X %.3X %.9X %.1Y %.3Y %.9Y", "timestamp"])
         .succeeds()
-        .stdout_is("-0.9 -0.877 -0.876543211 -0.9 -0.877 -0.876543211\n");
+        .stdout_is("-0.8 -0.876 -0.876543211 -0.8 -0.876 -0.876543211\n");
+}
+
+#[test]
+fn test_timestamp_format_before_epoch_truncation() {
+    let ts = TestScenario::new(util_name!());
+    let file = File::create(ts.fixtures.plus("fractional-time")).unwrap();
+    let timestamp = UNIX_EPOCH - Duration::new(2, 234_567_891);
+    file.set_times(
+        FileTimes::new()
+            .set_accessed(timestamp)
+            .set_modified(timestamp),
+    )
+    .unwrap();
+
+    for directive in ['X', 'Y'] {
+        let format = format!(
+            "%{directive}|%.0{directive}|%.{directive}|%.2{directive}|%.6{directive}|%.12{directive}"
+        );
+        ts.ucmd()
+            .args(&["-c", &format, "fractional-time"])
+            .succeeds()
+            .stdout_is("-3|-3|-2.234567891|-2.23|-2.234567|-2.234567891000\n");
+    }
 }
 
 #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
@@ -480,6 +539,74 @@ fn test_without_argument() {
 }
 
 #[test]
+fn test_quoting_style_default() {
+    // By default, a name is only quoted when needed (shell-escape).
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("plain");
+    at.touch("a b");
+    at.relative_symlink_file("plain", "link");
+    ts.ucmd()
+        .args(&["-c", "%N", "plain", "a b", "link"])
+        .succeeds()
+        .stdout_only("plain\n'a b'\nlink -> plain\n");
+
+    ts.ucmd()
+        .arg("a b")
+        .succeeds()
+        .stdout_contains("  File: 'a b'\n");
+}
+
+#[test]
+fn test_quoted_name_directive() {
+    // %Qn quotes the name like %N, without dereferencing a symbolic link.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a b");
+    at.relative_symlink_file("a b", "link");
+    ts.ucmd()
+        .args(&["-c", "%Qn|%-6Qn|", "a b", "link"])
+        .succeeds()
+        .stdout_only("'a b'|'a b' |\nlink|link  |\n");
+
+    ts.ucmd()
+        .env("QUOTING_STYLE", "c")
+        .args(&["-f", "-c", "%Qn", "a b"])
+        .succeeds()
+        .stdout_only("\"a b\"\n");
+
+    ts.ucmd()
+        .args(&["-t", "a b"])
+        .succeeds()
+        .stdout_str_check(|s| s.starts_with("'a b' "));
+}
+
+#[test]
+fn test_quoting_style_env() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("it's");
+    at.touch("tab\there");
+    for (style, expected) in [
+        ("literal", "it's\ntab\there\n"),
+        ("shell", "\"it's\"\n'tab\there'\n"),
+        ("shell-always", "\"it's\"\n'tab\there'\n"),
+        ("shell-escape", "\"it's\"\n'tab'$'\\t''here'\n"),
+        ("shell-escape-always", "\"it's\"\n'tab'$'\\t''here'\n"),
+        ("c", "\"it's\"\n\"tab\\there\"\n"),
+        ("escape", "it's\ntab\\there\n"),
+        ("locale", "'it\\'s'\n'tab\\there'\n"),
+        ("clocale", "\"it's\"\n\"tab\\there\"\n"),
+    ] {
+        ts.ucmd()
+            .env("QUOTING_STYLE", style)
+            .args(&["-c", "%N", "it's", "tab\there"])
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
 fn test_quoting_style_locale() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -553,7 +680,7 @@ fn test_quoting_style_invalid_env() {
         .env("QUOTING_STYLE", "fromage")
         .args(&["-c", "nom=[%N]", "baguette", "Croissant", "Escargot"])
         .succeeds();
-    res.stdout_is("nom=['baguette']\nnom=['Croissant']\nnom=['Escargot']\n");
+    res.stdout_is("nom=[baguette]\nnom=[Croissant]\nnom=[Escargot]\n");
     assert_eq!(res.stderr_str().matches(needle).count(), 1);
 
     // An empty value is also invalid and must be reported with empty quotes.
@@ -561,7 +688,7 @@ fn test_quoting_style_invalid_env() {
         .env("QUOTING_STYLE", "")
         .args(&["-c", "%N", "baguette"])
         .succeeds()
-        .stdout_is("'baguette'\n")
+        .stdout_is("baguette\n")
         .stderr_is("stat: ignoring invalid value of environment variable QUOTING_STYLE: ''\n");
 
     // %%%N: a literal '%' followed by the quoted name, fallback style applies.
@@ -569,7 +696,7 @@ fn test_quoting_style_invalid_env() {
         .env("QUOTING_STYLE", "soufflé")
         .args(&["-c", "%%%N", "baguette"])
         .succeeds()
-        .stdout_is("%'baguette'\n")
+        .stdout_is("%baguette\n")
         .stderr_is(
             "stat: ignoring invalid value of environment variable QUOTING_STYLE: 'soufflé'\n",
         );
@@ -598,6 +725,17 @@ fn test_printf_octal_2() {
     let expected_stdout = vec![b'.', 0x0A, b'a', 0xFF, b'b'];
     ts.ucmd()
         .args(&["--printf=.\\012a\\377b", "."])
+        .succeeds()
+        .stdout_is_bytes(expected_stdout);
+}
+
+#[test]
+fn test_printf_octal_out_of_range() {
+    // Octal escapes whose value exceeds 255 wrap around, as they do in GNU stat.
+    let ts = TestScenario::new(util_name!());
+    let expected_stdout = vec![0x00, 0xFF]; // \400 -> 256 & 0xFF, \777 -> 511 & 0xFF
+    ts.ucmd()
+        .args(&["--printf=\\400\\777", "."])
         .succeeds()
         .stdout_is_bytes(expected_stdout);
 }
@@ -849,5 +987,27 @@ stat: '%.3': invalid directive
             .args(&["-c", "%d%.3", "/dev/null"])
             .fails_with_code(1)
             .stderr_is("stat: '%.3': invalid directive\n");
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_error_message_preserves_non_utf8_filename() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    for (bytes, quoted) in [
+        (b"missing-\xff".as_slice(), "'missing-'$'\\377'"),
+        (b"missing-\xc3\xa9".as_slice(), "'missing-'$'\\303\\251'"),
+    ] {
+        let name = OsStr::from_bytes(bytes);
+        for args in [vec![], vec!["-L"], vec!["-f"]] {
+            new_ucmd!()
+                .env("LC_ALL", "C")
+                .args(&args)
+                .arg(name)
+                .fails_with_code(1)
+                .stderr_contains(quoted);
+        }
     }
 }

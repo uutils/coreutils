@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore udev pcent iuse itotal iused ipcent binfmt
+
+// spell-checker:ignore udev pcent iuse itotal iused ipcent binfmt Utilisé Monté
+
 #![allow(
     clippy::similar_names,
     clippy::cast_possible_truncation,
@@ -639,6 +641,16 @@ fn test_block_size_1024() {
 }
 
 #[test]
+fn test_block_size_1m_option_with_output() {
+    for args in [["-m", "--output=size"], ["--output=size", "-m"]] {
+        let output = new_ucmd!().args(&args).succeeds().stdout_str_lossy();
+        let header = output.lines().next().unwrap().trim();
+
+        assert_eq!(header, "1M-blocks");
+    }
+}
+
+#[test]
 fn test_block_size_with_suffix() {
     fn get_header(block_size: &str) -> String {
         let output = new_ucmd!()
@@ -1037,6 +1049,18 @@ fn test_file_column_width_if_filename_contains_unicode_chars() {
     let actual = output.lines().next().unwrap();
     // expected width: 7 chars (length of äöü.txt) + 1 char (column separator)
     assert_eq!(actual, "File    Mounted on");
+}
+
+#[test]
+fn test_column_width_if_header_contains_unicode_chars() {
+    // the French "Used" header "Utilisé" is 7 columns wide but 8 bytes long
+    let output = new_ucmd!()
+        .env("LANG", "fr_FR.UTF-8")
+        .args(&["-h", "--output=used,target", "."])
+        .succeeds()
+        .stdout_str_lossy();
+    let actual = output.lines().next().unwrap();
+    assert_eq!(actual, "Utilisé Monté sur");
 }
 
 #[test]

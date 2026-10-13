@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore memfd_create prefixcat rsplit testcat atexit profraw Cprofile
+// spell-checker:ignore execveat fexecve memfd prefixcat rsplit testcat atexit profraw Cprofile
 
 use std::ffi::{OsStr, OsString};
 use std::io::{Write, stderr};
@@ -127,10 +127,12 @@ pub fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
     let exec_path = Path::new(OsStr::from_bytes(execfn_bytes));
     let argv0 = args.next().unwrap();
     let mut shebang_buf = [0u8; 2];
-    // exec_path is wrong when called from shebang or memfd_create (/proc/self/fd/*)
+    // exec_path is wrong when called from a shebang, or via fexecve/execveat:
+    // the kernel reports /dev/fd/* and memfd_create/glibc's fallback /proc/self/fd/*
     // argv0 is not full-path when called from PATH
     if execfn_bytes.rsplit(|&b| b == b'/').next() == argv0.as_bytes().rsplit(|&b| b == b'/').next()
         || execfn_bytes.starts_with(b"/proc/")
+        || execfn_bytes.starts_with(b"/dev/fd/")
         || (File::open(Path::new(exec_path))
             .and_then(|mut f| f.read_exact(&mut shebang_buf))
             .is_ok()

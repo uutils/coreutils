@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore étage replacen
+
 //! Render an error against the argument list it came from.
 //!
 //! Utilities whose arguments *are* the expression they evaluate — `test`, `expr`
@@ -33,8 +35,6 @@
 //!    │ Help: a range goes from the lower character to the higher one, as in a-z
 //! ───╯
 //! ```
-
-// spell-checker:ignore étage replacen
 
 use std::borrow::Cow;
 use std::env;
@@ -218,7 +218,7 @@ impl Snapshot {
         let mut snapshot = Self::with_capacity(args.len());
         for arg in args {
             snapshot.push(match crate::os_str_from_bytes(arg.as_ref()) {
-                Ok(arg) => arg.into_owned(),
+                Ok(arg) => arg.to_owned(),
                 // Only reachable on platforms where `OsStr` is not raw bytes;
                 // show the argument lossily rather than not at all.
                 Err(_) => String::from_utf8_lossy(arg.as_ref()).into_owned().into(),
@@ -413,8 +413,7 @@ impl Snapshot {
         let mut skip_value = false;
         let mut rank = 0;
 
-        for index in self.first_operand..self.args.len() {
-            let arg = &self.args[index];
+        for (index, arg) in self.args.iter().enumerate().skip(self.first_operand) {
             if skip_value {
                 skip_value = false;
                 continue;

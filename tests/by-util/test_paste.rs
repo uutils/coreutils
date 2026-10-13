@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore bsdutils toybox
+
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use uutests::at_and_ucmd;
@@ -164,6 +165,19 @@ const EXAMPLE_DATA: &[TestData] = &[
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[test]
+fn test_delimiter_hyphen_leading_as_separate_arg() {
+    // A hyphen-leading delimiter value passed as its own argument (not
+    // attached with `-d-x`/`=`) must not be mistaken for a new,
+    // unrecognized flag.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f1", "a\nb\n");
+    at.write("f2", "1\n2\n");
+    ucmd.args(&["-d", "-x", "f1", "f2"])
+        .succeeds()
+        .stdout_is("a-1\nb-2\n");
 }
 
 #[test]
@@ -519,4 +533,79 @@ fn test_repeated_delimiter_takes_the_last() {
         .pipe_in("a\nb\n")
         .succeeds()
         .stdout_is("a:b\n");
+}
+
+#[test]
+fn test_crlf_input_in_serial_mode() {
+    let expected = if cfg!(windows) {
+        "1,2,3\n"
+    } else {
+        "1\r,2\r,3\r\n"
+    };
+
+    new_ucmd!()
+        .args(&["-s", "-d", ","])
+        .pipe_in(b"1\r\n2\r\n3\r\n")
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_crlf_input_in_parallel_mode() {
+    let expected = if cfg!(windows) {
+        "1\t3\n2\t4\n"
+    } else {
+        "1\r\t3\r\n2\r\t4\r\n"
+    };
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write_bytes("a", b"1\r\n2\r\n");
+    at.write_bytes("b", b"3\r\n4\r\n");
+
+    ucmd.arg("a").arg("b").succeeds().stdout_is(expected);
+}
+
+#[test]
+fn test_crlf_kept_when_input_is_zero_terminated() {
+    new_ucmd!()
+        .args(&["-s", "-z", "-d", ","])
+        .pipe_in(b"1\r\n2\r\0")
+        .succeeds()
+        .stdout_is("1\r\n2\r\0");
+}
+
+#[test]
+fn test_crlf_input_of_a_single_file_is_copied() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write_bytes("a", b"1\r\n2\r\n");
+
+    ucmd.arg("a").succeeds().stdout_is("1\r\n2\r\n");
+}
+
+#[test]
+fn test_crlf_kept_when_last_line_ends_with_cr_and_no_newline() {
+    let expected = if cfg!(windows) {
+        "1,2\r\n"
+    } else {
+        "1\r,2\r\n"
+    };
+
+    new_ucmd!()
+        .args(&["-s", "-d", ","])
+        .pipe_in(b"1\r\n2\r")
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_crlf_delimiter_not_eaten_by_an_empty_line() {
+    let expected = if cfg!(windows) { "1\r\n" } else { "1\r\r\n" };
+
+    new_ucmd!()
+        .args(&["-s", "-d", "\\r"])
+        .pipe_in(b"1\r\n\n")
+        .succeeds()
+        .stdout_is(expected);
 }

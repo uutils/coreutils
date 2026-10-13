@@ -19,6 +19,8 @@
 //!
 //! Without NSS_WRAPPER, the benchmark tests with the system's real /etc/hosts.
 
+#![cfg(any(all(unix, not(any(target_os = "aix", target_os = "redox"))), windows))]
+
 use divan::{Bencher, black_box};
 use std::io::Write;
 use uu_hostname::uumain;

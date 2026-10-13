@@ -6,7 +6,6 @@ env-after-help = A mere - implies -i. If no COMMAND, print the resulting environ
 env-help-ignore-environment = start with an empty environment
 env-help-chdir = change working directory to DIR
 env-help-null = end each output line with a 0 byte rather than a newline (only valid when printing the environment)
-env-help-file = read and set variables from a ".env"-style configuration file (prior to any unset and/or set)
 env-help-unset = remove variable from the environment
 env-help-debug = print verbose information for each processing step
 env-help-split-string = process and split S into separate arguments; used to pass multiple arguments on shebang lines
