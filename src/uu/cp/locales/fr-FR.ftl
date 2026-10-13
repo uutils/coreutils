@@ -19,6 +19,7 @@ cp-after-help = Ne pas copier un non-répertoire qui a une destination existante
   - older : C'est l'opération par défaut lorsque --update est spécifié, et entraîne le remplacement des fichiers s'ils sont plus anciens que le fichier source correspondant.
 
 # Messages d'aide
+cp-error-relative-symlink-not-in-cwd = { $dest } : les liens symboliques relatifs ne peuvent être créés que dans le répertoire courant
 cp-help-target-directory = copier tous les arguments SOURCE dans le répertoire cible
 cp-help-no-target-directory = Traiter DEST comme un fichier régulier et non comme un répertoire
 cp-help-interactive = demander avant d'écraser les fichiers

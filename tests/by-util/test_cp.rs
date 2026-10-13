@@ -122,6 +122,34 @@ fn test_cp_verbose_write_error_is_reported() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_cp_symlink_relative_source_outside_cwd() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("sub");
+    at.touch("b.txt");
+    ucmd.args(&["-s", "b.txt", "sub"])
+        .fails_with_code(1)
+        .stderr_only("cp: sub/b.txt: can make relative symbolic links only in current directory\n");
+    assert!(!at.is_symlink("sub/b.txt"));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_symlink_relative_source_in_cwd_and_absolute_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("sub");
+    at.touch("b.txt");
+    ucmd.args(&["-s", "b.txt", "b2.txt"]).succeeds();
+    assert!(at.is_symlink("b2.txt"));
+
+    new_ucmd!()
+        .current_dir(at.as_string())
+        .args(&["-s", &at.plus_as_string("b.txt"), "sub"])
+        .succeeds();
+    assert!(at.is_symlink("sub/b.txt"));
+}
+
+#[test]
 fn test_cp_cp() {
     let (at, mut ucmd) = at_and_ucmd!();
     // Invoke our binary to make the copy.
