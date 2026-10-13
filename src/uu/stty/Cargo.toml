@@ -18,7 +18,7 @@ doctest = false
 [target.'cfg(all(unix, not(any(target_os = "aix", target_os = "dragonfly"))))'.dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
-nix = { workspace = true, features = ["ioctl", "term"] }
+libc = { workspace = true }
 rustix = { workspace = true, features = ["fs", "termios"] }
 uucore = { workspace = true, features = ["parser"] }
 
