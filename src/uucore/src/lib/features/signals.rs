@@ -94,6 +94,82 @@ pub static ALL_SIGNALS: [&str; 32] = [
 
 /*
 
+     The following signals are defined in Haiku:
+     // https://github.com/haiku/haiku/blob/master/headers/posix/signal.h
+
+     SIGHUP           1     hangup -- tty is gone!
+     SIGINT           2     interrupt
+     SIGQUIT          3     `quit' special character typed in tty
+     SIGILL           4     illegal instruction
+     SIGCHLD          5     child process exited
+     SIGABRT          6     abort() called, dont' catch
+     SIGPIPE          7     write to a pipe w/no readers
+     SIGFPE           8     floating point exception
+     SIGKILL          9     kill a team (not catchable)
+     SIGSTOP          10    suspend a thread (not catchable)
+     SIGSEGV          11    segmentation violation (read: invalid pointer)
+     SIGCONT          12    continue execution if suspended
+     SIGTSTP          13    `stop' special character typed in tty
+     SIGALRM          14    an alarm has gone off (see alarm())
+     SIGTERM          15    termination requested
+     SIGTTIN          16    read of tty from bg process
+     SIGTTOU          17    write to tty from bg process
+     SIGUSR1          18    app defined signal 1
+     SIGUSR2          19    app defined signal 2
+     SIGWINCH         20    tty window size changed
+     SIGKILLTHR       21    be specific: kill just the thread, not team
+     SIGTRAP          22    Trace/breakpoint trap
+     SIGPOLL          23    Pollable event
+     SIGPROF          24    Profiling timer expired
+     SIGSYS           25    Bad system call
+     SIGURG           26    High bandwidth data is available at socket
+     SIGVTALRM        27    Virtual timer expired
+     SIGXCPU          28    CPU time limit exceeded
+     SIGXFSZ          29    File size limit exceeded
+     SIGBUS           30    access to undefined portion of a memory object
+     SIGRESERVED1     31    reserved for future use
+     SIGRESERVED2     32    reserved for future use
+*/
+
+#[cfg(target_os = "haiku")]
+pub static ALL_SIGNALS: [&str; 33] = [
+    "EXIT",
+    "HUP",
+    "INT",
+    "QUIT",
+    "ILL",
+    "CHLD",
+    "ABRT",
+    "PIPE",
+    "FPE",
+    "KILL",
+    "STOP",
+    "SEGV",
+    "CONT",
+    "TSTP",
+    "ALRM",
+    "TERM",
+    "TTIN",
+    "TTOU",
+    "USR1",
+    "USR2",
+    "WINCH",
+    "KILLTHR",
+    "TRAP",
+    "POLL",
+    "PROF",
+    "SYS",
+    "URG",
+    "VTALRM",
+    "XCPU",
+    "XFSZ",
+    "BUS",
+    "RESERVED1",
+    "RESERVED2",
+];
+
+/*
+
      The following signals are defined in GNU/Hurd:
      // https://github.com/sailfishos-mirror/glibc/blob/glibc-2.35/bits/signum-generic.h
      // https://github.com/sailfishos-mirror/glibc/blob/glibc-2.35/sysdeps/mach/hurd/bits/signum-arch.h
