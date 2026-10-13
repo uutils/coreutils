@@ -2094,14 +2094,11 @@ fn test_follow_descriptor_vs_rename1() {
         p.wait_for_stdout_contains("A\n", WAIT_TIMEOUT);
 
         at.rename(file_a, file_b);
-        // Descriptor follow keeps watching the same inode across renames; brief settle.
-        p.delay(50);
 
         at.append(file_b, "B\n");
         p.wait_for_stdout_contains("A\nB\n", WAIT_TIMEOUT);
 
         at.rename(file_b, file_c);
-        p.delay(50);
 
         at.append(file_c, "C\n");
         p.wait_for_stdout_contains("A\nB\nC\n", WAIT_TIMEOUT);
@@ -2607,8 +2604,10 @@ fn test_follow_name_move_create1() {
         p.wait_for_stderr_contains("has appeared", WAIT_TIMEOUT)
             .wait_for_stdout_contains("START(0)", WAIT_TIMEOUT);
     }
+    // without inotify the recreated file is not reopened, so there is no output to wait for;
+    // a couple of -s.1 poll intervals is enough to catch unexpected output.
     #[cfg(not(target_os = "linux"))]
-    p.delay(500);
+    p.delay(200);
 
     p.make_assertion().is_alive();
     p.kill()
