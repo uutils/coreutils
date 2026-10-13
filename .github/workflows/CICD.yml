@@ -558,10 +558,6 @@ jobs:
             sudo apt-get -y update
             sudo apt-get -y install gcc-riscv64-linux-gnu
           ;;
-          powerpc64le-unknown-linux-*)
-            sudo apt-get -y update
-            sudo apt-get -y install gcc-powerpc64le-linux-gnu
-          ;;
           *-redox*)
             sudo apt-get -y update
             sudo apt-get -y install fuse3 libfuse-dev
