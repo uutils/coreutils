@@ -49,6 +49,7 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
+use uucore::fs::{AccessMode, effective_access};
 #[cfg(feature = "i18n-collator")]
 use uucore::i18n::collator::{compute_sort_key_utf8, locale_cmp};
 use uucore::i18n::datetime::get_locale_months;
@@ -3360,10 +3361,7 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
     Ok(())
 }
 
-/// Check that all inputs are readable before sorting starts, like GNU sort's
-/// `check_inputs`. The inputs are probed with `access(2)` rather than opened:
-/// opening a FIFO here would block until a writer appears and lose data on the
-/// reopen, and keeping every input open would be bounded by `RLIMIT_NOFILE`.
+/// Check that all inputs are readable before sorting.
 fn check_inputs(files: &[OsString]) -> UResult<()> {
     for file in files {
         if file == STDIN_FILE {
@@ -3378,18 +3376,16 @@ fn check_inputs(files: &[OsString]) -> UResult<()> {
     Ok(())
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
 fn check_readable(path: &Path) -> std::io::Result<()> {
-    use rustix::fs::{Access, access};
+    if effective_access(path, AccessMode::Read) {
+        return Ok(());
+    }
 
-    access(path, Access::READ_OK).map_err(|e| std::io::Error::from_raw_os_error(e.raw_os_error()))
-}
-
-#[cfg(any(not(unix), target_os = "redox"))]
-fn check_readable(path: &Path) -> std::io::Result<()> {
-    // No `rustix::fs::access` here, so open the file and close it right away.
-    File::open(path)?;
-    Ok(())
+    // Preserve missing-path errors without opening FIFOs.
+    match path.metadata() {
+        Ok(_) => Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied)),
+        Err(error) => Err(error),
+    }
 }
 
 fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
