@@ -50,6 +50,7 @@ cp-help-progress = Display a progress bar. Note: this feature is not supported b
 cp-help-copy-contents = NotImplemented: copy contents of special files when recursive
 
 # Error messages
+cp-error-relative-symlink-not-in-cwd = { $dest }: can make relative symbolic links only in current directory
 cp-error-missing-file-operand = missing file operand
 cp-error-missing-destination-operand = missing destination file operand after { $source }
 cp-error-extra-operand = extra operand { $operand }

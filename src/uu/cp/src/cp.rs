@@ -2572,6 +2572,20 @@ fn handle_copy_mode(
             )?;
         }
         CopyMode::SymLink => {
+            // GNU: a relative symlink target is resolved from the link's own
+            // directory, so it is only valid if dest is in the current directory.
+            if !source.is_absolute() {
+                let in_cwd = dest
+                    .parent()
+                    .is_none_or(|p| p.as_os_str().is_empty() || p == Path::new("."));
+                if !in_cwd {
+                    return Err(CpError::Error(translate!(
+                        "cp-error-relative-symlink-not-in-cwd",
+                        "dest" => dest.maybe_quote()
+                    )));
+                }
+            }
+
             // Atomic replace, for the same reason as CopyMode::Link above.
             if dest.exists() && options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
                 replace_link(source, dest, true)?;
