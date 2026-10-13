@@ -827,16 +827,14 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
         format::YYYYMMDDHHMMSS,
         format::YYYYMMDDHHMM_OFFSET,
     ] {
-        // Without an explicit offset GNU touch reads the time in the local
-        // zone; only the offset form is absolute.
-        let zone = if fmt == format::YYYYMMDDHHMM_OFFSET {
-            TimeZone::UTC
-        } else {
-            TimeZone::system()
-        };
-        if let Ok(parsed) = strtime::parse(fmt, s)
+        if fmt == format::YYYYMMDDHHMM_OFFSET {
+            // Preserve the parsed offset, which to_datetime() would discard.
+            if let Ok(parsed) = strtime::parse(fmt, s).and_then(|tm| tm.to_timestamp()) {
+                return Ok(timestamp_to_filetime(parsed));
+            }
+        } else if let Ok(parsed) = strtime::parse(fmt, s)
             .and_then(|tm| tm.to_datetime())
-            .and_then(|dt| zone.to_ambiguous_zoned(dt).unambiguous())
+            .and_then(|dt| TimeZone::system().to_ambiguous_zoned(dt).unambiguous())
         {
             return Ok(timestamp_to_filetime(parsed.timestamp()));
         }
