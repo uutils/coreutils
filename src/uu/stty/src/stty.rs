@@ -19,14 +19,14 @@
 mod flags;
 
 use crate::flags::AllFlags;
-use crate::flags::COMBINATION_SETTINGS;
+use crate::flags::{COMBINATION_SETTINGS, SPECIAL_INDICES};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
-use nix::sys::termios::{
-    ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices as S,
-    Termios, cfsetispeed, cfsetospeed, tcgetattr, tcsetattr,
+use rustix::termios::{
+    ControlModes as ControlFlags, InputModes as InputFlags, LocalModes as LocalFlags,
+    OptionalActions, OutputModes as OutputFlags, SpecialCodeIndex as S, Termios, Winsize,
+    tcgetattr, tcgetwinsize, tcsetattr, tcsetwinsize,
 };
-use rustix::termios::{Winsize, tcgetwinsize, tcsetwinsize};
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, Stdin, stdin, stdout};
@@ -38,8 +38,6 @@ use uucore::format_usage;
 use uucore::parser::num_parser::ExtendedParser;
 use uucore::translate;
 
-#[cfg(not(bsd))]
-use flags::BAUD_RATES;
 use flags::{CONTROL_CHARS, CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
 
 const ASCII_DEL: u8 = 127;
@@ -238,7 +236,7 @@ fn stty(opts: &Options) -> UResult<()> {
         ));
     }
 
-    let mut set_arg = SetArg::TCSADRAIN;
+    let mut set_arg = OptionalActions::Drain;
     let mut valid_args: Vec<ArgOptions> = Vec::new();
 
     if let Some(args) = &opts.settings {
@@ -321,10 +319,10 @@ fn stty(opts: &Options) -> UResult<()> {
                     }
                 }
                 "drain" => {
-                    set_arg = SetArg::TCSADRAIN;
+                    set_arg = OptionalActions::Drain;
                 }
                 "-drain" => {
-                    set_arg = SetArg::TCSANOW;
+                    set_arg = OptionalActions::Now;
                 }
                 "size" => {
                     valid_args.push(ArgOptions::Print(PrintSetting::Size));
@@ -386,8 +384,9 @@ fn stty(opts: &Options) -> UResult<()> {
             }
         }
 
-        let mut termios =
-            tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
+        let mut termios = tcgetattr(&opts.file)
+            .map_err(io::Error::from)
+            .map_err_context(|| opts.device_name.clone())?;
 
         // iterate over valid_args, match on the arg type, do the matching apply function
         for arg in &valid_args {
@@ -405,9 +404,11 @@ fn stty(opts: &Options) -> UResult<()> {
                 }
             }
         }
-        tcsetattr(opts.file.as_fd(), set_arg, &termios)?;
+        tcsetattr(&opts.file, set_arg, &termios).map_err(io::Error::from)?;
     } else {
-        let termios = tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
+        let termios = tcgetattr(&opts.file)
+            .map_err(io::Error::from)
+            .map_err_context(|| opts.device_name.clone())?;
         print_settings(&termios, opts)?;
     }
     Ok(())
@@ -481,7 +482,7 @@ fn parse_rows_cols(arg: &str) -> Option<u16> {
 /// Parse a saved terminal state string in stty format.
 ///
 /// The format is colon-separated hexadecimal values:
-/// `input_flags:output_flags:control_flags:local_flags:cc0:cc1:cc2:...`
+/// `input_modes:output_modes:control_modes:local_modes:cc0:cc1:cc2:...`
 ///
 /// - Must have exactly 4 + NCCS parts (4 flags + platform-specific control characters)
 /// - All parts must be non-empty valid hex values
@@ -489,7 +490,7 @@ fn parse_rows_cols(arg: &str) -> Option<u16> {
 /// - Returns `None` if format is invalid
 fn parse_saved_state(arg: &str) -> Option<Vec<u32>> {
     let parts: Vec<&str> = arg.split(':').collect();
-    let expected_parts = 4 + nix::libc::NCCS;
+    let expected_parts = 4 + libc::NCCS;
 
     // GNU requires exactly the right number of parts for this platform
     if parts.len() != expected_parts {
@@ -595,9 +596,7 @@ fn print_terminal_size(
     window_size: Option<&Winsize>,
     term_size: Option<&Winsize>,
 ) -> io::Result<()> {
-    // GNU linked against glibc 2.42 provides us baudrate 51 which panics cfgetospeed
-    // so we repeat syscall... use termios.output_speed() instead if we switched to rustix instead.
-    let speed = rustix::termios::tcgetattr(&opts.file)?.output_speed();
+    let speed = termios.output_speed();
     let mut printer = WrappedPrinter::new(window_size);
     printer.print(&translate!("stty-output-speed", "speed" => speed));
     if opts.all {
@@ -612,8 +611,6 @@ fn print_terminal_size(
         let line = termios.line_discipline;
         printer.print(&translate!("stty-output-line", "line" => line));
     }
-    #[cfg(not(any(target_os = "linux", target_os = "redox")))]
-    let _ = termios; // remove this hack when we switched to rustix completely
     printer.flush();
     Ok(())
 }
@@ -699,19 +696,7 @@ fn string_to_baud(arg: &str, baud_type: flags::BaudType) -> Option<AllFlags<'_>>
     let normalized = normalized.strip_suffix('.').unwrap_or(normalized);
     let value = parse_baud_with_rounding(normalized)?;
 
-    // BSDs use a u32 for the baud rate, so any decimal number applies.
-    #[cfg(bsd)]
-    return Some(AllFlags::Baud(value, baud_type));
-
-    #[cfg(not(bsd))]
-    {
-        for (text, baud_rate) in BAUD_RATES {
-            if text.parse::<u32>().ok() == Some(value) {
-                return Some(AllFlags::Baud(*baud_rate, baud_type));
-            }
-        }
-        None
-    }
+    Some(AllFlags::Baud(value, baud_type))
 }
 
 /// return `Some(flag)` if the input is a valid flag, `None` if not
@@ -742,7 +727,7 @@ fn string_to_flag(option: &str) -> Option<AllFlags<'_>> {
     None
 }
 
-fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
+fn control_char_to_string(cc: u8) -> io::Result<String> {
     if cc == 0 {
         return Ok(translate!("stty-output-undef"));
     }
@@ -762,22 +747,22 @@ fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
         // DEL character
         0x7f => Ok(("^", '?')),
         // Out of range (above 8 bits)
-        _ => Err(nix::errno::Errno::ERANGE),
+        _ => Err(rustix::io::Errno::RANGE),
     }?;
 
     Ok(format!("{meta_prefix}{ctrl_prefix}{character}"))
 }
 
-fn print_control_chars(
+fn print_control_modes(
     termios: &Termios,
     opts: &Options,
     term_size: Option<&Winsize>,
-) -> nix::Result<()> {
+) -> io::Result<()> {
     if !opts.all {
         // Print only control chars that differ from sane defaults
         let mut printer = WrappedPrinter::new(term_size);
         for (text, cc_index) in CONTROL_CHARS {
-            let current_val = termios.control_chars[*cc_index as usize];
+            let current_val = termios.special_codes[*cc_index];
             let sane_val = get_sane_control_char(*cc_index);
 
             if current_val != sane_val {
@@ -795,12 +780,12 @@ fn print_control_chars(
     for (text, cc_index) in CONTROL_CHARS {
         printer.print(&format!(
             "{text} = {};",
-            control_char_to_string(termios.control_chars[*cc_index as usize])?
+            control_char_to_string(termios.special_codes[*cc_index])?
         ));
     }
     printer.print(&translate!("stty-output-min-time",
-        "min" => termios.control_chars[S::VMIN as usize],
-        "time" => termios.control_chars[S::VTIME as usize]
+        "min" => termios.special_codes[S::VMIN],
+        "time" => termios.special_codes[S::VTIME]
     ));
     printer.flush();
     Ok(())
@@ -809,13 +794,17 @@ fn print_control_chars(
 fn print_in_save_format(termios: &Termios) {
     print!(
         "{:x}:{:x}:{:x}:{:x}",
-        termios.input_flags.bits(),
-        termios.output_flags.bits(),
-        termios.control_flags.bits(),
-        termios.local_flags.bits()
+        termios.input_modes.bits(),
+        termios.output_modes.bits(),
+        termios.control_modes.bits(),
+        termios.local_modes.bits()
     );
-    for cc in termios.control_chars {
+    for &i in SPECIAL_INDICES {
+        let cc = termios.special_codes[i];
         print!(":{cc:x}");
+    }
+    for _ in SPECIAL_INDICES.len()..libc::NCCS {
+        print!(":0");
     }
     println!();
 }
@@ -844,7 +833,7 @@ fn print_settings(termios: &Termios, opts: &Options) -> io::Result<()> {
         };
 
         print_terminal_size(termios, opts, window_size.as_ref(), term_size.as_ref())?;
-        print_control_chars(termios, opts, window_size.as_ref())?;
+        print_control_modes(termios, opts, window_size.as_ref())?;
         print_flags(termios, opts, CONTROL_FLAGS, window_size.as_ref());
         print_flags(termios, opts, INPUT_FLAGS, window_size.as_ref());
         print_flags(termios, opts, OUTPUT_FLAGS, window_size.as_ref());
@@ -888,7 +877,7 @@ fn print_flags<T: TermiosFlag>(
 }
 
 /// Apply a single setting
-fn apply_setting(termios: &mut Termios, setting: &AllFlags) -> nix::Result<()> {
+fn apply_setting(termios: &mut Termios, setting: &AllFlags) -> io::Result<()> {
     match setting {
         AllFlags::Baud(_, _) => apply_baud_rate_flag(termios, setting)?,
         AllFlags::ControlFlags((setting, disable)) => {
@@ -907,14 +896,14 @@ fn apply_setting(termios: &mut Termios, setting: &AllFlags) -> nix::Result<()> {
     Ok(())
 }
 
-fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) -> nix::Result<()> {
+fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) -> io::Result<()> {
     if let AllFlags::Baud(rate, baud_type) = input {
         match baud_type {
-            flags::BaudType::Input => cfsetispeed(termios, *rate)?,
-            flags::BaudType::Output => cfsetospeed(termios, *rate)?,
+            flags::BaudType::Input => termios.set_input_speed(*rate)?,
+            flags::BaudType::Output => termios.set_output_speed(*rate)?,
             flags::BaudType::Both => {
-                cfsetispeed(termios, *rate)?;
-                cfsetospeed(termios, *rate)?;
+                termios.set_input_speed(*rate)?;
+                termios.set_output_speed(*rate)?;
             }
         }
     }
@@ -922,7 +911,7 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) -> nix::Result<
 }
 
 fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
-    termios.control_chars[mapping.0 as usize] = mapping.1;
+    termios.special_codes[mapping.0] = mapping.1;
 }
 
 /// Apply a saved terminal state to the current termios.
@@ -943,14 +932,13 @@ fn apply_saved_state(termios: &mut Termios, state: &[u32]) {
     };
 
     // Apply the four flag groups, done (as _) for MacOS size compatibility
-    termios.input_flags = InputFlags::from_bits_truncate(*s0 as _);
-    termios.output_flags = OutputFlags::from_bits_truncate(*s1 as _);
-    termios.control_flags = ControlFlags::from_bits_truncate(*s2 as _);
-    termios.local_flags = LocalFlags::from_bits_truncate(*s3 as _);
-
-    // Apply control characters if present (stored as u32 but used as u8)
-    for (c, &cc_val) in termios.control_chars.iter_mut().zip(rest) {
-        *c = cc_val as u8;
+    termios.input_modes = InputFlags::from_bits_truncate(*s0 as _);
+    termios.output_modes = OutputFlags::from_bits_truncate(*s1 as _);
+    termios.control_modes = ControlFlags::from_bits_truncate(*s2 as _);
+    termios.local_modes = LocalFlags::from_bits_truncate(*s3 as _);
+    // Apply control characters if present (stored as usize but used as u8)
+    for (&index, &cc_val) in SPECIAL_INDICES.iter().zip(rest) {
+        termios.special_codes[index] = cc_val as u8;
     }
 }
 
@@ -1168,45 +1156,45 @@ pub fn uu_app() -> Command {
 
 impl TermiosFlag for ControlFlags {
     fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool {
-        termios.control_flags.contains(*self)
-            && group.is_none_or(|g| !termios.control_flags.intersects(g - *self))
+        termios.control_modes.contains(*self)
+            && group.is_none_or(|g| !termios.control_modes.intersects(g - *self))
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
-        termios.control_flags.set(*self, val);
+        termios.control_modes.set(*self, val);
     }
 }
 
 impl TermiosFlag for InputFlags {
     fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool {
-        termios.input_flags.contains(*self)
-            && group.is_none_or(|g| !termios.input_flags.intersects(g - *self))
+        termios.input_modes.contains(*self)
+            && group.is_none_or(|g| !termios.input_modes.intersects(g - *self))
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
-        termios.input_flags.set(*self, val);
+        termios.input_modes.set(*self, val);
     }
 }
 
 impl TermiosFlag for OutputFlags {
     fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool {
-        termios.output_flags.contains(*self)
-            && group.is_none_or(|g| !termios.output_flags.intersects(g - *self))
+        termios.output_modes.contains(*self)
+            && group.is_none_or(|g| !termios.output_modes.intersects(g - *self))
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
-        termios.output_flags.set(*self, val);
+        termios.output_modes.set(*self, val);
     }
 }
 
 impl TermiosFlag for LocalFlags {
     fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool {
-        termios.local_flags.contains(*self)
-            && group.is_none_or(|g| !termios.local_flags.intersects(g - *self))
+        termios.local_modes.contains(*self)
+            && group.is_none_or(|g| !termios.local_modes.intersects(g - *self))
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
-        termios.local_flags.set(*self, val);
+        termios.local_modes.set(*self, val);
     }
 }
 
@@ -1331,6 +1319,8 @@ mod tests {
     // Tests for string_to_baud
     #[test]
     fn test_string_to_baud_valid() {
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        assert!(string_to_baud("995", flags::BaudType::Both).is_some());
         #[cfg(not(bsd))]
         {
             assert!(string_to_baud("9600", flags::BaudType::Both).is_some());
@@ -1352,7 +1342,6 @@ mod tests {
     fn test_string_to_baud_invalid() {
         #[cfg(not(bsd))]
         {
-            assert_eq!(string_to_baud("995", flags::BaudType::Both), None);
             assert_eq!(string_to_baud("invalid", flags::BaudType::Both), None);
             assert_eq!(string_to_baud("", flags::BaudType::Both), None);
             assert_eq!(string_to_baud("abc", flags::BaudType::Both), None);
