@@ -38,9 +38,9 @@ use uucore::backup_control::backup_would_destroy_source;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, UUsageError, set_exit_code, strip_errno};
 use uucore::fs::{
-    FileInformation, MissingHandling, ResolveMode, are_hardlinks_to_same_file, canonicalize,
-    get_filename, is_symlink_loop, normalize_path, path_ends_with_terminator,
-    paths_refer_to_same_file, replace_link,
+    AccessMode, FileInformation, MissingHandling, ResolveMode, are_hardlinks_to_same_file,
+    canonicalize, effective_access, get_filename, is_symlink_loop, normalize_path,
+    path_ends_with_terminator, paths_refer_to_same_file, replace_link,
 };
 use uucore::{backup_control, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
@@ -2320,11 +2320,8 @@ fn delete_dest_if_needed_and_allowed(
         OverwriteMode::Clobber(cl) | OverwriteMode::Interactive(cl) => {
             match cl {
                 ClobberMode::Force => {
-                    // TODO
-                    // Using `readonly` here to check if `dest` needs to be deleted is not correct:
-                    // "On Unix-based platforms this checks if any of the owner, group or others write permission bits are set. It does not check if the current user is in the file's assigned group. It also does not check ACLs. Therefore the return value of this function cannot be relied upon to predict whether attempts to read or write the file will actually succeed."
-                    // This results in some copy operations failing, because this necessary deletion is being skipped.
-                    is_symlink_loop(dest) || fs::metadata(dest)?.permissions().readonly()
+                    // Remove destinations that cannot be written directly so the copy can recreate them.
+                    is_symlink_loop(dest) || !effective_access(dest, AccessMode::Write)
                 }
                 ClobberMode::RemoveDestination => true,
                 ClobberMode::Standard => {
