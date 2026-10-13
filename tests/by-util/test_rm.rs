@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore rootlink dotdot rootfile deleteme keepme topfile mkdirat RDONLY FDCWD SIGSEGV rootbind submounts rprivate rbind overlayfs ENAMETOOLONG
+// spell-checker:ignore rootlink dotdot rootfile deleteme keepme topfile mkdirat RDONLY FDCWD SIGSEGV rootbind submounts rprivate rbind overlayfs ENAMETOOLONG NAMETOOLONG unlinkat
 
 #![allow(clippy::stable_sort_primitive)]
 
@@ -1684,6 +1684,56 @@ fn test_preserve_root_literal_root() {
         .fails()
         .stderr_contains("it is dangerous to operate recursively on '/'")
         .stderr_contains("use --no-preserve-root to override this failsafe");
+}
+
+/// `rm -rf / --no-preserve-root` must get past the failsafe and start removing.
+///
+/// GNU's `tests/rm/r-root.sh` cannot run against us, so this covers it. To keep
+/// it harmless, `strace` fakes success for every `unlink`/`unlinkat`/`rmdir`
+/// (the real syscall is skipped) and sends SIGINT on the first one, which stops
+/// `rm` at once. **Never run this without the injection**: a probe on a scratch
+/// file first proves the injection really skips the syscall, otherwise the test
+/// skips.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_no_preserve_root_literal_root() {
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::Command;
+
+    // One expression: separate `-e inject=` options for the same syscalls
+    // override each other instead of combining.
+    const INJECT: [&str; 2] = ["-e", "inject=unlink,unlinkat,rmdir:retval=0:signal=SIGINT"];
+
+    let ts = TestScenario::new(util_name!());
+    let bin = ts.bin_path.to_string_lossy().into_owned();
+
+    // Safety net: the injection must leave a real file in place.
+    ts.fixtures.touch("probe");
+    let probe = Command::new("strace")
+        .args(["-o", "/dev/null"])
+        .args(INJECT)
+        .args([&bin, "rm", &ts.fixtures.plus_as_string("probe")])
+        .status();
+    if probe.is_err() || !ts.fixtures.file_exists("probe") {
+        println!("TEST SKIPPED: strace syscall injection is not available");
+        return;
+    }
+
+    let output = Command::new("strace")
+        .args(["-o", "/dev/null"])
+        .args(INJECT)
+        .args([&bin, "rm", "-rf", "/", "--no-preserve-root"])
+        .env("LC_ALL", "C")
+        .output()
+        .expect("failed to spawn strace");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("it is dangerous to operate recursively"),
+        "--no-preserve-root was refused: {stderr}"
+    );
+    // rm got as far as its first (faked) removal and was interrupted by it.
+    assert_eq!(output.status.signal(), Some(libc::SIGINT), "{stderr}");
 }
 
 // Regression tests for Issue #9749: rm -rf ./ and variants silently delete
