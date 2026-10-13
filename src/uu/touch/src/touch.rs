@@ -827,9 +827,16 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
         format::YYYYMMDDHHMMSS,
         format::YYYYMMDDHHMM_OFFSET,
     ] {
+        // Without an explicit offset GNU touch reads the time in the local
+        // zone; only the offset form is absolute.
+        let zone = if fmt == format::YYYYMMDDHHMM_OFFSET {
+            TimeZone::UTC
+        } else {
+            TimeZone::system()
+        };
         if let Ok(parsed) = strtime::parse(fmt, s)
             .and_then(|tm| tm.to_datetime())
-            .and_then(|dt| TimeZone::UTC.to_zoned(dt))
+            .and_then(|dt| zone.to_ambiguous_zoned(dt).unambiguous())
         {
             return Ok(timestamp_to_filetime(parsed.timestamp()));
         }
@@ -970,6 +977,23 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
 
 #[cfg(test)]
 mod tests {
+    use jiff::Timestamp;
+    use jiff::tz::TimeZone;
+
+    #[test]
+    fn test_parse_date_without_offset_uses_local_zone() {
+        // "2026-08-01 12:00:00" has no offset, so it must mean 12:00 in the
+        // system zone (as GNU touch does), not 12:00 UTC.
+        let now = Timestamp::now().to_zoned(TimeZone::UTC);
+        let expected = TimeZone::system()
+            .to_ambiguous_zoned(jiff::civil::date(2026, 8, 1).at(12, 0, 0, 0))
+            .unambiguous()
+            .unwrap()
+            .timestamp();
+        let got = super::parse_date(now, "2026-08-01 12:00:00").unwrap();
+        assert_eq!(got.unix_seconds(), expected.as_second());
+    }
+
     use filetime::FileTime;
 
     use crate::{
