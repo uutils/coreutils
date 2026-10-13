@@ -25,7 +25,7 @@ use walkdir::WalkDir;
 
 #[cfg(target_os = "linux")]
 use crate::features::fs::FileInformation;
-use crate::features::fs::path_is_root_dir;
+use crate::features::fs::{metadata_is_root_dir, path_is_root_dir};
 #[cfg(target_os = "linux")]
 use crate::features::safe_traversal::{DirFd, FileInfo, SymlinkBehavior};
 
@@ -244,7 +244,21 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
     if !path_is_root_dir(path, would_traverse_symlink) {
         return false;
     }
+    report_root(path);
+    true
+}
 
+/// [`is_root`], judged on `meta` the caller already holds instead of on a new
+/// lookup of `path`, which a concurrent rename could have re-pointed.
+fn meta_is_root(path: &Path, meta: &Metadata) -> bool {
+    if !metadata_is_root_dir(meta) {
+        return false;
+    }
+    report_root(path);
+    true
+}
+
+fn report_root(path: &Path) {
     if path.as_os_str() == "/" {
         show_error!("it is dangerous to operate recursively on '/'");
     } else {
@@ -254,7 +268,6 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
         );
     }
     show_error!("use --no-preserve-root to override this failsafe");
-    true
 }
 
 /// Whether `dir_fd` refers to the very object `meta` describes.
@@ -306,9 +319,13 @@ impl ChownExecutor {
             return 1;
         };
 
+        // Also judge `meta`: the descent below is pinned to it, so a swap after the
+        // path lookup in `is_root` cannot slip "/" past, while that lookup still
+        // catches a symlink to "/" which `meta` did not follow.
         if self.recursive
             && self.preserve_root
-            && is_root(path, self.traverse_symlinks != TraverseSymlinks::None)
+            && (is_root(path, self.traverse_symlinks != TraverseSymlinks::None)
+                || meta_is_root(path, &meta))
         {
             // Fail-fast, do not attempt to recurse.
             return 1;
