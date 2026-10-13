@@ -616,11 +616,11 @@ fn test_numeric_group_formats() {
     let new_gid = at.plus("test_file").metadata().unwrap().gid();
     assert_eq!(new_gid, second_group.as_raw());
 
-    // Test :gid format in target group
+    // Test numeric gid in target group (the :gid format is only valid for --from)
     scene
         .ucmd()
         .arg(format!("--from={}", second_group.as_raw()))
-        .arg(format!(":{}", first_group.as_raw()))
+        .arg(first_group.as_raw().to_string())
         .arg("test_file")
         .succeeds()
         .no_stderr();
