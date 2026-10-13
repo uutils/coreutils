@@ -443,13 +443,8 @@ fn expand_buf(
 fn stdin_is_regular_file() -> bool {
     #[cfg(unix)]
     {
-        use std::os::fd::AsFd;
-        stdin()
-            .as_fd()
-            .try_clone_to_owned()
-            .map(File::from)
-            .and_then(|f| f.metadata())
-            .is_ok_and(|m| m.is_file())
+        rustix::fs::fstat(stdin())
+            .is_ok_and(|st| rustix::fs::FileType::from_raw_mode(st.st_mode).is_file())
     }
     #[cfg(not(unix))]
     {
@@ -465,7 +460,7 @@ fn expand_file(
     let mut input = open(file)?;
     // Only input that can block between lines (a pipe or terminal on stdin)
     // needs output flushed before the next read. Regular files keep the fully
-    // buffered path. Fixes #11091.
+    // buffered path.
     let flush_lines = file == "-" && !stdin_is_regular_file();
     let ts = options.tabstops.as_ref();
     let mut col = 0;

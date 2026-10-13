@@ -641,13 +641,8 @@ fn unexpand_buf(
 fn stdin_is_regular_file() -> bool {
     #[cfg(unix)]
     {
-        use std::os::fd::AsFd;
-        stdin()
-            .as_fd()
-            .try_clone_to_owned()
-            .map(File::from)
-            .and_then(|f| f.metadata())
-            .is_ok_and(|m| m.is_file())
+        rustix::fs::fstat(stdin())
+            .is_ok_and(|st| rustix::fs::FileType::from_raw_mode(st.st_mode).is_file())
     }
     #[cfg(not(unix))]
     {
@@ -663,7 +658,7 @@ fn unexpand_file(
     tab_config: &TabConfig,
 ) -> UResult<()> {
     let mut input = open(file)?;
-    // See expand: flush before the next read only when stdin can block. #11091
+    // See expand: flush before the next read only when stdin can block.
     let flush_lines = file == "-" && !stdin_is_regular_file();
     let mut print_state = PrintState {
         col: 0,
