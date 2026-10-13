@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//spell-checker:ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
+//spell-checker:ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty openpt grantpt unlockpt ptsname tcsetwinsize CLOEXEC RDWR SETFD
 //spell-checker:ignore (linux) winsize xpixel ypixel setrlimit Fsize SIGBUS SIGSEGV SIGXFSZ EFBIG sigbus tmpfs mksocket
 //spell-checker:ignore (ToDO) ttyname
 
@@ -2038,7 +2038,11 @@ impl UCommand {
                 let OpenptyResult {
                     slave: pi_slave,
                     master: pi_master,
-                } = nix::pty::openpty(&terminal_size, None).unwrap();
+                } = open_pty(Some(&terminal_size));
+                // Read the echo, as a terminal would. This also keeps the PTY
+                // open until the child closes it, so closing stdin doesn't hang it up.
+                let mut echo = File::from(pi_master.try_clone().unwrap());
+                thread::spawn(move || io::copy(&mut echo, &mut io::sink()));
                 stdin_pty = Some(File::from(pi_master));
                 command.stdin(pi_slave);
             }
@@ -2047,7 +2051,7 @@ impl UCommand {
                 let OpenptyResult {
                     slave: po_slave,
                     master: po_master,
-                } = nix::pty::openpty(&terminal_size, None).unwrap();
+                } = open_pty(Some(&terminal_size));
                 captured_stdout = Self::spawn_reader_thread(
                     captured_stdout,
                     po_master,
@@ -2060,7 +2064,7 @@ impl UCommand {
                 let OpenptyResult {
                     slave: pe_slave,
                     master: pe_master,
-                } = nix::pty::openpty(&terminal_size, None).unwrap();
+                } = open_pty(Some(&terminal_size));
                 captured_stderr = Self::spawn_reader_thread(
                     captured_stderr,
                     pe_master,
@@ -3038,6 +3042,63 @@ pub fn whoami() -> String {
         })
 }
 
+/// Open a PTY whose two ends are close-on-exec, so that commands started by
+/// other tests in the meantime don't inherit them.
+#[cfg(all(unix, not(target_os = "redox")))]
+fn open_pty(size: Option<&libc::winsize>) -> OpenptyResult {
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "freebsd",
+        target_os = "netbsd"
+    ))]
+    {
+        use rustix::fs::{Mode, OFlags, open};
+        use rustix::pty::{OpenptFlags, grantpt, openpt, ptsname, unlockpt};
+        use rustix::termios::{Winsize, tcsetwinsize};
+
+        let master =
+            openpt(OpenptFlags::RDWR | OpenptFlags::NOCTTY | OpenptFlags::CLOEXEC).unwrap();
+        grantpt(&master).unwrap();
+        unlockpt(&master).unwrap();
+        let name = ptsname(&master, Vec::new()).unwrap();
+        let slave = open(
+            name,
+            OFlags::RDWR | OFlags::NOCTTY | OFlags::CLOEXEC,
+            Mode::empty(),
+        )
+        .unwrap();
+        if let Some(size) = size {
+            let size = Winsize {
+                ws_row: size.ws_row,
+                ws_col: size.ws_col,
+                ws_xpixel: size.ws_xpixel,
+                ws_ypixel: size.ws_ypixel,
+            };
+            tcsetwinsize(&slave, size).unwrap();
+        }
+        OpenptyResult { master, slave }
+    }
+
+    // Elsewhere a PTY can't be opened close-on-exec, so a command started
+    // between openpty and fcntl can still inherit it.
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "freebsd",
+        target_os = "netbsd"
+    )))]
+    {
+        use nix::fcntl::{FcntlArg, FdFlag, fcntl};
+
+        let pty = nix::pty::openpty(size, None).unwrap();
+        for fd in [&pty.master, &pty.slave] {
+            fcntl(fd, FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC)).unwrap();
+        }
+        pty
+    }
+}
+
 /// Create a PTY (pseudo-terminal) for testing utilities that require a TTY.
 ///
 /// Returns a tuple of (path, controller, replica) where:
@@ -3046,9 +3107,8 @@ pub fn whoami() -> String {
 /// - replica: The replica file
 #[cfg(all(unix, not(target_os = "redox")))]
 pub fn pty_path() -> (String, File, File) {
-    use nix::pty::openpty;
     use nix::unistd::ttyname;
-    let pty = openpty(None, None).expect("Failed to create PTY");
+    let pty = open_pty(None);
     let path = ttyname(&pty.slave)
         .expect("Failed to get PTY path")
         .to_string_lossy()

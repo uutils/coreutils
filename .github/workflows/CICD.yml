@@ -5,7 +5,7 @@ name: CICD
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata profraw Cprofile
 # spell-checker:ignore (people) Peltoche rivy Anson dawidd
 # spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libcrypto libfuse libssl limactl nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache setfacl utmpdump xargs zstd
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest tempfile testsuite toybox uutils libsystemd codspeed wasip libexecinfo
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest tempfile testsuite toybox userns uutils libsystemd codspeed wasip libexecinfo
 
 env:
   PROJECT_NAME: coreutils
@@ -207,7 +207,12 @@ jobs:
       shell: bash
       run: |
         # Install a package for one of the tests
-        sudo apt-get -y update ; sudo apt-get -y install attr
+        # Some tests are silently skipped if strace is missing
+        sudo apt-get -y update ; sudo apt-get -y install attr strace
+        # Some tests are silently skipped if unshare failed
+        # userns is enabled only on few jobs for security
+        sudo sysctl -w kernel.unprivileged_userns_clone=1
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
     - name: Info
       shell: bash
       run: |
