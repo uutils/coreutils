@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
@@ -423,7 +423,7 @@ fn write_spaces(output: &mut impl Write, mut n: usize) -> std::io::Result<()> {
 
 fn expand_buf(
     buf: &[u8],
-    output: &mut impl Write,
+    output: &mut BufWriter<std::io::Stdout>,
     tabstops: &[usize],
     options: &Options,
     line: &mut LineState,
@@ -520,27 +520,45 @@ fn expand_buf(
     Ok(())
 }
 
+/// Whether stdin is a regular file, i.e. reads from it never wait for a writer.
+fn stdin_is_regular_file() -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::fd::AsFd;
+        stdin()
+            .as_fd()
+            .try_clone_to_owned()
+            .map(File::from)
+            .and_then(|f| f.metadata())
+            .is_ok_and(|m| m.is_file())
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
+}
+
 fn expand_file(
     file: &OsString,
-    output: &mut impl Write,
+    output: &mut BufWriter<std::io::Stdout>,
     options: &Options,
     line: &mut LineState,
 ) -> UResult<()> {
     let mut input = open(file)?;
+    // Only input that can block between lines (a pipe or terminal on stdin)
+    // needs output flushed before the next read. Regular files keep the fully
+    // buffered path. Fixes #11091.
+    let flush_lines = file == "-" && !stdin_is_regular_file();
     let ts = options.tabstops.as_ref();
     loop {
         match input.fill_buf() {
             Ok([]) => break,
             Ok(buf) => {
-                let had_newline = buf.contains(&b'\n');
                 expand_buf(buf, output, ts, options, line)
                     .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
                 let len = buf.len();
                 input.consume(len);
-                // Line-buffer when a newline was in this chunk so interactive stdin
-                // (and any producer that pauses between lines) shows output promptly.
-                // Fixes #11091.
-                if had_newline {
+                if flush_lines {
                     output
                         .flush()
                         .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
@@ -553,14 +571,7 @@ fn expand_file(
 }
 
 fn expand(options: &Options) -> UResult<()> {
-    // Match `cut`: when stdout is a terminal, skip BufWriter so each line appears
-    // immediately (GNU expand is line-buffered on a tty). Otherwise keep the
-    // buffered path for throughput on pipes/files. Fixes #11091.
-    let mut output: Box<dyn Write> = if stdout().is_terminal() {
-        Box::new(stdout())
-    } else {
-        Box::new(BufWriter::new(stdout()))
-    };
+    let mut output = BufWriter::new(stdout());
     // The files are one stream: a line without a newline at the end of a file
     // goes on in the next one.
     let mut line = LineState { col: 0, init: true };
@@ -571,7 +582,7 @@ fn expand(options: &Options) -> UResult<()> {
             set_exit_code(1);
         }
     }
-    // Flush once at the end (no-op for the unbuffered tty path)
+    // Flush once at the end
     output
         .flush()
         .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
