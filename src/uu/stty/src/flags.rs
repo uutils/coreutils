@@ -10,14 +10,12 @@
 // spell-checker:ignore lnext rprnt susp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase
 // spell-checker:ignore sigquit sigtstp
 // spell-checker:ignore cbreak decctlq evenp litout oddp
+// spell-checker:ignore VDSUSP VMIN VSTATUS VTIME VSWTCH
 
 use crate::Flag;
 
-#[cfg(not(bsd))]
-use nix::sys::termios::BaudRate;
-use nix::sys::termios::{
-    ControlFlags as C, InputFlags as I, LocalFlags as L, OutputFlags as O,
-    SpecialCharacterIndices as S,
+use rustix::termios::{
+    ControlModes as C, InputModes as I, LocalModes as L, OutputModes as O, SpecialCodeIndex as S,
 };
 
 #[derive(Debug)]
@@ -31,10 +29,7 @@ pub enum BaudType {
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum AllFlags<'a> {
-    #[cfg(bsd)]
     Baud(u32, BaudType),
-    #[cfg(not(bsd))]
-    Baud(BaudRate, BaudType),
     ControlFlags((&'a Flag<C>, bool)),
     InputFlags((&'a Flag<I>, bool)),
     LocalFlags((&'a Flag<L>, bool)),
@@ -84,6 +79,14 @@ pub const INPUT_FLAGS: &[Flag<I>] = &[
     Flag::new("iutf8", I::IUTF8),
 ];
 
+// workaround for unexposed const of OutputModes <https://github.com/bytecodealliance/rustix/pull/1720>
+#[allow(unused_macros)]
+macro_rules! o {
+    ($val:expr) => {
+        O::from_bits_retain($val as _)
+    };
+}
+
 pub const OUTPUT_FLAGS: &[Flag<O>] = &[
     Flag::new("opost", O::OPOST).sane(),
     #[cfg(any(
@@ -131,21 +134,21 @@ pub const OUTPUT_FLAGS: &[Flag<O>] = &[
         target_os = "haiku",
         target_os = "linux"
     ))]
-    Flag::new_grouped("cr1", O::CR1, O::CRDLY),
+    Flag::new_grouped("cr1", o!(libc::CR1), O::CRDLY),
     #[cfg(any(
         target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
         target_os = "linux"
     ))]
-    Flag::new_grouped("cr2", O::CR2, O::CRDLY),
+    Flag::new_grouped("cr2", o!(libc::CR2), O::CRDLY),
     #[cfg(any(
         target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
         target_os = "linux"
     ))]
-    Flag::new_grouped("cr3", O::CR3, O::CRDLY),
+    Flag::new_grouped("cr3", o!(libc::CR3), O::CRDLY),
     #[cfg(any(
         target_vendor = "apple",
         target_os = "android",
@@ -159,21 +162,21 @@ pub const OUTPUT_FLAGS: &[Flag<O>] = &[
         target_os = "haiku",
         target_os = "linux"
     ))]
-    Flag::new_grouped("tab1", O::TAB1, O::TABDLY),
+    Flag::new_grouped("tab1", o!(libc::TAB1), O::TABDLY),
     #[cfg(any(
         target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
         target_os = "linux"
     ))]
-    Flag::new_grouped("tab2", O::TAB2, O::TABDLY),
+    Flag::new_grouped("tab2", o!(libc::TAB2), O::TABDLY),
     #[cfg(any(
         target_vendor = "apple",
         target_os = "android",
         target_os = "haiku",
         target_os = "linux"
     ))]
-    Flag::new_grouped("tab3", O::TAB3, O::TABDLY),
+    Flag::new_grouped("tab3", o!(libc::TAB3), O::BSDLY),
     #[cfg(any(
         target_vendor = "apple",
         target_os = "android",
@@ -187,7 +190,7 @@ pub const OUTPUT_FLAGS: &[Flag<O>] = &[
         target_os = "haiku",
         target_os = "linux"
     ))]
-    Flag::new_grouped("bs1", O::BS1, O::BSDLY),
+    Flag::new_grouped("bs1", o!(libc::BS1), O::BSDLY),
     #[cfg(any(
         target_vendor = "apple",
         target_os = "android",
@@ -201,7 +204,7 @@ pub const OUTPUT_FLAGS: &[Flag<O>] = &[
         target_os = "haiku",
         target_os = "linux"
     ))]
-    Flag::new_grouped("vt1", O::VT1, O::VTDLY),
+    Flag::new_grouped("vt1", o!(libc::VT1), O::VTDLY),
     #[cfg(any(
         target_vendor = "apple",
         target_os = "android",
@@ -215,7 +218,7 @@ pub const OUTPUT_FLAGS: &[Flag<O>] = &[
         target_os = "haiku",
         target_os = "linux"
     ))]
-    Flag::new_grouped("ff1", O::FF1, O::FFDLY),
+    Flag::new_grouped("ff1", o!(libc::FF1), O::FFDLY),
 ];
 
 pub const LOCAL_FLAGS: &[Flag<L>] = &[
@@ -249,79 +252,6 @@ pub const LOCAL_FLAGS: &[Flag<L>] = &[
     Flag::new("extproc", L::EXTPROC),
 ];
 
-// BSD's use u32 as baud rate, so using the enum is unnecessary.
-#[cfg(not(bsd))]
-pub const BAUD_RATES: &[(&str, BaudRate)] = &[
-    ("0", BaudRate::B0),
-    ("50", BaudRate::B50),
-    ("75", BaudRate::B75),
-    ("110", BaudRate::B110),
-    ("134", BaudRate::B134),
-    ("150", BaudRate::B150),
-    ("200", BaudRate::B200),
-    ("300", BaudRate::B300),
-    ("600", BaudRate::B600),
-    ("1200", BaudRate::B1200),
-    ("1800", BaudRate::B1800),
-    ("2400", BaudRate::B2400),
-    ("4800", BaudRate::B4800),
-    ("9600", BaudRate::B9600),
-    ("19200", BaudRate::B19200),
-    ("38400", BaudRate::B38400),
-    ("57600", BaudRate::B57600),
-    ("115200", BaudRate::B115200),
-    ("230400", BaudRate::B230400),
-    // TODO: https://github.com/nix-rust/nix/pull/2815
-    #[cfg(not(any(
-        target_os = "cygwin",
-        target_os = "fuchsia",
-        target_os = "haiku",
-        target_os = "hurd",
-        target_os = "redox"
-    )))]
-    ("460800", BaudRate::B460800),
-    #[cfg(any(target_os = "android", target_os = "linux"))]
-    ("500000", BaudRate::B500000),
-    #[cfg(any(target_os = "android", target_os = "linux"))]
-    ("576000", BaudRate::B576000),
-    // TODO: https://github.com/nix-rust/nix/pull/2815
-    #[cfg(not(any(
-        target_os = "cygwin",
-        target_os = "fuchsia",
-        target_os = "haiku",
-        target_os = "hurd",
-        target_os = "redox"
-    )))]
-    ("921600", BaudRate::B921600),
-    #[cfg(any(target_os = "android", target_os = "linux"))]
-    ("1000000", BaudRate::B1000000),
-    #[cfg(any(target_os = "android", target_os = "linux"))]
-    ("1152000", BaudRate::B1152000),
-    #[cfg(any(target_os = "android", target_os = "linux"))]
-    ("1500000", BaudRate::B1500000),
-    #[cfg(any(target_os = "android", target_os = "linux"))]
-    ("2000000", BaudRate::B2000000),
-    #[cfg(any(
-        target_os = "android",
-        all(target_os = "linux", not(target_arch = "sparc64"))
-    ))]
-    ("2500000", BaudRate::B2500000),
-    #[cfg(any(
-        target_os = "android",
-        all(target_os = "linux", not(target_arch = "sparc64"))
-    ))]
-    ("3000000", BaudRate::B3000000),
-    #[cfg(any(
-        target_os = "android",
-        all(target_os = "linux", not(target_arch = "sparc64"))
-    ))]
-    ("3500000", BaudRate::B3500000),
-    #[cfg(any(
-        target_os = "android",
-        all(target_os = "linux", not(target_arch = "sparc64"))
-    ))]
-    ("4000000", BaudRate::B4000000),
-];
 /// Control characters for the stty command.
 ///
 /// This constant provides a mapping between the names of control characters
@@ -384,3 +314,102 @@ pub const COMBINATION_SETTINGS: &[(&str, bool)] = &[
     ("sane", false),
     ("tabs", true),
 ];
+
+// rustix::termios::SpecialCodeIndex, but ordered as same as C header
+#[cfg(bsd)] // different order with Linux
+pub const SPECIAL_INDICES: &[S] = &[
+    S::VEOF,
+    S::VEOL,
+    S::VEOL2,
+    S::VERASE,
+    S::VWERASE,
+    S::VKILL,
+    S::VREPRINT,
+    S::VINTR,
+    S::VQUIT,
+    S::VSUSP,
+    S::VDSUSP,
+    S::VSTART,
+    S::VSTOP,
+    S::VLNEXT,
+    S::VDISCARD,
+    S::VMIN,
+    S::VTIME,
+    S::VSTATUS,
+];
+
+#[cfg(not(bsd))]
+pub const SPECIAL_INDICES: &[S] = &[
+    S::VINTR,
+    S::VQUIT,
+    S::VERASE,
+    S::VKILL,
+    S::VEOF,
+    S::VTIME,
+    S::VMIN,
+    #[cfg(not(any(target_os = "haiku", target_os = "hurd")))]
+    S::VSWTC,
+    S::VSTART,
+    S::VSTOP,
+    S::VSUSP,
+    S::VEOL,
+    #[cfg(not(target_os = "haiku"))]
+    S::VREPRINT,
+    #[cfg(not(target_os = "haiku"))]
+    S::VDISCARD,
+    #[cfg(not(target_os = "haiku"))]
+    S::VWERASE,
+    #[cfg(not(target_os = "haiku"))]
+    S::VLNEXT,
+    S::VEOL2,
+    #[cfg(target_os = "haiku")]
+    S::VSWTCH,
+    #[cfg(target_os = "hurd")]
+    S::VDSUSP,
+    #[cfg(any(target_os = "hurd", target_os = "illumos"))]
+    S::VSTATUS,
+];
+
+// On Linux, rustix::termios::ControlModes removes enum baud rate from c_flag.
+// But we still need it for stty --save
+// However, missing baud does not break stty $(stty --save)
+// FIXME: On platforms supporting any baud, --save does not save baud rate which is
+// bug-compatible with GNU 9.12 <https://github.com/uutils/coreutils/pull/15299>
+#[cfg(any(target_os = "android", target_os = "linux"))]
+pub fn encoded_baud(b: u32) -> libc::speed_t {
+    #[allow(clippy::unreadable_literal)]
+    match b {
+        0 => libc::B0,
+        50 => libc::B50,
+        75 => libc::B75,
+        110 => libc::B110,
+        134 => libc::B134,
+        150 => libc::B150,
+        200 => libc::B200,
+        300 => libc::B300,
+        600 => libc::B600,
+        1200 => libc::B1200,
+        1800 => libc::B1800,
+        2400 => libc::B2400,
+        4800 => libc::B4800,
+        9600 => libc::B9600,
+        19200 => libc::B19200,
+        38400 => libc::B38400,
+        57600 => libc::B57600,
+        115200 => libc::B115200,
+        230400 => libc::B230400,
+        460800 => libc::B460800,
+        500000 => libc::B500000,
+        576000 => libc::B576000,
+        921600 => libc::B921600,
+        1000000 => libc::B1000000,
+        1152000 => libc::B1152000,
+        1500000 => libc::B1500000,
+        2000000 => libc::B2000000,
+        2500000 => libc::B2500000,
+        3000000 => libc::B3000000,
+        3500000 => libc::B3500000,
+        4000000 => libc::B4000000,
+        _ => libc::BOTHER,
+    }
+}

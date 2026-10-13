@@ -156,6 +156,12 @@ else
         echo "strip t${i}.sh from Makefile and tests/local.mk"
         sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile tests/local.mk
     done
+    # This intercepts C-function which does not use any syscall.
+    # GNU supports any baud only on newer glibc and this test is useful if and only if
+    # we ensure GNU stty 51 fails on legacy glibc using newer glibc.
+    # But we use ioctl directly to support any baud independently on glibc's version.
+    # So there is nothing we want to test at here.
+    sed -i '/tests\/stty\/bad-speed.sh/ D' Makefile
     # Remove tests checking for --version & --help
     # Not really interesting for us and logs are too big
     sed -i '/tests\/help\/help-version.sh/ D' Makefile

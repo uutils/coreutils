@@ -117,7 +117,7 @@ rlimit = "0.11.0"
 rstest = "0.28.0"
 rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"
-rustix = { version = "1.1.4", default-features = false }
+rustix = { version = "1.1.6", default-features = false }
 self_cell = "1.0.4"
 selinux = "0.6"
 tempfile = "3.15.0"
