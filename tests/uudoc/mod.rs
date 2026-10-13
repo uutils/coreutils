@@ -3,13 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::{env, path::PathBuf, process::Command, sync::OnceLock};
+use std::{path::PathBuf, process::Command, sync::OnceLock};
 
 static UUDOC_BINARY_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 fn get_uudoc_command() -> Command {
     let uudoc_binary = UUDOC_BINARY_PATH.get_or_init(|| {
-        let coreutils_binary = PathBuf::from(env!("CARGO_BIN_EXE_coreutils"));
+        let coreutils_binary = PathBuf::from(uutests::util::get_tests_binary());
         coreutils_binary.parent().unwrap().join("uudoc")
     });
     Command::new(uudoc_binary)

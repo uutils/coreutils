@@ -69,8 +69,9 @@ static END_OF_TRANSMISSION_SEQUENCE: &[u8] = b"\n\x04";
 
 static TESTS_BINARY_PATH: OnceLock<PathBuf> = OnceLock::new();
 /// This function needs the env variable UUTESTS_BINARY_PATH
-/// which will very probably be env!("`CARGO_BIN_EXE_<program>`")
-/// because here, we are in a crate but we need the name of the final binary
+/// which will very probably be set by [`set_default_tests_binary`] from
+/// `CARGO_BIN_EXE_<program>`, because here, we are in a crate but we need the
+/// name of the final binary
 pub fn get_tests_binary() -> &'static str {
     TESTS_BINARY_PATH.get_or_init(|| {
         if let Ok(path) = env::var("UUTESTS_BINARY_PATH") {
@@ -80,6 +81,39 @@ pub fn get_tests_binary() -> &'static str {
     })
     .to_str()
     .unwrap()
+}
+
+/// Use the binary `name` built by cargo for the tests, unless another binary is
+/// given with `UUTESTS_BINARY_PATH`.
+///
+/// Cargo gives the path of the binary in the environment of the tests it runs.
+/// Reading it at runtime instead of compile time with `env!` avoids embedding
+/// the path of the build directory in the test binaries. When the tests are
+/// not run by cargo, look for the binary next to the `deps` directory of the
+/// test executable, where cargo puts it.
+///
+/// This is meant to be called from a `ctor` function, before the tests start.
+pub fn set_default_tests_binary(name: &str) {
+    if env::var_os("UUTESTS_BINARY_PATH").is_some() {
+        return;
+    }
+    let path = env::var_os(format!("CARGO_BIN_EXE_{name}"))
+        .map(PathBuf::from)
+        .or_else(|| {
+            let mut path = env::current_exe().ok()?;
+            path.pop();
+            if path.ends_with("deps") {
+                path.pop();
+            }
+            path.push(format!("{name}{}", env::consts::EXE_SUFFIX));
+            path.is_file().then_some(path)
+        });
+    if let Some(path) = path {
+        // SAFETY: called before the tests are started, so no other thread uses the environment
+        unsafe {
+            env::set_var("UUTESTS_BINARY_PATH", path);
+        }
+    }
 }
 
 #[macro_export]

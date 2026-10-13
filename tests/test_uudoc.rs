@@ -18,18 +18,15 @@
 #![cfg(feature = "uudoc")]
 
 use std::env;
-pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_uudoc");
 
 // Set the environment variable for any tests
 
 // Use the ctor attribute to run this function before any tests
 #[ctor::ctor(unsafe)]
 fn init() {
-    unsafe {
-        env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
-    }
+    uutests::util::set_default_tests_binary("uudoc");
     // Print for debugging
-    eprintln!("Setting UUTESTS_BINARY_PATH={TESTS_BINARY}");
+    eprintln!("UUTESTS_BINARY_PATH={}", uutests::util::get_tests_binary());
 }
 
 /// Run the `uudoc` command and return the output as a vector of strings.

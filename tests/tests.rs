@@ -3,19 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::env;
-
-pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
-
 // Use the ctor attribute to run this function before any tests
 #[ctor::ctor(unsafe)]
 fn init() {
-    // Allow overriding the binary path (e.g. to test a WASI binary via wasmtime)
-    if env::var("UUTESTS_BINARY_PATH").is_err() {
-        unsafe {
-            env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
-        }
-    }
+    // The binary path can be overridden with UUTESTS_BINARY_PATH (e.g. to test a
+    // WASI binary via wasmtime), otherwise the binary built by cargo is used
+    uutests::util::set_default_tests_binary("coreutils");
 }
 
 #[cfg(feature = "arch")]
