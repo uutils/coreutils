@@ -1737,7 +1737,6 @@ fn test_no_preserve_root_literal_root() {
     let output = Command::new("strace")
         .args(INJECT)
         .args([&bin, "rm", "-rf", "/", "--no-preserve-root"])
-        .env("LC_ALL", "C")
         .output()
         .expect("failed to spawn strace");
 
