@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
@@ -363,7 +363,7 @@ fn write_spaces(output: &mut impl Write, mut n: usize) -> std::io::Result<()> {
 
 fn expand_buf(
     buf: &[u8],
-    output: &mut BufWriter<std::io::Stdout>,
+    output: &mut impl Write,
     tabstops: &[usize],
     options: &Options,
     col: &mut usize,
@@ -439,11 +439,7 @@ fn expand_buf(
     Ok(())
 }
 
-fn expand_file(
-    file: &OsString,
-    output: &mut BufWriter<std::io::Stdout>,
-    options: &Options,
-) -> UResult<()> {
+fn expand_file(file: &OsString, output: &mut impl Write, options: &Options) -> UResult<()> {
     let mut input = open(file)?;
     let ts = options.tabstops.as_ref();
     let mut col = 0;
@@ -451,10 +447,19 @@ fn expand_file(
         match input.fill_buf() {
             Ok([]) => break,
             Ok(buf) => {
+                let had_newline = buf.contains(&b'\n');
                 expand_buf(buf, output, ts, options, &mut col)
                     .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
                 let len = buf.len();
                 input.consume(len);
+                // Line-buffer when a newline was in this chunk so interactive stdin
+                // (and any producer that pauses between lines) shows output promptly.
+                // Fixes #11091.
+                if had_newline {
+                    output
+                        .flush()
+                        .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+                }
             }
             Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
         }
@@ -463,7 +468,14 @@ fn expand_file(
 }
 
 fn expand(options: &Options) -> UResult<()> {
-    let mut output = BufWriter::new(stdout());
+    // Match `cut`: when stdout is a terminal, skip BufWriter so each line appears
+    // immediately (GNU expand is line-buffered on a tty). Otherwise keep the
+    // buffered path for throughput on pipes/files. Fixes #11091.
+    let mut output: Box<dyn Write> = if stdout().is_terminal() {
+        Box::new(stdout())
+    } else {
+        Box::new(BufWriter::new(stdout()))
+    };
 
     for file in &options.files {
         if let Err(e) = expand_file(file, &mut output, options) {
@@ -471,7 +483,7 @@ fn expand(options: &Options) -> UResult<()> {
             set_exit_code(1);
         }
     }
-    // Flush once at the end
+    // Flush once at the end (no-op for the unbuffered tty path)
     output
         .flush()
         .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
