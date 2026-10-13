@@ -12,7 +12,7 @@ use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::{IsTerminal, stdin};
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::{MetadataExt, PermissionsExt};
+use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
@@ -22,31 +22,25 @@ use uucore::show_error;
 use uucore::translate;
 
 use super::super::{
-    InteractiveMode, Options, is_dir_empty, is_readable_metadata, prompt_descend, remove_file,
+    InteractiveMode, Options, is_dir_empty, is_readable, is_writable, prompt_descend, remove_file,
     report_verbose_write_error, show_permission_denied_error, show_removal_error,
     verbose_removed_directory, verbose_removed_file,
 };
 
-#[inline]
-fn mode_readable(mode: libc::mode_t) -> bool {
-    (mode & libc::S_IRUSR) != 0
-}
-
-#[inline]
-fn mode_writable(mode: libc::mode_t) -> bool {
-    (mode & libc::S_IWUSR) != 0
-}
-
-/// File prompt that reuses existing stat data to avoid extra statx calls
+/// File prompt that reuses existing stat data for the file type and size.
 fn prompt_file_with_stat(path: &Path, stat: &FileStat, options: &Options) -> bool {
     if options.interactive == InteractiveMode::Never {
         return true;
     }
 
     let is_symlink = ((stat.st_mode as libc::mode_t) & libc::S_IFMT) == libc::S_IFLNK;
-    let writable = mode_writable(stat.st_mode as libc::mode_t);
     let len = stat.st_size as u64;
     let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
+    if !stdin_ok && options.interactive == InteractiveMode::PromptProtected {
+        return true;
+    }
+
+    let writable = is_symlink || is_writable(path);
 
     // Match original behaviour:
     // - Interactive::Always: always prompt; use non-protected wording when writable,
@@ -66,10 +60,9 @@ fn prompt_file_with_stat(path: &Path, stat: &FileStat, options: &Options) -> boo
     }
 
     // Interactive::Once or ::PromptProtected (and non-writable Always) paths
-    match (stdin_ok, writable, len == 0) {
-        (false, _, _) if options.interactive == InteractiveMode::PromptProtected => true,
-        (_, true, _) => true,
-        (_, false, true) => prompt_yes!(
+    match (writable, len == 0) {
+        (true, _) => true,
+        (false, true) => prompt_yes!(
             "remove write-protected regular empty file {}?",
             path.quote()
         ),
@@ -77,38 +70,30 @@ fn prompt_file_with_stat(path: &Path, stat: &FileStat, options: &Options) -> boo
     }
 }
 
-/// Directory prompt that reuses existing stat data to avoid extra statx calls
-fn prompt_dir_with_mode(path: &Path, mode: libc::mode_t, options: &Options) -> bool {
+/// Directory prompt based on the process's effective access rights.
+fn prompt_dir(path: &Path, options: &Options) -> bool {
     if options.interactive == InteractiveMode::Never {
         return true;
     }
 
-    let readable = mode_readable(mode as libc::mode_t);
-    let writable = mode_writable(mode as libc::mode_t);
-    let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
+    let readable = is_readable(path);
+    let writable = is_writable(path);
 
-    match (stdin_ok, readable, writable, options.interactive) {
-        (false, _, _, InteractiveMode::PromptProtected)
-        | (false, false, false, InteractiveMode::Never) => true,
-        (_, false, false, _) => prompt_yes!(
+    match (readable, writable, options.interactive) {
+        (false, false, _) => prompt_yes!(
             "attempt removal of inaccessible directory {}?",
             path.quote()
         ),
-        (_, false, true, InteractiveMode::Always) => {
+        (false, true, InteractiveMode::Always) => {
             prompt_yes!(
                 "attempt removal of inaccessible directory {}?",
                 path.quote()
             )
         }
-        (_, true, false, _) => prompt_yes!("remove write-protected directory {}?", path.quote()),
-        (_, _, _, InteractiveMode::Always) => prompt_yes!("remove directory {}?", path.quote()),
-        (_, _, _, _) => true,
+        (true, false, _) => prompt_yes!("remove write-protected directory {}?", path.quote()),
+        (_, _, InteractiveMode::Always) => prompt_yes!("remove directory {}?", path.quote()),
+        (_, _, _) => true,
     }
-}
-
-/// Whether the given file or directory is readable.
-pub fn is_readable(path: &Path) -> bool {
-    fs::metadata(path).is_ok_and(|metadata| is_readable_metadata(&metadata))
 }
 
 /// Remove a single file using safe traversal
@@ -294,16 +279,13 @@ pub fn safe_remove_dir_recursive(
 ) -> bool {
     // Base case 1: this is a file or a symbolic link.
     // Use lstat to avoid race condition between check and use
-    let (initial_mode, root) = match fs::symlink_metadata(path) {
+    let root = match fs::symlink_metadata(path) {
         Ok(metadata) if !metadata.is_dir() => {
             return remove_file(path, options, progress_bar);
         }
         // The tree root's device is captured once and compared against every
         // subdirectory for --one-file-system (not recomputed per level).
-        Ok(metadata) => (
-            metadata.permissions().mode(),
-            FileInfo::new(metadata.dev(), metadata.ino()),
-        ),
+        Ok(metadata) => FileInfo::new(metadata.dev(), metadata.ino()),
         Err(e) => {
             return show_removal_error(e, path);
         }
@@ -369,9 +351,7 @@ pub fn safe_remove_dir_recursive(
         error
     } else {
         // Ask user permission if needed
-        if options.interactive == InteractiveMode::Always
-            && !prompt_dir_with_mode(path, initial_mode as libc::mode_t, options)
-        {
+        if options.interactive == InteractiveMode::Always && !prompt_dir(path, options) {
             return false;
         }
 
@@ -410,7 +390,6 @@ struct Frame {
     error: bool,
     /// The entry being emptied, removed once that is done.
     entry_name: OsString,
-    entry_mode: libc::mode_t,
     /// Length of this directory's own path, to cut the entry back off with.
     path_len: usize,
 }
@@ -518,7 +497,7 @@ pub fn safe_remove_dir_recursive_impl(
             // the now-empty subdirectory using safe unlinkat.
             if !child_error
                 && (options.interactive != InteractiveMode::Always
-                    || prompt_dir_with_mode(path_of(&path_buf), parent.entry_mode, options))
+                    || prompt_dir(path_of(&path_buf), options))
             {
                 error |= handle_unlink(
                     &cur_fd,
@@ -630,7 +609,6 @@ pub fn safe_remove_dir_recursive_impl(
                 entries: std::mem::replace(&mut entries, child_entries.0),
                 error: std::mem::replace(&mut error, child_entries.1),
                 entry_name,
-                entry_mode: entry_stat.st_mode as libc::mode_t,
                 path_len: parent_len,
             });
             if let Some(closable) = stack.len().checked_sub(OPEN_DIR_FDS) {
