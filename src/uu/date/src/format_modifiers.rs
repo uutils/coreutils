@@ -276,12 +276,10 @@ fn format_with_modifiers(
 /// Composite strftime conversions are expanded atomically by GNU date. In
 /// particular, `-` and `_` do not alter the padding of the fields inside an
 /// expansion such as `%D` or `%T`; an explicit width applies to the complete
-/// expansion instead.
+/// expansion instead. `%F` is intentionally handled as a regular numeric field
+/// so its modifiers apply to the year component, as GNU specifies.
 fn is_composite_specifier(specifier: &str) -> bool {
-    matches!(
-        specifier,
-        "c" | "D" | "F" | "R" | "r" | "T" | "x" | "X" | "v"
-    )
+    matches!(specifier, "c" | "D" | "R" | "r" | "T" | "x" | "X" | "v")
 }
 
 /// Apply flags and an optional width to the complete composite value rather
@@ -599,6 +597,8 @@ pub fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, F
         return Ok(strip_default_padding(&result));
     }
 
+    let unmodified_width = result.len();
+
     // Handle padding flag without explicit width: use default width.
     // This applies when _ or 0 flag overrides the default padding character
     // and no explicit width is specified (e.g., %_m, %0e).
@@ -638,8 +638,14 @@ pub fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, F
             .is_some_and(|c| !matches!(c, '+' | '-') && c.is_ascii_digit())
     {
         let default_w = get_default_width(specifier);
-        // Add sign only if explicit width provided OR result exceeds default width
-        if width.is_some() || (default_w > 0 && result.len() > default_w) {
+        // `%F` applies the sign to its year only when the width can expand the
+        // complete composite; narrower widths leave the existing date intact.
+        let width_allows_sign = if specifier == "F" {
+            width.is_some_and(|width| width > unmodified_width)
+        } else {
+            width.is_some()
+        };
+        if width_allows_sign || (default_w > 0 && result.len() > default_w) {
             result.insert(0, '+');
         }
     }
