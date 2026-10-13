@@ -42,7 +42,7 @@ use std::num::IntErrorKind;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, RawFd};
-use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError, strip_errno};
 use uucore::format_usage;
 use uucore::parser::num_parser::ExtendedParser;
 use uucore::translate;
@@ -202,7 +202,10 @@ impl<'a> Options<'a> {
                     std::fs::OpenOptions::new()
                         .read(true)
                         .custom_flags(O_NONBLOCK)
-                        .open(f)?,
+                        .open(f)
+                        .map_err(|e| {
+                            io::Error::new(e.kind(), format!("{f}: {}", strip_errno(&e)))
+                        })?,
                 ),
                 f.clone(),
             ),
