@@ -391,3 +391,14 @@ sed -i 's/echo "changing security context/echo "chcon: changing security context
 # * the selinux crate is handling errors
 # * the test says "maybe we should not fail when no context available"
 sed -i -e "s|returns_ 1||g" tests/cp/no-ctx.sh
+
+# avoid hang. This can be fixed at upstream.
+sed -i "s|require_controlling_input_terminal_||" tests/stty/bad-speed.sh
+# This test intercepts `cfsetispeed` which corresponds with `rustix::termios::Termios::set_input_speed`.
+# Testing failure of it is not useful for us since we support any baud on Linux independently on libc
+# ( GNU tests it since they support it only on glibc 2.42+ and want to test legacy glibc using newer glibc).
+# set_input_speed(51) should fail only on unsupported platforms.
+sed -i -e 's|skip_|true|g' -e 's|ispeed 9600|ispeed 51|g' tests/stty/bad-speed.sh
+case $(uname -s) in
+  Linux | FreeBSD | NetBSD | OpenBSD | DragonFly | Darwin) sed -i 's|returns_ 1 stty ispeed 51|script -e -c "stty ispeed 51"|g' tests/stty/bad-speed.sh;;
+esac
