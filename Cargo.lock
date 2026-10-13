@@ -144,7 +144,7 @@ checksum = "8fa3f3d8cbf4dffcfe4991de61d012bef509a409ecbe9dd41049bfe32b4d4653"
 dependencies = [
  "autocfg",
  "libm",
- "num-bigint",
+ "num-bigint 0.4.8",
  "num-integer",
  "num-traits",
 ]
@@ -1985,6 +1985,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-bigint"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93e7820bc0a80a0238e650327316f929ba18d5be054b647490a3a6a339f3e7c0"
+dependencies = [
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
 name = "num-conv"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2001,25 +2011,25 @@ dependencies = [
 
 [[package]]
 name = "num-modular"
-version = "0.6.1"
+version = "0.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17bb261bf36fa7d83f4c294f834e91256769097b3cb505d44831e0a179ac647f"
+checksum = "26ac76200f74e658124f95fa63e1a82b2fd2181c5b2fdde80b3d89d2d3f905e7"
 dependencies = [
- "num-bigint",
+ "num-bigint 0.5.1",
  "num-integer",
  "num-traits",
 ]
 
 [[package]]
 name = "num-prime"
-version = "0.6.1"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d25a3c4d8a61c86376f9372bea15400e076398135c866495186972cdf5888a45"
+checksum = "6de1394909173a98f21f28406f9d82f0e11d87be4bf36473364f37a5bd100741"
 dependencies = [
  "bitvec",
  "either",
  "lru",
- "num-bigint",
+ "num-bigint 0.4.8",
  "num-integer",
  "num-modular",
  "num-traits",
@@ -3462,7 +3472,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fancy-regex",
  "fluent",
- "num-bigint",
+ "num-bigint 0.4.8",
  "num-traits",
  "thiserror 2.0.21",
  "uucore",
@@ -3476,7 +3486,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "memchr",
- "num-bigint",
+ "num-bigint 0.4.8",
  "num-prime",
  "uucore",
 ]
@@ -3954,7 +3964,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
- "num-bigint",
+ "num-bigint 0.4.8",
  "num-traits",
  "thiserror 2.0.21",
  "uucore",
