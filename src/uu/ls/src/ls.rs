@@ -308,7 +308,8 @@ pub fn uu_app() -> Command {
                 PossibleValue::new("shell-always"),
                 PossibleValue::new("shell-escape-always"),
                 PossibleValue::new("clocale"),
-                PossibleValue::new("c").alias("c-maybe"),
+                PossibleValue::new("c"),
+                PossibleValue::new("c-maybe"),
                 PossibleValue::new("escape"),
             ]))
             .overrides_with_all([
