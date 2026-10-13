@@ -1311,9 +1311,8 @@ fn test_rm_recursive_very_deep_hierarchy() {
 
     use std::time::Duration;
 
-    use nix::errno::Errno;
-    use nix::fcntl::{OFlag, openat};
-    use nix::sys::stat::{Mode, mkdirat};
+    use rustix::fs::{CWD, Mode, OFlags, mkdirat, openat};
+    use rustix::io::Errno;
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1321,8 +1320,8 @@ fn test_rm_recursive_very_deep_hierarchy() {
     // The path of the deepest directory is far longer than PATH_MAX, so it has
     // to be built one level at a time with openat/mkdirat.
     at.mkdir("deep");
-    let flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY;
-    let mut fd = openat(nix::fcntl::AT_FDCWD, &at.plus("deep"), flags, Mode::empty()).unwrap();
+    let flags = OFlags::RDONLY | OFlags::DIRECTORY;
+    let mut fd = openat(CWD, at.plus("deep"), flags, Mode::empty()).unwrap();
     // The recursion only ran out of stack around 5000 levels unoptimized and
     // 20000 optimized, so a shallower tree would not test anything. Some
     // filesystems resolve the whole path internally and refuse to go past
@@ -1332,12 +1331,12 @@ fn test_rm_recursive_very_deep_hierarchy() {
     while depth < DEPTH {
         match mkdirat(&fd, "a", Mode::from_bits_truncate(0o755)) {
             Ok(()) => {}
-            Err(Errno::ENAMETOOLONG) => break,
+            Err(Errno::NAMETOOLONG) => break,
             Err(e) => panic!("mkdirat at depth {depth} failed: {e}"),
         }
         fd = match openat(&fd, "a", flags, Mode::empty()) {
             Ok(fd) => fd,
-            Err(Errno::ENAMETOOLONG) => break,
+            Err(Errno::NAMETOOLONG) => break,
             Err(e) => panic!("openat at depth {depth} failed: {e}"),
         };
         depth += 1;
