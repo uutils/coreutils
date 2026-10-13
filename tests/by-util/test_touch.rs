@@ -634,16 +634,38 @@ fn test_touch_set_date7() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_date";
 
-    ucmd.args(&["-d", "2004-01-16 12:00 +0000", file])
+    ucmd.env("TZ", "UTC-8")
+        .args(&["-d", "2004-01-16 12:00 +0200", file])
         .succeeds()
         .no_stderr();
 
     assert!(at.file_exists(file));
 
-    let expected = FileTime::from_unix_time(1_074_254_400, 0);
+    let expected = FileTime::from_unix_time(1_074_247_200, 0);
 
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
+}
+
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no tzdb; TZ env var is not honoured so timezone-dependent timestamps differ"
+)]
+fn test_touch_set_posix_locale_date_uses_system_timezone() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_posix_locale_date";
+
+    ucmd.env("TZ", "UTC-8")
+        .args(&["-d", "Thu Jan  1 12:34:00 2015", file])
+        .succeeds()
+        .no_stderr();
+
+    // UTC-8 is POSIX syntax for a local timezone eight hours east of UTC.
+    let expected = FileTime::from_unix_time(1_420_086_840, 0);
+    let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, expected);
     assert_eq!(mtime, expected);
 }
