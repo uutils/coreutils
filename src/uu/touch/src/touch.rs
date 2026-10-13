@@ -1040,7 +1040,7 @@ mod tests {
     #[test]
     fn test_parse_date_now_returns_the_reference_instant() {
         // `-d now` must parse back to the reference instant, so `touch()` can spot it (#15019).
-        let now = super::timestamp_to_filetime(jiff::Timestamp::now());
+        let now = super::timestamp_to_filetime(Timestamp::now());
         let reference = super::filetime_to_zoned(&now).unwrap();
 
         assert_eq!(super::parse_date(reference.clone(), "now").unwrap(), now);
