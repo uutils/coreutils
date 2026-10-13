@@ -112,7 +112,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let current_niceness = rustix::process::getpriority_process(None)
         .map_err(|e| uucore::error::USimpleError::new(125, format!("getpriority: {e}")))?;
 
-    let Some(mut cmd_iter) = matches.get_many::<String>(options::COMMAND) else {
+    let Some(mut cmd_iter) = matches.get_many::<OsString>(options::COMMAND) else {
         if matches.contains_id(options::ADJUSTMENT) {
             return Err(UUsageError::new(
                 125,
@@ -167,7 +167,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let cmd = cmd_iter.next().unwrap();
-    let args: Vec<&String> = cmd_iter.collect();
+    let args: Vec<&OsString> = cmd_iter.collect();
     let mut command = process::Command::new(cmd);
     command.args(args);
     #[cfg(unix)]
@@ -181,7 +181,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Ok(());
     };
 
-    show_error!("{cmd}: {err}");
+    show_error!("{}: {err}", cmd.to_string_lossy());
 
     let exit_code = if err.kind() == ErrorKind::NotFound {
         127
@@ -212,6 +212,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::COMMAND)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::CommandName),
+                .value_hint(clap::ValueHint::CommandName)
+                .value_parser(clap::value_parser!(OsString)),
         )
 }
