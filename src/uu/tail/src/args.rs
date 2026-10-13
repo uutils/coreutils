@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) kqueue Signum
+// spell-checker:ignore (ToDO) kqueue Signum underflows
 
 use crate::paths::Input;
 use crate::{Quotable, parse, platform};
@@ -59,7 +59,7 @@ pub enum FilterMode {
 
 impl FilterMode {
     fn from_obsolete_args(args: &parse::ObsoleteArgs) -> Self {
-        // Normalise zero as `parse_num` does: `Positive(0)` underflows at `count - 1`.
+        // Normalize zero as `parse_num` does: `Positive(0)` underflows at `count - 1`.
         let signum = match (args.num, args.plus) {
             (0, true) => Signum::PlusZero,
             (0, false) => Signum::MinusZero,

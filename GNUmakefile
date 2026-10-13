@@ -84,7 +84,7 @@ ifeq (,$(findstring windows,$(OS)))
 else
 	FEATURE_EXTRACT_UTILS := windows
 endif
-PROGS := $(shell cargo tree --depth 1 --features $(FEATURE_EXTRACT_UTILS) --format "{p}" --prefix none | sed -E -n 's/^uu_([^ ]+).*/\1/p')
+PROGS := $(shell cargo tree --depth 1 --features $(FEATURE_EXTRACT_UTILS) --format "{lib}" --prefix none | sed -n 's/^uu_//p')
 
 ifeq ($(SELINUX_ENABLED),1)
 	PROGS += $(SELINUX_PROGS)

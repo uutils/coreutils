@@ -140,7 +140,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // file untouched, matching GNU and avoiding silent data loss.
     let mut rng = match options.random_source {
         RandomSource::None => {
-            // GNU returns error on the legacy kernel gerandom is missing. But fallback is allowed
+            // GNU returns error on the legacy kernel getrandom is missing. But fallback is allowed
             let r = SmallRng::try_from_rng(&mut SysRng)
                 .unwrap_or_else(|_| SmallRng::seed_from_u64(&raw const options as u64));
             WrappedRng::Default(r)

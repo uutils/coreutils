@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore KMGTPEZYRQ
+
 //! Fast comparison for strings representing a base 10 number without precision loss.
 //!
 //! To be able to short-circuit when comparing, [`NumInfo`] must be passed along with each number

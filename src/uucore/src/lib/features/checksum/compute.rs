@@ -287,8 +287,13 @@ where
 
         // Always compute the "binary" version of the digest, i.e. on Windows,
         // never handle CRLFs specifically.
-        let (digest_output, sz) = digest_reader(&mut digest, &mut file, ReadingMode::Binary)
-            .map_err_context(|| translate!("checksum-error-failed-to-read-input"))?;
+        let (digest_output, sz) = match digest_reader(&mut digest, &mut file, ReadingMode::Binary) {
+            Ok(result) => result,
+            Err(err) => {
+                show!(err.map_err_context(|| locale_aware_shell_escape(filename)));
+                continue;
+            }
+        };
 
         // Encodes the sum if df is Base64, leaves as-is otherwise.
         let encode_sum = |sum: DigestOutput, df: DigestFormat| {

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ints paren prec multibytes aaaabc
+// spell-checker:ignore (ToDO) ints paren prec multibytes aaaabc metacharacter
 
 use std::{cell::Cell, collections::BTreeMap};
 

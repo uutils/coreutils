@@ -17,8 +17,8 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-itertools = { workspace = true }
 fluent = { workspace = true }
+itertools = { workspace = true }
 uucore = { workspace = true, features = ["fs", "pipes"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]

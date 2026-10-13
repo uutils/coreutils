@@ -72,12 +72,12 @@ numfmt-error-rejecting-suffix = rejecting suffix in input: '{ $number }{ $suffix
 numfmt-error-suffix-unsupported-for-unit = This suffix is unsupported for specified unit
 numfmt-error-invalid-unit-argument = invalid argument '{$arg}' for '{$opt}'
 numfmt-error-number-too-big = Number is too big and unsupported
-numfmt-error-format-no-percent = format '{ $format }' has no % directive
-numfmt-error-format-ends-in-percent = format '{ $format }' ends in %
-numfmt-error-invalid-format-directive = invalid format '{ $format }', directive must be %[0]['][-][N][.][N]f
-numfmt-error-invalid-format-width-overflow = invalid format '{ $format }' (width overflow)
-numfmt-error-invalid-precision = invalid precision in format '{ $format }'
-numfmt-error-format-too-many-percent = format '{ $format }' has too many % directives
+numfmt-error-format-no-percent = format { $format } has no % directive
+numfmt-error-format-ends-in-percent = format { $format } ends in %
+numfmt-error-invalid-format-directive = invalid format { $format }, directive must be %[0]['][-][N][.][N]f
+numfmt-error-invalid-format-width-overflow = invalid format { $format } (width overflow)
+numfmt-error-invalid-precision = invalid precision in format { $format }
+numfmt-error-format-too-many-percent = format { $format } has too many % directives
 numfmt-error-unknown-invalid-mode = Unknown invalid mode: { $mode }
 
 # Debug messages

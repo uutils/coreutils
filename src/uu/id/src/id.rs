@@ -12,23 +12,6 @@
 //  http://ftp-archive.freebsd.org/mirror/FreeBSD-Archive/old-releases/i386/1.0-RELEASE/ports/shellutils/src/id.c
 //  http://www.opensource.apple.com/source/shell_cmds/shell_cmds-118/id/id.c
 //
-// * This was partially rewritten in order for stdout/stderr/exit_code
-//   to be conform with GNU coreutils (8.32) test suite for `id`.
-//
-// * This supports multiple users (a feature that was introduced in coreutils 8.31)
-//
-// * This passes GNU's coreutils Test suite (8.32)
-//   for "tests/id/uid.sh" and "tests/id/zero/sh".
-//
-// * Option '--zero' does not exist for BSD's `id`, therefore '--zero' is only
-//   allowed together with other options that are available on GNU's `id`.
-//
-// * Help text based on BSD's `id` manpage and GNU's `id` manpage.
-//
-// * This passes GNU's coreutils Test suite (8.32) for "tests/id/context.sh" if compiled with
-//   `--features feat_selinux`. It should also pass "tests/id/no-context.sh", but that depends on
-//   `uu_ls -Z` being implemented and therefore fails at the moment
-//
 
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]

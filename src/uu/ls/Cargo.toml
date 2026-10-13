@@ -20,6 +20,7 @@ doctest = false
 [dependencies]
 ansi-width = { workspace = true }
 clap = { workspace = true, features = ["env"] }
+fluent = { workspace = true }
 glob = { workspace = true }
 lscolors = { workspace = true }
 rustc-hash = { workspace = true }
@@ -39,7 +40,6 @@ uucore = { workspace = true, features = [
   "version-cmp",
 ] }
 uutils_term_grid = { workspace = true }
-fluent = { workspace = true }
 
 [target.'cfg(any(target_os = "freebsd", target_os = "hurd", target_os = "linux", target_os = "netbsd"))'.dependencies]
 uucore = { workspace = true, features = ["fsxattr"] }

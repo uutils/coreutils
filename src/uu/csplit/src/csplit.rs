@@ -501,6 +501,8 @@ impl SplitWriter<'_> {
             // The consequence is that the buffer may already be full with lines from a previous
             // split, which is taken care of when calling `shrink_buffer_to_size`.
             let offset_usize = offset.unsigned_abs() as usize;
+            // lines of the current split before the match; a negative offset may not go past them
+            let mut lines_in_split = input_iter.buffer_len();
             input_iter.set_size_of_buffer(offset_usize);
             while let Some((ln, line)) = input_iter.next() {
                 let line = line?;
@@ -508,6 +510,10 @@ impl SplitWriter<'_> {
                     .strip_suffix("\r\n")
                     .unwrap_or_else(|| line.strip_suffix('\n').unwrap_or(&line));
                 if regex.is_match(l) {
+                    if offset_usize > lines_in_split {
+                        self.finish_split()?;
+                        return Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
+                    }
                     for line in input_iter.shrink_buffer_to_size() {
                         self.writeln(&line)?;
                     }
@@ -526,11 +532,9 @@ impl SplitWriter<'_> {
                     }
 
                     self.finish_split()?;
-                    if input_iter.buffer_len() < offset_usize {
-                        return Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
-                    }
                     return Ok(());
                 }
+                lines_in_split += 1;
                 if let Some(line) = input_iter.add_line_to_buffer(ln, line) {
                     self.writeln(&line)?;
                 }

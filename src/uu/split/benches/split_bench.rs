@@ -65,6 +65,25 @@ fn split_number_chunks(bencher: Bencher) {
         });
 }
 
+/// Benchmark splitting by round-robin chunks
+#[divan::bench]
+fn split_number_chunks_round_robin(bencher: Bencher) {
+    let data = text_data::generate_by_lines(100_000, 80);
+    let file_path = setup_test_file(&data);
+
+    bencher
+        .with_inputs(|| {
+            let output_dir = TempDir::new().unwrap();
+            let prefix = output_dir.path().join("x");
+            let args = get_bench_args(&[&"-n", &"r/10", &file_path, &prefix]).into_iter();
+            (output_dir, args)
+        })
+        .bench_values(|(output_dir, args)| {
+            black_box(uumain(args));
+            drop(output_dir);
+        });
+}
+
 /// Benchmark splitting with numeric suffix
 #[divan::bench]
 fn split_numeric_suffix(bencher: Bencher) {

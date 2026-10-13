@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons Nofile NOTCAPABLE
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons Nofile NOTCAPABLE iproduct newfstatat isox
 
 #![allow(
     clippy::similar_names,
@@ -2397,15 +2397,17 @@ fn test_ls_time_styles() {
         .stdout_matches(&re_custom_format_recent)
         .stdout_matches(&re_custom_format_old);
 
-    //+FORMAT_RECENT\nFORMAT_OLD
+    //+FORMAT_OLD\nFORMAT_RECENT: FORMAT1 applies to old files, FORMAT2 to recent files.
+    let re_custom_format_recent_2 =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}--\d{2} test\n").unwrap();
     let re_custom_format_old =
-        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}--\d{2} test-old\n").unwrap();
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}__\d{2} test-old\n").unwrap();
     scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=+%Y__%M\n%Y--%M")
         .succeeds()
-        .stdout_matches(&re_custom_format_recent)
+        .stdout_matches(&re_custom_format_recent_2)
         .stdout_matches(&re_custom_format_old);
 
     // Also fails due to not having full clap support for time_styles
@@ -2533,13 +2535,13 @@ fn test_ls_time_recent_future() {
         .succeeds()
         .stdout_matches(&re_iso_old);
 
-    // Also test that we can set a format that varies for recent of older files.
-    //+FORMAT_RECENT\nFORMAT_OLD
+    // A two-line format assigns FORMAT1 to old files and FORMAT2 to recent files.
+    //+FORMAT_OLD\nFORMAT_RECENT
     f.set_modified(SystemTime::now()).unwrap();
     scene
         .ucmd()
         .arg("-l")
-        .arg("--time-style=+RECENT\nOLD")
+        .arg("--time-style=+OLD\nRECENT")
         .succeeds()
         .stdout_contains("RECENT");
 
@@ -2549,11 +2551,11 @@ fn test_ls_time_recent_future() {
     scene
         .ucmd()
         .arg("-l")
-        .arg("--time-style=+RECENT\nOLD")
+        .arg("--time-style=+OLD\nRECENT")
         .succeeds()
         .stdout_contains("OLD");
 
-    // RECENT format is still used if no "OLD" one provided.
+    // The single format is used for all files when no second one is provided.
     scene
         .ucmd()
         .arg("-l")
@@ -4076,6 +4078,25 @@ fn test_ls_version_sort() {
 }
 
 #[test]
+fn test_ls_version_sort_command_line_args() {
+    // Regression test for https://github.com/uutils/coreutils/issues/14859:
+    // command-line arguments sharing the same file name must be version-sorted
+    // by their full path, not just by the file name.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    for dir in ["10", "18", "9.5"] {
+        at.mkdir(dir);
+        at.touch(format!("{dir}/file"));
+    }
+
+    scene
+        .ucmd()
+        .args(&["-1v", "10/file", "18/file", "9.5/file"])
+        .succeeds()
+        .stdout_only("9.5/file\n10/file\n18/file\n");
+}
+
+#[test]
 fn test_ls_quoting_style() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4195,6 +4216,22 @@ fn test_ls_quoting_style() {
                 .succeeds()
                 .stdout_only(format!("{correct}\n"));
         }
+
+        // Test difference between `c` and `c-maybe`
+        let simple: &str = "onetwo";
+        at.touch(simple);
+
+        for (arg, correct) in [
+            ("--quoting-style=c", "\"onetwo\""),
+            ("--quoting-style=c-maybe", "onetwo"),
+        ] {
+            scene
+                .ucmd()
+                .arg(arg)
+                .arg(simple)
+                .succeeds()
+                .stdout_only(format!("{correct}\n"));
+        }
     }
 
     // No-TTY
@@ -4306,6 +4343,39 @@ fn test_ls_invalid_quoting_style_env_var_with_unwritable_stderr() {
 }
 
 #[test]
+fn test_ls_invalid_quoting_style_env_var_warns() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("alpha");
+
+    scene
+        .ucmd()
+        .env("QUOTING_STYLE", "not-a-style")
+        .arg("alpha")
+        .succeeds()
+        .stdout_is("alpha\n")
+        .stderr_contains("ignoring invalid value of environment variable QUOTING_STYLE");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_ls_invalid_quoting_style_env_var_non_utf8() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("alpha");
+    let style = uucore::os_str_from_bytes(b"\xFF")
+        .expect("Only unix platforms can test non-unicode env values");
+
+    scene
+        .ucmd()
+        .env("QUOTING_STYLE", style)
+        .arg("alpha")
+        .succeeds()
+        .stdout_is("alpha\n")
+        .stderr_contains("ignoring invalid value of environment variable QUOTING_STYLE");
+}
+
+#[test]
 fn test_ls_quoting_style_arg_overrides_env_var() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4375,6 +4445,29 @@ fn test_ls_quoting_and_color() {
         .terminal_simulation(true)
         .succeeds()
         .stdout_only("'one two'\r\n");
+}
+
+/// This test makes sure that the c-maybe quoting style behaves as expected
+/// when the name has a comma in it and -m is passed.
+#[test]
+fn test_ls_quoting_style_c_maybe_comma() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("a_file");
+    at.touch("b,file");
+
+    // Comma is explicitely quoted when in -m mode
+    // and there's a comma in the name
+
+    let cases: &[(&[&str], &str)] = &[
+        (&["--quoting-style=c-maybe"], "a_file\nb,file\n"),
+        (&["-m", "--quoting-style=c"], "\"a_file\", \"b,file\"\n"),
+        (&["-m", "--quoting-style=c-maybe"], "a_file, \"b,file\"\n"),
+    ];
+    for (args, expected) in cases {
+        scene.ucmd().args(args).succeeds().stdout_only(expected);
+    }
 }
 
 #[test]
@@ -5642,6 +5735,42 @@ fn test_ls_dired_implies_long() {
         .stdout_does_not_contain("//DIRED//")
         .stdout_contains("  total 0")
         .stdout_contains("//DIRED-OPTIONS// --quoting-style");
+}
+
+// Regression test for issue #14775.
+#[test]
+fn test_ls_dired_quoting_style_name() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+
+    for style in [
+        "literal",
+        "shell",
+        "shell-always",
+        "shell-escape",
+        "shell-escape-always",
+        "c",
+        "escape",
+        "locale",
+        "clocale",
+    ] {
+        scene
+            .ucmd()
+            .env("LC_ALL", "C")
+            .args(&["-l", "--dired", &format!("--quoting-style={style}"), "dir"])
+            .succeeds()
+            .stdout_contains(format!("//DIRED-OPTIONS// --quoting-style={style}"));
+    }
+
+    for (opt, style) in [("-N", "literal"), ("-Q", "c"), ("-b", "escape")] {
+        scene
+            .ucmd()
+            .env("LC_ALL", "C")
+            .args(&["-l", "--dired", opt, "dir"])
+            .succeeds()
+            .stdout_contains(format!("//DIRED-OPTIONS// --quoting-style={style}"));
+    }
 }
 
 #[test]
@@ -8058,7 +8187,6 @@ fn test_ls_non_utf8_hidden() {
 }
 
 #[test]
-#[cfg(target_os = "wasi")]
 fn test_ls_a_dotdot_no_error_on_wasi() {
     // On WASI the sandbox may block access to ".." at the preopened root.
     // ls -a should still succeed and show ".." without an error message.
@@ -8073,7 +8201,6 @@ fn test_ls_a_dotdot_no_error_on_wasi() {
 }
 
 #[test]
-#[cfg(target_os = "wasi")]
 fn test_ls_al_no_capabilities_insufficient_on_wasi() {
     // `ls -al` reads metadata for every entry including "..". Without the
     // WASI fallback, stat on ".." at the preopened root returns
@@ -8103,6 +8230,7 @@ fn test_long_options_detached() {
 // recording it for the loop detection that only recursion consults.
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
 fn test_no_extra_stat_without_recursion() {
     use std::process::Command;
 
@@ -8249,4 +8377,105 @@ ls: invalid --block-size argument '1fb'
             .fails_with_code(2)
             .stderr_is("ls: invalid --block-size argument '1fb'\n");
     }
+}
+
+#[test]
+fn test_time_style_unambiguous_prefixes() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("test");
+    for style in ["full-iso", "long-iso", "iso", "locale"] {
+        let expected = scene
+            .ucmd()
+            .args(&["-l", "--time-style", style, "test"])
+            .succeeds()
+            .stdout_str()
+            .to_owned();
+        let min_len = if style.starts_with("lo") { 3 } else { 1 };
+        for len in min_len..=style.len() {
+            for prefix in ["", "posix-"] {
+                let value = format!("{prefix}{}", &style[..len]);
+                scene
+                    .ucmd()
+                    .args(&["-l", "--time-style", &value, "test"])
+                    .succeeds()
+                    .stdout_is(&expected);
+                scene
+                    .ucmd()
+                    .env("TIME_STYLE", &value)
+                    .args(&["-l", "test"])
+                    .succeeds()
+                    .stdout_is(&expected);
+            }
+        }
+    }
+}
+
+#[test]
+fn test_time_style_ambiguous_and_invalid_prefixes() {
+    for value in [
+        "l",
+        "lo",
+        "posix-l",
+        "posix-lo",
+        "posix-",
+        "full-isox",
+        "Locale",
+    ] {
+        new_ucmd!()
+            .args(&["-l", "--time-style", value])
+            .fails()
+            .code_is(2)
+            .stderr_contains("invalid --time-style argument");
+        new_ucmd!()
+            .env("TIME_STYLE", value)
+            .arg("-l")
+            .fails()
+            .code_is(2)
+            .stderr_contains("invalid --time-style argument");
+    }
+}
+
+#[test]
+fn test_ls_dereference_looped_symlinks_recursive_nested() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("loop");
+    at.mkdir("loop/a");
+    at.relative_symlink_dir("..", "loop/a/back");
+
+    ucmd.args(&["-RL", "loop"])
+        .fails_with_code(2)
+        .stderr_contains("not listing already-listed directory");
+}
+
+#[test]
+fn test_ls_dereference_cross_branch_alias_after_first_branch_completes() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir_all("top/a/target");
+    at.touch("top/a/target/file");
+    at.mkdir_all("top/b");
+    at.relative_symlink_dir("../a/target", "top/b/link");
+
+    let result = ucmd.args(&["-RL", "top"]).succeeds();
+    result
+        .stdout_contains("target:\nfile")
+        .stdout_contains("link:\nfile")
+        .no_stderr();
+}
+
+#[test]
+fn test_ls_dereference_sibling_alias_not_already_listed() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("top");
+    at.mkdir("top/real");
+    at.touch("top/real/file");
+    at.relative_symlink_dir("real", "top/link");
+
+    let result = ucmd.args(&["-RL", "top"]).succeeds();
+    result
+        .stdout_contains("real:\nfile")
+        .stdout_contains("link:\nfile")
+        .no_stderr();
 }

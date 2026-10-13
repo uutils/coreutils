@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) unwritable GHSA
+// spell-checker:ignore (ToDO) unwritable GHSA EAGAIN
 
 use std::fmt::Write;
 
@@ -17,7 +17,7 @@ fn test_invalid_arg() {
 
 #[test]
 #[cfg(target_os = "linux")]
-#[cfg_attr(wasi_runner, ignore)]
+#[cfg(not(wasi_runner))]
 fn test_getrandom_fail() {
     // getrandom is missing from legacy kernel
     use std::process::Command;
@@ -448,7 +448,7 @@ fn test_echo_invalid_unicode_in_arguments() {
     assert!(result.stdout().contains(&b'\xFF'));
 }
 
-#[cfg(any(unix, target_os = "wasi"))]
+#[cfg(unix)]
 #[cfg(not(target_vendor = "apple"))]
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]

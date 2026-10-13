@@ -17,7 +17,6 @@ use std::io::{self, BufWriter, ErrorKind, IsTerminal, Read, Write};
 use std::os::fd::AsFd;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
 use uucore::translate;
@@ -75,7 +74,7 @@ impl LineNumber {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 enum CatError {
     /// Wrapper around `io::Error`
     #[error("{}", strip_errno(.0))]
@@ -361,6 +360,12 @@ fn cat_handle<R: FdReadable>(
 fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -> CatResult<()> {
     match get_input_type(path)? {
         InputType::StdIn => {
+            // A closed stdin is reopened as /dev/null before `uumain` runs, so
+            // reading it would succeed silently instead of failing with EBADF.
+            #[cfg(unix)]
+            if uucore::signals::stdin_was_closed() {
+                return Err(io::Error::from(rustix::io::Errno::BADF).into());
+            }
             let stdin = io::stdin();
             let is_interactive = stdin.is_terminal();
             if !is_safe_overwrite(&stdin, &io::stdout()) {

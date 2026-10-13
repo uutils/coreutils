@@ -69,6 +69,33 @@ fn test_buffer_sizes() {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
+fn test_buffer_size_limits_both_chunks() {
+    let line = format!("{}\n", "b".repeat(1022));
+    let input = line.repeat(1200);
+
+    for args in [vec![], vec!["-k1,1"]] {
+        new_ucmd!()
+            .args(&["-u", "-T", "missing-directory"])
+            .args(&args)
+            .pipe_in(input.as_bytes())
+            .succeeds()
+            .stdout_only(&line);
+
+        // The input fits in two buffers of 768 KiB each, but exceeds the
+        // requested total. Spilling must fail when no temp directory exists.
+        new_ucmd!()
+            .args(&["-u", "-T", "missing-directory", "-S", "768K"])
+            .args(&args)
+            .pipe_in(input.as_bytes())
+            .ignore_stdin_write_error()
+            .fails_with_code(2)
+            .no_stdout()
+            .stderr_contains("cannot create temporary file");
+    }
+}
+
+#[test]
 fn test_invalid_buffer_size() {
     new_ucmd!()
         .arg("-S")
@@ -1357,6 +1384,40 @@ fn test_merge_write_error_does_not_panic() {
     }
 }
 
+// Regression test: a full temporary filesystem must make external sort fail
+// cleanly instead of panicking while spilling a sorted chunk.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+fn test_spill_write_error_does_not_panic() {
+    let mut scene = TestScenario::new("sort");
+
+    // Mounting a filesystem requires privileges that are not available in all
+    // test environments, so leave this integration test skipped there.
+    let tmp_dir = "tmp_dir";
+    scene.fixtures.mkdir(tmp_dir);
+    if scene.mount_temp_fs(tmp_dir).is_err() {
+        return;
+    }
+
+    let mut lines = String::new();
+    for line in 0..200_000 {
+        writeln!(lines, "{line:06}").expect("writing to a String cannot fail");
+    }
+    scene.fixtures.write("input.txt", &lines);
+
+    scene
+        .ucmd()
+        .args(&[
+            "--buffer-size=1",
+            "--temporary-directory",
+            tmp_dir,
+            "input.txt",
+        ])
+        .fails_with_code(1)
+        .stderr_contains("No space left on device")
+        .stderr_does_not_contain("panicked");
+}
+
 // A read error must be reported with context and without the raw io::Error suffix.
 // It used to print `sort: Input/output error (os error 5)`.
 #[test]
@@ -1374,6 +1435,22 @@ fn test_read_error_message() {
             || stderr == "sort: read failed: I/O error\n",
         "unexpected stderr: {stderr}"
     );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_merge_flush_error_is_reported() {
+    use std::fs::File;
+
+    let ts = TestScenario::new("sort");
+    ts.fixtures.write("input.txt", "line\n");
+
+    let dev_full = File::create("/dev/full").expect("Failed to open /dev/full");
+    ts.ucmd()
+        .args(&["-m", "input.txt"])
+        .set_stdout(dev_full)
+        .fails()
+        .stderr_is("sort: write failed: 'standard output': No space left on device\n");
 }
 
 #[test]
@@ -3581,6 +3658,53 @@ fn test_consistent_sorting_with_i18n_collate() {
         .arg("fix_i18n_collate_inconsistency_2.txt")
         .succeeds()
         .stdout_is(expected_output);
+}
+
+#[test]
+fn test_merge_locale_collation() {
+    // `sort -m` compares lines lazily with the collator instead of precomputed
+    // sort keys; the result must match what a full sort produces.
+    let ts = TestScenario::new("sort");
+    ts.fixtures
+        .write("a.txt", "0_1\n01\napple\nbanana\nzebra\n");
+    ts.fixtures
+        .write("b.txt", "0_1\n01\nApple\nBanana\nZebra\n");
+    ts.fixtures
+        .write("single.txt", "apple\nApple\nbanana\nBanana\n");
+    ts.fixtures
+        .write("rev_a.txt", "zebra\nbanana\napple\n01\n0_1\n");
+    ts.fixtures
+        .write("rev_b.txt", "Zebra\nBanana\nApple\n01\n0_1\n");
+
+    let cases: [(&[&str], &str); 4] = [
+        (
+            &["-m", "a.txt", "b.txt"],
+            "0_1\n0_1\n01\n01\napple\nApple\nbanana\nBanana\nzebra\nZebra\n",
+        ),
+        (
+            &["-m", "-u", "a.txt", "b.txt"],
+            "0_1\n01\napple\nApple\nbanana\nBanana\nzebra\nZebra\n",
+        ),
+        (&["-m", "single.txt"], "apple\nApple\nbanana\nBanana\n"),
+        (
+            &["-m", "-r", "rev_a.txt", "rev_b.txt"],
+            "Zebra\nzebra\nBanana\nbanana\nApple\napple\n01\n01\n0_1\n0_1\n",
+        ),
+    ];
+    for (args, expected) in cases {
+        ts.ucmd()
+            .env("LC_ALL", "en_US.UTF-8")
+            .args(args)
+            .succeeds()
+            .stdout_is(expected);
+        // A full sort of the same input yields the same output.
+        let sort_args: Vec<&str> = args.iter().filter(|a| **a != "-m").copied().collect();
+        ts.ucmd()
+            .env("LC_ALL", "en_US.UTF-8")
+            .args(&sort_args)
+            .succeeds()
+            .stdout_is(expected);
+    }
 }
 
 #[test]

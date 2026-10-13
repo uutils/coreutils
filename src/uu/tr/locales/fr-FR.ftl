@@ -7,13 +7,14 @@ tr-help-complement = utiliser le complément d'ENSEMBLE1
 tr-help-delete = supprimer les caractères dans ENSEMBLE1, ne pas traduire
 tr-help-squeeze = remplacer chaque séquence d'un caractère répété qui est listé dans le dernier ENSEMBLE spécifié, avec une seule occurrence de ce caractère
 tr-help-truncate-set1 = d'abord tronquer ENSEMBLE1 à la longueur d'ENSEMBLE2
+tr-help-unbuffered = ne pas mettre la sortie en mémoire tampon
 
 # Messages d'erreur
 tr-error-missing-operand = opérande manquant
 tr-error-missing-operand-translating = opérande manquant après { $set }
   Deux chaînes doivent être données lors de la traduction.
 tr-error-missing-operand-deleting-squeezing = opérande manquant après { $set }
-  Deux chaînes doivent être données lors de la suppression et compression.
+  Deux chaînes doivent être données lors de la suppression et de la compression des répétitions.
 tr-error-extra-operand-deleting-without-squeezing = opérande supplémentaire { $operand }
   Une seule chaîne peut être donnée lors de la suppression sans compression des répétitions.
 tr-error-extra-operand-simple = opérande supplémentaire { $operand }

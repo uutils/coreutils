@@ -197,6 +197,21 @@ fn test_recursive() {
     assert!(!at.file_exists(file_b));
 }
 
+#[cfg(unix)]
+#[test]
+fn test_recursive_large_sparse_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "large_sparse_dir";
+    let file = "large_sparse_dir/file";
+
+    at.mkdir(dir);
+    at.make_file(file).set_len(1u64 << 31).unwrap();
+
+    ucmd.arg("-r").arg(dir).succeeds().no_stderr();
+
+    assert!(!at.dir_exists(dir));
+}
+
 #[test]
 fn test_one_file_system_same_device() {
     // Cross-device skipping needs a mount point (root privileges), so here we
@@ -1224,13 +1239,10 @@ fn test_inaccessible_dir_recursive() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "wasi"))]
+#[cfg(target_os = "linux")]
 fn test_non_utf8_paths() {
     use std::ffi::OsStr;
-    #[cfg(target_os = "linux")]
     use std::os::unix::ffi::OsStrExt;
-    #[cfg(target_os = "wasi")]
-    use std::os::wasi::ffi::OsStrExt;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1299,9 +1311,8 @@ fn test_rm_recursive_very_deep_hierarchy() {
 
     use std::time::Duration;
 
-    use nix::errno::Errno;
-    use nix::fcntl::{OFlag, openat};
-    use nix::sys::stat::{Mode, mkdirat};
+    use rustix::fs::{CWD, Mode, OFlags, mkdirat, openat};
+    use rustix::io::Errno;
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1309,8 +1320,8 @@ fn test_rm_recursive_very_deep_hierarchy() {
     // The path of the deepest directory is far longer than PATH_MAX, so it has
     // to be built one level at a time with openat/mkdirat.
     at.mkdir("deep");
-    let flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY;
-    let mut fd = openat(nix::fcntl::AT_FDCWD, &at.plus("deep"), flags, Mode::empty()).unwrap();
+    let flags = OFlags::RDONLY | OFlags::DIRECTORY;
+    let mut fd = openat(CWD, at.plus("deep"), flags, Mode::empty()).unwrap();
     // The recursion only ran out of stack around 5000 levels unoptimized and
     // 20000 optimized, so a shallower tree would not test anything. Some
     // filesystems resolve the whole path internally and refuse to go past
@@ -1320,12 +1331,12 @@ fn test_rm_recursive_very_deep_hierarchy() {
     while depth < DEPTH {
         match mkdirat(&fd, "a", Mode::from_bits_truncate(0o755)) {
             Ok(()) => {}
-            Err(Errno::ENAMETOOLONG) => break,
+            Err(Errno::NAMETOOLONG) => break,
             Err(e) => panic!("mkdirat at depth {depth} failed: {e}"),
         }
         fd = match openat(&fd, "a", flags, Mode::empty()) {
             Ok(fd) => fd,
-            Err(Errno::ENAMETOOLONG) => break,
+            Err(Errno::NAMETOOLONG) => break,
             Err(e) => panic!("openat at depth {depth} failed: {e}"),
         };
         depth += 1;

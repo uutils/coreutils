@@ -112,21 +112,6 @@ jobs:
         path_UUTILS='uutils'
         python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_FULL_SUMMARY_FILE }}
 
-    ### Run tests as root
-    - name: Run GNU root tests
-      shell: bash
-      run: |
-        ## Run GNU root tests
-        path_GNU='gnu'
-        path_UUTILS='uutils'
-        bash "uutils/util/run-gnu-test.sh" run-root
-
-    - name: Extract testing info from individual logs (run as root) into JSON
-      shell: bash
-      run : |
-        path_UUTILS='uutils'
-        python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }}
-
     ### This shell has been changed from "bash" to this command
     ### "script" will start a pty and the -q command removes the "script" initiation log
     ### the -e flag makes it propagate the error code and -c runs the command in a pty
@@ -147,6 +132,29 @@ jobs:
       run : |
         path_UUTILS='uutils'
         python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_STTY_FULL_SUMMARY_FILE }}
+
+    ### Run tests as root
+    - name: Run GNU root tests
+      shell: bash
+      run: |
+        ## Root tests drop to nobody via `chroot --user`. /home/runner is
+        ## 0750, so that user cannot reach our build dir and PATH lookup silently
+        ## falls back to the runner's own /usr/bin coreutils. Allow traversal.
+        dir="${GITHUB_WORKSPACE}"
+        while [ "${dir}" != / ]; do sudo chmod o+x "${dir}"; dir=$(dirname "${dir}"); done
+        ## Fail here if that user still cannot run our build, instead of letting the
+        ## tests pass or fail on whatever coreutils the runner image ships.
+        sudo -u nobody "${GITHUB_WORKSPACE}/uutils/target/release-small/id" -u
+        ## Run GNU root tests
+        path_GNU='gnu'
+        path_UUTILS='uutils'
+        bash "uutils/util/run-gnu-test.sh" run-root
+
+    - name: Extract testing info from individual logs (run as root) into JSON
+      shell: bash
+      run : |
+        path_UUTILS='uutils'
+        python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }}
 
     ### Upload artifacts
     - name: Upload full json results

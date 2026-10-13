@@ -71,12 +71,12 @@ numfmt-error-rejecting-suffix = rejet du suffixe dans l'entrée : '{ $number }{ 
 numfmt-error-suffix-unsupported-for-unit = Ce suffixe n'est pas pris en charge pour l'unité spécifiée
 numfmt-error-unit-auto-not-supported-with-to = L'unité 'auto' n'est pas prise en charge avec les options --to
 numfmt-error-number-too-big = Le nombre est trop grand et non pris en charge
-numfmt-error-format-no-percent = le format '{ $format }' n'a pas de directive %
-numfmt-error-format-ends-in-percent = le format '{ $format }' se termine par %
-numfmt-error-invalid-format-directive = format invalide '{ $format }', la directive doit être %[0]['][-][N][.][N]f
-numfmt-error-invalid-format-width-overflow = format invalide '{ $format }' (débordement de largeur)
-numfmt-error-invalid-precision = précision invalide dans le format '{ $format }'
-numfmt-error-format-too-many-percent = le format '{ $format }' a trop de directives %
+numfmt-error-format-no-percent = le format { $format } n'a pas de directive %
+numfmt-error-format-ends-in-percent = le format { $format } se termine par %
+numfmt-error-invalid-format-directive = format invalide { $format }, la directive doit être %[0]['][-][N][.][N]f
+numfmt-error-invalid-format-width-overflow = format invalide { $format } (débordement de largeur)
+numfmt-error-invalid-precision = précision invalide dans le format { $format }
+numfmt-error-format-too-many-percent = le format { $format } a trop de directives %
 numfmt-error-unknown-invalid-mode = Mode invalide inconnu : { $mode }
 
 # Messages de débogage

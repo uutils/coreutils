@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//spell-checker:ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
-//spell-checker:ignore (linux) winsize xpixel ypixel setrlimit Fsize SIGBUS SIGSEGV sigbus tmpfs mksocket
-//spell-checker:ignore (ToDO) ttyname
+// spell-checker:ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty openpt grantpt unlockpt ptsname tcsetwinsize CLOEXEC RDWR SETFD
+// spell-checker:ignore (linux) winsize xpixel ypixel setrlimit Fsize SIGBUS SIGSEGV SIGXFSZ EFBIG sigbus tmpfs mksocket
+// spell-checker:ignore (ToDO) ttyname
 
 #![allow(dead_code)]
 #![allow(
@@ -17,7 +17,7 @@
 use core::str;
 #[cfg(unix)]
 use libc::mode_t;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 use nix::pty::OpenptyResult;
 #[cfg(unix)]
 use nix::sys;
@@ -27,7 +27,7 @@ use pretty_assertions::assert_eq;
 #[cfg(unix)]
 use rustix::process::{Resource, Rlimit, setrlimit};
 use std::borrow::Cow;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, OpenOptions, hard_link, remove_file};
 use std::io::{self, BufWriter, Read, Result, Write};
@@ -1353,6 +1353,14 @@ impl AtPath {
 
     pub fn root_dir_resolved(&self) -> String {
         log_info("current_directory_resolved", "");
+
+        // Under a WASM runner the fixtures directory is mapped to the guest's
+        // preopened root ("--dir=<subdir>::/"), so the binary under test sees
+        // it as "/" rather than the host's absolute path.
+        if env::var("UUTESTS_WASM_RUNNER").is_ok() {
+            return "/".to_owned();
+        }
+
         let s = self
             .subdir
             .canonicalize()
@@ -1544,6 +1552,8 @@ pub struct UCommand {
     bytes_into_stdin: Option<Vec<u8>>,
     #[cfg(unix)]
     limits: Vec<(Resource, u64, u64)>,
+    #[cfg(unix)]
+    ignore_sigxfsz: bool,
     stderr_to_stdout: bool,
     timeout: Option<Duration>,
     #[cfg(unix)]
@@ -1708,6 +1718,16 @@ impl UCommand {
     #[cfg(unix)]
     pub fn limit(&mut self, resource: Resource, soft_limit: u64, hard_limit: u64) -> &mut Self {
         self.limits.push((resource, soft_limit, hard_limit));
+        self
+    }
+
+    /// Ignore SIGXFSZ in the child, so that exceeding an `Fsize` [`limit`](Self::limit) makes
+    /// the write fail with `EFBIG` instead of killing the process.
+    ///
+    /// Only the child's disposition changes; the test process is left alone.
+    #[cfg(unix)]
+    pub fn ignore_sigxfsz(&mut self) -> &mut Self {
+        self.ignore_sigxfsz = true;
         self
     }
 
@@ -1935,8 +1955,10 @@ impl UCommand {
             cmd.arg(format!("--dir={}::/", work_dir.display()));
             cmd.arg("--argv0");
             cmd.arg(bin.file_name().unwrap_or(bin.as_os_str()));
-            // Forward env vars to the WASI guest via --env flags
-            for (key, val) in &cmd_env {
+            // WASI reads the first duplicate, whereas Command::envs uses the last.
+            // Resolve overrides before forwarding them to the guest.
+            let wasm_env: BTreeMap<_, _> = cmd_env.iter().map(|(key, val)| (key, val)).collect();
+            for (key, val) in &wasm_env {
                 if let (Some(k), Some(v)) = (key.to_str(), val.to_str()) {
                     cmd.arg("--env");
                     cmd.arg(format!("{k}={v}"));
@@ -1952,15 +1974,23 @@ impl UCommand {
         command.env_clear();
         command.envs(cmd_env);
 
+        // Guest env uses --env, but wasmtime itself requires an absolute HOME
+        // for its module cache to avoid runner aborts.
+        if wasm_runner.is_some()
+            && let Some(host_home) = env::var_os("HOME")
+        {
+            command.env("HOME", host_home);
+        }
+
         if self.timeout.is_none() {
             self.timeout = Some(Duration::from_secs(30));
         }
 
         let mut captured_stdout = None;
         let mut captured_stderr = None;
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "redox")))]
         let mut stdin_pty: Option<File> = None;
-        #[cfg(not(unix))]
+        #[cfg(not(all(unix, not(target_os = "redox"))))]
         let stdin_pty: Option<File> = None;
         if self.stderr_to_stdout {
             let mut output = CapturedOutput::default();
@@ -1995,7 +2025,7 @@ impl UCommand {
                 .stderr(stderr);
         }
 
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "redox")))]
         if let Some(simulated_terminal) = &self.terminal_simulation {
             let terminal_size = simulated_terminal.size.unwrap_or(libc::winsize {
                 ws_col: 80,
@@ -2008,7 +2038,11 @@ impl UCommand {
                 let OpenptyResult {
                     slave: pi_slave,
                     master: pi_master,
-                } = nix::pty::openpty(&terminal_size, None).unwrap();
+                } = open_pty(Some(&terminal_size));
+                // Read the echo, as a terminal would. This also keeps the PTY
+                // open until the child closes it, so closing stdin doesn't hang it up.
+                let mut echo = File::from(pi_master.try_clone().unwrap());
+                thread::spawn(move || io::copy(&mut echo, &mut io::sink()));
                 stdin_pty = Some(File::from(pi_master));
                 command.stdin(pi_slave);
             }
@@ -2017,7 +2051,7 @@ impl UCommand {
                 let OpenptyResult {
                     slave: po_slave,
                     master: po_master,
-                } = nix::pty::openpty(&terminal_size, None).unwrap();
+                } = open_pty(Some(&terminal_size));
                 captured_stdout = Self::spawn_reader_thread(
                     captured_stdout,
                     po_master,
@@ -2030,7 +2064,7 @@ impl UCommand {
                 let OpenptyResult {
                     slave: pe_slave,
                     master: pe_master,
-                } = nix::pty::openpty(&terminal_size, None).unwrap();
+                } = open_pty(Some(&terminal_size));
                 captured_stderr = Self::spawn_reader_thread(
                     captured_stderr,
                     pe_master,
@@ -2062,6 +2096,18 @@ impl UCommand {
             // also, the closure doesn't access stdin, stdout and stderr.
             unsafe {
                 command.pre_exec(closure);
+            }
+        }
+
+        #[cfg(unix)]
+        if self.ignore_sigxfsz {
+            // SAFETY: signal() is async-signal-safe, and an ignored disposition
+            // survives exec.
+            unsafe {
+                command.pre_exec(|| {
+                    libc::signal(libc::SIGXFSZ, libc::SIG_IGN);
+                    Ok(())
+                });
             }
         }
 
@@ -2996,17 +3042,73 @@ pub fn whoami() -> String {
         })
 }
 
+/// Open a PTY whose two ends are close-on-exec, so that commands started by
+/// other tests in the meantime don't inherit them.
+#[cfg(all(unix, not(target_os = "redox")))]
+fn open_pty(size: Option<&libc::winsize>) -> OpenptyResult {
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "freebsd",
+        target_os = "netbsd"
+    ))]
+    {
+        use rustix::fs::{Mode, OFlags, open};
+        use rustix::pty::{OpenptFlags, grantpt, openpt, ptsname, unlockpt};
+        use rustix::termios::{Winsize, tcsetwinsize};
+
+        let master =
+            openpt(OpenptFlags::RDWR | OpenptFlags::NOCTTY | OpenptFlags::CLOEXEC).unwrap();
+        grantpt(&master).unwrap();
+        unlockpt(&master).unwrap();
+        let name = ptsname(&master, Vec::new()).unwrap();
+        let slave = open(
+            name,
+            OFlags::RDWR | OFlags::NOCTTY | OFlags::CLOEXEC,
+            Mode::empty(),
+        )
+        .unwrap();
+        if let Some(size) = size {
+            let size = Winsize {
+                ws_row: size.ws_row,
+                ws_col: size.ws_col,
+                ws_xpixel: size.ws_xpixel,
+                ws_ypixel: size.ws_ypixel,
+            };
+            tcsetwinsize(&slave, size).unwrap();
+        }
+        OpenptyResult { master, slave }
+    }
+
+    // Elsewhere a PTY can't be opened close-on-exec, so a command started
+    // between openpty and fcntl can still inherit it.
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "freebsd",
+        target_os = "netbsd"
+    )))]
+    {
+        use nix::fcntl::{FcntlArg, FdFlag, fcntl};
+
+        let pty = nix::pty::openpty(size, None).unwrap();
+        for fd in [&pty.master, &pty.slave] {
+            fcntl(fd, FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC)).unwrap();
+        }
+        pty
+    }
+}
+
 /// Create a PTY (pseudo-terminal) for testing utilities that require a TTY.
 ///
 /// Returns a tuple of (path, controller, replica) where:
 /// - path: The filesystem path to the PTY replica device
 /// - controller: The controller file
 /// - replica: The replica file
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 pub fn pty_path() -> (String, File, File) {
-    use nix::pty::openpty;
     use nix::unistd::ttyname;
-    let pty = openpty(None, None).expect("Failed to create PTY");
+    let pty = open_pty(None);
     let path = ttyname(&pty.slave)
         .expect("Failed to get PTY path")
         .to_string_lossy()

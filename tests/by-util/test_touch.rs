@@ -356,6 +356,27 @@ fn test_touch_set_both_offset_date_and_reference() {
 }
 
 #[test]
+fn test_touch_offset_date_against_reference_with_different_atime_mtime() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ref_file = "test_touch_reference_different_atime_mtime";
+    let file = "test_touch_offset_date_different_atime_mtime";
+
+    let ref_atime = str_to_filetime("%Y%m%d%H%M", "201501011234");
+    let ref_mtime = str_to_filetime("%Y%m%d%H%M", "201502021234");
+
+    at.touch(ref_file);
+    set_file_times(&at, ref_file, ref_atime, ref_mtime);
+
+    // Each result is offset from its own reference time.
+    ucmd.args(&["-d", "+1 day", "-r", ref_file, file])
+        .succeeds()
+        .no_stderr();
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, str_to_filetime("%Y%m%d%H%M", "201501021234"));
+    assert_eq!(mtime, str_to_filetime("%Y%m%d%H%M", "201502031234"));
+}
+
+#[test]
 fn test_touch_set_both_time_and_date() {
     let file = "test_touch_set_both_time_and_date";
 
@@ -827,6 +848,39 @@ fn test_touch_system_fails() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: guest root is a writable preopen, not the protected system root"
+)]
+fn test_touch_explicit_time_on_root_owned_file_eperm() {
+    // Setting explicit timestamps on a file we do not own fails with EPERM
+    // (not EACCES), which GNU reports as "Operation not permitted" (#15020).
+    if rustix::process::geteuid().is_root() {
+        println!("Skipping test when running as root");
+        return;
+    }
+    new_ucmd!()
+        .args(&["-d", "2000-01-01", "/"])
+        .fails()
+        .stderr_only("touch: setting times of '/': Operation not permitted\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+fn test_touch_date_now_on_writable_file_owned_by_other() {
+    // /dev/null is root-owned but writable, so `-d now` needs only write permission (#15019).
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    new_ucmd!()
+        .args(&["-d", "now", "/dev/null"])
+        .succeeds()
+        .no_output();
+}
+
+#[test]
 #[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: no FIFO support")]
 fn test_touch_fifo() {
@@ -937,6 +991,82 @@ fn test_touch_permission_denied_error_msg() {
     let full_path = at.plus_as_string(path_str);
     ucmd.arg(&full_path).fails().stderr_only(format!(
         "touch: cannot touch '{full_path}': Permission denied\n",
+    ));
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: host system file is not visible")]
+fn test_touch_existing_unwritable_file_error_msg() {
+    use std::fs::OpenOptions;
+    use std::path::Path;
+
+    let path = "/etc/passwd";
+    let write_error = OpenOptions::new().write(true).open(path).err();
+    if rustix::process::geteuid().is_root()
+        || !Path::new(path).is_file()
+        || write_error.as_ref().and_then(std::io::Error::raw_os_error)
+            != Some(rustix::io::Errno::ACCESS.raw_os_error())
+    {
+        println!("Skipping test without a protected system file");
+        return;
+    }
+
+    new_ucmd!()
+        .arg(path)
+        .fails()
+        .stderr_only("touch: cannot touch '/etc/passwd': Permission denied\n");
+    new_ucmd!()
+        .args(&["-d", "2000-01-01", path])
+        .fails()
+        .stderr_only("touch: cannot touch '/etc/passwd': Permission denied\n");
+    let result = new_ucmd!().args(&["-c", path]).fails();
+    assert!(matches!(
+        result.stderr_str(),
+        "touch: setting times of '/etc/passwd': Permission denied\n"
+            | "touch: setting times of '/etc/passwd': Operation not permitted\n"
+    ));
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: filesystem permissions differ")]
+fn test_touch_inaccessible_parent_error_msg() {
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::PermissionsExt;
+
+    if rustix::process::geteuid().is_root() {
+        println!("Skipping test when running as root");
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("private");
+    at.touch("private/file");
+    let dir = at.plus("private");
+    let file = at.plus("private/file");
+    set_permissions(&dir, Permissions::from_mode(0o000)).unwrap();
+
+    let default = ucmd.arg(&file).run();
+    let no_create = new_ucmd!().args(&["-c"]).arg(&file).run();
+    let no_deref = new_ucmd!().args(&["-h"]).arg(&file).run();
+
+    set_permissions(&dir, Permissions::from_mode(0o700)).unwrap();
+
+    default.failure();
+    default.stderr_only(format!(
+        "touch: cannot touch '{}': Permission denied\n",
+        file.display()
+    ));
+    no_create.failure();
+    no_create.stderr_only(format!(
+        "touch: setting times of '{}': Permission denied\n",
+        file.display()
+    ));
+    no_deref.failure();
+    no_deref.stderr_only(format!(
+        "touch: setting times of '{}': Permission denied\n",
+        file.display()
     ));
 }
 

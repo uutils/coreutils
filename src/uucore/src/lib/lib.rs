@@ -105,11 +105,7 @@ pub use crate::features::pipes;
 pub use crate::features::process;
 #[cfg(all(unix, feature = "safe-copy"))]
 pub use crate::features::safe_copy;
-#[cfg(all(
-    feature = "safe-traversal",
-    unix,
-    not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))
-))]
+#[cfg(all(feature = "safe-traversal", unix, not(target_os = "redox")))]
 pub use crate::features::safe_traversal;
 #[cfg(all(
     feature = "signals",
@@ -120,6 +116,7 @@ pub use crate::features::safe_traversal;
         target_os = "android",
         target_os = "cygwin",
         target_os = "freebsd",
+        target_os = "haiku",
         target_os = "hurd",
         target_os = "illumos",
         target_os = "linux",

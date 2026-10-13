@@ -69,6 +69,8 @@ impl<'a> BufferedOutput<'a> {
     /// buffered until enough bytes have been provided to complete a
     /// block. The returned [`WriteStat`] object will include the
     /// number of blocks written during execution of this function.
+    // See `BlockWriter::write_blocks`.
+    #[inline(always)]
     pub(crate) fn write_blocks(&mut self, buf: &[u8]) -> std::io::Result<WriteStat> {
         // Split the incoming buffer into two parts: the bytes to write
         // and the bytes to buffer for next time.

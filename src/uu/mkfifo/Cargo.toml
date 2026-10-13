@@ -18,8 +18,8 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs", "mode"] }
 fluent = { workspace = true }
+uucore = { workspace = true, features = ["fs", "mode"] }
 
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["fs", "process"] }

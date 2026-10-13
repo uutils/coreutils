@@ -28,22 +28,22 @@ debug = true
 [dependencies]
 libfuzzer-sys = "0.4.7"
 rand = { version = "0.10.1", features = ["std_rng"] }
-uufuzz = { path = "uufuzz" }
-uucore = { path = "../src/uucore", features = ["parser"] }
+uu_cksum = { path = "../src/uu/cksum" }
+uu_cut = { path = "../src/uu/cut" }
 uu_date = { path = "../src/uu/date" }
-uu_test = { path = "../src/uu/test" }
+uu_dirname = { path = "../src/uu/dirname" }
+uu_echo = { path = "../src/uu/echo" }
+uu_env = { path = "../src/uu/env" }
 uu_expr = { path = "../src/uu/expr" }
 uu_printf = { path = "../src/uu/printf" }
-uu_echo = { path = "../src/uu/echo" }
 uu_seq = { path = "../src/uu/seq" }
 uu_sort = { path = "../src/uu/sort" }
-uu_wc = { path = "../src/uu/wc" }
-uu_cut = { path = "../src/uu/cut" }
 uu_split = { path = "../src/uu/split" }
+uu_test = { path = "../src/uu/test" }
 uu_tr = { path = "../src/uu/tr" }
-uu_env = { path = "../src/uu/env" }
-uu_cksum = { path = "../src/uu/cksum" }
-uu_dirname = { path = "../src/uu/dirname" }
+uu_wc = { path = "../src/uu/wc" }
+uucore = { path = "../src/uucore", features = ["parser"] }
+uufuzz = { path = "uufuzz" }
 
 [[bin]]
 name = "fuzz_date"
