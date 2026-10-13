@@ -814,7 +814,7 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
     //
     if let Ok(parsed) = strtime::parse(format::POSIX_LOCALE, s)
         .and_then(|tm| tm.to_datetime())
-        .and_then(|dt| TimeZone::UTC.to_zoned(dt))
+        .and_then(|dt| TimeZone::system().to_ambiguous_zoned(dt).unambiguous())
     {
         return Ok(timestamp_to_filetime(parsed.timestamp()));
     }
@@ -991,6 +991,18 @@ mod tests {
             .unwrap()
             .timestamp();
         let got = super::parse_date(now, "2026-08-01 12:00:00").unwrap();
+        assert_eq!(got.unix_seconds(), expected.as_second());
+    }
+
+    #[test]
+    fn test_parse_posix_locale_date_without_offset_uses_local_zone() {
+        let now = Timestamp::now().to_zoned(TimeZone::UTC);
+        let expected = TimeZone::system()
+            .to_ambiguous_zoned(jiff::civil::date(2015, 1, 1).at(12, 34, 0, 0))
+            .unambiguous()
+            .unwrap()
+            .timestamp();
+        let got = super::parse_date(now, "Thu Jan 01 12:34:00 2015").unwrap();
         assert_eq!(got.unix_seconds(), expected.as_second());
     }
 
