@@ -48,8 +48,8 @@ use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError, set_exit
 #[cfg(unix)]
 use uucore::fs::display_permissions_unix;
 use uucore::fs::{
-    MissingHandling, ResolveMode, are_hardlinks_or_one_way_symlink_to_same_file,
-    are_hardlinks_to_same_file, canonicalize, path_ends_with_terminator,
+    AccessMode, MissingHandling, ResolveMode, are_hardlinks_or_one_way_symlink_to_same_file,
+    are_hardlinks_to_same_file, canonicalize, effective_access, path_ends_with_terminator,
 };
 #[cfg(any(
     target_os = "freebsd",
@@ -1584,8 +1584,7 @@ fn is_empty_dir(path: &Path) -> bool {
 fn is_writable(path: &Path) -> (bool, Option<u32>) {
     if let Ok(metadata) = path.metadata() {
         let mode = metadata.permissions().mode();
-        // Check if user write bit is set
-        ((mode & 0o200) != 0, Some(mode))
+        (effective_access(path, AccessMode::Write), Some(mode))
     } else {
         (false, None) // If we can't get metadata, prompt user to be safe
     }
@@ -1594,8 +1593,8 @@ fn is_writable(path: &Path) -> (bool, Option<u32>) {
 /// Check if file is writable.
 #[cfg(not(unix))]
 fn is_writable(path: &Path) -> (bool, Option<u32>) {
-    if let Ok(metadata) = path.metadata() {
-        (!metadata.permissions().readonly(), None)
+    if path.metadata().is_ok() {
+        (effective_access(path, AccessMode::Write), None)
     } else {
         (false, None) // If we can't get metadata, prompt user to be safe
     }
