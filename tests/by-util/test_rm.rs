@@ -1702,25 +1702,39 @@ fn test_no_preserve_root_literal_root() {
 
     // One expression: separate `-e inject=` options for the same syscalls
     // override each other instead of combining.
-    const INJECT: [&str; 2] = ["-e", "inject=unlink,unlinkat,rmdir:retval=0:signal=SIGINT"];
+    const INJECT: [&str; 4] = [
+        "-o",
+        "/dev/null",
+        "-e",
+        "inject=unlink,unlinkat,rmdir:retval=0:signal=SIGINT",
+    ];
+
+    // As root a failed injection could really wipe the system, so never run.
+    if rustix::process::getuid().is_root() {
+        eprintln!("TEST SKIPPED: refusing to run `rm -rf /` as root");
+        return;
+    }
 
     let ts = TestScenario::new(util_name!());
     let bin = ts.bin_path.to_string_lossy().into_owned();
 
-    // Safety net: the injection must leave a real file in place.
-    ts.fixtures.touch("probe");
+    // Safety net: the injection must leave a real file in place, and strace
+    // must really have run `rm` (it dies of SIGINT); if strace cannot trace
+    // at all, `rm` never ran and the file survives for the wrong reason.
+    // Remove a/b recursively: that is `unlinkat`, like the real run below,
+    // whereas removing a plain file is `unlink`.
+    ts.fixtures.mkdir("a");
+    ts.fixtures.touch("a/b");
     let probe = Command::new("strace")
-        .args(["-o", "/dev/null"])
         .args(INJECT)
-        .args([&bin, "rm", &ts.fixtures.plus_as_string("probe")])
+        .args([&bin, "rm", "-r", &ts.fixtures.plus_as_string("a")])
         .status();
-    if probe.is_err() || !ts.fixtures.file_exists("probe") {
-        println!("TEST SKIPPED: strace syscall injection is not available");
+    if !probe.is_ok_and(|s| s.signal() == Some(libc::SIGINT)) || !ts.fixtures.file_exists("a/b") {
+        eprintln!("TEST SKIPPED: strace syscall injection is not available");
         return;
     }
 
     let output = Command::new("strace")
-        .args(["-o", "/dev/null"])
         .args(INJECT)
         .args([&bin, "rm", "-rf", "/", "--no-preserve-root"])
         .env("LC_ALL", "C")
