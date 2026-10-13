@@ -3568,7 +3568,7 @@ fn find_other_group(current: u32) -> Option<u32> {
 
 /// Test that group ownership is preserved during cross-device file moves.
 /// Uses chgrp to a supplementary group (no root needed).
-/// See https://github.com/uutils/coreutils/issues/9714
+/// See <https://github.com/uutils/coreutils/issues/9714>
 #[test]
 #[cfg(target_os = "linux")]
 fn test_mv_cross_device_preserves_ownership() {
@@ -3630,7 +3630,7 @@ fn test_mv_cross_device_preserves_ownership() {
 
 /// Test that group ownership is preserved for files inside directories during cross-device moves.
 /// Uses chgrp to a supplementary group (no root needed).
-/// See https://github.com/uutils/coreutils/issues/9714
+/// See <https://github.com/uutils/coreutils/issues/9714>
 #[test]
 #[cfg(target_os = "linux")]
 fn test_mv_cross_device_preserves_ownership_recursive() {
