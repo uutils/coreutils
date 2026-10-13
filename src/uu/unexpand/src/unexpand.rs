@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, IsTerminal, Read, Stdin, Write, stdin, stdout};
+use std::io::{self, BufRead, BufReader, BufWriter, Read, Stdin, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use uucore::char_width::char_info_at;
 use uucore::display::Quotable;
@@ -367,7 +367,7 @@ fn next_tabstop(tab_config: &TabConfig, col: usize) -> Option<usize> {
 }
 
 fn write_tabs(
-    output: &mut impl Write,
+    output: &mut BufWriter<Stdout>,
     tab_config: &TabConfig,
     print_state: &mut PrintState,
     amode: bool,
@@ -523,7 +523,7 @@ impl PrintState {
 #[allow(clippy::cognitive_complexity)]
 fn unexpand_buf(
     buf: &[u8],
-    output: &mut impl Write,
+    output: &mut BufWriter<Stdout>,
     options: &Options,
     lastcol: usize,
     tab_config: &TabConfig,
@@ -678,15 +678,35 @@ fn unexpand_buf(
     Ok(())
 }
 
+/// Whether stdin is a regular file, i.e. reads from it never wait for a writer.
+fn stdin_is_regular_file() -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::fd::AsFd;
+        stdin()
+            .as_fd()
+            .try_clone_to_owned()
+            .map(File::from)
+            .and_then(|f| f.metadata())
+            .is_ok_and(|m| m.is_file())
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
+}
+
 fn unexpand_file(
     file: &OsString,
-    output: &mut impl Write,
+    output: &mut BufWriter<Stdout>,
     options: &Options,
     lastcol: usize,
     tab_config: &TabConfig,
     line_state: &mut PrintState,
 ) -> UResult<()> {
     let mut input = open(file)?;
+    // See expand: flush before the next read only when stdin can block. #11091
+    let flush_lines = file == "-" && !stdin_is_regular_file();
     // Work on a local copy of the line state, so it can stay in registers
     // while unexpanding, and hand it back when done with this file.
     let mut print_state = std::mem::replace(line_state, PrintState::new());
@@ -698,6 +718,7 @@ fn unexpand_file(
         lastcol,
         tab_config,
         &mut print_state,
+        flush_lines,
     );
     *line_state = print_state;
     result
@@ -712,25 +733,21 @@ fn unexpand_input(
     lastcol: usize,
     tab_config: &TabConfig,
     print_state: &mut PrintState,
+    flush_lines: bool,
 ) -> UResult<()> {
     while let buf @ [_, ..] = input
         .fill_buf()
         .map_err(|e| e.map_err_context(|| file.maybe_quote().to_string()) as Box<dyn UError>)?
     {
-        let mut had_newline = false;
         for line in buf.split_inclusive(|b| *b == b'\n') {
             unexpand_buf(line, output, options, lastcol, tab_config, print_state)?;
             if let Some(b'\n') = line.last() {
                 print_state.new_line();
-                had_newline = true;
             }
         }
         let len = buf.len();
         input.consume(len);
-        // Flush once per chunk that completed a line, before the next (possibly
-        // blocking) read, so interactive stdin shows output promptly without a
-        // write per line on large inputs. Fixes #11091.
-        if had_newline {
+        if flush_lines {
             output.flush()?;
         }
     }
@@ -738,13 +755,7 @@ fn unexpand_input(
 }
 
 fn unexpand(options: &Options) -> UResult<()> {
-    // Match `cut` / `expand`: unbuffered on a tty so interactive stdin shows
-    // each converted line immediately. Fixes #11091.
-    let mut output: Box<dyn Write> = if stdout().is_terminal() {
-        Box::new(stdout())
-    } else {
-        Box::new(BufWriter::new(stdout()))
-    };
+    let mut output = BufWriter::new(stdout());
     let tab_config = &options.tab_config;
     let lastcol = if tab_config.tabstops.len() > 1
         && tab_config.increment_size.is_none()
