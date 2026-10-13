@@ -2729,6 +2729,48 @@ fn test_date_strftime_flag_on_composite() {
 }
 
 #[test]
+fn test_date_strftime_flags_on_iso_date_year() {
+    // Unlike other composites, GNU applies these modifiers to %Y inside %F.
+    for (format, expected) in [
+        ("+%-F", "1-01-01\n"),
+        ("+%_F", "1-01-01\n"),
+        ("+%6F", "1-01-01\n"),
+        ("+%_6F", "1-01-01\n"),
+        ("+%12F", "000001-01-01\n"),
+        ("+%_12F", "     1-01-01\n"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg("0001-01-01")
+            .arg(format)
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+fn test_date_strftime_plus_flag_on_iso_date_width() {
+    for (date, format, expected) in [
+        ("0001-01-01", "+%+8F", "01-01-01\n"),
+        ("0001-01-01", "+%+11F", "+0001-01-01\n"),
+        ("2024-06-15", "+%+6F", "2024-06-15\n"),
+        ("2024-06-15", "+%+11F", "+2024-06-15\n"),
+        ("2024-06-15", "+%+12F", "+02024-06-15\n"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(date)
+            .arg(format)
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
 fn test_date_strftime_timezone_flag_precedence() {
     for (format, expected) in [
         ("+%_0z", "+0000\n"),
