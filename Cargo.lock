@@ -4077,6 +4077,7 @@ dependencies = [
  "cfg_aliases",
  "clap",
  "fluent",
+ "libc",
  "nix",
  "rustix",
  "thiserror 2.0.21",
