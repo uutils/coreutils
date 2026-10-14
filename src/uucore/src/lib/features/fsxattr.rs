@@ -247,7 +247,10 @@ pub fn apply_xattrs_fd_ignore_unsupported(
     }
 }
 
-/// Checks if a file has an Access Control List (ACL) based on its extended attributes.
+/// Checks if a file has an Access Control List (ACL).
+///
+/// On macOS this asks the ACL API; elsewhere it looks at the file's extended
+/// attributes.
 ///
 /// # Arguments
 ///
@@ -256,7 +259,8 @@ pub fn apply_xattrs_fd_ignore_unsupported(
 ///
 /// # Returns
 ///
-/// `true` if the file has extended attributes (indicating an ACL), `false` otherwise.
+/// `true` if the file has an extended ACL (on macOS) or any extended attributes
+/// (elsewhere), `false` otherwise.
 pub fn has_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
     // On macOS most files carry some xattr (e.g. com.apple.provenance) and the
     // ACL is not one of them, so ask the ACL API instead.
@@ -559,10 +563,7 @@ mod tests {
         xattr::set(&file_path, test_attr, test_value).unwrap();
 
         // On macOS an ACL isn't an xattr, so an xattr alone is not an ACL.
-        #[cfg(not(target_os = "macos"))]
-        assert!(has_acl(&file_path, true));
-        #[cfg(target_os = "macos")]
-        assert!(!has_acl(&file_path, true));
+        assert_eq!(has_acl(&file_path, true), cfg!(not(target_os = "macos")));
         assert!(!has_security_cap_acl(&file_path, true));
 
         // FreeBSD/NetBSD's xattr library does not support the "security" namespace
