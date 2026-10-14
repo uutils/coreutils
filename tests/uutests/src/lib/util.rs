@@ -72,27 +72,37 @@ static DEFAULT_TESTS_BINARY: OnceLock<&'static str> = OnceLock::new();
 
 /// Path of the binary under test: `UUTESTS_BINARY_PATH` (the `coreutils` binary)
 /// if set, otherwise the default binary registered with [`set_default_tests_binary`].
+///
+/// # Panics
+/// If the binary cannot be found, see [`try_get_tests_binary`] to avoid this.
 pub fn get_tests_binary() -> &'static str {
-    TESTS_BINARY_PATH.get_or_init(|| {
-        let default = DEFAULT_TESTS_BINARY.get().copied().unwrap_or("coreutils");
-        if let Some(path) = env::var_os("UUTESTS_BINARY_PATH") {
-            let path = PathBuf::from(path);
-            if default == "coreutils" {
-                return path;
-            }
-            // UUTESTS_BINARY_PATH is the coreutils binary, the other binaries
-            // are installed next to it
-            if let Some(dir) = path.parent() {
-                return dir.join(format!("{default}{}", env::consts::EXE_SUFFIX));
-            }
-        }
-        if let Some(path) = cargo_binary(default) {
-            return path;
-        }
-        panic!("Could not determine coreutils binary path. Please set UUTESTS_BINARY_PATH environment variable");
+    try_get_tests_binary().unwrap_or_else(|| {
+        panic!("Could not determine coreutils binary path. Please set UUTESTS_BINARY_PATH environment variable")
     })
-    .to_str()
-    .unwrap()
+}
+
+/// Same as [`get_tests_binary`], but returns `None` instead of panicking.
+pub fn try_get_tests_binary() -> Option<&'static str> {
+    if TESTS_BINARY_PATH.get().is_none() {
+        let _ = TESTS_BINARY_PATH.set(find_tests_binary()?);
+    }
+    TESTS_BINARY_PATH.get()?.to_str()
+}
+
+fn find_tests_binary() -> Option<PathBuf> {
+    let default = DEFAULT_TESTS_BINARY.get().copied().unwrap_or("coreutils");
+    if let Some(path) = env::var_os("UUTESTS_BINARY_PATH") {
+        let path = PathBuf::from(path);
+        if default == "coreutils" {
+            return Some(path);
+        }
+        // UUTESTS_BINARY_PATH is the coreutils binary, the other binaries
+        // are installed next to it
+        if let Some(dir) = path.parent() {
+            return Some(dir.join(format!("{default}{}", env::consts::EXE_SUFFIX)));
+        }
+    }
+    cargo_binary(default)
 }
 
 /// Set the binary to test (default: `coreutils`), resolved by [`get_tests_binary`].

@@ -17,7 +17,10 @@ use std::env;
 fn init() {
     uutests::util::set_default_tests_binary("coreutils");
     // Print for debugging
-    eprintln!("UUTESTS_BINARY_PATH={}", uutests::util::get_tests_binary());
+    eprintln!(
+        "UUTESTS_BINARY_PATH={}",
+        uutests::util::try_get_tests_binary().unwrap_or("<not found>")
+    );
 }
 
 #[test]
