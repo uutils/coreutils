@@ -544,8 +544,7 @@ fn process_token_filesystem(
             format,
         } => {
             let output = match format {
-                // GNU prints the block and free node counts signed (`out_int`), so
-                // `+` and ` ` add a sign; the other counts are unsigned.
+                // The block and free node counts are signed, so `+` and ` ` apply.
                 // free blocks available to non-superuser
                 'a' => OutputType::Integer(meta.avail_blocks() as i64),
                 // total data blocks in file system

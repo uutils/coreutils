@@ -777,8 +777,6 @@ fn test_printf_invalid_directive() {
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
 fn test_fs_signed_counts_take_sign_flags() {
-    // GNU prints %a, %b, %d and %f signed, so `+` and ` ` add a sign there,
-    // while the unsigned counts (%c, %s) ignore them.
     let out = new_ucmd!()
         .args(&["-f", "--printf=%+a|% b|%+d|%+f|%+c|%+s", "."])
         .succeeds()
