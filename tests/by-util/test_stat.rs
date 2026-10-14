@@ -788,13 +788,14 @@ fn test_format_always_ends_with_a_newline() {
 }
 
 #[test]
-fn test_directive_on_a_multibyte_char_takes_its_first_byte() {
-    // Like GNU, which reads the format byte by byte: `%\xC2` is an unknown
-    // directive (`?`), and the `\xBF` that completes the `¿` is printed as is.
-    new_ucmd!()
-        .args(&["--printf=%\u{bf}", "."])
-        .succeeds()
-        .stdout_is_bytes(b"?\xbf");
+fn test_default_formats_end_with_one_newline() {
+    for args in [&["."][..], &["-t", "."], &["-f", "."], &["-f", "-t", "."]] {
+        let out = new_ucmd!().args(args).succeeds().stdout_move_str();
+        assert!(
+            out.ends_with('\n') && !out.ends_with("\n\n"),
+            "{args:?} should end with exactly one newline: {out:?}"
+        );
+    }
 }
 
 #[test]

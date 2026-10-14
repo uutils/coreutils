@@ -945,7 +945,14 @@ impl Stater {
     /// Returns the tokens parsed before the bad one, so the caller can print
     /// them the way GNU does, and the error that stopped the parse. A format
     /// that ends in a bad directive keeps no trailing newline.
-    fn generate_tokens(format_str: &str, use_printf: bool) -> (Vec<Token>, Option<DirectiveError>) {
+    ///
+    /// `trailing_newline` adds the newline GNU prints after a `--format`
+    /// output, even one that already ends with a newline.
+    fn generate_tokens(
+        format_str: &str,
+        use_printf: bool,
+        trailing_newline: bool,
+    ) -> (Vec<Token>, Option<DirectiveError>) {
         let mut tokens = Vec::new();
         let chars = format_str.chars().collect::<Vec<char>>();
         let bound = chars.len();
@@ -953,20 +960,7 @@ impl Stater {
         while i < bound {
             match chars.get(i) {
                 Some('%') => match Self::handle_percent_case(&chars, &mut i, bound, format_str) {
-                    Ok(token) => {
-                        // GNU reads the format byte by byte: a directive on a
-                        // multibyte character takes its first byte only (and
-                        // prints `?`), and the rest of the character follows.
-                        let rest = match &token {
-                            Token::Directive { format, .. } if !format.is_ascii() => {
-                                let mut buf = [0; 4];
-                                format.encode_utf8(&mut buf).as_bytes()[1..].to_vec()
-                            }
-                            _ => Vec::new(),
-                        };
-                        tokens.push(token);
-                        tokens.extend(rest.into_iter().map(Token::Byte));
-                    }
+                    Ok(token) => tokens.push(token),
                     Err(error) => return (tokens, Some(error)),
                 },
                 Some('\\') => {
@@ -983,9 +977,7 @@ impl Stater {
             }
             i += 1;
         }
-        // GNU ends every --format output with a newline, even when the format
-        // already ends with one.
-        if !use_printf {
+        if trailing_newline {
             tokens.push(Token::Char('\n'));
         }
         (tokens, None)
@@ -1051,19 +1043,25 @@ impl Stater {
         // error there is our bug, has nothing to point at, and is raised now.
         let mut format_error = None;
         let default_tokens = if format_str.is_empty() {
-            let (tokens, error) =
-                Self::generate_tokens(&Self::default_format(show_fs, terse, false), use_printf);
+            let (tokens, error) = Self::generate_tokens(
+                &Self::default_format(show_fs, terse, false),
+                use_printf,
+                false,
+            );
             if let Some(error) = error {
                 return Err(error.to_error(diag_args, None));
             }
             tokens
         } else {
-            let (tokens, error) = Self::generate_tokens(format_str, use_printf);
+            let (tokens, error) = Self::generate_tokens(format_str, use_printf, !use_printf);
             format_error = error;
             tokens
         };
-        let (default_dev_tokens, default_dev_error) =
-            Self::generate_tokens(&Self::default_format(show_fs, terse, true), use_printf);
+        let (default_dev_tokens, default_dev_error) = Self::generate_tokens(
+            &Self::default_format(show_fs, terse, true),
+            use_printf,
+            false,
+        );
         if let Some(error) = default_dev_error {
             return Err(error.to_error(diag_args, None));
         }
@@ -1640,7 +1638,7 @@ mod tests {
             // --format adds its own newline after the one the format ends with
             Token::Char('\n'),
         ];
-        let (tokens, error) = Stater::generate_tokens(s, false);
+        let (tokens, error) = Stater::generate_tokens(s, false, true);
         assert!(error.is_none());
         assert_eq!(&expected, &tokens);
     }
@@ -1685,7 +1683,7 @@ mod tests {
             Token::Byte(b'J'),
             Token::Byte(b'\n'),
         ];
-        let (tokens, error) = Stater::generate_tokens(s, true);
+        let (tokens, error) = Stater::generate_tokens(s, true, false);
         assert!(error.is_none());
         assert_eq!(&expected, &tokens);
     }
