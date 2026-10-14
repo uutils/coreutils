@@ -866,13 +866,24 @@ fn test_saved_state_valid_formats() {
     let (path, _controller, _replica) = pty_path();
     let (_at, ts) = at_and_ts!();
 
-    // Generate valid saved state from the actual terminal
-    let saved = unwrap_or_return!(expected_result(&ts, &["-g", "--file", &path])).stdout_move_str();
+    // Generate valid saved state from the actual terminal with our own stty,
+    // so the test doesn't depend on the system stty
+    let saved = ts
+        .ucmd()
+        .args(&["-g", "--file", &path])
+        .succeeds()
+        .stdout_move_str();
     let saved = saved.trim();
 
     let result = ts.ucmd().args(&["--file", &path, saved]).run();
 
-    result.success().no_stderr();
+    result.success().no_output();
+
+    // Restoring the state leaves the terminal as it was
+    ts.ucmd()
+        .args(&["-g", "--file", &path])
+        .succeeds()
+        .stdout_only(format!("{saved}\n"));
 
     let exp_result = unwrap_or_return!(expected_result(&ts, &["--file", &path, saved]));
     let normalized_stderr = normalize_stderr(result.stderr_str());
