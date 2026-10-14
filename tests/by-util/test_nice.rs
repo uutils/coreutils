@@ -96,7 +96,8 @@ fn test_non_utf8_command_not_found() {
     new_ucmd!()
         .arg(OsStr::from_bytes(b"no-such-command-\xff"))
         .fails_with_code(127)
-        .no_stdout();
+        .no_stdout()
+        .stderr_contains("no-such-command-\\xFF");
 }
 
 #[test]
