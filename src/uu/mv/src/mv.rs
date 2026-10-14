@@ -1517,22 +1517,28 @@ fn rename_file_fallback(
         }
     }
 
-    // Open src/dst with O_NOFOLLOW and keep the fds alive across copy,
-    // chown, xattr, and chmod so a concurrent path-swap can't redirect any
-    // step to a different inode.
+    // Open src with O_NOFOLLOW, create dst exclusively, and keep both fds for copy,
+    // chown, xattr and chmod, so each step acts on these files even if the paths change.
     #[cfg(unix)]
     {
         use std::fs::Permissions;
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
-        use uucore::safe_copy::{create_dest_restrictive, open_source};
+        use uucore::safe_copy::{ExistingDest, create_dest_restrictive, open_source};
         let src_file = open_source(from, /* nofollow */ true)
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
         let src_mode = src_file
             .metadata()
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?
             .mode();
-        let mut dst_file = create_dest_restrictive(to, /* nofollow */ true)
-            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+        // `to` was removed above (or was absent), so anything found there now
+        // was not created by mv; fail instead of opening it, as GNU mv does.
+        let mut dst_file = create_dest_restrictive(to, ExistingDest::Refuse).map_err(|err| {
+            if err.kind() == io::ErrorKind::AlreadyExists {
+                err
+            } else {
+                io::Error::new(err.kind(), translate!("mv-error-permission-denied"))
+            }
+        })?;
         uucore::buf_copy::copy_fast(&mut &src_file, &mut dst_file)
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
 

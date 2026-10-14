@@ -278,6 +278,19 @@ if have_util cp; then
     fi
     echo "✓ cp -P opens source with O_NOFOLLOW"
     rm -f test_cp_src test_cp_dst
+
+    # #15329: a removed dest is created with O_EXCL, so nothing planted after
+    # the removal is opened.
+    echo "cp_excl_test" > test_cp_src_excl
+    echo "old" > test_cp_dst_excl
+    strace -f -e trace=open,openat,openat2 -o strace_cp_excl.log \
+        $cp_cmd --remove-destination test_cp_src_excl test_cp_dst_excl 2>/dev/null || true
+    if ! grep -qE 'open(at)?2?\([^)]*"test_cp_dst_excl".*O_CREAT.*O_EXCL' strace_cp_excl.log; then
+        cat strace_cp_excl.log
+        fail_immediately "cp --remove-destination must create the dest with O_EXCL (issue #15329)"
+    fi
+    echo "✓ cp creates a removed dest with O_EXCL"
+    rm -f test_cp_src_excl test_cp_dst_excl
 fi
 
 # split must harden its output open against TOCTOU target swaps (issue #11401 /
@@ -362,8 +375,8 @@ if have_util mv && [ -d /dev/shm ]; then
     fi
 fi
 
-# mv cross-device must open the destination with O_NOFOLLOW (issue #10015).
-# The EXDEV fallback unlinks the dest then opens with O_CREAT|O_TRUNC; an
+# mv cross-device must open the dest with O_EXCL (issue #10015).
+# The EXDEV fallback unlinks the dest then opens with O_CREAT; an
 # attacker racing in a planted symlink would otherwise let the copy write
 # through to the symlink's target. rustix may emit either open(2) or
 # openat(2) depending on the path, so the check accepts both.
@@ -385,17 +398,17 @@ if have_util mv && [ -d /dev/shm ]; then
         nofollow_dst_base=$(basename "$nofollow_dst")
         # Lines that open the dest with O_CREAT — the dest may appear as a
         # full path (open) or basename (openat). Every such open must carry
-        # O_NOFOLLOW or the planted-symlink writethrough is possible.
+        # O_EXCL or the planted-symlink writethrough is possible.
         dest_creates=$(grep -E "open(at)?2?\(.*\"[^\"]*${nofollow_dst_base}\".*O_CREAT" strace_mv_nofollow.log || true)
         if [ -z "$dest_creates" ]; then
             cat strace_mv_nofollow.log
             fail_immediately "mv cross-device did not open dest with O_CREAT — strace check broken (issue #10015)"
         fi
-        if echo "$dest_creates" | grep -vq "O_NOFOLLOW"; then
+        if echo "$dest_creates" | grep -vq "O_EXCL"; then
             cat strace_mv_nofollow.log
-            fail_immediately "mv cross-device must open dest with O_NOFOLLOW (issue #10015)"
+            fail_immediately "mv cross-device must open dest with O_EXCL (issue #10015)"
         fi
-        echo "OK: mv cross-device opens dest with O_NOFOLLOW"
+        echo "OK: mv cross-device opens dest with O_EXCL"
         rm -f "$nofollow_dst"
     fi
 fi
