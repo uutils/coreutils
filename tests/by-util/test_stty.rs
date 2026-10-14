@@ -875,11 +875,23 @@ fn test_saved_state_valid_formats() {
         .stdout_move_str();
     let saved = saved.trim();
 
+    // Change a setting so that restoring the saved state has something to undo
+    ts.ucmd()
+        .args(&["--file", &path, "-echo"])
+        .succeeds()
+        .no_output();
+    let changed = ts
+        .ucmd()
+        .args(&["-g", "--file", &path])
+        .succeeds()
+        .stdout_move_str();
+    assert_ne!(changed.trim(), saved, "-echo should change the saved state");
+
     let result = ts.ucmd().args(&["--file", &path, saved]).run();
 
     result.success().no_output();
 
-    // Restoring the state leaves the terminal as it was
+    // Restoring the state brings the terminal back to it
     ts.ucmd()
         .args(&["-g", "--file", &path])
         .succeeds()
