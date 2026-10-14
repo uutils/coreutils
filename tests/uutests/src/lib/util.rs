@@ -70,14 +70,22 @@ static END_OF_TRANSMISSION_SEQUENCE: &[u8] = b"\n\x04";
 static TESTS_BINARY_PATH: OnceLock<PathBuf> = OnceLock::new();
 static DEFAULT_TESTS_BINARY: OnceLock<&'static str> = OnceLock::new();
 
-/// Path of the binary under test: `UUTESTS_BINARY_PATH` if set, otherwise the
-/// default binary registered with [`set_default_tests_binary`].
+/// Path of the binary under test: `UUTESTS_BINARY_PATH` (the `coreutils` binary)
+/// if set, otherwise the default binary registered with [`set_default_tests_binary`].
 pub fn get_tests_binary() -> &'static str {
     TESTS_BINARY_PATH.get_or_init(|| {
-        if let Some(path) = env::var_os("UUTESTS_BINARY_PATH") {
-            return PathBuf::from(path);
-        }
         let default = DEFAULT_TESTS_BINARY.get().copied().unwrap_or("coreutils");
+        if let Some(path) = env::var_os("UUTESTS_BINARY_PATH") {
+            let path = PathBuf::from(path);
+            if default == "coreutils" {
+                return path;
+            }
+            // UUTESTS_BINARY_PATH is the coreutils binary, the other binaries
+            // are installed next to it
+            if let Some(dir) = path.parent() {
+                return dir.join(format!("{default}{}", env::consts::EXE_SUFFIX));
+            }
+        }
         if let Some(path) = cargo_binary(default) {
             return path;
         }
