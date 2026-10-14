@@ -12,8 +12,6 @@ use std::os::unix::fs::symlink as symlink_file;
 
 use std::env;
 
-// Set the environment variable for any tests
-
 // Use the ctor attribute to run this function before any tests
 #[ctor::ctor(unsafe)]
 fn init() {

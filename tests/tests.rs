@@ -6,8 +6,7 @@
 // Use the ctor attribute to run this function before any tests
 #[ctor::ctor(unsafe)]
 fn init() {
-    // The binary path can be overridden with UUTESTS_BINARY_PATH (e.g. to test a
-    // WASI binary via wasmtime), otherwise the binary built by cargo is used
+    // UUTESTS_BINARY_PATH overrides the binary (e.g. a WASI one via wasmtime)
     uutests::util::set_default_tests_binary("coreutils");
 }
 

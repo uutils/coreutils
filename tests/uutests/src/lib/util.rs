@@ -68,14 +68,18 @@ static NO_STDIN_MEANINGLESS: &str = "Setting this flag has no effect if there is
 static END_OF_TRANSMISSION_SEQUENCE: &[u8] = b"\n\x04";
 
 static TESTS_BINARY_PATH: OnceLock<PathBuf> = OnceLock::new();
-/// This function needs the env variable UUTESTS_BINARY_PATH
-/// which will very probably be set by [`set_default_tests_binary`] from
-/// `CARGO_BIN_EXE_<program>`, because here, we are in a crate but we need the
-/// name of the final binary
+static DEFAULT_TESTS_BINARY: OnceLock<&'static str> = OnceLock::new();
+
+/// Path of the binary under test: `UUTESTS_BINARY_PATH` if set, otherwise the
+/// default binary registered with [`set_default_tests_binary`].
 pub fn get_tests_binary() -> &'static str {
     TESTS_BINARY_PATH.get_or_init(|| {
-        if let Ok(path) = env::var("UUTESTS_BINARY_PATH") {
+        if let Some(path) = env::var_os("UUTESTS_BINARY_PATH") {
             return PathBuf::from(path);
+        }
+        let default = DEFAULT_TESTS_BINARY.get().copied().unwrap_or("coreutils");
+        if let Some(path) = cargo_binary(default) {
+            return path;
         }
         panic!("Could not determine coreutils binary path. Please set UUTESTS_BINARY_PATH environment variable");
     })
@@ -83,37 +87,25 @@ pub fn get_tests_binary() -> &'static str {
     .unwrap()
 }
 
-/// Use the binary `name` built by cargo for the tests, unless another binary is
-/// given with `UUTESTS_BINARY_PATH`.
-///
-/// Cargo gives the path of the binary in the environment of the tests it runs.
-/// Reading it at runtime instead of compile time with `env!` avoids embedding
-/// the path of the build directory in the test binaries. When the tests are
-/// not run by cargo, look for the binary next to the `deps` directory of the
-/// test executable, where cargo puts it.
-///
-/// This is meant to be called from a `ctor` function, before the tests start.
-pub fn set_default_tests_binary(name: &str) {
-    if env::var_os("UUTESTS_BINARY_PATH").is_some() {
-        return;
+/// Set the binary to test (default: `coreutils`), resolved by [`get_tests_binary`].
+pub fn set_default_tests_binary(name: &'static str) {
+    let _ = DEFAULT_TESTS_BINARY.set(name);
+}
+
+/// Find the binary `name` built by cargo, from `CARGO_BIN_EXE_<name>` which
+/// cargo sets at runtime since 1.94 (MSRV is 1.88), or else next to the `deps`
+/// directory of the test executable, where cargo puts it.
+fn cargo_binary(name: &str) -> Option<PathBuf> {
+    if let Some(path) = env::var_os(format!("CARGO_BIN_EXE_{name}")) {
+        return Some(PathBuf::from(path));
     }
-    let path = env::var_os(format!("CARGO_BIN_EXE_{name}"))
-        .map(PathBuf::from)
-        .or_else(|| {
-            let mut path = env::current_exe().ok()?;
-            path.pop();
-            if path.ends_with("deps") {
-                path.pop();
-            }
-            path.push(format!("{name}{}", env::consts::EXE_SUFFIX));
-            path.is_file().then_some(path)
-        });
-    if let Some(path) = path {
-        // SAFETY: called before the tests are started, so no other thread uses the environment
-        unsafe {
-            env::set_var("UUTESTS_BINARY_PATH", path);
-        }
+    let mut path = env::current_exe().ok()?;
+    path.pop();
+    if path.ends_with("deps") {
+        path.pop();
     }
+    path.push(format!("{name}{}", env::consts::EXE_SUFFIX));
+    path.is_file().then_some(path)
 }
 
 #[macro_export]
@@ -1948,13 +1940,9 @@ impl UCommand {
         // that runner so host-compiled tests can exercise a WASI binary. Only
         // apply to the coreutils binary under test, not to helper commands like
         // sh or seq that should run natively on the host.
-        let wasm_runner = env::var("UUTESTS_WASM_RUNNER").ok().filter(|_| {
-            self.bin_path.as_deref()
-                == env::var("UUTESTS_BINARY_PATH")
-                    .ok()
-                    .map(PathBuf::from)
-                    .as_deref()
-        });
+        let wasm_runner = env::var("UUTESTS_WASM_RUNNER")
+            .ok()
+            .filter(|_| self.bin_path.as_deref() == Some(Path::new(get_tests_binary())));
 
         // Collect environment variables for the command.
         let mut cmd_env: Vec<(OsString, OsString)> = Vec::new();
