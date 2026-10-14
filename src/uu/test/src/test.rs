@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (vars) egid euid faccessat
 
+#![cfg(not(target_os = "redox"))]
+
 mod diagnostics;
 pub(crate) mod error;
 #[cfg(not(any(windows, target_os = "wasi")))]
