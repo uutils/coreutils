@@ -18,7 +18,7 @@ use filetime::set_file_times;
 use filetime::set_symlink_file_times;
 use jiff::civil::Time;
 use jiff::fmt::strtime;
-use jiff::tz::TimeZone;
+use jiff::tz::{AmbiguousOffset, TimeZone};
 use jiff::{Timestamp, ToSpan, Zoned};
 #[cfg(unix)]
 use libc::O_NONBLOCK;
@@ -861,6 +861,12 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
         return Ok(FileTime::from_unix_time(*ts, 0));
     }
 
+    // parse_datetime normalizes a wall-clock time that a DST gap skipped, so
+    // refuse one here, as the date utility does.
+    if is_system_zone_gap(s) {
+        return Err(TouchError::InvalidDateFormat(s.to_owned()));
+    }
+
     if let Ok(parsed) = parse_datetime::parse_datetime_at_date(ref_zoned, s)
         && let Some(zoned) = parsed.into_zoned()
     {
@@ -868,6 +874,30 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
     }
 
     Err(TouchError::InvalidDateFormat(s.to_owned()))
+}
+
+/// Whether `s` reads as a wall-clock time in the system zone that falls in a
+/// DST gap, so the zone has no such time.
+fn is_system_zone_gap(s: &str) -> bool {
+    let wall_times = [
+        format::POSIX_LOCALE,
+        format::YYYYMMDDHHMMS,
+        format::YYYYMMDDHHMMSS,
+    ]
+    .into_iter()
+    .filter_map(|fmt| strtime::parse(fmt, s).and_then(|tm| tm.to_datetime()).ok())
+    .chain(
+        strtime::parse(format::ISO_8601, s)
+            .and_then(|tm| tm.to_date())
+            .ok()
+            .map(|date| date.to_datetime(Time::midnight())),
+    );
+    wall_times.into_iter().any(|dt| {
+        matches!(
+            TimeZone::system().to_ambiguous_zoned(dt).offset(),
+            AmbiguousOffset::Gap { .. }
+        )
+    })
 }
 
 /// Prepends 19 or 20 to the year if it is a 2 digit year
