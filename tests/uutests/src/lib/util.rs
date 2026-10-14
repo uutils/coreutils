@@ -90,19 +90,13 @@ pub fn try_get_tests_binary() -> Option<&'static str> {
 }
 
 fn find_tests_binary() -> Option<PathBuf> {
-    let default = DEFAULT_TESTS_BINARY.get().copied().unwrap_or("coreutils");
-    if let Some(path) = env::var_os("UUTESTS_BINARY_PATH") {
-        let path = PathBuf::from(path);
-        if default == "coreutils" {
-            return Some(path);
-        }
-        // UUTESTS_BINARY_PATH is the coreutils binary, the other binaries
-        // are installed next to it
-        if let Some(dir) = path.parent() {
-            return Some(dir.join(format!("{default}{}", env::consts::EXE_SUFFIX)));
-        }
-    }
-    cargo_binary(default)
+    let name = DEFAULT_TESTS_BINARY.get().copied().unwrap_or("coreutils");
+    resolve_tests_binary(
+        name,
+        env::var_os("UUTESTS_BINARY_PATH"),
+        env::var_os(format!("CARGO_BIN_EXE_{name}")),
+        env::current_exe().ok(),
+    )
 }
 
 /// Set the binary to test (default: `coreutils`), resolved by [`get_tests_binary`].
@@ -110,19 +104,37 @@ pub fn set_default_tests_binary(name: &'static str) {
     let _ = DEFAULT_TESTS_BINARY.set(name);
 }
 
-/// Find the binary `name` built by cargo, from `CARGO_BIN_EXE_<name>` which
-/// cargo sets at runtime since 1.94 (MSRV is 1.88), or else next to the `deps`
-/// directory of the test executable, where cargo puts it.
-fn cargo_binary(name: &str) -> Option<PathBuf> {
-    if let Some(path) = env::var_os(format!("CARGO_BIN_EXE_{name}")) {
+/// Find the binary `name`, given the values of `UUTESTS_BINARY_PATH`,
+/// `CARGO_BIN_EXE_<name>` (which cargo sets at runtime since 1.94, MSRV is
+/// 1.88) and the path of the test executable. Without those, look next to the
+/// `deps` directory of the test executable, where cargo puts the binary.
+fn resolve_tests_binary(
+    name: &str,
+    override_path: Option<OsString>,
+    cargo_exe: Option<OsString>,
+    current_exe: Option<PathBuf>,
+) -> Option<PathBuf> {
+    let file_name = format!("{name}{}", env::consts::EXE_SUFFIX);
+    if let Some(path) = override_path {
+        let path = PathBuf::from(path);
+        if name == "coreutils" {
+            return Some(path);
+        }
+        // UUTESTS_BINARY_PATH is the coreutils binary, the other binaries
+        // are installed next to it
+        if let Some(dir) = path.parent() {
+            return Some(dir.join(file_name));
+        }
+    }
+    if let Some(path) = cargo_exe {
         return Some(PathBuf::from(path));
     }
-    let mut path = env::current_exe().ok()?;
+    let mut path = current_exe?;
     path.pop();
     if path.ends_with("deps") {
         path.pop();
     }
-    path.push(format!("{name}{}", env::consts::EXE_SUFFIX));
+    path.push(file_name);
     path.is_file().then_some(path)
 }
 
@@ -3439,6 +3451,67 @@ pub fn run_ucmd_as_root_with_stdin_stdout(
 mod tests {
     // spell-checker:ignore (tests) asdfsadfa
     use super::*;
+
+    #[test]
+    fn test_resolve_tests_binary() {
+        let exe = |name: &str| format!("{name}{}", env::consts::EXE_SUFFIX);
+        let some = |s: &str| Some(OsString::from(s));
+        let dir = tempfile::tempdir().unwrap();
+        let deps = dir.path().join("deps");
+        fs::create_dir(&deps).unwrap();
+        let test_exe = Some(deps.join("test"));
+
+        // Nothing to find
+        std::assert_eq!(
+            resolve_tests_binary("coreutils", None, None, test_exe.clone()),
+            None
+        );
+
+        // Next to the `deps` directory of the test executable, when not run by cargo
+        let coreutils = dir.path().join(exe("coreutils"));
+        fs::write(&coreutils, "").unwrap();
+        std::assert_eq!(
+            resolve_tests_binary("coreutils", None, None, test_exe.clone()),
+            Some(coreutils)
+        );
+        std::assert_eq!(
+            resolve_tests_binary("uudoc", None, None, test_exe.clone()),
+            None
+        );
+
+        // CARGO_BIN_EXE_<name> is used before looking at the test executable
+        std::assert_eq!(
+            resolve_tests_binary(
+                "coreutils",
+                None,
+                some("/cargo/coreutils"),
+                test_exe.clone()
+            ),
+            Some(PathBuf::from("/cargo/coreutils"))
+        );
+
+        // UUTESTS_BINARY_PATH has precedence over the other two
+        std::assert_eq!(
+            resolve_tests_binary(
+                "coreutils",
+                some("/other/coreutils"),
+                some("/cargo/coreutils"),
+                test_exe.clone()
+            ),
+            Some(PathBuf::from("/other/coreutils"))
+        );
+
+        // Other binaries are looked up next to the coreutils from UUTESTS_BINARY_PATH
+        std::assert_eq!(
+            resolve_tests_binary(
+                "uudoc",
+                some("/other/coreutils"),
+                some("/cargo/uudoc"),
+                test_exe
+            ),
+            Some(PathBuf::from("/other").join(exe("uudoc")))
+        );
+    }
 
     // Create a init for the test with a fake value (not needed)
     #[cfg(test)]
