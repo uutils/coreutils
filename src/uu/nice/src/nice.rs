@@ -21,6 +21,7 @@ use windows_sys::Win32::System::Threading::{
 
 use uucore::translate;
 use uucore::{
+    display::Quotable,
     error::{UResult, UUsageError, set_exit_code},
     format_usage, show_error,
 };
@@ -181,7 +182,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Ok(());
     };
 
-    show_error!("{}: {err}", cmd.to_string_lossy());
+    show_error!("{}: {err}", cmd.quote());
 
     let exit_code = if err.kind() == ErrorKind::NotFound {
         127
