@@ -1121,6 +1121,42 @@ fn test_split_number_by_lines_oversized_stdin() {
 }
 
 #[test]
+fn test_split_number_piped_stdin_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    scene
+        .ucmd()
+        .args(&["-n", "3"])
+        .pipe_in("a".repeat(651))
+        .succeeds()
+        .no_output();
+    assert!(at.file_exists("xaa"));
+    assert!(at.file_exists("xab"));
+    assert!(at.file_exists("xac"));
+    assert_eq!(at.read("xaa"), "a".repeat(217));
+    assert_eq!(at.read("xab"), "a".repeat(217));
+    assert_eq!(at.read("xac"), "a".repeat(217));
+}
+
+#[test]
+fn test_split_number_lines_piped_stdin_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    scene
+        .ucmd()
+        .args(&["-n", "l/3"])
+        .pipe_in("x\n".repeat(300))
+        .succeeds()
+        .no_output();
+    assert!(at.file_exists("xaa"));
+    assert!(at.file_exists("xab"));
+    assert!(at.file_exists("xac"));
+    assert_eq!(at.read("xaa"), "x\n".repeat(100));
+    assert_eq!(at.read("xab"), "x\n".repeat(100));
+    assert_eq!(at.read("xac"), "x\n".repeat(100));
+}
+
+#[test]
 fn test_invalid_suffix_length() {
     new_ucmd!()
         .args(&["-a", "xyz"])
