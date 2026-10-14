@@ -3558,6 +3558,64 @@ fn find_other_group(current: u32) -> Option<u32> {
     })
 }
 
+/// A setgid file owned by a supplementary group keeps both its group and the
+/// setgid bit across a cross-device move: the group is set with `fchown` on the
+/// destination, and the mode is applied after it.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_preserves_setgid_with_supplementary_group() {
+    use std::fs;
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("setgid_file", "setgid content");
+    let file_path = at.plus("setgid_file");
+
+    let original_meta = fs::metadata(&file_path).expect("Failed to get metadata");
+    let Some(other_gid) = find_other_group(original_meta.gid()) else {
+        println!("SKIPPED: no supplementary group available for chgrp");
+        return;
+    };
+    uucore::perms::wrap_chown(
+        &file_path,
+        &original_meta,
+        None,
+        Some(other_gid),
+        false,
+        uucore::perms::Verbosity::default(),
+    )
+    .expect("Failed to chgrp file");
+    fs::set_permissions(&file_path, fs::Permissions::from_mode(0o2755))
+        .expect("Failed to set the setgid bit");
+    assert_eq!(
+        fs::metadata(&file_path).unwrap().mode() & 0o7777,
+        0o2755,
+        "the setgid bit should be set before the move"
+    );
+
+    let target_dir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let target_file = target_dir.path().join("setgid_file");
+
+    scene
+        .ucmd()
+        .arg("setgid_file")
+        .arg(target_file.to_str().unwrap())
+        .succeeds()
+        .no_stderr();
+
+    let moved_meta = fs::metadata(&target_file).expect("Failed to get metadata of moved file");
+    assert_eq!(moved_meta.gid(), other_gid, "gid should be preserved");
+    assert_eq!(
+        moved_meta.mode() & 0o7777,
+        0o2755,
+        "the setgid bit should survive the cross-device move"
+    );
+}
+
 /// Test that group ownership is preserved during cross-device file moves.
 /// Uses chgrp to a supplementary group (no root needed).
 /// See https://github.com/uutils/coreutils/issues/9714

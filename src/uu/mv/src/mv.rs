@@ -1562,8 +1562,8 @@ fn preserve_ownership(from: &Path, to: &Path) -> io::Result<bool> {
 }
 
 /// [`preserve_ownership`] for a regular file the cross-device copy just
-/// created: the owner is set on the open destination descriptor (`fchown`, as
-/// GNU does), not by path, so it lands on the inode that was written.
+/// created: the owner is set on the open destination descriptor (`fchown`),
+/// not by path, so it lands on the inode that was written.
 #[cfg(unix)]
 fn preserve_ownership_fd(source_meta: &fs::Metadata, dst_file: &fs::File) -> bool {
     use rustix::fs::{Gid, Uid, fchown};
