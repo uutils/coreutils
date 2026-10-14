@@ -777,16 +777,24 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
 /// * `path` - The path to create directories for
 /// * `mode` - The mode to use when creating new directories (e.g., 0o755). The actual
 ///   mode will be modified by the process umask.
+/// * `before_create` - Called with the path of each missing directory before it is
+///   created; what it returns is dropped once that directory is open.
 ///
 /// # Returns
 /// A [`DirFd`] for the final created directory, or the first existing parent if
 /// all directories already exist.
 #[cfg(unix)]
-pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
-    let (existing_ancestor, components_to_create) = find_existing_ancestor(path)?;
-    let mut dir_fd = DirFd::open_anchor(&existing_ancestor)?;
+pub fn create_dir_all_safe<G>(
+    path: &Path,
+    mode: u32,
+    mut before_create: impl FnMut(&Path) -> io::Result<G>,
+) -> io::Result<DirFd> {
+    let (mut current, components_to_create) = find_existing_ancestor(path)?;
+    let mut dir_fd = DirFd::open_anchor(&current)?;
 
     for component in &components_to_create {
+        current.push(component);
+        let _created_with = before_create(&current)?;
         dir_fd = open_or_create_subdir(&dir_fd, component.as_os_str(), mode)?;
     }
 
@@ -1563,11 +1571,18 @@ mod tests {
     #[test]
     fn test_create_dir_all_safe_creates_nested_dirs() {
         let temp_dir = TempDir::new().unwrap();
+        fs::create_dir(temp_dir.path().join("a")).unwrap();
         let nested_path = temp_dir.path().join("a/b/c");
 
-        let dir_fd = create_dir_all_safe(&nested_path, 0o755).unwrap();
+        let mut seen = Vec::new();
+        let dir_fd = create_dir_all_safe(&nested_path, 0o755, |p| {
+            seen.push(p.to_path_buf());
+            Ok(())
+        })
+        .unwrap();
         assert!(dir_fd.as_raw_fd() >= 0);
         assert!(nested_path.is_dir());
+        assert_eq!(seen, [temp_dir.path().join("a/b"), nested_path]);
     }
 
     #[test]
@@ -1623,7 +1638,7 @@ mod tests {
         let existing_path = temp_dir.path().join("existing");
         fs::create_dir(&existing_path).unwrap();
 
-        let dir_fd = create_dir_all_safe(&existing_path, 0o755).unwrap();
+        let dir_fd = create_dir_all_safe(&existing_path, 0o755, |_| Ok(())).unwrap();
         assert!(dir_fd.as_raw_fd() >= 0);
     }
 
@@ -1639,7 +1654,7 @@ mod tests {
         assert!(symlink_path.is_symlink());
 
         // create_dir_all_safe should follow the symlink (GNU coreutils behavior)
-        let dir_fd = create_dir_all_safe(&symlink_path, 0o755).unwrap();
+        let dir_fd = create_dir_all_safe(&symlink_path, 0o755, |_| Ok(())).unwrap();
         assert!(dir_fd.as_raw_fd() >= 0);
 
         // Verify the symlink is preserved (not replaced with a real directory)
@@ -1653,7 +1668,7 @@ mod tests {
         let file_path = temp_dir.path().join("file");
         fs::write(&file_path, "content").unwrap();
 
-        let result = create_dir_all_safe(&file_path, 0o755);
+        let result = create_dir_all_safe(&file_path, 0o755, |_| Ok(()));
         assert!(result.is_err());
     }
 
@@ -1673,7 +1688,7 @@ mod tests {
 
         // Try to create parent/link/subdir - the symlink should be followed (GNU behavior)
         let nested_path = symlink_in_path.join("subdir");
-        let dir_fd = create_dir_all_safe(&nested_path, 0o755).unwrap();
+        let dir_fd = create_dir_all_safe(&nested_path, 0o755, |_| Ok(())).unwrap();
         assert!(dir_fd.as_raw_fd() >= 0);
 
         // The symlink should be preserved, not replaced
