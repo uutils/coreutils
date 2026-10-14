@@ -2211,6 +2211,29 @@ fn is_forbidden_to_copy_to_same_file(
         && !options.dereference)
 }
 
+/// Refuse `cp -s` with a relative source unless the destination is in
+/// the current directory, because a relative symlink target is resolved from
+/// the link's own directory.
+///
+/// This must run before anything can back up or remove `dest`, so that a
+/// failed copy leaves the destination untouched.
+fn verify_relative_symlink_in_cwd(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
+    if options.copy_mode != CopyMode::SymLink || source.is_absolute() {
+        return Ok(());
+    }
+    let in_cwd = dest
+        .parent()
+        .is_none_or(|p| p.as_os_str().is_empty() || p == Path::new("."));
+    if in_cwd {
+        Ok(())
+    } else {
+        Err(CpError::Error(translate!(
+            "cp-error-relative-symlink-not-in-cwd",
+            "dest" => dest.maybe_quote()
+        )))
+    }
+}
+
 /// Back up, remove, or leave intact the destination file, depending on the options.
 fn handle_existing_dest(
     source: &Path,
@@ -2572,20 +2595,6 @@ fn handle_copy_mode(
             )?;
         }
         CopyMode::SymLink => {
-            // GNU: a relative symlink target is resolved from the link's own
-            // directory, so it is only valid if dest is in the current directory.
-            if !source.is_absolute() {
-                let in_cwd = dest
-                    .parent()
-                    .is_none_or(|p| p.as_os_str().is_empty() || p == Path::new("."));
-                if !in_cwd {
-                    return Err(CpError::Error(translate!(
-                        "cp-error-relative-symlink-not-in-cwd",
-                        "dest" => dest.maybe_quote()
-                    )));
-                }
-            }
-
             // Atomic replace, for the same reason as CopyMode::Link above.
             if dest.exists() && options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
                 replace_link(source, dest, true)?;
@@ -2759,6 +2768,9 @@ fn copy_file(
     created_parent_dirs: &mut HashSet<PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
+    // Must run before anything below can remove or back up `dest`.
+    verify_relative_symlink_in_cwd(source, dest, options)?;
+
     let source_is_symlink = source.is_symlink();
     let initial_dest_metadata = dest.symlink_metadata().ok();
     let dest_is_symlink = initial_dest_metadata
