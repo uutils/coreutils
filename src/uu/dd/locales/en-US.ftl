@@ -82,6 +82,7 @@ dd-standard-output = 'standard output'
 # Error messages
 dd-error-failed-to-open = failed to open { $path }
 dd-error-write-error = write error
+dd-error-failed-to-ftruncate = failed to truncate to { $len } bytes in output file
 dd-error-failed-to-seek = failed to seek in output file
 dd-error-io-error = IO error
 dd-error-cannot-skip-offset = '{ $file }': cannot skip to specified offset
