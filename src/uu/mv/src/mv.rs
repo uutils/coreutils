@@ -1431,9 +1431,8 @@ fn rename_file_fallback(
         }
     }
 
-    // Open src/dst with O_NOFOLLOW and keep the fds alive across copy,
-    // chown, xattr, and chmod so a concurrent path-swap can't redirect any
-    // step to a different inode.
+    // Open src with O_NOFOLLOW, create dst exclusively, and keep both fds for copy,
+    // chown, xattr and chmod, so each step acts on these files even if the paths change.
     #[cfg(unix)]
     {
         use std::fs::Permissions;
@@ -1446,7 +1445,9 @@ fn rename_file_fallback(
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?
             .mode()
             & 0o7777;
-        let mut dst_file = create_dest_restrictive(to, /* nofollow */ true)
+        // `to` was removed above (or was absent), so anything found there now
+        // was not created by mv; fail instead of opening it, as GNU mv does.
+        let mut dst_file = create_dest_restrictive(to, /* exclusive */ true)
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
         uucore::buf_copy::copy_fast(&mut &src_file, &mut dst_file)
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;

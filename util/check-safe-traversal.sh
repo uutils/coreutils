@@ -362,11 +362,11 @@ if have_util mv && [ -d /dev/shm ]; then
     fi
 fi
 
-# mv cross-device must open the destination with O_NOFOLLOW (issue #10015).
-# The EXDEV fallback unlinks the dest then opens with O_CREAT|O_TRUNC; an
-# attacker racing in a planted symlink would otherwise let the copy write
-# through to the symlink's target. rustix may emit either open(2) or
-# openat(2) depending on the path, so the check accepts both.
+# mv cross-device must not open a symlink at the destination (issue #10015).
+# The EXDEV fallback unlinks the dest then creates it; an attacker racing in
+# a planted symlink would otherwise let the copy write through to the
+# symlink's target; O_EXCL or O_NOFOLLOW prevents that. rustix may emit
+# either open(2) or openat(2) depending on the path, so the check accepts both.
 if have_util mv && [ -d /dev/shm ]; then
     temp_fs_id=$(stat -f -c %i "$TEMP_DIR" 2>/dev/null || echo "")
     shm_fs_id=$(stat -f -c %i /dev/shm 2>/dev/null || echo "")
@@ -385,17 +385,17 @@ if have_util mv && [ -d /dev/shm ]; then
         nofollow_dst_base=$(basename "$nofollow_dst")
         # Lines that open the dest with O_CREAT — the dest may appear as a
         # full path (open) or basename (openat). Every such open must carry
-        # O_NOFOLLOW or the planted-symlink writethrough is possible.
+        # O_EXCL or O_NOFOLLOW or the planted-symlink writethrough is possible.
         dest_creates=$(grep -E "open(at)?2?\(.*\"[^\"]*${nofollow_dst_base}\".*O_CREAT" strace_mv_nofollow.log || true)
         if [ -z "$dest_creates" ]; then
             cat strace_mv_nofollow.log
             fail_immediately "mv cross-device did not open dest with O_CREAT — strace check broken (issue #10015)"
         fi
-        if echo "$dest_creates" | grep -vq "O_NOFOLLOW"; then
+        if echo "$dest_creates" | grep -Evq "O_EXCL|O_NOFOLLOW"; then
             cat strace_mv_nofollow.log
-            fail_immediately "mv cross-device must open dest with O_NOFOLLOW (issue #10015)"
+            fail_immediately "mv cross-device must open dest with O_EXCL or O_NOFOLLOW (issue #10015)"
         fi
-        echo "OK: mv cross-device opens dest with O_NOFOLLOW"
+        echo "OK: mv cross-device opens dest with O_EXCL or O_NOFOLLOW"
         rm -f "$nofollow_dst"
     fi
 fi

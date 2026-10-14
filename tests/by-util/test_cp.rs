@@ -1369,6 +1369,67 @@ fn test_cp_arg_remove_destination() {
     assert_eq!(at.read(TEST_HELLO_WORLD_DEST), "Hello, World!\n");
 }
 
+/// Like GNU cp, cp must not open what appears at `dest` after removing it.
+/// The FIFO source keeps cp waiting between the removal and the creation.
+#[cfg(unix)]
+#[rstest]
+#[case::symlink_remove_destination(&["--remove-destination"], Some("other"))]
+#[case::dangling_remove_destination(&["--remove-destination"], Some("missing"))]
+#[case::file_remove_destination(&["--remove-destination"], None)]
+#[case::symlink_force_readonly(&["-f"], Some("other"))]
+#[case::file_force_readonly(&["-f"], None)]
+#[case::symlink_simple_backup(&["--backup=simple"], Some("other"))]
+#[case::file_numbered_backup(&["--backup=numbered"], None)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
+fn test_cp_does_not_open_dest_recreated_after_removal(
+    #[case] args: &[&str],
+    #[case] symlink_target: Option<&str>,
+) {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkfifo("src");
+    at.write("other", "keep");
+    if args.iter().any(|arg| arg.starts_with("--backup=")) {
+        at.write("original", "old");
+        at.symlink_file("original", "dest");
+    } else {
+        at.write("dest", "old");
+        at.set_mode("dest", 0o444);
+    }
+
+    let child = scene.ucmd().args(args).args(&["src", "dest"]).run_no_wait();
+    let start = std::time::Instant::now();
+    while at.plus("dest").symlink_metadata().is_ok() {
+        assert!(
+            start.elapsed() < Duration::from_secs(60),
+            "timed out: cp did not remove dest"
+        );
+        sleep(Duration::from_millis(10));
+    }
+    if let Some(target) = symlink_target {
+        at.symlink_file(target, "dest");
+    } else {
+        at.write("dest", "new");
+    }
+    // Opening the writer releases cp's open of the source. cp may reject the
+    // destination and close its end before the write, which then fails.
+    let _ = std::fs::write(at.plus("src"), "data");
+
+    let expected = if symlink_target.is_some() {
+        "cp: not writing through dangling symlink 'dest'\n"
+    } else {
+        "cp: cannot create regular file 'dest': File exists\n"
+    };
+    child.wait().unwrap().failure().stderr_only(expected);
+    assert_eq!(at.read("other"), "keep");
+    assert!(!at.file_exists("missing"));
+    if symlink_target.is_some() {
+        assert!(at.is_symlink("dest"));
+    } else {
+        assert_eq!(at.read("dest"), "new");
+    }
+}
+
 #[test]
 fn test_cp_arg_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
