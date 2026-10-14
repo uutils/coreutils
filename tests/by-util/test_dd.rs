@@ -1381,12 +1381,20 @@ fn test_bytes_oseek_bytes_oflag() {
 
 #[test]
 fn test_bytes_oseek_bytes_trunc_oflag() {
+    // The test harness hands stdout over as a regular file. Where dd detects
+    // that (Linux), it seeks in the file and, like GNU, writes nothing.
+    // Elsewhere the seek on stdout is emulated by writing zeros.
+    let expected: &[u8] = if cfg!(target_os = "linux") {
+        b""
+    } else {
+        &[0; 8]
+    };
     new_ucmd!()
         .args(&["oseek=8", "oflag=seek_bytes", "bs=2", "count=0"])
         .pipe_in("abcdefghijklm")
         .ignore_stdin_write_error()
         .succeeds()
-        .no_stdout();
+        .stdout_is_bytes(expected);
 }
 
 /// With `of=`, the output is truncated at the `oseek` offset, so a file
@@ -1670,8 +1678,10 @@ fn test_sparse_notrunc_does_not_shrink() {
 }
 
 /// Without `of=`, a seekable stdout was not asked to be truncated, so the
-/// data after the written range must survive.
+/// data after the written range must survive. Linux only: elsewhere dd does
+/// not detect a seekable stdout and emulates the seek by writing zeros.
 #[test]
+#[cfg(target_os = "linux")]
 fn test_seekable_stdout_without_of_is_not_truncated() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
