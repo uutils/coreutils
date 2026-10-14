@@ -834,6 +834,18 @@ impl Stater {
             check_bound(format_str, bound, old, j)?;
         }
 
+        // A `%` after flags, a width or a precision (`%0%`, `%-%`, `%.3%`) is
+        // not the `%%` escape; GNU rejects it as an invalid directive.
+        if chars[j] == '%' {
+            let invalid_directive: String = chars[old..=j].iter().collect();
+            return Err(DirectiveError::new(
+                format_str,
+                &invalid_directive,
+                old,
+                j + 1,
+            ));
+        }
+
         *i = j;
 
         // Check for multi-character specifiers (e.g., `%Hd`, `%Lr`)

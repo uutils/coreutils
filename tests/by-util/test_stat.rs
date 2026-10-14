@@ -775,6 +775,31 @@ fn test_printf_invalid_directive() {
 }
 
 #[test]
+fn test_percent_after_flags_is_an_invalid_directive() {
+    let ts = TestScenario::new(util_name!());
+    // Only a bare `%%` is the escape. With flags or a precision in between,
+    // GNU stops at the directive, after printing what came before it.
+    for (fmt, before, directive) in [
+        ("%0%", "", "%0%"),
+        ("%-%s1212x", "", "%-%"),
+        ("%++-+%1212x", "", "%++-+%"),
+        ("%#%d", "", "%#%"),
+        ("%.3%", "", "%.3%"),
+        ("x%+-%%ss", "x", "%+-%"),
+    ] {
+        ts.ucmd()
+            .args(&["-c", fmt, "."])
+            .fails_with_code(1)
+            .stdout_is(before)
+            .stderr_is(format!("stat: '{directive}': invalid directive\n"));
+    }
+    ts.ucmd()
+        .args(&["--printf=100%%\n", "."])
+        .succeeds()
+        .stdout_only("100%\n");
+}
+
+#[test]
 fn test_invalid_directive_after_multibyte_char() {
     let ts = TestScenario::new(util_name!());
     // The text before the directive is printed, as GNU does. What is checked
