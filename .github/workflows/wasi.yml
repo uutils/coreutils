@@ -62,7 +62,7 @@ jobs:
         # not(wasi_runner) in the cfg guarding every `mod diagnostics`.
         # TODO: add integration tests for these tools as WASI support is extended:
         #   cksum csplit dircolors fmt ls mv readlink
-        #   realpath rm seq sort split tsort
+        #   rm seq sort split tsort
         # nproc is not part of the default feature set, so it needs to be
         # requested explicitly for the host test crate to compile its tests.
         UUTESTS_BINARY_PATH="$(pwd)/target/${{ matrix.job.target }}/debug/coreutils.wasm" \
@@ -76,7 +76,7 @@ jobs:
           test_ls::test_ls_al_no_capabilities_insufficient_on_wasi \
           test_md5sum:: test_mkdir:: test_mktemp:: test_nl:: test_nproc:: test_numfmt:: test_od:: \
           test_paste:: test_pathchk:: test_pr:: test_printenv:: test_printf:: test_ptx:: \
-          test_pwd:: test_rmdir:: test_sha1sum:: test_sha224sum:: test_sha256sum:: \
+          test_pwd:: test_realpath:: test_rmdir:: test_sha1sum:: test_sha224sum:: test_sha256sum:: \
           test_sha384sum:: test_sha512sum:: test_shred:: test_shuf:: test_sleep:: \
           test_sum:: test_tail:: test_tee:: \
           test_test:: test_touch:: test_tr:: test_true:: test_truncate:: test_uname:: \
