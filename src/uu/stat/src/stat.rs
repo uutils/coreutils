@@ -544,16 +544,18 @@ fn process_token_filesystem(
             format,
         } => {
             let output = match format {
+                // GNU prints the block and free node counts signed (`out_int`), so
+                // `+` and ` ` add a sign; the other counts are unsigned.
                 // free blocks available to non-superuser
-                'a' => OutputType::Unsigned(meta.avail_blocks()),
+                'a' => OutputType::Integer(meta.avail_blocks() as i64),
                 // total data blocks in file system
-                'b' => OutputType::Unsigned(meta.total_blocks()),
+                'b' => OutputType::Integer(meta.total_blocks() as i64),
                 // total file nodes in file system
                 'c' => OutputType::Unsigned(meta.total_file_nodes()),
                 // free file nodes in file system
-                'd' => OutputType::Unsigned(meta.free_file_nodes()),
+                'd' => OutputType::Integer(meta.free_file_nodes() as i64),
                 // free blocks in file system
-                'f' => OutputType::Unsigned(meta.free_blocks()),
+                'f' => OutputType::Integer(meta.free_blocks() as i64),
                 // file system ID in hex
                 'i' => OutputType::UnsignedHex(meta.fsid()),
                 // maximum length of filenames

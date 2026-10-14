@@ -775,6 +775,25 @@ fn test_printf_invalid_directive() {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+fn test_fs_signed_counts_take_sign_flags() {
+    // GNU prints %a, %b, %d and %f signed, so `+` and ` ` add a sign there,
+    // while the unsigned counts (%c, %s) ignore them.
+    let out = new_ucmd!()
+        .args(&["-f", "--printf=%+a|% b|%+d|%+f|%+c|%+s", "."])
+        .succeeds()
+        .stdout_move_str();
+    let fields: Vec<&str> = out.split('|').collect();
+    assert!(fields[0].starts_with('+'), "{out}");
+    assert!(fields[1].starts_with(' '), "{out}");
+    assert!(fields[2].starts_with('+'), "{out}");
+    assert!(fields[3].starts_with('+'), "{out}");
+    for unsigned in &fields[4..] {
+        assert!(unsigned.chars().all(|c| c.is_ascii_digit()), "{out}");
+    }
+}
+
+#[test]
 fn test_invalid_directive_after_multibyte_char() {
     let ts = TestScenario::new(util_name!());
     // The text before the directive is printed, as GNU does. What is checked
