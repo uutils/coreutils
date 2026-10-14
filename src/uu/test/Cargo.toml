@@ -15,16 +15,16 @@ readme.workspace = true
 path = "src/test.rs"
 doctest = false
 
-[dependencies]
+[target.'cfg(not(target_os = "redox"))'.dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["fs", "i18n-collator", "wide"] }
 
-[target.'cfg(not(any(windows, target_os = "wasi")))'.dependencies]
+[target.'cfg(not(any(windows, target_os = "redox", target_os = "wasi")))'.dependencies]
 rustix = { workspace = true, features = ["fs", "process"] }
 
-[target.'cfg(not(windows))'.dependencies]
+[target.'cfg(not(any(windows, target_os = "redox")))'.dependencies]
 libc = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
@@ -48,3 +48,4 @@ workspace = true
 [[bin]]
 name = "test"
 path = "src/main.rs"
+required-features = ["uucore/default"]
