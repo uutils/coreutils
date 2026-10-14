@@ -176,6 +176,7 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(pgo_training)',
   'cfg(target_os, values("cygwin"))',
   'cfg(wasi_runner)',
+  'cfg(wasip2_runner)',
 ] }
 unused_qualifications = "warn"
 
