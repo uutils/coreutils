@@ -77,51 +77,43 @@ impl Default for Config {
     }
 }
 
-/// The name of the file given to `option`, for error messages.
-fn filter_file_name(matches: &clap::ArgMatches, option: &str) -> String {
-    matches
-        .get_one::<OsString>(option)
-        .map(|name| name.maybe_quote().to_string())
-        .unwrap_or_default()
-}
-
-fn read_word_filter_file(
-    matches: &clap::ArgMatches,
-    option: &str,
-) -> std::io::Result<FxHashSet<String>> {
+fn read_word_filter_file(matches: &clap::ArgMatches, option: &str) -> UResult<FxHashSet<String>> {
     let filename = matches
         .get_one::<OsString>(option)
         .expect("parsing options failed!");
-    let reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
-        Box::new(stdin())
-    } else {
-        let file = File::open(Path::new(filename))?;
-        Box::new(file)
-    });
-    let mut words: FxHashSet<String> = FxHashSet::default();
-    for word in reader.lines() {
-        words.insert(word?);
-    }
-    Ok(words)
+    let read = || -> std::io::Result<FxHashSet<String>> {
+        let reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
+            Box::new(stdin())
+        } else {
+            let file = File::open(Path::new(filename))?;
+            Box::new(file)
+        });
+        let mut words: FxHashSet<String> = FxHashSet::default();
+        for word in reader.lines() {
+            words.insert(word?);
+        }
+        Ok(words)
+    };
+    read().map_err_context(|| filename.maybe_quote().to_string())
 }
 
 /// reads contents of file as unique set of characters to be used with the break-file option
-fn read_char_filter_file(
-    matches: &clap::ArgMatches,
-    option: &str,
-) -> std::io::Result<FxHashSet<char>> {
+fn read_char_filter_file(matches: &clap::ArgMatches, option: &str) -> UResult<FxHashSet<char>> {
     let filename = matches
         .get_one::<OsString>(option)
         .expect("parsing options failed!");
-    let mut reader: Box<dyn Read> = if filename == "-" {
-        Box::new(stdin())
-    } else {
-        let file = File::open(Path::new(filename))?;
-        Box::new(file)
+    let read = || -> std::io::Result<FxHashSet<char>> {
+        let mut reader: Box<dyn Read> = if filename == "-" {
+            Box::new(stdin())
+        } else {
+            let file = File::open(Path::new(filename))?;
+            Box::new(file)
+        };
+        let mut buffer = String::new();
+        reader.read_to_string(&mut buffer)?;
+        Ok(buffer.chars().collect())
     };
-    let mut buffer = String::new();
-    reader.read_to_string(&mut buffer)?;
-    Ok(buffer.chars().collect())
+    read().map_err_context(|| filename.maybe_quote().to_string())
 }
 
 #[derive(Debug)]
@@ -137,15 +129,13 @@ impl WordFilter {
     #[allow(clippy::cognitive_complexity)]
     fn new(matches: &clap::ArgMatches, config: &Config) -> UResult<Self> {
         let (o, oset): (bool, FxHashSet<String>) = if matches.contains_id(options::ONLY_FILE) {
-            let words = read_word_filter_file(matches, options::ONLY_FILE)
-                .map_err_context(|| filter_file_name(matches, options::ONLY_FILE))?;
+            let words = read_word_filter_file(matches, options::ONLY_FILE)?;
             (true, words)
         } else {
             (false, FxHashSet::default())
         };
         let (i, iset): (bool, FxHashSet<String>) = if matches.contains_id(options::IGNORE_FILE) {
-            let words = read_word_filter_file(matches, options::IGNORE_FILE)
-                .map_err_context(|| filter_file_name(matches, options::IGNORE_FILE))?;
+            let words = read_word_filter_file(matches, options::IGNORE_FILE)?;
             (true, words)
         } else {
             (false, FxHashSet::default())
@@ -153,8 +143,7 @@ impl WordFilter {
         let break_set: Option<FxHashSet<char>> = if matches.contains_id(options::BREAK_FILE)
             && !matches.contains_id(options::WORD_REGEXP)
         {
-            let mut chars = read_char_filter_file(matches, options::BREAK_FILE)
-                .map_err_context(|| filter_file_name(matches, options::BREAK_FILE))?;
+            let mut chars = read_char_filter_file(matches, options::BREAK_FILE)?;
             if !config.gnu_ext {
                 // GNU off means at least these are considered
                 chars.extend([' ', '\t', '\n']);

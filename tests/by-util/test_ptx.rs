@@ -510,6 +510,6 @@ fn test_missing_filter_file_is_named_in_error() {
             .pipe_in("x\n")
             .fails_with_code(1)
             .no_stdout()
-            .stderr_contains("ptx: nonexistent: ");
+            .stderr_is("ptx: nonexistent: No such file or directory\n");
     }
 }
