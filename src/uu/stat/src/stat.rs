@@ -565,7 +565,7 @@ fn process_token_filesystem(
                 // block size (for faster transfers)
                 's' => OutputType::Unsigned(meta.io_size()),
                 // fundamental block size (for block counts)
-                'S' => OutputType::Integer(meta.block_size()),
+                'S' => OutputType::Unsigned(meta.block_size() as u64),
                 // file system type in hex
                 't' => OutputType::UnsignedHex(meta.fs_type() as u64),
                 // file system type in human readable form
@@ -1246,7 +1246,8 @@ impl Stater {
                     // optimal I/O transfer size hint
                     'o' => OutputType::Unsigned(meta.blksize()),
                     // total size, in bytes
-                    's' => OutputType::Integer(meta.len() as i64),
+                    // unsigned, as GNU prints it: no `+` or ` ` sign flag
+                    's' => OutputType::Unsigned(meta.len()),
                     // major device type in hex, for character/block device special
                     // files
                     't' => OutputType::UnsignedHex(major(meta.rdev() as _) as u64),
