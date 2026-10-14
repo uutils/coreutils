@@ -393,8 +393,11 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            // undocumented alias `B` because it is implemented in GNU for compability with other
+            // coreutils e.g. https://man.netbsd.org/od.1
             Arg::new("o")
                 .short('o')
+                .short_alias('B')
                 .help(translate!("od-help-o"))
                 .action(ArgAction::SetTrue),
         )

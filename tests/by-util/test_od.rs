@@ -1546,3 +1546,19 @@ fn test_hyphen_leading_byte_count_is_reported_as_invalid() {
             .stderr_contains(format!("invalid {opt} argument '-1'"));
     }
 }
+
+#[test]
+fn test_octal_alias() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("test", "abcdefghijklmnopqrstuvwxyz\n");
+
+    for arg in ["-o", "-B"] {
+        scene
+            .ucmd()
+            .arg(arg)
+            .arg("test")
+            .succeeds()
+            .stdout_only(unindent(ALPHA_OUT));
+    }
+}
