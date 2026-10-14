@@ -1441,11 +1441,10 @@ fn rename_file_fallback(
         use uucore::safe_copy::{create_dest_restrictive, open_source};
         let src_file = open_source(from, /* nofollow */ true)
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
-        let src_mode = src_file
+        let src_meta = src_file
             .metadata()
-            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?
-            .mode()
-            & 0o7777;
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+        let src_mode = src_meta.mode() & 0o7777;
         let mut dst_file = create_dest_restrictive(to, /* nofollow */ true)
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
         uucore::buf_copy::copy_fast(&mut &src_file, &mut dst_file)
@@ -1471,7 +1470,7 @@ fn rename_file_fallback(
         // `mv`, and re-applying setuid/setgid would hand them a binary running
         // as themselves that used to run as someone else. GNU strips the bits
         // in that case and so do we.
-        let ownership_preserved = preserve_ownership(from, to).unwrap_or(false);
+        let ownership_preserved = preserve_ownership_fd(&src_meta, &dst_file);
         let dest_mode = if ownership_preserved {
             src_mode
         } else {
@@ -1560,6 +1559,26 @@ fn preserve_ownership(from: &Path, to: &Path) -> io::Result<bool> {
     }
 
     Ok(true)
+}
+
+/// [`preserve_ownership`] for a regular file the cross-device copy just
+/// created: the owner is set on the open destination descriptor (`fchown`, as
+/// GNU does), not by path, so it lands on the inode that was written.
+#[cfg(unix)]
+fn preserve_ownership_fd(source_meta: &fs::Metadata, dst_file: &fs::File) -> bool {
+    use rustix::fs::{Gid, Uid, fchown};
+    use std::os::unix::fs::MetadataExt;
+
+    let Ok(dest_meta) = dst_file.metadata() else {
+        return false;
+    };
+    if source_meta.uid() == dest_meta.uid() && source_meta.gid() == dest_meta.gid() {
+        return true;
+    }
+    // Best effort, like GNU: a non-root user usually cannot give a file away.
+    let uid = Uid::from_raw(source_meta.uid());
+    let gid = Gid::from_raw(source_meta.gid());
+    fchown(dst_file, Some(uid), Some(gid)).is_ok()
 }
 
 fn is_empty_dir(path: &Path) -> bool {
