@@ -12,7 +12,7 @@
 // spell-checker:ignore sigquit sigtstp
 // spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain exta extb NCCS cfsetispeed
 // spell-checker:ignore notaflag notacombo notabaud
-// spell-checker:ignore baudrate TCGETS
+// spell-checker:ignore baudrate TCGETS Winsize tcgetwinsize tcsetwinsize
 
 #![cfg(unix)]
 
@@ -21,7 +21,6 @@ mod flags;
 use crate::flags::AllFlags;
 use crate::flags::COMBINATION_SETTINGS;
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
 
 #[cfg(all(
     target_os = "linux",
@@ -34,7 +33,7 @@ use nix::sys::termios::{
     ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices as S,
     Termios, cfsetispeed, cfsetospeed, tcgetattr, tcsetattr,
 };
-use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
+use rustix::termios::{Winsize, tcgetwinsize, tcsetwinsize};
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, Stdin, stdin, stdout};
@@ -201,7 +200,7 @@ impl<'a> Options<'a> {
                 Device::File(
                     std::fs::OpenOptions::new()
                         .read(true)
-                        .custom_flags(O_NONBLOCK)
+                        .custom_flags(rustix::fs::OFlags::NONBLOCK.bits() as i32)
                         .open(f)?,
                 ),
                 f.clone(),
@@ -223,28 +222,12 @@ impl<'a> Options<'a> {
     }
 }
 
-// Needs to be repr(C) because we pass it to the ioctl calls.
-#[repr(C)]
-#[derive(Default, Debug)]
-pub struct TermSize {
-    rows: c_ushort,
-    columns: c_ushort,
-    x: c_ushort,
-    y: c_ushort,
-}
-
-ioctl_read_bad!(
+#[cfg(all(not(target_arch = "powerpc"), not(target_arch = "powerpc64")))]
+nix::ioctl_read_bad!(
     /// Get terminal window size
     tiocgwinsz,
-    TIOCGWINSZ,
-    TermSize
-);
-
-ioctl_write_ptr_bad!(
-    /// Set terminal window size
-    tiocswinsz,
-    TIOCSWINSZ,
-    TermSize
+    nix::libc::TIOCGWINSZ,
+    Winsize
 );
 
 #[uucore::main]
@@ -428,10 +411,10 @@ fn stty(opts: &Options) -> UResult<()> {
                 ArgOptions::Mapping(mapping) => apply_char_mapping(&mut termios, mapping),
                 ArgOptions::Flags(flag) => apply_setting(&mut termios, flag)?,
                 ArgOptions::Special(setting) => {
-                    apply_special_setting(&mut termios, setting, opts.file.as_raw_fd())?;
+                    apply_special_setting(&mut termios, setting, &opts.file)?;
                 }
                 ArgOptions::Print(setting) => {
-                    print_special_setting(setting, opts.file.as_raw_fd())?;
+                    print_special_setting(setting, &opts.file)?;
                 }
                 ArgOptions::SavedState(state) => {
                     apply_saved_state(&mut termios, state);
@@ -552,12 +535,11 @@ fn check_flag_group<T>(flag: &Flag<T>, remove: bool) -> bool {
     remove && flag.group.is_some()
 }
 
-fn print_special_setting(setting: &PrintSetting, fd: i32) -> nix::Result<()> {
+fn print_special_setting(setting: &PrintSetting, fd: impl AsFd) -> io::Result<()> {
     match setting {
         PrintSetting::Size => {
-            let mut size = TermSize::default();
-            unsafe { tiocgwinsz(fd, &raw mut size)? };
-            println!("{} {}", size.rows, size.columns);
+            let size = tcgetwinsize(fd)?;
+            println!("{} {}", size.ws_row, size.ws_col);
         }
     }
     Ok(())
@@ -574,9 +556,9 @@ impl WrappedPrinter {
     /// Creates a new printer with the specified terminal width.
     /// If term_size is None (typically when output is piped), falls back to
     /// the COLUMNS environment variable or a default width of 80 columns.
-    fn new(term_size: Option<&TermSize>) -> Self {
+    fn new(term_size: Option<&Winsize>) -> Self {
         let columns = if let Some(term_size) = term_size {
-            term_size.columns
+            term_size.ws_col
         } else {
             const DEFAULT_TERM_WIDTH: u16 = 80;
 
@@ -626,15 +608,15 @@ impl WrappedPrinter {
 fn print_terminal_size(
     termios: &Termios,
     opts: &Options,
-    window_size: Option<&TermSize>,
-    term_size: Option<&TermSize>,
+    window_size: Option<&Winsize>,
+    term_size: Option<&Winsize>,
 ) -> nix::Result<()> {
     // GNU linked against glibc 2.42 provides us baudrate 51 which panics cfgetospeed
     #[cfg(not(target_os = "linux"))]
     let speed = nix::sys::termios::cfgetospeed(termios);
     #[cfg(target_os = "linux")]
     #[cfg(all(not(target_arch = "powerpc"), not(target_arch = "powerpc64")))]
-    ioctl_read_bad!(tcgets2, TCGETS2, termios2);
+    nix::ioctl_read_bad!(tcgets2, TCGETS2, termios2);
     #[cfg(target_os = "linux")]
     #[cfg(all(not(target_arch = "powerpc"), not(target_arch = "powerpc64")))]
     let speed = {
@@ -686,7 +668,7 @@ fn print_terminal_size(
     if opts.all {
         let term_size = term_size.as_ref().expect("terminal size should be set");
         printer.print(
-            &translate!("stty-output-rows-columns", "rows" => term_size.rows, "columns" => term_size.columns),
+            &translate!("stty-output-rows-columns", "rows" => term_size.ws_row, "columns" => term_size.ws_col),
         );
     }
 
@@ -855,7 +837,7 @@ fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
 fn print_control_chars(
     termios: &Termios,
     opts: &Options,
-    term_size: Option<&TermSize>,
+    term_size: Option<&Winsize>,
 ) -> nix::Result<()> {
     if !opts.all {
         // Print only control chars that differ from sane defaults
@@ -904,29 +886,27 @@ fn print_in_save_format(termios: &Termios) {
     println!();
 }
 
-/// Gets terminal size using the tiocgwinsz ioctl system call.
+/// Gets terminal size
 /// This queries the kernel for the current terminal window dimensions.
-fn get_terminal_size(fd: RawFd) -> nix::Result<TermSize> {
-    let mut term_size = TermSize::default();
-    unsafe { tiocgwinsz(fd, &raw mut term_size) }.map(|_| term_size)
+fn get_terminal_size(fd: impl AsFd) -> io::Result<Winsize> {
+    Ok(tcgetwinsize(fd)?)
 }
 
-fn print_settings(termios: &Termios, opts: &Options) -> nix::Result<()> {
+fn print_settings(termios: &Termios, opts: &Options) -> io::Result<()> {
     if opts.save {
         print_in_save_format(termios);
     } else {
-        let device_fd = opts.file.as_raw_fd();
         let term_size = if opts.all {
-            Some(get_terminal_size(device_fd)?)
+            Some(get_terminal_size(&opts.file)?)
         } else {
-            get_terminal_size(device_fd).ok()
+            get_terminal_size(&opts.file).ok()
         };
 
-        let stdout_fd = stdout().as_raw_fd();
-        let window_size = if device_fd == stdout_fd {
+        let stdout = stdout();
+        let window_size = if stdout.as_raw_fd() == opts.file.as_raw_fd() {
             &term_size
         } else {
-            &get_terminal_size(stdout_fd).ok()
+            &get_terminal_size(stdout).ok()
         };
 
         print_terminal_size(termios, opts, window_size.as_ref(), term_size.as_ref())?;
@@ -943,7 +923,7 @@ fn print_flags<T: TermiosFlag>(
     termios: &Termios,
     opts: &Options,
     flags: &[Flag<T>],
-    term_size: Option<&TermSize>,
+    term_size: Option<&Winsize>,
 ) {
     let mut printer = WrappedPrinter::new(term_size);
     for &Flag {
@@ -1043,13 +1023,12 @@ fn apply_saved_state(termios: &mut Termios, state: &[u32]) {
 fn apply_special_setting(
     _termios: &mut Termios,
     setting: &SpecialSetting,
-    fd: i32,
-) -> nix::Result<()> {
-    let mut size = TermSize::default();
-    unsafe { tiocgwinsz(fd, &raw mut size)? };
+    fd: impl AsFd,
+) -> io::Result<()> {
+    let mut size = tcgetwinsize(&fd)?;
     match setting {
-        SpecialSetting::Rows(n) => size.rows = *n,
-        SpecialSetting::Cols(n) => size.columns = *n,
+        SpecialSetting::Rows(n) => size.ws_row = *n,
+        SpecialSetting::Cols(n) => size.ws_col = *n,
         #[cfg_attr(
             not(any(target_os = "linux", target_os = "android")),
             expect(unused_variables)
@@ -1062,7 +1041,7 @@ fn apply_special_setting(
             }
         }
     }
-    unsafe { tiocswinsz(fd, &raw mut size)? };
+    tcsetwinsize(fd, size)?;
     Ok(())
 }
 
