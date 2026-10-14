@@ -607,16 +607,9 @@ fn extract_strings_from_input(
     let inputs = map_input_strings(input_strings);
     let mut mf = MultifileReader::new(inputs);
 
-    // Apply skip_bytes by reading and discarding
-    let mut skipped = 0u64;
-    while skipped < skip_bytes {
-        let to_skip = cmp::min(8192, skip_bytes - skipped);
-        let mut skip_buf = vec![0u8; to_skip as usize];
-        match mf.read(&mut skip_buf) {
-            Ok(0) | Err(_) => break, // 0 is EOF
-            Ok(n) => skipped += n as u64,
-        }
-    }
+    // Skipping past the end of the input is an error, as without -S.
+    mf.skip(skip_bytes)
+        .map_err(|e| USimpleError::new(1, e.to_string()))?;
 
     // Helper function to format and print a string
     let mut print_string = |offset: u64, string: &[u8]| -> std::io::Result<()> {

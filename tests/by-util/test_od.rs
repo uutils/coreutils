@@ -981,6 +981,35 @@ fn test_skip_bytes_past_end_message() {
         .stderr_only("od: cannot skip past end of combined input\n");
 }
 
+// -S/--strings reports a skip past the end of the input like the other
+// output modes, matching GNU od.
+#[test]
+fn test_strings_skip_bytes_past_end() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello");
+    ucmd.args(&["-j", "50", "-S", "1", "f"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_only("od: cannot skip past end of combined input\n");
+
+    new_ucmd!()
+        .args(&["-j", "5", "-S", "1"])
+        .pipe_in("")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_only("od: cannot skip past end of combined input\n");
+}
+
+// A skip that lands inside the input still prints the strings after it.
+#[test]
+fn test_strings_skip_bytes_within_input() {
+    new_ucmd!()
+        .args(&["-j", "4", "-S", "3", "-An"])
+        .pipe_in("xxx\0abcd\0")
+        .succeeds()
+        .stdout_only("abcd\n");
+}
+
 // A seekable special file such as /dev/null can be skipped past its (empty)
 // end without error, matching GNU od.
 #[cfg(unix)]
