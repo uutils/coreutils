@@ -17,9 +17,8 @@
 //! * [`create_dest_restrictive`] creates the destination with mode
 //!   `0o600` instead of the umask-derived 0o644, so another user in a
 //!   shared directory cannot open the file before the caller narrows the
-//!   final permissions via `set_permissions` (issue #10011). The same
-//!   `nofollow` flag refuses to truncate through a symlink that may have
-//!   been swapped in at the destination path.
+//!   final permissions via `set_permissions` (issue #10011), and with
+//!   `exclusive` fails if anything is already at the path.
 
 use std::fs::File;
 use std::io;
@@ -37,6 +36,10 @@ const SOURCE_FLAGS: OFlags = OFlags::RDONLY.union(OFlags::CLOEXEC);
 const DEST_FLAGS: OFlags = OFlags::WRONLY
     .union(OFlags::CREATE)
     .union(OFlags::TRUNC)
+    .union(OFlags::CLOEXEC);
+const DEST_EXCLUSIVE_FLAGS: OFlags = OFlags::WRONLY
+    .union(OFlags::CREATE)
+    .union(OFlags::EXCL)
     .union(OFlags::CLOEXEC);
 
 /// Open `path` for reading, optionally with `O_NOFOLLOW`.
@@ -64,17 +67,14 @@ pub fn open_source<P: AsRef<Path>>(path: P, nofollow: bool) -> io::Result<File> 
 /// the source's permissions should do so via `set_permissions` *after*
 /// the content copy completes.
 ///
-/// With `nofollow = true`, an existing symlink at `path` causes `ELOOP`
-/// rather than truncating the symlink's target. Pass `true` whenever the
-/// caller has not just unlinked `path` itself: without it, an attacker
-/// who plants `path` as a symlink between the caller's check and this
-/// open can redirect the truncate (and the subsequent write) to any file
-/// the caller has permission to write.
-pub fn create_dest_restrictive<P: AsRef<Path>>(path: P, nofollow: bool) -> io::Result<File> {
-    let mut flags = DEST_FLAGS;
-    if nofollow {
-        flags |= OFlags::NOFOLLOW;
-    }
+/// With `exclusive`, anything at `path`, even a dangling symlink, fails with
+/// `EEXIST`. Without it, an existing `path` is truncated and followed.
+pub fn create_dest_restrictive<P: AsRef<Path>>(path: P, exclusive: bool) -> io::Result<File> {
+    let flags = if exclusive {
+        DEST_EXCLUSIVE_FLAGS
+    } else {
+        DEST_FLAGS
+    };
     let fd: OwnedFd = open(path.as_ref(), flags, Mode::RUSR.union(Mode::WUSR))?;
     Ok(File::from(fd))
 }
@@ -166,22 +166,42 @@ mod tests {
     }
 
     #[test]
-    fn create_dest_rejects_symlink_with_nofollow() {
-        // Without nofollow on the dest, an attacker swapping `dst` to a
-        // symlink between check and open would silently truncate the
-        // symlink's target. With nofollow=true the open returns ELOOP and
-        // the would-be victim file is left untouched.
+    fn create_dest_exclusive_rejects_existing_symlink() {
+        // The exclusive create fails with EEXIST on a symlink, dangling or not,
+        // and leaves its target untouched.
         let dir = tempdir().unwrap();
-        let victim = dir.path().join("victim");
+        let target = dir.path().join("target");
         let dst = dir.path().join("dst");
-        std::fs::write(&victim, b"do not truncate me").unwrap();
-        symlink(&victim, &dst).unwrap();
+        let dangling = dir.path().join("dangling");
+        std::fs::write(&target, b"do not truncate me").unwrap();
+        symlink(&target, &dst).unwrap();
+        symlink(dir.path().join("missing"), &dangling).unwrap();
 
-        let err = create_dest_restrictive(&dst, true).unwrap_err();
-        assert_eq!(
-            err.raw_os_error(),
-            Some(rustix::io::Errno::LOOP.raw_os_error())
-        );
-        assert_eq!(std::fs::read(&victim).unwrap(), b"do not truncate me");
+        for path in [&dst, &dangling] {
+            let err = create_dest_restrictive(path, true).unwrap_err();
+            assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+        }
+        assert_eq!(std::fs::read(&target).unwrap(), b"do not truncate me");
+        assert!(!dir.path().join("missing").exists());
+    }
+
+    #[test]
+    fn create_dest_exclusive_rejects_existing_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("existing");
+        std::fs::write(&path, b"keep").unwrap();
+
+        let err = create_dest_restrictive(&path, true).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(std::fs::read(&path).unwrap(), b"keep");
+    }
+
+    #[test]
+    fn create_dest_exclusive_uses_restrictive_initial_mode() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("new");
+        let f = create_dest_restrictive(&path, true).unwrap();
+        let mode = f.metadata().unwrap().mode() & 0o777;
+        assert_eq!(mode, DEST_INITIAL_MODE);
     }
 }
