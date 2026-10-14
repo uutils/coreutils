@@ -1382,9 +1382,9 @@ fn test_bytes_oseek_bytes_oflag() {
 #[test]
 fn test_bytes_oseek_bytes_trunc_oflag() {
     // The test harness hands stdout over as a regular file. Where dd detects
-    // that (Linux), it seeks in the file and, like GNU, writes nothing.
-    // Elsewhere the seek on stdout is emulated by writing zeros.
-    let expected: &[u8] = if cfg!(target_os = "linux") {
+    // that (Linux, OpenBSD), it seeks in the file and, like GNU, writes
+    // nothing. Elsewhere the seek on stdout is emulated by writing zeros.
+    let expected: &[u8] = if cfg!(any(target_os = "linux", target_os = "openbsd")) {
         b""
     } else {
         &[0; 8]

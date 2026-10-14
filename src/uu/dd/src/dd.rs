@@ -690,12 +690,8 @@ impl Dest {
         }
     }
 
-    /// Grow a sparse output file up to the current stream position.
-    ///
-    /// With `conv=sparse`, trailing all-zero blocks are skipped with a seek
-    /// instead of written, so the file can end before the cursor. This only
-    /// grows the file: shrinking would destroy data that `conv=notrunc`, or
-    /// a seekable stdout without `of=`, asked to keep.
+    /// Grow a sparse output file up to the current stream position, since
+    /// `conv=sparse` seeks over trailing zero blocks. Never shrinks it.
     fn extend_sparse(&mut self) -> io::Result<()> {
         let Self::File(f, Density::Sparse) = self else {
             return Ok(());
@@ -873,10 +869,7 @@ impl<'a> Output<'a> {
             || translate!("dd-error-failed-to-open", "path" => filename.quote()),
         )?;
 
-        // Truncate to the seek offset unless `conv=notrunc`. Failures on
-        // special outputs such as `/dev/null` are ignored, as GNU does. On a
-        // regular file the failure is reported and the copy goes on, but the
-        // exit status becomes 1.
+        // Failures on special outputs such as `/dev/null` are ignored, as GNU does.
         if !settings.oconv.notrunc
             && let Err(e) = dst.set_len(settings.seek)
             && dst.metadata().is_ok_and(|m| m.is_file())
