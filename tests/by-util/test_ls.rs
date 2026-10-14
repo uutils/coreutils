@@ -7084,6 +7084,36 @@ fn test_acl_display() {
         .stdout_matches(&re_without_acl);
 }
 
+// On macOS the ACL is not an xattr, and most files carry xattrs anyway, so
+// `+` comes from the ACL API (#15273).
+#[cfg(target_os = "macos")]
+#[test]
+fn test_acl_display_macos() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("with_acl");
+    at.touch("without_acl");
+
+    let status = Command::new("chmod")
+        .args(["+a", "everyone allow read", &at.plus_as_string("with_acl")])
+        .status();
+    if !status.is_ok_and(|s| s.success()) {
+        println!("test skipped: chmod +a failed");
+        return;
+    }
+
+    let re_with_acl = Regex::new(r"(?m)^-[rwx-]{9}\+ .*with_acl$").unwrap();
+    let re_without_acl = Regex::new(r"(?m)^-[rwx-]{9} .*without_acl$").unwrap();
+    scene
+        .ucmd()
+        .args(&["-l", "with_acl", "without_acl"])
+        .succeeds()
+        .stdout_matches(&re_with_acl)
+        .stdout_matches(&re_without_acl);
+}
+
 // Regression test for https://github.com/uutils/coreutils/issues/10980
 // Each file with an ACL must not inflate the link-count column width.
 #[cfg(all(unix, not(target_vendor = "apple")))]

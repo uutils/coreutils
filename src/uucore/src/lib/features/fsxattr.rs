@@ -258,17 +258,68 @@ pub fn apply_xattrs_fd_ignore_unsupported(
 ///
 /// `true` if the file has extended attributes (indicating an ACL), `false` otherwise.
 pub fn has_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
+    // On macOS most files carry some xattr (e.g. com.apple.provenance) and the
+    // ACL is not one of them, so ask the ACL API instead.
+    #[cfg(target_os = "macos")]
+    return macos_acl::has_extended_acl(file.as_ref(), dereference);
+
     // don't use exacl here, it is doing more getxattr call then needed
+    #[cfg(not(target_os = "macos"))]
     let attrs = if dereference {
         xattr::list_deref(file)
     } else {
         xattr::list(file)
     };
 
+    #[cfg(not(target_os = "macos"))]
     attrs.is_ok_and(|acl| {
         // if we have extra attributes, we have an acl
         acl.count() > 0
     })
+}
+
+#[cfg(target_os = "macos")]
+mod macos_acl {
+    use std::ffi::{CString, c_char, c_int, c_void};
+    use std::os::unix::ffi::OsStrExt;
+    use std::path::Path;
+
+    // <sys/acl.h>
+    const ACL_TYPE_EXTENDED: c_int = 0x0000_0100;
+    const ACL_FIRST_ENTRY: c_int = 0;
+
+    unsafe extern "C" {
+        fn acl_get_file(path: *const c_char, acl_type: c_int) -> *mut c_void;
+        fn acl_get_link_np(path: *const c_char, acl_type: c_int) -> *mut c_void;
+        fn acl_get_entry(acl: *mut c_void, entry_id: c_int, entry: *mut *mut c_void) -> c_int;
+        fn acl_free(obj: *mut c_void) -> c_int;
+    }
+
+    /// Whether `path` has an extended ACL with at least one entry.
+    pub(super) fn has_extended_acl(path: &Path, dereference: bool) -> bool {
+        let Ok(c_path) = CString::new(path.as_os_str().as_bytes()) else {
+            return false;
+        };
+        // SAFETY: `c_path` is a valid NUL-terminated string that outlives the
+        // call. A NULL result means there is no ACL (or it can't be read).
+        let acl = unsafe {
+            if dereference {
+                acl_get_file(c_path.as_ptr(), ACL_TYPE_EXTENDED)
+            } else {
+                acl_get_link_np(c_path.as_ptr(), ACL_TYPE_EXTENDED)
+            }
+        };
+        if acl.is_null() {
+            return false;
+        }
+        let mut entry: *mut c_void = std::ptr::null_mut();
+        // SAFETY: `acl` is a valid ACL returned above; `entry` is a valid
+        // out-pointer. The ACL is freed exactly once below.
+        let has_entry = unsafe { acl_get_entry(acl, ACL_FIRST_ENTRY, &raw mut entry) } == 0;
+        // SAFETY: `acl` came from acl_get_file/acl_get_link_np and isn't used after this.
+        unsafe { acl_free(acl) };
+        has_entry
+    }
 }
 
 /// Checks if a file has an Access Control List (ACL) named "security.capability" based on its extended attributes.
