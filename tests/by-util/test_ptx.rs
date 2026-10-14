@@ -500,3 +500,16 @@ fn test_nullable_word_regexp_no_empty_matches() {
         .succeeds()
         .stdout_only(expected);
 }
+
+// A missing break, ignore or only file is named in the error, as in GNU.
+#[test]
+fn test_missing_filter_file_is_named_in_error() {
+    for option in ["-b", "-i", "-o"] {
+        new_ucmd!()
+            .args(&[option, "nonexistent"])
+            .pipe_in("x\n")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("ptx: nonexistent: ");
+    }
+}

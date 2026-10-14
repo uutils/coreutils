@@ -77,6 +77,14 @@ impl Default for Config {
     }
 }
 
+/// The name of the file given to `option`, for error messages.
+fn filter_file_name(matches: &clap::ArgMatches, option: &str) -> String {
+    matches
+        .get_one::<OsString>(option)
+        .map(|name| name.maybe_quote().to_string())
+        .unwrap_or_default()
+}
+
 fn read_word_filter_file(
     matches: &clap::ArgMatches,
     option: &str,
@@ -129,15 +137,15 @@ impl WordFilter {
     #[allow(clippy::cognitive_complexity)]
     fn new(matches: &clap::ArgMatches, config: &Config) -> UResult<Self> {
         let (o, oset): (bool, FxHashSet<String>) = if matches.contains_id(options::ONLY_FILE) {
-            let words =
-                read_word_filter_file(matches, options::ONLY_FILE).map_err_context(String::new)?;
+            let words = read_word_filter_file(matches, options::ONLY_FILE)
+                .map_err_context(|| filter_file_name(matches, options::ONLY_FILE))?;
             (true, words)
         } else {
             (false, FxHashSet::default())
         };
         let (i, iset): (bool, FxHashSet<String>) = if matches.contains_id(options::IGNORE_FILE) {
             let words = read_word_filter_file(matches, options::IGNORE_FILE)
-                .map_err_context(String::new)?;
+                .map_err_context(|| filter_file_name(matches, options::IGNORE_FILE))?;
             (true, words)
         } else {
             (false, FxHashSet::default())
@@ -145,8 +153,8 @@ impl WordFilter {
         let break_set: Option<FxHashSet<char>> = if matches.contains_id(options::BREAK_FILE)
             && !matches.contains_id(options::WORD_REGEXP)
         {
-            let mut chars =
-                read_char_filter_file(matches, options::BREAK_FILE).map_err_context(String::new)?;
+            let mut chars = read_char_filter_file(matches, options::BREAK_FILE)
+                .map_err_context(|| filter_file_name(matches, options::BREAK_FILE))?;
             if !config.gnu_ext {
                 // GNU off means at least these are considered
                 chars.extend([' ', '\t', '\n']);
