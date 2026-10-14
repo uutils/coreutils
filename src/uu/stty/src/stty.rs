@@ -14,7 +14,7 @@
 // spell-checker:ignore notaflag notacombo notabaud
 // spell-checker:ignore baudrate TCGETS Winsize tcgetwinsize tcsetwinsize
 
-#![cfg(unix)]
+#![cfg(all(unix, not(any(target_os = "aix", target_os = "dragonfly"))))]
 
 mod flags;
 
