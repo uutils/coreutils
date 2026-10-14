@@ -74,10 +74,15 @@ static DEFAULT_TESTS_BINARY: OnceLock<&'static str> = OnceLock::new();
 /// if set, otherwise the default binary registered with [`set_default_tests_binary`].
 ///
 /// # Panics
-/// If the binary cannot be found, see [`try_get_tests_binary`] to avoid this.
+/// If the binary cannot be found or its path is not valid UTF-8, see
+/// [`try_get_tests_binary`] to avoid this.
 pub fn get_tests_binary() -> &'static str {
     try_get_tests_binary().unwrap_or_else(|| {
-        panic!("Could not determine coreutils binary path. Please set UUTESTS_BINARY_PATH environment variable")
+        let name = DEFAULT_TESTS_BINARY.get().copied().unwrap_or("coreutils");
+        panic!(
+            "Could not find the {name} binary or its path is not valid UTF-8. \
+             Please set UUTESTS_BINARY_PATH to the path of coreutils"
+        )
     })
 }
 
