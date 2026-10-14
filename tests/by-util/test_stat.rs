@@ -775,6 +775,29 @@ fn test_printf_invalid_directive() {
 }
 
 #[test]
+fn test_format_always_ends_with_a_newline() {
+    // GNU adds the newline after --format output even when the format ends in one.
+    new_ucmd!()
+        .args(&["-c", "%n\n", "."])
+        .succeeds()
+        .stdout_only(".\n\n");
+    new_ucmd!()
+        .args(&["--printf=%n\n", "."])
+        .succeeds()
+        .stdout_only(".\n");
+}
+
+#[test]
+fn test_directive_on_a_multibyte_char_takes_its_first_byte() {
+    // Like GNU, which reads the format byte by byte: `%\xC2` is an unknown
+    // directive (`?`), and the `\xBF` that completes the `¿` is printed as is.
+    new_ucmd!()
+        .args(&["--printf=%\u{bf}", "."])
+        .succeeds()
+        .stdout_is_bytes(b"?\xbf");
+}
+
+#[test]
 fn test_invalid_directive_after_multibyte_char() {
     let ts = TestScenario::new(util_name!());
     // The text before the directive is printed, as GNU does. What is checked
