@@ -30,14 +30,13 @@ uucore = { workspace = true, default-features = true, features = [
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 rustix = { workspace = true, features = ["fs"] }
-selinux = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["process"] }
 
 [features]
 diagnostics = ["uucore/diagnostics"]
-selinux = ["dep:selinux", "uucore/selinux"]
+selinux = ["uucore/selinux"]
 
 [lints]
 workspace = true

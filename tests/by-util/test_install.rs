@@ -2843,6 +2843,45 @@ fn test_selinux_default_context_relative_name_missing_parents() {
     }
 }
 
+// Like GNU, -Z gives a file the policy's default context.
+#[test]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+fn test_selinux_default_context_file() {
+    let Some((scene, dir, expected)) = selinux_scene_in_policy_default_dir() else {
+        return;
+    };
+    fs::write(dir.path().join("source"), "content").unwrap();
+
+    scene
+        .ucmd()
+        .current_dir(dir.path())
+        .args(&["-Z", "source", "parent/file"])
+        .succeeds();
+
+    assert_eq!(selinux_type(&dir.path().join("parent/file")), expected);
+}
+
+// Where the policy has no default, as under /tmp, -Z leaves a file the label
+// the kernel gave it, like GNU.
+#[test]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+fn test_selinux_default_context_file_without_policy_default() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("Skipping SELinux test: SELinux is not enabled");
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("source");
+    at.touch("plain");
+
+    ucmd.args(&["-Z", "source", "dest"]).succeeds();
+
+    assert_eq!(
+        selinux_type(&at.plus("dest")),
+        selinux_type(&at.plus("plain"))
+    );
+}
+
 #[test]
 #[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
 fn test_install_compare_with_mode_bits() {

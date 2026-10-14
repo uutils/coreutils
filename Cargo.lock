@@ -3575,7 +3575,6 @@ dependencies = [
  "clap",
  "fluent",
  "rustix",
- "selinux",
  "thiserror 2.0.21",
  "uucore",
 ]
