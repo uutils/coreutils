@@ -10,7 +10,7 @@
 use std::borrow::Cow;
 use std::error::Error;
 use std::marker::PhantomData;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::translate;
 use selinux::SecurityContext;
@@ -323,7 +323,7 @@ fn absolute_for_policy_lookup(path: &Path) -> Cow<'_, Path> {
             } else {
                 directory
             };
-            std::fs::canonicalize(directory).map(|directory| directory.join(name))
+            canonicalize_allow_missing(directory).map(|directory| directory.join(name))
         }
         // No last component to keep: the name ends in `.` or `..`, which names
         // a directory and never a symbolic link, so resolve the whole of it.
@@ -332,6 +332,25 @@ fn absolute_for_policy_lookup(path: &Path) -> Cow<'_, Path> {
         _ => std::fs::canonicalize(path),
     };
     resolved.map_or(Cow::Borrowed(path), Cow::Owned)
+}
+
+/// Like `canonicalize`, but a directory that does not exist yet, as for one about to be
+/// created, is resolved through its parents with its own name kept.
+fn canonicalize_allow_missing(directory: &Path) -> std::io::Result<PathBuf> {
+    match std::fs::canonicalize(directory) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            let (Some(parent), Some(name)) = (directory.parent(), directory.file_name()) else {
+                return Err(e);
+            };
+            let parent = if parent.as_os_str().is_empty() {
+                Path::new(".")
+            } else {
+                parent
+            };
+            Ok(canonicalize_allow_missing(parent)?.join(name))
+        }
+        resolved => resolved,
+    }
 }
 
 /// Gets the SELinux security context for the given filesystem path.
@@ -584,6 +603,15 @@ mod tests {
             ("branch/../quokka", directory.join("quokka")),
             ("branch/..", directory.clone()),
             (".", directory.clone()),
+            // Parents that are about to be created, as for `install -d -Z a/b/c`.
+            (
+                "missing/deeper/quokka",
+                directory.join("missing/deeper/quokka"),
+            ),
+            (
+                "branch/missing/quokka",
+                directory.join("branch/missing/quokka"),
+            ),
         ] {
             assert_eq!(absolute_for_policy_lookup(Path::new(given)), expected);
         }
