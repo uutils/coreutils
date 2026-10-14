@@ -800,20 +800,6 @@ fn test_percent_after_flags_is_an_invalid_directive() {
 }
 
 #[test]
-<<<<<<< HEAD
-fn test_size_ignores_sign_flags() {
-    // GNU prints the size unsigned, so `+` and ` ` add no sign.
-    let ts = TestScenario::new(util_name!());
-    ts.fixtures.write("f", "content");
-    ts.ucmd()
-        .args(&["--printf=%+s|% s|%+5s|%++-+-3s|", "f"])
-        .succeeds()
-        .stdout_only("7|7|    7|7  |");
-}
-
-#[test]
-=======
->>>>>>> parent of e220bf314 (stat: print %s and the file system %S unsigned, as GNU does)
 fn test_invalid_directive_after_multibyte_char() {
     let ts = TestScenario::new(util_name!());
     // The text before the directive is printed, as GNU does. What is checked
