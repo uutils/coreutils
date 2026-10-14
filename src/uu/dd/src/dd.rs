@@ -50,9 +50,9 @@ use std::time::{Duration, Instant};
 use clap::{Arg, Command};
 use num_integer::Integer;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult};
 #[cfg(unix)]
-use uucore::error::{USimpleError, set_exit_code};
+use uucore::error::USimpleError;
+use uucore::error::{FromIo, UResult, set_exit_code};
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 use uucore::show_if_err;
 use uucore::{format_usage, show_error};
@@ -690,24 +690,24 @@ impl Dest {
         }
     }
 
-    /// Truncate the underlying file to the current stream position, if possible.
-    fn truncate(&mut self) -> io::Result<()> {
-        let Self::File(f, _) = self else {
+    /// Grow a sparse output file up to the current stream position.
+    ///
+    /// With `conv=sparse`, trailing all-zero blocks are skipped with a seek
+    /// instead of written, so the file can end before the cursor. This only
+    /// grows the file: shrinking would destroy data that `conv=notrunc`, or
+    /// a seekable stdout without `of=`, asked to keep.
+    fn extend_sparse(&mut self) -> io::Result<()> {
+        let Self::File(f, Density::Sparse) = self else {
             return Ok(());
         };
-        let pos = match f.stream_position() {
-            Ok(pos) => pos,
-            Err(e) if e.kind() == io::ErrorKind::NotSeekable => return Ok(()),
-            Err(e) => return Err(e),
-        };
-        // `set_len()` can fail with EINVAL on special outputs such as
-        // `/dev/null`; GNU ignores that. But on a regular file a
-        // truncate failure (e.g. ENOSPC, read-only fs) means silent data
-        // loss.
-        if let Err(e) = f.set_len(pos)
-            && f.metadata().is_ok_and(|m| m.file_type().is_file())
-        {
-            return Err(e);
+        let meta = f.metadata()?;
+        // `set_len()` fails on special outputs such as `/dev/null`.
+        if !meta.is_file() {
+            return Ok(());
+        }
+        let pos = f.stream_position()?;
+        if meta.len() < pos {
+            f.set_len(pos)?;
         }
         Ok(())
     }
@@ -873,16 +873,23 @@ impl<'a> Output<'a> {
             || translate!("dd-error-failed-to-open", "path" => filename.quote()),
         )?;
 
-        // Seek to the index in the output file, truncating if requested.
-        //
-        // Calling `set_len()` may result in an error (for example,
-        // when calling it on `/dev/null`), but we don't want to
-        // terminate the process when that happens.  Instead, we
-        // suppress the error by calling `Result::ok()`. This matches
-        // the behavior of GNU `dd` when given the command-line
-        // argument `of=/dev/null`.
-        if !settings.oconv.notrunc {
-            dst.set_len(settings.seek).ok();
+        // Truncate to the seek offset unless `conv=notrunc`. Failures on
+        // special outputs such as `/dev/null` are ignored, as GNU does. On a
+        // regular file the failure is reported and the copy goes on, but the
+        // exit status becomes 1.
+        if !settings.oconv.notrunc
+            && let Err(e) = dst.set_len(settings.seek)
+            && dst.metadata().is_ok_and(|m| m.is_file())
+        {
+            show_error!(
+                "{}",
+                e.map_err_context(|| translate!(
+                    "dd-error-failed-to-truncate",
+                    "size" => settings.seek,
+                    "file" => filename.quote()
+                ))
+            );
+            set_exit_code(1);
         }
 
         Self::prepare_file(dst, settings)
@@ -1043,9 +1050,9 @@ impl<'a> Output<'a> {
         }
     }
 
-    /// Truncate the underlying file to the current stream position, if possible.
-    fn truncate(&mut self) -> io::Result<()> {
-        self.dst.truncate()
+    /// Grow a sparse output file up to the current stream position.
+    fn extend_sparse(&mut self) -> io::Result<()> {
+        self.dst.extend_sparse()
     }
 }
 
@@ -1084,15 +1091,14 @@ impl BlockWriter<'_> {
         }
     }
 
-    /// Truncate the file to the final cursor location.
+    /// Grow a sparse output file up to the final cursor location.
     ///
     /// Errors are suppressed for special outputs (e.g. `/dev/null`) but
-    /// propagated for regular files, so a failed truncate does not silently
-    /// leave stale data behind. See [`Dest::truncate`].
-    fn truncate(&mut self) -> io::Result<()> {
+    /// propagated for regular files. See [`Dest::extend_sparse`].
+    fn extend_sparse(&mut self) -> io::Result<()> {
         match self {
-            Self::Unbuffered(o) => o.truncate(),
-            Self::Buffered(o) => o.truncate(),
+            Self::Unbuffered(o) => o.extend_sparse(),
+            Self::Buffered(o) => o.extend_sparse(),
         }
     }
 
@@ -1167,9 +1173,6 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     let (prog_tx, rx) = mpsc::channel();
     let output_thread = thread::spawn(gen_prog_updater(rx, i.settings.status));
 
-    // Whether to truncate the output file after all blocks have been written.
-    let truncate = !o.settings.oconv.notrunc;
-
     // Optimization: if no blocks are to be written, then don't
     // bother allocating any buffers.
     if let Some(Num::Blocks(0) | Num::Bytes(0)) = i.settings.count {
@@ -1186,7 +1189,6 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             start,
             &prog_tx,
             output_thread,
-            truncate,
         );
     }
 
@@ -1340,7 +1342,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         return Err(e);
     }
 
-    finalize(o, rstat, wstat, start, &prog_tx, output_thread, truncate)
+    finalize(o, rstat, wstat, start, &prog_tx, output_thread)
 }
 
 /// Write `data` through `converter`, which may count truncated records in `rstat`.
@@ -1385,7 +1387,6 @@ fn finalize<T>(
     start: Instant,
     prog_tx: &mpsc::Sender<ProgUpdate>,
     output_thread: thread::JoinHandle<T>,
-    truncate: bool,
 ) -> io::Result<()> {
     // Flush the output in case a partial write has been buffered but
     // not yet written.
@@ -1394,10 +1395,8 @@ fn finalize<T>(
     // Sync the output, if configured to do so.
     output.sync()?;
 
-    // Truncate the file to the final cursor location.
-    if truncate {
-        output.truncate()?;
-    }
+    // With `conv=sparse`, trailing zero blocks were skipped, not written.
+    output.extend_sparse()?;
 
     // Print the final read/write statistics.
     let wstat = wstat + wstat_update;
@@ -1731,14 +1730,15 @@ mod tests {
         assert_eq!(res, m);
     }
 
-    // a failed truncate on a regular file must surface as an
-    // error instead of being silently swallowed (which would hide data loss).
+    // a failed extension of a regular file must surface as an
+    // error instead of being silently swallowed (which would leave the
+    // output shorter than the data copied).
     #[cfg(unix)]
     #[test]
-    fn truncate_propagates_error_on_regular_file() {
+    fn extend_sparse_propagates_error_on_regular_file() {
         use crate::{Density, Dest};
         use std::fs::OpenOptions;
-        use std::io::Write;
+        use std::io::{Seek, SeekFrom, Write};
 
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("regular");
@@ -1747,23 +1747,25 @@ mod tests {
             .write_all(b"hello world")
             .unwrap();
 
-        // Open read-only so `set_len()` fails with EINVAL on a regular file.
-        let f = OpenOptions::new().read(true).open(&path).unwrap();
-        let mut dst = Dest::File(f, Density::Dense);
-        assert!(dst.truncate().is_err());
+        // Open read-only so `set_len()` fails with EINVAL on a regular file,
+        // and seek past the end so there is something to extend.
+        let mut f = OpenOptions::new().read(true).open(&path).unwrap();
+        f.seek(SeekFrom::Start(64)).unwrap();
+        let mut dst = Dest::File(f, Density::Sparse);
+        assert!(dst.extend_sparse().is_err());
     }
 
-    // truncate failures on special outputs (e.g. `/dev/null`)
+    // failures on special outputs (e.g. `/dev/null`)
     // are still suppressed, matching GNU `dd of=/dev/null`.
     #[cfg(unix)]
     #[test]
-    fn truncate_suppresses_error_on_special_file() {
+    fn extend_sparse_suppresses_error_on_special_file() {
         use crate::{Density, Dest};
         use std::fs::OpenOptions;
 
         let f = OpenOptions::new().write(true).open("/dev/null").unwrap();
-        let mut dst = Dest::File(f, Density::Dense);
-        assert!(dst.truncate().is_ok());
+        let mut dst = Dest::File(f, Density::Sparse);
+        assert!(dst.extend_sparse().is_ok());
     }
 
     #[test]
