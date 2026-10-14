@@ -804,7 +804,7 @@ impl Stater {
             j += offset;
 
             // Reject directives like `%<NUMBER>` by checking if width has been parsed.
-            if j >= bound || chars[j] == '%' {
+            if j >= bound {
                 let end = j.min(bound - 1);
                 let invalid_directive: String = chars[old..=end].iter().collect();
                 return Err(DirectiveError::new(

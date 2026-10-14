@@ -811,6 +811,21 @@ fn test_size_ignores_sign_flags() {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+fn test_fs_block_size_ignores_sign_flags() {
+    let ts = TestScenario::new(util_name!());
+    let size = ts
+        .ucmd()
+        .args(&["-f", "--printf=%S", "."])
+        .succeeds()
+        .stdout_move_str();
+    ts.ucmd()
+        .args(&["-f", "--printf=%+S|% S", "."])
+        .succeeds()
+        .stdout_only(format!("{size}|{size}"));
+}
+
+#[test]
 fn test_invalid_directive_after_multibyte_char() {
     let ts = TestScenario::new(util_name!());
     // The text before the directive is printed, as GNU does. What is checked
