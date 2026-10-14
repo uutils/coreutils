@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//spell-checker:ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty openpt grantpt unlockpt ptsname tcsetwinsize CLOEXEC RDWR SETFD
-//spell-checker:ignore (linux) winsize xpixel ypixel setrlimit Fsize SIGBUS SIGSEGV SIGXFSZ EFBIG sigbus tmpfs mksocket
-//spell-checker:ignore (ToDO) ttyname
+// spell-checker:ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty openpt grantpt unlockpt ptsname tcsetwinsize CLOEXEC RDWR SETFD
+// spell-checker:ignore (linux) winsize xpixel ypixel setrlimit Fsize SIGBUS SIGSEGV SIGXFSZ EFBIG sigbus tmpfs mksocket
+// spell-checker:ignore (ToDO) ttyname
 
 #![allow(dead_code)]
 #![allow(
