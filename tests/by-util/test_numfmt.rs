@@ -1632,6 +1632,28 @@ fn test_numfmt_scientific_notation_rejected() {
         .stderr_contains("invalid suffix in input");
 }
 
+// Scientific notation is only rejected in the field being converted; other
+// fields are passed through unchanged, as in GNU.
+#[test]
+fn test_scientific_notation_in_unselected_field_is_kept() {
+    new_ucmd!()
+        .arg("--to=si")
+        .pipe_in("1000 1e3\n")
+        .succeeds()
+        .stdout_only("1.0k 1e3\n");
+
+    new_ucmd!()
+        .args(&["--field=2", "1e3"])
+        .succeeds()
+        .stdout_only("1e3\n");
+
+    new_ucmd!()
+        .args(&["--field=2", "--to=si"])
+        .pipe_in("1e3 5000\n")
+        .succeeds()
+        .stdout_only("1e3 5.0k\n");
+}
+
 #[test]
 fn test_to_auto_rejected_at_parse_time() {
     new_ucmd!()
