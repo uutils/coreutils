@@ -34,7 +34,6 @@ split-error-output-file-suffixes-exhausted = suffixes de fichiers de sortie épu
 split-error-numerical-suffix-start-too-large = la valeur de départ du suffixe numérique est trop grande pour la longueur du suffixe
 split-error-cannot-open-for-reading = impossible d'ouvrir { $file } en lecture
 split-error-would-overwrite-input = { $file } écraserait l'entrée ; abandon
-split-error-cannot-determine-input-size = { $input } : impossible de déterminer la taille de l'entrée
 split-error-cannot-determine-file-size = { $input } : impossible de déterminer la taille du fichier
 split-error-cannot-read-from-input = { $input } : impossible de lire depuis l'entrée : { $error }
 split-error-unable-to-open-file = impossible d'ouvrir { $file } ; abandon

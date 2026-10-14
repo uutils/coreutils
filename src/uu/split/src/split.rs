@@ -424,6 +424,11 @@ fn custom_write_all<T: Write>(
     }
 }
 
+struct InputSize {
+    size: u64,
+    spooled: Option<File>,
+}
+
 /// Get the size of the input file in bytes
 /// Used only for subset of `--number=CHUNKS` strategy, as there is a need
 /// to determine input file size upfront in order to estimate the chunk size
@@ -444,11 +449,6 @@ fn custom_write_all<T: Write>(
 /// spool it to a temporary file so its size can be determined without keeping it in memory.
 ///
 /// Note: The `buf` might end up with either partial or entire input content.
-struct InputSize {
-    size: u64,
-    spooled: Option<File>,
-}
-
 fn get_input_size(
     input: &OsString,
     reader: &mut impl Read,
@@ -1120,10 +1120,7 @@ fn n_chunks_by_line(
     )?;
     let reader: Box<dyn BufRead> = match spooled {
         Some(file) => Box::new(BufReader::with_capacity(io_blksize, file)),
-        None => Box::new(BufReader::with_capacity(
-            io_blksize,
-            initial_buf.chain(reader),
-        )),
+        None => Box::new(initial_buf.chain(reader)),
     };
 
     // If input file is empty and we would not have determined the Kth chunk
