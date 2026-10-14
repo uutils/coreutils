@@ -7098,11 +7098,9 @@ fn test_acl_display_macos() {
 
     let status = Command::new("chmod")
         .args(["+a", "everyone allow read", &at.plus_as_string("with_acl")])
-        .status();
-    if !status.is_ok_and(|s| s.success()) {
-        println!("test skipped: chmod +a failed");
-        return;
-    }
+        .status()
+        .unwrap();
+    assert!(status.success(), "chmod +a failed");
 
     let re_with_acl = Regex::new(r"(?m)^-[rwx-]{9}\+ .*with_acl$").unwrap();
     let re_without_acl = Regex::new(r"(?m)^-[rwx-]{9} .*without_acl$").unwrap();
