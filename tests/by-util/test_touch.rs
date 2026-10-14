@@ -326,7 +326,8 @@ fn test_touch_set_both_date_and_reference() {
     set_file_times(&at, ref_file, start_of_year, start_of_year);
     assert!(at.file_exists(ref_file));
 
-    ucmd.args(&["-d", "Thu Jan 01 12:34:00 2015", "-r", ref_file, file])
+    ucmd.env("TZ", "UTC")
+        .args(&["-d", "Thu Jan 01 12:34:00 2015", "-r", ref_file, file])
         .succeeds()
         .no_stderr();
     let (atime, mtime) = get_file_times(&at, file);
@@ -519,7 +520,8 @@ fn test_touch_set_date() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_date";
 
-    ucmd.args(&["-d", "Thu Jan 01 12:34:00 2015", file])
+    ucmd.env("TZ", "UTC")
+        .args(&["-d", "Thu Jan 01 12:34:00 2015", file])
         .succeeds()
         .no_stderr();
 
