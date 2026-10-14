@@ -526,6 +526,24 @@ mod tests {
         assert_eq!(0o700, perm_bits);
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_file_has_acl_macos() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("test_file.txt");
+        File::create(&file_path).unwrap();
+        assert!(!has_acl(&file_path, true));
+
+        let status = std::process::Command::new("chmod")
+            .args(["+a", "everyone allow read"])
+            .arg(&file_path)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        assert!(has_acl(&file_path, true));
+        assert!(has_acl(&file_path, false));
+    }
+
     #[test]
     fn test_file_has_acl() {
         let temp_dir = tempdir().unwrap();
@@ -540,7 +558,11 @@ mod tests {
         let test_value = b"test value";
         xattr::set(&file_path, test_attr, test_value).unwrap();
 
+        // On macOS an ACL isn't an xattr, so an xattr alone is not an ACL.
+        #[cfg(not(target_os = "macos"))]
         assert!(has_acl(&file_path, true));
+        #[cfg(target_os = "macos")]
+        assert!(!has_acl(&file_path, true));
         assert!(!has_security_cap_acl(&file_path, true));
 
         // FreeBSD/NetBSD's xattr library does not support the "security" namespace
