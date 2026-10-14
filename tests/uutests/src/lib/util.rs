@@ -3018,12 +3018,7 @@ pub fn whoami() -> String {
 /// other tests in the meantime don't inherit them.
 #[cfg(all(unix, not(target_os = "redox")))]
 fn open_pty(size: Option<&libc::winsize>) -> OpenptyResult {
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "freebsd",
-        target_os = "netbsd"
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
     {
         use rustix::fs::{Mode, OFlags, open};
         use rustix::pty::{OpenptFlags, grantpt, openpt, ptsname, unlockpt};
@@ -3054,12 +3049,7 @@ fn open_pty(size: Option<&libc::winsize>) -> OpenptyResult {
 
     // Elsewhere a PTY can't be opened close-on-exec, so a command started
     // between openpty and fcntl can still inherit it.
-    #[cfg(not(any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "freebsd",
-        target_os = "netbsd"
-    )))]
+    #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "freebsd")))]
     {
         use nix::fcntl::{FcntlArg, FdFlag, fcntl};
 
