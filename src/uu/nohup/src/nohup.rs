@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (ToDO) SIGHUP cproc vprocmgr homeout
 
+#![cfg(any(unix, windows))]
+
 use clap::{Arg, ArgAction, Command};
 use std::env;
 use std::ffi::OsString;
