@@ -205,8 +205,8 @@ fn test_piped_to_dev_null() {
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn test_piped_to_dev_full() {
     for append in [true, false] {
-        let s = TestScenario::new(util_name!());
-        {
+        for args in [&["-", "/dev/zero"][..], &["-n", "-", "/dev/zero"][..]] {
+            let s = TestScenario::new(util_name!());
             let dev_full = OpenOptions::new()
                 .write(true)
                 .append(append)
@@ -215,10 +215,11 @@ fn test_piped_to_dev_full() {
 
             s.ucmd()
                 .set_stdout(dev_full)
+                .args(args)
                 .pipe_in_fixture("alpha.txt")
                 .ignore_stdin_write_error()
                 .fails()
-                .stderr_contains("No space left on device");
+                .stderr_is("cat: write error: No space left on device\n");
         }
     }
 }

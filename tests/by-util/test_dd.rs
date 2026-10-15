@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED Fsize SIGXFSZ rusage maxrss cdefg ncdefg cdefh
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED Fsize SIGXFSZ rusage maxrss cdefg ncdefg cdefh memfd ftruncate
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -1381,12 +1381,32 @@ fn test_bytes_oseek_bytes_oflag() {
 
 #[test]
 fn test_bytes_oseek_bytes_trunc_oflag() {
+    // The test harness hands stdout over as a regular file. Where dd detects
+    // that (Linux, OpenBSD), it seeks in the file and, like GNU, writes
+    // nothing. Elsewhere the seek on stdout is emulated by writing zeros.
+    let expected: &[u8] = if cfg!(any(target_os = "linux", target_os = "openbsd")) {
+        b""
+    } else {
+        &[0; 8]
+    };
     new_ucmd!()
         .args(&["oseek=8", "oflag=seek_bytes", "bs=2", "count=0"])
         .pipe_in("abcdefghijklm")
         .ignore_stdin_write_error()
         .succeeds()
-        .stdout_is_fixture_bytes("dd-bytes-null-trunc.spec");
+        .stdout_is_bytes(expected);
+}
+
+/// With `of=`, the output is truncated at the `oseek` offset, so a file
+/// opened for the first time is extended to that length.
+#[test]
+fn test_bytes_oseek_bytes_trunc_oflag_with_of() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["oseek=8", "oflag=seek_bytes", "bs=2", "count=0", "of=out"])
+        .pipe_in("abcdefghijklm")
+        .ignore_stdin_write_error()
+        .succeeds();
+    assert_eq!(at.read_bytes("out"), [0; 8]);
 }
 
 #[test]
@@ -1633,6 +1653,80 @@ fn test_sparse() {
     // The number of bytes in the file should be accurate though the
     // number of blocks stored on disk may be zero.
     assert_eq!(at.metadata("infile").len(), at.metadata("outfile").len());
+}
+
+/// `conv=notrunc,sparse` must still extend the file over skipped zero blocks.
+#[test]
+fn test_sparse_notrunc_extends_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("infile", &[0; 1024]);
+    at.touch("outfile");
+    ucmd.args(&["bs=512", "if=infile", "of=outfile", "conv=notrunc,sparse"])
+        .succeeds();
+    assert_eq!(at.metadata("outfile").len(), 1024);
+}
+
+/// `conv=notrunc,sparse` must not shrink an output file longer than the copy.
+#[test]
+fn test_sparse_notrunc_does_not_shrink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("infile", &[0; 1024]);
+    at.write_bytes("outfile", &[b'x'; 4096]);
+    ucmd.args(&["bs=512", "if=infile", "of=outfile", "conv=notrunc,sparse"])
+        .succeeds();
+    assert_eq!(at.metadata("outfile").len(), 4096);
+}
+
+/// Without `of=`, a seekable stdout was not asked to be truncated, so the
+/// data after the written range must survive. Linux only: elsewhere dd does
+/// not detect a seekable stdout and emulates the seek by writing zeros.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_seekable_stdout_without_of_is_not_truncated() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write_bytes("out", &[b'x'; 2048]);
+    let stdout = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().write(true),
+        at.plus("out").as_path(),
+    )
+    .unwrap();
+
+    ts.ucmd()
+        .args(&["bs=512", "count=1", "seek=1"])
+        .pipe_in(vec![b'a'; 512])
+        .set_stdout(Stdio::from(stdout))
+        .succeeds();
+
+    let out = at.read_bytes("out");
+    assert_eq!(out.len(), 2048);
+    assert!(out[..512].iter().all(|&b| b == b'x'));
+    assert!(out[512..1024].iter().all(|&b| b == b'a'));
+    assert!(out[1024..].iter().all(|&b| b == b'x'));
+}
+
+/// A failed truncate of the output names the file and the size, the copy
+/// still runs and prints its statistics, and the exit status is 1.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_failed_truncate_is_reported_and_copy_goes_on() {
+    use rustix::fs::{MemfdFlags, SealFlags, fcntl_add_seals, ftruncate, memfd_create};
+
+    // A memfd sealed against shrinking: `ftruncate` to a smaller size fails
+    // with EPERM, while writes inside the existing size still work.
+    let fd = memfd_create("out", MemfdFlags::ALLOW_SEALING).unwrap();
+    ftruncate(&fd, 2048).unwrap();
+    fcntl_add_seals(&fd, SealFlags::SHRINK).unwrap();
+
+    new_ucmd!()
+        .args(&["bs=512", "count=1", "seek=1", "of=/dev/stdout"])
+        .pipe_in(vec![b'a'; 512])
+        .set_stdout(Stdio::from(File::from(fd)))
+        .fails_with_code(1)
+        .stderr_contains(
+            "dd: failed to truncate to 512 bytes in output file '/dev/stdout': Operation not permitted\n",
+        )
+        .stderr_contains("1+0 records in\n1+0 records out\n");
 }
 
 /// Test that a seek on an output FIFO results in a read.

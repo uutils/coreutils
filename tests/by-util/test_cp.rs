@@ -39,7 +39,7 @@ use std::time::Duration;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(feature = "truncate")]
-use uutests::util::PATH;
+use uutests::util::path;
 
 static TEST_EXISTING_FILE: &str = "existing_file.txt";
 static TEST_HELLO_WORLD_SOURCE: &str = "hello_world.txt";
@@ -3968,7 +3968,7 @@ fn test_cp_reflink_always_override() {
 
     if !scene
         .cmd("env")
-        .env("PATH", PATH)
+        .env("PATH", path())
         .args(&["mkfs.btrfs", "--rootdir", ROOTDIR, DISK])
         .run()
         .succeeded()
@@ -3981,7 +3981,7 @@ fn test_cp_reflink_always_override() {
 
     let mount = scene
         .cmd("sudo")
-        .env("PATH", PATH)
+        .env("PATH", path())
         .args(&["-E", "--non-interactive", "mount", DISK, MOUNTPOINT])
         .run();
 
@@ -4008,7 +4008,7 @@ fn test_cp_reflink_always_override() {
 
     scene
         .cmd("sudo")
-        .env("PATH", PATH)
+        .env("PATH", path())
         .args(&["-E", "--non-interactive", "umount", MOUNTPOINT])
         .succeeds();
 }
