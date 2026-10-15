@@ -866,13 +866,53 @@ fn test_saved_state_valid_formats() {
     let (path, _controller, _replica) = pty_path();
     let (_at, ts) = at_and_ts!();
 
-    // Generate valid saved state from the actual terminal
-    let saved = unwrap_or_return!(expected_result(&ts, &["-g", "--file", &path])).stdout_move_str();
+    // Generate valid saved state from the actual terminal with our own stty,
+    // so the test doesn't depend on the system stty
+    let saved = ts
+        .ucmd()
+        .args(&["-g", "--file", &path])
+        .succeeds()
+        .stdout_move_str();
     let saved = saved.trim();
+
+    // Change a setting so that restoring the saved state has something to undo
+    ts.ucmd()
+        .args(&["--file", &path, "-echo"])
+        .succeeds()
+        .no_output();
+    // Compare the iflag:oflag:cflag:lflag fields only. The control characters
+    // after them include slots the terminal does not store, which can read back
+    // differently (seen on musl).
+    let flags = |state: &str| {
+        state
+            .trim()
+            .split(':')
+            .take(4)
+            .collect::<Vec<_>>()
+            .join(":")
+    };
+    let changed = ts
+        .ucmd()
+        .args(&["-g", "--file", &path])
+        .succeeds()
+        .stdout_move_str();
+    assert_ne!(
+        flags(&changed),
+        flags(saved),
+        "-echo should change the saved state"
+    );
 
     let result = ts.ucmd().args(&["--file", &path, saved]).run();
 
-    result.success().no_stderr();
+    result.success().no_output();
+
+    // Restoring the state brings the terminal back to it
+    let restored = ts
+        .ucmd()
+        .args(&["-g", "--file", &path])
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(flags(&restored), flags(saved));
 
     let exp_result = unwrap_or_return!(expected_result(&ts, &["--file", &path, saved]));
     let normalized_stderr = normalize_stderr(result.stderr_str());
