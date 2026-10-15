@@ -191,6 +191,23 @@ fn test_check_status_reports_unusable_checksum_input() {
 }
 
 #[test]
+fn test_check_empty_filename() {
+    let digest = "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce";
+
+    for line in [format!("{digest} \n"), format!(" {digest}\t\n")] {
+        new_ucmd!()
+            .arg("--check")
+            .pipe_in(line)
+            .fails_with_code(1)
+            .stdout_is("'': FAILED open or read\n")
+            .stderr_is(
+                "b2sum: '': No such file or directory\n\
+                 b2sum: WARNING: 1 listed file could not be read\n",
+            );
+    }
+}
+
+#[test]
 fn test_invalid_b2sum_length_option_not_multiple_of_8() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
