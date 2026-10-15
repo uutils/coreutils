@@ -46,7 +46,7 @@ use self::escape::parse_escape_code;
 use self::num_format::Formatter;
 use crate::error::{UError, strip_errno};
 use crate::{NonUtf8OsStrError, translate, translate_text};
-pub use spec::Spec;
+pub use spec::{ArgumentLocation, Spec};
 use std::io::{Write, stdout};
 use std::marker::PhantomData;
 use std::ops::{ControlFlow, Range};
