@@ -112,11 +112,11 @@ impl FormattedUptime {
 /// # Arguments
 ///
 /// `boot_time`: `Option<time_t>` - Manually specify the boot time, or None to try to get it from the system.
-/// `output_format`: `OutputFormat` - Selects the format of the output string.
+/// `output_format`: [`OutputFormat`] - Selects the format of the output string.
 ///
 /// # Returns
 ///
-/// Returns a `UResult` with the uptime in a human-readable format(e.g. "1 day, 3:45") if successful, otherwise an `UptimeError`.
+/// Returns a `UResult` with the uptime in a human-readable format(e.g. "1 day, 3:45") if successful, otherwise an [`UptimeError`].
 #[inline]
 pub fn get_formatted_uptime(
     boot_time: Option<time_t>,
@@ -163,7 +163,7 @@ pub fn get_formatted_nusers() -> String {
 ///
 /// # Returns
 ///
-/// Returns a `UResult` with the load average in a human-readable format if successful, otherwise an `UptimeError`.
+/// Returns a `UResult` with the load average in a human-readable format if successful, otherwise an [`UptimeError`].
 /// e.g. "load average: 0.00, 0.00, 0.00"
 #[inline]
 pub fn get_formatted_loadavg() -> UResult<String> {

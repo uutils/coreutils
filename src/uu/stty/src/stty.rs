@@ -471,7 +471,7 @@ fn parse_u8_or_err(arg: &str) -> Result<u8, String> {
 /// Parse an integer with hex (0x/0X) and octal (0) prefix support, wrapping to u16.
 ///
 /// GNU stty uses an unsigned 32-bit integer for row/col sizes, then wraps to 16 bits.
-/// Returns `None` if parsing fails or value exceeds `u32::MAX`.
+/// Returns [`None`] if parsing fails or value exceeds [`u32::MAX`].
 fn parse_rows_cols(arg: &str) -> Option<u16> {
     u64::extended_parse(arg)
         .ok()

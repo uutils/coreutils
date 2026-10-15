@@ -87,7 +87,7 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
 ///
 /// # Returns
 ///
-/// Returns a `UResult` with the uptime in seconds if successful, otherwise an `UptimeError`.
+/// Returns a `UResult` with the uptime in seconds if successful, otherwise an [`UptimeError`].
 #[cfg(not(any(
     target_os = "linux",
     target_os = "android",
@@ -220,7 +220,7 @@ pub(crate) fn default_nusers() -> usize {
 ///
 /// # Returns
 ///
-/// Returns a `UResult` with the load average if successful, otherwise an `UptimeError`.
+/// Returns a `UResult` with the load average if successful, otherwise an [`UptimeError`].
 /// The load average is a tuple of three floating point numbers representing the 1-minute, 5-minute, and 15-minute load averages.
 #[cfg(not(any(target_arch = "wasm32", target_os = "android")))]
 pub fn get_loadavg() -> UResult<(f64, f64, f64)> {

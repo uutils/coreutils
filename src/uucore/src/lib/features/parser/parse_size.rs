@@ -533,7 +533,7 @@ pub fn parse_size_u128_max(size: &str) -> Result<u128, ParseSizeError> {
     Parser::default().parse_u128_max(size)
 }
 
-/// Error type for `parse_size`
+/// Error type for [`parse_size`]
 #[derive(Debug, PartialEq, Eq)]
 pub enum ParseSizeError {
     /// Suffix

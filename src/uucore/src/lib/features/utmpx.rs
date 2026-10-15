@@ -406,7 +406,7 @@ static LOCK: Mutex<()> = Mutex::new(());
 pub struct UtmpxIter {
     #[allow(dead_code)]
     guard: MutexGuard<'static, ()>,
-    /// Ensure `UtmpxIter` is !Send. Technically redundant because `MutexGuard`
+    /// Ensure [`UtmpxIter`] is !Send. Technically redundant because [`MutexGuard`]
     /// is also !Send.
     phantom: PhantomData<std::rc::Rc<()>>,
     #[cfg(feature = "feat_systemd_logind")]

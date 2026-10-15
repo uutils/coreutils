@@ -276,7 +276,7 @@ impl ExtendedParser for f64 {
 }
 
 impl ExtendedParser for ExtendedBigDecimal {
-    /// Parse a number as an `ExtendedBigDecimal`
+    /// Parse a number as an [`ExtendedBigDecimal`]
     fn extended_parse(input: &str) -> Result<Self, ExtendedParserError<Self>> {
         parse(input, ParseTarget::Decimal, &[])
     }

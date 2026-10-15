@@ -625,7 +625,7 @@ impl DirFd {
         Ok(fs::File::from(fd))
     }
 
-    /// Create a `DirFd` from an existing file descriptor (takes ownership)
+    /// Create a [`DirFd`] from an existing file descriptor (takes ownership)
     pub fn from_raw_fd(fd: RawFd) -> io::Result<Self> {
         if fd < 0 {
             return Err(io::Error::new(
@@ -720,7 +720,7 @@ fn find_existing_ancestor(path: &Path) -> io::Result<(PathBuf, Vec<OsString>)> {
 /// * `mode` - The mode to use when creating a new directory
 ///
 /// # Returns
-/// A `DirFd` for the subdirectory
+/// A [`DirFd`] for the subdirectory
 fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Result<DirFd> {
     match parent_fd.stat_at(name, SymlinkBehavior::NoFollow) {
         Ok(stat) => {
@@ -780,7 +780,7 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
 ///   mode will be modified by the process umask.
 ///
 /// # Returns
-/// A `DirFd` for the final created directory, or the first existing parent if
+/// A [`DirFd`] for the final created directory, or the first existing parent if
 /// all directories already exist.
 #[cfg(unix)]
 pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
@@ -823,7 +823,7 @@ impl FileInfo {
         }
     }
 
-    /// Create `FileInfo` from device and inode numbers
+    /// Create [`FileInfo`] from device and inode numbers
     pub fn new(dev: u64, ino: u64) -> Self {
         Self { dev, ino }
     }
@@ -910,7 +910,7 @@ impl Metadata {
         }
     }
 
-    /// Compatibility methods to match `std::fs::Metadata` interface
+    /// Compatibility methods to match [`std::fs::Metadata`] interface
     pub fn is_dir(&self) -> bool {
         self.file_type().is_directory()
     }
