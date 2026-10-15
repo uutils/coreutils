@@ -185,6 +185,7 @@ i18n-datetime = [
   "icu_datetime",
   "jiff-icu",
   "jiff",
+  "libc",
 ]
 mode = ["libc", "quoting-style", "rustix/process"]
 perms = ["entries", "libc", "safe-traversal", "walkdir"]
