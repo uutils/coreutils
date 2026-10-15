@@ -186,6 +186,24 @@ fn test_id_groups_ordering() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_id_unmapped_groups() {
+    let ts = TestScenario::new(util_name!());
+    let Some(mut command) = ts.ucmd_with_unmapped_groups() else {
+        return;
+    };
+
+    let result = command.succeeds();
+    result.no_stderr();
+    let groups = result
+        .stdout_str()
+        .split_whitespace()
+        .find(|field| field.starts_with("groups="))
+        .unwrap();
+    assert_eq!(groups.split(',').count(), 1);
+}
+
+#[test]
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn test_id_pretty_print() {
     // `-p` is BSD only and not supported on GNU's `id`
