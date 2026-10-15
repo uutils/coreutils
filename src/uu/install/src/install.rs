@@ -34,7 +34,7 @@ use uucore::selinux::{
     selinux_error_description, set_selinux_security_context,
 };
 use uucore::translate;
-use uucore::{format_usage, show, show_error, show_if_err};
+use uucore::{format_usage, show, show_error, show_if_err, show_warning};
 
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
@@ -456,8 +456,17 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
         None
     };
 
-    let context = matches.get_one::<String>(OPT_CONTEXT).cloned();
-    let default_context = matches.get_flag(OPT_DEFAULT_CONTEXT);
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    let selinux_enabled = is_selinux_enabled();
+    #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
+    let selinux_enabled = false;
+
+    let mut context = matches.get_one::<String>(OPT_CONTEXT).cloned();
+    if context.is_some() && !selinux_enabled {
+        show_warning!("{}", translate!("install-warning-context-ignored"));
+        context = None;
+    }
+    let default_context = matches.get_flag(OPT_DEFAULT_CONTEXT) && selinux_enabled;
     let privileged = !matches.get_flag(OPT_UNPRIVILEGED);
 
     Ok(Behavior {
