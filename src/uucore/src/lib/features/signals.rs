@@ -12,12 +12,12 @@
 
 #[cfg(unix)]
 use nix::errno::Errno;
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(unix)]
 use nix::libc;
 #[cfg(unix)]
 use nix::sys::signal::{
     SaFlags, SigAction, SigHandler, SigHandler::SigDfl, SigHandler::SigIgn, SigSet, Signal,
-    Signal::SIGINT, Signal::SIGPIPE, sigaction, signal,
+    Signal::SIGBUS, Signal::SIGINT, Signal::SIGPIPE, Signal::SIGSEGV, sigaction, signal,
 };
 
 /// The default signal value.
@@ -527,6 +527,41 @@ pub static ALL_SIGNALS: [&str; 32] = [
     "USR2", "PIPE", "ALRM", "TERM", "STKFLT", "CHLD", "CONT", "STOP", "TSTP", "TTIN", "TTOU",
     "URG", "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "POLL", "PWR", "SYS",
 ];
+
+/// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
+/// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
+#[cfg(unix)]
+pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
+    unsafe {
+        sigaction(
+            SIGSEGV,
+            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
+        )
+    }?;
+    unsafe {
+        sigaction(
+            SIGBUS,
+            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
+        )
+    }?;
+    Ok(())
+}
+
+/// Preserve inherited SIGPIPE settings from parent process.
+///
+/// Rust unconditionally sets SIGPIPE to SIG_IGN on startup. This function
+/// checks if the parent process (e.g., `env --default-signal=PIPE`) intended
+/// for SIGPIPE to be set to default by checking the RUST_SIGPIPE environment
+/// variable. If set to "default", it restores SIGPIPE to SIG_DFL.
+#[cfg(unix)]
+pub fn preserve_inherited_sigpipe() {
+    // Check if parent specified that SIGPIPE should be default
+    if std::env::var_os("RUST_SIGPIPE").is_some_and(|v| v == "default") {
+        unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
+        // Remove the environment variable so child processes don't inherit it incorrectly
+        unsafe { std::env::remove_var("RUST_SIGPIPE") };
+    }
+}
 
 /// Returns the signal number for a given signal name or value.
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
