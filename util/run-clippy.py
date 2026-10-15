@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-# spell-checker:ignore pcoreutils
+# spell-checker:ignore pcoreutils puucore
 """Run cargo clippy with appropriate flags and emit GitHub Actions annotations."""
 
 from __future__ import annotations
