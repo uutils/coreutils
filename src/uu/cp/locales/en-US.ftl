@@ -110,6 +110,7 @@ cp-debug-enum-seek-hole = SEEK_HOLE
 cp-debug-enum-seek-hole-zeros = SEEK_HOLE + zeros
 
 # Warning messages
+cp-warning-context-ignored = ignoring --context; it requires an SELinux-enabled kernel
 cp-warning-source-specified-more-than-once = source { $file_type } { $source } specified more than once
 
 # Verbose and debug messages
