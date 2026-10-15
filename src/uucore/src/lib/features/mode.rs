@@ -38,6 +38,10 @@ pub enum ModeErrorKind {
     MissingOperator,
     /// A numeric mode that is not octal, or is out of range.
     InvalidNumber,
+    /// Nothing between two commas, or at either end of the mode.
+    EmptyClause,
+    /// An octal mode without an operator, next to other clauses.
+    OctalInList,
 }
 
 impl ModeError {
@@ -177,8 +181,10 @@ impl ModeError {
     /// convention in [`crate::diagnostics`].
     fn describe(&self) -> (Option<String>, Option<String>) {
         let label = match self.kind {
-            // The message already names the expected operators.
-            ModeErrorKind::InvalidOperator => None,
+            // The message already says what is wrong.
+            ModeErrorKind::InvalidOperator
+            | ModeErrorKind::EmptyClause
+            | ModeErrorKind::OctalInList => None,
             ModeErrorKind::MissingOperator => Some("mode-diag-label-missing-operator"),
             ModeErrorKind::InvalidNumber => Some("mode-diag-label-invalid-number"),
         };
@@ -359,6 +365,44 @@ fn parse_change(mode: &str, fperm: u32, considering_dir: bool) -> (u32, usize) {
     (srwx, pos)
 }
 
+/// The comma-separated clauses of `mode`, trimmed, each with where it starts
+/// inside `mode`.
+fn clauses(mode: &str) -> impl Iterator<Item = (usize, &str)> {
+    let mut offset = 0;
+    mode.split(',').map(move |raw| {
+        let start = offset + (raw.len() - raw.trim_start().len());
+        // Past the clause and the comma that followed it.
+        offset += raw.len() + 1;
+        (start, raw.trim())
+    })
+}
+
+/// Check how the comma-separated clauses of `mode` fit together: `+644,u+x`
+/// is valid, `u+x,` and `644,u+x` are not. The error's span is inside `mode`.
+///
+/// Empty clauses are looked for first, so `644,` points at the missing
+/// clause rather than at `644`. A blank clause counts as empty.
+pub fn check_clauses(mode: &str) -> Result<(), ModeError> {
+    if let Some((start, _)) = clauses(mode).find(|(_, clause)| clause.is_empty()) {
+        return Err(ModeError::new(
+            format!("invalid mode ({mode})"),
+            start..start,
+            ModeErrorKind::EmptyClause,
+        ));
+    }
+    if mode.contains(',')
+        && let Some((start, clause)) =
+            clauses(mode).find(|(_, clause)| clause.starts_with(|c: char| c.is_ascii_digit()))
+    {
+        return Err(ModeError::new(
+            format!("invalid mode ({mode})"),
+            start..start + clause.len(),
+            ModeErrorKind::OctalInList,
+        ));
+    }
+    Ok(())
+}
+
 /// Modify a file mode based on a user-supplied string.
 /// Supports comma-separated mode strings like "ug+rwX,o+rX" (same as chmod).
 pub fn parse_chmod(
@@ -367,20 +411,11 @@ pub fn parse_chmod(
     considering_dir: bool,
     umask: u32,
 ) -> Result<u32, ModeError> {
+    check_clauses(mode_string)?;
     let mut new_mode: u32 = current_mode;
 
-    // Split by commas and process each mode part sequentially
-    let mut offset = 0;
-    for raw_part in mode_string.split(',') {
-        let start = offset + (raw_part.len() - raw_part.trim_start().len());
-        // Past the part and the comma that followed it.
-        offset += raw_part.len() + 1;
-
-        let mode_part = raw_part.trim();
-        if mode_part.is_empty() {
-            continue;
-        }
-
+    // Process each mode part sequentially
+    for (start, mode_part) in clauses(mode_string) {
         new_mode = if mode_part.chars().any(|c| c.is_ascii_digit()) {
             parse_numeric(new_mode, mode_part, considering_dir)
         } else {
@@ -494,6 +529,7 @@ pub fn with_umask<T>(mask: u32, operation: impl FnOnce() -> T) -> T {
 #[cfg(test)]
 mod tests {
 
+    use super::ModeErrorKind;
     use super::parse;
     use super::parse_chmod;
 
@@ -530,7 +566,7 @@ mod tests {
         // Numeric mode with - operator (starting from 0, so nothing to remove)
         assert_eq!(parse("-4", false, 0).unwrap(), 0);
         // But if we first set a mode, then remove bits
-        assert_eq!(parse("644,-4", false, 0).unwrap(), 0o640);
+        assert_eq!(parse("=644,-4", false, 0).unwrap(), 0o640);
     }
 
     #[test]
@@ -567,17 +603,51 @@ mod tests {
 
     #[test]
     fn test_parse_mixed_numeric_and_symbolic() {
-        // Mix of numeric and symbolic modes
-        assert_eq!(parse("644,u+x", false, 0).unwrap(), 0o744);
-        assert_eq!(parse("u+rw,755", false, 0).unwrap(), 0o755);
+        // An octal mode next to other clauses needs an operator
+        assert_eq!(parse("+644,u+x", false, 0).unwrap(), 0o744);
+        assert_eq!(parse("u+rw,=755", false, 0).unwrap(), 0o755);
+        assert_eq!(
+            parse("644,u+x", false, 0).unwrap_err().kind,
+            ModeErrorKind::OctalInList
+        );
+        assert_eq!(
+            parse("u+rw,755", false, 0).unwrap_err().kind,
+            ModeErrorKind::OctalInList
+        );
+        assert_eq!(
+            parse("+644,644", false, 0).unwrap_err().kind,
+            ModeErrorKind::OctalInList
+        );
     }
 
     #[test]
-    fn test_parse_empty_string() {
-        // Empty string should return 0
-        assert_eq!(parse("", false, 0).unwrap(), 0);
-        assert_eq!(parse("   ", false, 0).unwrap(), 0);
-        assert_eq!(parse(",,", false, 0).unwrap(), 0);
+    fn test_parse_empty_clauses() {
+        for mode in [
+            "",
+            "   ",
+            ",",
+            ",,",
+            "u+x,",
+            ",u+x",
+            "u+x,,g+x",
+            "u+x, ,g+x",
+            ",644",
+            "644,",
+            "644,,u+x",
+        ] {
+            let err = parse(mode, false, 0).unwrap_err();
+            assert_eq!(err.kind, ModeErrorKind::EmptyClause, "{mode:?}");
+        }
+        // The caret goes under the missing clause, not under the octal
+        assert_eq!(parse("644,", false, 0).unwrap_err().span, 4..4);
+    }
+
+    #[test]
+    fn test_parse_error_spans() {
+        // The span is inside the whole mode, not the clause
+        assert_eq!(parse("u+x,,g+x", false, 0).unwrap_err().span, 4..4);
+        assert_eq!(parse("u+x,644", false, 0).unwrap_err().span, 4..7);
+        assert_eq!(parse("u+x, ,g+x", false, 0).unwrap_err().span, 5..5);
     }
 
     #[test]
@@ -617,18 +687,18 @@ mod tests {
         // Complex real-world examples
         assert_eq!(parse("u=rwx,g=rx,o=r", false, 0).unwrap(), 0o754);
         // To test removal, we need to first set permissions, then remove them
-        assert_eq!(parse("644,a-w", false, 0).unwrap(), 0o444);
-        assert_eq!(parse("644,g-r", false, 0).unwrap(), 0o604);
+        assert_eq!(parse("=644,a-w", false, 0).unwrap(), 0o444);
+        assert_eq!(parse("=644,g-r", false, 0).unwrap(), 0o604);
     }
 
     #[test]
     fn test_parse_sequential_application() {
         // Test that comma-separated modes are applied sequentially
         // First set to 644, then add execute for user
-        assert_eq!(parse("644,u+x", false, 0).unwrap(), 0o744);
+        assert_eq!(parse("=644,u+x", false, 0).unwrap(), 0o744);
 
         // First add user write, then set to 755 (should override)
-        assert_eq!(parse("u+w,755", false, 0).unwrap(), 0o755);
+        assert_eq!(parse("u+w,=755", false, 0).unwrap(), 0o755);
     }
 
     /// Reads the umask without going through the helpers under test.
