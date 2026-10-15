@@ -8501,6 +8501,42 @@ fn test_cp_from_stream_permission() {
 }
 
 #[test]
+fn test_cp_context_without_selinux() {
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    if uucore::selinux::is_selinux_enabled() {
+        println!("Test skipped: SELinux is enabled");
+        return;
+    }
+
+    let warning = "cp: warning: ignoring --context; it requires an SELinux-enabled kernel\n";
+    for (arg, stderr) in [
+        ("--context=con", warning),
+        ("--context=", warning),
+        ("--context", ""),
+        ("-Z", ""),
+    ] {
+        let scene = TestScenario::new(util_name!());
+        scene.fixtures.mkdir("source");
+        scene.fixtures.write("source/file", "copied data");
+        scene
+            .ucmd()
+            .args(&[arg, "source/file", "dest"])
+            .succeeds()
+            .no_stdout()
+            .stderr_is(stderr);
+        assert_eq!(scene.fixtures.read("dest"), "copied data");
+
+        scene
+            .ucmd()
+            .args(&[arg, "-R", "source", "tree"])
+            .succeeds()
+            .no_stdout()
+            .stderr_is(stderr);
+        assert_eq!(scene.fixtures.read("tree/file"), "copied data");
+    }
+}
+
+#[test]
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_selinux() {
     let ts = TestScenario::new(util_name!());
@@ -10072,11 +10108,13 @@ fn test_cp_a_preserves_context() {
 #[test]
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_preserve_context_with_z_fails() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.touch("src");
-    ucmd.args(&["--preserve=context", "-Z", "src", "dst"])
-        .fails()
-        .stderr_contains("cannot combine");
+    for arg in ["-Z", "--context"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("src");
+        ucmd.args(&["--preserve=context", arg, "src", "dst"])
+            .fails()
+            .stderr_contains("cannot combine");
+    }
 }
 
 // Covers the happy path for issue #9750: when chown succeeds (src owner ==

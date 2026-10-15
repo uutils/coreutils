@@ -782,8 +782,7 @@ pub fn uu_app() -> Command {
                 .value_parser(value_parser!(String))
                 .help(translate!("cp-help-context"))
                 .num_args(0..=1)
-                .require_equals(true)
-                .default_missing_value(""),
+                .require_equals(true),
         )
         .arg(
             // The 'g' short flag is modeled after advcpmv
@@ -1219,17 +1218,21 @@ impl Options {
             show_error_if_needed(&selinux_disabled_error);
         }
 
-        // Extract the SELinux related flags and options
-        let set_selinux_context = matches.get_flag(options::SELINUX);
+        // A bare --context, like -Z, requests the default context.
+        let set_selinux_context =
+            matches.get_flag(options::SELINUX) || matches.contains_id(options::CONTEXT);
+        let context = matches.get_one::<String>(options::CONTEXT).cloned();
 
-        let context = if matches.contains_id(options::CONTEXT) {
-            matches.get_one::<String>(options::CONTEXT).cloned()
-        } else {
-            None
-        };
+        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+        let selinux_enabled = uucore::selinux::is_selinux_enabled();
+        #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
+        let selinux_enabled = false;
+        if context.is_some() && !selinux_enabled {
+            show_warning!("{}", translate!("cp-warning-context-ignored"));
+        }
 
         // -Z/--context conflicts with explicit --preserve=context but overrides implicit (from -a)
-        if set_selinux_context || context.is_some() {
+        if set_selinux_context {
             match attributes.context {
                 Preserve::Yes { required: true } => {
                     return Err(CpError::Error(translate!(
@@ -1295,7 +1298,7 @@ impl Options {
             recursive,
             target_dir,
             progress_bar: matches.get_flag(options::PROGRESS_BAR),
-            set_selinux_context: set_selinux_context || context.is_some(),
+            set_selinux_context,
             context,
         };
 
