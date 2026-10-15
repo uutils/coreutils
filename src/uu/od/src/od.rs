@@ -393,7 +393,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            // undocumented alias `B` because it is implemented in GNU for compability with other
+            // undocumented alias `B` because it is implemented in GNU for compatibility with other
             // coreutils e.g. https://man.netbsd.org/od.1
             Arg::new("o")
                 .short('o')

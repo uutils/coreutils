@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline onetwo somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
 // spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons Nofile NOTCAPABLE iproduct newfstatat isox
 
 #![allow(
@@ -4457,7 +4457,7 @@ fn test_ls_quoting_style_c_maybe_comma() {
     at.touch("a_file");
     at.touch("b,file");
 
-    // Comma is explicitely quoted when in -m mode
+    // Comma is explicitly quoted when in -m mode
     // and there's a comma in the name
 
     let cases: &[(&[&str], &str)] = &[
