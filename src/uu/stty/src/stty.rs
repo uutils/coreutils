@@ -1032,117 +1032,71 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
 
 // decomposes a combination argument into a vec of corresponding flags
 fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
-    let mut flags = Vec::new();
-    let mut ccs = Vec::new();
+    let ccs: &[(S, &str)] = match combo {
+        "cooked" | "-raw" => &[(S::VEOF, "^D"), (S::VEOL, "")],
+        "dec" => &[(S::VINTR, "^C"), (S::VERASE, "^?"), (S::VKILL, "^U")],
+        "ek" => &[(S::VERASE, "^?"), (S::VKILL, "^U")],
+        "raw" | "-cooked" => &[(S::VMIN, "1"), (S::VTIME, "0")],
+        "sane" => &[
+            (S::VINTR, "^C"),
+            (S::VQUIT, "^\\"),
+            (S::VERASE, "^?"),
+            (S::VKILL, "^U"),
+            (S::VEOF, "^D"),
+            (S::VEOL, ""),
+            (S::VEOL2, ""),
+            #[cfg(target_os = "linux")]
+            (S::VSWTC, ""),
+            (S::VSTART, "^Q"),
+            (S::VSTOP, "^S"),
+            (S::VSUSP, "^Z"),
+            (S::VREPRINT, "^R"),
+            (S::VWERASE, "^W"),
+            (S::VLNEXT, "^V"),
+            (S::VDISCARD, "^O"),
+        ],
+        _ => &[],
+    };
     #[expect(clippy::match_same_arms)]
-    match combo {
-        "lcase" | "LCASE" => {
-            flags = vec!["xcase", "iuclc", "olcuc"];
-        }
-        "-lcase" | "-LCASE" => {
-            flags = vec!["-xcase", "-iuclc", "-olcuc"];
-        }
-        "cbreak" => {
-            flags = vec!["-icanon"];
-        }
-        "-cbreak" => {
-            flags = vec!["icanon"];
-        }
-        "cooked" | "-raw" => {
-            flags = vec![
-                "brkint", "ignpar", "istrip", "icrnl", "ixon", "opost", "isig", "icanon",
-            ];
-            ccs = vec![(S::VEOF, "^D"), (S::VEOL, "")];
-        }
-        "crt" => {
-            flags = vec!["echoe", "echoctl", "echoke"];
-        }
-        "dec" => {
-            flags = vec!["echoe", "echoctl", "echoke", "-ixany"];
-            ccs = vec![(S::VINTR, "^C"), (S::VERASE, "^?"), (S::VKILL, "^U")];
-        }
-        "decctlq" => {
-            flags = vec!["ixany"];
-        }
-        "-decctlq" => {
-            flags = vec!["-ixany"];
-        }
-        "ek" => {
-            ccs = vec![(S::VERASE, "^?"), (S::VKILL, "^U")];
-        }
-        "evenp" | "parity" => {
-            flags = vec!["parenb", "-parodd", "cs7"];
-        }
-        "-evenp" | "-parity" => {
-            flags = vec!["-parenb", "cs8"];
-        }
-        "litout" => {
-            flags = vec!["-parenb", "-istrip", "-opost", "cs8"];
-        }
-        "-litout" => {
-            flags = vec!["parenb", "istrip", "opost", "cs7"];
-        }
-        "nl" => {
-            flags = vec!["-icrnl", "-onlcr"];
-        }
-        "-nl" => {
-            flags = vec!["icrnl", "-inlcr", "-igncr", "onlcr", "-ocrnl", "-onlret"];
-        }
-        "oddp" => {
-            flags = vec!["parenb", "parodd", "cs7"];
-        }
-        "-oddp" => {
-            flags = vec!["-parenb", "cs8"];
-        }
-        "pass8" => {
-            flags = vec!["-parenb", "-istrip", "cs8"];
-        }
-        "-pass8" => {
-            flags = vec!["parenb", "istrip", "cs7"];
-        }
-        "raw" | "-cooked" => {
-            flags = vec![
-                "-ignbrk", "-brkint", "-ignpar", "-parmrk", "-inpck", "-istrip", "-inlcr",
-                "-igncr", "-icrnl", "-ixon", "-ixoff", "-icanon", "-opost", "-isig", "-iuclc",
-                "-xcase", "-ixany", "-imaxbel",
-            ];
-            ccs = vec![(S::VMIN, "1"), (S::VTIME, "0")];
-        }
-        "sane" => {
-            flags = vec![
-                "cread", "-ignbrk", "brkint", "-inlcr", "-igncr", "icrnl", "icanon", "iexten",
-                "echo", "echoe", "echok", "-echonl", "-noflsh", "-ixoff", "-iutf8", "-iuclc",
-                "-xcase", "-ixany", "imaxbel", "-olcuc", "-ocrnl", "opost", "-ofill", "onlcr",
-                "-onocr", "-onlret", "nl0", "cr0", "tab0", "bs0", "vt0", "ff0", "isig", "-tostop",
-                "-ofdel", "-echoprt", "echoctl", "echoke", "-extproc", "-flusho",
-            ];
-            ccs = vec![
-                (S::VINTR, "^C"),
-                (S::VQUIT, "^\\"),
-                (S::VERASE, "^?"),
-                (S::VKILL, "^U"),
-                (S::VEOF, "^D"),
-                (S::VEOL, ""),
-                (S::VEOL2, ""),
-                #[cfg(target_os = "linux")]
-                (S::VSWTC, ""),
-                (S::VSTART, "^Q"),
-                (S::VSTOP, "^S"),
-                (S::VSUSP, "^Z"),
-                (S::VREPRINT, "^R"),
-                (S::VWERASE, "^W"),
-                (S::VLNEXT, "^V"),
-                (S::VDISCARD, "^O"),
-            ];
-        }
-        "tabs" => {
-            flags = vec!["tab0"];
-        }
-        "-tabs" => {
-            flags = vec!["tab3"];
-        }
+    let flags: &[&str] = match combo {
+        "lcase" | "LCASE" => &["xcase", "iuclc", "olcuc"],
+        "-lcase" | "-LCASE" => &["-xcase", "-iuclc", "-olcuc"],
+        "cbreak" => &["-icanon"],
+        "-cbreak" => &["icanon"],
+        "cooked" | "-raw" => &[
+            "brkint", "ignpar", "istrip", "icrnl", "ixon", "opost", "isig", "icanon",
+        ],
+        "crt" => &["echoe", "echoctl", "echoke"],
+        "dec" => &["echoe", "echoctl", "echoke", "-ixany"],
+        "decctlq" => &["ixany"],
+        "-decctlq" => &["-ixany"],
+        "ek" => &[],
+        "evenp" | "parity" => &["parenb", "-parodd", "cs7"],
+        "-evenp" | "-parity" => &["-parenb", "cs8"],
+        "litout" => &["-parenb", "-istrip", "-opost", "cs8"],
+        "-litout" => &["parenb", "istrip", "opost", "cs7"],
+        "nl" => &["-icrnl", "-onlcr"],
+        "-nl" => &["icrnl", "-inlcr", "-igncr", "onlcr", "-ocrnl", "-onlret"],
+        "oddp" => &["parenb", "parodd", "cs7"],
+        "-oddp" => &["-parenb", "cs8"],
+        "pass8" => &["-parenb", "-istrip", "cs8"],
+        "-pass8" => &["parenb", "istrip", "cs7"],
+        "raw" | "-cooked" => &[
+            "-ignbrk", "-brkint", "-ignpar", "-parmrk", "-inpck", "-istrip", "-inlcr", "-igncr",
+            "-icrnl", "-ixon", "-ixoff", "-icanon", "-opost", "-isig", "-iuclc", "-xcase",
+            "-ixany", "-imaxbel",
+        ],
+        "sane" => &[
+            "cread", "-ignbrk", "brkint", "-inlcr", "-igncr", "icrnl", "icanon", "iexten", "echo",
+            "echoe", "echok", "-echonl", "-noflsh", "-ixoff", "-iutf8", "-iuclc", "-xcase",
+            "-ixany", "imaxbel", "-olcuc", "-ocrnl", "opost", "-ofill", "onlcr", "-onocr",
+            "-onlret", "nl0", "cr0", "tab0", "bs0", "vt0", "ff0", "isig", "-tostop", "-ofdel",
+            "-echoprt", "echoctl", "echoke", "-extproc", "-flusho",
+        ],
+        "tabs" => &["tab0"],
+        "-tabs" => &["tab3"],
         _ => unreachable!("invalid combination setting: must have been caught earlier"),
-    }
+    };
     let mut flags = flags
         .iter()
         .filter_map(|f| string_to_flag(f).map(ArgOptions::Flags))
