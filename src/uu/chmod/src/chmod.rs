@@ -325,11 +325,15 @@ impl Chmoder {
             // Where the clause being parsed starts inside `cmode_unwrapped`, so
             // that an error can be pointed back at it.
             let mut offset = 0;
+            let clauses = cmode_unwrapped.split(',').count();
             for mode in cmode_unwrapped.split(',') {
                 let clause_start = offset;
                 offset += mode.len() + 1; // past the clause and its comma
 
-                let result = if mode.chars().any(|c| c.is_ascii_digit()) {
+                let result = if let Err(error) = mode::check_clause(&cmode_unwrapped, mode, clauses)
+                {
+                    Err(error)
+                } else if mode.chars().any(|c| c.is_ascii_digit()) {
                     mode::parse_numeric(new_mode, mode, is_dir).map(|v| (v, v))
                 } else {
                     mode::parse_symbolic(new_mode, mode, mode::get_umask(), is_dir).map(|m| {

@@ -1263,3 +1263,16 @@ fn test_mkdir_concurrent_non_recursive() {
         );
     }
 }
+
+#[test]
+fn test_mkdir_mode_rejects_empty_and_bare_numeric_clauses() {
+    // Rejected by GNU too: an empty clause, and a numeric mode without an
+    // operator in a list of clauses
+    for mode in ["u+x,", ",u+x", "u+r,,g+w", ",", "644,u+x", "u+x,644", "1,2"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["-m", mode, "dir"])
+            .fails_with_code(1)
+            .stderr_only(format!("mkdir: invalid mode '{mode}'\n"));
+        assert!(!at.dir_exists("dir"), "{mode}");
+    }
+}

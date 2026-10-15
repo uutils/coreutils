@@ -1865,3 +1865,27 @@ mod diagnostics {
             .no_output();
     }
 }
+
+#[test]
+fn test_chmod_rejects_empty_and_bare_numeric_clauses() {
+    // Rejected by GNU too: an empty clause, and a numeric mode without an
+    // operator in a list of clauses
+    for mode in ["u+x,", ",u+x", "u+r,,g+w", ",", "644,u+x", "u+x,644", "1,2"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("file");
+        set_permissions(at.plus("file"), Permissions::from_mode(0o644)).unwrap();
+        ucmd.args(&[mode, "file"])
+            .fails_with_code(1)
+            .stderr_only(format!("chmod: invalid mode ({mode})\n"));
+        assert_eq!(at.metadata("file").mode() & 0o7777, 0o644, "{mode}");
+    }
+}
+
+#[test]
+fn test_chmod_numeric_mode_with_operator_in_a_list() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    set_permissions(at.plus("file"), Permissions::from_mode(0o600)).unwrap();
+    ucmd.args(&["u+x,=644,g+w", "file"]).succeeds().no_output();
+    assert_eq!(at.metadata("file").mode() & 0o7777, 0o664);
+}
