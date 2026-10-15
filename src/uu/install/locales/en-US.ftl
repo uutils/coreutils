@@ -57,6 +57,7 @@ install-error-failed-to-remove = Failed to remove existing file { $path }. { $er
 install-error-will-not-overwrite-just-created = will not overwrite just-created { $dest } with { $source }
 
 # Warning messages
+install-warning-context-ignored = ignoring --context; it requires an SELinux-enabled kernel
 install-warning-compare-ignored = the --compare (-C) option is ignored when you specify a mode with non-permission bits
 install-warning-no-strip-with-program = WARNING: ignoring --strip-program option as -s option was not specified
 
