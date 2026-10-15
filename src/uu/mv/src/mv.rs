@@ -463,14 +463,16 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
             move_files_into_dir(&[source.to_path_buf()], target, opts)
         }
     } else if source_is_dir && target.symlink_metadata().is_ok() {
-        match opts.overwrite {
-            OverwriteMode::NoClobber => return Ok(()),
-            OverwriteMode::Interactive => prompt_overwrite(target, None)?,
-            OverwriteMode::Force => {}
-            OverwriteMode::Default => {
-                let (writable, mode) = is_writable(target);
-                if !writable && io::stdin().is_terminal() {
-                    prompt_overwrite(target, mode)?;
+        if !opts.no_target_dir {
+            match opts.overwrite {
+                OverwriteMode::NoClobber => return Ok(()),
+                OverwriteMode::Interactive => prompt_overwrite(target, None)?,
+                OverwriteMode::Force => {}
+                OverwriteMode::Default => {
+                    let (writable, mode) = is_writable(target);
+                    if !writable && io::stdin().is_terminal() {
+                        prompt_overwrite(target, mode)?;
+                    }
                 }
             }
         }
