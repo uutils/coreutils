@@ -1460,7 +1460,7 @@ static FIXED_OFFSET_ABBREVIATIONS: &[(&str, i32)] = &[
 static TZ_ABBREV_CACHE: OnceLock<HashMap<String, String>> = OnceLock::new();
 
 /// Build timezone abbreviation lookup map from IANA database.
-/// This is a fallback for abbreviations not covered by `FIXED_OFFSET_ABBREVIATIONS`.
+/// This is a fallback for abbreviations not covered by [`FIXED_OFFSET_ABBREVIATIONS`].
 fn build_tz_abbrev_map() -> HashMap<String, String> {
     let mut map = HashMap::new();
 
@@ -1961,7 +1961,7 @@ fn parse_relative_plus(input: &str, now: &Zoned) -> Option<ParsedDateTime> {
     None
 }
 
-/// Apply only the targeted syntax rewrites needed before `parse_datetime`.
+/// Apply only the targeted syntax rewrites needed before [`parse_datetime`].
 /// Keeping the input borrowed when possible also preserves the original text
 /// for diagnostics.
 fn normalize_parse_input(input: &str) -> Cow<'_, str> {

@@ -302,7 +302,7 @@ impl SystemdLoginRecord {
         !self.user.is_empty() && self.record_type == SystemdRecordType::UserProcess
     }
 
-    /// Get login time as `time::OffsetDateTime` compatible with utmpx
+    /// Get login time as [`time::OffsetDateTime`] compatible with utmpx
     pub fn login_time_offset(&self) -> time::OffsetDateTime {
         let duration = self
             .login_time
@@ -523,7 +523,7 @@ pub struct SystemdUtmpxCompat {
 }
 
 impl SystemdUtmpxCompat {
-    /// Create new instance from a `SystemdLoginRecord`
+    /// Create new instance from a [`SystemdLoginRecord`]
     pub fn new(record: SystemdLoginRecord) -> Self {
         Self { record }
     }

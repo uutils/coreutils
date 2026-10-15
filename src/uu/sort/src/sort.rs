@@ -450,7 +450,7 @@ impl GlobalSettings {
     /// Returns true when the fast lexicographic path can be used safely.
     /// Note: When i18n-collator is enabled, the caller must have already determined
     /// whether locale-aware collation is needed (via checking if we're in a UTF-8 locale).
-    /// This check is performed in `uumain()` before `init_precomputed()` is called.
+    /// This check is performed in [`uumain()`] before `init_precomputed()` is called.
     fn can_use_fast_lexicographic(&self) -> bool {
         let [selector] = &self.selectors[..] else {
             return false;

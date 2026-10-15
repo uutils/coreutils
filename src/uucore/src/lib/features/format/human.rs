@@ -7,7 +7,7 @@
 
 //! `human`-size formatting
 //!
-//! Format sizes like gnulibs `human_readable()` would
+//! Format sizes like gnulibs [`human_readable()`] would
 
 use unit_prefix::NumberPrefix;
 

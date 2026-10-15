@@ -453,14 +453,14 @@ pub trait Args: Iterator<Item = OsString> + Sized {
 impl<T: Iterator<Item = OsString> + Sized> Args for T {}
 
 /// Returns an iterator over the command line arguments as `OsString`s.
-/// `args_os()` can be expensive to call
+/// [`args_os()`] can be expensive to call
 pub fn args_os() -> impl Iterator<Item = OsString> {
     ARGV.iter().cloned()
 }
 
 /// Returns an iterator over the command line arguments as `OsString`s, filtering out empty arguments.
 /// This is useful for handling cases where extra whitespace or empty arguments are present.
-/// `args_os_filtered()` can be expensive to call
+/// [`args_os_filtered()`] can be expensive to call
 pub fn args_os_filtered() -> impl Iterator<Item = OsString> {
     ARGV.iter().filter(|arg| !arg.is_empty()).cloned()
 }
