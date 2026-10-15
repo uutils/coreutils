@@ -75,6 +75,7 @@ jobs:
           test_ls::test_ls_a_dotdot_no_error_on_wasi \
           test_ls::test_ls_al_no_capabilities_insufficient_on_wasi \
           test_md5sum:: test_mkdir:: test_mktemp:: test_nl:: test_nproc:: test_numfmt:: test_od:: \
+          test_mv::test_mv_dir_into_file_where_both_are_files \
           test_paste:: test_pathchk:: test_pr:: test_printenv:: test_printf:: test_ptx:: \
           test_pwd:: test_realpath:: test_rmdir:: test_sha1sum:: test_sha224sum:: test_sha256sum:: \
           test_sha384sum:: test_sha512sum:: test_shred:: test_shuf:: test_sleep:: \
