@@ -1782,6 +1782,7 @@ dependencies = [
  "fluent",
  "memchr",
  "rustix",
+ "tempfile",
  "thiserror",
  "uucore",
 ]

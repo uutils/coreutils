@@ -22,13 +22,6 @@ use crate::flags::AllFlags;
 use crate::flags::COMBINATION_SETTINGS;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
-#[cfg(all(
-    target_os = "linux",
-    not(target_arch = "powerpc"),
-    not(target_arch = "powerpc64")
-))]
-use nix::libc::{TCGETS2, termios2};
-
 use nix::sys::termios::{
     ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices as S,
     Termios, cfsetispeed, cfsetospeed, tcgetattr, tcsetattr,
@@ -221,14 +214,6 @@ impl<'a> Options<'a> {
         })
     }
 }
-
-#[cfg(all(not(target_arch = "powerpc"), not(target_arch = "powerpc64")))]
-nix::ioctl_read_bad!(
-    /// Get terminal window size
-    tiocgwinsz,
-    nix::libc::TIOCGWINSZ,
-    Winsize
-);
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -610,61 +595,12 @@ fn print_terminal_size(
     opts: &Options,
     window_size: Option<&Winsize>,
     term_size: Option<&Winsize>,
-) -> nix::Result<()> {
+) -> io::Result<()> {
     // GNU linked against glibc 2.42 provides us baudrate 51 which panics cfgetospeed
-    #[cfg(not(target_os = "linux"))]
-    let speed = nix::sys::termios::cfgetospeed(termios);
-    #[cfg(target_os = "linux")]
-    #[cfg(all(not(target_arch = "powerpc"), not(target_arch = "powerpc64")))]
-    nix::ioctl_read_bad!(tcgets2, TCGETS2, termios2);
-    #[cfg(target_os = "linux")]
-    #[cfg(all(not(target_arch = "powerpc"), not(target_arch = "powerpc64")))]
-    let speed = {
-        let mut t2 = unsafe { std::mem::zeroed::<termios2>() };
-        unsafe { tcgets2(opts.file.as_raw_fd(), &raw mut t2)? };
-        t2.c_ospeed
-    };
-    #[cfg(target_os = "linux")]
-    #[cfg(any(target_arch = "powerpc", target_arch = "powerpc64"))]
-    let speed = nix::sys::termios::cfgetospeed(termios);
-
+    // so we repeat syscall... use termios.output_speed() instead if we switched to rustix instead.
+    let speed = rustix::termios::tcgetattr(&opts.file)?.output_speed();
     let mut printer = WrappedPrinter::new(window_size);
-
-    // BSDs and Linux (not ppc/ppc64) use a u32 for the baud rate, so we can simply
-    // print it.
-    #[cfg(any(
-        bsd,
-        all(
-            target_os = "linux",
-            not(target_arch = "powerpc"),
-            not(target_arch = "powerpc64")
-        )
-    ))]
     printer.print(&translate!("stty-output-speed", "speed" => speed));
-
-    // Linux PowerPC uses the BaudRate enum, need to convert to display format
-    #[cfg(target_os = "linux")]
-    #[cfg(any(target_arch = "powerpc", target_arch = "powerpc64"))]
-    {
-        // On PowerPC, find the corresponding baud rate string for display
-        let speed_str = BAUD_RATES
-            .iter()
-            .find(|(_, rate)| *rate == speed)
-            .map(|(text, _)| *text)
-            .unwrap_or("unknown");
-        printer.print(&translate!("stty-output-speed", "speed" => speed_str));
-    }
-
-    // Other platforms need to use the baud rate enum, so printing the right value
-    // becomes slightly more complicated.
-    #[cfg(not(any(target_os = "linux", bsd)))]
-    for (text, baud_rate) in BAUD_RATES {
-        if *baud_rate == speed {
-            printer.print(&translate!("stty-output-speed", "speed" => (*text)));
-            break;
-        }
-    }
-
     if opts.all {
         let term_size = term_size.as_ref().expect("terminal size should be set");
         printer.print(
@@ -674,12 +610,11 @@ fn print_terminal_size(
 
     #[cfg(any(target_os = "linux", target_os = "redox"))]
     {
-        // For some reason the normal nix Termios struct does not expose the line,
-        // so we get the underlying libc::termios struct to get that information.
-        let libc_termios: nix::libc::termios = termios.clone().into();
-        let line = libc_termios.c_line;
+        let line = termios.line_discipline;
         printer.print(&translate!("stty-output-line", "line" => line));
     }
+    #[cfg(not(any(target_os = "linux", target_os = "redox")))]
+    let _ = termios; // remove this hack when we switched to rustix completely
     printer.flush();
     Ok(())
 }
