@@ -345,7 +345,7 @@ fn parse_fluent_resource_owned(content: &str) -> Result<FluentResource, Localiza
     )
 }
 
-/// Helper function to parse `FluentResource` from content string
+/// Helper function to parse [`FluentResource`] from content string
 fn parse_fluent_resource(
     content: &str,
     cache: &'static OnceLock<FluentResource>,
