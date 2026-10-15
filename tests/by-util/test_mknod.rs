@@ -258,6 +258,35 @@ fn test_mknod_fifo_with_umask() {
 }
 
 #[test]
+fn test_mknod_mode_list_with_empty_clause_or_bare_octal() {
+    let ts = TestScenario::new(util_name!());
+
+    for mode in [
+        "", ",", "u+x,", ",u+x", "u+x,,g+w", "644,u+x", "u+x,644", "+644,644", " 644,u+x",
+    ] {
+        ts.ucmd()
+            .arg("-m")
+            .arg(mode)
+            .arg("test_file")
+            .arg("p")
+            .fails_with_code(1)
+            .stderr_is(format!("mknod: invalid mode (invalid mode ({mode}))\n"));
+        assert!(!ts.fixtures.file_exists("test_file"), "{mode:?}");
+    }
+
+    ts.ucmd()
+        .arg("-m")
+        .arg("=644,u+x")
+        .arg("test_file")
+        .arg("p")
+        .succeeds();
+    assert_eq!(
+        ts.fixtures.metadata("test_file").permissions().mode() & 0o777,
+        0o744
+    );
+}
+
+#[test]
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mknod_selinux() {
     if !uucore::selinux::is_selinux_enabled() {

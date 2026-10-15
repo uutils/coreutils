@@ -914,6 +914,58 @@ fn test_gnu_invalid_mode() {
 }
 
 #[test]
+fn test_mode_list_with_empty_clause_or_bare_octal() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    set_permissions(at.plus("file"), Permissions::from_mode(0o640)).unwrap();
+
+    for mode in [
+        "", ",", "u+x,", ",u+x", "u+x,,g+w", "644,u+x", "u+x,644", "+644,644", " 644,u+x",
+    ] {
+        scene
+            .ucmd()
+            .arg(mode)
+            .arg("file")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_is(format!("chmod: invalid mode ({mode})\n"));
+        assert_eq!(
+            at.metadata("file").permissions().mode(),
+            0o100_640,
+            "{mode:?}"
+        );
+    }
+
+    scene.ucmd().arg("=644,u+x").arg("file").succeeds();
+    assert_eq!(at.metadata("file").permissions().mode(), 0o100_744);
+}
+
+#[test]
+fn test_mode_list_rejected_before_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.symlink_file("nowhere", "dangling");
+
+    for mode in [",", "u+x,", "644,u+x"] {
+        scene
+            .ucmd()
+            .arg(mode)
+            .arg("missing")
+            .fails_with_code(1)
+            .stderr_is(format!("chmod: invalid mode ({mode})\n"));
+    }
+
+    scene
+        .ucmd()
+        .arg("-h")
+        .arg("u+x,")
+        .arg("dangling")
+        .fails_with_code(1)
+        .stderr_is("chmod: invalid mode (u+x,)\n");
+}
+
+#[test]
 #[cfg(not(target_os = "android"))]
 fn test_gnu_options() {
     let scene = TestScenario::new(util_name!());
