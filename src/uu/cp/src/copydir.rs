@@ -378,13 +378,6 @@ pub(crate) fn copy_directory(
         return Err(translate!("cp-error-omitting-directory", "dir" => root.quote()).into());
     }
 
-    // check if root is a prefix of target
-    if path_has_prefix(target, root)? {
-        let dest_name = root.file_name().unwrap_or(root.as_os_str());
-        return Err(translate!("cp-error-cannot-copy-directory-into-itself", "source" => root.quote(), "dest" => target.join(dest_name).quote())
-        .into());
-    }
-
     // A directory cannot take the place of a file, nor of a symlink that
     // does not lead to a directory: a dangling one would be followed and
     // its target created.
@@ -393,6 +386,13 @@ pub(crate) fn copy_directory(
             target.to_path_buf(),
             root.to_path_buf(),
         ));
+    }
+
+    // check if root is a prefix of target
+    if path_has_prefix(target, root)? {
+        let dest_name = root.file_name().unwrap_or(root.as_os_str());
+        return Err(translate!("cp-error-cannot-copy-directory-into-itself", "source" => root.quote(), "dest" => target.join(dest_name).quote())
+        .into());
     }
 
     // If in `--parents` mode, create all the necessary ancestor directories.

@@ -91,6 +91,29 @@ fn test_canonicalize() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_canonicalize_permission_denied() {
+    if rustix::process::geteuid().is_root() {
+        return; // root bypasses the directory permissions this test relies on
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/file");
+    at.touch("good");
+    // Listing the parent is allowed, but looking up the final component is not.
+    at.set_mode("dir", 0o400);
+
+    let result = ucmd.args(&["-v", "-f", "dir/file", "good"]).run();
+    at.set_mode("dir", 0o700);
+
+    result
+        .code_is(1)
+        .stdout_is(path_concat!(at.root_dir_resolved(), "good") + "\n")
+        .stderr_is("readlink: dir/file: Permission denied\n");
+}
+
+#[test]
 fn test_canonicalize_existing() {
     let (at, mut ucmd) = at_and_ucmd!();
     let actual = ucmd.arg("-e").arg(".").succeeds().stdout_move_str();
