@@ -828,19 +828,12 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
     // keep an explicit UTC branch.
     if let Ok(filetime) = strtime::parse(format::YYYYMMDDHHMMS, s)
         .and_then(|tm| tm.to_datetime())
-        .and_then(|dt| {
-            TimeZone::system()
-                .to_ambiguous_zoned(dt)
-                .unambiguous()
-        })
+        .and_then(|dt| TimeZone::system().to_ambiguous_zoned(dt).unambiguous())
         .map(|zdt| timestamp_to_filetime(zdt.timestamp()))
     {
         return Ok(filetime);
     }
-    for fmt in [
-        format::YYYYMMDDHHMMSS,
-        format::YYYYMMDDHHMM_OFFSET,
-    ] {
+    for fmt in [format::YYYYMMDDHHMMSS, format::YYYYMMDDHHMM_OFFSET] {
         if let Ok(parsed) = strtime::parse(fmt, s)
             .and_then(|tm| tm.to_datetime())
             .and_then(|dt| TimeZone::UTC.to_zoned(dt))
