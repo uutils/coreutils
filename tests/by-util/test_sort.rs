@@ -1529,6 +1529,30 @@ fn test_check() {
 }
 
 #[test]
+fn test_check_with_merge_still_checks() {
+    // Regression for https://github.com/uutils/coreutils/issues/15380
+    // GNU sort: --check takes precedence over --merge. With one unsorted
+    // file, -c -m must report disorder (exit 1), not merge/print and exit 0.
+    new_ucmd!()
+        .args(&["-c", "-m"])
+        .pipe_in("b\na\n")
+        .fails()
+        .stderr_only("sort: -:2: disorder: a\n");
+
+    new_ucmd!()
+        .args(&["--check", "--merge"])
+        .pipe_in("b\na\n")
+        .fails()
+        .stderr_only("sort: -:2: disorder: a\n");
+
+    new_ucmd!()
+        .args(&["-c", "-m"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
 fn test_check_disorder_echoes_line_verbatim() {
     // The line reported in a "disorder" diagnostic is the raw offending input line.
     // It must never be reinterpreted/reformatted as a number, even though it looks
