@@ -48,7 +48,7 @@ use crate::{
     error::{UError, strip_errno},
     translate, translate_text,
 };
-pub use spec::Spec;
+pub use spec::{ArgumentLocation, Spec};
 use std::{
     error::Error,
     fmt::Display,
