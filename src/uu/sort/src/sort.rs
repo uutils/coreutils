@@ -2766,9 +2766,10 @@ fn exec(
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
-    if settings.merge {
-        merge::merge(files, settings, output, tmp_dir)
-    } else if settings.check {
+    // GNU: --check takes precedence over --merge when both are given.
+    // With one file, check still runs; with multiple files, the earlier
+    // "extra operand … not allowed with -c" error already fired.
+    if settings.check {
         if files.len() > 1 {
             Err(UUsageError::new(
                 2,
@@ -2777,6 +2778,8 @@ fn exec(
         } else {
             check::check(files.first().unwrap(), settings)
         }
+    } else if settings.merge {
+        merge::merge(files, settings, output, tmp_dir)
     } else {
         // Open each input once, when it is reached, so that only one input is open
         // at a time and FIFOs are never reopened.
