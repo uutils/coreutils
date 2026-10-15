@@ -123,33 +123,52 @@ fn test_cp_verbose_write_error_is_reported() {
 
 #[test]
 #[cfg(unix)]
-fn test_cp_symlink_relative_source_outside_cwd() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.mkdir("sub");
-    at.touch("b.txt");
-    ucmd.args(&["-s", "b.txt", "sub"])
-        .fails_with_code(1)
-        .stderr_only("cp: sub/b.txt: can make relative symbolic links only in current directory\n");
-    assert!(!at.is_symlink("sub/b.txt"));
-}
-
-#[test]
-#[cfg(unix)]
 fn test_cp_symlink_relative_source_in_cwd() {
+    // The destination is in the current directory, with or without "./".
+    for dest in ["b2.txt", "./b2.txt"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("b.txt");
+        ucmd.args(&["-s", "b.txt", dest]).succeeds();
+
+        assert!(at.is_symlink("b2.txt"), "with dest {dest}");
+        assert_eq!(at.read_symlink("b2.txt"), "b.txt", "with dest {dest}");
+    }
+}
+
+// The destination's parent is compared with the current directory by name
+// and then by device/inode, so a path that merely resolves to
+// the current directory is accepted.
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: '..' leaves the mapped guest root"
+)]
+fn test_cp_symlink_relative_source_dest_resolving_to_cwd() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("b.txt");
-    ucmd.args(&["-s", "b.txt", "b2.txt"]).succeeds();
-    assert!(at.is_symlink("b2.txt"));
-    assert_eq!(at.read_symlink("b2.txt"), "b.txt");
+    let cwd_name = at.subdir.file_name().unwrap().to_str().unwrap().to_owned();
+    let dest = format!("../{cwd_name}/b2");
+
+    ucmd.args(&["-s", "b.txt", &dest]).succeeds();
+
+    assert!(at.is_symlink("b2"));
 }
 
 #[test]
 #[cfg(unix)]
-fn test_cp_symlink_dot_slash_source_in_cwd() {
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
+fn test_cp_symlink_relative_source_dest_in_symlink_to_cwd() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("b.txt");
-    ucmd.args(&["-s", "b.txt", "./b2.txt"]).succeeds();
-    assert!(at.is_symlink("b2.txt"));
+    at.symlink_dir(".", "here");
+
+    ucmd.args(&["-s", "b.txt", "here/b2"]).succeeds();
+
+    assert!(at.is_symlink("b2"));
 }
 
 #[test]
