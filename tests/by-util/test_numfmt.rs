@@ -109,10 +109,6 @@ fn test_rounding_past_top_suffix() {
         .args(&["--to=iec", "999500000000000000000000000000000"])
         .succeeds()
         .stdout_only("789Q\n");
-}
-
-#[test]
-fn test_to_si_top_suffix_value_still_renders() {
     new_ucmd!()
         .args(&[
             "--to=si",
