@@ -83,8 +83,14 @@ enum InstallError {
     #[error("{}", translate!("install-error-invalid-target", "path" => .0.quote()))]
     InvalidTarget(PathBuf),
 
-    #[error("{}", translate!("install-error-target-not-dir", "path" => .0.quote()))]
-    TargetDirIsntDir(PathBuf),
+    #[error("{}", translate!("install-error-target-not-dir", "path" => .0.quote(), "error" => strip_errno(.1)))]
+    TargetDirIsntDir(PathBuf, #[source] std::io::Error),
+
+    #[error("{}", translate!("install-error-target-stat", "path" => .0.quote(), "error" => strip_errno(.1)))]
+    TargetStatFailed(PathBuf, #[source] std::io::Error),
+
+    #[error("{}", translate!("install-error-create-regular-file", "path" => .0.quote(), "error" => strip_errno(.1)))]
+    CreateRegularFileFailed(PathBuf, #[source] std::io::Error),
 
     #[error("{}", translate!("install-error-backup-failed", "from" => .0.quote(), "error" => strip_errno(.1)))]
     BackupFailed(PathBuf, #[source] std::io::Error),
@@ -660,9 +666,17 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             None
         };
 
-        // If -t is used, check if target exists as a file before trying to create directories
-        if b.target_dir.is_some() && target.exists() && !target.is_dir() {
-            return Err(InstallError::NotADirectory(target).into());
+        // Reject inaccessible -t targets before trying to create directories.
+        if b.target_dir.is_some() {
+            match metadata(&target) {
+                Ok(meta) if !meta.is_dir() => {
+                    return Err(InstallError::NotADirectory(target).into());
+                }
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                    return Err(InstallError::TargetDirAccess(target, e).into());
+                }
+                _ => {}
+            }
         }
 
         if let Some(to_create) = to_create {
@@ -840,14 +854,27 @@ fn metadata_for_source(path: &Path) -> UResult<fs::Metadata> {
 ///
 fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UResult<()> {
     if !target_dir.is_dir() {
+        let reason = metadata(target_dir)
+            .err()
+            .unwrap_or_else(|| rustix::io::Errno::NOTDIR.into());
         if b.target_dir.is_some() {
-            // GNU names why the `-t` directory cannot be used.
-            let reason = metadata(target_dir)
-                .err()
-                .unwrap_or_else(|| rustix::io::Errno::NOTDIR.into());
             return Err(InstallError::TargetDirAccess(target_dir.to_path_buf(), reason).into());
         }
-        return Err(InstallError::TargetDirIsntDir(target_dir.to_path_buf()).into());
+        if files.len() > 1 {
+            return Err(InstallError::TargetDirIsntDir(target_dir.to_path_buf(), reason).into());
+        }
+        if reason.kind() != std::io::ErrorKind::NotFound {
+            return Err(InstallError::TargetStatFailed(target_dir.to_path_buf(), reason).into());
+        }
+        // A trailing slash requires a directory even when its parent exists.
+        let create_error = if is_new_file_path(target_dir) {
+            rustix::io::Errno::NOTDIR.into()
+        } else {
+            reason
+        };
+        return Err(
+            InstallError::CreateRegularFileFailed(target_dir.to_path_buf(), create_error).into(),
+        );
     }
     let mut installed_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
     for sourcepath in files {

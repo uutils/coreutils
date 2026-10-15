@@ -85,7 +85,7 @@ fn test_install_failing_not_dir() {
         .arg(file2)
         .arg(file3)
         .fails()
-        .stderr_contains("not a directory");
+        .stderr_contains("Not a directory");
 }
 
 #[test]
@@ -685,7 +685,7 @@ fn test_install_failing_omitting_directory() {
         .arg(dir1)
         .arg(no_dir2)
         .fails()
-        .stderr_contains("is not a directory");
+        .stderr_contains("No such file or directory");
 
     // file1 will be copied before install fails on dir1
     scene
@@ -1107,7 +1107,7 @@ fn test_install_creating_leading_dirs_with_single_source_and_target_dir() {
         .arg(source1)
         .arg(at.plus(target_dir))
         .fails()
-        .stderr_contains("missing_target_dir/' is not a directory");
+        .stderr_contains("missing_target_dir/': Not a directory");
 
     assert!(!at.dir_exists(target_dir));
 
@@ -1143,7 +1143,7 @@ fn test_install_creating_leading_dirs_with_multiple_sources_and_target_dir() {
         .arg(source2)
         .arg(at.plus(target_dir))
         .fails()
-        .stderr_contains("missing_target_dir' is not a directory");
+        .stderr_contains("missing_target_dir': No such file or directory");
 
     assert!(!at.dir_exists(target_dir));
 
@@ -2244,6 +2244,53 @@ fn test_install_target_dir_not_a_directory() {
 }
 
 #[test]
+fn test_install_unusable_target_diagnostics() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("source", "new");
+    at.write("other", "other source");
+    at.write("regular", "old");
+
+    for (args, message) in [
+        (
+            vec!["source", "other", "regular"],
+            "target 'regular': Not a directory",
+        ),
+        (
+            vec!["source", "other", "missing"],
+            "target 'missing': No such file or directory",
+        ),
+        (
+            vec!["source", "regular/"],
+            "cannot stat 'regular/': Not a directory",
+        ),
+        (
+            vec!["source", "missing/"],
+            "cannot create regular file 'missing/': Not a directory",
+        ),
+        (
+            vec!["source", "missing/sub/"],
+            "cannot create regular file 'missing/sub/': No such file or directory",
+        ),
+        (
+            vec!["-D", "-t", "regular/sub", "source"],
+            "failed to access 'regular/sub': Not a directory",
+        ),
+    ] {
+        scene
+            .ucmd()
+            .args(&args)
+            .fails_with_code(1)
+            .stderr_only(format!("install: {message}\n"));
+    }
+    assert_eq!(at.read("source"), "new");
+    assert_eq!(at.read("other"), "other source");
+    assert_eq!(at.read("regular"), "old");
+    assert!(!at.dir_exists("missing"));
+    assert!(!at.file_exists("missing"));
+}
+
+#[test]
 fn test_install_root_combined() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -2435,7 +2482,7 @@ fn test_install_no_target_directory_creating_leading_dirs_with_single_source_and
         .arg(source1)
         .arg(at.plus(target_dir))
         .fails()
-        .stderr_contains("missing_target_dir/' is not a directory");
+        .stderr_contains("missing_target_dir/': Not a directory");
 
     assert!(!at.dir_exists(target_dir));
 }
