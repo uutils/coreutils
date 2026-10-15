@@ -305,7 +305,11 @@ impl Source {
                     }
                 }
             }
-            Self::File(f) => f.seek(SeekFrom::Current(n.try_into().unwrap())),
+            Self::File(f) => {
+                // Special files such as EFI variables can be readable without supporting seeks.
+                f.seek(SeekFrom::Current(n.try_into().unwrap()))
+                    .or_else(|_| uucore::io::read_and_discard(f, n, ibs))
+            }
             #[cfg(unix)]
             Self::Fifo(f) => uucore::io::read_and_discard(f, n, ibs),
         }
