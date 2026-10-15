@@ -32,6 +32,19 @@ fn test_groups() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_groups_unmapped_groups() {
+    let ts = TestScenario::new(util_name!());
+    let Some(mut command) = ts.ucmd_with_unmapped_groups() else {
+        return;
+    };
+
+    let result = command.succeeds();
+    result.no_stderr();
+    assert_eq!(result.stdout_str().split_whitespace().count(), 1);
+}
+
+#[test]
 #[cfg(unix)]
 fn test_groups_username() {
     let test_users = [&whoami()[..]];
