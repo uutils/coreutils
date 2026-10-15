@@ -267,7 +267,8 @@ fn test_nohup_non_utf8_command_not_found() {
         .arg(OsStr::from_bytes(b"no-such-command-\xff"))
         .fails_with_code(127)
         .no_stdout()
-        .stderr_contains("failed to run command");
+        .stderr_contains("failed to run command")
+        .stderr_contains("no-such-command-\\xFF");
 }
 
 #[test]
