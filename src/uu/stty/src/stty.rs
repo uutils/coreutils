@@ -31,9 +31,8 @@ use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, Stdin, stdin, stdout};
 use std::num::IntErrorKind;
-use std::os::fd::{AsFd, BorrowedFd};
+use std::os::fd::{AsFd, AsRawFd as _, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
-use std::os::unix::io::{AsRawFd, RawFd};
 use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::parser::num_parser::ExtendedParser;
@@ -164,15 +163,6 @@ impl AsFd for Device {
         match self {
             Self::File(f) => f.as_fd(),
             Self::Stdin(stdin) => stdin.as_fd(),
-        }
-    }
-}
-
-impl AsRawFd for Device {
-    fn as_raw_fd(&self) -> RawFd {
-        match self {
-            Self::File(f) => f.as_raw_fd(),
-            Self::Stdin(stdin) => stdin.as_raw_fd(),
         }
     }
 }
@@ -838,7 +828,7 @@ fn print_settings(termios: &Termios, opts: &Options) -> io::Result<()> {
         };
 
         let stdout = stdout();
-        let window_size = if stdout.as_raw_fd() == opts.file.as_raw_fd() {
+        let window_size = if stdout.as_fd().as_raw_fd() == opts.file.as_fd().as_raw_fd() {
             &term_size
         } else {
             &get_terminal_size(stdout).ok()
