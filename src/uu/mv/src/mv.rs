@@ -462,7 +462,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         } else {
             move_files_into_dir(&[source.to_path_buf()], target, opts)
         }
-    } else if source_is_dir && target.exists() {
+    } else if source_is_dir && target.symlink_metadata().is_ok() {
         match opts.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => prompt_overwrite(target, None)?,
