@@ -16,7 +16,7 @@ path = "src/nohup.rs"
 test = false
 doctest = false
 
-[dependencies]
+[target.'cfg(any(unix, windows))'.dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
 thiserror = { workspace = true }
@@ -35,3 +35,4 @@ workspace = true
 [[bin]]
 name = "nohup"
 path = "src/main.rs"
+required-features = ["uucore/default"]
