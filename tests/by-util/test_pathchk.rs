@@ -33,20 +33,15 @@ fn test_default_mode() {
     new_ucmd!().args(&["dir#/$file"]).succeeds().no_stdout();
 
     // fail on empty path
-    // WASI's symlink_metadata("") returns Ok instead of ENOENT, so pathchk
-    // accepts the empty operand there.
-    #[cfg(not(wasi_runner))]
-    {
-        new_ucmd!()
-            .args(&[""])
-            .fails()
-            .stderr_only("pathchk: '': No such file or directory\n");
+    new_ucmd!()
+        .args(&[""])
+        .fails()
+        .stderr_only("pathchk: '': No such file or directory\n");
 
-        new_ucmd!().args(&["", ""]).fails().stderr_only(
-            "pathchk: '': No such file or directory\n\
-            pathchk: '': No such file or directory\n",
-        );
-    }
+    new_ucmd!().args(&["", ""]).fails().stderr_only(
+        "pathchk: '': No such file or directory\n\
+        pathchk: '': No such file or directory\n",
+    );
 
     // fail on long path
     new_ucmd!()
