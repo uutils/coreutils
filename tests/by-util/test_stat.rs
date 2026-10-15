@@ -789,7 +789,17 @@ fn test_format_always_ends_with_a_newline() {
 
 #[test]
 fn test_default_formats_end_with_one_newline() {
-    for args in [&["."][..], &["-t", "."], &["-f", "."], &["-f", "-t", "."]] {
+    let mut cases: Vec<&[&str]> = vec![&["."], &["-t", "."]];
+    // `stat -f` needs the file system type, which is not implemented everywhere.
+    if cfg!(any(
+        target_vendor = "apple",
+        target_os = "linux",
+        target_os = "android",
+        target_os = "freebsd"
+    )) {
+        cases.extend([&["-f", "."][..], &["-f", "-t", "."]]);
+    }
+    for args in cases {
         let out = new_ucmd!().args(args).succeeds().stdout_move_str();
         assert!(
             out.ends_with('\n') && !out.ends_with("\n\n"),
