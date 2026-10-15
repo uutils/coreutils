@@ -802,19 +802,8 @@ impl Stater {
         if let Some((field_width, offset)) = format_str[j_byte..].scan_num::<usize>() {
             width = field_width;
             j += offset;
-
-            // Reject directives like `%<NUMBER>` by checking if width has been parsed.
-            if j >= bound {
-                let end = j.min(bound - 1);
-                let invalid_directive: String = chars[old..=end].iter().collect();
-                return Err(DirectiveError::new(
-                    format_str,
-                    &invalid_directive,
-                    old,
-                    end + 1,
-                ));
-            }
         }
+        // Rejects directives like `%<NUMBER>` that end the format.
         check_bound(format_str, bound, old, j)?;
 
         if chars[j] == '.' {
