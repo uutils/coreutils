@@ -133,6 +133,8 @@ mod format {
     pub(crate) const YYYYMMDDHHMMSS: &str = "%Y-%m-%d %H:%M:%S.%f";
     // "%Y-%m-%d %H:%M:%S" 12 chars
     pub(crate) const YYYYMMDDHHMMS: &str = "%Y-%m-%d %H:%M:%S";
+    // "%Y-%m-%d %H:%M", the same wall time without seconds
+    pub(crate) const YYYYMMDDHHMM_WALL: &str = "%Y-%m-%d %H:%M";
     // "%Y%m%d%H%M" 12 chars
     pub(crate) const YYYYMMDDHHMM: &str = "%Y%m%d%H%M";
     // "%Y-%m-%d %H:%M +offset"
@@ -883,6 +885,7 @@ fn is_system_zone_gap(s: &str) -> bool {
         format::POSIX_LOCALE,
         format::YYYYMMDDHHMMS,
         format::YYYYMMDDHHMMSS,
+        format::YYYYMMDDHHMM_WALL,
     ]
     .into_iter()
     .filter_map(|fmt| strtime::parse(fmt, s).and_then(|tm| tm.to_datetime()).ok())

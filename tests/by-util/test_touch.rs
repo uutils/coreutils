@@ -677,6 +677,23 @@ fn test_touch_set_posix_locale_date_uses_system_timezone() {
     wasi_runner,
     ignore = "WASI: no tzdb; TZ env var is not honoured so timezone-dependent timestamps differ"
 )]
+fn test_touch_set_minute_only_date_in_dst_gap_fails() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_minute_only_date_in_dst_gap";
+
+    // Same gap as above, written without seconds, which parse_datetime also accepts.
+    ucmd.env("TZ", "EST+5EDT,M3.2.0/2,M11.1.0/2")
+        .args(&["-d", "2020-03-08 02:30", file])
+        .fails()
+        .stderr_contains("Unable to parse date: 2020-03-08 02:30");
+    assert!(!at.file_exists(file));
+}
+
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no tzdb; TZ env var is not honoured so timezone-dependent timestamps differ"
+)]
 fn test_touch_set_date_in_dst_gap_fails() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_date_in_dst_gap";
