@@ -440,9 +440,7 @@ impl Display for UIoError {
                 // writable file owned by someone else) and "Permission denied"
                 // for EACCES. Prefer the errno when available (#15020).
                 #[cfg(unix)]
-                PermissionDenied
-                    if self.inner.raw_os_error() == Some(nix::errno::Errno::EPERM as i32) =>
-                {
+                PermissionDenied if self.inner.raw_os_error() == Some(libc::EPERM as _) => {
                     "Operation not permitted"
                 }
                 PermissionDenied => "Permission denied",
