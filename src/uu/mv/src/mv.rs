@@ -396,7 +396,12 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         )
         .into());
     }
-    let Ok(source_metadata) = source.symlink_metadata() else {
+    // WASI may return file metadata even when a trailing slash requires a directory.
+    let Some(source_metadata) = source
+        .symlink_metadata()
+        .ok()
+        .filter(|metadata| !metadata.is_file() || !path_ends_with_terminator(source))
+    else {
         return Err(if path_ends_with_terminator(source) {
             MvError::CannotStatNotADirectory(source.quote().to_string()).into()
         } else {

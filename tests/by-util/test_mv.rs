@@ -1917,14 +1917,18 @@ fn test_mv_seen_multiple_files_to_directory() {
 fn test_mv_dir_into_file_where_both_are_files() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch("a");
-    at.touch("b");
+    at.write("a", "source");
+    at.write("b", "target");
     scene
         .ucmd()
         .arg("a/")
         .arg("b")
-        .fails()
-        .stderr_contains("mv: cannot stat 'a/': Not a directory");
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("mv: cannot stat 'a/': Not a directory\n");
+
+    assert_eq!(at.read("a"), "source");
+    assert_eq!(at.read("b"), "target");
 }
 
 #[test]
