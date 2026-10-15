@@ -673,6 +673,20 @@ fn test_invalid_byte_sequence_word_count() {
         .stdout_is("      1       3       6\n");
 }
 
+#[test]
+#[cfg(all(target_arch = "x86_64", not(wasi_runner)))]
+fn test_debug_reports_sse2_on_x86_64() {
+    // SSE2 is part of the x86_64 baseline
+    new_ucmd!()
+        .args(&["-l", "--debug"])
+        .env("GLIBC_TUNABLES", "")
+        .pipe_in("line\n")
+        .succeeds()
+        .stdout_is("1\n")
+        .stderr_contains("using hardware support")
+        .stderr_contains("SSE2");
+}
+
 #[cfg(unix)]
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
