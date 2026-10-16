@@ -34,6 +34,8 @@ use uucore::locale::get_message;
 
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// Post-process a generated manpage to fix mandoc lint issues
 ///
 /// This function:
@@ -161,7 +163,7 @@ fn gen_manpage<T: Args>(
 
     // Generate the manpage to a buffer first so we can post-process it
     let mut buffer = Vec::new();
-    let man = Man::new(command);
+    let man = Man::new(command.version(VERSION));
     man.render(&mut buffer).expect("Man page generation failed");
 
     // Convert to string for processing
@@ -518,14 +520,8 @@ impl MDWriter<'_, '_> {
 
     /// # Errors
     /// Returns an error if the writer fails.
-    /// # Panics
-    /// Panics if the version is not found.
     fn version(&mut self) -> io::Result<()> {
-        writeln!(
-            self.w,
-            "<div class=\"version\">v{}</div>",
-            self.command.render_version().split_once(' ').unwrap().1
-        )
+        writeln!(self.w, "<div class=\"version\">v{VERSION}</div>")
     }
 
     /// # Errors
