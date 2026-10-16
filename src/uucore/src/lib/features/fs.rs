@@ -40,6 +40,18 @@ use windows_sys::Win32::System::IO::DeviceIoControl;
 #[cfg(windows)]
 use windows_sys::Win32::System::Ioctl::FSCTL_SET_SPARSE;
 
+/// Return metadata for a path, following its final symlink only when requested.
+///
+/// With `follow` set to `false`, the metadata describes the symlink itself.
+pub fn get_metadata(path: impl AsRef<Path>, follow: bool) -> IOResult<fs::Metadata> {
+    let path = path.as_ref();
+    if follow {
+        path.metadata()
+    } else {
+        path.symlink_metadata()
+    }
+}
+
 /// Maximum number of symlinks followed while resolving a single path.
 ///
 /// Matches the limit Linux enforces during path lookup; going past it is
@@ -1225,7 +1237,50 @@ mod tests {
     #[cfg(unix)]
     use std::os::unix;
     #[cfg(unix)]
-    use tempfile::{NamedTempFile, tempdir};
+    use tempfile::NamedTempFile;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_get_metadata_plain_paths() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("file");
+        fs::write(&file, "contents").unwrap();
+        for follow in [false, true] {
+            assert!(get_metadata(dir.path(), follow).unwrap().is_dir());
+            let metadata = get_metadata(&file, follow).unwrap();
+            assert!(metadata.is_file());
+            assert_eq!(metadata.len(), 8);
+            assert_eq!(
+                get_metadata(dir.path().join("missing"), follow)
+                    .unwrap_err()
+                    .kind(),
+                ErrorKind::NotFound
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_get_metadata_symlinks() {
+        let dir = tempdir().unwrap();
+        let target = dir.path().join("target");
+        fs::write(&target, "contents").unwrap();
+        let link = dir.path().join("link");
+        unix::fs::symlink(&target, &link).unwrap();
+
+        assert!(get_metadata(&link, false).unwrap().file_type().is_symlink());
+        let metadata = get_metadata(&link, true).unwrap();
+        assert!(metadata.is_file());
+        assert_eq!(metadata.len(), 8);
+        assert_eq!(metadata.ino(), fs::metadata(&target).unwrap().ino());
+
+        fs::remove_file(target).unwrap();
+        assert!(get_metadata(&link, false).unwrap().file_type().is_symlink());
+        assert_eq!(
+            get_metadata(&link, true).unwrap_err().kind(),
+            ErrorKind::NotFound
+        );
+    }
 
     struct NormalizePathTestCase<'a> {
         path: &'a str,

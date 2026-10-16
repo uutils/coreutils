@@ -36,6 +36,8 @@ use std::os::unix::fs::MetadataExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
+#[cfg(not(target_os = "wasi"))]
+use uucore::fs::get_metadata;
 #[cfg(not(any(windows, target_os = "wasi")))]
 use uucore::fs::mode::{S_ISGID, S_ISUID, S_ISVTX};
 use uucore::i18n::collator::{init_locale_collation, locale_cmp};
@@ -412,13 +414,7 @@ pub(crate) fn modified_since_read(metadata: &fs::Metadata) -> bool {
 fn path(path: &OsStr, condition: &PathCondition) -> bool {
     use std::os::unix::fs::FileTypeExt;
 
-    let metadata = || {
-        if matches!(condition, PathCondition::SymLink) {
-            fs::symlink_metadata(path)
-        } else {
-            fs::metadata(path)
-        }
-    };
+    let metadata = || get_metadata(path, !matches!(condition, PathCondition::SymLink));
 
     match condition {
         PathCondition::Readable => effective_access(path, Access::READ_OK),
@@ -460,11 +456,7 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
 fn path(path: &OsStr, condition: &PathCondition) -> bool {
     use crate::platform::{is_executable, is_readable, is_writable, owned_by_current_token};
 
-    let metadata = if condition == &PathCondition::SymLink {
-        fs::symlink_metadata(path)
-    } else {
-        fs::metadata(path)
-    };
+    let metadata = get_metadata(path, condition != &PathCondition::SymLink);
 
     let Ok(metadata) = metadata else {
         return false;
