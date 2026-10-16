@@ -38,12 +38,13 @@ mv-error-dangling-symlink = can't determine symlink type, since it is dangling
 mv-error-no-symlink-support = your operating system does not support symlinks
 mv-error-permission-denied = Permission denied
 mv-error-inter-device-move-failed = inter-device move failed: {$from} to {$to}; unable to remove target: {$err}
+mv-error-setting-attribute = setting attribute {$name}: {$err}
 mv-error-exchange-two-operands = --exchange requires exactly two operands
 mv-error-exchange-not-supported = --exchange is not supported on this platform
 
 # Help messages
 mv-help-force = do not prompt before overwriting
-mv-help-interactive = prompt before override
+mv-help-interactive = prompt before overwrite
 mv-help-no-clobber = do not overwrite an existing file
 mv-help-strip-trailing-slashes = remove any trailing slashes from each SOURCE argument
 mv-help-target-directory = move all SOURCE arguments into DIRECTORY

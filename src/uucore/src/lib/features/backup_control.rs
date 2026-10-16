@@ -150,25 +150,11 @@ pub enum BackupError {
     /// parameter is the argument, second is the arguments origin (CLI or
     /// ENV-var)
     AmbiguousArgument(String, String),
-    /// Currently unused
-    BackupImpossible(),
-    // BackupFailed(PathBuf, PathBuf, std::io::Error),
 }
 
 impl UError for BackupError {
-    fn code(&self) -> i32 {
-        match self {
-            Self::BackupImpossible() => 2,
-            _ => 1,
-        }
-    }
-
     fn usage(&self) -> bool {
-        // Suggested by clippy.
-        matches!(
-            self,
-            Self::InvalidArgument(_, _) | Self::AmbiguousArgument(_, _)
-        )
+        true
     }
 }
 
@@ -187,12 +173,6 @@ impl Display for BackupError {
                 "ambiguous argument {} for '{origin}'\n{VALID_ARGS_HELP}",
                 arg.quote(),
             ),
-            Self::BackupImpossible() => write!(f, "cannot create backup"),
-            // Placeholder for later
-            // Self::BackupFailed(from, to, e) => Display::fmt(
-            //     &uio_error!(e, "failed to backup {} to {}", from.quote(), to.quote()),
-            //     f
-            // ),
         }
     }
 }

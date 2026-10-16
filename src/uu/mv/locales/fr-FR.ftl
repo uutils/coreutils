@@ -38,6 +38,7 @@ mv-error-dangling-symlink = impossible de déterminer le type de lien symbolique
 mv-error-no-symlink-support = votre système d'exploitation ne prend pas en charge les liens symboliques
 mv-error-permission-denied = Permission refusée
 mv-error-inter-device-move-failed = échec du déplacement inter-périphérique : {$from} vers {$to} ; impossible de supprimer la cible : {$err}
+mv-error-setting-attribute = définition de l'attribut {$name} : {$err}
 mv-error-exchange-two-operands = --exchange nécessite exactement deux opérandes
 mv-error-exchange-not-supported = --exchange n'est pas pris en charge sur cette plateforme
 

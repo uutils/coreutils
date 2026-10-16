@@ -1105,11 +1105,55 @@ fn test_split_invalid_io_blksize() {
 #[test]
 fn test_split_number_oversized_stdin() {
     new_ucmd!()
-        .args(&["--number=3", "---io-blksize=600"])
+        .args(&["--number=1/4"])
         .pipe_in_fixture("sixhundredfiftyonebytes.txt")
-        .ignore_stdin_write_error()
-        .fails()
-        .stderr_only("split: -: cannot determine input size\n");
+        .succeeds()
+        .stdout_only("a".repeat(163));
+}
+
+#[test]
+fn test_split_number_by_lines_oversized_stdin() {
+    new_ucmd!()
+        .args(&["--number=l/1/4"])
+        .pipe_in("x\n".repeat(300))
+        .succeeds()
+        .stdout_only("x\n".repeat(75));
+}
+
+#[test]
+fn test_split_number_piped_stdin_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    scene
+        .ucmd()
+        .args(&["-n", "3"])
+        .pipe_in("a".repeat(651))
+        .succeeds()
+        .no_output();
+    assert!(at.file_exists("xaa"));
+    assert!(at.file_exists("xab"));
+    assert!(at.file_exists("xac"));
+    assert_eq!(at.read("xaa"), "a".repeat(217));
+    assert_eq!(at.read("xab"), "a".repeat(217));
+    assert_eq!(at.read("xac"), "a".repeat(217));
+}
+
+#[test]
+fn test_split_number_lines_piped_stdin_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    scene
+        .ucmd()
+        .args(&["-n", "l/3"])
+        .pipe_in("x\n".repeat(300))
+        .succeeds()
+        .no_output();
+    assert!(at.file_exists("xaa"));
+    assert!(at.file_exists("xab"));
+    assert!(at.file_exists("xac"));
+    assert_eq!(at.read("xaa"), "x\n".repeat(100));
+    assert_eq!(at.read("xab"), "x\n".repeat(100));
+    assert_eq!(at.read("xac"), "x\n".repeat(100));
 }
 
 #[test]

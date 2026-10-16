@@ -271,6 +271,22 @@ fn sub_num_int_char_const_in() {
 }
 
 #[test]
+fn char_constant_warning_preserves_prior_failure() {
+    new_ucmd!()
+        .args(&["%d\n", "bad", "'ab"])
+        .fails_with_code(1)
+        .stdout_is("0\n97\n")
+        .stderr_is("printf: 'bad': expected a numeric value\nprintf: warning: b: character(s) following character constant have been ignored\n");
+
+    new_ucmd!()
+        .args(&["%d\n", "bad", "'ab"])
+        .env("POSIXLY_CORRECT", "1")
+        .fails_with_code(1)
+        .stdout_is("0\n97\n")
+        .stderr_is("printf: 'bad': expected a numeric value\n");
+}
+
+#[test]
 fn sub_num_thousands() {
     // For "C" locale, the thousands separator is ignored but should
     // not result in an error
@@ -1890,4 +1906,37 @@ fn test_precision_above_formatter_limit() {
     assert_eq!(out.len(), 70_125);
     assert!(out.starts_with("3.25"));
     assert!(out[4..].bytes().all(|b| b == b'0'));
+}
+
+#[test]
+fn test_integer_precision_above_padding_limit() {
+    new_ucmd!()
+        .args(&["%.1500f", "1"])
+        .succeeds()
+        .stdout_only(format!("1.{}", "0".repeat(1500)));
+    new_ucmd!()
+        .args(&["%f", "1e1001"])
+        .succeeds()
+        .stdout_only(format!("1{}.000000", "0".repeat(1001)));
+    new_ucmd!()
+        .args(&["%#.0f", "1e1001"])
+        .succeeds()
+        .stdout_only(format!("1{}.", "0".repeat(1001)));
+}
+
+#[test]
+fn test_zero_precision_above_formatter_limit() {
+    let zeros = "0".repeat(70000);
+    new_ucmd!()
+        .args(&["%.70000e", "0"])
+        .succeeds()
+        .stdout_only(format!("0.{zeros}e+00"));
+    new_ucmd!()
+        .args(&["%.70000A", "0"])
+        .succeeds()
+        .stdout_only(format!("0X0.{zeros}P+0"));
+    new_ucmd!()
+        .args(&["%#.70000g", "0"])
+        .succeeds()
+        .stdout_only(format!("0.{}", &zeros[1..]));
 }

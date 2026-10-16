@@ -19,7 +19,6 @@ use std::fs::{File, OpenOptions};
 use std::io::{Write, stdout};
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process;
-use thiserror::Error;
 use uucore::backup_control::{self, BackupMode, backup_would_destroy_source};
 use uucore::buf_copy::copy_fast;
 use uucore::display::Quotable;
@@ -27,7 +26,7 @@ use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
 use uucore::fs::{are_files_identical, dir_strip_dot_for_creation};
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 use uucore::safe_traversal::{DirFd, SymlinkBehavior, create_dir_all_safe};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::{
@@ -35,7 +34,7 @@ use uucore::selinux::{
     selinux_error_description, set_selinux_security_context,
 };
 use uucore::translate;
-use uucore::{format_usage, show, show_error, show_if_err};
+use uucore::{format_usage, show, show_error, show_if_err, show_warning};
 
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
@@ -67,7 +66,7 @@ pub struct Behavior {
     privileged: bool,
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 enum InstallError {
     #[error("{}", translate!("install-error-dir-needs-arg", "util_name" => "install"))]
     DirNeedsArg,
@@ -84,8 +83,14 @@ enum InstallError {
     #[error("{}", translate!("install-error-invalid-target", "path" => .0.quote()))]
     InvalidTarget(PathBuf),
 
-    #[error("{}", translate!("install-error-target-not-dir", "path" => .0.quote()))]
-    TargetDirIsntDir(PathBuf),
+    #[error("{}", translate!("install-error-target-not-dir", "path" => .0.quote(), "error" => strip_errno(.1)))]
+    TargetDirIsntDir(PathBuf, #[source] std::io::Error),
+
+    #[error("{}", translate!("install-error-target-stat", "path" => .0.quote(), "error" => strip_errno(.1)))]
+    TargetStatFailed(PathBuf, #[source] std::io::Error),
+
+    #[error("{}", translate!("install-error-create-regular-file", "path" => .0.quote(), "error" => strip_errno(.1)))]
+    CreateRegularFileFailed(PathBuf, #[source] std::io::Error),
 
     #[error("{}", translate!("install-error-backup-failed", "from" => .0.quote(), "error" => strip_errno(.1)))]
     BackupFailed(PathBuf, #[source] std::io::Error),
@@ -451,8 +456,17 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
         None
     };
 
-    let context = matches.get_one::<String>(OPT_CONTEXT).cloned();
-    let default_context = matches.get_flag(OPT_DEFAULT_CONTEXT);
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    let selinux_enabled = is_selinux_enabled();
+    #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
+    let selinux_enabled = false;
+
+    let mut context = matches.get_one::<String>(OPT_CONTEXT).cloned();
+    if context.is_some() && !selinux_enabled {
+        show_warning!("{}", translate!("install-warning-context-ignored"));
+        context = None;
+    }
+    let default_context = matches.get_flag(OPT_DEFAULT_CONTEXT) && selinux_enabled;
     let privileged = !matches.get_flag(OPT_UNPRIVILEGED);
 
     Ok(Behavior {
@@ -645,9 +659,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
     let sources = &paths.iter().map(PathBuf::from).collect::<Vec<_>>();
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "redox")))]
     let mut target_parent_fd: Option<DirFd> = None;
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "redox")))]
     let mut target_filename: Option<OsString> = None;
 
     if b.create_leading {
@@ -661,12 +675,21 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             None
         };
 
-        // If -t is used, check if target exists as a file before trying to create directories
-        if b.target_dir.is_some() && target.exists() && !target.is_dir() {
-            return Err(InstallError::NotADirectory(target).into());
+        // Reject inaccessible -t targets before trying to create directories.
+        if b.target_dir.is_some() {
+            match metadata(&target) {
+                Ok(meta) if !meta.is_dir() => {
+                    return Err(InstallError::NotADirectory(target).into());
+                }
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                    return Err(InstallError::TargetDirAccess(target, e).into());
+                }
+                _ => {}
+            }
         }
 
         if let Some(to_create) = to_create {
+            #[cfg(all(unix, not(target_os = "redox")))]
             let to_create_original = to_create;
             let to_create_owned;
             let to_create = match uucore::os_str_as_bytes(to_create.as_os_str()) {
@@ -685,7 +708,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             let dir_exists = to_create.exists() && metadata(to_create).is_ok_and(|m| m.is_dir());
 
             if dir_exists {
-                #[cfg(unix)]
+                #[cfg(all(unix, not(target_os = "redox")))]
                 if b.target_dir.is_none()
                     && sources.len() == 1
                     && !is_potential_directory_path(&target)
@@ -712,7 +735,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     }
                 }
 
-                #[cfg(unix)]
+                #[cfg(all(unix, not(target_os = "redox")))]
                 {
                     // Use DEFAULT_MODE (0o755) for created directories - this matches GNU install
                     // behavior. The actual mode will be modified by umask at the kernel level.
@@ -755,7 +778,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                         }
                     }
                 }
-                #[cfg(not(unix))]
+                #[cfg(any(not(unix), target_os = "redox"))]
                 fs::create_dir_all(to_create)
                     .map_err(|e| InstallError::CreateDirFailed(to_create.to_path_buf(), e))?;
             }
@@ -790,7 +813,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         }
 
         if is_valid_target(&target) {
-            #[cfg(unix)]
+            #[cfg(all(unix, not(target_os = "redox")))]
             if let (Some(ref parent_fd), Some(ref filename)) = (target_parent_fd, target_filename) {
                 if b.compare && !need_copy(source, &target, b) {
                     return Ok(());
@@ -803,7 +826,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                 {
                     show_error!(
                         "{}",
-                        translate!("install-error-failed-to-remove", "path" => target.quote(), "error" => format!("{e:?}"))
+                        translate!("install-error-failed-to-remove", "path" => target.quote(), "error" => strip_errno(&e))
                     );
                 }
 
@@ -813,7 +836,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             } else {
                 copy(source, &target, b)
             }
-            #[cfg(not(unix))]
+            #[cfg(any(not(unix), target_os = "redox"))]
             {
                 copy(source, &target, b)
             }
@@ -840,14 +863,27 @@ fn metadata_for_source(path: &Path) -> UResult<fs::Metadata> {
 ///
 fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UResult<()> {
     if !target_dir.is_dir() {
+        let reason = metadata(target_dir)
+            .err()
+            .unwrap_or_else(|| rustix::io::Errno::NOTDIR.into());
         if b.target_dir.is_some() {
-            // GNU names why the `-t` directory cannot be used.
-            let reason = metadata(target_dir)
-                .err()
-                .unwrap_or_else(|| rustix::io::Errno::NOTDIR.into());
             return Err(InstallError::TargetDirAccess(target_dir.to_path_buf(), reason).into());
         }
-        return Err(InstallError::TargetDirIsntDir(target_dir.to_path_buf()).into());
+        if files.len() > 1 {
+            return Err(InstallError::TargetDirIsntDir(target_dir.to_path_buf(), reason).into());
+        }
+        if reason.kind() != std::io::ErrorKind::NotFound {
+            return Err(InstallError::TargetStatFailed(target_dir.to_path_buf(), reason).into());
+        }
+        // A trailing slash requires a directory even when its parent exists.
+        let create_error = if is_new_file_path(target_dir) {
+            rustix::io::Errno::NOTDIR.into()
+        } else {
+            reason
+        };
+        return Err(
+            InstallError::CreateRegularFileFailed(target_dir.to_path_buf(), create_error).into(),
+        );
     }
     let mut installed_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
     for sourcepath in files {
@@ -976,7 +1012,7 @@ fn perform_backup(from: &Path, to: &Path, b: &Behavior) -> UResult<Option<PathBu
 /// be consolidated because they use fundamentally different APIs:
 /// - `copy_file_safe` uses fd-based `DirFd::open_file_at()` (openat syscall)
 /// - `copy_file` uses path-based `OpenOptions::new().create_new().open()`
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsStr) -> UResult<()> {
     let from_meta = metadata(from)?;
 
@@ -1033,7 +1069,7 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
             }
             _ => show_error!(
                 "{}",
-                translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => format!("{e:?}"))
+                translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => strip_errno(&e))
             ),
         }
     }
@@ -1446,7 +1482,7 @@ fn get_default_context_for_path(path: &Path) -> Result<Option<String>, SeLinuxEr
             break;
         }
 
-        if current_path == Path::new("/") || current_path == Path::new("") {
+        if current_path == Path::new("/") || current_path.as_os_str().is_empty() {
             break;
         }
     }

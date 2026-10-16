@@ -1384,6 +1384,40 @@ fn test_merge_write_error_does_not_panic() {
     }
 }
 
+// Regression test: a full temporary filesystem must make external sort fail
+// cleanly instead of panicking while spilling a sorted chunk.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+fn test_spill_write_error_does_not_panic() {
+    let mut scene = TestScenario::new("sort");
+
+    // Mounting a filesystem requires privileges that are not available in all
+    // test environments, so leave this integration test skipped there.
+    let tmp_dir = "tmp_dir";
+    scene.fixtures.mkdir(tmp_dir);
+    if scene.mount_temp_fs(tmp_dir).is_err() {
+        return;
+    }
+
+    let mut lines = String::new();
+    for line in 0..200_000 {
+        writeln!(lines, "{line:06}").expect("writing to a String cannot fail");
+    }
+    scene.fixtures.write("input.txt", &lines);
+
+    scene
+        .ucmd()
+        .args(&[
+            "--buffer-size=1",
+            "--temporary-directory",
+            tmp_dir,
+            "input.txt",
+        ])
+        .fails_with_code(1)
+        .stderr_contains("No space left on device")
+        .stderr_does_not_contain("panicked");
+}
+
 // A read error must be reported with context and without the raw io::Error suffix.
 // It used to print `sort: Input/output error (os error 5)`.
 #[test]
@@ -1492,6 +1526,30 @@ fn test_check() {
             .succeeds()
             .no_output();
     }
+}
+
+#[test]
+fn test_check_with_merge_still_checks() {
+    // Regression for https://github.com/uutils/coreutils/issues/15380
+    // GNU sort: --check takes precedence over --merge. With one unsorted
+    // file, -c -m must report disorder (exit 1), not merge/print and exit 0.
+    new_ucmd!()
+        .args(&["-c", "-m"])
+        .pipe_in("b\na\n")
+        .fails()
+        .stderr_only("sort: -:2: disorder: a\n");
+
+    new_ucmd!()
+        .args(&["--check", "--merge"])
+        .pipe_in("b\na\n")
+        .fails()
+        .stderr_only("sort: -:2: disorder: a\n");
+
+    new_ucmd!()
+        .args(&["-c", "-m"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .no_output();
 }
 
 #[test]
@@ -1895,6 +1953,47 @@ fn test_more_files_than_fd_limit() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_temporary_files_with_few_file_descriptors() {
+    use rustix::process::Resource;
+    let ts = TestScenario::new("sort");
+    // Each input is larger than what the merge reads ahead, so it stays open.
+    let mut names = Vec::new();
+    let mut expected = String::new();
+    for i in 0..12 {
+        let name = format!("few_fds_{i:02}");
+        let contents = format!("{i:02}\n").repeat(32768);
+        ts.fixtures.write(&name, &contents);
+        names.push(name);
+        expected.push_str(&contents);
+    }
+    let unsorted: String = (0..32768)
+        .flat_map(|_| (0..12).rev().map(|i| format!("{i:02}\n")))
+        .collect();
+    ts.fixtures.write("unsorted", &unsorted);
+
+    // Stdin, stdout, stderr, two merge inputs and the merge output.
+    ts.ucmd()
+        .limit(Resource::Nofile, 6, 6)
+        .arg("-m")
+        .args(&names)
+        .succeeds()
+        .stdout_only(&expected);
+    ts.ucmd()
+        .limit(Resource::Nofile, 6, 6)
+        .args(&["-S", "64K", "unsorted"])
+        .succeeds()
+        .stdout_only(&expected);
+    // Starting the compress program can take two more for a moment: on musl and
+    // glibc before 2.24, a failed exec is reported through a pipe.
+    ts.ucmd()
+        .limit(Resource::Nofile, 10, 10)
+        .args(&["-S", "64K", "--compress-program", "gzip", "unsorted"])
+        .succeeds()
+        .stdout_only(&expected);
+}
+
+#[test]
 fn test_sigpipe_panic() {
     let mut cmd = new_ucmd!();
     let mut child = cmd.args(&["ext_sort.txt"]).run_no_wait();
@@ -2221,6 +2320,70 @@ fn test_tmp_files_are_private() {
 
     kill_process(Pid::from_raw(child.id() as i32).unwrap(), Signal::INT).unwrap();
     child.wait().unwrap().code_is(2);
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_tmp_dir_replaced_by_a_symlink() {
+    use rustix::process::{Pid, Signal, kill_process};
+    use std::{
+        fs,
+        io::Write as _,
+        time::{Duration, Instant},
+    };
+
+    // Once the temporary directory's path leads to another directory, sort must
+    // neither read nor delete anything there, whether it exits normally or on SIGINT.
+    for interrupt in [false, true] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("scratch");
+        at.mkdir("other");
+        at.write("other/0", "zzz other\n");
+        at.write("other/notes", "notes\n");
+        at.mkfifo("input");
+        let child = ucmd
+            .args(&["-S", "1K", "-T", "scratch", "input"])
+            .run_no_wait();
+        // Keep the input open until the directory has been replaced, so that the
+        // rest of the run happens afterwards.
+        let mut input = fs::OpenOptions::new()
+            .write(true)
+            .open(at.plus("input"))
+            .unwrap();
+        input
+            .write_all("willow\ncedar\n".repeat(8192).as_bytes())
+            .unwrap();
+        // Wait for sort's first temporary file, however long the machine takes:
+        // the deadline is only reached if it never writes one.
+        let deadline = Instant::now() + Duration::from_secs(60);
+        let tmp_dir = loop {
+            let dir = fs::read_dir(at.plus("scratch")).unwrap().next();
+            let dir = dir.map(|entry| entry.unwrap().path());
+            if let Some(dir) = dir.filter(|dir| dir.join("0").exists()) {
+                break dir;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "sort did not write a temporary file"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        fs::rename(&tmp_dir, at.plus("moved")).unwrap();
+        std::os::unix::fs::symlink(at.plus("other"), &tmp_dir).unwrap();
+        if interrupt {
+            kill_process(Pid::from_raw(child.id() as i32).unwrap(), Signal::INT).unwrap();
+        }
+        drop(input);
+        let result = child.wait().unwrap();
+
+        // sort can't go on without its directory, but must not take any data
+        // from the other one.
+        result.code_is(2);
+        assert!(!result.stdout_str().contains("zzz"));
+        assert_eq!(at.read("other/0"), "zzz other\n");
+        assert_eq!(at.read("other/notes"), "notes\n");
+        assert_eq!(fs::read_dir(at.plus("other")).unwrap().count(), 2);
+    }
 }
 
 #[test]
@@ -3624,6 +3787,53 @@ fn test_consistent_sorting_with_i18n_collate() {
         .arg("fix_i18n_collate_inconsistency_2.txt")
         .succeeds()
         .stdout_is(expected_output);
+}
+
+#[test]
+fn test_merge_locale_collation() {
+    // `sort -m` compares lines lazily with the collator instead of precomputed
+    // sort keys; the result must match what a full sort produces.
+    let ts = TestScenario::new("sort");
+    ts.fixtures
+        .write("a.txt", "0_1\n01\napple\nbanana\nzebra\n");
+    ts.fixtures
+        .write("b.txt", "0_1\n01\nApple\nBanana\nZebra\n");
+    ts.fixtures
+        .write("single.txt", "apple\nApple\nbanana\nBanana\n");
+    ts.fixtures
+        .write("rev_a.txt", "zebra\nbanana\napple\n01\n0_1\n");
+    ts.fixtures
+        .write("rev_b.txt", "Zebra\nBanana\nApple\n01\n0_1\n");
+
+    let cases: [(&[&str], &str); 4] = [
+        (
+            &["-m", "a.txt", "b.txt"],
+            "0_1\n0_1\n01\n01\napple\nApple\nbanana\nBanana\nzebra\nZebra\n",
+        ),
+        (
+            &["-m", "-u", "a.txt", "b.txt"],
+            "0_1\n01\napple\nApple\nbanana\nBanana\nzebra\nZebra\n",
+        ),
+        (&["-m", "single.txt"], "apple\nApple\nbanana\nBanana\n"),
+        (
+            &["-m", "-r", "rev_a.txt", "rev_b.txt"],
+            "Zebra\nzebra\nBanana\nbanana\nApple\napple\n01\n01\n0_1\n0_1\n",
+        ),
+    ];
+    for (args, expected) in cases {
+        ts.ucmd()
+            .env("LC_ALL", "en_US.UTF-8")
+            .args(args)
+            .succeeds()
+            .stdout_is(expected);
+        // A full sort of the same input yields the same output.
+        let sort_args: Vec<&str> = args.iter().filter(|a| **a != "-m").copied().collect();
+        ts.ucmd()
+            .env("LC_ALL", "en_US.UTF-8")
+            .args(&sort_args)
+            .succeeds()
+            .stdout_is(expected);
+    }
 }
 
 #[test]

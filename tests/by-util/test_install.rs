@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (words) helloworld nodir n'source nconfined testdir ETXTBSY Cryptfs
+// spell-checker:ignore tvos watchos visionos
 
 use rustix::process::{getegid, geteuid};
 use std::env::current_exe;
@@ -84,7 +85,7 @@ fn test_install_failing_not_dir() {
         .arg(file2)
         .arg(file3)
         .fails()
-        .stderr_contains("not a directory");
+        .stderr_contains("Not a directory");
 }
 
 #[test]
@@ -557,6 +558,22 @@ fn test_install_target_file_dev_null() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_install_replaces_special_target() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "source_file";
+    let target = "target_fifo";
+
+    at.write(source, "contents");
+    at.mkfifo(target);
+
+    ucmd.arg(source).arg(target).succeeds().no_stderr();
+
+    assert!(at.file_exists(target));
+    assert_eq!(at.read(target), "contents");
+}
+
+#[test]
 fn test_install_nested_paths_copy_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file1 = "source_file";
@@ -668,7 +685,7 @@ fn test_install_failing_omitting_directory() {
         .arg(dir1)
         .arg(no_dir2)
         .fails()
-        .stderr_contains("is not a directory");
+        .stderr_contains("No such file or directory");
 
     // file1 will be copied before install fails on dir1
     scene
@@ -799,21 +816,27 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
 const STRIP_TARGET_FILE: &str = "helloworld_installed";
 const STRIP_PROGRAM: &str = "#!/bin/sh\n: > \"$1\"\n";
 
+/// Create the fake strip program from a child process. Tests run as threads of
+/// one process: if this process held the script open for writing, a sibling
+/// test forking at that moment would inherit the fd, and exec'ing the script
+/// would then fail with ETXTBSY.
+fn write_strip_program(scene: &TestScenario, name: &str) {
+    scene
+        .cmd("sh")
+        .env("STRIP_SCRIPT", STRIP_PROGRAM)
+        .arg("-c")
+        .arg(format!(
+            "printf '%s' \"$STRIP_SCRIPT\" > {name} && chmod 755 {name}"
+        ))
+        .succeeds();
+}
+
 #[test]
 fn test_install_and_strip() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    // Write the strip script and sync to disk to avoid ETXTBSY race on some
-    // platforms (observed on ARM64 Linux CI runners).
-    let strip_path = at.plus("strip");
-    {
-        use std::io::Write;
-        let mut f = fs::File::create(&strip_path).unwrap();
-        f.write_all(STRIP_PROGRAM.as_bytes()).unwrap();
-        f.sync_all().unwrap();
-    }
-    at.set_mode("strip", 0o755);
+    write_strip_program(&scene, "strip");
     at.write("source", "file contents");
     let path = format!(
         "{}:{}",
@@ -853,16 +876,7 @@ fn test_install_and_strip_with_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    // Write the strip script and sync to disk to avoid ETXTBSY race on some
-    // platforms (observed on ARM64 Linux CI runners).
-    let strip_path = at.plus("strip-program");
-    {
-        use std::io::Write;
-        let mut f = fs::File::create(&strip_path).unwrap();
-        f.write_all(STRIP_PROGRAM.as_bytes()).unwrap();
-        f.sync_all().unwrap();
-    }
-    at.set_mode("strip-program", 0o755);
+    write_strip_program(&scene, "strip-program");
     at.write("source", "file contents");
 
     scene
@@ -1093,7 +1107,7 @@ fn test_install_creating_leading_dirs_with_single_source_and_target_dir() {
         .arg(source1)
         .arg(at.plus(target_dir))
         .fails()
-        .stderr_contains("missing_target_dir/' is not a directory");
+        .stderr_contains("missing_target_dir/': Not a directory");
 
     assert!(!at.dir_exists(target_dir));
 
@@ -1129,7 +1143,7 @@ fn test_install_creating_leading_dirs_with_multiple_sources_and_target_dir() {
         .arg(source2)
         .arg(at.plus(target_dir))
         .fails()
-        .stderr_contains("missing_target_dir' is not a directory");
+        .stderr_contains("missing_target_dir': No such file or directory");
 
     assert!(!at.dir_exists(target_dir));
 
@@ -2230,6 +2244,53 @@ fn test_install_target_dir_not_a_directory() {
 }
 
 #[test]
+fn test_install_unusable_target_diagnostics() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("source", "new");
+    at.write("other", "other source");
+    at.write("regular", "old");
+
+    for (args, message) in [
+        (
+            vec!["source", "other", "regular"],
+            "target 'regular': Not a directory",
+        ),
+        (
+            vec!["source", "other", "missing"],
+            "target 'missing': No such file or directory",
+        ),
+        (
+            vec!["source", "regular/"],
+            "cannot stat 'regular/': Not a directory",
+        ),
+        (
+            vec!["source", "missing/"],
+            "cannot create regular file 'missing/': Not a directory",
+        ),
+        (
+            vec!["source", "missing/sub/"],
+            "cannot create regular file 'missing/sub/': No such file or directory",
+        ),
+        (
+            vec!["-D", "-t", "regular/sub", "source"],
+            "failed to access 'regular/sub': Not a directory",
+        ),
+    ] {
+        scene
+            .ucmd()
+            .args(&args)
+            .fails_with_code(1)
+            .stderr_only(format!("install: {message}\n"));
+    }
+    assert_eq!(at.read("source"), "new");
+    assert_eq!(at.read("other"), "other source");
+    assert_eq!(at.read("regular"), "old");
+    assert!(!at.dir_exists("missing"));
+    assert!(!at.file_exists("missing"));
+}
+
+#[test]
 fn test_install_root_combined() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -2421,7 +2482,7 @@ fn test_install_no_target_directory_creating_leading_dirs_with_single_source_and
         .arg(source1)
         .arg(at.plus(target_dir))
         .fails()
-        .stderr_contains("missing_target_dir/' is not a directory");
+        .stderr_contains("missing_target_dir/': Not a directory");
 
     assert!(!at.dir_exists(target_dir));
 }
@@ -2523,8 +2584,49 @@ fn test_install_no_target_basic() {
 }
 
 #[test]
+fn test_context_without_selinux() {
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    if uucore::selinux::is_selinux_enabled() {
+        println!("Test skipped: SELinux is enabled");
+        return;
+    }
+
+    let warning = "install: warning: ignoring --context; it requires an SELinux-enabled kernel\n";
+    for (arg, stderr) in [
+        ("--context=con", warning),
+        ("--context=", warning),
+        ("--context", ""),
+        ("-Z", ""),
+    ] {
+        let scene = TestScenario::new(util_name!());
+        scene.fixtures.write("source", "installed data");
+        scene
+            .ucmd()
+            .args(&["-D", "source", "parent/file", arg])
+            .succeeds()
+            .no_stdout()
+            .stderr_is(stderr);
+        assert_eq!(scene.fixtures.read("parent/file"), "installed data");
+
+        scene
+            .ucmd()
+            .args(&["-d", "dir1", "dir2", arg])
+            .succeeds()
+            .no_stdout()
+            .stderr_is(stderr);
+        assert!(scene.fixtures.dir_exists("dir1"));
+        assert!(scene.fixtures.dir_exists("dir2"));
+    }
+}
+
+#[test]
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_selinux() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("Test skipped: SELinux is not enabled");
+        return;
+    }
+
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let src = "orig";
@@ -2534,24 +2636,13 @@ fn test_selinux() {
 
     let args = ["-Z", "--context=unconfined_u:object_r:user_tmp_t:s0"];
     for arg in args {
-        let result = new_ucmd!()
+        new_ucmd!()
             .arg(arg)
             .arg("-v")
             .arg(at.plus_as_string(src))
             .arg(at.plus_as_string(dest))
-            .run();
-
-        // Skip test if SELinux is not enabled
-        if result
-            .stderr_str()
-            .contains("SELinux is not enabled on this system")
-        {
-            println!("Skipping SELinux test: SELinux is not enabled");
-            at.remove(&at.plus_as_string(dest));
-            continue;
-        }
-
-        result.success().stdout_contains("orig' -> '");
+            .succeeds()
+            .stdout_contains("orig' -> '");
 
         // Try to get SELinux context, skip test if getfattr is not available
         let context_value =
@@ -2574,6 +2665,11 @@ fn test_selinux() {
 #[test]
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_selinux_invalid_args() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("Test skipped: SELinux is not enabled");
+        return;
+    }
+
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let src = "orig";
@@ -2586,19 +2682,13 @@ fn test_selinux_invalid_args() {
         "--context=nconfined_u:object_r:user_tmp_t:s0",
     ];
     for arg in args {
-        let result = new_ucmd!()
+        new_ucmd!()
             .arg(arg)
             .arg("-v")
             .arg(at.plus_as_string(src))
             .arg(at.plus_as_string(dest))
-            .fails();
-
-        let stderr = result.stderr_str();
-        assert!(
-            stderr.contains("failed to set default file creation")
-                || stderr.contains("SELinux is not enabled on this system"),
-            "Expected stderr to contain either 'failed to set default file creation' or 'SELinux is not enabled on this system', but got: '{stderr}'"
-        );
+            .fails()
+            .stderr_contains("failed to set default file creation");
 
         at.remove(&at.plus_as_string(dest));
     }
@@ -2607,29 +2697,24 @@ fn test_selinux_invalid_args() {
 #[test]
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_selinux_default_context() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("Test skipped: SELinux is not enabled");
+        return;
+    }
+
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let src = "orig";
     at.touch(src);
     let dest = "orig.2";
 
-    let result = new_ucmd!()
+    new_ucmd!()
         .arg("-Z")
         .arg("-v")
         .arg(at.plus_as_string(src))
         .arg(at.plus_as_string(dest))
-        .run();
-
-    // Skip test if SELinux is not enabled
-    if result
-        .stderr_str()
-        .contains("SELinux is not enabled on this system")
-    {
-        println!("Skipping SELinux default context test: SELinux is not enabled");
-        return;
-    }
-
-    result.success().stdout_contains("orig' -> '");
+        .succeeds()
+        .stdout_contains("orig' -> '");
     assert!(at.file_exists(dest));
 }
 
@@ -2929,6 +3014,52 @@ fn test_install_d_dangling_symlink_in_path_errors() {
     assert!(
         !at.plus("nonexistent").exists(),
         "The symlink target must not have been created"
+    );
+}
+
+#[test]
+// The targets with O_PATH or O_SEARCH, as named by the `has_o_path` and
+// `has_o_search` cfg aliases in src/uucore/build.rs. Elsewhere install cannot
+// anchor on an unreadable directory and fails with EACCES.
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "tvos",
+    target_os = "watchos",
+    target_os = "visionos",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris"
+))]
+fn test_install_d_leading_dirs_in_write_only_directory() {
+    // mkdir needs write and execute on the parent, not read, so -D must be
+    // able to create leading directories inside a directory it cannot read.
+    use std::os::unix::fs::PermissionsExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    if geteuid().is_root() {
+        println!("Test skipped; root ignores directory permissions");
+        return;
+    }
+
+    at.write("file.txt", "hello");
+    at.mkdir("wx");
+    fs::set_permissions(at.plus("wx"), fs::Permissions::from_mode(0o300)).unwrap();
+
+    scene
+        .ucmd()
+        .args(&["-D", "file.txt", "wx/a/b/file.txt"])
+        .succeeds();
+
+    fs::set_permissions(at.plus("wx"), fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(
+        fs::read_to_string(at.plus("wx/a/b/file.txt")).unwrap(),
+        "hello"
     );
 }
 

@@ -86,11 +86,7 @@ pub mod proc_info;
 pub mod process;
 #[cfg(all(unix, feature = "safe-copy"))]
 pub mod safe_copy;
-#[cfg(all(
-    feature = "safe-traversal",
-    unix,
-    not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))
-))]
+#[cfg(all(feature = "safe-traversal", unix, not(target_os = "redox")))]
 pub mod safe_traversal;
 #[cfg(all(target_os = "linux", feature = "tty"))]
 pub mod tty;
@@ -120,6 +116,7 @@ pub mod selinux;
         target_os = "android",
         target_os = "cygwin",
         target_os = "freebsd",
+        target_os = "haiku",
         target_os = "hurd",
         target_os = "illumos",
         target_os = "linux",

@@ -84,6 +84,9 @@ fluent-syntax = { workspace = true }
 unic-langid = { workspace = true }
 thiserror = { workspace = true }
 
+[build-dependencies]
+cfg_aliases = { workspace = true }
+
 [dev-dependencies]
 tempfile = { workspace = true }
 
@@ -183,7 +186,7 @@ i18n-datetime = [
   "jiff-icu",
   "jiff",
 ]
-mode = ["libc", "rustix/process"]
+mode = ["libc", "quoting-style", "rustix/process"]
 perms = ["entries", "libc", "safe-traversal", "walkdir"]
 buf-copy = ["pipes"]
 parser-num = ["extendedbigdecimal", "num-traits"]
@@ -197,8 +200,8 @@ quoting-style = ["i18n-common"]
 ranges = []
 ringbuffer = []
 safe-copy = ["rustix/fs"]
-safe-traversal = ["libc", "nix/fs", "nix/dir", "nix/user"]
-selinux = ["dep:selinux"]
+safe-traversal = ["libc", "nix/fs", "nix/dir", "nix/user", "rustix/fs"]
+selinux = ["dep:selinux", "libc"]
 smack = ["xattr"]
 signals = ["nix/fs", "nix/signal", "nix/poll"]
 sum = [

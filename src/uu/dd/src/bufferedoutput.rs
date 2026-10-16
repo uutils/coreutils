@@ -58,9 +58,9 @@ impl<'a> BufferedOutput<'a> {
         self.inner.sync()
     }
 
-    /// Truncate the underlying file to the current stream position, if possible.
-    pub(crate) fn truncate(&mut self) -> std::io::Result<()> {
-        self.inner.dst.truncate()
+    /// Grow a sparse output file up to the current stream position.
+    pub(crate) fn extend_sparse(&mut self) -> std::io::Result<()> {
+        self.inner.dst.extend_sparse()
     }
 
     /// Write the given bytes one block at a time.

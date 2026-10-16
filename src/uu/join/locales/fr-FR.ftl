@@ -29,8 +29,12 @@ join-error-both-files-stdin = les deux fichiers ne peuvent pas être l'entrée s
 join-error-invalid-field-specifier = spécificateur de champ invalide : { $spec }
 join-error-invalid-file-number = numéro de fichier invalide dans la spécification de champ : { $spec }
 join-error-invalid-file-number-simple = numéro de fichier invalide : { $value }
+join-error-missing-operand = opérande manquant
+join-error-missing-operand-after = opérande manquant après { $file }
+join-error-extra-operand = opérande supplémentaire { $operand }
 join-error-invalid-field-number = numéro de champ invalide : { $value }
 join-error-incompatible-fields = champs de jointure incompatibles { $field1 }, { $field2 }
+join-error-conflicting-empty-field = chaînes de remplacement des champs vides en conflit
 join-error-not-sorted = { $file }:{ $line_num } : n'est pas trié : { $content }
 join-error-input-not-sorted = l'entrée n'est pas dans l'ordre trié
 

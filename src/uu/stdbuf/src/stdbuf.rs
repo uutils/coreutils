@@ -15,7 +15,6 @@ use std::path::PathBuf;
 use std::process;
 #[cfg(not(feature = "feat_external_libstdbuf"))]
 use tempfile::TempDir;
-use thiserror::Error;
 use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError, strip_errno};
@@ -85,7 +84,7 @@ struct ModeError {
     error: ParseSizeError,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum ProgramOptionsError {
     #[error("{}", translate!("stdbuf-error-line-buffering-stdin-meaningless"))]
     LineBufferingStdinMeaningless,

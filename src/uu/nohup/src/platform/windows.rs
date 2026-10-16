@@ -8,14 +8,13 @@ use std::io::{self, Error, IsTerminal as _};
 use std::os::windows::io::{AsHandle as _, OwnedHandle};
 use std::os::windows::process::CommandExt as _;
 use std::process::{Command, Stdio};
-use thiserror::Error as ThisError;
 use uucore::error::{UError, UResult};
 use uucore::translate;
 use windows_sys::Win32::System::Threading::DETACHED_PROCESS;
 
 use crate::find_stdout;
 
-#[derive(Debug, ThisError)]
+#[derive(Debug, thiserror::Error)]
 enum PlatformError {
     #[error("{}", translate!("nohup-error-cannot-replace", "name" => (*_0), "err" => _1))]
     CannotReplace(&'static str, #[source] Error),

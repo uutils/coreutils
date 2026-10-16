@@ -145,6 +145,7 @@ fn test_sleep_wrong_time() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no signal support")]
 fn test_sleep_stops_after_sigsegv() {
     let mut child = new_ucmd!()
         .arg("100")
@@ -162,6 +163,7 @@ fn test_sleep_stops_after_sigsegv() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no signal support")]
 fn test_sleep_stops_after_sigbus() {
     let mut child = new_ucmd!()
         .arg("100")

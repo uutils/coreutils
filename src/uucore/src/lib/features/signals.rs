@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf pgrp GETFD pfds revents POLLRDBAND POLLERR unblockable
-// spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGDANGER SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGMIGRATE SIGMSG SIGPIPE SIGPRE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTALRM SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVIRT SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VIRT VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX TALRM AIOCANCEL XRES RTMIN RTMAX LTOSTOP SIGSIGTERM SIGSIGKILL
+// spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGDANGER SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL KILLTHR SIGMIGRATE SIGMSG SIGPIPE SIGPRE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTALRM SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVIRT SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VIRT VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX TALRM AIOCANCEL XRES RTMIN RTMAX LTOSTOP SIGSIGTERM SIGSIGKILL
 
 //! This module provides a way to handle signals in a platform-independent way.
 //! It provides a way to convert signal names to their corresponding values and vice versa.
@@ -90,6 +90,84 @@ pub static ALL_SIGNALS: [&str; 32] = [
     "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV",
     "SYS", "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "IO",
     "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "INFO", "USR1", "USR2",
+];
+
+// spell-checker: disable
+/*
+
+     The following signals are defined in Haiku:
+     // https://github.com/haiku/haiku/blob/master/headers/posix/signal.h
+
+     SIGHUP           1     hangup -- tty is gone!
+     SIGINT           2     interrupt
+     SIGQUIT          3     `quit' special character typed in tty
+     SIGILL           4     illegal instruction
+     SIGCHLD          5     child process exited
+     SIGABRT          6     abort() called, dont' catch
+     SIGPIPE          7     write to a pipe w/no readers
+     SIGFPE           8     floating point exception
+     SIGKILL          9     kill a team (not catchable)
+     SIGSTOP          10    suspend a thread (not catchable)
+     SIGSEGV          11    segmentation violation (read: invalid pointer)
+     SIGCONT          12    continue execution if suspended
+     SIGTSTP          13    `stop' special character typed in tty
+     SIGALRM          14    an alarm has gone off (see alarm())
+     SIGTERM          15    termination requested
+     SIGTTIN          16    read of tty from bg process
+     SIGTTOU          17    write to tty from bg process
+     SIGUSR1          18    app defined signal 1
+     SIGUSR2          19    app defined signal 2
+     SIGWINCH         20    tty window size changed
+     SIGKILLTHR       21    be specific: kill just the thread, not team
+     SIGTRAP          22    Trace/breakpoint trap
+     SIGPOLL          23    Pollable event
+     SIGPROF          24    Profiling timer expired
+     SIGSYS           25    Bad system call
+     SIGURG           26    High bandwidth data is available at socket
+     SIGVTALRM        27    Virtual timer expired
+     SIGXCPU          28    CPU time limit exceeded
+     SIGXFSZ          29    File size limit exceeded
+     SIGBUS           30    access to undefined portion of a memory object
+     SIGRESERVED1     31    reserved for future use
+     SIGRESERVED2     32    reserved for future use
+*/
+// spell-checker: enable
+
+#[cfg(target_os = "haiku")]
+pub static ALL_SIGNALS: [&str; 33] = [
+    "EXIT",
+    "HUP",
+    "INT",
+    "QUIT",
+    "ILL",
+    "CHLD",
+    "ABRT",
+    "PIPE",
+    "FPE",
+    "KILL",
+    "STOP",
+    "SEGV",
+    "CONT",
+    "TSTP",
+    "ALRM",
+    "TERM",
+    "TTIN",
+    "TTOU",
+    "USR1",
+    "USR2",
+    "WINCH",
+    "KILLTHR",
+    "TRAP",
+    "POLL",
+    "PROF",
+    "SYS",
+    "URG",
+    "VTALRM",
+    "XCPU",
+    "XFSZ",
+    "BUS",
+    "RESERVED1",
+    "RESERVED2",
 ];
 
 /*

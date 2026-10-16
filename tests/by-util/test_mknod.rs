@@ -86,6 +86,37 @@ fn test_mknod_fifo_read_only() {
 }
 
 #[test]
+fn test_mknod_context_without_security_support() {
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    if uucore::selinux::is_selinux_enabled() {
+        println!("Test skipped: SELinux is enabled");
+        return;
+    }
+    #[cfg(all(feature = "feat_smack", target_os = "linux"))]
+    if uucore::smack::is_smack_enabled() {
+        println!("Test skipped: SMACK is enabled");
+        return;
+    }
+
+    let warning =
+        "mknod: warning: ignoring --context; it requires an SELinux/SMACK-enabled kernel\n";
+    for (arg, stderr) in [
+        ("--context=con", warning),
+        ("--context=", warning),
+        ("--context", ""),
+        ("-Z", ""),
+    ] {
+        let ts = TestScenario::new(util_name!());
+        ts.ucmd()
+            .args(&[arg, "fifo", "p"])
+            .succeeds()
+            .no_stdout()
+            .stderr_is(stderr);
+        assert!(ts.fixtures.is_fifo("fifo"));
+    }
+}
+
+#[test]
 fn test_mknod_fifo_invalid_extra_operand() {
     new_ucmd!()
         .arg("test_file")
@@ -186,6 +217,11 @@ fn test_mknod_mode_comma_separated() {
 #[test]
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mknod_selinux() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("Test skipped: SELinux is not enabled");
+        return;
+    }
+
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     let dest = "test_file";
@@ -217,6 +253,11 @@ fn test_mknod_selinux() {
 #[test]
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mknod_selinux_invalid() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("Test skipped: SELinux is not enabled");
+        return;
+    }
+
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let dest = "orig";
@@ -244,6 +285,11 @@ fn test_mknod_selinux_invalid() {
 #[test]
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mknod_selinux_invalid_cleanup() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("Test skipped: SELinux is not enabled");
+        return;
+    }
+
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let dest = "test_fifo";

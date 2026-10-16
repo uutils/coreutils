@@ -57,7 +57,7 @@ cp-error-same-file = { $source } and { $dest } are the same file
 cp-error-backing-up-destroy-source = backing up { $dest } might destroy source;  { $source } not copied
 cp-error-cannot-open-for-reading = cannot open { $source } for reading
 cp-error-not-writing-dangling-symlink = not writing through dangling symlink { $dest }
-cp-error-failed-to-clone = failed to clone { $source } from { $dest }: { $error }
+cp-error-failed-to-clone = failed to clone { $dest } from { $source }: { $error }
 cp-error-cannot-change-attribute = cannot change attribute { $dest }: Source file is a non regular file
 cp-error-cannot-stat = cannot stat { $source }: No such file or directory
 cp-error-cannot-create-symlink = cannot create symlink { $dest } to { $source }
@@ -68,7 +68,7 @@ cp-error-will-not-copy-through-symlink = will not copy { $source } through just-
 cp-error-will-not-overwrite-just-created = will not overwrite just-created { $dest } with { $source }
 cp-error-target-not-directory = target: { $target } is not a directory
 cp-error-cannot-overwrite-directory-with-non-directory = cannot overwrite directory { $dir } with non-directory
-cp-error-cannot-overwrite-non-directory-with-directory = cannot overwrite non-directory with directory
+cp-error-cannot-overwrite-non-directory-with-directory = cannot overwrite non-directory { $dest } with directory { $source }
 cp-error-with-parents-dest-must-be-dir = with --parents, the destination must be a directory
 cp-error-not-replacing = not replacing { $file }
 cp-error-failed-get-current-dir = failed to get current directory { $error }
@@ -110,6 +110,7 @@ cp-debug-enum-seek-hole = SEEK_HOLE
 cp-debug-enum-seek-hole-zeros = SEEK_HOLE + zeros
 
 # Warning messages
+cp-warning-context-ignored = ignoring --context; it requires an SELinux-enabled kernel
 cp-warning-source-specified-more-than-once = source { $file_type } { $source } specified more than once
 
 # Verbose and debug messages

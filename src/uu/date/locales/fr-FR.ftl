@@ -96,10 +96,12 @@ date-error-invalid-format = format invalide '{$format}' ({$error})
 date-error-expected-file-got-directory = fichier attendu, répertoire obtenu {$path}
 date-error-date-overflow = débordement de date '{$date}'
 date-error-setting-date-not-supported-redox = la définition de la date n'est pas prise en charge par Redox
+date-error-setting-date-not-supported-wasi = la définition de la date n'est pas prise en charge par WASI
 date-error-cannot-set-date = impossible de définir la date
 date-error-extra-operand = opérande supplémentaire '{$operand}'
 date-error-write = erreur d'écriture: {$error}
 date-error-format-modifier-width-too-large = la largeur du modificateur de format '{$width}' est trop grande pour le spécificateur '%{$specifier}'
-date-error-format-missing-plus = l'argument {$arg} ne commence pas par un signe '+';
+date-error-format-missing-plus = l'argument '{$arg}' ne commence pas par un signe '+';
  lorsqu'une option est utilisée pour spécifier une ou plusieurs dates, tout argument autre
   qu'une option doit être une chaîne de format commençant par un signe '+'.
+date-error-multiple-output-formats = plusieurs formats de sortie spécifiés

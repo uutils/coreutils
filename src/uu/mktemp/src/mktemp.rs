@@ -27,7 +27,6 @@ use rand::{
     rngs::{self, SmallRng},
 };
 use tempfile::Builder;
-use thiserror::Error;
 
 static DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
 
@@ -48,7 +47,7 @@ const TMPDIR_ENV_VAR: &str = "TMP";
 
 const FALLBACK_TMPDIR: &str = "/tmp";
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 enum MkTempError {
     #[error("{}", translate!("mktemp-error-persist-file", "path" => .0.quote()))]
     PersistError(PathBuf),

@@ -19,6 +19,7 @@ doctest = false
 clap = { workspace = true }
 fluent = { workspace = true }
 nix = { workspace = true, features = ["ioctl", "term"] }
+rustix = { workspace = true, features = ["fs", "termios"] }
 uucore = { workspace = true, features = ["parser"] }
 
 [build-dependencies]

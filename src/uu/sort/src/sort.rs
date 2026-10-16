@@ -44,7 +44,6 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
 use std::sync::OnceLock;
-use thiserror::Error;
 use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
@@ -134,7 +133,7 @@ const MIN_AUTOMATIC_BUF_SIZE: usize = 512 * 1024; // 512 KiB
 const FALLBACK_AUTOMATIC_BUF_SIZE: usize = 32 * 1024 * 1024; // 32 MiB
 const MAX_AUTOMATIC_BUF_SIZE: usize = 1024 * 1024 * 1024; // 1 GiB
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum SortError {
     #[error("{}", format_disorder(.file, .line_number, .line, .silent))]
     Disorder {
@@ -658,6 +657,8 @@ fn incompatible_options_message(opts: &str) -> String {
     )
 }
 
+#[cold]
+#[inline(never)]
 fn incompatible_options_error(opts: &str) -> Box<dyn UError> {
     USimpleError::new(2, incompatible_options_message(opts))
 }
@@ -2765,9 +2766,10 @@ fn exec(
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
-    if settings.merge {
-        merge::merge(files, settings, output, tmp_dir)
-    } else if settings.check {
+    // GNU: --check takes precedence over --merge when both are given.
+    // With one file, check still runs; with multiple files, the earlier
+    // "extra operand … not allowed with -c" error already fired.
+    if settings.check {
         if files.len() > 1 {
             Err(UUsageError::new(
                 2,
@@ -2776,6 +2778,8 @@ fn exec(
         } else {
             check::check(files.first().unwrap(), settings)
         }
+    } else if settings.merge {
+        merge::merge(files, settings, output, tmp_dir)
     } else {
         // Open each input once, when it is reached, so that only one input is open
         // at a time and FIFOs are never reopened.
@@ -2799,6 +2803,47 @@ fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_dat
         #[cfg(target_os = "wasi")]
         unsorted.sort_unstable_by(cmp);
     }
+}
+
+/// Comparison used by the merge path.
+///
+/// This is result-identical to `compare_by`, but for the whole-line locale-collation
+/// case it compares the two lines lazily with the ICU collator instead of relying on
+/// precomputed collation keys. Merging only performs O(n log k) comparisons (and none at
+/// all when merging a single file), so computing a full sort key for every line — as the
+/// regular sort path does to amortize O(n log n) comparisons — is pure overhead here.
+/// Skipping that per-line work (see `merge_without_limit`) is what makes `sort -m` of
+/// already-sorted input fast.
+#[inline]
+pub fn merge_compare<'a>(
+    a: &Line<'a>,
+    b: &Line<'a>,
+    settings: &GlobalSettings,
+    a_line_data: &LineData<'a>,
+    b_line_data: &LineData<'a>,
+) -> Ordering {
+    #[cfg(feature = "i18n-collator")]
+    if settings.precomputed.fast_locale_collation {
+        return compare_lines_with_collator(a, b, settings);
+    }
+    compare_by(a, b, settings, a_line_data, b_line_data)
+}
+
+/// Lazy counterpart of the `fast_locale_collation` branch of `compare_by`: compare the
+/// line bytes directly rather than precomputed keys. `locale_cmp` (ICU `compare_utf8`)
+/// and the sort-key comparison agree on ordering by construction.
+///
+/// Kept out of line so that `merge_compare` stays small enough to be inlined into the
+/// merge heap's comparator, which keeps the non-locale merge paths as fast as before.
+#[cfg(feature = "i18n-collator")]
+#[inline(never)]
+fn compare_lines_with_collator(a: &Line<'_>, b: &Line<'_>, settings: &GlobalSettings) -> Ordering {
+    let mut cmp = locale_cmp(a.line, b.line);
+    if cmp == Ordering::Equal {
+        // Equal keys for inputs like `01` and `0_1`; fall back to (reversed) byte order.
+        cmp = b.line.cmp(a.line);
+    }
+    if settings.reverse { cmp.reverse() } else { cmp }
 }
 
 fn compare_by<'a>(

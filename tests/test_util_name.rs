@@ -263,7 +263,7 @@ fn util_version() {
         assert_eq!(output.status.code(), Some(0));
         assert_eq!(output.stderr, b"");
         let output_str = String::from_utf8(output.stdout).unwrap();
-        let ver = env::var("CARGO_PKG_VERSION").unwrap();
+        let ver = env!("CARGO_PKG_VERSION");
         assert_eq!(format!("coreutils {ver} (multi-call binary)\n"), output_str);
     }
 }

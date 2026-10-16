@@ -77,8 +77,11 @@ fn test_not_and_is_false() {
 }
 
 #[test]
-fn test_not_and_not_succeeds() {
-    new_ucmd!().args(&["!", "-a", "!"]).succeeds();
+fn test_not_and_not_is_a_syntax_error() {
+    new_ucmd!()
+        .args(&["!", "-a", "!"])
+        .fails_with_code(2)
+        .stderr_contains("'-a': unary operator expected");
 }
 
 #[test]
@@ -96,6 +99,18 @@ fn test_errors_miss_and_or() {
         .args(&["-a", "arg"])
         .fails()
         .stderr_contains("'-a': unary operator expected");
+}
+
+#[test]
+fn test_unknown_two_byte_operator_errors() {
+    new_ucmd!()
+        .args(&["-Q", "x"])
+        .fails_with_code(2)
+        .stderr_contains("'-Q': unary operator expected");
+    new_ucmd!()
+        .args(&["x", "-Q", "y"])
+        .fails_with_code(2)
+        .stderr_contains("'-Q': binary operator expected");
 }
 
 #[test]
@@ -175,12 +190,11 @@ fn test_string_comparison() {
 }
 
 #[test]
-#[ignore = "fixme: error reporting"]
 fn test_dangling_string_comparison_is_error() {
     new_ucmd!()
         .args(&["missing_something", "="])
         .fails_with_code(2)
-        .stderr_is("test: missing argument after '='");
+        .stderr_is("test: missing argument after '='\n");
 }
 
 #[test]
@@ -252,6 +266,40 @@ fn test_some_int_compares() {
     for test in &tests {
         scenario.ucmd().arg("!").args(&test[..]).fails_with_code(1);
     }
+}
+
+#[test]
+fn test_integer_length_operands() {
+    new_ucmd!().args(&["-l", "abc", "-eq", "3"]).succeeds();
+    new_ucmd!().args(&["3", "-eq", "-l", "abc"]).succeeds();
+    new_ucmd!().args(&["-l", "abc", "-ne", "4"]).succeeds();
+}
+
+#[test]
+fn test_file_operator_rejects_length_operand() {
+    new_ucmd!()
+        .args(&["-l", "a", "-nt", "b"])
+        .fails_with_code(2)
+        .stderr_contains("-nt does not accept -l");
+}
+
+#[test]
+fn test_tty_out_of_range_is_false() {
+    new_ucmd!()
+        .args(&["-t", "999999999999999999999999999999999999"])
+        .fails_with_code(1);
+}
+
+#[test]
+fn test_and_or_do_not_short_circuit() {
+    new_ucmd!()
+        .args(&["", "-a", "1", "-eq", "bad"])
+        .fails_with_code(2)
+        .stderr_contains("invalid integer 'bad'");
+    new_ucmd!()
+        .args(&["x", "-o", "1", "-eq", "bad"])
+        .fails_with_code(2)
+        .stderr_contains("invalid integer 'bad'");
 }
 
 #[test]
@@ -1115,7 +1163,6 @@ fn test_inverted_parenthetical_bool_op_precedence() {
 }
 
 #[test]
-#[ignore = "fixme: error reporting"]
 fn test_dangling_parenthesis() {
     new_ucmd!()
         .args(&["(", "(", "a", "!=", "b", ")", "-o", "-n", "c"])
@@ -1151,7 +1198,6 @@ fn test_or_as_filename() {
 }
 
 #[test]
-#[ignore = "TODO: Busybox has this working"]
 fn test_filename_or_with_equal() {
     new_ucmd!().args(&["-f", "=", "a", "-o", "b"]).succeeds();
 }

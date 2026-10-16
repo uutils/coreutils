@@ -127,7 +127,6 @@ ls-help-full-time = comme -l --time-style=full-iso
 ls-help-context = afficher tout contexte de sécurité de chaque fichier
 ls-help-group-directories-first = grouper les répertoires avant les fichiers ; peut être augmenté avec
   une option --sort, mais toute utilisation de --sort=none (-U) désactive le groupement
-ls-invalid-quoting-style = {$program} : Ignorer la valeur invalide de la variable d'environnement QUOTING_STYLE : '{$style}'
 ls-invalid-columns-width = ignorer la largeur invalide dans la variable d'environnement COLUMNS : {$width}
 ls-invalid-ignore-pattern = Motif invalide pour ignore : {$pattern}
 ls-invalid-hide-pattern = Motif invalide pour hide : {$pattern}

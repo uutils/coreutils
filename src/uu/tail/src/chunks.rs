@@ -75,9 +75,10 @@ impl Iterator for ReverseChunks<'_> {
 
         // The chunk size is `BLOCK_SIZE` for all but the last chunk
         // (that is, the chunk closest to the beginning of the file),
-        // which contains the remainder of the bytes.
+        // which contains the remaining bytes. That is a full block when
+        // the size is an exact multiple of `BLOCK_SIZE`.
         let block_size = if self.block_idx == self.max_blocks_to_read - 1 {
-            self.size % BLOCK_SIZE
+            self.size - (self.max_blocks_to_read as u64 - 1) * BLOCK_SIZE
         } else {
             BLOCK_SIZE
         };

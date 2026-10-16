@@ -1323,6 +1323,7 @@ pub fn uu_app() -> Command {
                 .short('O')
                 .long(options::OUTPUT_DELIMITER)
                 .value_parser(ValueParser::os_string())
+                .allow_hyphen_values(true)
                 .help(translate!("cut-help-output-delimiter"))
                 .value_name("NEW_DELIM"),
         )
