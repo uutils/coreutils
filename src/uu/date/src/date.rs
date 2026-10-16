@@ -598,11 +598,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     path: path.quote().to_string(),
                 }));
             }
-            let file =
-                File::open(path).map_err_context(|| path.as_os_str().maybe_quote().to_string())?;
+            let quoted_path = path.as_os_str().maybe_quote().to_string();
+            let file = File::open(path).map_err_context(|| quoted_path.clone())?;
             parse_dates_from_reader(
                 file,
-                path.as_os_str().maybe_quote().to_string(),
+                quoted_path,
                 &now,
                 DebugOptions::new(settings.debug, true),
                 allow_extended,
