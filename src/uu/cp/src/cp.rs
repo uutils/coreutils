@@ -2533,6 +2533,9 @@ fn handle_copy_mode(
 ) -> CopyResult<PerformedAction> {
     match options.copy_mode {
         CopyMode::Link => {
+            let replace_symlink = !options.dereference(source_in_command_line)
+                && source_metadata.file_type().is_symlink()
+                && dest.is_symlink();
             let mut force = false;
             if dest.exists() {
                 let backup_path =
@@ -2550,7 +2553,7 @@ fn handle_copy_mode(
             };
             // Replace atomically rather than unlinking first: the gap would
             // let another user claim `dest` under a name the caller trusts.
-            if force {
+            if force || replace_symlink {
                 replace_link(&src, dest, false)
             } else {
                 fs::hard_link(&src, dest)
@@ -2561,6 +2564,15 @@ fn handle_copy_mode(
                     translate!("cp-error-cannot-create-hard-link", "dest" => get_filename(dest).unwrap_or("?").quote(), "source" => get_filename(source).unwrap_or("?").quote())
                 )
             })?;
+            if replace_symlink && options.verbose {
+                use std::io::Write;
+                writeln!(
+                    io::stdout(),
+                    "{}",
+                    translate!("cp-verbose-removed", "path" => dest.quote())
+                )
+                .map_err(|e| CpError::IoErrContext(e, translate!("cp-error-write")))?;
+            }
         }
         CopyMode::Copy => {
             copy_helper(
@@ -2815,7 +2827,16 @@ fn copy_file(
                 OverwriteMode::Clobber(ClobberMode::RemoveDestination)
             ))
     {
-        if paths_refer_to_same_file(source, dest, true) && options.copy_mode == CopyMode::Link {
+        // Distinct symlinks can share a target without being the same link under -P.
+        if options.copy_mode == CopyMode::Link
+            && paths_refer_to_same_file(
+                source,
+                dest,
+                options.dereference(source_in_command_line)
+                    || !source_is_symlink
+                    || !dest_is_symlink,
+            )
+        {
             if source_is_symlink {
                 if !dest_is_symlink {
                     return Ok(());
