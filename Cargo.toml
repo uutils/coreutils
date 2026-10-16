@@ -348,7 +348,6 @@ uptime = { optional = true, version = "0.13.0", package = "uu_uptime", path = "s
 users = { optional = true, version = "0.13.0", package = "uu_users", path = "src/uu/users" }
 vdir = { optional = true, version = "0.13.0", package = "uu_vdir", path = "src/uu/vdir" }
 wc = { optional = true, version = "0.13.0", package = "uu_wc", path = "src/uu/wc" }
-who = { optional = true, version = "0.13.0", package = "uu_who", path = "src/uu/who" }
 whoami = { optional = true, version = "0.13.0", package = "uu_whoami", path = "src/uu/whoami" }
 yes = { optional = true, version = "0.13.0", package = "uu_yes", path = "src/uu/yes" }
 
@@ -400,6 +399,7 @@ runcon = { optional = true, version = "0.13.0", package = "uu_runcon", path = "s
 
 [target.'cfg(any(target_vendor = "apple", target_os = "cygwin", target_os = "freebsd", target_os = "linux", target_os = "netbsd"))'.dependencies]
 pinky = { optional = true, version = "0.13.0", package = "uu_pinky", path = "src/uu/pinky" }
+who = { optional = true, version = "0.13.0", package = "uu_who", path = "src/uu/who" }
 
 [target.'cfg(unix)'.dev-dependencies]
 nix = { workspace = true, features = ["fs", "signal"] }
