@@ -2411,10 +2411,7 @@ fn test_ls_time_styles() {
         .stdout_matches(&re_custom_format_old);
 
     // Empty halves must preserve the order in both --time-style and TIME_STYLE.
-    for (style, expected_recent, expected_old) in [
-        ("+\nNEW", "NEW", ""),
-        ("+OLD\n", "", "OLD"),
-    ] {
+    for (style, expected_recent, expected_old) in [("+\nNEW", "NEW", ""), ("+OLD\n", "", "OLD")] {
         for use_env in [false, true] {
             for (file, expected) in [("test", expected_recent), ("test-old", expected_old)] {
                 let mut cmd = scene.ucmd();
