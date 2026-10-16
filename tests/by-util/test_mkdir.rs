@@ -1259,6 +1259,14 @@ mod diagnostics {
     }
 
     #[test]
+    fn test_invalid_mode_is_quoted() {
+        new_ucmd!()
+            .args(&["-m", "\u{AF}", "c"])
+            .fails_with_code(1)
+            .stderr_only("mkdir: invalid mode '\\302\\257'\n");
+    }
+
+    #[test]
     fn test_terminal_message_quotes_control_character() {
         let result = new_ucmd!()
             .terminal_sim_stderr()
@@ -1267,7 +1275,7 @@ mod diagnostics {
         let stderr = result.stderr_str();
 
         assert!(
-            stderr.contains("invalid operator (expected +, -, or =, but found \\001)"),
+            stderr.contains("invalid operator (expected +, -, or =, but found '\\001')"),
             "{stderr}"
         );
         assert!(stderr.contains("1 │ -m a=\\001 some_dir"), "{stderr}");

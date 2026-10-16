@@ -1405,7 +1405,7 @@ fn test_chmod_invalid_mode_checked_before_any_file() {
     // The mode is checked once, up front: one message, and no walk.
     ucmd.args(&["-R", "g+rw?x", "d"])
         .fails_with_code(1)
-        .stderr_only("chmod: invalid operator (expected +, -, or =, but found ?)\n");
+        .stderr_only("chmod: invalid operator (expected +, -, or =, but found '?')\n");
 }
 
 #[test]
@@ -2428,7 +2428,7 @@ mod diagnostics {
         // The test harness pipes stderr, so the report must not appear.
         ucmd.args(&["g+rw?x", "probe"])
             .fails_with_code(1)
-            .stderr_only("chmod: invalid operator (expected +, -, or =, but found ?)\n");
+            .stderr_only("chmod: invalid operator (expected +, -, or =, but found '?')\n");
     }
 
     #[cfg(unix)]
