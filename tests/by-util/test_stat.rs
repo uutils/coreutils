@@ -775,6 +775,15 @@ fn test_printf_invalid_directive() {
 }
 
 #[test]
+fn test_format_flags_closed_by_percent_are_invalid() {
+    // GNU rejects flag-only fragments ended by another '%', e.g. `%++-+%`.
+    new_ucmd!()
+        .args(&["--format=%++-+%1212x", "/"])
+        .fails_with_code(1)
+        .stderr_is("stat: '%++-+%': invalid directive\n");
+}
+
+#[test]
 fn test_invalid_directive_after_multibyte_char() {
     let ts = TestScenario::new(util_name!());
     // The text before the directive is printed, as GNU does. What is checked

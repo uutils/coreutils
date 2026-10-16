@@ -794,6 +794,17 @@ impl Stater {
 
         Self::process_flags(chars, i, bound, &mut flag);
 
+        // GNU rejects flag-only fragments closed by another '%', e.g. `%++-+%`.
+        if *i < bound && chars[*i] == '%' {
+            let invalid_directive: String = chars[old..=*i].iter().collect();
+            return Err(DirectiveError::new(
+                format_str,
+                &invalid_directive,
+                old,
+                *i + 1,
+            ));
+        }
+
         let mut width = 0;
         let mut precision = Precision::NotSpecified;
         let mut j = *i;
