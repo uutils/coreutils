@@ -2826,7 +2826,7 @@ fn copy_file(
             )
             && options.backup == BackupMode::None
         {
-            fs::remove_file(dest)?;
+            delete_path(dest, options)?;
         }
     }
 
@@ -2839,7 +2839,7 @@ fn copy_file(
         )
         && paths_are_distinct_entries(source, dest)
     {
-        fs::remove_file(dest)?;
+        delete_path(dest, options)?;
     }
 
     if initial_dest_metadata.is_some()
