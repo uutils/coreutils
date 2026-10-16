@@ -1076,33 +1076,37 @@ fn test_negative_offset() {
 
 #[test]
 fn test_relative_weekdays() {
-    // Truncate time component to midnight
-    let today = Timestamp::now().to_zoned(TimeZone::UTC).date();
     // Loop through each day of the week, starting with today
     for offset in 0..7 {
         for direction in ["last", "this", "next"] {
-            let weekday = today
-                .checked_add(offset.days())
-                .unwrap()
-                .strftime("%a")
-                .to_string();
-            new_ucmd!()
-                .arg("-d")
-                .arg(format!("{direction} {weekday}"))
-                .arg("--rfc-3339=seconds")
-                .arg("--utc")
-                .succeeds()
-                .stdout_str_check(|out| {
-                    let result = out.trim().parse::<Timestamp>().unwrap();
-                    let expected = match (direction, offset) {
-                        ("last", _) => today.checked_sub((7 - offset).days()).unwrap(),
-                        ("this", 0) => today,
-                        ("next", 0) => today.checked_add(7.days()).unwrap(),
-                        _ => today.checked_add(offset.days()).unwrap(),
-                    };
-                    let expected_ts = expected.to_zoned(TimeZone::UTC).unwrap().timestamp();
-                    result == expected_ts
-                });
+            // `date` reads the clock itself; run it again if UTC midnight passed meanwhile
+            for _ in 0..2 {
+                let today = Timestamp::now().to_zoned(TimeZone::UTC).date();
+                let weekday = today
+                    .checked_add(offset.days())
+                    .unwrap()
+                    .strftime("%a")
+                    .to_string();
+                let result = new_ucmd!()
+                    .arg("-d")
+                    .arg(format!("{direction} {weekday}"))
+                    .arg("--rfc-3339=seconds")
+                    .arg("--utc")
+                    .succeeds();
+                if Timestamp::now().to_zoned(TimeZone::UTC).date() != today {
+                    continue;
+                }
+                let expected = match (direction, offset) {
+                    ("last", _) => today.checked_sub((7 - offset).days()).unwrap(),
+                    ("this", 0) => today,
+                    ("next", 0) => today.checked_add(7.days()).unwrap(),
+                    _ => today.checked_add(offset.days()).unwrap(),
+                };
+                let expected_ts = expected.to_zoned(TimeZone::UTC).unwrap().timestamp();
+                let got = result.stdout_str().trim().parse::<Timestamp>().unwrap();
+                assert_eq!(got, expected_ts);
+                break;
+            }
         }
     }
 }
@@ -1439,37 +1443,32 @@ fn test_date_resolution_no_combine() {
 fn test_date_numeric_d_basic_utc() {
     // Verify GNU-compatible pure-digit parsing for -d STRING under UTC
     // 0/00 -> today at 00:00; 7/07 -> today at 07:00; 0700 -> today at 07:00
-    let today = Timestamp::now().to_zoned(TimeZone::UTC).date();
-    let yyyy = today.year();
-    let mm = today.month();
-    let dd = today.day();
+    for (input, hour, minute) in [("0", 0, 0), ("7", 7, 0), ("0700", 7, 0)] {
+        let before = Timestamp::now().to_zoned(TimeZone::UTC).date();
+        let out = new_ucmd!()
+            .env("TZ", "UTC0")
+            .arg("-d")
+            .arg(input)
+            .arg("+%F %T %Z")
+            .succeeds();
 
-    let mk =
-        |h: u32, m: u32| -> String { format!("{yyyy:04}-{mm:02}-{dd:02} {h:02}:{m:02}:00 UTC\n") };
-
-    new_ucmd!()
-        .env("TZ", "UTC0")
-        .arg("-d")
-        .arg("0")
-        .arg("+%F %T %Z")
-        .succeeds()
-        .stdout_only(mk(0, 0));
-
-    new_ucmd!()
-        .env("TZ", "UTC0")
-        .arg("-d")
-        .arg("7")
-        .arg("+%F %T %Z")
-        .succeeds()
-        .stdout_only(mk(7, 0));
-
-    new_ucmd!()
-        .env("TZ", "UTC0")
-        .arg("-d")
-        .arg("0700")
-        .arg("+%F %T %Z")
-        .succeeds()
-        .stdout_only(mk(7, 0));
+        let after = Timestamp::now().to_zoned(TimeZone::UTC).date();
+        let expected = |day: jiff::civil::Date| {
+            format!(
+                "{:04}-{:02}-{:02} {hour:02}:{minute:02}:00 UTC\n",
+                day.year(),
+                day.month(),
+                day.day(),
+            )
+        };
+        out.no_stderr();
+        if before == after {
+            out.stdout_is(expected(before));
+        } else {
+            // UTC midnight passed while `date` ran, so either day is right
+            out.stdout_is_any(&[expected(before), expected(after)]);
+        }
+    }
 }
 
 #[test]
@@ -1881,8 +1880,6 @@ fn test_date_military_timezone_with_offset_variations() {
 
 #[test]
 fn test_date_military_timezone_with_offset_and_date() {
-    let today = Timestamp::now().to_zoned(TimeZone::UTC).date();
-
     let test_cases = vec![
         ("m", -1), // M = UTC+12
         ("a", -1), // A = UTC+1
@@ -1903,17 +1900,28 @@ fn test_date_military_timezone_with_offset_and_date() {
     ];
 
     for (input, day_delta) in test_cases {
-        let expected_date = today.checked_add(day_delta.days()).unwrap();
-
-        let expected = format!("{}\n", expected_date.strftime("%F"));
-
-        new_ucmd!()
+        let before = Timestamp::now().to_zoned(TimeZone::UTC).date();
+        let out = new_ucmd!()
             .env("TZ", "UTC")
             .arg("-d")
             .arg(input)
             .arg("+%F")
-            .succeeds()
-            .stdout_is(expected);
+            .succeeds();
+
+        let after = Timestamp::now().to_zoned(TimeZone::UTC).date();
+        let expected = |day: jiff::civil::Date| {
+            format!(
+                "{}\n",
+                day.checked_add(day_delta.days()).unwrap().strftime("%F")
+            )
+        };
+
+        if before == after {
+            out.stdout_is(expected(before));
+        } else {
+            // UTC midnight passed while `date` ran, so either day is right
+            out.stdout_is_any(&[expected(before), expected(after)]);
+        }
     }
 }
 
