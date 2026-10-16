@@ -18,7 +18,7 @@ use std::fs::{self, exists};
 use std::io;
 use std::path::{Path, PathBuf, StripPrefixError};
 
-use indicatif::ProgressBar;
+use crate::CopyProgress;
 use uucore::display::Quotable;
 use uucore::error::set_exit_code;
 use uucore::fs::{
@@ -243,7 +243,7 @@ impl Entry {
 /// be preserved during attribute copying.
 #[allow(clippy::too_many_arguments)]
 fn copy_direntry(
-    progress_bar: Option<&ProgressBar>,
+    progress_bar: Option<&CopyProgress>,
     entry: &Entry,
     entry_is_symlink: bool,
     entry_is_dir_no_follow: bool,
@@ -343,7 +343,7 @@ fn copy_direntry(
 /// will not cause a short-circuit.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn copy_directory(
-    progress_bar: Option<&ProgressBar>,
+    progress_bar: Option<&CopyProgress>,
     root: &Path,
     target: &Path,
     options: &Options,

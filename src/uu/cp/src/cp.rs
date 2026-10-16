@@ -29,7 +29,7 @@ use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_parser};
 use filetime::FileTime;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 #[cfg(unix)]
 use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, mode_t};
 
@@ -407,6 +407,21 @@ impl Default for Options {
             progress_bar: false,
             set_selinux_context: false,
             context: None,
+        }
+    }
+}
+
+/// Progress display activated once a file has passed all skip checks.
+pub(crate) struct CopyProgress {
+    bar: ProgressBar,
+    started: std::cell::Cell<bool>,
+}
+
+impl CopyProgress {
+    fn start(&self) {
+        if !self.started.replace(true) {
+            self.bar.set_draw_target(ProgressDrawTarget::stderr());
+            self.bar.tick();
         }
     }
 }
@@ -1484,8 +1499,11 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 .unwrap(),
             )
             .with_message("cp");
-        pb.tick();
-        Some(pb)
+        pb.set_draw_target(ProgressDrawTarget::hidden());
+        Some(CopyProgress {
+            bar: pb,
+            started: std::cell::Cell::new(false),
+        })
     } else {
         None
     };
@@ -1551,7 +1569,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
     }
 
     if let Some(pb) = progress_bar {
-        pb.finish();
+        pb.bar.finish();
     }
 
     if non_fatal_errors {
@@ -1604,7 +1622,7 @@ fn construct_dest_path(
 }
 #[allow(clippy::too_many_arguments)]
 fn copy_source(
-    progress_bar: Option<&ProgressBar>,
+    progress_bar: Option<&CopyProgress>,
     source: &Path,
     target: &Path,
     target_type: TargetType,
@@ -2520,13 +2538,13 @@ pub(crate) fn set_parent_dirs_attributes(
 
 pub(crate) fn print_verbose_output(
     parents: bool,
-    progress_bar: Option<&ProgressBar>,
+    progress_bar: Option<&CopyProgress>,
     source: &Path,
     dest: &Path,
 ) -> CopyResult<()> {
     if let Some(pb) = progress_bar {
         // Suspend (hide) the progress bar so the println won't overlap with the progress bar.
-        pb.suspend(|| print_paths(parents, source, dest))
+        pb.bar.suspend(|| print_paths(parents, source, dest))
     } else {
         print_paths(parents, source, dest)
     }
@@ -2568,6 +2586,7 @@ fn print_paths(parents: bool, source: &Path, dest: &Path) -> CopyResult<()> {
 /// * `Err(CopyError)` - An error occurred while copying the file.
 #[allow(clippy::too_many_arguments)]
 fn handle_copy_mode(
+    progress_bar: Option<&CopyProgress>,
     source: &Path,
     dest: &Path,
     options: &Options,
@@ -2577,6 +2596,34 @@ fn handle_copy_mode(
     source_in_command_line: bool,
     created_parent_dirs: &mut HashSet<PathBuf>,
 ) -> CopyResult<PerformedAction> {
+    if options.copy_mode == CopyMode::Update && dest.exists() {
+        match options.update {
+            UpdateMode::All => {}
+            UpdateMode::None => {
+                if options.debug {
+                    println!("skipped {}", dest.quote());
+                }
+                return Ok(PerformedAction::Skipped);
+            }
+            UpdateMode::NoneFail => {
+                return Err(CpError::Error(
+                    translate!("cp-error-not-replacing", "file" => dest.quote()),
+                ));
+            }
+            UpdateMode::IfOlder => {
+                let dest_metadata = fs::symlink_metadata(dest)?;
+                if source_metadata.modified()? <= dest_metadata.modified()? {
+                    return Ok(PerformedAction::Skipped);
+                }
+                options.overwrite.verify(dest, options.debug)?;
+            }
+        }
+    }
+
+    if let Some(progress) = progress_bar {
+        progress.start();
+    }
+
     match options.copy_mode {
         CopyMode::Link => {
             let mut force = false;
@@ -2608,7 +2655,7 @@ fn handle_copy_mode(
                 )
             })?;
         }
-        CopyMode::Copy => {
+        CopyMode::Copy | CopyMode::Update => {
             copy_helper(
                 source,
                 dest,
@@ -2627,69 +2674,6 @@ fn handle_copy_mode(
                 symlinked_files.insert(FileInformation::from_path(dest, false)?);
             } else {
                 symlink_file(source, dest, symlinked_files)?;
-            }
-        }
-        CopyMode::Update => {
-            if dest.exists() {
-                match options.update {
-                    UpdateMode::All => {
-                        copy_helper(
-                            source,
-                            dest,
-                            options,
-                            context,
-                            source_metadata,
-                            symlinked_files,
-                            source_in_command_line,
-                            created_parent_dirs,
-                        )?;
-                    }
-                    UpdateMode::None => {
-                        if options.debug {
-                            println!("skipped {}", dest.quote());
-                        }
-
-                        return Ok(PerformedAction::Skipped);
-                    }
-                    UpdateMode::NoneFail => {
-                        return Err(CpError::Error(
-                            translate!("cp-error-not-replacing", "file" => dest.quote()),
-                        ));
-                    }
-                    UpdateMode::IfOlder => {
-                        let dest_metadata = fs::symlink_metadata(dest)?;
-
-                        let src_time = source_metadata.modified()?;
-                        let dest_time = dest_metadata.modified()?;
-                        if src_time <= dest_time {
-                            return Ok(PerformedAction::Skipped);
-                        }
-
-                        options.overwrite.verify(dest, options.debug)?;
-
-                        copy_helper(
-                            source,
-                            dest,
-                            options,
-                            context,
-                            source_metadata,
-                            symlinked_files,
-                            source_in_command_line,
-                            created_parent_dirs,
-                        )?;
-                    }
-                }
-            } else {
-                copy_helper(
-                    source,
-                    dest,
-                    options,
-                    context,
-                    source_metadata,
-                    symlinked_files,
-                    source_in_command_line,
-                    created_parent_dirs,
-                )?;
             }
         }
         CopyMode::AttrOnly => {
@@ -2786,7 +2770,7 @@ fn calculate_dest_permissions(
 /// after a successful copy.
 #[allow(clippy::cognitive_complexity, clippy::too_many_arguments)]
 fn copy_file(
-    progress_bar: Option<&ProgressBar>,
+    progress_bar: Option<&CopyProgress>,
     source: &Path,
     dest: &Path,
     options: &Options,
@@ -2978,6 +2962,7 @@ fn copy_file(
     let source_is_stream = is_stream(&source_metadata);
 
     let performed_action = handle_copy_mode(
+        progress_bar,
         source,
         dest,
         options,
@@ -3079,8 +3064,10 @@ fn copy_file(
         );
     }
 
-    if let Some(progress_bar) = progress_bar {
-        progress_bar.inc(source_metadata.len());
+    if let Some(progress_bar) = progress_bar
+        && performed_action != PerformedAction::Skipped
+    {
+        progress_bar.bar.inc(source_metadata.len());
     }
 
     Ok(())
