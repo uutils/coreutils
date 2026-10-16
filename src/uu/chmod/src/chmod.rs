@@ -11,11 +11,12 @@ use clap::{Arg, ArgAction, Command};
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs;
+use std::io::{Write, stdout};
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{
-    ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code, strip_errno,
+    ExitCode, FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code, strip_errno,
 };
 use uucore::fs::{FileInformation, display_permissions_unix, path_is_root_dir};
 use uucore::mode;
@@ -191,7 +192,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (recursive, dereference, traverse_symlinks) =
         configure_symlink_and_recursion(&matches, TraverseSymlinks::First)?;
 
-    let chmoder = Chmoder {
+    let mut chmoder = Chmoder {
         changes,
         quiet,
         verbose,
@@ -204,9 +205,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         dereference,
         args: mode_args,
         mode_indices,
+        write_error: None,
     };
 
-    chmoder.chmod(&files)
+    let result = chmoder.chmod(&files);
+    if let Some(error) = chmoder.write_error {
+        show!(error.map_err_context(|| translate!("common-write-error")));
+    }
+    result
 }
 
 pub fn uu_app() -> Command {
@@ -311,6 +317,7 @@ struct Chmoder {
     /// Where each extracted negative mode sat in `args`, in the order they
     /// were joined into `cmode`. Empty unless `option_like_mode` is set.
     mode_indices: Vec<usize>,
+    write_error: Option<std::io::Error>,
 }
 
 impl Chmoder {
@@ -399,35 +406,40 @@ impl Chmoder {
     }
 
     /// Report permission changes based on verbose and changes flags
-    fn report_permission_change(&self, file_path: &Path, old_mode: u32, new_mode: u32) {
+    fn report_permission_change(&mut self, file_path: &Path, old_mode: u32, new_mode: u32) {
         if self.verbose || self.changes {
             let current_permissions = display_permissions_unix(old_mode, false);
             let new_permissions = display_permissions_unix(new_mode, false);
 
             if new_mode != old_mode {
-                println!(
+                self.print(format_args!(
                     "mode of {} changed from {old_mode:04o} ({current_permissions}) to {new_mode:04o} ({new_permissions})",
                     file_path.quote(),
-                );
+                ));
             } else if self.verbose {
-                println!(
+                self.print(format_args!(
                     "mode of {} retained as {old_mode:04o} ({current_permissions})",
                     file_path.quote(),
-                );
+                ));
             }
         }
     }
 
-    fn print_neither_changed(file: OsString) -> std::io::Result<()> {
-        use std::io::{Write as _, stdout};
-        writeln!(
-            stdout(),
-            "{}",
-            translate!("chmod-verbose-neither-changed", "file" => file.quote())
-        )
+    fn print(&mut self, message: std::fmt::Arguments<'_>) {
+        // A failed diagnostic must not stop permission changes on later files.
+        if self.write_error.is_none() {
+            self.write_error = writeln!(stdout(), "{message}").err();
+        }
     }
 
-    fn chmod(&self, files: &[OsString]) -> UResult<()> {
+    fn print_neither_changed(&mut self, file: &Path) {
+        self.print(format_args!(
+            "{}",
+            translate!("chmod-verbose-neither-changed", "file" => file.quote())
+        ));
+    }
+
+    fn chmod(&mut self, files: &[OsString]) -> UResult<()> {
         let mut r = Ok(());
 
         for filename in files {
@@ -456,10 +468,10 @@ impl Chmoder {
                         }
 
                         if self.verbose {
-                            println!(
+                            self.print(format_args!(
                                 "{}",
                                 translate!("chmod-verbose-failed-dangling", "file" => filename.quote())
-                            );
+                            ));
                         }
                     } else if !self.quiet {
                         show!(ChmodError::NoSuchFile(filename.into()));
@@ -525,7 +537,7 @@ impl Chmoder {
     // Non-safe traversal implementation for platforms without safe_traversal support
     #[cfg(target_os = "redox")]
     fn walk_dir_with_context(
-        &self,
+        &mut self,
         file_path: &Path,
         is_command_line_arg: bool,
         ancestors: &mut HashSet<FileInformation>,
@@ -585,7 +597,7 @@ impl Chmoder {
 
     #[cfg(not(target_os = "redox"))]
     fn walk_dir_with_context(
-        &self,
+        &mut self,
         file_path: &Path,
         is_command_line_arg: bool,
         ancestors: &mut HashSet<FileInformation>,
@@ -630,7 +642,7 @@ impl Chmoder {
 
     #[cfg(not(target_os = "redox"))]
     fn safe_traverse_dir(
-        &self,
+        &mut self,
         dir_fd: &DirFd,
         dir_path: &Path,
         ancestors: &mut HashSet<FileInformation>,
@@ -728,7 +740,7 @@ impl Chmoder {
 
     #[cfg(not(target_os = "redox"))]
     fn handle_symlink_during_safe_recursion(
-        &self,
+        &mut self,
         path: &Path,
         dir_fd: &DirFd,
         entry_name: &std::ffi::OsStr,
@@ -771,7 +783,7 @@ impl Chmoder {
 
     #[cfg(not(target_os = "redox"))]
     fn safe_chmod_file(
-        &self,
+        &mut self,
         file_path: &Path,
         dir_fd: &DirFd,
         entry_name: &std::ffi::OsStr,
@@ -784,10 +796,10 @@ impl Chmoder {
         // Use safe traversal to change the mode
         if let Err(_e) = dir_fd.chmod_at(entry_name, new_mode, symlink_behavior) {
             if self.verbose {
-                println!(
+                self.print(format_args!(
                     "failed to change mode of {} to {new_mode:o}",
                     file_path.quote(),
-                );
+                ));
             }
             return Err(ChmodError::PermissionDenied(file_path.into()).into());
         }
@@ -798,11 +810,11 @@ impl Chmoder {
         Ok(())
     }
 
-    fn chmod_file(&self, file: &Path) -> UResult<()> {
+    fn chmod_file(&mut self, file: &Path) -> UResult<()> {
         self.chmod_file_internal(file, self.dereference)
     }
 
-    fn chmod_file_internal(&self, file: &Path, dereference: bool) -> UResult<()> {
+    fn chmod_file_internal(&mut self, file: &Path, dereference: bool) -> UResult<()> {
         use uucore::perms::get_metadata;
 
         let metadata = get_metadata(file, dereference);
@@ -813,7 +825,7 @@ impl Chmoder {
                 // Handle dangling symlinks or other errors
                 return if file.is_symlink() && !dereference {
                     if self.verbose {
-                        Self::print_neither_changed(file.into())?;
+                        self.print_neither_changed(file);
                     }
                     Ok(()) // Skip dangling symlinks
                 } else if err.kind() == std::io::ErrorKind::PermissionDenied {
@@ -835,7 +847,7 @@ impl Chmoder {
         // ignored by the kernel anyway, so changing them has no effect.
         if file.is_symlink() && !dereference {
             if self.verbose {
-                Self::print_neither_changed(file.into())?;
+                self.print_neither_changed(file);
             }
             return Ok(());
         }
@@ -862,7 +874,7 @@ impl Chmoder {
         Ok(())
     }
 
-    fn change_file(&self, fperm: u32, mode: u32, file: &Path) -> Result<(), i32> {
+    fn change_file(&mut self, fperm: u32, mode: u32, file: &Path) -> Result<(), i32> {
         // Always issue the chmod(2) call, even when the bits are unchanged: the
         // syscall can still fail (e.g. lacking permission on the file) and that
         // failure must be reported, matching GNU.
@@ -871,12 +883,12 @@ impl Chmoder {
                 show_error!("{}", ChmodError::ChangingPermissions(file.into(), err));
             }
             if self.verbose {
-                println!(
+                self.print(format_args!(
                     "failed to change mode of file {} from {fperm:04o} ({}) to {mode:04o} ({})",
                     file.quote(),
                     display_permissions_unix(fperm, false),
                     display_permissions_unix(mode, false)
-                );
+                ));
             }
             Err(1)
         } else {
