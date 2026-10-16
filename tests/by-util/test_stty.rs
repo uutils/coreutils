@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar ispeed ospeed NCCS nonhex gstty notachar cbreak evenp oddp CSIZE
+// spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar ispeed ospeed NCCS nonhex gstty notachar cbreak evenp oddp CSIZE tcgetattr tcsetattr TCSADRAIN CRDLY
 
 #![cfg(unix)]
 
@@ -44,6 +44,61 @@ fn test_all_flag() {
     for flag in ["parenb", "parmrk", "ixany", "onlcr", "icanon", "noflsh"] {
         result.stdout_contains(flag);
     }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_character_size_cs8_then_cs7() {
+    use nix::sys::termios::{ControlFlags, SetArg, tcgetattr, tcsetattr};
+
+    let (path, _controller, replica) = pty_path();
+    new_ucmd!()
+        .args(&["--file", &path, "cs8"])
+        .succeeds()
+        .no_output();
+
+    // Compare with a direct request: PTY support and libc error handling vary.
+    let original = tcgetattr(&replica).unwrap();
+    let mut expected = original.clone();
+    expected.control_flags.remove(ControlFlags::CSIZE);
+    expected.control_flags.insert(ControlFlags::CS7);
+    let expected_result = tcsetattr(&replica, SetArg::TCSADRAIN, &expected);
+    let expected_size = tcgetattr(&replica).unwrap().control_flags & ControlFlags::CSIZE;
+    tcsetattr(&replica, SetArg::TCSADRAIN, &original).unwrap();
+
+    let result = new_ucmd!().args(&["--file", &path, "cs7"]).run();
+    match expected_result {
+        Ok(()) => result.success().no_output(),
+        Err(_) => result.code_is(1).no_stdout(),
+    };
+    assert_eq!(
+        tcgetattr(&replica).unwrap().control_flags & ControlFlags::CSIZE,
+        expected_size
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[rstest::rstest]
+#[case("cr3", "cr0", nix::sys::termios::OutputFlags::CR0)]
+#[case("cr3", "cr1", nix::sys::termios::OutputFlags::CR1)]
+#[case("cr1", "cr2", nix::sys::termios::OutputFlags::CR2)]
+#[case("cr2", "cr3", nix::sys::termios::OutputFlags::CR3)]
+fn test_grouped_output_flags(
+    #[case] initial: &str,
+    #[case] setting: &str,
+    #[case] expected: nix::sys::termios::OutputFlags,
+) {
+    use nix::sys::termios::{OutputFlags, tcgetattr};
+
+    let (path, _controller, replica) = pty_path();
+    new_ucmd!()
+        .args(&["--file", &path, "opost", initial, setting])
+        .succeeds()
+        .no_output();
+
+    let termios = tcgetattr(&replica).unwrap();
+    assert_eq!(termios.output_flags & OutputFlags::CRDLY, expected);
+    assert!(termios.output_flags.contains(OutputFlags::OPOST));
 }
 
 #[test]
