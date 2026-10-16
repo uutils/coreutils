@@ -14,6 +14,7 @@
 //! More specifically, exponent can be understood so that the original number is in `(1..10)*10^exponent`.
 //! From that follows the constraints of this algorithm: It is able to compare numbers in ±(1*10^[`i64::MIN`]..10*10^[`i64::MAX`]).
 
+use crate::custom_str_cmp::is_blank;
 use std::{cmp::Ordering, ops::Range};
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
@@ -63,7 +64,7 @@ impl NumInfo {
         let mut first_char = true;
 
         for (idx, &char) in num.iter().enumerate() {
-            if first_char && char.is_ascii_whitespace() {
+            if first_char && is_blank(char) {
                 continue;
             }
 
