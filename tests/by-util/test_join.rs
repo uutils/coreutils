@@ -1052,3 +1052,12 @@ fn test_last_of_check_order_nocheck_order_wins() {
         .fails_with_code(1)
         .stderr_is("join: a.txt:2: is not sorted: a\n");
 }
+
+#[test]
+fn test_o_separate_field_operands() {
+    // GNU accepts -o fields as separate argv words when they follow -o.
+    new_ucmd!()
+        .args(&["-o", "1.1", "1.2", "2.2", "fields_1.txt", "fields_2.txt"])
+        .succeeds()
+        .stdout_only("1  a\n2  b\n3  c\n5  e\n8  h\n");
+}
