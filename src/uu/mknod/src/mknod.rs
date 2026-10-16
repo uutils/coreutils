@@ -3,11 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) parsemode makedev sysmacros perror IFBLK IFCHR IFIFO sflag
+// spell-checker:ignore (ToDO) parsemode makedev sysmacros perror RAII mknodat
 
 use clap::{Arg, ArgAction, Command, value_parser};
-use nix::libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t};
-use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, umask as nix_umask};
+use rustix::fs::{CWD, Dev, FileType as RustixFileType, Mode, mknodat};
+use rustix::process::umask;
 use std::ffi::OsString;
 use std::io::{self, Write as _};
 
@@ -17,8 +17,7 @@ use uucore::format_usage;
 use uucore::fs::makedev;
 use uucore::translate;
 
-#[allow(clippy::unnecessary_cast)]
-const MODE_RW_UGO: u32 = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+const MODE_RW_UGO: u32 = 0o666;
 
 mod options {
     pub const MODE: &str = "mode";
@@ -29,7 +28,7 @@ mod options {
     pub const CONTEXT: &str = "context";
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 enum FileType {
     Block,
     Character,
@@ -37,11 +36,11 @@ enum FileType {
 }
 
 impl FileType {
-    fn as_sflag(&self) -> SFlag {
+    fn to_file_type(self) -> RustixFileType {
         match self {
-            Self::Block => SFlag::S_IFBLK,
-            Self::Character => SFlag::S_IFCHR,
-            Self::Fifo => SFlag::S_IFIFO,
+            Self::Block => RustixFileType::BlockDevice,
+            Self::Character => RustixFileType::CharacterDevice,
+            Self::Fifo => RustixFileType::Fifo,
         }
     }
 }
@@ -56,7 +55,7 @@ struct Config {
     /// when false, the exact mode bits will be set
     use_umask: bool,
 
-    dev: dev_t,
+    dev: Dev,
 
     /// Set security context (SELinux/SMACK).
     #[cfg(any(
@@ -73,11 +72,27 @@ struct Config {
     context: Option<String>,
 }
 
+/// RAII guard to restore umask on drop, ensuring cleanup even on panic.
+struct UmaskGuard(Mode);
+
+impl UmaskGuard {
+    fn set(new_mask: Mode) -> Self {
+        let old_mask = umask(new_mask);
+        Self(old_mask)
+    }
+}
+
+impl Drop for UmaskGuard {
+    fn drop(&mut self) {
+        umask(self.0);
+    }
+}
+
 fn mknod(file_name: &str, config: Config) -> i32 {
     // Label the node at creation, as GNU does; relabelling after leaves a window.
     #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
     let _selinux_guard = if config.set_security_context {
-        let mode = config.file_type.as_sflag().bits() | config.mode.bits();
+        let mode = config.file_type.to_file_type().as_raw_mode() | config.mode.as_raw_mode();
         match uucore::selinux::FsCreateContext::new(
             std::path::Path::new(file_name),
             Some(mode),
@@ -93,26 +108,21 @@ fn mknod(file_name: &str, config: Config) -> i32 {
         None
     };
 
-    // set umask to 0 and store previous umask
-    let have_prev_umask = if config.use_umask {
+    let _guard = if config.use_umask {
         None
     } else {
-        Some(nix_umask(Mode::empty()))
+        Some(UmaskGuard::set(Mode::empty()))
     };
 
-    let mknod_err = nix_mknod(
+    let mknod_err = mknodat(
+        CWD,
         file_name,
-        config.file_type.as_sflag(),
+        config.file_type.to_file_type(),
         config.mode,
         config.dev,
     )
     .err();
     let errno = if mknod_err.is_some() { -1 } else { 0 };
-
-    // set umask back to original value
-    if let Some(prev_umask) = have_prev_umask {
-        nix_umask(prev_umask);
-    }
 
     if let Some(err) = mknod_err {
         let _ = writeln!(
@@ -174,7 +184,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             mode
         }
     };
-    let mode = Mode::from_bits_truncate(mode_permissions as mode_t);
+    let mode = Mode::from_bits_truncate(mode_permissions as _);
 
     let file_name = matches
         .get_one::<String>("name")
@@ -215,7 +225,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let config = Config {
         mode,
-        file_type: file_type.clone(),
+        file_type: *file_type,
         use_umask,
         dev,
         #[cfg(any(
