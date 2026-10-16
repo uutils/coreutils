@@ -51,7 +51,7 @@ pub fn main() {
                 "chcon" | "runcon" if !(target_os == "linux" || target_os == "android") => {
                     continue;
                 }
-                "pinky"
+                "pinky" | "who"
                     if !(target_vendor == "apple"
                         || target_os == "cygwin"
                         || target_os == "freebsd"
