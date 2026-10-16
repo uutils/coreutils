@@ -1345,14 +1345,7 @@ where
     }
 }
 
-fn line_bytes(
-    settings: &Settings,
-    reader: &mut impl Read,
-    chunk_size: usize,
-    io_blksize: usize,
-) -> UResult<()> {
-    // todo: GNU is not buffered. So BufReader might wrong.
-    let reader = BufReader::with_capacity(io_blksize, reader);
+fn line_bytes(settings: &Settings, reader: &mut impl BufRead, chunk_size: usize) -> UResult<()> {
     let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
     let mut next_writer = || -> UResult<_> {
         let name = filename_iterator.next().ok_or_else(|| {
@@ -1367,49 +1360,52 @@ fn line_bytes(
     let mut writer = next_writer()?;
     debug_assert!(chunk_size > 0);
     let mut remaining = chunk_size;
+    let mut pending = Vec::new();
+    let mut continuing_line = false;
 
-    for line in lines_with_sep(reader, settings.separator) {
-        let line = line?;
-        let mut line = &line[..];
-        loop {
+    loop {
+        let buffer = reader.fill_buf()?;
+        if buffer.is_empty() {
+            break;
+        }
+        let separator = memchr::memchr(settings.separator, buffer);
+        let end = separator.map_or(buffer.len(), |pos| pos + 1);
+        let complete_line = separator.is_some();
+        pending.extend_from_slice(&buffer[..end]);
+        reader.consume(end);
+
+        // After a complete line, keep the next line intact if it fits.
+        // Lines starting a new chunk can be written as input arrives.
+        if !continuing_line && remaining < chunk_size {
+            if !complete_line && pending.len() <= remaining {
+                continue;
+            }
+            if pending.len() > remaining {
+                remaining = 0;
+            }
+        }
+
+        let mut bytes = pending.as_slice();
+        while !bytes.is_empty() {
             if remaining == 0 {
                 writer = next_writer()?;
                 remaining = chunk_size;
             }
-
-            // Special case: if this is the last line and it doesn't end
-            // with a newline character, then count its length as though
-            // it did end with a newline. If that puts it over the edge
-            // of this chunk, continue to the next chunk.
-            if line.len() == remaining
-                && remaining < chunk_size
-                && line[line.len() - 1] != settings.separator
-            {
-                remaining = 0;
-                continue;
-            }
-
-            // If the entire line fits in this chunk, write it and
-            // continue to the next line.
-            if line.len() <= remaining {
-                custom_write_all(line, &mut writer, settings)?;
-                remaining -= line.len();
-                break;
-            } else if remaining == chunk_size {
-                // If the line is too large to fit in *any* chunk and we are
-                // at the start of a new chunk, write as much as we can of
-                // it and pass the remainder along to the next chunk.
-                custom_write_all(&line[..chunk_size], &mut writer, settings)?;
-                line = &line[chunk_size..];
-                remaining = 0;
-                continue;
-            }
-
-            // If the line is too large to fit in *this* chunk, but
-            // might otherwise fit in the next chunk, then just continue
-            // to the next chunk and let it be handled there.
-            remaining = 0;
+            let count = bytes.len().min(remaining);
+            custom_write_all(&bytes[..count], &mut writer, settings)?;
+            remaining -= count;
+            bytes = &bytes[count..];
         }
+        pending.clear();
+        continuing_line = !complete_line;
+    }
+
+    if !pending.is_empty() {
+        // An unterminated final line needs room for an implicit separator.
+        if pending.len() == remaining {
+            writer = next_writer()?;
+        }
+        custom_write_all(&pending, &mut writer, settings)?;
     }
     Ok(())
 }
@@ -1484,9 +1480,7 @@ fn split(settings: &Settings) -> UResult<()> {
                 Err(e) => Err(e.into()),
             }
         }
-        Strategy::LineBytes(chunk_size) => {
-            line_bytes(settings, &mut reader, chunk_size as usize, io_blksize)
-        }
+        Strategy::LineBytes(chunk_size) => line_bytes(settings, &mut reader, chunk_size as usize),
     }
 }
 
