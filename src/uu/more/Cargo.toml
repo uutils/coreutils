@@ -17,15 +17,17 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-crossterm = { workspace = true, features = ["events"] }
+# use-dev-tty: avoid mio's tight loop on tty EOF/hangup (see #15258); also
+# needed on macOS for event init when stdin is a pipe.
+crossterm = { workspace = true, features = ["events", "use-dev-tty"] }
 fluent = { workspace = true }
 uucore = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["event"] }
+
 [target.'cfg(windows)'.dependencies]
 crossterm = { workspace = true, features = ["windows"] }
-
-[target.'cfg(target_vendor = "apple")'.dependencies]
-crossterm = { workspace = true, features = ["use-dev-tty"] }
 
 [[bin]]
 name = "more"
