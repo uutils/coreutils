@@ -38,14 +38,15 @@ fn test_invalid_arg() {
 }
 
 #[test]
-fn test_hostname_domain_empty() {
+fn test_hostname_domain_none_when_no_dot() {
     let fqdn = new_ucmd!().arg("-f").succeeds();
     let short = new_ucmd!().arg("-s").succeeds();
     let domain = new_ucmd!().arg("-d").succeeds();
     let domain_short = new_ucmd!().arg("-sd").succeeds();
 
+    // When the host name has no '.', GNU prints "(none)" for --domain.
     if fqdn.stdout() == short.stdout() {
-        assert!(domain.stdout().is_empty());
-        assert!(domain_short.stdout().is_empty());
+        assert_eq!(domain.stdout_str(), "(none)\n");
+        assert_eq!(domain_short.stdout_str(), "(none)\n");
     }
 }
