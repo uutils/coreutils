@@ -5,6 +5,14 @@
 
 // spell-checker:ignore (flags) runlevel mesg
 
+#![cfg(any(
+    target_vendor = "apple",
+    target_os = "cygwin",
+    target_os = "freebsd",
+    target_os = "linux",
+    target_os = "netbsd"
+))]
+
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
 use uutests::util::{TestScenario, expected_result, gnu_cmd_result};

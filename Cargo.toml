@@ -346,7 +346,6 @@ uptime = { optional = true, version = "0.13.0", package = "uu_uptime", path = "s
 users = { optional = true, version = "0.13.0", package = "uu_users", path = "src/uu/users" }
 vdir = { optional = true, version = "0.13.0", package = "uu_vdir", path = "src/uu/vdir" }
 wc = { optional = true, version = "0.13.0", package = "uu_wc", path = "src/uu/wc" }
-who = { optional = true, version = "0.13.0", package = "uu_who", path = "src/uu/who" }
 whoami = { optional = true, version = "0.13.0", package = "uu_whoami", path = "src/uu/whoami" }
 yes = { optional = true, version = "0.13.0", package = "uu_yes", path = "src/uu/yes" }
 
@@ -395,6 +394,9 @@ runcon = { optional = true, version = "0.13.0", package = "uu_runcon", path = "s
 # * pinned transitive dependencies
 # Not needed for now. Keep as examples:
 #pin_cc = { version="1.0.61, < 1.0.62", package="cc" } ## cc v1.0.62 has compiler errors for MinRustV v1.32.0, requires 1.34 (for `std::str::split_ascii_whitespace()`)
+
+[target.'cfg(any(target_vendor = "apple", target_os = "cygwin", target_os = "freebsd", target_os = "linux", target_os = "netbsd"))'.dependencies]
+who = { optional = true, version = "0.13.0", package = "uu_who", path = "src/uu/who" }
 
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dev-dependencies]
 rlimit = { workspace = true }
