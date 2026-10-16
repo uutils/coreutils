@@ -9,8 +9,13 @@
 
 use std::cmp::Ordering;
 
+// Newlines also act as blanks inside NUL-terminated records.
+pub fn is_blank(c: u8) -> bool {
+    matches!(c, b' ' | b'\t' | b'\n')
+}
+
 fn filter_char(c: u8, ignore_non_printing: bool, ignore_non_dictionary: bool) -> bool {
-    if ignore_non_dictionary && !(c.is_ascii_alphanumeric() || c.is_ascii_whitespace()) {
+    if ignore_non_dictionary && !(c.is_ascii_alphanumeric() || is_blank(c)) {
         return false;
     }
     !(ignore_non_printing && (c.is_ascii_control() || !c.is_ascii()))
