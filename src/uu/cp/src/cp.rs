@@ -2327,6 +2327,11 @@ fn delete_dest_if_needed_and_allowed(
         OverwriteMode::Clobber(cl) | OverwriteMode::Interactive(cl) => {
             match cl {
                 ClobberMode::Force => {
+                    // Link modes replace the directory entry atomically below and
+                    // do not need access to an existing symlink's target.
+                    if matches!(options.copy_mode, CopyMode::Link | CopyMode::SymLink) {
+                        return Ok(());
+                    }
                     // TODO
                     // Using `readonly` here to check if `dest` needs to be deleted is not correct:
                     // "On Unix-based platforms this checks if any of the owner, group or others write permission bits are set. It does not check if the current user is in the file's assigned group. It also does not check ACLs. Therefore the return value of this function cannot be relied upon to predict whether attempts to read or write the file will actually succeed."
@@ -2580,7 +2585,7 @@ fn handle_copy_mode(
     match options.copy_mode {
         CopyMode::Link => {
             let mut force = false;
-            if dest.exists() {
+            if dest.symlink_metadata().is_ok() {
                 let backup_path =
                     backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
                 if let Some(backup_path) = backup_path {
@@ -2622,7 +2627,9 @@ fn handle_copy_mode(
         }
         CopyMode::SymLink => {
             // Atomic replace, for the same reason as CopyMode::Link above.
-            if dest.exists() && options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
+            if dest.symlink_metadata().is_ok()
+                && options.overwrite == OverwriteMode::Clobber(ClobberMode::Force)
+            {
                 replace_link(source, dest, true)?;
                 symlinked_files.insert(FileInformation::from_path(dest, false)?);
             } else {
@@ -2804,7 +2811,6 @@ fn copy_file(
     let dest_is_symlink = initial_dest_metadata
         .as_ref()
         .is_some_and(|md| md.file_type().is_symlink());
-    let dest_target_exists = dest.try_exists().unwrap_or(false);
     // Fail if dest is a dangling symlink or a symlink this program created previously
     if dest_is_symlink {
         if FileInformation::from_path(dest, false).is_ok_and(|info| symlinked_files.contains(&info))
@@ -2824,17 +2830,30 @@ fn copy_file(
 
         let copy_contents = options.dereference(source_in_command_line) || !source_is_symlink;
         if copy_contents
-            && !dest_target_exists
             && !matches!(
                 options.overwrite,
                 OverwriteMode::Clobber(ClobberMode::RemoveDestination)
             )
             && !is_symlink_loop(dest)
-            && std::env::var_os("POSIXLY_CORRECT").is_none()
         {
-            return Err(CpError::Error(
-                translate!("cp-error-not-writing-dangling-symlink", "dest" => dest.quote()),
-            ));
+            let target_missing = match dest.try_exists() {
+                Ok(exists) => !exists,
+                Err(error)
+                    if options.backup == BackupMode::None
+                        && !matches!(options.copy_mode, CopyMode::Link | CopyMode::SymLink) =>
+                {
+                    return Err(CpError::IoErrContext(
+                        error,
+                        translate!("cp-error-cannot-stat-context", "source" => dest.quote()),
+                    ));
+                }
+                Err(_) => false,
+            };
+            if target_missing && std::env::var_os("POSIXLY_CORRECT").is_none() {
+                return Err(CpError::Error(
+                    translate!("cp-error-not-writing-dangling-symlink", "dest" => dest.quote()),
+                ));
+            }
         }
         if paths_refer_to_same_file(source, dest, true)
             && matches!(
