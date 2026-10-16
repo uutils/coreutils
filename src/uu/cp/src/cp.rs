@@ -1981,7 +1981,9 @@ pub(crate) fn copy_attributes(
             // so we keep ACL parity with GNU without preserving user xattrs
             // (which are intentionally excluded from the default -p set per
             // issue #9704). Best-effort: ignore failures on filesystems that
-            // do not support ACL xattrs.
+            // do not support ACL xattrs. A directory created without an
+            // explicit preserve only gets the source mode bits; GNU `cp -r`
+            // does not copy its ACLs.
             #[cfg(any(
                 target_os = "freebsd",
                 target_os = "hurd",
@@ -1989,7 +1991,9 @@ pub(crate) fn copy_attributes(
                 target_os = "macos",
                 target_os = "netbsd"
             ))]
-            copy_acls(source, dest);
+            if matches!(attributes.mode, Preserve::Yes { .. }) {
+                copy_acls(source, dest);
+            }
         }
 
         Ok(())
