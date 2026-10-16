@@ -1056,7 +1056,6 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
         ],
         _ => &[],
     };
-    #[expect(clippy::match_same_arms)]
     let flags: &[&str] = match combo {
         "lcase" | "LCASE" => &["xcase", "iuclc", "olcuc"],
         "-lcase" | "-LCASE" => &["-xcase", "-iuclc", "-olcuc"],
@@ -1071,13 +1070,12 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
         "-decctlq" => &["-ixany"],
         "ek" => &[],
         "evenp" | "parity" => &["parenb", "-parodd", "cs7"],
-        "-evenp" | "-parity" => &["-parenb", "cs8"],
+        "-evenp" | "-oddp" | "-parity" => &["-parenb", "cs8"],
         "litout" => &["-parenb", "-istrip", "-opost", "cs8"],
         "-litout" => &["parenb", "istrip", "opost", "cs7"],
         "nl" => &["-icrnl", "-onlcr"],
         "-nl" => &["icrnl", "-inlcr", "-igncr", "onlcr", "-ocrnl", "-onlret"],
         "oddp" => &["parenb", "parodd", "cs7"],
-        "-oddp" => &["-parenb", "cs8"],
         "pass8" => &["-parenb", "-istrip", "cs8"],
         "-pass8" => &["parenb", "istrip", "cs7"],
         "raw" | "-cooked" => &[
