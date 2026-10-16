@@ -38,7 +38,10 @@ pub mod fast_inc;
 pub mod format;
 #[cfg(all(feature = "fs", any(unix, windows, target_os = "wasi")))]
 pub mod fs;
-#[cfg(feature = "fsext")]
+#[cfg(all(
+    feature = "fsext",
+    any(all(unix, not(target_os = "fuchsia")), windows, target_os = "wasi")
+))]
 pub mod fsext;
 #[cfg(feature = "i18n-common")]
 pub mod i18n;
@@ -76,7 +79,7 @@ pub mod mode;
 // ** unix-only
 #[cfg(all(unix, feature = "entries"))]
 pub mod entries;
-#[cfg(all(unix, feature = "perms"))]
+#[cfg(all(feature = "perms", unix, not(target_os = "haiku")))]
 pub mod perms;
 #[cfg(all(feature = "pipes", any(target_os = "linux", target_os = "android")))]
 pub mod pipes;
@@ -129,7 +132,7 @@ pub mod selinux;
 pub mod signals;
 #[cfg(all(feature = "smack", target_os = "linux"))]
 pub mod smack;
-#[cfg(feature = "feat_systemd_logind")]
+#[cfg(all(feature = "systemd_logind", target_os = "linux"))]
 pub mod systemd_logind;
 #[cfg(all(
     feature = "utmpx",

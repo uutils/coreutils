@@ -30,7 +30,9 @@ uucore = { workspace = true, features = [
 rustix = { workspace = true, features = ["process", "fs"] }
 
 [features]
+default = ["signals"]
 diagnostics = ["uucore/diagnostics"]
+signals = ["uucore/signals"]
 selinux = ["uucore/selinux"]
 smack = ["uucore/smack"]
 

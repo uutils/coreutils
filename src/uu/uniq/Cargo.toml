@@ -25,6 +25,10 @@ uucore = { workspace = true, features = ["parser"] }
 divan = { workspace = true }
 uucore = { workspace = true, features = ["benchmark", "parser"] }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true
 

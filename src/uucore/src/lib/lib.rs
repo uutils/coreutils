@@ -7,6 +7,7 @@
 
 //! library ~ (core/bundler file)
 
+#![cfg(not(any(target_os = "aix", target_os = "horizon")))]
 // #![deny(missing_docs)] //TODO: enable this
 
 // * feature-gated external crates (re-shared as public internal modules)
@@ -79,7 +80,7 @@ pub use crate::features::ranges;
 pub use crate::features::ringbuffer;
 #[cfg(feature = "sum")]
 pub use crate::features::sum;
-#[cfg(feature = "feat_systemd_logind")]
+#[cfg(all(feature = "systemd_logind", target_os = "linux"))]
 pub use crate::features::systemd_logind;
 #[cfg(feature = "time")]
 pub use crate::features::time;
@@ -97,11 +98,11 @@ pub use crate::features::mode;
 // ** unix-only
 #[cfg(all(unix, feature = "entries"))]
 pub use crate::features::entries;
-#[cfg(all(unix, feature = "perms"))]
+#[cfg(all(feature = "perms", unix, not(target_os = "haiku")))]
 pub use crate::features::perms;
 #[cfg(all(feature = "pipes", any(target_os = "linux", target_os = "android")))]
 pub use crate::features::pipes;
-#[cfg(all(any(unix, windows), feature = "process"))]
+#[cfg(all(any(all(unix, not(target_os = "aix")), windows), feature = "process"))]
 pub use crate::features::process;
 #[cfg(all(unix, feature = "safe-copy"))]
 pub use crate::features::safe_copy;
@@ -142,7 +143,10 @@ pub use crate::features::utmpx;
 #[cfg(all(windows, feature = "wide"))]
 pub use crate::features::wide;
 
-#[cfg(feature = "fsext")]
+#[cfg(all(
+    feature = "fsext",
+    any(all(unix, not(target_os = "fuchsia")), windows, target_os = "wasi")
+))]
 pub use crate::features::fsext;
 
 #[cfg(all(
@@ -166,12 +170,6 @@ pub use crate::features::smack;
 
 //## core functions
 
-#[cfg(unix)]
-use nix::errno::Errno;
-#[cfg(unix)]
-use nix::sys::signal::{
-    SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGSEGV, sigaction,
-};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader};
@@ -183,25 +181,6 @@ use std::os::wasi::ffi::{OsStrExt, OsStringExt};
 use std::str;
 use std::str::Utf8Chunk;
 use std::sync::{LazyLock, atomic::Ordering};
-
-/// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
-/// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
-#[cfg(unix)]
-pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
-    unsafe {
-        sigaction(
-            SIGSEGV,
-            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
-        )
-    }?;
-    unsafe {
-        sigaction(
-            SIGBUS,
-            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
-        )
-    }?;
-    Ok(())
-}
 
 pub fn get_canonical_util_name(util_name: &str) -> &str {
     // remove the "uu_" prefix
@@ -223,10 +202,11 @@ macro_rules! bin_inner {
             use uucore::locale;
 
             // Preserve inherited SIGPIPE settings (e.g., from env --default-signal=PIPE)
-            uucore::panic::preserve_inherited_sigpipe();
+            #[cfg(all(feature = "signals", unix))]
+            uucore::signals::preserve_inherited_sigpipe();
 
             // suppress extraneous error output for SIGPIPE failures/panics
-            uucore::panic::mute_sigpipe_panic();
+            uucore::panic::silence_broken_pipe_panic();
             locale::setup_localization(uucore::get_canonical_util_name(stringify!($util)))
                 .unwrap_or_else(|err| {
                     match err {

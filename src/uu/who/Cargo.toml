@@ -18,14 +18,16 @@ path = "src/who.rs"
 test = false
 doctest = false
 
-[dependencies]
+[target.'cfg(all(unix, not(any(target_os = "aix", target_os = "android", target_os = "fuchsia", target_os = "openbsd", target_os = "redox"))))'.dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
 rustix = { workspace = true, features = ["fs", "termios"] }
 uucore = { workspace = true, features = ["utmpx"] }
 
 [features]
-feat_systemd_logind = ["uucore/feat_systemd_logind"]
+default = ["signals"]
+signals = ["uucore/signals"]
+systemd_logind = ["uucore/systemd_logind"]
 
 [lints]
 workspace = true
@@ -33,3 +35,4 @@ workspace = true
 [[bin]]
 name = "who"
 path = "src/main.rs"
+required-features = ["uucore/default"]
