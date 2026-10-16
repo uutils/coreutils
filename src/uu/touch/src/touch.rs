@@ -507,11 +507,7 @@ fn touch_file(
         path.as_os_str()
     };
 
-    let metadata_result = if opts.no_deref {
-        path.symlink_metadata()
-    } else {
-        path.metadata()
-    };
+    let metadata_result = uucore::fs::get_metadata(path, !opts.no_deref);
 
     if let Err(e) = metadata_result {
         if e.kind() != ErrorKind::NotFound {
