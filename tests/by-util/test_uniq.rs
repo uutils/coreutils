@@ -1223,6 +1223,78 @@ fn test_failed_write_is_reported() {
         .stderr_is("uniq: write error: No space left on device\n");
 }
 
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
+mod read_errors {
+    use rustix::termios::{OptionalActions, OutputModes, tcgetattr, tcsetattr};
+    use std::io::Write;
+    use uutests::{new_ucmd, util::pty_path};
+
+    fn check_read_error(args: &[&str], input: &[u8], expected: &[u8]) {
+        let (_, controller, mut replica) = pty_path();
+        let mut termios = tcgetattr(&replica).unwrap();
+        // Preserve the input bytes, including newlines and NUL delimiters.
+        termios.output_modes.remove(OutputModes::OPOST);
+        tcsetattr(&replica, OptionalActions::Now, &termios).unwrap();
+        replica.write_all(input).unwrap();
+        // Linux reads the queued bytes before returning EIO once the replica closes.
+        drop(replica);
+
+        new_ucmd!()
+            .args(args)
+            .set_stdin(controller)
+            .fails_with_code(1)
+            .stdout_is_bytes(expected)
+            .stderr_contains("uniq: read error:");
+    }
+
+    #[test]
+    fn test_read_error_preserves_complete_lines() {
+        for (input, expected) in [
+            (&b"cedar\nmaple\n"[..], &b"cedar\nmaple\n"[..]),
+            (b"cedar\ncedar\n", b"cedar\n"),
+            (b"cedar\nmaple", b"cedar\n"),
+            (b"cedar\ncedar", b"cedar\n"),
+            (b"\n\n", b"\n"),
+            (b"partial", b""),
+            (b"", b""),
+        ] {
+            check_read_error(&[], input, expected);
+        }
+    }
+
+    #[test]
+    fn test_read_error_preserves_zero_terminated_lines() {
+        check_read_error(&["-z"], b"cedar\0maple\0partial", b"cedar\0maple\0");
+    }
+
+    #[test]
+    fn test_read_error_preserves_group_delimiters() {
+        for (arg, expected) in [
+            ("--group=separate", &b"cedar\ncedar\n\nmaple\n"[..]),
+            ("--group=prepend", b"\ncedar\ncedar\n\nmaple\n"),
+            ("--group=append", b"cedar\ncedar\n\nmaple\n\n"),
+            ("--group=both", b"\ncedar\ncedar\n\nmaple\n\n"),
+        ] {
+            check_read_error(&[arg], b"cedar\ncedar\nmaple\npartial", expected);
+        }
+    }
+
+    #[test]
+    fn test_read_error_does_not_finalize_counts_or_filtered_groups() {
+        for (arg, input, expected) in [
+            ("-c", &b"cedar\nmaple\n"[..], &b"      1 cedar\n"[..]),
+            ("-c", b"cedar\nmaple", b""),
+            ("-c", b"cedar\ncedar\n", b""),
+            ("-u", b"cedar\nmaple\n", b"cedar\n"),
+            ("-d", b"cedar\ncedar\nmaple\n", b"cedar\n"),
+            ("-d", b"cedar\ncedar\n", b""),
+            ("-D", b"cedar\ncedar\n", b"cedar\n"),
+        ] {
+            check_read_error(&[arg], input, expected);
+        }
+    }
+}
+
 #[test]
 fn test_repeated_skip_fields_takes_the_last() {
     // GNU lets a later -f override an earlier one rather than erroring.
