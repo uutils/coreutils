@@ -710,7 +710,7 @@ fn test_chmod_symlink_non_existing_file_recursive() {
     let test_directory = "test_chmod_symlink_non_existing_file_directory";
 
     at.mkdir(test_directory);
-    at.symlink_file(non_existing, &format!("{test_directory}/{test_symlink}"));
+    at.symlink_file(non_existing, format!("{test_directory}/{test_symlink}"));
 
     // this should succeed
     scene
@@ -1329,7 +1329,7 @@ fn test_chmod_traverse_symlink_combo() {
 
         at.mkdir(directory);
         at.touch(target);
-        at.symlink_file(target, &format!("{directory}/{symlink}"));
+        at.symlink_file(target, format!("{directory}/{symlink}"));
 
         set_permissions(at.plus(target), Permissions::from_mode(0o664)).unwrap();
 
@@ -1348,7 +1348,7 @@ fn test_chmod_traverse_symlink_combo() {
         );
 
         let actual_symlink = at
-            .symlink_metadata(&format!("{directory}/{symlink}"))
+            .symlink_metadata(format!("{directory}/{symlink}"))
             .permissions()
             .mode();
         assert_eq!(
@@ -1394,7 +1394,7 @@ fn test_chmod_recursive_symlink_to_directory_command_line() {
             .no_stderr();
 
         let actual_file_perms = at
-            .metadata(&format!("{target_dir}/{file_in_target}"))
+            .metadata(format!("{target_dir}/{file_in_target}"))
             .permissions()
             .mode();
 
@@ -1436,7 +1436,7 @@ fn test_chmod_recursive_symlink_during_traversal() {
         at.mkdir(directory);
         at.mkdir(target_dir);
         at.touch(format!("{target_dir}/{file_in_target}"));
-        at.symlink_dir(target_dir, &format!("{directory}/{symlink_to_dir}"));
+        at.symlink_dir(target_dir, format!("{directory}/{symlink_to_dir}"));
 
         set_permissions(
             at.plus(format!("{target_dir}/{file_in_target}")),
@@ -1452,7 +1452,7 @@ fn test_chmod_recursive_symlink_during_traversal() {
             .no_stderr();
 
         let actual_file_perms = at
-            .metadata(&format!("{target_dir}/{file_in_target}"))
+            .metadata(format!("{target_dir}/{file_in_target}"))
             .permissions()
             .mode();
 
@@ -1488,8 +1488,8 @@ fn test_chmod_recursive_symlink_combinations() {
     at.mkdir(target_dir);
     at.touch(target_file);
     at.touch(format!("{target_dir}/{file_in_target}"));
-    at.symlink_dir(target_dir, &format!("{directory}/{symlink_to_dir}"));
-    at.symlink_file(target_file, &format!("{directory}/{symlink_to_file}"));
+    at.symlink_dir(target_dir, format!("{directory}/{symlink_to_dir}"));
+    at.symlink_file(target_file, format!("{directory}/{symlink_to_file}"));
 
     set_permissions(at.plus(target_file), Permissions::from_mode(0o644)).unwrap();
     set_permissions(
@@ -1511,7 +1511,7 @@ fn test_chmod_recursive_symlink_combinations() {
     // Both target file and file in target directory should have permissions changed
     assert_eq!(at.metadata(target_file).permissions().mode(), 0o100_600);
     assert_eq!(
-        at.metadata(&format!("{target_dir}/{file_in_target}"))
+        at.metadata(format!("{target_dir}/{file_in_target}"))
             .permissions()
             .mode(),
         0o100_600

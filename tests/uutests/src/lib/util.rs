@@ -43,8 +43,6 @@ use std::os::unix::process::CommandExt;
 use std::os::unix::process::ExitStatusExt;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
-#[cfg(windows)]
-use std::path::MAIN_SEPARATOR_STR;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::rc::Rc;
@@ -1049,13 +1047,12 @@ impl AtPath {
         self.subdir.to_str().unwrap().to_owned()
     }
 
-    pub fn plus<P: AsRef<Path>>(&self, name: P) -> PathBuf {
-        let mut pathbuf = self.subdir.clone();
-        pathbuf.push(name);
-        pathbuf
+    pub fn plus(&self, name: impl AsRef<Path>) -> PathBuf {
+        let pathbuf = self.subdir.clone();
+        pathbuf.join(name)
     }
 
-    pub fn plus_as_string<P: AsRef<Path>>(&self, name: P) -> String {
+    pub fn plus_as_string(&self, name: impl AsRef<Path>) -> String {
         self.plus(name).display().to_string()
     }
 
@@ -1076,44 +1073,48 @@ impl AtPath {
         String::from(self.minus(name).to_str().unwrap())
     }
 
-    pub fn set_readonly(&self, name: &str) {
-        let metadata = fs::metadata(self.plus(name)).unwrap();
+    pub fn set_readonly(&self, name: impl AsRef<Path>) {
+        let metadata = fs::metadata(self.plus(&name)).unwrap();
         let mut permissions = metadata.permissions();
         permissions.set_readonly(true);
         fs::set_permissions(self.plus(name), permissions).unwrap();
     }
 
-    pub fn open(&self, name: &str) -> File {
-        log_info("open", self.plus_as_string(name));
+    pub fn open(&self, name: impl AsRef<Path>) -> File {
+        log_info("open", self.plus_as_string(&name));
         File::open(self.plus(name)).unwrap()
     }
 
-    pub fn read(&self, name: &str) -> String {
+    pub fn read(&self, name: impl AsRef<Path>) -> String {
+        let name = name.as_ref();
         let mut f = self.open(name);
         let mut contents = String::new();
         f.read_to_string(&mut contents)
-            .unwrap_or_else(|e| panic!("Couldn't read {name}: {e}"));
+            .unwrap_or_else(|e| panic!("Couldn't read {}: {e}", name.display()));
         contents
     }
 
-    pub fn read_bytes(&self, name: &str) -> Vec<u8> {
+    pub fn read_bytes(&self, name: impl AsRef<Path>) -> Vec<u8> {
+        let name = name.as_ref();
         let mut f = self.open(name);
         let mut contents = Vec::new();
         f.read_to_end(&mut contents)
-            .unwrap_or_else(|e| panic!("Couldn't read {name}: {e}"));
+            .unwrap_or_else(|e| panic!("Couldn't read {}: {e}", name.display()));
         contents
     }
 
-    pub fn write(&self, name: &str, contents: &str) {
+    pub fn write(&self, name: impl AsRef<Path>, contents: &str) {
+        let name = name.as_ref();
         log_info("write(default)", self.plus_as_string(name));
         fs::write(self.plus(name), contents)
-            .unwrap_or_else(|e| panic!("Couldn't write {name}: {e}"));
+            .unwrap_or_else(|e| panic!("Couldn't write {}: {e}", name.display()));
     }
 
-    pub fn write_bytes(&self, name: &str, contents: &[u8]) {
+    pub fn write_bytes(&self, name: impl AsRef<Path>, contents: &[u8]) {
+        let name = name.as_ref();
         log_info("write(default)", self.plus_as_string(name));
         fs::write(self.plus(name), contents)
-            .unwrap_or_else(|e| panic!("Couldn't write {name}: {e}"));
+            .unwrap_or_else(|e| panic!("Couldn't write {}: {e}", name.display()));
     }
 
     pub fn append(&self, name: impl AsRef<Path>, contents: &str) {
@@ -1128,7 +1129,8 @@ impl AtPath {
             .unwrap_or_else(|e| panic!("Couldn't write(append) {}: {e}", name.display()));
     }
 
-    pub fn append_bytes(&self, name: &str, contents: &[u8]) {
+    pub fn append_bytes(&self, name: impl AsRef<Path>, contents: &[u8]) {
+        let name = name.as_ref();
         log_info("write(append)", self.plus_as_string(name));
         let mut f = OpenOptions::new()
             .append(true)
@@ -1136,10 +1138,11 @@ impl AtPath {
             .open(self.plus(name))
             .unwrap();
         f.write_all(contents)
-            .unwrap_or_else(|e| panic!("Couldn't write(append) to {name}: {e}"));
+            .unwrap_or_else(|e| panic!("Couldn't write(append) to {}: {e}", name.display()));
     }
 
-    pub fn truncate(&self, name: &str, contents: &str) {
+    pub fn truncate(&self, name: impl AsRef<Path>, contents: &str) {
+        let name = name.as_ref();
         log_info("write(truncate)", self.plus_as_string(name));
         let mut f = OpenOptions::new()
             .write(true)
@@ -1148,10 +1151,10 @@ impl AtPath {
             .open(self.plus(name))
             .unwrap();
         f.write_all(contents.as_bytes())
-            .unwrap_or_else(|e| panic!("Couldn't write(truncate) {name}: {e}"));
+            .unwrap_or_else(|e| panic!("Couldn't write(truncate) {}: {e}", name.display()));
     }
 
-    pub fn rename(&self, source: &str, target: &str) {
+    pub fn rename(&self, source: impl AsRef<Path>, target: impl AsRef<Path>) {
         let source = self.plus(source);
         let target = self.plus(target);
         log_info(
@@ -1167,14 +1170,14 @@ impl AtPath {
         });
     }
 
-    pub fn remove(&self, source: &str) {
+    pub fn remove(&self, source: impl AsRef<Path>) {
         let source = self.plus(source);
         log_info("remove", format!("{}", source.display()));
         remove_file(&source)
             .unwrap_or_else(|e| panic!("Couldn't remove {}: {e}", source.display()));
     }
 
-    pub fn copy(&self, source: &str, target: &str) {
+    pub fn copy(&self, source: impl AsRef<Path>, target: impl AsRef<Path>) {
         let source = self.plus(source);
         let target = self.plus(target);
         log_info("copy", format!("{} {}", source.display(), target.display()));
@@ -1187,37 +1190,40 @@ impl AtPath {
         });
     }
 
-    pub fn rmdir(&self, dir: &str) {
+    pub fn rmdir(&self, dir: impl AsRef<Path>) {
+        let dir = dir.as_ref();
         log_info("rmdir", self.plus_as_string(dir));
         fs::remove_dir(self.plus(dir)).unwrap();
     }
 
-    pub fn mkdir<P: AsRef<Path>>(&self, dir: P) {
+    pub fn mkdir(&self, dir: impl AsRef<Path>) {
         let dir = dir.as_ref();
         log_info("mkdir", self.plus_as_string(dir));
         fs::create_dir(self.plus(dir)).unwrap();
     }
 
-    pub fn mkdir_all(&self, dir: &str) {
+    pub fn mkdir_all(&self, dir: impl AsRef<Path>) {
+        let dir = dir.as_ref();
         log_info("mkdir_all", self.plus_as_string(dir));
         fs::create_dir_all(self.plus(dir)).unwrap();
     }
 
-    pub fn make_file(&self, name: &str) -> File {
+    pub fn make_file(&self, name: impl AsRef<Path>) -> File {
+        let name = name.as_ref();
         match File::create(self.plus(name)) {
             Ok(f) => f,
-            Err(e) => panic!("{e}"),
+            Err(e) => panic!("Couldn't create file {}: {e}", name.display()),
         }
     }
 
     pub fn touch<P: AsRef<Path>>(&self, file: P) {
         let file = file.as_ref();
         log_info("touch", self.plus_as_string(file));
-        File::create(self.plus(file)).unwrap();
+        let _ = self.make_file(file);
     }
 
     #[cfg(not(windows))]
-    pub fn mkfifo(&self, fifo: &str) {
+    pub fn mkfifo(&self, fifo: impl AsRef<Path>) {
         // rustix::fs::mkfifoat is linux only
         use nix::sys::stat::Mode;
         let full_path = self.plus_as_string(fifo);
@@ -1228,25 +1234,27 @@ impl AtPath {
     }
 
     #[cfg(unix)]
-    pub fn mksocket(&self, socket: &str) {
+    pub fn mksocket(&self, socket: impl AsRef<Path>) {
         let full_path = self.plus_as_string(socket);
         log_info("mksocket", &full_path);
         UnixListener::bind(full_path).expect("Socket file creation failed.");
     }
 
     #[cfg(not(windows))]
-    pub fn is_fifo(&self, fifo: &str) -> bool {
+    pub fn is_fifo(&self, fifo: impl AsRef<Path>) -> bool {
         stat::stat(&self.plus(fifo))
             .is_ok_and(|s| SFlag::from_bits_truncate(s.st_mode).contains(SFlag::S_IFIFO))
     }
 
     #[cfg(not(windows))]
-    pub fn is_char_device(&self, char_dev: &str) -> bool {
+    pub fn is_char_device(&self, char_dev: impl AsRef<Path>) -> bool {
         stat::stat(&self.plus(char_dev))
             .is_ok_and(|s| SFlag::from_bits_truncate(s.st_mode).contains(SFlag::S_IFCHR))
     }
 
-    pub fn hard_link(&self, original: &str, link: &str) {
+    pub fn hard_link(&self, original: impl AsRef<Path>, link: impl AsRef<Path>) {
+        let original = original.as_ref();
+        let link = link.as_ref();
         log_info(
             "hard_link",
             format!(
@@ -1258,7 +1266,9 @@ impl AtPath {
         hard_link(self.plus(original), self.plus(link)).unwrap();
     }
 
-    pub fn symlink_file(&self, original: &str, link: &str) {
+    pub fn symlink_file(&self, original: impl AsRef<Path>, link: impl AsRef<Path>) {
+        let original = original.as_ref();
+        let link = link.as_ref();
         log_info(
             "symlink",
             format!(
@@ -1270,17 +1280,19 @@ impl AtPath {
         symlink_file(self.plus(original), self.plus(link)).unwrap();
     }
 
-    pub fn relative_symlink_file(&self, original: &str, link: &str) {
-        #[cfg(windows)]
-        let original = original.replace('/', MAIN_SEPARATOR_STR);
+    pub fn relative_symlink_file(&self, original: impl AsRef<Path>, link: impl AsRef<Path>) {
+        let original = original.as_ref();
+        let link = link.as_ref();
         log_info(
             "symlink",
-            format!("{original},{}", self.plus_as_string(link)),
+            format!("{},{}", original.display(), self.plus_as_string(link)),
         );
         symlink_file(original, self.plus(link)).unwrap();
     }
 
-    pub fn symlink_dir(&self, original: &str, link: &str) {
+    pub fn symlink_dir(&self, original: impl AsRef<Path>, link: impl AsRef<Path>) {
+        let original = original.as_ref();
+        let link = link.as_ref();
         log_info(
             "symlink",
             format!(
@@ -1292,25 +1304,24 @@ impl AtPath {
         symlink_dir(self.plus(original), self.plus(link)).unwrap();
     }
 
-    pub fn relative_symlink_dir(&self, original: &str, link: &str) {
-        #[cfg(windows)]
-        let original = original.replace('/', MAIN_SEPARATOR_STR);
+    pub fn relative_symlink_dir(&self, original: impl AsRef<Path>, link: impl AsRef<Path>) {
+        let original = original.as_ref();
+        let link = link.as_ref();
         log_info(
             "symlink",
-            format!("{original},{}", self.plus_as_string(link)),
+            format!("{},{}", original.display(), self.plus_as_string(link)),
         );
         symlink_dir(original, self.plus(link)).unwrap();
     }
 
-    pub fn is_symlink(&self, path: &str) -> bool {
+    pub fn is_symlink(&self, path: impl AsRef<Path>) -> bool {
+        let path = path.as_ref();
         log_info("is_symlink", self.plus_as_string(path));
-        match fs::symlink_metadata(self.plus(path)) {
-            Ok(m) => m.file_type().is_symlink(),
-            Err(_) => false,
-        }
+        fs::symlink_metadata(self.plus(path)).is_ok_and(|m| m.is_symlink())
     }
 
-    pub fn resolve_link(&self, path: &str) -> String {
+    pub fn resolve_link(&self, path: impl AsRef<Path>) -> String {
+        let path = path.as_ref();
         log_info("resolve_link", self.plus_as_string(path));
         match fs::read_link(self.plus(path)) {
             Ok(p) => self.minus_as_string(p.to_str().unwrap()),
@@ -1318,7 +1329,8 @@ impl AtPath {
         }
     }
 
-    pub fn read_symlink(&self, path: &str) -> String {
+    pub fn read_symlink(&self, path: impl AsRef<Path>) -> String {
+        let path = path.as_ref();
         log_info("read_symlink", self.plus_as_string(path));
         fs::read_link(self.plus(path))
             .unwrap()
@@ -1327,40 +1339,31 @@ impl AtPath {
             .to_owned()
     }
 
-    pub fn symlink_metadata(&self, path: &str) -> fs::Metadata {
+    pub fn symlink_metadata(&self, path: impl AsRef<Path>) -> fs::Metadata {
         match fs::symlink_metadata(self.plus(path)) {
             Ok(m) => m,
             Err(e) => panic!("{e}"),
         }
     }
 
-    pub fn metadata(&self, path: &str) -> fs::Metadata {
+    pub fn metadata(&self, path: impl AsRef<Path>) -> fs::Metadata {
         match fs::metadata(self.plus(path)) {
             Ok(m) => m,
             Err(e) => panic!("{e}"),
         }
     }
 
-    pub fn file_exists<P: AsRef<Path>>(&self, path: P) -> bool {
-        match fs::metadata(self.plus(path)) {
-            Ok(m) => m.is_file(),
-            Err(_) => false,
-        }
+    pub fn file_exists(&self, path: impl AsRef<Path>) -> bool {
+        fs::metadata(self.plus(path)).is_ok_and(|m| m.is_file())
     }
 
     /// Decide whether the named symbolic link exists in the test directory.
-    pub fn symlink_exists<P: AsRef<Path>>(&self, path: P) -> bool {
-        match fs::symlink_metadata(self.plus(path)) {
-            Ok(m) => m.file_type().is_symlink(),
-            Err(_) => false,
-        }
+    pub fn symlink_exists(&self, path: impl AsRef<Path>) -> bool {
+        fs::symlink_metadata(self.plus(path)).is_ok_and(|m| m.is_symlink())
     }
 
-    pub fn dir_exists<P: AsRef<Path>>(&self, path: P) -> bool {
-        match fs::metadata(self.plus(path)) {
-            Ok(m) => m.is_dir(),
-            Err(_) => false,
-        }
+    pub fn dir_exists(&self, path: impl AsRef<Path>) -> bool {
+        fs::metadata(self.plus(path)).is_ok_and(|m| m.is_dir())
     }
 
     pub fn root_dir_resolved(&self) -> String {
@@ -1404,7 +1407,7 @@ impl AtPath {
     /// This function panics if there is an error loading the metadata
     /// or setting the permissions of the file.
     #[cfg(not(windows))]
-    pub fn set_mode(&self, filename: &str, mode: u32) {
+    pub fn set_mode(&self, filename: impl AsRef<Path>, mode: u32) {
         let path = self.plus(filename);
         let mut perms = fs::metadata(&path).unwrap().permissions();
         perms.set_mode(mode);

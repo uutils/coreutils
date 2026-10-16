@@ -210,7 +210,7 @@ fn test_mknod_selinux() {
             context_value.contains("unconfined_u"),
             "Expected 'unconfined_u' not found in getfattr output:\n{context_value}"
         );
-        at.remove(&at.plus_as_string(dest));
+        at.remove(at.plus_as_string(dest));
     }
 }
 
