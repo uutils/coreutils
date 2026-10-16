@@ -62,6 +62,7 @@ struct OrderChecker {
     mode: CheckOrder,
     has_error: bool,
     use_locale: bool,
+    line_ending: u8,
 }
 
 /// Compare two lines the way the input was ordered.
@@ -69,7 +70,12 @@ struct OrderChecker {
 /// `sort` orders with the locale collation, and so do `join` and `ls`. Reading
 /// that order back with a byte comparison rejects input that is in order and
 /// puts lines in the wrong column, so `comm` has to measure it the same way.
-fn line_cmp(a: &[u8], b: &[u8], use_locale: bool) -> Ordering {
+///
+/// The terminator is not part of the line: an empty line sorts before a tab,
+/// even though a newline byte sorts after a tab byte.
+fn line_cmp(a: &[u8], b: &[u8], line_ending: u8, use_locale: bool) -> Ordering {
+    let a = a.strip_suffix(&[line_ending]).unwrap_or(a);
+    let b = b.strip_suffix(&[line_ending]).unwrap_or(b);
     if use_locale {
         locale_cmp(a, b)
     } else {
@@ -121,13 +127,14 @@ impl LineReader {
 }
 
 impl OrderChecker {
-    fn new(file_num: FileNumber, mode: CheckOrder, use_locale: bool) -> Self {
+    fn new(file_num: FileNumber, mode: CheckOrder, use_locale: bool, line_ending: u8) -> Self {
         Self {
             last_line: Vec::new(),
             file_num,
             mode,
             has_error: false,
             use_locale,
+            line_ending,
         }
     }
 
@@ -143,7 +150,12 @@ impl OrderChecker {
             return true;
         }
 
-        let is_ordered = line_cmp(current_line, &self.last_line, self.use_locale) != Ordering::Less;
+        let is_ordered = line_cmp(
+            current_line,
+            &self.last_line,
+            self.line_ending,
+            self.use_locale,
+        ) != Ordering::Less;
         if !is_ordered && !self.has_error {
             let _ = writeln!(
                 stderr(),
@@ -211,8 +223,9 @@ fn comm(
     };
 
     let use_locale = should_use_locale_collation();
-    let mut checker1 = OrderChecker::new(FileNumber::One, mode, use_locale);
-    let mut checker2 = OrderChecker::new(FileNumber::Two, mode, use_locale);
+    let line_ending = a.line_ending.into();
+    let mut checker1 = OrderChecker::new(FileNumber::One, mode, use_locale, line_ending);
+    let mut checker2 = OrderChecker::new(FileNumber::Two, mode, use_locale, line_ending);
     let mut files_differ = false;
     let mut input_error = false;
 
@@ -220,7 +233,7 @@ fn comm(
         let ord = match (na, nb) {
             (0, _) => Ordering::Greater,
             (_, 0) => Ordering::Less,
-            (_, _) => line_cmp(ra, rb, use_locale),
+            (_, _) => line_cmp(ra, rb, line_ending, use_locale),
         };
 
         if ord != Ordering::Equal {
