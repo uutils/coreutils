@@ -1895,10 +1895,12 @@ fn test_du_symlink_fail() {
     ts.ucmd().arg("-L").arg("target.txt").fails_with_code(1);
 }
 
-#[cfg(not(windows))]
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[uutests::wasi_ignore(NoBlockSizeSupport)]
 #[test]
 fn test_du_symlink_multiple_fail() {
+    use std::os::unix::fs::MetadataExt;
+
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
@@ -1907,7 +1909,8 @@ fn test_du_symlink_multiple_fail() {
 
     let result = ts.ucmd().arg("-L").arg("target.txt").arg("file1").fails();
     assert_eq!(result.code(), 1);
-    result.stdout_contains("4\tfile1\n");
+    let kib = at.metadata("file1").blocks().div_ceil(2);
+    result.stdout_is(format!("{kib}\tfile1\n"));
 }
 
 #[test]
