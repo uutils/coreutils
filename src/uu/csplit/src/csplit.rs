@@ -387,19 +387,14 @@ impl SplitWriter<'_> {
             let line = line?;
             match n.cmp(&(&ln + 1)) {
                 Ordering::Less => {
-                    assert!(
-                        input_iter.add_line_to_buffer(ln, line).is_none(),
-                        "the buffer is big enough to contain 1 line"
-                    );
+                    input_iter.put_back_line(ln, line);
                     ret = Ok(());
                     break;
                 }
                 Ordering::Equal => {
-                    assert!(
-                        self.options.suppress_matched
-                            || input_iter.add_line_to_buffer(ln, line).is_none(),
-                        "the buffer is big enough to contain 1 line"
-                    );
+                    if !self.options.suppress_matched {
+                        input_iter.put_back_line(ln, line);
+                    }
                     ret = Ok(());
                     break;
                 }
@@ -447,6 +442,7 @@ impl SplitWriter<'_> {
                     .strip_suffix(b"\r\n")
                     .unwrap_or_else(|| line.strip_suffix(b"\n").unwrap_or(&line));
                 if regex.is_match(l) {
+                    let retain_next_line = offset > 0;
                     let mut next_line_suppress_matched = false;
                     match (self.options.suppress_matched, offset) {
                         // no offset, add the line to the next split
@@ -482,6 +478,11 @@ impl SplitWriter<'_> {
                     // if we have to suppress one line after we take the next and do nothing
                     if next_line_suppress_matched {
                         input_iter.next();
+                    } else if retain_next_line {
+                        // The next regex starts after the current line, even with a positive offset.
+                        if let Some((ln, line)) = input_iter.next() {
+                            input_iter.add_line_to_buffer(ln, line?);
+                        }
                     }
                     return Ok(());
                 }
@@ -550,6 +551,8 @@ where
     I: Iterator<Item = (usize, UResult<Vec<u8>>)>,
 {
     iter: I,
+    /// A line held back by a numeric pattern, not yet examined by a regex.
+    pending_line: Option<<I as Iterator>::Item>,
     buffer: Vec<<I as Iterator>::Item>,
     /// the number of elements the buffer may hold
     size: usize,
@@ -565,9 +568,19 @@ where
     fn new(iter: I) -> Self {
         Self {
             iter,
+            pending_line: None,
             buffer: Vec::new(),
             rewind: false,
             size: 1,
+        }
+    }
+
+    /// Retain the current line without marking a newly read line as already searched.
+    fn put_back_line(&mut self, ln: usize, line: Vec<u8>) {
+        if self.rewind {
+            self.buffer.insert(0, (ln, Ok(line)));
+        } else {
+            self.pending_line = Some((ln, Ok(line)));
         }
     }
 
@@ -629,6 +642,10 @@ where
     type Item = <I as Iterator>::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if let Some(line) = self.pending_line.take() {
+            self.rewind = false;
+            return Some(line);
+        }
         if self.rewind {
             if !self.buffer.is_empty() {
                 return Some(self.buffer.remove(0));
