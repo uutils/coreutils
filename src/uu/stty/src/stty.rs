@@ -45,18 +45,22 @@ use flags::{CONTROL_CHARS, CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS
 const ASCII_DEL: u8 = 127;
 
 // Sane defaults for control characters.
-const SANE_CONTROL_CHARS: [(S, u8); 12] = [
-    (S::VINTR, 3),     // ^C
-    (S::VQUIT, 28),    // ^\
-    (S::VERASE, 127),  // DEL
-    (S::VKILL, 21),    // ^U
-    (S::VEOF, 4),      // ^D
-    (S::VSTART, 17),   // ^Q
-    (S::VSTOP, 19),    // ^S
-    (S::VSUSP, 26),    // ^Z
+const SANE_CONTROL_CHARS: &[(S, u8)] = &[
+    (S::VINTR, 3),    // ^C
+    (S::VQUIT, 28),   // ^\
+    (S::VERASE, 127), // DEL
+    (S::VKILL, 21),   // ^U
+    (S::VEOF, 4),     // ^D
+    (S::VSTART, 17),  // ^Q
+    (S::VSTOP, 19),   // ^S
+    (S::VSUSP, 26),   // ^Z
+    #[cfg(not(target_os = "haiku"))]
     (S::VREPRINT, 18), // ^R
-    (S::VWERASE, 23),  // ^W
-    (S::VLNEXT, 22),   // ^V
+    #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
+    (S::VWERASE, 23), // ^W
+    #[cfg(not(target_os = "haiku"))]
+    (S::VLNEXT, 22), // ^V
+    #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
     (S::VDISCARD, 15), // ^O
 ];
 
@@ -1049,9 +1053,13 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
             (S::VSTART, "^Q"),
             (S::VSTOP, "^S"),
             (S::VSUSP, "^Z"),
+            #[cfg(not(target_os = "haiku"))]
             (S::VREPRINT, "^R"),
+            #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
             (S::VWERASE, "^W"),
+            #[cfg(not(target_os = "haiku"))]
             (S::VLNEXT, "^V"),
+            #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
             (S::VDISCARD, "^O"),
         ],
         _ => &[],
@@ -1109,7 +1117,7 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
 }
 
 fn get_sane_control_char(cc_index: S) -> u8 {
-    for (sane_index, sane_val) in SANE_CONTROL_CHARS {
+    for &(sane_index, sane_val) in SANE_CONTROL_CHARS {
         if sane_index == cc_index {
             return sane_val;
         }
@@ -1121,8 +1129,9 @@ fn get_sane_control_char(cc_index: S) -> u8 {
         S::VMIN => 1,
         #[cfg(not(any(
             all(target_os = "linux", target_arch = "sparc64"),
-            target_os = "illumos",
-            target_os = "solaris"
+            solarish,
+            target_os = "aix",
+            target_os = "haiku"
         )))]
         S::VTIME => 0,
         #[cfg(target_os = "linux")]
@@ -1421,9 +1430,13 @@ mod tests {
         assert_eq!(cc_to_index("start"), Some(S::VSTART));
         assert_eq!(cc_to_index("stop"), Some(S::VSTOP));
         assert_eq!(cc_to_index("susp"), Some(S::VSUSP));
+        #[cfg(not(target_os = "haiku"))]
         assert_eq!(cc_to_index("rprnt"), Some(S::VREPRINT));
+        #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
         assert_eq!(cc_to_index("werase"), Some(S::VWERASE));
+        #[cfg(not(target_os = "haiku"))]
         assert_eq!(cc_to_index("lnext"), Some(S::VLNEXT));
+        #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
         assert_eq!(cc_to_index("discard"), Some(S::VDISCARD));
     }
 
@@ -1454,9 +1467,13 @@ mod tests {
         assert_eq!(get_sane_control_char(S::VSTART), 17); // ^Q
         assert_eq!(get_sane_control_char(S::VSTOP), 19); // ^S
         assert_eq!(get_sane_control_char(S::VSUSP), 26); // ^Z
+        #[cfg(not(target_os = "haiku"))]
         assert_eq!(get_sane_control_char(S::VREPRINT), 18); // ^R
+        #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
         assert_eq!(get_sane_control_char(S::VWERASE), 23); // ^W
+        #[cfg(not(target_os = "haiku"))]
         assert_eq!(get_sane_control_char(S::VLNEXT), 22); // ^V
+        #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
         assert_eq!(get_sane_control_char(S::VDISCARD), 15); // ^O
     }
 

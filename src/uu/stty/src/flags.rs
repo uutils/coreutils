@@ -57,7 +57,7 @@ pub const CONTROL_FLAGS: &[Flag<C>] = &[
     Flag::new("cstopb", C::CSTOPB),
     Flag::new("cread", C::CREAD).sane(),
     Flag::new("clocal", C::CLOCAL),
-    #[cfg(not(target_os = "redox"))]
+    #[cfg(not(any(target_os = "redox", target_os = "aix")))]
     Flag::new("crtscts", C::CRTSCTS),
 ];
 
@@ -78,7 +78,7 @@ pub const INPUT_FLAGS: &[Flag<I>] = &[
     // Flag::new("iuclc", I::IUCLC),
     #[cfg(not(target_os = "redox"))]
     Flag::new("ixany", I::IXANY),
-    #[cfg(not(target_os = "redox"))]
+    #[cfg(not(any(target_os = "redox", target_os = "haiku")))]
     Flag::new("imaxbel", I::IMAXBEL).sane(),
     #[cfg(any(target_vendor = "apple", target_os = "android", target_os = "linux"))]
     Flag::new("iutf8", I::IUTF8),
@@ -245,7 +245,12 @@ pub const LOCAL_FLAGS: &[Flag<L>] = &[
     Flag::new("crtkill", L::ECHOKE).sane().hidden(),
     #[cfg(not(target_os = "redox"))]
     Flag::new("flusho", L::FLUSHO),
-    #[cfg(not(any(target_os = "cygwin", target_os = "redox")))]
+    #[cfg(not(any(
+        target_os = "cygwin",
+        target_os = "redox",
+        target_os = "aix",
+        target_os = "haiku"
+    )))]
     Flag::new("extproc", L::EXTPROC),
 ];
 
@@ -276,7 +281,9 @@ pub const BAUD_RATES: &[(&str, BaudRate)] = &[
         target_os = "cygwin",
         target_os = "fuchsia",
         target_os = "hurd",
-        target_os = "redox"
+        target_os = "redox",
+        target_os = "aix",
+        target_os = "haiku"
     )))]
     ("460800", BaudRate::B460800),
     #[cfg(any(target_os = "android", target_os = "linux"))]
@@ -288,7 +295,9 @@ pub const BAUD_RATES: &[(&str, BaudRate)] = &[
         target_os = "cygwin",
         target_os = "fuchsia",
         target_os = "hurd",
-        target_os = "redox"
+        target_os = "redox",
+        target_os = "aix",
+        target_os = "haiku"
     )))]
     ("921600", BaudRate::B921600),
     #[cfg(any(target_os = "android", target_os = "linux"))]
@@ -348,12 +357,16 @@ pub const CONTROL_CHARS: &[(&str, S)] = &[
     ("stop", S::VSTOP),
     // Sends a suspend signal (SIGTSTP).
     ("susp", S::VSUSP),
+    #[cfg(not(target_os = "haiku"))]
     // Reprints the current line.
     ("rprnt", S::VREPRINT),
+    #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
     // Deletes the last word typed.
     ("werase", S::VWERASE),
+    #[cfg(not(target_os = "haiku"))]
     // Enters literal mode (next character is taken literally).
     ("lnext", S::VLNEXT),
+    #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
     // Discards the current line.
     ("discard", S::VDISCARD),
 ];
