@@ -9,7 +9,7 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
 use memchr::{Memchr3, memchr_iter, memmem::Finder};
 use std::cmp::Ordering;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Split, Stdin, Write, stdin, stdout};
 use std::num::IntErrorKind;
@@ -854,13 +854,58 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
     Ok(settings)
 }
 
+/// Whether `arg` is a GNU `-o` field token (`0`, `N.M`, `auto`, or a
+/// comma/blank-separated list of those), so consecutive operands after `-o`
+/// can be absorbed like GNU join.
+fn looks_like_o_field(arg: &OsStr) -> bool {
+    let Some(s) = arg.to_str() else {
+        return false;
+    };
+    if s.is_empty() {
+        return false;
+    }
+    s.split([' ', ',', '\t'])
+        .filter(|part| !part.is_empty())
+        .all(|part| part == "auto" || Spec::parse(part).is_ok())
+}
+
+/// Merge separate `-o` field operands into one value so clap does not treat
+/// them as file operands (`join -o 1.1 1.2 2.2 f1 f2`).
+fn coalesce_o_fields(args: Vec<OsString>) -> Vec<OsString> {
+    let mut out = Vec::with_capacity(args.len());
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "-o" {
+            out.push(args[i].clone());
+            i += 1;
+            let start = i;
+            while i < args.len() && looks_like_o_field(&args[i]) {
+                i += 1;
+            }
+            if start < i {
+                let mut joined = args[start].clone();
+                for field in args.iter().take(i).skip(start + 1) {
+                    joined.push(" ");
+                    joined.push(field);
+                }
+                out.push(joined);
+            }
+        } else {
+            out.push(args[i].clone());
+            i += 1;
+        }
+    }
+    out
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // The command line is kept for the caret in `-o` diagnostics, which needs
-    // the list as typed.
+    // the list as typed. Coalesce separate `-o` field operands first so clap
+    // does not eat them as FILE1/FILE2.
     let (matches, diag_args) = uucore::clap_localization::handle_clap_result_with_diagnostics(
         uu_app(),
-        args.collect(),
+        coalesce_o_fields(args.collect()),
         1,
     )?;
 
