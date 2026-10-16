@@ -469,8 +469,13 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
             file.seek(SeekFrom::End(0)).unwrap();
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
-            if file.seek(SeekFrom::End(-(*count as i64))).is_err() {
-                file.seek(SeekFrom::Start(0)).unwrap();
+            // A count that does not fit into an `i64` cannot be negated for
+            // the seek; like a seek before the start, it means the whole file.
+            match i64::try_from(*count) {
+                Ok(count) if file.seek(SeekFrom::End(-count)).is_ok() => {}
+                _ => {
+                    file.seek(SeekFrom::Start(0)).unwrap();
+                }
             }
             limit = Some(*count);
         }
@@ -587,7 +592,10 @@ fn print_target_section<
         }
     } else {
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        if uucore::pipes::splice_unbounded_auto(file, &mut stdout)?.is_err() {
+        if uucore::pipes::splice_unbounded_auto(file, &mut stdout)
+            .map_err(io::Error::from)?
+            .is_err()
+        {
             io::copy(file, &mut stdout)?;
         }
         #[cfg(not(any(target_os = "linux", target_os = "android")))]

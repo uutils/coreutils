@@ -10,7 +10,7 @@ dd-after-help = Operands:
     - ibs=N : the size of buffer used for reads (default: 512)
     - if=FILE : the file used for input. When not specified, stdin is used instead
     - iflag=FLAGS : a comma-separated list of input flags which specify how the input source is treated. FLAGS may be any of the input-flags or general-flags specified below.
-    - skip=N (or iseek=N) : skip N ibs-sized records into input before beginning copy/convert operations. See iflag=seek_bytes if seeking N bytes is preferred.
+    - skip=N (or iseek=N) : skip N ibs-sized records into input before beginning copy/convert operations. See iflag=skip_bytes if seeking N bytes is preferred.
     - obs=N : the size of buffer used for writes (default: 512)
     - of=FILE : the file used for output. When not specified, stdout is used instead
     - oflag=FLAGS : comma separated list of output flags which specify how the output source is treated. FLAGS may be any of the output flags or general flags specified below
@@ -44,7 +44,7 @@ dd-after-help = Operands:
     - unblock : for each block of input of the size indicated by cbs=BYTES, remove right-trailing spaces and replace with a newline character.
     - sparse : attempts to seek the output when an obs-sized block consists of only zeros.
     - swab : swaps each adjacent pair of bytes. If an odd number of bytes is present, the final byte is omitted.
-    - sync : pad each ibs-sided block with zeros. If block or unblock is specified, pad with spaces instead.
+    - sync : pad each ibs-sized block with zeros. If block or unblock is specified, pad with spaces instead.
     - excl : the output file must be created. Fail if the output file is already present.
     - nocreat : the output file will not be created. Fail if the output file is not already present.
     - notrunc : the output file will not be truncated. If this option is not present, output will be truncated when opened.
@@ -73,7 +73,7 @@ dd-after-help = Operands:
     - noatime : do not update access time.
     - nocache : request that OS drop cache.
     - noctty : do not assign a controlling tty.
-    - nofollow : do not follow system links.
+    - nofollow : do not follow symbolic links.
 
 # Common strings
 dd-standard-input = 'standard input'
@@ -83,6 +83,7 @@ dd-standard-output = 'standard output'
 dd-error-failed-to-open = failed to open { $path }
 dd-error-write-error = write error
 dd-error-failed-to-seek = failed to seek in output file
+dd-error-failed-to-truncate = failed to truncate to { $size } bytes in output file { $file }
 dd-error-io-error = IO error
 dd-error-cannot-skip-offset = '{ $file }': cannot skip to specified offset
 dd-error-cannot-skip-invalid = '{ $file }': cannot skip: Invalid argument
@@ -101,7 +102,6 @@ dd-error-invalid-output-flag = invalid output flag: '{ $flag }'
 dd-error-conv-flag-no-match = invalid conversion: '{ $flag }'
 dd-error-multiplier-parse-failure = invalid number: '{ $input }'
 dd-error-multiplier-overflow = Multiplier string would overflow on current system -> { $input }
-dd-error-block-without-cbs = conv=block or conv=unblock specified without cbs=N
 dd-error-status-not-recognized = invalid status level: '{ $level }'
 dd-error-unimplemented = feature not implemented on this system -> { $feature }
 dd-error-bs-out-of-range = { $param }=N cannot fit into memory

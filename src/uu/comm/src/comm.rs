@@ -8,7 +8,7 @@
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, StdinLock, Write, stderr, stdin};
+use std::io::{self, BufRead, BufReader, BufWriter, Stdin, Write, stderr, stdin};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
@@ -78,13 +78,15 @@ fn line_cmp(a: &[u8], b: &[u8], use_locale: bool) -> Ordering {
 }
 
 enum Input {
-    Stdin(StdinLock<'static>),
+    // Locked per read rather than once, so that `comm - -` reads both operands
+    // from the one shared stdin buffer instead of blocking on a second lock.
+    Stdin(Stdin),
     FileIn(BufReader<File>),
 }
 
 impl Input {
     fn stdin() -> Self {
-        Self::Stdin(stdin().lock())
+        Self::Stdin(stdin())
     }
 
     fn from_file(f: File) -> Self {
@@ -106,7 +108,7 @@ impl LineReader {
         let line_ending = self.line_ending.into();
 
         let result = match &mut self.input {
-            Input::Stdin(r) => r.read_until(line_ending, buf),
+            Input::Stdin(r) => r.lock().read_until(line_ending, buf),
             Input::FileIn(r) => r.read_until(line_ending, buf),
         };
 
@@ -131,12 +133,13 @@ impl OrderChecker {
 
     fn verify_order(&mut self, current_line: &[u8], files_differ: bool) -> bool {
         if self.mode == CheckOrder::IfDiffer && !files_differ {
-            self.last_line = current_line.to_vec();
+            self.last_line.clear();
+            self.last_line.extend_from_slice(current_line);
             return true;
         }
 
         if self.last_line.is_empty() {
-            self.last_line = current_line.to_vec();
+            self.last_line.extend_from_slice(current_line);
             return true;
         }
 
@@ -150,7 +153,8 @@ impl OrderChecker {
             self.has_error = true;
         }
 
-        self.last_line = current_line.to_vec();
+        self.last_line.clear();
+        self.last_line.extend_from_slice(current_line);
         is_ordered || self.mode != CheckOrder::Always
     }
 }
@@ -173,8 +177,12 @@ fn comm(
     delim: &str,
     opts: &ArgMatches,
 ) -> UResult<()> {
-    let width_col_1 = usize::from(!opts.get_flag(options::COLUMN_1));
-    let width_col_2 = usize::from(!opts.get_flag(options::COLUMN_2));
+    // Hoist clap lookups out of the per-line loop.
+    let print_col_1 = !opts.get_flag(options::COLUMN_1);
+    let print_col_2 = !opts.get_flag(options::COLUMN_2);
+    let print_col_3 = !opts.get_flag(options::COLUMN_3);
+    let width_col_1 = usize::from(print_col_1);
+    let width_col_2 = usize::from(print_col_2);
 
     let delim_col_2 = delim.repeat(width_col_1);
     let delim_col_3 = delim.repeat(width_col_1 + width_col_2);
@@ -224,7 +232,7 @@ fn comm(
                 if mode != CheckOrder::Never && !checker1.verify_order(ra, files_differ) {
                     break;
                 }
-                if !opts.get_flag(options::COLUMN_1) {
+                if print_col_1 {
                     writer
                         .write_all(ra)
                         .map_err_context(|| translate!("comm-error-write"))?;
@@ -239,7 +247,7 @@ fn comm(
                 if mode != CheckOrder::Never && !checker2.verify_order(rb, files_differ) {
                     break;
                 }
-                if !opts.get_flag(options::COLUMN_2) {
+                if print_col_2 {
                     write_line_with_delimiter(&mut writer, delim_col_2.as_bytes(), rb)?;
                 }
                 rb.clear();
@@ -255,7 +263,7 @@ fn comm(
                 {
                     break;
                 }
-                if !opts.get_flag(options::COLUMN_3) {
+                if print_col_3 {
                     write_line_with_delimiter(&mut writer, delim_col_3.as_bytes(), ra)?;
                 }
                 ra.clear();
@@ -424,13 +432,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::CHECK_ORDER)
                 .long(options::CHECK_ORDER)
                 .help(translate!("comm-help-check-order"))
+                .overrides_with(options::NO_CHECK_ORDER)
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_CHECK_ORDER)
                 .long(options::NO_CHECK_ORDER)
                 .help(translate!("comm-help-no-check-order"))
-                .action(ArgAction::SetTrue)
-                .conflicts_with(options::CHECK_ORDER),
+                .overrides_with(options::CHECK_ORDER)
+                .action(ArgAction::SetTrue),
         )
 }

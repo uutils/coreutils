@@ -3,11 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED Fsize SIGXFSZ sighandler rusage maxrss cdefg ncdefg cdefh
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED Fsize SIGXFSZ rusage maxrss cdefg ncdefg cdefh memfd ftruncate
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
+#[cfg(all(unix, not(target_os = "redox")))]
+use uutests::util::pty_path;
 #[cfg(all(unix, not(feature = "selinux")))]
 use uutests::util::run_ucmd_as_root_with_stdin_stdout;
 #[cfg(not(windows))]
@@ -735,6 +737,21 @@ fn test_seek_bytes() {
         .stdout_is("\0\0\0\0\0\0\0\0abcdefghijklm\n");
 }
 
+#[cfg(all(unix, not(target_os = "redox")))]
+#[test]
+fn test_seek_zero_on_non_seekable_output() {
+    for args in [&["status=none"][..], &["seek=0", "status=none"][..]] {
+        let (path, _controller, _replica) = pty_path();
+
+        new_ucmd!()
+            .arg(of!(path))
+            .args(args)
+            .pipe_in("hello\n")
+            .succeeds()
+            .no_output();
+    }
+}
+
 /// Test for skipping beyond the number of bytes in a file.
 #[test]
 fn test_skip_beyond_file() {
@@ -896,6 +913,25 @@ fn test_etoa_conv_spec_test() {
 }
 
 #[test]
+fn test_etoa_and_lcase() {
+    // "Hello, World!" in EBCDIC.
+    new_ucmd!()
+        .args(&["conv=ascii,lcase", "status=none"])
+        .pipe_in(b"\xc8\x85\x93\x93\x96\x6b\x40\xe6\x96\x99\x93\x84\x5a".to_vec())
+        .succeeds()
+        .stdout_only_bytes(b"hello, world!");
+}
+
+#[test]
+fn test_etoa_and_ucase() {
+    new_ucmd!()
+        .args(&["conv=ascii,ucase", "status=none"])
+        .pipe_in(b"\xc8\x85\x93\x93\x96\x6b\x40\xe6\x96\x99\x93\x84\x5a".to_vec())
+        .succeeds()
+        .stdout_only_bytes(b"HELLO, WORLD!");
+}
+
+#[test]
 fn test_atoibm_conv_spec_test() {
     new_ucmd!()
         .args(&["conv=ibm"])
@@ -940,24 +976,13 @@ fn test_atoe_and_lcase_conv_spec_test() {
         .stdout_is_fixture_bytes("lcase-ebcdic.test");
 }
 
-// TODO I think uppercase and lowercase are unintentionally swapped in
-// the code that parses the command-line arguments. See this line from
-// `parseargs.rs`:
-//
-//     (ConvFlag::FmtAtoI, ConvFlag::UCase) => Some(&ASCII_TO_IBM_UCASE_TO_LCASE),
-//     (ConvFlag::FmtAtoI, ConvFlag::LCase) => Some(&ASCII_TO_IBM_LCASE_TO_UCASE),
-//
-// If my reading is correct and that is a typo, then the
-// UCASE_TO_LCASE and LCASE_TO_UCASE in those lines should be swapped,
-// and the expected output for the following two tests should be
-// updated accordingly.
 #[test]
 fn test_atoibm_and_ucase_conv_spec_test() {
     new_ucmd!()
         .args(&["conv=ibm,ucase"])
         .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
         .succeeds()
-        .stdout_is_fixture_bytes("lcase-ibm.test");
+        .stdout_is_fixture_bytes("ucase-ibm.test");
 }
 
 #[test]
@@ -966,7 +991,7 @@ fn test_atoibm_and_lcase_conv_spec_test() {
         .args(&["conv=ibm,lcase"])
         .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
         .succeeds()
-        .stdout_is_fixture_bytes("ucase-ibm.test");
+        .stdout_is_fixture_bytes("lcase-ibm.test");
 }
 
 #[test]
@@ -1356,12 +1381,32 @@ fn test_bytes_oseek_bytes_oflag() {
 
 #[test]
 fn test_bytes_oseek_bytes_trunc_oflag() {
+    // The test harness hands stdout over as a regular file. Where dd detects
+    // that (Linux, OpenBSD), it seeks in the file and, like GNU, writes
+    // nothing. Elsewhere the seek on stdout is emulated by writing zeros.
+    let expected: &[u8] = if cfg!(any(target_os = "linux", target_os = "openbsd")) {
+        b""
+    } else {
+        &[0; 8]
+    };
     new_ucmd!()
         .args(&["oseek=8", "oflag=seek_bytes", "bs=2", "count=0"])
         .pipe_in("abcdefghijklm")
         .ignore_stdin_write_error()
         .succeeds()
-        .stdout_is_fixture_bytes("dd-bytes-null-trunc.spec");
+        .stdout_is_bytes(expected);
+}
+
+/// With `of=`, the output is truncated at the `oseek` offset, so a file
+/// opened for the first time is extended to that length.
+#[test]
+fn test_bytes_oseek_bytes_trunc_oflag_with_of() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["oseek=8", "oflag=seek_bytes", "bs=2", "count=0", "of=out"])
+        .pipe_in("abcdefghijklm")
+        .ignore_stdin_write_error()
+        .succeeds();
+    assert_eq!(at.read_bytes("out"), [0; 8]);
 }
 
 #[test]
@@ -1608,6 +1653,80 @@ fn test_sparse() {
     // The number of bytes in the file should be accurate though the
     // number of blocks stored on disk may be zero.
     assert_eq!(at.metadata("infile").len(), at.metadata("outfile").len());
+}
+
+/// `conv=notrunc,sparse` must still extend the file over skipped zero blocks.
+#[test]
+fn test_sparse_notrunc_extends_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("infile", &[0; 1024]);
+    at.touch("outfile");
+    ucmd.args(&["bs=512", "if=infile", "of=outfile", "conv=notrunc,sparse"])
+        .succeeds();
+    assert_eq!(at.metadata("outfile").len(), 1024);
+}
+
+/// `conv=notrunc,sparse` must not shrink an output file longer than the copy.
+#[test]
+fn test_sparse_notrunc_does_not_shrink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("infile", &[0; 1024]);
+    at.write_bytes("outfile", &[b'x'; 4096]);
+    ucmd.args(&["bs=512", "if=infile", "of=outfile", "conv=notrunc,sparse"])
+        .succeeds();
+    assert_eq!(at.metadata("outfile").len(), 4096);
+}
+
+/// Without `of=`, a seekable stdout was not asked to be truncated, so the
+/// data after the written range must survive. Linux only: elsewhere dd does
+/// not detect a seekable stdout and emulates the seek by writing zeros.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_seekable_stdout_without_of_is_not_truncated() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write_bytes("out", &[b'x'; 2048]);
+    let stdout = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().write(true),
+        at.plus("out").as_path(),
+    )
+    .unwrap();
+
+    ts.ucmd()
+        .args(&["bs=512", "count=1", "seek=1"])
+        .pipe_in(vec![b'a'; 512])
+        .set_stdout(Stdio::from(stdout))
+        .succeeds();
+
+    let out = at.read_bytes("out");
+    assert_eq!(out.len(), 2048);
+    assert!(out[..512].iter().all(|&b| b == b'x'));
+    assert!(out[512..1024].iter().all(|&b| b == b'a'));
+    assert!(out[1024..].iter().all(|&b| b == b'x'));
+}
+
+/// A failed truncate of the output names the file and the size, the copy
+/// still runs and prints its statistics, and the exit status is 1.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_failed_truncate_is_reported_and_copy_goes_on() {
+    use rustix::fs::{MemfdFlags, SealFlags, fcntl_add_seals, ftruncate, memfd_create};
+
+    // A memfd sealed against shrinking: `ftruncate` to a smaller size fails
+    // with EPERM, while writes inside the existing size still work.
+    let fd = memfd_create("out", MemfdFlags::ALLOW_SEALING).unwrap();
+    ftruncate(&fd, 2048).unwrap();
+    fcntl_add_seals(&fd, SealFlags::SHRINK).unwrap();
+
+    new_ucmd!()
+        .args(&["bs=512", "count=1", "seek=1", "of=/dev/stdout"])
+        .pipe_in(vec![b'a'; 512])
+        .set_stdout(Stdio::from(File::from(fd)))
+        .fails_with_code(1)
+        .stderr_contains(
+            "dd: failed to truncate to 512 bytes in output file '/dev/stdout': Operation not permitted\n",
+        )
+        .stderr_contains("1+0 records in\n1+0 records out\n");
 }
 
 /// Test that a seek on an output FIFO results in a read.
@@ -2171,6 +2290,7 @@ fn test_nocache_eof() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
 fn test_nocache_eof_fadvise_zero_length() {
     use std::process::Command;
     let (at, _ucmd) = at_and_ucmd!();
@@ -2383,30 +2503,6 @@ fn test_count_bytes_with_expanding_block_conv() {
     assert!(!output.contains(&b'Z'));
 }
 
-/// Ignores SIGXFSZ until dropped, even if an assertion panics.
-///
-/// The child inherits the ignored SIGXFSZ, so exceeding RLIMIT_FSIZE shows
-/// up as a short write() instead of killing the process.
-#[cfg(all(unix, not(target_vendor = "apple")))]
-struct SigxfszGuard(libc::sighandler_t);
-
-#[cfg(all(unix, not(target_vendor = "apple")))]
-impl SigxfszGuard {
-    fn ignore() -> Self {
-        // SAFETY: signal() with SIG_IGN is async-signal-safe and `drop` puts
-        // the old handler back.
-        Self(unsafe { libc::signal(libc::SIGXFSZ, libc::SIG_IGN) })
-    }
-}
-
-#[cfg(all(unix, not(target_vendor = "apple")))]
-impl Drop for SigxfszGuard {
-    fn drop(&mut self) {
-        // SAFETY: restoring the disposition saved in `ignore`.
-        unsafe { libc::signal(libc::SIGXFSZ, self.0) };
-    }
-}
-
 // A failed copy still has to report what it transferred, including complete
 // and partial records.
 #[test]
@@ -2416,12 +2512,11 @@ fn test_stats_are_reported_when_a_write_fails() {
 
     const CAP: u64 = 768 * 1024;
 
-    let _sigxfsz = SigxfszGuard::ignore();
-
     let (at, mut ucmd) = at_and_ucmd!();
     let result = ucmd
         .args(&["if=/dev/zero", "of=capped.bin", "bs=512K", "count=3"])
         .limit(Resource::Fsize, CAP, CAP)
+        .ignore_sigxfsz()
         .fails();
 
     // Under a 768 KiB cap, the first 512 KiB block is written in full, the
@@ -2440,13 +2535,12 @@ fn test_block_stats_are_reported_when_a_write_fails() {
 
     const CAP: u64 = 200 * 1024;
 
-    let _sigxfsz = SigxfszGuard::ignore();
-
     let (at, mut ucmd) = at_and_ucmd!();
     let result = ucmd
         .args(&["conv=block", "cbs=1M", "obs=64K", "of=capped.bin"])
         .pipe_in("x\n")
         .limit(Resource::Fsize, CAP, CAP)
+        .ignore_sigxfsz()
         .fails();
 
     // Three 64 KiB pieces are written in full, and the fourth one is cut short.
@@ -2641,5 +2735,74 @@ dd: unrecognized operand 'bsx=1'
             .fails_with_code(1)
             .stderr_contains("dd: unrecognized operand 'bsx=1'\n")
             .stderr_does_not_contain("╭─");
+    }
+}
+
+// Conversion conflicts are reported in a fixed order: ascii/ebcdic/ibm,
+// block/unblock, lcase/ucase, then excl/nocreat. ascii implies unblock;
+// ebcdic and ibm imply block, so with cbs an explicit flag in the other
+// direction is a block/unblock conflict as well.
+#[test]
+fn test_block_unblock_conflicts() {
+    for conv in [
+        // block/unblock is reported before the later pairs.
+        "block,unblock,lcase,ucase",
+        "block,unblock,excl,nocreat",
+        // The implied direction conflicts with the explicit flag.
+        "ascii,block",
+        "ebcdic,unblock",
+        "ibm,unblock",
+        "ascii,block,unblock",
+    ] {
+        new_ucmd!()
+            .args(&[
+                format!("conv={conv}"),
+                "cbs=1".into(),
+                "if=/dev/null".into(),
+            ])
+            .fails_with_code(1)
+            .stderr_only("dd: cannot combine block and unblock\n");
+    }
+}
+
+#[test]
+fn test_implied_block_direction_agrees_with_explicit_flag() {
+    for conv in ["ascii,unblock", "ebcdic,block", "ibm,block"] {
+        new_ucmd!()
+            .args(&[format!("conv={conv}"), "cbs=1".into(), "status=none".into()])
+            .pipe_in("")
+            .succeeds()
+            .no_output();
+    }
+}
+
+// Without cbs, block and unblock have no record length to work with and are
+// ignored rather than rejected.
+#[test]
+fn test_block_unblock_without_cbs_is_ignored() {
+    for conv in ["block", "unblock", "block,unblock"] {
+        new_ucmd!()
+            .args(&[format!("conv={conv}"), "status=none".into()])
+            .pipe_in("ab\ncd\n")
+            .succeeds()
+            .stdout_only("ab\ncd\n");
+    }
+}
+
+// Without cbs, ascii and ebcdic still convert the bytes; only the implied
+// unblock or block step is skipped, so the trailing space survives and no
+// newline is added.
+#[test]
+fn test_ascii_ebcdic_without_cbs_still_convert() {
+    let cases: [(&str, &[u8], &[u8]); 2] = [
+        ("ascii", b"\xc1\xc2\x40", b"AB "),
+        ("ebcdic", b"AB ", b"\xc1\xc2\x40"),
+    ];
+    for (conv, input, expected) in cases {
+        new_ucmd!()
+            .args(&[format!("conv={conv}"), "status=none".into()])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only_bytes(expected);
     }
 }

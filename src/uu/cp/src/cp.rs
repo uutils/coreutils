@@ -32,7 +32,6 @@ use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
 use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, mode_t};
-use thiserror::Error;
 
 use platform::copy_on_write;
 use uucore::backup_control::backup_would_destroy_source;
@@ -57,7 +56,7 @@ use crate::copydir::copy_directory;
 mod copydir;
 mod platform;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum CpError {
     /// Simple [`io::Error`] wrapper
     #[error("{0}")]
@@ -118,6 +117,10 @@ pub enum CpError {
 
     #[error("{}", translate!("cp-error-not-a-directory", "path" => .0.quote()))]
     NotADirectory(PathBuf),
+
+    /// A directory would have to replace something that is not one.
+    #[error("{}", translate!("cp-error-cannot-overwrite-non-directory-with-directory", "dest" => .0.quote(), "source" => .1.quote()))]
+    CannotOverwriteNonDirectory(PathBuf, PathBuf),
 }
 
 // Manual impl for &str
@@ -779,8 +782,7 @@ pub fn uu_app() -> Command {
                 .value_parser(value_parser!(String))
                 .help(translate!("cp-help-context"))
                 .num_args(0..=1)
-                .require_equals(true)
-                .default_missing_value(""),
+                .require_equals(true),
         )
         .arg(
             // The 'g' short flag is modeled after advcpmv
@@ -1216,17 +1218,21 @@ impl Options {
             show_error_if_needed(&selinux_disabled_error);
         }
 
-        // Extract the SELinux related flags and options
-        let set_selinux_context = matches.get_flag(options::SELINUX);
+        // A bare --context, like -Z, requests the default context.
+        let set_selinux_context =
+            matches.get_flag(options::SELINUX) || matches.contains_id(options::CONTEXT);
+        let context = matches.get_one::<String>(options::CONTEXT).cloned();
 
-        let context = if matches.contains_id(options::CONTEXT) {
-            matches.get_one::<String>(options::CONTEXT).cloned()
-        } else {
-            None
-        };
+        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+        let selinux_enabled = uucore::selinux::is_selinux_enabled();
+        #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
+        let selinux_enabled = false;
+        if context.is_some() && !selinux_enabled {
+            show_warning!("{}", translate!("cp-warning-context-ignored"));
+        }
 
         // -Z/--context conflicts with explicit --preserve=context but overrides implicit (from -a)
-        if set_selinux_context || context.is_some() {
+        if set_selinux_context {
             match attributes.context {
                 Preserve::Yes { required: true } => {
                     return Err(CpError::Error(translate!(
@@ -1292,7 +1298,7 @@ impl Options {
             recursive,
             target_dir,
             progress_bar: matches.get_flag(options::PROGRESS_BAR),
-            set_selinux_context: set_selinux_context || context.is_some(),
+            set_selinux_context,
             context,
         };
 
@@ -1621,31 +1627,28 @@ fn copy_source(
     } else {
         // Copy as file
         let dest = construct_dest_path(source_path, target, target_type, options)?;
-        let res = copy_file(
-            progress_bar,
-            source_path,
-            dest.as_path(),
-            options,
-            symlinked_files,
-            copied_destinations,
-            copied_files,
-            created_parent_dirs,
-            true,
-        );
-        if options.parents {
-            for (x, y) in aligned_ancestors(source, dest.as_path()) {
-                if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
-                    copy_attributes(
-                        &src,
-                        y,
-                        &options.attributes,
-                        false,
-                        options.set_selinux_context,
-                    )?;
-                }
-            }
+        // Nothing is created for a source that cannot be found, so that a
+        // failed copy leaves no directories behind.
+        let mut parent_dirs = Vec::new();
+        let res = if options.parents && source_path.symlink_metadata().is_ok() {
+            create_parent_dirs(source, &dest, options, &mut parent_dirs)
+        } else {
+            Ok(())
         }
-        res
+        .and_then(|()| {
+            copy_file(
+                progress_bar,
+                source_path,
+                dest.as_path(),
+                options,
+                symlinked_files,
+                copied_destinations,
+                copied_files,
+                created_parent_dirs,
+                true,
+            )
+        });
+        res.and(set_parent_dirs_attributes(&parent_dirs, options))
     }
 }
 
@@ -1848,6 +1851,9 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
     } else {
         copy_xattrs(source, dest)
     };
+    // Every attribute has been tried; report the first one that failed.
+    let copy_xattrs_result = copy_xattrs_result
+        .and_then(|failed| failed.into_iter().next().map_or(Ok(()), |(_, e)| Err(e)));
 
     // Restore read-only if we changed it.
     if was_readonly {
@@ -2388,7 +2394,85 @@ fn aligned_ancestors<'a>(source: &'a Path, dest: &'a Path) -> Vec<(&'a Path, &'a
     result
 }
 
-fn print_verbose_output(
+/// Create the missing ancestors of `dest` that `--parents` needs, owner-only
+/// until the copy is done (default mode with `--no-preserve=mode`).
+///
+/// Adds every ancestor to `dirs`, outermost first, with its `source`
+/// counterpart and whether it was created; none if nothing was created, so an
+/// existing path is left alone. On error, `dirs` holds the ones made so far.
+pub(crate) fn create_parent_dirs<'a>(
+    source: &'a Path,
+    dest: &'a Path,
+    options: &Options,
+    dirs: &mut Vec<(&'a Path, &'a Path, bool)>,
+) -> CopyResult<()> {
+    let builder = parent_dir_builder(options);
+    let mut any_created = false;
+    let mut result = Ok(());
+    for (src, dst) in aligned_ancestors(source, dest) {
+        let created = match builder.create(dst) {
+            Ok(()) => true,
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists && dst.is_dir() => false,
+            Err(e) => {
+                result = Err(e.into());
+                break;
+            }
+        };
+        any_created |= created;
+        dirs.push((src, dst, created));
+    }
+    if !any_created {
+        dirs.clear();
+    }
+    result
+}
+
+#[cfg(unix)]
+fn parent_dir_builder(options: &Options) -> fs::DirBuilder {
+    use std::os::unix::fs::DirBuilderExt;
+    let mut builder = fs::DirBuilder::new();
+    if matches!(options.attributes.mode, Preserve::No { explicit: true }) {
+        builder.mode(0o777);
+    } else {
+        builder.mode(0o700);
+    }
+    builder
+}
+
+#[cfg(not(unix))]
+fn parent_dir_builder(_options: &Options) -> fs::DirBuilder {
+    fs::DirBuilder::new()
+}
+
+/// Give the directories from [`create_parent_dirs`] their final attributes.
+///
+/// Called whether or not the copy succeeded, so that none stays owner-only;
+/// tries every directory and returns the first error.
+pub(crate) fn set_parent_dirs_attributes(
+    dirs: &[(&Path, &Path, bool)],
+    options: &Options,
+) -> CopyResult<()> {
+    let mut result = Ok(());
+    for &(src, dst, created) in dirs {
+        // realpath fails without search permission above the working directory;
+        // "src/." still reaches the directory, and never a symlink's own mode
+        let src = canonicalize(src, MissingHandling::Normal, ResolveMode::Physical)
+            .unwrap_or_else(|_| src.join("."));
+        let res = copy_attributes(
+            &src,
+            dst,
+            &options.attributes,
+            created,
+            options.set_selinux_context,
+        );
+        if result.is_ok() {
+            result = res;
+        }
+    }
+    result
+}
+
+pub(crate) fn print_verbose_output(
     parents: bool,
     progress_bar: Option<&ProgressBar>,
     source: &Path,
@@ -2860,7 +2944,9 @@ fn copy_file(
     // and chmod() would follow it and change the mode of the link target,
     // which can live outside the copied tree. Conversely, --remove-destination
     // replaces a symlink with a regular file that still needs its mode set.
-    if !dest.is_symlink() {
+    // With --link, dest shares the source's inode, so chmod would change the
+    // mode of the source file as well.
+    if options.copy_mode != CopyMode::Link && !dest.is_symlink() {
         // Here, to match GNU semantics, we quietly ignore an error
         // if a user does not have the correct ownership to modify
         // the permissions of a file.

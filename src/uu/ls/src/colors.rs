@@ -605,6 +605,11 @@ pub(crate) fn validate_ls_colors_env() -> Result<(), LsColorsParseError> {
 
 // GNU-like parser: ensure LS_COLORS has valid labels and well-formed escapes.
 fn validate_ls_colors(ls_colors: &str) -> Result<(), LsColorsParseError> {
+    const VALID_PREFIXES: &[&[u8; 2]] = &[
+        b"lc", b"rc", b"ec", b"rs", b"no", b"fi", b"di", b"ln", b"pi", b"so", b"bd", b"cd", b"mi",
+        b"or", b"ex", b"do", b"su", b"sg", b"st", b"ow", b"tw", b"ca", b"mh", b"cl",
+    ];
+
     let bytes = ls_colors.as_bytes();
     let mut idx = 0;
 
@@ -629,13 +634,13 @@ fn validate_ls_colors(ls_colors: &str) -> Result<(), LsColorsParseError> {
                 let Some(&byte_next) = bytes.get(idx + 1) else {
                     return Err(LsColorsParseError::InvalidSyntax);
                 };
-                let label = [byte, byte_next];
+                let label = &[byte, byte_next];
                 idx += 2;
                 if bytes.get(idx) != Some(&b'=') {
                     return Err(LsColorsParseError::InvalidSyntax);
                 }
-                if !is_valid_ls_colors_prefix(label) {
-                    let prefix = String::from_utf8_lossy(&label).into_owned();
+                if !VALID_PREFIXES.contains(&label) {
+                    let prefix = String::from_utf8_lossy(label).into_owned();
                     return Err(LsColorsParseError::UnrecognizedPrefix(prefix));
                 }
                 idx += 1;
@@ -727,36 +732,6 @@ fn parse_funky_string(
             },
         }
     }
-}
-
-fn is_valid_ls_colors_prefix(label: [u8; 2]) -> bool {
-    matches!(
-        label,
-        [b'l', b'c']
-            | [b'r', b'c']
-            | [b'e', b'c']
-            | [b'r', b's']
-            | [b'n', b'o']
-            | [b'f', b'i']
-            | [b'd', b'i']
-            | [b'l', b'n']
-            | [b'p', b'i']
-            | [b's', b'o']
-            | [b'b', b'd']
-            | [b'c', b'd']
-            | [b'm', b'i']
-            | [b'o', b'r']
-            | [b'e', b'x']
-            | [b'd', b'o']
-            | [b's', b'u']
-            | [b's', b'g']
-            | [b's', b't']
-            | [b'o', b'w']
-            | [b't', b'w']
-            | [b'c', b'a']
-            | [b'm', b'h']
-            | [b'c', b'l']
-    )
 }
 
 fn parse_indicator_codes() -> (FxHashMap<Indicator, String>, bool) {

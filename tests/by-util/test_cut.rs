@@ -265,6 +265,22 @@ fn test_output_delimiter() {
 }
 
 #[test]
+fn test_output_delimiter_starting_with_hyphen() {
+    for args in [
+        ["--output-delimiter", "-x"],
+        ["-O", "-x"],
+        ["--output-delimiter", "-1"],
+    ] {
+        new_ucmd!()
+            .args(&["-d,", "-f1,2"])
+            .args(&args)
+            .pipe_in("a,b\n")
+            .succeeds()
+            .stdout_only(format!("a{}b\n", args[1]));
+    }
+}
+
+#[test]
 fn test_complement() {
     for param in ["--complement", "--com"] {
         new_ucmd!()
@@ -1207,7 +1223,7 @@ fn test_cut_chars_utf8_mixed_ascii_lines() {
 
 #[test]
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
-#[cfg_attr(wasi_runner, ignore)]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_read_error() {
     new_ucmd!()
         .args(&["-c1", "/proc/self/mem"])

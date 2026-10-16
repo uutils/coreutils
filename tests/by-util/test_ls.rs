@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline onetwo somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
 // spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons Nofile NOTCAPABLE iproduct newfstatat isox
 
 #![allow(
@@ -4216,6 +4216,22 @@ fn test_ls_quoting_style() {
                 .succeeds()
                 .stdout_only(format!("{correct}\n"));
         }
+
+        // Test difference between `c` and `c-maybe`
+        let simple: &str = "onetwo";
+        at.touch(simple);
+
+        for (arg, correct) in [
+            ("--quoting-style=c", "\"onetwo\""),
+            ("--quoting-style=c-maybe", "onetwo"),
+        ] {
+            scene
+                .ucmd()
+                .arg(arg)
+                .arg(simple)
+                .succeeds()
+                .stdout_only(format!("{correct}\n"));
+        }
     }
 
     // No-TTY
@@ -4338,7 +4354,7 @@ fn test_ls_invalid_quoting_style_env_var_warns() {
         .arg("alpha")
         .succeeds()
         .stdout_is("alpha\n")
-        .stderr_contains("Ignoring invalid value of environment variable QUOTING_STYLE");
+        .stderr_contains("ignoring invalid value of environment variable QUOTING_STYLE");
 }
 
 #[cfg(unix)]
@@ -4356,7 +4372,7 @@ fn test_ls_invalid_quoting_style_env_var_non_utf8() {
         .arg("alpha")
         .succeeds()
         .stdout_is("alpha\n")
-        .stderr_contains("Ignoring invalid value of environment variable QUOTING_STYLE");
+        .stderr_contains("ignoring invalid value of environment variable QUOTING_STYLE");
 }
 
 #[test]
@@ -4429,6 +4445,29 @@ fn test_ls_quoting_and_color() {
         .terminal_simulation(true)
         .succeeds()
         .stdout_only("'one two'\r\n");
+}
+
+/// This test makes sure that the c-maybe quoting style behaves as expected
+/// when the name has a comma in it and -m is passed.
+#[test]
+fn test_ls_quoting_style_c_maybe_comma() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("a_file");
+    at.touch("b,file");
+
+    // Comma is explicitly quoted when in -m mode
+    // and there's a comma in the name
+
+    let cases: &[(&[&str], &str)] = &[
+        (&["--quoting-style=c-maybe"], "a_file\nb,file\n"),
+        (&["-m", "--quoting-style=c"], "\"a_file\", \"b,file\"\n"),
+        (&["-m", "--quoting-style=c-maybe"], "a_file, \"b,file\"\n"),
+    ];
+    for (args, expected) in cases {
+        scene.ucmd().args(args).succeeds().stdout_only(expected);
+    }
 }
 
 #[test]
@@ -7045,6 +7084,34 @@ fn test_acl_display() {
         .stdout_matches(&re_without_acl);
 }
 
+// On macOS the ACL is not an xattr, and most files carry xattrs anyway, so
+// `+` comes from the ACL API (#15273).
+#[cfg(target_os = "macos")]
+#[test]
+fn test_acl_display_macos() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("with_acl");
+    at.touch("without_acl");
+
+    let status = Command::new("chmod")
+        .args(["+a", "everyone allow read", &at.plus_as_string("with_acl")])
+        .status()
+        .unwrap();
+    assert!(status.success(), "chmod +a failed");
+
+    let re_with_acl = Regex::new(r"(?m)^-[rwx-]{9}\+ .*with_acl$").unwrap();
+    let re_without_acl = Regex::new(r"(?m)^-[rwx-]{9} .*without_acl$").unwrap();
+    scene
+        .ucmd()
+        .args(&["-l", "with_acl", "without_acl"])
+        .succeeds()
+        .stdout_matches(&re_with_acl)
+        .stdout_matches(&re_without_acl);
+}
+
 // Regression test for https://github.com/uutils/coreutils/issues/10980
 // Each file with an ACL must not inflate the link-count column width.
 #[cfg(all(unix, not(target_vendor = "apple")))]
@@ -8191,6 +8258,7 @@ fn test_long_options_detached() {
 // recording it for the loop detection that only recursion consults.
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg(not(wasi_runner))]
 fn test_no_extra_stat_without_recursion() {
     use std::process::Command;
 
@@ -8393,4 +8461,49 @@ fn test_time_style_ambiguous_and_invalid_prefixes() {
             .code_is(2)
             .stderr_contains("invalid --time-style argument");
     }
+}
+
+#[test]
+fn test_ls_dereference_looped_symlinks_recursive_nested() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("loop");
+    at.mkdir("loop/a");
+    at.relative_symlink_dir("..", "loop/a/back");
+
+    ucmd.args(&["-RL", "loop"])
+        .fails_with_code(2)
+        .stderr_contains("not listing already-listed directory");
+}
+
+#[test]
+fn test_ls_dereference_cross_branch_alias_after_first_branch_completes() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir_all("top/a/target");
+    at.touch("top/a/target/file");
+    at.mkdir_all("top/b");
+    at.relative_symlink_dir("../a/target", "top/b/link");
+
+    let result = ucmd.args(&["-RL", "top"]).succeeds();
+    result
+        .stdout_contains("target:\nfile")
+        .stdout_contains("link:\nfile")
+        .no_stderr();
+}
+
+#[test]
+fn test_ls_dereference_sibling_alias_not_already_listed() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("top");
+    at.mkdir("top/real");
+    at.touch("top/real/file");
+    at.relative_symlink_dir("real", "top/link");
+
+    let result = ucmd.args(&["-RL", "top"]).succeeds();
+    result
+        .stdout_contains("real:\nfile")
+        .stdout_contains("link:\nfile")
+        .no_stderr();
 }

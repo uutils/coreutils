@@ -491,6 +491,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::BYTES)
                 .short('c')
                 .long(options::BYTES)
+                .value_name("[+]NUM")
                 .allow_hyphen_values(true)
                 .overrides_with_all([options::BYTES, options::LINES])
                 .help(translate!("tail-help-bytes")),
@@ -510,6 +511,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::LINES)
                 .short('n')
                 .long(options::LINES)
+                .value_name("[+]NUM")
                 .allow_hyphen_values(true)
                 .overrides_with_all([options::BYTES, options::LINES])
                 .help(translate!("tail-help-lines")),

@@ -5,11 +5,10 @@
 
 // spell-checker:ignore (words) defaultcheck nocheck helpb helpz nwordb nwordwordz wordtotal
 
-use uutests::new_ucmd;
 use uutests::util::TestScenario;
 #[cfg(unix)]
 use uutests::util::is_locale_available;
-use uutests::util_name;
+use uutests::{new_ucmd, util_name};
 
 #[test]
 fn test_invalid_arg() {
@@ -344,7 +343,7 @@ fn nocheck_order() {
 // stderr and the error code behaves like check order, but stdout
 // behaves like nocheck_order. However with some quirks detailed below.
 #[test]
-fn defaultcheck_order() {
+fn default_check_order() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.write("a", "a\n");
@@ -358,6 +357,30 @@ fn defaultcheck_order() {
             "comm: file 2 is not in sorted order\n\
              comm: input is not in sorted order\n",
         );
+}
+
+// when both --check-order and --nocheck-order are provided,
+// the last one "wins"
+#[test]
+fn check_order_and_nocheck_order() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a", "apple\ncherry\n");
+    at.write("bad_order", "banana\napricot\n");
+
+    scene
+        .ucmd()
+        .args(&["--check-order", "--nocheck-order", "a", "bad_order"])
+        .succeeds()
+        .stdout_only("apple\n\tbanana\n\tapricot\ncherry\n");
+
+    scene
+        .ucmd()
+        .args(&["--nocheck-order", "--check-order", "a", "bad_order"])
+        .fails_with_code(1)
+        .stdout_is("apple\n\tbanana\n")
+        .stderr_is("comm: file 2 is not in sorted order\n");
 }
 
 // * the first: if both files are not in order, the default behavior is the only
@@ -822,4 +845,17 @@ fn test_identical_unsorted_prefix_check_order_fails() {
         .fails()
         .stdout_is("\t\tb\n")
         .stderr_is("comm: file 1 is not in sorted order\n");
+}
+
+#[test]
+fn test_both_inputs_stdin() {
+    // Both operands read the same standard input, so lines are taken from it
+    // alternately as the comparison advances. This used to hang.
+    new_ucmd!()
+        .args(&["-", "-"])
+        .pipe_in("b\na\nc\nc\n")
+        .timeout(std::time::Duration::from_secs(10))
+        .succeeds()
+        .stdout_is("\ta\nb\n\t\tc\n")
+        .no_stderr();
 }

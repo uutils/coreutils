@@ -345,7 +345,30 @@ fn test_timestamp_format_before_epoch() {
     ts.ucmd()
         .args(&["-c", "%.1X %.3X %.9X %.1Y %.3Y %.9Y", "timestamp"])
         .succeeds()
-        .stdout_is("-0.9 -0.877 -0.876543211 -0.9 -0.877 -0.876543211\n");
+        .stdout_is("-0.8 -0.876 -0.876543211 -0.8 -0.876 -0.876543211\n");
+}
+
+#[test]
+fn test_timestamp_format_before_epoch_truncation() {
+    let ts = TestScenario::new(util_name!());
+    let file = File::create(ts.fixtures.plus("fractional-time")).unwrap();
+    let timestamp = UNIX_EPOCH - Duration::new(2, 234_567_891);
+    file.set_times(
+        FileTimes::new()
+            .set_accessed(timestamp)
+            .set_modified(timestamp),
+    )
+    .unwrap();
+
+    for directive in ['X', 'Y'] {
+        let format = format!(
+            "%{directive}|%.0{directive}|%.{directive}|%.2{directive}|%.6{directive}|%.12{directive}"
+        );
+        ts.ucmd()
+            .args(&["-c", &format, "fractional-time"])
+            .succeeds()
+            .stdout_is("-3|-3|-2.234567891|-2.23|-2.234567|-2.234567891000\n");
+    }
 }
 
 #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
@@ -964,5 +987,27 @@ stat: '%.3': invalid directive
             .args(&["-c", "%d%.3", "/dev/null"])
             .fails_with_code(1)
             .stderr_is("stat: '%.3': invalid directive\n");
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_error_message_preserves_non_utf8_filename() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    for (bytes, quoted) in [
+        (b"missing-\xff".as_slice(), "'missing-'$'\\377'"),
+        (b"missing-\xc3\xa9".as_slice(), "'missing-'$'\\303\\251'"),
+    ] {
+        let name = OsStr::from_bytes(bytes);
+        for args in [vec![], vec!["-L"], vec!["-f"]] {
+            new_ucmd!()
+                .env("LC_ALL", "C")
+                .args(&args)
+                .arg(name)
+                .fails_with_code(1)
+                .stderr_contains(quoted);
+        }
     }
 }

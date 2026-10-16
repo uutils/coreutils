@@ -126,7 +126,7 @@ impl<'a> FormatArguments<'a> {
             return Err(ExtendedParserError::NotNumeric);
         };
 
-        let (Some((b'"', bytes)) | Some((b'\'', bytes))) = s.split_first() else {
+        let Some((b'"' | b'\'', bytes)) = s.split_first() else {
             // This really can't happen, the string we are given must start with '/".
             debug_assert!(false);
             return Err(ExtendedParserError::NotNumeric);
@@ -208,20 +208,20 @@ fn extract_value<T: Default>(
     match p {
         Ok(v) => v,
         Err(e) => {
-            set_exit_code(1);
-            let input = locale_aware_escape_name(OsStr::new(input), QuotingStyle::C_NO_QUOTES);
+            let input = locale_aware_escape_name(OsStr::new(input), QuotingStyle::Escape);
             match e {
                 ExtendedParserError::Overflow(v) | ExtendedParserError::Underflow(v) => {
+                    set_exit_code(1);
                     show_error!("{}: Numerical result out of range", input.quote());
                     v
                 }
                 ExtendedParserError::NotNumeric => {
+                    set_exit_code(1);
                     show_error!("{}: expected a numeric value", input.quote());
                     Default::default()
                 }
                 ExtendedParserError::PartialMatch(v, rest) => {
                     if quote_start {
-                        set_exit_code(0);
                         // GNU stays silent about the ignored trailing bytes when
                         // POSIXLY_CORRECT is set. Only the presence of the variable
                         // matters, its value is irrelevant.
@@ -231,6 +231,7 @@ fn extract_value<T: Default>(
                             );
                         }
                     } else {
+                        set_exit_code(1);
                         show_error!("{}: value not completely converted", input.quote());
                     }
 

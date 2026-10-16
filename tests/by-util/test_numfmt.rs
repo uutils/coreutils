@@ -1632,6 +1632,28 @@ fn test_numfmt_scientific_notation_rejected() {
         .stderr_contains("invalid suffix in input");
 }
 
+// Scientific notation is only rejected in the field being converted; other
+// fields are passed through unchanged, as in GNU.
+#[test]
+fn test_scientific_notation_in_unselected_field_is_kept() {
+    new_ucmd!()
+        .arg("--to=si")
+        .pipe_in("1000 1e3\n")
+        .succeeds()
+        .stdout_only("1.0k 1e3\n");
+
+    new_ucmd!()
+        .args(&["--field=2", "1e3"])
+        .succeeds()
+        .stdout_only("1e3\n");
+
+    new_ucmd!()
+        .args(&["--field=2", "--to=si"])
+        .pipe_in("1e3 5000\n")
+        .succeeds()
+        .stdout_only("1e3 5.0k\n");
+}
+
 #[test]
 fn test_to_auto_rejected_at_parse_time() {
     new_ucmd!()
@@ -1679,6 +1701,57 @@ fn test_format_precision_zero_with_to_scale_issue_11667() {
         .args(&["--to=iec", "--format=%.0f", "5183776"])
         .succeeds()
         .stdout_is("5M\n");
+}
+
+// `--format=%.0f` with `--to=<scale>` must round the scaled value with the
+// selected `--round` method, instead of first keeping a fractional digit and
+// then rounding that to nearest.
+#[test]
+fn test_format_precision_zero_with_to_scale_honors_round_method() {
+    let cases = [
+        (vec!["--to=si", "--format=%.0f", "1234567"], "2M"),
+        (vec!["--to=si", "--format=%.0f", "--", "-1234567"], "-2M"),
+        (vec!["--to=iec", "--format=%.0f", "1234567"], "2M"),
+        (
+            vec!["--to=si", "--format=%.0f", "--round=up", "1234567"],
+            "2M",
+        ),
+        (
+            vec!["--to=si", "--format=%.0f", "--round=down", "1934567"],
+            "1M",
+        ),
+        (
+            vec!["--to=si", "--format=%.0f", "--round=nearest", "1234567"],
+            "1M",
+        ),
+        (
+            vec![
+                "--to=si",
+                "--format=%.0f",
+                "--round=towards-zero",
+                "1934567",
+            ],
+            "1M",
+        ),
+        // rounding carries into the next suffix
+        (vec!["--to=si", "--format=%.0f", "999999"], "1M"),
+        (vec!["--to=iec", "--format=%.0f", "1048575"], "1M"),
+        (
+            vec!["--to=si", "--format=%.0f", "--round=nearest", "999999"],
+            "1M",
+        ),
+        (
+            vec!["--to=si", "--format=%.0f", "--round=down", "999999"],
+            "999k",
+        ),
+    ];
+
+    for (args, expected) in cases {
+        new_ucmd!()
+            .args(&args)
+            .succeeds()
+            .stdout_only(format!("{expected}\n"));
+    }
 }
 
 #[test]

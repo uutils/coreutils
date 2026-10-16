@@ -106,6 +106,44 @@ fn test_stdin() {
 }
 
 #[test]
+fn test_binary_input_line_number() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("input", b"\xff\0\nhello\x80");
+
+    ucmd.args(&["input", "2"]).succeeds().stdout_only("3\n6\n");
+
+    assert_eq!(at.read_bytes("xx00"), b"\xff\0\n");
+    assert_eq!(at.read_bytes("xx01"), b"hello\x80");
+}
+
+#[test]
+fn test_binary_input_regex() {
+    let input = b"\xff\0\nbefore\r\nmatch\xfe\r\nlast\x80";
+    for (pattern, split) in [("/match/", 11), ("/match/+1", 19), ("/match/-1", 3)] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["-", pattern])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(format!("{split}\n{}\n", input.len() - split));
+
+        assert_eq!(at.read_bytes("xx00"), &input[..split]);
+        assert_eq!(at.read_bytes("xx01"), &input[split..]);
+    }
+}
+
+#[test]
+fn test_binary_input_skip_regex() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-", "%match%"])
+        .pipe_in(b"\xff\0\nmatch\xfe\nlast\x80")
+        .succeeds()
+        .stdout_only("12\n");
+
+    assert_eq!(at.read_bytes("xx00"), b"match\xfe\nlast\x80");
+    assert!(!at.file_exists("xx01"));
+}
+
+#[test]
 fn test_up_to_line() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "10"])
