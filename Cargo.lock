@@ -2001,9 +2001,9 @@ dependencies = [
 
 [[package]]
 name = "num-modular"
-version = "0.6.1"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17bb261bf36fa7d83f4c294f834e91256769097b3cb505d44831e0a179ac647f"
+checksum = "bd8e500409e6cd603b03e477c26a6caecdc27ac58979a53e881c75eafc079f44"
 dependencies = [
  "num-bigint",
  "num-integer",
@@ -2012,9 +2012,9 @@ dependencies = [
 
 [[package]]
 name = "num-prime"
-version = "0.6.1"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d25a3c4d8a61c86376f9372bea15400e076398135c866495186972cdf5888a45"
+checksum = "6de1394909173a98f21f28406f9d82f0e11d87be4bf36473364f37a5bd100741"
 dependencies = [
  "bitvec",
  "either",
