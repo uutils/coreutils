@@ -18,7 +18,7 @@ doctest = false
 [target.'cfg(unix)'.dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
-nix = { workspace = true, features = ["ioctl", "term"] }
+libc = { workspace = true }
 rustix = { workspace = true, features = ["fs", "termios"] }
 uucore = { workspace = true, features = ["parser"] }
 
