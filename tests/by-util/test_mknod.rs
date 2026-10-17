@@ -58,6 +58,20 @@ fn test_mknod_version() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_mknod_non_utf8_file_name() {
+    use std::os::unix::ffi::OsStrExt;
+    use uutests::at_and_ucmd;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file_name = std::ffi::OsStr::from_bytes(b"fifo_\xFF\xFE");
+
+    ucmd.arg(file_name).arg("p").succeeds().no_output();
+    assert!(std::path::Path::new(&at.plus(file_name)).exists());
+}
+
+#[test]
 fn test_mknod_fifo_default_writable() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd().arg("test_file").arg("p").succeeds();
