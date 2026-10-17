@@ -553,7 +553,15 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 }
                 continue;
             }
-            head_file(&mut file_handle, options)?;
+            if let Err(err) = head_file(&mut file_handle, options) {
+                let name = if file == "-" {
+                    "standard input".into()
+                } else {
+                    file.into()
+                };
+                show!(HeadError::Io { name, err });
+                continue;
+            }
             Ok(())
         };
         if let Err(err) = res {
