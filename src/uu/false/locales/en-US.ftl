@@ -4,5 +4,8 @@ false-about = Returns false, an unsuccessful exit status.
   will try to write the help or version text. Any IO error during this operation is diagnosed, yet
   the program will also return 1.
 
+false-usage = false [ignored command line arguments]
+  or:  false OPTION
+
 false-help-text = Print help information
 false-version-text = Print version information
