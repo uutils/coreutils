@@ -10289,6 +10289,49 @@ fn test_cp_p_preserves_posix_acls() {
     );
 }
 
+// `cp -r` without -p only copies the mode bits of the directories it
+// creates, like GNU; it must not copy their access or default ACLs.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: ACL/xattr syscalls are not implemented")]
+fn test_cp_r_does_not_copy_posix_acls() {
+    use std::process::Command;
+
+    if Command::new("setfacl").arg("--version").output().is_err() {
+        return;
+    }
+    if Command::new("getfacl").arg("--version").output().is_err() {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("src");
+
+    let setfacl = Command::new("setfacl")
+        .arg("-m")
+        .arg("user:bin:rwx,default:user:bin:rwx")
+        .arg(at.plus("src"))
+        .status();
+    let Ok(status) = setfacl else { return };
+    if !status.success() {
+        // Filesystem doesn't support ACLs; skip.
+        return;
+    }
+
+    ucmd.arg("-r").arg("src").arg("dst").succeeds();
+
+    let dst_acl = Command::new("getfacl")
+        .arg("--omit-header")
+        .arg(at.plus("dst"))
+        .output()
+        .unwrap();
+    let dst_acl = String::from_utf8_lossy(&dst_acl.stdout);
+    assert!(
+        !dst_acl.contains("user:bin:"),
+        "cp -r must not copy POSIX ACLs:\n{dst_acl}",
+    );
+}
+
 #[test]
 fn test_progressbar_inexistent_source() {
     let (_, mut ucmd) = at_and_ucmd!();
