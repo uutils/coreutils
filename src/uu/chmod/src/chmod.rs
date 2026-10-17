@@ -204,6 +204,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         mode_indices,
     };
 
+    chmoder.check_mode()?;
     chmoder.chmod(&files)
 }
 
@@ -347,23 +348,49 @@ impl Chmoder {
                         naively_expected_new_mode = naive_mode;
                     }
                     Err(error) => {
-                        if self.quiet {
-                            return Err(ExitCode::new(1));
-                        }
-                        if let Some(args) = &self.args
-                            && let Some((index, operand, offset)) =
-                                self.locate_clause(args, &cmode_unwrapped, clause_start)
-                            && error.render_at(args, index, &operand, offset, &error.to_string())
-                        {
-                            // The diagnostic is already on stderr; exit quietly.
-                            return Err(ExitCode::new(1));
-                        }
-                        return Err(USimpleError::new(1, error.to_string()));
+                        return Err(self.mode_error(&error, &cmode_unwrapped, clause_start));
                     }
                 }
             }
             Ok((new_mode, naively_expected_new_mode))
         }
+    }
+
+    /// Reject a malformed mode list, such as `u+x,` or `644,u+x`, before any
+    /// file is looked at. This only needs the mode string, so it runs once.
+    fn check_mode(&self) -> UResult<()> {
+        let Some(cmode) = &self.cmode else {
+            return Ok(());
+        };
+        let mut offset = 0;
+        for clause in cmode.split(',') {
+            if let Err(error) = mode::check_clause(cmode, clause) {
+                return Err(self.mode_error(&error, cmode, offset));
+            }
+            offset += clause.len() + 1; // past the clause and its comma
+        }
+        Ok(())
+    }
+
+    /// Report `error` for the clause starting at `clause_start` in `cmode`,
+    /// with a caret under it when the arguments are known.
+    fn mode_error(
+        &self,
+        error: &mode::ModeError,
+        cmode: &str,
+        clause_start: usize,
+    ) -> Box<dyn UError> {
+        if self.quiet {
+            return ExitCode::new(1);
+        }
+        if let Some(args) = &self.args
+            && let Some((index, operand, offset)) = self.locate_clause(args, cmode, clause_start)
+            && error.render_at(args, index, &operand, offset, &error.to_string())
+        {
+            // The diagnostic is already on stderr; exit quietly.
+            return ExitCode::new(1);
+        }
+        USimpleError::new(1, error.to_string())
     }
 
     /// Map `clause_start` — an offset into `cmode`, the joined mode string —
