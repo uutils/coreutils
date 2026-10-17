@@ -4,8 +4,8 @@ name: CICD
 # spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS CLEVEL nodocs
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata profraw Cprofile
 # spell-checker:ignore (people) Peltoche rivy Anson dawidd
-# spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libcrypto libfuse libssl limactl nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache setfacl utmpdump xargs zstd
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest tempfile testsuite toybox userns uutils libsystemd codspeed wasip libexecinfo
+# spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov grubby halium lcov libclang libcrypto libfuse libssl limactl nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache setfacl utmpdump xargs zstd
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest tempfile testsuite toybox userns uutils libsystemd smackfs codspeed wasip libexecinfo
 
 env:
   PROJECT_NAME: coreutils
@@ -975,7 +975,7 @@ jobs:
     - run: rsync -v -a -e ssh . lima-default:~/work/
     - name: Setup Rust and other build deps in VM
       run: |
-        lima sudo dnf install --nodocs cargo clippy gcc g++ git rust libselinux-devel clang-devel attr -y
+        lima sudo dnf install --nodocs cargo clippy gcc g++ git grubby rust libselinux-devel clang-devel attr -y
     - name: Verify SELinux Status
       run: |
         lima getenforce
@@ -983,9 +983,19 @@ jobs:
     - name: Build and Test with SELinux
       run: |
         lima ls
-        lima bash -c "cd work && cargo test --features 'feat_selinux' --no-default-features"
-    - name: Lint with SELinux
-      run: lima bash -c "cd work && cargo clippy --all-targets --features 'feat_selinux' --no-default-features -- -D warnings"
+        lima bash -c "cd work && cargo test --features 'feat_selinux,feat_smack' --no-default-features"
+    - name: Lint with SELinux and SMACK support
+      run: lima bash -c "cd work && cargo clippy --all-targets --features 'feat_selinux,feat_smack' --no-default-features -- -D warnings"
+    - name: Restart Fedora VM with SELinux disabled
+      run: |
+        lima sudo grubby --update-kernel=ALL --args=selinux=0
+        limactl stop default
+        limactl start default
+    - name: Verify SELinux and SMACK are disabled
+      run: |
+        lima bash -c 'test "$(getenforce)" = Disabled && test ! -e /sys/fs/smackfs'
+    - name: Test disabled security context handling
+      run: lima bash -c "cd work && cargo test --features 'feat_selinux,feat_smack' --no-default-features --test tests security_contexts_disabled"
 
   test_safe_traversal:
     name: Safe Traversal Security Check
