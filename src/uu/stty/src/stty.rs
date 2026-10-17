@@ -820,27 +820,21 @@ fn print_in_save_format(termios: &Termios) {
     println!();
 }
 
-/// Gets terminal size
-/// This queries the kernel for the current terminal window dimensions.
-fn get_terminal_size(fd: impl AsFd) -> io::Result<Winsize> {
-    Ok(tcgetwinsize(fd)?)
-}
-
 fn print_settings(termios: &Termios, opts: &Options) -> io::Result<()> {
     if opts.save {
         print_in_save_format(termios);
     } else {
         let term_size = if opts.all {
-            Some(get_terminal_size(&opts.file)?)
+            Some(tcgetwinsize(&opts.file)?)
         } else {
-            get_terminal_size(&opts.file).ok()
+            tcgetwinsize(&opts.file).ok()
         };
 
         let stdout = stdout();
         let window_size = if stdout.as_raw_fd() == opts.file.as_raw_fd() {
             &term_size
         } else {
-            &get_terminal_size(stdout).ok()
+            &tcgetwinsize(stdout).ok()
         };
 
         print_terminal_size(termios, opts, window_size.as_ref(), term_size.as_ref())?;
