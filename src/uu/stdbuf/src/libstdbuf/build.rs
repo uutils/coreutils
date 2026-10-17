@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) libstdbuf
+// spell-checker:ignore (ToDO) libstdbuf libgcc lgcc
 
 use std::env;
 
@@ -20,6 +20,17 @@ fn main() {
     if !target.contains("apple-darwin") && !target.contains("cygwin") {
         println!("cargo:rustc-link-arg=-z");
         println!("cargo:rustc-link-arg=defs");
+    }
+
+    // Without std (see src/libstdbuf.rs), nothing links the C library. Pass it
+    // last, after the libraries that use it, such as the PGO profiler runtime.
+    println!("cargo:rustc-link-arg=-lc");
+
+    // ARM unwind tables refer to libgcc_s routines.
+    if env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("arm")
+        && env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("gnu")
+    {
+        println!("cargo:rustc-link-arg=-lgcc_s");
     }
 
     println!("cargo:rerun-if-changed=src/libstdbuf.rs");

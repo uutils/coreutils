@@ -85,6 +85,11 @@ fn main() {
         cmd.arg("--profile").arg(profile);
     }
 
+    // Abort on panic in every profile, so that libstdbuf is built without std.
+    let profile_key = if profile == "debug" { "dev" } else { profile };
+    cmd.arg("--config")
+        .arg(format!("profile.{profile_key}.panic=\"abort\""));
+
     // Pass the target architecture if we're cross-compiling
     if !target.is_empty() && target != "unknown" {
         cmd.arg("--target").arg(&target);
