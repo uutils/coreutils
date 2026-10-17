@@ -465,12 +465,15 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
     } else if source_is_dir && target.symlink_metadata().is_ok() {
         match opts.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
-            OverwriteMode::Interactive => prompt_overwrite(target, None)?,
+            OverwriteMode::Interactive => {
+                let writable = is_writable(target);
+                prompt_overwrite(target, writable)?;
+            }
             OverwriteMode::Force => {}
             OverwriteMode::Default => {
-                let (writable, mode) = is_writable(target);
+                let writable = is_writable(target);
                 if !writable && io::stdin().is_terminal() {
-                    prompt_overwrite(target, mode)?;
+                    prompt_overwrite(target, writable)?;
                 }
             }
         }
@@ -842,13 +845,16 @@ fn rename(
                 }
                 return Ok(());
             }
-            OverwriteMode::Interactive => prompt_overwrite(to, None)?,
+            OverwriteMode::Interactive => {
+                let writable = is_writable(to);
+                prompt_overwrite(to, writable)?;
+            }
             OverwriteMode::Force => {}
             OverwriteMode::Default => {
                 // GNU mv prompts when stdin is a TTY and target is not writable
-                let (writable, mode) = is_writable(to);
+                let writable = is_writable(to);
                 if !writable && io::stdin().is_terminal() {
-                    prompt_overwrite(to, mode)?;
+                    prompt_overwrite(to, writable)?;
                 }
             }
         }
@@ -1566,52 +1572,68 @@ fn is_empty_dir(path: &Path) -> bool {
     fs::read_dir(path).is_ok_and(|mut contents| contents.next().is_none())
 }
 
-/// Check if file is writable, returning the mode for potential reuse.
+/// Whether the destination can be overwritten without asking the user.
+///
+/// A symlink destination always counts as writable, because `mv` replaces the
+/// link itself and never writes through it. Anything else is decided by asking
+/// the kernel whether the caller's effective credentials allow writing, so root
+/// and ACL/group grants are honoured.
 #[cfg(unix)]
-fn is_writable(path: &Path) -> (bool, Option<u32>) {
-    if let Ok(metadata) = path.metadata() {
-        let mode = metadata.permissions().mode();
-        // Check if user write bit is set
-        ((mode & 0o200) != 0, Some(mode))
-    } else {
-        (false, None) // If we can't get metadata, prompt user to be safe
+fn is_writable(path: &Path) -> bool {
+    use rustix::fs::{Access, AtFlags, CWD, accessat};
+
+    if path
+        .symlink_metadata()
+        .is_ok_and(|metadata| metadata.file_type().is_symlink())
+    {
+        return true;
     }
+
+    // AT_EACCESS is what makes this about the caller's effective credentials.
+    // Android has no such flag and always uses the real ids.
+    #[cfg(target_os = "android")]
+    let flags = AtFlags::empty();
+    #[cfg(not(target_os = "android"))]
+    let flags = AtFlags::EACCESS;
+
+    accessat(CWD, path, Access::WRITE_OK, flags).is_ok()
 }
 
 /// Check if file is writable.
 #[cfg(not(unix))]
-fn is_writable(path: &Path) -> (bool, Option<u32>) {
-    if let Ok(metadata) = path.metadata() {
-        (!metadata.permissions().readonly(), None)
-    } else {
-        (false, None) // If we can't get metadata, prompt user to be safe
-    }
+fn is_writable(path: &Path) -> bool {
+    path.metadata()
+        .is_ok_and(|metadata| !metadata.permissions().readonly())
 }
 
 #[cfg(unix)]
-fn get_interactive_prompt(to: &Path, cached_mode: Option<u32>) -> String {
-    // Use cached mode if available, otherwise fetch it
-    let mode = cached_mode.or_else(|| to.metadata().ok().map(|m| m.permissions().mode()));
-    if let Some(mode) = mode {
+fn get_interactive_prompt(to: &Path, writable: bool) -> String {
+    // The mode is only needed for the "overriding mode" wording, which is used
+    // exactly when the destination is not writable.
+    if let Some(mode) = (!writable)
+        .then(|| to.metadata().ok().map(|m| m.permissions().mode()))
+        .flatten()
+    {
         let file_mode = mode & 0o777;
-        // Check if file is not writable by user
-        if (mode & 0o200) == 0 {
-            let perms = display_permissions_unix(mode, false);
-            let mode_info = format!("{file_mode:04o} ({perms})");
-            return translate!("mv-prompt-overwrite-mode", "target" => to.quote(), "mode_info" => mode_info);
-        }
+        let perms = display_permissions_unix(mode, false);
+        let mode_info = format!("{file_mode:04o} ({perms})");
+        return translate!(
+            "mv-prompt-overwrite-mode",
+            "target" => to.quote(),
+            "mode_info" => mode_info
+        );
     }
     translate!("mv-prompt-overwrite", "target" => to.quote())
 }
 
 #[cfg(not(unix))]
-fn get_interactive_prompt(to: &Path, _cached_mode: Option<u32>) -> String {
+fn get_interactive_prompt(to: &Path, _writable: bool) -> String {
     translate!("mv-prompt-overwrite", "target" => to.quote())
 }
 
 /// Prompts the user for confirmation and returns an error if declined.
-fn prompt_overwrite(to: &Path, cached_mode: Option<u32>) -> io::Result<()> {
-    if !prompt_yes!("{}", get_interactive_prompt(to, cached_mode)) {
+fn prompt_overwrite(to: &Path, writable: bool) -> io::Result<()> {
+    if !prompt_yes!("{}", get_interactive_prompt(to, writable)) {
         return Err(io::Error::other(""));
     }
     Ok(())
