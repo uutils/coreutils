@@ -9658,3 +9658,28 @@ fn test_cp_source_in_unsearchable_dir() {
     at.set_mode("d", 0o755);
     assert!(!at.file_exists("dest"));
 }
+
+#[test]
+#[cfg(all(target_os = "linux", feature = "feat_selinux", feature = "feat_smack"))]
+fn test_security_contexts_disabled() {
+    if !uutests::util::security_contexts_disabled() {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("source", "contents");
+    for (option, warning) in [
+        ("-Z", ""),
+        (
+            "--context=some_context",
+            "cp: warning: ignoring --context; it requires an SELinux-enabled kernel\n",
+        ),
+    ] {
+        scene
+            .ucmd()
+            .args(&[option, "source", "dest"])
+            .succeeds()
+            .no_stdout()
+            .stderr_is(warning);
+        assert_eq!(scene.fixtures.read("dest"), "contents");
+    }
+}
