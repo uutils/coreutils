@@ -35,6 +35,7 @@ error-invalid-argument = Invalid argument
 error-is-a-directory-text = Is a directory
 error-is-a-directory = { $file }: { error-is-a-directory-text }
 error-too-many-symlink-levels = Too many levels of symbolic links
+error-no-unique-temp-name = no unique temporary name available in the destination directory
 
 # Common actions
 action-copying = copying
