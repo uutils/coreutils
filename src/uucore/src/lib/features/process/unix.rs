@@ -66,16 +66,14 @@ impl ChildExt for Child {
     }
 
     fn wait_or_timeout(&mut self, timeout: Duration, ignore_term: bool) -> io::Result<TimeoutRet> {
-        if timeout == Duration::from_micros(0) {
-            return self.wait().map(TimeoutRet::Exited);
-        }
         // .try_wait() doesn't drop stdin, so we do it manually
         drop(self.stdin.take());
 
         // Waits continuously whenever we receive an external SIGCHLD or
         // we SIGTERM when we are ignoring them.
         let start = Instant::now();
-        let mut remaining = timeout;
+        // Zero disables the timer, but signals must still be handled.
+        let mut remaining = (!timeout.is_zero()).then_some(timeout);
         let mut timer = Timer::new()?;
         loop {
             match timer.timed_sigwait(remaining) {
@@ -89,7 +87,9 @@ impl ChildExt for Child {
                 Ok(Some(signal)) => break Ok(TimeoutRet::Interrupted(signal as usize)),
                 Err(e) => break Err(e),
             }
-            remaining = timeout.saturating_sub(start.elapsed());
+            if remaining.is_some() {
+                remaining = Some(timeout.saturating_sub(start.elapsed()));
+            }
         }
     }
 }
@@ -301,8 +301,10 @@ mod timer {
 
 #[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 impl Timer {
-    fn timed_sigwait(&mut self, timeout: Duration) -> io::Result<Option<Signal>> {
-        self.arm(timeout)?;
+    fn timed_sigwait(&mut self, timeout: Option<Duration>) -> io::Result<Option<Signal>> {
+        if let Some(timeout) = timeout {
+            self.arm(timeout)?;
+        }
 
         let set = timeout_signal_set();
         let mut sig = 0;
