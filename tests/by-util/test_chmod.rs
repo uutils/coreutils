@@ -1628,6 +1628,142 @@ fn test_chmod_operator_only_still_calls_syscall() {
     }
 }
 
+#[cfg(not(target_os = "redox"))]
+#[test]
+fn test_chmod_recursive_does_not_exhaust_fds() {
+    use rustix::process::Resource;
+    use std::path::PathBuf;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let mut current = PathBuf::from("deep");
+    at.mkdir(&current);
+    let mut paths = vec![current.clone()];
+    for _ in 0..256 {
+        current.push("d");
+        at.mkdir(&current);
+        paths.push(current.clone());
+    }
+    at.touch(current.join("file"));
+    paths.push(current.join("file"));
+    // Exercise sibling processing again after returning to evicted ancestors.
+    for path in &paths[..paths.len() - 1] {
+        at.touch(path.join("sibling"));
+    }
+    for flags in ["-RP", "-RH", "-RL"] {
+        for path in &paths {
+            at.set_mode(path.to_str().unwrap(), 0o755);
+        }
+        scene
+            .ucmd()
+            .limit(Resource::Nofile, 64, 64)
+            .args(&[flags, "700", "deep"])
+            .succeeds()
+            .no_stderr();
+        for path in &paths {
+            assert_eq!(
+                at.metadata(path.to_str().unwrap()).permissions().mode() & 0o777,
+                0o700
+            );
+        }
+        for path in &paths[..paths.len() - 1] {
+            assert_eq!(
+                at.metadata(path.join("sibling").to_str().unwrap())
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o700
+            );
+        }
+    }
+}
+
+#[cfg(not(target_os = "redox"))]
+#[test]
+fn test_chmod_recursive_wide_tree_does_not_exhaust_fds() {
+    use rustix::process::Resource;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("wide");
+    for i in 0..256 {
+        at.mkdir(format!("wide/d{i}"));
+        at.touch(format!("wide/d{i}/file"));
+    }
+    scene
+        .ucmd()
+        .limit(Resource::Nofile, 64, 64)
+        .args(&["-R", "700", "wide"])
+        .succeeds()
+        .no_stderr();
+    for i in 0..256 {
+        assert_eq!(
+            at.metadata(&format!("wide/d{i}/file")).permissions().mode() & 0o777,
+            0o700
+        );
+    }
+}
+
+#[cfg(not(target_os = "redox"))]
+#[test]
+fn test_chmod_recursive_symlink_chain_does_not_exhaust_fds() {
+    use rustix::process::Resource;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("targets");
+    for i in 0..256 {
+        at.mkdir(format!("targets/d{i}"));
+        at.set_mode(&format!("targets/d{i}"), 0o755);
+    }
+    at.symlink_dir("targets/d0", "start");
+    for i in 0..255 {
+        at.symlink_dir(
+            &format!("targets/d{}", i + 1),
+            &format!("targets/d{i}/next"),
+        );
+    }
+    at.touch("targets/d255/file");
+    // The back edge must be detected using the open directory's identity.
+    at.symlink_dir("targets/d0", "targets/d255/cycle");
+    scene
+        .ucmd()
+        .limit(Resource::Nofile, 64, 64)
+        .args(&["-RL", "700", "start"])
+        .succeeds()
+        .no_stderr();
+    for i in 0..256 {
+        assert_eq!(
+            at.metadata(&format!("targets/d{i}")).permissions().mode() & 0o777,
+            0o700
+        );
+    }
+    assert_eq!(
+        at.metadata("targets/d255/file").permissions().mode() & 0o777,
+        0o700
+    );
+    // Directory-only symbolic modes must also work beyond the pathname's
+    // symlink limit; use the metadata obtained relative to the directory fd.
+    at.set_mode("targets/d255/file", 0o600);
+    for i in 0..256 {
+        at.set_mode(&format!("targets/d{i}"), 0o600);
+    }
+    scene
+        .ucmd()
+        .limit(Resource::Nofile, 64, 64)
+        .args(&["-RL", "u+X", "start"])
+        .succeeds()
+        .no_stderr();
+    for i in 0..256 {
+        assert_eq!(
+            at.metadata(&format!("targets/d{i}")).permissions().mode() & 0o777,
+            0o700
+        );
+    }
+    assert_eq!(
+        at.metadata("targets/d255/file").permissions().mode() & 0o777,
+        0o600
+    );
+}
+
 #[test]
 fn test_chmod_colored_output() {
     // Test colored help message
