@@ -9,8 +9,6 @@ mod mode;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use rustix::process::{getegid, geteuid};
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-use selinux::SecurityContext;
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fmt::Debug;
@@ -29,10 +27,7 @@ use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 #[cfg(all(unix, not(target_os = "redox")))]
 use uucore::safe_traversal::{DirFd, SymlinkBehavior, create_dir_all_safe};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-use uucore::selinux::{
-    SeLinuxError, contexts_differ, get_selinux_security_context, is_selinux_enabled,
-    selinux_error_description, set_selinux_security_context,
-};
+use uucore::selinux::{contexts_differ, is_selinux_enabled, set_selinux_security_context};
 use uucore::translate;
 use uucore::{format_usage, show, show_error, show_if_err, show_warning};
 
@@ -504,18 +499,32 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
     }
 
     for path in paths.iter().map(Path::new) {
+        // Special case to match GNU's behavior:
+        // install -d foo/. should work and just create foo/
+        // std::fs::create_dir("foo/."); fails in pure Rust
+        // See also mkdir.rs for another occurrence of this
+        let path_to_create = dir_strip_dot_for_creation(path);
+        // Set up first: like GNU, an unusable context fails even when nothing is created.
+        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+        let _selinux_guard = match directory_creation_context(&path_to_create, b) {
+            Ok(guard) => guard,
+            Err(e) => {
+                show!(e);
+                continue;
+            }
+        };
         // if the path already exist, check if it's a file
         if path.exists() {
             if !path.is_dir() {
                 show!(InstallError::ExistingFileNotADirectory(path.to_path_buf()));
                 continue;
             }
+            // Like GNU, -Z resets an existing target to its default context; --context doesn't.
+            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+            if b.privileged && b.default_context && is_selinux_enabled() {
+                show_if_err!(set_selinux_security_context(path, None));
+            }
         } else {
-            // Special case to match GNU's behavior:
-            // install -d foo/. should work and just create foo/
-            // std::fs::create_dir("foo/."); fails in pure Rust
-            // See also mkdir.rs for another occurrence of this
-            let path_to_create = dir_strip_dot_for_creation(path);
             // Differently than the primary functionality
             // (MainFunction::Standard), the directory functionality should
             // create all ancestors (or components) of a directory
@@ -530,13 +539,6 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
             ) {
                 show!(e);
                 continue;
-            }
-
-            // Set SELinux context for all created directories if needed
-            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-            if should_set_selinux_context(b) {
-                let context = get_context_for_selinux(b);
-                set_selinux_context_for_directories_install(path_to_create.as_path(), context);
             }
 
             if b.verbose {
@@ -556,17 +558,6 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
             show!(e);
             uucore::error::set_exit_code(1);
             continue;
-        }
-
-        // Set SELinux context for directory if needed
-        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-        if b.privileged {
-            if b.default_context {
-                show_if_err!(set_selinux_default_context(path));
-            } else if b.context.is_some() {
-                let context = get_context_for_selinux(b);
-                show_if_err!(set_selinux_security_context(path, context));
-            }
         }
 
         if mode::chmod(path, b.mode()).is_err() {
@@ -719,6 +710,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     target_filename = Some(filename.to_os_string());
                 }
             } else {
+                // Before the -v lines, so a context error reports no directories.
+                #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+                let selinux_guard = directory_creation_context(to_create, b)?;
                 if b.verbose {
                     let mut result = PathBuf::new();
                     // When creating directories with -Dv, show directory creations step by step
@@ -739,7 +733,14 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                 {
                     // Use DEFAULT_MODE (0o755) for created directories - this matches GNU install
                     // behavior. The actual mode will be modified by umask at the kernel level.
-                    match create_dir_all_safe(to_create, DEFAULT_MODE) {
+                    let created = create_dir_all_safe(to_create, DEFAULT_MODE);
+                    // End the creation context before any file is created.
+                    #[cfg(all(
+                        feature = "selinux",
+                        any(target_os = "linux", target_os = "android")
+                    ))]
+                    drop(selinux_guard);
+                    match created {
                         Ok(dir_fd) => {
                             if b.target_dir.is_none()
                                 && sources.len() == 1
@@ -748,16 +749,6 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                             {
                                 target_parent_fd = Some(dir_fd);
                                 target_filename = Some(filename.to_os_string());
-                            }
-
-                            // Set SELinux context for all created directories if needed
-                            #[cfg(all(
-                                feature = "selinux",
-                                any(target_os = "linux", target_os = "android")
-                            ))]
-                            if should_set_selinux_context(b) {
-                                let context = get_context_for_selinux(b);
-                                set_selinux_context_for_directories_install(to_create, context);
                             }
                         }
                         Err(e) => {
@@ -1213,7 +1204,9 @@ fn finalize_installed_file(
             uucore::selinux::preserve_security_context(from, to)
                 .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
         } else if b.default_context {
-            set_selinux_default_context(to)
+            // Relabelled after the copy and strip, so the file briefly has its inherited
+            // label; creating it under `FsCreateContext` (and relabelling after strip) would not.
+            set_selinux_security_context(to, None)
                 .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
         } else if b.context.is_some() {
             let context = get_context_for_selinux(b);
@@ -1402,357 +1395,18 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     false
 }
 
-/// Sets the `SELinux` security context for install's -Z flag behavior.
-///
-/// This function implements the specific behavior needed for install's -Z flag,
-/// which attempts to derive an appropriate context based on policy rules.
-/// If derivation fails, it falls back to the system default.
-///
-/// # Arguments
-///
-/// * `path` - Filesystem path for which to set the `SELinux` context.
-///
-/// # Returns
-///
-/// Returns `Ok(())` if the context was successfully set, or a `SeLinuxError` if the operation failed.
+/// With -Z or --context, label the directories created while the returned guard lives.
+/// One policy lookup for `path` serves all of them; GNU looks up each component.
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-pub fn set_selinux_default_context(path: &Path) -> Result<(), SeLinuxError> {
-    if !is_selinux_enabled() {
-        return Err(SeLinuxError::SELinuxNotEnabled);
+fn directory_creation_context(
+    path: &Path,
+    b: &Behavior,
+) -> Result<Option<uucore::selinux::FsCreateContext>, InstallError> {
+    if !should_set_selinux_context(b) || !is_selinux_enabled() {
+        return Ok(None);
     }
-
-    // Try to get the correct context based on file type and policy, then set it
-    match get_default_context_for_path(path) {
-        Ok(Some(default_ctx)) => {
-            // Set the context we determined from policy
-            set_selinux_security_context(path, Some(&default_ctx))
-        }
-        Ok(None) | Err(_) => {
-            // Fall back to set_default_for_path if we can't determine the correct context
-            SecurityContext::set_default_for_path(path).map_err(|e| {
-                SeLinuxError::ContextSetFailure(String::new(), selinux_error_description(&e))
-            })
-        }
-    }
-}
-
-/// Gets the default `SELinux` context for a path based on the system's security policy.
-///
-/// This function attempts to determine what the "correct" `SELinux` context should be
-/// for a given path by consulting the `SELinux` policy database. This is similar to
-/// what `matchpathcon` or `restorecon` would determine.
-///
-/// The function traverses up the directory tree to find the first existing parent
-/// directory, gets its `SELinux` context, and then derives the appropriate context
-/// for the target path based on `SELinux` policy rules.
-///
-/// # Arguments
-///
-/// * `path` - The filesystem path to get the default context for
-///
-/// # Returns
-///
-/// * `Ok(Some(String))` - The default context string if successfully determined
-/// * `Ok(None)` - No default context could be determined
-/// * `Err(SeLinuxError)` - An error occurred while determining the context
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-fn get_default_context_for_path(path: &Path) -> Result<Option<String>, SeLinuxError> {
-    if !is_selinux_enabled() {
-        return Err(SeLinuxError::SELinuxNotEnabled);
-    }
-
-    // Find the first existing parent directory to get its context
-    let mut current_path = path;
-    loop {
-        if current_path.exists()
-            && let Ok(parent_context) = get_selinux_security_context(current_path, false)
-            && !parent_context.is_empty()
-        {
-            // Found a context - derive the appropriate context for our target
-            return Ok(Some(derive_context_from_parent(&parent_context)));
-        }
-
-        // Move up to parent
-        if let Some(parent) = current_path.parent() {
-            if parent == current_path {
-                break; // Reached root
-            }
-            current_path = parent;
-        } else {
-            break;
-        }
-
-        if current_path == Path::new("/") || current_path.as_os_str().is_empty() {
-            break;
-        }
-    }
-
-    // If we can't determine from any parent, return None to fall back to default behavior
-    Ok(None)
-}
-
-/// Derives an appropriate `SELinux` context based on a parent directory context.
-///
-/// This is a heuristic function that attempts to generate an appropriate
-/// context for a file based on its parent directory's context and file type.
-/// The goal is to mimic what `restorecon` would do based on `SELinux` policy.
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-fn derive_context_from_parent(parent_context: &str) -> String {
-    // Parse the parent context (format: user:role:type:level)
-    let parts: Vec<&str> = parent_context.split(':').collect();
-    if let [user, role, parent_type, ..] = parts.as_slice() {
-        // Based on the GNU test expectations, when creating files in tmp-related directories,
-        // `install -Z` should create files with user_home_t context (like restorecon would).
-        // This is a specific policy behavior that the test expects.
-        let derived_type = if parent_type.contains("tmp") {
-            // tmp-related types should resolve to user_home_t
-            // This matches the behavior expected by the GNU test and restorecon
-            "user_home_t"
-        } else {
-            // For other parent types, preserve the type
-            parent_type
-        };
-
-        if let Some(level) = parts.get(3) {
-            format!("{user}:{role}:{derived_type}:{level}")
-        } else {
-            format!("{user}:{role}:{derived_type}")
-        }
-    } else {
-        // Fallback if we can't parse the parent context
-        parent_context.to_string()
-    }
-}
-
-/// Helper function to collect paths that need `SELinux` context setting.
-///
-/// Traverses from the given starting path up to existing parent directories.
-/// Returns a vector of paths in reverse order (from parent to child).
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-fn collect_paths_for_context_setting(starting_path: &Path) -> Vec<&Path> {
-    let mut paths: Vec<&Path> = starting_path
-        .ancestors()
-        .take_while(|p| p.exists())
-        .collect();
-    paths.reverse();
-    paths
-}
-
-/// Sets the `SELinux` security context for a directory hierarchy.
-///
-/// This function traverses from the given starting path up to existing parent directories
-/// and sets the `SELinux` context on each directory in the hierarchy (from parent to child).
-/// This is useful when creating directory structures and needing to set contexts on all
-/// created directories.
-///
-/// # Arguments
-///
-/// * `target_path` - The target path (typically the deepest directory in a hierarchy)
-/// * `context` - Optional `SELinux` context string to set. If None, sets default context.
-///
-/// # Behavior
-///
-/// - Traverses from `target_path` upward to find existing parent directories
-/// - Sets the context on each directory in reverse order (parent to child)
-/// - Uses `show_if_err!` to handle errors gracefully without panicking
-/// - Stops at filesystem root ("/") or empty path to prevent infinite loops
-/// - Only processes paths that exist on the filesystem
-/// - Silently handles `SELinux` context setting failures
-///
-/// # Examples
-///
-/// ```no_run
-/// use std::path::Path;
-///
-/// // Set default context on directory hierarchy
-/// // set_selinux_context_for_directories(Path::new("/tmp/new/deep/dir"), None);
-///
-/// // Set specific context on directory hierarchy
-/// // let context = String::from("user_u:object_r:tmp_t:s0");
-/// // set_selinux_context_for_directories(Path::new("/tmp/new/deep/dir"), Some(&context));
-/// ```
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-fn set_selinux_context_for_directories(target_path: &Path, context: Option<&String>) {
-    for path in collect_paths_for_context_setting(target_path) {
-        show_if_err!(set_selinux_security_context(path, context));
-    }
-}
-
-/// Sets `SELinux` context for created directories using install's -Z default behavior.
-///
-/// Similar to `set_selinux_context_for_directories` but uses install's
-/// specific default context derivation when no context is provided.
-///
-/// # Arguments
-///
-/// * `target_path` - The target path (typically the deepest directory in a hierarchy)
-/// * `context` - Optional `SELinux` context string to set. If None, uses install's default derivation.
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-pub fn set_selinux_context_for_directories_install(target_path: &Path, context: Option<&String>) {
-    if context.is_some() {
-        // Use the standard function for explicit contexts
-        set_selinux_context_for_directories(target_path, context);
-    } else {
-        // For default context, we need our custom install behavior
-        for path in collect_paths_for_context_setting(target_path) {
-            show_if_err!(set_selinux_default_context(path));
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-    use super::derive_context_from_parent;
-
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-    #[test]
-    fn test_derive_context_from_parent() {
-        // Test cases: (input_context, file_type, expected_output, description)
-        let test_cases = [
-            // Core tmp_t transformation (matches GNU behavior)
-            (
-                "unconfined_u:object_r:tmp_t:s0",
-                "regular_file",
-                "unconfined_u:object_r:user_home_t:s0",
-                "tmp_t transformation",
-            ),
-            (
-                "unconfined_u:object_r:tmp_t:s0",
-                "directory",
-                "unconfined_u:object_r:user_home_t:s0",
-                "tmp_t directory transformation",
-            ),
-            (
-                "unconfined_u:object_r:tmp_t:s0",
-                "other",
-                "unconfined_u:object_r:user_home_t:s0",
-                "tmp_t other file type transformation",
-            ),
-            // Tmp variants transformation
-            (
-                "unconfined_u:object_r:user_tmp_t:s0",
-                "regular_file",
-                "unconfined_u:object_r:user_home_t:s0",
-                "user_tmp_t transformation",
-            ),
-            (
-                "root:object_r:admin_tmp_t:s0",
-                "directory",
-                "root:object_r:user_home_t:s0",
-                "admin_tmp_t transformation",
-            ),
-            // Non-tmp contexts (should be preserved)
-            (
-                "unconfined_u:object_r:user_home_t:s0",
-                "regular_file",
-                "unconfined_u:object_r:user_home_t:s0",
-                "user_home_t preservation",
-            ),
-            (
-                "system_u:object_r:bin_t:s0",
-                "directory",
-                "system_u:object_r:bin_t:s0",
-                "bin_t preservation",
-            ),
-            (
-                "system_u:object_r:lib_t:s0",
-                "regular_file",
-                "system_u:object_r:lib_t:s0",
-                "lib_t preservation",
-            ),
-            // Contexts without MLS level
-            (
-                "unconfined_u:object_r:tmp_t",
-                "regular_file",
-                "unconfined_u:object_r:user_home_t",
-                "tmp_t no level transformation",
-            ),
-            (
-                "unconfined_u:object_r:user_home_t",
-                "directory",
-                "unconfined_u:object_r:user_home_t",
-                "user_home_t no level preservation",
-            ),
-            // Different users and roles
-            (
-                "root:system_r:tmp_t:s0",
-                "regular_file",
-                "root:system_r:user_home_t:s0",
-                "root user tmp transformation",
-            ),
-            (
-                "staff_u:staff_r:tmp_t:s0-s0:c0.c1023",
-                "directory",
-                "staff_u:staff_r:user_home_t:s0-s0",
-                "complex MLS level truncation with tmp transformation",
-            ),
-            // Real-world examples
-            (
-                "unconfined_u:unconfined_r:tmp_t:s0-s0:c0.c1023",
-                "regular_file",
-                "unconfined_u:unconfined_r:user_home_t:s0-s0",
-                "user session tmp context transformation",
-            ),
-            (
-                "system_u:system_r:tmp_t:s0",
-                "directory",
-                "system_u:system_r:user_home_t:s0",
-                "system tmp context transformation",
-            ),
-            (
-                "unconfined_u:unconfined_r:user_home_t:s0",
-                "regular_file",
-                "unconfined_u:unconfined_r:user_home_t:s0",
-                "already correct home context",
-            ),
-            // Edge cases and malformed contexts
-            (
-                "invalid",
-                "regular_file",
-                "invalid",
-                "invalid context passthrough",
-            ),
-            ("", "regular_file", "", "empty context passthrough"),
-            (
-                "user:role",
-                "regular_file",
-                "user:role",
-                "insufficient parts passthrough",
-            ),
-            (
-                "user:role:type:level:extra:parts",
-                "regular_file",
-                "user:role:type:level",
-                "extra parts truncation",
-            ),
-            (
-                "user:role:tmp_t:s0:extra",
-                "regular_file",
-                "user:role:user_home_t:s0",
-                "tmp transformation with extra parts",
-            ),
-        ];
-
-        for (input_context, file_type, expected_output, description) in test_cases {
-            let result = derive_context_from_parent(input_context);
-            assert_eq!(
-                result, expected_output,
-                "Failed test case: {description} - Input: '{input_context}', File type: '{file_type}', Expected: '{expected_output}', Got: '{result}'"
-            );
-        }
-
-        // Test file type independence (since current implementation ignores file_type)
-        let tmp_context = "unconfined_u:object_r:tmp_t:s0";
-        let expected = "unconfined_u:object_r:user_home_t:s0";
-        let file_types = ["regular_file", "directory", "other", "custom_type"];
-
-        for file_type in file_types {
-            let result = derive_context_from_parent(tmp_context);
-            assert_eq!(
-                result, expected,
-                "File type independence test failed - file_type: '{file_type}', Expected: '{expected}', Got: '{result}'"
-            );
-        }
-    }
+    let mode = uucore::libc::S_IFDIR | DEFAULT_MODE as uucore::libc::mode_t;
+    uucore::selinux::FsCreateContext::new(path, Some(mode), get_context_for_selinux(b))
+        .map(Some)
+        .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))
 }
