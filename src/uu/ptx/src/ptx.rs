@@ -129,15 +129,17 @@ impl WordFilter {
     #[allow(clippy::cognitive_complexity)]
     fn new(matches: &clap::ArgMatches, config: &Config) -> UResult<Self> {
         let (o, oset): (bool, FxHashSet<String>) = if matches.contains_id(options::ONLY_FILE) {
-            let words =
-                read_word_filter_file(matches, options::ONLY_FILE).map_err_context(String::new)?;
+            let filename = matches.get_one::<OsString>(options::ONLY_FILE).unwrap();
+            let words = read_word_filter_file(matches, options::ONLY_FILE)
+                .map_err_context(|| filename.quote().to_string())?;
             (true, words)
         } else {
             (false, FxHashSet::default())
         };
         let (i, iset): (bool, FxHashSet<String>) = if matches.contains_id(options::IGNORE_FILE) {
+            let filename = matches.get_one::<OsString>(options::IGNORE_FILE).unwrap();
             let words = read_word_filter_file(matches, options::IGNORE_FILE)
-                .map_err_context(String::new)?;
+                .map_err_context(|| filename.quote().to_string())?;
             (true, words)
         } else {
             (false, FxHashSet::default())
@@ -145,8 +147,9 @@ impl WordFilter {
         let break_set: Option<FxHashSet<char>> = if matches.contains_id(options::BREAK_FILE)
             && !matches.contains_id(options::WORD_REGEXP)
         {
-            let mut chars =
-                read_char_filter_file(matches, options::BREAK_FILE).map_err_context(String::new)?;
+            let filename = matches.get_one::<OsString>(options::BREAK_FILE).unwrap();
+            let mut chars = read_char_filter_file(matches, options::BREAK_FILE)
+                .map_err_context(|| filename.quote().to_string())?;
             if !config.gnu_ext {
                 // GNU off means at least these are considered
                 chars.extend([' ', '\t', '\n']);
