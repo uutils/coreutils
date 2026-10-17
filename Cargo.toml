@@ -172,6 +172,7 @@ renamed_and_removed_lints = { level = "allow", priority = -1 }
 # Allow "fuzzing" as a "cfg" condition name and "cygwin" as a value for "target_os"
 # https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html
 unexpected_cfgs = { level = "warn", check-cfg = [
+  'cfg(codspeed)',
   'cfg(fuzzing)',
   'cfg(pgo_training)',
   'cfg(target_os, values("cygwin"))',
