@@ -122,6 +122,162 @@ fn test_cp_verbose_write_error_is_reported() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_cp_symlink_relative_source_in_cwd() {
+    // The destination is in the current directory, with or without "./".
+    for dest in ["b2.txt", "./b2.txt"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("b.txt");
+        ucmd.args(&["-s", "b.txt", dest]).succeeds();
+
+        assert!(at.is_symlink("b2.txt"), "with dest {dest}");
+        assert_eq!(at.read_symlink("b2.txt"), "b.txt", "with dest {dest}");
+    }
+}
+
+// The destination's parent is compared with the current directory by name
+// and then by device/inode, so a path that merely resolves to
+// the current directory is accepted.
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: '..' leaves the mapped guest root"
+)]
+fn test_cp_symlink_relative_source_dest_resolving_to_cwd() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("b.txt");
+    let cwd_name = at.subdir.file_name().unwrap().to_str().unwrap().to_owned();
+    let dest = format!("../{cwd_name}/b2");
+
+    ucmd.args(&["-s", "b.txt", &dest]).succeeds();
+
+    assert!(at.is_symlink("b2"));
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
+fn test_cp_symlink_relative_source_dest_in_symlink_to_cwd() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("b.txt");
+    at.symlink_dir(".", "here");
+
+    ucmd.args(&["-s", "b.txt", "here/b2"]).succeeds();
+
+    assert!(at.is_symlink("b2"));
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: absolute host tmpdir path is outside the mapped guest root, so cp cannot stat it"
+)]
+fn test_cp_symlink_absolute_source_into_subdir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("sub");
+    at.touch("b.txt");
+    ucmd.args(&["-s", &at.plus_as_string("b.txt"), "sub"])
+        .succeeds();
+    assert!(at.is_symlink("sub/b.txt"));
+}
+
+// The check must run before an existing destination is removed or backed up,
+// otherwise a failed command still destroys data.
+#[test]
+#[cfg(unix)]
+fn test_cp_symlink_relative_source_outside_cwd_existing_dest() {
+    for extra in ["--remove-destination", "-b", "-f"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("b.txt");
+        at.mkdir("sub");
+        at.write("sub/b.txt", "keep me");
+
+        ucmd.args(&["-s", extra, "b.txt", "sub"])
+            .fails_with_code(1)
+            .stderr_contains("can make relative symbolic links only in current directory");
+
+        assert!(!at.is_symlink("sub/b.txt"), "with {extra}");
+        assert_eq!(at.read("sub/b.txt"), "keep me", "with {extra}");
+        assert!(!at.file_exists("sub/b.txt~"), "with {extra}");
+    }
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: symlink/hardlink capability restrictions cause dangling-symlink/same-file detection to differ"
+)]
+fn test_cp_symlink_relative_source_outside_cwd_existing_symlink_dest() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("b.txt");
+    at.mkdir("sub");
+    at.touch("other");
+    at.symlink_file("other", "sub/b.txt");
+
+    ucmd.args(&["-s", "--remove-destination", "b.txt", "sub"])
+        .fails_with_code(1)
+        .stderr_contains("can make relative symbolic links only in current directory");
+
+    assert!(at.is_symlink("sub/b.txt"));
+    assert_eq!(at.read_symlink("sub/b.txt"), at.plus_as_string("other"));
+}
+
+// `cp -rs dir out` with a relative dir: every link would be created in `out`,
+// so refuse per file.
+#[test]
+#[cfg(unix)]
+fn test_cp_symlink_recursive_relative_dir_outside_cwd() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/a.txt");
+
+    ucmd.args(&["-rs", "dir", "out"])
+        .fails_with_code(1)
+        .stderr_contains("can make relative symbolic links only in current directory");
+
+    assert!(!at.is_symlink("out/a.txt"));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_symlink_recursive_relative_dir_into_existing_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/a.txt");
+    at.mkdir("out");
+
+    ucmd.args(&["-rs", "dir", "out"])
+        .fails_with_code(1)
+        .stderr_contains("can make relative symbolic links only in current directory");
+
+    assert!(!at.is_symlink("out/dir/a.txt"));
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: absolute host tmpdir path is outside the mapped guest root, so cp cannot stat it"
+)]
+fn test_cp_symlink_recursive_absolute_dir_into_subdir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/a.txt");
+    at.mkdir("out");
+
+    ucmd.args(&["-rs", &at.plus_as_string("dir"), "out"])
+        .succeeds();
+
+    assert!(at.is_symlink("out/dir/a.txt"));
+}
+
+#[test]
 fn test_cp_cp() {
     let (at, mut ucmd) = at_and_ucmd!();
     // Invoke our binary to make the copy.
