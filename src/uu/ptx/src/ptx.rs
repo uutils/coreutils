@@ -218,10 +218,10 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
         // In the future, we might want to switch to the fancy-regex crate for better compatibility.
 
         // Verify regex is valid and doesn't match empty string
-        let re = Regex::new(&regex).map_err(|error| {
+        let re = Regex::new(&regex).map_err(|_| {
             USimpleError::new(
                 1,
-                translate!("ptx-error-invalid-regexp", "error" => error.to_string()),
+                translate!("ptx-error-invalid-regexp", "pattern" => regex.quote()),
             )
         })?;
         if re.is_match("") {
