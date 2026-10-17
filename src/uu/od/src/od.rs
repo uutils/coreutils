@@ -50,6 +50,8 @@ use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, show_error, show_warning};
 
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
+const DEFAULT_MISSING_WIDTH: &str = "32";
+const DEFAULT_MISSING_STRING_LENGTH: &str = "3";
 
 pub(crate) mod options {
     pub const HELP: &str = "help";
@@ -257,8 +259,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let raw_args: Vec<OsString> = args.iter().map(OsString::from).collect();
 
     let clap_opts = uu_app();
-
-    let clap_matches = uucore::clap_localization::handle_clap_result(clap_opts, &args)?;
+    let clap_args = default_optional_value_args(&args, &clap_opts);
+    let clap_matches = uucore::clap_localization::handle_clap_result(clap_opts, &clap_args)?;
 
     // Kept for the caret in SIZE diagnostics, which echoes the command line.
     let diag_args = uucore::diagnostics::capture(&raw_args);
@@ -304,6 +306,39 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             &mut out,
         )
     }
+}
+
+// Attach missing optional values so Clap keeps the next operand as a filename.
+fn default_optional_value_args(args: &[String], command: &Command) -> Vec<String> {
+    let mut args = args.to_vec();
+    for arg in args
+        .iter_mut()
+        .skip(1)
+        .take_while(|arg| arg.as_str() != "--")
+    {
+        let long_width = arg.starts_with("--w") && "--width".starts_with(arg.as_str());
+        let long_strings = arg.starts_with("--st") && "--strings".starts_with(arg.as_str());
+        let short_width = arg
+            .strip_prefix('-')
+            .and_then(|flags| flags.strip_suffix('w'))
+            .is_some_and(|flags| {
+                flags.chars().all(|flag| {
+                    command.get_arguments().any(|option| {
+                        option.get_short() == Some(flag) && !option.get_action().takes_values()
+                    })
+                })
+            });
+        if long_width {
+            arg.push('=');
+            arg.push_str(DEFAULT_MISSING_WIDTH);
+        } else if long_strings {
+            arg.push('=');
+            arg.push_str(DEFAULT_MISSING_STRING_LENGTH);
+        } else if short_width {
+            arg.push_str(DEFAULT_MISSING_WIDTH);
+        }
+    }
+    args
 }
 
 pub fn uu_app() -> Command {
@@ -359,7 +394,7 @@ pub fn uu_app() -> Command {
                 .long(options::STRINGS)
                 .help(translate!("od-help-strings"))
                 .num_args(0..=1)
-                .default_missing_value("3")
+                .default_missing_value(DEFAULT_MISSING_STRING_LENGTH)
                 .value_name("BYTES"),
         )
         .arg(
@@ -500,7 +535,7 @@ pub fn uu_app() -> Command {
                 .short('w')
                 .long(options::WIDTH)
                 .help(translate!("od-help-width"))
-                .default_missing_value("32")
+                .default_missing_value(DEFAULT_MISSING_WIDTH)
                 .value_name("BYTES")
                 .num_args(..=1),
         )
