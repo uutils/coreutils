@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) krate mangen tldr
+// spell-checker:ignore (vars) krate mangen logind tldr
 
 use std::env;
 use std::fs::File;
@@ -51,7 +51,7 @@ pub fn main() {
                     continue;
                 }
                 "default" | "macos" | "unix" | "windows" | "selinux" | "zip" | "clap_complete"
-                | "clap_mangen" | "fluent_syntax" | "openssl" => continue, // common/standard feature names
+                | "clap_mangen" | "fluent_syntax" | "openssl" | "systemd_logind" => continue, // common/standard feature names
                 "nightly" | "test_unimplemented" | "expensive_tests" | "test_risky_names" => {
                     continue;
                 } // crate-local custom features
