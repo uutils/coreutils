@@ -250,6 +250,14 @@ fn test_sigpipe_ignored_reports_write_error() {
     assert_eq!(scene.fixtures.read("code"), "1\n");
 }
 
+#[test]
+fn test_broken_pipe_is_silent() {
+    new_ucmd!()
+        .arg("inf")
+        .run_stdout_starts_with(b"1\n")
+        .no_stderr();
+}
+
 // ---- Tests for the big integer based path ----
 
 #[test]

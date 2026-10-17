@@ -67,7 +67,7 @@ enum LsError {
     IOError(#[from] std::io::Error),
 
     #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
-    WriteError(std::io::Error),
+    WriteError(#[source] std::io::Error),
 
     #[error("{}", match .1.kind() {
 		ErrorKind::NotADirectory => translate!("ls-error-not-directory", "path" => .0.quote()),
