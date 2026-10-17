@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore ilog wc wc's
+// spell-checker:ignore ctype ilog wc wc's
 
 mod count_fast;
 mod countable;
@@ -25,6 +25,7 @@ use std::{
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
+use uucore::i18n::charmap::{Encoding, locale_encoding};
 use uucore::{display::Quotable, quoting_style::locale_aware_shell_escape, translate};
 
 use uucore::{
@@ -578,6 +579,7 @@ fn process_chunk<
     current_len: &mut usize,
     in_word: &mut bool,
     is_posixly_correct: bool,
+    chars_are_bytes: bool,
 ) {
     for ch in text.chars() {
         if SHOW_WORDS {
@@ -613,11 +615,16 @@ fn process_chunk<
         if SHOW_LINES && ch == '\n' {
             total.lines += 1;
         }
-        if SHOW_CHARS {
+        if SHOW_CHARS && !chars_are_bytes {
             total.chars += 1;
         }
     }
     total.bytes += text.len();
+
+    // In C/POSIX locale, chars count equals bytes count
+    if SHOW_CHARS && chars_are_bytes {
+        total.chars += text.len();
+    }
 
     total.max_line_length = max(*current_len, total.max_line_length);
 }
@@ -654,6 +661,7 @@ fn word_count_from_reader_specialized<
     let mut in_word = false;
     let mut current_len = 0;
     let is_posixly_correct = *IS_POSIXLY_CORRECT;
+    let chars_are_bytes = SHOW_CHARS && locale_encoding() == Encoding::SingleByte;
     while let Some(chunk) = reader.next_strict() {
         match chunk {
             Ok(text) => {
@@ -663,6 +671,7 @@ fn word_count_from_reader_specialized<
                     &mut current_len,
                     &mut in_word,
                     is_posixly_correct,
+                    chars_are_bytes,
                 );
             }
             Err(e) => {
