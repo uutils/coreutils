@@ -563,13 +563,13 @@ fn test_large_page_width_does_not_panic() {
     ignore = "WASI: wasmtime itself needs more memory than the guest's rlimit allows"
 )]
 fn test_offset_large_value_does_not_abort_under_memory_limit() {
-    use rustix::process::Resource;
+    use rlimit::Resource;
     use std::process::Stdio;
 
     const AS_LIMIT: u64 = 200 * 1024 * 1024;
 
     new_ucmd!()
-        .limit(Resource::As, AS_LIMIT, AS_LIMIT)
+        .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
         .set_stdout(Stdio::null())
         .args(&["-t", "-o", "999999999"])
         .pipe_in("hi\n")
