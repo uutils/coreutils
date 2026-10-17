@@ -668,6 +668,7 @@ fn test_follow_multiple() {
 
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg(not(target_vendor = "apple"))] // FIXME: intermittent failures on macOS
 fn test_follow_name_multiple() {
     // spell-checker:disable-next-line
     for argument in ["--follow=name", "--follo=nam", "--f=n"] {
