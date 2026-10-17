@@ -225,9 +225,34 @@ fn test_version_empty_lines() {
 
 #[test]
 fn test_parallel_invalid() {
-    // clap provided stderr
-    new_ucmd!().arg("--parallel=0").fails().code_is(2);
-    new_ucmd!().arg("--parallel=NaN").fails().code_is(2);
+    for (value, stderr) in [
+        ("", "sort: invalid --parallel argument ''\n"),
+        ("0", "sort: number in parallel must be nonzero\n"),
+        ("NaN", "sort: invalid --parallel argument 'NaN'\n"),
+        ("-1", "sort: invalid --parallel argument '-1'\n"),
+        ("1x", "sort: invalid suffix in --parallel argument '1x'\n"),
+        (
+            "99999999999999999999",
+            "sort: --parallel argument '99999999999999999999' too large\n",
+        ),
+    ] {
+        new_ucmd!()
+            .arg(format!("--parallel={value}"))
+            .pipe_in("b\na\n")
+            .fails_with_code(2)
+            .stderr_only(stderr);
+        // the value as a separate argument, which is how GNU's sort.pl passes it
+        new_ucmd!()
+            .args(&["--parallel", value])
+            .pipe_in("b\na\n")
+            .fails_with_code(2)
+            .stderr_only(stderr);
+    }
+    new_ucmd!()
+        .arg("--parallel=+2")
+        .pipe_in("b\na\n")
+        .succeeds()
+        .stdout_only("a\nb\n");
 }
 
 #[test]
