@@ -511,12 +511,11 @@ fn test_install_compare_preserve_timestamps() {
     at.write(source, "data");
     at.write(dest, "data");
     let old = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
-    fs::OpenOptions::new()
+    let f = fs::OpenOptions::new()
         .write(true)
         .open(at.plus(source))
-        .unwrap()
-        .set_modified(old)
         .unwrap();
+    f.set_modified(old).unwrap();
 
     // With --preserve-timestamps, the timestamp difference forces the copy so
     // the destination ends up with the source's modification time.
