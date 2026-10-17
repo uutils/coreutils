@@ -643,6 +643,82 @@ fn test_interactive_once_recursive_prompt() {
 }
 
 #[test]
+fn test_french_file_prompts() {
+    for (contents, description) in [
+        ("", "le fichier ordinaire vide"),
+        ("contents", "le fichier"),
+    ] {
+        for (answer, removed) in [("y\n", true), ("Y\n", true), ("n\n", false), ("\n", false)] {
+            let (at, mut ucmd) = at_and_ucmd!();
+            let file = "fichier avec espaces";
+            at.write(file, contents);
+
+            ucmd.env("LANG", "fr-FR")
+                .arg("-i")
+                .arg(file)
+                .pipe_in(answer)
+                .succeeds()
+                .no_stdout()
+                .stderr_is(format!("rm: supprimer {description} '{file}' ? (y/N) "));
+
+            assert_eq!(at.file_exists(file), !removed);
+        }
+    }
+}
+
+#[test]
+fn test_french_interactive_once_prompts() {
+    for (recursive, count, description) in [
+        (true, 1, "1 argument récursivement"),
+        (true, 2, "2 arguments récursivement"),
+        (false, 4, "4 arguments"),
+    ] {
+        for (answer, removed) in [("y\n", true), ("n\n", false), ("\n", false)] {
+            let (at, mut ucmd) = at_and_ucmd!();
+            let files: Vec<_> = (0..count).map(|i| format!("fichier{i}")).collect();
+            for file in &files {
+                at.touch(file);
+            }
+
+            ucmd.env("LANG", "fr-FR").arg("-I");
+            if recursive {
+                ucmd.arg("-r");
+            }
+            ucmd.args(&files)
+                .pipe_in(answer)
+                .succeeds()
+                .no_stdout()
+                .stderr_is(format!("rm: supprimer {description} ? (y/N) "));
+
+            for file in &files {
+                assert_eq!(at.file_exists(file), !removed);
+            }
+        }
+    }
+}
+
+#[test]
+fn test_french_recursive_directory_prompts() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/file");
+
+    ucmd.env("LANG", "fr-FR")
+        .arg("-ri")
+        .arg("dir")
+        .pipe_in("y\ny\ny\n")
+        .succeeds()
+        .no_stdout()
+        .stderr_is(concat!(
+            "rm: descendre dans le répertoire 'dir' ? (y/N) ",
+            "rm: supprimer le fichier ordinaire vide 'dir/file' ? (y/N) ",
+            "rm: supprimer le répertoire 'dir' ? (y/N) ",
+        ));
+
+    assert!(!at.dir_exists("dir"));
+}
+
+#[test]
 fn test_descend_directory() {
     // This test descends into each directory and deletes the files and folders inside of them
     // This test will have the rm process asks 6 question and us answering Y to them will delete all the files and folders
