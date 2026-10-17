@@ -41,13 +41,13 @@ jobs:
         sync: rsync
         copyback: false
         mem: 4096
-        # We need jq and GNU coreutils to run show-utils.sh and bash to use inline shell string replacement
+        # We need jq and bash to use inline shell string replacement
         # Use sudo-- to get the default sudo package without ambiguity
         # Install rust and cargo from OpenBSD packages
         prepare: |
           # Clean up disk space before installing packages
           df -h
-          pkg_add curl sudo-- jq coreutils bash rust rust-clippy rust-rustfmt python3
+          pkg_add curl sudo-- jq bash rust rust-clippy rust-rustfmt python3
           rm -rf /usr/share/relink/* /usr/X11R6/* /usr/share/doc/* /usr/share/man/* &
           # Clean up package cache after installation
           pkg_delete -a &
