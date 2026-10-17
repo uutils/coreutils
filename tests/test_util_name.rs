@@ -11,18 +11,16 @@ use uutests::util::TestScenario;
 use std::os::unix::fs::symlink as symlink_file;
 
 use std::env;
-pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
-
-// Set the environment variable for any tests
 
 // Use the ctor attribute to run this function before any tests
 #[ctor::ctor(unsafe)]
 fn init() {
-    unsafe {
-        env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
-    }
+    uutests::util::set_default_tests_binary("coreutils");
     // Print for debugging
-    eprintln!("Setting UUTESTS_BINARY_PATH={TESTS_BINARY}");
+    eprintln!(
+        "UUTESTS_BINARY_PATH={}",
+        uutests::util::try_get_tests_binary().unwrap_or("<not found>")
+    );
 }
 
 #[test]
