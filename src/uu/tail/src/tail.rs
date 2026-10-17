@@ -33,6 +33,7 @@ use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
+use uucore::fs::FileInformation;
 use uucore::translate;
 
 use uucore::{show, show_error};
@@ -172,18 +173,25 @@ fn tail_file(
             Ok(mut file) => {
                 let st = file.metadata()?;
                 let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
+                // When our output goes to this very file (`tail f >> f`), it
+                // ends where it ended when we opened it. Reading on to the
+                // moving end of file would copy our own output back, forever.
+                let end = (st.is_file() && is_stdout(&file)).then_some(st.len());
                 header_printer.print_input(input);
-                let mut reader;
                 if !settings.presume_input_pipe
                     && file.is_seekable(if input.is_stdin() { offset } else { 0 })
                     && (!st.is_file() || st.len() > blksize_limit)
                 {
-                    bounded_tail(&mut file, settings)?;
-                    reader = BufReader::new(file);
+                    bounded_tail(&mut file, settings, end)?;
                 } else {
-                    reader = BufReader::new(file);
-                    unbounded_tail(&mut reader, settings)?;
+                    let remaining = match end {
+                        Some(end) => end.saturating_sub(file.stream_position()?),
+                        None => u64::MAX,
+                    };
+                    // Dropping this reader loses nothing: unbounded_tail reads to EOF or not at all.
+                    unbounded_tail(&mut BufReader::new((&file).take(remaining)), settings)?;
                 }
+                let reader = BufReader::new(file);
                 if input.is_tailable() {
                     observer.add_path(
                         path,
@@ -244,6 +252,49 @@ fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
     } else {
         File::open(path)
     }
+}
+
+/// Whether `file` is the file that standard output writes to.
+fn is_stdout<
+    #[cfg(any(unix, target_os = "wasi"))] F: std::os::fd::AsFd,
+    #[cfg(windows)] F: std::os::windows::io::AsRawHandle,
+>(
+    file: &F,
+) -> bool {
+    matches!(
+        (FileInformation::from_file(file), FileInformation::from_file(&stdout())),
+        (Ok(input), Ok(output)) if input == output
+    )
+}
+
+/// How much of standard input to read: all of it, unless it is the regular
+/// file that standard output writes to (`tail < f >> f`), which ends where
+/// it ended when we started. On macOS and Windows, such a file is not resolved
+/// to a path, so it is read here rather than by `tail_file`.
+fn stdin_limit() -> u64 {
+    #[cfg(windows)]
+    use std::os::windows::io::AsHandle;
+
+    #[cfg(unix)]
+    if let Ok(st) = rustix::fs::fstat(stdin())
+        && rustix::fs::FileType::from_raw_mode(st.st_mode).is_file()
+        && is_stdout(&stdin())
+        && let Ok(pos) = rustix::fs::tell(stdin())
+    {
+        return u64::try_from(st.st_size).unwrap_or(0).saturating_sub(pos);
+    }
+    // A duplicate of the handle shares its file position, and closing it
+    // leaves standard input open.
+    #[cfg(windows)]
+    if let Ok(file) = stdin().as_handle().try_clone_to_owned().map(File::from)
+        && let Ok(st) = file.metadata()
+        && st.is_file()
+        && is_stdout(&file)
+        && let Ok(pos) = (&file).stream_position()
+    {
+        return st.len().saturating_sub(pos);
+    }
+    u64::MAX
 }
 
 fn tail_stdin(
@@ -310,7 +361,7 @@ fn tail_stdin(
                 );
             }
         } else {
-            let mut reader = BufReader::new(stdin());
+            let mut reader = BufReader::new(stdin().take(stdin_limit()));
             unbounded_tail(&mut reader, settings)?;
         }
     }
@@ -452,7 +503,9 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
 /// end of the file, and then read the file "backwards" in blocks of size
 /// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
 /// being a nice performance win for very large files.
-fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
+///
+/// If `end` is given, nothing at or beyond that offset is printed.
+fn bounded_tail(file: &mut File, settings: &Settings, end: Option<u64>) -> UResult<()> {
     debug_assert!(!settings.presume_input_pipe);
     let mut limit = None;
 
@@ -490,6 +543,11 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
                 .unwrap();
         }
         _ => {}
+    }
+
+    if let Some(end) = end {
+        let remaining = end.saturating_sub(file.stream_position()?);
+        limit = Some(limit.map_or(remaining, |limit| limit.min(remaining)));
     }
 
     print_target_section(file, limit)?;
