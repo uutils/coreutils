@@ -192,7 +192,13 @@ fn format_timestamp(ut: &UtmpxRecord) -> String {
         };
     }
 
-    TIME_FORMAT.with(|description| ut.login_time().format(description).unwrap())
+    // A time that cannot be represented is shown as its raw seconds, as GNU
+    // does when it cannot be broken down into a date either.
+    TIME_FORMAT.with(|description| {
+        ut.login_time()
+            .and_then(|time| time.format(description).ok())
+            .unwrap_or_else(|| ut.login_time_seconds().to_string())
+    })
 }
 
 /// Pull the real name out of a password entry's comment field: it is the part

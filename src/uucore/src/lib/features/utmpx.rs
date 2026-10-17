@@ -248,17 +248,29 @@ impl Utmpx {
     pub fn tty_device(&self) -> String {
         chars2string!(self.inner.ut_line)
     }
-    /// A.K.A. ut.ut_tv
-    pub fn login_time(&self) -> time::OffsetDateTime {
+    /// A.K.A. ut.ut_tv.tv_sec: the login time as seconds since the epoch,
+    /// whatever the record holds.
+    pub fn login_time_seconds(&self) -> i64 {
         #[allow(clippy::unnecessary_cast)]
-        let ts_nanos: i128 = (1_000_000_000_i64 * self.inner.ut_tv.tv_sec as i64
-            + 1_000_i64 * self.inner.ut_tv.tv_usec as i64)
-            .into();
+        {
+            self.inner.ut_tv.tv_sec as i64
+        }
+    }
+    /// A.K.A. ut.ut_tv
+    ///
+    /// `None` when the record's time cannot be represented, as in a file
+    /// that does not hold utmp records at all: the fields are read as they
+    /// are, so the arithmetic must not overflow and the conversion must not
+    /// fail.
+    pub fn login_time(&self) -> Option<time::OffsetDateTime> {
+        #[allow(clippy::unnecessary_cast)]
+        let ts_nanos = 1_000_000_000_i128 * i128::from(self.inner.ut_tv.tv_sec as i64)
+            + 1_000_i128 * i128::from(self.inner.ut_tv.tv_usec as i64);
         let local_offset = time::OffsetDateTime::now_local()
             .map_or_else(|_| time::UtcOffset::UTC, time::OffsetDateTime::offset);
         time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos)
-            .unwrap()
-            .to_offset(local_offset)
+            .ok()
+            .map(|dt| dt.to_offset(local_offset))
     }
     /// A.K.A. ut.ut_exit
     ///
@@ -511,12 +523,23 @@ impl UtmpxRecord {
         }
     }
 
+    /// A.K.A. ut.ut_tv.tv_sec
+    pub fn login_time_seconds(&self) -> i64 {
+        match self {
+            Self::Traditional(utmpx) => utmpx.login_time_seconds(),
+            #[cfg(feature = "feat_systemd_logind")]
+            Self::Systemd(systemd) => systemd.login_time().unix_timestamp(),
+        }
+    }
+
     /// A.K.A. ut.ut_tv
-    pub fn login_time(&self) -> time::OffsetDateTime {
+    ///
+    /// `None` when the record's time cannot be represented.
+    pub fn login_time(&self) -> Option<time::OffsetDateTime> {
         match self {
             Self::Traditional(utmpx) => utmpx.login_time(),
             #[cfg(feature = "feat_systemd_logind")]
-            Self::Systemd(systemd) => systemd.login_time(),
+            Self::Systemd(systemd) => Some(systemd.login_time()),
         }
     }
 
@@ -585,6 +608,49 @@ impl Drop for UtmpxIter {
         unsafe {
             #[cfg_attr(any(target_env = "musl", target_env = "ohos"), allow(deprecated))]
             endutxent();
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A record holding `tv_sec` as the target's `ut_tv.tv_sec` field holds
+    /// it: 32 bits on x86_64 glibc, 64 bits on most other targets.
+    fn record_with_time(tv_sec: i64) -> Utmpx {
+        // SAFETY: all-zero bytes are a valid `utmpx`.
+        let mut inner: utmpx = unsafe { std::mem::zeroed() };
+        inner.ut_tv.tv_sec = tv_sec as _;
+        Utmpx { inner }
+    }
+
+    #[test]
+    fn login_time_of_an_ordinary_record() {
+        let record = record_with_time(1_700_000_000);
+        assert_eq!(record.login_time_seconds(), 1_700_000_000);
+        assert_eq!(
+            record
+                .login_time()
+                .map(time::OffsetDateTime::unix_timestamp),
+            Some(1_700_000_000)
+        );
+    }
+
+    #[test]
+    fn login_time_of_an_extreme_record() {
+        // A file that is not a utmp file yields arbitrary fields. The
+        // conversion must neither overflow nor fail loudly: a time that
+        // cannot be represented is `None`, and the raw seconds stay
+        // available for display.
+        for tv_sec in [i64::MAX, i64::MIN, 1 << 40, -(1 << 40)] {
+            let record = record_with_time(tv_sec);
+            let seconds = record.login_time_seconds();
+            match record.login_time() {
+                Some(time) => assert_eq!(time.unix_timestamp(), seconds),
+                // Outside the years -9999..=9999.
+                None => assert!(!(-377_705_116_800..=253_402_300_799).contains(&seconds)),
+            }
         }
     }
 }
