@@ -27,9 +27,11 @@ output of uutils `cat` (with `splice()` support) into it. If a file is given as 
 
 ### Counting lines and UTF-8 characters
 
-If the flags set are a subset of `-clm` then the input doesn't have to be decoded. The
-input is read in chunks and the `bytecount` crate is used to count the newlines (`-l` flag)
-and/or UTF-8 characters (`-m` flag).
+If the flags set are a subset of `-clm`, the input is read in chunks and the
+`bytecount` crate is used to count newlines (`-l`) and UTF-8 characters (`-m`).
+In UTF-8 locales, character counting validates the input with `simdutf8` when SIMD
+is enabled, skips malformed sequences, and carries partial characters between
+reads. ASCII chunks are counted by length.
 
 It's useful to vary the line length in the input. GNU wc seems particularly
 bad at short lines.
