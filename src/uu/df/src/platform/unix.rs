@@ -11,8 +11,6 @@ use std::io;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
-use clap::ArgMatches;
-use uucore::error::UResult;
 use uucore::fsext::{FsMeta, FsUsage, MountInfo, pretty_fstype, statfs};
 
 use crate::filesystem::{Filesystem, FsError};
@@ -157,11 +155,6 @@ where
         mount_info,
         usage,
     })
-}
-
-/// Every option is supported on unix.
-pub(crate) fn maybe_unsupported_options(_matches: &ArgMatches) -> Option<UResult<()>> {
-    None
 }
 
 #[cfg(test)]
