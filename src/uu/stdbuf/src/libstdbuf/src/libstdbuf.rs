@@ -3,13 +3,42 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) getreent reent IOFBF IOLBF IONBF setvbuf stderrp stdinp stdoutp fdopen
+// spell-checker:ignore (ToDO) getreent reent IOFBF IOLBF IONBF setvbuf stderrp stdinp stdoutp fdopen getenv
 
-use core::ffi::{c_char, c_int};
+// Release builds (no debug assertions, panics abort, LTO) leave std out: the
+// library is preloaded into every process stdbuf runs, and embedded in stdbuf
+// itself. A no_std cdylib needs panics to abort and LTO on stable Rust, so
+// other builds keep std.
+#![cfg_attr(all(panic = "abort", not(debug_assertions)), no_std)]
+
+use core::ffi::{CStr, c_char, c_int};
+use core::fmt::{self, Write};
+use core::ptr;
 use ctor::ctor;
 use libc::{_IOFBF, _IOLBF, _IONBF, FILE, fileno, size_t};
-use std::io::{Write, stderr};
-use std::{env, ptr};
+
+#[cfg(all(panic = "abort", not(debug_assertions)))]
+#[panic_handler]
+fn panic(_: &core::panic::PanicInfo) -> ! {
+    unsafe { libc::abort() }
+}
+
+/// Unbuffered writes to file descriptor 2, whatever buffering stderr was given.
+struct Stderr;
+
+impl Write for Stderr {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        let mut bytes = s.as_bytes();
+        while !bytes.is_empty() {
+            let n = unsafe { libc::write(libc::STDERR_FILENO, bytes.as_ptr().cast(), bytes.len()) };
+            if n <= 0 {
+                return Err(fmt::Error);
+            }
+            bytes = &bytes[n as usize..];
+        }
+        Ok(())
+    }
+}
 
 // This runs automatically when the library is loaded via LD_PRELOAD
 #[ctor(unsafe)]
@@ -17,10 +46,9 @@ fn init() {
     unsafe { __stdbuf() };
 }
 
-/// # Safety
-/// This function is unsafe because it calls a C API
+/// Returns the C library's stdin stream.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
+pub extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
     #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     {
         unsafe extern "C" {
@@ -80,10 +108,9 @@ pub unsafe extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
     }
 }
 
-/// # Safety
-/// This function is unsafe because it calls a C API
+/// Returns the C library's stdout stream.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
+pub extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
     #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     {
         unsafe extern "C" {
@@ -143,10 +170,9 @@ pub unsafe extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
     }
 }
 
-/// # Safety
-/// This function is unsafe because it calls a C API
+/// Returns the C library's stderr stream.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn __stdbuf_get_stderr() -> *mut FILE {
+pub extern "C" fn __stdbuf_get_stderr() -> *mut FILE {
     #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     {
         unsafe extern "C" {
@@ -212,8 +238,8 @@ fn set_buffer(stream: *mut FILE, value: &str) {
         "L" => (_IOLBF, 0_usize),
         input => {
             let Ok(buff_size) = input.parse::<usize>() else {
-                let _ = writeln!(stderr(), "failed to allocate a {value} byte stdio buffer");
-                std::process::exit(1);
+                let _ = writeln!(Stderr, "failed to allocate a {value} byte stdio buffer");
+                unsafe { libc::exit(1) };
             };
             (_IOFBF, buff_size as size_t)
         }
@@ -226,10 +252,27 @@ fn set_buffer(stream: *mut FILE, value: &str) {
     }
     if res != 0 {
         let _ = writeln!(
-            stderr(),
+            Stderr,
             "could not set buffering of {} to mode {mode}",
             unsafe { fileno(stream) }
         );
+    }
+}
+
+/// Applies the buffering mode in environment variable `name`, if set, to the
+/// stream returned by `get_stream`.
+fn set_buffer_from_env(name: &CStr, get_stream: impl FnOnce() -> *mut FILE) {
+    // SAFETY: getenv returns null or a NUL-terminated string, which stays
+    // valid as nothing changes the environment while this runs.
+    let value = unsafe {
+        let ptr = libc::getenv(name.as_ptr());
+        if ptr.is_null() {
+            return;
+        }
+        CStr::from_ptr(ptr)
+    };
+    if let Ok(value) = value.to_str() {
+        set_buffer(get_stream(), value);
     }
 }
 
@@ -239,13 +282,7 @@ fn set_buffer(stream: *mut FILE, value: &str) {
 /// The caller must ensure this function is only called in a compatible runtime environment.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __stdbuf() {
-    if let Ok(val) = env::var("_STDBUF_E") {
-        set_buffer(unsafe { __stdbuf_get_stderr() }, &val);
-    }
-    if let Ok(val) = env::var("_STDBUF_I") {
-        set_buffer(unsafe { __stdbuf_get_stdin() }, &val);
-    }
-    if let Ok(val) = env::var("_STDBUF_O") {
-        set_buffer(unsafe { __stdbuf_get_stdout() }, &val);
-    }
+    set_buffer_from_env(c"_STDBUF_E", || __stdbuf_get_stderr());
+    set_buffer_from_env(c"_STDBUF_I", || __stdbuf_get_stdin());
+    set_buffer_from_env(c"_STDBUF_O", || __stdbuf_get_stdout());
 }

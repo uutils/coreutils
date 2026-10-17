@@ -22,5 +22,10 @@ fn main() {
         println!("cargo:rustc-link-arg=defs");
     }
 
+    // Release builds leave std out (see src/libstdbuf.rs), and std is what
+    // normally links the C library. Link it last, after the libraries that
+    // need it, such as the profiler runtime of PGO builds.
+    println!("cargo:rustc-link-arg=-lc");
+
     println!("cargo:rerun-if-changed=src/libstdbuf.rs");
 }

@@ -57,7 +57,10 @@ clap = { version = "4.5", features = ["wrap_help", "cargo", "color"] }
 clap_complete = "4.4"
 clap_mangen = "0.3.3"
 crossterm = { version = "0.29.0", default-features = false }
-ctor = "1.0.0"
+# Without its std feature: libstdbuf is no_std in release builds.
+ctor = { version = "1.0.0", default-features = false, features = [
+  "proc_macro",
+] }
 ctrlc = { version = "3.5.2", features = ["termination"] }
 data-encoding = "2.6"
 data-encoding-macro = "0.1.15"
@@ -690,6 +693,7 @@ path = "src/bin/uudoc.rs"
 required-features = ["uudoc"]
 
 [profile.release]
+# libstdbuf is no_std in release builds, which needs LTO to link.
 lto = "fat"
 panic = "abort"
 codegen-units = 1
