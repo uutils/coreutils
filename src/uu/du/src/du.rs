@@ -99,6 +99,7 @@ struct StatPrinter {
     time_format: String,
     line_ending: LineEnding,
     summarize: bool,
+    separate_dirs: bool,
     total_text: String,
 }
 
@@ -130,6 +131,11 @@ struct Stat {
     inode: Option<FileInfo>,
     metadata: Metadata,
     latest_time: Option<SystemTime>,
+    /// `metadata.is_dir()` is not reliable for children visited by safe
+    /// traversal: those entries keep a placeholder (the parent's metadata)
+    /// unless `--time` is set. `--separate-dirs` needs the real kind when
+    /// the grand total adds every directory back in.
+    is_dir: bool,
 }
 
 impl Stat {
@@ -161,15 +167,17 @@ impl Stat {
         let latest_time = options
             .time
             .and_then(|time| metadata_get_time(&metadata, time));
+        let is_dir = metadata.is_dir();
 
         Ok(Self {
             path: path.to_path_buf(),
-            size: if metadata.is_dir() { 0 } else { metadata.len() },
+            size: if is_dir { 0 } else { metadata.len() },
             blocks,
             inodes: 1,
             inode: file_info,
             metadata,
             latest_time,
+            is_dir,
         })
     }
 
@@ -210,6 +218,7 @@ impl Stat {
             inode: file_info_option,
             metadata: std_metadata,
             latest_time,
+            is_dir: safe_metadata.is_dir(),
         })
     }
 }
@@ -505,6 +514,7 @@ fn safe_du(
                 // This is a workaround since we can't get real metadata without the full path
                 metadata: my_stat.metadata.clone(),
                 latest_time,
+                is_dir: true,
             }
         } else {
             // For files
@@ -518,6 +528,7 @@ fn safe_du(
                 inode: file_info,
                 metadata: my_stat.metadata.clone(),
                 latest_time,
+                is_dir: false,
             }
         };
 
@@ -860,13 +871,25 @@ impl StatPrinter {
 
     fn print_stats(&self, rx: &mpsc::Receiver<UResult<StatPrintInfo>>) -> UResult<()> {
         let mut grand_total = 0;
+        // GNU's total timestamp starts at the epoch and moves forward only,
+        // so a pre-1970 mtime is kept on its own line but the total stays
+        // at 1970-01-01 unless something newer is seen. With no successful
+        // entry (every path failed), that epoch is what `--time` prints.
+        let mut saw_stat = false;
+        let mut grand_time: Option<SystemTime> = None;
         while let Ok(received) = rx.recv() {
             match received {
                 Ok(stat_info) => {
                     let size = self.choose_size(&stat_info.stat);
+                    saw_stat = true;
 
-                    if stat_info.depth == 0 {
+                    if self.counts_toward_total(&stat_info) {
                         grand_total += size;
+                    }
+                    if self.time.is_some()
+                        && let Some(time) = stat_info.stat.latest_time
+                    {
+                        grand_time = Some(grand_time.map_or(time, |current| current.max(time)));
                     }
 
                     if !self
@@ -885,16 +908,33 @@ impl StatPrinter {
         }
 
         if self.total {
-            write!(
-                stdout(),
-                "{}\t{}{}",
-                self.convert_size(grand_total),
-                self.total_text,
-                self.line_ending
-            )?;
+            let time = if self.time.is_none() {
+                None
+            } else {
+                match (saw_stat, grand_time) {
+                    (_, Some(time)) => Some(time.max(SystemTime::UNIX_EPOCH)),
+                    // Entries were seen but none had a timestamp (??? on
+                    // their own lines). Keep the total in that form.
+                    (true, None) => None,
+                    (false, None) => Some(SystemTime::UNIX_EPOCH),
+                }
+            };
+            self.write_size_and_time(grand_total, time)?;
+            write!(stdout(), "{}{}", self.total_text, self.line_ending)?;
         }
 
         Ok(())
+    }
+
+    /// Size contribution of one printed-or-traversed entry to `--total`.
+    ///
+    /// Without `--separate-dirs`, a depth-0 entry already includes its
+    /// descendants. With `--separate-dirs`, each directory's own size omits
+    /// its subdirectories, so every directory has to be added or the total
+    /// collapses to the top-level figure. Files are already inside the
+    /// containing directory and are not added again.
+    fn counts_toward_total(&self, stat_info: &StatPrintInfo) -> bool {
+        stat_info.depth == 0 || (self.separate_dirs && stat_info.stat.is_dir)
     }
 
     fn convert_size(&self, size: u64) -> String {
@@ -919,10 +959,18 @@ impl StatPrinter {
     }
 
     fn print_stat(&self, stat: &Stat, size: u64) -> UResult<()> {
+        self.write_size_and_time(size, stat.latest_time)?;
+        print_verbatim(&stat.path)?;
+        write!(stdout(), "{}", self.line_ending)?;
+
+        Ok(())
+    }
+
+    fn write_size_and_time(&self, size: u64, time: Option<SystemTime>) -> UResult<()> {
         write!(stdout(), "{}\t", self.convert_size(size))?;
 
         if self.time.is_some() {
-            if let Some(time) = stat.latest_time {
+            if let Some(time) = time {
                 format_system_time(
                     &mut stdout(),
                     time,
@@ -934,9 +982,6 @@ impl StatPrinter {
                 write!(stdout(), "???\t")?;
             }
         }
-
-        print_verbatim(&stat.path)?;
-        write!(stdout(), "{}", self.line_ending)?;
 
         Ok(())
     }
@@ -1151,6 +1196,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         time,
         time_format,
         line_ending: LineEnding::from_zero_flag(matches.get_flag(options::NULL)),
+        separate_dirs: matches.get_flag(options::SEPARATE_DIRS),
         total_text: translate!("du-total"),
     };
 
