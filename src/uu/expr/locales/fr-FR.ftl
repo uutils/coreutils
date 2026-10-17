@@ -95,15 +95,8 @@ expr-error-missing-argument = erreur de syntaxe : argument manquant après { $ar
 expr-error-non-integer-argument = argument non entier
 expr-error-missing-operand = opérande manquant
 expr-error-division-by-zero = division par zéro
-expr-error-invalid-regex-expression = Expression regex invalide
 expr-error-expected-closing-brace-after = erreur de syntaxe : ')' attendu après { $arg }
 expr-error-expected-closing-brace-instead-of = erreur de syntaxe : ')' attendu au lieu de { $arg }
-expr-error-unmatched-opening-parenthesis = Parenthèse ouvrante ( ou \( non appariée
-expr-error-unmatched-closing-parenthesis = Parenthèse fermante ) ou \) non appariée
-expr-error-unmatched-opening-brace = Accolade ouvrante {"\\{"} non appariée
-expr-error-invalid-bracket-content = Contenu invalide de {"\\{\\}"}
-expr-error-trailing-backslash = Barre oblique inverse en fin
-expr-error-too-big-range-quantifier-index = Expression régulière trop grande
 expr-error-match-utf8 = match ne supporte pas l'encodage UTF-8 invalide dans { $arg }
 
 # Étiquettes de diagnostic, utilisées quand les erreurs sont rendues avec un extrait
