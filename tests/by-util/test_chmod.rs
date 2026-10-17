@@ -17,6 +17,32 @@ static TEST_FILE: &str = "file";
 static REFERENCE_FILE: &str = "reference";
 static REFERENCE_PERMS: u32 = 0o247;
 
+#[cfg(target_os = "linux")]
+#[rstest::rstest]
+#[case(&["-v"], &["first", "dir/second"])]
+#[case(&["-c"], &["first", "dir/second"])]
+#[case(&["-R", "-v"], &["first", "dir"])]
+#[case(&["-R", "-c"], &["first", "dir"])]
+fn test_write_error_still_changes_permissions(#[case] flags: &[&str], #[case] files: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    for file in ["first", "dir/second"] {
+        at.touch(file);
+        at.set_mode(file, 0o600);
+    }
+
+    ucmd.args(flags)
+        .arg("755")
+        .args(files)
+        .set_stdout(OpenOptions::new().write(true).open("/dev/full").unwrap())
+        .fails_with_code(1)
+        .stderr_is("chmod: write error: No space left on device\n");
+
+    for file in ["first", "dir/second"] {
+        assert_eq!(at.metadata(file).permissions().mode() & 0o7777, 0o755);
+    }
+}
+
 struct TestCase {
     args: Vec<&'static str>,
     before: u32,
