@@ -388,8 +388,9 @@ impl Sequence {
             .collect();
 
         // For every upper/lower in set2, there must be an upper/lower in set1 at the same position. The position is calculated by expanding everything before the upper/lower in both sets
+        // With -c, set1 positions are those of the complement, so there is nothing to match.
         for (set2_pos, set2_item) in set2.iter().enumerate() {
-            if matches!(set2_item, Self::Class(_)) {
+            if !complement_flag && matches!(set2_item, Self::Class(_)) {
                 let set2_part_solved_len = Self::expanded_len_of(&set2[..set2_pos]);
 
                 let mut class_matches = false;
@@ -418,20 +419,6 @@ impl Sequence {
         let set2_uniques = Self::unique_chars(&set2_runs);
 
         let set1_has_class = set1.iter().any(|x| matches!(x, Self::Class(_)));
-        // If the complement flag is used in translate mode, only one unique
-        // character may appear in set2. Validate this with the set of uniques
-        // in set2 that we just generated.
-        // Also, set2 must not overgrow set1, otherwise the mapping can't be 1:1.
-        if set1_has_class
-            && translating
-            && complement_flag
-            && (set2_uniques.len() > 1 || set2_len > set1_len)
-        {
-            return Err(SequenceError::whole_set(
-                BadSequence::ComplementMoreThanOneUniqueInSet2,
-                2,
-            ));
-        }
 
         if set2_len < set1_len {
             if truncate_set1_flag {
@@ -460,6 +447,21 @@ impl Sequence {
                     1,
                 ));
             }
+        }
+
+        // If the complement flag is used in translate mode, only one unique
+        // character may appear in set2. Validate this with the set of uniques
+        // in set2 that we just generated.
+        // Also, set2 must not overgrow set1, otherwise the mapping can't be 1:1.
+        if set1_has_class
+            && translating
+            && complement_flag
+            && (set2_uniques.len() > 1 || set2_len > set1_len)
+        {
+            return Err(SequenceError::whole_set(
+                BadSequence::ComplementMoreThanOneUniqueInSet2,
+                2,
+            ));
         }
 
         // Line the two sets up position by position, one run at a time. A run
