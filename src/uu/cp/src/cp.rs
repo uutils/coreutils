@@ -2215,13 +2215,14 @@ fn is_forbidden_to_copy_to_same_file(
 }
 
 /// Back up, remove, or leave intact the destination file, depending on the options.
+/// Returns whether `dest` was removed or moved away.
 fn handle_existing_dest(
     source: &Path,
     dest: &Path,
     options: &Options,
     source_in_command_line: bool,
     copied_files: &HashMap<FileInformation, PathBuf>,
-) -> CopyResult<()> {
+) -> CopyResult<bool> {
     // Disallow copying a file to itself, unless `--force` and
     // `--backup` are both specified.
     if is_forbidden_to_copy_to_same_file(source, dest, options, source_in_command_line) {
@@ -2253,7 +2254,7 @@ fn handle_existing_dest(
         backup_dest(dest, &backup_path, is_dest_removed)?;
     }
     if !is_dest_removed {
-        delete_dest_if_needed_and_allowed(
+        is_dest_removed = delete_dest_if_needed_and_allowed(
             source,
             dest,
             options,
@@ -2262,21 +2263,21 @@ fn handle_existing_dest(
         )?;
     }
 
-    Ok(())
+    Ok(is_dest_removed)
 }
 
 /// Checks if:
 /// * `dest` needs to be deleted before the copy operation can proceed
 /// * the provided options allow this deletion
 ///
-/// If so, deletes `dest`.
+/// If so, deletes `dest` and returns `true`.
 fn delete_dest_if_needed_and_allowed(
     source: &Path,
     dest: &Path,
     options: &Options,
     source_in_command_line: bool,
     copied_files: &HashMap<FileInformation, PathBuf>,
-) -> CopyResult<()> {
+) -> CopyResult<bool> {
     let delete_dest = match options.overwrite {
         OverwriteMode::Clobber(cl) | OverwriteMode::Interactive(cl) => {
             match cl {
@@ -2318,10 +2319,9 @@ fn delete_dest_if_needed_and_allowed(
     };
 
     if delete_dest {
-        delete_path(dest, options)
-    } else {
-        Ok(())
+        delete_path(dest, options)?;
     }
+    Ok(delete_dest)
 }
 
 fn delete_path(path: &Path, options: &Options) -> CopyResult<()> {
@@ -2530,6 +2530,7 @@ fn handle_copy_mode(
     symlinked_files: &mut HashSet<FileInformation>,
     source_in_command_line: bool,
     created_parent_dirs: &mut HashSet<PathBuf>,
+    create_exclusive: bool,
 ) -> CopyResult<PerformedAction> {
     match options.copy_mode {
         CopyMode::Link => {
@@ -2572,6 +2573,8 @@ fn handle_copy_mode(
                 symlinked_files,
                 source_in_command_line,
                 created_parent_dirs,
+                #[cfg(unix)]
+                create_exclusive,
             )?;
         }
         CopyMode::SymLink => {
@@ -2596,6 +2599,8 @@ fn handle_copy_mode(
                             symlinked_files,
                             source_in_command_line,
                             created_parent_dirs,
+                            #[cfg(unix)]
+                            create_exclusive,
                         )?;
                     }
                     UpdateMode::None => {
@@ -2630,6 +2635,8 @@ fn handle_copy_mode(
                             symlinked_files,
                             source_in_command_line,
                             created_parent_dirs,
+                            #[cfg(unix)]
+                            create_exclusive,
                         )?;
                     }
                 }
@@ -2643,6 +2650,8 @@ fn handle_copy_mode(
                     symlinked_files,
                     source_in_command_line,
                     created_parent_dirs,
+                    #[cfg(unix)]
+                    create_exclusive,
                 )?;
             }
         }
@@ -2671,16 +2680,9 @@ fn handle_copy_mode(
                 .write(true)
                 .truncate(false)
                 .create(true)
+                .create_new(create_exclusive)
                 .open(dest)
-                .map_err(|e| {
-                    CpError::IoErrContext(
-                        e,
-                        translate!(
-                            "cp-error-cannot-create-regular-file",
-                            "path" => dest.quote()
-                        ),
-                    )
-                })?;
+                .map_err(|e| create_dest_error(e, dest, create_exclusive))?;
         }
     }
 
@@ -2754,6 +2756,7 @@ fn copy_file(
         .as_ref()
         .is_some_and(|md| md.file_type().is_symlink());
     let dest_target_exists = dest.try_exists().unwrap_or(false);
+    let mut dest_removed = false;
     // Fail if dest is a dangling symlink or a symlink this program created previously
     if dest_is_symlink {
         if FileInformation::from_path(dest, false).is_ok_and(|info| symlinked_files.contains(&info))
@@ -2793,6 +2796,7 @@ fn copy_file(
             && options.backup == BackupMode::None
         {
             fs::remove_file(dest)?;
+            dest_removed = true;
         }
     }
 
@@ -2806,6 +2810,7 @@ fn copy_file(
         && !paths_are_same_entry(source, dest)
     {
         fs::remove_file(dest)?;
+        dest_removed = true;
     }
 
     if initial_dest_metadata.is_some()
@@ -2833,7 +2838,8 @@ fn copy_file(
                 }
             }
         }
-        handle_existing_dest(source, dest, options, source_in_command_line, copied_files)?;
+        dest_removed |=
+            handle_existing_dest(source, dest, options, source_in_command_line, copied_files)?;
         if are_hardlinks_to_same_file(source, dest) {
             if options.copy_mode == CopyMode::Copy {
                 return Ok(());
@@ -2911,6 +2917,9 @@ fn copy_file(
     };
 
     let dest_metadata = dest.symlink_metadata().ok();
+    // Create `dest` exclusively unless an existing file is overwritten in place,
+    // so nothing that appears at that name meanwhile is opened, as in GNU cp.
+    let create_exclusive = initial_dest_metadata.is_none() || dest_removed;
 
     let dest_permissions = calculate_dest_permissions(
         dest_metadata.as_ref(),
@@ -2931,6 +2940,7 @@ fn copy_file(
         symlinked_files,
         source_in_command_line,
         created_parent_dirs,
+        create_exclusive,
     )?;
 
     if options.verbose && performed_action != PerformedAction::Skipped {
@@ -3044,6 +3054,40 @@ fn is_stream(metadata: &Metadata) -> bool {
     }
 }
 
+/// How a Unix backend opens the source and creates the destination.
+#[cfg(unix)]
+pub(crate) struct CopyFlags {
+    /// The source is a FIFO or a device, read as a stream.
+    pub(crate) source_is_stream: bool,
+    /// Open the source with `O_NOFOLLOW`.
+    pub(crate) nofollow: bool,
+    /// Nothing was at `dest` before the copy, or cp removed it: create the
+    /// file anew and fail if something appears at `dest` in the meantime.
+    pub(crate) exclusive: bool,
+}
+
+/// Create the regular file `dest`, anew if `exclusive`. Otherwise an existing
+/// `dest` is truncated and followed if it is a symlink, as GNU cp -d/-P does.
+#[cfg(unix)]
+pub(crate) fn create_dest(dest: &Path, exclusive: bool) -> CopyResult<fs::File> {
+    uucore::safe_copy::create_dest_restrictive(dest, exclusive)
+        .map_err(|e| create_dest_error(e, dest, exclusive))
+}
+
+/// Error for a failed create of `dest`. Like GNU cp, a symlink found by an
+/// exclusive create is reported as one that is not written through.
+fn create_dest_error(err: io::Error, dest: &Path, exclusive: bool) -> CpError {
+    if exclusive && err.kind() == io::ErrorKind::AlreadyExists && dest.is_symlink() {
+        return CpError::Error(
+            translate!("cp-error-not-writing-dangling-symlink", "dest" => dest.quote()),
+        );
+    }
+    CpError::IoErrContext(
+        err,
+        translate!("cp-error-cannot-create-regular-file", "path" => dest.quote()),
+    )
+}
+
 #[cfg(unix)]
 fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
     let (is_preserve_mode, is_explicit_no_preserve_mode) = options.preserve_mode();
@@ -3103,6 +3147,7 @@ fn copy_helper(
     symlinked_files: &mut HashSet<FileInformation>,
     #[cfg_attr(not(unix), allow(unused_variables))] source_in_command_line: bool,
     created_parent_dirs: &mut HashSet<PathBuf>,
+    #[cfg(unix)] create_exclusive: bool,
 ) -> CopyResult<()> {
     if options.parents {
         let parent = dest.parent().unwrap_or(dest);
@@ -3147,9 +3192,11 @@ fn copy_helper(
             options.sparse_mode,
             context,
             #[cfg(unix)]
-            is_stream(source_metadata),
-            #[cfg(unix)]
-            nofollow,
+            CopyFlags {
+                source_is_stream: is_stream(source_metadata),
+                nofollow,
+                exclusive: create_exclusive,
+            },
         )?;
 
         if !options.attributes_only && options.debug {
