@@ -807,7 +807,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
         if b.backup_mode.ne(&BackupMode::None)
             && let Ok(to_abs) = target.canonicalize()
-            && source.canonicalize()? == to_abs
+            && source
+                .canonicalize()
+                .is_ok_and(|from_abs| from_abs == to_abs)
         {
             return Err(InstallError::SameFile(source.clone(), target.clone()).into());
         }
@@ -1048,8 +1050,9 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
 ///
 fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     use std::os::unix::fs::OpenOptionsExt;
+    // Pipe-backed descriptors can be opened even when canonicalize fails.
     if let Ok(to_abs) = to.canonicalize()
-        && from.canonicalize()? == to_abs
+        && from.canonicalize().is_ok_and(|from_abs| from_abs == to_abs)
     {
         return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
     }
