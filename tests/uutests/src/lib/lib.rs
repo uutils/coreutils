@@ -7,3 +7,5 @@
 pub mod macros;
 pub mod random;
 pub mod util;
+
+pub use uutests_procs::*;

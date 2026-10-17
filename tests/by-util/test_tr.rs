@@ -1544,9 +1544,9 @@ fn check_complement_set2_too_big() {
         .stderr_contains("when translating with complemented character classes,\nstring2 must map all characters in the domain to one");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_truncate_non_utf8_set() {
     let stdin = b"\x01amp\xfe\xff";
     let set1 = OsStr::from_bytes(b"a\xfe\xffz"); // spell-checker:disable-line
@@ -1644,10 +1644,7 @@ fn test_backwards_range() {
 }
 
 #[cfg(target_pointer_width = "64")]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: usize is 32-bit, so these repeat counts do not parse"
-)]
+#[uutests::wasi_ignore(Usize32BitOverflow)]
 #[test]
 fn test_huge_repeat_count_in_set1() {
     // A repeat count this large used to be expanded character by character,
@@ -1675,10 +1672,7 @@ fn test_huge_repeat_count_in_set1() {
 }
 
 #[cfg(target_pointer_width = "64")]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: usize is 32-bit, so these repeat counts do not parse"
-)]
+#[uutests::wasi_ignore(Usize32BitOverflow)]
 #[test]
 fn test_huge_repeat_count_in_set2() {
     new_ucmd!()
@@ -1699,10 +1693,7 @@ fn test_huge_repeat_count_in_set2() {
 }
 
 #[cfg(target_pointer_width = "64")]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: usize is 32-bit, so these repeat counts do not parse"
-)]
+#[uutests::wasi_ignore(Usize32BitOverflow)]
 #[test]
 fn test_repeat_lengths_beyond_usize() {
     // Set lengths are kept exact when repeat counts add up past usize::MAX,
@@ -1762,9 +1753,9 @@ fn test_non_digit_repeat() {
         .stderr_only("tr: invalid repeat count 'c' in [c*n] construct\n");
 }
 
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_octal_escape_ambiguous_followed_by_non_utf8() {
     // This case does not trigger the panic
     let set1 = OsStr::from_bytes(b"\\501a");
@@ -1807,8 +1798,8 @@ fn test_unbuffered_flag() {
         .stdout_only("HELLO\n");
 }
 
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no pipe support")]
 fn test_unbuffered_partial_line() {
     // With -u, a chunk without a trailing newline must come out before more
     // input arrives, as in `tail -f log | tr -u a-z A-Z | consumer`.
@@ -1845,8 +1836,8 @@ fn test_unbuffered_partial_line() {
     handle.join().unwrap();
 }
 
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: no pipe/signal support")]
 fn test_broken_pipe_no_error() {
     // More than a pipe buffer, so that the output blocks until the reader is gone.
     new_ucmd!()

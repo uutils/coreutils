@@ -143,9 +143,9 @@ fn test_sleep_wrong_time() {
     new_ucmd!().args(&["0.1s", "abc"]).fails();
 }
 
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: no signal support")]
 fn test_sleep_stops_after_sigsegv() {
     let mut child = new_ucmd!()
         .arg("100")
@@ -161,9 +161,9 @@ fn test_sleep_stops_after_sigsegv() {
         .no_output();
 }
 
+#[uutests::wasi_ignore(NoPipeSignalSupport)]
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: no signal support")]
 fn test_sleep_stops_after_sigbus() {
     let mut child = new_ucmd!()
         .arg("100")
