@@ -8,7 +8,7 @@
 // spell-checker:ignore ignbrk brkint ignpar parmrk inpck istrip inlcr igncr icrnl ixoff ixon iuclc ixany imaxbel iutf
 // spell-checker:ignore opost olcuc ocrnl onlcr onocr onlret ofdel nldly crdly tabdly bsdly vtdly ffdly ofill
 // spell-checker:ignore isig icanon iexten echoe crterase echok echonl noflsh xcase tostop echoprt prterase echoctl ctlecho echoke crtkill flusho extproc
-// spell-checker:ignore lnext rprnt susp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase
+// spell-checker:ignore lnext rprnt susp dsusp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase
 // spell-checker:ignore sigquit sigtstp
 // spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain exta extb NCCS cfsetispeed
 // spell-checker:ignore notaflag notacombo notabaud
@@ -45,18 +45,22 @@ use flags::{CONTROL_CHARS, CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS
 const ASCII_DEL: u8 = 127;
 
 // Sane defaults for control characters.
-const SANE_CONTROL_CHARS: [(S, u8); 12] = [
-    (S::VINTR, 3),     // ^C
-    (S::VQUIT, 28),    // ^\
-    (S::VERASE, 127),  // DEL
-    (S::VKILL, 21),    // ^U
-    (S::VEOF, 4),      // ^D
-    (S::VSTART, 17),   // ^Q
-    (S::VSTOP, 19),    // ^S
-    (S::VSUSP, 26),    // ^Z
+const SANE_CONTROL_CHARS: &[(S, u8)] = &[
+    (S::VINTR, 3),    // ^C
+    (S::VQUIT, 28),   // ^\
+    (S::VERASE, 127), // DEL
+    (S::VKILL, 21),   // ^U
+    (S::VEOF, 4),     // ^D
+    (S::VSTART, 17),  // ^Q
+    (S::VSTOP, 19),   // ^S
+    (S::VSUSP, 26),   // ^Z
+    #[cfg(not(target_os = "haiku"))]
     (S::VREPRINT, 18), // ^R
-    (S::VWERASE, 23),  // ^W
-    (S::VLNEXT, 22),   // ^V
+    #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
+    (S::VWERASE, 23), // ^W
+    #[cfg(not(target_os = "haiku"))]
+    (S::VLNEXT, 22), // ^V
+    #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
     (S::VDISCARD, 15), // ^O
 ];
 
@@ -607,12 +611,25 @@ fn print_terminal_size(
         );
     }
 
-    #[cfg(any(target_os = "linux", target_os = "redox"))]
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "haiku"))]
     {
         let line = termios.line_discipline;
         printer.print(&translate!("stty-output-line", "line" => line));
     }
-    #[cfg(not(any(target_os = "linux", target_os = "redox")))]
+    #[cfg(target_os = "redox")]
+    {
+        // nix does not expose the line discipline on Redox, so we get the
+        // underlying libc::termios struct to read that information.
+        let libc_termios: nix::libc::termios = termios.clone().into();
+        let line = libc_termios.c_line;
+        printer.print(&translate!("stty-output-line", "line" => line));
+    }
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "redox"
+    )))]
     let _ = termios; // remove this hack when we switched to rustix completely
     printer.flush();
     Ok(())
@@ -956,7 +973,7 @@ fn apply_special_setting(
         SpecialSetting::Rows(n) => size.ws_row = *n,
         SpecialSetting::Cols(n) => size.ws_col = *n,
         #[cfg_attr(
-            not(any(target_os = "linux", target_os = "android")),
+            not(any(target_os = "linux", target_os = "android", target_os = "haiku")),
             expect(unused_variables)
         )]
         SpecialSetting::Line(n) => {
@@ -964,6 +981,12 @@ fn apply_special_setting(
             #[cfg(any(target_os = "linux", target_os = "android"))]
             {
                 _termios.line_discipline = *n;
+            }
+            // On Haiku the field is a `c_char`, so convert from `u8` first.
+            #[cfg(target_os = "haiku")]
+            {
+                _termios.line_discipline =
+                    (*n).try_into().map_err(|_| nix::errno::Errno::ERANGE)?;
             }
         }
     }
@@ -1041,10 +1064,18 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
             (S::VSTART, "^Q"),
             (S::VSTOP, "^S"),
             (S::VSUSP, "^Z"),
+            #[cfg(not(target_os = "haiku"))]
             (S::VREPRINT, "^R"),
+            #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
             (S::VWERASE, "^W"),
+            #[cfg(not(target_os = "haiku"))]
             (S::VLNEXT, "^V"),
+            #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
             (S::VDISCARD, "^O"),
+            #[cfg(any(bsd, solarish, target_os = "aix"))]
+            (S::VDSUSP, "^Y"),
+            #[cfg(any(bsd, target_os = "illumos"))]
+            (S::VSTATUS, "^T"),
         ],
         _ => &[],
     };
@@ -1099,7 +1130,7 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
 }
 
 fn get_sane_control_char(cc_index: S) -> u8 {
-    for (sane_index, sane_val) in SANE_CONTROL_CHARS {
+    for &(sane_index, sane_val) in SANE_CONTROL_CHARS {
         if sane_index == cc_index {
             return sane_val;
         }
@@ -1111,12 +1142,18 @@ fn get_sane_control_char(cc_index: S) -> u8 {
         S::VMIN => 1,
         #[cfg(not(any(
             all(target_os = "linux", target_arch = "sparc64"),
-            target_os = "illumos",
-            target_os = "solaris"
+            solarish,
+            target_os = "aix",
+            target_os = "haiku"
         )))]
         S::VTIME => 0,
         #[cfg(target_os = "linux")]
         S::VSWTC => 0,
+        // BSD-family sane defaults (GNU uses CDSUSP = ^Y, CSTATUS = ^T).
+        #[cfg(any(bsd, solarish, target_os = "aix"))]
+        S::VDSUSP => 25, // ^Y
+        #[cfg(any(bsd, target_os = "illumos"))]
+        S::VSTATUS => 20, // ^T
         _ => 0,
     }
 }
@@ -1256,6 +1293,18 @@ mod tests {
     fn test_combo_to_flags_sane() {
         let flags = combo_to_flags("sane");
         assert!(flags.len() > 5); // sane sets multiple flags
+
+        let has_mapping = |cc: S, val: u8| {
+            flags
+                .iter()
+                .any(|f| matches!(f, ArgOptions::Mapping((idx, v)) if *idx == cc && *v == val))
+        };
+        // sane always resets the standard control characters.
+        assert!(has_mapping(S::VINTR, 3)); // ^C
+        #[cfg(any(bsd, solarish, target_os = "aix"))]
+        assert!(has_mapping(S::VDSUSP, 25)); // ^Y
+        #[cfg(any(bsd, target_os = "illumos"))]
+        assert!(has_mapping(S::VSTATUS, 20)); // ^T
     }
 
     #[test]
@@ -1411,9 +1460,13 @@ mod tests {
         assert_eq!(cc_to_index("start"), Some(S::VSTART));
         assert_eq!(cc_to_index("stop"), Some(S::VSTOP));
         assert_eq!(cc_to_index("susp"), Some(S::VSUSP));
+        #[cfg(not(target_os = "haiku"))]
         assert_eq!(cc_to_index("rprnt"), Some(S::VREPRINT));
+        #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
         assert_eq!(cc_to_index("werase"), Some(S::VWERASE));
+        #[cfg(not(target_os = "haiku"))]
         assert_eq!(cc_to_index("lnext"), Some(S::VLNEXT));
+        #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
         assert_eq!(cc_to_index("discard"), Some(S::VDISCARD));
     }
 
@@ -1444,10 +1497,26 @@ mod tests {
         assert_eq!(get_sane_control_char(S::VSTART), 17); // ^Q
         assert_eq!(get_sane_control_char(S::VSTOP), 19); // ^S
         assert_eq!(get_sane_control_char(S::VSUSP), 26); // ^Z
+        #[cfg(not(target_os = "haiku"))]
         assert_eq!(get_sane_control_char(S::VREPRINT), 18); // ^R
+        #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
         assert_eq!(get_sane_control_char(S::VWERASE), 23); // ^W
+        #[cfg(not(target_os = "haiku"))]
         assert_eq!(get_sane_control_char(S::VLNEXT), 22); // ^V
+        #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
         assert_eq!(get_sane_control_char(S::VDISCARD), 15); // ^O
+    }
+
+    #[cfg(any(bsd, solarish, target_os = "aix"))]
+    #[test]
+    fn test_get_sane_control_char_dsusp() {
+        assert_eq!(get_sane_control_char(S::VDSUSP), 25); // ^Y
+    }
+
+    #[cfg(any(bsd, target_os = "illumos"))]
+    #[test]
+    fn test_get_sane_control_char_status() {
+        assert_eq!(get_sane_control_char(S::VSTATUS), 20); // ^T
     }
 
     // Tests for parse_u8_or_err

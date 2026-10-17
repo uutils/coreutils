@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar ispeed ospeed NCCS nonhex gstty notachar cbreak evenp oddp CSIZE
+// spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar ispeed ospeed NCCS nonhex gstty notachar cbreak dsusp evenp oddp CSIZE
 
 #![cfg(unix)]
 
@@ -39,11 +39,145 @@ fn test_basic() {
 #[test]
 fn test_all_flag() {
     let (path, _controller, _replica) = pty_path();
+    // The pty defaults for `status`/`dsusp` differ per platform (OpenBSD
+    // leaves `status` at \377), so set the sane values explicitly and check
+    // that they round-trip through the mapping.
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "illumos"
+    ))]
+    new_ucmd!()
+        .args(&["--file", &path, "status", "^T"])
+        .succeeds();
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "aix",
+        target_os = "illumos",
+        target_os = "solaris"
+    ))]
+    new_ucmd!()
+        .args(&["--file", &path, "dsusp", "^Y"])
+        .succeeds();
     let result = new_ucmd!().args(&["--all", "--file", &path]).succeeds();
 
     for flag in ["parenb", "parmrk", "ixany", "onlcr", "icanon", "noflsh"] {
         result.stdout_contains(flag);
     }
+
+    // Tokens are matched on the whitespace-split output, so the checks are
+    // stable against the line wrapping of `--all`.
+    let tokens: Vec<&str> = result.stdout_str().split_whitespace().collect();
+    let position = |token: &str| tokens.iter().position(|&t| t == token);
+    let flag_position = |name: &str| {
+        tokens
+            .iter()
+            .position(|&t| t.trim_start_matches('-') == name)
+    };
+
+    // `tandem` is GNU's hidden alias of `ixoff` and is never printed.
+    assert!(!tokens.contains(&"tandem"));
+
+    // GNU prints `ixon` before `ixoff`, whichever their state.
+    assert!(flag_position("ixon").unwrap() < flag_position("ixoff").unwrap());
+
+    // GNU-compatibility entries that are only defined on some platforms; they
+    // are off by default, so check their negated form (polarity).
+    #[cfg(any(
+        target_os = "aix",
+        target_os = "android",
+        target_os = "cygwin",
+        target_os = "haiku",
+        target_os = "hurd",
+        target_os = "illumos",
+        target_os = "nto",
+        target_os = "solaris",
+        target_os = "linux"
+    ))]
+    assert!(position("-iuclc").unwrap() > flag_position("ixoff").unwrap());
+    #[cfg(any(
+        target_vendor = "apple",
+        target_os = "aix",
+        target_os = "android",
+        target_os = "cygwin",
+        target_os = "fuchsia",
+        target_os = "haiku",
+        target_os = "hurd",
+        target_os = "illumos",
+        target_os = "linux",
+        target_os = "nto",
+        target_os = "redox",
+        target_os = "solaris"
+    ))]
+    assert!(position("-ofill").is_some());
+    #[cfg(any(
+        target_os = "aix",
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "nto",
+        target_os = "linux",
+    ))]
+    assert!(position("-xcase").is_some());
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "aix",
+        target_os = "illumos",
+        target_os = "solaris"
+    ))]
+    {
+        // `dsusp` resets to ^Y on the sane defaults; `--all` prints it as
+        // `dsusp = ^Y;`.
+        let dsusp = position("dsusp").unwrap();
+        assert_eq!(tokens[dsusp + 2], "^Y;");
+    }
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "illumos",
+    ))]
+    {
+        // `status` resets to ^T on sane defaults; `--all` prints it as
+        // `status = ^T;`.
+        let status = position("status").unwrap();
+        assert_eq!(tokens[status + 2], "^T;");
+    }
+}
+
+#[test]
+fn test_hup_alias() {
+    // `hup` is GNU's hidden alias of `hupcl` and is never printed itself.
+    let (path, _controller, _replica) = pty_path();
+
+    new_ucmd!().args(&["--file", &path, "-hup"]).succeeds();
+    new_ucmd!()
+        .args(&["--file", &path, "--all"])
+        .succeeds()
+        .stdout_contains("-hupcl");
+
+    new_ucmd!().args(&["--file", &path, "hup"]).succeeds();
+    new_ucmd!()
+        .args(&["--file", &path, "--all"])
+        .succeeds()
+        .stdout_contains("hupcl")
+        .stdout_does_not_contain("-hupcl");
 }
 
 #[test]
@@ -320,7 +454,7 @@ fn test_row_column_hex_octal() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "haiku"))]
 fn line() {
     new_ucmd!()
         .args(&["line"])
