@@ -1715,6 +1715,30 @@ fn test_mv_permission_error() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_mv_destination_parent_permission_denied() {
+    if rustix::process::geteuid().is_root() {
+        return; // root bypasses the directory permissions this test relies on
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "source contents");
+    at.mkdir_all("dir_without_x/sub");
+    at.write("dir_without_x/sub/b", "destination contents");
+    at.set_mode("dir_without_x", 0o400);
+
+    let result = ucmd.args(&["a", "dir_without_x/sub/b"]).run();
+    at.set_mode("dir_without_x", 0o700);
+
+    result
+        .code_is(1)
+        .no_stdout()
+        .stderr_is("mv: Permission denied (os error 13)\n");
+    assert_eq!(at.read("a"), "source contents");
+    assert_eq!(at.read("dir_without_x/sub/b"), "destination contents");
+}
+
+#[test]
 fn test_mv_interactive_error() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
