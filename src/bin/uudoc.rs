@@ -662,9 +662,10 @@ fn write_zip_examples(
     name: &str,
     output_markdown: bool,
 ) -> io::Result<String> {
-    let content = if let Some(f) = get_zip_content(archive, &format!("pages/common/{name}.md")) {
+    // Prefer GNU-specific examples over generic POSIX examples.
+    let content = if let Some(f) = get_zip_content(archive, &format!("pages/linux/{name}.md")) {
         f
-    } else if let Some(f) = get_zip_content(archive, &format!("pages/linux/{name}.md")) {
+    } else if let Some(f) = get_zip_content(archive, &format!("pages/common/{name}.md")) {
         f
     } else {
         return Err(io::Error::new(
@@ -714,6 +715,32 @@ fn format_examples(content: String, output_markdown: bool) -> Result<String, std
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[rstest::rstest]
+    #[case(&["common", "linux"], "linux")]
+    #[case(&["linux"], "linux")]
+    #[case(&["common"], "common")]
+    fn test_tldr_page_selection(
+        #[case] platforms: &[&str],
+        #[case] expected: &str,
+        #[values(false, true)] markdown: bool,
+    ) {
+        let mut zip = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
+        for platform in platforms {
+            zip.start_file(
+                format!("pages/{platform}/head.md"),
+                zip::write::SimpleFileOptions::default(),
+            )
+            .unwrap();
+            writeln!(zip, "- {platform} example:\n\n`head file`").unwrap();
+        }
+        let mut archive = ZipArchive::new(zip.finish().unwrap()).unwrap();
+        let output = write_zip_examples(&mut archive, "head", markdown).unwrap();
+        assert!(output.contains(&format!("{expected} example:")), "{output}");
+        if platforms.len() > 1 {
+            assert!(!output.contains("common example:"), "{output}");
+        }
+    }
 
     #[test]
     fn test_post_process_manpage_fixes_th_header() {
