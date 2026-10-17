@@ -37,6 +37,24 @@ pub enum FormatArgument {
 }
 
 /// A struct that holds a slice of format arguments and provides methods to access them
+///
+/// # Examples
+///
+/// ```
+/// use std::num::NonZero;
+/// use uucore::format::{ArgumentLocation, FormatArgument, FormatArguments};
+///
+/// let values = [
+///     FormatArgument::String("first".into()),
+///     FormatArgument::String("second".into()),
+/// ];
+/// let mut args = FormatArguments::new(&values);
+/// assert_eq!(args.next_string(ArgumentLocation::NextArgument), "first");
+/// assert_eq!(
+///     args.next_string(ArgumentLocation::Position(NonZero::new(2).unwrap())),
+///     "second",
+/// );
+/// ```
 #[derive(Debug, PartialEq)]
 pub struct FormatArguments<'a> {
     args: &'a [FormatArgument],
