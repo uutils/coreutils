@@ -1459,8 +1459,8 @@ fn rename_file_fallback(
             target_os = "netbsd"
         ))]
         {
-            if let Ok(failed) = fsxattr::copy_xattrs_fd_ignore_unsupported(&src_file, &dst_file) {
-                show_xattr_failures(failed);
+            if let Ok(failed) = fsxattr::copy_xattrs_fd(&src_file, &dst_file) {
+                show_xattr_failures_for(to, failed);
             }
         }
 
@@ -1489,6 +1489,42 @@ fn rename_file_fallback(
     fs::remove_file(from)
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
     Ok(())
+}
+
+/// Like [`show_xattr_failures`], but for a file moved to `to`. When `to` does
+/// not support xattrs at all, GNU 9.12 warns once for the file rather than once
+/// per attribute. It says nothing when only a POSIX ACL could not be set.
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "hurd",
+    target_os = "linux",
+    target_os = "android",
+    target_os = "netbsd"
+))]
+fn show_xattr_failures_for(to: &Path, failed: Vec<(OsString, io::Error)>) {
+    use uucore::error::strip_errno;
+    use uucore::show_error;
+
+    let (unsupported, failed): (Vec<_>, Vec<_>) = failed
+        .into_iter()
+        .partition(|(_, err)| fsxattr::is_xattr_unsupported(err));
+    let is_acl = |name: &OsString| {
+        matches!(
+            name.to_str(),
+            Some("system.posix_acl_access" | "system.posix_acl_default")
+        )
+    };
+    if let Some((_, err)) = unsupported.iter().find(|(name, _)| !is_acl(name)) {
+        show_error!(
+            "{}",
+            translate!(
+                "mv-error-setting-attributes",
+                "path" => to.quote(),
+                "err" => strip_errno(err)
+            )
+        );
+    }
+    show_xattr_failures(failed);
 }
 
 /// Report each xattr that a cross-device move could not copy. Like GNU, these

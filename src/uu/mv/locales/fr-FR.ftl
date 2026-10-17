@@ -39,6 +39,7 @@ mv-error-no-symlink-support = votre système d'exploitation ne prend pas en char
 mv-error-permission-denied = Permission refusée
 mv-error-inter-device-move-failed = échec du déplacement inter-périphérique : {$from} vers {$to} ; impossible de supprimer la cible : {$err}
 mv-error-setting-attribute = définition de l'attribut {$name} : {$err}
+mv-error-setting-attributes = définition des attributs pour {$path} : {$err}
 mv-error-exchange-two-operands = --exchange nécessite exactement deux opérandes
 mv-error-exchange-not-supported = --exchange n'est pas pris en charge sur cette plateforme
 
