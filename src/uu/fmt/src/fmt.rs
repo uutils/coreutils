@@ -169,7 +169,10 @@ impl FmtOptions {
         let tabwidth = tabwidth_str
             .parse::<usize>()
             .map_err(|_| FmtError::InvalidTabWidth(tabwidth_str.to_owned()))?
-            .clamp(1, usize::MAX);
+            .max(1);
+        let tabwidth @ ..=MAX_WIDTH = tabwidth else {
+            return Err(FmtError::WidthOutOfRange(tabwidth).into());
+        };
 
         Ok(Self {
             crown,
