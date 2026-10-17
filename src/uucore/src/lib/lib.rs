@@ -166,12 +166,6 @@ pub use crate::features::smack;
 
 //## core functions
 
-#[cfg(unix)]
-use nix::errno::Errno;
-#[cfg(unix)]
-use nix::sys::signal::{
-    SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGSEGV, sigaction,
-};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader};
@@ -183,25 +177,6 @@ use std::os::wasi::ffi::{OsStrExt, OsStringExt};
 use std::str;
 use std::str::Utf8Chunk;
 use std::sync::{LazyLock, atomic::Ordering};
-
-/// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
-/// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
-#[cfg(unix)]
-pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
-    unsafe {
-        sigaction(
-            SIGSEGV,
-            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
-        )
-    }?;
-    unsafe {
-        sigaction(
-            SIGBUS,
-            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
-        )
-    }?;
-    Ok(())
-}
 
 pub fn get_canonical_util_name(util_name: &str) -> &str {
     // remove the "uu_" prefix
@@ -223,7 +198,8 @@ macro_rules! bin_inner {
             use uucore::locale;
 
             // Preserve inherited SIGPIPE settings (e.g., from env --default-signal=PIPE)
-            uucore::panic::preserve_inherited_sigpipe();
+            #[cfg(all(unix, not(target_os = "fuchsia")))]
+            uucore::signals::preserve_inherited_sigpipe();
 
             // suppress extraneous error output for SIGPIPE failures/panics
             uucore::panic::mute_sigpipe_panic();

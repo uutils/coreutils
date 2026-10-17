@@ -440,9 +440,7 @@ impl Display for UIoError {
                 // writable file owned by someone else) and "Permission denied"
                 // for EACCES. Prefer the errno when available (#15020).
                 #[cfg(unix)]
-                PermissionDenied
-                    if self.inner.raw_os_error() == Some(nix::errno::Errno::EPERM as i32) =>
-                {
+                PermissionDenied if self.inner.raw_os_error() == Some(libc::EPERM as _) => {
                     "Operation not permitted"
                 }
                 PermissionDenied => "Permission denied",
@@ -580,7 +578,7 @@ impl From<std::io::Error> for Box<dyn UError> {
 /// // prints "fix me please!: Permission denied"
 /// println!("{}", uio_result.unwrap_err());
 /// ```
-#[cfg(unix)]
+#[cfg(all(feature = "nix", unix))]
 impl<T> FromIo<UResult<T>> for Result<T, nix::Error> {
     fn map_err_context(self, context: impl FnOnce() -> String) -> UResult<T> {
         self.map_err(|e| {
@@ -592,7 +590,7 @@ impl<T> FromIo<UResult<T>> for Result<T, nix::Error> {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(feature = "nix", unix))]
 impl<T> FromIo<UResult<T>> for nix::Error {
     fn map_err_context(self, context: impl FnOnce() -> String) -> UResult<T> {
         Err(Box::new(UIoError {
@@ -602,7 +600,7 @@ impl<T> FromIo<UResult<T>> for nix::Error {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(feature = "nix", unix))]
 impl From<nix::Error> for UIoError {
     fn from(f: nix::Error) -> Self {
         Self {
@@ -612,7 +610,7 @@ impl From<nix::Error> for UIoError {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(feature = "nix", unix))]
 impl From<nix::Error> for Box<dyn UError> {
     fn from(f: nix::Error) -> Self {
         let u_error: UIoError = f.into();
@@ -901,7 +899,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg(all(feature = "nix", unix))]
     fn test_nix_error_conversion() {
         use super::{FromIo, UIoError};
         use nix::errno::Errno;
