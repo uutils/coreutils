@@ -942,19 +942,23 @@ fn format_epoch_seconds(seconds: i64, flags: &str, width: Option<usize>) -> Stri
     }
 }
 
-/// Remove the `O` strftime modifier from `fmt`.
+/// Remove the `O` and `E` strftime modifiers from `fmt`.
 ///
-/// In the C locale `%O` requests alternative numeric symbols that do not
-/// exist, so GNU `date` treats it as a no-op: `%Om` renders exactly like
-/// `%m` (issue #11656). jiff does not know the modifier and would emit it
-/// literally, so strip it before jiff sees the format string.
+/// In the C locale `%O` requests alternative numeric symbols and `%E`
+/// alternative era representations; neither exists there, so both fall back
+/// to the unmodified conversion and GNU `date` renders `%Om` like `%m` and
+/// `%Ey` like `%y` (issue #11656). jiff does not know either modifier and
+/// would emit it literally, so strip them before jiff sees the format string.
 ///
-/// The `O` is only dropped when it actually modifies something, that is,
-/// when a specifier letter follows it. A dangling `%O` (at the end of the
-/// string, or followed by a non-letter) stays literal, as does any `O`
-/// that merely follows the `%%` escape.
-fn strip_o_modifier(fmt: &str) -> String {
-    if !fmt.contains("%O") {
+/// A modifier is only dropped when it actually modifies something. `O` is
+/// dropped before any specifier letter; `E` only before the six conversions
+/// POSIX pairs it with, because GNU leaves the others literal. A dangling
+/// modifier (at the end of the string, or followed by a non-letter) stays
+/// literal, as does one that merely follows the `%%` escape.
+fn strip_locale_modifiers(fmt: &str) -> String {
+    // The modifier may sit behind flags and a width, as in `%-Oy`, so the
+    // cheap check can only look for the letters themselves.
+    if !fmt.contains('O') && !fmt.contains('E') {
         return fmt.to_string();
     }
 
@@ -965,21 +969,40 @@ fn strip_o_modifier(fmt: &str) -> String {
             out.push(c);
             continue;
         }
-        match chars.peek() {
-            Some('O') => {
-                let mut lookahead = chars.clone();
-                lookahead.next();
-                if lookahead.peek().is_some_and(char::is_ascii_alphabetic) {
-                    chars.next();
-                }
-                out.push('%');
+        // Keep `%%` intact: an `O` or `E` after a literal percent is plain
+        // text.
+        if chars.peek() == Some(&'%') {
+            chars.next();
+            out.push_str("%%");
+            continue;
+        }
+        out.push('%');
+
+        // The modifier comes after any GNU flags and field width, as in
+        // `%-Oy` or `%10EY`, so copy those across first.
+        let mut lookahead = chars.clone();
+        let mut prefix = String::new();
+        while lookahead
+            .peek()
+            .is_some_and(|c| "_0^#+-".contains(*c) || c.is_ascii_digit())
+        {
+            prefix.push(lookahead.next().unwrap());
+        }
+
+        let Some(&modifier @ ('O' | 'E')) = lookahead.peek() else {
+            continue;
+        };
+        lookahead.next();
+        let modifies = lookahead.peek().is_some_and(|&next| {
+            if modifier == 'E' {
+                matches!(next, 'c' | 'C' | 'x' | 'X' | 'y' | 'Y')
+            } else {
+                next.is_ascii_alphabetic()
             }
-            // Keep `%%` intact: an `O` after a literal percent is plain text.
-            Some('%') => {
-                chars.next();
-                out.push_str("%%");
-            }
-            _ => out.push('%'),
+        });
+        if modifies {
+            out.push_str(&prefix);
+            chars = lookahead;
         }
     }
     out
@@ -1439,7 +1462,7 @@ fn format_date_with_locale_aware_months(
     // negative infinity (e.g. `@-1.5` → `-2`, not `-1`). Every other field jiff
     // produces already agrees with GNU, so only `%s` needs correcting; rewrite it
     // to the floored epoch second before jiff sees the format string.
-    let fmt_owned = strip_o_modifier(&substitute_epoch_seconds(fmt, date));
+    let fmt_owned = strip_locale_modifiers(&substitute_epoch_seconds(fmt, date));
     let fmt = fmt_owned.as_str();
 
     // Check if format string has GNU modifiers (width/flags) and format if present
