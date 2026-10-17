@@ -15,6 +15,10 @@ pub fn main() {
     const FEATURE_PREFIX: &str = "feat_";
     const OVERRIDE_PREFIX: &str = "uu_";
 
+    cfg_aliases::cfg_aliases! {
+        selinux: { all(feature = "selinux", any(target_os = "android", target_os = "linux")) },
+    }
+
     // Do not rebuild build script unless the script itself or the enabled features are modified
     // See <https://doc.rust-lang.org/cargo/reference/build-scripts.html#change-detection>
     println!("cargo:rerun-if-changed=build.rs");

@@ -29,7 +29,7 @@ use uucore::translate;
 use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 use crate::set_selinux_context;
 use crate::{
     CopyMode, CopyResult, CpError, Options, aligned_ancestors, copy_attributes, copy_file,
@@ -590,7 +590,7 @@ pub(crate) fn copy_directory(
                 options.set_selinux_context,
             )?;
 
-            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+            #[cfg(selinux)]
             if options.set_selinux_context {
                 set_selinux_context(&dir.dest, options.context.as_ref())?;
             }
@@ -602,7 +602,7 @@ pub(crate) fn copy_directory(
 
     // Even after a failed copy, so that no `--parents` directory stays owner-only.
     let fixed = set_parent_dirs_attributes(&parent_dirs, options);
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    #[cfg(selinux)]
     let fixed = fixed.and_then(|()| {
         if !options.set_selinux_context {
             return Ok(());
