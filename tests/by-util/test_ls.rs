@@ -15,17 +15,19 @@
 use regex::Regex;
 #[cfg(unix)]
 use rustix::process::Resource;
-#[cfg(not(target_os = "openbsd"))]
-use std::collections::HashMap;
 #[cfg(target_os = "linux")]
 use std::ffi::OsStr;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStrExt;
+#[cfg(all(unix, not(target_os = "openbsd")))]
+use std::os::unix::fs::MetadataExt;
 #[cfg(not(windows))]
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{path::Path, time::SystemTime};
+#[cfg(not(target_os = "openbsd"))]
+use uucore::format::human::{SizeFormat, human_readable};
 use uutests::new_ucmd;
 #[cfg(unix)]
 use uutests::unwrap_or_return;
@@ -1763,36 +1765,27 @@ fn test_ls_long_total_size() {
     at.touch(at.plus_as_string("test-long2"));
     at.append("test-long2", "2");
 
-    let expected_prints: HashMap<_, _> = if cfg!(unix) {
-        [
-            ("long_vanilla", "total 8"),
-            ("long_human_readable", "total 8.0K"),
-            ("long_si", "total 8.2k"),
-        ]
-        .iter()
-        .copied()
-        .collect()
-    } else {
-        [
-            ("long_vanilla", "total 2"),
-            ("long_human_readable", "total 2"),
-            ("long_si", "total 2"),
-        ]
-        .iter()
-        .copied()
-        .collect()
+    #[cfg(unix)]
+    let (total_kib, total_bytes) = {
+        let blocks = at.metadata("test-long").blocks() + at.metadata("test-long2").blocks();
+        (blocks.div_ceil(2), blocks * 512)
     };
+    #[cfg(not(unix))]
+    let (total_kib, total_bytes) = (2, 2);
+    let expected_total = format!("total {total_kib}");
+    let expected_human = format!("total {}", human_readable(total_bytes, SizeFormat::Binary));
+    let expected_si = format!("total {}", human_readable(total_bytes, SizeFormat::Decimal));
 
     for arg in LONG_ARGS {
         let result = scene.ucmd().arg(arg).succeeds();
-        result.stdout_contains(expected_prints["long_vanilla"]);
+        result.stdout_contains_line(&expected_total);
 
         for arg2 in ["-h", "--human-readable", "--si"] {
             let result = scene.ucmd().arg(arg).arg(arg2).succeeds();
-            result.stdout_contains(if arg2 == "--si" {
-                expected_prints["long_si"]
+            result.stdout_contains_line(if arg2 == "--si" {
+                &expected_si
             } else {
-                expected_prints["long_human_readable"]
+                &expected_human
             });
         }
     }
@@ -6433,25 +6426,20 @@ fn test_ls_cf_output_should_be_delimited_by_tab() {
         .stdout_is("a2345/\tb/\n");
 }
 
-#[cfg(all(unix, feature = "dd"))]
+#[cfg(unix)]
 #[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_posixly_correct_and_block_size_env_vars() {
     let scene = TestScenario::new(util_name!());
 
-    scene
-        .ccmd("dd")
-        .arg("if=/dev/zero")
-        .arg("of=file")
-        .arg("bs=1024")
-        .arg("count=1")
-        .succeeds();
+    scene.fixtures.write_bytes("file", &[0; 1024]);
+    let blocks = scene.fixtures.metadata("file").blocks();
 
     scene
         .ucmd()
         .arg("-l")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {}", blocks.div_ceil(2)))
         .stdout_contains(" 1024 ");
 
     scene
@@ -6459,7 +6447,7 @@ fn test_posixly_correct_and_block_size_env_vars() {
         .arg("-l")
         .env("POSIXLY_CORRECT", "some_value")
         .succeeds()
-        .stdout_contains_line("total 8")
+        .stdout_contains_line(format!("total {blocks}"))
         .stdout_contains(" 1024 ");
 
     scene
@@ -6467,7 +6455,7 @@ fn test_posixly_correct_and_block_size_env_vars() {
         .arg("-l")
         .env("LS_BLOCK_SIZE", "512")
         .succeeds()
-        .stdout_contains_line("total 8")
+        .stdout_contains_line(format!("total {blocks}"))
         .stdout_contains(" 2 ");
 
     scene
@@ -6475,7 +6463,7 @@ fn test_posixly_correct_and_block_size_env_vars() {
         .arg("-l")
         .env("BLOCK_SIZE", "512")
         .succeeds()
-        .stdout_contains_line("total 8")
+        .stdout_contains_line(format!("total {blocks}"))
         .stdout_contains(" 2 ");
 
     scene
@@ -6483,23 +6471,18 @@ fn test_posixly_correct_and_block_size_env_vars() {
         .arg("-l")
         .env("BLOCKSIZE", "512")
         .succeeds()
-        .stdout_contains_line("total 8")
+        .stdout_contains_line(format!("total {blocks}"))
         .stdout_contains(" 1024 ");
 }
 
-#[cfg(all(unix, feature = "dd"))]
+#[cfg(unix)]
 #[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_posixly_correct_and_block_size_env_vars_with_k() {
     let scene = TestScenario::new(util_name!());
 
-    scene
-        .ccmd("dd")
-        .arg("if=/dev/zero")
-        .arg("of=file")
-        .arg("bs=1024")
-        .arg("count=1")
-        .succeeds();
+    scene.fixtures.write_bytes("file", &[0; 1024]);
+    let blocks = scene.fixtures.metadata("file").blocks();
 
     scene
         .ucmd()
@@ -6507,7 +6490,7 @@ fn test_posixly_correct_and_block_size_env_vars_with_k() {
         .arg("-k")
         .env("POSIXLY_CORRECT", "some_value")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {}", blocks.div_ceil(2)))
         .stdout_contains(" 1024 ");
 
     scene
@@ -6516,7 +6499,7 @@ fn test_posixly_correct_and_block_size_env_vars_with_k() {
         .arg("-k")
         .env("LS_BLOCK_SIZE", "512")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {}", blocks.div_ceil(2)))
         .stdout_contains(" 2 ");
 
     scene
@@ -6525,7 +6508,7 @@ fn test_posixly_correct_and_block_size_env_vars_with_k() {
         .arg("-k")
         .env("BLOCK_SIZE", "512")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {}", blocks.div_ceil(2)))
         .stdout_contains(" 2 ");
 
     scene
@@ -6534,7 +6517,7 @@ fn test_posixly_correct_and_block_size_env_vars_with_k() {
         .arg("-k")
         .env("BLOCKSIZE", "512")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {}", blocks.div_ceil(2)))
         .stdout_contains(" 1024 ");
 }
 
@@ -6553,26 +6536,21 @@ fn test_ls_invalid_block_size() {
         .stderr_is("ls: invalid --block-size argument '0'\n");
 }
 
-#[cfg(all(unix, feature = "dd"))]
+#[cfg(unix)]
 #[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_ls_invalid_block_size_in_env_var() {
     let scene = TestScenario::new(util_name!());
 
-    scene
-        .ccmd("dd")
-        .arg("if=/dev/zero")
-        .arg("of=file")
-        .arg("bs=1024")
-        .arg("count=1")
-        .succeeds();
+    scene.fixtures.write_bytes("file", &[0; 1024]);
+    let blocks = scene.fixtures.metadata("file").blocks();
 
     scene
         .ucmd()
         .arg("-og")
         .env("LS_BLOCK_SIZE", "invalid")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {}", blocks.div_ceil(2)))
         .stdout_contains(" 1 1 "); // hardlink count + file size
 
     scene
@@ -6580,7 +6558,7 @@ fn test_ls_invalid_block_size_in_env_var() {
         .arg("-og")
         .env("BLOCK_SIZE", "invalid")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {}", blocks.div_ceil(2)))
         .stdout_contains(" 1 1 "); // hardlink count + file size
 
     scene
@@ -6588,7 +6566,7 @@ fn test_ls_invalid_block_size_in_env_var() {
         .arg("-og")
         .env("BLOCKSIZE", "invalid")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {}", blocks.div_ceil(2)))
         .stdout_contains(" 1024 ");
 
     scene
@@ -6596,23 +6574,18 @@ fn test_ls_invalid_block_size_in_env_var() {
         .arg("-og")
         .env("BLOCKSIZE", "0")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {}", blocks.div_ceil(2)))
         .stdout_contains(" 1024 ");
 }
 
-#[cfg(all(unix, feature = "dd"))]
+#[cfg(unix)]
 #[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_ls_block_size_override() {
     let scene = TestScenario::new(util_name!());
 
-    scene
-        .ccmd("dd")
-        .arg("if=/dev/zero")
-        .arg("of=file")
-        .arg("bs=1024")
-        .arg("count=1")
-        .succeeds();
+    scene.fixtures.write_bytes("file", &[0; 1024]);
+    let blocks = scene.fixtures.metadata("file").blocks();
 
     // --si "wins"
     scene
@@ -6621,7 +6594,10 @@ fn test_ls_block_size_override() {
         .arg("--block-size=512")
         .arg("--si")
         .succeeds()
-        .stdout_contains_line("total 4.1k");
+        .stdout_contains_line(format!(
+            "total {}",
+            human_readable(blocks * 512, SizeFormat::Decimal)
+        ));
 
     // --block-size "wins"
     scene
@@ -6630,7 +6606,7 @@ fn test_ls_block_size_override() {
         .arg("--si")
         .arg("--block-size=512")
         .succeeds()
-        .stdout_contains_line("total 8");
+        .stdout_contains_line(format!("total {blocks}"));
 
     // --human-readable "wins"
     scene
@@ -6639,7 +6615,10 @@ fn test_ls_block_size_override() {
         .arg("--block-size=512")
         .arg("--human-readable")
         .succeeds()
-        .stdout_contains_line("total 4.0K");
+        .stdout_contains_line(format!(
+            "total {}",
+            human_readable(blocks * 512, SizeFormat::Binary)
+        ));
 
     // --block-size "wins"
     scene
@@ -6648,7 +6627,7 @@ fn test_ls_block_size_override() {
         .arg("--human-readable")
         .arg("--block-size=512")
         .succeeds()
-        .stdout_contains_line("total 8");
+        .stdout_contains_line(format!("total {blocks}"));
 }
 
 #[cfg(unix)]
