@@ -1865,3 +1865,47 @@ mod diagnostics {
             .no_output();
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn test_deep_directory_traversal_no_stack_overflow() {
+    use rustix::process::{Resource, Rlimit, getrlimit, setrlimit};
+
+    let lim = getrlimit(Resource::Nofile);
+    let max = lim.maximum.unwrap_or(4096);
+    let soft = max.min(4096);
+    let _ = setrlimit(
+        Resource::Nofile,
+        Rlimit {
+            current: Some(soft),
+            maximum: Some(max),
+        },
+    );
+    let nofile = soft;
+
+    // On macOS and BSD, PATH_MAX is 1024, so depth cannot exceed ~480 without hitting ENAMETOOLONG.
+    // On Linux, PATH_MAX is 4096, allowing 1500+ levels.
+    let target_depth = if cfg!(target_os = "linux") { 1500 } else { 400 };
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut current = at.plus_as_string("root_dir");
+    std::fs::create_dir(&current).unwrap();
+    let mut depth = 0;
+    for _ in 0..target_depth {
+        current.push_str("/d");
+        if std::fs::create_dir(&current).is_ok() {
+            depth += 1;
+        } else {
+            break;
+        }
+    }
+    assert_eq!(
+        depth, target_depth,
+        "failed to create nested directories: depth was {depth}"
+    );
+
+    if nofile >= 2000 {
+        ucmd.limit(Resource::Nofile, nofile, nofile);
+    }
+    ucmd.arg("-R").arg("755").arg("root_dir").succeeds();
+}
