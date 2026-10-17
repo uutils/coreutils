@@ -1390,3 +1390,31 @@ fn test_touch_set_time_on_unreadable_unwritable_file() {
     assert_eq!(atime, expected);
     assert_eq!(mtime, expected);
 }
+
+// -d with a date and time lacking an explicit timezone must be interpreted in
+// the local zone (GNU compatibility), not as UTC. Regression test for
+// https://github.com/uutils/coreutils/issues/15291.
+#[test]
+fn test_touch_date_without_offset_is_local_time() {
+    // Force TZ=Asia/Tokyo: the harness default TZ=UTC would make the buggy
+    // "interpret as UTC" behavior indistinguishable from the correct one.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "touch_local_no_offset";
+    at.touch(file);
+    ucmd.env("TZ", "Asia/Tokyo")
+        .args(&["-d", "2026-08-01 12:00:00", file])
+        .succeeds()
+        .no_output();
+    let (atime, mtime) = get_file_times(&at, file);
+    // 1_785_585_600 = 2026-08-01 12:00 UTC; Asia/Tokyo is UTC+9, so civil
+    // 12:00 local is 03:00 UTC = 1_785_553_200.
+    let expected = FileTime::from_unix_time(1_785_585_600 - 9 * 3600, 0);
+    assert_eq!(
+        mtime, expected,
+        "mtime should be 2026-08-01 12:00 Asia/Tokyo, not UTC"
+    );
+    assert_eq!(
+        atime, expected,
+        "atime should be 2026-08-01 12:00 Asia/Tokyo, not UTC"
+    );
+}
