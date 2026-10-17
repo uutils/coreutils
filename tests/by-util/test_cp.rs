@@ -263,7 +263,7 @@ fn test_cp_symlink_recursive_relative_dir_into_existing_dir() {
 #[cfg(unix)]
 #[cfg_attr(
     wasi_runner,
-    ignore = "WASI CI/CD: absolute host tmpdir path is outside the mapped guest root, so cp cannot stat it"
+    ignore = "WASI sandbox: absolute host tmpdir path is outside the mapped guest root, so cp cannot stat it"
 )]
 fn test_cp_symlink_recursive_absolute_dir_into_subdir() {
     let (at, mut ucmd) = at_and_ucmd!();
