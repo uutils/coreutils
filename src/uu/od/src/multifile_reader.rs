@@ -26,7 +26,7 @@ pub enum InputSource<'a> {
 enum CurrentReader {
     File(File),
     #[cfg(any(unix, target_os = "wasi"))]
-    Stdin(uucore::io::RawReader<rustix::fd::BorrowedFd<'static>>),
+    Stdin(uucore::io::RawReader<'static>),
     #[cfg(not(any(unix, target_os = "wasi")))]
     Stdin(io::Stdin),
 }
