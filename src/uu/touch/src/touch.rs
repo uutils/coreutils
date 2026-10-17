@@ -18,7 +18,7 @@ use filetime::set_file_times;
 use filetime::set_symlink_file_times;
 use jiff::civil::Time;
 use jiff::fmt::strtime;
-use jiff::tz::TimeZone;
+use jiff::tz::{AmbiguousOffset, TimeZone};
 use jiff::{Timestamp, ToSpan, Zoned};
 #[cfg(unix)]
 use libc::O_NONBLOCK;
@@ -133,6 +133,8 @@ mod format {
     pub(crate) const YYYYMMDDHHMMSS: &str = "%Y-%m-%d %H:%M:%S.%f";
     // "%Y-%m-%d %H:%M:%S" 12 chars
     pub(crate) const YYYYMMDDHHMMS: &str = "%Y-%m-%d %H:%M:%S";
+    // "%Y-%m-%d %H:%M", the same wall time without seconds
+    pub(crate) const YYYYMMDDHHMM_WALL: &str = "%Y-%m-%d %H:%M";
     // "%Y%m%d%H%M" 12 chars
     pub(crate) const YYYYMMDDHHMM: &str = "%Y%m%d%H%M";
     // "%Y-%m-%d %H:%M +offset"
@@ -814,7 +816,7 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
     //
     if let Ok(parsed) = strtime::parse(format::POSIX_LOCALE, s)
         .and_then(|tm| tm.to_datetime())
-        .and_then(|dt| TimeZone::UTC.to_zoned(dt))
+        .and_then(|dt| TimeZone::system().to_ambiguous_zoned(dt).unambiguous())
     {
         return Ok(timestamp_to_filetime(parsed.timestamp()));
     }
@@ -827,9 +829,14 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
         format::YYYYMMDDHHMMSS,
         format::YYYYMMDDHHMM_OFFSET,
     ] {
-        if let Ok(parsed) = strtime::parse(fmt, s)
+        if fmt == format::YYYYMMDDHHMM_OFFSET {
+            // Preserve the parsed offset, which to_datetime() would discard.
+            if let Ok(parsed) = strtime::parse(fmt, s).and_then(|tm| tm.to_timestamp()) {
+                return Ok(timestamp_to_filetime(parsed));
+            }
+        } else if let Ok(parsed) = strtime::parse(fmt, s)
             .and_then(|tm| tm.to_datetime())
-            .and_then(|dt| TimeZone::UTC.to_zoned(dt))
+            .and_then(|dt| TimeZone::system().to_ambiguous_zoned(dt).unambiguous())
         {
             return Ok(timestamp_to_filetime(parsed.timestamp()));
         }
@@ -856,6 +863,12 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
         return Ok(FileTime::from_unix_time(*ts, 0));
     }
 
+    // parse_datetime normalizes a wall-clock time that a DST gap skipped, so
+    // refuse one here, as the date utility does.
+    if is_system_zone_gap(s) {
+        return Err(TouchError::InvalidDateFormat(s.to_owned()));
+    }
+
     if let Ok(parsed) = parse_datetime::parse_datetime_at_date(ref_zoned, s)
         && let Some(zoned) = parsed.into_zoned()
     {
@@ -863,6 +876,31 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
     }
 
     Err(TouchError::InvalidDateFormat(s.to_owned()))
+}
+
+/// Whether `s` reads as a wall-clock time in the system zone that falls in a
+/// DST gap, so the zone has no such time.
+fn is_system_zone_gap(s: &str) -> bool {
+    let wall_times = [
+        format::POSIX_LOCALE,
+        format::YYYYMMDDHHMMS,
+        format::YYYYMMDDHHMMSS,
+        format::YYYYMMDDHHMM_WALL,
+    ]
+    .into_iter()
+    .filter_map(|fmt| strtime::parse(fmt, s).and_then(|tm| tm.to_datetime()).ok())
+    .chain(
+        strtime::parse(format::ISO_8601, s)
+            .and_then(|tm| tm.to_date())
+            .ok()
+            .map(|date| date.to_datetime(Time::midnight())),
+    );
+    wall_times.into_iter().any(|dt| {
+        matches!(
+            TimeZone::system().to_ambiguous_zoned(dt).offset(),
+            AmbiguousOffset::Gap { .. }
+        )
+    })
 }
 
 /// Prepends 19 or 20 to the year if it is a 2 digit year
@@ -970,6 +1008,8 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
 
 #[cfg(test)]
 mod tests {
+    use jiff::Timestamp;
+
     use filetime::FileTime;
 
     use crate::{
@@ -1004,7 +1044,7 @@ mod tests {
     #[test]
     fn test_parse_date_now_returns_the_reference_instant() {
         // `-d now` must parse back to the reference instant, so `touch()` can spot it (#15019).
-        let now = super::timestamp_to_filetime(jiff::Timestamp::now());
+        let now = super::timestamp_to_filetime(Timestamp::now());
         let reference = super::filetime_to_zoned(&now).unwrap();
 
         assert_eq!(super::parse_date(reference.clone(), "now").unwrap(), now);
