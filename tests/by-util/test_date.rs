@@ -355,6 +355,8 @@ fn test_date_rfc_8601_hour() {
             .succeeds()
             .stdout_matches(&re);
     }
+
+    new_ucmd!().arg("-uIhours").succeeds().stdout_matches(&re);
 }
 
 #[test]
@@ -471,6 +473,51 @@ fn test_date_rejects_multiple_output_formats() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("date: multiple output formats specified\n");
+}
+
+#[test]
+fn test_date_rejects_iso_format_with_positional_format() {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .args(&["-r", ".", "-I", "+hours"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("date: multiple output formats specified\n");
+
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .args(&["-r", ".", "-I", "hours"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("lacks a leading '+'");
+}
+
+#[test]
+fn test_date_rejects_setting_with_date_sources() {
+    // Setting the clock cannot be combined with another date source.
+    for args in [
+        ["-d", "@now", "-s", ""],
+        ["-r", ".", "-s", ""],
+        ["-f", ".", "-s", ""],
+    ] {
+        new_ucmd!()
+            .env("LANG", "C")
+            .env("LC_ALL", "C")
+            .args(&args)
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("cannot be used with");
+    }
+
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .args(&["-s", "a", "--resolution"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("cannot be used with");
 }
 
 #[test]
@@ -919,6 +966,22 @@ fn test_date_for_file_mtime() {
 }
 
 #[test]
+fn test_date_reference_attached_value_containing_iso_flag() {
+    use std::time::{Duration, UNIX_EPOCH};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let reference_file = "Ifile";
+    let f = at.make_file(reference_file);
+    f.set_modified(UNIX_EPOCH + Duration::from_secs(1234))
+        .unwrap();
+
+    ucmd.arg("-rIfile")
+        .arg("+%s")
+        .succeeds()
+        .stdout_only("1234\n");
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_date_reference_is_non_utf8_path() {
@@ -1135,6 +1198,34 @@ fn test_weekday_items_are_ignored_with_explicit_dates() {
             .args(&["-d", input, "+%F"])
             .succeeds()
             .stdout_is("2024-06-15\n");
+    }
+}
+
+#[test]
+fn test_weekday_items_are_ignored_with_named_dates() {
+    for (input, format, expected) in [
+        ("WEDNESDAY August 17", "+%m-%d", "08-17\n"),
+        ("August 17 Monday", "+%m-%d", "08-17\n"),
+        ("Monday 17 August 2026", "+%F", "2026-08-17\n"),
+        ("Wednesday 17 August 2026", "+%F", "2026-08-17\n"),
+        (
+            "Next Friday Sep 25 12:00:00 AM EDT 2026",
+            "+%F %T %Z",
+            "2026-09-25 04:00:00 UTC\n",
+        ),
+        (
+            "Next Sunday Sep 25 12:00:00 AM EDT 2026",
+            "+%F %T %Z",
+            "2026-09-25 04:00:00 UTC\n",
+        ),
+    ] {
+        new_ucmd!()
+            .env("LANG", "C")
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .args(&["-u", "-d", input, format])
+            .succeeds()
+            .stdout_is(expected);
     }
 }
 
@@ -2316,7 +2407,7 @@ fn test_date_french_full_sentence() {
     }
 }
 
-/// `%x`, `%X` and `%r` use the locale's `D_FMT`, `T_FMT` and `T_FMT_AMPM`.
+/// `%x`, `%X`, `%r` and `%c` use the locale's `D_FMT`, `T_FMT`, `T_FMT_AMPM` and `D_T_FMT`.
 /// The Linux values are GNU date's, the macOS ones follow its locale data.
 #[test]
 #[cfg(any(target_vendor = "apple", all(target_os = "linux", target_env = "gnu")))]
@@ -2355,6 +2446,27 @@ fn test_date_format_locale_date_and_time() {
             .succeeds()
             .stdout_only(format!("{expected}\n"));
     }
+}
+
+#[test]
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: timezone/locale database not visible"
+)]
+fn test_date_format_locale_c() {
+    if !is_locale_available("fr_FR.UTF-8") {
+        return;
+    }
+
+    new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .env("TZ", "UTC")
+        .args(&["-u", "-d", "@0", "+%c"])
+        .succeeds()
+        .stdout_contains("jeu.")
+        .stdout_contains("janv")
+        .stdout_contains("1970 00:00:00");
 }
 
 /// GNU pads `%x`, `%X` and `%r` as a whole and keeps the padding of the
@@ -2603,6 +2715,48 @@ fn test_date_strftime_flag_on_composite() {
             .env("TZ", "UTC")
             .arg("-d")
             .arg("2024-06-15")
+            .arg(format)
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+fn test_date_strftime_flags_on_iso_date_year() {
+    // Unlike other composites, GNU applies these modifiers to %Y inside %F.
+    for (format, expected) in [
+        ("+%-F", "1-01-01\n"),
+        ("+%_F", "1-01-01\n"),
+        ("+%6F", "1-01-01\n"),
+        ("+%_6F", "1-01-01\n"),
+        ("+%12F", "000001-01-01\n"),
+        ("+%_12F", "     1-01-01\n"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg("0001-01-01")
+            .arg(format)
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+fn test_date_strftime_plus_flag_on_iso_date_width() {
+    for (date, format, expected) in [
+        ("0001-01-01", "+%+8F", "01-01-01\n"),
+        ("0001-01-01", "+%+11F", "+0001-01-01\n"),
+        ("2024-06-15", "+%+6F", "2024-06-15\n"),
+        ("2024-06-15", "+%+11F", "+2024-06-15\n"),
+        ("2024-06-15", "+%+12F", "+02024-06-15\n"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(date)
             .arg(format)
             .succeeds()
             .stdout_is(expected);
