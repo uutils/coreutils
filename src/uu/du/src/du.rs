@@ -99,6 +99,7 @@ struct StatPrinter {
     time_format: String,
     line_ending: LineEnding,
     summarize: bool,
+    separate_dirs: bool,
     total_text: String,
 }
 
@@ -161,10 +162,11 @@ impl Stat {
         let latest_time = options
             .time
             .and_then(|time| metadata_get_time(&metadata, time));
+        let is_dir = metadata.is_dir();
 
         Ok(Self {
             path: path.to_path_buf(),
-            size: if metadata.is_dir() { 0 } else { metadata.len() },
+            size: if is_dir { 0 } else { metadata.len() },
             blocks,
             inodes: 1,
             inode: file_info,
@@ -579,6 +581,7 @@ fn safe_du(
             print_tx.send(Ok(StatPrintInfo {
                 stat: this_stat,
                 depth: depth + 1,
+                is_dir: true,
             }))?;
         } else {
             my_stat.size += this_stat.size;
@@ -593,6 +596,7 @@ fn safe_du(
                 print_tx.send(Ok(StatPrintInfo {
                     stat: this_stat,
                     depth: depth + 1,
+                    is_dir: false,
                 }))?;
             }
         }
@@ -741,6 +745,7 @@ fn du_regular(
                                 print_tx.send(Ok(StatPrintInfo {
                                     stat: this_stat,
                                     depth: depth + 1,
+                                    is_dir: true,
                                 }))?;
                             } else {
                                 my_stat.size += this_stat.size;
@@ -756,6 +761,7 @@ fn du_regular(
                                     print_tx.send(Ok(StatPrintInfo {
                                         stat: this_stat,
                                         depth: depth + 1,
+                                        is_dir: false,
                                     }))?;
                                 }
                             }
@@ -843,6 +849,12 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
 struct StatPrintInfo {
     stat: Stat,
     depth: usize,
+    /// Real directory bit for `--separate-dirs` with `--total`.
+    /// Safe-traversal children keep the parent's `Metadata` unless `--time`
+    /// re-stats them, so `stat.metadata.is_dir()` would treat files as
+    /// directories. `Stat` has no spare padding; keeping the flag here
+    /// leaves every traversed entry the same size on the `du -a` path.
+    is_dir: bool,
 }
 
 impl StatPrinter {
@@ -859,14 +871,48 @@ impl StatPrinter {
     }
 
     fn print_stats(&self, rx: &mpsc::Receiver<UResult<StatPrintInfo>>) -> UResult<()> {
+        // Monomorphize so a run without `--total` does not track a total,
+        // a timestamp, or per-directory sizes.
+        if self.total {
+            self.drain_stats::<true>(rx)
+        } else {
+            self.drain_stats::<false>(rx)
+        }
+    }
+
+    fn drain_stats<const WITH_TOTAL: bool>(
+        &self,
+        rx: &mpsc::Receiver<UResult<StatPrintInfo>>,
+    ) -> UResult<()> {
         let mut grand_total = 0;
+        // Subdirectory sizes are already inside the depth-0 figure unless
+        // `--separate-dirs` left them out. Only then does each directory's
+        // own size have to be added back. Files stay inside their directory.
+        let count_separate_dirs = WITH_TOTAL && self.separate_dirs;
+        // GNU's total timestamp starts at the epoch and moves forward only,
+        // so a pre-1970 mtime is kept on its own line but the total stays
+        // at 1970-01-01 unless something newer is seen. With no successful
+        // entry (every path failed), that epoch is what `--time` prints.
+        // Unused unless both `--time` and `--total` are set.
+        let track_total_time = WITH_TOTAL && self.time.is_some();
+        let mut saw_stat = false;
+        let mut grand_time: Option<SystemTime> = None;
         while let Ok(received) = rx.recv() {
             match received {
                 Ok(stat_info) => {
                     let size = self.choose_size(&stat_info.stat);
 
-                    if stat_info.depth == 0 {
-                        grand_total += size;
+                    if const { WITH_TOTAL } {
+                        if stat_info.depth == 0 || (count_separate_dirs && stat_info.is_dir) {
+                            grand_total += size;
+                        }
+                        if track_total_time {
+                            saw_stat = true;
+                            if let Some(time) = stat_info.stat.latest_time {
+                                grand_time =
+                                    Some(grand_time.map_or(time, |current| current.max(time)));
+                            }
+                        }
                     }
 
                     if !self
@@ -884,14 +930,20 @@ impl StatPrinter {
             }
         }
 
-        if self.total {
-            write!(
-                stdout(),
-                "{}\t{}{}",
-                self.convert_size(grand_total),
-                self.total_text,
-                self.line_ending
-            )?;
+        if const { WITH_TOTAL } {
+            let time = if track_total_time {
+                match (saw_stat, grand_time) {
+                    (_, Some(time)) => Some(time.max(SystemTime::UNIX_EPOCH)),
+                    // Entries were seen but none had a timestamp (??? on
+                    // their own lines). Keep the total in that form.
+                    (true, None) => None,
+                    (false, None) => Some(SystemTime::UNIX_EPOCH),
+                }
+            } else {
+                None
+            };
+            self.write_size_and_time(grand_total, time)?;
+            write!(stdout(), "{}{}", self.total_text, self.line_ending)?;
         }
 
         Ok(())
@@ -918,11 +970,21 @@ impl StatPrinter {
         }
     }
 
+    #[inline]
     fn print_stat(&self, stat: &Stat, size: u64) -> UResult<()> {
+        self.write_size_and_time(size, stat.latest_time)?;
+        print_verbatim(&stat.path)?;
+        write!(stdout(), "{}", self.line_ending)?;
+
+        Ok(())
+    }
+
+    #[inline]
+    fn write_size_and_time(&self, size: u64, time: Option<SystemTime>) -> UResult<()> {
         write!(stdout(), "{}\t", self.convert_size(size))?;
 
         if self.time.is_some() {
-            if let Some(time) = stat.latest_time {
+            if let Some(time) = time {
                 format_system_time(
                     &mut stdout(),
                     time,
@@ -934,9 +996,6 @@ impl StatPrinter {
                 write!(stdout(), "???\t")?;
             }
         }
-
-        print_verbatim(&stat.path)?;
-        write!(stdout(), "{}", self.line_ending)?;
 
         Ok(())
     }
@@ -1151,6 +1210,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         time,
         time_format,
         line_ending: LineEnding::from_zero_flag(matches.get_flag(options::NULL)),
+        separate_dirs: matches.get_flag(options::SEPARATE_DIRS),
         total_text: translate!("du-total"),
     };
 
@@ -1218,8 +1278,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     Some(stat),
                 ) {
                     Ok(stat) => {
+                        let is_dir = stat.metadata.is_dir();
                         print_tx
-                            .send(Ok(StatPrintInfo { stat, depth: 0 }))
+                            .send(Ok(StatPrintInfo {
+                                stat,
+                                depth: 0,
+                                is_dir,
+                            }))
                             .map_err(|e| USimpleError::new(1, e.to_string()))?;
                     }
                     Err(e) => {
@@ -1248,8 +1313,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 )
                 .map_err(|e| USimpleError::new(1, e.to_string()))?;
 
+                let is_dir = stat.metadata.is_dir();
                 print_tx
-                    .send(Ok(StatPrintInfo { stat, depth: 0 }))
+                    .send(Ok(StatPrintInfo {
+                        stat,
+                        depth: 0,
+                        is_dir,
+                    }))
                     .map_err(|e| USimpleError::new(1, e.to_string()))?;
             } else {
                 #[cfg(unix)]
