@@ -60,6 +60,24 @@ fn test_command_with_args() {
         .stdout_only("abcd");
 }
 
+/// Options end at DURATION: a later word that looks like an option is
+/// COMMAND, here one that does not exist.
+#[test]
+fn test_option_like_command_after_duration() {
+    for args in [
+        &["1", "-X"][..],
+        &["1", "-s", "KILL", "true"],
+        &["1", "--help"],
+        &["1", "--", "true"],
+        // The value of -k is in the same word, so "1" is DURATION.
+        &["-k1", "1", "-X"],
+        // The value of --kill-after is the next word, and -v is still an option.
+        &["--kill-after", "1", "-v", "1", "-X"],
+    ] {
+        new_ucmd!().args(args).fails_with_code(127);
+    }
+}
+
 #[test]
 #[cfg(unix)]
 fn test_command_with_non_utf8_args() {
@@ -100,7 +118,7 @@ fn test_zero_timeout() {
         .succeeds()
         .no_output();
     ts.ucmd()
-        .args(&["-v", "0", "-s0", "-k0", &bin, "sleep", ".1"])
+        .args(&["-v", "-s0", "-k0", "0", &bin, "sleep", ".1"])
         .succeeds()
         .no_output();
 }
