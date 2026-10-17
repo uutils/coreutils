@@ -10,6 +10,7 @@
 use crate::display::Quotable;
 use crate::error::{UResult, USimpleError, strip_errno};
 pub use crate::features::entries;
+pub use crate::features::fs::get_metadata;
 use crate::{show_error, translate};
 
 use clap::{Arg, ArgMatches, Command};
@@ -265,14 +266,6 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
 fn fd_is(dir_fd: &DirFd, meta: &Metadata) -> IOResult<bool> {
     let opened = FileInfo::from_stat(&dir_fd.fstat()?);
     Ok(opened == FileInfo::new(meta.dev(), meta.ino()))
-}
-
-pub fn get_metadata(file: &Path, follow: bool) -> std::io::Result<Metadata> {
-    if follow {
-        file.metadata()
-    } else {
-        file.symlink_metadata()
-    }
 }
 
 impl ChownExecutor {

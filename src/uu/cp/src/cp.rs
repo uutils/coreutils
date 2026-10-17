@@ -39,7 +39,7 @@ use uucore::display::Quotable;
 use uucore::error::{UError, UResult, UUsageError, set_exit_code, strip_errno};
 use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, are_hardlinks_to_same_file, canonicalize,
-    get_filename, is_symlink_loop, normalize_path, path_ends_with_terminator,
+    get_filename, get_metadata, is_symlink_loop, normalize_path, path_ends_with_terminator,
     paths_refer_to_same_file, replace_link,
 };
 use uucore::{backup_control, update_control};
@@ -2896,11 +2896,7 @@ fn copy_file(
     let context = context.as_str();
 
     let source_metadata = {
-        let result = if options.dereference(source_in_command_line) {
-            fs::metadata(source)
-        } else {
-            fs::symlink_metadata(source)
-        };
+        let result = get_metadata(source, options.dereference(source_in_command_line));
         // this is just for gnu tests compatibility
         result.map_err(|err| {
             if err.to_string().contains("No such file or directory") {

@@ -15,7 +15,7 @@ use uucore::translate;
 use clap::builder::ValueParser;
 use uucore::display::Quotable;
 use uucore::error::strip_errno;
-use uucore::fs::{display_permissions, major, minor};
+use uucore::fs::{display_permissions, get_metadata, major, minor};
 use uucore::fsext::{
     FsMeta, MetadataTimeField, StatFs, metadata_get_time, pretty_filetype, pretty_fstype,
     read_fs_list, statfs,
@@ -1350,11 +1350,7 @@ impl Stater {
             }
         } else {
             let follow_symbolic_links = self.follow || stdin_is_fifo && display_name == "-";
-            let result = if follow_symbolic_links {
-                fs::metadata(&file)
-            } else {
-                fs::symlink_metadata(&file)
-            };
+            let result = get_metadata(&file, follow_symbolic_links);
             match result {
                 Ok(meta) => {
                     let file_type = meta.file_type();
