@@ -755,9 +755,9 @@ fn print_raw_byte(byte: u8) {
 
 impl Stater {
     fn process_flags(chars: &[char], i: &mut usize, bound: usize, flag: &mut Flags) {
-        while *i < bound {
+        for &c in &chars[*i..bound] {
             #[expect(clippy::match_same_arms)] // needs comment
-            match chars[*i] {
+            match c {
                 '#' => flag.alter = true,
                 '0' => flag.zero = true,
                 '-' => flag.left = true,
