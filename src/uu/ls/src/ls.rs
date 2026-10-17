@@ -4,12 +4,9 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
-// spell-checker:ignore nohash strtime clocale inode
+// spell-checker:ignore nohash strtime clocale inode uerror
 
-use clap::{
-    Arg, ArgAction, Command,
-    builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
-};
+use clap::{Arg, ArgAction, Command};
 use lscolors::Colorable;
 #[cfg(unix)]
 use rustc_hash::FxHashMap;
@@ -36,32 +33,30 @@ use uucore::{
     format_usage,
     fs::FileInformation,
     fsext::metadata_get_time,
-    os_str_as_bytes_lossy,
-    parser::shortcut_value_parser::ShortcutValueParser,
-    show, translate,
+    os_str_as_bytes_lossy, show, translate,
     version_cmp::version_cmp,
 };
 
+mod args;
 mod colors;
 mod config;
 mod dired;
 mod display;
 
 pub mod output;
-pub use config::{Config, options};
+pub use config::{Config, ProgramMode, options};
 pub use display::Format;
 pub use output::{EntryInfo, LsOutput, StreamMode, StreamingOutput};
 
 use colors::StyleManager;
-use config::options::QUOTING_STYLE;
 use config::{Dereference, Files, Sort};
 use dired::DiredOutput;
 use display::{display_items, display_size, should_display, show_dir_name};
 
 #[derive(Debug, thiserror::Error)]
 enum LsError {
-    #[error("{}", translate!("ls-error-invalid-line-width", "width" => format!("'{_0}'")))]
-    InvalidLineWidth(String),
+    #[error("{}", translate!("ls-error-invalid-line-width", "width" => .0.quote()))]
+    InvalidLineWidth(OsString),
 
     #[error("{}", translate!("ls-error-general-io", "error" => _0))]
     IOError(#[from] std::io::Error),
@@ -88,11 +83,11 @@ enum LsError {
     })]
     IOErrorContext(PathBuf, std::io::Error, bool),
 
-    #[error("{}", translate!("ls-error-invalid-block-size", "size" => format!("'{_0}'")))]
-    BlockSizeParseError(String),
+    #[error("{}", translate!("ls-error-invalid-block-size", "size" => .0.quote()))]
+    BlockSizeParseError(OsString),
 
     #[error("{}", translate!("ls-error-invalid-tab-size", "size" => .0.quote()))]
-    InvalidTabSize(String),
+    InvalidTabSize(OsString),
 
     #[error("{}", translate!("ls-error-dired-and-zero-incompatible"))]
     DiredAndZeroAreIncompatible,
@@ -101,7 +96,7 @@ enum LsError {
     AlreadyListedError(PathBuf),
 
     #[error("{}", translate!("ls-error-invalid-time-style", "style" => .0.quote()))]
-    TimeStyleParseError(String),
+    TimeStyleParseError(OsString),
 }
 
 impl UError for LsError {
@@ -115,27 +110,55 @@ impl UError for LsError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // The arguments are kept for the caret in SIZE diagnostics, which echoes
-    // the command line.
-    let (matches, diag_args) = uucore::clap_localization::handle_clap_result_with_diagnostics(
-        uu_app(),
-        args.collect(),
-        2,
-    )?;
+    run(args, ProgramMode::Ls, uu_app)
+}
 
-    uucore::i18n::collator::init_locale_collation();
-
-    let config = Config::from(&matches, diag_args.as_deref())?;
-
-    let locs = matches
-        .get_many::<OsString>(options::PATHS)
-        .map_or_else(|| vec![Path::new(".")], |v| v.map(Path::new).collect());
-
+/// Shared runtime for ls, dir, and vdir. Presentation is constructed only when
+/// the parser encounters an actual help or version option.
+pub fn run(
+    args: impl uucore::Args,
+    mode: ProgramMode,
+    presentation: fn() -> Command,
+) -> UResult<()> {
+    use uucore::parser::gnu::{Event, Parser, Policy};
+    let args: Vec<OsString> = args.collect();
+    let diag_args = uucore::diagnostics::capture(&args);
+    let policy = if std::env::var_os("POSIXLY_CORRECT").is_some() {
+        Policy::posix()
+    } else {
+        Policy::gnu()
+    };
+    let mut settings = config::Settings::new(mode);
+    let mut operands = Vec::new();
+    for event in Parser::new(args.into_iter().skip(1), args::OPTIONS, policy) {
+        match event.map_err(|error| error.to_uerror_with_args(2, diag_args.as_deref()))? {
+            Event::Option(option) if option.id == options::HELP => {
+                presentation().print_help().map_err(LsError::WriteError)?;
+                return Ok(());
+            }
+            Event::Option(option) if option.id == "version" => {
+                write!(stdout(), "{}", presentation().render_version())
+                    .map_err(LsError::WriteError)?;
+                return Ok(());
+            }
+            Event::Option(option) => settings.apply(option, diag_args.as_deref())?,
+            Event::Operand { value, .. } => operands.push(value),
+        }
+    }
+    let config = settings.finish()?;
+    if matches!(mode, ProgramMode::Ls) {
+        uucore::i18n::collator::init_locale_collation();
+    }
+    let locs = if operands.is_empty() {
+        vec![Path::new(".")]
+    } else {
+        operands.iter().map(Path::new).collect()
+    };
     list(locs, &config)
 }
 
 pub fn uu_app() -> Command {
-    uucore::clap_localization::configure_localized_command(
+    let command = uucore::clap_localization::configure_localized_command(
         Command::new("ls")
             .version(uucore::crate_version!())
             .override_usage(format_usage(&translate!("ls-usage")))
@@ -143,648 +166,21 @@ pub fn uu_app() -> Command {
     )
     .infer_long_args(true)
     .disable_help_flag(true)
-    .args_override_self(true)
-    .arg(
-        Arg::new(options::HELP)
-            .long(options::HELP)
-            .help(translate!("ls-help-print-help"))
-            .action(ArgAction::Help),
-    )
-    // Format arguments
-    .arg(
-        Arg::new(options::FORMAT)
-            .long(options::FORMAT)
-            .help(translate!("ls-help-set-display-format"))
-            .value_parser(ShortcutValueParser::new([
-                "long",
-                "verbose",
-                "single-column",
-                "columns",
-                "vertical",
-                "across",
-                "horizontal",
-                "commas",
-            ]))
-            .hide_possible_values(true)
-            .overrides_with_all([
-                options::FORMAT,
-                options::format::COLUMNS,
-                options::format::LONG,
-                options::format::ACROSS,
-                options::format::COLUMNS,
-            ]),
-    )
-    .arg(
-        Arg::new(options::format::COLUMNS)
-            .short('C')
-            .help(translate!("ls-help-display-files-columns"))
-            .overrides_with_all([
-                options::FORMAT,
-                options::format::COLUMNS,
-                options::format::LONG,
-                options::format::ACROSS,
-                options::format::COLUMNS,
-            ])
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::format::LONG)
-            .short('l')
-            .long(options::format::LONG)
-            .help(translate!("ls-help-display-detailed-info"))
-            .overrides_with_all([
-                options::FORMAT,
-                options::format::COLUMNS,
-                options::format::LONG,
-                options::format::ACROSS,
-                options::format::COLUMNS,
-            ])
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::format::ACROSS)
-            .short('x')
-            .help(translate!("ls-help-list-entries-rows"))
-            .overrides_with_all([
-                options::FORMAT,
-                options::format::COLUMNS,
-                options::format::LONG,
-                options::format::ACROSS,
-                options::format::COLUMNS,
-            ])
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::format::TAB_SIZE)
-            .short('T')
-            .long(options::format::TAB_SIZE)
-            .env("TABSIZE")
-            .value_name("COLS")
-            .help(translate!("ls-help-assume-tab-stops")),
-    )
-    .arg(
-        Arg::new(options::format::COMMAS)
-            .short('m')
-            .help(translate!("ls-help-list-entries-commas"))
-            .overrides_with_all([
-                options::FORMAT,
-                options::format::COLUMNS,
-                options::format::LONG,
-                options::format::ACROSS,
-                options::format::COLUMNS,
-            ])
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::ZERO)
-            .long(options::ZERO)
-            .overrides_with(options::ZERO)
-            .help(translate!("ls-help-list-entries-nul"))
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::DIRED)
-            .long(options::DIRED)
-            .short('D')
-            .help(translate!("ls-help-generate-dired-output"))
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::HYPERLINK)
-            .long(options::HYPERLINK)
-            .help(translate!("ls-help-hyperlink-filenames"))
-            .value_parser(ShortcutValueParser::new([
-                PossibleValue::new("always").alias("yes").alias("force"),
-                PossibleValue::new("auto").alias("tty").alias("if-tty"),
-                PossibleValue::new("never").alias("no").alias("none"),
-            ]))
-            .require_equals(true)
-            .num_args(0..=1)
-            .default_missing_value("always")
-            .default_value("never")
-            .value_name("WHEN"),
-    )
-    // The next four arguments do not override with the other format
-    // options, see the comment in Config::from for the reason.
-    // Ideally, they would use Arg::override_with, with their own name
-    // but that doesn't seem to work in all cases. Example:
-    // ls -1g1
-    // even though `ls -11` and `ls -1 -g -1` work.
-    .arg(
-        Arg::new(options::format::ONE_LINE)
-            .short('1')
-            .help(translate!("ls-help-list-one-file-per-line"))
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::format::LONG_NO_GROUP)
-            .short('o')
-            .help(translate!("ls-help-long-format-no-group"))
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::format::LONG_NO_OWNER)
-            .short('g')
-            .help(translate!("ls-help-long-no-owner"))
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::format::LONG_NUMERIC_UID_GID)
-            .short('n')
-            .long(options::format::LONG_NUMERIC_UID_GID)
-            .help(translate!("ls-help-long-numeric-uid-gid"))
-            .action(ArgAction::SetTrue),
-    )
-    // Quoting style
-    .arg(
-        Arg::new(QUOTING_STYLE)
-            .long(QUOTING_STYLE)
-            .help(translate!("ls-help-set-quoting-style"))
-            .value_parser(ShortcutValueParser::new([
-                PossibleValue::new("literal"),
-                PossibleValue::new("locale"),
-                PossibleValue::new("shell"),
-                PossibleValue::new("shell-escape"),
-                PossibleValue::new("shell-always"),
-                PossibleValue::new("shell-escape-always"),
-                PossibleValue::new("clocale"),
-                PossibleValue::new("c"),
-                PossibleValue::new("c-maybe"),
-                PossibleValue::new("escape"),
-            ]))
-            .overrides_with_all([
-                QUOTING_STYLE,
-                options::quoting::LITERAL,
-                options::quoting::ESCAPE,
-                options::quoting::C,
-            ]),
-    )
-    .arg(
-        Arg::new(options::quoting::LITERAL)
-            .short('N')
-            .long(options::quoting::LITERAL)
-            .alias("l")
-            .help(translate!("ls-help-literal-quoting-style"))
-            .overrides_with_all([
-                QUOTING_STYLE,
-                options::quoting::LITERAL,
-                options::quoting::ESCAPE,
-                options::quoting::C,
-            ])
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::quoting::ESCAPE)
-            .short('b')
-            .long(options::quoting::ESCAPE)
-            .help(translate!("ls-help-escape-quoting-style"))
-            .overrides_with_all([
-                QUOTING_STYLE,
-                options::quoting::LITERAL,
-                options::quoting::ESCAPE,
-                options::quoting::C,
-            ])
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::quoting::C)
-            .short('Q')
-            .long(options::quoting::C)
-            .help(translate!("ls-help-c-quoting-style"))
-            .overrides_with_all([
-                QUOTING_STYLE,
-                options::quoting::LITERAL,
-                options::quoting::ESCAPE,
-                options::quoting::C,
-            ])
-            .action(ArgAction::SetTrue),
-    )
-    // Control characters
-    .arg(
-        Arg::new(options::HIDE_CONTROL_CHARS)
-            .short('q')
-            .long(options::HIDE_CONTROL_CHARS)
-            .help(translate!("ls-help-replace-control-chars"))
-            .overrides_with_all([options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS])
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::SHOW_CONTROL_CHARS)
-            .long(options::SHOW_CONTROL_CHARS)
-            .help(translate!("ls-help-show-control-chars"))
-            .overrides_with_all([options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS])
-            .action(ArgAction::SetTrue),
-    )
-    // Time arguments
-    .arg(
-        Arg::new(options::TIME)
-            .long(options::TIME)
-            .help(translate!("ls-help-show-time-field"))
-            .value_name("field")
-            .value_parser(ShortcutValueParser::new([
-                PossibleValue::new("atime").alias("access").alias("use"),
-                PossibleValue::new("ctime").alias("status"),
-                PossibleValue::new("mtime").alias("modification"),
-                PossibleValue::new("birth").alias("creation"),
-            ]))
-            .hide_possible_values(true)
-            .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE]),
-    )
-    .arg(
-        Arg::new(options::time::CHANGE)
-            .short('c')
-            .help(translate!("ls-help-time-change"))
-            .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE])
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::time::ACCESS)
-            .short('u')
-            .help(translate!("ls-help-time-access"))
-            .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE])
-            .action(ArgAction::SetTrue),
-    )
-    // Hide and ignore
-    .arg(
-        Arg::new(options::HIDE)
-            .long(options::HIDE)
-            .action(ArgAction::Append)
-            .value_name("PATTERN")
-            .help(translate!("ls-help-hide-pattern")),
-    )
-    .arg(
-        Arg::new(options::IGNORE)
-            .short('I')
-            .long(options::IGNORE)
-            .action(ArgAction::Append)
-            .value_name("PATTERN")
-            .help(translate!("ls-help-ignore-pattern")),
-    )
-    .arg(
-        Arg::new(options::IGNORE_BACKUPS)
-            .short('B')
-            .long(options::IGNORE_BACKUPS)
-            .help(translate!("ls-help-ignore-backups"))
-            .action(ArgAction::SetTrue),
-    )
-    // Sort arguments
-    .arg(
-        Arg::new(options::SORT)
-            .long(options::SORT)
-            .help(translate!("ls-help-sort-by-field"))
-            .value_name("field")
-            .value_parser(ShortcutValueParser::new([
-                "name",
-                "none",
-                "time",
-                "size",
-                "version",
-                "extension",
-                "width",
-            ]))
-            .overrides_with_all([
-                options::SORT,
-                options::sort::SIZE,
-                options::sort::TIME,
-                options::sort::NONE,
-                options::sort::VERSION,
-                options::sort::EXTENSION,
-            ]),
-    )
-    .arg(
-        Arg::new(options::sort::SIZE)
-            .short('S')
-            .help(translate!("ls-help-sort-by-size"))
-            .overrides_with_all([
-                options::SORT,
-                options::sort::SIZE,
-                options::sort::TIME,
-                options::sort::NONE,
-                options::sort::VERSION,
-                options::sort::EXTENSION,
-            ])
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::sort::TIME)
-            .short('t')
-            .help(translate!("ls-help-sort-by-time"))
-            .overrides_with_all([
-                options::SORT,
-                options::sort::SIZE,
-                options::sort::TIME,
-                options::sort::NONE,
-                options::sort::VERSION,
-                options::sort::EXTENSION,
-            ])
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::sort::VERSION)
-            .short('v')
-            .help(translate!("ls-help-sort-by-version"))
-            .overrides_with_all([
-                options::SORT,
-                options::sort::SIZE,
-                options::sort::TIME,
-                options::sort::NONE,
-                options::sort::VERSION,
-                options::sort::EXTENSION,
-            ])
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::sort::EXTENSION)
-            .short('X')
-            .help(translate!("ls-help-sort-by-extension"))
-            .overrides_with_all([
-                options::SORT,
-                options::sort::SIZE,
-                options::sort::TIME,
-                options::sort::NONE,
-                options::sort::VERSION,
-                options::sort::EXTENSION,
-            ])
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::sort::NONE)
-            .short('U')
-            .help(translate!("ls-help-sort-none"))
-            .overrides_with_all([
-                options::SORT,
-                options::sort::SIZE,
-                options::sort::TIME,
-                options::sort::NONE,
-                options::sort::VERSION,
-                options::sort::EXTENSION,
-            ])
-            .action(ArgAction::SetTrue),
-    )
-    // Dereferencing
-    .arg(
-        Arg::new(options::dereference::ALL)
-            .short('L')
-            .long(options::dereference::ALL)
-            .help(translate!("ls-help-dereference-all"))
-            .overrides_with_all([
-                options::dereference::ALL,
-                options::dereference::DIR_ARGS,
-                options::dereference::ARGS,
-            ])
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::dereference::DIR_ARGS)
-            .long(options::dereference::DIR_ARGS)
-            .help(translate!("ls-help-dereference-dir-args"))
-            .overrides_with_all([
-                options::dereference::ALL,
-                options::dereference::DIR_ARGS,
-                options::dereference::ARGS,
-            ])
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::dereference::ARGS)
-            .short('H')
-            .long(options::dereference::ARGS)
-            .help(translate!("ls-help-dereference-args"))
-            .overrides_with_all([
-                options::dereference::ALL,
-                options::dereference::DIR_ARGS,
-                options::dereference::ARGS,
-            ])
-            .action(ArgAction::SetTrue),
-    )
-    // Long format options
-    .arg(
-        Arg::new(options::NO_GROUP)
-            .long(options::NO_GROUP)
-            .short('G')
-            .help(translate!("ls-help-no-group"))
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::AUTHOR)
-            .long(options::AUTHOR)
-            .help(translate!("ls-help-author"))
-            .action(ArgAction::SetTrue),
-    )
-    // Other Flags
-    .arg(
-        Arg::new(options::files::ALL)
-            .short('a')
-            .long(options::files::ALL)
-            // Overrides -A (as the order matters)
-            .overrides_with_all([options::files::ALL, options::files::ALMOST_ALL])
-            .help(translate!("ls-help-all-files"))
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::files::ALMOST_ALL)
-            .short('A')
-            .long(options::files::ALMOST_ALL)
-            // Overrides -a (as the order matters)
-            .overrides_with_all([options::files::ALL, options::files::ALMOST_ALL])
-            .help(translate!("ls-help-almost-all"))
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::files::UNSORTED_ALL)
-            .short('f')
-            .help(translate!("ls-help-unsorted-all"))
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::DIRECTORY)
-            .short('d')
-            .long(options::DIRECTORY)
-            .help(translate!("ls-help-directory"))
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::size::HUMAN_READABLE)
-            .short('h')
-            .long(options::size::HUMAN_READABLE)
-            .help(translate!("ls-help-human-readable"))
-            .overrides_with_all([options::size::BLOCK_SIZE, options::size::SI])
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::size::KIBIBYTES)
-            .short('k')
-            .long(options::size::KIBIBYTES)
-            .help(translate!("ls-help-kibibytes"))
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::size::SI)
-            .long(options::size::SI)
-            .help(translate!("ls-help-si"))
-            .overrides_with_all([options::size::BLOCK_SIZE, options::size::HUMAN_READABLE])
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::size::BLOCK_SIZE)
-            .long(options::size::BLOCK_SIZE)
-            .value_name("BLOCK_SIZE")
-            .help(translate!("ls-help-block-size"))
-            .overrides_with_all([options::size::SI, options::size::HUMAN_READABLE]),
-    )
-    .arg(
-        Arg::new(options::INODE)
-            .short('i')
-            .long(options::INODE)
-            .help(translate!("ls-help-print-inode"))
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::REVERSE)
-            .short('r')
-            .long(options::REVERSE)
-            .help(translate!("ls-help-reverse-sort"))
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::RECURSIVE)
-            .short('R')
-            .long(options::RECURSIVE)
-            .help(translate!("ls-help-recursive"))
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::WIDTH)
-            .long(options::WIDTH)
-            .short('w')
-            .help(translate!("ls-help-terminal-width"))
-            .value_name("COLS"),
-    )
-    .arg(
-        Arg::new(options::size::ALLOCATION_SIZE)
-            .short('s')
-            .long(options::size::ALLOCATION_SIZE)
-            .help(translate!("ls-help-allocation-size"))
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::COLOR)
-            .long(options::COLOR)
-            .help(translate!("ls-help-color-output"))
-            .value_parser(ShortcutValueParser::new([
-                PossibleValue::new("always").alias("yes").alias("force"),
-                PossibleValue::new("auto").alias("tty").alias("if-tty"),
-                PossibleValue::new("never").alias("no").alias("none"),
-            ]))
-            .require_equals(true)
-            .num_args(0..=1),
-    )
-    .arg(
-        Arg::new(options::INDICATOR_STYLE)
-            .long(options::INDICATOR_STYLE)
-            .help(translate!("ls-help-indicator-style"))
-            .value_parser(ShortcutValueParser::new([
-                "none",
-                "slash",
-                "file-type",
-                "classify",
-            ]))
-            .overrides_with_all([
-                options::indicator_style::FILE_TYPE,
-                options::indicator_style::SLASH,
-                options::indicator_style::CLASSIFY,
-                options::INDICATOR_STYLE,
-            ]),
-    )
-    .arg(
-        // The --classify flag can take an optional when argument to
-        // control its behavior from version 9 of GNU coreutils.
-        // There is currently an inconsistency where GNU coreutils allows only
-        // the long form of the flag to take the argument while we allow it
-        // for both the long and short form of the flag.
-        Arg::new(options::indicator_style::CLASSIFY)
-            .short('F')
-            .long(options::indicator_style::CLASSIFY)
-            .help(translate!("ls-help-classify"))
-            .value_name("when")
-            .value_parser(ShortcutValueParser::new([
-                PossibleValue::new("always").alias("yes").alias("force"),
-                PossibleValue::new("auto").alias("tty").alias("if-tty"),
-                PossibleValue::new("never").alias("no").alias("none"),
-            ]))
-            .default_missing_value("always")
-            .require_equals(true)
-            .num_args(0..=1)
-            .overrides_with_all([
-                options::indicator_style::FILE_TYPE,
-                options::indicator_style::SLASH,
-                options::indicator_style::CLASSIFY,
-                options::INDICATOR_STYLE,
-            ]),
-    )
-    .arg(
-        Arg::new(options::indicator_style::FILE_TYPE)
-            .long(options::indicator_style::FILE_TYPE)
-            .help(translate!("ls-help-file-type"))
-            .overrides_with_all([
-                options::indicator_style::FILE_TYPE,
-                options::indicator_style::SLASH,
-                options::indicator_style::CLASSIFY,
-                options::INDICATOR_STYLE,
-            ])
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::indicator_style::SLASH)
-            .short('p')
-            .help(translate!("ls-help-slash-directories"))
-            .overrides_with_all([
-                options::indicator_style::FILE_TYPE,
-                options::indicator_style::SLASH,
-                options::indicator_style::CLASSIFY,
-                options::INDICATOR_STYLE,
-            ])
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        //This still needs support for posix-*
-        Arg::new(options::TIME_STYLE)
-            .long(options::TIME_STYLE)
-            .help(translate!("ls-help-time-style"))
-            .value_name("TIME_STYLE")
-            .env("TIME_STYLE")
-            .value_parser(NonEmptyStringValueParser::new())
-            .overrides_with_all([options::TIME_STYLE]),
-    )
-    .arg(
-        Arg::new(options::FULL_TIME)
-            .long(options::FULL_TIME)
-            .overrides_with(options::FULL_TIME)
-            .help(translate!("ls-help-full-time"))
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::CONTEXT)
-            .short('Z')
-            .long(options::CONTEXT)
-            .help(translate!("ls-help-context"))
-            .action(ArgAction::SetTrue),
-    )
-    .arg(
-        Arg::new(options::GROUP_DIRECTORIES_FIRST)
-            .long(options::GROUP_DIRECTORIES_FIRST)
-            .help(translate!("ls-help-group-directories-first"))
-            .action(ArgAction::SetTrue),
-    )
-    // Positional arguments
-    .arg(
-        Arg::new(options::PATHS)
-            .hide(true)
-            .action(ArgAction::Append)
-            .value_hint(clap::ValueHint::AnyPath)
-            .value_parser(ValueParser::os_string()),
-    )
-    .after_help(translate!("ls-after-help"))
+    .disable_version_flag(true)
+    .args_override_self(true);
+    args::OPTIONS
+        .iter()
+        .fold(command, |command, spec| {
+            command.arg(args::presentation(spec))
+        })
+        .arg(
+            Arg::new(options::PATHS)
+                .hide(true)
+                .action(ArgAction::Append)
+                .value_hint(clap::ValueHint::AnyPath)
+                .value_parser(clap::builder::ValueParser::os_string()),
+        )
+        .after_help(translate!("ls-after-help"))
 }
 
 /// Represents the possible values of [`PathData::display_name`]. The reason this is a

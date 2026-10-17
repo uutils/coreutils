@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore Nofile nonewline cmdline setrlimit ELOOP bcde acde
+// spell-checker:ignore Nofile nonewline cmdline setrlimit ELOOP bcde acde nonblank Aenbu nbet bnet etnbn
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::process::Resource;
@@ -973,4 +973,252 @@ fn test_closed_stdin() {
         .fails_with_code(1)
         .stdout_is("content\n")
         .stderr_is("cat: -: Bad file descriptor\n");
+}
+
+#[test]
+fn test_clustered_composites_and_number_nonblank_precedence() {
+    for options in ["-Aenbu", "-nbet", "-bnet", "-etnbn"] {
+        new_ucmd!()
+            .arg(options)
+            .pipe_in("\nX\t\0\n")
+            .succeeds()
+            .stdout_only("$\n     1\tX^I^@$\n");
+    }
+}
+
+#[test]
+fn test_options_are_intermixed_with_operands() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("first", "first\n");
+    at.write("-n", "literal\n");
+    ucmd.args(&["first", "-n"])
+        .succeeds()
+        .stdout_only("     1\tfirst\n");
+}
+
+#[test]
+fn test_posixly_correct_stops_at_first_operand() {
+    for posix in ["", "1"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("first", "first\n");
+        at.write("-n", "literal\n");
+        at.write("--help", "help file\n");
+        ucmd.env("POSIXLY_CORRECT", posix)
+            .args(&["-E", "first", "-n", "--help"])
+            .succeeds()
+            .stdout_only("first$\nliteral$\nhelp file$\n");
+    }
+}
+
+#[test]
+fn test_posixly_correct_lone_dash_is_first_operand() {
+    for posix in ["", "1"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("-n", "literal\n");
+        ucmd.env("POSIXLY_CORRECT", posix)
+            .args(&["-", "-n"])
+            .pipe_in("stdin\n")
+            .succeeds()
+            .stdout_only("stdin\nliteral\n");
+    }
+}
+
+#[test]
+fn test_explicit_terminator_preserves_option_looking_operands() {
+    for posix in [None, Some(""), Some("1")] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("--help", "help file\n");
+        at.write("--version", "version file\n");
+        at.write("-n", "literal\n");
+        if let Some(value) = posix {
+            ucmd.env("POSIXLY_CORRECT", value);
+        }
+        ucmd.args(&["-E", "--", "--help", "--version", "-n"])
+            .succeeds()
+            .stdout_only("help file$\nversion file$\nliteral$\n");
+    }
+}
+
+#[test]
+fn test_help_and_version_stop_parsing_in_order() {
+    for flag in ["--help", "--he", "--version", "--vers"] {
+        for invalid in ["--not-a-cat-option", "--number=1"] {
+            let result = new_ucmd!().args(&[flag, invalid]).succeeds();
+            result.no_stderr();
+            if flag.starts_with("--he") {
+                result.stdout_contains("Usage:");
+            } else {
+                result.stdout_contains("cat ");
+            }
+            new_ucmd!()
+                .args(&[invalid, flag])
+                .fails()
+                .code_is(1)
+                .no_stdout();
+        }
+    }
+}
+
+#[test]
+fn test_help_after_operand_uses_gnu_intermixing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("file", "this must not be printed\n");
+    ucmd.args(&["file", "--help"])
+        .succeeds()
+        .stdout_contains("Usage:")
+        .stdout_does_not_contain("this must not be printed")
+        .no_stderr();
+}
+
+#[test]
+fn test_informational_looking_file_contents_are_data() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("first");
+    for (name, contents) in [
+        (
+            "--help",
+            b"Usage: stored file contents\n\0\xff\n".as_slice(),
+        ),
+        (
+            "--version",
+            b"cat (GNU coreutils) 9.12\n\0\xff\n".as_slice(),
+        ),
+    ] {
+        scene.fixtures.write_bytes(name, contents);
+        scene
+            .ucmd()
+            .args(&["--", name])
+            .succeeds()
+            .stdout_only_bytes(contents);
+        for posix in ["", "1"] {
+            scene
+                .ucmd()
+                .env("POSIXLY_CORRECT", posix)
+                .args(&["first", name])
+                .succeeds()
+                .stdout_only_bytes(contents);
+        }
+    }
+}
+
+#[test]
+fn test_ambiguous_and_invalid_flag_arguments() {
+    new_ucmd!()
+        .arg("--show")
+        .fails()
+        .code_is(1)
+        .no_stdout()
+        .stderr_contains("ambiguous")
+        .stderr_contains("--show-all")
+        .stderr_contains("--show-ends")
+        .stderr_contains("--show-tabs")
+        .stderr_contains("--show-nonprinting");
+    for arg in ["--number=1", "--help=yes", "--version=yes", "-A?"] {
+        new_ucmd!().arg(arg).fails().code_is(1).no_stdout();
+    }
+}
+
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))] // Apple filesystems require UTF-8 names.
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
+fn test_non_utf8_operand_preserves_posix_ordering() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    for posix in [None, Some(""), Some("1")] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let filename = OsStr::from_bytes(b"file_\xff");
+        std::fs::write(at.plus(filename), "raw name\n").unwrap();
+        at.write("-n", "literal\n");
+        if let Some(value) = posix {
+            ucmd.env("POSIXLY_CORRECT", value);
+        }
+        ucmd.arg(filename)
+            .arg("-n")
+            .succeeds()
+            .stdout_only(if posix.is_some() {
+                "raw name\nliteral\n"
+            } else {
+                "     1\traw name\n"
+            });
+    }
+}
+
+#[test]
+fn test_short_help_and_version_extensions_preserve_cluster_order() {
+    for flag in ["-h?", "-V?"] {
+        new_ucmd!().arg(flag).succeeds().no_stderr();
+    }
+    for flag in ["-?h", "-?V"] {
+        new_ucmd!().arg(flag).fails().code_is(1).no_stdout();
+    }
+}
+
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))] // Apple filesystems require UTF-8 names.
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
+fn test_non_utf8_option_looking_name_is_not_help() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let filename = OsStr::from_bytes(b"--he\xff");
+    std::fs::write(scene.fixtures.plus(filename), "raw name\n").unwrap();
+    scene.fixtures.write("first", "first\n");
+    for posix in [None, Some(""), Some("1")] {
+        let mut unknown = scene.ucmd();
+        let mut terminated = scene.ucmd();
+        let mut after_operand = scene.ucmd();
+        if let Some(value) = posix {
+            unknown.env("POSIXLY_CORRECT", value);
+            terminated.env("POSIXLY_CORRECT", value);
+            after_operand.env("POSIXLY_CORRECT", value);
+        }
+        unknown
+            .arg(filename)
+            .fails()
+            .code_is(1)
+            .no_stdout()
+            .stderr_contains("unrecognized option");
+        terminated
+            .arg("--")
+            .arg(filename)
+            .succeeds()
+            .stdout_only("raw name\n");
+        after_operand.arg("first").arg(filename);
+        if posix.is_some() {
+            after_operand.succeeds().stdout_only("first\nraw name\n");
+        } else {
+            after_operand
+                .fails()
+                .code_is(1)
+                .no_stdout()
+                .stderr_contains("unrecognized option");
+        }
+    }
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
+fn test_non_utf8_options_stop_before_help() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    // This does not create a filename, so it also covers Apple platforms.
+    for bytes in [b"--he\xff".as_slice(), b"-\xff".as_slice()] {
+        let option = OsStr::from_bytes(bytes);
+        new_ucmd!()
+            .arg(option)
+            .arg("--help")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("unrecognized option");
+        new_ucmd!()
+            .arg("--help")
+            .arg(option)
+            .succeeds()
+            .stdout_contains("Usage:")
+            .no_stderr();
+    }
 }

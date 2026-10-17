@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore rootlink dotdot rootfile deleteme keepme topfile mkdirat RDONLY FDCWD SIGSEGV rootbind submounts rprivate rbind overlayfs ENAMETOOLONG NAMETOOLONG unlinkat
+// spell-checker:ignore rootlink dotdot rootfile deleteme keepme topfile mkdirat RDONLY FDCWD SIGSEGV rootbind submounts rprivate rbind overlayfs ENAMETOOLONG NAMETOOLONG unlinkat hbad Vbad fffd
 
 #![allow(clippy::stable_sort_primitive)]
 
@@ -1975,4 +1975,408 @@ fn test_dash_hint_is_shell_escaped() {
     ucmd.arg(name)
         .fails_with_code(1)
         .stderr_contains("./'-a'$'\\t''b'\\''c'' to remove the file '-a'$'\\t''b'\\''c'.");
+}
+
+#[test]
+fn test_dash_hint_preserves_scanner_error_and_checks_all_arguments() {
+    for (args, file, diagnostic) in [
+        (
+            vec!["--unknown", "--help"],
+            "--help",
+            "unrecognized option '--unknown'",
+        ),
+        (
+            vec!["--unknown", "--version"],
+            "--version",
+            "unrecognized option '--unknown'",
+        ),
+        (
+            vec!["-f", "--unknown"],
+            "-f",
+            "unrecognized option '--unknown'",
+        ),
+        (
+            vec!["--unknown", "-f"],
+            "-f",
+            "unrecognized option '--unknown'",
+        ),
+        (
+            vec!["--help=bad", "--help"],
+            "--help",
+            "option '--help' doesn't allow an argument",
+        ),
+        (
+            vec!["--=x", "--help"],
+            "--help",
+            "is ambiguous; possibilities:",
+        ),
+        (vec!["-z"], "-z", "unrecognized option '-z'"),
+    ] {
+        let (at, mut command) = at_and_ucmd!();
+        at.touch(file);
+        let result = command.args(&args).fails_with_code(1);
+        result.no_stdout();
+        result.stderr_contains(diagnostic);
+        result.stderr_contains(format!("./{file}' to remove the file '{file}'."));
+        assert_eq!(result.stderr_str().matches(diagnostic).count(), 1);
+        assert_eq!(
+            result.stderr_str().matches("for more information.").count(),
+            1
+        );
+        assert!(at.file_exists(file));
+    }
+}
+
+#[test]
+fn test_dash_hint_does_not_replace_invalid_value_error() {
+    let (at, mut command) = at_and_ucmd!();
+    at.touch("--help");
+    command
+        .args(&["--interactive=bad", "--help"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("invalid value 'bad' for '--interactive'")
+        .stderr_does_not_contain("to remove the file");
+    assert!(at.file_exists("--help"));
+}
+
+#[cfg(all(unix, not(target_vendor = "apple")))] // Apple filesystems require UTF-8 names.
+#[test]
+fn test_dash_hint_finds_non_utf8_filename_after_error() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let (at, mut command) = at_and_ucmd!();
+    let file = OsStr::from_bytes(b"--\xff");
+    at.touch(file);
+    command
+        .arg("--unknown")
+        .arg(file)
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("unrecognized option '--unknown'")
+        .stderr_contains("to remove the file")
+        .stderr_does_not_contain("\u{fffd}");
+    assert!(at.file_exists(file));
+}
+
+#[cfg(feature = "feat_diagnostics")]
+#[test]
+fn test_dash_hint_preserves_rich_scanner_diagnostic() {
+    let (at, mut command) = at_and_ucmd!();
+    at.touch("--help");
+    let result = command
+        .env("UUTILS_DIAG", "always")
+        .args(&["--unknown", "--help"])
+        .fails_with_code(1);
+    result.no_stdout();
+    result.stderr_contains("unrecognized option '--unknown'");
+    result.stderr_contains("./--help' to remove the file '--help'.");
+    result.stderr_contains("╭─[");
+    assert_eq!(
+        result.stderr_str().matches("unrecognized option").count(),
+        1
+    );
+    assert_eq!(
+        result.stderr_str().matches("for more information.").count(),
+        1
+    );
+    assert!(at.file_exists("--help"));
+}
+
+#[test]
+fn test_parser_force_and_interactive_order() {
+    // Each case gets its own temporary directory; refusing the prompt must
+    // retain the file when the last applicable option requests interaction.
+    for (options, removed) in [
+        (vec!["-fi"], false),
+        (vec!["-if"], true),
+        (vec!["-fI"], false),
+        (vec!["-If"], true),
+        (vec!["-ifI"], false),
+        (vec!["-Iif"], true),
+        (vec!["-f", "--interactive=always"], false),
+        (vec!["--interactive=always", "-f"], true),
+        (vec!["-f", "--interactive=once"], false),
+        (vec!["--interactive=once", "-f"], true),
+        (vec!["-i", "--interactive=never"], true),
+    ] {
+        let (at, mut command) = at_and_ucmd!();
+        at.mkdir("tree");
+        at.touch("tree/file");
+        command
+            .args(&options)
+            .args(&["-r", "tree"])
+            .pipe_in("n\n")
+            .ignore_stdin_write_error()
+            .timeout(std::time::Duration::from_secs(5))
+            .succeeds();
+        assert_eq!(!at.dir_exists("tree"), removed, "{options:?}");
+        if !removed {
+            assert!(at.file_exists("tree/file"), "{options:?}");
+        }
+    }
+}
+
+#[test]
+fn test_parser_force_missing_file_order() {
+    for options in [
+        &["-fi"][..],
+        &["-fI"],
+        &["-f", "--interactive=always"],
+        &["-f", "--interactive=once"],
+    ] {
+        new_ucmd!()
+            .args(options)
+            .arg("missing")
+            .fails_with_code(1)
+            .stderr_contains("cannot remove 'missing'");
+    }
+    for options in [
+        &["-if"][..],
+        &["-If"],
+        &["-f", "--interactive=never"],
+        &["-f", "--interactive=no"],
+        &["-f", "--interactive=none"],
+    ] {
+        new_ucmd!()
+            .args(options)
+            .arg("missing")
+            .succeeds()
+            .no_output();
+    }
+}
+
+#[test]
+fn test_parser_optional_values_do_not_consume_operands() {
+    for option in ["--interactive", "--preserve-root"] {
+        let (at, mut command) = at_and_ucmd!();
+        at.touch("always");
+        command
+            .arg(option)
+            .arg("always")
+            .pipe_in("y\n")
+            .ignore_stdin_write_error()
+            .timeout(std::time::Duration::from_secs(5))
+            .succeeds();
+        assert!(!at.file_exists("always"), "{option}");
+    }
+}
+
+#[test]
+fn test_parser_optional_interactive_value_requires_attachment() {
+    for posix in [None, Some(""), Some("1")] {
+        for (args, removed) in [
+            (vec!["--interactive", "never", "file"], false),
+            (vec!["--interactive=never", "never", "file"], true),
+        ] {
+            let (at, mut command) = at_and_ucmd!();
+            at.touch("never");
+            at.touch("file");
+            if let Some(value) = posix {
+                command.env("POSIXLY_CORRECT", value);
+            }
+            let result = command
+                .args(&args)
+                .pipe_in("n\nn\n")
+                .ignore_stdin_write_error()
+                .timeout(std::time::Duration::from_secs(5))
+                .succeeds();
+            result.no_stdout();
+            if removed {
+                result.no_stderr();
+            } else {
+                result.stderr_contains("never").stderr_contains("file");
+            }
+            for name in ["never", "file"] {
+                assert_eq!(
+                    at.file_exists(name),
+                    !removed,
+                    "{posix:?}: {args:?}: {name}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn test_parser_interactive_value_aliases_and_prefixes() {
+    for value in ["never", "no", "none", "n", "ne", "non"] {
+        let (at, mut command) = at_and_ucmd!();
+        at.touch("file");
+        command
+            .arg(format!("--interactive={value}"))
+            .arg("file")
+            .succeeds()
+            .no_output();
+        assert!(!at.file_exists("file"));
+    }
+    for value in ["always", "yes", "a", "y"] {
+        let (at, mut command) = at_and_ucmd!();
+        at.touch("file");
+        command
+            .arg(format!("--interactive={value}"))
+            .arg("file")
+            .pipe_in("n\n")
+            .timeout(std::time::Duration::from_secs(5))
+            .succeeds();
+        assert!(at.file_exists("file"));
+    }
+}
+
+#[test]
+fn test_parser_help_version_stop_at_their_position() {
+    for action in ["--help", "--version"] {
+        for invalid in [
+            "--interactive=bogus",
+            "--preserve-root=bogus",
+            "--no-pre",
+            "--unknown",
+        ] {
+            new_ucmd!().args(&[action, invalid]).succeeds().no_stderr();
+            new_ucmd!()
+                .args(&[invalid, action])
+                .fails_with_code(1)
+                .no_stdout();
+        }
+    }
+}
+
+#[test]
+fn test_parser_posix_ordering_including_empty_environment() {
+    for posix in [None, Some(""), Some("1")] {
+        let (at, mut command) = at_and_ucmd!();
+        at.touch("first");
+        at.touch("-f");
+        if let Some(value) = posix {
+            command.env("POSIXLY_CORRECT", value);
+        }
+        command.args(&["first", "-f"]).succeeds().no_output();
+        assert!(!at.file_exists("first"));
+        assert_eq!(at.file_exists("-f"), posix.is_none());
+    }
+}
+
+#[test]
+fn test_parser_explicit_terminator_and_lone_dash() {
+    for posix in [None, Some(""), Some("1")] {
+        let (at, mut command) = at_and_ucmd!();
+        for name in ["-", "--help", "--version", "-f"] {
+            at.touch(name);
+        }
+        if let Some(value) = posix {
+            command.env("POSIXLY_CORRECT", value);
+        }
+        command
+            .args(&["--", "-", "--help", "--version", "-f"])
+            .succeeds()
+            .no_output();
+        for name in ["-", "--help", "--version", "-f"] {
+            assert!(!at.file_exists(name), "{posix:?}: {name}");
+        }
+    }
+}
+
+#[test]
+fn test_parser_help_after_operand_obeys_posix_ordering() {
+    for posix in [None, Some(""), Some("1")] {
+        let (at, mut command) = at_and_ucmd!();
+        at.touch("file");
+        at.touch("--help");
+        if let Some(value) = posix {
+            command.env("POSIXLY_CORRECT", value);
+        }
+        command.args(&["file", "--help"]).succeeds().no_stderr();
+        assert_eq!(at.file_exists("file"), posix.is_none());
+        assert_eq!(at.file_exists("--help"), posix.is_none());
+    }
+}
+
+#[cfg(all(unix, not(target_vendor = "apple")))] // Apple filesystems require UTF-8 names.
+#[test]
+fn test_parser_non_utf8_operands_with_posix_ordering() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    for posix in [None, Some(""), Some("1")] {
+        let (at, mut command) = at_and_ucmd!();
+        let raw = OsStr::from_bytes(b"file_\xff");
+        at.touch(raw);
+        at.touch("-f");
+        if let Some(value) = posix {
+            command.env("POSIXLY_CORRECT", value);
+        }
+        command.arg(raw).arg("-f").succeeds().no_output();
+        assert!(!at.file_exists(raw));
+        assert_eq!(at.file_exists("-f"), posix.is_none());
+    }
+}
+
+#[test]
+fn test_parser_long_aliases_clusters_and_ambiguity() {
+    let (at, mut command) = at_and_ucmd!();
+    at.mkdir("tree");
+    at.touch("tree/file");
+    command.args(&["-Rf", "tree"]).succeeds().no_output();
+    assert!(!at.dir_exists("tree"));
+
+    let (at, mut command) = at_and_ucmd!();
+    at.mkdir("tree");
+    at.touch("tree/file");
+    command
+        .args(&["--rec", "--for", "tree"])
+        .succeeds()
+        .no_output();
+    assert!(!at.dir_exists("tree"));
+
+    new_ucmd!().arg("--p").fails_with_code(1);
+    new_ucmd!().arg("--force=yes").fails_with_code(1);
+}
+
+#[test]
+fn test_parser_abbreviation_cannot_be_authorized_by_operand() {
+    let (at, mut command) = at_and_ucmd!();
+    at.touch("--no-preserve-root");
+    command
+        .args(&["--no-pre", "--", "--no-preserve-root"])
+        .fails_with_code(1)
+        .stderr_contains("you may not abbreviate the --no-preserve-root option");
+    assert!(at.file_exists("--no-preserve-root"));
+}
+
+#[test]
+fn test_parser_display_extensions_and_attached_values() {
+    for action in ["-h", "-hbad", "-V", "-Vbad"] {
+        new_ucmd!().arg(action).succeeds().no_stderr();
+    }
+    for option in [
+        "--help=bad",
+        "--version=bad",
+        "--interactive=",
+        "--preserve-root=",
+    ] {
+        new_ucmd!()
+            .args(&[option, "--help"])
+            .fails_with_code(1)
+            .no_stdout();
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn test_parser_non_utf8_value_is_invalid_before_help() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let invalid = OsStr::from_bytes(b"--interactive=\xff");
+    new_ucmd!()
+        .arg(invalid)
+        .arg("--help")
+        .fails_with_code(1)
+        .no_stdout();
+    new_ucmd!()
+        .arg("--help")
+        .arg(invalid)
+        .succeeds()
+        .no_stderr();
 }

@@ -236,12 +236,14 @@ locales:
 		for locale_file in "$(BASEDIR)"/src/uucore/locales/*.ftl; do \
 			$(INSTALL) -m 644 "$$locale_file" "$(BUILDDIR)/locales/uucore/"; \
 		done; \
-		if [ -d "$(BASEDIR)/src/uucore/locales/errors" ]; then \
-			$(INSTALL) -d "$(BUILDDIR)/locales/uucore/errors"; \
-			for locale_file in "$(BASEDIR)"/src/uucore/locales/errors/*.ftl; do \
-				$(INSTALL) -m 644 "$$locale_file" "$(BUILDDIR)/locales/uucore/errors/"; \
-			done; \
-		fi; \
+		for component in errors parser; do \
+			if [ -d "$(BASEDIR)/src/uucore/locales/$$component" ]; then \
+				$(INSTALL) -d "$(BUILDDIR)/locales/uucore/$$component"; \
+				for locale_file in "$(BASEDIR)"/src/uucore/locales/"$$component"/*.ftl; do \
+					$(INSTALL) -m 644 "$$locale_file" "$(BUILDDIR)/locales/uucore/$$component/"; \
+				done; \
+			fi; \
+		done; \
 	fi; \
 	# Copy utility-specific locales
 	@for prog in $(INSTALLEES); do \
@@ -271,14 +273,16 @@ install-locales:
 		done; \
 	fi
 	@# Install lazy error locales shared by all utilities
-	@if [ -d "$(BASEDIR)/src/uucore/locales/errors" ]; then \
-		$(INSTALL) -d "$(DESTDIR)$(DATAROOTDIR)/locales/uucore/errors"; \
-		for locale_file in "$(BASEDIR)"/src/uucore/locales/errors/*.ftl; do \
-			if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
-				$(INSTALL) -m 644 "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/uucore/errors/"; \
-			fi; \
-		done; \
-	fi
+	@for component in errors parser; do \
+		if [ -d "$(BASEDIR)/src/uucore/locales/$$component" ]; then \
+			$(INSTALL) -d "$(DESTDIR)$(DATAROOTDIR)/locales/uucore/$$component"; \
+			for locale_file in "$(BASEDIR)"/src/uucore/locales/"$$component"/*.ftl; do \
+				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
+					$(INSTALL) -m 644 "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/uucore/$$component/"; \
+				fi; \
+			done; \
+		fi; \
+	done
 	@for prog in $(INSTALLEES_WITH_EXTRA_LOCALE); do \
 		if [ -d "$(BASEDIR)/src/uu/$$prog/locales" ]; then \
 			$(INSTALL) -d "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog"; \

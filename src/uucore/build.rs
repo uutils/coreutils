@@ -181,7 +181,11 @@ fn embed_single_utility_locale(
         project_root.join(format!("src/uucore/locales/{locale}.ftl"))
     })?;
 
-    embed_error_locales(embedded_file, project_root, locales_to_embed)?;
+    embed_error_locales(
+        embedded_file,
+        &project_root.join("src/uucore/locales"),
+        locales_to_embed,
+    )?;
 
     Ok(())
 }
@@ -197,12 +201,18 @@ fn embed_single_utility_locale(
 /// Returns an error if writing to the `embedded_file` fails.
 fn embed_error_locales(
     embedded_file: &mut File,
-    project_root: &Path,
+    locales_dir: &Path,
     locales_to_embed: &(String, Option<String>),
 ) -> Result<(), Box<dyn std::error::Error>> {
-    embed_component_locales(embedded_file, locales_to_embed, "uucore-errors", |locale| {
-        project_root.join(format!("src/uucore/locales/errors/{locale}.ftl"))
-    })
+    for component in ["errors", "parser"] {
+        embed_component_locales(
+            embedded_file,
+            locales_to_embed,
+            &format!("uucore-{component}"),
+            |locale| locales_dir.join(component).join(format!("{locale}.ftl")),
+        )?;
+    }
+    Ok(())
 }
 
 /// Embed locale files for all utilities (multicall binary).
@@ -252,7 +262,11 @@ fn embed_all_utility_locales(
         project_root.join(format!("src/uucore/locales/{locale}.ftl"))
     })?;
 
-    embed_error_locales(embedded_file, project_root, locales_to_embed)?;
+    embed_error_locales(
+        embedded_file,
+        &project_root.join("src/uucore/locales"),
+        locales_to_embed,
+    )?;
 
     embedded_file.flush()?;
     Ok(())
@@ -294,9 +308,11 @@ fn embed_static_utility_locales(
         Path::new(&manifest_dir).join(format!("locales/{locale}.ftl"))
     })?;
 
-    embed_component_locales(embedded_file, locales_to_embed, "uucore-errors", |locale| {
-        Path::new(&manifest_dir).join(format!("locales/errors/{locale}.ftl"))
-    })?;
+    embed_error_locales(
+        embedded_file,
+        &Path::new(&manifest_dir).join("locales"),
+        locales_to_embed,
+    )?;
 
     // Collect and sort for deterministic builds
     let mut entries: Vec<_> = std::fs::read_dir(registry_dir)?

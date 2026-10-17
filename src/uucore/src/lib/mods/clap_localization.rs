@@ -65,16 +65,16 @@ fn should_use_color_for_stream<S: std::io::IsTerminal>(stream: &S) -> bool {
 }
 
 /// Manages color output based on environment settings
-struct ColorManager(bool);
+pub(crate) struct ColorManager(bool);
 
 impl ColorManager {
     /// Create a new ColorManager based on environment variables
-    fn from_env() -> Self {
+    pub(crate) fn from_env() -> Self {
         Self(should_use_color_for_stream(&stderr()))
     }
 
     /// Apply color to text if colors are enabled
-    fn colorize(&self, text: &str, color: Color) -> String {
+    pub(crate) fn colorize(&self, text: &str, color: Color) -> String {
         if self.0 {
             format!("\x1b[{}m{text}\x1b[0m", color.code())
         } else {
