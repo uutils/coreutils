@@ -934,18 +934,12 @@ fn tokenize_default(
     // pretend that there was whitespace in front of the line
     let mut previous_was_whitespace = true;
     for (idx, char) in line.iter().enumerate() {
-        let is_whitespace = is_blank(*char);
-        let treat_as_separator = if is_whitespace {
-            if blank_thousands_sep && *char == b' ' {
-                !is_blank_thousands_sep(line, idx, allow_unit_after_blank)
-            } else {
-                true
-            }
-        } else {
-            false
-        };
+        let is_separator = is_blank(*char)
+            && !(blank_thousands_sep
+                && *char == b' '
+                && is_blank_thousands_sep(line, idx, allow_unit_after_blank));
 
-        if treat_as_separator {
+        if is_separator {
             if !previous_was_whitespace {
                 token_buffer.last_mut().unwrap().end = idx;
                 token_buffer.push(idx..0);
