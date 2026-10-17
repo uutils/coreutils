@@ -3,13 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore abcdefghijklmnopqrstuvwxyz Anone fdbb littl bfloat
+// spell-checker:ignore abcdefghijklmnopqrstuvwxyz Anone fdbb littl bfloat fffd
 
 #[cfg(unix)]
 use std::io::Read;
 #[cfg(target_os = "linux")]
 use std::path::Path;
 
+#[cfg(all(unix, not(target_vendor = "apple")))]
+use rstest::rstest;
 use unindent::unindent;
 use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, new_ucmd, util_name};
@@ -45,6 +47,67 @@ fn run_skip_across_inputs(files: &[(&str, &str)], skip: u64, expected: &str) {
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[rstest]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+#[case::bytes(&["-An", "-tx1"], None, " 61 62 63 64 65 66 00\n")]
+#[case::strings(&["-An", "-S3"], None, "abcdef\n")]
+#[case::traditional(&["--traditional", "-An", "-tx1"], Some("4"), " 65 66 00\n")]
+#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
+fn test_non_utf8_filename(
+    #[case] flags: &[&str],
+    #[case] offset: Option<&str>,
+    #[case] expected: &str,
+) {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let name = OsStr::from_bytes(b"input-\xff");
+    std::fs::write(scene.fixtures.plus(name), b"abcdef\0").unwrap();
+    scene.fixtures.write("input-\u{fffd}", "wrong file");
+    let mut cmd = scene.ucmd();
+    cmd.args(flags).arg(name);
+    if let Some(offset) = offset {
+        cmd.arg(offset);
+    }
+    cmd.pipe_in(b"wrong input").succeeds().stdout_only(expected);
+}
+
+#[rstest]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+#[case::missing(false, "No such file or directory")]
+#[case::directory(true, "Is a directory")]
+#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
+fn test_non_utf8_filename_errors(
+    #[case] directory: bool,
+    #[case] error: &str,
+    #[values(false, true)] invalid_first: bool,
+) {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("valid", "ab");
+    scene.fixtures.write("invalid-\u{fffd}", "wrong file");
+    let invalid = OsStr::from_bytes(b"invalid-\xff");
+    if directory {
+        std::fs::create_dir(scene.fixtures.plus(invalid)).unwrap();
+    }
+    let valid = OsStr::new("valid");
+    let files = if invalid_first {
+        [invalid, valid]
+    } else {
+        [valid, invalid]
+    };
+    scene
+        .ucmd()
+        .args(&["-An", "-tx1"])
+        .args(&files)
+        .fails_with_code(1)
+        .stdout_is(" 61 62\n")
+        .stderr_is(format!("od: $'invalid-\\xFF': {error}\n"));
 }
 
 // Test that od can read one file and dump with default format
