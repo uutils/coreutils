@@ -84,7 +84,11 @@ impl Uniq {
         let mut next_meta = LineMeta::default();
         let mut line_out = Vec::with_capacity(1024);
 
-        while Self::read_line(&mut reader, &mut next_buf, line_terminator)? {
+        let read_result = loop {
+            match Self::read_line(&mut reader, &mut next_buf, line_terminator) {
+                Ok(true) => {}
+                result => break result.map(|_| ()),
+            }
             self.build_meta(&next_buf, &mut next_meta);
 
             if self.keys_are_equal(&current_buf, &current_meta, &next_buf, &next_meta) {
@@ -119,9 +123,14 @@ impl Uniq {
                 group_count = 1;
             }
             next_buf.clear();
-        }
+        };
 
-        if (group_count == 1 && !self.repeats_only) || (group_count > 1 && !self.uniques_only) {
+        // Counts and filtering require the group to end; a read error does not end it.
+        let can_write_pending_line =
+            read_result.is_ok() || !(self.show_counts || self.repeats_only || self.uniques_only);
+        let group_matches_filter =
+            (group_count == 1 && !self.repeats_only) || (group_count > 1 && !self.uniques_only);
+        if can_write_pending_line && group_matches_filter {
             self.write_line(
                 writer,
                 &mut line_out,
@@ -141,7 +150,7 @@ impl Uniq {
         writer
             .flush()
             .map_err_context(|| translate!("uniq-error-write-error"))?;
-        Ok(())
+        read_result
     }
 
     fn get_line_terminator(&self) -> u8 {
@@ -872,4 +881,98 @@ fn open_output_file(out_file_name: Option<&OsStr>) -> UResult<Box<dyn Write>> {
             stdout().lock(),
         )),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Delimiters, Uniq};
+    use std::io::{self, BufReader, BufWriter, Cursor, Read};
+
+    struct ReadError;
+
+    impl Read for ReadError {
+        fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+            Err(io::Error::from(io::ErrorKind::PermissionDenied))
+        }
+    }
+
+    fn default_uniq() -> Uniq {
+        Uniq {
+            repeats_only: false,
+            uniques_only: false,
+            all_repeated: false,
+            delimiters: Delimiters::None,
+            show_counts: false,
+            skip_fields: None,
+            slice_start: None,
+            slice_stop: None,
+            ignore_case: false,
+            zero_terminated: false,
+            is_c_locale: true,
+        }
+    }
+
+    fn check_read_error(uniq: &Uniq, input: &[u8], expected: &[u8]) {
+        let reader = BufReader::new(Cursor::new(input).chain(ReadError));
+        let mut output = BufWriter::new(Vec::new());
+        let error = uniq.write_uniq(reader, &mut output).unwrap_err();
+        assert_eq!(error.code(), 1);
+        assert!(output.buffer().is_empty());
+        assert_eq!(output.get_ref().as_slice(), expected);
+    }
+
+    #[test]
+    fn test_read_error_preserves_complete_lines() {
+        let uniq = default_uniq();
+        for (input, expected) in [
+            (&b"alpha\nbeta\n"[..], &b"alpha\nbeta\n"[..]),
+            (b"alpha\nalpha\n", b"alpha\n"),
+            (b"alpha\nbeta", b"alpha\n"),
+            (b"alpha\nalpha", b"alpha\n"),
+            (b"\n\n", b"\n"),
+            (b"partial", b""),
+            (b"", b""),
+        ] {
+            check_read_error(&uniq, input, expected);
+        }
+    }
+
+    #[test]
+    fn test_read_error_preserves_zero_terminated_lines() {
+        let mut uniq = default_uniq();
+        uniq.zero_terminated = true;
+        check_read_error(&uniq, b"alpha\0beta\0partial", b"alpha\0beta\0");
+    }
+
+    #[test]
+    fn test_read_error_preserves_group_delimiters() {
+        let mut uniq = default_uniq();
+        uniq.all_repeated = true;
+        for (delimiters, expected) in [
+            (Delimiters::Separate, &b"alpha\nalpha\n\nbeta\n"[..]),
+            (Delimiters::Prepend, b"\nalpha\nalpha\n\nbeta\n"),
+            (Delimiters::Append, b"alpha\nalpha\n\nbeta\n\n"),
+            (Delimiters::Both, b"\nalpha\nalpha\n\nbeta\n\n"),
+        ] {
+            uniq.delimiters = delimiters;
+            check_read_error(&uniq, b"alpha\nalpha\nbeta\npartial", expected);
+        }
+    }
+
+    #[test]
+    fn test_read_error_does_not_finalize_counts_or_filtered_groups() {
+        let mut uniq = default_uniq();
+        uniq.show_counts = true;
+        check_read_error(&uniq, b"alpha\nbeta\n", b"      1 alpha\n");
+        check_read_error(&uniq, b"alpha\nbeta", b"");
+        check_read_error(&uniq, b"alpha\nalpha\n", b"");
+        uniq.show_counts = false;
+        uniq.uniques_only = true;
+        check_read_error(&uniq, b"alpha\nbeta\n", b"alpha\n");
+        uniq.uniques_only = false;
+        uniq.repeats_only = true;
+        check_read_error(&uniq, b"alpha\nalpha\n", b"");
+        uniq.all_repeated = true;
+        check_read_error(&uniq, b"alpha\nalpha\n", b"alpha\n");
+    }
 }

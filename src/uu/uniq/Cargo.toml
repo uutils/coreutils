@@ -13,7 +13,6 @@ readme.workspace = true
 
 [lib]
 path = "src/uniq.rs"
-test = false
 doctest = false
 
 [dependencies]
