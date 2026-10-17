@@ -544,3 +544,17 @@ fn test_buffered_read_edgecase_behaviour() {
             .stdout_only(String::from_utf8(expected).unwrap());
     }
 }
+
+#[test]
+fn test_tab_list_starting_with_hyphen() {
+    // See the matching expand test: `-1` after -t is a tab list, not the
+    // obsolete `--tabs=1` spelling.
+    for arg in ["-1", "-0"] {
+        new_ucmd!()
+            .args(&["-t", arg])
+            .fails()
+            .stderr_contains(format!("tab size contains invalid character(s): '{arg}'"));
+    }
+
+    new_ucmd!().arg("-4").pipe_in("        x\n").succeeds();
+}
