@@ -855,7 +855,7 @@ fn test_child_when_pipe_in() {
 }
 
 /// Regression test for GitHub issue #9769
-/// https://github.com/uutils/coreutils/issues/9769
+/// <https://github.com/uutils/coreutils/issues/9769>
 ///
 /// Bug: Utilities panic when output is redirected to /dev/full
 /// Location: src/uucore/src/lib/mods/error.rs:751 - `.unwrap()` causes panic

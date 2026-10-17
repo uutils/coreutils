@@ -66,7 +66,7 @@ fn test_fmt_width_max_display_width() {
         .stdout_is("aa\nbb cc\ndd ee\n");
 }
 
-/// Regression for https://github.com/uutils/coreutils/issues/10095
+/// Regression for <https://github.com/uutils/coreutils/issues/10095>
 ///
 /// GNU `fmt` measures `-w` in UTF-8 bytes (not Unicode display columns).
 /// These cases match GNU coreutils 9.11.

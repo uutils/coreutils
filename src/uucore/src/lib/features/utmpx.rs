@@ -224,31 +224,31 @@ impl Utmpx {
 }
 
 impl Utmpx {
-    /// A.K.A. ut.ut_type
+    /// A.K.A. `ut.ut_type`
     pub fn record_type(&self) -> i16 {
         self.ut_type()
     }
-    /// A.K.A. ut.ut_pid
+    /// A.K.A. `ut.ut_pid`
     pub fn pid(&self) -> i32 {
         self.inner.ut_pid
     }
-    /// A.K.A. ut.ut_id
+    /// A.K.A. `ut.ut_id`
     pub fn terminal_suffix(&self) -> String {
         chars2string!(self.inner.ut_id)
     }
-    ///  A.K.A. ut.ut_user / ut.ut_name (NetBSD)
+    ///  A.K.A. `ut.ut_user` / `ut.ut_name` (NetBSD)
     pub fn user(&self) -> String {
         self.ut_user()
     }
-    /// A.K.A. ut.ut_host
+    /// A.K.A. `ut.ut_host`
     pub fn host(&self) -> String {
         chars2string!(self.inner.ut_host)
     }
-    /// A.K.A. ut.ut_line
+    /// A.K.A. `ut.ut_line`
     pub fn tty_device(&self) -> String {
         chars2string!(self.inner.ut_line)
     }
-    /// A.K.A. ut.ut_tv
+    /// A.K.A. `ut.ut_tv`
     pub fn login_time(&self) -> time::OffsetDateTime {
         #[allow(clippy::unnecessary_cast)]
         let ts_nanos: i128 = (1_000_000_000_i64 * self.inner.ut_tv.tv_sec as i64
@@ -260,14 +260,14 @@ impl Utmpx {
             .unwrap()
             .to_offset(local_offset)
     }
-    /// A.K.A. ut.ut_exit
+    /// A.K.A. `ut.ut_exit`
     ///
-    /// Return (e_termination, e_exit)
+    /// Return (`e_termination`, `e_exit`)
     #[cfg(target_os = "linux")]
     pub fn exit_status(&self) -> (i16, i16) {
         (self.inner.ut_exit.e_termination, self.inner.ut_exit.e_exit)
     }
-    /// A.K.A. ut.ut_exit
+    /// A.K.A. `ut.ut_exit`
     ///
     /// Return (0, 0) on Non-Linux platform
     #[cfg(not(target_os = "linux"))]
@@ -406,7 +406,7 @@ static LOCK: Mutex<()> = Mutex::new(());
 pub struct UtmpxIter {
     #[allow(dead_code)]
     guard: MutexGuard<'static, ()>,
-    /// Ensure UtmpxIter is !Send. Technically redundant because MutexGuard
+    /// Ensure [`UtmpxIter`] is !Send. Technically redundant because [`MutexGuard`]
     /// is also !Send.
     phantom: PhantomData<std::rc::Rc<()>>,
     #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
@@ -457,7 +457,7 @@ pub enum UtmpxRecord {
 }
 
 impl UtmpxRecord {
-    /// A.K.A. ut.ut_type
+    /// A.K.A. `ut.ut_type`
     pub fn record_type(&self) -> i16 {
         match self {
             Self::Traditional(utmpx) => utmpx.record_type(),
@@ -466,7 +466,7 @@ impl UtmpxRecord {
         }
     }
 
-    /// A.K.A. ut.ut_pid
+    /// A.K.A. `ut.ut_pid`
     pub fn pid(&self) -> i32 {
         match self {
             Self::Traditional(utmpx) => utmpx.pid(),
@@ -475,7 +475,7 @@ impl UtmpxRecord {
         }
     }
 
-    /// A.K.A. ut.ut_id
+    /// A.K.A. `ut.ut_id`
     pub fn terminal_suffix(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.terminal_suffix(),
@@ -484,7 +484,7 @@ impl UtmpxRecord {
         }
     }
 
-    /// A.K.A. ut.ut_user
+    /// A.K.A. `ut.ut_user`
     pub fn user(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.user(),
@@ -493,7 +493,7 @@ impl UtmpxRecord {
         }
     }
 
-    /// A.K.A. ut.ut_host
+    /// A.K.A. `ut.ut_host`
     pub fn host(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.host(),
@@ -502,7 +502,7 @@ impl UtmpxRecord {
         }
     }
 
-    /// A.K.A. ut.ut_line
+    /// A.K.A. `ut.ut_line`
     pub fn tty_device(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.tty_device(),
@@ -511,7 +511,7 @@ impl UtmpxRecord {
         }
     }
 
-    /// A.K.A. ut.ut_tv
+    /// A.K.A. `ut.ut_tv`
     pub fn login_time(&self) -> time::OffsetDateTime {
         match self {
             Self::Traditional(utmpx) => utmpx.login_time(),
@@ -520,9 +520,9 @@ impl UtmpxRecord {
         }
     }
 
-    /// A.K.A. ut.ut_exit
+    /// A.K.A. `ut.ut_exit`
     ///
-    /// Return (e_termination, e_exit)
+    /// Return (`e_termination`, `e_exit`)
     pub fn exit_status(&self) -> (i16, i16) {
         match self {
             Self::Traditional(utmpx) => utmpx.exit_status(),

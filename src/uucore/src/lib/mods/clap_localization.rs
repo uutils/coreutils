@@ -68,7 +68,7 @@ fn should_use_color_for_stream<S: std::io::IsTerminal>(stream: &S) -> bool {
 struct ColorManager(bool);
 
 impl ColorManager {
-    /// Create a new ColorManager based on environment variables
+    /// Create a new [`ColorManager`] based on environment variables
     fn from_env() -> Self {
         Self(should_use_color_for_stream(&stderr()))
     }

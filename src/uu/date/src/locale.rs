@@ -75,9 +75,9 @@ cfg_nl_langinfo! {
     #[cfg(test)]
     use std::sync::Mutex;
 
-    /// Mutex to serialize setlocale() calls during tests.
+    /// Mutex to serialize [`libc::setlocale`] calls during tests.
     ///
-    /// setlocale() is process-global, so parallel tests that call it can
+    /// [`libc::setlocale`] is process-global, so parallel tests that call it can
     /// interfere with each other. This mutex ensures only one test accesses
     /// locale functions at a time.
     #[cfg(test)]

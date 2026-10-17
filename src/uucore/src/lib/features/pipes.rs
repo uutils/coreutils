@@ -33,17 +33,17 @@ impl From<PipeError> for std::io::Error {
 type PipeRes = std::io::Result<Result<(), ()>>;
 
 /// A type allows to
-/// - check that zero-copy succeed by ?.is_ok()
-/// - check that zero-copy failed, but read/write fallback succeed by ?.is_err()
+/// - check that zero-copy succeed by `?.is_ok()`
+/// - check that zero-copy failed, but read/write fallback succeed by `?.is_err()`
 /// - catch the read/write fallback's error by ? or let Err(e)
 ///
-/// use rustix::io::Result for functions without read/write fallback
+/// use `rustix::io::Result` for functions without read/write fallback
 type SpliceRes = Result<Result<(), ()>, PipeError>;
 
 /// return pipe and try to extend its size
-/// SIZE_REQUIRED should be true if you want to fail when changing pipe size failed
+/// `SIZE_REQUIRED` should be true if you want to fail when changing pipe size failed
 /// e.g. writing size to pipe should not hang
-/// SIZE_REQUIRED=false allows to continue unbuffered splice I/O with default pipe size even if fcntl failed
+/// `SIZE_REQUIRED=false` allows to continue unbuffered splice I/O with default pipe size even if fcntl failed
 ///
 /// used for resolving the limitation for splice: one of a input or output should be pipe
 #[inline]
@@ -64,7 +64,7 @@ pub fn pipe<const SIZE_REQUIRED: bool>() -> std::io::Result<(PipeReader, PipeWri
 /// of successfully moved bytes.
 ///
 /// splice fails if both of `source` and `target` are not pipe. Consider using
-/// splice_unbounded_broker or splice_unbounded_auto in the case.
+/// `splice_unbounded_broker` or `splice_unbounded_auto` in the case.
 #[inline]
 pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io::Result<usize> {
     rustix::pipe::splice(source, None, target, None, len, SpliceFlags::empty())

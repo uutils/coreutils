@@ -1299,7 +1299,7 @@ mod test {
         assert_eq!(f(0.000_001), "1e-06");
     }
 
-    /// Wrapper function to get a string out of Format.fmt()
+    /// Wrapper function to get a string out of `Format.fmt()`
     fn fmt<U, T>(format: &Format<U, T>, n: T) -> String
     where
         U: Formatter<T>,

@@ -5,7 +5,7 @@
 
 // spell-checker:ignore EINTR worl
 
-//! Tests for EINTR (ErrorKind::Interrupted) handling across utilities
+//! Tests for EINTR (`ErrorKind::Interrupted`) handling across utilities
 //!
 //! This module provides test utilities and integration tests to verify that
 //! utilities properly handle signal interruptions during I/O operations.

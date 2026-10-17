@@ -18,7 +18,7 @@ use std::sync::OnceLock;
 
 use crate::i18n::get_locale_from_env;
 
-/// Get the locale for time/date formatting from LC_TIME environment variable
+/// Get the locale for time/date formatting from `LC_TIME` environment variable
 pub fn get_time_locale() -> &'static (Locale, super::UEncoding) {
     static TIME_LOCALE: OnceLock<(Locale, super::UEncoding)> = OnceLock::new();
 
@@ -164,7 +164,7 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     fmt.replace(PERCENT_PLACEHOLDER, "%%")
 }
 
-/// Abbreviated month names for the current LC_TIME locale as raw bytes,
+/// Abbreviated month names for the current `LC_TIME` locale as raw bytes,
 /// with blanks stripped and uppercased using ASCII case folding.
 ///
 /// Each entry corresponds to months January (index 0) through December (index 11).
@@ -183,7 +183,7 @@ pub fn get_locale_months() -> Option<&'static [Vec<u8>; 12]> {
         .as_ref()
 }
 
-/// Unix implementation using nl_langinfo for exact match with `locale abmon` output.
+/// Unix implementation using `nl_langinfo` for exact match with `locale abmon` output.
 #[cfg(all(
     unix,
     not(target_os = "android"),
@@ -240,7 +240,7 @@ fn get_locale_months_inner() -> Option<[Vec<u8>; 12]> {
     Some(months)
 }
 
-/// Non-Unix fallback using ICU DateTimeFormatter.
+/// Non-Unix fallback using ICU `DateTimeFormatter`.
 #[cfg(any(
     not(unix),
     target_os = "android",
@@ -300,8 +300,8 @@ mod tests {
         }
     }
 
-    /// Confirm that M::short() gives numeric months and M::long() gives full names,
-    /// so M::medium() is the only correct choice for abbreviated month names.
+    /// Confirm that `M::short()` gives numeric months and `M::long()` gives full names,
+    /// so `M::medium()` is the only correct choice for abbreviated month names.
     #[test]
     fn test_icu_short_and_long_month_formats_differ() {
         use icu_locale::locale;

@@ -46,7 +46,7 @@ pub struct FormatArguments<'a> {
 }
 
 impl<'a> FormatArguments<'a> {
-    /// Create a new FormatArguments from a slice of FormatArgument
+    /// Create a new [`FormatArguments`] from a slice of [`FormatArgument`]
     pub fn new(args: &'a [FormatArgument]) -> Self {
         Self {
             args,

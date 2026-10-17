@@ -45,10 +45,10 @@ pub fn mute_sigpipe_panic() {
 
 /// Preserve inherited SIGPIPE settings from parent process.
 ///
-/// Rust unconditionally sets SIGPIPE to SIG_IGN on startup. This function
+/// Rust unconditionally sets SIGPIPE to `SIG_IGN` on startup. This function
 /// checks if the parent process (e.g., `env --default-signal=PIPE`) intended
-/// for SIGPIPE to be set to default by checking the RUST_SIGPIPE environment
-/// variable. If set to "default", it restores SIGPIPE to SIG_DFL.
+/// for SIGPIPE to be set to default by checking the `RUST_SIGPIPE` environment
+/// variable. If set to "default", it restores SIGPIPE to `SIG_DFL`.
 #[cfg(unix)]
 pub fn preserve_inherited_sigpipe() {
     use nix::libc;
