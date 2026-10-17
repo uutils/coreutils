@@ -719,25 +719,17 @@ fn string_to_flag(option: &str) -> Option<AllFlags<'_>> {
     let remove = option.starts_with('-');
     let name = option.trim_start_matches('-');
 
-    for cflag in CONTROL_FLAGS {
-        if name == cflag.name {
-            return Some(AllFlags::ControlFlags((cflag, remove)));
-        }
+    if let Some(cflag) = CONTROL_FLAGS.iter().find(|f| f.name == name) {
+        return Some(AllFlags::ControlFlags((cflag, remove)));
     }
-    for iflag in INPUT_FLAGS {
-        if name == iflag.name {
-            return Some(AllFlags::InputFlags((iflag, remove)));
-        }
+    if let Some(iflag) = INPUT_FLAGS.iter().find(|f| f.name == name) {
+        return Some(AllFlags::InputFlags((iflag, remove)));
     }
-    for lflag in LOCAL_FLAGS {
-        if name == lflag.name {
-            return Some(AllFlags::LocalFlags((lflag, remove)));
-        }
+    if let Some(lflag) = LOCAL_FLAGS.iter().find(|f| f.name == name) {
+        return Some(AllFlags::LocalFlags((lflag, remove)));
     }
-    for oflag in OUTPUT_FLAGS {
-        if name == oflag.name {
-            return Some(AllFlags::OutputFlags((oflag, remove)));
-        }
+    if let Some(oflag) = OUTPUT_FLAGS.iter().find(|f| f.name == name) {
+        return Some(AllFlags::OutputFlags((oflag, remove)));
     }
     None
 }
