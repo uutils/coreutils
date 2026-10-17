@@ -131,11 +131,6 @@ struct Stat {
     inode: Option<FileInfo>,
     metadata: Metadata,
     latest_time: Option<SystemTime>,
-    /// `metadata.is_dir()` is not reliable for children visited by safe
-    /// traversal: those entries keep a placeholder (the parent's metadata)
-    /// unless `--time` is set. `--separate-dirs` needs the real kind when
-    /// the grand total adds every directory back in.
-    is_dir: bool,
 }
 
 impl Stat {
@@ -177,7 +172,6 @@ impl Stat {
             inode: file_info,
             metadata,
             latest_time,
-            is_dir,
         })
     }
 
@@ -218,7 +212,6 @@ impl Stat {
             inode: file_info_option,
             metadata: std_metadata,
             latest_time,
-            is_dir: safe_metadata.is_dir(),
         })
     }
 }
@@ -514,7 +507,6 @@ fn safe_du(
                 // This is a workaround since we can't get real metadata without the full path
                 metadata: my_stat.metadata.clone(),
                 latest_time,
-                is_dir: true,
             }
         } else {
             // For files
@@ -528,7 +520,6 @@ fn safe_du(
                 inode: file_info,
                 metadata: my_stat.metadata.clone(),
                 latest_time,
-                is_dir: false,
             }
         };
 
@@ -590,6 +581,7 @@ fn safe_du(
             print_tx.send(Ok(StatPrintInfo {
                 stat: this_stat,
                 depth: depth + 1,
+                is_dir: true,
             }))?;
         } else {
             my_stat.size += this_stat.size;
@@ -604,6 +596,7 @@ fn safe_du(
                 print_tx.send(Ok(StatPrintInfo {
                     stat: this_stat,
                     depth: depth + 1,
+                    is_dir: false,
                 }))?;
             }
         }
@@ -752,6 +745,7 @@ fn du_regular(
                                 print_tx.send(Ok(StatPrintInfo {
                                     stat: this_stat,
                                     depth: depth + 1,
+                                    is_dir: true,
                                 }))?;
                             } else {
                                 my_stat.size += this_stat.size;
@@ -767,6 +761,7 @@ fn du_regular(
                                     print_tx.send(Ok(StatPrintInfo {
                                         stat: this_stat,
                                         depth: depth + 1,
+                                        is_dir: false,
                                     }))?;
                                 }
                             }
@@ -854,6 +849,12 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
 struct StatPrintInfo {
     stat: Stat,
     depth: usize,
+    /// Real directory bit for `--separate-dirs` with `--total`.
+    /// Safe-traversal children keep the parent's `Metadata` unless `--time`
+    /// re-stats them, so `stat.metadata.is_dir()` would treat files as
+    /// directories. `Stat` has no spare padding; keeping the flag here
+    /// leaves every traversed entry the same size on the `du -a` path.
+    is_dir: bool,
 }
 
 impl StatPrinter {
@@ -870,26 +871,48 @@ impl StatPrinter {
     }
 
     fn print_stats(&self, rx: &mpsc::Receiver<UResult<StatPrintInfo>>) -> UResult<()> {
+        // Monomorphize so a run without `--total` does not track a total,
+        // a timestamp, or per-directory sizes.
+        if self.total {
+            self.drain_stats::<true>(rx)
+        } else {
+            self.drain_stats::<false>(rx)
+        }
+    }
+
+    fn drain_stats<const WITH_TOTAL: bool>(
+        &self,
+        rx: &mpsc::Receiver<UResult<StatPrintInfo>>,
+    ) -> UResult<()> {
         let mut grand_total = 0;
+        // Subdirectory sizes are already inside the depth-0 figure unless
+        // `--separate-dirs` left them out. Only then does each directory's
+        // own size have to be added back. Files stay inside their directory.
+        let count_separate_dirs = WITH_TOTAL && self.separate_dirs;
         // GNU's total timestamp starts at the epoch and moves forward only,
         // so a pre-1970 mtime is kept on its own line but the total stays
         // at 1970-01-01 unless something newer is seen. With no successful
         // entry (every path failed), that epoch is what `--time` prints.
+        // Unused unless both `--time` and `--total` are set.
+        let track_total_time = WITH_TOTAL && self.time.is_some();
         let mut saw_stat = false;
         let mut grand_time: Option<SystemTime> = None;
         while let Ok(received) = rx.recv() {
             match received {
                 Ok(stat_info) => {
                     let size = self.choose_size(&stat_info.stat);
-                    saw_stat = true;
 
-                    if self.counts_toward_total(&stat_info) {
-                        grand_total += size;
-                    }
-                    if self.time.is_some()
-                        && let Some(time) = stat_info.stat.latest_time
-                    {
-                        grand_time = Some(grand_time.map_or(time, |current| current.max(time)));
+                    if const { WITH_TOTAL } {
+                        if stat_info.depth == 0 || (count_separate_dirs && stat_info.is_dir) {
+                            grand_total += size;
+                        }
+                        if track_total_time {
+                            saw_stat = true;
+                            if let Some(time) = stat_info.stat.latest_time {
+                                grand_time =
+                                    Some(grand_time.map_or(time, |current| current.max(time)));
+                            }
+                        }
                     }
 
                     if !self
@@ -907,10 +930,8 @@ impl StatPrinter {
             }
         }
 
-        if self.total {
-            let time = if self.time.is_none() {
-                None
-            } else {
+        if const { WITH_TOTAL } {
+            let time = if track_total_time {
                 match (saw_stat, grand_time) {
                     (_, Some(time)) => Some(time.max(SystemTime::UNIX_EPOCH)),
                     // Entries were seen but none had a timestamp (??? on
@@ -918,23 +939,14 @@ impl StatPrinter {
                     (true, None) => None,
                     (false, None) => Some(SystemTime::UNIX_EPOCH),
                 }
+            } else {
+                None
             };
             self.write_size_and_time(grand_total, time)?;
             write!(stdout(), "{}{}", self.total_text, self.line_ending)?;
         }
 
         Ok(())
-    }
-
-    /// Size contribution of one printed-or-traversed entry to `--total`.
-    ///
-    /// Without `--separate-dirs`, a depth-0 entry already includes its
-    /// descendants. With `--separate-dirs`, each directory's own size omits
-    /// its subdirectories, so every directory has to be added or the total
-    /// collapses to the top-level figure. Files are already inside the
-    /// containing directory and are not added again.
-    fn counts_toward_total(&self, stat_info: &StatPrintInfo) -> bool {
-        stat_info.depth == 0 || (self.separate_dirs && stat_info.stat.is_dir)
     }
 
     fn convert_size(&self, size: u64) -> String {
@@ -958,6 +970,7 @@ impl StatPrinter {
         }
     }
 
+    #[inline]
     fn print_stat(&self, stat: &Stat, size: u64) -> UResult<()> {
         self.write_size_and_time(size, stat.latest_time)?;
         print_verbatim(&stat.path)?;
@@ -966,6 +979,7 @@ impl StatPrinter {
         Ok(())
     }
 
+    #[inline]
     fn write_size_and_time(&self, size: u64, time: Option<SystemTime>) -> UResult<()> {
         write!(stdout(), "{}\t", self.convert_size(size))?;
 
@@ -1264,8 +1278,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     Some(stat),
                 ) {
                     Ok(stat) => {
+                        let is_dir = stat.metadata.is_dir();
                         print_tx
-                            .send(Ok(StatPrintInfo { stat, depth: 0 }))
+                            .send(Ok(StatPrintInfo {
+                                stat,
+                                depth: 0,
+                                is_dir,
+                            }))
                             .map_err(|e| USimpleError::new(1, e.to_string()))?;
                     }
                     Err(e) => {
@@ -1294,8 +1313,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 )
                 .map_err(|e| USimpleError::new(1, e.to_string()))?;
 
+                let is_dir = stat.metadata.is_dir();
                 print_tx
-                    .send(Ok(StatPrintInfo { stat, depth: 0 }))
+                    .send(Ok(StatPrintInfo {
+                        stat,
+                        depth: 0,
+                        is_dir,
+                    }))
                     .map_err(|e| USimpleError::new(1, e.to_string()))?;
             } else {
                 #[cfg(unix)]
