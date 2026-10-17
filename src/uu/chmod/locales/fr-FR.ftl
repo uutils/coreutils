@@ -24,6 +24,7 @@ chmod-error-preserve-root = il est dangereux d'opérer récursivement sur {$file
 chmod-error-preserve-root-same-as = il est dangereux d'opérer récursivement sur {$file} (identique à '/')
   chmod: utiliser --no-preserve-root pour outrepasser cette protection
 chmod-error-permission-denied = impossible d'accéder à {$file} : Permission refusée
+chmod-error-cannot-read-directory = impossible de lire le répertoire {$file} : {$err}
 chmod-error-new-permissions = {$file} : les nouvelles permissions sont {$actual}, pas {$expected}
 chmod-error-changing-permissions = changement des permissions de {$file} : {$err}
 chmod-error-missing-operand = opérande manquant
@@ -34,3 +35,4 @@ chmod-verbose-neither-changed = ni le lien symbolique {$file} ni la référence 
 chmod-verbose-mode-retained = mode de {$file} conservé comme {$mode_octal} ({$mode_display})
 chmod-verbose-failed-change = échec du changement de mode du fichier {$file} de {$old_mode} ({$old_mode_display}) vers {$new_mode} ({$new_mode_display})
 chmod-verbose-mode-changed = mode de {$file} changé de {$old_mode} ({$old_mode_display}) vers {$new_mode} ({$new_mode_display})
+chmod-verbose-could-not-be-accessed = {$file} n'a pas pu être consulté

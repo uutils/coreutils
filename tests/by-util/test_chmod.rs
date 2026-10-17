@@ -445,12 +445,8 @@ fn test_chmod_recursive_correct_exit_code() {
     perms.set_mode(0o000);
     set_permissions(at.plus_as_string("a"), perms).unwrap();
 
-    // With safe_traversal enabled on all Unix platforms (except Redox),
-    // we get detailed error messages that include the file path
-    #[cfg(all(unix, not(target_os = "redox")))]
-    let err_msg = "chmod: cannot access 'a': Permission denied\n";
-    #[cfg(not(all(unix, not(target_os = "redox"))))]
-    let err_msg = "chmod: Permission denied\n";
+    // `a` is changed before it is read, so the failure is about reading it.
+    let err_msg = "chmod: cannot read directory 'a': Permission denied\n";
 
     // order of command is a, a/b then c
     // command is expected to fail and not just take the last exit code
@@ -461,7 +457,8 @@ fn test_chmod_recursive_correct_exit_code() {
         .arg("z")
         .umask(0)
         .fails()
-        .stderr_is(err_msg);
+        .stderr_is(err_msg)
+        .stdout_contains("'a' could not be accessed\n");
 }
 
 #[test]
@@ -491,9 +488,9 @@ fn test_chmod_recursive() {
     make_file(&at.plus_as_string("a/b/b"), 0o100444);
     make_file(&at.plus_as_string("a/b/c/c"), 0o100444);
     make_file(&at.plus_as_string("z/y"), 0o100444);
-    // With safe_traversal enabled on all Unix platforms, the error message
-    // now includes the file path consistently across platforms
-    let err_msg = "chmod: cannot access 'z': Permission denied\n";
+    // Both operands become unreadable, and each failure is reported.
+    let err_msg = "chmod: cannot read directory 'a': Permission denied\n\
+                   chmod: cannot read directory 'z': Permission denied\n";
 
     // only the permissions of folder `a` and `z` are changed
     // folder can't be read after read permission is removed
@@ -513,6 +510,68 @@ fn test_chmod_recursive() {
     println!("mode {:o}", at.metadata("a").permissions().mode());
     assert_eq!(at.metadata("a").permissions().mode(), a_perms_expected);
     assert_eq!(at.metadata("z").permissions().mode(), z_perms_expected);
+}
+
+#[test]
+fn test_chmod_recursive_reports_every_unreadable_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dirs = ["d/a", "d/b", "d/c"];
+    for dir in dirs {
+        at.mkdir_all(&format!("{dir}/y"));
+        set_permissions(at.plus_as_string(dir), Permissions::from_mode(0o311)).unwrap();
+    }
+
+    let result = ucmd.args(&["-R", "o=r", "d"]).fails_with_code(1);
+    for dir in dirs {
+        result.stderr_contains(format!(
+            "chmod: cannot read directory '{dir}': Permission denied\n"
+        ));
+        // The directory itself is changed before its entries are listed.
+        assert_eq!(at.metadata(dir).permissions().mode() & 0o777, 0o314);
+        set_permissions(at.plus_as_string(dir), Permissions::from_mode(0o755)).unwrap();
+    }
+}
+
+#[test]
+fn test_chmod_recursive_quiet_unreadable_directory() {
+    // -f hides the diagnostic; the failure still sets the exit status.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("d/a/y");
+    set_permissions(at.plus_as_string("d/a"), Permissions::from_mode(0o311)).unwrap();
+
+    ucmd.args(&["-f", "-R", "o=r", "d"])
+        .fails_with_code(1)
+        .no_output();
+
+    set_permissions(at.plus_as_string("d/a"), Permissions::from_mode(0o755)).unwrap();
+}
+
+#[test]
+fn test_chmod_recursive_verbose_unreadable_directory() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("d/a/y");
+    set_permissions(at.plus_as_string("d/a"), Permissions::from_mode(0o311)).unwrap();
+
+    // -v names the directory that was changed but could not be read.
+    scene
+        .ucmd()
+        .args(&["-R", "-v", "o=r", "d"])
+        .fails_with_code(1)
+        .stderr_is("chmod: cannot read directory 'd/a': Permission denied\n")
+        .stdout_contains("mode of 'd/a' changed from 0311 (-wx--x--x) to 0314 (-wx--xr--)\n")
+        .stdout_contains("'d/a' could not be accessed\n");
+
+    // -c reports the change only.
+    scene
+        .ucmd()
+        .args(&["-R", "-c", "o=rw", "d"])
+        .fails_with_code(1)
+        .stderr_is("chmod: cannot read directory 'd/a': Permission denied\n")
+        .stdout_contains("mode of 'd/a' changed from 0314 (-wx--xr--) to 0316 (-wx--xrw-)\n")
+        .stdout_does_not_contain("could not be accessed");
+
+    set_permissions(at.plus_as_string("d/a"), Permissions::from_mode(0o755)).unwrap();
 }
 
 #[test]
@@ -914,6 +973,18 @@ fn test_gnu_invalid_mode() {
 }
 
 #[test]
+fn test_chmod_invalid_mode_checked_before_any_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("d/a");
+    at.touch("d/a/f");
+
+    // The mode is checked once, up front: one message, and no walk.
+    ucmd.args(&["-R", "g+rw?x", "d"])
+        .fails_with_code(1)
+        .stderr_only("chmod: invalid operator (expected +, -, or =, but found ?)\n");
+}
+
+#[test]
 #[cfg(not(target_os = "android"))]
 fn test_gnu_options() {
     let scene = TestScenario::new(util_name!());
@@ -1068,6 +1139,8 @@ fn test_umask_conflict_reported_only_for_option_like_mode() {
         (&["-w", "--", "file"], 0o466, true),
         (&["file", "-w"], 0o466, true),
         (&["-w", "-w", "--", "file"], 0o466, true),
+        // `-f` hides most diagnostics, but not this one, as in GNU.
+        (&["-f", "-w", "file"], 0o466, true),
         (&["--", "-w", "file"], 0o466, false),
         (&["--", "-rw", "file"], 0o022, false),
         // What matters is whether the argument itself began with a hyphen, not whether the mode
@@ -1626,6 +1699,34 @@ fn test_chmod_operator_only_still_calls_syscall() {
             .code_is(1)
             .stderr_contains("changing permissions of '/'");
     }
+}
+
+#[test]
+fn test_chmod_reports_every_failing_operand() {
+    use rustix::process::geteuid;
+
+    // Every operand is tried and every failure reported, as GNU does: '-f'
+    // hides the messages but keeps the exit status, and '-v' still says what
+    // could not be changed. As above, '/' is a file a non-root user cannot
+    // chmod.
+    if geteuid().is_root() || metadata("/").map_or(0, |m| m.uid()) != 0 {
+        return;
+    }
+
+    let error = "chmod: changing permissions of '/': Operation not permitted\n";
+    new_ucmd!()
+        .args(&["0", "/", "/"])
+        .fails_with_code(1)
+        .stderr_only(format!("{error}{error}"));
+    new_ucmd!()
+        .args(&["-f", "0", "/", "/"])
+        .fails_with_code(1)
+        .no_output();
+    new_ucmd!()
+        .args(&["-v", "-f", "0", "/", "/"])
+        .fails_with_code(1)
+        .no_stderr()
+        .stdout_contains("failed to change mode of file '/' from");
 }
 
 #[test]
