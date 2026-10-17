@@ -1544,7 +1544,12 @@ fn test_du_total_time_column() {
     at.write("file", "z");
     ts.ccmd("touch")
         .env("TZ", "UTC")
-        .args(&["-a", "-t", "201505150000", "-m", "-t", "201606160000"])
+        .args(&["-a", "-t", "201505150000"])
+        .arg(at.plus("file"))
+        .succeeds();
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .args(&["-m", "-t", "201606160000"])
         .arg(at.plus("file"))
         .succeeds();
 
