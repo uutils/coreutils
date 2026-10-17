@@ -4170,6 +4170,7 @@ dependencies = [
  "memchr",
  "notify",
  "rstest",
+ "rustc-hash",
  "rustix",
  "uucore",
  "windows-sys 0.60.2",
