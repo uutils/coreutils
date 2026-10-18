@@ -970,7 +970,7 @@ impl Stater {
                         // printed as `?`) the rest of its bytes are printed as is.
                         let rest = match token {
                             Token::Directive { format, .. } if !format.is_ascii() => {
-                                format.to_string().into_bytes().split_off(1)
+                                format.encode_utf8(&mut [0; 4]).as_bytes()[1..].to_vec()
                             }
                             _ => Vec::new(),
                         };
