@@ -981,9 +981,6 @@ impl Stater {
             }
             i += 1;
         }
-        if !use_printf && !format_str.ends_with('\n') {
-            tokens.push(Token::Char('\n'));
-        }
         (tokens, None)
     }
 
@@ -1054,7 +1051,12 @@ impl Stater {
             }
             tokens
         } else {
-            let (tokens, error) = Self::generate_tokens(format_str, use_printf);
+            let (mut tokens, error) = Self::generate_tokens(format_str, use_printf);
+            // `--format` always prints a newline after the output, even when
+            // the format already ends with one; `--printf` never adds one.
+            if !use_printf && error.is_none() {
+                tokens.push(Token::Char('\n'));
+            }
             format_error = error;
             tokens
         };
