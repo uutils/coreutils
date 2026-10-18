@@ -51,7 +51,7 @@ crates is as follows:
 - `locales/en-US.ftl`: the util's strings
 - `locales/fr-FR.ftl`: French translation of the util's strings
 
-We have separated repositories for crates that we maintain but also publish for
+We have separate repositories for crates that we maintain but also publish for
 use by others:
 
 - [coreutils-i10n](https://github.com/uutils/coreutils-l10n)
