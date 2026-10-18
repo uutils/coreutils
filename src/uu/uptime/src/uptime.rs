@@ -13,7 +13,6 @@ use jiff::tz::TimeZone;
 use std::io::{self, Write, stdout};
 use uucore::error::{UError, UResult};
 use uucore::format_usage;
-use uucore::libc::time_t;
 use uucore::translate;
 use uucore::uptime::{
     OutputFormat, format_nusers, get_formatted_loadavg, get_formatted_nusers, get_formatted_time,
@@ -140,7 +139,7 @@ fn print_time() -> UResult<()> {
     Ok(())
 }
 
-fn print_uptime(boot_time: Option<time_t>) -> UResult<()> {
+fn print_uptime(boot_time: Option<i64>) -> UResult<()> {
     let localized_text = translate!("uptime-output-up-text");
     let uptime_message = get_formatted_uptime(boot_time, OutputFormat::HumanReadable)?;
 
