@@ -4533,3 +4533,12 @@ fn test_debug_incompatible_with_check() {
             .stderr_only(format!("sort: options '-{opt} --debug' are incompatible\n"));
     }
 }
+
+#[test]
+fn test_posix_locale_keeps_byte_order() {
+    new_ucmd!()
+        .env("LC_ALL", "POSIX")
+        .pipe_in("b\nB\na\nA\n")
+        .succeeds()
+        .stdout_only("A\nB\na\nb\n");
+}

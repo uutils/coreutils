@@ -953,3 +953,15 @@ fn test_merge_prefix_lines(
     };
     cmd.args(&files).succeeds().stdout_only(expected);
 }
+
+#[test]
+fn test_posix_locale_accepts_byte_sorted_input() {
+    let ts = TestScenario::new(uutests::util_name!());
+    ts.fixtures.write("sorted", "A\nB\na\nb\n");
+    ts.fixtures.touch("empty");
+    ts.ucmd()
+        .env("LC_ALL", "POSIX")
+        .args(&["--check-order", "sorted", "empty"])
+        .succeeds()
+        .stdout_only("A\nB\na\nb\n");
+}
