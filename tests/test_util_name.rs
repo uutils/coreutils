@@ -341,3 +341,80 @@ fn test_sorted_utils() {
     .unwrap();
     assert!(out.lines().filter(|s| !s.is_empty()).is_sorted());
 }
+
+#[test]
+#[cfg(all(feature = "echo", feature = "true", feature = "false"))]
+fn coreutils_prog_option() {
+    use std::process::Command;
+    let scene = TestScenario::new("dispatch");
+    let output = Command::new(&scene.bin_path)
+        .args(["--coreutils-prog=echo", "hello", "world"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"hello world\n");
+    assert!(output.stderr.is_empty());
+    for (name, expected) in [("true", 0), ("false", 1)] {
+        let output = Command::new(&scene.bin_path)
+            .arg(format!("--coreutils-prog={name}"))
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(expected), "{name}: {output:?}");
+    }
+    for name in ["missing_program", "", "--list", "--version"] {
+        let output = Command::new(&scene.bin_path)
+            .arg(format!("--coreutils-prog={name}"))
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1), "{name}: {output:?}");
+        assert!(output.stdout.is_empty());
+        let expected = if name.is_empty() {
+            "coreutils: unknown program ''''\n".to_owned()
+        } else {
+            format!("coreutils: unknown program '{name}'\n")
+        };
+        assert_eq!(String::from_utf8_lossy(&output.stderr), expected);
+    }
+}
+
+#[test]
+#[cfg(all(unix, feature = "true", feature = "echo"))]
+fn coreutils_prog_option_under_unknown_name() {
+    use std::process::Command;
+    let scene = TestScenario::new("dispatch");
+    let alias = scene.fixtures.plus("invalid_name");
+    symlink_file(&scene.bin_path, &alias).unwrap();
+    let output = Command::new(&alias)
+        .arg("--coreutils-prog=true")
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
+
+    let output = Command::new(&alias)
+        .args(["--coreutils-prog=echo", "--help"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("Usage: echo")
+    );
+}
+
+#[test]
+#[cfg(feature = "ls")]
+fn coreutils_prog_diagnostics_use_selected_name() {
+    let scene = TestScenario::new("dispatch");
+    let output = std::process::Command::new(&scene.bin_path)
+        .args([
+            "--coreutils-prog=ls",
+            "/coreutils-nonexistent-diagnostic-path",
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).starts_with("ls:"));
+}

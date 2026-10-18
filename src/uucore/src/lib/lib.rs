@@ -182,7 +182,7 @@ use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::wasi::ffi::{OsStrExt, OsStringExt};
 use std::str;
 use std::str::Utf8Chunk;
-use std::sync::{LazyLock, atomic::Ordering};
+use std::sync::{LazyLock, OnceLock, atomic::Ordering};
 
 /// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
 /// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
@@ -397,9 +397,19 @@ static UTIL_NAME: LazyLock<String> = LazyLock::new(|| {
         .into_owned()
 });
 
+static UTILITY_NAME_OVERRIDE: OnceLock<String> = OnceLock::new();
+
+/// Set the name used in diagnostics before dispatching a utility.
+/// The first explicit name is retained for the lifetime of the process.
+pub fn set_utility_name(name: String) {
+    let _ = UTILITY_NAME_OVERRIDE.set(name);
+}
+
 /// Derive the utility name.
 pub fn util_name() -> &'static str {
-    &UTIL_NAME
+    UTILITY_NAME_OVERRIDE
+        .get()
+        .map_or_else(|| &*UTIL_NAME, String::as_str)
 }
 
 static EXECUTION_PHRASE: LazyLock<String> = LazyLock::new(|| {
