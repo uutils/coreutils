@@ -7,6 +7,7 @@
 
 #![allow(clippy::cast_possible_wrap)]
 
+use rstest::rstest;
 use std::env;
 use std::fmt::Write as FmtWrite;
 #[cfg(unix)]
@@ -204,23 +205,48 @@ fn test_ext_sort_zero_terminated() {
         .stdout_is_fixture("zero-terminated.expected");
 }
 
-#[test]
-fn test_months_whitespace() {
-    test_helper(
-        "months-whitespace",
-        &[
-            "-M",
-            "--month-sort",
-            "--sort=month",
-            "--sort=mont",
-            "--sort=m",
-        ],
-    );
-}
-
-#[test]
-fn test_version_empty_lines() {
-    test_helper("version-empty-lines", &["-V", "--version-sort"]);
+#[rstest]
+#[case::months_whitespace("months-whitespace", &["-M", "--month-sort", "--sort=month", "--sort=mont", "--sort=m"])]
+#[case::version_empty_lines("version-empty-lines", &["-V", "--version-sort"])]
+#[case::multiple_decimals_numeric("multiple_decimals_numeric", &["-n", "--numeric-sort", "--sort=numeric", "--sort=n"])]
+#[case::multiple_groupings_numeric("multiple_groupings_numeric", &["-n", "--numeric-sort", "--sort=numeric", "--sort=n"])]
+#[case::numeric_with_trailing_invalid_chars("numeric_trailing_chars", &["-n", "--numeric-sort", "--sort=numeric"])]
+#[case::numeric_floats_and_ints("numeric_floats_and_ints", &["-n", "--numeric-sort", "--sort=numeric"])]
+#[case::numeric_floats("numeric_floats", &["-n", "--numeric-sort", "--sort=numeric"])]
+#[case::numeric_floats_with_nan("numeric_floats_with_nan", &["-n", "--numeric-sort", "--sort=numeric"])]
+#[case::numeric_unfixed_floats("numeric_unfixed_floats", &["-n", "--numeric-sort", "--sort=numeric"])]
+#[case::numeric_fixed_floats("numeric_fixed_floats", &["-n", "--numeric-sort", "--sort=numeric"])]
+#[case::numeric_unsorted_ints("numeric_unsorted_ints", &["-n", "--numeric-sort", "--sort=numeric"])]
+#[case::human_block_sizes("human_block_sizes", &["-h", "--human-numeric-sort", "--sort=human-numeric"])]
+#[case::month_default("month_default", &["-M", "--month-sort", "--sort=month"])]
+#[case::month_stable("month_stable", &["-Ms"])]
+#[case::default_unsorted_ints("default_unsorted_ints", &[""])]
+#[case::numeric_unique_ints("numeric_unsorted_ints_unique", &["-nu"])]
+#[case::version("version", &["-V"])]
+#[case::ignore_case("ignore_case", &["-f"])]
+#[case::dictionary_order("dictionary_order", &["-d"])]
+#[case::exponents_general("exponents_general", &["-g"])]
+#[case::exponents_positive_numeric("exponents-positive-numeric", &["-n", "--numeric-sort", "--sort=numeric"])]
+#[case::months_dedup("months-dedup", &["-Mu"])]
+#[case::mixed_floats_ints_chars_numeric("mixed_floats_ints_chars_numeric", &["-n", "--numeric-sort", "--sort=numeric"])]
+#[case::mixed_floats_ints_chars_numeric_unique("mixed_floats_ints_chars_numeric_unique", &["-nu"])]
+#[case::words_unique("words_unique", &["-u"])]
+#[case::numeric_unique("numeric_unique", &["-nu"])]
+#[case::mixed_floats_ints_chars_numeric_unique_reverse("mixed_floats_ints_chars_numeric_unique_reverse", &["-nur"])]
+#[case::mixed_floats_ints_chars_numeric_stable("mixed_floats_ints_chars_numeric_stable", &["-ns"])]
+#[case::numeric_floats_with_nan2("numeric-floats-with-nan2", &["-n", "--numeric-sort", "--sort=numeric"])]
+#[case::keys_open_ended("keys_open_ended", &["-k 2.3"])]
+#[case::keys_closed_range("keys_closed_range", &["-k 2.2,2.2"])]
+#[case::keys_multiple_ranges("keys_multiple_ranges", &["-k 2,2 -k 3,3"])]
+#[case::keys_no_field_match("keys_no_field_match", &["-k 4,4"])]
+#[case::keys_no_char_match("keys_no_char_match", &["-k 1.2"])]
+#[case::keys_custom_separator("keys_custom_separator", &["-k 2.2,2.2 -t x"])]
+#[case::keys_blanks_with_char_idx("keys_blanks", &["-k 1.2b"])]
+#[case::keys_ignore_flag("keys_ignore_flag", &["-k 1n -b"])]
+#[case::zero_terminated("zero-terminated", &["-z"])]
+#[case::blanks("blanks", &["-b", "--ignore-leading-blanks"])]
+fn test_sort_fixtures(#[case] fixture_stem: &str, #[case] possible_args: &[&str]) {
+    test_helper(fixture_stem, possible_args);
 }
 
 #[test]
@@ -316,30 +342,6 @@ fn test_multiple_decimals_general() {
             "--sort=general",
             "--sort=g",
         ],
-    );
-}
-
-#[test]
-fn test_multiple_decimals_numeric() {
-    test_helper(
-        "multiple_decimals_numeric",
-        &["-n", "--numeric-sort", "--sort=numeric", "--sort=n"],
-    );
-}
-
-#[test]
-fn test_multiple_groupings_numeric() {
-    test_helper(
-        "multiple_groupings_numeric",
-        &["-n", "--numeric-sort", "--sort=numeric", "--sort=n"],
-    );
-}
-
-#[test]
-fn test_numeric_with_trailing_invalid_chars() {
-    test_helper(
-        "numeric_trailing_chars",
-        &["-n", "--numeric-sort", "--sort=numeric"],
     );
 }
 
@@ -528,97 +530,6 @@ fn test_random_ignore_case() {
 }
 
 #[test]
-fn test_numeric_floats_and_ints() {
-    test_helper(
-        "numeric_floats_and_ints",
-        &["-n", "--numeric-sort", "--sort=numeric"],
-    );
-}
-
-#[test]
-fn test_numeric_floats() {
-    test_helper(
-        "numeric_floats",
-        &["-n", "--numeric-sort", "--sort=numeric"],
-    );
-}
-
-#[test]
-fn test_numeric_floats_with_nan() {
-    test_helper(
-        "numeric_floats_with_nan",
-        &["-n", "--numeric-sort", "--sort=numeric"],
-    );
-}
-
-#[test]
-fn test_numeric_unfixed_floats() {
-    test_helper(
-        "numeric_unfixed_floats",
-        &["-n", "--numeric-sort", "--sort=numeric"],
-    );
-}
-
-#[test]
-fn test_numeric_fixed_floats() {
-    test_helper(
-        "numeric_fixed_floats",
-        &["-n", "--numeric-sort", "--sort=numeric"],
-    );
-}
-
-#[test]
-fn test_numeric_unsorted_ints() {
-    test_helper(
-        "numeric_unsorted_ints",
-        &["-n", "--numeric-sort", "--sort=numeric"],
-    );
-}
-
-#[test]
-fn test_human_block_sizes() {
-    test_helper(
-        "human_block_sizes",
-        &["-h", "--human-numeric-sort", "--sort=human-numeric"],
-    );
-}
-
-#[test]
-fn test_month_default() {
-    test_helper("month_default", &["-M", "--month-sort", "--sort=month"]);
-}
-
-#[test]
-fn test_month_stable() {
-    test_helper("month_stable", &["-Ms"]);
-}
-
-#[test]
-fn test_default_unsorted_ints() {
-    test_helper("default_unsorted_ints", &[""]);
-}
-
-#[test]
-fn test_numeric_unique_ints() {
-    test_helper("numeric_unsorted_ints_unique", &["-nu"]);
-}
-
-#[test]
-fn test_version() {
-    test_helper("version", &["-V"]);
-}
-
-#[test]
-fn test_ignore_case() {
-    test_helper("ignore_case", &["-f"]);
-}
-
-#[test]
-fn test_dictionary_order() {
-    test_helper("dictionary_order", &["-d"]);
-}
-
-#[test]
 fn test_dictionary_order2() {
     new_ucmd!()
         .pipe_in("a👦🏻aa\tb\naaaa\tb") // spell-checker:disable-line
@@ -637,63 +548,12 @@ fn test_non_printing_chars() {
 }
 
 #[test]
-fn test_exponents_general() {
-    test_helper("exponents_general", &["-g"]);
-}
-
-#[test]
 fn test_exponents_positive_general() {
     new_ucmd!()
         .pipe_in("1\n2e3\n1e-5")
         .arg("-g")
         .succeeds()
         .stdout_only("1e-5\n1\n2e3\n");
-}
-
-#[test]
-fn test_exponents_positive_numeric() {
-    test_helper(
-        "exponents-positive-numeric",
-        &["-n", "--numeric-sort", "--sort=numeric"],
-    );
-}
-
-#[test]
-fn test_months_dedup() {
-    test_helper("months-dedup", &["-Mu"]);
-}
-
-#[test]
-fn test_mixed_floats_ints_chars_numeric() {
-    test_helper(
-        "mixed_floats_ints_chars_numeric",
-        &["-n", "--numeric-sort", "--sort=numeric"],
-    );
-}
-
-#[test]
-fn test_mixed_floats_ints_chars_numeric_unique() {
-    test_helper("mixed_floats_ints_chars_numeric_unique", &["-nu"]);
-}
-
-#[test]
-fn test_words_unique() {
-    test_helper("words_unique", &["-u"]);
-}
-
-#[test]
-fn test_numeric_unique() {
-    test_helper("numeric_unique", &["-nu"]);
-}
-
-#[test]
-fn test_mixed_floats_ints_chars_numeric_reverse() {
-    test_helper("mixed_floats_ints_chars_numeric_unique_reverse", &["-nur"]);
-}
-
-#[test]
-fn test_mixed_floats_ints_chars_numeric_stable() {
-    test_helper("mixed_floats_ints_chars_numeric_stable", &["-ns"]);
 }
 
 #[test]
@@ -718,14 +578,6 @@ fn test_numeric_floats2() {
             .succeeds()
             .stdout_only("-8.90880\n-.05\n1.040000000\n1.444\n1.58590\n8.013\n");
     }
-}
-
-#[test]
-fn test_numeric_floats_with_nan2() {
-    test_helper(
-        "numeric-floats-with-nan2",
-        &["-n", "--numeric-sort", "--sort=numeric"],
-    );
 }
 
 #[test]
@@ -1025,36 +877,6 @@ fn test_numeric_unique_ints2() {
 }
 
 #[test]
-fn test_keys_open_ended() {
-    test_helper("keys_open_ended", &["-k 2.3"]);
-}
-
-#[test]
-fn test_keys_closed_range() {
-    test_helper("keys_closed_range", &["-k 2.2,2.2"]);
-}
-
-#[test]
-fn test_keys_multiple_ranges() {
-    test_helper("keys_multiple_ranges", &["-k 2,2 -k 3,3"]);
-}
-
-#[test]
-fn test_keys_no_field_match() {
-    test_helper("keys_no_field_match", &["-k 4,4"]);
-}
-
-#[test]
-fn test_keys_no_char_match() {
-    test_helper("keys_no_char_match", &["-k 1.2"]);
-}
-
-#[test]
-fn test_keys_custom_separator() {
-    test_helper("keys_custom_separator", &["-k 2.2,2.2 -t x"]);
-}
-
-#[test]
 fn test_keys_invalid_field() {
     new_ucmd!()
         .args(&["-k", "1."])
@@ -1181,11 +1003,6 @@ fn test_keys_with_options_blanks_start() {
 }
 
 #[test]
-fn test_keys_blanks_with_char_idx() {
-    test_helper("keys_blanks", &["-k 1.2b"]);
-}
-
-#[test]
 fn test_keys_with_options_blanks_end() {
     let input = "a  b
 a b
@@ -1241,11 +1058,6 @@ fn test_keys_negative_size_match() {
 }
 
 #[test]
-fn test_keys_ignore_flag() {
-    test_helper("keys_ignore_flag", &["-k 1n -b"]);
-}
-
-#[test]
 fn test_does_not_inherit_key_settings() {
     let input = " 1
 2
@@ -1279,11 +1091,6 @@ fn test_inherits_key_settings() {
    10
 ",
         );
-}
-
-#[test]
-fn test_zero_terminated() {
-    test_helper("zero-terminated", &["-z"]);
 }
 
 #[test]
@@ -1691,11 +1498,6 @@ fn test_nonexistent_file() {
             #[cfg(windows)]
             "sort: cannot read: nonexistent.txt: The system cannot find the file specified.\n",
         );
-}
-
-#[test]
-fn test_blanks() {
-    test_helper("blanks", &["-b", "--ignore-leading-blanks"]);
 }
 
 #[test]
