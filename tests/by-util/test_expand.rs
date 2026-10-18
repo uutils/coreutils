@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (ToDO) taaaa tbbbb tcccc
 
+use rstest::rstest;
 use uucore::display::Quotable;
 use uutests::new_ucmd;
 
@@ -79,58 +80,20 @@ fn test_tabs() {
     }
 }
 
-#[test]
-fn test_multiple_tabs_args() {
+#[rstest]
+#[case::multiple_tabs_args(&["--tabs=3", "--tabs=6", "--tabs=9"], "a\tb\tc\td\te", "a  b  c  d e")]
+#[case::tabs_empty_string(&["--tabs", ""], "a\tb\tc", "a       b       c")]
+#[case::tabs_comma_only(&["--tabs", ","], "a\tb\tc", "a       b       c")]
+#[case::tabs_space_only(&["--tabs", " "], "a\tb\tc", "a       b       c")]
+#[case::tabs_slash(&["--tabs", "/"], "a\tb\tc", "a       b       c")]
+#[case::tabs_plus(&["--tabs", "+"], "a\tb\tc", "a       b       c")]
+#[case::tabs_comma_separated_no_numbers(&["--tabs=+,/,+,/"], "\ta\tb\tc", "        a       b       c")]
+fn test_expand_stdin(#[case] args: &[&str], #[case] input: &str, #[case] expected: &str) {
     new_ucmd!()
-        .args(&["--tabs=3", "--tabs=6", "--tabs=9"])
-        .pipe_in("a\tb\tc\td\te")
+        .args(args)
+        .pipe_in(input)
         .succeeds()
-        .stdout_is("a  b  c  d e");
-}
-
-#[test]
-fn test_tabs_empty_string() {
-    new_ucmd!()
-        .args(&["--tabs", ""])
-        .pipe_in("a\tb\tc")
-        .succeeds()
-        .stdout_is("a       b       c");
-}
-
-#[test]
-fn test_tabs_comma_only() {
-    new_ucmd!()
-        .args(&["--tabs", ","])
-        .pipe_in("a\tb\tc")
-        .succeeds()
-        .stdout_is("a       b       c");
-}
-
-#[test]
-fn test_tabs_space_only() {
-    new_ucmd!()
-        .args(&["--tabs", " "])
-        .pipe_in("a\tb\tc")
-        .succeeds()
-        .stdout_is("a       b       c");
-}
-
-#[test]
-fn test_tabs_slash() {
-    new_ucmd!()
-        .args(&["--tabs", "/"])
-        .pipe_in("a\tb\tc")
-        .succeeds()
-        .stdout_is("a       b       c");
-}
-
-#[test]
-fn test_tabs_plus() {
-    new_ucmd!()
-        .args(&["--tabs", "+"])
-        .pipe_in("a\tb\tc")
-        .succeeds()
-        .stdout_is("a       b       c");
+        .stdout_only(expected);
 }
 
 #[test]
@@ -204,15 +167,6 @@ fn test_tabs_keep_last_trailing_specifier() {
         //          0         1
         //          01234567890
         .stdout_is(" a   b    c");
-}
-
-#[test]
-fn test_tabs_comma_separated_no_numbers() {
-    new_ucmd!()
-        .arg("--tabs=+,/,+,/")
-        .pipe_in("\ta\tb\tc")
-        .succeeds()
-        .stdout_is("        a       b       c");
 }
 
 #[test]
