@@ -13,6 +13,25 @@ use data_encoding::Encoding;
 use data_encoding_macro::new_encoding;
 use std::collections::VecDeque;
 
+/// Recover complete bytes from a failed power-of-two encoding quantum.
+/// Its caller still reports the original padding or trailing-bit error.
+fn decode_partial_bits(input: &[u8], alphabet: &[u8], bits: u32, output: &mut Vec<u8>) {
+    let mut pending = 0u16;
+    let mut pending_bits = 0;
+    for byte in input {
+        let Some(value) = alphabet.iter().position(|symbol| symbol == byte) else {
+            break;
+        };
+        pending = (pending << bits) | value as u16;
+        pending_bits += bits;
+        if pending_bits >= 8 {
+            pending_bits -= 8;
+            output.push((pending >> pending_bits) as u8);
+            pending &= (1 << pending_bits) - 1;
+        }
+    }
+}
+
 // SIMD base64 wrapper
 pub struct Base64SimdWrapper {
     pub alphabet: &'static [u8],
@@ -58,6 +77,19 @@ impl Base64SimdWrapper {
 impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
     fn alphabet(&self) -> &'static [u8] {
         self.alphabet
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        true
+    }
+
+    fn decode_partial_quantum(&self, input: &[u8], output: &mut Vec<u8>) {
+        decode_partial_bits(
+            input,
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+            6,
+            output,
+        );
     }
 
     fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
@@ -180,6 +212,7 @@ pub struct Base58Wrapper {}
 pub struct EncodingWrapper {
     pub alphabet: &'static [u8],
     pub encoding: Encoding,
+    partial_bits: Option<(&'static [u8], u32)>,
     pub unpadded_multiple: usize,
     pub valid_decoding_multiple: usize,
 }
@@ -197,9 +230,14 @@ impl EncodingWrapper {
 
         assert!(!alphabet.is_empty());
 
+        let partial_bits = (encoding == data_encoding::BASE64URL).then_some((
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".as_slice(),
+            6,
+        ));
         Self {
             alphabet,
             encoding,
+            partial_bits,
             unpadded_multiple,
             valid_decoding_multiple,
         }
@@ -216,6 +254,11 @@ pub trait SupportsFastDecodeAndEncode {
     fn alphabet(&self) -> &'static [u8];
 
     fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()>;
+
+    /// before the streaming decoder emits its otherwise valid prefix.
+    /// Recover complete bytes within a quantum whose padding or trailing bits
+    /// are invalid. Encodings without independently decodable bits opt out.
+    fn decode_partial_quantum(&self, _input: &[u8], _output: &mut Vec<u8>) {}
 
     fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()>;
 
@@ -416,6 +459,10 @@ impl SupportsFastDecodeAndEncode for Z85Wrapper {
         b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#"
     }
 
+    fn supports_partial_decode(&self) -> bool {
+        true
+    }
+
     fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
         if input.first() == Some(&b'#') {
             return Err(USimpleError::new(1, "error: invalid input"));
@@ -457,6 +504,16 @@ impl SupportsFastDecodeAndEncode for Z85Wrapper {
 impl SupportsFastDecodeAndEncode for EncodingWrapper {
     fn alphabet(&self) -> &'static [u8] {
         self.alphabet
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        true
+    }
+
+    fn decode_partial_quantum(&self, input: &[u8], output: &mut Vec<u8>) {
+        if let Some((alphabet, bits)) = self.partial_bits {
+            decode_partial_bits(input, alphabet, bits, output);
+        }
     }
 
     // Adapted from `decode` in the "data-encoding" crate
@@ -534,6 +591,10 @@ impl SupportsFastDecodeAndEncode for Base32Wrapper {
 
     fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
         self.inner.decode_into_vec(input, output)
+    }
+
+    fn decode_partial_quantum(&self, input: &[u8], output: &mut Vec<u8>) {
+        decode_partial_bits(input, &self.inner.alphabet[..32], 5, output);
     }
 
     fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
