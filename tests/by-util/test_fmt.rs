@@ -304,7 +304,8 @@ fn prefix_minus() {
 #[test]
 fn prefix_equal() {
     for prefix_args in [
-        // FIXME: #6353 vec!["-p="],
+        vec!["-p="],
+        vec!["-up="],
         vec!["-p", "="],
         vec!["--prefix=="],
         vec!["--prefix", "="],
@@ -312,6 +313,7 @@ fn prefix_equal() {
         vec!["--pref", "="],
         // Test self-overriding:
         vec!["--prefix=-", "--prefix=="],
+        vec!["-p-", "-p="],
     ] {
         new_ucmd!()
             .args(&prefix_args)
@@ -324,7 +326,8 @@ fn prefix_equal() {
 #[test]
 fn prefix_equal_skip_prefix_equal_two() {
     for prefix_args in [
-        // FIXME: #6353 vec!["--prefix==", "-P=2"],
+        vec!["--prefix==", "-P=2"],
+        vec!["-p=", "-uP=2"],
         vec!["--prefix==", "-P", "=2"],
         vec!["--prefix==", "--skip-prefix==2"],
         vec!["--prefix==", "--skip-prefix", "=2"],
@@ -332,6 +335,7 @@ fn prefix_equal_skip_prefix_equal_two() {
         vec!["--prefix==", "--skip-pref", "=2"],
         // Test self-overriding:
         vec!["--prefix==", "--skip-pref", "asdf", "-P", "=2"],
+        vec!["-p=", "-Pignored", "-P=2"],
     ] {
         new_ucmd!()
             .args(&prefix_args)
@@ -339,6 +343,35 @@ fn prefix_equal_skip_prefix_equal_two() {
             .succeeds()
             .stdout_is_fixture("prefixed-one-word-per-line_p=_P=2.txt");
     }
+}
+
+#[test]
+fn prefix_with_multiple_equals() {
+    for prefix_args in [vec!["-p=="], vec!["-up=="], vec!["--prefix==="]] {
+        new_ucmd!()
+            .args(&prefix_args)
+            .pipe_in("=unchanged\n==one\n==two\n")
+            .succeeds()
+            .stdout_only("=unchanged\n==one two\n");
+    }
+}
+
+#[test]
+fn prefix_containing_short_option_spelling() {
+    for prefix_args in [vec!["-p-p="], vec!["--prefix=-p="], vec!["-qp-p="]] {
+        new_ucmd!()
+            .args(&prefix_args)
+            .pipe_in("-p=one\n-p=two\n")
+            .succeeds()
+            .stdout_only("-p=one two\n");
+    }
+}
+
+#[test]
+fn prefix_option_spelling_after_terminator_is_a_file() {
+    let (at, mut cmd) = uutests::at_and_ucmd!();
+    at.write("-p=", "one\ntwo\n");
+    cmd.args(&["--", "-p="]).succeeds().stdout_only("one two\n");
 }
 
 #[test]
