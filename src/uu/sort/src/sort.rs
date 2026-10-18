@@ -2965,6 +2965,10 @@ fn compare_by<'a>(
                 general_numeric_compare(a_float, b_float)
             }
             SortMode::Month => month_compare(a_str, b_str),
+            SortMode::Version if settings.ignore_case => {
+                // -f folds lowercase to uppercase before comparing, as in the other modes.
+                version_cmp(&a_str.to_ascii_uppercase(), &b_str.to_ascii_uppercase())
+            }
             SortMode::Version => version_cmp(a_str, b_str),
             SortMode::Default => {
                 // Use locale-aware comparison if feature is enabled and no custom flags are set
