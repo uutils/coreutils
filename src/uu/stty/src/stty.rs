@@ -735,14 +735,10 @@ fn string_to_flag(option: &str) -> Option<AllFlags<'_>> {
 }
 
 fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
-    if cc == 0 {
-        return Ok(translate!("stty-output-undef"));
-    }
-
-    let (meta_prefix, code) = if cc >= 0x80 {
-        ("M-", cc - 0x80)
-    } else {
-        ("", cc)
+    let (meta_prefix, code) = match cc {
+        0 => return Ok(translate!("stty-output-undef")),
+        0x80.. => ("M-", cc - 0x80),
+        _ => ("", cc),
     };
 
     // Determine the '^'-prefix if applicable and character based on the code
@@ -1006,18 +1002,16 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
     }
     // try to parse ^<char> or just <char>
     let mut chars = s.chars();
-    match (chars.next(), chars.next()) {
-        (Some('^'), Some(c)) => {
-            // special case: ascii value of '^?' is greater than '?'
-            if c == '?' {
-                return Ok(ASCII_DEL);
-            }
-            // subtract by '@' to turn the char into the ascii value of '^<char>'
-            Ok((c.to_ascii_uppercase() as u8).wrapping_sub(b'@'))
-        }
-        (Some(c), None) => Ok(c as u8),
-        (Some(_), Some(_)) => Err(ControlCharMappingError::MultipleChars(s.to_string())),
-        _ => unreachable!("No arguments provided: must have been caught earlier"),
+    match (
+        chars.next().expect("must have been caught earlier"),
+        chars.next(),
+    ) {
+        // special case: ascii value of '^?' is greater than '?'
+        ('^', Some('?')) => Ok(ASCII_DEL),
+        // subtract by '@' to turn the char into the ascii value of '^<char>'
+        ('^', Some(c)) => Ok((c.to_ascii_uppercase() as u8).wrapping_sub(b'@')),
+        (c, None) => Ok(c as u8),
+        (_, Some(_)) => Err(ControlCharMappingError::MultipleChars(s.to_string())),
     }
 }
 
