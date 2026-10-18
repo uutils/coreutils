@@ -1083,6 +1083,14 @@ fn test_ls_zero() {
         .succeeds()
         .stdout_only("0-test-zero, 2-test-zero, 3-test-zero\x00");
 
+    for opt in ["-C", "-x"] {
+        scene
+            .ucmd()
+            .args(&["--zero", opt, "-w", "80"])
+            .succeeds()
+            .stdout_only("0-test-zero\t2-test-zero\t3-test-zero\x00");
+    }
+
     scene
         .ucmd()
         .args(&["--zero", "--hide-control-chars"])

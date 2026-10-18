@@ -410,6 +410,7 @@ fn display_items_non_long(
             &mut state.out,
             quoted,
             config.tab_size,
+            config.line_ending,
         ),
         Format::Across => display_grid(
             names.into_iter(),
@@ -418,6 +419,7 @@ fn display_items_non_long(
             &mut state.out,
             quoted,
             config.tab_size,
+            config.line_ending,
         ),
         Format::Commas => display_commas_format(
             names.into_iter(),
@@ -497,6 +499,7 @@ fn display_grid(
     out: &mut BufWriter<Stdout>,
     quoted: bool,
     tab_size: usize,
+    line_ending: LineEnding,
 ) -> UResult<()> {
     if width == 0 {
         // If the width is 0 we print one single line
@@ -509,7 +512,7 @@ fn display_grid(
             write_os_str(out, &name.displayed)?;
         }
         if printed_something {
-            writeln!(out)?;
+            write!(out, "{line_ending}")?;
         }
     } else {
         let names: Vec<String> = {
@@ -556,7 +559,14 @@ fn display_grid(
                 width: width as usize,
             },
         );
-        write!(out, "{grid}")?;
+        match line_ending {
+            LineEnding::Newline => write!(out, "{grid}")?,
+            LineEnding::Nul => {
+                let grid_str = grid.to_string();
+                let nul_str = grid_str.replace('\n', "\0");
+                write!(out, "{nul_str}")?;
+            }
+        }
     }
     Ok(())
 }
