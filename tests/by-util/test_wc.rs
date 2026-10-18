@@ -508,6 +508,68 @@ fn test_total_only() {
         .stdout_is("31 313 1887\n");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
+#[cfg(unix)]
+fn test_total_bytes_overflow() {
+    let (at, ts) = uutests::at_and_ts!();
+    let size = (1_u64 << 61) + 1;
+    let file = at.make_file("sparse");
+    let (file, path) = match file.set_len(size) {
+        Ok(()) => (file, "sparse".to_owned()),
+        // ext4 cannot hold a file this large. A memfd supports the sparse size
+        // without allocating its contents; keep it open until all commands finish.
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        Err(_) => {
+            use rustix::fs::{MemfdFlags, memfd_create};
+
+            let file =
+                std::fs::File::from(memfd_create("wc-overflow", MemfdFlags::CLOEXEC).unwrap());
+            file.set_len(size).unwrap();
+            // Inherit the file as stdin: Android restricts access to another
+            // process's proc entries, so each command must open its own fd.
+            (file, "/proc/self/fd/0".to_owned())
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        Err(error) => {
+            eprintln!("Skipping test: cannot create a sparse file of size {size}: {error}");
+            return;
+        }
+    };
+    let files = vec![path.as_str(); 9];
+    let diagnostic = "wc: total bytes: Value too large for defined data type\n";
+
+    ts.ucmd()
+        .set_stdin(file.try_clone().unwrap())
+        .args(&["-c", "--total=only"])
+        .args(&files)
+        .fails_with_code(1)
+        .stdout_is(format!("{}\n", u64::MAX))
+        .stderr_is(diagnostic);
+
+    // This also exercises the metadata sum used to choose the column width.
+    for total in ["--total=auto", "--total=always"] {
+        ts.ucmd()
+            .set_stdin(file.try_clone().unwrap())
+            .args(&["-c", total])
+            .args(&files)
+            .fails_with_code(1)
+            .stdout_is(format!(
+                "{}{} total\n",
+                format!("{size:20} {path}\n").repeat(files.len()),
+                u64::MAX,
+            ))
+            .stderr_is(diagnostic);
+    }
+
+    ts.ucmd()
+        .set_stdin(file.try_clone().unwrap())
+        .args(&["-c", "--total=never"])
+        .args(&files)
+        .succeeds()
+        .stdout_only(format!("{size:20} {path}\n").repeat(files.len()));
+}
+
 #[test]
 fn test_zero_length_files() {
     // A trailing zero is ignored, but otherwise empty file names are an error...

@@ -11,7 +11,7 @@ use uutests::util_name;
 /*
  * As dir use the same functions than ls, we don't have to retest them here.
  * We just test the default and the long output
-*/
+ */
 
 #[test]
 fn test_dir() {
