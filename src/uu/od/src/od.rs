@@ -70,7 +70,7 @@ struct OdOptions {
     skip_bytes: u64,
     read_bytes: Option<u64>,
     label: Option<u64>,
-    input_strings: Vec<String>,
+    input_strings: Vec<OsString>,
     formats: Vec<ParsedFormatterItemInfo>,
     line_bytes: usize,
     output_duplicates: bool,
@@ -253,12 +253,16 @@ impl OdOptions {
 /// opens the input and calls `odfunc` to process the input.
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
-    let raw_args: Vec<OsString> = args.iter().map(OsString::from).collect();
+    let raw_args: Vec<OsString> = args.collect();
+    // Keep a text view for option scanning, but parse filenames from the raw arguments.
+    let args: Vec<String> = raw_args
+        .iter()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
 
     let clap_opts = uu_app();
 
-    let clap_matches = uucore::clap_localization::handle_clap_result(clap_opts, &args)?;
+    let clap_matches = uucore::clap_localization::handle_clap_result(clap_opts, &raw_args)?;
 
     // Kept for the caret in SIZE diagnostics, which echoes the command line.
     let diag_args = uucore::diagnostics::capture(&raw_args);
@@ -512,6 +516,7 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::FILENAME)
+                .value_parser(clap::builder::OsStringValueParser::new())
                 .hide(true)
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
@@ -600,7 +605,7 @@ where
 
 /// Extract and display printable strings from input (od -S option)
 fn extract_strings_from_input(
-    input_strings: &[String],
+    input_strings: &[OsString],
     skip_bytes: u64,
     read_bytes: Option<u64>,
     min_length: usize,
@@ -784,12 +789,15 @@ fn write_bytes(
 }
 
 /// Helper function to convert input strings to InputSource
-fn map_input_strings(input_strings: &[String]) -> Vec<InputSource<'_>> {
+fn map_input_strings(input_strings: &[OsString]) -> Vec<InputSource<'_>> {
     input_strings
         .iter()
-        .map(|w| match w as &str {
-            "-" => InputSource::Stdin,
-            x => InputSource::FileName(x),
+        .map(|w| {
+            if w == "-" {
+                InputSource::Stdin
+            } else {
+                InputSource::FileName(w)
+            }
         })
         .collect()
 }
@@ -799,7 +807,7 @@ fn map_input_strings(input_strings: &[String]) -> Vec<InputSource<'_>> {
 /// `skip_bytes` is the number of bytes skipped from the input
 /// `read_bytes` is an optional limit to the number of bytes to read
 fn open_input_peek_reader(
-    input_strings: &[String],
+    input_strings: &[OsString],
     skip_bytes: u64,
     read_bytes: Option<u64>,
 ) -> UResult<PeekReader<BufReader<PartialReader<MultifileReader<'_>>>>> {
