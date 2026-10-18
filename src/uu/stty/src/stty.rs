@@ -619,12 +619,9 @@ fn print_terminal_size(
 }
 
 fn cc_to_index(option: &str) -> Option<S> {
-    for cc in CONTROL_CHARS {
-        if option == cc.0 {
-            return Some(cc.1);
-        }
-    }
-    None
+    CONTROL_CHARS
+        .iter()
+        .find_map(|cc| (cc.0 == option).then_some(cc.1))
 }
 
 fn string_to_combo(arg: &str) -> Option<&str> {
