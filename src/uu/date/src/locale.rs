@@ -322,11 +322,6 @@ mod tests {
             // Acquire mutex to prevent interference with other tests
             let _lock = LOCALE_MUTEX.lock().unwrap();
 
-            // Save original locale (both environment and process locale)
-            let original_lc_all = std::env::var_os("LC_ALL");
-            let original_lc_time = std::env::var_os("LC_TIME");
-            let original_lang = std::env::var_os("LANG");
-
             // Save current process locale
             let original_process_locale = unsafe {
                 let ptr = libc::setlocale(libc::LC_TIME, std::ptr::null());
@@ -336,13 +331,6 @@ mod tests {
                     CStr::from_ptr(ptr).to_str().ok().map(ToString::to_string)
                 }
             };
-
-            unsafe {
-                // Set C locale
-                std::env::set_var("LC_ALL", "C");
-                std::env::remove_var("LC_TIME");
-                std::env::remove_var("LANG");
-            }
 
             // Get the locale format
             let format = unsafe {
@@ -362,25 +350,6 @@ mod tests {
                     || locale_format.contains("%T")
                     || locale_format.contains("%R");
                 assert!(uses_24_hour, "C locale should use 24-hour format, got: {locale_format}");
-            }
-
-            // Restore original environment variables
-            unsafe {
-                if let Some(val) = original_lc_all {
-                    std::env::set_var("LC_ALL", val);
-                } else {
-                    std::env::remove_var("LC_ALL");
-                }
-                if let Some(val) = original_lc_time {
-                    std::env::set_var("LC_TIME", val);
-                } else {
-                    std::env::remove_var("LC_TIME");
-                }
-                if let Some(val) = original_lang {
-                    std::env::set_var("LANG", val);
-                } else {
-                    std::env::remove_var("LANG");
-                }
             }
 
             // Restore original process locale
