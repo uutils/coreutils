@@ -23,6 +23,11 @@ wc-error-cannot-open-for-reading = cannot open { $path } for reading
 wc-error-read-error = { $path }: read error
 wc-error-failed-to-print-result = failed to print result for { $title }
 wc-error-failed-to-print-total = failed to print total
+wc-error-overflow = Value too large for defined data type
+wc-error-total-bytes-overflow = total bytes: { wc-error-overflow }
+wc-error-total-chars-overflow = total characters: { wc-error-overflow }
+wc-error-total-lines-overflow = total lines: { wc-error-overflow }
+wc-error-total-words-overflow = total words: { wc-error-overflow }
 
 # Decoder error messages
 decoder-error-invalid-byte-sequence = invalid byte sequence: { $bytes }
