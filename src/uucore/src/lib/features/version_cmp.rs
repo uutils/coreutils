@@ -10,9 +10,16 @@ use std::cmp::Ordering;
 /// Compares the non-digit parts of a version.
 /// Special cases: ~ are before everything else, even ends ("a~" < "a")
 /// Letters are before non-letters
-fn version_non_digit_cmp(a: &[u8], b: &[u8]) -> Ordering {
-    let mut a_chars = a.iter();
-    let mut b_chars = b.iter();
+fn version_non_digit_cmp(a: &[u8], b: &[u8], ignore_case: bool) -> Ordering {
+    let fold = |c: &u8| {
+        if ignore_case {
+            c.to_ascii_uppercase()
+        } else {
+            *c
+        }
+    };
+    let mut a_chars = a.iter().map(fold);
+    let mut b_chars = b.iter().map(fold);
     loop {
         match (a_chars.next(), b_chars.next()) {
             (Some(c1), Some(c2)) if c1 == c2 => {}
@@ -26,7 +33,7 @@ fn version_non_digit_cmp(a: &[u8], b: &[u8]) -> Ordering {
             (Some(c1), Some(c2)) if !c1.is_ascii_alphabetic() && c2.is_ascii_alphabetic() => {
                 return Ordering::Greater;
             }
-            (Some(c1), Some(c2)) => return c1.cmp(c2),
+            (Some(c1), Some(c2)) => return c1.cmp(&c2),
         }
     }
 }
@@ -61,10 +68,26 @@ fn remove_file_ending(a: &[u8]) -> &[u8] {
 }
 
 /// Compare two version strings.
-pub fn version_cmp(mut a: &[u8], mut b: &[u8]) -> Ordering {
-    let str_cmp = a.cmp(b);
-    if str_cmp == Ordering::Equal {
-        return str_cmp;
+pub fn version_cmp(a: &[u8], b: &[u8]) -> Ordering {
+    version_cmp_impl(a, b, false)
+}
+
+/// Compare two version strings, treating ASCII lowercase letters as
+/// their uppercase equivalents.
+pub fn version_cmp_ignore_case(a: &[u8], b: &[u8]) -> Ordering {
+    version_cmp_impl(a, b, true)
+}
+
+fn version_cmp_impl(mut a: &[u8], mut b: &[u8], ignore_case: bool) -> Ordering {
+    let same = |a: &[u8], b: &[u8]| {
+        if ignore_case {
+            a.eq_ignore_ascii_case(b)
+        } else {
+            a == b
+        }
+    };
+    if same(a, b) {
+        return Ordering::Equal;
     }
 
     // Special cases:
@@ -103,7 +126,7 @@ pub fn version_cmp(mut a: &[u8], mut b: &[u8]) -> Ordering {
 
     // Try to strip file extensions
     let (mut a, mut b) = match (remove_file_ending(a), remove_file_ending(b)) {
-        (a_stripped, b_stripped) if a_stripped == b_stripped => {
+        (a_stripped, b_stripped) if same(a_stripped, b_stripped) => {
             // If both would be the same after stripping file extensions, don't strip them.
             (a, b)
         }
@@ -120,7 +143,7 @@ pub fn version_cmp(mut a: &[u8], mut b: &[u8]) -> Ordering {
         let a_str = &a[..a_numerical_start];
         let b_str = &b[..b_numerical_start];
 
-        match version_non_digit_cmp(a_str, b_str) {
+        match version_non_digit_cmp(a_str, b_str, ignore_case) {
             Ordering::Equal => {}
             ord => return ord,
         }
@@ -159,7 +182,7 @@ pub fn version_cmp(mut a: &[u8], mut b: &[u8]) -> Ordering {
 
 #[cfg(test)]
 mod tests {
-    use crate::version_cmp::version_cmp;
+    use crate::version_cmp::{version_cmp, version_cmp_ignore_case};
     use std::cmp::Ordering;
     #[test]
     fn test_version_cmp() {
@@ -366,6 +389,24 @@ mod tests {
             version_cmp(b"a\0a", b"a"),
             Ordering::Greater,
             "NULL bytes are handled comparison"
+        );
+    }
+
+    #[test]
+    fn test_version_cmp_ignore_case() {
+        assert_eq!(version_cmp_ignore_case(b"Beef", b"beef"), Ordering::Equal);
+        assert_eq!(
+            version_cmp_ignore_case(b"Beef", b"apple"),
+            Ordering::Greater
+        );
+        assert_eq!(version_cmp_ignore_case(b"a2", b"A10"), Ordering::Less);
+        assert_eq!(
+            version_cmp_ignore_case(b"A1.TXT", b"a1.txt"),
+            Ordering::Equal
+        );
+        assert_eq!(
+            version_cmp_ignore_case(b"file-B2", b"file-a10"),
+            Ordering::Greater
         );
     }
 }

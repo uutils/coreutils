@@ -61,7 +61,7 @@ use uucore::posix::{MODERN, TRADITIONAL};
 use uucore::show_error;
 use uucore::translate;
 use uucore::translate_text;
-use uucore::version_cmp::version_cmp;
+use uucore::version_cmp::{version_cmp, version_cmp_ignore_case};
 use uucore::{format_usage, i18n};
 
 use crate::buffer_hint::automatic_buffer_size;
@@ -2967,7 +2967,7 @@ fn compare_by<'a>(
             SortMode::Month => month_compare(a_str, b_str),
             SortMode::Version if settings.ignore_case => {
                 // -f folds lowercase to uppercase before comparing, as in the other modes.
-                version_cmp(&a_str.to_ascii_uppercase(), &b_str.to_ascii_uppercase())
+                version_cmp_ignore_case(a_str, b_str)
             }
             SortMode::Version => version_cmp(a_str, b_str),
             SortMode::Default => {
