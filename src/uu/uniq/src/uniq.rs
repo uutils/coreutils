@@ -199,11 +199,7 @@ impl Uniq {
     }
 
     fn is_c_locale() -> bool {
-        ["LC_ALL", "LC_CTYPE", "LANG"]
-            .iter()
-            .find_map(|&key| std::env::var_os(key))
-            .filter(|v| !v.is_empty())
-            .is_none_or(|v| v == "C" || v == "POSIX")
+        uucore::i18n::get_locale_from_env("LC_CTYPE") == uucore::i18n::parse_posix_locale("C")
     }
 
     fn key_end_index(&self, line: &[u8], key_start: usize) -> usize {

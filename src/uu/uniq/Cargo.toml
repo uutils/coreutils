@@ -19,11 +19,11 @@ doctest = false
 [dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
-uucore = { workspace = true, features = ["parser"] }
+uucore = { workspace = true, features = ["parser", "i18n-common"] }
 
 [dev-dependencies]
 divan = { workspace = true }
-uucore = { workspace = true, features = ["benchmark", "parser"] }
+uucore = { workspace = true, features = ["benchmark", "parser", "i18n-common"] }
 
 [lints]
 workspace = true

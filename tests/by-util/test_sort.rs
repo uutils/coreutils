@@ -4140,3 +4140,12 @@ fn test_control_whitespace(#[case] args: &[&str], #[case] input: &str, #[case] e
         .succeeds()
         .stdout_only(expected);
 }
+
+#[test]
+fn test_posix_locale_keeps_byte_order() {
+    new_ucmd!()
+        .env("LC_ALL", "POSIX")
+        .pipe_in("b\nB\na\nA\n")
+        .succeeds()
+        .stdout_only("A\nB\na\nb\n");
+}
