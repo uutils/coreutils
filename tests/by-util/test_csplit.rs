@@ -794,6 +794,20 @@ fn test_skip_to_match_option_suppress_matched() {
 }
 
 #[test]
+fn test_suppress_line_number_before_current_position() {
+    for line_number in ["5", "10", "11"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["numbers50.txt", "--suppress-matched", "/10$/", line_number])
+            .succeeds()
+            .stdout_only("18\n0\n117\n");
+
+        assert_eq!(at.read("xx00"), generate(1, 10));
+        assert_eq!(at.read("xx01"), "");
+        assert_eq!(at.read("xx02"), generate(12, 51));
+    }
+}
+
+#[test]
 fn test_option_elide_empty_file1() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "--suppress-matched", "-z", "/0$/", "{*}"])
@@ -1706,7 +1720,7 @@ fn repeat_everything() {
         .count();
     assert_eq!(count, 6);
     assert_eq!(at.read("xxz_000"), generate(1, 12 + 1));
-    assert_eq!(at.read("xxz_001"), generate(14, 17 + 1)); // FIXME: GNU starts at 15
+    assert_eq!(at.read("xxz_001"), generate(15, 17 + 1));
     assert_eq!(at.read("xxz_002"), generate(19, 26 + 1));
     assert_eq!(at.read("xxz_003"), generate(28, 35 + 1));
     assert_eq!(at.read("xxz_004"), generate(37, 44 + 1));
