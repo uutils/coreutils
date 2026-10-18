@@ -454,7 +454,22 @@ fn test_invalid_regex_word_trailing_backslash() {
 
 #[test]
 fn test_invalid_regex_word_unclosed_group() {
-    new_ucmd!().args(&["-W", "(wrong"]).succeeds().no_stderr();
+    new_ucmd!()
+        .args(&["-W", "(wrong"])
+        .pipe_in("some input\n")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("Invalid regexp:");
+}
+
+#[test]
+fn test_invalid_word_regexp_reports_error() {
+    new_ucmd!()
+        .args(&["-W", "["])
+        .pipe_in("some input\n")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("Invalid regexp:");
 }
 
 #[test]
@@ -499,4 +514,44 @@ fn test_nullable_word_regexp_no_empty_matches() {
         .pipe_in("aa bb cc\n")
         .succeeds()
         .stdout_only(expected);
+}
+
+#[test]
+fn test_default_word_scanner_matches_explicit_regex() {
+    // Include combining marks, connector punctuation and join controls, which
+    // are word characters even though char::is_alphanumeric does not cover them.
+    let text = "123abc abc_42 café a\u{301} _élan α\u{200c}β 字词 foo-bar\n";
+    let ts = uutests::util::TestScenario::new(uutests::util_name!());
+    for flags in [vec![], vec!["-r"], vec!["-f"]] {
+        let default = ts.ucmd().args(&flags).pipe_in(text).succeeds();
+        ts.ucmd()
+            .args(&flags)
+            .args(&["-W", "\\w+"])
+            .pipe_in(text)
+            .succeeds()
+            .stdout_is(default.stdout_str());
+    }
+}
+
+#[test]
+fn test_traditional_word_scanner_matches_explicit_regex() {
+    let ts = uutests::util::TestScenario::new(uutests::util_name!());
+    let text = "ref abc_123 café,foo\tbar\n";
+    let default = ts.ucmd().args(&["-G", "-r"]).pipe_in(text).succeeds();
+    ts.ucmd()
+        .args(&["-G", "-r", "-W", "[^ \t\n]+"])
+        .pipe_in(text)
+        .succeeds()
+        .stdout_is(default.stdout_str());
+}
+
+#[test]
+fn test_empty_break_file_keeps_whole_line() {
+    let ts = uutests::util::TestScenario::new(uutests::util_name!());
+    ts.fixtures.touch("empty-breaks");
+    ts.ucmd()
+        .args(&["-b", "empty-breaks"])
+        .pipe_in("alpha beta\n")
+        .succeeds()
+        .stdout_only("                                       alpha beta\n");
 }
