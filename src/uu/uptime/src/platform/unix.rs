@@ -12,6 +12,7 @@
 use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint, builder::ValueParser};
 use std::ffi::OsString;
 use std::io::{Write, stdout};
+use std::time::Duration;
 use uucore::error::UResult;
 #[cfg(not(any(target_os = "openbsd", target_os = "android")))]
 use uucore::libc::time_t;
@@ -43,10 +44,10 @@ pub(crate) fn maybe_uptime_from_file(matches: &ArgMatches) -> Option<UResult<()>
         .map(uptime_with_file)
 }
 
-/// The system uptime in seconds, for `--since`: derived from the utmpx
+/// The elapsed duration since boot, for `--since`: derived from the utmpx
 /// `BOOT_TIME` record where utmpx is available (on OpenBSD, from
 /// [`get_uptime`] directly).
-pub(crate) fn system_uptime_seconds() -> UResult<i64> {
+pub(crate) fn system_uptime() -> UResult<Duration> {
     #[cfg(not(any(target_os = "openbsd", target_os = "android")))]
     {
         let (boot_time, _) = process_utmpx(None);
@@ -130,15 +131,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
 
     #[cfg(any(target_os = "openbsd", target_os = "android"))]
     {
-        let upsecs = get_uptime(None)?;
-        if upsecs >= 0 {
-            print_uptime(Some(upsecs))?;
-        } else {
-            show_error!("{}", translate!("uptime-error-couldnt-get-boot-time"));
-            set_exit_code(1);
-
-            write!(stdout(), "{}", translate!("uptime-output-unknown-uptime"))?;
-        }
+        print_uptime(None)?;
         #[cfg(target_os = "openbsd")]
         {
             user_count =

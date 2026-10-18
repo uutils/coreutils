@@ -70,13 +70,13 @@ pub enum OutputFormat {
 }
 
 struct FormattedUptime {
-    days: i64,
-    hours: i64,
-    mins: i64,
+    days: u64,
+    hours: u64,
+    mins: u64,
 }
 
 impl FormattedUptime {
-    fn new(seconds: i64) -> Self {
+    fn new(seconds: u64) -> Self {
         let days = seconds / 86400;
         let hours = (seconds - (days * 86400)) / 3600;
         let mins = (seconds - (days * 86400) - (hours * 3600)) / 60;
@@ -124,11 +124,7 @@ pub fn get_formatted_uptime(
 ) -> UResult<String> {
     let uptime = get_uptime(boot_time)?;
 
-    if uptime < 0 {
-        Err(UptimeError::SystemUptime)?;
-    }
-
-    let formatted_uptime = FormattedUptime::new(uptime);
+    let formatted_uptime = FormattedUptime::new(uptime.as_secs());
 
     match output_format {
         OutputFormat::HumanReadable => Ok(formatted_uptime.get_human_readable_uptime()),
