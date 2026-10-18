@@ -550,7 +550,6 @@ fn display_grid(
                 tab_size,
             },
         };
-
         let grid = Grid::new(
             names,
             GridOptions {
@@ -562,9 +561,34 @@ fn display_grid(
         match line_ending {
             LineEnding::Newline => write!(out, "{grid}")?,
             LineEnding::Nul => {
-                let grid_str = grid.to_string();
-                let nul_str = grid_str.replace('\n', "\0");
-                write!(out, "{nul_str}")?;
+                struct GridNulWriter<'a, W> {
+                    out: &'a mut W,
+                    io_error: Option<std::io::Error>,
+                }
+                impl<W: Write> FmtWrite for GridNulWriter<'_, W> {
+                    fn write_str(&mut self, s: &str) -> std::fmt::Result {
+                        let res = if s == "\n" {
+                            self.out.write_all(b"\0")
+                        } else {
+                            self.out.write_all(s.as_bytes())
+                        };
+                        if let Err(e) = res {
+                            self.io_error = Some(e);
+                            return Err(std::fmt::Error);
+                        }
+                        Ok(())
+                    }
+                }
+                let mut writer = GridNulWriter {
+                    out,
+                    io_error: None,
+                };
+                if let Err(e) = write!(writer, "{grid}") {
+                    if let Some(io_err) = writer.io_error {
+                        return Err(io_err.into());
+                    }
+                    return Err(std::io::Error::other(e).into());
+                }
             }
         }
     }

@@ -1088,8 +1088,20 @@ fn test_ls_zero() {
             .ucmd()
             .args(&["--zero", opt, "-w", "80"])
             .succeeds()
-            .stdout_only("0-test-zero\t2-test-zero\t3-test-zero\x00");
+            .stdout_only("0-test-zero  2-test-zero  3-test-zero\x00");
     }
+
+    scene
+        .ucmd()
+        .args(&["--zero", "-C", "-w", "30"])
+        .succeeds()
+        .stdout_only("0-test-zero  3-test-zero\x002-test-zero\x00");
+
+    scene
+        .ucmd()
+        .args(&["--zero", "-x", "-w", "30"])
+        .succeeds()
+        .stdout_only("0-test-zero  2-test-zero\x003-test-zero\x00");
 
     scene
         .ucmd()
@@ -1149,6 +1161,26 @@ fn test_ls_zero() {
             .args(&["--zero", "-m"])
             .succeeds()
             .stdout_only("0-test-zero, 1\ntest-zero, 2-test-zero, 3-test-zero\x00");
+
+        for opt in ["-C", "-x"] {
+            scene
+                .ucmd()
+                .args(&["--zero", opt, "-w", "80"])
+                .succeeds()
+                .stdout_only("0-test-zero  1\ntest-zero\t 2-test-zero  3-test-zero\x00");
+        }
+
+        scene
+            .ucmd()
+            .args(&["--zero", "-C", "-w", "30"])
+            .succeeds()
+            .stdout_only("0-test-zero  2-test-zero\x001\ntest-zero   3-test-zero\x00");
+
+        scene
+            .ucmd()
+            .args(&["--zero", "-x", "-w", "30"])
+            .succeeds()
+            .stdout_only("0-test-zero  1\ntest-zero\x002-test-zero  3-test-zero\x00");
 
         scene
             .ucmd()
