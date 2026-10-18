@@ -7,11 +7,13 @@
 
 use crate::args::Settings;
 use crate::chunks::BytesChunkBuffer;
+use crate::open_file;
 use crate::paths::{HeaderPrinter, PathExtTail};
+use crate::read::ReadAvailable;
 use crate::text;
 use std::collections::HashMap;
 use std::collections::hash_map::Keys;
-use std::fs::{File, Metadata};
+use std::fs::Metadata;
 use std::io::{BufRead, BufReader, BufWriter, Write, stdout};
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
@@ -25,6 +27,7 @@ pub struct FileHandling {
     map: HashMap<PathBuf, PathData>,
     last: Option<PathBuf>,
     header_printer: HeaderPrinter,
+    pub(super) nonblocking: bool,
 }
 
 impl FileHandling {
@@ -33,6 +36,7 @@ impl FileHandling {
             map: HashMap::with_capacity(settings.inputs.len()),
             last: None,
             header_printer: HeaderPrinter::new(settings.verbose, false),
+            nonblocking: settings.pid.is_some(),
         }
     }
 
@@ -120,9 +124,10 @@ impl FileHandling {
         As a workaround, we always reopen the file even though this might not always
         be necessary.
         */
+        let file = open_file(path, self.nonblocking)?;
         self.get_mut(path)
             .reader
-            .replace(Box::new(BufReader::new(File::open(path)?)));
+            .replace(Box::new(BufReader::new(file)));
         Ok(())
     }
 
@@ -138,8 +143,9 @@ impl FileHandling {
     /// Read new data from `path` and print it to stdout
     pub fn tail_file(&mut self, path: &Path, verbose: bool) -> UResult<bool> {
         let mut chunks = BytesChunkBuffer::new(u64::MAX);
+        let nonblocking = self.nonblocking;
         if let Some(reader) = self.get_mut(path).reader.as_mut() {
-            chunks.fill(reader)?;
+            chunks.fill(&mut ReadAvailable::new(reader, nonblocking))?;
         }
         if chunks.has_data() {
             if self.needs_header(path, verbose) {
@@ -193,13 +199,13 @@ impl PathData {
             display_name: display_name.to_owned(),
         }
     }
-    pub fn from_other_with_path(data: Self, path: &Path) -> Self {
+    pub fn from_other_with_path(data: Self, path: &Path, nonblocking: bool) -> Self {
         // Remove old reader
         let old_reader = data.reader;
         let reader = if old_reader.is_some() {
             // Use old reader with the same file descriptor if there is one
             old_reader
-        } else if let Ok(file) = File::open(path) {
+        } else if let Ok(file) = open_file(path, nonblocking) {
             // Open new file tail from start
             Some(Box::new(BufReader::new(file)) as Box<dyn BufRead>)
         } else {

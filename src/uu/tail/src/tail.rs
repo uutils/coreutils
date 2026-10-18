@@ -19,6 +19,7 @@ mod follow;
 mod parse;
 mod paths;
 mod platform;
+mod read;
 pub mod text;
 
 pub use args::uu_app;
@@ -27,6 +28,7 @@ use chunks::ReverseChunks;
 use follow::Observer;
 use memchr::{memchr_iter, memrchr_iter};
 use paths::{FileExtTail, HeaderPrinter, Input, InputKind};
+use read::ReadAvailable;
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin, stdout};
@@ -163,10 +165,12 @@ fn tail_file(
         }
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
     } else {
-        #[cfg(unix)]
-        let open_result = open_file(path, settings.pid.is_some_and(|pid| pid != 0));
-        #[cfg(not(unix))]
-        let open_result = File::open(path);
+        // Standard input keeps its blocking behavior, including when it resolves
+        // to a terminal device. Apply --pid's nonblocking mode to named inputs.
+        let open_result = open_file(
+            path,
+            settings.follow.is_some() && settings.pid.is_some() && !input.is_stdin(),
+        );
 
         match open_result {
             Ok(mut file) => {
@@ -213,37 +217,22 @@ fn tail_file(
     Ok(())
 }
 
-/// Opens a file, using non-blocking mode for FIFOs when `use_nonblock_for_fifo` is true.
-///
-/// When opening a FIFO with `--pid`, we need to use O_NONBLOCK so that:
-/// 1. The open() call doesn't block waiting for a writer
-/// 2. We can periodically check if the monitored process is still alive
-///
-/// After opening, we clear O_NONBLOCK so subsequent reads block normally.
-/// Without `--pid`, FIFOs block on open() until a writer connects (GNU behavior).
+/// Keep opens and reads nonblocking with --pid so the follow loop can check
+/// whether the monitored process is still alive, even while a writer is idle.
 #[cfg(unix)]
-fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
-    use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
+fn open_file(path: &Path, nonblocking: bool) -> io::Result<File> {
     use std::fs::OpenOptions;
-    use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
+    use std::os::unix::fs::OpenOptionsExt;
 
-    let is_fifo = path.metadata().is_ok_and(|m| m.file_type().is_fifo());
+    OpenOptions::new()
+        .read(true)
+        .custom_flags(if nonblocking { libc::O_NONBLOCK } else { 0 })
+        .open(path)
+}
 
-    if is_fifo && use_nonblock_for_fifo {
-        let file = OpenOptions::new()
-            .read(true)
-            .custom_flags(libc::O_NONBLOCK)
-            .open(path)?;
-
-        // Clear O_NONBLOCK so reads block normally
-        let flags = fcntl_getfl(&file)?;
-        let new_flags = flags & !OFlags::NONBLOCK;
-        fcntl_setfl(&file, new_flags)?;
-
-        Ok(file)
-    } else {
-        File::open(path)
-    }
+#[cfg(not(unix))]
+fn open_file(path: &Path, _nonblocking: bool) -> io::Result<File> {
+    File::open(path)
 }
 
 fn tail_stdin(
@@ -498,20 +487,22 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
 
 fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
     let mut writer = BufWriter::new(stdout().lock());
+    let nonblocking = settings.follow.is_some() && settings.pid.is_some();
+    let mut reader = ReadAvailable::new(reader, nonblocking);
     match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), sep) => {
             let mut chunks = chunks::LinesChunkBuffer::new(*sep, *count);
-            chunks.fill(reader)?;
+            chunks.fill(&mut reader)?;
             chunks.write(&mut writer)?;
         }
         FilterMode::Lines(Signum::PlusZero | Signum::Positive(1), _)
         | FilterMode::Bytes(Signum::PlusZero | Signum::Positive(1)) => {
-            io::copy(reader, &mut writer)?;
+            io::copy(&mut reader, &mut writer)?;
         }
         FilterMode::Lines(Signum::Positive(count), sep) => {
             let mut num_skip = *count - 1;
             let mut chunk = chunks::LinesChunk::new(*sep);
-            while chunk.fill(reader)?.is_some() {
+            while chunk.fill(&mut reader)?.is_some() {
                 let lines = chunk.get_lines() as u64;
                 if lines < num_skip {
                     num_skip -= lines;
@@ -521,24 +512,24 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
             }
             if chunk.has_data() {
                 chunk.write_lines(&mut writer, num_skip as usize)?;
-                io::copy(reader, &mut writer)?;
+                io::copy(&mut reader, &mut writer)?;
             }
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
             let mut chunks = chunks::BytesChunkBuffer::new(*count);
-            chunks.fill(reader)?;
+            chunks.fill(&mut reader)?;
             chunks.write(&mut writer)?;
         }
         FilterMode::Lines(Signum::MinusZero, sep) => {
             let mut chunks = chunks::LinesChunkBuffer::new(*sep, 0);
-            chunks.fill(reader)?;
+            chunks.fill(&mut reader)?;
             chunks.write(&mut writer)?;
         }
         FilterMode::Bytes(Signum::Positive(count)) => {
             let mut num_skip = *count - 1;
             let mut chunk = chunks::BytesChunk::new();
             loop {
-                let Some(bytes) = chunk.fill(reader)? else {
+                let Some(bytes) = chunk.fill(&mut reader)? else {
                     return Ok(());
                 };
                 let bytes: u64 = bytes as u64;
@@ -554,7 +545,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
                 }
             }
 
-            io::copy(reader, &mut writer)?;
+            io::copy(&mut reader, &mut writer)?;
         }
         _ => {}
     }

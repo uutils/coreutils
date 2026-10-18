@@ -480,7 +480,9 @@ impl Observer {
                     let new_path = event.paths.last().unwrap();
                     paths.push(new_path.clone());
 
-                    let new_data = PathData::from_other_with_path(self.files.remove(event_path), new_path);
+                    let new_data = PathData::from_other_with_path(
+                        self.files.remove(event_path), new_path, self.files.nonblocking
+                    );
                     self.files.insert(
                         new_path,
                         new_data,
