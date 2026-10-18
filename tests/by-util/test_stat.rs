@@ -799,6 +799,29 @@ fn test_invalid_directive_after_multibyte_char() {
 }
 
 #[test]
+fn test_unknown_multibyte_directive_keeps_trailing_bytes() {
+    let ts = TestScenario::new(util_name!());
+    // Only the first byte of a multibyte char after `%` is taken as the
+    // (unknown) directive, so the remaining bytes are still printed.
+    for (fmt, expected) in [
+        ("%\u{bf}", &b"?\xbf"[..]),
+        ("a%\u{e9}b", &b"a?\xa9b"[..]),
+        ("%\u{20ac}%n", &b"?\x82\xac."[..]),
+        ("%5\u{20ac}", &b"?\x82\xac"[..]),
+    ] {
+        ts.ucmd()
+            .arg(format!("--printf={fmt}"))
+            .arg(".")
+            .succeeds()
+            .stdout_only_bytes(expected);
+    }
+    ts.ucmd()
+        .args(&["-c", "%\u{bf}", "."])
+        .succeeds()
+        .stdout_only_bytes(b"?\xbf\n");
+}
+
+#[test]
 fn test_precision_splits_multibyte_char_in_value() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;

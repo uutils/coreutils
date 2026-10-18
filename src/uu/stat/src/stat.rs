@@ -964,7 +964,19 @@ impl Stater {
         while i < bound {
             match chars.get(i) {
                 Some('%') => match Self::handle_percent_case(&chars, &mut i, bound, format_str) {
-                    Ok(token) => tokens.push(token),
+                    Ok(token) => {
+                        // A directive takes a single byte as its conversion, so
+                        // after a multibyte char (always an unknown directive,
+                        // printed as `?`) the rest of its bytes are printed as is.
+                        let rest = match token {
+                            Token::Directive { format, .. } if !format.is_ascii() => {
+                                format.to_string().into_bytes().split_off(1)
+                            }
+                            _ => Vec::new(),
+                        };
+                        tokens.push(token);
+                        tokens.extend(rest.into_iter().map(Token::Byte));
+                    }
                     Err(error) => return (tokens, Some(error)),
                 },
                 Some('\\') => {
