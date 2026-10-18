@@ -249,3 +249,18 @@ pub unsafe extern "C" fn __stdbuf() {
         set_buffer(unsafe { __stdbuf_get_stdout() }, &val);
     }
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    // Each getter must return its own stream, not another one.
+    #[test]
+    fn test_stream_getters_return_matching_streams() {
+        unsafe {
+            assert_eq!(fileno(__stdbuf_get_stdin()), 0);
+            assert_eq!(fileno(__stdbuf_get_stdout()), 1);
+            assert_eq!(fileno(__stdbuf_get_stderr()), 2);
+        }
+    }
+}
