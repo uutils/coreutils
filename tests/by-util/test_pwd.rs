@@ -43,24 +43,30 @@ fn test_deleted_dir() {
     use uutests::util::TestScenario;
     use uutests::util_name;
 
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
-    let output = Command::new("sh")
-        .arg("-c")
-        .arg(format!(
-            "cd '{}'; mkdir foo; cd foo; rmdir ../foo; LANG=C exec '{}' {}",
-            at.root_dir_resolved(),
-            ts.bin_path.to_str().unwrap(),
-            ts.util_name,
-        ))
-        .output()
-        .unwrap();
-    assert!(!output.status.success());
-    assert!(output.stdout.is_empty());
-    assert_eq!(
-        String::from_utf8_lossy(&output.stderr),
-        "pwd: failed to get current directory: No such file or directory\n"
-    );
+    for replacement in ["deleted", "file"] {
+        for flag in ["-L", "-P"] {
+            let scene = TestScenario::new(util_name!());
+            let output = Command::new("sh")
+                .args([
+                    "-c",
+                    "mkdir \"$2\" && cd \"$2\" && rmdir \"$2\" && { [ \"$3\" = deleted ] || : > \"$2\"; } && exec \"$1\" pwd \"$4\"",
+                    "sh",
+                ])
+                .arg(&scene.bin_path)
+                .arg(scene.fixtures.plus("work"))
+                .arg(replacement)
+                .arg(flag)
+                .env("LC_ALL", "C")
+                .output()
+                .unwrap();
+            assert_eq!(output.status.code(), Some(1));
+            assert!(output.stdout.is_empty());
+            assert_eq!(
+                output.stderr,
+                b"pwd: couldn't find directory entry in '..' with matching i-node\n"
+            );
+        }
+    }
 }
 
 struct Env {
