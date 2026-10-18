@@ -328,8 +328,12 @@ fn copy_direntry(
             // TODO What other kinds of errors, if any, should
             // cause us to continue walking the directory?
             match err {
-                CpError::IoErrContext(e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
+                CpError::SourceOpenError(e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
                     show!(CpError::CannotOpenForReading(entry.source_relative.clone()));
+                }
+                CpError::IoErrContext(ref e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
+                    crate::show_error_if_needed(&err);
+                    set_exit_code(crate::EXIT_ERR);
                 }
                 e => return Err(e),
             }

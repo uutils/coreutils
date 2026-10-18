@@ -9737,3 +9737,35 @@ fn test_cp_source_in_unsearchable_dir() {
     at.set_mode("d", 0o755);
     assert!(!at.file_exists("dest"));
 }
+
+#[test]
+#[cfg(all(unix, not(target_os = "wasi")))]
+fn test_recursive_copy_unwritable_destination_keeps_error_context() {
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("source");
+    at.mkdir("dest");
+    at.mkdir("dest/source");
+    at.write("source/blocked", "new contents");
+    at.write("source/readable", "copied");
+    at.write("dest/source/blocked", "keep contents");
+    at.set_mode("dest/source/blocked", 0o440);
+
+    // WASI uses std::fs::copy, which reports a combined source/destination context.
+    let expected_error = if cfg!(wasi_runner) {
+        "cp: 'source/blocked' -> 'dest/source/blocked': Permission denied\n"
+    } else {
+        "cp: cannot create regular file 'dest/source/blocked': Permission denied\n"
+    };
+
+    scene
+        .ucmd()
+        .args(&["-r", "source", "dest"])
+        .fails_with_code(1)
+        .stderr_only(expected_error);
+    assert_eq!(at.read("dest/source/blocked"), "keep contents");
+    assert_eq!(at.read("dest/source/readable"), "copied");
+}

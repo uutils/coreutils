@@ -249,7 +249,8 @@ pub(crate) fn copy_on_write(
     let context_err = |e| CpError::IoErrContext(e, context.to_owned());
     match sparse_mode {
         SparseMode::Always => {
-            let mut src_file = File::open(source).map_err(context_err)?;
+            let mut src_file =
+                File::open(source).map_err(|e| CpError::SourceOpenError(e, context.to_owned()))?;
             copy_debug.sparse_detection =
                 sparse_copy_or_plain(&mut src_file, dest).map_err(context_err)?;
         }
@@ -262,7 +263,8 @@ pub(crate) fn copy_on_write(
         // identical and the result is sparse; a byte-exact hole layout would
         // instead query `FSCTL_QUERY_ALLOCATED_RANGES`, which is out of scope.
         SparseMode::Auto => {
-            let mut src_file = File::open(source).map_err(context_err)?;
+            let mut src_file =
+                File::open(source).map_err(|e| CpError::SourceOpenError(e, context.to_owned()))?;
             if is_sparse(&src_file).map_err(context_err)? {
                 copy_debug.sparse_detection =
                     sparse_copy_or_plain(&mut src_file, dest).map_err(context_err)?;

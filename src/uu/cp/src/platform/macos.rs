@@ -109,7 +109,7 @@ pub(crate) fn copy_on_write(
         copy_debug.reflink = OffloadReflinkDebug::Yes;
         if source_is_stream {
             let mut src_file =
-                File::open(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+                File::open(source).map_err(|e| CpError::SourceOpenError(e, context.to_owned()))?;
             let mode = 0o622 & !get_umask();
             let mut dst_file = OpenOptions::new()
                 .create(true)
@@ -140,7 +140,7 @@ pub(crate) fn copy_on_write(
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
         } else {
             let mut src_file = open_source(source, nofollow)
-                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+                .map_err(|e| CpError::SourceOpenError(e, context.to_owned()))?;
             let mut dst_file = create_dest_restrictive(dest, false).map_err(|e| {
                 CpError::IoErrContext(
                     e,
