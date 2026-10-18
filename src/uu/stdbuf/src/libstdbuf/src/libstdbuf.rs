@@ -188,7 +188,7 @@ pub unsafe extern "C" fn __stdbuf_get_stderr() -> *mut FILE {
             fn __getreent() -> *mut _reent;
         }
 
-        unsafe { (*__getreent())._stdin }
+        unsafe { (*__getreent())._stderr }
     }
 
     #[cfg(not(any(
