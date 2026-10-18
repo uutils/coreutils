@@ -5,6 +5,7 @@
 
 // spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED Fsize SIGXFSZ rusage maxrss cdefg ncdefg cdefh memfd ftruncate
 
+use rstest::rstest;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -849,67 +850,34 @@ fn test_block_keeps_trailing_record_of_spaces() {
         .stdout_is("ab      ");
 }
 
-#[test]
-fn test_block_cbs16() {
+#[rstest]
+#[case::block_cbs16(&["conv=block", "cbs=16"], "dd-block-cbs16.test", "dd-block-cbs16.spec")]
+#[case::block_cbs16_as_cbs8(&["conv=block", "cbs=8"], "dd-block-cbs16.test", "dd-block-cbs8.spec")]
+#[case::block_consecutive_nl(&["conv=block", "cbs=16"], "dd-block-consecutive-nl.test", "dd-block-consecutive-nl-cbs16.spec")]
+#[case::unblock_multi_16(&["conv=unblock", "cbs=16"], "dd-unblock-cbs16.test", "dd-unblock-cbs16.spec")]
+#[case::unblock_multi_16_as_8(&["conv=unblock", "cbs=8"], "dd-unblock-cbs16.test", "dd-unblock-cbs8.spec")]
+#[case::atoe_conv_spec_test(&["conv=ebcdic"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "gnudd-conv-atoe-seq-byte-values.spec")]
+#[case::etoa_conv_spec_test(&["conv=ascii"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "gnudd-conv-etoa-seq-byte-values.spec")]
+#[case::atoibm_conv_spec_test(&["conv=ibm"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "gnudd-conv-atoibm-seq-byte-values.spec")]
+#[case::lcase_ascii_to_ucase_ascii(&["conv=ucase"], "lcase-ascii.test", "ucase-ascii.test")]
+#[case::ucase_ascii_to_lcase_ascii(&["conv=lcase"], "ucase-ascii.test", "lcase-ascii.test")]
+#[case::atoe_and_ucase_conv_spec_test(&["conv=ebcdic,ucase"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "ucase-ebcdic.test")]
+#[case::atoe_and_lcase_conv_spec_test(&["conv=ebcdic,lcase"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "lcase-ebcdic.test")]
+#[case::atoibm_and_ucase_conv_spec_test(&["conv=ibm,ucase"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "ucase-ibm.test")]
+#[case::atoibm_and_lcase_conv_spec_test(&["conv=ibm,lcase"], "seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test", "lcase-ibm.test")]
+#[case::swab_256_test(&["conv=swab"], "seq-byte-values.test", "seq-byte-values-swapped.test")]
+#[case::swab_257_test(&["conv=swab"], "seq-byte-values-odd.test", "seq-byte-values-odd.spec")]
+#[case::block_lower(&["conv=block,lcase", "cbs=8"], "dd-block8-lowercase.test", "dd-block8-lowercase.spec")]
+#[case::lower_block(&["conv=lcase,block", "cbs=8"], "dd-block8-lowercase.test", "dd-block8-lowercase.spec")]
+#[case::unblock_lower(&["conv=unblock,lcase", "cbs=8"], "dd-unblock8-lowercase.test", "dd-unblock8-lowercase.spec")]
+#[case::zeros_4k_conv_sync_obs_gt_ibs(&["conv=sync", "ibs=521", "obs=1031"], "zeros-620f0b67a91f7f74151bc5be745b7110.test", "gnudd-conv-sync-ibs-521-obs-1031-zeros.spec")]
+#[case::zeros_4k_conv_sync_ibs_gt_obs(&["conv=sync", "ibs=1031", "obs=521"], "zeros-620f0b67a91f7f74151bc5be745b7110.test", "gnudd-conv-sync-ibs-1031-obs-521-zeros.spec")]
+fn test_dd_conv_fixtures(#[case] args: &[&str], #[case] input: &str, #[case] expected: &str) {
     new_ucmd!()
-        .args(&["conv=block", "cbs=16"])
-        .pipe_in_fixture("dd-block-cbs16.test")
+        .args(args)
+        .pipe_in_fixture(input)
         .succeeds()
-        .stdout_is_fixture_bytes("dd-block-cbs16.spec");
-}
-
-#[test]
-fn test_block_cbs16_as_cbs8() {
-    new_ucmd!()
-        .args(&["conv=block", "cbs=8"])
-        .pipe_in_fixture("dd-block-cbs16.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("dd-block-cbs8.spec");
-}
-
-#[test]
-fn test_block_consecutive_nl() {
-    new_ucmd!()
-        .args(&["conv=block", "cbs=16"])
-        .pipe_in_fixture("dd-block-consecutive-nl.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("dd-block-consecutive-nl-cbs16.spec");
-}
-
-#[test]
-fn test_unblock_multi_16() {
-    new_ucmd!()
-        .args(&["conv=unblock", "cbs=16"])
-        .pipe_in_fixture("dd-unblock-cbs16.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("dd-unblock-cbs16.spec");
-}
-
-#[test]
-fn test_unblock_multi_16_as_8() {
-    new_ucmd!()
-        .args(&["conv=unblock", "cbs=8"])
-        .pipe_in_fixture("dd-unblock-cbs16.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("dd-unblock-cbs8.spec");
-}
-
-#[test]
-fn test_atoe_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ebcdic"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("gnudd-conv-atoe-seq-byte-values.spec");
-}
-
-#[test]
-fn test_etoa_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ascii"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("gnudd-conv-etoa-seq-byte-values.spec");
+        .stdout_is_fixture_bytes(expected);
 }
 
 #[test]
@@ -929,132 +897,6 @@ fn test_etoa_and_ucase() {
         .pipe_in(b"\xc8\x85\x93\x93\x96\x6b\x40\xe6\x96\x99\x93\x84\x5a".to_vec())
         .succeeds()
         .stdout_only_bytes(b"HELLO, WORLD!");
-}
-
-#[test]
-fn test_atoibm_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ibm"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("gnudd-conv-atoibm-seq-byte-values.spec");
-}
-
-#[test]
-fn test_lcase_ascii_to_ucase_ascii() {
-    new_ucmd!()
-        .args(&["conv=ucase"])
-        .pipe_in_fixture("lcase-ascii.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("ucase-ascii.test");
-}
-
-#[test]
-fn test_ucase_ascii_to_lcase_ascii() {
-    new_ucmd!()
-        .args(&["conv=lcase"])
-        .pipe_in_fixture("ucase-ascii.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("lcase-ascii.test");
-}
-
-#[test]
-fn test_atoe_and_ucase_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ebcdic,ucase"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("ucase-ebcdic.test");
-}
-
-#[test]
-fn test_atoe_and_lcase_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ebcdic,lcase"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("lcase-ebcdic.test");
-}
-
-#[test]
-fn test_atoibm_and_ucase_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ibm,ucase"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("ucase-ibm.test");
-}
-
-#[test]
-fn test_atoibm_and_lcase_conv_spec_test() {
-    new_ucmd!()
-        .args(&["conv=ibm,lcase"])
-        .pipe_in_fixture("seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("lcase-ibm.test");
-}
-
-#[test]
-fn test_swab_256_test() {
-    new_ucmd!()
-        .args(&["conv=swab"])
-        .pipe_in_fixture("seq-byte-values.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("seq-byte-values-swapped.test");
-}
-
-#[test]
-fn test_swab_257_test() {
-    new_ucmd!()
-        .args(&["conv=swab"])
-        .pipe_in_fixture("seq-byte-values-odd.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("seq-byte-values-odd.spec");
-}
-
-#[test]
-fn test_block_lower() {
-    new_ucmd!()
-        .args(&["conv=block,lcase", "cbs=8"])
-        .pipe_in_fixture("dd-block8-lowercase.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("dd-block8-lowercase.spec");
-}
-
-#[test]
-fn test_lower_block() {
-    new_ucmd!()
-        .args(&["conv=lcase,block", "cbs=8"])
-        .pipe_in_fixture("dd-block8-lowercase.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("dd-block8-lowercase.spec");
-}
-
-#[test]
-fn test_unblock_lower() {
-    new_ucmd!()
-        .args(&["conv=unblock,lcase", "cbs=8"])
-        .pipe_in_fixture("dd-unblock8-lowercase.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("dd-unblock8-lowercase.spec");
-}
-
-#[test]
-fn test_zeros_4k_conv_sync_obs_gt_ibs() {
-    new_ucmd!()
-        .args(&["conv=sync", "ibs=521", "obs=1031"])
-        .pipe_in_fixture("zeros-620f0b67a91f7f74151bc5be745b7110.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("gnudd-conv-sync-ibs-521-obs-1031-zeros.spec");
-}
-
-#[test]
-fn test_zeros_4k_conv_sync_ibs_gt_obs() {
-    new_ucmd!()
-        .args(&["conv=sync", "ibs=1031", "obs=521"])
-        .pipe_in_fixture("zeros-620f0b67a91f7f74151bc5be745b7110.test")
-        .succeeds()
-        .stdout_is_fixture_bytes("gnudd-conv-sync-ibs-1031-obs-521-zeros.spec");
 }
 
 #[test]
