@@ -29,8 +29,10 @@ use uucore::translate;
 
 #[derive(Debug, thiserror::Error)]
 enum ChmodError {
-    #[error("{}", translate!("chmod-error-cannot-stat", "file" => _0.quote()))]
-    CannotStat(PathBuf),
+    #[error("{}", translate!("perms-cannot-access", "file" => _0.quote(), "error" => strip_errno(_1)))]
+    CannotStat(PathBuf, std::io::Error),
+    #[error("{}", translate!("chmod-error-reference-stat", "file" => _0.quote(), "error" => strip_errno(_1)))]
+    ReferenceStat(PathBuf, std::io::Error),
     #[error("{}", translate!("chmod-error-dangling-symlink", "file" => _0.quote()))]
     DanglingSymlink(PathBuf),
     #[error("{}", translate!("chmod-error-no-such-file", "file" => _0.quote()))]
@@ -150,7 +152,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(fref) => Some(
             fs::metadata(fref)
                 .map(|meta| meta.mode() & 0o7777)
-                .map_err(|_| ChmodError::CannotStat(fref.into()))?,
+                .map_err(|err| ChmodError::ReferenceStat(fref.into(), err))?,
         ),
         None => None,
     };
@@ -817,7 +819,7 @@ impl Chmoder {
                 } else if err.kind() == std::io::ErrorKind::PermissionDenied {
                     Err(ChmodError::PermissionDenied(file.into()).into())
                 } else {
-                    Err(ChmodError::CannotStat(file.into()).into())
+                    Err(ChmodError::CannotStat(file.into(), err).into())
                 };
             }
         };

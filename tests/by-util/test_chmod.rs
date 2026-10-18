@@ -1865,3 +1865,35 @@ mod diagnostics {
             .no_output();
     }
 }
+
+#[test]
+fn test_overlong_path_reports_os_error_and_continues() {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.touch("valid");
+    // Every component exists, but the unnormalized operand exceeds PATH_MAX.
+    let path = "./".repeat(4096);
+    let error = uucore::error::strip_errno(&std::io::Error::from_raw_os_error(libc::ENAMETOOLONG));
+    for flags in [vec![], vec!["-R"]] {
+        set_permissions(ts.fixtures.plus("valid"), Permissions::from_mode(0o600)).unwrap();
+        let result = ts
+            .ucmd()
+            .args(&flags)
+            .arg("700")
+            .arg(&path)
+            .arg("valid")
+            .fails_with_code(1);
+        result.stderr_is(format!("chmod: cannot access '{path}': {error}\n"));
+        assert_eq!(
+            ts.fixtures.metadata("valid").permissions().mode() & 0o777,
+            0o700
+        );
+    }
+    ts.ucmd()
+        .arg("--reference")
+        .arg(&path)
+        .arg("valid")
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "chmod: failed to get attributes of '{path}': {error}\n"
+        ));
+}
