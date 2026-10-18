@@ -39,10 +39,11 @@ use libc::{getgrgid, getgrnam};
 use libc::{getpwnam, getpwuid, group, passwd};
 use libc::{gid_t, uid_t};
 
-use std::ffi::CString;
+use std::ffi::{CString, OsStr};
 use std::io::Error as IOError;
 use std::io::ErrorKind;
 use std::io::Result as IOResult;
+use std::os::unix::ffi::OsStrExt;
 use std::ptr;
 use std::sync::Mutex;
 
@@ -277,33 +278,39 @@ macro_rules! f {
             }
         }
 
-        impl<'a> Locate<&'a str> for $st {
-            fn locate(k: &'a str) -> IOResult<Self> {
+        impl Locate<&CStr> for $st {
+            fn locate(k: &CStr) -> IOResult<Self> {
                 let _guard = PW_LOCK.lock();
-                // SAFETY: We're holding PW_LOCK.
+                // SAFETY: We're holding PW_LOCK and k is NUL-terminated.
                 unsafe {
-                    let cstring = CString::new(k)?;
-                    // try to get user or group with name matching the input with these tow lines:
-                    // f!(getpwnam, getpwuid, uid_t, Passwd);
-                    // f!(getgrnam, getgrgid, gid_t, Group);
-                    let data = $fnam(cstring.as_ptr());
+                    let data = $fnam(k.as_ptr());
                     if !data.is_null() {
-                        return Ok($st::from_raw(ptr::read(data.cast_const())));
-                    }
-                    if let Ok(id) = k.parse::<$t>() {
-                        let data = $fid(id);
-                        if !data.is_null() {
-                            Ok($st::from_raw(ptr::read(data.cast_const())))
-                        } else {
-                            Err(IOError::new(
-                                ErrorKind::NotFound,
-                                format!("No such id: {id}"),
-                            ))
-                        }
+                        Ok($st::from_raw(ptr::read(data.cast_const())))
                     } else {
-                        Err(IOError::new(ErrorKind::NotFound, format!("Not found: {k}")))
+                        Err(IOError::new(
+                            ErrorKind::NotFound,
+                            format!("Not found: {}", k.to_string_lossy()),
+                        ))
                     }
                 }
+            }
+        }
+
+        impl Locate<&OsStr> for $st {
+            fn locate(k: &OsStr) -> IOResult<Self> {
+                let name = CString::new(k.as_bytes())?;
+                Self::locate(name.as_c_str()).or_else(|error| {
+                    match k.to_str().and_then(|s| s.parse::<$t>().ok()) {
+                        Some(id) => Self::locate(id),
+                        None => Err(error),
+                    }
+                })
+            }
+        }
+
+        impl Locate<&str> for $st {
+            fn locate(k: &str) -> IOResult<Self> {
+                Self::locate(OsStr::new(k))
             }
         }
     };

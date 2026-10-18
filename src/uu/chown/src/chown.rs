@@ -13,12 +13,13 @@ use uucore::{format_usage, show_warning, translate};
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
-use std::ffi::OsString;
+use std::ffi::{CString, OsStr, OsString};
 use std::fs;
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
 
 fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
-    let filter = if let Some(spec) = matches.get_one::<String>(options::FROM) {
+    let filter = if let Some(spec) = matches.get_one::<OsString>(options::FROM) {
         match parse_spec(spec, ':')? {
             (Some(uid), None) => IfFrom::User(uid),
             (None, Some(gid)) => IfFrom::Group(gid),
@@ -46,11 +47,9 @@ fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> 
             entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string())
         );
     } else {
-        raw_owner = matches
-            .get_one::<String>(options::ARG_OWNER)
-            .unwrap()
-            .into();
-        let (u, g) = parse_spec(&raw_owner, ':')?;
+        let spec = matches.get_one::<OsString>(options::ARG_OWNER).unwrap();
+        let (u, g) = parse_spec(spec, ':')?;
+        raw_owner = spec.to_string_lossy().into_owned();
         dest_uid = u;
         dest_gid = g;
     }
@@ -98,7 +97,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::FROM)
                 .long(options::FROM)
                 .help(translate!("chown-help-from"))
-                .value_name("CURRENT_OWNER:CURRENT_GROUP"),
+                .value_name("CURRENT_OWNER:CURRENT_GROUP")
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::preserve_root::PRESERVE)
@@ -151,7 +151,7 @@ pub fn uu_app() -> Command {
 }
 
 /// Parses the user string to extract the UID.
-fn parse_uid(user: &str, spec: &str) -> UResult<Option<u32>> {
+fn parse_uid(user: &OsStr, spec: &OsStr) -> UResult<Option<u32>> {
     if user.is_empty() {
         return Ok(None);
     }
@@ -161,24 +161,27 @@ fn parse_uid(user: &str, spec: &str) -> UResult<Option<u32>> {
     }
 
     // Fallback: `user` string contains a numeric user ID
-    user.parse().map(Some).map_err(|_| {
-        USimpleError::new(
-            1,
-            translate!("chown-error-invalid-user", "user" => spec.quote()),
-        )
-    })
+    user.to_str()
+        .and_then(|s| s.parse().ok())
+        .map(Some)
+        .ok_or_else(|| {
+            USimpleError::new(
+                1,
+                translate!("chown-error-invalid-user", "user" => spec.quote()),
+            )
+        })
 }
 
 /// Parses the group string to extract the GID.
-fn parse_gid(group: &str, spec: &str) -> UResult<Option<u32>> {
+fn parse_gid(group: &OsStr, spec: &OsStr) -> UResult<Option<u32>> {
     if group.is_empty() {
         return Ok(None);
     }
     match Group::locate(group) {
         Ok(g) => Ok(Some(g.gid)),
-        Err(_) => match group.parse() {
-            Ok(gid) => Ok(Some(gid)),
-            Err(_) => Err(USimpleError::new(
+        Err(_) => match group.to_str().and_then(|s| s.parse().ok()) {
+            Some(gid) => Ok(Some(gid)),
+            None => Err(USimpleError::new(
                 1,
                 translate!("chown-error-invalid-group", "group" => spec.quote()),
             )),
@@ -200,14 +203,15 @@ fn parse_gid(group: &str, spec: &str) -> UResult<Option<u32>> {
 /// separator between the owner and group; calling code should set
 /// this to `':'`. If a separator is given but the group is omitted
 /// (as in `"owner:"`), the group is set to the owner's login group.
-fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
+fn parse_spec(spec: &OsStr, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
     assert!(['.', ':'].contains(&sep));
-    let mut args = spec.splitn(2, sep);
-    let user = args.next().unwrap_or("");
-    let group = args.next().unwrap_or("");
+    let bytes = spec.as_bytes();
+    let mut args = bytes.splitn(2, |&c| c == sep as u8);
+    let user = OsStr::from_bytes(args.next().unwrap_or_default());
+    let group = OsStr::from_bytes(args.next().unwrap_or_default());
 
     // dot separator: try as username first, fall back to owner.group (like GNU)
-    if sep == ':' && !spec.contains(':') && spec.contains('.') {
+    if sep == ':' && !bytes.contains(&b':') && bytes.contains(&b'.') {
         if let Ok(uid) = parse_uid(user, spec) {
             let gid = parse_gid(group, spec)?;
             return Ok((uid, gid));
@@ -222,9 +226,12 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
     if !user.is_empty() && group.is_empty() && spec != user {
         // A separator was given but the group was not ("owner:"), so the
         // group is set to the owner's login group.
-        return match Passwd::locate(user) {
-            // Lookup must occur through name, not ID, to be valid here.
-            Ok(passwd) if passwd.name == user => Ok((Some(passwd.uid), Some(passwd.gid))),
+        // Resolve by name only: a numeric fallback must not supply a login group.
+        let passwd = CString::new(user.as_bytes())
+            .ok()
+            .and_then(|name| Passwd::locate(name.as_c_str()).ok());
+        return match passwd {
+            Some(passwd) => Ok((Some(passwd.uid), Some(passwd.gid))),
             _ => Err(USimpleError::new(
                 1,
                 translate!("chown-error-invalid-spec", "spec" => spec.quote()),
@@ -247,18 +254,24 @@ mod test {
             env::set_var("LANG", "C");
         }
         let _ = locale::setup_localization("chown");
-        assert!(matches!(parse_spec(":", ':'), Ok((None, None))));
-        assert!(matches!(parse_spec(".", ':'), Ok((None, None))));
-        assert!(matches!(parse_spec(".", '.'), Ok((None, None))));
-        assert!(format!("{}", parse_spec("::", ':').err().unwrap()).starts_with("invalid group: "));
-        assert!(format!("{}", parse_spec("..", ':').err().unwrap()).starts_with("invalid group: "));
+        assert!(matches!(parse_spec(OsStr::new(":"), ':'), Ok((None, None))));
+        assert!(matches!(parse_spec(OsStr::new("."), ':'), Ok((None, None))));
+        assert!(matches!(parse_spec(OsStr::new("."), '.'), Ok((None, None))));
+        assert!(
+            format!("{}", parse_spec(OsStr::new("::"), ':').err().unwrap())
+                .starts_with("invalid group: ")
+        );
+        assert!(
+            format!("{}", parse_spec(OsStr::new(".."), ':').err().unwrap())
+                .starts_with("invalid group: ")
+        );
     }
 
     /// Test that "USER:" sets the group to the user's login group.
     #[test]
     fn test_parse_spec_login_group() {
         if let Ok(passwd) = Passwd::locate("root") {
-            let (uid, gid) = parse_spec("root:", ':').unwrap();
+            let (uid, gid) = parse_spec(OsStr::new("root:"), ':').unwrap();
             assert_eq!(uid, Some(passwd.uid));
             assert_eq!(gid, Some(passwd.gid));
         }
@@ -268,11 +281,17 @@ mod test {
     #[test]
     fn test_parse_spec_nameless_ids() {
         // This assumes that there is no named user with ID 12345.
-        assert!(matches!(parse_spec("12345", ':'), Ok((Some(12345), None))));
-        // This assumes that there is no named group with ID 54321.
-        assert!(matches!(parse_spec(":54321", ':'), Ok((None, Some(54321)))));
         assert!(matches!(
-            parse_spec("12345:54321", ':'),
+            parse_spec(OsStr::new("12345"), ':'),
+            Ok((Some(12345), None))
+        ));
+        // This assumes that there is no named group with ID 54321.
+        assert!(matches!(
+            parse_spec(OsStr::new(":54321"), ':'),
+            Ok((None, Some(54321)))
+        ));
+        assert!(matches!(
+            parse_spec(OsStr::new("12345:54321"), ':'),
             Ok((Some(12345), Some(54321)))
         ));
     }

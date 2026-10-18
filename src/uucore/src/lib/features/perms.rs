@@ -986,11 +986,11 @@ pub fn chown_base(
     if help || !reference {
         // add both positional arguments
         // arg_group is only required if
-        command = command.arg(
-            Arg::new(add_arg_if_not_reference)
-                .value_name(add_arg_if_not_reference)
-                .required(true),
-        );
+        let owner_arg = Arg::new(add_arg_if_not_reference)
+            .value_name(add_arg_if_not_reference)
+            .required(true)
+            .value_parser(clap::value_parser!(OsString));
+        command = command.arg(owner_arg);
     }
     command = command.arg(
         Arg::new(options::ARG_FILES)

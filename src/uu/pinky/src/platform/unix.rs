@@ -228,7 +228,7 @@ impl Pinky {
         column!(row, "{1:<8.0$}", utmpx::UT_NAMESIZE, ut.user());
 
         if self.layout.real_name {
-            let name = Passwd::locate(ut.user().as_ref())
+            let name = Passwd::locate(ut.user().as_str())
                 .ok()
                 .and_then(|pw| real_name(&pw.name, pw.user_info.as_deref()));
             match name {
