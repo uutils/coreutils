@@ -410,6 +410,7 @@ pub fn uu_app() -> Command {
             .long(options::HIDE)
             .action(ArgAction::Append)
             .value_name("PATTERN")
+            .value_parser(ValueParser::os_string())
             .help(translate!("ls-help-hide-pattern")),
     )
     .arg(
@@ -418,6 +419,7 @@ pub fn uu_app() -> Command {
             .long(options::IGNORE)
             .action(ArgAction::Append)
             .value_name("PATTERN")
+            .value_parser(ValueParser::os_string())
             .help(translate!("ls-help-ignore-pattern")),
     )
     .arg(
