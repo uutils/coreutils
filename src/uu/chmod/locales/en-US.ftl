@@ -4,7 +4,6 @@ chmod-usage = chmod [OPTION]... MODE[,MODE]... FILE...
   chmod [OPTION]... OCTAL-MODE FILE...
   chmod [OPTION]... --reference=RFILE FILE...
 chmod-after-help = Each MODE is of the form [ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+.
-chmod-error-cannot-stat = cannot stat attributes of {$file}
 chmod-error-dangling-symlink = cannot operate on dangling symlink {$file}
 chmod-error-no-such-file = cannot access {$file}: No such file or directory
 chmod-error-preserve-root = it is dangerous to operate recursively on {$file}
@@ -15,6 +14,7 @@ chmod-error-permission-denied = cannot access {$file}: Permission denied
 chmod-error-new-permissions = {$file}: new permissions are {$actual}, not {$expected}
 chmod-error-changing-permissions = changing permissions of {$file}: {$err}
 chmod-error-missing-operand = missing operand
+chmod-error-reference-stat = failed to get attributes of { $file }: { $error }
 
 # Help messages
 chmod-help-print-help = Print help information.
