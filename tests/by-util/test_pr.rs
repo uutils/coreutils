@@ -1352,3 +1352,68 @@ fn test_missing_file_error_message() {
         .stderr_contains("pr: nonexistent_file: ")
         .stderr_does_not_contain("(os error");
 }
+
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
+fn test_non_utf8_input_filename() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = OsStr::from_bytes(b"input-\xff");
+    std::fs::write(at.plus(name), b"from file\n").unwrap();
+    ucmd.arg("-t")
+        .arg(name)
+        .pipe_in("from stdin\n")
+        .succeeds()
+        .stdout_only("from file\n");
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
+fn test_missing_non_utf8_input_does_not_read_stdin() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    new_ucmd!()
+        .arg("-t")
+        .arg(OsStr::from_bytes(b"missing-\xff"))
+        .pipe_in("from stdin\n")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("missing-")
+        .stderr_does_not_contain("(os error");
+}
+
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
+fn test_merge_non_utf8_input_filename() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = OsStr::from_bytes(b"input-\xff");
+    std::fs::write(at.plus(name), b"left\n").unwrap();
+    at.write("right", "right\n");
+    ucmd.args(&["-T", "-m", "-l1"])
+        .arg(name)
+        .arg("right")
+        .succeeds()
+        .stdout_only(format!("{:<35}\t{:<35}\n", "left", "right"));
+}
+
+#[test]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
+fn test_header_preserves_non_utf8_filename() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    let (at, mut command) = at_and_ucmd!();
+    let name = OsStr::from_bytes(b"input-\xff");
+    std::fs::write(at.plus(name), b"01234567890123456789\n").unwrap();
+    command
+        .args(&["-D", "date", "-W20", "-l12"])
+        .arg(name)
+        .succeeds()
+        .stdout_only_bytes(b"\n\ndate input-\xff  Page 1\n\n\n01234567890123456789\n\n\n\n\n\n\n");
+}
