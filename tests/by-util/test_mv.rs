@@ -854,23 +854,36 @@ fn test_mv_same_file_dot_dir() {
         .stderr_only("mv: '.' and '.' are the same file\n");
 }
 
-#[test]
-fn test_mv_simple_backup() {
+#[rstest]
+#[case::short(&["-b"], Some("~"))]
+#[case::long(&["--backup"], Some("~"))]
+#[case::suffix(&["-b", "--suffix=super-suffix-of-the-century"], Some("super-suffix-of-the-century"))]
+#[case::suffix_implies_backup(&["--suffix=super-suffix-of-the-century"], Some("super-suffix-of-the-century"))]
+#[case::suffix_hyphen_value(&["-b", "--suffix=-v"], Some("-v"))]
+#[case::numbered_t(&["--backup=t"], Some(".~1~"))]
+#[case::numbered(&["--backup=numbered"], Some(".~1~"))]
+#[case::existing(&["--backup=existing"], Some("~"))]
+#[case::nil(&["--backup=nil"], Some("~"))]
+#[case::simple(&["--backup=simple"], Some("~"))]
+#[case::never(&["--backup=never"], Some("~"))]
+#[case::none(&["--backup=none"], None)]
+#[case::off(&["--backup=off"], None)]
+fn test_mv_backup_control(#[case] args: &[&str], #[case] backup_suffix: Option<&str>) {
     let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_simple_backup_file_a";
-    let file_b = "test_mv_simple_backup_file_b";
+    // the extension makes sure the suffix is appended, not substituted
+    let source = "source.txt";
+    let dest = "dest.txt";
 
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("-b")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
+    at.write(source, "new");
+    at.write(dest, "old");
+    ucmd.args(args).arg(source).arg(dest).succeeds().no_output();
 
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}~")));
+    assert!(!at.file_exists(source));
+    assert_eq!(at.read(dest), "new");
+    match backup_suffix {
+        Some(suffix) => assert_eq!(at.read(&format!("{dest}{suffix}")), "old"),
+        None => assert!(!at.file_exists(format!("{dest}~"))),
+    }
 }
 
 #[test]
@@ -898,102 +911,6 @@ fn test_mv_simple_backup_for_directory() {
 }
 
 #[test]
-fn test_mv_simple_backup_with_file_extension() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_simple_backup_file_a.txt";
-    let file_b = "test_mv_simple_backup_file_b.txt";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("-b")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}~")));
-}
-
-#[test]
-fn test_mv_arg_backup_arg_first() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_simple_backup_file_a";
-    let file_b = "test_mv_simple_backup_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("--backup").arg(file_a).arg(file_b).succeeds();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}~")));
-}
-
-#[test]
-fn test_mv_custom_backup_suffix() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_custom_backup_suffix_file_a";
-    let file_b = "test_mv_custom_backup_suffix_file_b";
-    let suffix = "super-suffix-of-the-century";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("-b")
-        .arg(format!("--suffix={suffix}"))
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}{suffix}")));
-}
-
-#[test]
-fn test_suffix_without_backup_option() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_custom_backup_suffix_file_a";
-    let file_b = "test_mv_custom_backup_suffix_file_b";
-    let suffix = "super-suffix-of-the-century";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg(format!("--suffix={suffix}"))
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}{suffix}")));
-}
-
-#[test]
-fn test_mv_custom_backup_suffix_hyphen_value() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_custom_backup_suffix_file_a";
-    let file_b = "test_mv_custom_backup_suffix_file_b";
-    let suffix = "-v";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("-b")
-        .arg(format!("--suffix={suffix}"))
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}{suffix}")));
-}
-
-#[test]
 fn test_mv_custom_backup_suffix_via_env() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_custom_backup_suffix_file_a";
@@ -1013,84 +930,10 @@ fn test_mv_custom_backup_suffix_via_env() {
     assert!(at.file_exists(format!("{file_b}{suffix}")));
 }
 
-#[test]
-fn test_mv_backup_numbered_with_t() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_backup_numbering_file_a";
-    let file_b = "test_mv_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("--backup=t")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}.~1~")));
-}
-
-#[test]
-fn test_mv_backup_numbered() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_backup_numbering_file_a";
-    let file_b = "test_mv_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("--backup=numbered")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}.~1~")));
-}
-
-#[test]
-fn test_mv_backup_existing() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_backup_numbering_file_a";
-    let file_b = "test_mv_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("--backup=existing")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}~")));
-}
-
-#[test]
-fn test_mv_backup_nil() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_backup_numbering_file_a";
-    let file_b = "test_mv_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("--backup=nil")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}~")));
-}
-
-#[test]
-fn test_mv_numbered_if_existing_backup_existing() {
+#[rstest]
+#[case::existing("--backup=existing")]
+#[case::nil("--backup=nil")]
+fn test_mv_numbered_if_existing_backup(#[case] backup_arg: &str) {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_backup_numbering_file_a";
     let file_b = "test_mv_backup_numbering_file_b";
@@ -1099,7 +942,7 @@ fn test_mv_numbered_if_existing_backup_existing() {
     at.touch(file_a);
     at.touch(file_b);
     at.touch(file_b_backup);
-    ucmd.arg("--backup=existing")
+    ucmd.arg(backup_arg)
         .arg(file_a)
         .arg(file_b)
         .succeeds()
@@ -1108,103 +951,6 @@ fn test_mv_numbered_if_existing_backup_existing() {
     assert!(at.file_exists(file_b));
     assert!(at.file_exists(file_b_backup));
     assert!(at.file_exists(format!("{file_b}.~2~")));
-}
-
-#[test]
-fn test_mv_numbered_if_existing_backup_nil() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_backup_numbering_file_a";
-    let file_b = "test_mv_backup_numbering_file_b";
-    let file_b_backup = "test_mv_backup_numbering_file_b.~1~";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    at.touch(file_b_backup);
-    ucmd.arg("--backup=nil")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(file_b_backup));
-    assert!(at.file_exists(format!("{file_b}.~2~")));
-}
-
-#[test]
-fn test_mv_backup_simple() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_backup_numbering_file_a";
-    let file_b = "test_mv_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("--backup=simple")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}~")));
-}
-
-#[test]
-fn test_mv_backup_never() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_backup_numbering_file_a";
-    let file_b = "test_mv_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("--backup=never")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}~")));
-}
-
-#[test]
-fn test_mv_backup_none() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_backup_numbering_file_a";
-    let file_b = "test_mv_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("--backup=none")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(!at.file_exists(format!("{file_b}~")));
-}
-
-#[test]
-fn test_mv_backup_off() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_backup_numbering_file_a";
-    let file_b = "test_mv_backup_numbering_file_b";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    ucmd.arg("--backup=off")
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(!at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(!at.file_exists(format!("{file_b}~")));
 }
 
 #[test]
