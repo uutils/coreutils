@@ -1117,6 +1117,53 @@ fn test_mkdir_inside_inexistent_dir() {
         .stderr_is("mkdir: cannot create directory 'a/b': No such file or directory\n");
 }
 
+#[test]
+fn test_mkdir_numeric_looking_name_in_error() {
+    let scene = TestScenario::new(util_name!());
+    for name in ["0042", "-0042", "7e2"] {
+        scene.fixtures.mkdir(name);
+    }
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .args(&["--", "0042", "-0042", "7e2"])
+        .fails_with_code(1)
+        .stderr_is(concat!(
+            "mkdir: cannot create directory '0042': File exists\n",
+            "mkdir: cannot create directory '-0042': File exists\n",
+            "mkdir: cannot create directory '7e2': File exists\n",
+        ));
+}
+
+#[test]
+fn test_mkdir_parents_over_existing_file() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("0077");
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .args(&["-p", "0077"])
+        .fails_with_code(1)
+        .stderr_is("mkdir: cannot create directory '0077': File exists\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_mkdir_error_escapes_special_chars() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("don't");
+    scene.fixtures.mkdir("tab\there");
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .args(&["don't", "tab\there"])
+        .fails_with_code(1)
+        .stderr_is(concat!(
+            "mkdir: cannot create directory 'don\\'t': File exists\n",
+            "mkdir: cannot create directory 'tab\\there': File exists\n",
+        ));
+}
+
 // The mode is only parsed where a mode means something.
 #[cfg(unix)]
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
