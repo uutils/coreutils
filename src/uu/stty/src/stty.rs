@@ -1106,17 +1106,7 @@ fn get_sane_control_char(cc_index: S) -> u8 {
     }
     // Default values for control chars not in the sane list
     match cc_index {
-        S::VEOL => 0,
-        S::VEOL2 => 0,
         S::VMIN => 1,
-        #[cfg(not(any(
-            all(target_os = "linux", target_arch = "sparc64"),
-            target_os = "illumos",
-            target_os = "solaris"
-        )))]
-        S::VTIME => 0,
-        #[cfg(target_os = "linux")]
-        S::VSWTC => 0,
         _ => 0,
     }
 }
