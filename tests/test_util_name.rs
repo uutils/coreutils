@@ -26,11 +26,7 @@ fn init() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "env",
-    any(target_os = "linux", target_os = "android"),
-    not(target_env = "musl")
-))]
+#[cfg(all(feature = "env", any(target_os = "linux", target_os = "android")))]
 fn binary_name_protection() {
     let ts = TestScenario::new("env");
     let bin = ts.bin_path.clone();
@@ -45,7 +41,7 @@ fn binary_name_protection() {
 
 // missing /proc/self/fd on Android?
 #[test]
-#[cfg(all(feature = "true", target_os = "linux", target_env = "gnu"))]
+#[cfg(all(feature = "true", target_os = "linux"))]
 fn binary_name_execfn_fallback() {
     use std::os::{fd::AsRawFd, unix::process::CommandExt};
     use std::process::Command;
