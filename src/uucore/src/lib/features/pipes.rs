@@ -105,6 +105,13 @@ pub fn drain_pipe(pipe: &PipeReader, dest: &impl AsFd, len: usize) -> PipeRes {
 /// This includes read ahead and optimization for stdout's pipe size
 #[inline]
 pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> SpliceRes {
+    // Read character devices directly instead of allocating a broker pipe for
+    // a splice attempt. This also avoids a pipe for empty inputs like /dev/null.
+    if rustix::fs::fstat(source).is_ok_and(|stat| {
+        rustix::fs::FileType::from_raw_mode(stat.st_mode) == rustix::fs::FileType::CharacterDevice
+    }) {
+        return Ok(Err(()));
+    }
     let Ok((pipe_rd, pipe_wr)) = PIPE_CACHE.take().map_or_else(pipe::<false>, Ok) else {
         return Ok(Err(()));
     };
@@ -229,4 +236,18 @@ pub fn dev_null() -> Option<std::fs::File> {
 #[inline]
 pub fn tee(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io::Result<usize> {
     rustix::pipe::tee(source, target, len, SpliceFlags::empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn null_input_does_not_allocate_a_pipe() {
+        drop(PIPE_CACHE.take());
+        let source = std::fs::File::open("/dev/null").unwrap();
+        let mut dest = tempfile::tempfile().unwrap();
+        assert!(splice_unbounded_auto(&source, &mut dest).unwrap().is_err());
+        assert!(PIPE_CACHE.take().is_none());
+    }
 }
