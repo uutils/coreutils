@@ -258,9 +258,9 @@ mod tests {
     #[test]
     fn test_stream_getters_return_matching_streams() {
         unsafe {
-            assert_eq!(fileno(__stdbuf_get_stdin()), 0);
-            assert_eq!(fileno(__stdbuf_get_stdout()), 1);
-            assert_eq!(fileno(__stdbuf_get_stderr()), 2);
+            assert_eq!(fileno(__stdbuf_get_stdin()), libc::STDIN_FILENO);
+            assert_eq!(fileno(__stdbuf_get_stdout()), libc::STDOUT_FILENO);
+            assert_eq!(fileno(__stdbuf_get_stderr()), libc::STDERR_FILENO);
         }
     }
 }
