@@ -634,6 +634,21 @@ fn wipe_file(
     } = *wipe_options;
     // Get these potential errors out of the way first
     let path = Path::new(path_str);
+    // Keep the command-line operand for diagnostics; use the resolved path
+    // only for filesystem operations.
+    let is_stdout = cfg!(unix) && path_str == "-";
+    let path = if is_stdout {
+        #[cfg(unix)]
+        {
+            Path::new("/dev/fd/1")
+        }
+        #[cfg(not(unix))]
+        {
+            path
+        }
+    } else {
+        path
+    };
 
     if path_str.as_encoded_bytes().ends_with(b"/") {
         if path.is_dir() {
@@ -676,7 +691,7 @@ fn wipe_file(
         fs::metadata(path).map_err_context(|| translate!("shred-failed-to-get-metadata"))?;
 
     // If force is true, set file permissions to not-readonly.
-    if force {
+    if force && !is_stdout {
         let mut perms = metadata.permissions();
         #[cfg(unix)]
         #[allow(clippy::useless_conversion, clippy::unnecessary_cast)]
@@ -750,9 +765,17 @@ fn wipe_file(
     }
 
     if remove_method != RemoveMethod::None {
-        do_remove(path, verbose, remove_method).map_err_context(
-            || translate_text!("shred-failed-to-remove-file", "file" => path.maybe_quote()),
-        )?;
+        if is_stdout {
+            // Deallocate stdout's data for -u/--remove without renaming or
+            // unlinking the file that the descriptor refers to.
+            file.set_len(0).map_err_context(
+                || translate_text!("shred-failed-to-remove-file", "file" => display_path.maybe_quote()),
+            )?;
+        } else {
+            do_remove(path, verbose, remove_method).map_err_context(
+                || translate_text!("shred-failed-to-remove-file", "file" => display_path.maybe_quote()),
+            )?;
+        }
     }
     Ok(())
 }
