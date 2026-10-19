@@ -5316,6 +5316,36 @@ fn test_tail_obsolete_f_flag() {
 
 #[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+fn test_tail_obsolete_bytes_follow() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("file", "abcdefghijklmnop\n");
+    let mut p = scene.ucmd().args(&["-cf", "file"]).run_no_wait();
+    p.make_assertion_with_delay(500).is_alive();
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_only("hijklmnop\n");
+
+    scene
+        .ucmd()
+        .arg("-c")
+        .arg("f")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("tail: invalid number of bytes: 'f'\n");
+
+    scene
+        .ucmd()
+        .args(&["-5ff", "file"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("tail: option used in invalid context -- 5\n");
+}
+
+#[test]
 #[cfg(unix)]
 fn test_obsolete_encoding_unix() {
     use std::ffi::OsStr;
