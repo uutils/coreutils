@@ -9,6 +9,109 @@
 use uutests::{at_and_ucmd, new_ucmd};
 
 #[test]
+fn test_decode_preserves_output_before_invalid_byte() {
+    for (encoding, encoded, expected) in [
+        ("--base64", "YWJjZGU=", "abcde"),
+        ("--base64url", "YWJjZGU=", "abcde"),
+        ("--base32", "MFRGGZDF", "abcde"),
+        ("--base32hex", "C5H66P35", "abcde"),
+        ("--base16", "6162636465", "abcde"),
+        ("--base2msbf", "011000010110001001100011", "abc"),
+        ("--base2lsbf", "100001100100011011000110", "abc"),
+        ("--z85", "ze16jx(mMb", "missing!"),
+    ] {
+        for from_file in [false, true] {
+            let (at, mut ucmd) = at_and_ucmd!();
+            let input = format!("{encoded}~");
+            ucmd.args(&[encoding, "--decode"]);
+            if from_file {
+                at.write("input", &input);
+                ucmd.arg("input");
+            } else {
+                ucmd.pipe_in(input.as_str());
+            }
+            ucmd.fails_with_code(1)
+                .stdout_is(expected)
+                .stderr_is("basenc: error: invalid input\n");
+        }
+    }
+}
+
+#[test]
+fn test_decode_preserves_output_before_incomplete_quantum() {
+    for (encoding, input, expected) in [
+        ("--z85", "ze16jx(mMba", "missing!"),
+        ("--base16", "6162636", "abc"),
+        ("--base2msbf", "0110000101100010011000111", "abc"),
+    ] {
+        new_ucmd!()
+            .args(&[encoding, "--decode"])
+            .pipe_in(input)
+            .fails_with_code(1)
+            .stdout_is(expected)
+            .stderr_is("basenc: error: invalid input\n");
+    }
+}
+
+#[test]
+fn test_decode_preserves_output_before_invalid_quantum() {
+    new_ucmd!()
+        .args(&["--z85", "--decode"])
+        .pipe_in("ze16jx(mMb#####")
+        .fails_with_code(1)
+        .stdout_is("missing!")
+        .stderr_is("basenc: error: invalid input\n");
+}
+
+#[test]
+fn test_decode_preserves_output_across_batches() {
+    for tail in ["a", "~"] {
+        new_ucmd!()
+            .args(&["--z85", "--decode"])
+            .pipe_in(format!("{}{tail}", "ze16jx(mMb".repeat(600)))
+            .fails_with_code(1)
+            .stdout_is("missing!".repeat(600))
+            .stderr_is("basenc: error: invalid input\n");
+    }
+}
+
+#[test]
+fn test_base64url_preserves_prefix_before_standard_alphabet() {
+    for input in ["YQ==+", "YQ==/", "YQ==~+"] {
+        new_ucmd!()
+            .args(&["--base64url", "--decode"])
+            .pipe_in(input)
+            .fails_with_code(1)
+            .stdout_is("a")
+            .stderr_is("basenc: error: invalid input\n");
+        new_ucmd!()
+            .args(&["--base64url", "--decode", "--ignore-garbage"])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only("a");
+    }
+}
+
+#[test]
+fn test_decode_preserves_bytes_before_invalid_padding_or_trailing_bits() {
+    for (encoding, input, expected) in [
+        ("--base64", "YQ=Z", "a"),
+        ("--base64", "YWJ", "ab"),
+        ("--base64url", "YQ=Z", "a"),
+        ("--base64url", "YWJ", "ab"),
+        ("--base32", "MZ======", "f"),
+        ("--base32hex", "CP======", "f"),
+    ] {
+        new_ucmd!()
+            .args(&[encoding, "--decode"])
+            .pipe_in(input)
+            .fails_with_code(1)
+            .stdout_is(expected)
+            .stderr_is("basenc: error: invalid input\n");
+    }
+}
+
+#[test]
 fn test_version() {
     new_ucmd!()
         .arg("--version")
