@@ -24,9 +24,9 @@ pub unsafe extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
     #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     {
         unsafe extern "C" {
-            fn __stdinp() -> *mut FILE;
+            static mut __stdinp: *mut FILE;
         }
-        unsafe { __stdinp() }
+        unsafe { __stdinp }
     }
 
     #[cfg(target_os = "openbsd")]
@@ -87,9 +87,9 @@ pub unsafe extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
     #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     {
         unsafe extern "C" {
-            fn __stdoutp() -> *mut FILE;
+            static mut __stdoutp: *mut FILE;
         }
-        unsafe { __stdoutp() }
+        unsafe { __stdoutp }
     }
 
     #[cfg(target_os = "openbsd")]
@@ -150,9 +150,9 @@ pub unsafe extern "C" fn __stdbuf_get_stderr() -> *mut FILE {
     #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     {
         unsafe extern "C" {
-            fn __stderrp() -> *mut FILE;
+            static mut __stderrp: *mut FILE;
         }
-        unsafe { __stderrp() }
+        unsafe { __stderrp }
     }
 
     #[cfg(target_os = "openbsd")]
