@@ -21,7 +21,14 @@ clap = { workspace = true }
 fluent = { workspace = true }
 rustix = { workspace = true, features = ["fs"] }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["backup-control", "fs"] }
+uucore = { workspace = true, features = [
+  "backup-control",
+  "fs",
+  "safe-traversal",
+] }
+
+[build-dependencies]
+cfg_aliases = { workspace = true }
 
 [lints]
 workspace = true
