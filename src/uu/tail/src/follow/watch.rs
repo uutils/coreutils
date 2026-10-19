@@ -17,7 +17,7 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, set_exit_code};
 #[cfg(target_os = "linux")]
 use uucore::signals::ensure_stdout_not_broken;
-use uucore::translate;
+use uucore::{translate, translate_text};
 
 use uucore::show_error;
 
@@ -378,7 +378,7 @@ impl Observer {
                                 // almost always means it was emptied outright.
                                 show_error!(
                                     "{}",
-                                    translate!("tail-status-file-truncated", "file" => display_name)
+                                    translate_text!("tail-status-file-truncated", "file" => display_name)
                                 );
                                 self.reopen(event_path)?;
                             }

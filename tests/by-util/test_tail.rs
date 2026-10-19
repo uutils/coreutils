@@ -314,6 +314,22 @@ fn test_permission_denied_multiple() {
 }
 
 #[test]
+fn test_numeric_looking_file_names_are_kept_verbatim() {
+    // File names such as "007" or "1e3" must not be reformatted as numbers
+    // in error messages.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("2.50");
+    ucmd.args(&["007", "1e3", "2.50"])
+        .fails_with_code(1)
+        .stdout_is("==> 2.50 <==\n")
+        .stderr_is(
+            "tail: cannot open '007' for reading: No such file or directory\n\
+             tail: cannot open '1e3' for reading: No such file or directory\n\
+             tail: error reading '2.50': Is a directory\n",
+        );
+}
+
+#[test]
 fn test_follow_redirect_stdin_name_retry() {
     // $ touch f && tail -F - < f
     // tail: cannot follow '-' by name
