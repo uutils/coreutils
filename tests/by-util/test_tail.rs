@@ -3059,6 +3059,114 @@ fn test_fifo_with_pid() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+fn test_fifo_with_pid_reads_while_writer_stays_open() {
+    use std::fs::OpenOptions;
+    use std::os::unix::fs::OpenOptionsExt;
+    use std::process::Command;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    let mut writer = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(libc::O_NONBLOCK)
+        .open(at.plus("fifo"))
+        .unwrap();
+    writer.write_all(b"skip\nfirst\n").unwrap();
+    let mut monitored = Command::new("sh")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let mut child = ucmd
+        .args(&["-f", "-s.05", "-n1", "fifo"])
+        .arg(format!("--pid={}", monitored.id()))
+        .timeout(std::time::Duration::from_secs(5))
+        .run_no_wait();
+    child
+        .make_assertion_with_delay(500)
+        .is_alive()
+        .with_all_output()
+        .stdout_is("first\n");
+    writer.write_all(b"second\n").unwrap();
+    child
+        .make_assertion_with_delay(500)
+        .is_alive()
+        .with_all_output()
+        .stdout_is("first\nsecond\n");
+    monitored.stdin.take();
+    monitored.wait().unwrap();
+    // Keep the FIFO writer open: only the process-exit check can stop tail.
+    child.wait().unwrap().success().no_stderr();
+}
+
+#[cfg(target_os = "linux")]
+fn tail_input_flags(pid: u32, target: &Path) -> std::io::Result<Option<u32>> {
+    let read_flags = || -> std::io::Result<Option<u32>> {
+        for descriptor in std::fs::read_dir(format!("/proc/{pid}/fd"))? {
+            let descriptor = descriptor?;
+            if descriptor
+                .file_name()
+                .to_string_lossy()
+                .parse::<u32>()
+                .is_ok_and(|fd| fd > 2)
+                && std::fs::read_link(descriptor.path()).is_ok_and(|path| path == target)
+            {
+                let info = std::fs::read_to_string(format!(
+                    "/proc/{pid}/fdinfo/{}",
+                    descriptor.file_name().to_string_lossy()
+                ))?;
+                return Ok(info
+                    .lines()
+                    .find_map(|line| line.strip_prefix("flags:\t"))
+                    .and_then(|flags| u32::from_str_radix(flags, 8).ok()));
+            }
+        }
+        Ok(None)
+    };
+    match read_flags() {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        result => result,
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+fn test_pid_opens_files_nonblocking_including_pid_zero() {
+    for name in ["regular", "/dev/null"] {
+        for pid in [None, Some(0), Some(std::process::id())] {
+            let (at, mut ucmd) = at_and_ucmd!();
+            at.touch("regular");
+            let target = at.plus(name);
+            ucmd.args(&["-f", "-s.05"]).arg(&target);
+            if let Some(pid) = pid {
+                ucmd.arg(format!("--pid={pid}"));
+            }
+            let mut child = ucmd.run_no_wait();
+            let mut flags = None;
+            for _ in 0..500 {
+                flags = tail_input_flags(child.id(), &target).unwrap();
+                if flags.is_some() || !child.is_alive() {
+                    break;
+                }
+                child.delay(10);
+            }
+            child.kill();
+            let flags = flags.expect("tail did not open the input");
+            assert_eq!(
+                flags & libc::O_NONBLOCK as u32 != 0,
+                pid.is_some(),
+                "{name}, {pid:?}"
+            );
+        }
+    }
+}
+
+#[test]
 #[cfg(unix)]
 #[ignore = "disabled until fixed"]
 fn test_illegal_seek() {
@@ -5538,4 +5646,34 @@ fn test_header_quotes_name_with_control_char() {
     ucmd.args(&["-v", "-n1", "tab\there"])
         .succeeds()
         .stdout_only("==> 'tab'$'\\t''here' <==\nt\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO support")]
+fn test_pid_without_follow_waits_for_fifo_eof() {
+    use std::fs::OpenOptions;
+    use std::os::unix::fs::OpenOptionsExt;
+    let (at, mut command) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    let mut writer = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(libc::O_NONBLOCK)
+        .open(at.plus("fifo"))
+        .unwrap();
+    writer.write_all(b"first\n").unwrap();
+    let mut child = command
+        .arg("--pid=0")
+        .args(&["-n1", "fifo"])
+        .timeout(std::time::Duration::from_secs(5))
+        .run_no_wait();
+    child
+        .make_assertion_with_delay(500)
+        .is_alive()
+        .with_all_output()
+        .no_stdout();
+    writer.write_all(b"last\n").unwrap();
+    drop(writer);
+    child.wait().unwrap().success().stdout_is("last\n");
 }
