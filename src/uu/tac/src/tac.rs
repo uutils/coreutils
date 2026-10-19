@@ -83,6 +83,7 @@ pub fn uu_app() -> Command {
                 .long(options::SEPARATOR)
                 .help(translate!("tac-help-separator"))
                 .value_parser(clap::value_parser!(OsString))
+                .allow_hyphen_values(true)
                 .value_name("STRING"),
         )
         .arg(

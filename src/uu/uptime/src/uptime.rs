@@ -8,8 +8,8 @@
 mod platform;
 
 use clap::{Arg, ArgAction, Command};
+use jiff::Timestamp;
 use jiff::tz::TimeZone;
-use jiff::{Timestamp, ToSpan};
 use std::io::{self, Write, stdout};
 use uucore::error::{UError, UResult};
 use uucore::format_usage;
@@ -89,9 +89,9 @@ pub fn uu_app() -> Command {
 }
 
 fn uptime_since() -> UResult<()> {
-    let uptime = platform::system_uptime_seconds()?;
+    let uptime = platform::system_uptime()?;
 
-    let since_date = (Timestamp::now() - uptime.seconds()).to_zoned(TimeZone::system());
+    let since_date = (Timestamp::now() - uptime).to_zoned(TimeZone::system());
     writeln!(stdout(), "{}", since_date.strftime("%Y-%m-%d %H:%M:%S"))?;
 
     Ok(())

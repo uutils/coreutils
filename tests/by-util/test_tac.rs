@@ -57,6 +57,21 @@ fn test_stdin_non_newline_separator_before() {
 }
 
 #[test]
+fn test_separator_starting_with_hyphen() {
+    for args in [
+        &["-s", "-1"][..],
+        &["--separator", "-1"],
+        &["--separator=-1"],
+    ] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("a-1b-1")
+            .succeeds()
+            .stdout_is("b-1a-1");
+    }
+}
+
+#[test]
 fn test_single_default() {
     new_ucmd!()
         .arg("prime_per_line.txt")
