@@ -33,7 +33,7 @@ use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
-use uucore::translate;
+use uucore::{translate, translate_text};
 
 use uucore::{show, show_error};
 
@@ -127,7 +127,7 @@ fn tail_file(
         set_exit_code(1);
         show_error!(
             "{}",
-            translate!(
+            translate_text!(
                 "tail-error-cannot-open-no-such-file",
                 "file" => input.display_name,
                 "error" => translate!("tail-no-such-file-or-directory")
@@ -145,7 +145,7 @@ fn tail_file(
 
         show_error!(
             "{}",
-            translate!("tail-error-reading-file", "file" => input.display_name, "error" => err_msg)
+            translate_text!("tail-error-reading-file", "file" => input.display_name, "error" => err_msg)
         );
         if settings.follow.is_some() {
             let msg = if settings.retry {
@@ -155,7 +155,7 @@ fn tail_file(
             };
             show_error!(
                 "{}",
-                translate!("tail-error-cannot-follow-file-type", "file" => input.display_name, "msg" => msg)
+                translate_text!("tail-error-cannot-follow-file-type", "file" => input.display_name, "msg" => msg)
             );
         }
         if !observer.follow_name_retry() {
@@ -198,13 +198,13 @@ fn tail_file(
             Err(e) if e.kind() == ErrorKind::PermissionDenied => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 show!(e.map_err_context(|| {
-                    translate!("tail-error-cannot-open-for-reading", "file" => input.display_name)
+                    translate_text!("tail-error-cannot-open-for-reading", "file" => input.display_name)
                 }));
             }
             Err(e) => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 return Err(e.map_err_context(|| {
-                    translate!("tail-error-cannot-open-for-reading", "file" => input.display_name)
+                    translate_text!("tail-error-cannot-open-for-reading", "file" => input.display_name)
                 }));
             }
         }
@@ -263,7 +263,7 @@ fn tail_stdin(
         set_exit_code(1);
         show_error!(
             "{}",
-            translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name, "error" => translate!("tail-no-such-file-or-directory"))
+            translate_text!("tail-error-cannot-open-no-such-file", "file" => input.display_name, "error" => translate!("tail-no-such-file-or-directory"))
         );
         return Ok(());
     }
