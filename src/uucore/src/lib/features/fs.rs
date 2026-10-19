@@ -404,9 +404,13 @@ pub fn canonicalize<P: AsRef<Path>>(
                 }
                 result.pop();
             }
+            // Existing requires every component to resolve. Normal permits only
+            // a missing final component, not errors such as permission denied.
+            // Missing ignores lookup errors for any component.
             Err(e)
                 if (miss_mode == MissingHandling::Existing
-                    || (miss_mode == MissingHandling::Normal && !parts.is_empty())) =>
+                    || (miss_mode == MissingHandling::Normal
+                        && (!parts.is_empty() || e.kind() != ErrorKind::NotFound))) =>
             {
                 return Err(e);
             }
