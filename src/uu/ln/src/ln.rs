@@ -20,9 +20,15 @@ use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs;
 
+#[cfg(all(unix, not(target_os = "redox")))]
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
+#[cfg(all(unix, not(target_os = "redox")))]
+use uucore::fs::link_at;
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
+#[cfg(all(unix, not(target_os = "redox")))]
+use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 
 /// Public visibility allows other apps to integrate with our
 /// `ln` utility by calling `exec` directly with their `Settings`.
@@ -294,12 +300,26 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
     if !target_dir.is_dir() {
         return Err(LnError::TargetIsNotADirectory(target_dir.to_owned()));
     }
+    let replace_target_dir = settings.no_dereference && target_dir.is_symlink();
+    // Links are made through the open directory, so they land in it even if
+    // `target_dir` is renamed meanwhile.
+    #[cfg(all(unix, not(target_os = "redox")))]
+    let dir = if replace_target_dir {
+        None
+    } else {
+        Some(DirFd::open_anchor(target_dir).map_err(|e| {
+            LnError::IoContext(
+                UIoError::from(e),
+                translate!("ln-failed-to-access", "file" => target_dir.quote()),
+            )
+        })?)
+    };
     // remember the linked destinations for further usage
     let mut linked_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
 
     let mut all_successful = true;
     for srcpath in files {
-        let targetpath = if settings.no_dereference && target_dir.is_symlink() {
+        let dest = if replace_target_dir {
             let remove_target = || {
                 // Not sure why but on Windows, the symlink can be
                 // considered as a dir
@@ -326,26 +346,32 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                     remove_target();
                 }
             }
-            target_dir.to_path_buf()
+            Dest::by_path(target_dir.into())
         } else {
-            match srcpath.file_name() {
-                Some(basename) => target_dir.join(basename),
-                // This can be None only for "." or "..". Trying
-                // to create a link with such name will fail with
-                // EEXIST, which agrees with the behavior of GNU
-                // coreutils.
-                None => target_dir.join(srcpath),
+            // This can be None only for "." or "..". Trying
+            // to create a link with such name will fail with
+            // EEXIST, which agrees with the behavior of GNU
+            // coreutils.
+            let name = srcpath.file_name().unwrap_or(srcpath.as_os_str());
+            Dest {
+                path: target_dir.join(name).into(),
+                #[cfg(all(unix, not(target_os = "redox")))]
+                at: dir.as_ref().map(|dir| InDir {
+                    dir,
+                    dir_path: target_dir,
+                    name: name.into(),
+                }),
             }
         };
 
-        if linked_destinations.contains(&targetpath) {
+        if linked_destinations.contains(dest.path.as_ref()) {
             // If the target file was already created in this ln call, do not overwrite
             show_error!(
                 "{}",
-                translate!("ln-error-will-not-overwrite", "target" => targetpath.quote(), "source" => srcpath.quote())
+                translate!("ln-error-will-not-overwrite", "target" => dest.path.quote(), "source" => srcpath.quote())
             );
             all_successful = false;
-        } else if let Err(e) = link(srcpath, &targetpath, settings) {
+        } else if let Err(e) = link_to(srcpath, &dest, settings) {
             // A declined prompt has nothing to report.
             if !matches!(e, LnError::SomeLinksFailed) {
                 show_error!("{e}");
@@ -353,7 +379,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
             all_successful = false;
         }
 
-        linked_destinations.insert(targetpath);
+        linked_destinations.insert(dest.path.into_owned());
     }
     if all_successful {
         Ok(())
@@ -393,9 +419,13 @@ fn is_same_entry(src: &Path, dst: &Path) -> bool {
 /// Create symlink to src at dst with the given settings
 ///
 /// This is made public to allow other apps to use `ln` as a library.
-#[allow(clippy::cognitive_complexity)]
 pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
-    let mut backup_path = None;
+    link_to(src, &Dest::by_path(dst.into()), settings)
+}
+
+fn link_to(src: &Path, dest: &Dest, settings: &Settings) -> LnResult<()> {
+    let dst = dest.path.as_ref();
+    let mut backup = None;
     // Remove an existing destination only after a link attempt fails with EEXIST.
     let mut overwrite_on_conflict = false;
     let source: Cow<'_, Path> = if settings.relative {
@@ -404,8 +434,8 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
         src.into()
     };
 
-    if dst.is_symlink() || dst.exists() {
-        backup_path = backup_control::get_backup_path(settings.backup, dst, &settings.suffix);
+    if dest.exists() {
+        backup = dest.backup(settings);
         if settings.backup != BackupMode::None && !settings.symbolic {
             // `ln --backup f f`: the backup would move `f` away before the
             // link is made, so detect the same file first, for any backup mode
@@ -424,7 +454,7 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
             }
             OverwriteMode::Force => {
                 // A backup moves the destination away before the link is made.
-                if backup_path.is_none()
+                if backup.is_none()
                     && !dst.is_symlink()
                     && paths_refer_to_same_file(src, dst, true)
                     && is_same_entry(src, dst)
@@ -435,8 +465,8 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
                 overwrite_on_conflict = true;
             }
         }
-        if let Some(ref p) = backup_path {
-            fs::rename(dst, p).map_err(|e| {
+        if let Some(backup) = &backup {
+            dest.rename_to(backup).map_err(|e| {
                 LnError::IoContext(
                     UIoError::from(e),
                     translate!("ln-cannot-backup", "file" => dst.quote()),
@@ -462,13 +492,7 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
     // Link first, matching GNU. Replacing uses a temp name + `renameat`, so
     // `dst` is never briefly free for another user to claim.
     let link_target = hard_link_src.as_deref().unwrap_or(&source);
-    let raw = if overwrite_on_conflict {
-        replace_link(link_target, dst, settings.symbolic)
-    } else if settings.symbolic {
-        symlink(&source, dst)
-    } else {
-        fs::hard_link(link_target, dst)
-    };
+    let raw = dest.create_link(link_target, settings.symbolic, overwrite_on_conflict);
 
     let res = raw.map_err(|e| {
         if settings.symbolic {
@@ -494,8 +518,8 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
     });
 
     if let Err(e) = res {
-        if let Some(ref p) = backup_path {
-            fs::rename(p, dst).map_err(|e| {
+        if let Some(backup) = &backup {
+            backup.rename_to(dest).map_err(|e| {
                 LnError::IoContext(
                     UIoError::from(e),
                     translate!("ln-cannot-backup", "file" => dst.quote()),
@@ -508,16 +532,105 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
     if settings.verbose {
         let mut out = stdout();
         write!(out, "{} -> {}", dst.quote(), source.quote())?;
-        match backup_path {
-            Some(path) => writeln!(
+        match backup {
+            Some(backup) => writeln!(
                 out,
                 " ({})",
-                translate!("ln-backup", "backup" => path.quote())
+                translate!("ln-backup", "backup" => backup.path.quote())
             )?,
             None => writeln!(out)?,
         }
     }
     Ok(())
+}
+
+/// Where [`link_to`] puts a link or a backup.
+struct Dest<'a> {
+    path: Cow<'a, Path>,
+    #[cfg(all(unix, not(target_os = "redox")))]
+    at: Option<InDir<'a>>,
+}
+
+/// The entry `name` in the directory `link_files_in_dir` opened, at `dir_path`.
+#[cfg(all(unix, not(target_os = "redox")))]
+struct InDir<'a> {
+    dir: &'a DirFd,
+    dir_path: &'a Path,
+    name: Cow<'a, OsStr>,
+}
+
+impl<'a> Dest<'a> {
+    fn by_path(path: Cow<'a, Path>) -> Self {
+        Self {
+            path,
+            #[cfg(all(unix, not(target_os = "redox")))]
+            at: None,
+        }
+    }
+
+    fn exists(&self) -> bool {
+        #[cfg(all(unix, not(target_os = "redox")))]
+        if let Some(at) = &self.at {
+            return at.dir.stat_at(&at.name, SymlinkBehavior::NoFollow).is_ok();
+        }
+        self.path.is_symlink() || self.path.exists()
+    }
+
+    /// Where the backup of this entry goes, in the same directory.
+    fn backup(&self, settings: &Settings) -> Option<Self> {
+        #[cfg(all(unix, not(target_os = "redox")))]
+        if let Some(at) = &self.at {
+            let exists = |path: &Path| {
+                at.dir
+                    .stat_at(path.as_os_str(), SymlinkBehavior::NoFollow)
+                    .is_ok()
+            };
+            let name = backup_control::get_backup_path_with_exists(
+                settings.backup,
+                Path::new(&at.name),
+                &settings.suffix,
+                exists,
+            )?;
+            return Some(Self {
+                path: at.dir_path.join(&name).into(),
+                at: Some(InDir {
+                    name: name.into_os_string().into(),
+                    ..*at
+                }),
+            });
+        }
+        backup_control::get_backup_path(settings.backup, &self.path, &settings.suffix)
+            .map(|path| Self::by_path(path.into()))
+    }
+
+    /// Rename this entry to `to`, its backup or the entry it backs up.
+    fn rename_to(&self, to: &Self) -> io::Result<()> {
+        #[cfg(all(unix, not(target_os = "redox")))]
+        if let (Some(from), Some(to)) = (&self.at, &to.at) {
+            return rustix::fs::renameat(from.dir, &*from.name, to.dir, &*to.name)
+                .map_err(Into::into);
+        }
+        fs::rename(&self.path, &to.path)
+    }
+
+    fn create_link(&self, target: &Path, symbolic: bool, replace: bool) -> io::Result<()> {
+        #[cfg(all(unix, not(target_os = "redox")))]
+        if let Some(at) = &self.at {
+            let create = |dir: &DirFd, name: &OsStr| link_at(target, dir, name, symbolic);
+            return if replace {
+                at.dir.replace_entry_at(&at.name, create)
+            } else {
+                create(at.dir, &at.name)
+            };
+        }
+        if replace {
+            replace_link(target, &self.path, symbolic)
+        } else if symbolic {
+            symlink(target, &self.path)
+        } else {
+            fs::hard_link(target, &self.path)
+        }
+    }
 }
 
 #[cfg(windows)]
