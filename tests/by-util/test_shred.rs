@@ -612,3 +612,71 @@ fn test_numeric_looking_file_name_verbose_remove() {
         .stderr_contains("shred: 2.50: removed\n");
     assert!(!at.file_exists("2.50"));
 }
+
+// On Unix, '-' names the file attached to standard output, not a file
+// literally named '-'. Open without truncating so the test checks shredding.
+#[test]
+#[cfg(unix)]
+fn test_shred_dash_wipes_stdout_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "secret.txt";
+    let original = b"secret data";
+    at.write_bytes(file, original);
+
+    let stdout = std::fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus(file))
+        .unwrap();
+
+    ucmd.args(&["-vn1", "-x", "-"])
+        .set_stdout(stdout)
+        .succeeds()
+        .stderr_only("shred: -: pass 1/1 (random)...\n");
+
+    assert!(at.file_exists(file));
+
+    let contents = at.read_bytes(file);
+    assert_eq!(contents.len(), original.len());
+    assert_ne!(contents.as_slice(), &original[..]);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_shred_dash_remove_truncates_but_does_not_unlink_stdout() {
+    for remove_arg in [
+        "-u",
+        "--remove=unlink",
+        "--remove=wipe",
+        "--remove=wipesync",
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let file = "secret.txt";
+        at.write(file, "secret data");
+
+        let stdout = std::fs::OpenOptions::new()
+            .write(true)
+            .open(at.plus(file))
+            .unwrap();
+
+        ucmd.args(&["-n1", remove_arg, "-"])
+            .set_stdout(stdout)
+            .succeeds();
+
+        assert!(at.file_exists(file), "{remove_arg} must not unlink stdout");
+        assert!(
+            at.read_bytes(file).is_empty(),
+            "{remove_arg} must truncate stdout"
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_shred_dash_rejects_stdout_pipe() {
+    new_ucmd!()
+        .arg("-")
+        .set_stdout(std::process::Stdio::piped())
+        .fails_with_code(1)
+        .stderr_contains("shred: -:")
+        .stderr_does_not_contain("/dev/fd/1");
+}
