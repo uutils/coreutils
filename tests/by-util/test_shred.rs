@@ -617,6 +617,10 @@ fn test_numeric_looking_file_name_verbose_remove() {
 // literally named '-'. Open without truncating so the test checks shredding.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: stdout is not accessible through /dev/fd/1"
+)]
 fn test_shred_dash_wipes_stdout_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "secret.txt";
@@ -642,6 +646,10 @@ fn test_shred_dash_wipes_stdout_file() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: stdout is not accessible through /dev/fd/1"
+)]
 fn test_shred_dash_remove_truncates_but_does_not_unlink_stdout() {
     for remove_arg in [
         "-u",
@@ -672,6 +680,10 @@ fn test_shred_dash_remove_truncates_but_does_not_unlink_stdout() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: stdout is not accessible through /dev/fd/1"
+)]
 fn test_shred_dash_rejects_stdout_pipe() {
     new_ucmd!()
         .arg("-")
