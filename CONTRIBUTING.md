@@ -54,7 +54,7 @@ crates is as follows:
 We have separate repositories for crates that we maintain but also publish for
 use by others:
 
-- [coreutils-i10n](https://github.com/uutils/coreutils-l10n)
+- [coreutils-l10n](https://github.com/uutils/coreutils-l10n)
 - [num-prime](https://github.com/uutils/num-prime)
 - [uutils-term-grid](https://github.com/uutils/uutils-term-grid)
 - [parse_datetime](https://github.com/uutils/parse_datetime)
