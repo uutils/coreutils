@@ -5121,6 +5121,50 @@ fn test_tail_obsolete_error_cases() {
 }
 
 #[test]
+fn test_tail_obsolete_bare_c_needs_posix_1992() {
+    new_ucmd!()
+        .arg("-c")
+        .pipe_in("abcdefghijkl")
+        .fails_with_code(1)
+        .no_stdout();
+    new_ucmd!()
+        .env("_POSIX2_VERSION", "200809")
+        .arg("-c")
+        .pipe_in("abcdefghijkl")
+        .fails_with_code(1)
+        .no_stdout();
+    new_ucmd!()
+        .env("_POSIX2_VERSION", "199209")
+        .arg("-c")
+        .pipe_in("abcdefghijkl")
+        .succeeds()
+        .stdout_only("cdefghijkl");
+}
+
+#[test]
+fn test_tail_obsolete_plus_is_a_file_under_posix_2001() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("+2", "file\n");
+    ucmd.env("_POSIX2_VERSION", "200112")
+        .arg("+2")
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_only("file\n");
+    new_ucmd!()
+        .env("_POSIX2_VERSION", "200809")
+        .arg("+2")
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_only("b\n");
+    new_ucmd!()
+        .env("_POSIX2_VERSION", "199209")
+        .arg("+2")
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_only("b\n");
+}
+
+#[test]
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_tail_obsolete_f_flag() {
     let scene = TestScenario::new(util_name!());
