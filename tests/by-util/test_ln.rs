@@ -320,6 +320,43 @@ fn test_symlink_interactive_overrides_force() {
 }
 
 #[test]
+fn test_symlink_interactive_backup_declined() {
+    for (dest, replaced) in [
+        ("old", PathBuf::from("old")),
+        ("dir", PathBuf::from("dir").join("new")),
+    ] {
+        let replaced = replaced.to_str().unwrap();
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir("dir");
+        at.write("new", "new");
+        at.write("old", "old");
+        at.write("dir/new", "old");
+
+        scene
+            .ucmd()
+            .args(&["-s", "-i", "-b", "new", dest])
+            .pipe_in("n")
+            .fails()
+            .stderr_only(format!("ln: replace '{replaced}'? "));
+
+        assert_eq!(at.read(replaced), "old");
+        assert!(!at.file_exists(format!("{replaced}~")));
+    }
+}
+
+#[test]
+fn test_symlink_force_backup_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("file", "content");
+
+    ucmd.args(&["-s", "-f", "-b", "file", "file"]).succeeds();
+
+    assert_eq!(at.resolve_link("file"), "file");
+    assert_eq!(at.read("file~"), "content");
+}
+
+#[test]
 fn test_symlink_simple_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_symlink_simple_backup";
