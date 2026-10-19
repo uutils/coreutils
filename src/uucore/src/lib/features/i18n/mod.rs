@@ -40,29 +40,31 @@ pub fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
         .iter()
         .find_map(|&key| std::env::var(key).ok().filter(|l| !l.is_empty()));
 
-    if let Some(locale_var_str) = locale_var {
-        let mut split = locale_var_str.split(&['.', '@']);
+    locale_var.map_or_else(get_locale_from_os, |value| parse_posix_locale(&value))
+}
 
-        if let Some(simple) = split.next() {
-            // Naively convert the locale name to BCP47 tag format.
-            //
-            // See https://en.wikipedia.org/wiki/IETF_language_tag
-            let bcp47 = simple.replace('_', "-");
-            let locale = Locale::try_from_str(&bcp47).unwrap_or(DEFAULT_LOCALE);
-
-            // Determine encoding from the locale suffix (e.g. en_US.UTF-8, C.UTF-8).
-            let encoding = split
-                .next()
-                .filter(|enc| {
-                    let lower = enc.to_lowercase();
-                    lower == "utf-8" || lower == "utf8"
-                })
-                .map_or(UEncoding::Ascii, |_| UEncoding::Utf8);
-            return (locale, encoding);
-        }
-    }
-
-    get_locale_from_os()
+/// Parse `language[_territory][.codeset][@modifier]` from a POSIX locale name.
+///
+/// C and POSIX use the default collation. Only a codeset following `.` can
+/// select UTF-8; a modifier following `@` is never an encoding.
+/// Unrecognized locale names use the default locale; unrecognized codesets use ASCII.
+pub fn parse_posix_locale(value: &str) -> (Locale, UEncoding) {
+    let name_and_codeset = value.split_once('@').map_or(value, |(name, _)| name);
+    let (name, codeset) = name_and_codeset
+        .split_once('.')
+        .unwrap_or((name_and_codeset, ""));
+    let locale = if matches!(name, "C" | "POSIX") {
+        DEFAULT_LOCALE
+    } else {
+        Locale::try_from_str(&name.replace('_', "-")).unwrap_or(DEFAULT_LOCALE)
+    };
+    let encoding = if codeset.eq_ignore_ascii_case("utf-8") || codeset.eq_ignore_ascii_case("utf8")
+    {
+        UEncoding::Utf8
+    } else {
+        UEncoding::Ascii
+    };
+    (locale, encoding)
 }
 
 /// Returns the preferred user locale.
@@ -175,6 +177,37 @@ pub fn get_ctype_encoding() -> UEncoding {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn modifiers_do_not_select_an_encoding() {
+        for value in ["en_US@utf-8", "en_US@utf-8.dict", "en_US@latin.UTF-8"] {
+            assert_eq!(
+                parse_posix_locale(value),
+                (locale!("en-US"), UEncoding::Ascii)
+            );
+        }
+        for value in ["en_US.UTF-8@latin", "en_US.utf8", "en_US.UTF8@utf-8.dict"] {
+            assert_eq!(
+                parse_posix_locale(value),
+                (locale!("en-US"), UEncoding::Utf8)
+            );
+        }
+    }
+
+    #[test]
+    fn posix_and_c_names_use_default_collation() {
+        for value in ["C", "POSIX", "C@modifier", "POSIX@modifier"] {
+            assert_eq!(
+                parse_posix_locale(value),
+                (DEFAULT_LOCALE, UEncoding::Ascii)
+            );
+        }
+        for value in ["C.UTF-8", "POSIX.UTF8@modifier"] {
+            assert_eq!(parse_posix_locale(value), (DEFAULT_LOCALE, UEncoding::Utf8));
+        }
+    }
+
     #[cfg(windows)]
     #[test]
     fn test_get_locale_from_os() {
@@ -193,8 +226,8 @@ mod tests {
             assert_eq!(num, 1);
         }
 
-        let (locale, encoding) = super::get_locale_from_os();
-        assert_eq!(encoding, super::UEncoding::Utf8);
+        let (locale, encoding) = get_locale_from_os();
+        assert_eq!(encoding, UEncoding::Utf8);
         assert_eq!(locale, locale!("fr-FR"));
 
         unsafe {

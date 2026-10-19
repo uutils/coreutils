@@ -859,3 +859,15 @@ fn test_both_inputs_stdin() {
         .stdout_is("\ta\nb\n\t\tc\n")
         .no_stderr();
 }
+
+#[test]
+fn test_posix_locale_accepts_byte_sorted_input() {
+    let ts = TestScenario::new(uutests::util_name!());
+    ts.fixtures.write("sorted", "A\nB\na\nb\n");
+    ts.fixtures.touch("empty");
+    ts.ucmd()
+        .env("LC_ALL", "POSIX")
+        .args(&["--check-order", "sorted", "empty"])
+        .succeeds()
+        .stdout_only("A\nB\na\nb\n");
+}

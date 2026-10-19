@@ -2251,3 +2251,12 @@ fn test_exit_with_3_write_error() {
         .fails_with_code(3)
         .stderr_is("expr: No space left on device\n");
 }
+
+#[test]
+fn test_modifier_is_not_a_utf8_codeset() {
+    new_ucmd!()
+        .env("LC_ALL", "en_US@utf-8.dict")
+        .args(&["length", "é"])
+        .succeeds()
+        .stdout_only("2\n");
+}
