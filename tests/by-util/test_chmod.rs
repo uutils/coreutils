@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (words) dirfd subdirs openat FDCWD rwxr
 
+#![cfg(unix)]
+
 use std::fs::{OpenOptions, Permissions, metadata, set_permissions};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use uutests::at_and_ucmd;

@@ -38,7 +38,32 @@ pub mod fast_inc;
 pub mod format;
 #[cfg(all(feature = "fs", any(unix, windows, target_os = "wasi")))]
 pub mod fs;
-#[cfg(feature = "fsext")]
+#[cfg(all(
+    feature = "fsext",
+    any(
+        all(
+            unix,
+            any(
+                target_vendor = "apple",
+                target_os = "aix",
+                target_os = "cygwin",
+                target_os = "dragonfly",
+                target_os = "freebsd",
+                target_os = "haiku",
+                target_os = "hurd",
+                target_os = "illumos",
+                target_os = "solaris",
+                target_os = "linux",
+                target_os = "android",
+                target_os = "netbsd",
+                target_os = "openbsd",
+                target_os = "redox",
+            )
+        ),
+        windows,
+        target_os = "wasi"
+    )
+))]
 pub mod fsext;
 #[cfg(feature = "i18n-common")]
 pub mod i18n;
@@ -76,7 +101,7 @@ pub mod mode;
 // ** unix-only
 #[cfg(all(unix, feature = "entries"))]
 pub mod entries;
-#[cfg(all(unix, feature = "perms"))]
+#[cfg(all(feature = "perms", unix, not(target_os = "haiku")))]
 pub mod perms;
 #[cfg(all(feature = "pipes", any(target_os = "linux", target_os = "android")))]
 pub mod pipes;

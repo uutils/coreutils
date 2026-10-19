@@ -40,6 +40,9 @@ pub fn main() {
 
     let out_dir = env::var("OUT_DIR").unwrap();
 
+    let target_arch = env::var_os("CARGO_CFG_TARGET_ARCH").unwrap();
+    let is_unix = env::var_os("CARGO_CFG_UNIX").is_some();
+    let is_selinux = env::var_os("CARGO_FEATURE_SELINUX").is_some();
     let target_os = env::var_os("CARGO_CFG_TARGET_OS").unwrap();
     for (key, val) in env::vars() {
         if val == "1" && key.starts_with(ENV_FEATURE_PREFIX) {
@@ -47,7 +50,57 @@ pub fn main() {
             // Allow this as we have a bunch of info in the comments
             #[allow(clippy::match_same_arms)]
             match krate.as_ref() {
-                "chcon" | "runcon" if !(target_os == "linux" || target_os == "android") => {
+                "chcon" | "runcon"
+                    if !(is_selinux && (target_os == "linux" || target_os == "android")) =>
+                {
+                    continue;
+                }
+                "chgrp" | "chmod" | "chown" | "logname" | "nice" | "stat" | "stty" if !is_unix => {
+                    continue;
+                }
+                "chroot" | "hostid" | "id" | "mkfifo"
+                    if !is_unix || target_os == "fuchsia" || target_os == "redox" =>
+                {
+                    continue;
+                }
+                "mknod" if !is_unix || target_os == "haiku" => {
+                    continue;
+                }
+                "groups" | "install" if !is_unix || target_os == "redox" => {
+                    continue;
+                }
+                "pinky"
+                    if !is_unix
+                        || target_os == "aix"
+                        || target_os == "android"
+                        || target_os == "fuchsia"
+                        || target_os == "redox" =>
+                {
+                    continue;
+                }
+                "who"
+                    if !is_unix
+                        || target_os == "aix"
+                        || target_os == "android"
+                        || target_os == "fuchsia"
+                        || target_os == "openbsd"
+                        || target_os == "redox" =>
+                {
+                    continue;
+                }
+                "users"
+                    if !is_unix
+                        || target_os == "android"
+                        || target_os == "fuchsia"
+                        || target_os == "redox" =>
+                {
+                    continue;
+                }
+                "pinky" | "uptime" | "users" | "who"
+                    if target_arch == "wasm32"
+                        || target_os == "fuchsia"
+                        || target_os == "redox" =>
+                {
                     continue;
                 }
                 "default" | "macos" | "unix" | "windows" | "selinux" | "zip" | "clap_complete"

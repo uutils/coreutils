@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline onetwo somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons Nofile NOTCAPABLE iproduct newfstatat isox
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE NOTCAPABLE iproduct newfstatat isox
 
 #![allow(
     clippy::similar_names,
@@ -14,7 +14,7 @@
 
 use regex::Regex;
 #[cfg(unix)]
-use rustix::process::Resource;
+use rlimit::Resource;
 #[cfg(not(target_os = "openbsd"))]
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
@@ -30,7 +30,10 @@ use uutests::new_ucmd;
 #[cfg(unix)]
 use uutests::unwrap_or_return;
 use uutests::util::TestScenario;
-#[cfg(any(unix, feature = "selinux"))]
+#[cfg(any(
+    unix,
+    all(feature = "selinux", any(target_os = "linux", target_os = "android"))
+))]
 use uutests::util::expected_result;
 use uutests::{at_and_ucmd, util_name};
 
@@ -8197,7 +8200,7 @@ fn test_ls_recursive_no_fd_leak() {
         .ucmd()
         .arg("-R")
         .arg("1")
-        .limit(Resource::Nofile, 20, 20)
+        .limit(Resource::NOFILE, 20, 20)
         .succeeds()
         .no_stderr();
 }

@@ -113,6 +113,7 @@ rand = { version = "0.10.1", features = ["std_rng"] }
 rand_chacha = { version = "0.10.0" }
 rayon = "1.10"
 regex = "1.10.4"
+rlimit = "0.11.0"
 rstest = "0.27.0"
 rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"
@@ -155,7 +156,7 @@ fluent = "0.17.0"
 unic-langid = "0.9.6"
 fluent-syntax = "0.12.0"
 
-uucore = { version = "0.13.0", path = "src/uucore" }
+uucore = { version = "0.13.0", default-features = false, path = "src/uucore" }
 uucore_procs = { version = "0.13.0", path = "src/uucore_procs" }
 uu_ls = { version = "0.13.0", path = "src/uu/ls" }
 uu_base32 = { version = "0.13.0", path = "src/uu/base32" }
@@ -395,6 +396,9 @@ runcon = { optional = true, version = "0.13.0", package = "uu_runcon", path = "s
 [target.'cfg(unix)'.dev-dependencies]
 nix = { workspace = true, features = ["fs", "signal"] }
 rustix = { workspace = true, features = ["net", "process"] }
+
+[target.'cfg(all(unix, not(target_os = "fuchsia")))'.dev-dependencies]
+rlimit = { workspace = true }
 
 [build-dependencies]
 phf_codegen.workspace = true
@@ -649,7 +653,7 @@ feat_require_unix_core = [
 # * ref: <https://wiki.musl-libc.org/faq.html#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?>
 feat_require_unix_utmpx = ["pinky", "uptime", "users", "who"]
 # "feat_require_selinux" == set of utilities depending on SELinux.
-feat_require_selinux = ["chcon", "runcon"]
+feat_require_selinux = ["chcon/selinux", "runcon/selinux"]
 ## (alternate/newer/smaller platforms) feature sets
 # "feat_os_unix_fuchsia" == set of utilities which can be built/run on the "Fuchsia" OS (refs: <https://fuchsia.dev>; <https://en.wikipedia.org/wiki/Google_Fuchsia>)
 feat_os_unix_fuchsia = [
@@ -706,3 +710,7 @@ strip = true
 inherits = "release"
 panic = "unwind"
 debug = true
+
+[patch.crates-io]
+nix = { git = "https://github.com/xtqqczze/nix-rust-nix", branch = "horizon" }
+terminal_size = { git = "https://github.com/eminence/terminal-size", branch = "master" }

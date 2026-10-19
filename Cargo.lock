@@ -523,6 +523,7 @@ dependencies = [
  "pretty_assertions",
  "rand 0.10.3",
  "regex",
+ "rlimit",
  "rstest",
  "rstest_reuse",
  "rustc-hash",
@@ -1909,8 +1910,7 @@ dependencies = [
 [[package]]
 name = "nix"
 version = "0.31.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
+source = "git+https://github.com/xtqqczze/nix-rust-nix?branch=horizon#d60243b4542f0776501fbcf31bf2ace89e521a57"
 dependencies = [
  "bitflags 2.13.2",
  "cfg-if",
@@ -2478,6 +2478,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba39f3699c378cd8970968dcbff9c43159ea4cfbd88d43c00b22f2ef10a435d2"
 
 [[package]]
+name = "rlimit"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f35ee2729c56bb610f6dba436bf78135f728b7373bdffae2ec815b2d3eb98cc3"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "roff"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2879,8 +2888,7 @@ dependencies = [
 [[package]]
 name = "terminal_size"
 version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
+source = "git+https://github.com/eminence/terminal-size?branch=master#0a699e9d8c36d64df1b7d4a9975d1df254efcb6c"
 dependencies = [
  "rustix",
  "windows-sys 0.60.2",
@@ -4488,6 +4496,7 @@ dependencies = [
  "pretty_assertions",
  "rand 0.10.3",
  "regex",
+ "rlimit",
  "rustix",
  "tempfile",
  "uucore",

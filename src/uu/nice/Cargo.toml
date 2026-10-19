@@ -16,7 +16,7 @@ path = "src/nice.rs"
 test = false
 doctest = false
 
-[dependencies]
+[target.'cfg(any(unix, windows))'.dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
 uucore = { workspace = true }
@@ -27,9 +27,14 @@ rustix = { workspace = true, features = ["process"] }
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = ["Win32_System_Threading"] }
 
+[features]
+default = ["signals"]
+signals = ["uucore/signals"]
+
 [lints]
 workspace = true
 
 [[bin]]
 name = "nice"
 path = "src/main.rs"
+required-features = ["uucore/default"]
