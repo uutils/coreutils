@@ -1585,21 +1585,20 @@ fn test_line_num_range_with_up_to_match2() {
     assert_eq!(at.read("xx01"), "");
 }
 
-// NOTE: output different than gnu's: the pattern /10/ is matched but should not
 #[test]
 fn test_line_num_range_with_up_to_match3() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "10", "/10/", "-k"])
-        .fails()
-        .stderr_is("csplit: '/10/': match not found\n")
-        .stdout_is("18\n123\n");
+        .succeeds()
+        .stdout_only("18\n0\n123\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
         .count();
-    assert_eq!(count, 2);
+    assert_eq!(count, 3);
     assert_eq!(at.read("xx00"), generate(1, 10));
-    assert_eq!(at.read("xx01"), generate(10, 51));
+    assert_eq!(at.read("xx01"), "");
+    assert_eq!(at.read("xx02"), generate(10, 51));
 
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "/10/", "10"])
@@ -1869,4 +1868,50 @@ fn test_empty_skip_to_regex_is_accepted() {
 
     ucmd.args(&["letters", "%%"]).succeeds().stdout_only("19\n");
     assert_eq!(at.read("xx00"), "delta\necho\nfoxtrot\n");
+}
+
+#[test]
+fn test_regex_after_line_number_matches_current_line() {
+    for (patterns, sizes, pieces) in [
+        (vec!["2", "/[0-9]/"], "2\n0\n4\n", vec!["a\n", "", "1\n2\n"]),
+        (vec!["2", "/1/+1"], "2\n2\n2\n", vec!["a\n", "1\n", "2\n"]),
+        (vec!["2", "/2/-1"], "2\n0\n4\n", vec!["a\n", "", "1\n2\n"]),
+        (vec!["2", "%1%"], "2\n4\n", vec!["a\n", "1\n2\n"]),
+        (
+            vec!["2", "/[0-9]/", "{1}"],
+            "2\n0\n2\n2\n",
+            vec!["a\n", "", "1\n", "2\n"],
+        ),
+        (
+            vec!["/a/+1", "2", "/[12]/"],
+            "2\n0\n2\n2\n",
+            vec!["a\n", "", "1\n", "2\n"],
+        ),
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.arg("-")
+            .args(&patterns)
+            .pipe_in("a\n1\n2\n")
+            .succeeds()
+            .stdout_only(sizes);
+        for (index, piece) in pieces.iter().enumerate() {
+            assert_eq!(at.read(&format!("xx{index:02}")), *piece);
+        }
+        assert!(!at.file_exists(format!("xx{:02}", pieces.len())));
+    }
+}
+
+#[test]
+fn test_repeated_line_number_before_regex() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-", "2", "2", "/1/"])
+        .pipe_in("a\n1\n2\n")
+        .succeeds()
+        .stdout_is("2\n0\n0\n4\n")
+        .stderr_is("csplit: warning: line number '2' is the same as preceding line number\n");
+    assert_eq!(at.read("xx00"), "a\n");
+    assert_eq!(at.read("xx01"), "");
+    assert_eq!(at.read("xx02"), "");
+    assert_eq!(at.read("xx03"), "1\n2\n");
+    assert!(!at.file_exists("xx04"));
 }
