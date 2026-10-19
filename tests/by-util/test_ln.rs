@@ -186,6 +186,47 @@ fn test_hard_link_overwrite_force_in_write_search_only_dir() {
     assert_eq!(at.read("dir/dest"), "new");
 }
 
+/// Linking into a target directory needs write and search permission on it,
+/// not read permission.
+#[test]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_symlink_into_write_search_only_target_dir() {
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.mkdir("dir");
+    at.set_mode("dir", 0o300);
+
+    let result = ucmd.args(&["-s", "../file", "dir/"]).run();
+
+    at.set_mode("dir", 0o755);
+    result.success().no_output();
+    assert_eq!(at.resolve_link("dir/file"), "../file");
+}
+
+/// The backup of a link in such a target directory is made in it too.
+#[test]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_symlink_backup_in_write_search_only_target_dir() {
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.mkdir("dir");
+    at.relative_symlink_file("old", "dir/file");
+    at.set_mode("dir", 0o300);
+
+    let result = ucmd.args(&["-sb", "../file", "dir/"]).run();
+
+    at.set_mode("dir", 0o755);
+    result.success().no_output();
+    assert_eq!(at.resolve_link("dir/file"), "../file");
+    assert_eq!(at.resolve_link("dir/file~"), "old");
+}
+
 /// A forced replace must be atomic, so a concurrent creator always loses.
 /// Fails reliably if unlink-then-create ever comes back.
 #[uutests::wasi_ignore(RenameNotAtomicReplace)]
@@ -668,6 +709,141 @@ fn test_symlink_target_dir_non_utf8_source_name() {
     let created_link_target = fs::read_link(&created_link_path)
         .expect("reading created symlink target in target directory");
     assert_eq!(created_link_target.as_os_str().as_bytes(), source_bytes);
+}
+
+/// Links go into the directory ln opened even if its name is re-pointed while
+/// ln prompts. `link` is the expected symlink prefix, `None` for a hard link.
+#[uutests::wasi_ignore(LinkInSymlinkedDirectoryDenied)]
+#[cfg(unix)]
+#[rstest::rstest]
+#[case::symbolic(&["-s", "-i"], Some(""), None)]
+#[cfg_attr(not(target_os = "android"), case::hard(&["-i"], None, None))]
+#[case::relative(&["-s", "-r", "-i"], Some("../"), None)]
+#[case::backup_simple(&["-s", "-i", "--backup=simple"], Some(""), Some("~"))]
+#[case::backup_numbered(&["-s", "-i", "--backup=numbered"], Some(""), Some(".~2~"))]
+#[case::backup_existing(&["-s", "-i", "--backup=existing"], Some(""), Some(".~2~"))]
+fn test_target_dir_renamed_during_prompt(
+    #[case] flags: &[&str],
+    #[case] link: Option<&str>,
+    #[case] backup: Option<&str>,
+) {
+    use std::process::Stdio;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.mkdir("other");
+    at.write("a", "new a");
+    at.write("b", "new b");
+    at.write("c", "new c");
+    at.write("dir/a", "old a");
+    at.write("dir/b", "old b");
+    at.write("dir/b.~1~", "first backup");
+    at.write("other/b", "untouched");
+
+    let mut child = scene
+        .ucmd()
+        .args(flags)
+        .args(&["-t", "dir", "a", "b", "c"])
+        .set_stdin(Stdio::piped())
+        .set_stderr(Stdio::piped())
+        .run_no_wait();
+    let prompt = "ln: replace 'dir/a'? ";
+    assert_eq!(child.stderr_exact_bytes(prompt.len()), prompt.as_bytes());
+
+    // Change the pathname while ln is waiting, then process another source.
+    at.rename("dir", "moved");
+    at.relative_symlink_dir("other", "dir");
+    child.write_in("y\n");
+    let prompt = "ln: replace 'dir/b'? ";
+    assert_eq!(child.stderr_exact_bytes(prompt.len()), prompt.as_bytes());
+    child.write_in("y\n");
+    child.wait().unwrap().success();
+
+    for name in ["a", "b", "c"] {
+        match link {
+            Some(prefix) => {
+                assert_eq!(
+                    at.resolve_link(format!("moved/{name}")),
+                    format!("{prefix}{name}")
+                );
+            }
+            None => assert_eq!(at.read(format!("moved/{name}")), format!("new {name}")),
+        }
+    }
+    if let Some(suffix) = backup {
+        assert_eq!(at.read(format!("moved/b{suffix}")), "old b");
+        assert_eq!(at.read("moved/b.~1~"), "first backup");
+    }
+    assert_eq!(at.read("other/b"), "untouched");
+    assert!(!at.file_exists("other/a"));
+    assert_eq!(std::fs::read_dir(at.plus("other")).unwrap().count(), 1);
+}
+
+/// A target directory that can be neither read nor searched gets one error per
+/// link, as in GNU.
+#[test]
+#[cfg(unix)]
+fn test_unsearchable_target_dir() {
+    // Root can search the directory anyway.
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    at.mkdir("dir");
+    at.set_mode("dir", 0o000);
+
+    let result = ucmd.args(&["-s", "../a", "../b", "dir"]).run();
+
+    at.set_mode("dir", 0o755);
+    result.code_is(1).no_stdout().stderr_is(
+        "ln: failed to create symbolic link 'dir/a': Permission denied\n\
+         ln: failed to create symbolic link 'dir/b': Permission denied\n",
+    );
+}
+
+/// An empty source names the target directory itself, which is not replaced.
+#[test]
+#[cfg(unix)]
+fn test_empty_source_into_target_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    ucmd.args(&["-sf", "", "dir"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("ln: dir/: cannot overwrite directory\n");
+    assert!(at.dir_exists("dir"));
+}
+
+/// A source without a basename names the target directory itself, which is
+/// neither replaced nor backed up.
+#[cfg(all(unix, not(target_os = "android")))]
+#[rstest::rstest]
+#[case::dot(".", Some("ln: destination/.: cannot overwrite directory\n"))]
+#[case::dot_dot("..", Some("ln: destination/..: cannot overwrite directory\n"))]
+// GNU reports `destination/..` here too; ln names the source, as on main.
+#[case::nested_dot_dot("nested/..", None)]
+fn test_target_dir_backup_source_without_basename(
+    #[case] source: &str,
+    #[case] stderr: Option<&str>,
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("destination");
+    at.mkdir("nested");
+    at.write("destination/kept", "unchanged");
+    let result = ucmd
+        .args(&["-s", "--backup=existing", source, "destination"])
+        .fails_with_code(1);
+    if let Some(stderr) = stderr {
+        result.no_stdout().stderr_is(stderr);
+    }
+    assert_eq!(at.read("destination/kept"), "unchanged");
+    assert_eq!(
+        std::fs::read_dir(at.plus("destination")).unwrap().count(),
+        1
+    );
 }
 
 #[test]

@@ -329,17 +329,7 @@ impl DirFd {
 
     /// Get raw stat data for a file relative to this directory
     pub fn stat_at(&self, name: &OsStr, symlink_behavior: SymlinkBehavior) -> io::Result<FileStat> {
-        let name_cstr =
-            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-
-        let stat = fstatat_fd(&self.fd, name_cstr.as_c_str(), symlink_behavior).map_err(|e| {
-            SafeTraversalError::StatFailed {
-                path: name.into(),
-                source: e,
-            }
-        })?;
-
-        Ok(stat)
+        stat_at_fd(&self.fd, name, symlink_behavior)
     }
 
     /// Get metadata for a file relative to this directory
@@ -784,6 +774,25 @@ impl AsFd for DirFd {
     }
 }
 
+/// [`DirFd::stat_at`] relative to any directory descriptor.
+fn stat_at_fd(
+    dir: impl AsFd,
+    name: &OsStr,
+    symlink_behavior: SymlinkBehavior,
+) -> io::Result<FileStat> {
+    let name_cstr =
+        CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+
+    let stat = fstatat_fd(dir, name_cstr.as_c_str(), symlink_behavior).map_err(|e| {
+        SafeTraversalError::StatFailed {
+            path: name.into(),
+            source: e,
+        }
+    })?;
+
+    Ok(stat)
+}
+
 /// `symlinkat`/`linkat` relative to an open directory.
 pub(crate) fn link_at<Fd: AsFd>(
     target: &Path,
@@ -803,14 +812,14 @@ pub(crate) fn link_at<Fd: AsFd>(
 
 /// A directory to create entries in, held open where the platform allows. Without a
 /// search-only open, an unreadable one is reached by its path, resolved again on each call.
-pub(crate) struct DirAnchor {
+pub struct DirAnchor {
     path: PathBuf,
     fd: Option<DirFd>,
 }
 
 impl DirAnchor {
     /// Open `path` with [`DirFd::open_anchor`], keeping only the path where that is denied.
-    pub(crate) fn open(path: &Path) -> io::Result<Self> {
+    pub fn open(path: &Path) -> io::Result<Self> {
         let fd = match DirFd::open_anchor(path) {
             Ok(fd) => Some(fd),
             Err(e) if SEARCH_ONLY.is_none() && e.kind() == io::ErrorKind::PermissionDenied => None,
@@ -838,9 +847,39 @@ impl DirAnchor {
     }
 
     /// Create `name` as a link to `target`, symbolic if `symbolic` is set.
-    pub(crate) fn link_at(&self, target: &Path, name: &OsStr, symbolic: bool) -> io::Result<()> {
+    pub fn link_at(&self, target: &Path, name: &OsStr, symbolic: bool) -> io::Result<()> {
         let (dir, name) = self.at(name)?;
         link_at(target, dir, &name, symbolic)
+    }
+
+    /// Get metadata for the entry `name`, as [`DirFd::metadata_at`] does.
+    pub fn metadata_at(
+        &self,
+        name: &OsStr,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<Metadata> {
+        let (dir, name) = self.at(name)?;
+        stat_at_fd(dir, &name, symlink_behavior).map(Metadata::from_stat)
+    }
+
+    /// Rename the entry `from` to `to` in this directory.
+    pub fn rename_at(&self, from: &OsStr, to: &OsStr) -> io::Result<()> {
+        let (dir, from) = self.at(from)?;
+        let (_, to) = self.at(to)?;
+        rustix::fs::renameat(dir, &*from, dir, &*to).map_err(Into::into)
+    }
+
+    /// Create `name` with `create`, or replace it the same way if it is taken.
+    pub fn replace_entry_at(
+        &self,
+        name: &OsStr,
+        mut create: impl FnMut(&Self, &OsStr) -> io::Result<()>,
+    ) -> io::Result<()> {
+        match create(self, name) {
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+            res => return res,
+        }
+        self.replace_existing_entry_at(name, create)
     }
 
     /// Replace the existing entry `name` with one made by `create`: build it under a
