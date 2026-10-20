@@ -155,6 +155,38 @@ fn test_utf8_malformed_sequences_do_not_count_as_characters() {
 }
 
 #[test]
+fn test_utf8_counts_after_ascii_prefixes() {
+    let cases: &[(&[u8], usize)] = &[
+        (b"b\n", 2),
+        (b"\xc3\xa4\n", 2),
+        (b"\xff\n", 1),
+        (b"\xe2\x82", 0),
+    ];
+    for prefix in [0, 7, 8, 31, 32, 63, 64, 255, 256, 1023, 1024, 2047, 65536] {
+        for &(suffix, chars) in cases {
+            let mut input = vec![b'a'; prefix];
+            input.extend_from_slice(suffix);
+            input.extend_from_slice(&[b'b'; 1024]);
+            let width = input.len().to_string().len();
+            let expected = format!(
+                "{:width$} {:width$} input\n",
+                prefix + chars + 1024,
+                input.len()
+            );
+            for tunables in ["", "glibc.cpu.hwcaps=-AVX2,-SSE2,-ASIMD"] {
+                let (at, mut ucmd) = at_and_ucmd!();
+                at.write_bytes("input", &input);
+                ucmd.env("LC_ALL", "C.UTF-8")
+                    .env("GLIBC_TUNABLES", tunables)
+                    .args(&["-cm", "input"])
+                    .succeeds()
+                    .stdout_is(&expected);
+            }
+        }
+    }
+}
+
+#[test]
 fn test_utf8_sequences_across_read_buffer_boundaries() {
     let cases: &[(&[u8], usize)] = &[
         (b"\xc3\xa4\xe2\x82\xac\xf0\x9f\x92\xa9\n", 4),

@@ -31,7 +31,7 @@ If the flags set are a subset of `-clm`, the input is read in chunks and the
 `bytecount` crate is used to count newlines (`-l`) and UTF-8 characters (`-m`).
 In UTF-8 locales, character counting validates the input with `simdutf8` when SIMD
 is enabled, skips malformed sequences, and carries partial characters between
-reads. ASCII chunks are counted by length.
+reads. Complete ASCII blocks are counted by length before validating the suffix.
 
 It's useful to vary the line length in the input. GNU wc seems particularly
 bad at short lines.

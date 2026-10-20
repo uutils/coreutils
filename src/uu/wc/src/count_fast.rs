@@ -178,26 +178,52 @@ impl Default for AlignedBuffer {
     }
 }
 
+fn count_chars(input: &[u8], simd_allowed: bool) -> usize {
+    if simd_allowed {
+        bytecount::num_chars(input)
+    } else {
+        bytecount::naive_num_chars(input)
+    }
+}
+
+// Return complete ASCII blocks so validation does not scan those bytes again.
+fn ascii_prefix_len(input: &[u8]) -> usize {
+    const BLOCK_SIZE: usize = 1024;
+
+    input
+        .as_chunks::<BLOCK_SIZE>()
+        .0
+        .iter()
+        .take_while(|block| {
+            let bits = block
+                .as_chunks::<8>()
+                .0
+                .iter()
+                .fold(0_u64, |bits, word| bits | u64::from_ne_bytes(*word));
+            bits & 0x8080_8080_8080_8080 == 0
+        })
+        .count()
+        * BLOCK_SIZE
+}
+
 // incomplete holds only a potentially valid UTF-8 suffix from the preceding read.
 fn count_utf8_chars(mut input: &[u8], incomplete: &mut Incomplete, simd_allowed: bool) -> usize {
-    let count_chars = |bytes: &[u8]| {
-        if simd_allowed {
-            bytecount::num_chars(bytes)
-        } else {
-            bytecount::naive_num_chars(bytes)
-        }
-    };
     let mut chars = 0;
     if !incomplete.is_empty() {
         let (consumed, result) = incomplete.try_complete_offsets(input);
         input = &input[consumed..];
         match result {
-            Some(Ok(())) => chars += count_chars(incomplete.take_buffer()),
+            Some(Ok(())) => chars += count_chars(incomplete.take_buffer(), simd_allowed),
             Some(Err(())) => {
                 incomplete.take_buffer();
             }
             None => return 0,
         }
+    }
+    if simd_allowed {
+        let ascii_bytes = ascii_prefix_len(input);
+        chars += ascii_bytes;
+        input = &input[ascii_bytes..];
     }
     if input.is_ascii() {
         return chars + input.len();
@@ -211,11 +237,11 @@ fn count_utf8_chars(mut input: &[u8], incomplete: &mut Incomplete, simd_allowed:
             std::str::from_utf8(input).map_err(|error| (error.valid_up_to(), error.error_len()))
         };
         match result {
-            Ok(_) => return chars + count_chars(input),
+            Ok(_) => return chars + count_chars(input, simd_allowed),
             Err((valid, invalid)) => {
                 // Repeated SIMD setup is expensive when errors are close together.
                 validate_with_simd = false;
-                chars += count_chars(&input[..valid]);
+                chars += count_chars(&input[..valid], simd_allowed);
                 input = &input[valid..];
                 if let Some(invalid) = invalid {
                     input = &input[invalid..];
@@ -261,10 +287,8 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
                 if COUNT_CHARS {
                     total.chars += if validate_utf8 {
                         count_utf8_chars(&buf[..n], &mut incomplete, simd_allowed)
-                    } else if simd_allowed {
-                        bytecount::num_chars(&buf[..n])
                     } else {
-                        bytecount::naive_num_chars(&buf[..n])
+                        count_chars(&buf[..n], simd_allowed)
                     };
                 }
                 if COUNT_LINES {
