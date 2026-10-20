@@ -98,11 +98,11 @@ fn dirname_string_manipulation(path: &OsStr) -> &[u8] {
     }
 
     // Step 2: Check if it ends with `/.` and strip the `/+.` pattern
-    if bytes.ends_with(b".") && bytes.len() >= 2 && is_sep(bytes[bytes.len() - 2]) {
+    if bytes.ends_with(b".") && bytes.get(bytes.len() - 2).is_some_and(|&b| is_sep(b)) {
         let dot_pos = bytes.len() - 1;
         // Find where the slashes before the dot start
         let mut slash_start = dot_pos - 1;
-        while slash_start > 0 && is_sep(bytes[slash_start - 1]) {
+        while bytes.get(slash_start - 1).is_some_and(|&b| is_sep(b)) {
             slash_start -= 1;
         }
         // Return the stripped result
@@ -127,7 +127,7 @@ fn dirname_string_manipulation(path: &OsStr) -> &[u8] {
         let mut result = &bytes[..last_slash_pos];
 
         // Strip trailing slashes from result (but keep at least one if at the start)
-        while result.len() > 1 && is_sep(result[result.len() - 1]) {
+        while result.last().is_some_and(|&b| is_sep(b)) {
             result = &result[..result.len() - 1];
         }
 
