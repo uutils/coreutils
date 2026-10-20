@@ -1713,11 +1713,17 @@ fn test_chmod_reports_every_failing_operand() {
         return;
     }
 
-    let error = "chmod: changing permissions of '/': Operation not permitted\n";
-    new_ucmd!()
-        .args(&["0", "/", "/"])
-        .fails_with_code(1)
-        .stderr_only(format!("{error}{error}"));
+    // The errno text differs between systems: '/' is read-only on macOS.
+    let result = new_ucmd!().args(&["0", "/", "/"]).fails_with_code(1);
+    result.no_stdout();
+    let lines: Vec<&str> = result.stderr_str().lines().collect();
+    assert_eq!(lines.len(), 2, "{lines:?}");
+    for line in lines {
+        assert!(
+            line.starts_with("chmod: changing permissions of '/': "),
+            "{line}"
+        );
+    }
     new_ucmd!()
         .args(&["-f", "0", "/", "/"])
         .fails_with_code(1)
