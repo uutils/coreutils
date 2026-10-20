@@ -17,7 +17,7 @@ use crate::error::{FromIo, UResult, USimpleError};
 use crate::line_ending::LineEnding;
 use crate::quoting_style::locale_aware_shell_escape;
 use crate::sum::DigestOutput;
-use crate::{show, translate};
+use crate::{show, translate_text};
 
 /// Use the same buffer size as GNU when reading a file to create a checksum
 /// from it: 32 KiB.
@@ -257,7 +257,7 @@ where
                 if filepath.is_dir() {
                     show!(USimpleError::new(
                         1,
-                        translate!(
+                        translate_text!(
                             "error-is-a-directory",
                             "file" => locale_aware_shell_escape(filepath)
                         )
