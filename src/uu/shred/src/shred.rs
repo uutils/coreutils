@@ -665,13 +665,32 @@ fn wipe_file(
         }
     }
 
+    // On OpenBSD, /dev/fd/1 is a character device rather than a symlink.
+    // Get the metadata from stdout's file descriptor to inspect the actual file.
+    #[cfg(target_os = "openbsd")]
+    let get_metadata = || {
+        if is_stdout {
+            use std::{io::stdout, os::fd::AsFd};
+
+            stdout()
+                .as_fd()
+                .try_clone_to_owned()
+                .and_then(|fd| File::from(fd).metadata())
+        } else {
+            fs::metadata(path)
+        }
+    };
+
+    #[cfg(not(target_os = "openbsd"))]
+    let get_metadata = || fs::metadata(path);
+
     // `Path::exists()` and `Path::is_file()` both collapse any metadata error
     // (including a permission error) into `false`, which made shred report a
     // file whose parent directory lacks search permission as "No such file or
     // directory". Inspect the metadata directly so a genuine `ENOENT` stays a
     // "no such file" error while a permission error falls through to the
     // open-for-writing below, which surfaces the real reason.
-    match fs::metadata(path) {
+    match get_metadata() {
         Ok(md) if !md.is_file() => {
             return Err(USimpleError::new(
                 1,
@@ -687,8 +706,7 @@ fn wipe_file(
         _ => {}
     }
 
-    let metadata =
-        fs::metadata(path).map_err_context(|| translate!("shred-failed-to-get-metadata"))?;
+    let metadata = get_metadata().map_err_context(|| translate!("shred-failed-to-get-metadata"))?;
 
     // If force is true, set file permissions to not-readonly.
     if force && !is_stdout {
