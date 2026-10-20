@@ -533,6 +533,44 @@ fn test_field_with_multibyte_whitespace_separator() {
         .stdout_only("1K 2000\n");
 }
 
+// https://github.com/uutils/coreutils/issues/15552
+#[test]
+fn test_first_blank_between_fields_is_written_as_space_issue15552() {
+    // The first blank after a field is written as a space, the others as they are.
+    for (args, input, expected) in [
+        (&[][..], "1\t2\n", "1 2\n"),
+        (&[], "1\t2\t3\n", "1 2 3\n"),
+        (&[], "1\t\t2\n", "1 \t2\n"),
+        (&[], "1 \t2\n", "1 \t2\n"),
+        (&[], "1\t2\t\n", "1 2 \n"),
+        (&["--to=si"], "1000\t2\n", "1.0k 2\n"),
+        (&["--field=2", "--to=si"], "1000\t2000\n", "1000 2.0k\n"),
+        (&["--field=-", "--to=si"], "1000\t2000\n", "1.0k 2.0k\n"),
+        // blanks before the first field are kept
+        (&[], "  1\t 2000\n", "  1  2000\n"),
+        (&["--field=2"], "\t1\t2\n", "\t1 2\n"),
+        // an invalid line is echoed with the same blanks
+        (&["--invalid=ignore"], "a\tb\n", "a b\n"),
+        (&["--invalid=ignore"], "a\t\tb\n", "a \tb\n"),
+        // an explicit delimiter leaves the input alone
+        (&["-d\t"], "1\t2\n", "1\t2\n"),
+        (&["-d\t", "--invalid=ignore"], "a\t\tb\n", "a\t\tb\n"),
+    ] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(expected);
+    }
+
+    new_ucmd!()
+        .args(&["--invalid=warn"])
+        .pipe_in("a\tb\n")
+        .succeeds()
+        .stdout_is("a b\n")
+        .stderr_is("numfmt: invalid number: 'a'\n");
+}
+
 #[test]
 fn test_format_selected_fields() {
     new_ucmd!()

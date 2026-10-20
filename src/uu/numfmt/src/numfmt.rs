@@ -8,6 +8,7 @@
 use crate::errors::NumfmtError;
 use crate::format::{
     WriteError, escape_line, write_formatted_with_delimiter, write_formatted_with_whitespace,
+    write_unconverted_with_whitespace,
 };
 use crate::options::{
     DEBUG, DELIMITER, FIELD, FIELD_DEFAULT, FORMAT, FROM, FROM_DEFAULT, FROM_UNIT,
@@ -96,10 +97,15 @@ fn format_and_write(
             }
             InvalidModes::Ignore => {}
         }
-        // On error, echo the original line unchanged.
-        writer
-            .write_all(input_line)
-            .map_err_context(|| translate!("numfmt-error-write"))?;
+        // On error, echo the original line, with the blanks between fields
+        // written as usual unless an explicit delimiter is set.
+        match std::str::from_utf8(input_line) {
+            Ok(s) if options.delimiter.is_none() => {
+                write_unconverted_with_whitespace(writer, s, options)
+            }
+            _ => writer.write_all(input_line),
+        }
+        .map_err_context(|| translate!("numfmt-error-write"))?;
         if let Some(eol) = eol {
             writer
                 .write_all(&[eol])
