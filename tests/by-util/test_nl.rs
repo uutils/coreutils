@@ -827,9 +827,10 @@ fn test_directory_as_input() {
 }
 
 #[test]
+#[cfg(not(windows))]
 fn test_numeric_looking_directory_names_are_kept_verbatim() {
     // Names such as "007" or "1e3" must not be reformatted as numbers
-    // in error messages.
+    // in error messages. Windows quotes these names, so skip it there.
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("007");
     at.mkdir("1e3");
