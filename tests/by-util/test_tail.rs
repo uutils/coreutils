@@ -5364,6 +5364,21 @@ fn test_failed_write_is_reported() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn test_multiple_input_files_failed_write_is_reported() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("file1", "first file contents\n");
+    at.write("file2", "second file contents\n");
+
+    ucmd.args(&["file1", "file2"])
+        .set_stdout(File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_contains("tail: No space left on device")
+        .stderr_does_not_contain("panicked");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn test_failed_warning_write_is_reported() {
     new_ucmd!()
         .args(&["--pid=0", "/dev/null"])
