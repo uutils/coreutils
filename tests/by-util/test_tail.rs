@@ -5143,6 +5143,17 @@ fn test_tail_obsolete_f_flag() {
 
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+fn test_tail_obsolete_bytes_follow_stdin() {
+    // `-f` is ignored when stdin is a pipe, so tail exits after printing.
+    new_ucmd!()
+        .arg("-cf")
+        .pipe_in("abcdefghijklmnop\n")
+        .succeeds()
+        .stdout_only("hijklmnop\n");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_tail_obsolete_bytes_follow() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

@@ -428,7 +428,7 @@ fn parse_num(src: &str) -> Result<Signum, ParseSizeError> {
 pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     let args_vec: Vec<OsString> = args.collect();
     let clap_args = uu_app().try_get_matches_from(args_vec.clone());
-    let mut invalid_value = false;
+    let mut settings_failed = false;
     let clap_result = match clap_args {
         // Kept for the caret in size diagnostics, which needs the value as
         // typed.
@@ -436,7 +436,7 @@ pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
             &matches,
             uucore::diagnostics::capture(&args_vec).as_deref(),
         )
-        .inspect_err(|_| invalid_value = true),
+        .inspect_err(|_| settings_failed = true),
         Err(err) => Err(err.into()),
     };
 
@@ -469,7 +469,10 @@ pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     }
     // `tail -cf` is obsolete syntax even though clap reads it as `-c f`,
     // but in `tail -c f` the separate argument is always the count.
-    if invalid_value && possible_obsolete_args.len() <= 2 {
+    // A bare short option such as `-c` is two bytes long: no value is
+    // attached to it, so the value came from the next argument.
+    let no_value_attached = possible_obsolete_args.len() <= "-c".len();
+    if settings_failed && no_value_attached {
         return clap_result;
     }
     match parse_obsolete(possible_obsolete_args, args_vec.get(2))? {
