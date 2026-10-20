@@ -16,7 +16,7 @@ use filetime::FileTime;
 use filetime::set_file_times;
 #[cfg(not(target_os = "wasi"))]
 use filetime::set_symlink_file_times;
-use jiff::civil::Time;
+use jiff::civil::{DateTime, Time};
 use jiff::fmt::strtime;
 use jiff::tz::{AmbiguousOffset, TimeZone};
 use jiff::{Timestamp, ToSpan, Zoned};
@@ -816,7 +816,7 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
     //
     if let Ok(parsed) = strtime::parse(format::POSIX_LOCALE, s)
         .and_then(|tm| tm.to_datetime())
-        .and_then(|dt| TimeZone::system().to_ambiguous_zoned(dt).unambiguous())
+        .and_then(|dt| zoned_earlier(&TimeZone::system(), dt))
     {
         return Ok(timestamp_to_filetime(parsed.timestamp()));
     }
@@ -836,7 +836,7 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
             }
         } else if let Ok(parsed) = strtime::parse(fmt, s)
             .and_then(|tm| tm.to_datetime())
-            .and_then(|dt| TimeZone::system().to_ambiguous_zoned(dt).unambiguous())
+            .and_then(|dt| zoned_earlier(&TimeZone::system(), dt))
         {
             return Ok(timestamp_to_filetime(parsed.timestamp()));
         }
@@ -846,11 +846,7 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
     // ("%F", ISO_8601_FORMAT),
     if let Ok(filetime) = strtime::parse(format::ISO_8601, s)
         .and_then(|tm| tm.to_date())
-        .and_then(|date| {
-            TimeZone::system()
-                .to_ambiguous_zoned(date.to_datetime(Time::midnight()))
-                .unambiguous()
-        })
+        .and_then(|date| zoned_earlier(&TimeZone::system(), date.to_datetime(Time::midnight())))
         .map(|zdt| timestamp_to_filetime(zdt.timestamp()))
     {
         return Ok(filetime);
@@ -895,12 +891,23 @@ fn is_system_zone_gap(s: &str) -> bool {
             .ok()
             .map(|date| date.to_datetime(Time::midnight())),
     );
+    let tz = TimeZone::system();
     wall_times.into_iter().any(|dt| {
         matches!(
-            TimeZone::system().to_ambiguous_zoned(dt).offset(),
+            tz.to_ambiguous_zoned(dt).offset(),
             AmbiguousOffset::Gap { .. }
         )
     })
+}
+
+/// Converts a wall-clock time in `tz`. A time in a DST gap is an error. A time
+/// in a DST fold takes its earlier instant, as GNU does.
+fn zoned_earlier(tz: &TimeZone, dt: DateTime) -> Result<Zoned, jiff::Error> {
+    let ambiguous = tz.to_ambiguous_zoned(dt);
+    match ambiguous.offset() {
+        AmbiguousOffset::Fold { .. } => ambiguous.earlier(),
+        _ => ambiguous.unambiguous(),
+    }
 }
 
 /// Prepends 19 or 20 to the year if it is a 2 digit year
@@ -978,16 +985,13 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
 
     // Due to daylight saving time switch, local time can jump from 1:59 AM to
     // 3:00 AM, in which case any time between 2:00 AM and 2:59 AM is not valid.
-    // Jiff's `to_ambiguous_zoned(...).unambiguous()` handles this case.
-    let local = TimeZone::system()
-        .to_ambiguous_zoned(dt)
-        .unambiguous()
-        .map_err(|_| {
-            USimpleError::new(
-                1,
-                translate!("touch-error-invalid-date-format", "date" => s.quote()),
-            )
-        })?;
+    // zoned_earlier rejects this gap and takes the earlier time of a fold.
+    let local = zoned_earlier(&TimeZone::system(), dt).map_err(|_| {
+        USimpleError::new(
+            1,
+            translate!("touch-error-invalid-date-format", "date" => s.quote()),
+        )
+    })?;
 
     Ok(timestamp_to_filetime(local.timestamp()))
 }

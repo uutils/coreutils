@@ -681,7 +681,7 @@ fn test_touch_set_minute_only_date_in_dst_gap_fails() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_minute_only_date_in_dst_gap";
 
-    // Same gap as above, written without seconds, which parse_datetime also accepts.
+    // The 2020-03-08 spring-forward gap in EST, written without seconds, which parse_datetime also accepts.
     ucmd.env("TZ", "EST+5EDT,M3.2.0/2,M11.1.0/2")
         .args(&["-d", "2020-03-08 02:30", file])
         .fails()
@@ -705,6 +705,29 @@ fn test_touch_set_date_in_dst_gap_fails() {
         .fails()
         .stderr_contains("Unable to parse date: 2020-03-08 02:30:00");
     assert!(!at.file_exists(file));
+}
+
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no tzdb; TZ env var is not honoured so timezone-dependent timestamps differ"
+)]
+fn test_touch_t_in_dst_fold_uses_earlier() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_t_in_dst_fold_uses_earlier";
+
+    // 2020-11-01 01:30 happens twice in EST. The earlier one is EDT, UTC-4,
+    // which is 05:30 UTC.
+    ucmd.env("TZ", "EST+5EDT,M3.2.0/2,M11.1.0/2")
+        .args(&["-t", "202011010130", file])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+
+    let target_time = str_to_filetime("%Y%m%d%H%M%S", "20201101053000");
+    let (_, mtime) = get_file_times(&at, file);
+    assert_eq!(target_time, mtime);
 }
 
 #[test]
