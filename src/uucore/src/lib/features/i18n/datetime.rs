@@ -270,6 +270,53 @@ fn get_locale_months_inner() -> Option<[Vec<u8>; 12]> {
     Some(months)
 }
 
+/// Resolves locale-specific E/O conversions.
+///
+/// Returns `None` when no replacement is available.
+/// The caller handles fallback and invalid conversions.
+// TODO(#10958): Implement POSIX era formatting and alternative digits;
+// verify standalone month formatting for %OB.
+pub fn resolve_eo_conversion(modifier: char, spec: char, date: JiffDate) -> Option<String> {
+    match (modifier, spec) {
+        ('E', 'Y' | 'y' | 'C') => {
+            // Uses the converted calendar year, not the locale's era year or name.
+            let (locale, _) = get_time_locale();
+            let iso_date = Date::<Iso>::convert_from(date);
+            let alt_year = match get_locale_calendar_type(locale) {
+                CalendarType::Gregorian => iso_date.year().extended_year(),
+                CalendarType::Buddhist => iso_date.to_calendar(Buddhist).year().extended_year(),
+                CalendarType::Persian => iso_date.to_calendar(Persian).year().extended_year(),
+                CalendarType::Ethiopian => iso_date
+                    .to_calendar(Ethiopian::new())
+                    .year()
+                    .extended_year(),
+            };
+            Some(match spec {
+                'Y' => alt_year.to_string(),
+                'y' => format!("{:02}", alt_year % 100),
+                _ => format!("{:02}", alt_year / 100),
+            })
+        }
+        ('E', 'c' | 'x' | 'X') => {
+            // Locale-specific composite formats are not implemented.
+            None
+        }
+        ('O', 'B') => {
+            // ICU's root locale returns month codes such as "M06".
+            // Use jiff for C/POSIX locales instead.
+            if !should_use_icu_locale() {
+                return None;
+            }
+            let iso_date = Date::<Iso>::convert_from(date);
+            format_with!(MONTH_LONG, &iso_date)
+        }
+        // `%O` numerics and anything else: no substitute. The caller decides
+        // via the parser's validity table whether to use the base conversion
+        // or stay literal.
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
