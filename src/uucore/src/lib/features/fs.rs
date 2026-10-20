@@ -1140,9 +1140,10 @@ pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> 
     }
 }
 
-/// `symlinkat`/`linkat` relative to an open directory.
+/// Link `name` in `dir` to `target`: `symlinkat(2)` if `symbolic`, else `linkat(2)`,
+/// which resolves a relative `target` from the current directory.
 #[cfg(all(unix, not(target_os = "redox")))]
-fn link_at<Fd: AsFd>(target: &Path, dir: Fd, name: &OsStr, symbolic: bool) -> IOResult<()> {
+pub fn link_at<Fd: AsFd>(target: &Path, dir: Fd, name: &OsStr, symbolic: bool) -> IOResult<()> {
     use rustix::fs::{AtFlags, CWD, linkat, symlinkat};
 
     if symbolic {
