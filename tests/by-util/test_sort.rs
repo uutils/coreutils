@@ -236,15 +236,14 @@ fn test_parallel_invalid() {
             "sort: --parallel argument '99999999999999999999' too large\n",
         ),
     ] {
+        // No input: sort exits before reading it, and writing to it would fail.
         new_ucmd!()
             .arg(format!("--parallel={value}"))
-            .pipe_in("b\na\n")
             .fails_with_code(2)
             .stderr_only(stderr);
         // the value as a separate argument, which is how GNU's sort.pl passes it
         new_ucmd!()
             .args(&["--parallel", value])
-            .pipe_in("b\na\n")
             .fails_with_code(2)
             .stderr_only(stderr);
     }
