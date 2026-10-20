@@ -1017,6 +1017,42 @@ fn test_backup_same_file() {
 }
 
 #[test]
+fn test_backup_simple_numbered_same_file() {
+    for backup in ["--backup=simple", "--backup=numbered"] {
+        for args in [
+            vec![backup, "a", "a"],
+            vec!["-f", backup, "a", "a"],
+            vec!["-f", backup, "./a", "a"],
+        ] {
+            let (at, mut ucmd) = at_and_ucmd!();
+            at.write("a", "content");
+
+            ucmd.args(&args)
+                .fails_with_code(1)
+                .stderr_contains("are the same file");
+
+            assert_eq!(at.read("a"), "content");
+            assert!(!at.file_exists("a~"));
+            assert!(!at.file_exists("a.~1~"));
+        }
+    }
+}
+
+#[test]
+fn test_backup_simple_same_file_into_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    at.write("d/a", "content");
+
+    ucmd.args(&["-f", "--backup=simple", "d/a", "d"])
+        .fails_with_code(1)
+        .stderr_contains("are the same file");
+
+    assert_eq!(at.read("d/a"), "content");
+    assert!(!at.file_exists("d/a~"));
+}
+
+#[test]
 #[cfg(not(target_os = "android"))]
 fn test_backup_existing_hard_linked_under_different_name() {
     let (at, mut ucmd) = at_and_ucmd!();
