@@ -536,3 +536,36 @@ fn test_fmt_goal_only_defaults_width_to_goal_plus_ten() {
         .succeeds()
         .stdout_is("this is a file with one word per line\n");
 }
+
+#[test]
+fn prefix_copies_unprefixed_last_line_without_adding_newline() {
+    for (input, expected) in [
+        ("x", "x"),
+        ("  x", "  x"),
+        ("a\nmixed", "a\nmixed"),
+        // a line with the prefix is reformatted and gets its newline
+        ("# hi", "# hi\n"),
+        ("x\n# hi", "x\n# hi\n"),
+        ("x\n#", "x\n#\n"),
+    ] {
+        for args in [vec!["-p", "#"], vec!["-s", "-p", "#"]] {
+            new_ucmd!()
+                .args(&args)
+                .pipe_in(input)
+                .succeeds()
+                .stdout_only(expected);
+        }
+    }
+}
+
+#[test]
+fn prefix_unprefixed_last_line_runs_into_next_file() {
+    use uutests::at_and_ucmd;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f1", "a\nmixed");
+    at.write("f2", "hello\n");
+    ucmd.args(&["-p", "#", "f1", "f2"])
+        .succeeds()
+        .stdout_only("a\nmixedhello\n");
+}

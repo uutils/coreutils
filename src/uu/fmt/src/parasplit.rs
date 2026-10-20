@@ -124,7 +124,10 @@ fn is_fmt_whitespace_byte(b: u8) -> bool {
 #[derive(Debug)]
 pub enum Line {
     FormatLine(FileLine),
-    NoFormatLine(Vec<u8>, bool),
+    /// The line's bytes, whether it is a blank line, and whether to end it
+    /// with a newline (a line lacking PREFIX is copied without one if it was
+    /// the last line of its file and had none)
+    NoFormatLine(Vec<u8>, bool, bool),
 }
 
 impl Line {
@@ -137,9 +140,9 @@ impl Line {
     }
 
     /// when we know that it's a [`Line::NoFormatLine`], as in the [`ParagraphStream`] iterator
-    fn get_noformatline(self) -> (Vec<u8>, bool) {
+    fn get_noformatline(self) -> (Vec<u8>, bool, bool) {
         match self {
-            Self::NoFormatLine(s, b) => (s, b),
+            Self::NoFormatLine(s, b, nl) => (s, b, nl),
             Self::FormatLine(..) => panic!("Found FormatLine when expecting NoFormatLine"),
         }
     }
@@ -256,7 +259,8 @@ impl Iterator for FileLines<'_> {
             .read_until(b'\n', &mut buf)
             .ok()
             .filter(|n| *n > 0)?;
-        if buf.ends_with(b"\n") {
+        let has_newline = buf.ends_with(b"\n");
+        if has_newline {
             buf.pop();
             if buf.ends_with(b"\r") {
                 buf.pop();
@@ -269,15 +273,16 @@ impl Iterator for FileLines<'_> {
         // Err(true) indicates that this was a linebreak,
         // which is important to know when detecting mail headers
         if n.iter().all(|&b| is_fmt_whitespace_byte(b)) {
-            return Some(Line::NoFormatLine(Vec::new(), true));
+            return Some(Line::NoFormatLine(Vec::new(), true, true));
         }
 
         let (pmatch, poffset) = self.match_prefix(&n[..]);
 
         // if this line does not match the prefix,
-        // emit the line unprocessed and iterate again
+        // emit the line unprocessed (even when it lacks a final newline)
+        // and iterate again
         if !pmatch {
-            return Some(Line::NoFormatLine(n, false));
+            return Some(Line::NoFormatLine(n, false, has_newline));
         }
 
         // if the line matches the prefix, but is blank after,
@@ -289,13 +294,13 @@ impl Iterator for FileLines<'_> {
             .iter()
             .all(|&b| is_fmt_whitespace_byte(b))
         {
-            return Some(Line::NoFormatLine(n, false));
+            return Some(Line::NoFormatLine(n, false, true));
         }
 
         // skip if this line matches the anti_prefix
         // (NOTE definition of match_anti_prefix is TRUE if we should process)
         if !self.match_anti_prefix(&n[..]) {
-            return Some(Line::NoFormatLine(n, false));
+            return Some(Line::NoFormatLine(n, false, true));
         }
 
         // figure out the indent, prefix, and prefixindent ending points
@@ -386,21 +391,21 @@ impl ParagraphStream<'_> {
 }
 
 impl Iterator for ParagraphStream<'_> {
-    type Item = Result<Paragraph, Vec<u8>>;
+    type Item = Result<Paragraph, (Vec<u8>, bool)>;
 
     #[allow(clippy::cognitive_complexity)]
-    fn next(&mut self) -> Option<Result<Paragraph, Vec<u8>>> {
+    fn next(&mut self) -> Option<Result<Paragraph, (Vec<u8>, bool)>> {
         // return a NoFormatLine in an Err; it should immediately be output
         let noformat = match self.lines.peek()? {
             Line::FormatLine(_) => false,
-            Line::NoFormatLine(_, _) => true,
+            Line::NoFormatLine(..) => true,
         };
 
         // found a NoFormatLine, immediately dump it out
         if noformat {
-            let (s, nm) = self.lines.next().unwrap().get_noformatline();
+            let (s, nm, newline) = self.lines.next().unwrap().get_noformatline();
             self.next_mail = nm;
-            return Some(Err(s));
+            return Some(Err((s, newline)));
         }
 
         // found a FormatLine, now build a paragraph
