@@ -406,8 +406,9 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
 
     if dst.is_symlink() || dst.exists() {
         backup_path = backup_control::get_backup_path(settings.backup, dst, &settings.suffix);
-        if settings.backup == BackupMode::Existing && !settings.symbolic {
-            // when ln --backup f f, it should detect that it is the same file
+        if settings.backup != BackupMode::None && !settings.symbolic {
+            // `ln --backup f f`: the backup would move `f` away before the
+            // link is made, so detect the same file first, for any backup mode
             if paths_refer_to_same_file(src, dst, true) && is_same_entry(src, dst) {
                 return Err(LnError::SameFile(src.to_owned(), dst.to_owned()));
             }
