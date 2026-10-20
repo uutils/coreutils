@@ -716,6 +716,7 @@ fn test_shred_missing_file() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO or socket file types")]
 fn test_shred_fifo() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("p");
@@ -726,6 +727,7 @@ fn test_shred_fifo() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO or socket file types")]
 fn test_shred_socket() {
     // GNU reaches the open and reports its failure; so does shred here.
     let (at, mut ucmd) = at_and_ucmd!();
