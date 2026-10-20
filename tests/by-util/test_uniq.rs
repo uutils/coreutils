@@ -1253,6 +1253,7 @@ fn test_obsolete_skip_fields_not_read_after_double_dash() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: reading a directory gives EBADF")]
 fn test_read_error_names_the_input() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("d");
