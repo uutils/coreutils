@@ -748,6 +748,7 @@ fn wipe_file(
             || translate_text!("shred-failed-to-open-for-writing", "file" => path.maybe_quote()),
         )?;
 
+    let unbounded_char_device = is_char_device && size.is_none();
     let size = match size {
         Some(size) => size,
         None if is_block_device => {
@@ -780,6 +781,7 @@ fn wipe_file(
             random_source,
             size,
             is_char_device,
+            unbounded_char_device,
         )
         .map_err_context(
             || translate_text!("shred-file-write-pass-failed", "file" => path.maybe_quote()),
@@ -818,12 +820,13 @@ fn do_pass(
     random_source: Option<&RefCell<File>>,
     file_size: u64,
     is_char_device: bool,
+    unbounded_char_device: bool,
 ) -> Result<(), io::Error> {
     let mut writer = BytesWriter::from_pass_type(pass_type, random_source)?;
 
     // Char devices with no known size: write until ENOSPC (e.g. /dev/full).
     // Char devices with --size, and all regular/block paths, fall through below.
-    if is_char_device && file_size == 0 {
+    if unbounded_char_device {
         loop {
             let block = writer.bytes_for_pass(BLOCK_SIZE)?;
             match file.write_all(block) {
