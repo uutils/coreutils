@@ -17,7 +17,6 @@ use parse_datetime::{ExtendedDateTime, ParsedDateTime};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
-use std::fmt::Write as _;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stderr};
 use std::path::PathBuf;
@@ -27,7 +26,8 @@ use uucore::error::FromIo;
 use uucore::error::{UError, UResult, strip_errno};
 #[cfg(feature = "i18n-datetime")]
 use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
-use uucore::i18n::{UEncoding, get_locale_from_env};
+use uucore::i18n::get_ctype_encoding;
+use uucore::quoting_style::{QuotingStyle, escape_bytes};
 use uucore::translate;
 use uucore::translate_text;
 use uucore::{format_usage, show, show_if_err};
@@ -224,77 +224,20 @@ enum DayDelta {
     Next,
 }
 
-/// Escape invalid UTF-8 bytes in GNU-compatible octal notation.
-///
-/// Converts bytes to a string with printable ASCII characters preserved
-/// and non-printable/invalid UTF-8 bytes escaped as `\NNN` octal sequences.
-///
-/// This matches GNU date's behavior for invalid input.
-///
-/// # Arguments
-/// * `bytes` - The byte sequence to escape
-///
-/// # Returns
-/// A string with invalid bytes escaped in octal notation
-///
-/// # Example
-/// ```ignore
-/// let invalid = b"\xb0";
-/// assert_eq!(escape_invalid_bytes(invalid), "\\260");
-/// ```
-fn escape_invalid_bytes(bytes: &[u8]) -> String {
-    let mut output = String::new();
-    let mut rest = bytes;
-    let preserve_utf8 = get_locale_from_env("LC_CTYPE").1 == UEncoding::Utf8;
-
-    // Decode valid runs so UTF-8 locales preserve user-facing text while
-    // legacy locales retain GNU's byte-oriented octal escaping.
-    let append_valid = |output: &mut String, valid: &str| {
-        for ch in valid.chars() {
-            if !ch.is_ascii() && !preserve_utf8 {
-                let mut bytes = [0; 4];
-                for &byte in ch.encode_utf8(&mut bytes).as_bytes() {
-                    let _ = write!(output, "\\{byte:03o}");
-                }
-            } else if ch.is_ascii() && (!(0x20..0x7f).contains(&(ch as u8)) || ch == '\\') {
-                let _ = write!(output, "\\{:03o}", ch as u8);
-            } else {
-                output.push(ch);
-            }
-        }
-    };
-
-    while !rest.is_empty() {
-        match std::str::from_utf8(rest) {
-            Ok(valid) => {
-                append_valid(&mut output, valid);
-                break;
-            }
-            Err(error) => {
-                let valid_len = error.valid_up_to();
-                if valid_len > 0 {
-                    append_valid(
-                        &mut output,
-                        std::str::from_utf8(&rest[..valid_len]).unwrap_or_default(),
-                    );
-                }
-                let invalid_len = error.error_len().unwrap_or(rest.len() - valid_len);
-                for &byte in &rest[valid_len..valid_len + invalid_len] {
-                    let _ = write!(output, "\\{byte:03o}");
-                }
-                rest = &rest[valid_len + invalid_len..];
-            }
-        }
-    }
-
-    output
+/// Escape user input for an error message the way GNU date quotes it: C
+/// escapes for control characters and quotes, octal for bytes the locale
+/// cannot display. The surrounding quotes come from the message itself.
+fn escape_for_error(bytes: &[u8]) -> String {
+    let style = QuotingStyle::C_SINGLE;
+    let quoted = escape_bytes(bytes, style, get_ctype_encoding());
+    String::from_utf8_lossy(&quoted[1..quoted.len() - 1]).into_owned()
 }
 
 /// Renders a command-line operand for an error message the way GNU does:
 /// valid UTF-8 is kept as-is in UTF-8 locales; non-UTF-8 locale bytes and
 /// invalid UTF-8 are octal-escaped.
 fn operand_for_error(operand: &OsStr) -> String {
-    escape_invalid_bytes(operand.as_encoded_bytes())
+    escape_for_error(operand.as_encoded_bytes())
 }
 
 /// Strip parenthesized comments from a date string.
@@ -1156,7 +1099,7 @@ fn set_and_echo(input: &str, now: &Zoned, settings: &Settings) -> UResult<()> {
             Ok(())
         }
         Ok(ParsedDateTime::Extended(_)) => Err(Box::new(DateError::InvalidDate {
-            date: escape_invalid_bytes(input.as_bytes()),
+            date: escape_for_error(input.as_bytes()),
         })),
         Err((input, _)) => Err(Box::new(DateError::InvalidDate { date: input })),
     }
@@ -1673,9 +1616,7 @@ fn parse_dates_from_reader<R: Read + 'static>(
         match String::from_utf8(bytes) {
             Ok(s) => parse_date(s, now, dbg_opts)
                 .map_err(|(input, _)| DateInputError::InvalidDate(input)),
-            Err(e) => Err(DateInputError::InvalidDate(escape_invalid_bytes(
-                e.as_bytes(),
-            ))),
+            Err(e) => Err(DateInputError::InvalidDate(escape_for_error(e.as_bytes()))),
         }
     });
     Box::new(lines.scan(false, |failed, result| {
@@ -2238,7 +2179,7 @@ fn parse_date<S: AsRef<str>>(
             // reject that result so DST gaps are not silently accepted.
             if is_nonexistent_local_time(input_str, now) {
                 return Err((
-                    escape_invalid_bytes(input_str.as_bytes()),
+                    escape_for_error(input_str.as_bytes()),
                     parse_datetime::ParseDateTimeError::InvalidInput,
                 ));
             }
@@ -2277,7 +2218,7 @@ fn parse_date<S: AsRef<str>>(
             Ok(ParsedDateTime::InRange(result))
         }
         Ok(ParsedDateTime::Extended(date)) => Ok(ParsedDateTime::Extended(date)),
-        Err(e) => Err((escape_invalid_bytes(input_str.as_bytes()), e)),
+        Err(e) => Err((escape_for_error(input_str.as_bytes()), e)),
     }
 }
 

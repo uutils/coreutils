@@ -21,6 +21,20 @@ fn test_uname_compatible() {
     new_ucmd!().arg("-a").succeeds();
 }
 
+#[rstest::rstest]
+fn test_uname_all_omits_unknown_fields(
+    #[values("-a", "--all", "-A", "--all-labeled")] all: &str,
+    #[values("-p", "-i", "-pi")] unknown: &str,
+) {
+    let expected = new_ucmd!().arg(all).succeeds();
+    for args in [[all, unknown], [unknown, all]] {
+        new_ucmd!()
+            .args(&args)
+            .succeeds()
+            .stdout_only(expected.stdout_str());
+    }
+}
+
 #[test]
 fn test_uname_name() {
     new_ucmd!().arg("-n").succeeds();

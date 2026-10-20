@@ -8,7 +8,6 @@
 #![allow(rustdoc::private_intra_doc_links)]
 
 use std::borrow::Borrow;
-use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::io::{self, BufReader};
 use std::{
@@ -385,25 +384,14 @@ impl SplitWriter<'_> {
         let mut ret = Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
         while let Some((ln, line)) = input_iter.next() {
             let line = line?;
-            match n.cmp(&(&ln + 1)) {
-                Ordering::Less => {
-                    assert!(
-                        input_iter.add_line_to_buffer(ln, line).is_none(),
-                        "the buffer is big enough to contain 1 line"
-                    );
-                    ret = Ok(());
-                    break;
-                }
-                Ordering::Equal => {
-                    assert!(
-                        self.options.suppress_matched
-                            || input_iter.add_line_to_buffer(ln, line).is_none(),
-                        "the buffer is big enough to contain 1 line"
-                    );
-                    ret = Ok(());
-                    break;
-                }
-                Ordering::Greater => (),
+            if n <= ln + 1 {
+                assert!(
+                    self.options.suppress_matched
+                        || input_iter.add_line_to_buffer(ln, line).is_none(),
+                    "the buffer is big enough to contain 1 line"
+                );
+                ret = Ok(());
+                break;
             }
             self.writeln(&line)?;
         }

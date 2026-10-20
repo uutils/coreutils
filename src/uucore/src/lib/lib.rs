@@ -8,6 +8,21 @@
 //! library ~ (core/bundler file)
 
 // #![deny(missing_docs)] //TODO: enable this
+#![cfg_attr(
+    any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "illumos",
+        all(target_os = "linux", target_env = "ohos"),
+        target_os = "openbsd",
+        target_os = "solaris",
+        all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))
+    ),
+    allow(
+        clippy::missing_const_for_thread_local,
+        reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
+    )
+)]
 
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
@@ -79,7 +94,7 @@ pub use crate::features::ranges;
 pub use crate::features::ringbuffer;
 #[cfg(feature = "sum")]
 pub use crate::features::sum;
-#[cfg(feature = "feat_systemd_logind")]
+#[cfg(all(feature = "systemd_logind", target_os = "linux"))]
 pub use crate::features::systemd_logind;
 #[cfg(feature = "time")]
 pub use crate::features::time;

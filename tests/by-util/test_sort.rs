@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) ints (linux) Nofile dfgi abmon avril
+// spell-checker:ignore (words) ints (linux) Nofile dfgi abmon avril naab
 
 #![allow(clippy::cast_possible_wrap)]
 
@@ -2134,7 +2134,6 @@ fn test_separator_attached_equals_double() {
     // `-t==` selects the two-character separator `==`, which GNU rejects.
     new_ucmd!()
         .args(&["-t==", "-k", "2"])
-        .pipe_in("")
         .fails()
         .stderr_contains("separator must be exactly one character long: '=='");
 }
@@ -2144,7 +2143,6 @@ fn test_separator_attached_equals_multi_char() {
     // `-t=a` selects the two-character separator `=a`, which GNU rejects.
     new_ucmd!()
         .args(&["-t=a", "-k", "2"])
-        .pipe_in("")
         .fails()
         .stderr_contains("separator must be exactly one character long: '=a'");
 }
@@ -4123,3 +4121,22 @@ sort: invalid suffix in --buffer-size argument '8zz'
 }
 
 // spell-checker:enable
+
+#[rstest::rstest]
+#[case(&["-k2,3"], "aa\n0aa\r\n", "0aa\r\naa\n")]
+#[case(&["-k2,3"], "aa\n0aa\x0c\n", "0aa\x0c\naa\n")]
+#[case(&["-d"], "a\rb\naab\n", "aab\na\rb\n")]
+#[case(&["-d"], "a\x0cb\naab\n", "aab\na\x0cb\n")]
+#[case(&["-n"], "\r4\na\n", "\r4\na\n")]
+#[case(&["-n"], "\x0c4\na\n", "\x0c4\na\n")]
+#[case(&["-z", "-k2"], "b\n1\0a\n2\0", "b\n1\0a\n2\0")]
+#[case(&["-z", "-d"], "a\nb\0aab\0", "a\nb\0aab\0")]
+#[case(&["-z", "-n"], "\n4\0a\0", "a\0\n4\0")]
+fn test_control_whitespace(#[case] args: &[&str], #[case] input: &str, #[case] expected: &str) {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected);
+}

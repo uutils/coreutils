@@ -23,7 +23,7 @@ fluent = { workspace = true }
 uucore = { workspace = true, features = ["utmpx", "entries"] }
 
 [features]
-feat_systemd_logind = ["uucore/feat_systemd_logind"]
+systemd_logind = ["uucore/systemd_logind"]
 
 [lints]
 workspace = true

@@ -123,7 +123,7 @@ fn main() {
             exit(uumain(vec![util_os].into_iter().chain(args)));
         }
         // GNU coreutils --help string shows help for coreutils
-        if util == "--help" || util == "-h" {
+        if util == "-h" || (util.starts_with("--h") && "--help".starts_with(util)) {
             usage(&utils, binary_as_util);
             exit(0);
         } else if util.starts_with('-') {

@@ -120,9 +120,10 @@ impl FileHandling {
         As a workaround, we always reopen the file even though this might not always
         be necessary.
         */
-        self.get_mut(path)
-            .reader
+        let data = self.get_mut(path);
+        data.reader
             .replace(Box::new(BufReader::new(File::open(path)?)));
+        data.symlink = path.is_symlink();
         Ok(())
     }
 
@@ -179,6 +180,11 @@ pub struct PathData {
     pub reader: Option<Box<dyn BufRead>>,
     pub metadata: Option<Metadata>,
     pub display_name: String,
+    /// Whether the path was a symbolic link when it was last opened. Under
+    /// `--follow=name`, a link named on the command line is followed to
+    /// whatever it points at, while a regular file that turns into a link is
+    /// not: its target could be any file.
+    pub symlink: bool,
 }
 
 impl PathData {
@@ -186,11 +192,13 @@ impl PathData {
         reader: Option<Box<dyn BufRead>>,
         metadata: Option<Metadata>,
         display_name: &str,
+        symlink: bool,
     ) -> Self {
         Self {
             reader,
             metadata,
             display_name: display_name.to_owned(),
+            symlink,
         }
     }
     pub fn from_other_with_path(data: Self, path: &Path) -> Self {
@@ -207,6 +215,11 @@ impl PathData {
             None
         };
 
-        Self::new(reader, path.metadata().ok(), data.display_name.as_str())
+        Self::new(
+            reader,
+            path.metadata().ok(),
+            data.display_name.as_str(),
+            path.is_symlink(),
+        )
     }
 }

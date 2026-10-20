@@ -14,7 +14,7 @@
 // spell-checker:ignore notaflag notacombo notabaud
 // spell-checker:ignore baudrate TCGETS Winsize tcgetwinsize tcsetwinsize
 
-#![cfg(unix)]
+#![cfg(all(unix, not(any(target_os = "aix", target_os = "dragonfly"))))]
 
 mod flags;
 
@@ -459,7 +459,7 @@ fn invalid_speed<T>(arg: &str, speed: &str) -> Result<T, Box<dyn UError>> {
 /// this function returns the appropriate error message in the case of overflow or underflow, or u8 on success
 fn parse_u8_or_err(arg: &str) -> Result<u8, String> {
     arg.parse::<u8>().map_err(|e| {
-        if let IntErrorKind::PosOverflow = e.kind() {
+        if *e.kind() == IntErrorKind::PosOverflow {
             translate!("stty-error-invalid-integer-argument-value-too-large", "value" => format!("'{arg}'"))
         } else {
             translate!("stty-error-invalid-integer-argument", "value" => format!("'{arg}'"))
@@ -619,12 +619,9 @@ fn print_terminal_size(
 }
 
 fn cc_to_index(option: &str) -> Option<S> {
-    for cc in CONTROL_CHARS {
-        if option == cc.0 {
-            return Some(cc.1);
-        }
-    }
-    None
+    CONTROL_CHARS
+        .iter()
+        .find_map(|cc| (cc.0 == option).then_some(cc.1))
 }
 
 fn string_to_combo(arg: &str) -> Option<&str> {
@@ -719,38 +716,26 @@ fn string_to_flag(option: &str) -> Option<AllFlags<'_>> {
     let remove = option.starts_with('-');
     let name = option.trim_start_matches('-');
 
-    for cflag in CONTROL_FLAGS {
-        if name == cflag.name {
-            return Some(AllFlags::ControlFlags((cflag, remove)));
-        }
+    if let Some(cflag) = CONTROL_FLAGS.iter().find(|f| f.name == name) {
+        return Some(AllFlags::ControlFlags((cflag, remove)));
     }
-    for iflag in INPUT_FLAGS {
-        if name == iflag.name {
-            return Some(AllFlags::InputFlags((iflag, remove)));
-        }
+    if let Some(iflag) = INPUT_FLAGS.iter().find(|f| f.name == name) {
+        return Some(AllFlags::InputFlags((iflag, remove)));
     }
-    for lflag in LOCAL_FLAGS {
-        if name == lflag.name {
-            return Some(AllFlags::LocalFlags((lflag, remove)));
-        }
+    if let Some(lflag) = LOCAL_FLAGS.iter().find(|f| f.name == name) {
+        return Some(AllFlags::LocalFlags((lflag, remove)));
     }
-    for oflag in OUTPUT_FLAGS {
-        if name == oflag.name {
-            return Some(AllFlags::OutputFlags((oflag, remove)));
-        }
+    if let Some(oflag) = OUTPUT_FLAGS.iter().find(|f| f.name == name) {
+        return Some(AllFlags::OutputFlags((oflag, remove)));
     }
     None
 }
 
 fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
-    if cc == 0 {
-        return Ok(translate!("stty-output-undef"));
-    }
-
-    let (meta_prefix, code) = if cc >= 0x80 {
-        ("M-", cc - 0x80)
-    } else {
-        ("", cc)
+    let (meta_prefix, code) = match cc {
+        0 => return Ok(translate!("stty-output-undef")),
+        0x80.. => ("M-", cc - 0x80),
+        _ => ("", cc),
     };
 
     // Determine the '^'-prefix if applicable and character based on the code
@@ -820,27 +805,21 @@ fn print_in_save_format(termios: &Termios) {
     println!();
 }
 
-/// Gets terminal size
-/// This queries the kernel for the current terminal window dimensions.
-fn get_terminal_size(fd: impl AsFd) -> io::Result<Winsize> {
-    Ok(tcgetwinsize(fd)?)
-}
-
 fn print_settings(termios: &Termios, opts: &Options) -> io::Result<()> {
     if opts.save {
         print_in_save_format(termios);
     } else {
         let term_size = if opts.all {
-            Some(get_terminal_size(&opts.file)?)
+            Some(tcgetwinsize(&opts.file)?)
         } else {
-            get_terminal_size(&opts.file).ok()
+            tcgetwinsize(&opts.file).ok()
         };
 
         let stdout = stdout();
         let window_size = if stdout.as_raw_fd() == opts.file.as_raw_fd() {
             &term_size
         } else {
-            &get_terminal_size(stdout).ok()
+            &tcgetwinsize(stdout).ok()
         };
 
         print_terminal_size(termios, opts, window_size.as_ref(), term_size.as_ref())?;
@@ -1014,18 +993,16 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
     }
     // try to parse ^<char> or just <char>
     let mut chars = s.chars();
-    match (chars.next(), chars.next()) {
-        (Some('^'), Some(c)) => {
-            // special case: ascii value of '^?' is greater than '?'
-            if c == '?' {
-                return Ok(ASCII_DEL);
-            }
-            // subtract by '@' to turn the char into the ascii value of '^<char>'
-            Ok((c.to_ascii_uppercase() as u8).wrapping_sub(b'@'))
-        }
-        (Some(c), None) => Ok(c as u8),
-        (Some(_), Some(_)) => Err(ControlCharMappingError::MultipleChars(s.to_string())),
-        _ => unreachable!("No arguments provided: must have been caught earlier"),
+    match (
+        chars.next().expect("must have been caught earlier"),
+        chars.next(),
+    ) {
+        // special case: ascii value of '^?' is greater than '?'
+        ('^', Some('?')) => Ok(ASCII_DEL),
+        // subtract by '@' to turn the char into the ascii value of '^<char>'
+        ('^', Some(c)) => Ok((c.to_ascii_uppercase() as u8).wrapping_sub(b'@')),
+        (c, None) => Ok(c as u8),
+        (_, Some(_)) => Err(ControlCharMappingError::MultipleChars(s.to_string())),
     }
 }
 
@@ -1056,7 +1033,6 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
         ],
         _ => &[],
     };
-    #[expect(clippy::match_same_arms)]
     let flags: &[&str] = match combo {
         "lcase" | "LCASE" => &["xcase", "iuclc", "olcuc"],
         "-lcase" | "-LCASE" => &["-xcase", "-iuclc", "-olcuc"],
@@ -1071,13 +1047,12 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
         "-decctlq" => &["-ixany"],
         "ek" => &[],
         "evenp" | "parity" => &["parenb", "-parodd", "cs7"],
-        "-evenp" | "-parity" => &["-parenb", "cs8"],
+        "-evenp" | "-oddp" | "-parity" => &["-parenb", "cs8"],
         "litout" => &["-parenb", "-istrip", "-opost", "cs8"],
         "-litout" => &["parenb", "istrip", "opost", "cs7"],
         "nl" => &["-icrnl", "-onlcr"],
         "-nl" => &["icrnl", "-inlcr", "-igncr", "onlcr", "-ocrnl", "-onlret"],
         "oddp" => &["parenb", "parodd", "cs7"],
-        "-oddp" => &["-parenb", "cs8"],
         "pass8" => &["-parenb", "-istrip", "cs8"],
         "-pass8" => &["parenb", "istrip", "cs7"],
         "raw" | "-cooked" => &[
@@ -1116,17 +1091,7 @@ fn get_sane_control_char(cc_index: S) -> u8 {
     }
     // Default values for control chars not in the sane list
     match cc_index {
-        S::VEOL => 0,
-        S::VEOL2 => 0,
         S::VMIN => 1,
-        #[cfg(not(any(
-            all(target_os = "linux", target_arch = "sparc64"),
-            target_os = "illumos",
-            target_os = "solaris"
-        )))]
-        S::VTIME => 0,
-        #[cfg(target_os = "linux")]
-        S::VSWTC => 0,
         _ => 0,
     }
 }

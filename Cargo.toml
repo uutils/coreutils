@@ -94,7 +94,7 @@ nom = "8.0.0"
 notify = { version = "8.2.0", features = ["macos_kqueue"] }
 num-bigint = "0.4.4"
 num-integer = "0.1.47"
-num-prime = "0.6.0"
+num-prime = "0.7.0"
 num-traits = "0.2.19"
 fancy-regex = { version = "0.19.2", default-features = false, features = [
   "std",
@@ -113,7 +113,7 @@ rand = { version = "0.10.1", features = ["std_rng"] }
 rand_chacha = { version = "0.10.0" }
 rayon = "1.10"
 regex = "1.10.4"
-rstest = "0.27.0"
+rstest = "0.28.0"
 rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"
 rustix = { version = "1.1.4", default-features = false }
@@ -454,13 +454,13 @@ feat_diagnostics = ["uucore/diagnostics"]
 ## Optional feature for stdbuf
 # "feat_external_libstdbuf" == use an external libstdbuf.so for stdbuf instead of embedding it
 feat_external_libstdbuf = ["stdbuf/feat_external_libstdbuf"]
-# "feat_systemd_logind" == enable feat_systemd_logind support for utmpx replacement
+# "feat_systemd_logind" == enable systemd_logind support for utmpx replacement
 feat_systemd_logind = [
-  "pinky/feat_systemd_logind",
-  "uptime/feat_systemd_logind",
-  "users/feat_systemd_logind",
-  "uucore/feat_systemd_logind",
-  "who/feat_systemd_logind",
+  "pinky/systemd_logind",
+  "uptime/systemd_logind",
+  "users/systemd_logind",
+  "uucore/systemd_logind",
+  "who/systemd_logind",
 ]
 # "feat_selinux" == enable support for SELinux Security Context (by using `--features feat_selinux`)
 # NOTE:
