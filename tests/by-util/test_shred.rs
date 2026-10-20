@@ -706,3 +706,21 @@ fn test_shred_dev_full() {
 fn test_shred_dev_null() {
     new_ucmd!().arg("--size=1M").arg("/dev/null").succeeds();
 }
+
+#[test]
+#[cfg(unix)]
+fn test_shred_rejects_fifo() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkfifo("fifo");
+
+    ucmd.arg("fifo").fails().stderr_contains("fifo");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_shred_dev_null_zero_size() {
+    new_ucmd!()
+        .args(&["-n1", "--size=0", "/dev/null"])
+        .succeeds();
+}
