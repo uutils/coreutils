@@ -610,6 +610,31 @@ fn create_standard_pass_sequence(num_passes: usize) -> Vec<PassType> {
     sequence
 }
 
+#[cfg(unix)]
+fn is_fifo(metadata: &fs::Metadata) -> bool {
+    use std::os::unix::fs::FileTypeExt;
+    metadata.file_type().is_fifo()
+}
+
+#[cfg(not(unix))]
+fn is_fifo(_metadata: &fs::Metadata) -> bool {
+    false
+}
+
+/// A character or block device, which shred does not overwrite yet.
+#[cfg(unix)]
+fn is_special_file(metadata: &fs::Metadata) -> bool {
+    use std::os::unix::fs::FileTypeExt;
+    let file_type = metadata.file_type();
+    file_type.is_char_device() || file_type.is_block_device()
+}
+
+/// Anything but a regular file: `std` cannot tell the kinds apart here.
+#[cfg(not(unix))]
+fn is_special_file(metadata: &fs::Metadata) -> bool {
+    !metadata.is_file()
+}
+
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::cognitive_complexity)]
 fn wipe_file(
@@ -626,45 +651,45 @@ fn wipe_file(
     // Get these potential errors out of the way first
     let path = Path::new(path_str);
 
-    if path_str.as_encoded_bytes().ends_with(b"/") {
-        if path.is_dir() {
+    // One stat classifies the file and later gives its size and mode. A FIFO
+    // has to be refused before the open below, which would block until a
+    // reader shows up. The stat errors (missing file, "f/" with `f` a file,
+    // no search permission on the parent) are the ones that open would meet,
+    // so they are reported the way GNU reports them: a failure to open for
+    // writing. The directory and "Not a directory" messages are spelled out
+    // because the OS text differs on Windows.
+    let metadata = match fs::metadata(path) {
+        Ok(md) if md.is_dir() => {
             return Err(USimpleError::new(
                 1,
                 translate!("shred-failed-to-open-for-writing-is-a-directory", "file" => path.maybe_quote()),
             ));
         }
-        if fs::metadata(path).is_err_and(|e| e.kind() == io::ErrorKind::NotADirectory) {
+        Ok(md) if is_fifo(&md) => {
             return Err(USimpleError::new(
                 1,
-                translate!("shred-failed-to-open-for-writing-not-a-directory", "file" => path.maybe_quote()),
+                translate!("shred-invalid-file-type", "file" => path.maybe_quote()),
             ));
         }
-    }
-
-    // `Path::exists()` and `Path::is_file()` both collapse any metadata error
-    // (including a permission error) into `false`, which made shred report a
-    // file whose parent directory lacks search permission as "No such file or
-    // directory". Inspect the metadata directly so a genuine `ENOENT` stays a
-    // "no such file" error while a permission error falls through to the
-    // open-for-writing below, which surfaces the real reason.
-    match fs::metadata(path) {
-        Ok(md) if !md.is_file() => {
+        Ok(md) if is_special_file(&md) => {
             return Err(USimpleError::new(
                 1,
                 translate!("shred-not-a-file", "file" => path.maybe_quote()),
             ));
         }
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+        Ok(md) => md,
+        Err(err) if err.kind() == io::ErrorKind::NotADirectory => {
             return Err(USimpleError::new(
                 1,
-                translate!("shred-no-such-file-or-directory", "file" => path.maybe_quote()),
+                translate!("shred-failed-to-open-for-writing-not-a-directory", "file" => path.maybe_quote()),
             ));
         }
-        _ => {}
-    }
-
-    let metadata =
-        fs::metadata(path).map_err_context(|| translate!("shred-failed-to-get-metadata"))?;
+        Err(err) => {
+            return Err(err).map_err_context(
+                || translate!("shred-failed-to-open-for-writing", "file" => path.maybe_quote()),
+            );
+        }
+    };
 
     // If force is true, set file permissions to not-readonly.
     if force {

@@ -40,10 +40,10 @@ shred-missing-file-operand = opérande de fichier manquant
 shred-invalid-number-of-passes = nombre de passes invalide : {$passes}
 shred-cannot-open-random-source = impossible d'ouvrir la source aléatoire : {$source}
 shred-invalid-file-size = taille de fichier invalide : {$size}
-shred-no-such-file-or-directory = {$file} : Aucun fichier ou répertoire de ce type
 shred-failed-to-open-for-writing-not-a-directory = {$file} : impossible d'ouvrir en écriture : N'est pas un répertoire
 shred-failed-to-open-for-writing-is-a-directory = {$file} : impossible d'ouvrir en écriture : Est un répertoire
 shred-not-a-file = {$file} : N'est pas un fichier
+shred-invalid-file-type = {$file} : type de fichier invalide
 
 # Texte d'aide des options
 shred-force-help = modifier les permissions pour permettre l'écriture si nécessaire
@@ -71,5 +71,4 @@ shred-failed-to-remove-file = {$file} : impossible de supprimer le fichier
 shred-failed-to-clone-file-handle = échec du clonage du descripteur de fichier
 shred-failed-to-seek-file = échec de la recherche dans le fichier
 shred-failed-to-read-seed-bytes = échec de la lecture des octets de graine du fichier
-shred-failed-to-get-metadata = échec de l'obtention des métadonnées du fichier
 shred-failed-to-set-permissions = échec de la définition des permissions du fichier
