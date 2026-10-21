@@ -55,13 +55,11 @@
 //! * Using [`ExitCode`] is not recommended but can be useful for converting utils to use
 //!   [`UResult`].
 
-use std::{
-    cell::Cell,
-    error::Error,
-    fmt::{Display, Formatter},
-    io::Write,
-    sync::atomic::{AtomicI32, Ordering},
-};
+use std::cell::Cell;
+use std::error::Error;
+use std::fmt::{Display, Formatter};
+use std::io::Write;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 static EXIT_CODE: AtomicI32 = AtomicI32::new(0);
 

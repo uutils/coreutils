@@ -31,14 +31,12 @@
 
 use crate::features::tty::Teletype;
 
+use std::collections::HashMap;
+use std::fmt::{self, Display, Formatter};
 use std::hash::Hash;
-use std::{
-    collections::HashMap,
-    fmt::{self, Display, Formatter},
-    fs, io,
-    path::PathBuf,
-    rc::Rc,
-};
+use std::path::PathBuf;
+use std::rc::Rc;
+use std::{fs, io};
 
 use walkdir::{DirEntry, WalkDir};
 
@@ -411,7 +409,8 @@ pub fn walk_process() -> impl Iterator<Item = ProcessInformation> {
 mod tests {
     use super::*;
     use crate::features::tty::Teletype;
-    use std::{collections::HashSet, str::FromStr};
+    use std::collections::HashSet;
+    use std::str::FromStr;
 
     #[test]
     fn test_run_state_conversion() {

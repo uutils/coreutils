@@ -5,16 +5,20 @@
 
 // spell-checker:ignore (vars) intmax ptrdiff padlen
 
+use super::num_format::{
+    self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
+    UnsignedIntVariant,
+};
 use super::{
     EscapeSet, ExtendedBigDecimal, FormatChar, FormatError, OctalParsing, check_precision,
-    num_format::{
-        self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
-        UnsignedIntVariant,
-    },
     parse_escape_only,
 };
-use crate::{format::FormatArguments, os_str_as_bytes, quoting_style::locale_aware_shell_escape};
-use std::{io::Write, num::NonZero, ops::ControlFlow};
+use crate::format::FormatArguments;
+use crate::os_str_as_bytes;
+use crate::quoting_style::locale_aware_shell_escape;
+use std::io::Write;
+use std::num::NonZero;
+use std::ops::ControlFlow;
 
 /// A parsed specification for formatting a value
 ///
