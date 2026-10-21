@@ -538,7 +538,7 @@ fn test_fmt_goal_only_defaults_width_to_goal_plus_ten() {
 }
 
 #[test]
-fn prefix_copies_unprefixed_last_line_without_adding_newline() {
+fn test_fmt_prefix_copies_unprefixed_last_line_without_adding_newline() {
     for (input, expected) in [
         ("x", "x"),
         ("  x", "  x"),
@@ -559,7 +559,7 @@ fn prefix_copies_unprefixed_last_line_without_adding_newline() {
 }
 
 #[test]
-fn prefix_unprefixed_last_line_runs_into_next_file() {
+fn test_fmt_prefix_unprefixed_last_line_runs_into_next_file() {
     use uutests::at_and_ucmd;
 
     let (at, mut ucmd) = at_and_ucmd!();
