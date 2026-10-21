@@ -605,11 +605,14 @@ fn print_terminal_size(
         );
     }
 
-    #[cfg(any(target_os = "linux", target_os = "redox"))]
-    {
-        let line = termios.line_discipline;
-        printer.print(&translate!("stty-output-line", "line" => line));
-    }
+    #[cfg(any(
+        target_os = "android",
+        target_os = "fuchsia",
+        target_os = "haiku",
+        target_os = "linux",
+        target_os = "redox"
+    ))]
+    printer.print(&translate!("stty-output-line", "line" => termios.line_discipline));
     printer.flush();
 }
 
