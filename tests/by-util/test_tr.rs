@@ -401,6 +401,21 @@ fn test_delete_and_squeeze() {
 }
 
 #[test]
+fn test_delete_and_squeeze_class_in_set2() {
+    // with -d and -s, set2 is only the set to squeeze, so any class is allowed
+    new_ucmd!()
+        .args(&["-ds", "x", "[:digit:]"])
+        .pipe_in("aab-x1122")
+        .succeeds()
+        .stdout_is("aab-12");
+    new_ucmd!()
+        .args(&["-ds", "a", "[:upper:]"])
+        .pipe_in("aAAb")
+        .succeeds()
+        .stdout_is("Ab");
+}
+
+#[test]
 fn test_delete_and_squeeze_complement() {
     new_ucmd!()
         .args(&["-dsc", "a-z", "A-Z"])
