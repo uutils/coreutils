@@ -839,10 +839,12 @@ fn hardware_feature_label(feature: HardwareFeature) -> &'static str {
 }
 
 fn is_simd_runtime_feature(feature: HardwareFeature) -> bool {
-    matches!(
-        feature,
-        HardwareFeature::Avx2 | HardwareFeature::Sse2 | HardwareFeature::Asimd
-    )
+    match feature {
+        HardwareFeature::Avx2 | HardwareFeature::Sse2 => true,
+        // bytecount v0.6.9 compiles its NEON path only on little-endian targets.
+        HardwareFeature::Asimd => cfg!(target_endian = "little"),
+        _ => false,
+    }
 }
 
 fn is_simd_debug_feature(feature: HardwareFeature) -> bool {
