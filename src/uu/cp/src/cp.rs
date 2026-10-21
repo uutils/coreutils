@@ -2830,7 +2830,7 @@ fn copy_file(
             )
             && options.backup == BackupMode::None
         {
-            fs::remove_file(dest)?;
+            delete_path(dest, options)?;
         }
     }
 

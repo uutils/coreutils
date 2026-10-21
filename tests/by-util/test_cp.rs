@@ -1525,6 +1525,31 @@ fn test_cp_arg_remove_destination() {
     assert_eq!(at.read(TEST_HELLO_WORLD_DEST), "Hello, World!\n");
 }
 
+#[cfg(all(unix, not(target_os = "android")))] // Android denies hard links in the test directory.
+#[rstest]
+fn test_cp_verbose_remove_destination_symlink(#[values("source", "other")] target: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("source", "keep me");
+    at.write("other", "leave me alone");
+    at.symlink_file(target, "dest");
+
+    ucmd.args(&[
+        "--link",
+        "--remove-destination",
+        "--verbose",
+        "source",
+        "dest",
+    ])
+    .succeeds()
+    .stdout_only("removed 'dest'\n'source' -> 'dest'\n");
+
+    assert!(!at.symlink_exists("dest"));
+    assert_eq!(at.metadata("source").ino(), at.metadata("dest").ino());
+    assert_eq!(at.read("source"), "keep me");
+    assert_eq!(at.read("dest"), "keep me");
+    assert_eq!(at.read("other"), "leave me alone");
+}
+
 #[test]
 fn test_cp_arg_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
