@@ -18,10 +18,13 @@ use std::{
 
 use memchr::memchr_iter;
 use self_cell::self_cell;
+use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, strip_errno};
 use uucore::translate;
 
-use crate::{GeneralBigDecimalParseResult, GlobalSettings, Line, numeric_str_cmp::NumInfo};
+use crate::{
+    GeneralBigDecimalParseResult, GlobalSettings, Line, NamedReadError, numeric_str_cmp::NumInfo,
+};
 
 const ALLOC_CHUNK_SIZE: usize = 64 * 1024;
 const MAX_TOKEN_BUFFER_BYTES: usize = 4 * 1024 * 1024;
@@ -425,10 +428,17 @@ fn read_to_buffer<T: Read>(
                 // retry
             }
             Err(e) => {
-                return Err(USimpleError::new(
-                    2,
-                    translate!("sort-read-failed", "error" => strip_errno(&e)),
-                ));
+                // Inputs and temporary files are read through `NamedReader`,
+                // so the error can say which one it was reading.
+                let message = match e.downcast::<NamedReadError>() {
+                    Ok(NamedReadError { name, source }) => translate!(
+                        "sort-read-failed",
+                        "path" => name.maybe_quote().to_string(),
+                        "error" => strip_errno(&source)
+                    ),
+                    Err(e) => strip_errno(&e),
+                };
+                return Err(USimpleError::new(2, message));
             }
         }
     }
