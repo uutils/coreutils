@@ -976,3 +976,52 @@ fn test_no_skip_after_error() {
         .fails()
         .stdout_is("     1\thello\n");
 }
+
+#[test]
+fn test_join_blank_lines_above_u64_saturates() {
+    // Too many blank lines to ever join, so the value saturates instead of
+    // being rejected.
+    for value in [
+        "18446744073709551615",
+        "18446744073709551616",
+        "99999999999999999999",
+        "99999999999999999999999999999999999999999999999",
+    ] {
+        for arg in [format!("-l{value}"), format!("--join-blank-lines={value}")] {
+            new_ucmd!()
+                .arg(arg)
+                .arg("-ba")
+                .pipe_in("a\n\n\n\nb\n")
+                .succeeds()
+                .stdout_is("     1\ta\n       \n       \n       \n     2\tb\n");
+        }
+    }
+}
+
+#[test]
+fn test_join_blank_lines_still_rejects_invalid_numbers() {
+    for value in [
+        "-1",
+        "abc",
+        "1K",
+        "99999999999999999999x",
+        "-99999999999999999999",
+    ] {
+        new_ucmd!()
+            .arg(format!("--join-blank-lines={value}"))
+            .pipe_in("a\n")
+            .fails_with_code(1)
+            .stderr_contains(format!("invalid value '{value}'"));
+    }
+}
+
+#[test]
+fn test_other_numeric_options_still_reject_values_above_the_limit() {
+    for arg in ["-v", "-i", "-w"] {
+        new_ucmd!()
+            .args(&[arg, "18446744073709551616"])
+            .pipe_in("a\n")
+            .fails_with_code(1)
+            .stderr_contains("invalid value '18446744073709551616'");
+    }
+}

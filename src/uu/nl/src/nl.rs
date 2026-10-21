@@ -7,6 +7,7 @@ use clap::{Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::num::{IntErrorKind, ParseIntError};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
@@ -213,6 +214,25 @@ pub mod options {
     pub const NUMBER_WIDTH: &str = "number-width";
 }
 
+/// Parses the value of `-l`. A number too large for `u64` saturates instead of
+/// being rejected: it only sets how many blank lines make up one numbered line.
+fn parse_join_blank_lines(s: &str) -> Result<u64, ParseIntError> {
+    s.parse::<u64>().or_else(|e| {
+        // `parse` reports an overflow without looking at the rest of the
+        // value, so only saturate when all of it is digits.
+        let all_digits = s
+            .strip_prefix('+')
+            .unwrap_or(s)
+            .bytes()
+            .all(|b| b.is_ascii_digit());
+        if *e.kind() == IntErrorKind::PosOverflow && all_digits {
+            Ok(u64::MAX)
+        } else {
+            Err(e)
+        }
+    })
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
@@ -337,7 +357,7 @@ pub fn uu_app() -> Command {
                 .long(options::JOIN_BLANK_LINES)
                 .help(translate!("nl-help-join-blank-lines"))
                 .value_name("NUMBER")
-                .value_parser(clap::value_parser!(u64)),
+                .value_parser(parse_join_blank_lines),
         )
         .arg(
             Arg::new(options::NUMBER_FORMAT)
