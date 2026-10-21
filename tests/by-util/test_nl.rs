@@ -1020,7 +1020,6 @@ fn test_other_numeric_options_still_reject_values_above_the_limit() {
     for arg in ["-v", "-i", "-w"] {
         new_ucmd!()
             .args(&[arg, "18446744073709551616"])
-            .pipe_in("a\n")
             .fails_with_code(1)
             .stderr_contains("invalid value '18446744073709551616'");
     }

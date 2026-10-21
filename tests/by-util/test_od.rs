@@ -1334,10 +1334,6 @@ fn test_od_invalid_bytes() {
     const INVALID_SUFFIX: &str = "1fb4t";
     const BIG_SIZE: &str = "1Y";
 
-    // NOTE:
-    // '--width' takes a plain number, so it does not accept 'Y' as a suffix
-    // (see test_width_rejects_size_suffixes).
-
     let options = [
         "--read-bytes",
         "--skip-bytes",
