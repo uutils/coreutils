@@ -969,6 +969,16 @@ pub fn write_formatted_with_delimiter<W: std::io::Write + ?Sized>(
     Ok(())
 }
 
+/// Writes the space that stands for the first of the `blanks` between two
+/// fields, and returns the blanks that follow it.
+fn write_separator<'a, W: std::io::Write + ?Sized>(
+    writer: &mut W,
+    blanks: &'a str,
+) -> std::io::Result<&'a str> {
+    writer.write_all(b" ")?;
+    Ok(&blanks[blanks.chars().next().map_or(0, char::len_utf8)..])
+}
+
 pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
     writer: &mut W,
     s: &str,
@@ -986,8 +996,7 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
 
             // add delimiter before second and subsequent fields
             let prefix = if n > 1 {
-                writer.write_all(b" ")?;
-                &prefix[prefix.chars().next().map_or(0, char::len_utf8)..]
+                write_separator(writer, prefix)?
             } else {
                 prefix
             };
@@ -1004,8 +1013,7 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
             // the first blank between fields is written as a space, as is an
             // initial \n with the -z option
             let prefix = if n > 1 || (options.zero_terminated && prefix.starts_with('\n')) {
-                writer.write_all(b" ")?;
-                &prefix[prefix.chars().next().map_or(0, char::len_utf8)..]
+                write_separator(writer, prefix)?
             } else {
                 prefix
             };
@@ -1034,8 +1042,7 @@ pub fn write_unconverted_with_whitespace<W: std::io::Write + ?Sized>(
         options,
     }) {
         let prefix = if n > 1 {
-            writer.write_all(b" ")?;
-            &prefix[prefix.chars().next().map_or(0, char::len_utf8)..]
+            write_separator(writer, prefix)?
         } else {
             prefix
         };
