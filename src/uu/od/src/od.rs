@@ -33,7 +33,7 @@ use crate::multifile_reader::{HasError, InputSource, MultifileReader};
 use crate::output_info::OutputInfo;
 use crate::parse_formats::{ParsedFormatterItemInfo, parse_format_flags};
 use crate::parse_inputs::{CommandLineInputs, parse_inputs};
-use crate::parse_nrofbytes::{parse_number_of_bytes, parse_plain_number};
+use crate::parse_nrofbytes::{parse_number_of_bytes, parse_width};
 use crate::partial_reader::PartialReader;
 use crate::peek_reader::{PeekRead, PeekReader};
 use crate::prn_char::format_ascii_dump;
@@ -145,7 +145,7 @@ impl OdOptions {
             matches.value_source(options::WIDTH),
         ) {
             let width_display = option_display_name(args, options::WIDTH, 'w');
-            let parsed = parse_plain_number(s).map_err(|e| {
+            let parsed = parse_width(s).map_err(|e| {
                 let message = format_error_message(&e, s, &width_display);
                 e.size_value_error(
                     diag_args,

@@ -79,7 +79,7 @@ pub fn parse_number_of_bytes(s: &str) -> Result<u64, ParseSizeError> {
 
 /// Parses a plain decimal number, as `-w` takes: no radix prefix (a leading
 /// zero is not octal) and no multiplier suffix.
-pub fn parse_plain_number(s: &str) -> Result<u64, ParseSizeError> {
+pub fn parse_width(s: &str) -> Result<u64, ParseSizeError> {
     let digits = s.bytes().take_while(u8::is_ascii_digit).count();
     if digits == 0 {
         return Err(ParseSizeError::ParseFailure(s.to_string()));
@@ -110,13 +110,13 @@ fn test_parse_number_of_bytes() {
 }
 
 #[test]
-fn test_parse_plain_number() {
-    assert_eq!(Ok(4), parse_plain_number("4"));
+fn test_parse_width() {
+    assert_eq!(Ok(4), parse_width("4"));
     // Not octal.
-    assert_eq!(Ok(10), parse_plain_number("010"));
-    assert_eq!(Ok(8), parse_plain_number("08"));
-    assert_eq!(Ok(0), parse_plain_number("00"));
-    assert_eq!(Ok(u64::MAX), parse_plain_number("18446744073709551615"));
+    assert_eq!(Ok(10), parse_width("010"));
+    assert_eq!(Ok(8), parse_width("08"));
+    assert_eq!(Ok(0), parse_width("00"));
+    assert_eq!(Ok(u64::MAX), parse_width("18446744073709551615"));
 
     for s in [
         "1K",
@@ -128,18 +128,18 @@ fn test_parse_plain_number() {
         "99999999999999999999K",
     ] {
         assert!(matches!(
-            parse_plain_number(s),
+            parse_width(s),
             Err(ParseSizeError::InvalidSuffix(_))
         ));
     }
     for s in ["", "abc", "-4", "+4", "K"] {
         assert!(matches!(
-            parse_plain_number(s),
+            parse_width(s),
             Err(ParseSizeError::ParseFailure(_))
         ));
     }
     assert!(matches!(
-        parse_plain_number("18446744073709551616"),
+        parse_width("18446744073709551616"),
         Err(ParseSizeError::SizeTooBig(_))
     ));
 }
