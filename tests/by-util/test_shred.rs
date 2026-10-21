@@ -585,3 +585,30 @@ fn test_couldnt_rename() {
         .fails_with_code(1)
         .stderr_is("shred: /proc/self/mem: Couldn't rename to '/proc/self/000': No such file or directory\n");
 }
+
+#[rstest::rstest]
+#[case(&["1e3"], "shred: 1e3: No such file or directory\n")]
+#[case(&["007"], "shred: 007: Not a file\n")]
+#[cfg(not(windows))]
+fn test_numeric_looking_file_names_are_kept_verbatim(
+    #[case] args: &[&str],
+    #[case] expected: &str,
+) {
+    // File names such as "007" or "1e3" must not be reformatted as numbers
+    // in error messages.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("007");
+    ucmd.args(args).fails_with_code(1).stderr_is(expected);
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_numeric_looking_file_name_verbose_remove() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("2.50");
+    ucmd.args(&["-v", "-u", "-n", "0", "2.50"])
+        .succeeds()
+        .stderr_contains("shred: 2.50: removing\n")
+        .stderr_contains("shred: 2.50: removed\n");
+    assert!(!at.file_exists("2.50"));
+}
