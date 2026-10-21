@@ -1424,6 +1424,28 @@ fn test_zero_terminated_embedded_newline() {
         .stdout_is("1000 2000\x003000 4000\x00");
 }
 
+#[test]
+fn test_zero_terminated_initial_newline() {
+    for (args, input, expected) in [
+        // kept before a field that is not converted
+        (&["--field=2"][..], "\n1\n2\x00", "\n1 2\x00"),
+        (&["--field=2"], "\n\n1 2\x00", "\n\n1 2\x00"),
+        (&["--field=2"], "\nabc\n2\x00", "\nabc 2\x00"),
+        (&["--field=2", "--to=si"], "\n1\n2\x00", "\n1 2\x00"),
+        // kept in a line that is echoed because it is invalid
+        (&["--invalid=ignore"], "\nabc\x00", "\nabc\x00"),
+        // padding before a converted field
+        (&["--to=si"], "\n1000\x00", " 1.0k\x00"),
+    ] {
+        new_ucmd!()
+            .arg("-z")
+            .args(args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
 #[cfg(unix)]
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
