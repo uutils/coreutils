@@ -322,7 +322,7 @@ impl Iterator for FileLines<'_> {
             return Some(Line::NoFormatLine(NoFormatLine {
                 line: n,
                 blank: false,
-                newline: true,
+                newline: has_newline,
             }));
         }
 

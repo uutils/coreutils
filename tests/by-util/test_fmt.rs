@@ -569,3 +569,22 @@ fn test_fmt_prefix_unprefixed_last_line_runs_into_next_file() {
         .succeeds()
         .stdout_only("a\nmixedhello\n");
 }
+
+#[test]
+fn test_fmt_anti_prefix_keeps_missing_final_newline() {
+    for (args, input, expected) in [
+        (vec!["-P", "#"], "a\n#x", "a\n#x"),
+        (vec!["-P", "#"], "a\n#x\n", "a\n#x\n"),
+        (vec!["-P", "#"], "#x\na\n", "#x\na\n"),
+        (vec!["--skip-prefix", "#"], "a\n  #x", "a\n  #x"),
+        (vec!["-p", ">", "-P", ">#"], "> a\n>#x", "> a\n>#x"),
+        // a line that is reformatted gets its newline
+        (vec!["-P", "#"], "a\nb", "a b\n"),
+    ] {
+        new_ucmd!()
+            .args(&args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
