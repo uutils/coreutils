@@ -858,7 +858,8 @@ macro_rules! translate {
 }
 
 // Re-export the macros for easier access
-pub use {translate, translate_text};
+pub use translate;
+pub use translate_text;
 
 #[cfg(test)]
 mod tests {
@@ -875,9 +876,8 @@ mod tests {
             "locale table uses a raw string; content containing `\"#` becomes code"
         );
     }
-    use std::env;
-    use std::fs;
     use std::path::PathBuf;
+    use std::{env, fs};
     use tempfile::TempDir;
 
     #[test]

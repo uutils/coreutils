@@ -383,10 +383,8 @@ pub fn locale_aware_escape_dir_name(name: &OsStr, style: QuotingStyle) -> OsStri
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        i18n::UEncoding,
-        quoting_style::{QuotingStyle, escape_control_chars, escape_name_inner},
-    };
+    use crate::i18n::UEncoding;
+    use crate::quoting_style::{QuotingStyle, escape_control_chars, escape_name_inner};
 
     // spell-checker:ignore (tests/words) one\'two one'two
 
