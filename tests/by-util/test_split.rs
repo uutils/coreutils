@@ -2339,6 +2339,8 @@ fn test_obsolete_lines_not_read_after_double_dash() {
 
 #[test]
 fn test_verbose_number_of_chunks() {
+    use std::fmt::Write as _;
+
     for (args, input, created) in [
         (&["-n", "2"][..], "a\nb\n", &["xaa", "xab"][..]),
         (&["-n", "l/2"], "a\nb\n", &["xaa", "xab"]),
@@ -2358,10 +2360,10 @@ fn test_verbose_number_of_chunks() {
         (&["-e", "-n", "r/2"], "1\n2\n3\n4\n5\n", &["xaa", "xab"]),
     ] {
         let (at, mut ucmd) = at_and_ucmd!();
-        let expected: String = created
-            .iter()
-            .map(|name| format!("creating file '{name}'\n"))
-            .collect();
+        let expected = created.iter().fold(String::new(), |mut out, name| {
+            writeln!(out, "creating file '{name}'").unwrap();
+            out
+        });
 
         ucmd.args(args)
             .arg("--verbose")
