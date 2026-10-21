@@ -139,11 +139,6 @@ jobs:
         CARGO_FEATURES_OPTION='--all-features' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features ${{ matrix.job.features }}' ; fi
         outputs CARGO_FEATURES_OPTION
-        # * determine sub-crate utility list
-        UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
-        echo UTILITY_LIST=${UTILITY_LIST}
-        CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
-        outputs CARGO_UTILITY_LIST_OPTIONS
     - name: "`cargo doc` with warnings"
       shell: bash
       run: |
@@ -597,9 +592,7 @@ jobs:
         ## Dependent VARs setup
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # * determine sub-crate utility list
-        UTILITY_LIST="$(./util/show-utils.sh ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }})"
-        echo UTILITY_LIST=${UTILITY_LIST}
-        CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
+        CARGO_UTILITY_LIST_OPTIONS="$(cargo tree --depth 1 --format '{lib}' ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --prefix none | sed -n 's/^uu_/-p &/p' | tr '\n' ' ')"
         outputs CARGO_UTILITY_LIST_OPTIONS
     - name: Info
       shell: bash
