@@ -91,6 +91,22 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_buffered_output_reports_flush_errors() {
+    for zero in [false, true] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("file");
+        ucmd.arg("file");
+        if zero {
+            ucmd.arg("--null");
+        }
+        ucmd.set_stdout(std::fs::File::create("/dev/full").unwrap())
+            .fails_with_code(1)
+            .stderr_contains("No space left on device");
+    }
+}
+
+#[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_du_basics_subdir() {
     let ts = TestScenario::new(util_name!());
@@ -3107,4 +3123,16 @@ fn test_dereference_args_after_dereference_wins() {
         .args(&["--dereference-args", "-L", "dir"])
         .succeeds()
         .stdout_contains("dir/link");
+}
+
+#[test]
+fn test_verbose_excluded_operand_preserves_output_order() {
+    let (at, mut command) = at_and_ucmd!();
+    at.write("first", "a");
+    at.write("skip", "skip");
+    at.write("last", "bb");
+    command
+        .args(&["-b", "-v", "--exclude=skip", "first", "skip", "last"])
+        .succeeds()
+        .stdout_only("adding skip to the exclude list\n1\tfirst\n'skip' ignored\n2\tlast\n");
 }
