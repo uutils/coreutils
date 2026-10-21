@@ -971,4 +971,19 @@ fn test_numeric_looking_file_names_are_kept_verbatim() {
         .args(&["--check", "1.0"])
         .fails_with_code(1)
         .stderr_is("md5sum: 1.0: no properly formatted checksum lines found\n");
+
+    at.touch("empty");
+    at.write(
+        "3.0",
+        "not a checksum line\nd41d8cd98f00b204e9800998ecf8427e  empty\n",
+    );
+    scene
+        .ucmd()
+        .args(&["--check", "--warn", "3.0"])
+        .succeeds()
+        .stdout_is("empty: OK\n")
+        .stderr_is(
+            "md5sum: 3.0: 1: improperly formatted MD5 checksum line\n\
+             md5sum: WARNING: 1 line is improperly formatted\n",
+        );
 }
