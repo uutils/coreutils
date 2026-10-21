@@ -305,7 +305,7 @@ where
                 digest_output
                     .write_raw(&mut w)
                     .map_err(ChecksumError::Write)?;
-                return Ok(());
+                break;
             }
             OutputFormat::Legacy => {
                 write_legacy_checksum(&mut w, &options, filename, &digest_output, sz)
@@ -331,8 +331,7 @@ where
         write!(w, "{}", options.line_ending).map_err(ChecksumError::Write)?;
     }
 
-    if options.line_ending != LineEnding::Newline {
-        w.flush().map_err(ChecksumError::Write)?;
-    }
+    // The drop of the writer ignores a flush error.
+    w.flush().map_err(ChecksumError::Write)?;
     Ok(())
 }

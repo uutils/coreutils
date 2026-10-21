@@ -1000,6 +1000,24 @@ fn test_raw_multiple_files() {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_write_error() {
+    // A normal line fails at its newline. The raw digest has no newline, so
+    // only a flush reports its write error.
+    for args in [&["lorem_ipsum.txt"][..], &["--raw", "lorem_ipsum.txt"]] {
+        let dev_full = std::fs::OpenOptions::new()
+            .write(true)
+            .open("/dev/full")
+            .unwrap();
+        new_ucmd!()
+            .args(args)
+            .set_stdout(dev_full)
+            .fails_with_code(1)
+            .stderr_is("cksum: write error: No space left on device\n");
+    }
+}
+
+#[test]
 fn test_base64_raw_conflicts() {
     new_ucmd!()
         .arg("--base64")
