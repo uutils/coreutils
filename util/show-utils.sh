@@ -1,21 +1,30 @@
-#!/usr/bin/env bash
+#!/bin/sh
 
-set -eo pipefail
+set -e
 
-cd -- "$(dirname -- "$0")/.."
+CDPATH='' cd "$(dirname "$0")/.."
 
-if test "$*";then
-  _args=("$@")
+if [ "$#" -gt 0 ]; then
+    :
 else
-  CARGO_BUILD_TARGET="${CARGO_BUILD_TARGET:-$(rustc --print host-tuple)}"
-  case "$CARGO_BUILD_TARGET" in
-    *windows*) _args=("--features=windows");;
-    *wasip*) _args=("--features=feat_wasm");;
-    *android*) _args=("--features=feat_os_unix_android,feat_require_selinux");;
-    *linux*) _args=("--features=unix,feat_require_selinux");;
-    # unix is default since we don't support too many non-unix
-    *) _args=("--features=unix");;
-  esac
+    CARGO_BUILD_TARGET=${CARGO_BUILD_TARGET:-$(rustc --print host-tuple)}
+    case "$CARGO_BUILD_TARGET" in
+        *windows*)
+            set -- --features=windows
+            ;;
+        *wasip*)
+            set -- --features=feat_wasm
+            ;;
+        *android*)
+            set -- --features=feat_os_unix_android,feat_require_selinux
+            ;;
+        *linux*)
+            set -- --features=unix,feat_require_selinux
+            ;;
+        *)
+            set -- --features=unix
+            ;;
+    esac
 fi
 
-cargo tree --depth 1 --format "{lib}" "${_args[@]}" --prefix none | sed -n 's/^uu_//p'
+cargo tree --depth 1 --format '{lib}' "$@" --prefix none | sed -n 's/^uu_//p'
