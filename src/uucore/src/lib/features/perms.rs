@@ -31,8 +31,7 @@ use crate::features::safe_traversal::{DirFd, FileInfo, SymlinkBehavior};
 
 use std::ffi::CString;
 use std::fs::Metadata;
-use std::io::Error as IOError;
-use std::io::Result as IOResult;
+use std::io::{Error as IOError, Result as IOResult};
 use std::os::unix::fs::MetadataExt;
 
 use std::os::unix::ffi::OsStrExt;
