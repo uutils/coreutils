@@ -1253,3 +1253,27 @@ fn test_format_zero_precision_above_formatter_limit() {
         .succeeds()
         .stdout_only(format!("0.{}e+00\n", "0".repeat(70000)));
 }
+
+/// The increment is never printed, so its sign and leading zeros must not widen
+/// the output; only its fractional digits count (like for the other arguments).
+#[rstest]
+#[case::negative_increment(&["-w", "5", "-1", "3"], "5\n4\n3\n")]
+#[case::negative_increment_to_zero(&["-w", "1", "-1", "0"], "1\n0\n")]
+#[case::negative_increment_fractional(&["-w", "2", "-1.5", "0"], "2.0\n0.5\n")]
+#[case::negative_hex_increment(&["-w", "5", "-0x1", "3"], "5\n4\n3\n")]
+#[case::leading_zeros_increment(&["-w", "1", "007", "8"], "1\n8\n")]
+#[case::leading_zeros_increment_negative_start(&["-w", "99", "-007", "80"], "99\n92\n85\n")]
+#[case::plus_sign_increment(&["-w", "1", "+02", "5"], "1\n3\n5\n")]
+#[case::wide_increment(&["-w", "1", "100", "3"], "1\n")]
+#[case::scientific_increment(&["-w", "1", "1e2", "3"], "1\n")]
+#[case::wide_fractional_increment(&["-w", "1", "007.5", "9"], "1.0\n8.5\n")]
+#[case::fractional_increment(&["-w", "1", ".5", "2"], "1.0\n1.5\n2.0\n")]
+#[case::fractional_negative_increment(&["-w", "1", "-1.5", "-3"], "01.0\n-0.5\n-2.0\n")]
+#[case::fractional_increment_trailing_zero(&["-w", "1", "0.50", "2"], "1.00\n1.50\n2.00\n")]
+#[case::narrow_increment_unchanged(&["-w", "10", "-3", "1"], "10\n07\n04\n01\n")]
+#[case::narrow_increment_negative_range(&["-w", "-5", "-1", "-7"], "-5\n-6\n-7\n")]
+#[case::sign_of_last_still_counts(&["-w", "5", "-10", "-20"], "005\n-05\n-15\n")]
+#[case::zero_padded_last_still_counts(&["-w", "1", "1", "003"], "001\n002\n003\n")]
+fn test_equal_width_ignores_increment_integer_width(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!().args(args).succeeds().stdout_only(expected);
+}
