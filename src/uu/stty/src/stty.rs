@@ -585,19 +585,13 @@ impl WrappedPrinter {
     }
 }
 
-#[allow(
-    clippy::unnecessary_wraps,
-    reason = "needed for some platform-specific code"
-)]
 fn print_terminal_size(
-    termios: &Termios,
+    termios: &rustix::termios::Termios,
     opts: &Options,
     window_size: Option<&Winsize>,
     term_size: Option<&Winsize>,
-) -> io::Result<()> {
-    // GNU linked against glibc 2.42 provides us baudrate 51 which panics cfgetospeed
-    // so we repeat syscall... use termios.output_speed() instead if we switched to rustix instead.
-    let speed = rustix::termios::tcgetattr(&opts.file)?.output_speed();
+) {
+    let speed = termios.output_speed();
     let mut printer = WrappedPrinter::new(window_size);
     printer.print(&translate!("stty-output-speed", "speed" => speed));
     if opts.all {
@@ -612,10 +606,7 @@ fn print_terminal_size(
         let line = termios.line_discipline;
         printer.print(&translate!("stty-output-line", "line" => line));
     }
-    #[cfg(not(any(target_os = "linux", target_os = "redox")))]
-    let _ = termios; // remove this hack when we switched to rustix completely
     printer.flush();
-    Ok(())
 }
 
 fn cc_to_index(option: &str) -> Option<S> {
@@ -822,7 +813,15 @@ fn print_settings(termios: &Termios, opts: &Options) -> io::Result<()> {
             &tcgetwinsize(stdout).ok()
         };
 
-        print_terminal_size(termios, opts, window_size.as_ref(), term_size.as_ref())?;
+        // GNU linked against glibc 2.42 provides us baudrate 51 which panics nix::sys::termios::cfgetospeed
+        // so we repeat syscall until we replace nix with rustix...
+        let rustix_termios = rustix::termios::tcgetattr(&opts.file)?;
+        print_terminal_size(
+            &rustix_termios,
+            opts,
+            window_size.as_ref(),
+            term_size.as_ref(),
+        );
         print_control_chars(termios, opts, window_size.as_ref())?;
         print_flags(termios, opts, CONTROL_FLAGS, window_size.as_ref());
         print_flags(termios, opts, INPUT_FLAGS, window_size.as_ref());
