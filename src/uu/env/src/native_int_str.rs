@@ -3,10 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore (words) Grüße
+
 // This module contains classes and functions for dealing with the differences
 // between operating systems regarding the lossless processing of OsStr/OsString.
 // In contrast to existing crates with similar purpose, this module does not use any
-// `unsafe` features or functions.
+// `unsafe` features or functions, except to stand in for std APIs that are still
+// unstable on WASI Preview 2 (see `wasip2_ffi`).
 // Due to a suboptimal design aspect of OsStr/OsString on windows, we need to
 // encode/decode to wide chars on windows operating system.
 // This prevents borrowing from OsStr on windows. Anyway, if optimally used,#
@@ -15,11 +18,52 @@
 use std::ffi::OsString;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
-#[cfg(target_os = "wasi")]
+#[cfg(all(target_os = "wasi", target_env = "p1"))]
 use std::os::wasi::ffi::{OsStrExt, OsStringExt};
 #[cfg(windows)]
 use std::os::windows::prelude::*;
 use std::{borrow::Cow, ffi::OsStr};
+#[cfg(all(target_os = "wasi", not(target_env = "p1")))]
+use wasip2_ffi::{OsStrExt, OsStringExt};
+
+// `std::os::wasi::ffi` is still unstable on WASI Preview 2, so provide the same traits here.
+// On WASI an `OsStr` is a plain byte string, so these conversions keep every byte.
+#[cfg(all(target_os = "wasi", not(target_env = "p1")))]
+mod wasip2_ffi {
+    use std::ffi::{OsStr, OsString};
+
+    pub trait OsStrExt {
+        fn from_bytes(bytes: &[u8]) -> &Self;
+        fn as_bytes(&self) -> &[u8];
+    }
+
+    impl OsStrExt for OsStr {
+        fn from_bytes(bytes: &[u8]) -> &Self {
+            // SAFETY: WASI `OsStr` is a byte string; this is `std::os::wasi::ffi::OsStrExt::from_bytes`.
+            unsafe { Self::from_encoded_bytes_unchecked(bytes) }
+        }
+
+        fn as_bytes(&self) -> &[u8] {
+            self.as_encoded_bytes()
+        }
+    }
+
+    pub trait OsStringExt {
+        fn from_vec(vec: Vec<u8>) -> Self;
+        fn into_vec(self) -> Vec<u8>;
+    }
+
+    impl OsStringExt for OsString {
+        fn from_vec(vec: Vec<u8>) -> Self {
+            // SAFETY: as above; this is `std::os::wasi::ffi::OsStringExt::from_vec`.
+            unsafe { Self::from_encoded_bytes_unchecked(vec) }
+        }
+
+        fn into_vec(self) -> Vec<u8> {
+            self.into_encoded_bytes()
+        }
+    }
+}
 
 #[cfg(not(windows))]
 use u8 as NativeIntCharU;
@@ -310,5 +354,35 @@ impl<'a> NativeStr<'a> {
                 slice.map(Cow::Owned)
             }
         }
+    }
+}
+
+#[cfg(all(test, target_os = "wasi", not(target_env = "p1")))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wasip2_encoded_bytes_round_trip() {
+        let source = OsString::from("NAME=Grüße");
+
+        let borrowed = to_native_int_representation(&source);
+        assert_eq!(&*borrowed, "NAME=Grüße".as_bytes());
+        let converted = from_native_int_representation(borrowed);
+        assert_eq!(&*converted, source.as_os_str());
+
+        let owned: Cow<'static, NativeIntStr> = NCvt::convert(source.clone());
+        assert_eq!(
+            from_native_int_representation_owned(owned.into_owned()),
+            source
+        );
+    }
+
+    #[test]
+    fn wasip2_non_utf8_bytes_are_kept() {
+        let bytes = vec![b'f', b'o', 0x80, b'o'];
+        let converted = from_native_int_representation_owned(bytes.clone());
+        assert_eq!(converted.as_encoded_bytes(), bytes.as_slice());
+        let borrowed = from_native_int_representation(Cow::Borrowed(&bytes));
+        assert_eq!(borrowed.as_encoded_bytes(), bytes.as_slice());
     }
 }
