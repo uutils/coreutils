@@ -194,7 +194,7 @@ fn test_sync_data_fifo_fails_immediately() {
 
     ts.ucmd()
         .arg("--data")
-        .arg(at.plus_as_string("test-fifo"))
+        .arg(at.plus("test-fifo"))
         .timeout(Duration::from_secs(2))
         .fails()
         .stderr_contains("error syncing")

@@ -3167,7 +3167,7 @@ fn test_cp_one_file_system() {
 
     // Prepare the mount
     at_src.mkdir(TEST_MOUNT_MOUNTPOINT);
-    let mountpoint_path = &at_src.plus_as_string(TEST_MOUNT_MOUNTPOINT);
+    let mountpoint_path = &at_src.plus(TEST_MOUNT_MOUNTPOINT);
 
     scene
         .mount_temp_fs(mountpoint_path)
@@ -5720,7 +5720,7 @@ fn test_acl_preserve() {
     let path = at.plus_as_string(file);
     scene.ucmd().args(&["-p", &path, path2]).succeeds();
 
-    assert!(compare_xattrs(&file, &file_target));
+    assert!(compare_xattrs(file, file_target));
 }
 
 /// Layout of the source file copied by `test_cp_debug_sparse_source`.
@@ -7863,7 +7863,7 @@ fn test_cp_preserve_xattr_readonly_source() {
     }
 
     let getfattr_output = Command::new("getfattr")
-        .args([&at.plus_as_string(source_file)])
+        .args([&at.plus(source_file)])
         .output()
         .expect("Failed to run `getfattr` on the destination file");
 
@@ -7900,7 +7900,7 @@ fn test_cp_preserve_xattr_readonly_source() {
 
     assert!(scene.fixtures.metadata(dest_file).permissions().readonly());
     assert!(
-        compare_xattrs(&at.plus(source_file), &at.plus(dest_file)),
+        compare_xattrs(at.plus(source_file), at.plus(dest_file)),
         "Extended attributes were not preserved"
     );
 }
@@ -8137,7 +8137,7 @@ fn test_cp_selinux() {
             selinux_perm.contains("unconfined_u"),
             "Expected 'foo' not found in getfattr output:\n{selinux_perm}"
         );
-        at.remove(at.plus_as_string(TEST_HELLO_WORLD_DEST));
+        at.remove(at.plus(TEST_HELLO_WORLD_DEST));
     }
 }
 
@@ -8147,7 +8147,6 @@ fn test_cp_selinux_default_context_relative_dest() {
     // -Z labels the destination with the context the policy has for its path,
     // and the policy only lists absolute paths: a relative destination used to
     // match nothing and silently keep the context it already carried.
-    use std::path::Path;
     use uucore::selinux::set_selinux_security_context;
 
     let ts = TestScenario::new(util_name!());
@@ -8160,7 +8159,7 @@ fn test_cp_selinux_default_context_relative_dest() {
     let ctx = "root:object_r:etc_t:s0".to_string();
     for dest in ["relative", "absolute"] {
         at.touch(dest);
-        if set_selinux_security_context(Path::new(&at.plus_as_string(dest)), Some(&ctx)).is_err() {
+        if set_selinux_security_context(&at.plus(dest), Some(&ctx)).is_err() {
             return;
         }
     }
@@ -8256,7 +8255,7 @@ fn test_cp_preserve_selinux_admin_context() {
     // On Debian/Ubuntu, this program is provided by the selinux-utils package
     // On Fedora/RHEL, this program is provided by the libselinux-devel package
     let output = std::process::Command::new("matchpathcon")
-        .arg(at.plus_as_string(TEST_HELLO_WORLD_DEST))
+        .arg(at.plus(TEST_HELLO_WORLD_DEST))
         .output()
         .expect("failed to execute matchpathcon command");
 
@@ -8300,7 +8299,7 @@ fn test_cp_preserve_selinux_admin_context() {
 
     assert_eq!(default_context, selinux_perm_dest);
 
-    at.remove(at.plus_as_string(TEST_HELLO_WORLD_DEST));
+    at.remove(at.plus(TEST_HELLO_WORLD_DEST));
 }
 
 #[test]
@@ -8498,7 +8497,7 @@ fn test_cp_preserve_context_root() {
 
     let chcon_result = std::process::Command::new("chcon")
         .arg(context)
-        .arg(at.plus_as_string(source_file))
+        .arg(at.plus(source_file))
         .status();
 
     if !chcon_result.is_ok_and(|status| status.success()) {
@@ -9195,7 +9194,7 @@ fn test_cp_archive_deref_symlinks_inside_dir() {
     let at = &scene.fixtures;
     at.mkdir("srcdir");
     at.touch("srcdir/real.txt");
-    symlink("real.txt", at.plus_as_string("srcdir/link.txt")).unwrap();
+    symlink("real.txt", at.plus("srcdir/link.txt")).unwrap();
 
     // -a (no deref): inner symlinks preserved
     scene.ucmd().args(&["-a", "srcdir", "dest_a"]).succeeds();
@@ -9232,7 +9231,7 @@ fn test_cp_archive_cli_deref_inner_preserved() {
     let at = &scene.fixtures;
     at.mkdir("srcdir");
     at.touch("srcdir/real.txt");
-    symlink("real.txt", at.plus_as_string("srcdir/link.txt")).unwrap();
+    symlink("real.txt", at.plus("srcdir/link.txt")).unwrap();
 
     // -aH: CLI symlink dereferenced, inner symlinks preserved
     scene.ucmd().args(&["-aH", "srcdir", "dest_aH"]).succeeds();
@@ -9262,7 +9261,7 @@ fn test_cp_archive_deref_repeated_flag_last_wins() {
     let at = &scene.fixtures;
     at.mkdir("srcdir");
     at.touch("srcdir/real.txt");
-    symlink("real.txt", at.plus_as_string("srcdir/link.txt")).unwrap();
+    symlink("real.txt", at.plus("srcdir/link.txt")).unwrap();
 
     // -aL -a: -a is last, inner symlinks preserved
     scene
@@ -9648,14 +9647,13 @@ fn test_cp_gnu_preserve_mode() {
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_a_z_overrides_context() {
     // Verifies -aZ succeeds (-Z overrides implicit --preserve=context from -a)
-    use std::path::Path;
     use uucore::selinux::set_selinux_security_context;
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("src");
 
     let ctx = "unconfined_u:object_r:user_tmp_t:s0".to_string();
-    if set_selinux_security_context(Path::new(&at.plus_as_string("src")), Some(&ctx)).is_err() {
+    if set_selinux_security_context(&at.plus("src"), Some(&ctx)).is_err() {
         return;
     }
 
@@ -9665,22 +9663,19 @@ fn test_cp_a_z_overrides_context() {
 #[test]
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_a_preserves_context() {
-    use std::path::Path;
     use uucore::selinux::{get_selinux_security_context, set_selinux_security_context};
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("src");
 
     let ctx = "unconfined_u:object_r:user_tmp_t:s0".to_string();
-    if set_selinux_security_context(Path::new(&at.plus_as_string("src")), Some(&ctx)).is_err() {
+    if set_selinux_security_context(&at.plus("src"), Some(&ctx)).is_err() {
         return;
     }
 
-    let src_ctx =
-        get_selinux_security_context(Path::new(&at.plus_as_string("src")), false).unwrap();
+    let src_ctx = get_selinux_security_context(&at.plus("src"), false).unwrap();
     ucmd.args(&["-a", "src", "dst"]).succeeds();
-    let dst_ctx =
-        get_selinux_security_context(Path::new(&at.plus_as_string("dst")), false).unwrap();
+    let dst_ctx = get_selinux_security_context(&at.plus("dst"), false).unwrap();
 
     assert_eq!(src_ctx, dst_ctx, "-a should preserve SELinux context");
 }

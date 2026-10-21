@@ -780,10 +780,10 @@ fn test_chown_recursive() {
 
     at.mkdir_all("a/b/c");
     at.mkdir("z");
-    at.touch(at.plus_as_string("a/a"));
-    at.touch(at.plus_as_string("a/b/b"));
-    at.touch(at.plus_as_string("a/b/c/c"));
-    at.touch(at.plus_as_string("z/y"));
+    at.touch(at.plus("a/a"));
+    at.touch(at.plus("a/b/b"));
+    at.touch(at.plus("a/b/c/c"));
+    at.touch(at.plus("z/y"));
 
     scene
         .ucmd()

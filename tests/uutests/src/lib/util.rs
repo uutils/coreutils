@@ -1015,18 +1015,17 @@ pub fn get_root_path() -> &'static str {
     target_os = "android",
     target_os = "netbsd"
 ))]
-pub fn compare_xattrs<P: AsRef<Path>>(path1: P, path2: P) -> bool {
-    let get_sorted_xattrs = |path: P| {
-        xattr::list(path)
-            .map(|attrs| {
-                let mut attrs = attrs.collect::<Vec<_>>();
-                attrs.sort();
-                attrs
-            })
-            .unwrap_or_default()
+pub fn compare_xattrs<P1: AsRef<Path>, P2: AsRef<Path>>(path1: P1, path2: P2) -> bool {
+    let get_sorted_xattrs = |list: Result<xattr::XAttrs>| {
+        list.map(|attrs| {
+            let mut attrs = attrs.collect::<Vec<_>>();
+            attrs.sort();
+            attrs
+        })
+        .unwrap_or_default()
     };
 
-    get_sorted_xattrs(path1) == get_sorted_xattrs(path2)
+    get_sorted_xattrs(xattr::list(path1)) == get_sorted_xattrs(xattr::list(path2))
 }
 
 /// Object-oriented path struct that represents and operates on
@@ -1081,17 +1080,14 @@ impl AtPath {
     }
 
     pub fn open<P: AsRef<Path>>(&self, name: P) -> File {
-        log_info("open", self.plus_as_string(&name));
-        File::open(self.plus(name)).unwrap()
+        let path = self.plus(name);
+        log_info("open", path.display());
+        File::open(path).unwrap()
     }
 
     pub fn read<P: AsRef<Path>>(&self, name: P) -> String {
-        let name = name.as_ref();
-        let mut f = self.open(name);
-        let mut contents = String::new();
-        f.read_to_string(&mut contents)
-            .unwrap_or_else(|e| panic!("Couldn't read {}: {e}", name.display()));
-        contents
+        String::from_utf8(self.read_bytes(&name))
+            .unwrap_or_else(|e| panic!("Couldn't decode {} as UTF-8: {e}", name.as_ref().display()))
     }
 
     pub fn read_bytes<P: AsRef<Path>>(&self, name: P) -> Vec<u8> {
@@ -1108,47 +1104,41 @@ impl AtPath {
     }
 
     pub fn write_bytes<P: AsRef<Path>>(&self, name: P, contents: &[u8]) {
-        let name = name.as_ref();
-        log_info("write(default)", self.plus_as_string(name));
-        fs::write(self.plus(name), contents)
-            .unwrap_or_else(|e| panic!("Couldn't write {}: {e}", name.display()));
+        let path = self.plus(&name);
+        log_info("write(default)", path.display());
+        fs::write(path, contents)
+            .unwrap_or_else(|e| panic!("Couldn't write {}: {e}", name.as_ref().display()));
     }
 
     pub fn append<P: AsRef<Path>>(&self, name: P, contents: &str) {
-        let name = name.as_ref();
-        log_info("write(append)", self.plus_as_string(name));
-        let mut f = OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(self.plus(name))
-            .unwrap();
-        f.write_all(contents.as_bytes())
-            .unwrap_or_else(|e| panic!("Couldn't write(append) {}: {e}", name.display()));
+        self.append_bytes(name, contents.as_bytes());
     }
 
     pub fn append_bytes<P: AsRef<Path>>(&self, name: P, contents: &[u8]) {
-        let name = name.as_ref();
-        log_info("write(append)", self.plus_as_string(name));
+        let path = self.plus(&name);
+        log_info("write(append)", path.display());
         let mut f = OpenOptions::new()
             .append(true)
             .create(true)
-            .open(self.plus(name))
+            .open(path)
             .unwrap();
-        f.write_all(contents)
-            .unwrap_or_else(|e| panic!("Couldn't write(append) to {}: {e}", name.display()));
+        f.write_all(contents).unwrap_or_else(|e| {
+            panic!("Couldn't write(append) to {}: {e}", name.as_ref().display())
+        });
     }
 
     pub fn truncate<P: AsRef<Path>>(&self, name: P, contents: &str) {
-        let name = name.as_ref();
-        log_info("write(truncate)", self.plus_as_string(name));
+        let path = self.plus(name.as_ref());
+        log_info("write(truncate)", path.display());
         let mut f = OpenOptions::new()
             .write(true)
             .truncate(true)
             .create(true)
-            .open(self.plus(name))
+            .open(path)
             .unwrap();
-        f.write_all(contents.as_bytes())
-            .unwrap_or_else(|e| panic!("Couldn't write(truncate) {}: {e}", name.display()));
+        f.write_all(contents.as_bytes()).unwrap_or_else(|e| {
+            panic!("Couldn't write(truncate) {}: {e}", name.as_ref().display())
+        });
     }
 
     pub fn rename<P1: AsRef<Path>, P2: AsRef<Path>>(&self, source: P1, target: P2) {
@@ -1188,34 +1178,31 @@ impl AtPath {
     }
 
     pub fn rmdir<P: AsRef<Path>>(&self, dir: P) {
-        let dir = dir.as_ref();
-        log_info("rmdir", self.plus_as_string(dir));
-        fs::remove_dir(self.plus(dir)).unwrap();
+        let path = self.plus(dir);
+        log_info("rmdir", path.display());
+        fs::remove_dir(path).unwrap();
     }
 
     pub fn mkdir<P: AsRef<Path>>(&self, dir: P) {
-        let dir = dir.as_ref();
-        log_info("mkdir", self.plus_as_string(dir));
-        fs::create_dir(self.plus(dir)).unwrap();
+        let path = self.plus(dir);
+        log_info("mkdir", path.display());
+        fs::create_dir(path).unwrap();
     }
 
     pub fn mkdir_all<P: AsRef<Path>>(&self, dir: P) {
-        let dir = dir.as_ref();
-        log_info("mkdir_all", self.plus_as_string(dir));
-        fs::create_dir_all(self.plus(dir)).unwrap();
+        let path = self.plus(dir);
+        log_info("mkdir_all", path.display());
+        fs::create_dir_all(path).unwrap();
     }
 
     pub fn make_file<P: AsRef<Path>>(&self, name: P) -> File {
         let name = name.as_ref();
-        match File::create(self.plus(name)) {
-            Ok(f) => f,
-            Err(e) => panic!("Couldn't create file {}: {e}", name.display()),
-        }
+        File::create(self.plus(name))
+            .unwrap_or_else(|e| panic!("Couldn't create file {}: {e}", name.display()))
     }
 
     pub fn touch<P: AsRef<Path>>(&self, file: P) {
-        let file = file.as_ref();
-        log_info("touch", self.plus_as_string(file));
+        log_info("touch", self.plus(&file).display());
         let _ = self.make_file(file);
     }
 
@@ -1223,18 +1210,18 @@ impl AtPath {
     pub fn mkfifo<P: AsRef<Path>>(&self, fifo: P) {
         // rustix::fs::mkfifoat is linux only
         use nix::sys::stat::Mode;
-        let full_path = self.plus_as_string(fifo);
-        log_info("mkfifo", &full_path);
+        let path = self.plus(fifo);
+        log_info("mkfifo", path.display());
 
         let mode = Mode::S_IRUSR | Mode::S_IWUSR;
-        nix::unistd::mkfifo(Path::new(&full_path), mode).expect("mkfifo failed");
+        nix::unistd::mkfifo(&path, mode).expect("mkfifo failed");
     }
 
     #[cfg(unix)]
     pub fn mksocket<P: AsRef<Path>>(&self, socket: P) {
-        let full_path = self.plus_as_string(socket);
-        log_info("mksocket", &full_path);
-        UnixListener::bind(full_path).expect("Socket file creation failed.");
+        let path = self.plus(socket);
+        log_info("mksocket", path.display());
+        UnixListener::bind(path).expect("Socket file creation failed.");
     }
 
     #[cfg(not(windows))]
@@ -1250,17 +1237,13 @@ impl AtPath {
     }
 
     pub fn hard_link<P1: AsRef<Path>, P2: AsRef<Path>>(&self, original: P1, link: P2) {
-        let original = original.as_ref();
-        let link = link.as_ref();
+        let original = self.plus(original);
+        let link = self.plus(link);
         log_info(
             "hard_link",
-            format!(
-                "{},{}",
-                self.plus_as_string(original),
-                self.plus_as_string(link)
-            ),
+            format!("{},{}", original.display(), link.display()),
         );
-        hard_link(self.plus(original), self.plus(link)).unwrap();
+        hard_link(original, link).unwrap();
     }
 
     fn symlink_inner(&self, original: &Path, link: &Path) {
@@ -1296,28 +1279,24 @@ impl AtPath {
     }
 
     pub fn is_symlink<P: AsRef<Path>>(&self, path: P) -> bool {
-        let path = path.as_ref();
-        log_info("is_symlink", self.plus_as_string(path));
-        fs::symlink_metadata(self.plus(path)).is_ok_and(|m| m.is_symlink())
+        let path = self.plus(path);
+        log_info("is_symlink", path.display());
+        fs::symlink_metadata(path).is_ok_and(|m| m.is_symlink())
     }
 
     pub fn resolve_link<P: AsRef<Path>>(&self, path: P) -> String {
-        let path = path.as_ref();
-        log_info("resolve_link", self.plus_as_string(path));
-        match fs::read_link(self.plus(path)) {
+        let path = self.plus(path);
+        log_info("resolve_link", path.display());
+        match fs::read_link(path) {
             Ok(p) => self.minus_as_string(p.to_str().unwrap()),
             Err(_) => String::new(),
         }
     }
 
     pub fn read_symlink<P: AsRef<Path>>(&self, path: P) -> String {
-        let path = path.as_ref();
-        log_info("read_symlink", self.plus_as_string(path));
-        fs::read_link(self.plus(path))
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_owned()
+        let path = self.plus(path);
+        log_info("read_symlink", path.display());
+        fs::read_link(path).unwrap().to_str().unwrap().to_owned()
     }
 
     pub fn symlink_metadata<P: AsRef<Path>>(&self, path: P) -> fs::Metadata {
@@ -1402,7 +1381,7 @@ pub struct TestScenario {
     pub fixtures: AtPath,
     tmpd: Rc<TempDir>,
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
-    tmp_fs_mountpoint: Option<String>,
+    tmp_fs_mountpoint: Option<OsString>,
 }
 
 impl TestScenario {
@@ -1464,7 +1443,10 @@ impl TestScenario {
 
     /// Mounts a temporary filesystem at the specified mount point.
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
-    pub fn mount_temp_fs(&mut self, mount_point: &str) -> core::result::Result<(), String> {
+    pub fn mount_temp_fs<P: AsRef<Path>>(
+        &mut self,
+        mount_point: P,
+    ) -> core::result::Result<(), String> {
         if self.tmp_fs_mountpoint.is_some() {
             return Err("already mounted".to_string());
         }
@@ -1475,12 +1457,12 @@ impl TestScenario {
             .arg("-o")
             .arg("size=640k") // ought to be enough
             .arg("tmpfs")
-            .arg(mount_point)
+            .arg(mount_point.as_ref())
             .run();
         if !cmd_result.succeeded() {
             return Err(format!("mount failed: {}", cmd_result.stderr_str()));
         }
-        self.tmp_fs_mountpoint = Some(mount_point.to_string());
+        self.tmp_fs_mountpoint = Some(mount_point.as_ref().as_os_str().to_os_string());
         Ok(())
     }
 
