@@ -1335,14 +1335,12 @@ fn test_od_invalid_bytes() {
     const BIG_SIZE: &str = "1Y";
 
     // NOTE:
-    // GNU's od (8.32) with option '--width' does not accept 'Y' as valid suffix.
-    // According to the man page it should be valid in the same way it is valid for
-    // '--read-bytes' and '--skip-bytes'.
+    // '--width' takes a plain number, so it does not accept 'Y' as a suffix
+    // (see test_width_rejects_size_suffixes).
 
     let options = [
         "--read-bytes",
         "--skip-bytes",
-        "--width",
         // "--strings", // TODO: consider testing here once '--strings' is implemented
     ];
     for option in &options {
@@ -1650,5 +1648,65 @@ fn test_octal_alias() {
             .arg("test")
             .succeeds()
             .stdout_only(unindent(ALPHA_OUT));
+    }
+}
+
+#[test]
+fn test_width_rejects_size_suffixes() {
+    // Unlike -N and -j, -w takes a plain number: no multiplier and no radix prefix.
+    for value in ["1K", "1k", "2b", "1KB", "1M", "1Y", "0x8", "4B"] {
+        for (arg, option) in [
+            (format!("-w{value}"), "-w"),
+            (format!("--width={value}"), "--width"),
+        ] {
+            new_ucmd!()
+                .arg(arg)
+                .pipe_in("abcdefgh")
+                .fails_with_code(1)
+                .stderr_only(format!(
+                    "od: invalid suffix in {option} argument '{value}'\n"
+                ));
+        }
+    }
+}
+
+#[test]
+fn test_width_is_decimal_even_with_leading_zero() {
+    for (value, expected) in [
+        (
+            "010",
+            " 61 62 63 64 65 66 67 68 69 6a\n 6b 6c 6d 6e 6f 70 71 72 73 74\n",
+        ),
+        (
+            "08",
+            " 61 62 63 64 65 66 67 68\n 69 6a 6b 6c 6d 6e 6f 70\n 71 72 73 74\n",
+        ),
+    ] {
+        new_ucmd!()
+            .args(&["-An", "-tx1", &format!("-w{value}")])
+            .pipe_in("abcdefghijklmnopqrst")
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn test_width_invalid_numbers() {
+    for (value, message) in [
+        ("abc", "invalid --width argument 'abc'"),
+        ("0", "invalid --width argument '0'"),
+        ("00", "invalid --width argument '00'"),
+        ("-4", "invalid --width argument '-4'"),
+        ("1fb4t", "invalid suffix in --width argument '1fb4t'"),
+        (
+            "99999999999999999999",
+            "--width argument '99999999999999999999' too large",
+        ),
+    ] {
+        new_ucmd!()
+            .arg(format!("--width={value}"))
+            .pipe_in("abcdefgh")
+            .fails_with_code(1)
+            .stderr_only(format!("od: {message}\n"));
     }
 }
