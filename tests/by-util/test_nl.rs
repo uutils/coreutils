@@ -1009,7 +1009,6 @@ fn test_join_blank_lines_still_rejects_invalid_numbers() {
     ] {
         new_ucmd!()
             .arg(format!("--join-blank-lines={value}"))
-            .pipe_in("a\n")
             .fails_with_code(1)
             .stderr_contains(format!("invalid value '{value}'"));
     }

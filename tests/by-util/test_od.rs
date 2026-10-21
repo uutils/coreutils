@@ -1655,13 +1655,9 @@ fn test_width_rejects_size_suffixes() {
             (format!("-w{value}"), "-w"),
             (format!("--width={value}"), "--width"),
         ] {
-            new_ucmd!()
-                .arg(arg)
-                .pipe_in("abcdefgh")
-                .fails_with_code(1)
-                .stderr_only(format!(
-                    "od: invalid suffix in {option} argument '{value}'\n"
-                ));
+            new_ucmd!().arg(arg).fails_with_code(1).stderr_only(format!(
+                "od: invalid suffix in {option} argument '{value}'\n"
+            ));
         }
     }
 }
@@ -1701,7 +1697,6 @@ fn test_width_invalid_numbers() {
     ] {
         new_ucmd!()
             .arg(format!("--width={value}"))
-            .pipe_in("abcdefgh")
             .fails_with_code(1)
             .stderr_only(format!("od: {message}\n"));
     }
