@@ -124,10 +124,17 @@ fn is_fmt_whitespace_byte(b: u8) -> bool {
 #[derive(Debug)]
 pub enum Line {
     FormatLine(FileLine),
-    /// The line's bytes, whether it is a blank line, and whether to end it
-    /// with a newline (a line lacking PREFIX is copied without one if it was
-    /// the last line of its file and had none)
-    NoFormatLine(Vec<u8>, bool, bool),
+    NoFormatLine(NoFormatLine),
+}
+
+/// A line that is copied as it is
+#[derive(Debug)]
+pub struct NoFormatLine {
+    pub line: Vec<u8>,
+    /// Whether the line is entirely blank
+    blank: bool,
+    /// Whether the line ends with a newline in the output
+    pub newline: bool,
 }
 
 impl Line {
@@ -140,9 +147,9 @@ impl Line {
     }
 
     /// when we know that it's a [`Line::NoFormatLine`], as in the [`ParagraphStream`] iterator
-    fn get_noformatline(self) -> (Vec<u8>, bool, bool) {
+    fn get_noformatline(self) -> NoFormatLine {
         match self {
-            Self::NoFormatLine(s, b, nl) => (s, b, nl),
+            Self::NoFormatLine(nfl) => nfl,
             Self::FormatLine(..) => panic!("Found FormatLine when expecting NoFormatLine"),
         }
     }
@@ -273,7 +280,11 @@ impl Iterator for FileLines<'_> {
         // Err(true) indicates that this was a linebreak,
         // which is important to know when detecting mail headers
         if n.iter().all(|&b| is_fmt_whitespace_byte(b)) {
-            return Some(Line::NoFormatLine(Vec::new(), true, true));
+            return Some(Line::NoFormatLine(NoFormatLine {
+                line: Vec::new(),
+                blank: true,
+                newline: true,
+            }));
         }
 
         let (pmatch, poffset) = self.match_prefix(&n[..]);
@@ -282,7 +293,11 @@ impl Iterator for FileLines<'_> {
         // emit the line unprocessed (even when it lacks a final newline)
         // and iterate again
         if !pmatch {
-            return Some(Line::NoFormatLine(n, false, has_newline));
+            return Some(Line::NoFormatLine(NoFormatLine {
+                line: n,
+                blank: false,
+                newline: has_newline,
+            }));
         }
 
         // if the line matches the prefix, but is blank after,
@@ -294,13 +309,21 @@ impl Iterator for FileLines<'_> {
             .iter()
             .all(|&b| is_fmt_whitespace_byte(b))
         {
-            return Some(Line::NoFormatLine(n, false, true));
+            return Some(Line::NoFormatLine(NoFormatLine {
+                line: n,
+                blank: false,
+                newline: true,
+            }));
         }
 
         // skip if this line matches the anti_prefix
         // (NOTE definition of match_anti_prefix is TRUE if we should process)
         if !self.match_anti_prefix(&n[..]) {
-            return Some(Line::NoFormatLine(n, false, true));
+            return Some(Line::NoFormatLine(NoFormatLine {
+                line: n,
+                blank: false,
+                newline: true,
+            }));
         }
 
         // figure out the indent, prefix, and prefixindent ending points
@@ -391,21 +414,21 @@ impl ParagraphStream<'_> {
 }
 
 impl Iterator for ParagraphStream<'_> {
-    type Item = Result<Paragraph, (Vec<u8>, bool)>;
+    type Item = Result<Paragraph, NoFormatLine>;
 
     #[allow(clippy::cognitive_complexity)]
-    fn next(&mut self) -> Option<Result<Paragraph, (Vec<u8>, bool)>> {
+    fn next(&mut self) -> Option<Result<Paragraph, NoFormatLine>> {
         // return a NoFormatLine in an Err; it should immediately be output
         let noformat = match self.lines.peek()? {
             Line::FormatLine(_) => false,
-            Line::NoFormatLine(..) => true,
+            Line::NoFormatLine(_) => true,
         };
 
         // found a NoFormatLine, immediately dump it out
         if noformat {
-            let (s, nm, newline) = self.lines.next().unwrap().get_noformatline();
-            self.next_mail = nm;
-            return Some(Err((s, newline)));
+            let nfl = self.lines.next().unwrap().get_noformatline();
+            self.next_mail = nfl.blank;
+            return Some(Err(nfl));
         }
 
         // found a FormatLine, now build a paragraph

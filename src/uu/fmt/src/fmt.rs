@@ -227,11 +227,11 @@ fn process_file(
     let p_stream = ParagraphStream::new(fmt_opts, &mut fp);
     for para_result in p_stream {
         match para_result {
-            Err((s, newline)) => {
+            Err(nfl) => {
                 ostream
-                    .write_all(&s)
+                    .write_all(&nfl.line)
                     .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?;
-                if newline {
+                if nfl.newline {
                     ostream
                         .write_all(b"\n")
                         .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?;
