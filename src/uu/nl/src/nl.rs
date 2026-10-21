@@ -10,7 +10,7 @@ use std::io::{self, BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
-use uucore::{format_usage, show_error, translate};
+use uucore::{format_usage, show_error, translate, translate_text};
 
 mod helper;
 
@@ -250,7 +250,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if path.is_dir() {
                 show_error!(
                     "{}",
-                    translate!("nl-error-is-directory", "path" => path.maybe_quote())
+                    translate_text!("nl-error-is-directory", "path" => path.maybe_quote())
                 );
                 set_exit_code(1);
             } else {
