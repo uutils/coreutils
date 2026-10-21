@@ -3942,3 +3942,20 @@ fn test_control_whitespace(#[case] args: &[&str], #[case] input: &str, #[case] e
         .succeeds()
         .stdout_only(expected);
 }
+
+#[rstest::rstest]
+#[case(&["1e3"], "sort: cannot read: 1e3: No such file or directory\n")]
+#[case(&["-o", "007", "empty"], "sort: open failed: 007: Is a directory\n")]
+#[case(&["--files0-from=2.50"], "sort: open failed: 2.50: No such file or directory\n")]
+#[cfg(not(windows))]
+fn test_numeric_looking_file_names_are_kept_verbatim(
+    #[case] args: &[&str],
+    #[case] expected: &str,
+) {
+    // File names such as "007" or "1e3" must not be reformatted as numbers
+    // in error messages.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("007");
+    at.touch("empty");
+    ucmd.args(args).fails_with_code(2).stderr_is(expected);
+}
