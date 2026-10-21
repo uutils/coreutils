@@ -271,7 +271,6 @@ jobs:
     runs-on: ${{ matrix.job.os }}
     env:
       CARGO_INCREMENTAL: 0
-      RUSTFLAGS: "-C link-arg=-Wl,--dynamicbase -C link-arg=-Wl,--enable-auto-image-base"
     strategy:
       fail-fast: false
       matrix:
@@ -291,18 +290,7 @@ jobs:
       run: |
         echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
         echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-    - name: Disable Mandatory ASLR (required for Cygwin/MSYS2 bash on GitHub runners)
-      shell: powershell
-      run: |
-        # exit code 254 from bash.exe is caused by Windows Mandatory ASLR
-        # See: https://github.com/appveyor/ci/issues/3777
-        Set-ProcessMitigation -System -Disable ForceRelocateImages
     - name: Update MSYS2 packages
-      # msys2-runtime must be upgraded in a separate bash session before the build.
-      # Upgrading it mid-session changes the shared memory layout (60344 -> 59320),
-      # which causes subsequent fork() calls to fail with EAGAIN (exit code 254).
-      # The update may also terminate the current shell, so continue-on-error
-      # allows the workflow to proceed with a fresh session.
       shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
       continue-on-error: true
       run: |
