@@ -1010,9 +1010,8 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
             let formatted = format_string(field, options, implicit_padding)?;
             writer.write_all(formatted.as_bytes())?;
         } else {
-            // the first blank between fields is written as a space, as is an
-            // initial \n with the -z option
-            let prefix = if n > 1 || (options.zero_terminated && prefix.starts_with('\n')) {
+            // the first blank between fields is written as a space
+            let prefix = if n > 1 {
                 write_separator(writer, prefix)?
             } else {
                 prefix
