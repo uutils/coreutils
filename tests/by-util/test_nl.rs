@@ -827,6 +827,20 @@ fn test_directory_as_input() {
 }
 
 #[test]
+#[cfg(not(windows))]
+fn test_numeric_looking_directory_names_are_kept_verbatim() {
+    // Names such as "007" or "1e3" must not be reformatted as numbers
+    // in error messages. Windows quotes these names, so skip it there.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("007");
+    at.mkdir("1e3");
+    at.mkdir("2.50");
+    ucmd.args(&["007", "1e3", "2.50"])
+        .fails_with_code(1)
+        .stderr_is("nl: 007: Is a directory\nnl: 1e3: Is a directory\nnl: 2.50: Is a directory\n");
+}
+
+#[test]
 fn test_file_with_non_utf8_content() {
     let (at, mut ucmd) = at_and_ucmd!();
 
