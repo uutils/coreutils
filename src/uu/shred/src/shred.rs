@@ -96,6 +96,17 @@ enum PassType {
     Random,
 }
 
+/// Settings shared by every file passed on the command line.
+struct WipeOptions {
+    n_passes: usize,
+    remove_method: RemoveMethod,
+    size: Option<u64>,
+    exact: bool,
+    zero: bool,
+    verbose: bool,
+    force: bool,
+}
+
 #[derive(PartialEq, Clone, Copy)]
 enum RemoveMethod {
     None,     // Default method. Only obfuscate the file data
@@ -298,22 +309,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_one::<String>(options::SIZE)
         .map(ToOwned::to_owned);
     let size = get_size(size_arg, diag_args.as_deref())?;
-    let exact = matches.get_flag(options::EXACT) || size.is_some();
-    let zero = matches.get_flag(options::ZERO);
-    let verbose = matches.get_flag(options::VERBOSE);
+    let wipe_options = WipeOptions {
+        n_passes: iterations,
+        remove_method,
+        size,
+        exact: matches.get_flag(options::EXACT) || size.is_some(),
+        zero: matches.get_flag(options::ZERO),
+        verbose: matches.get_flag(options::VERBOSE),
+        force,
+    };
 
     for path_str in matches.get_many::<OsString>(options::FILE).unwrap() {
-        show_if_err!(wipe_file(
-            path_str,
-            iterations,
-            remove_method,
-            size,
-            exact,
-            zero,
-            random_source.as_ref(),
-            verbose,
-            force,
-        ));
+        show_if_err!(wipe_file(path_str, &wipe_options, random_source.as_ref()));
     }
     Ok(())
 }
@@ -610,19 +617,21 @@ fn create_standard_pass_sequence(num_passes: usize) -> Vec<PassType> {
     sequence
 }
 
-#[allow(clippy::too_many_arguments)]
 #[allow(clippy::cognitive_complexity)]
 fn wipe_file(
     path_str: &OsString,
-    n_passes: usize,
-    remove_method: RemoveMethod,
-    size: Option<u64>,
-    exact: bool,
-    zero: bool,
+    wipe_options: &WipeOptions,
     random_source: Option<&RefCell<File>>,
-    verbose: bool,
-    force: bool,
 ) -> UResult<()> {
+    let WipeOptions {
+        n_passes,
+        remove_method,
+        size,
+        exact,
+        zero,
+        verbose,
+        force,
+    } = *wipe_options;
     // Get these potential errors out of the way first
     let path = Path::new(path_str);
 
