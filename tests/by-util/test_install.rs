@@ -2382,8 +2382,8 @@ fn test_selinux() {
         new_ucmd!()
             .arg(arg)
             .arg("-v")
-            .arg(at.plus_as_string(src))
-            .arg(at.plus_as_string(dest))
+            .arg(at.plus(src))
+            .arg(at.plus(dest))
             .succeeds()
             .stdout_contains("orig' -> '");
 
@@ -2393,7 +2393,7 @@ fn test_selinux() {
 
         let Ok(context_value) = context_value else {
             println!("Skipping SELinux test: getfattr not available or failed");
-            at.remove(at.plus_as_string(dest));
+            at.remove(at.plus(dest));
             continue;
         };
 
@@ -2401,7 +2401,7 @@ fn test_selinux() {
             context_value.contains("unconfined_u"),
             "Expected 'unconfined_u' not found in getfattr output:\n{context_value}"
         );
-        at.remove(at.plus_as_string(dest));
+        at.remove(at.plus(dest));
     }
 }
 
@@ -2428,12 +2428,12 @@ fn test_selinux_invalid_args() {
         new_ucmd!()
             .arg(arg)
             .arg("-v")
-            .arg(at.plus_as_string(src))
-            .arg(at.plus_as_string(dest))
+            .arg(at.plus(src))
+            .arg(at.plus(dest))
             .fails()
             .stderr_contains("failed to set default file creation");
 
-        at.remove(at.plus_as_string(dest));
+        at.remove(at.plus(dest));
     }
 }
 
@@ -2454,8 +2454,8 @@ fn test_selinux_default_context() {
     new_ucmd!()
         .arg("-Z")
         .arg("-v")
-        .arg(at.plus_as_string(src))
-        .arg(at.plus_as_string(dest))
+        .arg(at.plus(src))
+        .arg(at.plus(dest))
         .succeeds()
         .stdout_contains("orig' -> '");
     assert!(at.file_exists(dest));

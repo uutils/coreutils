@@ -102,7 +102,7 @@ fn test_nohup_replaced_stdin_is_not_readable() {
     sleep(std::time::Duration::from_millis(10));
 
     // cat's error message goes to stderr, which nohup redirected into nohup.out
-    let content = std::fs::read_to_string(at.plus_as_string("nohup.out")).unwrap();
+    let content = at.read("nohup.out");
     assert!(
         content.contains("Bad file descriptor"),
         "expected a read error from cat in nohup.out, got: {content:?}"

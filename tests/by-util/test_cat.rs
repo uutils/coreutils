@@ -762,7 +762,7 @@ fn test_write_fast_read_error() {
     at.write("foo", "content");
 
     // Remove read permissions to cause a read error
-    let file_path = at.plus_as_string("foo");
+    let file_path = at.plus("foo");
     let mut perms = std::fs::metadata(&file_path).unwrap().permissions();
     perms.set_mode(0o000); // No permissions
     std::fs::set_permissions(&file_path, perms).unwrap();
@@ -803,7 +803,7 @@ fn test_appending_same_input_output() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.write("foo", "content");
-    let foo_file = at.plus_as_string("foo");
+    let foo_file = at.plus("foo");
 
     let file_read = File::open(&foo_file).unwrap();
     let file_write = OpenOptions::new().append(true).open(&foo_file).unwrap();

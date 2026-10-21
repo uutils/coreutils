@@ -797,10 +797,10 @@ fn test_ls_a() {
 fn test_ls_width() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("test-width-1"));
-    at.touch(at.plus_as_string("test-width-2"));
-    at.touch(at.plus_as_string("test-width-3"));
-    at.touch(at.plus_as_string("test-width-4"));
+    at.touch(at.plus("test-width-1"));
+    at.touch(at.plus("test-width-2"));
+    at.touch(at.plus("test-width-3"));
+    at.touch(at.plus("test-width-4"));
 
     for option in [
         "-w 100",
@@ -897,10 +897,10 @@ fn test_ls_width() {
 fn test_ls_columns() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("test-columns-1"));
-    at.touch(at.plus_as_string("test-columns-2"));
-    at.touch(at.plus_as_string("test-columns-3"));
-    at.touch(at.plus_as_string("test-columns-4"));
+    at.touch(at.plus("test-columns-1"));
+    at.touch(at.plus("test-columns-2"));
+    at.touch(at.plus("test-columns-3"));
+    at.touch(at.plus("test-columns-4"));
 
     // Columns is the default
     let result = scene.ucmd().succeeds();
@@ -958,10 +958,10 @@ fn test_ls_columns() {
 fn test_ls_across() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("test-across-1"));
-    at.touch(at.plus_as_string("test-across-2"));
-    at.touch(at.plus_as_string("test-across-3"));
-    at.touch(at.plus_as_string("test-across-4"));
+    at.touch(at.plus("test-across-1"));
+    at.touch(at.plus("test-across-2"));
+    at.touch(at.plus("test-across-3"));
+    at.touch(at.plus("test-across-4"));
 
     for option in ACROSS_ARGS {
         let result = scene.ucmd().arg(option).succeeds();
@@ -986,10 +986,10 @@ fn test_ls_across() {
 fn test_ls_commas() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("test-commas-1"));
-    at.touch(at.plus_as_string("test-commas-2"));
-    at.touch(at.plus_as_string("test-commas-3"));
-    at.touch(at.plus_as_string("test-commas-4"));
+    at.touch(at.plus("test-commas-1"));
+    at.touch(at.plus("test-commas-2"));
+    at.touch(at.plus("test-commas-3"));
+    at.touch(at.plus("test-commas-4"));
 
     for option in COMMA_ARGS {
         let result = scene.ucmd().arg(option).succeeds();
@@ -1050,8 +1050,8 @@ fn test_ls_zero() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.mkdir("0-test-zero");
-    at.touch(at.plus_as_string("2-test-zero"));
-    at.touch(at.plus_as_string("3-test-zero"));
+    at.touch(at.plus("2-test-zero"));
+    at.touch(at.plus("3-test-zero"));
 
     let ignored_opts = [
         "--quoting-style=c",
@@ -1106,7 +1106,7 @@ fn test_ls_zero() {
 
     #[cfg(unix)]
     {
-        at.touch(at.plus_as_string("1\ntest-zero"));
+        at.touch(at.plus("1\ntest-zero"));
 
         let ignored_opts = [
             "--quoting-style=c",
@@ -1169,9 +1169,9 @@ fn test_ls_zero() {
 fn test_ls_commas_trailing() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("test-commas-trailing-2"));
+    at.touch(at.plus("test-commas-trailing-2"));
 
-    at.touch(at.plus_as_string("test-commas-trailing-1"));
+    at.touch(at.plus("test-commas-trailing-1"));
     at.append(
         "test-commas-trailing-1",
         &(0..2000)
@@ -1193,7 +1193,7 @@ fn test_ls_commas_trailing() {
 fn test_ls_long() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("test-long"));
+    at.touch(at.plus("test-long"));
 
     #[cfg(not(windows))]
     let regex = r"[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3}.*";
@@ -1215,9 +1215,9 @@ fn test_ls_long() {
 fn test_ls_long_format() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.mkdir(at.plus_as_string("test-long-dir"));
-    at.touch(at.plus_as_string("test-long-dir/test-long-file"));
-    at.mkdir(at.plus_as_string("test-long-dir/test-long-dir"));
+    at.mkdir(at.plus("test-long-dir"));
+    at.touch(at.plus("test-long-dir/test-long-file"));
+    at.mkdir(at.plus("test-long-dir/test-long-dir"));
 
     // Assuming sane username do not have spaces within them.
     // A line of the output should be:
@@ -1771,9 +1771,9 @@ fn test_ls_directory_dangling_symlink_uses_ln_when_or_blank() {
 fn test_ls_long_total_size() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("test-long"));
+    at.touch(at.plus("test-long"));
     at.append("test-long", "1");
-    at.touch(at.plus_as_string("test-long2"));
+    at.touch(at.plus("test-long2"));
     at.append("test-long2", "2");
 
     let expected_prints: HashMap<_, _> = if cfg!(unix) {
@@ -1817,7 +1817,7 @@ fn test_ls_long_total_size() {
 fn test_ls_long_formats() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("test-long-formats"));
+    at.touch(at.plus("test-long-formats"));
 
     // Zero or one "." for indicating a file with security context
 
@@ -1964,8 +1964,8 @@ fn test_ls_long_formats() {
 fn test_ls_oneline() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("test-oneline-1"));
-    at.touch(at.plus_as_string("test-oneline-2"));
+    at.touch(at.plus("test-oneline-1"));
+    at.touch(at.plus("test-oneline-2"));
 
     // Bit of a weird situation: in the tests oneline and columns have the same output,
     // except on Windows.
@@ -1985,7 +1985,7 @@ fn test_ls_deref() {
     let path_regexp = r"(.*)test-long.link -> (.*)test-long(.*)";
     let re = Regex::new(path_regexp).unwrap();
 
-    at.touch(at.plus_as_string("test-long"));
+    at.touch(at.plus("test-long"));
     at.symlink_file("test-long", "test-long.link");
     assert!(at.is_symlink("test-long.link"));
 
@@ -2619,7 +2619,7 @@ fn test_ls_order_time_breaks_ties_by_name() {
     }
     let same = FileTime::from_unix_time(1_700_000_000, 0);
     for name in names {
-        set_file_times(at.plus_as_string(name), same, same).unwrap();
+        set_file_times(at.plus(name), same, same).unwrap();
     }
 
     scene
@@ -2676,11 +2676,7 @@ fn test_ls_order_time() {
     at.read("test-3");
 
     // Set permissions of test-2, only changing ctime
-    std::fs::set_permissions(
-        at.plus_as_string("test-2"),
-        at.metadata("test-2").permissions(),
-    )
-    .unwrap();
+    std::fs::set_permissions(at.plus("test-2"), at.metadata("test-2").permissions()).unwrap();
 
     scene.ucmd().arg("-al").succeeds();
 
@@ -2789,8 +2785,8 @@ fn test_ls_files_dirs() {
     at.mkdir("a/b");
     at.mkdir("a/b/c");
     at.mkdir("z");
-    at.touch(at.plus_as_string("a/a"));
-    at.touch(at.plus_as_string("a/b/b"));
+    at.touch(at.plus("a/a"));
+    at.touch(at.plus("a/b/b"));
 
     scene.ucmd().arg("a").succeeds();
     scene.ucmd().arg("a/a").succeeds();
@@ -2821,8 +2817,8 @@ fn test_ls_recursive() {
     at.mkdir("a/b");
     at.mkdir("a/b/c");
     at.mkdir("z");
-    at.touch(at.plus_as_string("a/a"));
-    at.touch(at.plus_as_string("a/b/b"));
+    at.touch(at.plus("a/a"));
+    at.touch(at.plus("a/b/b"));
 
     scene.ucmd().arg("a").succeeds();
     scene.ucmd().arg("a/a").succeeds();
@@ -3634,7 +3630,7 @@ fn test_ls_indicator_style() {
     at.mkdir("directory");
     assert!(at.dir_exists("directory"));
 
-    at.touch(at.plus_as_string("link-src"));
+    at.touch(at.plus("link-src"));
     at.symlink_file("link-src", "link-dest.link");
     assert!(at.is_symlink("link-dest.link"));
 
@@ -3837,7 +3833,7 @@ fn test_ls_indicator_style() {
     at.mkdir("directory");
     assert!(at.dir_exists("directory"));
 
-    at.touch(at.plus_as_string("link-src"));
+    at.touch(at.plus("link-src"));
     at.symlink_file("link-src", "link-dest.link");
     assert!(at.is_symlink("link-dest.link"));
 
@@ -4335,8 +4331,8 @@ fn test_ls_quoting_style() {
 fn test_ls_quoting_style_env_var_default() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("foo-1"));
-    at.touch(at.plus_as_string("bar-2"));
+    at.touch(at.plus("foo-1"));
+    at.touch(at.plus("bar-2"));
 
     // If no quoting style argument is provided, the QUOTING_STYLE environment variable
     // shall be used.
@@ -4410,8 +4406,8 @@ fn test_ls_invalid_quoting_style_env_var_non_utf8() {
 fn test_ls_quoting_style_arg_overrides_env_var() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("foo-1"));
-    at.touch(at.plus_as_string("bar-2"));
+    at.touch(at.plus("foo-1"));
+    at.touch(at.plus("bar-2"));
 
     // The quoting style given by the env variable should be
     // overridden by any escape style provided by argument.

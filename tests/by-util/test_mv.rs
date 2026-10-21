@@ -983,13 +983,13 @@ fn test_mv_update_option() {
     let times_later = FileTimes::new().set_accessed(now).set_modified(later);
     File::options()
         .write(true)
-        .open(at.plus_as_string(file_a))
+        .open(at.plus(file_a))
         .unwrap()
         .set_times(times_now)
         .unwrap();
     File::options()
         .write(true)
-        .open(at.plus_as_string(file_b))
+        .open(at.plus(file_b))
         .unwrap()
         .set_times(times_later)
         .unwrap();
@@ -1732,13 +1732,13 @@ fn test_acl() {
     let at = &scene.fixtures;
     let path1 = "a";
     let path2 = "b";
-    let file = "a/file";
     let file_target = "b/file";
     at.mkdir(path1);
     at.mkdir(path2);
-    at.touch(file);
+    let filename = "a/file";
+    at.touch(filename);
+    let path = at.plus(filename);
 
-    let path = at.plus_as_string(file);
     // calling the command directly. xattr requires some dev packages to be installed
     // and it adds a complex dependency just for a test
     match Command::new("setfacl")
@@ -1759,7 +1759,7 @@ fn test_acl() {
 
     scene.ucmd().arg(&path).arg(path2).succeeds();
 
-    assert!(compare_xattrs(&file, &file_target));
+    assert!(compare_xattrs(&path, file_target));
 }
 
 #[test]
@@ -2789,10 +2789,7 @@ fn test_mv_selinux_context() {
         let mut cmd = scene.ucmd();
         cmd.arg(arg);
 
-        let result = cmd
-            .arg(at.plus_as_string(src))
-            .arg(at.plus_as_string(dest))
-            .run();
+        let result = cmd.arg(at.plus(src)).arg(at.plus(dest)).run();
 
         // Skip test if SELinux is not enabled
         if result
@@ -2819,8 +2816,8 @@ fn test_mv_selinux_context() {
         }
 
         // Clean up files
-        let _ = std::fs::remove_file(at.plus_as_string(dest));
-        let _ = std::fs::remove_file(at.plus_as_string(src));
+        let _ = std::fs::remove_file(at.plus(dest));
+        let _ = std::fs::remove_file(at.plus(src));
     }
 }
 
@@ -2987,7 +2984,7 @@ fn test_mv_xattr_enotsup_silent() {
     {
         scene
             .ucmd()
-            .arg(at.plus_as_string("src"))
+            .arg(at.plus("src"))
             .arg("/dev/shm/mv_test")
             .succeeds()
             .no_stderr();
@@ -3031,7 +3028,7 @@ fn test_mv_cross_device_dir_xattr_preserved() {
 
     scene
         .ucmd()
-        .arg(at.plus_as_string("src_dir"))
+        .arg(at.plus("src_dir"))
         .arg(dst_path.to_str().unwrap())
         .succeeds()
         .no_stderr();
@@ -3144,7 +3141,7 @@ fn test_mv_cross_device_symlink_onto_existing() {
 
     scene
         .ucmd()
-        .arg(at.plus_as_string("src_link"))
+        .arg(at.plus("src_link"))
         .arg(dst_path.to_str().unwrap())
         .succeeds()
         .no_stderr();
@@ -3187,7 +3184,7 @@ fn test_mv_cross_device_symlink_onto_existing_dir() {
     scene
         .ucmd()
         .arg("-T")
-        .arg(at.plus_as_string("src_link"))
+        .arg(at.plus("src_link"))
         .arg(dst_dir.to_str().unwrap())
         .fails();
 
