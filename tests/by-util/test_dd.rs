@@ -1435,6 +1435,49 @@ fn test_bytes_suffix_recursive() {
         .stdout_only("\0\0\0\0abcdef");
 }
 
+/// `conv=swab` pairs the bytes of the whole input, so a byte left over at the
+/// end of an odd-length block is swapped with the first byte of the next one.
+#[test]
+fn test_swab_across_blocks() {
+    for (args, expected) in [
+        (&["bs=3"][..], "badcfeg"),
+        (&["bs=1"], "badcfeg"),
+        (&["ibs=3", "obs=2"], "badcfeg"),
+        (&["bs=3", "count=1"], "bac"),
+        (&["bs=3", "conv=ucase"], "BADCFEG"),
+        (&["bs=3", "conv=sync"], "badcfe\0g\0"),
+    ] {
+        new_ucmd!()
+            .args(&["conv=swab", "status=none"])
+            .args(args)
+            .pipe_in("abcdefg")
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+/// `conv=swab` with an odd number of bytes in each read from a pipe.
+#[cfg(not(windows))]
+#[test]
+fn test_swab_delayed_reader() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    let child = ucmd
+        .args(&["conv=swab", "if=fifo", "status=none"])
+        .run_no_wait();
+    {
+        let mut fifo = OpenOptions::new()
+            .write(true)
+            .open(at.plus("fifo"))
+            .unwrap();
+        fifo.write_all(b"abc").unwrap();
+        // Let dd read the first three bytes on their own.
+        sleep(Duration::from_millis(100));
+        fifo.write_all(b"defg").unwrap();
+    }
+    child.wait().unwrap().success().stdout_only("badcfeg");
+}
+
 /// Test for "conv=sync" with a slow reader.
 #[cfg(not(windows))]
 #[test]

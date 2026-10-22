@@ -1218,7 +1218,9 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     // Aligned read scratch sized to the block size (the max size needed).
     // 4 KiB alignment satisfies block devices that enforce a strict
     // `dma_alignment` for `iflag=direct` reads — see `AlignedBuf`.
-    let mut buf = AlignedBuf::new(bsize)?;
+    // `conv=swab` may put a byte carried over from the previous block in front of a full block.
+    let mut buf = AlignedBuf::new(bsize.saturating_add(usize::from(i.settings.iconv.swab)))?;
+    let mut swab_carry = None;
     // Applies the `conv=` flags not handled by `read_helper`.
     let mut converter = i.settings.iconv.mode.map(Converter::new);
     // The records truncated by `converter`, copied into `rstat` for progress
@@ -1242,8 +1244,8 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // best buffer size for reading based on the number of
         // blocks already read and the number of blocks remaining.
         let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, i.settings.ibs, bsize);
-        let Ok((rstat_update, data)) =
-            read_helper(&mut i, &mut buf, loop_bsize).map_err(|e| copy_error = Some(e))
+        let Ok((rstat_update, data)) = read_helper(&mut i, &mut buf, loop_bsize, &mut swab_carry)
+            .map_err(|e| copy_error = Some(e))
         else {
             break;
         };
@@ -1311,6 +1313,20 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         rstat.records_truncated = conv_rstat.records_truncated;
         let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), tp);
         prog_tx.send(prog_update).unwrap_or(());
+    }
+
+    // With an odd number of input bytes, `conv=swab` keeps the last one as it is.
+    if copy_error.is_none()
+        && let Some(carry) = swab_carry
+    {
+        let written = match &mut converter {
+            None => o.write_blocks(&[carry]),
+            Some(c) => write_converted(c, &[carry], &mut conv_rstat, &mut conv_wstat, &mut o),
+        };
+        match written {
+            Ok(wstat_update) => wstat += wstat_update,
+            Err(e) => copy_error = Some(e),
+        }
     }
 
     wstat += conv_wstat;
@@ -1460,22 +1476,29 @@ fn alloc_copy_buffer(bsize: usize) -> io::Result<Vec<u8>> {
 
 /// Read one block worth of data, applying `conv=sync` and `conv=swab`.
 ///
-/// `read_buf` is the page-aligned scratch read into directly. The other
-/// `conv=` transformations are applied by [`Converter`].
+/// `read_buf` is the page-aligned scratch read into directly. With
+/// `conv=swab` it must be one byte longer than `bsize`. The other `conv=`
+/// transformations are applied by [`Converter`].
+///
+/// `conv=swab` pairs the bytes of the whole input, not of each block: a byte
+/// left without a pair at the end of a block is kept in `swab_carry` and
+/// paired with the first byte of the next block.
 fn read_helper<'a>(
     i: &mut Input,
     read_buf: &'a mut AlignedBuf,
     bsize: usize,
+    swab_carry: &mut Option<u8>,
 ) -> io::Result<(ReadStat, &'a [u8])> {
     fn perform_swab(buf: &mut [u8]) {
-        for base in (1..buf.len()).step_by(2) {
-            buf.swap(base, base - 1);
+        for pair in buf.as_chunks_mut::<2>().0 {
+            pair.swap(0, 1);
         }
     }
 
     let (rstat, data_len) = {
-        let scratch = &mut read_buf.as_mut_bytes()[..bsize];
-        let (rstat, data_len) = if let Some(ch) = i.settings.iconv.sync {
+        let buf = read_buf.as_mut_bytes();
+        let scratch = &mut buf[..bsize];
+        let (rstat, mut data_len) = if let Some(ch) = i.settings.iconv.sync {
             i.fill_blocks(scratch, ch)?
         } else {
             let s = i.fill_consecutive(scratch)?;
@@ -1483,7 +1506,16 @@ fn read_helper<'a>(
             (s, n)
         };
         if !rstat.is_empty() && i.settings.iconv.swab {
-            perform_swab(&mut scratch[..data_len]);
+            if let Some(carry) = swab_carry.take() {
+                buf.copy_within(..data_len, 1);
+                buf[0] = carry;
+                data_len += 1;
+            }
+            if data_len % 2 == 1 {
+                data_len -= 1;
+                *swab_carry = Some(buf[data_len]);
+            }
+            perform_swab(&mut buf[..data_len]);
         }
         (rstat, data_len)
     };
