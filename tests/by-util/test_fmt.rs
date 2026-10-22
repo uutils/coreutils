@@ -703,3 +703,23 @@ fn test_fmt_width_is_a_hard_maximum() {
             "    indented text\n    that is long\n    enough to wrap\n    at a narrow\n    width\n",
         );
 }
+
+#[test]
+fn test_first_word_ending_a_sentence() {
+    // A first word that ends a sentence at the end of its line gets two
+    // spaces after it, like any later word.
+    for (args, input, expected) in [
+        (&[][..], "Hello.\nWorld.\n", "Hello.  World.\n"),
+        (&["-u"], "Why?\nnot\n", "Why?  not\n"),
+        // --quick takes the greedy path
+        (&["-q"], "Hello!\nWorld.\n", "Hello!  World.\n"),
+        (&[], "A.\nB.\nC.\n", "A.  B.  C.\n"),
+        (&["-p", "x"], "x Hello.\nx World.\n", "x Hello.  World.\n"),
+    ] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
