@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use std::ffi::{CString, OsStr};
-use std::fs;
+use uucore::fs::get_metadata;
 
 use crate::{PathCondition, modified_since_read};
 
@@ -15,11 +15,7 @@ use crate::{PathCondition, modified_since_read};
 /// Everything the platform does report - file type, size, timestamps -
 /// behaves as it does elsewhere.
 pub fn path(path: &OsStr, condition: &PathCondition) -> bool {
-    let metadata = if condition == &PathCondition::SymLink {
-        fs::symlink_metadata(path)
-    } else {
-        fs::metadata(path)
-    };
+    let metadata = get_metadata(path, condition != &PathCondition::SymLink);
 
     let Ok(metadata) = metadata else {
         return false;

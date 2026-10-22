@@ -34,7 +34,7 @@ use uucore::{
     display::Quotable,
     error::{UError, UResult, set_exit_code, strip_errno},
     format_usage,
-    fs::FileInformation,
+    fs::{FileInformation, get_metadata},
     fsext::metadata_get_time,
     os_str_as_bytes_lossy,
     parser::shortcut_value_parser::ShortcutValueParser,
@@ -914,7 +914,7 @@ impl<'a> PathData<'a> {
                 {
                     dir_entry.metadata()
                 } else {
-                    get_metadata_with_deref_opt(self.path(), self.must_dereference)
+                    get_metadata(self.path(), self.must_dereference)
                 };
 
                 match md {
@@ -1611,20 +1611,11 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             !match ft {
                 None => {
                     // If it metadata cannot be determined, treat as a file.
-                    get_metadata_with_deref_opt(&p.p_buf, true)
-                        .map_or_else(|_| false, |m| m.is_dir())
+                    get_metadata(&p.p_buf, true).map_or_else(|_| false, |m| m.is_dir())
                 }
                 Some(ft) => ft.is_dir(),
             }
         });
-    }
-}
-
-fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
-    if dereference {
-        p_buf.metadata()
-    } else {
-        p_buf.symlink_metadata()
     }
 }
 
@@ -1677,7 +1668,7 @@ fn get_security_context<'a>(
     // If we must dereference, ensure that the symlink is actually valid even if the system
     // does not support SELinux.
     // Conforms to the GNU coreutils where a dangling symlink results in exit code 1.
-    if must_dereference && let Err(err) = get_metadata_with_deref_opt(path, must_dereference) {
+    if must_dereference && let Err(err) = get_metadata(path, must_dereference) {
         // The Path couldn't be dereferenced, so return early and set exit code 1
         // to indicate a minor error
         // Only show error when context display is requested to avoid duplicate messages
