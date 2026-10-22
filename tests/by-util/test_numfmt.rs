@@ -607,6 +607,29 @@ fn test_round_with_to_unit() {
 }
 
 #[test]
+fn test_round_without_suffix() {
+    // A value printed without a suffix is rounded with the method too, and
+    // the suffix is only added if the rounded value needs one.
+    for (method, exp) in [
+        ("from-zero", ["13", "-13", "1.0k", "1.0K"]),
+        ("towards-zero", ["12", "-12", "999", "1023"]),
+        ("up", ["13", "-12", "1.0k", "1.0K"]),
+        ("down", ["12", "-13", "999", "1023"]),
+        ("nearest", ["12", "-12", "1.0k", "1.0K"]),
+    ] {
+        let round = format!("--round={method}");
+        new_ucmd!()
+            .args(&["--to=si", &round, "--", "12.1", "-12.1", "999.9"])
+            .succeeds()
+            .stdout_only(exp[..3].join("\n") + "\n");
+        new_ucmd!()
+            .args(&["--to=iec", &round, "1023.9"])
+            .succeeds()
+            .stdout_only(format!("{}\n", exp[3]));
+    }
+}
+
+#[test]
 fn test_to_unit_with_unitless_small_value_uses_display_rounding() {
     new_ucmd!()
         .args(&["--to=iec", "--to-unit=689", "701"])

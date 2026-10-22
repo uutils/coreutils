@@ -584,8 +584,18 @@ fn consider_suffix(
         Unit::None => return Ok((n, None)),
     };
 
+    // The suffix is chosen from the value as it will be printed, so with
+    // `--round=down` 999.9 stays 999 instead of becoming 0.9k.
+    let unscaled = if is_precision_specified {
+        round_with_precision(n, round_method, 0)
+    } else {
+        div_round(n, 1.0, round_method)
+    };
+    if unscaled.abs() <= bases[1] - 1.0 {
+        return Ok((n, None));
+    }
+
     let i = match abs_n {
-        _ if abs_n <= bases[1] - 1.0 => return Ok((n, None)),
         _ if abs_n < bases[2] => 1,
         _ if abs_n < bases[3] => 2,
         _ if abs_n < bases[4] => 3,
@@ -743,7 +753,7 @@ fn transform_to(
             let i2 = round_with_precision(i2, round_method, 0);
             localize(format_float(i2, precision))
         }
-        None => localize(format_float(i2, 0)),
+        None => localize(format_float(div_round(i2, 1.0, round_method), 0)),
         Some(s) if precision > 0 && precision <= u16::MAX.into() => localize(format!(
             "{i2:.precision$}{unit_separator}{}",
             DisplayableSuffix(s, opts.to),
