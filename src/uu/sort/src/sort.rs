@@ -432,15 +432,16 @@ impl GlobalSettings {
     /// looking at any key. That is only the same comparison when the single
     /// key spans the entire line: `-n -k1.2` sorts on the line's second
     /// character onwards, and `-n -t. -k2` on its second field, neither of
-    /// which the line as a whole stands for. A key of its own `r` also has to
-    /// go the long way, since the shortcut only knows the global one.
+    /// which the line as a whole stands for. A key whose `r` differs from the
+    /// global one also has to go the long way, since the shortcut only knows
+    /// the global one.
     fn can_use_whole_line_numeric(&self) -> bool {
         let [selector] = &self.selectors[..] else {
             return false;
         };
         self.mode == SortMode::Numeric
             && selector.settings.mode == SortMode::Numeric
-            && !selector.settings.reverse
+            && selector.settings.reverse == self.reverse
             && selector.from.field == 1
             && selector.from.char == 1
             && selector.to.is_none()
@@ -465,6 +466,7 @@ impl GlobalSettings {
             && !selector.settings.dictionary_order
             && !selector.settings.ignore_non_printing
             && !selector.settings.ignore_blanks
+            && selector.settings.reverse == self.reverse
     }
 
     /// Returns true when the ASCII case-insensitive fast path is valid.
@@ -483,6 +485,7 @@ impl GlobalSettings {
             && !selector.settings.dictionary_order
             && !selector.settings.ignore_non_printing
             && !selector.settings.ignore_blanks
+            && selector.settings.reverse == self.reverse
     }
 }
 
