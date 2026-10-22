@@ -1588,7 +1588,7 @@ fn get_block_bytes(md: &Metadata) -> u64 {
 /// up: with `--block-size=1000`, 4096 allocated bytes are five blocks, not
 /// four. `-h`/`--si` keep the byte count, which the human-readable formatter
 /// scales itself.
-#[allow(unused_variables)]
+#[cfg_attr(not(unix), allow(unused_variables))]
 fn scale_block_bytes(bytes: u64, config: &Config) -> u64 {
     #[cfg(unix)]
     {
