@@ -5139,11 +5139,13 @@ fn test_tail_obsolete_error_cases() {
 #[test]
 fn test_tail_obsolete_bare_c_needs_posix_1992() {
     new_ucmd!()
+        .ignore_stdin_write_error()
         .arg("-c")
         .pipe_in("abcdefghijkl")
         .fails_with_code(1)
         .no_stdout();
     new_ucmd!()
+        .ignore_stdin_write_error()
         .env("_POSIX2_VERSION", "200809")
         .arg("-c")
         .pipe_in("abcdefghijkl")
@@ -5161,7 +5163,8 @@ fn test_tail_obsolete_bare_c_needs_posix_1992() {
 fn test_tail_obsolete_plus_is_a_file_under_posix_2001() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("+2", "file\n");
-    ucmd.env("_POSIX2_VERSION", "200112")
+    ucmd.ignore_stdin_write_error()
+        .env("_POSIX2_VERSION", "200112")
         .arg("+2")
         .pipe_in("a\nb\n")
         .succeeds()
