@@ -339,9 +339,10 @@ impl Default for NumericLocaleSettings {
 }
 
 impl NumericLocaleSettings {
-    fn num_info_settings(self, accept_si_units: bool) -> NumInfoParseSettings {
+    fn num_info_settings(self, accept_si_units: bool, fold_si_units: bool) -> NumInfoParseSettings {
         NumInfoParseSettings {
             accept_si_units,
+            fold_si_units,
             thousands_separator: self.thousands_sep,
             decimal_pt: self.decimal_pt,
         }
@@ -794,9 +795,10 @@ impl<'a> Line<'a> {
             match selector.settings.mode {
                 SortMode::Numeric | SortMode::HumanNumeric => {
                     // find out which range is used for numeric comparisons
+                    // GNU marks a lowercase unit as not part of the key, even with -f.
                     let mut parse_settings = settings
                         .numeric_locale
-                        .num_info_settings(selector.settings.mode == SortMode::HumanNumeric);
+                        .num_info_settings(selector.settings.mode == SortMode::HumanNumeric, false);
                     // Debug annotations should ignore thousands separators to match GNU output.
                     parse_settings.thousands_separator = None;
                     let (_, num_range) =
@@ -1375,7 +1377,10 @@ impl FieldSelector {
             // Parse NumInfo for this number.
             let (info, num_range) = NumInfo::parse(
                 range_str,
-                &numeric_locale.num_info_settings(self.settings.mode == SortMode::HumanNumeric),
+                &numeric_locale.num_info_settings(
+                    self.settings.mode == SortMode::HumanNumeric,
+                    self.settings.ignore_case,
+                ),
             );
             // Shorten the range to what we need to pass to numeric_str_cmp later.
             range_str = &range_str[num_range];
