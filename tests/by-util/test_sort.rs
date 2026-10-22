@@ -2466,6 +2466,24 @@ fn test_files0_from_non_utf8_filename() {
         .stderr_contains("sort: cannot read");
 }
 
+#[rstest::rstest]
+#[case(&["-c", "dir"])]
+#[case(&["-C", "dir"])]
+#[case(&["-m", "input", "dir"])]
+#[cfg(target_os = "linux")]
+fn test_read_error_on_reader_thread(#[case] args: &[&str]) {
+    // `--check` used to exit 0 without a message when its input could not be
+    // read, and `--merge` printed the untranslated message id.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.write("input", "a\nb\n");
+    ucmd.args(args)
+        .fails_with_code(2)
+        .stderr_contains("sort: read failed: ")
+        .stderr_contains("Is a directory")
+        .stderr_does_not_contain("sort-read-failed");
+}
+
 #[test]
 #[cfg(unix)]
 fn test_files0_from_unreadable_source() {
