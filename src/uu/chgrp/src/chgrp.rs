@@ -8,7 +8,7 @@
 #![cfg(unix)]
 
 use uucore::display::Quotable;
-use uucore::entries;
+use uucore::entries::{self, Group, Locate};
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::perms::{GidUidOwnerFilter, IfFrom, chown_base, options};
@@ -16,6 +16,7 @@ use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 
@@ -27,27 +28,26 @@ enum ChgrpError {
 
 impl UError for ChgrpError {}
 
-fn parse_gid_from_str(group: &str) -> Result<u32, String> {
-    if let Some(gid_str) = group.strip_prefix(':') {
-        // Handle :gid format
+fn parse_gid_from_str(group: &OsStr) -> Result<u32, String> {
+    if let Some(gid_str) = group.to_str().and_then(|s| s.strip_prefix(':')) {
         gid_str
             .parse::<u32>()
             .map_err(|_| translate!("chgrp-error-invalid-group-id", "gid_str" => gid_str))
     } else {
-        // Try as group name first
-        match entries::grp2gid(group) {
-            Ok(g) => Ok(g),
-            // If group name lookup fails, try parsing as raw number
-            Err(_) => group
-                .parse::<u32>()
-                .map_err(|_| translate!("chgrp-error-invalid-group", "group" => group)),
-        }
+        Group::locate(group).map(|g| g.gid).or_else(|_| {
+            group
+                .to_str()
+                .and_then(|s| s.parse::<u32>().ok())
+                .ok_or_else(
+                    || translate!("chgrp-error-invalid-group", "group" => group.to_string_lossy()),
+                )
+        })
     }
 }
 
 fn get_dest_gid(matches: &ArgMatches) -> UResult<(Option<u32>, String)> {
     let mut raw_group = String::new();
-    let dest_gid = if let Some(file) = matches.get_one::<std::ffi::OsString>(options::REFERENCE) {
+    let dest_gid = if let Some(file) = matches.get_one::<OsString>(options::REFERENCE) {
         let path = std::path::Path::new(file);
         fs::metadata(path)
             .map(|meta| {
@@ -60,10 +60,10 @@ fn get_dest_gid(matches: &ArgMatches) -> UResult<(Option<u32>, String)> {
             )?
     } else {
         let group = matches
-            .get_one::<String>(options::ARG_GROUP)
-            .map(String::as_str)
+            .get_one::<OsString>(options::ARG_GROUP)
+            .map(OsString::as_os_str)
             .unwrap_or_default();
-        raw_group = group.to_string();
+        raw_group = group.to_string_lossy().into_owned();
         if group.is_empty() {
             None
         } else {
@@ -78,9 +78,9 @@ fn get_dest_gid(matches: &ArgMatches) -> UResult<(Option<u32>, String)> {
 
 fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
     // Handle --from option
-    let filter = if let Some(from_group) = matches.get_one::<String>(options::FROM) {
+    let filter = if let Some(from_group) = matches.get_one::<OsString>(options::FROM) {
         let Ok(gid) = parse_gid_from_str(from_group) else {
-            return Err(ChgrpError::InvalidUser(from_group.clone()).into());
+            return Err(ChgrpError::InvalidUser(from_group.to_string_lossy().into_owned()).into());
         };
         IfFrom::Group(gid)
     } else {
@@ -159,12 +159,13 @@ pub fn uu_app() -> Command {
                 .long(options::REFERENCE)
                 .value_name("RFILE")
                 .value_hint(clap::ValueHint::FilePath)
-                .value_parser(clap::value_parser!(std::ffi::OsString))
+                .value_parser(clap::value_parser!(OsString))
                 .help(translate!("chgrp-help-reference")),
         )
         .arg(
             Arg::new(options::FROM)
                 .long(options::FROM)
+                .value_parser(clap::value_parser!(OsString))
                 .value_name("GROUP")
                 .help(translate!("chgrp-help-from")),
         )

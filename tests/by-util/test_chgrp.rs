@@ -693,3 +693,23 @@ fn verbose_missing_file_write_error_is_reported_not_panic() {
         .fails_with_code(1)
         .stderr_contains("chgrp: write error: No space left on device");
 }
+
+#[test]
+fn test_unknown_non_utf8_group_reports_lookup_error() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    new_ucmd!()
+        .args(&[OsStr::from_bytes(b"unknown_\xff"), OsStr::new("file")])
+        .fails_with_code(1)
+        .stderr_contains("invalid group:");
+    new_ucmd!()
+        .args(&[
+            OsStr::new("--from"),
+            OsStr::from_bytes(b"unknown_\xff"),
+            OsStr::new(&getegid().to_string()),
+            OsStr::new("file"),
+        ])
+        .fails_with_code(1)
+        .stderr_contains("invalid user:");
+}
