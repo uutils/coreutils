@@ -12,7 +12,8 @@ use std::iter::Cycle;
 use std::path::Path;
 use std::rc::Rc;
 use std::slice::Iter;
-use uucore::error::{UResult, USimpleError};
+use uucore::display::Quotable;
+use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::i18n::charmap::mb_char_len;
 use uucore::line_ending::LineEnding;
@@ -107,8 +108,8 @@ fn paste(
             )
         } else {
             let path = Path::new(&filename);
-            let file = File::open(path)?;
-            InputSource::File(BufReader::new(file))
+            let file = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
+            InputSource::File(BufReader::new(file), filename)
         };
 
         input_source_vec.push(input_source);
@@ -376,14 +377,17 @@ impl<'a> DelimiterState<'a> {
 }
 
 enum InputSource {
-    File(BufReader<File>),
+    /// An opened file and the name it was given as, for error messages.
+    File(BufReader<File>, OsString),
     StandardInput(Rc<RefCell<Stdin>>),
 }
 
 impl InputSource {
     fn read(&mut self, buf: &mut [u8]) -> UResult<usize> {
         let us = match self {
-            Self::File(bu) => bu.read(buf)?,
+            Self::File(bu, name) => bu
+                .read(buf)
+                .map_err_context(|| name.maybe_quote().to_string())?,
             Self::StandardInput(rc) => rc
                 .try_borrow()
                 .map_err(|bo| {
@@ -398,7 +402,9 @@ impl InputSource {
 
     fn read_until(&mut self, byte: u8, buf: &mut Vec<u8>) -> UResult<usize> {
         let us = match self {
-            Self::File(bu) => bu.read_until(byte, buf)?,
+            Self::File(bu, name) => bu
+                .read_until(byte, buf)
+                .map_err_context(|| name.maybe_quote().to_string())?,
             Self::StandardInput(rc) => rc
                 .try_borrow()
                 .map_err(|bo| {
