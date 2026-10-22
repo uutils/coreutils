@@ -310,6 +310,29 @@ fn test_version_sort_stable() {
 }
 
 #[test]
+fn test_version_sort_dictionary_order_and_ignore_nonprinting() {
+    // -d and -i drop characters from the key before it is compared as a version
+    for args in [&["-dV"][..], &["-k1dV"], &["-k1,1dV"]] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("b\n_a\na10\na_9\n")
+            .succeeds()
+            .stdout_is("_a\na_9\na10\nb\n");
+    }
+    new_ucmd!()
+        .arg("-iV")
+        .pipe_in("a10\na\x019\n")
+        .succeeds()
+        .stdout_is("a\x019\na10\n");
+    // The key of the second line is empty, so it sorts before "0"
+    new_ucmd!()
+        .args(&["-c", "-iV"])
+        .pipe_in("0\n\t\n")
+        .fails_with_code(1)
+        .stderr_only("sort: -:2: disorder: \t\n");
+}
+
+#[test]
 fn test_ignore_case_orders_punctuation_after_letters() {
     new_ucmd!()
         .arg("-f")
