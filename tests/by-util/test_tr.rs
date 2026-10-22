@@ -1272,6 +1272,52 @@ fn test_repeat_in_set1_padded_by_star_in_set2() {
 }
 
 #[test]
+fn test_star_in_set2_only_when_translating() {
+    // With `-d -s` set2 is only the set to squeeze, which a star cannot fill.
+    for set2 in ["[b*]", "[b*0]", "b[b*]c", "[=b=][b*]"] {
+        new_ucmd!()
+            .args(&["-ds", "a", set2])
+            .pipe_in("xaab")
+            .fails_with_code(1)
+            .stderr_only("tr: the [c*] construct may appear in string2 only when translating\n");
+    }
+    // A repeat with a count is still allowed.
+    new_ucmd!()
+        .args(&["-ds", "a", "[b*3]"])
+        .pipe_in("xaabb")
+        .succeeds()
+        .stdout_only("xb");
+}
+
+#[test]
+fn test_equivalence_class_in_set2_only_with_delete_and_squeeze() {
+    for args in [
+        &["a", "[=b=]"][..],
+        &["a", "b[=b=]"],
+        &["-s", "a", "[=b=]"],
+        &["-t", "a", "[=b=]"],
+        &["-c", "a", "[=b=]"],
+        &["a", "[=b=][:digit:]"],
+    ] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("xaab")
+            .fails_with_code(1)
+            .stderr_only("tr: [=c=] expressions may not appear in string2 when translating\n");
+    }
+    new_ucmd!()
+        .args(&["-ds", "a", "[=b=]"])
+        .pipe_in("xaabb")
+        .succeeds()
+        .stdout_only("xb");
+    new_ucmd!()
+        .args(&["[=a=]", "b"])
+        .pipe_in("xaab")
+        .succeeds()
+        .stdout_only("xbbb");
+}
+
+#[test]
 fn test_non_digit_repeat() {
     new_ucmd!()
         .args(&["a", "[b*c]"])
