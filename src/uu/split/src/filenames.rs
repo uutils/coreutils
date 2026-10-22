@@ -124,14 +124,13 @@ impl Suffix {
     /// - Do NOT pre-calculate new suffix length otherwise, i.e. when
     ///   suffix start >= N number of files
     ///   as in `split --numeric-suffixes=100 --number=r/100 file`
-    ///   OR when suffix length N is specified, except for N=0 (see edge cases below)
+    ///   OR when suffix length N is specified, except for N=0 (see edge case below)
     ///   `-a N` or `--suffix-length=N`
     ///
     /// Edge case:
-    /// - If suffix length is specified as 0 in a command line,
-    ///   first apply auto-width calculations and if still 0
-    ///   set it to default value.
-    ///   Do NOT change auto-widening value
+    /// - A suffix length of 0 in a command line is the same as no suffix
+    ///   length option: the default length is used, and auto-width and
+    ///   auto-widening apply as they would without `-a`.
     ///
     pub fn from(matches: &ArgMatches, strategy: &Strategy) -> Result<Self, SuffixError> {
         let stype: SuffixType;
