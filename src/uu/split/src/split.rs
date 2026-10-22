@@ -299,7 +299,7 @@ impl SettingsError {
         matches!(
             self,
             Self::Strategy(StrategyError::MultipleWays)
-                | Self::Suffix(SuffixError::ContainsSeparator(_))
+                | Self::Suffix(SuffixError::ContainsSeparator(_) | SuffixError::StartTooLarge)
         )
     }
 }

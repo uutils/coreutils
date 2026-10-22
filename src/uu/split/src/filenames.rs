@@ -98,6 +98,10 @@ pub enum SuffixError {
     /// Suffix is not large enough to split into specified chunks
     #[error("{}", translate!("split-error-suffix-too-small", "length" => .0))]
     TooSmall(usize),
+
+    /// The suffix start value does not fit in the fixed suffix length
+    #[error("{}", translate!("split-error-numerical-suffix-start-too-large"))]
+    StartTooLarge,
 }
 
 impl Suffix {
@@ -198,24 +202,28 @@ impl Suffix {
         }
 
         // Auto pre-calculate new suffix length (auto-width) if necessary
+        // A suffix start at or past the number of chunks disables auto-width,
+        // and the start value is then checked against the suffix length below
         if let Strategy::Number(number_type) = strategy {
             let chunks = number_type.num_chunks();
-            let required_length = ((start as u64 + chunks) as f64)
-                .log(stype.radix() as f64)
-                .ceil() as usize;
+            if (start as u64) < chunks {
+                let required_length = ((start as u64 + chunks) as f64)
+                    .log(stype.radix() as f64)
+                    .ceil() as usize;
 
-            if (start as u64) < chunks && !(is_length_cmd_opt && length > 0) {
-                // with auto-width ON the auto-widening is OFF
-                auto_widening = false;
+                if !(is_length_cmd_opt && length > 0) {
+                    // with auto-width ON the auto-widening is OFF
+                    auto_widening = false;
 
-                // do not reduce suffix length with auto-width
-                if length < required_length {
-                    length = required_length;
+                    // do not reduce suffix length with auto-width
+                    if length < required_length {
+                        length = required_length;
+                    }
                 }
-            }
 
-            if length < required_length {
-                return Err(SuffixError::TooSmall(required_length));
+                if length < required_length {
+                    return Err(SuffixError::TooSmall(required_length));
+                }
             }
         }
 
@@ -223,6 +231,12 @@ impl Suffix {
         // Set it to default value
         if is_length_cmd_opt && length == 0 {
             length = default_length;
+        }
+
+        // Check the start value here rather than when the first file is named,
+        // so that it is reported before the input is read, even if it is empty
+        if !auto_widening && FixedWidthNumber::new(stype.radix(), length, start).is_err() {
+            return Err(SuffixError::StartTooLarge);
         }
 
         let additional = matches

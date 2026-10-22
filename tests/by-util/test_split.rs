@@ -880,6 +880,48 @@ fn test_suffix_auto_width_with_number() {
         .fails();
 }
 
+/// Test that a suffix start value too large for the suffix length is rejected
+/// before the input is read, even when the input is empty or missing
+#[test]
+fn test_suffix_start_too_large() {
+    let msg = "numerical suffix start value is too large for the suffix length";
+    for args in [
+        &["--numeric-suffixes=100"][..],
+        &["--hex-suffixes=100"],
+        &["-a", "1", "--numeric-suffixes=10"],
+        &["-a", "0", "--numeric-suffixes=100"],
+        &["-n", "2", "--numeric-suffixes=100"],
+        &["-n", "r/2", "--hex-suffixes=100"],
+    ] {
+        new_ucmd!().args(args).pipe_in("").fails().usage_error(msg);
+        new_ucmd!()
+            .args(args)
+            .pipe_in("a\n")
+            .fails()
+            .usage_error(msg);
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--numeric-suffixes=100", "non-existing"])
+        .fails()
+        .usage_error(msg);
+    assert!(!at.file_exists("x100"));
+}
+
+/// Test that a suffix start at or past the number of chunks is not checked
+/// against the auto-width suffix length, but against the default one
+#[test]
+fn test_suffix_start_past_number_of_chunks() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-n", "2", "--numeric-suffixes=98", "fivelines.txt"])
+        .succeeds();
+    assert_eq!(at.read("x98") + &at.read("x99"), at.read("fivelines.txt"));
+
+    new_ucmd!()
+        .args(&["-n", "2", "--numeric-suffixes=99", "fivelines.txt"])
+        .fails()
+        .stderr_contains("output file suffixes exhausted");
+}
+
 /// Test for edge case of specifying 0 for suffix length
 #[test]
 fn test_suffix_length_zero() {
