@@ -1147,6 +1147,31 @@ fn test_invalid_fail_with_fields_does_not_duplicate_output() {
 }
 
 #[test]
+fn test_invalid_field_does_not_stop_the_line() {
+    // Each invalid field is reported and written as it is, and the fields
+    // around it are still converted.
+    new_ucmd!()
+        .args(&["--invalid=fail", "--to=si", "--field=-"])
+        .pipe_in("x 1000 y 2000\n")
+        .fails_with_code(2)
+        .stdout_is("x 1.0k y 2.0k\n")
+        .stderr_is("numfmt: invalid number: 'x'\nnumfmt: invalid number: 'y'\n");
+
+    new_ucmd!()
+        .args(&["--invalid=warn", "--to=si", "--field=-", "-d:"])
+        .pipe_in("x:1000:y\n")
+        .succeeds()
+        .stdout_is("x:1.0k:y\n")
+        .stderr_is("numfmt: invalid number: 'x'\nnumfmt: invalid number: 'y'\n");
+
+    new_ucmd!()
+        .args(&["--invalid=ignore", "--to=si", "--field=-"])
+        .pipe_in("   x    1000\n")
+        .succeeds()
+        .stdout_only("   x    1.0k\n");
+}
+
+#[test]
 fn test_abort_with_fields_preserves_partial_output() {
     new_ucmd!()
         .args(&["--field=3", "--from=auto", "Hello 40M World 90G"])
