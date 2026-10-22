@@ -687,6 +687,21 @@ fn test_with_join_lines_option() {
 }
 
 #[test]
+fn test_join_lines_keeps_column_separator() {
+    // -J only stops truncation and alignment; columns are still separated
+    new_ucmd!()
+        .args(&["-2", "-t", "-J", "-S,"])
+        .pipe_in("1\n2\n3\n4\n")
+        .succeeds()
+        .stdout_is("1,3\n2,4\n");
+    new_ucmd!()
+        .args(&["-2", "-t", "-J"])
+        .pipe_in("1\n2\n3\n4\n")
+        .succeeds()
+        .stdout_is("1\t3\n2\t4\n");
+}
+
+#[test]
 fn test_value_for_number_lines() {
     // *5 is of the form [SEP[NUMBER]] so is accepted and succeeds
     new_ucmd!().args(&["-n", "*5", "test.log"]).succeeds();
