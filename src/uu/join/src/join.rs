@@ -511,9 +511,10 @@ impl<'a> State<'a> {
         other: &State,
         repr: &Repr<'a, Sep>,
     ) -> io::Result<()> {
-        let key = self.get_current_key();
-
         for line1 in &self.seq {
+            // With -i the keys of a group can differ in case, so print
+            // each line's own key.
+            let key = line1.get_field(self.key);
             for line2 in &other.seq {
                 if repr.uses_format() {
                     repr.write_format(writer, |spec| match *spec {

@@ -11,6 +11,7 @@ use std::fs::OpenOptions;
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 #[cfg(windows)]
 use std::{ffi::OsString, os::windows::ffi::OsStringExt};
+use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
@@ -199,6 +200,25 @@ fn case_insensitive() {
         .arg("-i")
         .succeeds()
         .stdout_only_fixture("case_insensitive.expected");
+}
+
+#[test]
+fn case_insensitive_prints_each_lines_own_key() {
+    // Keys that differ only in case form one group with -i, but each output
+    // line still shows the key from its own file1 line.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "b z\n");
+    ucmd.args(&["-i", "-", "f"])
+        .pipe_in("B x\nb y\n")
+        .succeeds()
+        .stdout_only("B x z\nb y z\n");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "B\n");
+    ucmd.args(&["-i", "-o", "0", "-", "f"])
+        .pipe_in("B\nb\n")
+        .succeeds()
+        .stdout_only("B\nb\n");
 }
 
 #[test]
