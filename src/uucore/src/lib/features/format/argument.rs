@@ -4,19 +4,14 @@
 // file that was distributed with this source code.
 
 use super::ExtendedBigDecimal;
+use crate::error::set_exit_code;
 use crate::format::spec::ArgumentLocation;
-use crate::{
-    error::set_exit_code,
-    os_str_as_bytes,
-    parser::num_parser::{ExtendedParser, ExtendedParserError},
-    quoting_style::{QuotingStyle, locale_aware_escape_name},
-    show_error, show_warning,
-};
+use crate::parser::num_parser::{ExtendedParser, ExtendedParserError};
+use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
+use crate::{os_str_as_bytes, show_error, show_warning};
 use os_display::Quotable;
-use std::{
-    ffi::{OsStr, OsString},
-    num::NonZero,
-};
+use std::ffi::{OsStr, OsString};
+use std::num::NonZero;
 
 /// An argument for formatting
 ///

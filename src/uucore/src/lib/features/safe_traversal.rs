@@ -17,8 +17,6 @@
 use std::os::unix::ffi::OsStringExt;
 
 use std::ffi::{CStr, CString, OsStr, OsString};
-use std::fs;
-use std::io;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::mem::MaybeUninit;
 use std::os::unix::ffi::OsStrExt;
@@ -26,6 +24,7 @@ use std::os::unix::fs::MetadataExt;
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
+use std::{fs, io};
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 use nix::dir::Dir;
@@ -1102,8 +1101,7 @@ impl MetadataExt for Metadata {
 mod tests {
     use super::*;
     use std::fs;
-    use std::os::unix::fs::MetadataExt;
-    use std::os::unix::fs::symlink;
+    use std::os::unix::fs::{MetadataExt, symlink};
     use std::os::unix::io::IntoRawFd;
     use tempfile::TempDir;
 

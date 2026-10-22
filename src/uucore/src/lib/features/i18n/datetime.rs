@@ -9,8 +9,7 @@
 
 use icu_calendar::Date;
 use icu_calendar::cal::{Buddhist, Ethiopian, Iso, Persian};
-use icu_datetime::DateTimeFormatter;
-use icu_datetime::fieldsets;
+use icu_datetime::{DateTimeFormatter, fieldsets};
 use icu_locale::Locale;
 use jiff::civil::Date as JiffDate;
 use jiff_icu::ConvertFrom;
