@@ -845,14 +845,11 @@ fn print_flags<T: TermiosFlag>(
     for &Flag {
         name,
         flag,
-        show,
         sane,
         group,
-    } in flags
+        ..
+    } in flags.iter().filter(|f| f.show)
     {
-        if !show {
-            continue;
-        }
         let val = flag.is_in(termios, group);
         if group.is_some() {
             if val && (!sane || opts.all) {
