@@ -702,6 +702,19 @@ fn test_join_lines_keeps_column_separator() {
 }
 
 #[test]
+fn test_merge_stops_after_last_line_without_header() {
+    // without a page trailer there is nothing to pad to: like GNU pr, stop
+    // after the last merged line (-F still prints the 5 header lines and a form feed)
+    for (flag, lines) in [("-t", 2), ("-T", 2), ("-F", 8)] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("one", "a\nb\n");
+        at.write("two", "c\nd\n");
+        let result = ucmd.args(&["-m", flag, "one", "two"]).succeeds();
+        assert_eq!(result.stdout_str().lines().count(), lines, "{flag}");
+    }
+}
+
+#[test]
 fn test_value_for_number_lines() {
     // *5 is of the form [SEP[NUMBER]] so is accepted and succeeds
     new_ucmd!().args(&["-n", "*5", "test.log"]).succeeds();
