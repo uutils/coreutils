@@ -627,6 +627,29 @@ fn test_human_numeric_zero_stable() {
 }
 
 #[test]
+fn test_ignore_blanks_and_month_skip_only_space_and_tab() {
+    // In the C locale a blank is a space or a tab, so a leading \f or \r
+    // stays part of the key
+    for blank in ["\x0c", "\r"] {
+        new_ucmd!()
+            .arg("-k1b")
+            .pipe_in(format!("a\n{blank}b\n"))
+            .succeeds()
+            .stdout_only(format!("{blank}b\na\n"));
+        new_ucmd!()
+            .arg("-M")
+            .pipe_in(format!("{blank}FEB\nJAN\n"))
+            .succeeds()
+            .stdout_only(format!("{blank}FEB\nJAN\n"));
+    }
+    new_ucmd!()
+        .arg("-M")
+        .pipe_in(" \tFEB\nJAN\n")
+        .succeeds()
+        .stdout_only("JAN\n \tFEB\n");
+}
+
+#[test]
 fn test_month_default2() {
     for month_sort_param in ["-M", "--month-sort", "--sort=month"] {
         let input = "JAn\nMAY\n000may\nJun\nFeb";

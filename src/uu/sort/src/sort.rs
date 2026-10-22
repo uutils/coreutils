@@ -845,7 +845,7 @@ impl<'a> Line<'a> {
                     let initial_selection = &self.line[selection.clone()];
                     let first_non_blank = initial_selection
                         .iter()
-                        .position(|c| !c.is_ascii_whitespace())
+                        .position(|&c| !is_blank(c))
                         .unwrap_or(initial_selection.len());
 
                     let (parsed, match_len) = month_parse(initial_selection);
@@ -1433,7 +1433,7 @@ impl FieldSelector {
                     idx += line[idx..]
                         .iter()
                         .enumerate()
-                        .find(|(_, c)| !c.is_ascii_whitespace())
+                        .find(|(_, c)| !is_blank(**c))
                         .map_or(line[idx..].len(), |(idx, _)| idx);
                 }
                 // apply the character index
@@ -3303,7 +3303,12 @@ fn get_locale_month_table() -> Option<&'static MonthTable> {
 /// Comparison against input is case-insensitive but NOT blank-insensitive:
 /// the input must match the stored name exactly (after leading blank trimming).
 fn month_parse(line: &[u8]) -> (Month, usize) {
-    let line = line.trim_ascii_start();
+    let mut line = line;
+    while let [first, rest @ ..] = line
+        && is_blank(*first)
+    {
+        line = rest;
+    }
 
     // Try locale-specific month names, keeping the longest match.
     // This handles cases where one name is a prefix of another
