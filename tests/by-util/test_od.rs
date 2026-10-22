@@ -1404,6 +1404,14 @@ fn test_od_strings_option() {
         .succeeds()
         .stdout_is("0000001 hello\n0000007 world\n");
 
+    // Hexadecimal offsets use 6 digits, as in the normal dump
+    new_ucmd!()
+        .arg("-Ax")
+        .arg("-S3")
+        .pipe_in(b"\x01hello\x00world\x00ab\x00")
+        .succeeds()
+        .stdout_is("000001 hello\n000007 world\n");
+
     // Test with -S10 to show only strings with minimum length
     new_ucmd!()
         .arg("-S10")

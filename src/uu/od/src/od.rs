@@ -625,7 +625,7 @@ fn extract_strings_from_input(
         match radix {
             Radix::NoPrefix => writeln!(writer, "{string_content}"),
             Radix::Decimal => writeln!(writer, "{offset:07} {string_content}"),
-            Radix::Hexadecimal => writeln!(writer, "{offset:07x} {string_content}"),
+            Radix::Hexadecimal => writeln!(writer, "{offset:06x} {string_content}"),
             Radix::Octal => writeln!(writer, "{offset:07o} {string_content}"),
         }
     };
