@@ -14,3 +14,7 @@ tests_numfmt.patch
 tests_pwd-long.patch
 tests_getopt_vs_usage.patch
 tests_usage_vs_refs.patch
+tests_cut_messages.patch
+tests_expr_messages.patch
+tests_fold_messages.patch
+tests_uniq_messages.patch

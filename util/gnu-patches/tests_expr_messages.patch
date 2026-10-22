@@ -1,0 +1,22 @@
+Index: gnu/tests/expr/expr.pl
+===================================================================
+--- gnu.orig/tests/expr/expr.pl
++++ gnu/tests/expr/expr.pl
+@@ -220,7 +220,7 @@
+ if ($mb_locale ne 'C')
+   {
+     # Duplicate each test vector, appending "-mb" to the test name and
+-    # inserting {ENV => "LC_ALL=$mb_locale"} in the copy, so that we
++    # inserting {ENV => "LC_CTYPE=$mb_locale LC_MESSAGES=C"}, {ENV_DEL => "LC_ALL"} in the copy, so that we
+     # provide coverage for multi-byte code paths.
+     my @new;
+     foreach my $t (@Tests)
+@@ -232,7 +232,7 @@
+         my @new_t = @$t;
+         my $test_name = shift @new_t;
+
+-        push @new, ["$test_name-mb", @new_t, {ENV => "LC_ALL=$mb_locale"}];
++        push @new, ["$test_name-mb", @new_t, {ENV => "LC_CTYPE=$mb_locale LC_MESSAGES=C"}, {ENV_DEL => "LC_ALL"}];
+       }
+     push @Tests, @new;
+   }
