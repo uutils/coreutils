@@ -548,6 +548,24 @@ fn test_non_printing_chars() {
 }
 
 #[test]
+fn test_dictionary_order_overrides_non_printing() {
+    // -i has no effect with -d, so the tab is kept as a blank
+    for args in [
+        &["-d", "-i"][..],
+        &["-i", "-d"],
+        &["-di"],
+        &["-id"],
+        &["-di", "-k1"],
+    ] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("\tK\n7\n")
+            .succeeds()
+            .stdout_only("\tK\n7\n");
+    }
+}
+
+#[test]
 fn test_exponents_positive_general() {
     new_ucmd!()
         .pipe_in("1\n2e3\n1e-5")
