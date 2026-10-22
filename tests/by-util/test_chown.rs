@@ -1141,3 +1141,94 @@ fn verbose_missing_file_write_error_is_reported_not_panic() {
         .fails_with_code(1)
         .stderr_contains("chown: write error: No space left on device");
 }
+
+/// Under `-R -H` a symlink met in the tree is changed through, so the file
+/// changed is not the link that was looked at: `--from` must not refuse it.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_from_changes_through_symlink_in_tree_under_big_h() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("target");
+    at.relative_symlink_file("../target", "dir/link");
+    let meta = at.plus("target").metadata().unwrap();
+    let owner = format!("{}:{}", meta.uid(), meta.gid());
+
+    ucmd.args(&["-R", "-H", "-v", &format!("--from={owner}"), &owner, "dir"])
+        .succeeds()
+        .stdout_contains("ownership of 'dir/link' retained as")
+        .stdout_does_not_contain("failed");
+}
+
+/// A directory operand that cannot be read is still changed without -R.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_unreadable_dir_operand() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    let meta = at.plus("dir").metadata().unwrap();
+    let owner = format!("{}:{}", meta.uid(), meta.gid());
+    std::fs::set_permissions(at.plus("dir"), std::fs::Permissions::from_mode(0o000)).unwrap();
+
+    for from in [None, Some(format!("--from={owner}"))] {
+        scene
+            .ucmd()
+            .arg("-v")
+            .args(from.as_slice())
+            .args(&[owner.as_str(), "dir"])
+            .succeeds()
+            .stdout_contains("ownership of 'dir' retained as");
+    }
+    std::fs::set_permissions(at.plus("dir"), std::fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+/// Under `-R -H` a symlink met in the tree is followed for the change, so
+/// `--from` has to be judged on the file it points to, not on the link.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_from_judges_symlink_target_under_big_h() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let groups: Vec<u32> = scene
+        .cmd("id")
+        .arg("-G")
+        .succeeds()
+        .stdout_str()
+        .split_whitespace()
+        .map(|g| g.parse().unwrap())
+        .collect();
+    let Some(&target_group) = groups.first() else {
+        return;
+    };
+    let Some(&link_group) = groups.iter().find(|&&g| g != target_group) else {
+        return;
+    };
+
+    at.mkdir("dir");
+    at.touch("target");
+    at.relative_symlink_file("../target", "dir/link");
+    std::os::unix::fs::chown(at.plus("target"), None, Some(target_group)).unwrap();
+    std::os::unix::fs::lchown(at.plus("dir/link"), None, Some(link_group)).unwrap();
+
+    // Only the link is in `link_group`: the target is left alone.
+    scene
+        .ucmd()
+        .args(&["-R", "-H", &format!("--from=:{link_group}")])
+        .arg(format!(":{link_group}"))
+        .arg("dir")
+        .succeeds();
+    assert_eq!(at.plus("target").metadata().unwrap().gid(), target_group);
+
+    // The target is in `target_group`, so it is changed.
+    scene
+        .ucmd()
+        .args(&["-R", "-H", &format!("--from=:{target_group}")])
+        .arg(format!(":{link_group}"))
+        .arg("dir")
+        .succeeds();
+    assert_eq!(at.plus("target").metadata().unwrap().gid(), link_group);
+}
