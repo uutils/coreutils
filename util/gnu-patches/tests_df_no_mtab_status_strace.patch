@@ -6,19 +6,19 @@ index 6573476ffb..9dfd5e86b1 100755
  #!/bin/sh
  # Test df's behavior when the mount list cannot be read.
 -# This test is skipped on systems that lack LD_PRELOAD support; that's fine.
- 
+
  # Copyright (C) 2012-2026 Free Software Foundation, Inc.
- 
+
 @@ -19,117 +18,27 @@
- 
+
  . "${srcdir=.}/tests/init.sh"; path_prepend_ ./src
  print_ver_ df
 -require_gcc_shared_
 +uses_strace_
- 
+
  # Protect against inaccessible remote mounts etc.
  timeout 10 df || skip_ "df fails"
- 
+
 -grep '^#define HAVE_GETMNTENT 1' $CONFIG_HEADER > /dev/null \
 -      || skip_ "getmntent is not used on this system"
 -
@@ -72,7 +72,7 @@ index 6573476ffb..9dfd5e86b1 100755
 +    -e fault=openat \
 +    "$@"
  }
- 
+
 -int open(const char *path, int flags, ...)
 -{
 -  static int (*open_func)(const char *, int, ...);
@@ -108,7 +108,7 @@ index 6573476ffb..9dfd5e86b1 100755
 -  return open_func(path, flags, mode);
 -}
 +no-mtab true || skip_ 'strace injection for openat failed'
- 
+
 -struct mntent *getmntent (FILE *fp)
 -{
 -  /* Prove that LD_PRELOAD works. */
@@ -137,6 +137,6 @@ index 6573476ffb..9dfd5e86b1 100755
 -# Test if LD_PRELOAD works:
 -df
 -test -f x || skip_ "internal test failure: maybe LD_PRELOAD doesn't work?"
- 
+
  # These tests are supposed to succeed:
  df '.' || fail=1

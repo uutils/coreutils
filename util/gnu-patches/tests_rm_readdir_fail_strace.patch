@@ -6,19 +6,19 @@ index 130685cbac..797b22af62 100755
  #!/bin/sh
  # Test rm's behavior when the directory cannot be read.
 -# This test is skipped on systems that lack LD_PRELOAD support.
- 
+
  # Copyright (C) 2016-2026 Free Software Foundation, Inc.
- 
+
 @@ -19,103 +18,31 @@
- 
+
  . "${srcdir=.}/tests/init.sh"; path_prepend_ ./src
  print_ver_ rm
 -require_gcc_shared_
 +getlimits_
 +uses_strace_
- 
+
  mkdir -p dir/notempty || framework_failure_
- 
+
 -# Simulate "readdir" failure.
 -cat > k.c <<\EOF || framework_failure_
 -#define _GNU_SOURCE
@@ -92,7 +92,7 @@ index 130685cbac..797b22af62 100755
 -# Then compile/link it:
 -gcc_shared_ k.c k.so \
 -  || framework_failure_ 'failed to build shared library'
- 
+
 -# Test if LD_PRELOAD works:
 -export READDIR_PARTIAL
 -for READDIR_PARTIAL in '' '1'; do
@@ -128,5 +128,5 @@ index 130685cbac..797b22af62 100755
 +echo "rm: traversal failed: dir: $EIO" > exp || framework_failure_
 +returns_ 1 rm_getdents_fail 2 2>err || fail=1
  compare exp err || fail=1
- 
+
  Exit $fail
