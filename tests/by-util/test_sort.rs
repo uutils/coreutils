@@ -1039,6 +1039,34 @@ a   b
 }
 
 #[test]
+fn test_keys_whole_line_own_reverse() {
+    // A key's own `r` applies even when the key covers the whole line.
+    for args in [&["-k1r"][..], &["-k1.1r"], &["-f", "-k1fr"]] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("a\nb\n")
+            .succeeds()
+            .stdout_only("b\na\n");
+    }
+    new_ucmd!()
+        .args(&["-c", "-k1r"])
+        .pipe_in("a\nb\n")
+        .fails_with_code(1)
+        .stderr_contains("disorder: b");
+    // A key with options of its own does not inherit the global `-r`.
+    new_ucmd!()
+        .args(&["-f", "-r", "-k1f"])
+        .pipe_in("b\na\n")
+        .succeeds()
+        .stdout_only("a\nb\n");
+    new_ucmd!()
+        .args(&["-r", "-n", "-k1n"])
+        .pipe_in("10\n2\n")
+        .succeeds()
+        .stdout_only("2\n10\n");
+}
+
+#[test]
 fn test_keys_empty_match() {
     let input = "a a a a
 aaaa
