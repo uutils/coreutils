@@ -929,7 +929,8 @@ fn test_suffix_length_zero_with_number_uses_default_length() {
     assert!(!at.file_exists("xa"));
 
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["-dn10", "-a0", "fivelines.txt"]).succeeds();
+    let args = ["-d", "-n10", "-a0", "fivelines.txt"];
+    ucmd.args(&args).succeeds();
     assert!(at.file_exists("x00"));
     assert!(at.file_exists("x09"));
     assert!(!at.file_exists("x0"));
