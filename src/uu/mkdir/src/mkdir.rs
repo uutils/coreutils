@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ugoa cmode fchmod NOFOLLOW EACCES
+// spell-checker:ignore (ToDO) ugoa cmode fchmod NOFOLLOW EACCES ENOTDIR gnulib lchmod
 
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
@@ -307,14 +307,28 @@ fn apply_special_bits(path: &Path, requested: u32, kept: u32) -> std::io::Result
         #[cfg(any(target_os = "linux", target_os = "android"))]
         Err(e) if e.raw_os_error() == Some(libc::EACCES) => {
             use std::os::fd::AsRawFd;
+            use std::os::unix::fs::MetadataExt;
             let dir = OpenOptions::new()
                 .read(true)
                 .custom_flags(flags | libc::O_PATH)
                 .open(path)?;
-            let current = dir.metadata()?.permissions().mode();
+            let meta = dir.metadata()?;
+            let current = meta.permissions().mode();
             if wanted(current) != current & 0o7777 {
+                let perms = Permissions::from_mode(wanted(current));
                 let link = format!("/proc/self/fd/{}", dir.as_raw_fd());
-                std::fs::set_permissions(link, Permissions::from_mode(wanted(current)))?;
+                match std::fs::set_permissions(link, perms.clone()) {
+                    // Without /proc, do as gnulib's lchmod: chmod by path, but
+                    // only if the path still names the directory we opened.
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                        let now = std::fs::symlink_metadata(path)?;
+                        if !now.is_dir() || now.dev() != meta.dev() || now.ino() != meta.ino() {
+                            return Err(std::io::Error::from_raw_os_error(libc::ENOTDIR));
+                        }
+                        std::fs::set_permissions(path, perms)?;
+                    }
+                    res => res?,
+                }
             }
         }
         Err(e) => return Err(e),
