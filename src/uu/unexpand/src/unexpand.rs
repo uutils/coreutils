@@ -457,6 +457,8 @@ fn classify_char_at(utf8: bool, buf: &[u8], byte: usize) -> (CharType, usize, us
             b' ' => (Space, 1, 1),
             b'\t' => (Tab, 0, 1),
             b'\x08' => (Backspace, 0, 1),
+            // NUL has no display width (`wcwidth(L'\0')` is 0).
+            b'\0' => (Other, 0, 1),
             _ => (Other, 1, 1),
         };
     }
