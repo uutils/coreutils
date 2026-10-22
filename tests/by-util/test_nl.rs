@@ -438,6 +438,22 @@ fn test_default_body_numbering_multiple_files_and_stdin() {
 }
 
 #[test]
+fn test_section_continues_into_next_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // A footer started in a.txt goes on in b.txt, and a header started in
+    // b.txt goes on in stdin.
+    at.write("a.txt", "a\n\\:\n");
+    at.write("b.txt", "b\n\\:\\:\\:\n");
+    at.write("c.txt", "\\:\\:\nd\n");
+
+    ucmd.args(&["-h", "a", "a.txt", "b.txt", "-", "c.txt"])
+        .pipe_in("c\n")
+        .succeeds()
+        .stdout_is("     1\ta\n\n       b\n\n     1\tc\n\n     1\td\n");
+}
+
+#[test]
 fn test_default_body_numbering_multiple_files_with_non_existing_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
