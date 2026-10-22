@@ -27,6 +27,7 @@ chmod-error-permission-denied = impossible d'accéder à {$file} : Permission re
 chmod-error-new-permissions = {$file} : les nouvelles permissions sont {$actual}, pas {$expected}
 chmod-error-changing-permissions = changement des permissions de {$file} : {$err}
 chmod-error-missing-operand = opérande manquant
+chmod-error-invalid-mode = mode invalide : '{$mode}'
 
 # Messages verbeux/de statut
 chmod-verbose-failed-dangling = échec du changement de mode de {$file} de 0000 (---------) vers 1500 (r-x-----T)
