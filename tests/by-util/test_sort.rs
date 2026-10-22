@@ -3,10 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) ints (linux) Nofile dfgi abmon avril
+// spell-checker:ignore (words) ints (linux) Nofile dfgi abmon avril naab
 
 #![allow(clippy::cast_possible_wrap)]
 
+use rstest::rstest;
 use std::env;
 use std::fmt::Write as FmtWrite;
 #[cfg(unix)]
@@ -204,23 +205,48 @@ fn test_ext_sort_zero_terminated() {
         .stdout_is_fixture("zero-terminated.expected");
 }
 
-#[test]
-fn test_months_whitespace() {
-    test_helper(
-        "months-whitespace",
-        &[
-            "-M",
-            "--month-sort",
-            "--sort=month",
-            "--sort=mont",
-            "--sort=m",
-        ],
-    );
-}
-
-#[test]
-fn test_version_empty_lines() {
-    test_helper("version-empty-lines", &["-V", "--version-sort"]);
+#[rstest]
+#[case::months_whitespace("months-whitespace", &["-M", "--month-sort", "--sort=month", "--sort=mont", "--sort=m"])]
+#[case::version_empty_lines("version-empty-lines", &["-V", "--version-sort"])]
+#[case::multiple_decimals_numeric("multiple_decimals_numeric", &["-n", "--numeric-sort", "--sort=numeric", "--sort=n"])]
+#[case::multiple_groupings_numeric("multiple_groupings_numeric", &["-n", "--numeric-sort", "--sort=numeric", "--sort=n"])]
+#[case::numeric_with_trailing_invalid_chars("numeric_trailing_chars", &["-n", "--numeric-sort", "--sort=numeric"])]
+#[case::numeric_floats_and_ints("numeric_floats_and_ints", &["-n", "--numeric-sort", "--sort=numeric"])]
+#[case::numeric_floats("numeric_floats", &["-n", "--numeric-sort", "--sort=numeric"])]
+#[case::numeric_floats_with_nan("numeric_floats_with_nan", &["-n", "--numeric-sort", "--sort=numeric"])]
+#[case::numeric_unfixed_floats("numeric_unfixed_floats", &["-n", "--numeric-sort", "--sort=numeric"])]
+#[case::numeric_fixed_floats("numeric_fixed_floats", &["-n", "--numeric-sort", "--sort=numeric"])]
+#[case::numeric_unsorted_ints("numeric_unsorted_ints", &["-n", "--numeric-sort", "--sort=numeric"])]
+#[case::human_block_sizes("human_block_sizes", &["-h", "--human-numeric-sort", "--sort=human-numeric"])]
+#[case::month_default("month_default", &["-M", "--month-sort", "--sort=month"])]
+#[case::month_stable("month_stable", &["-Ms"])]
+#[case::default_unsorted_ints("default_unsorted_ints", &[""])]
+#[case::numeric_unique_ints("numeric_unsorted_ints_unique", &["-nu"])]
+#[case::version("version", &["-V"])]
+#[case::ignore_case("ignore_case", &["-f"])]
+#[case::dictionary_order("dictionary_order", &["-d"])]
+#[case::exponents_general("exponents_general", &["-g"])]
+#[case::exponents_positive_numeric("exponents-positive-numeric", &["-n", "--numeric-sort", "--sort=numeric"])]
+#[case::months_dedup("months-dedup", &["-Mu"])]
+#[case::mixed_floats_ints_chars_numeric("mixed_floats_ints_chars_numeric", &["-n", "--numeric-sort", "--sort=numeric"])]
+#[case::mixed_floats_ints_chars_numeric_unique("mixed_floats_ints_chars_numeric_unique", &["-nu"])]
+#[case::words_unique("words_unique", &["-u"])]
+#[case::numeric_unique("numeric_unique", &["-nu"])]
+#[case::mixed_floats_ints_chars_numeric_unique_reverse("mixed_floats_ints_chars_numeric_unique_reverse", &["-nur"])]
+#[case::mixed_floats_ints_chars_numeric_stable("mixed_floats_ints_chars_numeric_stable", &["-ns"])]
+#[case::numeric_floats_with_nan2("numeric-floats-with-nan2", &["-n", "--numeric-sort", "--sort=numeric"])]
+#[case::keys_open_ended("keys_open_ended", &["-k 2.3"])]
+#[case::keys_closed_range("keys_closed_range", &["-k 2.2,2.2"])]
+#[case::keys_multiple_ranges("keys_multiple_ranges", &["-k 2,2 -k 3,3"])]
+#[case::keys_no_field_match("keys_no_field_match", &["-k 4,4"])]
+#[case::keys_no_char_match("keys_no_char_match", &["-k 1.2"])]
+#[case::keys_custom_separator("keys_custom_separator", &["-k 2.2,2.2 -t x"])]
+#[case::keys_blanks_with_char_idx("keys_blanks", &["-k 1.2b"])]
+#[case::keys_ignore_flag("keys_ignore_flag", &["-k 1n -b"])]
+#[case::zero_terminated("zero-terminated", &["-z"])]
+#[case::blanks("blanks", &["-b", "--ignore-leading-blanks"])]
+fn test_sort_fixtures(#[case] fixture_stem: &str, #[case] possible_args: &[&str]) {
+    test_helper(fixture_stem, possible_args);
 }
 
 #[test]
@@ -316,30 +342,6 @@ fn test_multiple_decimals_general() {
             "--sort=general",
             "--sort=g",
         ],
-    );
-}
-
-#[test]
-fn test_multiple_decimals_numeric() {
-    test_helper(
-        "multiple_decimals_numeric",
-        &["-n", "--numeric-sort", "--sort=numeric", "--sort=n"],
-    );
-}
-
-#[test]
-fn test_multiple_groupings_numeric() {
-    test_helper(
-        "multiple_groupings_numeric",
-        &["-n", "--numeric-sort", "--sort=numeric", "--sort=n"],
-    );
-}
-
-#[test]
-fn test_numeric_with_trailing_invalid_chars() {
-    test_helper(
-        "numeric_trailing_chars",
-        &["-n", "--numeric-sort", "--sort=numeric"],
     );
 }
 
@@ -528,97 +530,6 @@ fn test_random_ignore_case() {
 }
 
 #[test]
-fn test_numeric_floats_and_ints() {
-    test_helper(
-        "numeric_floats_and_ints",
-        &["-n", "--numeric-sort", "--sort=numeric"],
-    );
-}
-
-#[test]
-fn test_numeric_floats() {
-    test_helper(
-        "numeric_floats",
-        &["-n", "--numeric-sort", "--sort=numeric"],
-    );
-}
-
-#[test]
-fn test_numeric_floats_with_nan() {
-    test_helper(
-        "numeric_floats_with_nan",
-        &["-n", "--numeric-sort", "--sort=numeric"],
-    );
-}
-
-#[test]
-fn test_numeric_unfixed_floats() {
-    test_helper(
-        "numeric_unfixed_floats",
-        &["-n", "--numeric-sort", "--sort=numeric"],
-    );
-}
-
-#[test]
-fn test_numeric_fixed_floats() {
-    test_helper(
-        "numeric_fixed_floats",
-        &["-n", "--numeric-sort", "--sort=numeric"],
-    );
-}
-
-#[test]
-fn test_numeric_unsorted_ints() {
-    test_helper(
-        "numeric_unsorted_ints",
-        &["-n", "--numeric-sort", "--sort=numeric"],
-    );
-}
-
-#[test]
-fn test_human_block_sizes() {
-    test_helper(
-        "human_block_sizes",
-        &["-h", "--human-numeric-sort", "--sort=human-numeric"],
-    );
-}
-
-#[test]
-fn test_month_default() {
-    test_helper("month_default", &["-M", "--month-sort", "--sort=month"]);
-}
-
-#[test]
-fn test_month_stable() {
-    test_helper("month_stable", &["-Ms"]);
-}
-
-#[test]
-fn test_default_unsorted_ints() {
-    test_helper("default_unsorted_ints", &[""]);
-}
-
-#[test]
-fn test_numeric_unique_ints() {
-    test_helper("numeric_unsorted_ints_unique", &["-nu"]);
-}
-
-#[test]
-fn test_version() {
-    test_helper("version", &["-V"]);
-}
-
-#[test]
-fn test_ignore_case() {
-    test_helper("ignore_case", &["-f"]);
-}
-
-#[test]
-fn test_dictionary_order() {
-    test_helper("dictionary_order", &["-d"]);
-}
-
-#[test]
 fn test_dictionary_order2() {
     new_ucmd!()
         .pipe_in("a👦🏻aa\tb\naaaa\tb") // spell-checker:disable-line
@@ -637,63 +548,12 @@ fn test_non_printing_chars() {
 }
 
 #[test]
-fn test_exponents_general() {
-    test_helper("exponents_general", &["-g"]);
-}
-
-#[test]
 fn test_exponents_positive_general() {
     new_ucmd!()
         .pipe_in("1\n2e3\n1e-5")
         .arg("-g")
         .succeeds()
         .stdout_only("1e-5\n1\n2e3\n");
-}
-
-#[test]
-fn test_exponents_positive_numeric() {
-    test_helper(
-        "exponents-positive-numeric",
-        &["-n", "--numeric-sort", "--sort=numeric"],
-    );
-}
-
-#[test]
-fn test_months_dedup() {
-    test_helper("months-dedup", &["-Mu"]);
-}
-
-#[test]
-fn test_mixed_floats_ints_chars_numeric() {
-    test_helper(
-        "mixed_floats_ints_chars_numeric",
-        &["-n", "--numeric-sort", "--sort=numeric"],
-    );
-}
-
-#[test]
-fn test_mixed_floats_ints_chars_numeric_unique() {
-    test_helper("mixed_floats_ints_chars_numeric_unique", &["-nu"]);
-}
-
-#[test]
-fn test_words_unique() {
-    test_helper("words_unique", &["-u"]);
-}
-
-#[test]
-fn test_numeric_unique() {
-    test_helper("numeric_unique", &["-nu"]);
-}
-
-#[test]
-fn test_mixed_floats_ints_chars_numeric_reverse() {
-    test_helper("mixed_floats_ints_chars_numeric_unique_reverse", &["-nur"]);
-}
-
-#[test]
-fn test_mixed_floats_ints_chars_numeric_stable() {
-    test_helper("mixed_floats_ints_chars_numeric_stable", &["-ns"]);
 }
 
 #[test]
@@ -718,14 +578,6 @@ fn test_numeric_floats2() {
             .succeeds()
             .stdout_only("-8.90880\n-.05\n1.040000000\n1.444\n1.58590\n8.013\n");
     }
-}
-
-#[test]
-fn test_numeric_floats_with_nan2() {
-    test_helper(
-        "numeric-floats-with-nan2",
-        &["-n", "--numeric-sort", "--sort=numeric"],
-    );
 }
 
 #[test]
@@ -1025,36 +877,6 @@ fn test_numeric_unique_ints2() {
 }
 
 #[test]
-fn test_keys_open_ended() {
-    test_helper("keys_open_ended", &["-k 2.3"]);
-}
-
-#[test]
-fn test_keys_closed_range() {
-    test_helper("keys_closed_range", &["-k 2.2,2.2"]);
-}
-
-#[test]
-fn test_keys_multiple_ranges() {
-    test_helper("keys_multiple_ranges", &["-k 2,2 -k 3,3"]);
-}
-
-#[test]
-fn test_keys_no_field_match() {
-    test_helper("keys_no_field_match", &["-k 4,4"]);
-}
-
-#[test]
-fn test_keys_no_char_match() {
-    test_helper("keys_no_char_match", &["-k 1.2"]);
-}
-
-#[test]
-fn test_keys_custom_separator() {
-    test_helper("keys_custom_separator", &["-k 2.2,2.2 -t x"]);
-}
-
-#[test]
 fn test_keys_invalid_field() {
     new_ucmd!()
         .args(&["-k", "1."])
@@ -1181,11 +1003,6 @@ fn test_keys_with_options_blanks_start() {
 }
 
 #[test]
-fn test_keys_blanks_with_char_idx() {
-    test_helper("keys_blanks", &["-k 1.2b"]);
-}
-
-#[test]
 fn test_keys_with_options_blanks_end() {
     let input = "a  b
 a b
@@ -1241,11 +1058,6 @@ fn test_keys_negative_size_match() {
 }
 
 #[test]
-fn test_keys_ignore_flag() {
-    test_helper("keys_ignore_flag", &["-k 1n -b"]);
-}
-
-#[test]
 fn test_does_not_inherit_key_settings() {
     let input = " 1
 2
@@ -1279,11 +1091,6 @@ fn test_inherits_key_settings() {
    10
 ",
         );
-}
-
-#[test]
-fn test_zero_terminated() {
-    test_helper("zero-terminated", &["-z"]);
 }
 
 #[test]
@@ -1382,6 +1189,40 @@ fn test_merge_write_error_does_not_panic() {
             .stderr_contains("No space left on device")
             .stderr_does_not_contain("panicked");
     }
+}
+
+// Regression test: a full temporary filesystem must make external sort fail
+// cleanly instead of panicking while spilling a sorted chunk.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+fn test_spill_write_error_does_not_panic() {
+    let mut scene = TestScenario::new("sort");
+
+    // Mounting a filesystem requires privileges that are not available in all
+    // test environments, so leave this integration test skipped there.
+    let tmp_dir = "tmp_dir";
+    scene.fixtures.mkdir(tmp_dir);
+    if scene.mount_temp_fs(tmp_dir).is_err() {
+        return;
+    }
+
+    let mut lines = String::new();
+    for line in 0..200_000 {
+        writeln!(lines, "{line:06}").expect("writing to a String cannot fail");
+    }
+    scene.fixtures.write("input.txt", &lines);
+
+    scene
+        .ucmd()
+        .args(&[
+            "--buffer-size=1",
+            "--temporary-directory",
+            tmp_dir,
+            "input.txt",
+        ])
+        .fails_with_code(1)
+        .stderr_contains("No space left on device")
+        .stderr_does_not_contain("panicked");
 }
 
 // A read error must be reported with context and without the raw io::Error suffix.
@@ -1492,6 +1333,30 @@ fn test_check() {
             .succeeds()
             .no_output();
     }
+}
+
+#[test]
+fn test_check_with_merge_still_checks() {
+    // Regression for https://github.com/uutils/coreutils/issues/15380
+    // GNU sort: --check takes precedence over --merge. With one unsorted
+    // file, -c -m must report disorder (exit 1), not merge/print and exit 0.
+    new_ucmd!()
+        .args(&["-c", "-m"])
+        .pipe_in("b\na\n")
+        .fails()
+        .stderr_only("sort: -:2: disorder: a\n");
+
+    new_ucmd!()
+        .args(&["--check", "--merge"])
+        .pipe_in("b\na\n")
+        .fails()
+        .stderr_only("sort: -:2: disorder: a\n");
+
+    new_ucmd!()
+        .args(&["-c", "-m"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .no_output();
 }
 
 #[test]
@@ -1633,11 +1498,6 @@ fn test_nonexistent_file() {
             #[cfg(windows)]
             "sort: cannot read: nonexistent.txt: The system cannot find the file specified.\n",
         );
-}
-
-#[test]
-fn test_blanks() {
-    test_helper("blanks", &["-b", "--ignore-leading-blanks"]);
 }
 
 #[test]
@@ -1895,6 +1755,47 @@ fn test_more_files_than_fd_limit() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_temporary_files_with_few_file_descriptors() {
+    use rustix::process::Resource;
+    let ts = TestScenario::new("sort");
+    // Each input is larger than what the merge reads ahead, so it stays open.
+    let mut names = Vec::new();
+    let mut expected = String::new();
+    for i in 0..12 {
+        let name = format!("few_fds_{i:02}");
+        let contents = format!("{i:02}\n").repeat(32768);
+        ts.fixtures.write(&name, &contents);
+        names.push(name);
+        expected.push_str(&contents);
+    }
+    let unsorted: String = (0..32768)
+        .flat_map(|_| (0..12).rev().map(|i| format!("{i:02}\n")))
+        .collect();
+    ts.fixtures.write("unsorted", &unsorted);
+
+    // Stdin, stdout, stderr, two merge inputs and the merge output.
+    ts.ucmd()
+        .limit(Resource::Nofile, 6, 6)
+        .arg("-m")
+        .args(&names)
+        .succeeds()
+        .stdout_only(&expected);
+    ts.ucmd()
+        .limit(Resource::Nofile, 6, 6)
+        .args(&["-S", "64K", "unsorted"])
+        .succeeds()
+        .stdout_only(&expected);
+    // Starting the compress program can take two more for a moment: on musl and
+    // glibc before 2.24, a failed exec is reported through a pipe.
+    ts.ucmd()
+        .limit(Resource::Nofile, 10, 10)
+        .args(&["-S", "64K", "--compress-program", "gzip", "unsorted"])
+        .succeeds()
+        .stdout_only(&expected);
+}
+
+#[test]
 fn test_sigpipe_panic() {
     let mut cmd = new_ucmd!();
     let mut child = cmd.args(&["ext_sort.txt"]).run_no_wait();
@@ -2035,7 +1936,6 @@ fn test_separator_attached_equals_double() {
     // `-t==` selects the two-character separator `==`, which GNU rejects.
     new_ucmd!()
         .args(&["-t==", "-k", "2"])
-        .pipe_in("")
         .fails()
         .stderr_contains("separator must be exactly one character long: '=='");
 }
@@ -2045,7 +1945,6 @@ fn test_separator_attached_equals_multi_char() {
     // `-t=a` selects the two-character separator `=a`, which GNU rejects.
     new_ucmd!()
         .args(&["-t=a", "-k", "2"])
-        .pipe_in("")
         .fails()
         .stderr_contains("separator must be exactly one character long: '=a'");
 }
@@ -2221,6 +2120,70 @@ fn test_tmp_files_are_private() {
 
     kill_process(Pid::from_raw(child.id() as i32).unwrap(), Signal::INT).unwrap();
     child.wait().unwrap().code_is(2);
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "redox")))]
+fn test_tmp_dir_replaced_by_a_symlink() {
+    use rustix::process::{Pid, Signal, kill_process};
+    use std::{
+        fs,
+        io::Write as _,
+        time::{Duration, Instant},
+    };
+
+    // Once the temporary directory's path leads to another directory, sort must
+    // neither read nor delete anything there, whether it exits normally or on SIGINT.
+    for interrupt in [false, true] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("scratch");
+        at.mkdir("other");
+        at.write("other/0", "zzz other\n");
+        at.write("other/notes", "notes\n");
+        at.mkfifo("input");
+        let child = ucmd
+            .args(&["-S", "1K", "-T", "scratch", "input"])
+            .run_no_wait();
+        // Keep the input open until the directory has been replaced, so that the
+        // rest of the run happens afterwards.
+        let mut input = fs::OpenOptions::new()
+            .write(true)
+            .open(at.plus("input"))
+            .unwrap();
+        input
+            .write_all("willow\ncedar\n".repeat(8192).as_bytes())
+            .unwrap();
+        // Wait for sort's first temporary file, however long the machine takes:
+        // the deadline is only reached if it never writes one.
+        let deadline = Instant::now() + Duration::from_secs(60);
+        let tmp_dir = loop {
+            let dir = fs::read_dir(at.plus("scratch")).unwrap().next();
+            let dir = dir.map(|entry| entry.unwrap().path());
+            if let Some(dir) = dir.filter(|dir| dir.join("0").exists()) {
+                break dir;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "sort did not write a temporary file"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        fs::rename(&tmp_dir, at.plus("moved")).unwrap();
+        std::os::unix::fs::symlink(at.plus("other"), &tmp_dir).unwrap();
+        if interrupt {
+            kill_process(Pid::from_raw(child.id() as i32).unwrap(), Signal::INT).unwrap();
+        }
+        drop(input);
+        let result = child.wait().unwrap();
+
+        // sort can't go on without its directory, but must not take any data
+        // from the other one.
+        result.code_is(2);
+        assert!(!result.stdout_str().contains("zzz"));
+        assert_eq!(at.read("other/0"), "zzz other\n");
+        assert_eq!(at.read("other/notes"), "notes\n");
+        assert_eq!(fs::read_dir(at.plus("other")).unwrap().count(), 2);
+    }
 }
 
 #[test]
@@ -3960,3 +3923,39 @@ sort: invalid suffix in --buffer-size argument '8zz'
 }
 
 // spell-checker:enable
+
+#[rstest::rstest]
+#[case(&["-k2,3"], "aa\n0aa\r\n", "0aa\r\naa\n")]
+#[case(&["-k2,3"], "aa\n0aa\x0c\n", "0aa\x0c\naa\n")]
+#[case(&["-d"], "a\rb\naab\n", "aab\na\rb\n")]
+#[case(&["-d"], "a\x0cb\naab\n", "aab\na\x0cb\n")]
+#[case(&["-n"], "\r4\na\n", "\r4\na\n")]
+#[case(&["-n"], "\x0c4\na\n", "\x0c4\na\n")]
+#[case(&["-z", "-k2"], "b\n1\0a\n2\0", "b\n1\0a\n2\0")]
+#[case(&["-z", "-d"], "a\nb\0aab\0", "a\nb\0aab\0")]
+#[case(&["-z", "-n"], "\n4\0a\0", "a\0\n4\0")]
+fn test_control_whitespace(#[case] args: &[&str], #[case] input: &str, #[case] expected: &str) {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[rstest::rstest]
+#[case(&["1e3"], "sort: cannot read: 1e3: No such file or directory\n")]
+#[case(&["-o", "007", "empty"], "sort: open failed: 007: Is a directory\n")]
+#[case(&["--files0-from=2.50"], "sort: open failed: 2.50: No such file or directory\n")]
+#[cfg(not(windows))]
+fn test_numeric_looking_file_names_are_kept_verbatim(
+    #[case] args: &[&str],
+    #[case] expected: &str,
+) {
+    // File names such as "007" or "1e3" must not be reformatted as numbers
+    // in error messages.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("007");
+    at.touch("empty");
+    ucmd.args(args).fails_with_code(2).stderr_is(expected);
+}

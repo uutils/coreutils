@@ -47,6 +47,9 @@ fn run_more_with_pty(
 fn quit_more(controller: &mut File, mut child: uutests::util::UChild) {
     controller.write_all(b"q").unwrap();
     child.delay(50);
+    // Not all options quit on `q` here, and a `more` left behind spins once
+    // its terminal hangs up.
+    child.kill();
 }
 
 #[cfg(unix)]
@@ -110,9 +113,7 @@ fn test_alive(args: &[&str]) {
 
     assert!(child.is_alive(), "Command should still be alive");
 
-    // cleanup
-    controller.write_all(b"q").unwrap();
-    child.delay(50);
+    quit_more(&mut controller, child);
 }
 
 #[test]

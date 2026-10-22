@@ -13,7 +13,7 @@ install-help-owner = set ownership (super-user only)
 install-help-preserve-timestamps = apply access/modification times of SOURCE files to corresponding destination files
 install-help-strip = strip symbol tables
 install-help-strip-program = program used to strip binaries
-install-help-target-directory = move all SOURCE arguments into DIRECTORY
+install-help-target-directory = copy all SOURCE arguments into DIRECTORY
 install-help-no-target-directory = treat DEST as a normal file
 install-help-verbose = explain what is being done
 install-help-preserve-context = preserve security context
@@ -28,7 +28,9 @@ install-error-chmod-failed = failed to chmod { $path }
 install-error-chmod-failed-detailed = { $path }: chmod failed with error { $error }
 install-error-chown-failed = failed to chown { $path }: { $error }
 install-error-invalid-target = invalid target { $path }: No such file or directory
-install-error-target-not-dir = target { $path } is not a directory
+install-error-target-not-dir = target { $path }: { $error }
+install-error-target-stat = cannot stat { $path }: { $error }
+install-error-create-regular-file = cannot create regular file { $path }: { $error }
 install-error-backup-failed = cannot backup { $from }: { $error }
 install-error-install-failed = cannot install { $from } to { $to }: { $error }
 install-error-strip-failed = strip program failed: { $error }
@@ -51,10 +53,11 @@ install-error-mutually-exclusive-target = Options --target-directory and --no-ta
 install-error-mutually-exclusive-compare-strip = Options --compare and --strip are mutually exclusive
 install-error-missing-file-operand = missing file operand
 install-error-missing-destination-operand = missing destination file operand after { $path }
-install-error-failed-to-remove = Failed to remove existing file { $path }. Error: { $error }
+install-error-failed-to-remove = Failed to remove existing file { $path }. { $error }
 install-error-will-not-overwrite-just-created = will not overwrite just-created { $dest } with { $source }
 
 # Warning messages
+install-warning-context-ignored = ignoring --context; it requires an SELinux-enabled kernel
 install-warning-compare-ignored = the --compare (-C) option is ignored when you specify a mode with non-permission bits
 install-warning-no-strip-with-program = WARNING: ignoring --strip-program option as -s option was not specified
 

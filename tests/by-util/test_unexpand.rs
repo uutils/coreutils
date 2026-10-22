@@ -5,6 +5,7 @@
 
 // spell-checker:ignore contenta edgecase behaviour tcaf
 
+use rstest::rstest;
 use uutests::{at_and_ucmd, new_ucmd};
 
 #[test]
@@ -12,31 +13,26 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
-#[test]
-fn unexpand_init_0() {
+#[rstest]
+#[case::unexpand_init_0(&["-t4"], " 1\n  2\n   3\n    4\n", " 1\n  2\n   3\n\t4\n")]
+#[case::unexpand_init_1(&["-t4"], "     5\n      6\n       7\n        8\n", "\t 5\n\t  6\n\t   7\n\t\t8\n")]
+#[case::unexpand_init_list_0(&["-t2,4"], " 1\n  2\n   3\n    4\n", " 1\n\t2\n\t 3\n\t\t4\n")]
+#[case::unexpand_flag_a_0(&["--"], "e     E\nf      F\ng       G\nh        H\n", "e     E\nf      F\ng       G\nh        H\n")]
+#[case::unexpand_flag_a_1(&["-a"], "e     E\nf      F\ng       G\nh        H\n", "e     E\nf      F\ng\tG\nh\t H\n")]
+#[case::unexpand_flag_a_2(&["-t8"], "e     E\nf      F\ng       G\nh        H\n", "e     E\nf      F\ng\tG\nh\t H\n")]
+#[case::unexpand_first_only_0(&["-t3"], "        A     B", "\t\t  A\t  B")]
+#[case::unexpand_first_only_1(&["-t3", "--first-only"], "        A     B", "\t\t  A     B")]
+#[case::unexpand_first_only_2(&["-t3", "-f"], "        A     B", "\t\t  A     B")]
+#[case::unexpand_first_only_3(&["-f", "-t8"], "        A     B", "\tA     B")]
+#[case::unexpand_spaces_after_fields(&["-a"], "   \t        A B C D             A\t\n", "\t\tA B C D\t\t    A\t\n")]
+#[case::tabs_shortcut(&["-3"], "   a   b", "\ta   b")]
+#[case::comma_separated_tabs_shortcut(&["-a", "-3,9"], "a  b     c", "a\tb\tc")]
+fn test_unexpand_stdin(#[case] args: &[&str], #[case] input: &str, #[case] expected: &str) {
     new_ucmd!()
-        .args(&["-t4"])
-        .pipe_in(" 1\n  2\n   3\n    4\n")
+        .args(args)
+        .pipe_in(input)
         .succeeds()
-        .stdout_is(" 1\n  2\n   3\n\t4\n");
-}
-
-#[test]
-fn unexpand_init_1() {
-    new_ucmd!()
-        .args(&["-t4"])
-        .pipe_in("     5\n      6\n       7\n        8\n")
-        .succeeds()
-        .stdout_is("\t 5\n\t  6\n\t   7\n\t\t8\n");
-}
-
-#[test]
-fn unexpand_init_list_0() {
-    new_ucmd!()
-        .args(&["-t2,4"])
-        .pipe_in(" 1\n  2\n   3\n    4\n")
-        .succeeds()
-        .stdout_is(" 1\n\t2\n\t 3\n\t\t4\n");
+        .stdout_only(expected);
 }
 
 #[test]
@@ -47,69 +43,6 @@ fn unexpand_init_list_1() {
         .pipe_in("     5\n      6\n       7\n        8\n")
         .succeeds()
         .stdout_is("\t\t 5\n\t\t  6\n\t\t   7\n\t\t    8\n");
-}
-
-#[test]
-fn unexpand_flag_a_0() {
-    new_ucmd!()
-        .args(&["--"])
-        .pipe_in("e     E\nf      F\ng       G\nh        H\n")
-        .succeeds()
-        .stdout_is("e     E\nf      F\ng       G\nh        H\n");
-}
-
-#[test]
-fn unexpand_flag_a_1() {
-    new_ucmd!()
-        .args(&["-a"])
-        .pipe_in("e     E\nf      F\ng       G\nh        H\n")
-        .succeeds()
-        .stdout_is("e     E\nf      F\ng\tG\nh\t H\n");
-}
-
-#[test]
-fn unexpand_flag_a_2() {
-    new_ucmd!()
-        .args(&["-t8"])
-        .pipe_in("e     E\nf      F\ng       G\nh        H\n")
-        .succeeds()
-        .stdout_is("e     E\nf      F\ng\tG\nh\t H\n");
-}
-
-#[test]
-fn unexpand_first_only_0() {
-    new_ucmd!()
-        .args(&["-t3"])
-        .pipe_in("        A     B")
-        .succeeds()
-        .stdout_is("\t\t  A\t  B");
-}
-
-#[test]
-fn unexpand_first_only_1() {
-    new_ucmd!()
-        .args(&["-t3", "--first-only"])
-        .pipe_in("        A     B")
-        .succeeds()
-        .stdout_is("\t\t  A     B");
-}
-
-#[test]
-fn unexpand_first_only_2() {
-    new_ucmd!()
-        .args(&["-t3", "-f"])
-        .pipe_in("        A     B")
-        .succeeds()
-        .stdout_is("\t\t  A     B");
-}
-
-#[test]
-fn unexpand_first_only_3() {
-    new_ucmd!()
-        .args(&["-f", "-t8"])
-        .pipe_in("        A     B")
-        .succeeds()
-        .stdout_is("\tA     B");
 }
 
 #[test]
@@ -156,15 +89,6 @@ fn unexpand_spaces_follow_tabs_1() {
         .pipe_in("a \t   B \t")
         .succeeds()
         .stdout_is("a\t\t  B \t");
-}
-
-#[test]
-fn unexpand_spaces_after_fields() {
-    new_ucmd!()
-        .args(&["-a"])
-        .pipe_in("   \t        A B C D             A\t\n")
-        .succeeds()
-        .stdout_is("\t\tA B C D\t\t    A\t\n");
 }
 
 #[test]
@@ -236,15 +160,6 @@ fn unexpand_read_from_two_file() {
 }
 
 #[test]
-fn test_tabs_shortcut() {
-    new_ucmd!()
-        .arg("-3")
-        .pipe_in("   a   b")
-        .succeeds()
-        .stdout_is("\ta   b");
-}
-
-#[test]
 fn test_tabs_shortcut_combined_with_all_arg() {
     fn run_cmd(all_arg: &str) {
         new_ucmd!()
@@ -259,15 +174,6 @@ fn test_tabs_shortcut_combined_with_all_arg() {
     for arg in all_args {
         run_cmd(arg);
     }
-}
-
-#[test]
-fn test_comma_separated_tabs_shortcut() {
-    new_ucmd!()
-        .args(&["-a", "-3,9"])
-        .pipe_in("a  b     c")
-        .succeeds()
-        .stdout_is("a\tb\tc");
 }
 
 #[test]

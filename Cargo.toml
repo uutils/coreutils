@@ -94,7 +94,7 @@ nom = "8.0.0"
 notify = { version = "8.2.0", features = ["macos_kqueue"] }
 num-bigint = "0.4.4"
 num-integer = "0.1.47"
-num-prime = "0.6.0"
+num-prime = "0.7.0"
 num-traits = "0.2.19"
 fancy-regex = { version = "0.19.2", default-features = false, features = [
   "std",
@@ -102,7 +102,7 @@ fancy-regex = { version = "0.19.2", default-features = false, features = [
   "leftmost_longest",
 ] }
 os_display = "0.1.3"
-parse_datetime = "0.16.0"
+parse_datetime = "0.17.0"
 phf = "0.14.0"
 phf_codegen = "0.14.0"
 platform-info = "2.0.3"
@@ -113,7 +113,7 @@ rand = { version = "0.10.1", features = ["std_rng"] }
 rand_chacha = { version = "0.10.0" }
 rayon = "1.10"
 regex = "1.10.4"
-rstest = "0.27.0"
+rstest = "0.28.0"
 rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"
 rustix = { version = "1.1.4", default-features = false }
@@ -176,6 +176,7 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(pgo_training)',
   'cfg(target_os, values("cygwin"))',
   'cfg(wasi_runner)',
+  'cfg(wasip2_runner)',
 ] }
 unused_qualifications = "warn"
 
@@ -207,15 +208,12 @@ needless_pass_by_value = "allow"             # 16
 float_cmp = "allow"                          # 12
 return_self_not_must_use = "allow"           # 8
 inline_always = "allow"                      # 6
-fn_params_excessive_bools = "allow"          # 6
 should_panic_without_expect = "allow"        # 2
 assert_is_empty = "allow"
 
 doc_markdown = "allow"
 unused_self = "allow"
-unnested_or_patterns = "allow"
 implicit_hasher = "allow"
-doc_link_with_quotes = "allow"
 # TODO lint is deprecated since Rust 1.98, can be removed when we have a MSRV >= 1.98
 from_iter_instead_of_collect = "allow"
 large_types_passed_by_value = "allow"
@@ -454,13 +452,13 @@ feat_diagnostics = ["uucore/diagnostics"]
 ## Optional feature for stdbuf
 # "feat_external_libstdbuf" == use an external libstdbuf.so for stdbuf instead of embedding it
 feat_external_libstdbuf = ["stdbuf/feat_external_libstdbuf"]
-# "feat_systemd_logind" == enable feat_systemd_logind support for utmpx replacement
+# "feat_systemd_logind" == enable systemd_logind support for utmpx replacement
 feat_systemd_logind = [
-  "pinky/feat_systemd_logind",
-  "uptime/feat_systemd_logind",
-  "users/feat_systemd_logind",
-  "uucore/feat_systemd_logind",
-  "who/feat_systemd_logind",
+  "pinky/systemd_logind",
+  "uptime/systemd_logind",
+  "users/systemd_logind",
+  "uucore/systemd_logind",
+  "who/systemd_logind",
 ]
 # "feat_selinux" == enable support for SELinux Security Context (by using `--features feat_selinux`)
 # NOTE:

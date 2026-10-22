@@ -82,7 +82,7 @@ fn od_format_type(type_char: FormatType, byte_size: u8) -> Option<FormatterItemI
 
         (FormatType::Float, 2) => Some(FORMAT_ITEM_F16),
         (FormatType::Float, 4) => Some(FORMAT_ITEM_F32),
-        (FormatType::Float, 0) | (FormatType::Float, 8) => Some(FORMAT_ITEM_F64),
+        (FormatType::Float, 0 | 8) => Some(FORMAT_ITEM_F64),
         (FormatType::Float, 16) => Some(FORMAT_ITEM_LONG_DOUBLE),
 
         _ => None,

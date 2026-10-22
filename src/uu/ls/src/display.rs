@@ -37,6 +37,7 @@ use uucore::entries;
     target_os = "freebsd",
     target_os = "hurd",
     target_os = "linux",
+    target_os = "macos",
     target_os = "netbsd"
 ))]
 use uucore::fsxattr::has_acl;
@@ -769,7 +770,7 @@ fn display_item_name(
         let should_stat_target = has_mi_or_or
             || matches!(
                 config.indicator_style,
-                Some(IndicatorStyle::Classify) | Some(IndicatorStyle::FileType)
+                Some(IndicatorStyle::Classify | IndicatorStyle::FileType)
             );
 
         match path.path().read_link() {
@@ -952,14 +953,15 @@ fn display_item_long(
             target_os = "freebsd",
             target_os = "hurd",
             target_os = "linux",
+            target_os = "macos",
             target_os = "netbsd"
         )))]
-        // TODO: See how Mac should work here
         let is_acl_set = false;
         #[cfg(any(
             target_os = "freebsd",
             target_os = "hurd",
             target_os = "linux",
+            target_os = "macos",
             target_os = "netbsd"
         ))]
         let is_acl_set = has_acl(item.path(), item.must_dereference);
@@ -1381,14 +1383,15 @@ fn calculate_padding_collection(
                 target_os = "freebsd",
                 target_os = "hurd",
                 target_os = "linux",
+                target_os = "macos",
                 target_os = "netbsd"
             )))]
-            // TODO: See how Mac should work here
             let is_acl_set = false;
             #[cfg(any(
                 target_os = "freebsd",
                 target_os = "hurd",
                 target_os = "linux",
+                target_os = "macos",
                 target_os = "netbsd"
             ))]
             let is_acl_set = has_acl(item.path(), item.must_dereference);

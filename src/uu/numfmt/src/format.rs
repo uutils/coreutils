@@ -969,6 +969,16 @@ pub fn write_formatted_with_delimiter<W: std::io::Write + ?Sized>(
     Ok(())
 }
 
+/// Writes the space that stands for the first of the `blanks` between two
+/// fields, and returns the blanks that follow it.
+fn write_separator<'a, W: std::io::Write + ?Sized>(
+    writer: &mut W,
+    blanks: &'a str,
+) -> std::io::Result<&'a str> {
+    writer.write_all(b" ")?;
+    Ok(&blanks[blanks.chars().next().map_or(0, char::len_utf8)..])
+}
+
 pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
     writer: &mut W,
     s: &str,
@@ -986,8 +996,7 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
 
             // add delimiter before second and subsequent fields
             let prefix = if n > 1 {
-                writer.write_all(b" ")?;
-                &prefix[prefix.chars().next().map_or(0, char::len_utf8)..]
+                write_separator(writer, prefix)?
             } else {
                 prefix
             };
@@ -1001,10 +1010,9 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
             let formatted = format_string(field, options, implicit_padding)?;
             writer.write_all(formatted.as_bytes())?;
         } else {
-            // the -z option converts an initial \n into a space
-            let prefix = if options.zero_terminated && prefix.starts_with('\n') {
-                writer.write_all(b" ")?;
-                &prefix[1..]
+            // the first blank between fields is written as a space
+            let prefix = if n > 1 {
+                write_separator(writer, prefix)?
             } else {
                 prefix
             };
@@ -1016,6 +1024,29 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
 
     if let Some(eol) = eol {
         writer.write_all(&[eol])?;
+    }
+
+    Ok(())
+}
+
+/// Writes a line that could not be converted, with the blanks between its
+/// fields written as `write_formatted_with_whitespace` writes them.
+pub fn write_unconverted_with_whitespace<W: std::io::Write + ?Sized>(
+    writer: &mut W,
+    s: &str,
+    options: &NumfmtOptions,
+) -> std::io::Result<()> {
+    for (n, (prefix, field)) in (1..).zip(WhitespaceSplitter {
+        s: Some(s),
+        options,
+    }) {
+        let prefix = if n > 1 {
+            write_separator(writer, prefix)?
+        } else {
+            prefix
+        };
+        writer.write_all(prefix.as_bytes())?;
+        writer.write_all(field.as_bytes())?;
     }
 
     Ok(())

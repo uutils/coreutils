@@ -22,7 +22,6 @@ use crate::error::{UError, UResult};
 use crate::translate;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
-use libc::time_t;
 
 #[cfg(unix)]
 mod unix;
@@ -70,13 +69,13 @@ pub enum OutputFormat {
 }
 
 struct FormattedUptime {
-    days: i64,
-    hours: i64,
-    mins: i64,
+    days: u64,
+    hours: u64,
+    mins: u64,
 }
 
 impl FormattedUptime {
-    fn new(seconds: i64) -> Self {
+    fn new(seconds: u64) -> Self {
         let days = seconds / 86400;
         let hours = (seconds - (days * 86400)) / 3600;
         let mins = (seconds - (days * 86400) - (hours * 3600)) / 60;
@@ -111,7 +110,7 @@ impl FormattedUptime {
 ///
 /// # Arguments
 ///
-/// boot_time: Option<time_t> - Manually specify the boot time, or None to try to get it from the system.
+/// boot_time: Unix timestamp in seconds as a signed 64-bit integer, or None to try to get it from the system.
 /// output_format: OutputFormat - Selects the format of the output string.
 ///
 /// # Returns
@@ -119,16 +118,12 @@ impl FormattedUptime {
 /// Returns a UResult with the uptime in a human-readable format(e.g. "1 day, 3:45") if successful, otherwise an UptimeError.
 #[inline]
 pub fn get_formatted_uptime(
-    boot_time: Option<time_t>,
+    boot_time: Option<i64>,
     output_format: OutputFormat,
 ) -> UResult<String> {
     let uptime = get_uptime(boot_time)?;
 
-    if uptime < 0 {
-        Err(UptimeError::SystemUptime)?;
-    }
-
-    let formatted_uptime = FormattedUptime::new(uptime);
+    let formatted_uptime = FormattedUptime::new(uptime.as_secs());
 
     match output_format {
         OutputFormat::HumanReadable => Ok(formatted_uptime.get_human_readable_uptime()),

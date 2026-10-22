@@ -1598,7 +1598,7 @@ mod tests {
         assert!(path_is_root_dir("/", false));
         // Reached by a different name, still the same directory.
         assert!(path_is_root_dir("/..", true));
-        assert!(path_is_root_dir("/tmp/..", true));
+        assert!(path_is_root_dir("/.", true));
 
         let dir = tempdir().unwrap();
         assert!(!path_is_root_dir(dir.path(), true));

@@ -346,7 +346,10 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
             );
             all_successful = false;
         } else if let Err(e) = link(srcpath, &targetpath, settings) {
-            show_error!("{e}");
+            // A declined prompt has nothing to report.
+            if !matches!(e, LnError::SomeLinksFailed) {
+                show_error!("{e}");
+            }
             all_successful = false;
         }
 
@@ -403,19 +406,12 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
 
     if dst.is_symlink() || dst.exists() {
         backup_path = backup_control::get_backup_path(settings.backup, dst, &settings.suffix);
-        if settings.backup == BackupMode::Existing && !settings.symbolic {
-            // when ln --backup f f, it should detect that it is the same file
+        if settings.backup != BackupMode::None && !settings.symbolic {
+            // `ln --backup f f`: the backup would move `f` away before the
+            // link is made, so detect the same file first, for any backup mode
             if paths_refer_to_same_file(src, dst, true) && is_same_entry(src, dst) {
                 return Err(LnError::SameFile(src.to_owned(), dst.to_owned()));
             }
-        }
-        if let Some(ref p) = backup_path {
-            fs::rename(dst, p).map_err(|e| {
-                LnError::IoContext(
-                    UIoError::from(e),
-                    translate!("ln-cannot-backup", "file" => dst.quote()),
-                )
-            })?;
         }
         match settings.overwrite {
             OverwriteMode::NoClobber => {}
@@ -427,7 +423,9 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
                 overwrite_on_conflict = true;
             }
             OverwriteMode::Force => {
-                if !dst.is_symlink()
+                // A backup moves the destination away before the link is made.
+                if backup_path.is_none()
+                    && !dst.is_symlink()
                     && paths_refer_to_same_file(src, dst, true)
                     && is_same_entry(src, dst)
                 {
@@ -436,6 +434,14 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
                 }
                 overwrite_on_conflict = true;
             }
+        }
+        if let Some(ref p) = backup_path {
+            fs::rename(dst, p).map_err(|e| {
+                LnError::IoContext(
+                    UIoError::from(e),
+                    translate!("ln-cannot-backup", "file" => dst.quote()),
+                )
+            })?;
         }
     }
 

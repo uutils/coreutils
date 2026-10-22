@@ -106,6 +106,44 @@ fn test_stdin() {
 }
 
 #[test]
+fn test_binary_input_line_number() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("input", b"\xff\0\nhello\x80");
+
+    ucmd.args(&["input", "2"]).succeeds().stdout_only("3\n6\n");
+
+    assert_eq!(at.read_bytes("xx00"), b"\xff\0\n");
+    assert_eq!(at.read_bytes("xx01"), b"hello\x80");
+}
+
+#[test]
+fn test_binary_input_regex() {
+    let input = b"\xff\0\nbefore\r\nmatch\xfe\r\nlast\x80";
+    for (pattern, split) in [("/match/", 11), ("/match/+1", 19), ("/match/-1", 3)] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["-", pattern])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(format!("{split}\n{}\n", input.len() - split));
+
+        assert_eq!(at.read_bytes("xx00"), &input[..split]);
+        assert_eq!(at.read_bytes("xx01"), &input[split..]);
+    }
+}
+
+#[test]
+fn test_binary_input_skip_regex() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-", "%match%"])
+        .pipe_in(b"\xff\0\nmatch\xfe\nlast\x80")
+        .succeeds()
+        .stdout_only("12\n");
+
+    assert_eq!(at.read_bytes("xx00"), b"match\xfe\nlast\x80");
+    assert!(!at.file_exists("xx01"));
+}
+
+#[test]
 fn test_up_to_line() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "10"])
@@ -753,6 +791,20 @@ fn test_skip_to_match_option_suppress_matched() {
         .count();
     assert_eq!(count, 1);
     assert_eq!(at.read("xx00"), generate(11, 51));
+}
+
+#[test]
+fn test_suppress_line_number_before_current_position() {
+    for line_number in ["5", "10", "11"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["numbers50.txt", "--suppress-matched", "/10$/", line_number])
+            .succeeds()
+            .stdout_only("18\n0\n117\n");
+
+        assert_eq!(at.read("xx00"), generate(1, 10));
+        assert_eq!(at.read("xx01"), "");
+        assert_eq!(at.read("xx02"), generate(12, 51));
+    }
 }
 
 #[test]
@@ -1668,7 +1720,7 @@ fn repeat_everything() {
         .count();
     assert_eq!(count, 6);
     assert_eq!(at.read("xxz_000"), generate(1, 12 + 1));
-    assert_eq!(at.read("xxz_001"), generate(14, 17 + 1)); // FIXME: GNU starts at 15
+    assert_eq!(at.read("xxz_001"), generate(15, 17 + 1));
     assert_eq!(at.read("xxz_002"), generate(19, 26 + 1));
     assert_eq!(at.read("xxz_003"), generate(28, 35 + 1));
     assert_eq!(at.read("xxz_004"), generate(37, 44 + 1));

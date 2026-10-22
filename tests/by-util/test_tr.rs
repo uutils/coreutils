@@ -3,8 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore lowre punct aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase fooclass Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer mnop mnopq pqopq pqqqq ppqqrr pqrr ppqr ppqqpp
+// spell-checker:ignore lowre punct aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase fooclass Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer mnop mnopq pqopq pqqqq ppqqrr pqrr ppqr ppqqpp abcx xxaa aazz
 
+use rstest::rstest;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -39,22 +40,79 @@ fn test_invalid_input() {
     }
 }
 
-#[test]
-fn test_to_upper() {
+#[rstest]
+#[case::to_upper(&["a-z", "A-Z"], "!abcd!", "!ABCD!")]
+#[case::small_set2(&["0-9", "X"], "@0123456789", "@XXXXXXXXXX")]
+#[case::delete(&["-d", "a-z"], "aBcD", "BD")]
+#[case::delete_afterwards_is_not_flag(&["a-z", "-d"], "aBcD", "-BdD")]
+#[case::delete_multi(&["-d", "-d", "a-z"], "aBcD", "BD")]
+#[case::delete_complement(&["-d", "-c", "a-z"], "aBcD", "ac")]
+#[case::complement1(&["-c", "a", "X"], "ab", "aX")]
+#[case::complement2(&["-c", "0-9", "x"], "Phone: 01234 567890", "xxxxxxx01234x567890")]
+#[case::complement3(&["-c", "abcdefgh", "123"], "the cat and the bat", "3he3ca33a3d33he3ba3")]
+#[case::complement_multi_early(&["-c", "-c", "a", "X"], "ab", "aX")]
+#[case::squeeze(&["-s", "a-z"], "aaBBcDcc", "aBBcDc")]
+#[case::squeeze_multi(&["-ss", "-s", "a-z"], "aaBBcDcc", "aBBcDc")]
+#[case::squeeze_complement(&["-sc", "a-z"], "aaBBcDcc", "aaBcDcc")]
+#[case::translate_and_squeeze(&["-s", "x", "y"], "xx", "y")]
+#[case::delete_and_squeeze(&["-ds", "a-z", "A-Z"], "abBcB", "B")]
+#[case::delete_and_squeeze_complement(&["-dsc", "a-z", "A-Z"], "abBcB", "abc")]
+#[case::delete_and_squeeze_complement_squeeze_set2(&["-dsc", "abX", "XYZ"], "abbbcdddXXXYYY", "abbbX")]
+// with -d and -s, set2 is only the set to squeeze, so any class is allowed
+#[case::delete_and_squeeze_digit_class_in_set2(&["-ds", "x", "[:digit:]"], "aab-x1122", "aab-12")]
+#[case::delete_and_squeeze_upper_class_in_set2(&["-ds", "a", "[:upper:]"], "aAAb", "Ab")]
+#[case::set1_shorter_than_set2(&["ab", "xyz"], "abcde", "xycde")]
+#[case::truncate_multi(&["-tt", "-t", "abc", "xy"], "abcde", "xycde")]
+#[case::truncate_with_set1_shorter_than_set2(&["-t", "ab", "xyz"], "abcde", "xycde")]
+#[case::interpret_unrecognized_backslash_escape_as_character(&["qcz+=~-", r"\q\c\z\+\=\~\-"], "qcz+=~-", "qcz+=~-")]
+#[case::interpret_single_octal_escape(&["X", r"\015"], "X", "\r")]
+#[case::interpret_one_and_two_digit_octal_escape(&["XYZ", r"\0\11\77"], "XYZ", "\0\t?")]
+#[case::octal_escape_is_at_most_three_digits(&["XY", r"\0156"], "XY", "\r6")]
+#[case::non_octal_digit_ends_escape(&["rust", r"\08\11956"], "rust", "\08\t9")]
+#[case::interpret_backslash_at_eol_literally(&["X", r"\"], "X", "\\")]
+#[case::tr_translate_range_to_repeat_class_zero(&["abcd", "[]*]"], "abcd", "]]]]")]
+#[case::tr_translate_range_to_repeat_class(&["rst", "[%*]uvw"], "rst", "uvw")]
+#[case::tr_translate_empty_set1_noop(&["", "[.*]"], "rst", "rst")]
+#[case::tr_squeeze_range_to_special_chars(&["-s", "a-p", "%[.*]$"], "abcdefghijklmnop", "%.$")]
+#[case::tr_squeeze_range_to_repeat_class(&["-s", "a-p", "[.*]$"], "abcdefghijklmnop", ".$")]
+#[case::tr_squeeze_range_to_class_prefix(&["-s", "a-p", "%[.*]"], "abcdefghijklmnop", "%.")]
+#[case::tr_squeeze_char_class_alnum(&["-s", "[p-z]"], "ppqqrr", "pqr")]
+#[case::tr_squeeze_explicit_range(&["-s", "[p-r]"], "ppqqrr", "pqr")]
+#[case::tr_squeeze_partial_range(&["-s", "[p-q]"], "ppqqrr", "pqrr")]
+#[case::tr_squeeze_tail_range(&["-s", "[q-r]"], "ppqqrr", "ppqr")]
+#[case::tr_delete_equivalence_class_close(&["-d", "[=]=]"], "[[[[[[[]]]]]]]]", "[[[[[[[")]
+#[case::tr_delete_xdigit_leaves_non_hex(&["-d", "[:xdigit:]"], "w0x1y2z3456789acbdefABCDEFz", "wxyzz")]
+#[case::tr_delete_digit_leaves_alpha(&["-d", "[:digit:]"], "a0b1c2d3e4f5g6h7i8j9k", "abcdefghijk")]
+#[case::tr_delete_complement_alnum(&["-d", "[:alnum:]"], ".abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.", "..")]
+#[case::tr_delete_complement_alpha(&["-ds", "[:alnum:]", "."], ".abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.", ".")]
+#[case::tr_delete_squeeze_combined(&["-ds", "q", "p"], "ppqqpp", "p")]
+#[case::tr_delete_squeeze_xdigit(&["-ds", "[:xdigit:]", "Z"], "ZZ0123456789acbdefABCDEFZZ", "Z")]
+#[case::tr_squeeze_alnum_remove_spaces(&["-s", "abcdefghijklmn", "[:*016]"], "abcdefghijklmnop", ":op")]
+#[case::tr_translate_digits_to_letters(&["-d", "a-z"], "abc $code", " $")]
+#[case::tr_translate_control_chars(&["-ds", "a-z", "$."], "a.b.c $$$$code\\", ". $\\")]
+#[case::tr_translate_lower_to_upper(&["[:lower:]", "[:upper:]"], "abcxyzABCXYZ", "ABCXYZABCXYZ")]
+#[case::tr_translate_upper_to_lower(&["[:upper:]", "[:lower:]"], "abcxyzABCXYZ", "abcxyzabcxyz")]
+#[case::tr_repeat_complement_char_class(&["a[=*2][=c=]", "xyyz"], "a=c", "xyz")]
+#[case::tr_repeat_class_in_set2_basic(&["[:*3][:digit:]", "a-m"], ":1239", "cefgm")]
+#[case::tr_repeat_class_extends_set2(&["a[b*512]c", "1[x*]2"], "abc", "1x2")]
+#[case::tr_repeat_class_with_squeeze(&["a[b*513]c", "1[x*]2"], "abc", "1x2")]
+#[case::tr_translate_overlap_repeat_squeeze(&["[b*010]cd", "[a*7]BC[x*]"], "bcd", "BCx")]
+#[case::tr_translate_with_escape_sequence(&[r"a\-z", "A-Z"], "abc-z", "AbcBC")]
+#[case::tr_translate_octal_backslash(&["a\u{055}b", "def"], "a\u{055}b", "def")]
+#[case::tr_ross_translate_complement(&["-cs", "[:upper:]", "[X*]"], "AMZamz123.-+AMZ", "AMZXAMZ")]
+#[case::tr_ross_delete_complement(&["-dcs", "[:lower:]", "n-rs-z"], "amzAMZ123.-+amz", "amzamz")]
+#[case::tr_ross_delete_complement_squeeze(&["-ds", "[:xdigit:]", "[:alnum:]"], ".ZABCDEFGzabcdefg.0123456788899.GG", ".ZGzg..G")]
+#[case::tr_translate_repeat_zero_count(&["abc", "[b*0]"], "abcd", "bbbd")]
+#[case::tr_translate_repeat_multiple_zeros(&["abc", "[b*00000000000000000000]"], "abcd", "bbbd")]
+#[case::tr_translate_repeat_complement(&["-c", "[a*65536]\n", "[b*]"], "abcd", "abbb")]
+#[case::tr_translate_repeat_x_complement(&["-C", "[a*65536]\n", "[b*]"], "abcd", "abbb")]
+#[case::unbuffered_flag(&["-u", "a-z", "A-Z"], "hello\n", "HELLO\n")]
+fn test_tr_stdin(#[case] args: &[&str], #[case] input: &str, #[case] expected: &str) {
     new_ucmd!()
-        .args(&["a-z", "A-Z"])
-        .pipe_in("!abcd!")
+        .args(args)
+        .pipe_in(input)
         .succeeds()
-        .stdout_is("!ABCD!");
-}
-
-#[test]
-fn test_small_set2() {
-    new_ucmd!()
-        .args(&["0-9", "X"])
-        .pipe_in("@0123456789")
-        .succeeds()
-        .stdout_is("@XXXXXXXXXX");
+        .stdout_only(expected);
 }
 
 #[test]
@@ -64,15 +122,6 @@ fn test_invalid_unicode() {
         .pipe_in([0o200, b'a', b'b', b'c'])
         .succeeds()
         .stdout_is("abc");
-}
-
-#[test]
-fn test_delete() {
-    new_ucmd!()
-        .args(&["-d", "a-z"])
-        .pipe_in("aBcD")
-        .succeeds()
-        .stdout_is("BD");
 }
 
 #[test]
@@ -108,38 +157,11 @@ fn test_delete_complement_graph_and_print_match_gnu() {
 }
 
 #[test]
-fn test_delete_afterwards_is_not_flag() {
-    new_ucmd!()
-        .args(&["a-z", "-d"])
-        .pipe_in("aBcD")
-        .succeeds()
-        .stdout_is("-BdD");
-}
-
-#[test]
-fn test_delete_multi() {
-    new_ucmd!()
-        .args(&["-d", "-d", "a-z"])
-        .pipe_in("aBcD")
-        .succeeds()
-        .stdout_is("BD");
-}
-
-#[test]
 fn test_delete_late() {
     new_ucmd!()
         .args(&["-d", "a-z", "-d"])
         .fails()
         .stderr_contains("extra operand '-d'");
-}
-
-#[test]
-fn test_delete_complement() {
-    new_ucmd!()
-        .args(&["-d", "-c", "a-z"])
-        .pipe_in("aBcD")
-        .succeeds()
-        .stdout_is("ac");
 }
 
 #[test]
@@ -238,38 +260,11 @@ fn test_translate_one_char_large_input() {
 }
 
 #[test]
-fn test_complement1() {
-    new_ucmd!()
-        .args(&["-c", "a", "X"])
-        .pipe_in("ab")
-        .succeeds()
-        .stdout_is("aX");
-}
-
-#[test]
 fn test_complement_afterwards_is_not_flag() {
     new_ucmd!()
         .args(&["a", "X", "-c"])
         .fails()
         .stderr_contains("extra operand '-c'");
-}
-
-#[test]
-fn test_complement2() {
-    new_ucmd!()
-        .args(&["-c", "0-9", "x"])
-        .pipe_in("Phone: 01234 567890")
-        .succeeds()
-        .stdout_is("xxxxxxx01234x567890");
-}
-
-#[test]
-fn test_complement3() {
-    new_ucmd!()
-        .args(&["-c", "abcdefgh", "123"])
-        .pipe_in("the cat and the bat")
-        .succeeds()
-        .stdout_is("3he3ca33a3d33he3ba3");
 }
 
 #[test]
@@ -295,15 +290,6 @@ fn test_complement5() {
 }
 
 #[test]
-fn test_complement_multi_early() {
-    new_ucmd!()
-        .args(&["-c", "-c", "a", "X"])
-        .pipe_in("ab")
-        .succeeds()
-        .stdout_is("aX");
-}
-
-#[test]
 fn test_complement_multi_middle() {
     new_ucmd!()
         .args(&["-c", "a", "-c", "X"])
@@ -317,33 +303,6 @@ fn test_complement_multi_late() {
         .args(&["-c", "a", "X", "-c"])
         .fails()
         .stderr_contains("tr: extra operand '-c'");
-}
-
-#[test]
-fn test_squeeze() {
-    new_ucmd!()
-        .args(&["-s", "a-z"])
-        .pipe_in("aaBBcDcc")
-        .succeeds()
-        .stdout_is("aBBcDc");
-}
-
-#[test]
-fn test_squeeze_multi() {
-    new_ucmd!()
-        .args(&["-ss", "-s", "a-z"])
-        .pipe_in("aaBBcDcc")
-        .succeeds()
-        .stdout_is("aBBcDc");
-}
-
-#[test]
-fn test_squeeze_complement() {
-    new_ucmd!()
-        .args(&["-sc", "a-z"])
-        .pipe_in("aaBBcDcc")
-        .succeeds()
-        .stdout_is("aaBcDcc");
 }
 
 #[test]
@@ -365,15 +324,6 @@ fn test_squeeze_complement_two_sets() {
 }
 
 #[test]
-fn test_translate_and_squeeze() {
-    new_ucmd!()
-        .args(&["-s", "x", "y"])
-        .pipe_in("xx")
-        .succeeds()
-        .stdout_is("y");
-}
-
-#[test]
 fn test_translate_and_squeeze_multiple_lines() {
     new_ucmd!()
         .args(&["-s", "x", "y"])
@@ -392,48 +342,12 @@ fn test_delete_and_squeeze_one_set() {
 }
 
 #[test]
-fn test_delete_and_squeeze() {
-    new_ucmd!()
-        .args(&["-ds", "a-z", "A-Z"])
-        .pipe_in("abBcB")
-        .succeeds()
-        .stdout_is("B");
-}
-
-#[test]
-fn test_delete_and_squeeze_complement() {
-    new_ucmd!()
-        .args(&["-dsc", "a-z", "A-Z"])
-        .pipe_in("abBcB")
-        .succeeds()
-        .stdout_is("abc");
-}
-
-#[test]
-fn test_delete_and_squeeze_complement_squeeze_set2() {
-    new_ucmd!()
-        .args(&["-dsc", "abX", "XYZ"])
-        .pipe_in("abbbcdddXXXYYY")
-        .succeeds()
-        .stdout_is("abbbX");
-}
-
-#[test]
 fn test_set1_longer_than_set2() {
     new_ucmd!()
         .args(&["abc", "xy"])
         .pipe_in("abcde")
         .succeeds()
         .stdout_is("xyyde"); // spell-checker:disable-line
-}
-
-#[test]
-fn test_set1_shorter_than_set2() {
-    new_ucmd!()
-        .args(&["ab", "xyz"])
-        .pipe_in("abcde")
-        .succeeds()
-        .stdout_is("xycde");
 }
 
 #[test]
@@ -447,21 +361,35 @@ fn test_truncate() {
 }
 
 #[test]
-fn test_truncate_multi() {
+fn test_ascii_flag() {
     new_ucmd!()
-        .args(&["-tt", "-t", "abc", "xy"])
-        .pipe_in("abcde")
+        .args(&["-A", "k-o", "K-O"])
+        .pipe_in("monkey")
         .succeeds()
-        .stdout_is("xycde");
+        .stdout_is("MONKey");
+
+    new_ucmd!()
+        .args(&["-AA", "-sAd", "[:digit:]", "q"])
+        .pipe_in("qq7q8qqr")
+        .succeeds()
+        .stdout_is("qr");
 }
 
 #[test]
-fn test_truncate_with_set1_shorter_than_set2() {
+fn test_ascii_flag_works_on_bytes() {
+    // 0xd6 is an upper case letter in Latin-1, but not in ASCII.
     new_ucmd!()
-        .args(&["-t", "ab", "xyz"])
-        .pipe_in("abcde")
+        .args(&["-A", "[:upper:]", "[:lower:]"])
+        .pipe_in([b'T', 0xd6, b'P'])
         .succeeds()
-        .stdout_is("xycde");
+        .stdout_is_bytes([b't', 0xd6, b'p']);
+
+    // The complement covers every byte value.
+    new_ucmd!()
+        .args(&["-Acd", "a-z"])
+        .pipe_in([b'w', 0xd6, b'k', 0xff])
+        .succeeds()
+        .stdout_is_bytes(*b"wk");
 }
 
 #[test]
@@ -495,60 +423,6 @@ fn test_interpret_backslash_escapes() {
         .pipe_in("abfnrtv") // spell-checker:disable-line
         .succeeds()
         .stdout_is("\u{7}\u{8}\u{c}\n\r\t\u{b}");
-}
-
-#[test]
-fn test_interpret_unrecognized_backslash_escape_as_character() {
-    new_ucmd!()
-        .args(&["qcz+=~-", r"\q\c\z\+\=\~\-"])
-        .pipe_in("qcz+=~-")
-        .succeeds()
-        .stdout_is("qcz+=~-");
-}
-
-#[test]
-fn test_interpret_single_octal_escape() {
-    new_ucmd!()
-        .args(&["X", r"\015"])
-        .pipe_in("X")
-        .succeeds()
-        .stdout_is("\r");
-}
-
-#[test]
-fn test_interpret_one_and_two_digit_octal_escape() {
-    new_ucmd!()
-        .args(&["XYZ", r"\0\11\77"])
-        .pipe_in("XYZ")
-        .succeeds()
-        .stdout_is("\0\t?");
-}
-
-#[test]
-fn test_octal_escape_is_at_most_three_digits() {
-    new_ucmd!()
-        .args(&["XY", r"\0156"])
-        .pipe_in("XY")
-        .succeeds()
-        .stdout_is("\r6");
-}
-
-#[test]
-fn test_non_octal_digit_ends_escape() {
-    new_ucmd!()
-        .args(&["rust", r"\08\11956"])
-        .pipe_in("rust")
-        .succeeds()
-        .stdout_is("\08\t9");
-}
-
-#[test]
-fn test_interpret_backslash_at_eol_literally() {
-    new_ucmd!()
-        .args(&["X", r"\"])
-        .pipe_in("X")
-        .succeeds()
-        .stdout_is("\\");
 }
 
 #[test]
@@ -657,33 +531,6 @@ fn alnum_expands_number_uppercase_lowercase() {
 }
 
 #[test]
-fn tr_translate_range_to_repeat_class_zero() {
-    new_ucmd!()
-        .args(&["abcd", "[]*]"])
-        .pipe_in("abcd")
-        .succeeds()
-        .stdout_is("]]]]");
-}
-
-#[test]
-fn tr_translate_range_to_repeat_class() {
-    new_ucmd!()
-        .args(&["rst", "[%*]uvw"])
-        .pipe_in("rst")
-        .succeeds()
-        .stdout_is("uvw");
-}
-
-#[test]
-fn tr_translate_empty_set1_noop() {
-    new_ucmd!()
-        .args(&["", "[.*]"])
-        .pipe_in("rst")
-        .succeeds()
-        .stdout_is("rst");
-}
-
-#[test]
 fn tr_truncate_set1_longer_than_set2() {
     // # Test --truncate-set1 behavior when string1 is longer than string2
     new_ucmd!()
@@ -714,69 +561,6 @@ fn tr_posix_repeat_class_extension() {
 }
 
 #[test]
-fn tr_squeeze_range_to_special_chars() {
-    new_ucmd!()
-        .args(&["-s", "a-p", "%[.*]$"])
-        .pipe_in("abcdefghijklmnop")
-        .succeeds()
-        .stdout_is("%.$");
-}
-
-#[test]
-fn tr_squeeze_range_to_repeat_class() {
-    new_ucmd!()
-        .args(&["-s", "a-p", "[.*]$"])
-        .pipe_in("abcdefghijklmnop")
-        .succeeds()
-        .stdout_is(".$");
-}
-
-#[test]
-fn tr_squeeze_range_to_class_prefix() {
-    new_ucmd!()
-        .args(&["-s", "a-p", "%[.*]"])
-        .pipe_in("abcdefghijklmnop")
-        .succeeds()
-        .stdout_is("%.");
-}
-
-#[test]
-fn tr_squeeze_char_class_alnum() {
-    new_ucmd!()
-        .args(&["-s", "[p-z]"])
-        .pipe_in("ppqqrr")
-        .succeeds()
-        .stdout_is("pqr");
-}
-
-#[test]
-fn tr_squeeze_explicit_range() {
-    new_ucmd!()
-        .args(&["-s", "[p-r]"])
-        .pipe_in("ppqqrr")
-        .succeeds()
-        .stdout_is("pqr");
-}
-
-#[test]
-fn tr_squeeze_partial_range() {
-    new_ucmd!()
-        .args(&["-s", "[p-q]"])
-        .pipe_in("ppqqrr")
-        .succeeds()
-        .stdout_is("pqrr");
-}
-
-#[test]
-fn tr_squeeze_tail_range() {
-    new_ucmd!()
-        .args(&["-s", "[q-r]"])
-        .pipe_in("ppqqrr")
-        .succeeds()
-        .stdout_is("ppqr");
-}
-
-#[test]
 fn tr_squeeze_nul_range() {
     new_ucmd!()
         .args(&["-s", r"[\0-\5]"])
@@ -798,15 +582,6 @@ fn tr_delete_equivalence_class_open() {
 }
 
 #[test]
-fn tr_delete_equivalence_class_close() {
-    new_ucmd!()
-        .args(&["-d", "[=]=]"])
-        .pipe_in("[[[[[[[]]]]]]]]")
-        .succeeds()
-        .stdout_is("[[[[[[[");
-}
-
-#[test]
 fn tr_delete_xdigit_all() {
     new_ucmd!()
         .args(&["-d", "[:xdigit:]"])
@@ -816,30 +591,12 @@ fn tr_delete_xdigit_all() {
 }
 
 #[test]
-fn tr_delete_xdigit_leaves_non_hex() {
-    new_ucmd!()
-        .args(&["-d", "[:xdigit:]"])
-        .pipe_in("w0x1y2z3456789acbdefABCDEFz")
-        .succeeds()
-        .stdout_is("wxyzz");
-}
-
-#[test]
 fn tr_delete_digit_all() {
     new_ucmd!()
         .args(&["-d", "[:digit:]"])
         .pipe_in("0123456789")
         .succeeds()
         .no_output();
-}
-
-#[test]
-fn tr_delete_digit_leaves_alpha() {
-    new_ucmd!()
-        .args(&["-d", "[:digit:]"])
-        .pipe_in("a0b1c2d3e4f5g6h7i8j9k")
-        .succeeds()
-        .stdout_is("abcdefghijk");
 }
 
 #[test]
@@ -888,24 +645,6 @@ fn tr_delete_space_class() {
 }
 
 #[test]
-fn tr_delete_complement_alnum() {
-    new_ucmd!()
-        .args(&["-d", "[:alnum:]"])
-        .pipe_in(".abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.")
-        .succeeds()
-        .stdout_is("..");
-}
-
-#[test]
-fn tr_delete_complement_alpha() {
-    new_ucmd!()
-        .args(&["-ds", "[:alnum:]", "."])
-        .pipe_in(".abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.")
-        .succeeds()
-        .stdout_is(".");
-}
-
-#[test]
 fn tr_squeeze_complement_alnum_to_newline_bsd() {
     // # The classic example, with string2 BSD-style
     new_ucmd!()
@@ -926,24 +665,6 @@ fn tr_squeeze_complement_alnum_to_newline_posix() {
 }
 
 #[test]
-fn tr_delete_squeeze_combined() {
-    new_ucmd!()
-        .args(&["-ds", "q", "p"])
-        .pipe_in("ppqqpp")
-        .succeeds()
-        .stdout_is("p");
-}
-
-#[test]
-fn tr_delete_squeeze_xdigit() {
-    new_ucmd!()
-        .args(&["-ds", "[:xdigit:]", "Z"])
-        .pipe_in("ZZ0123456789acbdefABCDEFZZ")
-        .succeeds()
-        .stdout_is("Z");
-}
-
-#[test]
 fn tr_translate_alnum_to_rot13_plus_space() {
     // # Try some data with 8th bit set in case something is mistakenly
     // # sign-extended.
@@ -953,33 +674,6 @@ fn tr_translate_alnum_to_rot13_plus_space() {
         .pipe_in([0o300, 0o301, 0o377, 0o345, 0o345, 0o350, 0o345])
         .succeeds()
         .stdout_is_bytes([0o300, 0o301, 0o377, 0o345]);
-}
-
-#[test]
-fn tr_squeeze_alnum_remove_spaces() {
-    new_ucmd!()
-        .args(&["-s", "abcdefghijklmn", "[:*016]"])
-        .pipe_in("abcdefghijklmnop")
-        .succeeds()
-        .stdout_is(":op");
-}
-
-#[test]
-fn tr_translate_digits_to_letters() {
-    new_ucmd!()
-        .args(&["-d", "a-z"])
-        .pipe_in("abc $code")
-        .succeeds()
-        .stdout_is(" $");
-}
-
-#[test]
-fn tr_translate_control_chars() {
-    new_ucmd!()
-        .args(&["-ds", "a-z", "$."])
-        .pipe_in("a.b.c $$$$code\\")
-        .succeeds()
-        .stdout_is(". $\\");
 }
 
 #[test]
@@ -1003,60 +697,6 @@ fn tr_translate_with_null_byte() {
 }
 
 #[test]
-fn tr_translate_lower_to_upper() {
-    new_ucmd!()
-        .args(&["[:lower:]", "[:upper:]"])
-        .pipe_in("abcxyzABCXYZ")
-        .succeeds()
-        .stdout_is("ABCXYZABCXYZ");
-}
-
-#[test]
-fn tr_translate_upper_to_lower() {
-    new_ucmd!()
-        .args(&["[:upper:]", "[:lower:]"])
-        .pipe_in("abcxyzABCXYZ")
-        .succeeds()
-        .stdout_is("abcxyzabcxyz");
-}
-
-#[test]
-fn tr_repeat_complement_char_class() {
-    new_ucmd!()
-        .args(&["a[=*2][=c=]", "xyyz"])
-        .pipe_in("a=c")
-        .succeeds()
-        .stdout_is("xyz");
-}
-
-#[test]
-fn tr_repeat_class_in_set2_basic() {
-    new_ucmd!()
-        .args(&["[:*3][:digit:]", "a-m"])
-        .pipe_in(":1239")
-        .succeeds()
-        .stdout_is("cefgm");
-}
-
-#[test]
-fn tr_repeat_class_extends_set2() {
-    new_ucmd!()
-        .args(&["a[b*512]c", "1[x*]2"])
-        .pipe_in("abc")
-        .succeeds()
-        .stdout_is("1x2");
-}
-
-#[test]
-fn tr_repeat_class_with_squeeze() {
-    new_ucmd!()
-        .args(&["a[b*513]c", "1[x*]2"])
-        .pipe_in("abc")
-        .succeeds()
-        .stdout_is("1x2");
-}
-
-#[test]
 fn tr_translate_overlap_repeat() {
     // # Another couple octal repeat count tests.
     //  {ERR=>"$prog: invalid repeat count '08' in [c*n] construct\n"}],
@@ -1065,15 +705,6 @@ fn tr_translate_overlap_repeat() {
         .pipe_in("")
         .fails()
         .stderr_is("tr: invalid repeat count '08' in [c*n] construct\n");
-}
-
-#[test]
-fn tr_translate_overlap_repeat_squeeze() {
-    new_ucmd!()
-        .args(&["[b*010]cd", "[a*7]BC[x*]"])
-        .pipe_in("bcd")
-        .succeeds()
-        .stdout_is("BCx");
 }
 
 #[test]
@@ -1094,24 +725,6 @@ fn non_octal_repeat_count_test() {
         .pipe_in("ABCdefghijklmn12")
         .succeeds()
         .stdout_is("xxxxxxxxxxYYmn12");
-}
-
-#[test]
-fn tr_translate_with_escape_sequence() {
-    new_ucmd!()
-        .args(&[r"a\-z", "A-Z"])
-        .pipe_in("abc-z")
-        .succeeds()
-        .stdout_is("AbcBC");
-}
-
-#[test]
-fn tr_translate_octal_backslash() {
-    new_ucmd!()
-        .args(&["a\u{055}b", "def"])
-        .pipe_in("a\u{055}b")
-        .succeeds()
-        .stdout_is("def");
 }
 
 #[test]
@@ -1150,39 +763,12 @@ fn tr_ross_delete_with_squeeze() {
 }
 
 #[test]
-fn tr_ross_translate_complement() {
-    new_ucmd!()
-        .args(&["-cs", "[:upper:]", "[X*]"])
-        .pipe_in("AMZamz123.-+AMZ")
-        .succeeds()
-        .stdout_is("AMZXAMZ");
-}
-
-#[test]
 fn tr_ross_translate_complement_squeeze() {
     new_ucmd!()
         .args(&["-cs", "[:upper:][:digit:]", "[Z*]"])
         .pipe_in("")
         .succeeds()
         .no_output();
-}
-
-#[test]
-fn tr_ross_delete_complement() {
-    new_ucmd!()
-        .args(&["-dcs", "[:lower:]", "n-rs-z"])
-        .pipe_in("amzAMZ123.-+amz")
-        .succeeds()
-        .stdout_is("amzamz");
-}
-
-#[test]
-fn tr_ross_delete_complement_squeeze() {
-    new_ucmd!()
-        .args(&["-ds", "[:xdigit:]", "[:alnum:]"])
-        .pipe_in(".ZABCDEFGzabcdefg.0123456788899.GG")
-        .succeeds()
-        .stdout_is(".ZGzg..G");
 }
 
 #[test]
@@ -1278,42 +864,6 @@ fn tr_translate_repeat_octal() {
         .pipe_in("abcd")
         .succeeds()
         .stdout_is("[b*d");
-}
-
-#[test]
-fn tr_translate_repeat_zero_count() {
-    new_ucmd!()
-        .args(&["abc", "[b*0]"])
-        .pipe_in("abcd")
-        .succeeds()
-        .stdout_is("bbbd");
-}
-
-#[test]
-fn tr_translate_repeat_multiple_zeros() {
-    new_ucmd!()
-        .args(&["abc", "[b*00000000000000000000]"])
-        .pipe_in("abcd")
-        .succeeds()
-        .stdout_is("bbbd");
-}
-
-#[test]
-fn tr_translate_repeat_complement() {
-    new_ucmd!()
-        .args(&["-c", "[a*65536]\n", "[b*]"])
-        .pipe_in("abcd")
-        .succeeds()
-        .stdout_is("abbb");
-}
-
-#[test]
-fn tr_translate_repeat_x_complement() {
-    new_ucmd!()
-        .args(&["-C", "[a*65536]\n", "[b*]"])
-        .pipe_in("abcd")
-        .succeeds()
-        .stdout_is("abbb");
 }
 
 #[test]
@@ -1764,6 +1314,44 @@ fn test_failed_write_is_reported() {
         .set_stdout(std::fs::File::create("/dev/full").unwrap())
         .fails()
         .stderr_is("tr: write error: No space left on device\n");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no pipe support")]
+fn test_unbuffered_partial_line() {
+    // With -u, a chunk without a trailing newline must come out before more
+    // input arrives, as in `tail -f log | tr -u a-z A-Z | consumer`.
+    //
+    // Run in a separate thread so that the test fails via timeout rather
+    // than hanging if tr holds the output back.
+    let handle = std::thread::spawn(|| {
+        for (args, out1, out2) in [
+            (&["-u", "a-z", "A-Z"][..], "ABC", "DEF\nXY"),
+            (&["-u", "-d", "e"][..], "abc", "df\nxy"),
+            (&["-u", "-s", "a-z"][..], "abc", "def\nxy"),
+        ] {
+            let mut child = new_ucmd!()
+                .args(args)
+                .set_stdin(std::process::Stdio::piped())
+                .set_stdout(std::process::Stdio::piped())
+                .run_no_wait();
+            child.write_in(b"abc");
+            assert_eq!(child.stdout_exact_bytes(out1.len()), out1.as_bytes());
+            child.write_in(b"def\nxy");
+            assert_eq!(child.stdout_exact_bytes(out2.len()), out2.as_bytes());
+            child.wait().unwrap().success();
+        }
+    });
+
+    for _ in 0..500 {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        if handle.is_finished() {
+            break;
+        }
+    }
+
+    assert!(handle.is_finished(), "tr -u held back a partial line");
+    handle.join().unwrap();
 }
 
 #[test]

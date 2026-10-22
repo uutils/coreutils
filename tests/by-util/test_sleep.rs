@@ -28,6 +28,17 @@ fn test_invalid_time_interval() {
 }
 
 #[test]
+fn test_tiny_hex_duration_does_not_stall() {
+    // Windows command lines are limited to 32,767 UTF-16 code units.
+    let zeros = if cfg!(windows) { 10_000 } else { 100_000 };
+    new_ucmd!()
+        .arg(format!("0x.{}f321984", "0".repeat(zeros)))
+        .timeout(Duration::from_secs(5))
+        .succeeds()
+        .no_output();
+}
+
+#[test]
 fn test_sleep_no_suffix() {
     let millis_100 = Duration::from_millis(100);
     let before_test = Instant::now();

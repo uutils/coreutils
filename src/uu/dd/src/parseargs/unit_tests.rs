@@ -298,7 +298,7 @@ fn icf_case_error() {
 
 #[test]
 fn icf_block_error() {
-    let args = ["conv=block,unblock"];
+    let args = ["conv=block,unblock", "cbs=1"];
     assert!(Parser::new().parse(args).is_err());
 }
 

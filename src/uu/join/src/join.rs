@@ -825,7 +825,15 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
         }
     }
 
-    if let Some(empty) = matches.get_one::<String>("e") {
+    if let Some(mut empties) = matches.get_many::<String>("e") {
+        // Like GNU join, -e may be repeated, but only with the same string.
+        let empty = empties.next().unwrap();
+        if empties.any(|e| e != empty) {
+            return Err(USimpleError::new(
+                1,
+                translate!("join-error-conflicting-empty-field"),
+            ));
+        }
         settings.empty = empty.as_bytes().to_vec();
     }
 
@@ -936,6 +944,8 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new("e")
                 .short('e')
+                .action(ArgAction::Append)
+                .num_args(1)
                 .value_name("EMPTY")
                 .help(translate!("join-help-e")),
         )

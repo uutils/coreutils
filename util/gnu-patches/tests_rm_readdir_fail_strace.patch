@@ -1,0 +1,132 @@
+diff --git a/tests/rm/rm-readdir-fail.sh b/tests/rm/rm-readdir-fail.sh
+index 130685cbac..797b22af62 100755
+--- a/tests/rm/rm-readdir-fail.sh
++++ b/tests/rm/rm-readdir-fail.sh
+@@ -1,6 +1,5 @@
+ #!/bin/sh
+ # Test rm's behavior when the directory cannot be read.
+-# This test is skipped on systems that lack LD_PRELOAD support.
+
+ # Copyright (C) 2016-2026 Free Software Foundation, Inc.
+
+@@ -19,103 +18,31 @@
+
+ . "${srcdir=.}/tests/init.sh"; path_prepend_ ./src
+ print_ver_ rm
+-require_gcc_shared_
++getlimits_
++uses_strace_
+
+ mkdir -p dir/notempty || framework_failure_
+
+-# Simulate "readdir" failure.
+-cat > k.c <<\EOF || framework_failure_
+-#define _GNU_SOURCE
+-
+-/* Setup so we don't have to worry about readdir64.  */
+-#ifndef __LP64__
+-# define _FILE_OFFSET_BITS 64
+-#endif
+-
+-#include <dlfcn.h>
+-#include <dirent.h>
+-#include <errno.h>
+-#include <stdio.h>
+-#include <stdlib.h>
+-
+-struct dirent *readdir (DIR *dirp)
+-{
+-  static int count = 1;
+-
+-#ifndef __LP64__
+-  if (count == 1)
+-    fclose (fopen ("32bit", "w"));
+-  errno = ENOSYS;
+-  return NULL;
+-#endif
+-
+-  static struct dirent *(*real_readdir)(DIR *dirp);
+-  if (! real_readdir && ! (real_readdir = dlsym (RTLD_NEXT, "readdir")))
+-    {
+-      fprintf (stderr, "Failed to find readdir()\n");
+-      errno = ESRCH;
+-      return NULL;
+-    }
+-  struct dirent *d;
+-  if (! (d = real_readdir (dirp)))
+-    {
+-      fprintf (stderr, "Failed to get dirent\n");
+-      errno = EIO;
+-      return NULL;
+-    }
+-
+-  /* Flag that LD_PRELOAD and above functions work.  */
+-  if (count == 1)
+-    fclose (fopen ("preloaded", "w"));
+-
+-  /* Return some entries to trigger partial read failure,
+-     ensuring we don't return ignored '.' or '..'  */
+-  char const *readdir_partial = getenv ("READDIR_PARTIAL");
+-  if (readdir_partial && *readdir_partial && count <= 3)
+-    {
+-      count++;
+-      d->d_name[0]='0'+count; d->d_name[1]='\0';
+-#ifdef _DIRENT_HAVE_D_NAMLEN
+-      d->d_namlen = 1;
+-#endif
+-      errno = 0;
+-      return d;
+-    };
+-
+-  /* Fail.  */
+-  errno = EIO;
+-  return NULL;
++rm_getdents_fail() {
++  strace -o strace.out \
++    -e trace=getdents64 \
++    -e fault=getdents64:error=EIO:when="$@" \
++    rm -Rf dir
+ }
+-EOF
+-
+-# Then compile/link it:
+-gcc_shared_ k.c k.so \
+-  || framework_failure_ 'failed to build shared library'
+
+-# Test if LD_PRELOAD works:
+-export READDIR_PARTIAL
+-for READDIR_PARTIAL in '' '1'; do
+-  rm -f preloaded
+-  (export LD_PRELOAD=$LD_PRELOAD:./k.so
+-   returns_ 1 rm -Rf dir 2>>errt) || fail=1
+-  if test -f 32bit; then
+-    skip_ 'This test only supports 64 bit systems'
+-  elif ! test -f preloaded; then
+-    cat errt
+-    skip_ "internal test failure: maybe LD_PRELOAD doesn't work?"
+-  fi
+-done
+-
+-# First case is failure to read any items from dir, then assume empty.
++strace -o /dev/null -e fault=getdents64 true || skip_ 'getdents64 is not supported'
++# failure to read any items from dir, then assume empty.
+ # Generally that will be diagnosed when rm tries to rmdir().
++echo "rm: cannot remove 'dir': $EIO" > exp || framework_failure_
++returns_ 1 rm_getdents_fail 1 2>err || fail=1
++grep getdents64 strace.out || skip_ 'getdents64 is not intercepted'
++compare exp err || fail=1
++
+ # Second case is more general error where we fail immediately
+ # (with ENOENT in this case but it could be anything).
+-cat <<EOF > exp
+-rm: cannot remove 'dir'
+-Failed to get dirent
+-rm: traversal failed: dir
+-EOF
+-sed 's/\(rm:.*\):.*/\1/' errt > err || framework_failure_
++# e.g. 1st getdents64 cache was exhaused and 2nd getdents64 failed in the one readdir call
++echo "rm: traversal failed: dir: $EIO" > exp || framework_failure_
++returns_ 1 rm_getdents_fail 2 2>err || fail=1
+ compare exp err || fail=1
+
+ Exit $fail
