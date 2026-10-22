@@ -606,9 +606,7 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
         }
 
         // A zero-width character such as NUL stays on the full line.
-        let zero_width = ctx.mode == WidthMode::Columns
-            && !matches!(ch, '\r' | '\x08' | '\t')
-            && char_columns(ch) == 0;
+        let zero_width = ctx.mode == WidthMode::Columns && char_columns(ch) == 0;
         if *ctx.col_count >= ctx.width && !zero_width {
             emit_output(ctx)?;
         }
