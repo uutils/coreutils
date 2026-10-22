@@ -3,7 +3,7 @@ index 0395ccaca6..c9e4f736ae 100755
 --- a/tests/dd/nocache_fail.sh
 +++ b/tests/dd/nocache_fail.sh
 @@ -19,38 +19,18 @@
- 
+
  . "${srcdir=.}/tests/init.sh"; path_prepend_ ./src
  print_ver_ dd
 -require_gcc_shared_
@@ -28,9 +28,9 @@ index 0395ccaca6..c9e4f736ae 100755
 -gcc_shared_ k.c k.so \
 -  || framework_failure_ 'failed to build shared library'
 +uses_strace_
- 
+
  touch ifile || framework_failure_
- 
+
 -LD_PRELOAD=$LD_PRELOAD:./k.so dd if=ifile iflag=nocache count=0 2>err
 -ret=$?
 -
@@ -39,12 +39,12 @@ index 0395ccaca6..c9e4f736ae 100755
 +  -e trace=fadvise64 \
 +  -e fault=fadvise64:error=EOPNOTSUPP \
 +  dd if=ifile iflag=nocache count=0 2>err
- 
+
 +ret=$?
 +grep fadvise64 strace.out || skip_ 'fadvise64 is not intercepted'
  grep 'dd: failed to discard cache for: ifile' err || fail=1
 -
 -# Ensure that the dd command failed
  test "$ret" = 1 || fail=1
- 
+
  Exit $fail
