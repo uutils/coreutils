@@ -5,6 +5,7 @@
 
 // spell-checker:ignore binvalid finvalid hinvalid iinvalid linvalid nabcabc nabcabcabc ninvalid vinvalid winvalid dabc näää févr
 
+use rstest::rstest;
 use uutests::{at_and_ucmd, new_ucmd, util::TestScenario, util_name};
 
 #[test]
@@ -228,6 +229,19 @@ fn test_number_separator() {
             .succeeds()
             .stdout_is("     1:-:test\n");
     }
+}
+
+#[rstest]
+#[case(&["-s", ""], concat!("     1a\n", "      \n", "     2b\n"))]
+#[case(&["-s:"], concat!("     1:a\n", "       \n", "     2:b\n"))]
+#[case(&["-s:-:"], concat!("     1:-:a\n", "         \n", "     2:-:b\n"))]
+#[case(&["-s🦀"], concat!("     1🦀a\n", "          \n", "     2🦀b\n"))]
+fn test_number_separator_and_padding_of_empty_lines(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in("a\n\nb\n")
+        .succeeds()
+        .stdout_only(expected);
 }
 
 #[test]
