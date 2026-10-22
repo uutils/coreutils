@@ -161,9 +161,18 @@ fn should_extract_obs_lines(
 fn handle_extract_obs_lines(slice: &str, obs_lines: &mut Option<String>) -> Option<OsString> {
     let mut obs_lines_extracted: Vec<char> = vec![];
     let mut obs_lines_end_reached = false;
+    let mut option_value_reached = false;
     let filtered_slice: Vec<char> = slice
         .chars()
         .filter(|c| {
+            // The rest of the argument after an option that takes a value,
+            // as in '-dn10', is that value and not an obsolete lines value
+            if option_value_reached {
+                return true;
+            }
+            if matches!(c, 'a' | 'b' | 'C' | 'l' | 'n' | 't') {
+                option_value_reached = true;
+            }
             // To correctly process scenario like '-x200a4'
             // we need to stop extracting digits once alphabetic character is encountered
             // after we already have something in obs_lines_extracted
