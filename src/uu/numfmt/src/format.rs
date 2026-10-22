@@ -592,7 +592,7 @@ fn consider_suffix(
         div_round(n, 1.0, round_method)
     };
     if unscaled.abs() <= bases[1] - 1.0 {
-        return Ok((n, None));
+        return Ok((unscaled, None));
     }
 
     let i = match abs_n {
@@ -755,7 +755,7 @@ fn transform_to(
             let i2 = round_with_precision(i2, round_method, 0);
             localize(format_float(i2, precision))
         }
-        None => localize(format_float(div_round(i2, 1.0, round_method), 0)),
+        None => localize(format_float(i2, 0)),
         Some(s) if precision > 0 && precision <= u16::MAX.into() => localize(format!(
             "{i2:.precision$}{unit_separator}{}",
             DisplayableSuffix(s, opts.to),

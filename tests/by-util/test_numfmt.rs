@@ -637,6 +637,21 @@ fn test_round_without_suffix() {
             .succeeds()
             .stdout_only(format!("{}\n", exp[3]));
     }
+
+    // With a `--format` precision, the value is rounded to an integer first.
+    for (method, exp) in [
+        ("from-zero", "13.0\n-13.0\n1.0k\n2.0\n"),
+        ("towards-zero", "12.0\n-12.0\n999.0\n1.0\n"),
+        ("up", "13.0\n-12.0\n1.0k\n2.0\n"),
+        ("down", "12.0\n-13.0\n999.0\n1.0\n"),
+        ("nearest", "12.0\n-12.0\n1.0k\n1.0\n"),
+    ] {
+        new_ucmd!()
+            .args(&["--to=si", "--format=%.1f", &format!("--round={method}")])
+            .args(&["--", "12.1", "-12.1", "999.9", "1.44"])
+            .succeeds()
+            .stdout_only(exp);
+    }
 }
 
 #[test]
