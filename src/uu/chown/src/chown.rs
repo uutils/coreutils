@@ -185,6 +185,16 @@ fn parse_uid(user: &str, spec: &str, sep: char) -> UResult<Option<u32>> {
     }
 }
 
+fn get_passwd_uid_gid_by_username(user: &str, spec: &str) -> UResult<(Option<u32>, Option<u32>)> {
+    match Passwd::locate(user) {
+        Ok(u) => Ok((Some(u.uid), Some(u.gid))),
+        Err(_) => Err(USimpleError::new(
+            1,
+            format!("invalid spec: {}", spec.quote()),
+        )),
+    }
+}
+
 /// Parses the group string to extract the GID.
 fn parse_gid(group: &str, spec: &str) -> UResult<Option<u32>> {
     if group.is_empty() {
@@ -208,6 +218,7 @@ fn parse_gid(group: &str, spec: &str) -> UResult<Option<u32>> {
 ///
 /// * `"owner:group"`,
 /// * `"owner"`,
+/// * `"owner:"`
 /// * `":group"`,
 ///
 /// and the owner or group can be specified either as an ID or a
@@ -218,15 +229,25 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
     assert!(['.', ':'].contains(&sep));
     let mut args = spec.splitn(2, sep);
     let user = args.next().unwrap_or("");
-    let group = args.next().unwrap_or("");
+    let user_is_numeric = user.chars().next().is_some_and(char::is_numeric);
 
-    let uid = parse_uid(user, spec, sep)?;
-    let gid = parse_gid(group, spec)?;
-
-    if user.chars().next().map(char::is_numeric).unwrap_or(false)
-        && group.is_empty()
-        && spec != user
+    let mut implicit_group_is_user = false;
+    let maybe_group = args.next();
+    if sep == ':'
+        && !user_is_numeric
+        && !user.is_empty()
+        && maybe_group.is_some_and(|g| g.is_empty())
     {
+        implicit_group_is_user = true;
+    }
+    let group = maybe_group.unwrap_or("");
+    let (uid, gid) = if implicit_group_is_user {
+        get_passwd_uid_gid_by_username(user, spec)?
+    } else {
+        (parse_uid(user, spec, sep)?, parse_gid(group, spec)?)
+    };
+
+    if user_is_numeric && (group.is_empty() || implicit_group_is_user) && spec != user {
         // if the arg starts with an id numeric value, the group isn't set but the separator is provided,
         // we should fail with an error
         return Err(USimpleError::new(
@@ -256,11 +277,21 @@ mod test {
     fn test_parse_spec_nameless_ids() {
         // This assumes that there is no named user with ID 12345.
         assert!(matches!(parse_spec("12345", ':'), Ok((Some(12345), None))));
+        // Numeric user without group is an invalid spec
+        assert!(
+            format!("{}", parse_spec("12345:", ':').err().unwrap()).starts_with("invalid spec: ")
+        );
         // This assumes that there is no named group with ID 54321.
         assert!(matches!(parse_spec(":54321", ':'), Ok((None, Some(54321)))));
         assert!(matches!(
             parse_spec("12345:54321", ':'),
             Ok((Some(12345), Some(54321)))
         ));
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_parse_spec_named() {
+        assert!(matches!(parse_spec("root:", ':'), Ok((Some(0), Some(0)))));
     }
 }

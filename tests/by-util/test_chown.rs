@@ -23,6 +23,7 @@ use uutests::util_name;
 //     value: Custom { kind: NotFound, error: "No such id: 1001" }',
 //     /project/src/uucore/src/lib/features/perms.rs:176:44"
 //
+#[track_caller]
 fn skipping_test_is_okay(result: &CmdResult, needle: &str) -> bool {
     if !result.succeeded() {
         println!("result.stdout = {}", result.stdout_str());
@@ -458,6 +459,81 @@ fn test_chown_fail_id() {
         .arg(file1)
         .fails()
         .stderr_contains("invalid spec");
+}
+
+#[test]
+fn test_chown_implicit_group() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+
+    let file1 = "test_chown_file1";
+    at.touch(file1);
+
+    scene
+        .ucmd()
+        .arg(format!("{user_name}:"))
+        .arg(file1)
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    scene
+        .ucmd()
+        .arg("root:")
+        .arg("--verbose")
+        .arg(file1)
+        .fails()
+        .stderr_contains("failed to change");
+}
+
+#[test]
+fn test_chown_implicit_group_root_changes_ownership() {
+    use std::os::unix::fs::MetadataExt;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("id").arg("-u").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
+        return;
+    }
+    let user_id = String::from(result.stdout_str().trim());
+    assert!(!user_id.is_empty());
+    let user_id: u32 = user_id.parse().unwrap();
+
+    let result = scene.cmd("id").arg("-g").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
+        return;
+    }
+    let group_id = String::from(result.stdout_str().trim());
+    assert!(!group_id.is_empty());
+    let group_id: u32 = group_id.parse().unwrap();
+
+    let file1 = "test_chown_file1";
+    at.touch(file1);
+
+    let metadata = at.plus(&file1).metadata().unwrap();
+    assert_eq!(metadata.uid(), user_id);
+    assert_eq!(metadata.gid(), group_id);
+
+    match run_ucmd_as_root(&scene, &["root:", file1]) {
+        Ok(result) => {
+            result.success().no_stdout().no_stderr();
+        }
+        Err(_) => {
+            print!("Test skipped; requires root user");
+            return;
+        }
+    }
+    let metadata = at.plus(&file1).metadata().unwrap();
+    assert_eq!(metadata.uid(), 0);
+    assert_eq!(metadata.gid(), 0);
 }
 
 /// Test for setting the owner to a user ID for a user that does not exist.
