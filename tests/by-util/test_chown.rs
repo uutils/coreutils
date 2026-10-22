@@ -1141,3 +1141,240 @@ fn verbose_missing_file_write_error_is_reported_not_panic() {
         .fails_with_code(1)
         .stderr_contains("chown: write error: No space left on device");
 }
+
+/// Under `-R -H` a symlink met in the tree is changed through, so the file
+/// changed is not the link that was looked at: `--from` must not refuse it.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_from_changes_through_symlink_in_tree_under_big_h() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("target");
+    at.relative_symlink_file("../target", "dir/link");
+    let meta = at.plus("target").metadata().unwrap();
+    let owner = format!("{}:{}", meta.uid(), meta.gid());
+
+    ucmd.args(&["-R", "-H", "-v", &format!("--from={owner}"), &owner, "dir"])
+        .succeeds()
+        .stdout_contains("ownership of 'dir/link' retained as")
+        .stdout_does_not_contain("failed");
+}
+
+/// A directory operand that cannot be read is still changed without -R.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_unreadable_dir_operand() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    let meta = at.plus("dir").metadata().unwrap();
+    let owner = format!("{}:{}", meta.uid(), meta.gid());
+    std::fs::set_permissions(at.plus("dir"), std::fs::Permissions::from_mode(0o000)).unwrap();
+
+    for from in [None, Some(format!("--from={owner}"))] {
+        scene
+            .ucmd()
+            .arg("-v")
+            .args(from.as_slice())
+            .args(&[owner.as_str(), "dir"])
+            .succeeds()
+            .stdout_contains("ownership of 'dir' retained as");
+    }
+    std::fs::set_permissions(at.plus("dir"), std::fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+/// Under `-R -H` a symlink met in the tree is followed for the change, so
+/// `--from` has to be judged on the file it points to, not on the link.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_from_judges_symlink_target_under_big_h() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let Some((target_group, link_group)) = two_groups(&scene) else {
+        return;
+    };
+
+    at.mkdir("dir");
+    at.touch("target");
+    at.relative_symlink_file("../target", "dir/link");
+    std::os::unix::fs::chown(at.plus("target"), None, Some(target_group)).unwrap();
+    std::os::unix::fs::lchown(at.plus("dir/link"), None, Some(link_group)).unwrap();
+
+    // Only the link is in `link_group`: the target is left alone.
+    scene
+        .ucmd()
+        .args(&["-R", "-H", &format!("--from=:{link_group}")])
+        .arg(format!(":{link_group}"))
+        .arg("dir")
+        .succeeds();
+    assert_eq!(at.plus("target").metadata().unwrap().gid(), target_group);
+
+    // The target is in `target_group`, so it is changed.
+    scene
+        .ucmd()
+        .args(&["-R", "-H", &format!("--from=:{target_group}")])
+        .arg(format!(":{link_group}"))
+        .arg("dir")
+        .succeeds();
+    assert_eq!(at.plus("target").metadata().unwrap().gid(), link_group);
+}
+
+/// With -R -v, a change below the operand that fails is reported as for the
+/// operand itself.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_recursive_verbose_reports_failed_entry() {
+    // Root can give the files to root, so nothing fails.
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/file");
+
+    ucmd.args(&["-R", "-v", "root", "dir"])
+        .fails()
+        .stderr_contains("failed to change ownership of 'dir'")
+        .stderr_contains("failed to change ownership of 'dir/file'");
+}
+
+/// Two different groups the caller is in, if there are.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+fn two_groups(scene: &TestScenario) -> Option<(u32, u32)> {
+    let groups: Vec<u32> = scene
+        .cmd("id")
+        .arg("-G")
+        .succeeds()
+        .stdout_str()
+        .split_whitespace()
+        .map(|g| g.parse().unwrap())
+        .collect();
+    let first = *groups.first()?;
+    let second = *groups.iter().find(|&&g| g != first)?;
+    Some((first, second))
+}
+
+/// -H and -L follow a symlinked directory operand also with -h: as with GNU,
+/// `--from` is judged on the directory and it is descended into, but the link
+/// itself is changed.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_h_follows_symlink_operand_under_big_h_and_l() {
+    use std::os::unix::fs::lchown;
+
+    for opt in ["-H", "-L"] {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let Some((first, second)) = two_groups(&scene) else {
+            return;
+        };
+        let gid = |path: &str| at.plus(path).symlink_metadata().unwrap().gid();
+        at.mkdir("dir");
+        at.touch("dir/file");
+        at.symlink_dir("dir", "link");
+        lchown(at.plus("dir"), None, Some(second)).unwrap();
+        lchown(at.plus("dir/file"), None, Some(first)).unwrap();
+        lchown(at.plus("link"), None, Some(first)).unwrap();
+
+        // The link is in `first`, but the directory is not.
+        scene
+            .ucmd()
+            .args(&["-R", opt, "-h", &format!("--from=:{first}")])
+            .arg(format!(":{second}"))
+            .arg("link")
+            .succeeds();
+        assert_eq!((gid("link"), gid("dir")), (first, second));
+        assert_eq!(gid("dir/file"), second);
+
+        lchown(at.plus("link"), None, Some(second)).unwrap();
+        scene
+            .ucmd()
+            .args(&["-R", opt, "-h"])
+            .arg(format!(":{first}"))
+            .arg("link")
+            .succeeds();
+        assert_eq!((gid("link"), gid("dir")), (first, second));
+        assert_eq!(gid("dir/file"), first);
+    }
+}
+
+/// Under -L -h a symlink met in the tree is followed for the descent but, as
+/// with GNU, changed itself, also with `--from`.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_big_l_with_h_changes_symlinks_in_tree() {
+    use std::os::unix::fs::lchown;
+
+    let scene = TestScenario::new(util_name!());
+    let Some((first, second)) = two_groups(&scene) else {
+        return;
+    };
+    for from in [None, Some(format!("--from=:{first}"))] {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let gid = |path: &str| at.plus(path).symlink_metadata().unwrap().gid();
+        at.mkdir("dir");
+        at.mkdir("other");
+        at.touch("other/file");
+        at.symlink_dir("other", "dir/link");
+        for path in ["dir", "dir/link", "other", "other/file"] {
+            lchown(at.plus(path), None, Some(first)).unwrap();
+        }
+
+        scene
+            .ucmd()
+            .args(&["-R", "-L", "-h"])
+            .args(from.as_slice())
+            .arg(format!(":{second}"))
+            .arg("dir")
+            .succeeds();
+        assert_eq!((gid("dir/link"), gid("other")), (second, first));
+        assert_eq!(gid("other/file"), second);
+    }
+}
+
+/// With -h, -H and -L judge a symlink operand on its target but change the
+/// link: an owner or group not asked for stays as the link has it, not as
+/// the target has it.
+#[cfg(all(unix, not(target_os = "openbsd")))]
+#[test]
+fn test_chown_h_keeps_unchanged_ids_of_symlink_operand() {
+    use std::os::unix::fs::{lchown, symlink};
+
+    for opt in ["-H", "-L"] {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let Some((first, second)) = two_groups(&scene) else {
+            return;
+        };
+        at.touch("target");
+        at.symlink_file("target", "link");
+        lchown(at.plus("target"), None, Some(first)).unwrap();
+        lchown(at.plus("link"), None, Some(second)).unwrap();
+        let link = || at.plus("link").symlink_metadata().unwrap();
+        let uid = link().uid();
+
+        // Only the owner is asked for: the link keeps its own group.
+        scene
+            .ucmd()
+            .args(&["-R", opt, "-h", &uid.to_string(), "link"])
+            .succeeds();
+        assert_eq!(link().gid(), second);
+
+        // Only the group is asked for, for a link to a file of another
+        // owner: the link keeps its own owner.
+        let other = std::path::Path::new("/etc/passwd");
+        if other.metadata().is_ok_and(|meta| meta.uid() != uid) {
+            at.remove("link");
+            symlink(other, at.plus("link")).unwrap();
+            lchown(at.plus("link"), None, Some(second)).unwrap();
+            scene
+                .ucmd()
+                .args(&["-R", opt, "-h", &format!(":{first}"), "link"])
+                .succeeds();
+            assert_eq!((link().uid(), link().gid()), (uid, first));
+        }
+    }
+}
