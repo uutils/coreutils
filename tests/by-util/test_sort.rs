@@ -1156,6 +1156,33 @@ fn test_merge_preserves_long_lines() {
     assert_eq!(stdout.as_slice(), input.as_bytes());
 }
 
+/// Lines longer than the buffer used to read temporary files back must stay whole
+/// when an external sort merges its chunks (#15638).
+#[test]
+fn test_ext_sort_preserves_long_lines() {
+    const N_ROWS: usize = 24;
+    const LINE_LEN: usize = 20_000;
+    // Multiplying by 7 modulo N_ROWS permutes the keys, so the input is not sorted.
+    let lines: Vec<String> = (0..N_ROWS)
+        .map(|i| format!("{:04}{}", i * 7 % N_ROWS, "x".repeat(LINE_LEN - 4)))
+        .collect();
+    let mut sorted_lines = lines.clone();
+    sorted_lines.sort();
+    let expected = format!("{}\n", sorted_lines.join("\n"));
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("long-lines.txt", &format!("{}\n", lines.join("\n")));
+
+    // A tiny buffer makes the input span several chunks, which are written to
+    // temporary files and merged back.
+    let result = ucmd.args(&["-S", "1K", "long-lines.txt"]).succeeds();
+    result.no_stderr();
+
+    let stdout = result.stdout_move_bytes();
+    assert_eq!(bytecount::count(&stdout, b'\n'), N_ROWS);
+    assert!(stdout == expected.as_bytes(), "a long line was altered");
+}
+
 // Regression test: a failing write must not take the merge reader thread down with it.
 // The write error used to propagate straight out of `write_all_to`, dropping the chunk
 // receivers while the reader was still sending, and `chunks::read` unwraps that send.
