@@ -2278,7 +2278,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     settings.dictionary_order = dictionary_order;
-    settings.ignore_non_printing = ignore_non_printing;
+    // -i has no effect when -d is also given, as for key options
+    settings.ignore_non_printing = ignore_non_printing && !dictionary_order;
     settings.ignore_case = ignore_case;
 
     let threads = match matches.get_one::<String>(options::PARALLEL) {
