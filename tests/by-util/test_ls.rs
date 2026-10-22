@@ -2410,6 +2410,31 @@ fn test_ls_time_styles() {
         .stdout_matches(&re_custom_format_recent_2)
         .stdout_matches(&re_custom_format_old);
 
+    // Empty halves must preserve the order in both --time-style and TIME_STYLE.
+    for (style, expected_recent, expected_old) in [("+\nNEW", "NEW", ""), ("+OLD\n", "", "OLD")] {
+        let re_recent = Regex::new(&format!(
+            r"[a-z-]* \d* [\w.]* [\w.]* \d* {expected_recent} test\n"
+        ))
+        .unwrap();
+        let re_old = Regex::new(&format!(
+            r"[a-z-]* \d* [\w.]* [\w.]* \d* {expected_old} test-old\n"
+        ))
+        .unwrap();
+        scene
+            .ucmd()
+            .args(&["-l", "--time-style", style])
+            .succeeds()
+            .stdout_matches(&re_recent)
+            .stdout_matches(&re_old);
+        scene
+            .ucmd()
+            .env("TIME_STYLE", style)
+            .arg("-l")
+            .succeeds()
+            .stdout_matches(&re_recent)
+            .stdout_matches(&re_old);
+    }
+
     // Also fails due to not having full clap support for time_styles
     scene
         .ucmd()
