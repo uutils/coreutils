@@ -27,6 +27,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             target_os = "illumos",
             target_os = "solaris"
         ) },
+        // Where `safe_traversal`, and the descriptor walk built on it, exist.
+        has_safe_traversal: { all(unix, not(target_os = "redox")) },
     }
 
     let out_dir = env::var("OUT_DIR")?;
