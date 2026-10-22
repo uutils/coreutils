@@ -590,7 +590,7 @@ fn test_fmt_anti_prefix_keeps_missing_final_newline() {
 }
 
 #[test]
-fn test_first_word_ending_a_sentence() {
+fn test_fmt_first_word_ending_a_sentence() {
     // A first word that ends a sentence at the end of its line gets two
     // spaces after it, like any later word.
     for (args, input, expected) in [
