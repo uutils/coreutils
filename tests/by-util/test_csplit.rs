@@ -808,6 +808,37 @@ fn test_suppress_line_number_before_current_position() {
 }
 
 #[test]
+fn test_up_to_line_one_past_end_suppress_matched() {
+    // There is no line 51 to suppress, so the split is complete.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "--suppress-matched", "51"])
+        .succeeds()
+        .stdout_only("141\n0\n");
+    assert_eq!(at.read("xx00"), generate(1, 51));
+    assert_eq!(at.read("xx01"), "");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "--suppress-matched", "17", "{2}"])
+        .succeeds()
+        .stdout_only("39\n48\n48\n0\n");
+    assert_eq!(at.read("xx02"), generate(35, 51));
+    assert_eq!(at.read("xx03"), "");
+
+    new_ucmd!()
+        .args(&["numbers50.txt", "-k", "--suppress-matched", "17", "{*}"])
+        .fails()
+        .stdout_is("39\n48\n48\n0\n")
+        .stderr_is("csplit: '17': line number out of range on repetition 3\n");
+
+    // Line 50 was already suppressed, so there is nothing left for line 51.
+    new_ucmd!()
+        .args(&["numbers50.txt", "--suppress-matched", "50", "51"])
+        .fails()
+        .stdout_is("138\n0\n")
+        .stderr_is("csplit: '51': line number out of range\n");
+}
+
+#[test]
 fn test_option_elide_empty_file1() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "--suppress-matched", "-z", "/0$/", "{*}"])

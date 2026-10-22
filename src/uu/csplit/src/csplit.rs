@@ -368,7 +368,8 @@ impl SplitWriter<'_> {
     ///
     /// In addition to errors reading/writing from/to a file, if the line number
     /// `n` is greater than the total available lines, then a
-    /// [`CsplitError::LineOutOfRange`] error is returned.
+    /// [`CsplitError::LineOutOfRange`] error is returned. With `--suppress-matched`,
+    /// `n` may also be one past the last line, if this split read any lines.
     fn do_to_line<I>(
         &mut self,
         pattern_as_str: &str,
@@ -382,8 +383,10 @@ impl SplitWriter<'_> {
         input_iter.set_size_of_buffer(1);
 
         let mut ret = Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
+        let mut last_ln = None;
         while let Some((ln, line)) = input_iter.next() {
             let line = line?;
+            last_ln = Some(ln);
             if n <= ln + 1 {
                 assert!(
                     self.options.suppress_matched
@@ -394,6 +397,11 @@ impl SplitWriter<'_> {
                 break;
             }
             self.writeln(&line)?;
+        }
+        // With --suppress-matched, a split that ends with the input right before
+        // line `n` is complete: line `n` would have been dropped anyway.
+        if self.options.suppress_matched && last_ln.is_some_and(|ln| ln + 2 == n) {
+            ret = Ok(());
         }
         self.finish_split()?;
         ret
