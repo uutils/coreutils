@@ -593,6 +593,27 @@ fn test_human_block_sizes2() {
 }
 
 #[test]
+fn test_human_numeric_ignore_case() {
+    // With -f, lowercase units other than k are read as the uppercase ones
+    for args in [&["-h", "-f"][..], &["-hf"], &["-k1,1hf"]] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("2m\n1e\n3g\n1K\n-1m\n")
+            .succeeds()
+            .stdout_only("-1m\n1K\n2m\n3g\n1e\n");
+    }
+    // Without -f (a key with its own options does not inherit the global
+    // one) they are not units
+    for args in [&["-h"][..], &["-f", "-k1h"]] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("2m\n1e\n3g\n1K\n-1m\n")
+            .succeeds()
+            .stdout_only("-1m\n1e\n2m\n3g\n1K\n");
+    }
+}
+
+#[test]
 fn test_human_numeric_zero_stable() {
     let input = "0M\n0K\n-0K\n-P\n-0M\n";
     new_ucmd!()
