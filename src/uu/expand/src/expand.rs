@@ -353,6 +353,13 @@ fn classify_char(buf: &[u8], byte: usize, utf8: bool) -> (CharType, usize, usize
     (Other, 1, 1) // implicit assumption: non-UTF-8 char is 1 col wide
 }
 
+/// Whether `b` is an ASCII byte that takes one column and needs no special
+/// handling: not a tab, backspace, newline or NUL.
+#[inline]
+fn is_plain(b: u8) -> bool {
+    b.is_ascii() && !matches!(b, b'\t' | b'\x08' | b'\n' | b'\0')
+}
+
 /// Write spaces for a tab expansion.
 #[inline]
 fn write_spaces(output: &mut impl Write, mut n: usize) -> std::io::Result<()> {
@@ -394,6 +401,22 @@ fn expand_buf(
     let mut init = true;
 
     while byte < buf.len() {
+        // Write a run of plain one-column ASCII bytes at once.
+        if is_plain(buf[byte]) {
+            let end = buf[byte + 1..]
+                .iter()
+                .position(|&b| !is_plain(b))
+                .map_or(buf.len(), |n| byte + 1 + n);
+            let plain = &buf[byte..end];
+            if init {
+                init = plain.iter().all(|&b| b == b' ');
+            }
+            *col += plain.len();
+            output.write_all(plain)?;
+            byte = end;
+            continue;
+        }
+
         let (ctype, cwidth, nbytes) = classify_char(buf, byte, options.utf8);
 
         // figure out how many columns this char takes up
