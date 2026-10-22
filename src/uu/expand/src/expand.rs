@@ -340,6 +340,8 @@ fn classify_char(buf: &[u8], byte: usize, utf8: bool) -> (CharType, usize, usize
         return match b {
             b'\t' => (Tab, 0, 1),
             b'\x08' => (Backspace, 0, 1),
+            // NUL has no display width (`wcwidth(L'\0')` is 0).
+            b'\0' => (Other, 0, 1),
             _ => (Other, 1, 1),
         };
     }
