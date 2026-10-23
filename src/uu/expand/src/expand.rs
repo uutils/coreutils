@@ -461,24 +461,33 @@ fn expand_file(
     file: &OsString,
     output: &mut BufWriter<std::io::Stdout>,
     options: &Options,
-    col: &mut usize,
-    init: &mut bool,
+    line_col: &mut usize,
+    line_init: &mut bool,
 ) -> UResult<()> {
     let mut input = open(file)?;
     let ts = options.tabstops.as_ref();
-    loop {
+    // Work on local copies of the line state, so they can stay in registers
+    // while expanding, and store them back when done with this file.
+    let mut col = *line_col;
+    let mut init = *line_init;
+    let result: UResult<()> = loop {
         match input.fill_buf() {
-            Ok([]) => break,
+            Ok([]) => break Ok(()),
             Ok(buf) => {
-                expand_buf(buf, output, ts, options, col, init)
-                    .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+                if let Err(e) = expand_buf(buf, output, ts, options, &mut col, &mut init) {
+                    break Err(
+                        e.map_err_context(|| translate!("expand-error-failed-to-write-output"))
+                    );
+                }
                 let len = buf.len();
                 input.consume(len);
             }
-            Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
+            Err(e) => break Err(e.map_err_context(|| file.maybe_quote().to_string())),
         }
-    }
-    Ok(())
+    };
+    *line_col = col;
+    *line_init = init;
+    result
 }
 
 fn expand(options: &Options) -> UResult<()> {

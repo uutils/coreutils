@@ -525,3 +525,18 @@ fn test_tab_after_chunk_ending_in_wide_chars() {
         .succeeds()
         .stdout_is(format!("{first}\n\u{4E2D}\u{4E2D}\u{4E2D}  |\n"));
 }
+
+#[test]
+fn test_line_continues_past_unreadable_file() {
+    use uutests::at_and_ucmd;
+
+    // A file that cannot be read does not end the line started before it.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f1", "a");
+    at.mkdir("dir");
+    at.write("f2", "\tb\n");
+    ucmd.args(&["f1", "dir", "f2"])
+        .fails()
+        .stdout_is("a       b\n")
+        .stderr_contains("expand: dir: Is a directory");
+}
