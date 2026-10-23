@@ -9890,3 +9890,17 @@ fn test_progressbar_inexistent_source() {
         .fails_with_code(1)
         .stderr_contains("cp: cannot stat 'inexistent1': No such file or directory");
 }
+
+#[rstest]
+#[case::plain(&[])]
+#[case::recursive(&["-r"])]
+#[cfg(unix)]
+fn test_cp_source_with_trailing_slash_on_file(#[case] flags: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    ucmd.args(flags)
+        .args(&["f/", "dest"])
+        .fails_with_code(1)
+        .stderr_only("cp: cannot stat 'f/': Not a directory\n");
+    assert!(!at.file_exists("dest"));
+}
