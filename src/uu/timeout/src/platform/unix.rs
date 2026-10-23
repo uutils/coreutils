@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sigstr setpgid sigchld sigwait getpid TTIN TTOU prctl rlimit setrlimit DUMPABLE rlim
+// spell-checker:ignore (ToDO) sigstr setpgid sigchld sigwait getpid TTIN TTOU rlimit setrlimit Dumpable
 
 use std::io;
 use std::os::unix::process::CommandExt;
@@ -151,15 +151,16 @@ pub(crate) fn preserve_signal_info(signal: core::ffi::c_int) -> core::ffi::c_int
 
 /// Make sure this process won't dump core, returning whether that worked.
 fn disable_core_dumps() -> bool {
+    use rustix::process::{Resource, Rlimit, setrlimit};
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    // SAFETY: PR_SET_DUMPABLE only takes an integer argument.
-    if unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0) } == 0 {
+    if rustix::process::set_dumpable_behavior(rustix::process::DumpableBehavior::NotDumpable)
+        .is_ok()
+    {
         return true;
     }
-    let limit = libc::rlimit {
-        rlim_cur: 0,
-        rlim_max: 0,
+    let limit = Rlimit {
+        current: Some(0),
+        maximum: Some(0),
     };
-    // SAFETY: `limit` is a valid rlimit that outlives the call.
-    unsafe { libc::setrlimit(libc::RLIMIT_CORE, &raw const limit) == 0 }
+    setrlimit(Resource::Core, limit).is_ok()
 }

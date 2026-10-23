@@ -171,8 +171,9 @@ fn test_kill_signal_reports_signal_exit_code() {
 
 /// When the child dumps core, timeout re-raises its signal without dumping
 /// core itself.
+// Linux only: on macOS the child would write a real core file into /cores.
 #[test]
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn test_child_core_dump_not_repeated() {
     use std::os::unix::process::ExitStatusExt;
     let ts = TestScenario::new(util_name!());
