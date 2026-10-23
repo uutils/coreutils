@@ -365,6 +365,31 @@ fn test_chmod_many_options() {
 }
 
 #[test]
+fn test_chmod_option_like_mode_starting_with_operator() {
+    let tests = vec![
+        TestCase {
+            args: vec!["-=r", TEST_FILE],
+            before: 0o100_644,
+            after: 0o100_444,
+            umask: Some(0o022),
+        },
+        TestCase {
+            args: vec!["-+x", TEST_FILE],
+            before: 0o100_644,
+            after: 0o100_755,
+            umask: Some(0o022),
+        },
+        TestCase {
+            args: vec!["-,u+x", TEST_FILE],
+            before: 0o100_644,
+            after: 0o100_744,
+            umask: Some(0o022),
+        },
+    ];
+    run_tests(tests);
+}
+
+#[test]
 #[allow(clippy::unreadable_literal)]
 fn test_chmod_reference_file() {
     let tests = [
