@@ -25,7 +25,7 @@ use nix::sys;
 use nix::sys::stat::{self, SFlag};
 use pretty_assertions::assert_eq;
 #[cfg(unix)]
-use rustix::process::{Resource, Rlimit, setrlimit};
+use rustix::process::{Resource, Rlimit, getrlimit, setrlimit};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, VecDeque};
 use std::ffi::{OsStr, OsString};
@@ -3404,6 +3404,36 @@ pub fn run_ucmd_as_root_with_stdin_stdout(
             Err(e) => Err(format!("{UUTILS_WARNING}: {e}")),
         }
     }
+}
+
+/// Prepares a deep directory tree for stack overflow regression testing.
+///
+/// Returns `Some(file_limit)` if the system's hard `RLIMIT_NOFILE` limit is at least 2000
+/// and directory creation succeeded, or `None` if the test should be skipped (e.g. in environments
+/// where `NOFILE` cannot be raised enough to avoid `EMFILE`).
+#[cfg(unix)]
+#[must_use]
+pub fn prepare_deep_traversal(root: &Path) -> Option<u64> {
+    let lim = getrlimit(Resource::Nofile);
+    let max = lim.maximum.unwrap_or(u64::MAX);
+    if max < 2000 {
+        return None;
+    }
+    let file_limit = max.min(4096);
+
+    // On macOS and BSD, PATH_MAX is 1024, so depth cannot exceed ~480 without hitting ENAMETOOLONG.
+    // On Linux, PATH_MAX is 4096, allowing 1500+ levels.
+    let target_depth = if cfg!(target_os = "linux") { 1500 } else { 400 };
+
+    let mut current = root.to_path_buf();
+    for _ in 0..target_depth {
+        current.push("d");
+        if fs::create_dir(&current).is_err() {
+            return None;
+        }
+    }
+
+    Some(file_limit)
 }
 
 /// Sanity checks for test utils
