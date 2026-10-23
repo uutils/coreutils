@@ -735,10 +735,12 @@ fn transform_to(
         }
     };
     Ok(match s {
-        None if opts.to == Unit::None && precision <= u16::MAX.into() => localize(format_float(
-            round_with_precision(i2, round_method, precision),
-            precision,
-        )),
+        None if opts.to == Unit::None && precision <= u16::MAX.into() => {
+            let rounded = round_with_precision(i2, round_method, precision);
+            // rounding a small negative number leaves -0.0, which would print as "-0"
+            let rounded = if rounded == 0.0 { 0.0 } else { rounded };
+            localize(format_float(rounded, precision))
+        }
         None if is_precision_specified && precision <= u16::MAX.into() => {
             let i2 = round_with_precision(i2, round_method, 0);
             localize(format_float(i2, precision))
