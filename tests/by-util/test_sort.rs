@@ -638,6 +638,23 @@ fn test_human_numeric_ignore_case() {
 }
 
 #[test]
+fn test_human_numeric_ignore_case_debug() {
+    // GNU sorts by the folded unit but does not mark a lowercase unit as part of the key
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["--debug", "-h", "-f"])
+        .pipe_in("2m\n1e\n3g\n1K\n-1m\n")
+        .succeeds()
+        .stdout_is(concat!(
+            "-1m\n__\n___\n",
+            "1K\n__\n__\n",
+            "2m\n_\n__\n",
+            "3g\n_\n__\n",
+            "1e\n_\n__\n",
+        ));
+}
+
+#[test]
 fn test_human_numeric_zero_stable() {
     let input = "0M\n0K\n-0K\n-P\n-0M\n";
     new_ucmd!()
