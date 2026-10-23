@@ -369,7 +369,13 @@ impl Spec {
                 // For now, we let printf panic when we truncate within a code point.
                 // TODO: We need to not use Rust's formatting for aligning the output,
                 // so that we can just write bytes to stdout without panicking.
+                let star_precision = matches!(precision, Some(CanAsterisk::Asterisk(_)));
                 let precision = resolve_asterisk_precision(*precision, args);
+                // A `*` precision is an int argument, so it is capped at i32::MAX like
+                // the numeric specs; a precision written in the format is not.
+                if star_precision && let Some(precision) = precision {
+                    check_precision(precision)?;
+                }
                 let os_str = args.next_string(*position);
                 let bytes = os_str_as_bytes(os_str)?;
 
