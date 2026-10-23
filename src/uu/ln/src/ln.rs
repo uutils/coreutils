@@ -523,10 +523,42 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
 #[cfg(windows)]
 pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result<()> {
     use std::os::windows::fs::{symlink_dir, symlink_file};
-    if src.as_ref().is_dir() {
+    // Windows does not resolve `/` inside a symlink target, so store it with `\`.
+    let src = windows_link_target(src.as_ref());
+    if src.is_dir() {
         symlink_dir(src, dst)
     } else {
         symlink_file(src, dst)
+    }
+}
+
+#[cfg(windows)]
+fn windows_link_target(src: &Path) -> PathBuf {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    let wide: Vec<u16> = src
+        .as_os_str()
+        .encode_wide()
+        .map(|c| {
+            if c == u16::from(b'/') {
+                u16::from(b'\\')
+            } else {
+                c
+            }
+        })
+        .collect();
+    PathBuf::from(OsString::from_wide(&wide))
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn link_target_uses_backslashes() {
+        assert_eq!(
+            windows_link_target(Path::new("test/dir/file")),
+            PathBuf::from(r"test\dir\file")
+        );
     }
 }
 
