@@ -396,6 +396,47 @@ fn test_squeeze_all_files_repeated() {
 }
 
 #[test]
+fn test_squeeze_keeps_blank_after_line_split_across_files() {
+    // the newline that finishes a line begun in the previous file is not a blank line
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input1", "a");
+    at.write("input2", "\n\nb\n");
+    ucmd.args(&["-s", "input1", "input2"])
+        .succeeds()
+        .stdout_only("a\n\nb\n");
+}
+
+#[test]
+fn test_squeeze_keeps_blank_after_line_split_across_file_and_stdin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input", "a");
+    ucmd.args(&["-s", "input", "-"])
+        .pipe_in("\n\nb\n")
+        .succeeds()
+        .stdout_only("a\n\nb\n");
+}
+
+#[test]
+fn test_squeeze_keeps_numbered_blank_after_line_split_across_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input1", "a");
+    at.write("input2", "\n\nb\n");
+    ucmd.args(&["-s", "-n", "input1", "input2"])
+        .succeeds()
+        .stdout_only("     1\ta\n     2\t\n     3\tb\n");
+}
+
+#[test]
+fn test_squeeze_blank_lines_repeated_across_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input1", "a\n\n");
+    at.write("input2", "\n\nb\n");
+    ucmd.args(&["-s", "input1", "input2"])
+        .succeeds()
+        .stdout_only("a\n\nb\n");
+}
+
+#[test]
 fn test_show_ends_crlf() {
     new_ucmd!()
         .arg("-E")
