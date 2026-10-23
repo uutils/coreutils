@@ -72,6 +72,32 @@ fn test_directory_in_file() {
 }
 
 #[test]
+fn test_name_too_long() {
+    let name = "a".repeat(300);
+    new_ucmd!()
+        .arg(&name)
+        .fails_with_code(2)
+        .stderr_contains(format!("ls: cannot access '{name}': "))
+        .stderr_does_not_contain("unknown io error")
+        .stderr_does_not_contain("os error");
+}
+
+#[test]
+#[cfg(windows)]
+fn test_invalid_filename_windows() {
+    // `*` and `<` cannot appear in a Windows file name, so the lookup fails
+    // with ERROR_INVALID_NAME rather than "not found"
+    for name in ["a*", "a<b"] {
+        new_ucmd!()
+            .arg(name)
+            .fails_with_code(2)
+            .stderr_contains(format!("ls: cannot access '{name}': "))
+            .stderr_does_not_contain("unknown io error")
+            .stderr_does_not_contain("os error");
+    }
+}
+
+#[test]
 fn test_invalid_flag() {
     new_ucmd!()
         .arg("--invalid-argument")
