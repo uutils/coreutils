@@ -19,11 +19,11 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
 name = "ansi-width"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "219e3ce6f2611d83b51ec2098a12702112c29e57203a6b0a0929b2cddb486608"
+checksum = "90759a65f5178dbbd1b0eecc97b187996401bced0eb4a943d9ac6d7a6304d111"
 dependencies = [
- "unicode-width 0.1.14",
+ "unicode-width",
 ]
 
 [[package]]
@@ -97,7 +97,7 @@ version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8454c8a44ce2cb9cc7e7fae67fc6128465b343b92c6631e94beca3c8d1524ea5"
 dependencies = [
- "unicode-width 0.2.2",
+ "unicode-width",
  "yansi",
 ]
 
@@ -481,7 +481,7 @@ checksum = "e96a4956774c13c126a8b5af4daa79384f4d826534c95a02d76afb39e2ab64e3"
 dependencies = [
  "encode_unicode",
  "libc",
- "unicode-width 0.2.2",
+ "unicode-width",
  "windows-sys 0.61.2",
 ]
 
@@ -532,7 +532,7 @@ dependencies = [
  "tempfile",
  "textwrap",
  "time",
- "unicode-width 0.2.2",
+ "unicode-width",
  "unindent",
  "uu_arch",
  "uu_b2sum",
@@ -1578,7 +1578,7 @@ checksum = "9433806cd6b4ec1aba79c021c7e4c58fb4c3b9977c085062e611ac929998fb0c"
 dependencies = [
  "console",
  "portable-atomic",
- "unicode-width 0.2.2",
+ "unicode-width",
  "unit-prefix",
  "web-time",
 ]
@@ -2125,7 +2125,7 @@ version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ad5fd71b79026fb918650dde6d125000a233764f1c2f1659a1c71118e33ea08f"
 dependencies = [
- "unicode-width 0.2.2",
+ "unicode-width",
 ]
 
 [[package]]
@@ -2895,7 +2895,7 @@ dependencies = [
  "icu_segmenter",
  "smawk",
  "terminal_size",
- "unicode-width 0.2.2",
+ "unicode-width",
 ]
 
 [[package]]
@@ -3055,12 +3055,6 @@ name = "unicode-ident"
 version = "1.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d245f478577f809a851594d02313b640fb437e0bb33866753cff937863096954"
-
-[[package]]
-name = "unicode-width"
-version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dd6e30e90baa6f72411720665d41d89b9a3d039dc45b8faea1ddd07f617f6af"
 
 [[package]]
 name = "unicode-width"
@@ -3374,7 +3368,7 @@ dependencies = [
  "rustix",
  "tempfile",
  "thiserror 2.0.21",
- "unicode-width 0.2.2",
+ "unicode-width",
  "uucore",
 ]
 
@@ -3509,7 +3503,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "tempfile",
- "unicode-width 0.2.2",
+ "unicode-width",
  "uucore",
 ]
 
@@ -4372,7 +4366,7 @@ dependencies = [
  "rustix",
  "tempfile",
  "thiserror 2.0.21",
- "unicode-width 0.2.2",
+ "unicode-width",
  "uucore",
 ]
 
@@ -4459,7 +4453,7 @@ dependencies = [
  "thiserror 2.0.21",
  "time",
  "unic-langid",
- "unicode-width 0.2.2",
+ "unicode-width",
  "unit-prefix",
  "utmp-classic",
  "uucore_procs",
