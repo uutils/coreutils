@@ -147,6 +147,15 @@ fn test_invalid_value_returns_2() {
 }
 
 #[test]
+fn test_invalid_numeric_value_is_verbatim() {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg("--format=007")
+        .fails()
+        .stderr_contains("invalid value '007' for '--format");
+}
+
+#[test]
 fn test_invalid_value_time_style() {
     // This is the only flag which does not raise an error if it is invalid but not actually used:
     new_ucmd!()
