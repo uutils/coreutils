@@ -1,0 +1,30 @@
+name: Redox
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  test_redox:
+    name: cargo check
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: x86_64-unknown-redox
+    - name: cargo check
+      env:
+        CARGO_INCREMENTAL: 0
+      run: cargo check --target x86_64-unknown-redox --no-default-features --features feat_os_unix_redox
