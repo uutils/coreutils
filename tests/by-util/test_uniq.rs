@@ -1306,6 +1306,25 @@ fn test_repeated_skip_fields_takes_the_last() {
 }
 
 #[test]
+fn test_skip_fields_carriage_return_is_not_a_separator() {
+    // Only space and tab separate fields, so each line is a single field.
+    new_ucmd!()
+        .args(&["-f1"])
+        .pipe_in("a\rb\nc\rd\n")
+        .succeeds()
+        .stdout_is("a\rb\n");
+}
+
+#[test]
+fn test_skip_fields_form_feed_is_not_a_separator() {
+    new_ucmd!()
+        .args(&["-c", "-f1"])
+        .pipe_in("a\x0cb\nc\x0cd\n")
+        .succeeds()
+        .stdout_is("      2 a\x0cb\n");
+}
+
+#[test]
 fn test_nonexistent_input_file_error_matches_gnu() {
     new_ucmd!()
         .arg("nosuchfile.txt")
