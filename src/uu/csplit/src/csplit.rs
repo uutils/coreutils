@@ -604,9 +604,10 @@ where
             self.buffer.push_front((ln, Ok(line)));
             None
         } else if self.buffer.len() >= self.size {
-            let (_, head_line) = self.buffer.pop_front().unwrap();
             self.buffer.push_back((ln, Ok(line)));
-            Some(head_line.unwrap())
+            self.buffer
+                .pop_front()
+                .map(|(_, head_line)| head_line.unwrap())
         } else {
             self.buffer.push_back((ln, Ok(line)));
             None
@@ -627,8 +628,8 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.rewind {
-            if !self.buffer.is_empty() {
-                return Some(self.buffer.pop_front().unwrap());
+            if let Some(item) = self.buffer.pop_front() {
+                return Some(item);
             }
             self.rewind = false;
         }
