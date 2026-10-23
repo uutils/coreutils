@@ -25,7 +25,7 @@ use nix::sys;
 use nix::sys::stat::{self, SFlag};
 use pretty_assertions::assert_eq;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
-use rlimit::{Resource, setrlimit};
+use rlimit::{Resource, getrlimit, setrlimit};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, VecDeque};
 use std::ffi::{OsStr, OsString};
@@ -3398,6 +3398,39 @@ pub fn run_ucmd_as_root_with_stdin_stdout(
             Err(e) => Err(format!("{UUTILS_WARNING}: {e}")),
         }
     }
+}
+
+/// Prepares a deep directory tree for stack overflow regression testing.
+///
+/// Returns `Some(file_limit)` if the system's hard `RLIMIT_NOFILE` limit is at least 2000
+/// and directory creation succeeded, or `None` if the test should be skipped (e.g. in environments
+/// where `NOFILE` cannot be raised enough to avoid `EMFILE`).
+#[cfg(all(unix, not(target_os = "fuchsia")))]
+#[must_use]
+pub fn prepare_deep_traversal(root: &Path) -> Option<u64> {
+    let (_, hard) = getrlimit(Resource::NOFILE).ok()?;
+    let max_depth = if cfg!(target_os = "linux") { 1500 } else { 400 };
+    let required_fd = (max_depth as u64) + 50;
+
+    let (file_limit, target_depth) = if hard >= required_fd {
+        (hard.min(4096), max_depth)
+    } else if hard >= 600 {
+        let depth = (hard.saturating_sub(50)) as usize;
+        (hard, depth)
+    } else {
+        println!("skipping deep traversal test: hard NOFILE limit {hard} < 600");
+        return None;
+    };
+
+    let mut current = root.to_path_buf();
+    for _ in 0..target_depth {
+        current.push("d");
+        if fs::create_dir(&current).is_err() {
+            return None;
+        }
+    }
+
+    Some(file_limit)
 }
 
 /// Sanity checks for test utils

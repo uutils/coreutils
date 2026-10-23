@@ -2938,3 +2938,22 @@ du: invalid suffix in --block-size argument '1fb'
             .stderr_is("du: invalid suffix in --block-size argument '1fb'\n");
     }
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_deep_directory_traversal_no_stack_overflow() {
+    use rlimit::Resource;
+    use uutests::util::prepare_deep_traversal;
+
+    let ts = TestScenario::new(util_name!());
+    let Some(file_limit) = prepare_deep_traversal(&ts.fixtures.subdir) else {
+        return;
+    };
+
+    ts.ucmd()
+        .limit(Resource::NOFILE, file_limit, file_limit)
+        .limit(Resource::STACK, 256 * 1024, 256 * 1024)
+        .arg("-s")
+        .arg(".")
+        .succeeds();
+}

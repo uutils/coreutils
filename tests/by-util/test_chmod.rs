@@ -2125,3 +2125,24 @@ fn test_overlong_path_reports_os_error_and_continues() {
             "chmod: failed to get attributes of '{path}': {error}\n"
         ));
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_deep_directory_traversal_no_stack_overflow() {
+    use rlimit::Resource;
+    use uutests::util::prepare_deep_traversal;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("root_dir");
+    let root = at.plus("root_dir");
+    let Some(file_limit) = prepare_deep_traversal(&root) else {
+        return;
+    };
+
+    ucmd.limit(Resource::NOFILE, file_limit, file_limit)
+        .limit(Resource::STACK, 256 * 1024, 256 * 1024)
+        .arg("-R")
+        .arg("755")
+        .arg("root_dir")
+        .succeeds();
+}
