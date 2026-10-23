@@ -70,6 +70,8 @@ pub use crate::features::hardware;
 pub use crate::features::i18n;
 #[cfg(feature = "lines")]
 pub use crate::features::lines;
+#[cfg(feature = "numeric-str-cmp")]
+pub use crate::features::numeric_str_cmp;
 #[cfg(any(
     feature = "parser",
     feature = "parser-num",
