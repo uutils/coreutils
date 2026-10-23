@@ -2598,6 +2598,37 @@ fn test_date_strftime_n_width_and_flags() {
         .stdout_is("000000000\n");
 }
 
+// https://github.com/uutils/coreutils/issues/15697
+#[test]
+fn test_date_strftime_n_width_keeps_leading_zeros() {
+    for (time, format, expected) in [
+        ("@0.005123456", "+%3N", "005\n"),
+        ("@0.050123456", "+%3N", "050\n"),
+        ("@0.011123456", "+%3N", "011\n"),
+        ("@0.123456789", "+%3N", "123\n"),
+        ("@0.005123456", "+%6N", "005123\n"),
+        ("@0.005123456", "+%1N", "0\n"),
+        ("@0.005123456", "+%12N", "005123456000\n"),
+        ("@0.005123456", "+%_12N", "005123456   \n"),
+        ("@0.005123456", "+%_N", "005123456\n"),
+        ("@0.050000000", "+%_3N", "05 \n"),
+        ("@0.050000000", "+%-3N", "05\n"),
+        ("@0.050000000", "+%-12N", "05\n"),
+        ("@0.050000000", "+%-N", "050000000\n"),
+        ("@0.005123456", "+%+3N", "005\n"),
+        ("@1.005123456", "+%s%3N", "1005\n"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(time)
+            .arg(format)
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
 #[test]
 fn test_date_strftime_flag_on_composite() {
     // GNU treats composite strftime specifiers atomically.
