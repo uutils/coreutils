@@ -3428,6 +3428,39 @@ pub fn run_ucmd_as_root_with_stdin_stdout(
     }
 }
 
+/// Prepares a deep directory tree for stack overflow regression testing.
+///
+/// Returns `Some(file_limit)` if the system's hard `RLIMIT_NOFILE` limit is at least 600
+/// and directory creation succeeded, or `None` if the test should be skipped (e.g. in environments
+/// where `NOFILE` cannot be raised enough to avoid `EMFILE`).
+#[cfg(target_os = "linux")]
+#[must_use]
+pub fn prepare_deep_traversal(root: &Path) -> Option<u64> {
+    const MAX_DEPTH: usize = 1500;
+    let (_, hard) = rlimit::getrlimit(Resource::NOFILE).ok()?;
+    let required_fd = (MAX_DEPTH as u64) + 50;
+
+    let (file_limit, target_depth) = if hard >= required_fd {
+        (hard.min(4096), MAX_DEPTH)
+    } else if hard >= 600 {
+        let depth = (hard.saturating_sub(50)) as usize;
+        (hard, depth)
+    } else {
+        println!("skipping deep traversal test: hard NOFILE limit {hard} < 600");
+        return None;
+    };
+
+    let mut current = root.to_path_buf();
+    for _ in 0..target_depth {
+        current.push("d");
+        if fs::create_dir(&current).is_err() {
+            return None;
+        }
+    }
+
+    Some(file_limit)
+}
+
 /// Sanity checks for test utils
 #[cfg(test)]
 mod tests {
