@@ -604,10 +604,12 @@ where
             self.buffer.push_front((ln, Ok(line)));
             None
         } else if self.buffer.len() >= self.size {
-            self.buffer.push_back((ln, Ok(line)));
-            self.buffer
+            let head_line = self
+                .buffer
                 .pop_front()
-                .map(|(_, head_line)| head_line.unwrap())
+                .map(|(_, head_line)| head_line.unwrap());
+            self.buffer.push_back((ln, Ok(line)));
+            head_line
         } else {
             self.buffer.push_back((ln, Ok(line)));
             None
