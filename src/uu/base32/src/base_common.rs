@@ -14,7 +14,7 @@ use uucore::display::Quotable;
 use uucore::encoding::{
     BASE2LSBF, BASE2MSBF, Base32Wrapper, Base58Wrapper, Base64SimdWrapper, EncodingWrapper, Format,
     SupportsFastDecodeAndEncode, Z85Wrapper,
-    for_base_common::{BASE32, BASE32HEX, BASE64URL, HEXUPPER_PERMISSIVE},
+    for_base_common::{BASE32, BASE32HEX, HEXUPPER_PERMISSIVE},
 };
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError, strip_errno};
 use uucore::format_usage;
@@ -242,6 +242,13 @@ pub fn get_supports_fast_decode_and_encode(
     const BASE32_UNPADDED_MULTIPLE: usize = 5;
     const BASE64_UNPADDED_MULTIPLE: usize = 3;
 
+    // spell-checker:disable
+    const BASE64_ALPHABET: &[u8] =
+        b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=";
+    const BASE64URL_ALPHABET: &[u8] =
+        b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_=";
+    // spell-checker:enable
+
     match format {
         Format::Base16 => Box::from(EncodingWrapper::new(
             HEXUPPER_PERMISSIVE,
@@ -278,27 +285,28 @@ pub fn get_supports_fast_decode_and_encode(
             // spell-checker:disable-next-line
             b"0123456789ABCDEFGHIJKLMNOPQRSTUV=",
         )),
-        Format::Base64 => {
-            let alphabet: &[u8] = if has_padding {
-                &b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/="[..]
+        Format::Base64 | Format::Base64Url => {
+            let url_safe = matches!(format, Format::Base64Url);
+            let alphabet: &'static [u8] = if url_safe {
+                BASE64URL_ALPHABET
             } else {
-                &b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/"[..]
+                BASE64_ALPHABET
+            };
+            // The alphabets end with '=', which is only valid when padding is used.
+            let alphabet = if has_padding {
+                alphabet
+            } else {
+                &alphabet[..alphabet.len() - 1]
             };
             let use_padding = !decode || has_padding;
             Box::from(Base64SimdWrapper::new(
                 use_padding,
+                url_safe,
                 BASE64_VALID_DECODING_MULTIPLE,
                 BASE64_UNPADDED_MULTIPLE,
                 alphabet,
             ))
         }
-        Format::Base64Url => Box::from(EncodingWrapper::new(
-            BASE64URL,
-            BASE64_VALID_DECODING_MULTIPLE,
-            BASE64_UNPADDED_MULTIPLE,
-            // spell-checker:disable-next-line
-            b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789=_-",
-        )),
         Format::Z85 => Box::from(Z85Wrapper {}),
         Format::Base58 => Box::from(Base58Wrapper {}),
     }
