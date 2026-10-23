@@ -632,8 +632,9 @@ fn wipe_file(
         verbose,
         force,
     } = *wipe_options;
-    // Get these potential errors out of the way first
-    let path = Path::new(path_str);
+
+    let display_path = Path::new(path_str);
+
     // Keep the command-line operand for diagnostics; use the resolved path
     // only for filesystem operations.
     let is_stdout = cfg!(unix) && path_str == "-";
@@ -644,23 +645,23 @@ fn wipe_file(
         }
         #[cfg(not(unix))]
         {
-            path
+            display_path
         }
     } else {
-        path
+        display_path
     };
 
     if path_str.as_encoded_bytes().ends_with(b"/") {
         if path.is_dir() {
             return Err(USimpleError::new(
                 1,
-                translate_text!("shred-failed-to-open-for-writing-is-a-directory", "file" => path.maybe_quote()),
+                translate_text!("shred-failed-to-open-for-writing-is-a-directory", "file" => display_path.maybe_quote()),
             ));
         }
         if fs::metadata(path).is_err_and(|e| e.kind() == io::ErrorKind::NotADirectory) {
             return Err(USimpleError::new(
                 1,
-                translate_text!("shred-failed-to-open-for-writing-not-a-directory", "file" => path.maybe_quote()),
+                translate_text!("shred-failed-to-open-for-writing-not-a-directory", "file" => display_path.maybe_quote()),
             ));
         }
     }
@@ -694,13 +695,13 @@ fn wipe_file(
         Ok(md) if !md.is_file() => {
             return Err(USimpleError::new(
                 1,
-                translate_text!("shred-not-a-file", "file" => path.maybe_quote()),
+                translate_text!("shred-not-a-file", "file" => display_path.maybe_quote()),
             ));
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
             return Err(USimpleError::new(
                 1,
-                translate_text!("shred-no-such-file-or-directory", "file" => path.maybe_quote()),
+                translate_text!("shred-no-such-file-or-directory", "file" => display_path.maybe_quote()),
             ));
         }
         _ => {}
@@ -759,7 +760,7 @@ fn wipe_file(
         .truncate(false)
         .open(path)
         .map_err_context(
-            || translate_text!("shred-failed-to-open-for-writing", "file" => path.maybe_quote()),
+            || translate_text!("shred-failed-to-open-for-writing", "file" => display_path.maybe_quote()),
         )?;
 
     let size = match size {
@@ -770,7 +771,7 @@ fn wipe_file(
     for (i, pass_type) in pass_sequence.into_iter().enumerate() {
         if verbose {
             let pass_name = pass_name(&pass_type);
-            let msg = translate_text!("shred-pass-progress", "file" => path.maybe_quote());
+            let msg = translate_text!("shred-pass-progress", "file" => display_path.maybe_quote());
             show_error!(
                 "{msg} {}/{total_passes} ({pass_name})...",
                 (i + 1).to_string()
@@ -778,7 +779,7 @@ fn wipe_file(
         }
         // size is an optional argument for exactly how many bytes we want to shred
         do_pass(&mut file, &pass_type, exact, random_source, size).map_err_context(
-            || translate_text!("shred-file-write-pass-failed", "file" => path.maybe_quote()),
+            || translate_text!("shred-file-write-pass-failed", "file" => display_path.maybe_quote()),
         )?;
     }
 
