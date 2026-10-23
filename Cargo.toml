@@ -670,9 +670,23 @@ feat_os_unix_fuchsia = [
 # "feat_os_unix_redox" == set of utilities which can be built/run on "Redox OS" (refs: <https://www.redox-os.org>; <https://en.wikipedia.org/wiki/Redox_(operating_system)>)
 feat_os_unix_redox = [
   "feat_common_core",
-  #
+  "chgrp",
   "chmod",
+  "chown",
+  "df",
+  "du",
+  "env",
+  "install",
+  "kill",
+  "logname",
+  "more",
+  "nice",
+  "nohup",
+  "nproc",
   "stat",
+  "stty",
+  "timeout",
+  "whoami",
 ]
 ##
 # * bypass/override ~ translate 'test' feature name to avoid dependency collision with rust core 'test' crate (o/w surfaces as compiler errors during testing)
