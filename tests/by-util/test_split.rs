@@ -965,6 +965,24 @@ fn test_suffix_length_zero() {
 }
 
 #[test]
+fn test_suffix_length_zero_with_number_uses_default_length() {
+    // `-a 0` is the same as no `-a`, so the suffixes start at length 2
+    // even when a shorter suffix would fit the number of chunks.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-n2", "-a0", "fivelines.txt"]).succeeds();
+    assert!(at.file_exists("xaa"));
+    assert!(at.file_exists("xab"));
+    assert!(!at.file_exists("xa"));
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let args = ["-d", "-n10", "-a0", "fivelines.txt"];
+    ucmd.args(&args).succeeds();
+    assert!(at.file_exists("x00"));
+    assert!(at.file_exists("x09"));
+    assert!(!at.file_exists("x0"));
+}
+
+#[test]
 fn test_suffixes_exhausted() {
     new_ucmd!()
         .args(&["-b", "1", "-a", "1", "asciilowercase.txt"])

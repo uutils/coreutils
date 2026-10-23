@@ -16,7 +16,6 @@ chmod-help-recursive = changer les fichiers et répertoires récursivement
 chmod-help-reference = utiliser le mode de RFICHIER au lieu des valeurs de MODE
 
 # Messages d'erreur
-chmod-error-cannot-stat = impossible d'obtenir les attributs de {$file}
 chmod-error-dangling-symlink = impossible d'opérer sur le lien symbolique pendouillant {$file}
 chmod-error-no-such-file = impossible d'accéder à {$file} : Aucun fichier ou répertoire de ce type
 chmod-error-preserve-root = il est dangereux d'opérer récursivement sur {$file}
@@ -27,6 +26,7 @@ chmod-error-permission-denied = impossible d'accéder à {$file} : Permission re
 chmod-error-new-permissions = {$file} : les nouvelles permissions sont {$actual}, pas {$expected}
 chmod-error-changing-permissions = changement des permissions de {$file} : {$err}
 chmod-error-missing-operand = opérande manquant
+chmod-error-reference-stat = impossible d'obtenir les attributs de { $file } : { $error }
 
 # Messages verbeux/de statut
 chmod-verbose-failed-dangling = échec du changement de mode de {$file} de 0000 (---------) vers 1500 (r-x-----T)

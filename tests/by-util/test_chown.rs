@@ -1141,3 +1141,30 @@ fn verbose_missing_file_write_error_is_reported_not_panic() {
         .fails_with_code(1)
         .stderr_contains("chown: write error: No space left on device");
 }
+
+#[test]
+fn test_repeated_flags_are_accepted() {
+    use rustix::process::geteuid;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.touch("dir/file");
+
+    // GNU chown accepts a flag given more than once; the last one wins.
+    for flags in [
+        vec!["-R", "-R"],
+        vec!["-R", "--recursive"],
+        vec!["-v", "-v"],
+        vec!["-c", "-c"],
+        vec!["-f", "-f"],
+        vec!["-R", "-c", "-c"],
+    ] {
+        scene
+            .ucmd()
+            .args(&flags)
+            .arg(geteuid().to_string())
+            .arg("dir")
+            .succeeds();
+    }
+}
