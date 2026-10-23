@@ -1437,23 +1437,20 @@ fn test_bytes_suffix_recursive() {
 
 /// `conv=swab` pairs the bytes of the whole input, so a byte left over at the
 /// end of an odd-length block is swapped with the first byte of the next one.
-#[test]
-fn test_swab_across_blocks() {
-    for (args, expected) in [
-        (&["bs=3"][..], "badcfeg"),
-        (&["bs=1"], "badcfeg"),
-        (&["ibs=3", "obs=2"], "badcfeg"),
-        (&["bs=3", "count=1"], "bac"),
-        (&["bs=3", "conv=ucase"], "BADCFEG"),
-        (&["bs=3", "conv=sync"], "badcfe\0g\0"),
-    ] {
-        new_ucmd!()
-            .args(&["conv=swab", "status=none"])
-            .args(args)
-            .pipe_in("abcdefg")
-            .succeeds()
-            .stdout_only(expected);
-    }
+#[rstest]
+#[case::bs_3(&["bs=3"], "badcfeg")]
+#[case::bs_1(&["bs=1"], "badcfeg")]
+#[case::ibs_3_obs_2(&["ibs=3", "obs=2"], "badcfeg")]
+#[case::count(&["bs=3", "count=1"], "bac")]
+#[case::ucase(&["bs=3", "conv=ucase"], "BADCFEG")]
+#[case::sync(&["bs=3", "conv=sync"], "badcfe\0g\0")]
+fn test_swab_across_blocks(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .args(&["conv=swab", "status=none"])
+        .args(args)
+        .pipe_in("abcdefg")
+        .succeeds()
+        .stdout_only(expected);
 }
 
 /// `conv=swab` with an odd number of bytes in each read from a pipe.
