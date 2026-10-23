@@ -23,6 +23,9 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
+#[cfg(unix)]
+use uucore::fs::mode::{S_IRUSR, S_IWUSR};
+use uucore::fs::{AccessMode, effective_access};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use uucore::translate;
@@ -630,25 +633,30 @@ fn is_dir_empty(path: &Path) -> bool {
 
 #[cfg(unix)]
 fn is_readable_metadata(metadata: &Metadata) -> bool {
-    let mode = metadata.permissions().mode();
-    (mode & 0o400) > 0
+    metadata.permissions().mode() & S_IRUSR != 0
 }
 
-/// Whether the given file or directory is readable.
-#[cfg(any(not(unix), target_os = "redox"))]
-fn is_readable(_path: &Path) -> bool {
+#[cfg(not(unix))]
+fn is_readable_metadata(_metadata: &Metadata) -> bool {
     true
 }
 
 #[cfg(unix)]
 fn is_writable_metadata(metadata: &Metadata) -> bool {
-    let mode = metadata.permissions().mode();
-    (mode & 0o200) > 0
+    metadata.permissions().mode() & S_IWUSR != 0
 }
 
 #[cfg(not(unix))]
-fn is_writable_metadata(_metadata: &Metadata) -> bool {
-    true
+fn is_writable_metadata(metadata: &Metadata) -> bool {
+    !metadata.permissions().readonly()
+}
+
+fn is_readable(path: &Path) -> bool {
+    effective_access(path, AccessMode::Read)
+}
+
+fn is_writable(path: &Path) -> bool {
+    effective_access(path, AccessMode::Write)
 }
 
 /// Recursively remove the directory tree rooted at the given path.
@@ -738,7 +746,7 @@ fn remove_dir_recursive(
 
         // Try removing the directory itself.
         match fs::remove_dir(path) {
-            Err(_) if !error && !is_readable(path) => {
+            Err(_) if !(error || is_readable_metadata(&metadata) || is_readable(path)) => {
                 // For compatibility with GNU test case
                 // `tests/rm/unread2.sh`, show "Permission denied" in this
                 // case instead of "Directory not empty".
@@ -940,7 +948,9 @@ fn prompt_file(path: &Path, options: &Options) -> bool {
             || prompt_yes!("remove symbolic link {}?", path.quote());
     }
 
-    if options.interactive == InteractiveMode::Always && is_writable_metadata(&metadata) {
+    if options.interactive == InteractiveMode::Always
+        && (is_writable_metadata(&metadata) || is_writable(path))
+    {
         return if metadata.len() == 0 {
             prompt_yes!("remove regular empty file {}?", path.quote())
         } else {
@@ -955,7 +965,7 @@ fn prompt_file_permission_readonly(path: &Path, options: &Options, metadata: &Me
     let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
     match (stdin_ok, options.interactive) {
         (false, InteractiveMode::PromptProtected) => true,
-        _ if is_writable_metadata(metadata) => true,
+        _ if is_writable_metadata(metadata) || is_writable(path) => true,
         _ if metadata.len() == 0 => prompt_yes!(
             "remove write-protected regular empty file {}?",
             path.quote()
@@ -1031,15 +1041,12 @@ mod path_tests {
     }
 }
 
-// For directories finding if they are writable or not is a hassle. In Unix we can use the built-in rust crate to check mode bits. But other os don't have something similar afaik
-// Most cases are covered by keep eye out for edge cases
-#[cfg(unix)]
 fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
     let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
     match (
         stdin_ok,
-        is_readable_metadata(metadata),
-        is_writable_metadata(metadata),
+        is_readable_metadata(metadata) || is_readable(path),
+        is_writable_metadata(metadata) || is_writable(path),
         options.interactive,
     ) {
         #[expect(clippy::match_same_arms)] // needs comment
@@ -1056,30 +1063,6 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
         (_, true, false, _) => prompt_yes!("remove write-protected directory {}?", path.quote()),
         (_, _, _, InteractiveMode::Always) => prompt_yes!("remove directory {}?", path.quote()),
         (_, _, _, _) => true,
-    }
-}
-
-// For Windows, metadata.permissions().readonly() checks FILE_ATTRIBUTE_READONLY
-#[cfg(windows)]
-fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
-    let not_user_writable = metadata.permissions().readonly();
-    let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
-    match (stdin_ok, not_user_writable, options.interactive) {
-        (false, _, InteractiveMode::PromptProtected) => true,
-        (_, true, _) => prompt_yes!("remove write-protected directory {}?", path.quote()),
-        (_, _, InteractiveMode::Always) => prompt_yes!("remove directory {}?", path.quote()),
-        (_, _, _) => true,
-    }
-}
-
-// I have this here for completeness but it will always return "remove directory {}" because metadata.permissions().readonly() only works for file not directories
-#[cfg(not(windows))]
-#[cfg(not(unix))]
-fn handle_writable_directory(path: &Path, options: &Options, _metadata: &Metadata) -> bool {
-    if options.interactive == InteractiveMode::Always {
-        prompt_yes!("remove directory {}?", path.quote())
-    } else {
-        true
     }
 }
 

@@ -22,29 +22,29 @@ use uucore::show_error;
 use uucore::translate;
 
 use super::super::{
-    InteractiveMode, Options, is_dir_empty, is_readable_metadata, prompt_descend, remove_file,
+    InteractiveMode, Options, is_dir_empty, is_readable, is_writable, prompt_descend, remove_file,
     report_verbose_write_error, show_permission_denied_error, show_removal_error,
     verbose_removed_directory, verbose_removed_file,
 };
 
 #[inline]
 fn mode_readable(mode: libc::mode_t) -> bool {
-    (mode & libc::S_IRUSR) != 0
+    mode & libc::S_IRUSR != 0
 }
 
 #[inline]
 fn mode_writable(mode: libc::mode_t) -> bool {
-    (mode & libc::S_IWUSR) != 0
+    mode & libc::S_IWUSR != 0
 }
 
-/// File prompt that reuses existing stat data to avoid extra statx calls
+/// Prompt for a file using cached metadata.
 fn prompt_file_with_stat(path: &Path, stat: &FileStat, options: &Options) -> bool {
     if options.interactive == InteractiveMode::Never {
         return true;
     }
 
     let is_symlink = ((stat.st_mode as libc::mode_t) & libc::S_IFMT) == libc::S_IFLNK;
-    let writable = mode_writable(stat.st_mode as libc::mode_t);
+    let writable = is_symlink || mode_writable(stat.st_mode as libc::mode_t) || is_writable(path);
     let len = stat.st_size as u64;
     let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
 
@@ -77,14 +77,14 @@ fn prompt_file_with_stat(path: &Path, stat: &FileStat, options: &Options) -> boo
     }
 }
 
-/// Directory prompt that reuses existing stat data to avoid extra statx calls
+/// Prompt for a directory using cached mode bits and effective access.
 fn prompt_dir_with_mode(path: &Path, mode: libc::mode_t, options: &Options) -> bool {
     if options.interactive == InteractiveMode::Never {
         return true;
     }
 
-    let readable = mode_readable(mode as libc::mode_t);
-    let writable = mode_writable(mode as libc::mode_t);
+    let readable = mode_readable(mode) || is_readable(path);
+    let writable = mode_writable(mode) || is_writable(path);
     let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
 
     match (stdin_ok, readable, writable, options.interactive) {
@@ -104,11 +104,6 @@ fn prompt_dir_with_mode(path: &Path, mode: libc::mode_t, options: &Options) -> b
         (_, _, _, InteractiveMode::Always) => prompt_yes!("remove directory {}?", path.quote()),
         (_, _, _, _) => true,
     }
-}
-
-/// Whether the given file or directory is readable.
-pub fn is_readable(path: &Path) -> bool {
-    fs::metadata(path).is_ok_and(|metadata| is_readable_metadata(&metadata))
 }
 
 /// Remove a single file using safe traversal

@@ -3,19 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) egid euid faccessat
+// spell-checker:ignore (vars) egid euid
 
 mod diagnostics;
 pub(crate) mod error;
-#[cfg(not(any(windows, target_os = "wasi")))]
-mod faccessat;
 mod parser;
 
 #[cfg(any(windows, target_os = "wasi"))]
 mod platform;
 
-#[cfg(not(any(windows, target_os = "wasi")))]
-use crate::faccessat::effective_access;
 use clap::Command;
 use error::{ParseError, ParseErrorKind, ParseResult};
 use parser::{BinaryOp, Evaluator, Operand, UnaryOp, evaluate};
@@ -23,8 +19,6 @@ use parser::{BinaryOp, Evaluator, Operand, UnaryOp, evaluate};
 use platform::fd_is_terminal;
 #[cfg(target_os = "wasi")]
 use platform::path;
-#[cfg(not(any(windows, target_os = "wasi")))]
-use rustix::fs::Access;
 #[cfg(not(any(windows, target_os = "wasi")))]
 use rustix::process::{getegid, geteuid};
 use std::cmp::Ordering;
@@ -38,6 +32,8 @@ use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 #[cfg(not(any(windows, target_os = "wasi")))]
 use uucore::fs::mode::{S_ISGID, S_ISUID, S_ISVTX};
+#[cfg(not(target_os = "wasi"))]
+use uucore::fs::{AccessMode, effective_access};
 use uucore::i18n::collator::{init_locale_collation, locale_cmp};
 use uucore::translate;
 
@@ -421,9 +417,9 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
     };
 
     match condition {
-        PathCondition::Readable => effective_access(path, Access::READ_OK),
-        PathCondition::Writable => effective_access(path, Access::WRITE_OK),
-        PathCondition::Executable => effective_access(path, Access::EXEC_OK),
+        PathCondition::Readable => effective_access(path, AccessMode::Read),
+        PathCondition::Writable => effective_access(path, AccessMode::Write),
+        PathCondition::Executable => effective_access(path, AccessMode::Execute),
 
         PathCondition::BlockSpecial => metadata().is_ok_and(|m| m.file_type().is_block_device()),
 
@@ -458,8 +454,6 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
 }
 #[cfg(windows)]
 fn path(path: &OsStr, condition: &PathCondition) -> bool {
-    use crate::platform::{is_executable, is_readable, is_writable, owned_by_current_token};
-
     let metadata = if condition == &PathCondition::SymLink {
         fs::symlink_metadata(path)
     } else {
@@ -474,14 +468,14 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         PathCondition::Directory => metadata.is_dir(),
         PathCondition::Exists => true,
         PathCondition::ExistsModifiedLastRead => modified_since_read(&metadata),
-        PathCondition::GroupOwns => owned_by_current_token(path, true),
-        PathCondition::UserOwns => owned_by_current_token(path, false),
+        PathCondition::GroupOwns => uucore::fs::owned_by_current_token(path, true),
+        PathCondition::UserOwns => uucore::fs::owned_by_current_token(path, false),
         PathCondition::Regular => metadata.is_file(),
         PathCondition::SymLink => metadata.file_type().is_symlink(),
         PathCondition::NonEmpty => metadata.len() > 0,
-        PathCondition::Readable => is_readable(path),
-        PathCondition::Writable => is_writable(path, &metadata),
-        PathCondition::Executable => is_executable(path, &metadata),
+        PathCondition::Readable => effective_access(path, AccessMode::Read),
+        PathCondition::Writable => effective_access(path, AccessMode::Write),
+        PathCondition::Executable => effective_access(path, AccessMode::Execute),
         PathCondition::BlockSpecial
         | PathCondition::CharacterSpecial
         | PathCondition::Fifo
@@ -513,12 +507,12 @@ mod tests {
         fs::set_permissions(file.path(), fs::Permissions::from_mode(0o000)).unwrap();
         let path = file.path().as_os_str();
 
-        assert!(effective_access(path, Access::READ_OK));
-        assert!(effective_access(path, Access::WRITE_OK));
-        assert!(!effective_access(path, Access::EXEC_OK));
+        assert!(effective_access(path, AccessMode::Read));
+        assert!(effective_access(path, AccessMode::Write));
+        assert!(!effective_access(path, AccessMode::Execute));
 
         fs::set_permissions(file.path(), fs::Permissions::from_mode(0o001)).unwrap();
-        assert!(effective_access(path, Access::EXEC_OK));
+        assert!(effective_access(path, AccessMode::Execute));
     }
 
     #[test]
