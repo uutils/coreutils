@@ -7,7 +7,7 @@
 
 #![allow(clippy::similar_names)]
 
-use std::path::PathBuf;
+use std::path::{MAIN_SEPARATOR_STR, PathBuf};
 #[cfg(all(unix, not(target_os = "android")))]
 use std::time::Duration;
 use uutests::at_and_ucmd;
@@ -33,6 +33,31 @@ fn test_symlink_existing_file() {
     assert!(at.file_exists(file));
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file);
+}
+
+#[test]
+#[cfg(windows)]
+fn test_symlink_target_with_forward_slashes() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("dir/sub");
+    at.write("dir/file", "content");
+
+    scene
+        .ucmd()
+        .args(&["-s", "dir/file", "link"])
+        .succeeds()
+        .no_stderr();
+    assert_eq!(at.resolve_link("link"), "dir\\file");
+    assert_eq!(at.read("link"), "content");
+
+    scene
+        .ucmd()
+        .args(&["-s", "dir/sub", "dirlink"])
+        .succeeds()
+        .no_stderr();
+    assert_eq!(at.resolve_link("dirlink"), "dir\\sub");
+    assert!(at.dir_exists("dirlink"));
 }
 
 #[test]
@@ -611,11 +636,17 @@ fn test_symlink_target_dir_from_dir() {
 
     let file_a_link = &format!("{dir}/{filename_a}");
     assert!(at.is_symlink(file_a_link));
-    assert_eq!(&at.resolve_link(file_a_link), file_a);
+    assert_eq!(
+        at.resolve_link(file_a_link),
+        file_a.replace('/', MAIN_SEPARATOR_STR)
+    );
 
     let file_b_link = &format!("{dir}/{filename_b}");
     assert!(at.is_symlink(file_b_link));
-    assert_eq!(&at.resolve_link(file_b_link), file_b);
+    assert_eq!(
+        at.resolve_link(file_b_link),
+        file_b.replace('/', MAIN_SEPARATOR_STR)
+    );
 }
 
 #[test]
@@ -796,7 +827,10 @@ fn test_symlink_relative_path() {
         .succeeds()
         .stdout_only(format!("'{link}' -> '{}'\n", p.to_string_lossy()));
     assert!(at.is_symlink(link));
-    assert_eq!(at.resolve_link(link), p.to_string_lossy());
+    assert_eq!(
+        at.resolve_link(link),
+        p.to_string_lossy().replace('/', MAIN_SEPARATOR_STR)
+    );
 }
 
 #[test]
