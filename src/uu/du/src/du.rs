@@ -162,11 +162,10 @@ impl Stat {
         let latest_time = options
             .time
             .and_then(|time| metadata_get_time(&metadata, time));
-        let is_dir = metadata.is_dir();
 
         Ok(Self {
             path: path.to_path_buf(),
-            size: if is_dir { 0 } else { metadata.len() },
+            size: if metadata.is_dir() { 0 } else { metadata.len() },
             blocks,
             inodes: 1,
             inode: file_info,
