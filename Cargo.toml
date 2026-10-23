@@ -41,7 +41,7 @@ readme = "README.package.md"
 version = "0.13.0"
 
 [workspace.dependencies]
-ansi-width = "0.1.0"
+ansi-width = "0.1.1"
 # The diagnostics rewrite ariadne's output by row number, so a release that
 # changes the shape of a report is a breaking change here even when it is not
 # one for ariadne. `uucore`'s `the_rendered_report_has_the_row_shape_the_rewriting_assumes`
