@@ -396,17 +396,22 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         )
         .into());
     }
-    // WASI may return file metadata even when a trailing slash requires a directory.
-    let Some(source_metadata) = source
-        .symlink_metadata()
-        .ok()
-        .filter(|metadata| !metadata.is_file() || !path_ends_with_terminator(source))
-    else {
-        return Err(if path_ends_with_terminator(source) {
-            MvError::CannotStatNotADirectory(source.quote().to_string()).into()
-        } else {
-            MvError::NoSuchFile(source.quote().to_string()).into()
-        });
+    let source_metadata = match source.symlink_metadata() {
+        // WASI may return file metadata even when a trailing slash requires a directory.
+        Ok(metadata) if metadata.is_file() && path_ends_with_terminator(source) => {
+            return Err(MvError::CannotStatNotADirectory(source.quote().to_string()).into());
+        }
+        Ok(metadata) => metadata,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            return Err(MvError::NoSuchFile(source.quote().to_string()).into());
+        }
+        // Report the real reason, e.g. "Not a directory" for `file/` or
+        // "Permission denied" for a source in an unsearchable directory.
+        Err(e) => {
+            return Err(
+                e.map_err_context(|| translate!("mv-error-cannot-stat", "path" => source.quote()))
+            );
+        }
     };
 
     // `symlink_metadata` does not follow symlinks, so this is equivalent to
