@@ -666,6 +666,34 @@ fn invalid_precision_tests() {
     }
 }
 
+#[test]
+fn invalid_star_precision_string() {
+    for precision in ["2147483648", &i64::MAX.to_string()] {
+        new_ucmd!()
+            .args(&["%.*s|\n", precision, "x"])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_is(format!("printf: invalid precision: '{precision}'\n"));
+    }
+
+    // The failure ends printf, so the rest of the format is not run.
+    new_ucmd!()
+        .args(&["%.*s %s\n", "2147483648", "a", "b"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("printf: invalid precision: '2147483648'\n");
+
+    // The cap is i32::MAX itself, and only a `*` precision is capped.
+    new_ucmd!()
+        .args(&["%.*s|\n", "2147483647", "x"])
+        .succeeds()
+        .stdout_only("x|\n");
+    new_ucmd!()
+        .args(&["%.4294967296s|\n", "x"])
+        .succeeds()
+        .stdout_only("x|\n");
+}
+
 // The following padding-tests test for the cases in which flags in ['0', ' '] are given.
 // For integer, only try to pad when no precision is given, while
 // for float, always try to pad
