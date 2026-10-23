@@ -1298,21 +1298,25 @@ fn test_equivalence_class_in_set2_only_with_delete_and_squeeze(#[case] args: &[&
         .stderr_only("tr: [=c=] expressions may not appear in string2 when translating\n");
 }
 
-#[rstest]
 // A repeat with a count still fills set2 with `-d -s`.
-#[case::delete_squeeze_repeat(&["-ds", "a", "[b*3]"], "xaabb", "xb")]
-#[case::delete_squeeze_equivalence(&["-ds", "a", "[=b=]"], "xaabb", "xb")]
-#[case::equivalence_in_set1(&["[=a=]", "b"], "xaab", "xbbb")]
-fn test_set2_constructs_allowed(
-    #[case] args: &[&str],
-    #[case] input: &str,
-    #[case] expected: &str,
-) {
+#[rstest]
+#[case::repeat("[b*3]")]
+#[case::equivalence("[=b=]")]
+fn test_set2_constructs_allowed_with_delete_and_squeeze(#[case] set2: &str) {
     new_ucmd!()
-        .args(args)
-        .pipe_in(input)
+        .args(&["-ds", "a", set2])
+        .pipe_in("xaabb")
         .succeeds()
-        .stdout_only(expected);
+        .stdout_only("xb");
+}
+
+#[test]
+fn test_equivalence_class_in_set1_when_translating() {
+    new_ucmd!()
+        .args(&["[=a=]", "b"])
+        .pipe_in("xaab")
+        .succeeds()
+        .stdout_only("xbbb");
 }
 
 #[test]
