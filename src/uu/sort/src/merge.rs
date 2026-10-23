@@ -256,8 +256,6 @@ fn reader(
     settings: &GlobalSettings,
     separator: u8,
 ) -> UResult<()> {
-    // Error messages are built on this thread, and localization is per thread.
-    let _ = uucore::locale::setup_localization("sort");
     for (file_idx, recycled_chunk) in recycled_receiver {
         if let Some(ReaderFile {
             file,

@@ -2341,8 +2341,6 @@ fn test_files0_from_non_utf8_filename() {
 #[case(&["-m", "input", "dir"])]
 #[cfg(target_os = "linux")]
 fn test_read_error_on_reader_thread(#[case] args: &[&str]) {
-    // `--check` used to exit 0 without a message when its input could not be
-    // read, and `--merge` printed the untranslated message id.
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
     at.write("input", "a\nb\n");

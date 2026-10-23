@@ -124,8 +124,6 @@ fn reader(
     sender: &SyncSender<Chunk>,
     settings: &GlobalSettings,
 ) -> UResult<()> {
-    // Error messages are built on this thread, and localization is per thread.
-    let _ = uucore::locale::setup_localization("sort");
     let mut carry_over = vec![];
     for recycled_chunk in receiver {
         let should_continue = chunks::read(

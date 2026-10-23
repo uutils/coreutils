@@ -161,6 +161,9 @@ pub enum SortError {
         error: std::io::Error,
     },
 
+    #[error("{}", translate!("sort-read-failed", "error" => strip_errno(.error)))]
+    ChunkReadFailed { error: std::io::Error },
+
     #[error("{}", translate!("sort-open-tmp-file-failed", "error" => strip_errno(.error)))]
     OpenTmpFileFailed { error: std::io::Error },
 
