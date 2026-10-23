@@ -312,22 +312,42 @@ fn test_version_sort_stable() {
         .stdout_is("0.1\n0.02\n0.2\n0.002\n0.3\n");
 }
 
-// -d and -i drop characters from the key before it is compared as a version
-#[rstest]
-#[case::dictionary_order(&["-dV"], "b\n_a\na10\na_9\n", "_a\na_9\na10\nb\n")]
-#[case::dictionary_order_key(&["-k1dV"], "b\n_a\na10\na_9\n", "_a\na_9\na10\nb\n")]
-#[case::dictionary_order_bounded_key(&["-k1,1dV"], "b\n_a\na10\na_9\n", "_a\na_9\na10\nb\n")]
-#[case::ignore_nonprinting(&["-iV"], "a10\na\x019\n", "a\x019\na10\n")]
-fn test_version_sort_dictionary_order_and_ignore_nonprinting(
-    #[case] args: &[&str],
-    #[case] input: &str,
-    #[case] expected: &str,
-) {
+#[test]
+fn test_version_sort_dictionary_order() {
+    // -d drops the underscores before the key is compared as a version
     new_ucmd!()
-        .args(args)
-        .pipe_in(input)
+        .arg("-dV")
+        .pipe_in("b\n_a\na10\na_9\n")
         .succeeds()
-        .stdout_is(expected);
+        .stdout_is("_a\na_9\na10\nb\n");
+}
+
+#[test]
+fn test_version_sort_dictionary_order_key() {
+    new_ucmd!()
+        .arg("-k1dV")
+        .pipe_in("b\n_a\na10\na_9\n")
+        .succeeds()
+        .stdout_is("_a\na_9\na10\nb\n");
+}
+
+#[test]
+fn test_version_sort_dictionary_order_bounded_key() {
+    new_ucmd!()
+        .arg("-k1,1dV")
+        .pipe_in("b\n_a\na10\na_9\n")
+        .succeeds()
+        .stdout_is("_a\na_9\na10\nb\n");
+}
+
+#[test]
+fn test_version_sort_ignore_nonprinting() {
+    // -i drops the control character before the key is compared as a version
+    new_ucmd!()
+        .arg("-iV")
+        .pipe_in("a10\na\x019\n")
+        .succeeds()
+        .stdout_is("a\x019\na10\n");
 }
 
 #[test]
