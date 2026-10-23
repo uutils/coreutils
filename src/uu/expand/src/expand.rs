@@ -371,6 +371,7 @@ fn expand_buf(
     tabstops: &[usize],
     options: &Options,
     col: &mut usize,
+    init: &mut bool,
 ) -> std::io::Result<()> {
     use self::CharType::{Backspace, Other, Tab};
 
@@ -382,14 +383,27 @@ fn expand_buf(
         .any(|&b| b == b'\t' || b == b'\x08' || (!options.utf8 && b == b'\r'));
     if !needs_processing {
         output.write_all(buf)?;
-        if let Some(n) = buf.iter().rposition(|&b| b == b'\n') {
-            *col = buf.len() - n - 1;
+        // The last line may continue in the next buffer or file, so keep
+        // track of its column and whether it is still in leading blanks.
+        let line = match buf.iter().rposition(|&b| b == b'\n') {
+            Some(n) => {
+                *col = 0;
+                *init = true;
+                &buf[n + 1..]
+            }
+            None => buf,
+        };
+        *init = *init && line.iter().all(|&b| b == b' ');
+        let mut byte = 0;
+        while byte < line.len() {
+            let (_, cwidth, nbytes) = classify_char(line, byte, options.utf8);
+            *col += cwidth;
+            byte += nbytes;
         }
         return Ok(());
     }
 
     let mut byte = 0;
-    let mut init = true;
 
     while byte < buf.len() {
         let (ctype, cwidth, nbytes) = classify_char(buf, byte, options.utf8);
@@ -402,7 +416,7 @@ fn expand_buf(
                 *col += nts;
 
                 // now dump out either spaces if we're expanding, or a literal tab if we're not
-                if init || !options.iflag {
+                if *init || !options.iflag {
                     write_spaces(output, nts)?;
                 } else {
                     output.write_all(&buf[byte..byte + nbytes])?;
@@ -414,7 +428,7 @@ fn expand_buf(
                 // if we're writing anything other than a space, then we're
                 // done with the line's leading spaces
                 if buf[byte] != b' ' {
-                    init = false;
+                    *init = false;
                 }
 
                 output.write_all(&buf[byte..byte + nbytes])?;
@@ -425,12 +439,12 @@ fn expand_buf(
                 // if we're writing anything other than a space, then we're
                 // done with the line's leading spaces
                 if buf[byte] != b' ' {
-                    init = false;
+                    *init = false;
                 }
 
                 if buf[byte] == b'\n' {
                     *col = 0;
-                    init = true;
+                    *init = true;
                 }
 
                 output.write_all(&buf[byte..byte + nbytes])?;
@@ -447,15 +461,16 @@ fn expand_file(
     file: &OsString,
     output: &mut BufWriter<std::io::Stdout>,
     options: &Options,
+    col: &mut usize,
+    init: &mut bool,
 ) -> UResult<()> {
     let mut input = open(file)?;
     let ts = options.tabstops.as_ref();
-    let mut col = 0;
     loop {
         match input.fill_buf() {
             Ok([]) => break,
             Ok(buf) => {
-                expand_buf(buf, output, ts, options, &mut col)
+                expand_buf(buf, output, ts, options, col, init)
                     .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
                 let len = buf.len();
                 input.consume(len);
@@ -468,9 +483,13 @@ fn expand_file(
 
 fn expand(options: &Options) -> UResult<()> {
     let mut output = BufWriter::new(stdout());
+    // Input files form a single stream: a line that does not end in a
+    // newline continues in the next file.
+    let mut col = 0;
+    let mut init = true;
 
     for file in &options.files {
-        if let Err(e) = expand_file(file, &mut output, options) {
+        if let Err(e) = expand_file(file, &mut output, options, &mut col, &mut init) {
             show!(e);
             set_exit_code(1);
         }
