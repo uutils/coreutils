@@ -10,6 +10,7 @@ join-help-a = afficher aussi les lignes non appariables du fichier NUMÉRO_FICHI
 join-help-v = comme -a NUMÉRO_FICHIER, mais supprimer les lignes de sortie jointes
 join-help-e = remplacer les champs d'entrée manquants par VIDE
 join-help-i = ignorer les différences de casse lors de la comparaison des champs
+join-help-n = comparer les champs de jointure selon leur valeur numérique, comme 'sort -n'
 join-help-j = équivalent à '-1 CHAMP -2 CHAMP'
 join-help-o = obéir au FORMAT lors de la construction de la ligne de sortie
 join-help-t = utiliser CHAR comme séparateur de champ d'entrée et de sortie
