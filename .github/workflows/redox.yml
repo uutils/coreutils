@@ -1,0 +1,39 @@
+# spell-checker:ignore taiki
+name: Redox
+
+# spell-checker:ignore TRIGGERPATH
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+# End the current execution if there is a new changeset in the PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  test_wasi:
+    name: Tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          target: x86_64-unknown-redox
+    steps:
+    - uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.job.target }}
+    - uses: Swatinem/rust-cache@v2
+      with:
+        key: "${{ matrix.job.target }}"
+    - name: cargo check
+      run: cargo check --target "${{ matrix.job.target }}" --no-default-features --features true
