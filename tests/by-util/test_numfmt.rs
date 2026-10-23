@@ -254,7 +254,6 @@ fn test_negative_zero() {
         .stdout_is("0\n0.0");
 }
 
-// https://github.com/uutils/coreutils/issues/15661
 // A negative number that rounds to zero prints an unsigned zero.
 #[rstest]
 #[case::round_up_format_precision(&["--round=up", "--format=%.0f", "--", "-0.3"], "0\n")]
