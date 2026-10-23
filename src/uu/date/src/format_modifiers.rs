@@ -583,19 +583,14 @@ pub fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, F
         }
     }
 
+    // %N is a fraction, not an integer, so it has its own width and padding rules.
+    if specifier.ends_with('N') && result.len() == 9 && result.bytes().all(|b| b.is_ascii_digit()) {
+        let pad = if no_pad { None } else { Some(pad_char) };
+        return apply_nanosecond_modifiers(&result, width, pad, specifier);
+    }
+
     // If no_pad flag is active, suppress all padding and return
     if no_pad {
-        if specifier.ends_with('N') {
-            if let Some(width) = width {
-                if width > MAX_FORMAT_WIDTH {
-                    return Err(field_width_too_large(width, specifier));
-                }
-                if width < result.len() {
-                    result.truncate(width);
-                }
-            }
-            return Ok(result);
-        }
         return Ok(strip_default_padding(&result));
     }
 
@@ -649,13 +644,7 @@ pub fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, F
         let padding = effective_width - result.len();
         let has_sign = result.starts_with('+') || result.starts_with('-');
 
-        if specifier.ends_with('N') && pad_char == ' ' {
-            // GNU treats `_` on `%N` as a right-padded, zero-stripped value.
-            let mut padded = try_alloc_padded(result.len(), padding, effective_width, specifier)?;
-            padded.push_str(&result);
-            padded.extend(std::iter::repeat_n(' ', padding));
-            result = padded;
-        } else if pad_char == '0' && has_sign {
+        if pad_char == '0' && has_sign {
             // Zero padding: sign first, then zeros (e.g., "-0022")
             let sign = result.chars().next().unwrap();
             let rest = &result[1..];
@@ -671,14 +660,56 @@ pub fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, F
             padded.push_str(&result);
             result = padded;
         }
-    } else if specifier.ends_with('N')
-        && effective_width <= get_default_width(specifier)
-        && effective_width != 0
-    {
-        result.truncate(effective_width);
     }
 
     Ok(result)
+}
+
+/// Apply width and padding to the 9-digit nanosecond field of `%N`.
+///
+/// The digits are the leading digits of a fraction of a second, so a width
+/// narrower than 9 keeps the first `width` digits (including leading zeros)
+/// and a wider width pads on the right. Within the requested width, trailing
+/// zeros are replaced by the pad character, or dropped when `pad` is `None`
+/// (the `-` flag). Without a width the field is 9 characters wide, and only
+/// the `_` flag changes its digits.
+fn apply_nanosecond_modifiers(
+    digits: &str,
+    width: Option<usize>,
+    pad: Option<char>,
+    specifier: &str,
+) -> Result<String, FormatError> {
+    let Some(width) = width else {
+        if pad == Some(' ') {
+            return apply_nanosecond_modifiers(digits, Some(digits.len()), pad, specifier);
+        }
+        return Ok(digits.to_string());
+    };
+    if width > MAX_FORMAT_WIDTH {
+        return Err(field_width_too_large(width, specifier));
+    }
+    if width == 0 {
+        return Ok(digits.to_string());
+    }
+    let significant = significant_nanosecond_digits(&digits[..width.min(digits.len())]);
+    let Some(pad_char) = pad else {
+        return Ok(significant.to_string());
+    };
+    let padding = width - significant.len();
+    let mut padded = try_alloc_padded(significant.len(), padding, width, specifier)?;
+    padded.push_str(significant);
+    padded.extend(std::iter::repeat_n(pad_char, padding));
+    Ok(padded)
+}
+
+/// Keep at least one digit of `digits` and drop its trailing zeros.
+fn significant_nanosecond_digits(digits: &str) -> &str {
+    let trimmed = digits.trim_end_matches('0');
+    if trimmed.is_empty() {
+        &digits[..1]
+    } else {
+        trimmed
+    }
 }
 
 /// Allocate a `String` with enough capacity for `current_len + padding`,
