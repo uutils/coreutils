@@ -475,3 +475,16 @@ fn test_trailing_blanks_of_last_file_are_kept() {
     at.write("b", "   ");
     ucmd.args(&["a", "b"]).succeeds().stdout_is("x\n   ");
 }
+
+#[test]
+fn test_line_continues_past_unreadable_file() {
+    // A file that cannot be read does not end the line started before it.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "    ");
+    at.mkdir("dir");
+    at.write("b", "    x\n");
+    ucmd.args(&["a", "dir", "b"])
+        .fails()
+        .stdout_is("\tx\n")
+        .stderr_contains("unexpand: dir: Is a directory");
+}
