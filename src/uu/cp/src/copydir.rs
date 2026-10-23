@@ -71,8 +71,10 @@ fn adjust_canonicalization(p: &Path) -> Cow<'_, Path> {
 
 /// Get a descendant path relative to the given parent directory.
 ///
-/// If `root_parent` is `None`, then this just returns the `path`
-/// itself. Otherwise, this function strips the parent prefix from the
+/// If `root_parent` is `None` (the source is a filesystem root), then
+/// this returns the `path` without its drive prefix and root directory,
+/// so that joining it to the target does not discard the target.
+/// Otherwise, this function strips the parent prefix from the
 /// given `path`, leaving only the portion of the path relative to the
 /// parent.
 fn get_local_to_root_parent(
@@ -92,7 +94,15 @@ fn get_local_to_root_parent(
             let path = path.strip_prefix(parent)?;
             Ok(path.to_path_buf())
         }
-        None => Ok(path.to_path_buf()),
+        None => Ok(path
+            .components()
+            .filter(|c| {
+                !matches!(
+                    c,
+                    std::path::Component::Prefix(_) | std::path::Component::RootDir
+                )
+            })
+            .collect()),
     }
 }
 
@@ -695,4 +705,26 @@ fn build_dir(
 
     builder.create(path)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_local_to_root_parent_without_parent_is_relative() {
+        // Copying a filesystem root (`cp -r / dst`, or `cp -r W:/ dst` on
+        // Windows) has no parent; the result must not be absolute, or
+        // `target.join(..)` would discard the target.
+        let local = get_local_to_root_parent(Path::new("/a/b"), None).unwrap();
+        assert_eq!(local, Path::new("a").join("b"));
+        assert!(local.is_relative());
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_local_to_root_parent_without_parent_drops_drive() {
+        let local = get_local_to_root_parent(Path::new("W:/id.dat"), None).unwrap();
+        assert_eq!(local, Path::new("id.dat"));
+    }
 }
