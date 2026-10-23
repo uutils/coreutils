@@ -1417,7 +1417,11 @@ fn test_ls_long_symlink_color() {
     ) {
         // Names are always compared.
         assert_eq!(name, expected_name);
-        assert_eq!(target, expected_target);
+        // ln stores symlink targets with `\` on Windows.
+        assert_eq!(
+            target,
+            expected_target.replace('/', std::path::MAIN_SEPARATOR_STR)
+        );
 
         // Colors are only compared when we have inferred what color we are looking for.
         if let Some(name) = expected_name_color {

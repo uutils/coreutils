@@ -549,6 +549,11 @@ fn windows_link_target(src: &Path) -> PathBuf {
     PathBuf::from(OsString::from_wide(&wide))
 }
 
+#[cfg(any(unix, target_os = "wasi"))]
+pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result<()> {
+    rustix::fs::symlink(src.as_ref(), dst.as_ref()).map_err(io::Error::from)
+}
+
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
@@ -557,12 +562,11 @@ mod tests {
     fn link_target_uses_backslashes() {
         assert_eq!(
             windows_link_target(Path::new("test/dir/file")),
-            PathBuf::from(r"test\dir\file")
+            PathBuf::from("test\\dir\\file")
+        );
+        assert_eq!(
+            windows_link_target(Path::new("..\\up/mixed\\sep/file")),
+            PathBuf::from("..\\up\\mixed\\sep\\file")
         );
     }
-}
-
-#[cfg(any(unix, target_os = "wasi"))]
-pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result<()> {
-    rustix::fs::symlink(src.as_ref(), dst.as_ref()).map_err(io::Error::from)
 }
