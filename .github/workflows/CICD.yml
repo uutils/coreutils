@@ -1010,7 +1010,7 @@ jobs:
     - name: Install fakeroot
       run: sudo apt-get update && sudo apt-get install -y fakeroot
     - name: Build utilities that must stay interposable
-      run: cargo build --profile=release-small -p uu_chmod -p uu_chown
+      run: cargo build --profile=release-small -p uu_chmod -p uu_chown -p uu_mv
     - name: Run libc interposition verification
       run: ./util/check-libc-interposition.sh
 

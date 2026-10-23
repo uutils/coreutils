@@ -6,7 +6,7 @@
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR EXCL EEXIST
 // spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot EOVERFLOW chowned chmoded
-// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat
+// spell-checker:ignore LARGEFILE getdents atim mtim ctim statat renameat unguessability mknodat
 
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
@@ -327,6 +327,25 @@ impl DirFd {
         Ok(Self { fd })
     }
 
+    /// Open subdirectory `name` without following a symlink, search-only where
+    /// possible, so entries can be created in it without read permission.
+    pub fn open_subdir_anchor(&self, name: &OsStr) -> io::Result<Self> {
+        let name_cstr =
+            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        let flags = SEARCH_ONLY.unwrap_or(OFlag::O_RDONLY)
+            | OFlag::O_DIRECTORY
+            | OFlag::O_NOFOLLOW
+            | OFlag::O_CLOEXEC
+            | LARGEFILE;
+        let fd = openat(&self.fd, name_cstr.as_c_str(), flags, Mode::empty()).map_err(|e| {
+            SafeTraversalError::OpenFailed {
+                path: name.into(),
+                source: io::Error::from_raw_os_error(e as i32),
+            }
+        })?;
+        Ok(Self { fd })
+    }
+
     /// Get raw stat data for a file relative to this directory
     pub fn stat_at(&self, name: &OsStr, symlink_behavior: SymlinkBehavior) -> io::Result<FileStat> {
         let name_cstr =
@@ -599,6 +618,32 @@ impl DirFd {
         Ok(())
     }
 
+    /// Create a fifo, socket, or device node relative to this directory
+    ///
+    /// `mode` holds the file type bits as well as the permissions, as for
+    /// `mknod(2)`, and the umask applies. Fails with `EEXIST` if the name
+    /// already exists.
+    pub fn mknod_at(&self, name: &OsStr, mode: u32, dev: u64) -> io::Result<()> {
+        let name_cstr =
+            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        // Neither nix nor rustix provides `mknodat` on Apple targets.
+        // SAFETY: `name_cstr` is NUL-terminated and outlives the call, and
+        // `self.fd` is an open directory descriptor.
+        let res = unsafe {
+            libc::mknodat(
+                self.fd.as_raw_fd(),
+                name_cstr.as_ptr(),
+                mode as libc::mode_t,
+                dev as libc::dev_t,
+            )
+        };
+        if res == 0 {
+            Ok(())
+        } else {
+            Err(io::Error::last_os_error())
+        }
+    }
+
     /// Create a file for writing relative to this directory
     /// Fails with `EEXIST` if the name already exists
     pub fn open_file_at(&self, name: &OsStr) -> io::Result<fs::File> {
@@ -623,6 +668,73 @@ impl DirFd {
             .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
 
         Ok(fs::File::from(fd))
+    }
+
+    /// Create `name` with `create`, renaming a temporary entry over it if it is taken, so
+    /// the name is never free. `create` must fail with `EEXIST` there and not make a directory.
+    pub fn replace_entry_at<T>(
+        &self,
+        name: &OsStr,
+        mut create: impl FnMut(&Self, &OsStr) -> io::Result<T>,
+    ) -> io::Result<T> {
+        match create(self, name) {
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+            res => return res,
+        }
+        self.replace_existing_entry_at(name, create)
+    }
+
+    /// [`Self::replace_entry_at`] once creating `name` itself failed with `EEXIST`.
+    pub(crate) fn replace_existing_entry_at<T>(
+        &self,
+        name: &OsStr,
+        create: impl FnMut(&Self, &OsStr) -> io::Result<T>,
+    ) -> io::Result<T> {
+        use rustix::fs::{AtFlags, renameat};
+
+        let (created, tmp) = self.create_temp_at(create)?;
+        let renamed = renameat(self, &tmp, self, name);
+        // Renaming onto an existing link to the same inode is a no-op, which
+        // leaves the temp behind.
+        let _ = rustix::fs::unlinkat(self, &tmp, AtFlags::empty());
+        renamed.map(|()| created).map_err(Into::into)
+    }
+
+    /// Create an entry under an unused random name with `create`, which must fail with
+    /// `EEXIST` on a taken name. Returns what `create` returned and the name.
+    pub fn create_temp_at<T>(
+        &self,
+        mut create: impl FnMut(&Self, &OsStr) -> io::Result<T>,
+    ) -> io::Result<(T, OsString)> {
+        use std::io::Read;
+
+        // GNU's template is `CuXXXXXX`: a 2-char prefix plus 6 random chars
+        // from a 62-char alphabet. The ~3% modulo bias per slot is irrelevant
+        // for an 8-char unguessability budget.
+        const ALPHABET: &[u8; 62] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+        let mut urandom = fs::File::open("/dev/urandom")?;
+
+        for _ in 0..32 {
+            let mut tmp = *b"Cu------";
+            let mut raw = [0u8; 6];
+            urandom.read_exact(&mut raw)?;
+            for (slot, byte) in tmp[2..].iter_mut().zip(raw) {
+                *slot = ALPHABET[byte as usize % ALPHABET.len()];
+            }
+            let tmp = OsStr::from_bytes(&tmp);
+
+            match create(self, tmp) {
+                Ok(created) => return Ok((created, tmp.to_owned())),
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            translate!("error-no-unique-temp-name"),
+        ))
     }
 
     /// Create a DirFd from an existing file descriptor (takes ownership)
@@ -1507,6 +1619,23 @@ mod tests {
     }
 
     #[test]
+    fn test_mknod_at_creates_fifo_and_refuses_existing() {
+        use std::os::unix::fs::FileTypeExt;
+
+        let temp_dir = TempDir::new().unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        // S_IFIFO | 0o600
+        let fifo = 0o010_600;
+
+        dir_fd.mknod_at(OsStr::new("fifo"), fifo, 0).unwrap();
+
+        let metadata = fs::symlink_metadata(temp_dir.path().join("fifo")).unwrap();
+        assert!(metadata.file_type().is_fifo());
+        let err = dir_fd.mknod_at(OsStr::new("fifo"), fifo, 0).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+    }
+
+    #[test]
     fn test_open_file_at_creates_file() {
         use std::io::Write;
 
@@ -1593,6 +1722,31 @@ mod tests {
 
         fs::set_permissions(&write_only, fs::Permissions::from_mode(0o755)).unwrap();
         assert!(write_only.join("sub").is_dir());
+        assert!(write_only.join("file").is_file());
+    }
+
+    #[test]
+    #[cfg(any(has_o_path, has_o_search))]
+    fn test_open_subdir_anchor_in_write_only_dir_refuses_symlink() {
+        use std::os::unix::fs::PermissionsExt;
+
+        if Uid::effective().is_root() {
+            // root ignores the permission bits this test depends on
+            return;
+        }
+        let temp_dir = TempDir::new().unwrap();
+        let write_only = temp_dir.path().join("wx");
+        fs::create_dir(&write_only).unwrap();
+        fs::set_permissions(&write_only, fs::Permissions::from_mode(0o300)).unwrap();
+        symlink("wx", temp_dir.path().join("link")).unwrap();
+        let parent = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+
+        // Creating entries needs write and execute, not read.
+        let dir_fd = parent.open_subdir_anchor(OsStr::new("wx")).unwrap();
+        dir_fd.open_file_at(OsStr::new("file")).unwrap();
+        assert!(parent.open_subdir_anchor(OsStr::new("link")).is_err());
+
+        fs::set_permissions(&write_only, fs::Permissions::from_mode(0o755)).unwrap();
         assert!(write_only.join("file").is_file());
     }
 
