@@ -7,6 +7,7 @@
 
 use rand::{RngExt as _, SeedableRng, rng};
 use regex::Regex;
+use rstest::rstest;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::process::Resource;
 #[cfg(target_os = "linux")]
@@ -881,29 +882,32 @@ fn test_suffix_auto_width_with_number() {
 }
 
 /// Test that a suffix start value too large for the suffix length is rejected
-/// before the input is read, even when the input is empty or missing
+/// before the input is read, even when the input is empty
+#[rstest]
+#[case::numeric(&["--numeric-suffixes=100"], "")]
+#[case::numeric_with_input(&["--numeric-suffixes=100"], "a\n")]
+#[case::hex(&["--hex-suffixes=100"], "")]
+#[case::hex_with_input(&["--hex-suffixes=100"], "a\n")]
+#[case::length_1(&["-a", "1", "--numeric-suffixes=10"], "")]
+#[case::length_0(&["-a", "0", "--numeric-suffixes=100"], "")]
+#[case::number(&["-n", "2", "--numeric-suffixes=100"], "")]
+#[case::number_with_input(&["-n", "2", "--numeric-suffixes=100"], "a\n")]
+#[case::number_round_robin(&["-n", "r/2", "--hex-suffixes=100"], "")]
+fn test_suffix_start_too_large(#[case] args: &[&str], #[case] input: &str) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in(input)
+        .fails()
+        .usage_error("numerical suffix start value is too large for the suffix length");
+}
+
+/// Test that the suffix start value is checked before the input is opened
 #[test]
-fn test_suffix_start_too_large() {
-    let msg = "numerical suffix start value is too large for the suffix length";
-    for args in [
-        &["--numeric-suffixes=100"][..],
-        &["--hex-suffixes=100"],
-        &["-a", "1", "--numeric-suffixes=10"],
-        &["-a", "0", "--numeric-suffixes=100"],
-        &["-n", "2", "--numeric-suffixes=100"],
-        &["-n", "r/2", "--hex-suffixes=100"],
-    ] {
-        new_ucmd!().args(args).pipe_in("").fails().usage_error(msg);
-        new_ucmd!()
-            .args(args)
-            .pipe_in("a\n")
-            .fails()
-            .usage_error(msg);
-    }
+fn test_suffix_start_too_large_missing_input() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["--numeric-suffixes=100", "non-existing"])
         .fails()
-        .usage_error(msg);
+        .usage_error("numerical suffix start value is too large for the suffix length");
     assert!(!at.file_exists("x100"));
 }
 
