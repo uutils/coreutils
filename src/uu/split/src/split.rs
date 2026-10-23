@@ -140,6 +140,9 @@ fn filter_args(
     filter
 }
 
+/// Short options that take a value, as in '-b 10' or '-b10'
+const SHORT_OPTS_WITH_VALUE: &[u8] = b"abClnt"; // spell-checker:disable-line
+
 /// Helper function to [`filter_args`]
 /// Checks if the slice is a true short option (and not hyphen prefixed value of an option)
 /// and if so, a short option that can contain obsolete lines value
@@ -151,7 +154,9 @@ fn should_extract_obs_lines(
     !preceding_long_opt_req_value
         && !preceding_short_opt_req_value
         && slice.strip_prefix("-").is_some_and(|s| {
-            !s.as_bytes().first().is_some_and(|s| b"-abClnt".contains(s)) // spell-checker:disable-line
+            !s.as_bytes()
+                .first()
+                .is_some_and(|s| *s == b'-' || SHORT_OPTS_WITH_VALUE.contains(s))
         })
 }
 
@@ -170,7 +175,7 @@ fn handle_extract_obs_lines(slice: &str, obs_lines: &mut Option<String>) -> Opti
             if option_value_reached {
                 return true;
             }
-            if matches!(c, 'a' | 'b' | 'C' | 'l' | 'n' | 't') {
+            if u8::try_from(*c).is_ok_and(|c| SHORT_OPTS_WITH_VALUE.contains(&c)) {
                 option_value_reached = true;
             }
             // To correctly process scenario like '-x200a4'
@@ -237,7 +242,8 @@ fn handle_preceding_options(
     // capture if current slice is a preceding short option that requires value and does not have value in the same slice (value separated by whitespace)
     // following slice should be treaded as value for this option
     // even if it starts with '-' (which would be treated as hyphen prefixed value)
-    *preceding_short_opt_req_value = matches!(slice, "-b" | "-C" | "-l" | "-n" | "-a" | "-t");
+    *preceding_short_opt_req_value =
+        matches!(slice.as_bytes(), [b'-', c] if SHORT_OPTS_WITH_VALUE.contains(c));
 }
 
 /// Parameters that control how a file gets split.
