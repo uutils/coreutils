@@ -80,6 +80,7 @@ pub fn uu_app() -> Command {
         .about(translate!("chown-about"))
         .override_usage(format_usage(&translate!("chown-usage")))
         .infer_long_args(true)
+        .args_override_self(true)
         .disable_help_flag(true)
         .arg(
             Arg::new(options::HELP)
