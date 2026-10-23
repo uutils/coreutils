@@ -14,6 +14,8 @@ use std::{ffi::OsString, os::windows::ffi::OsStringExt};
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util::is_locale_available;
 use uutests::util_name;
 
 #[test]
@@ -239,6 +241,85 @@ fn case_insensitive_matches_sort_f_order() {
         .args(&["-i", "requested", "reserved"])
         .succeeds()
         .stdout_only("svc_backup mallory\n");
+}
+
+#[test]
+fn numeric_sort() {
+    // Input sorted with `sort -n`: keys are compared by value, so `01` pairs with `1`.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "-3.5 w\n01 x\n2 y\n10 z\n");
+    ucmd.args(&["--numeric-sort", "--check-order", "-", "f"])
+        .pipe_in("-3.50 v\n1 a\n2 b\n9 c\n10 d\n")
+        .succeeds()
+        .stdout_only("-3.50 v w\n1 a x\n2 b y\n10 d z\n");
+}
+
+#[test]
+fn numeric_sort_missing_and_empty_fields_are_zero() {
+    // `sort -n -k2` puts a missing or empty key between -1 and 1, like 0.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "x -1\ny 0\nz 1\n");
+    ucmd.args(&["-n", "-1", "2", "-2", "2", "--check-order", "-", "f"])
+        .pipe_in("a -1\nb\nc 1\n")
+        .succeeds()
+        .stdout_only("-1 a x\n b y\n1 c z\n");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "x,-1\ny,0\nz,1\n");
+    ucmd.args(&[
+        "-n",
+        "-t",
+        ",",
+        "-1",
+        "2",
+        "-2",
+        "2",
+        "--check-order",
+        "-",
+        "f",
+    ])
+    .pipe_in("a,-1\nb,\nc\nd,1\n")
+    .succeeds()
+    .stdout_only("-1,a,x\n,b,y\n,c,y\n1,d,z\n");
+}
+
+#[test]
+fn numeric_sort_non_numeric_keys_are_zero() {
+    // Like `sort -n`, keys that are not numbers compare equal to each other and to 0.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "0 p\nfoo q\n");
+    ucmd.args(&["-n", "-", "f"])
+        .pipe_in("abc x\n")
+        .succeeds()
+        .stdout_only("abc x p\nabc x q\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn numeric_sort_locale_decimal_point() {
+    let locale = "fr_FR.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // With ',' as the decimal point, 1,5 and 1,7 differ; in the C locale both would be 1.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "1,7 x\n2,50 y\n");
+    ucmd.env("LC_ALL", locale)
+        .args(&["-n", "--check-order", "-", "f"])
+        .pipe_in("1,5 a\n2,5 b\n")
+        .succeeds()
+        .stdout_only("2,5 b y\n");
+}
+
+#[test]
+fn numeric_sort_lexicographic_input_is_unsorted() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "1\n10\n2\n");
+    ucmd.args(&["-n", "--check-order", "-", "f"])
+        .pipe_in("1\n2\n10\n")
+        .fails_with_code(1)
+        .stdout_is("1\n")
+        .stderr_is("join: f:3: is not sorted: 2\n");
 }
 
 #[test]
