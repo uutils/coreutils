@@ -469,6 +469,51 @@ fn test_chmod_reference_file() {
 }
 
 #[test]
+fn test_chmod_reference_keeps_operand_order() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("ref");
+    at.set_mode("ref", 0o644);
+    for name in ["a", "b", "c"] {
+        at.touch(name);
+        at.set_mode(name, 0o600);
+    }
+
+    ucmd.args(&["-v", "--reference=ref", "a", "b", "c"])
+        .succeeds()
+        .stdout_is(
+            "mode of 'a' changed from 0600 (rw-------) to 0644 (rw-r--r--)\n\
+             mode of 'b' changed from 0600 (rw-------) to 0644 (rw-r--r--)\n\
+             mode of 'c' changed from 0600 (rw-------) to 0644 (rw-r--r--)\n",
+        );
+}
+
+#[test]
+fn test_chmod_reference_first_operand_before_its_parent_dir() {
+    use rustix::process::geteuid;
+
+    // The reference mode drops the search bit of `dir`, so `dir/file` is only
+    // reachable if it is handled first. root ignores directory permissions.
+    if geteuid().is_root() {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("ref");
+    at.set_mode("ref", 0o644);
+    at.mkdir("dir");
+    at.touch("dir/file");
+    at.set_mode("dir/file", 0o600);
+    at.set_mode("dir", 0o755);
+
+    ucmd.args(&["--reference=ref", "dir/file", "dir"])
+        .succeeds();
+
+    assert_eq!(at.metadata("dir").permissions().mode() & 0o7777, 0o644);
+    at.set_mode("dir", 0o755);
+    assert_eq!(at.metadata("dir/file").permissions().mode() & 0o7777, 0o644);
+}
+
+#[test]
 fn test_permission_denied() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
