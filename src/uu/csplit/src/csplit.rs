@@ -605,10 +605,14 @@ where
             self.buffer.push_front((ln, Ok(line)));
             None
         } else if self.buffer.len() >= self.size {
+            // only `Ok` lines are ever stored in the buffer
+            let head_line = if let Some((_, Ok(head_line))) = self.buffer.pop_front() {
+                Some(head_line)
+            } else {
+                None
+            };
             self.buffer.push_back((ln, Ok(line)));
-            self.buffer
-                .pop_front()
-                .map(|(_, head_line)| head_line.unwrap())
+            head_line
         } else {
             self.buffer.push_back((ln, Ok(line)));
             None
