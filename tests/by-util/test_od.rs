@@ -10,6 +10,8 @@ use std::io::Read;
 #[cfg(target_os = "linux")]
 use std::path::Path;
 
+#[cfg(all(unix, not(target_vendor = "apple")))]
+use rstest::rstest;
 use unindent::unindent;
 use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, new_ucmd, util_name};
@@ -45,6 +47,65 @@ fn run_skip_across_inputs(files: &[(&str, &str)], skip: u64, expected: &str) {
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[rstest]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+#[case::bytes(&["-An", "-tx1"], None, " 61 62 63 64 65 66 00\n")]
+#[case::strings(&["-An", "-S3"], None, "abcdef\n")]
+#[case::traditional(&["--traditional", "-An", "-tx1"], Some("4"), " 65 66 00\n")]
+#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
+fn test_non_utf8_filename(
+    #[case] flags: &[&str],
+    #[case] offset: Option<&str>,
+    #[case] expected: &str,
+) {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let name = OsStr::from_bytes(b"input-\xff");
+    std::fs::write(scene.fixtures.plus(name), b"abcdef\0").unwrap();
+    let mut cmd = scene.ucmd();
+    cmd.args(flags).arg(name);
+    if let Some(offset) = offset {
+        cmd.arg(offset);
+    }
+    cmd.succeeds().stdout_only(expected);
+}
+
+#[rstest]
+#[cfg(all(unix, not(target_vendor = "apple")))]
+#[case::missing(false, "No such file or directory")]
+#[case::directory(true, "Is a directory")]
+#[cfg_attr(wasi_runner, ignore = "WASI: wasmtime rejects non-UTF-8 arguments")]
+fn test_non_utf8_filename_errors(
+    #[case] directory: bool,
+    #[case] error: &str,
+    #[values(false, true)] invalid_first: bool,
+) {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("valid", "ab");
+    let invalid = OsStr::from_bytes(b"invalid-\xff");
+    if directory {
+        std::fs::create_dir(scene.fixtures.plus(invalid)).unwrap();
+    }
+    let valid = OsStr::new("valid");
+    let files = if invalid_first {
+        [invalid, valid]
+    } else {
+        [valid, invalid]
+    };
+    scene
+        .ucmd()
+        .args(&["-An", "-tx1"])
+        .args(&files)
+        .fails_with_code(1)
+        .stdout_is(" 61 62\n")
+        .stderr_is(format!("od: $'invalid-\\xFF': {error}\n"));
 }
 
 // Test that od can read one file and dump with default format
@@ -981,6 +1042,35 @@ fn test_skip_bytes_past_end_message() {
         .stderr_only("od: cannot skip past end of combined input\n");
 }
 
+// -S/--strings reports a skip past the end of the input like the other
+// output modes, matching GNU od.
+#[test]
+fn test_strings_skip_bytes_past_end() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello");
+    ucmd.args(&["-j", "50", "-S", "1", "f"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_only("od: cannot skip past end of combined input\n");
+
+    new_ucmd!()
+        .args(&["-j", "5", "-S", "1"])
+        .pipe_in("")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_only("od: cannot skip past end of combined input\n");
+}
+
+// A skip that lands inside the input still prints the strings after it.
+#[test]
+fn test_strings_skip_bytes_within_input() {
+    new_ucmd!()
+        .args(&["-j", "4", "-S", "3", "-An"])
+        .pipe_in("xxx\0abcd\0")
+        .succeeds()
+        .stdout_only("abcd\n");
+}
+
 // A seekable special file such as /dev/null can be skipped past its (empty)
 // end without error, matching GNU od.
 #[cfg(unix)]
@@ -1244,15 +1334,9 @@ fn test_od_invalid_bytes() {
     const INVALID_SUFFIX: &str = "1fb4t";
     const BIG_SIZE: &str = "1Y";
 
-    // NOTE:
-    // GNU's od (8.32) with option '--width' does not accept 'Y' as valid suffix.
-    // According to the man page it should be valid in the same way it is valid for
-    // '--read-bytes' and '--skip-bytes'.
-
     let options = [
         "--read-bytes",
         "--skip-bytes",
-        "--width",
         // "--strings", // TODO: consider testing here once '--strings' is implemented
     ];
     for option in &options {
@@ -1319,6 +1403,14 @@ fn test_od_strings_option() {
         .pipe_in(b"\x01hello\x00world\x00ab\x00")
         .succeeds()
         .stdout_is("0000001 hello\n0000007 world\n");
+
+    // Hexadecimal offsets use 6 digits, as in the normal dump
+    new_ucmd!()
+        .arg("-Ax")
+        .arg("-S3")
+        .pipe_in(b"\x01hello\x00world\x00ab\x00")
+        .succeeds()
+        .stdout_is("000001 hello\n000007 world\n");
 
     // Test with -S10 to show only strings with minimum length
     new_ucmd!()
@@ -1544,5 +1636,76 @@ fn test_hyphen_leading_byte_count_is_reported_as_invalid() {
             .pipe_in("")
             .fails()
             .stderr_contains(format!("invalid {opt} argument '-1'"));
+    }
+}
+
+#[test]
+fn test_octal_alias() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("test", "abcdefghijklmnopqrstuvwxyz\n");
+
+    for arg in ["-o", "-B"] {
+        scene
+            .ucmd()
+            .arg(arg)
+            .arg("test")
+            .succeeds()
+            .stdout_only(unindent(ALPHA_OUT));
+    }
+}
+
+#[test]
+fn test_width_rejects_size_suffixes() {
+    // Unlike -N and -j, -w takes a plain number: no multiplier and no radix prefix.
+    for value in ["1K", "1k", "2b", "1KB", "1M", "1Y", "0x8", "4B"] {
+        for (arg, option) in [
+            (format!("-w{value}"), "-w"),
+            (format!("--width={value}"), "--width"),
+        ] {
+            new_ucmd!().arg(arg).fails_with_code(1).stderr_only(format!(
+                "od: invalid suffix in {option} argument '{value}'\n"
+            ));
+        }
+    }
+}
+
+#[test]
+fn test_width_is_decimal_even_with_leading_zero() {
+    for (value, expected) in [
+        (
+            "010",
+            " 61 62 63 64 65 66 67 68 69 6a\n 6b 6c 6d 6e 6f 70 71 72 73 74\n",
+        ),
+        (
+            "08",
+            " 61 62 63 64 65 66 67 68\n 69 6a 6b 6c 6d 6e 6f 70\n 71 72 73 74\n",
+        ),
+    ] {
+        new_ucmd!()
+            .args(&["-An", "-tx1", &format!("-w{value}")])
+            .pipe_in("abcdefghijklmnopqrst")
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn test_width_invalid_numbers() {
+    for (value, message) in [
+        ("abc", "invalid --width argument 'abc'"),
+        ("0", "invalid --width argument '0'"),
+        ("00", "invalid --width argument '00'"),
+        ("-4", "invalid --width argument '-4'"),
+        ("1fb4t", "invalid suffix in --width argument '1fb4t'"),
+        (
+            "99999999999999999999",
+            "--width argument '99999999999999999999' too large",
+        ),
+    ] {
+        new_ucmd!()
+            .arg(format!("--width={value}"))
+            .fails_with_code(1)
+            .stderr_only(format!("od: {message}\n"));
     }
 }

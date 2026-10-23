@@ -465,6 +465,7 @@ fn test_fmt_knuth_plass_line_breaking() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_fmt_non_utf8_paths() {
     use uutests::at_and_ucmd;
 
@@ -534,4 +535,56 @@ fn test_fmt_goal_only_defaults_width_to_goal_plus_ten() {
         .args(&["one-word-per-line.txt", "--goal", "30"])
         .succeeds()
         .stdout_is("this is a file with one word per line\n");
+}
+
+#[test]
+fn test_fmt_prefix_copies_unprefixed_last_line_without_adding_newline() {
+    for (input, expected) in [
+        ("x", "x"),
+        ("  x", "  x"),
+        ("a\nmixed", "a\nmixed"),
+        // a line with the prefix is reformatted and gets its newline
+        ("# hi", "# hi\n"),
+        ("x\n# hi", "x\n# hi\n"),
+        ("x\n#", "x\n#\n"),
+    ] {
+        for args in [vec!["-p", "#"], vec!["-s", "-p", "#"]] {
+            new_ucmd!()
+                .args(&args)
+                .pipe_in(input)
+                .succeeds()
+                .stdout_only(expected);
+        }
+    }
+}
+
+#[test]
+fn test_fmt_prefix_unprefixed_last_line_runs_into_next_file() {
+    use uutests::at_and_ucmd;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f1", "a\nmixed");
+    at.write("f2", "hello\n");
+    ucmd.args(&["-p", "#", "f1", "f2"])
+        .succeeds()
+        .stdout_only("a\nmixedhello\n");
+}
+
+#[test]
+fn test_fmt_anti_prefix_keeps_missing_final_newline() {
+    for (args, input, expected) in [
+        (vec!["-P", "#"], "a\n#x", "a\n#x"),
+        (vec!["-P", "#"], "a\n#x\n", "a\n#x\n"),
+        (vec!["-P", "#"], "#x\na\n", "#x\na\n"),
+        (vec!["--skip-prefix", "#"], "a\n  #x", "a\n  #x"),
+        (vec!["-p", ">", "-P", ">#"], "> a\n>#x", "> a\n>#x"),
+        // a line that is reformatted gets its newline
+        (vec!["-P", "#"], "a\nb", "a b\n"),
+    ] {
+        new_ucmd!()
+            .args(&args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(expected);
+    }
 }

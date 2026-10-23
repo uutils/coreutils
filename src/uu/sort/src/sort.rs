@@ -24,7 +24,7 @@ use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use custom_str_cmp::custom_str_cmp;
+use custom_str_cmp::{custom_str_cmp, is_blank};
 use ext_sort::ext_sort;
 use foldhash::fast::FoldHasher;
 use foldhash::{HashMap, SharedSeed};
@@ -143,19 +143,19 @@ pub enum SortError {
         silent: bool,
     },
 
-    #[error("{}", translate!("sort-open-failed", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
+    #[error("{}", translate_text!("sort-open-failed", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
     OpenFailed {
         path: PathBuf,
         error: std::io::Error,
     },
 
-    #[error("{}", translate!("sort-truncate-failed", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
+    #[error("{}", translate_text!("sort-truncate-failed", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
     TruncateFailed {
         path: PathBuf,
         error: std::io::Error,
     },
 
-    #[error("{}", translate!("sort-cannot-read", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
+    #[error("{}", translate_text!("sort-cannot-read", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
     ReadFailed {
         path: PathBuf,
         error: std::io::Error,
@@ -170,10 +170,10 @@ pub enum SortError {
     #[error("{}", translate!("sort-compress-prog-terminated-abnormally", "prog" => .prog.quote()))]
     CompressProgTerminatedAbnormally { prog: String },
 
-    #[error("{}", translate!("sort-cannot-create-tmp-file", "path" => format!("{}", .path.quote())))]
+    #[error("{}", translate_text!("sort-cannot-create-tmp-file", "path" => format!("{}", .path.quote())))]
     TmpFileCreationFailed { path: PathBuf },
 
-    #[error("{}", translate!("sort-file-operands-combined", "file" => format!("{}", .file.quote()), "help" => uucore::execution_phrase()))]
+    #[error("{}", translate_text!("sort-file-operands-combined", "file" => format!("{}", .file.quote()), "help" => uucore::execution_phrase()))]
     FileOperandsCombined { file: PathBuf },
 
     #[error("{error}")]
@@ -185,13 +185,13 @@ pub enum SortError {
     #[error("{}", translate!("sort-minus-in-stdin"))]
     MinusInStdIn,
 
-    #[error("{}", translate!("sort-no-input-from", "file" => format!("{}", .file.quote())))]
+    #[error("{}", translate_text!("sort-no-input-from", "file" => format!("{}", .file.quote())))]
     EmptyInputFile { file: PathBuf },
 
-    #[error("{}", translate!("sort-random-source-end-of-file", "path" => format!("{}", .path.quote())))]
+    #[error("{}", translate_text!("sort-random-source-end-of-file", "path" => format!("{}", .path.quote())))]
     RandomSourceEndOfFile { path: PathBuf },
 
-    #[error("{}", translate!("sort-invalid-zero-length-filename", "file" => .file.maybe_quote(), "line_num" => .line_num))]
+    #[error("{}", translate_text!("sort-invalid-zero-length-filename", "file" => .file.maybe_quote(), "line_num" => .line_num))]
     ZeroLengthFileName { file: PathBuf, line_num: usize },
 }
 
@@ -289,7 +289,7 @@ impl Output {
             .as_output_name()
             .unwrap_or(OsStr::new("standard output"))
             .to_owned();
-        move || translate!("sort-error-write-failed", "output" => output_name.maybe_quote())
+        move || translate_text!("sort-error-write-failed", "output" => output_name.maybe_quote())
     }
 }
 
@@ -432,15 +432,16 @@ impl GlobalSettings {
     /// looking at any key. That is only the same comparison when the single
     /// key spans the entire line: `-n -k1.2` sorts on the line's second
     /// character onwards, and `-n -t. -k2` on its second field, neither of
-    /// which the line as a whole stands for. A key of its own `r` also has to
-    /// go the long way, since the shortcut only knows the global one.
+    /// which the line as a whole stands for. A key whose `r` differs from the
+    /// global one also has to go the long way, since the shortcut only knows
+    /// the global one.
     fn can_use_whole_line_numeric(&self) -> bool {
         let [selector] = &self.selectors[..] else {
             return false;
         };
         self.mode == SortMode::Numeric
             && selector.settings.mode == SortMode::Numeric
-            && !selector.settings.reverse
+            && selector.settings.reverse == self.reverse
             && selector.from.field == 1
             && selector.from.char == 1
             && selector.to.is_none()
@@ -465,6 +466,7 @@ impl GlobalSettings {
             && !selector.settings.dictionary_order
             && !selector.settings.ignore_non_printing
             && !selector.settings.ignore_blanks
+            && selector.settings.reverse == self.reverse
     }
 
     /// Returns true when the ASCII case-insensitive fast path is valid.
@@ -483,6 +485,7 @@ impl GlobalSettings {
             && !selector.settings.dictionary_order
             && !selector.settings.ignore_non_printing
             && !selector.settings.ignore_blanks
+            && selector.settings.reverse == self.reverse
     }
 }
 
@@ -657,6 +660,8 @@ fn incompatible_options_message(opts: &str) -> String {
     )
 }
 
+#[cold]
+#[inline(never)]
 fn incompatible_options_error(opts: &str) -> Box<dyn UError> {
     USimpleError::new(2, incompatible_options_message(opts))
 }
@@ -932,18 +937,12 @@ fn tokenize_default(
     // pretend that there was whitespace in front of the line
     let mut previous_was_whitespace = true;
     for (idx, char) in line.iter().enumerate() {
-        let is_whitespace = char.is_ascii_whitespace();
-        let treat_as_separator = if is_whitespace {
-            if blank_thousands_sep && *char == b' ' {
-                !is_blank_thousands_sep(line, idx, allow_unit_after_blank)
-            } else {
-                true
-            }
-        } else {
-            false
-        };
+        let is_separator = is_blank(*char)
+            && !(blank_thousands_sep
+                && *char == b' '
+                && is_blank_thousands_sep(line, idx, allow_unit_after_blank));
 
-        if treat_as_separator {
+        if is_separator {
             if !previous_was_whitespace {
                 token_buffer.last_mut().unwrap().end = idx;
                 token_buffer.push(idx..0);
@@ -2286,17 +2285,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.ignore_non_printing = ignore_non_printing;
     settings.ignore_case = ignore_case;
 
-    // WASI doesn't support threads, so we ignore the corresponding option
+    let threads = match matches.get_one::<String>(options::PARALLEL) {
+        Some(value) => parse_parallel(value)?,
+        None => std::thread::available_parallelism().map_or(1, |n| n.get() as u64),
+    };
+    // WASI doesn't support threads, so the value is only validated there
     #[cfg(not(target_os = "wasi"))]
-    {
-        let threads = matches
-            .get_one::<u64>(options::PARALLEL)
-            .copied()
-            .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get() as u64));
-        let _ = rayon::ThreadPoolBuilder::new()
-            .num_threads(threads as usize)
-            .build_global();
-    }
+    let _ = rayon::ThreadPoolBuilder::new()
+        .num_threads(threads as usize)
+        .build_global();
+    #[cfg(target_os = "wasi")]
+    let _ = threads;
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
         settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|error| {
@@ -2420,7 +2419,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if settings.check && files.len() != 1 {
         return Err(UUsageError::new(
             2,
-            translate!("sort-extra-operand-not-allowed-with-c", "operand" => files[1].quote()),
+            translate_text!("sort-extra-operand-not-allowed-with-c", "operand" => files[1].quote()),
         ));
     }
 
@@ -2705,7 +2704,7 @@ pub fn uu_app() -> Command {
         Arg::new(options::PARALLEL)
             .long(options::PARALLEL)
             .help(translate!("sort-help-parallel"))
-            .value_parser(clap::value_parser!(u64).range(1..))
+            .allow_hyphen_values(true)
             .value_name("NUM_THREADS"),
     )
     .arg(
@@ -2764,9 +2763,10 @@ fn exec(
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
-    if settings.merge {
-        merge::merge(files, settings, output, tmp_dir)
-    } else if settings.check {
+    // GNU: --check takes precedence over --merge when both are given.
+    // With one file, check still runs; with multiple files, the earlier
+    // "extra operand … not allowed with -c" error already fired.
+    if settings.check {
         if files.len() > 1 {
             Err(UUsageError::new(
                 2,
@@ -2775,6 +2775,8 @@ fn exec(
         } else {
             check::check(files.first().unwrap(), settings)
         }
+    } else if settings.merge {
+        merge::merge(files, settings, output, tmp_dir)
     } else {
         // Open each input once, when it is reached, so that only one input is open
         // at a time and FIFOs are never reopened.
@@ -2798,6 +2800,47 @@ fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_dat
         #[cfg(target_os = "wasi")]
         unsorted.sort_unstable_by(cmp);
     }
+}
+
+/// Comparison used by the merge path.
+///
+/// This is result-identical to `compare_by`, but for the whole-line locale-collation
+/// case it compares the two lines lazily with the ICU collator instead of relying on
+/// precomputed collation keys. Merging only performs O(n log k) comparisons (and none at
+/// all when merging a single file), so computing a full sort key for every line — as the
+/// regular sort path does to amortize O(n log n) comparisons — is pure overhead here.
+/// Skipping that per-line work (see `merge_without_limit`) is what makes `sort -m` of
+/// already-sorted input fast.
+#[inline]
+pub fn merge_compare<'a>(
+    a: &Line<'a>,
+    b: &Line<'a>,
+    settings: &GlobalSettings,
+    a_line_data: &LineData<'a>,
+    b_line_data: &LineData<'a>,
+) -> Ordering {
+    #[cfg(feature = "i18n-collator")]
+    if settings.precomputed.fast_locale_collation {
+        return compare_lines_with_collator(a, b, settings);
+    }
+    compare_by(a, b, settings, a_line_data, b_line_data)
+}
+
+/// Lazy counterpart of the `fast_locale_collation` branch of `compare_by`: compare the
+/// line bytes directly rather than precomputed keys. `locale_cmp` (ICU `compare_utf8`)
+/// and the sort-key comparison agree on ordering by construction.
+///
+/// Kept out of line so that `merge_compare` stays small enough to be inlined into the
+/// merge heap's comparator, which keeps the non-locale merge paths as fast as before.
+#[cfg(feature = "i18n-collator")]
+#[inline(never)]
+fn compare_lines_with_collator(a: &Line<'_>, b: &Line<'_>, settings: &GlobalSettings) -> Ordering {
+    let mut cmp = locale_cmp(a.line, b.line);
+    if cmp == Ordering::Equal {
+        // Equal keys for inputs like `01` and `0_1`; fall back to (reversed) byte order.
+        cmp = b.line.cmp(a.line);
+    }
+    if settings.reverse { cmp.reverse() } else { cmp }
 }
 
 fn compare_by<'a>(
@@ -3386,6 +3429,33 @@ fn open_with_open_failed_error(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read 
             error,
         }
         .into()),
+    }
+}
+
+/// The thread count of `--parallel`, reported as GNU does: a leading `+`
+/// is accepted, zero is refused, and a value that is not a number, or has
+/// a suffix, is an invalid argument.
+fn parse_parallel(value: &str) -> UResult<u64> {
+    let digits = value.strip_prefix('+').unwrap_or(value);
+    let invalid = |key: &str| {
+        USimpleError::new(
+            2,
+            translate!(key, "option" => options::PARALLEL, "arg" => value.quote()),
+        )
+    };
+    if !digits.starts_with(|c: char| c.is_ascii_digit()) {
+        return Err(invalid("sort-invalid-option-arg"));
+    }
+    if !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(invalid("sort-invalid-suffix-in-option-arg"));
+    }
+    match digits.parse::<u64>() {
+        Ok(0) => Err(USimpleError::new(
+            2,
+            translate!("sort-parallel-must-be-nonzero"),
+        )),
+        Ok(threads) => Ok(threads),
+        Err(_) => Err(invalid("sort-option-arg-too-large")),
     }
 }
 

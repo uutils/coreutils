@@ -44,7 +44,7 @@ mv-error-exchange-not-supported = --exchange is not supported on this platform
 
 # Help messages
 mv-help-force = do not prompt before overwriting
-mv-help-interactive = prompt before override
+mv-help-interactive = prompt before overwrite
 mv-help-no-clobber = do not overwrite an existing file
 mv-help-strip-trailing-slashes = remove any trailing slashes from each SOURCE argument
 mv-help-target-directory = move all SOURCE arguments into DIRECTORY

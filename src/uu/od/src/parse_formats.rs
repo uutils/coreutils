@@ -82,7 +82,7 @@ fn od_format_type(type_char: FormatType, byte_size: u8) -> Option<FormatterItemI
 
         (FormatType::Float, 2) => Some(FORMAT_ITEM_F16),
         (FormatType::Float, 4) => Some(FORMAT_ITEM_F32),
-        (FormatType::Float, 0) | (FormatType::Float, 8) => Some(FORMAT_ITEM_F64),
+        (FormatType::Float, 0 | 8) => Some(FORMAT_ITEM_F64),
         (FormatType::Float, 16) => Some(FORMAT_ITEM_LONG_DOUBLE),
 
         _ => None,
@@ -253,16 +253,6 @@ fn is_format_size_decimal(
     }
 }
 
-fn is_format_dump_char(ch: Option<char>, show_ascii_dump: &mut bool) -> bool {
-    match ch {
-        Some('z') => {
-            *show_ascii_dump = true;
-            true
-        }
-        _ => false,
-    }
-}
-
 fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, String> {
     let mut formats = Vec::new();
 
@@ -329,7 +319,8 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
                 })?;
             }
         }
-        if is_format_dump_char(ch, &mut show_ascii_dump) {
+        if ch == Some('z') {
+            show_ascii_dump = true;
             ch = chars.next();
         }
 

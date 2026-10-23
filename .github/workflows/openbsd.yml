@@ -25,11 +25,6 @@ jobs:
     name: Style and Lint
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { features: unix }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -41,13 +36,12 @@ jobs:
         sync: rsync
         copyback: false
         mem: 4096
-        # We need jq and GNU coreutils to run show-utils.sh and bash to use inline shell string replacement
+        # We need bash for inline shell string replacement
         # Use sudo-- to get the default sudo package without ambiguity
-        # Install rust and cargo from OpenBSD packages
         prepare: |
           # Clean up disk space before installing packages
           df -h
-          pkg_add curl sudo-- jq coreutils bash rust rust-clippy rust-rustfmt python3
+          pkg_add curl sudo-- bash rust rust-clippy rust-rustfmt python3
           rm -rf /usr/share/relink/* /usr/X11R6/* /usr/share/doc/* /usr/share/man/* &
           # Clean up package cache after installation
           pkg_delete -a &
@@ -79,8 +73,6 @@ jobs:
           *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
           esac;
           FAULT_PREFIX=\$(echo "\${FAULT_TYPE}" | tr '[:lower:]' '[:upper:]')
-          # * determine sub-crate utility list
-          UTILITY_LIST="\$(./util/show-utils.sh --features ${{ matrix.job.features }})"
           ## Info
           echo "::group::environment"
           echo "CI='${CI}'"
@@ -89,7 +81,6 @@ jobs:
           echo "WORKSPACE_PARENT='${WORKSPACE_PARENT}'"
           echo "WORKSPACE='${WORKSPACE}'"
           echo "FAULT_PREFIX='\${FAULT_PREFIX}'"
-          echo "UTILITY_LIST='\${UTILITY_LIST}'"
           env | sort
           echo "::endgroup::"
           echo "::group::tooling info"
@@ -108,7 +99,7 @@ jobs:
           ## cargo clippy lint testing
           if [ -z "\${FAULT}" ]; then
             echo "::group::cargo clippy"
-            CLIPPY_ARGS="--features ${{ matrix.job.features }} --fault-type \${FAULT_TYPE}"
+            CLIPPY_ARGS="--features feat_os_unix --fault-type \${FAULT_TYPE}"
             if [ -n "\${FAIL_ON_FAULT}" ]; then CLIPPY_ARGS="\${CLIPPY_ARGS} --fail-on-fault"; fi
             python3 util/run-clippy.py \${CLIPPY_ARGS} || FAULT=true
             echo "::endgroup::"
@@ -122,11 +113,6 @@ jobs:
     name: Tests
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { features: unix }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -154,7 +140,7 @@ jobs:
           rsync -a --delete empty/ /usr/X11R6/
           rsync -a --delete empty/ /usr/share/doc/
           rsync -a --delete empty/ /usr/share/man/
-          pkg_add curl gmake sudo-- jq rust
+          pkg_add curl gmake sudo-- rust
           # Clean up package cache after installation
           pkg_delete -a
           df -h
@@ -212,14 +198,12 @@ jobs:
           # Use cargo test since nextest might not support OpenBSD
           if (test -z "\$FAULT"); then
             echo "::group::cargo test (workspace)"
-            cargo test --features '${{ matrix.job.features }}' || FAULT=1
+            cargo test --features feat_os_unix || FAULT=1
             echo "::endgroup::"
           fi
-          # There is no systemd-logind on OpenBSD, so test all features except feat_systemd_logind
           if (test -z "\$FAULT"); then
             echo "::group::cargo test (uucore)"
-            UUCORE_FEATURES=\$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "uucore") | .features | keys | .[]' | grep -v "feat_systemd_logind" | paste -s -d "," -)
-            cargo test --features "\$UUCORE_FEATURES" -p uucore || FAULT=1
+            cargo test --all-features -p uucore || FAULT=1
             echo "::endgroup::"
           fi
           # Test building with make

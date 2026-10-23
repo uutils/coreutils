@@ -146,8 +146,9 @@ impl FsCreateContext {
                         SeLinuxError::ContextRetrievalFailure(selinux_error_description(&e))
                     })?;
 
+            let path = absolute_for_policy_lookup(path);
             let default_context =
-                match labeler.look_up_by_path(path, mode.and_then(selinux::FileAccessMode::new)) {
+                match labeler.look_up_by_path(&path, mode.and_then(selinux::FileAccessMode::new)) {
                     Ok(context) => context,
                     Err(e) if is_ignorable_context_error(&e) => {
                         return Ok(Self {
@@ -796,11 +797,14 @@ mod tests {
         let tmp_dir = tempdir().expect("Failed to create temporary directory");
         let dir_path = tmp_dir.path();
 
-        // Create a FIFO (pipe)
+        // Create a named FIFO
         let fifo_path = dir_path.join("my_fifo");
-        // todo: use rustix::fs::mkfifoat since selinux is linux specific
-        nix::unistd::mkfifo(&fifo_path, nix::sys::stat::Mode::from_bits_truncate(0o666))
-            .expect("Failed to create FIFO");
+        rustix::fs::mkfifoat(
+            rustix::fs::CWD,
+            &fifo_path,
+            rustix::fs::Mode::from_bits_truncate(0o666),
+        )
+        .expect("Failed to create FIFO");
 
         // Just getting a context is good enough
         get_selinux_security_context(&fifo_path, false).expect("Cannot get fifo context");

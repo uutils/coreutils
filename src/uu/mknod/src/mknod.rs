@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, Command, value_parser};
 use nix::libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t};
-use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, umask as nix_umask};
+use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod};
 use std::ffi::OsString;
 use std::io::{self, Write as _};
 
@@ -15,7 +15,7 @@ use uucore::display::Quotable;
 use uucore::error::{ExitCode, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::format_usage;
 use uucore::fs::makedev;
-use uucore::translate;
+use uucore::{show_warning, translate};
 
 #[allow(clippy::unnecessary_cast)]
 const MODE_RW_UGO: u32 = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
@@ -66,17 +66,26 @@ struct Config {
     set_security_context: bool,
 
     /// Specific security context (SELinux/SMACK).
-    #[cfg(any(
-        all(feature = "selinux", any(target_os = "android", target_os = "linux")),
-        all(feature = "smack", target_os = "linux"),
-    ))]
     context: Option<String>,
 }
 
 fn mknod(file_name: &str, config: Config) -> i32 {
+    #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
+    let selinux_enabled = uucore::selinux::is_selinux_enabled();
+    #[cfg(not(all(feature = "selinux", any(target_os = "android", target_os = "linux"))))]
+    let selinux_enabled = false;
+    #[cfg(all(feature = "smack", target_os = "linux"))]
+    let smack_enabled = uucore::smack::is_smack_enabled();
+    #[cfg(not(all(feature = "smack", target_os = "linux")))]
+    let smack_enabled = false;
+
+    if config.context.is_some() && !selinux_enabled && !smack_enabled {
+        show_warning!("{}", translate!("mknod-warning-context-ignored"));
+    }
+
     // Label the node at creation, as GNU does; relabelling after leaves a window.
     #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
-    let _selinux_guard = if config.set_security_context {
+    let _selinux_guard = if config.set_security_context && selinux_enabled {
         let mode = config.file_type.as_sflag().bits() | config.mode.bits();
         match uucore::selinux::FsCreateContext::new(
             std::path::Path::new(file_name),
@@ -93,26 +102,21 @@ fn mknod(file_name: &str, config: Config) -> i32 {
         None
     };
 
-    // set umask to 0 and store previous umask
-    let have_prev_umask = if config.use_umask {
-        None
-    } else {
-        Some(nix_umask(Mode::empty()))
+    let create_node = || {
+        nix_mknod(
+            file_name,
+            config.file_type.as_sflag(),
+            config.mode,
+            config.dev,
+        )
+        .err()
     };
-
-    let mknod_err = nix_mknod(
-        file_name,
-        config.file_type.as_sflag(),
-        config.mode,
-        config.dev,
-    )
-    .err();
+    let mknod_err = if config.use_umask {
+        create_node()
+    } else {
+        uucore::mode::with_umask(0, create_node)
+    };
     let errno = if mknod_err.is_some() { -1 } else { 0 };
-
-    // set umask back to original value
-    if let Some(prev_umask) = have_prev_umask {
-        nix_umask(prev_umask);
-    }
 
     if let Some(err) = mknod_err {
         let _ = writeln!(
@@ -126,6 +130,7 @@ fn mknod(file_name: &str, config: Config) -> i32 {
     // Apply SMACK context if requested
     #[cfg(all(feature = "smack", target_os = "linux"))]
     if config.set_security_context
+        && smack_enabled
         && let Err(e) =
             uucore::smack::set_smack_label_and_cleanup(file_name, config.context.as_ref(), |p| {
                 std::fs::remove_file(p)
@@ -186,10 +191,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         all(feature = "smack", target_os = "linux"),
     ))]
     let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
-    #[cfg(any(
-        all(feature = "selinux", any(target_os = "android", target_os = "linux")),
-        all(feature = "smack", target_os = "linux"),
-    ))]
     let context = matches.get_one::<String>(options::CONTEXT).cloned();
 
     let dev = match (
@@ -223,10 +224,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             all(feature = "smack", target_os = "linux"),
         ))]
         set_security_context: set_security_context || context.is_some(),
-        #[cfg(any(
-            all(feature = "selinux", any(target_os = "android", target_os = "linux")),
-            all(feature = "smack", target_os = "linux"),
-        ))]
         context,
     };
 

@@ -80,21 +80,12 @@ jobs:
         test -f target/CACHEDIR.TAG
         # Restore cache for target/release (we only did a debug build)
         mv -t target/ target.cache/release 2>/dev/null || true
-    - name: "`make nextest`"
+    # only check the GNUmakefile logic, full tests run in CICD.yml
+    - name: "`make nextest UTILS=stdbuf`"
       shell: bash
-      run: make nextest PROFILE=ci CARGOFLAGS="--hide-progress-bar"
+      run: make nextest PROFILE=ci UTILS=stdbuf CARGOFLAGS="--hide-progress-bar"
       env:
         RUST_BACKTRACE: "1"
-    - name: Upload test results to Codecov
-      if: ${{ !cancelled() }}
-      uses: codecov/codecov-action@v7
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        report_type: test_results
-        files: target/nextest/ci/junit.xml
-        disable_search: true
-        flags: makefile,${{ matrix.job.os }}
-        fail_ci_if_error: false
     - name: "`make install`"
       shell: bash
       run: |

@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (path) eacces inacc rm-r4 unlinkat fstatat rootlink
 
+#![cfg(any(unix, windows, target_os = "wasi"))]
+
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, Command, parser::ValueSource};
 use indicatif::{ProgressBar, ProgressStyle};

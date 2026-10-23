@@ -21,8 +21,8 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError, strip_errno};
 use uucore::parser::parse_size::parse_size_u64;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
-use uucore::translate;
 use uucore::{format_usage, show_error, show_if_err};
+use uucore::{translate, translate_text};
 
 pub mod options {
     pub const FORCE: &str = "force";
@@ -94,6 +94,17 @@ enum Pattern {
 enum PassType {
     Pattern(Pattern),
     Random,
+}
+
+/// Settings shared by every file passed on the command line.
+struct WipeOptions {
+    n_passes: usize,
+    remove_method: RemoveMethod,
+    size: Option<u64>,
+    exact: bool,
+    zero: bool,
+    verbose: bool,
+    force: bool,
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -298,22 +309,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_one::<String>(options::SIZE)
         .map(ToOwned::to_owned);
     let size = get_size(size_arg, diag_args.as_deref())?;
-    let exact = matches.get_flag(options::EXACT) || size.is_some();
-    let zero = matches.get_flag(options::ZERO);
-    let verbose = matches.get_flag(options::VERBOSE);
+    let wipe_options = WipeOptions {
+        n_passes: iterations,
+        remove_method,
+        size,
+        exact: matches.get_flag(options::EXACT) || size.is_some(),
+        zero: matches.get_flag(options::ZERO),
+        verbose: matches.get_flag(options::VERBOSE),
+        force,
+    };
 
     for path_str in matches.get_many::<OsString>(options::FILE).unwrap() {
-        show_if_err!(wipe_file(
-            path_str,
-            iterations,
-            remove_method,
-            size,
-            exact,
-            zero,
-            random_source.as_ref(),
-            verbose,
-            force,
-        ));
+        show_if_err!(wipe_file(path_str, &wipe_options, random_source.as_ref()));
     }
     Ok(())
 }
@@ -610,19 +617,21 @@ fn create_standard_pass_sequence(num_passes: usize) -> Vec<PassType> {
     sequence
 }
 
-#[allow(clippy::too_many_arguments)]
 #[allow(clippy::cognitive_complexity)]
 fn wipe_file(
     path_str: &OsString,
-    n_passes: usize,
-    remove_method: RemoveMethod,
-    size: Option<u64>,
-    exact: bool,
-    zero: bool,
+    wipe_options: &WipeOptions,
     random_source: Option<&RefCell<File>>,
-    verbose: bool,
-    force: bool,
 ) -> UResult<()> {
+    let WipeOptions {
+        n_passes,
+        remove_method,
+        size,
+        exact,
+        zero,
+        verbose,
+        force,
+    } = *wipe_options;
     // Get these potential errors out of the way first
     let path = Path::new(path_str);
 
@@ -630,13 +639,13 @@ fn wipe_file(
         if path.is_dir() {
             return Err(USimpleError::new(
                 1,
-                translate!("shred-failed-to-open-for-writing-is-a-directory", "file" => path.maybe_quote()),
+                translate_text!("shred-failed-to-open-for-writing-is-a-directory", "file" => path.maybe_quote()),
             ));
         }
         if fs::metadata(path).is_err_and(|e| e.kind() == io::ErrorKind::NotADirectory) {
             return Err(USimpleError::new(
                 1,
-                translate!("shred-failed-to-open-for-writing-not-a-directory", "file" => path.maybe_quote()),
+                translate_text!("shred-failed-to-open-for-writing-not-a-directory", "file" => path.maybe_quote()),
             ));
         }
     }
@@ -651,13 +660,13 @@ fn wipe_file(
         Ok(md) if !md.is_file() => {
             return Err(USimpleError::new(
                 1,
-                translate!("shred-not-a-file", "file" => path.maybe_quote()),
+                translate_text!("shred-not-a-file", "file" => path.maybe_quote()),
             ));
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
             return Err(USimpleError::new(
                 1,
-                translate!("shred-no-such-file-or-directory", "file" => path.maybe_quote()),
+                translate_text!("shred-no-such-file-or-directory", "file" => path.maybe_quote()),
             ));
         }
         _ => {}
@@ -717,7 +726,7 @@ fn wipe_file(
         .truncate(false)
         .open(path)
         .map_err_context(
-            || translate!("shred-failed-to-open-for-writing", "file" => path.maybe_quote()),
+            || translate_text!("shred-failed-to-open-for-writing", "file" => path.maybe_quote()),
         )?;
 
     let size = match size {
@@ -728,7 +737,7 @@ fn wipe_file(
     for (i, pass_type) in pass_sequence.into_iter().enumerate() {
         if verbose {
             let pass_name = pass_name(&pass_type);
-            let msg = translate!("shred-pass-progress", "file" => path.maybe_quote());
+            let msg = translate_text!("shred-pass-progress", "file" => path.maybe_quote());
             show_error!(
                 "{msg} {}/{total_passes} ({pass_name})...",
                 (i + 1).to_string()
@@ -736,13 +745,13 @@ fn wipe_file(
         }
         // size is an optional argument for exactly how many bytes we want to shred
         do_pass(&mut file, &pass_type, exact, random_source, size).map_err_context(
-            || translate!("shred-file-write-pass-failed", "file" => path.maybe_quote()),
+            || translate_text!("shred-file-write-pass-failed", "file" => path.maybe_quote()),
         )?;
     }
 
     if remove_method != RemoveMethod::None {
         do_remove(path, verbose, remove_method).map_err_context(
-            || translate!("shred-failed-to-remove-file", "file" => path.maybe_quote()),
+            || translate_text!("shred-failed-to-remove-file", "file" => path.maybe_quote()),
         )?;
     }
     Ok(())
@@ -834,7 +843,7 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Pa
                     break;
                 }
                 Err(e) => {
-                    let msg = translate!("shred-couldnt-rename", "file" => last_path.maybe_quote(), "new_name" => new_path.quote(), "error" => strip_errno(&e));
+                    let msg = translate_text!("shred-couldnt-rename", "file" => last_path.maybe_quote(), "new_name" => new_path.quote(), "error" => strip_errno(&e));
                     show_error!("{msg}");
                     // TODO: replace with our error management
                     std::process::exit(1);
@@ -850,7 +859,7 @@ fn do_remove(path: &Path, verbose: bool, remove_method: RemoveMethod) -> Result<
     if verbose {
         show_error!(
             "{}",
-            translate!("shred-removing", "file" => path.maybe_quote())
+            translate_text!("shred-removing", "file" => path.maybe_quote())
         );
     }
 
@@ -865,7 +874,7 @@ fn do_remove(path: &Path, verbose: bool, remove_method: RemoveMethod) -> Result<
     if verbose {
         show_error!(
             "{}",
-            translate!("shred-removed", "file" => path.maybe_quote())
+            translate_text!("shred-removed", "file" => path.maybe_quote())
         );
     }
 
