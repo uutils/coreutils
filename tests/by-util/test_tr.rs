@@ -1280,7 +1280,6 @@ fn test_repeat_in_set1_padded_by_star_in_set2() {
 fn test_star_in_set2_only_when_translating(#[case] set2: &str) {
     new_ucmd!()
         .args(&["-ds", "a", set2])
-        .pipe_in("xaab")
         .fails_with_code(1)
         .stderr_only("tr: the [c*] construct may appear in string2 only when translating\n");
 }
@@ -1295,7 +1294,6 @@ fn test_star_in_set2_only_when_translating(#[case] set2: &str) {
 fn test_equivalence_class_in_set2_only_with_delete_and_squeeze(#[case] args: &[&str]) {
     new_ucmd!()
         .args(args)
-        .pipe_in("xaab")
         .fails_with_code(1)
         .stderr_only("tr: [=c=] expressions may not appear in string2 when translating\n");
 }
