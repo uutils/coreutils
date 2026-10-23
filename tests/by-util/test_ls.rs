@@ -8570,3 +8570,355 @@ fn test_ls_dereference_sibling_alias_not_already_listed() {
         .stdout_contains("link:\nfile")
         .no_stderr();
 }
+
+#[test]
+fn test_parser_posix_ordering_after_required_value() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("first");
+    scene.fixtures.touch("--reverse");
+    scene.fixtures.touch("--help");
+    scene.fixtures.touch("--");
+    let prefix = ["--width", "80", "-d1", "first"];
+    scene
+        .ucmd()
+        .args(&prefix)
+        .arg("--reverse")
+        .succeeds()
+        .stdout_only("first\n");
+    for value in ["1", ""] {
+        scene
+            .ucmd()
+            .env("POSIXLY_CORRECT", value)
+            .args(&prefix)
+            .arg("--reverse")
+            .succeeds()
+            .stdout_only("--reverse\nfirst\n");
+        scene
+            .ucmd()
+            .env("POSIXLY_CORRECT", value)
+            .args(&prefix)
+            .arg("--help")
+            .succeeds()
+            .stdout_only("--help\nfirst\n");
+        scene
+            .ucmd()
+            .env("POSIXLY_CORRECT", value)
+            .args(&["-d1", "first", "--", "--help"])
+            .succeeds()
+            .stdout_only("--\n--help\nfirst\n");
+    }
+    scene
+        .ucmd()
+        .args(&["-d1", "--", "first", "--reverse"])
+        .succeeds()
+        .stdout_only("--reverse\nfirst\n");
+}
+
+#[test]
+fn test_parser_optional_values_leave_following_operand() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("never");
+    scene.fixtures.touch("auto");
+    // These optional values are only recognized with '=', so the following
+    // word is a filename even when it is also a valid value.
+    for option in ["--color", "--hyperlink", "--classify"] {
+        for operand in ["never", "auto"] {
+            scene
+                .ucmd()
+                .args(&[option, operand])
+                .succeeds()
+                .stdout_contains(operand);
+        }
+    }
+    scene.fixtures.mkdir("dir");
+    scene
+        .ucmd()
+        .args(&["-Fd", "dir"])
+        .succeeds()
+        .stdout_only("dir/\n");
+    // Preserve the existing uutils short-form extension while allowing -Fl
+    // to be scanned as two flags.
+    scene
+        .ucmd()
+        .args(&["-F=never", "-d", "dir"])
+        .succeeds()
+        .stdout_only("dir\n");
+    scene
+        .ucmd()
+        .args(&["-Fdl", "dir"])
+        .succeeds()
+        .stdout_contains(" dir/\n");
+}
+
+#[test]
+fn test_parser_help_and_version_terminate_in_order() {
+    for display in ["--help", "--version"] {
+        for (invalid, code) in [
+            ("--format=invalid", 1),
+            ("--color=invalid", 1),
+            ("--sort=invalid", 1),
+            ("--time=invalid", 1),
+            ("--block-size=invalid", 2),
+            ("--width=invalid", 2),
+            ("--tabsize=invalid", 2),
+        ] {
+            new_ucmd!()
+                .args(&[invalid, display])
+                .fails_with_code(code)
+                .no_stdout();
+            new_ucmd!().args(&[display, invalid]).succeeds().no_stderr();
+        }
+        new_ucmd!()
+            .args(&["--time-style=invalid", display])
+            .succeeds()
+            .no_stderr();
+    }
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("file");
+    // A required option value can begin with '-', including a literal '--'.
+    scene
+        .ucmd()
+        .args(&["--ignore", "--help", "file"])
+        .succeeds()
+        .stdout_only("file\n");
+    scene
+        .ucmd()
+        .args(&["--ignore", "--", "--help"])
+        .succeeds()
+        .stdout_contains("Usage:");
+    scene
+        .ucmd()
+        .args(&["--format", "--", "--help"])
+        .fails_with_code(1)
+        .no_stdout();
+}
+
+#[test]
+fn test_parser_required_patterns_consume_option_looking_values() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("a");
+    scene.fixtures.touch("b");
+    for option in ["--ignore", "--hide", "-I"] {
+        for value in ["--help", "--version", "--"] {
+            // A consumed '--' must not terminate scanning: -r still reverses
+            // the listing. Consumed display flags must not produce help.
+            scene
+                .ucmd()
+                .args(&["-1", option, value, "-r", "a", "b"])
+                .succeeds()
+                .stdout_only("b\na\n");
+        }
+    }
+    for attached in ["-I--help", "-I--version", "-I--"] {
+        scene
+            .ucmd()
+            .args(&["-1", attached, "-r", "a", "b"])
+            .succeeds()
+            .stdout_only("b\na\n");
+    }
+}
+
+#[test]
+fn test_successful_listing_does_not_construct_help() {
+    use ls::ProgramMode;
+    use std::ffi::OsString;
+
+    fn unexpected_presentation() -> clap::Command {
+        panic!("a successful runtime parse constructed presentation metadata");
+    }
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("empty");
+    for mode in [ProgramMode::Ls, ProgramMode::Dir, ProgramMode::Vdir] {
+        let arguments = vec![
+            OsString::from("ls"),
+            OsString::from("--format=single-column"),
+            OsString::from("--color=never"),
+            scene.fixtures.plus("empty").into_os_string(),
+        ];
+        ls::run(arguments.into_iter(), mode, unexpected_presentation).unwrap();
+    }
+}
+
+#[test]
+fn test_parser_format_interactions_within_clusters() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("a");
+    scene.fixtures.touch("b");
+    for cluster in ["-lC1", "-gC1", "-oC1", "-nC1", "-ClC1"] {
+        scene.ucmd().arg(cluster).succeeds().stdout_only("a\nb\n");
+    }
+    for cluster in ["-l1C", "-g1C", "-o1C", "-n1C"] {
+        scene
+            .ucmd()
+            .args(&[cluster, "--tabsize=0", "--width=80"])
+            .succeeds()
+            .stdout_only("a  b\n");
+    }
+    for cluster in ["-l1", "-1l1", "-g1", "-o1", "-n1"] {
+        scene
+            .ucmd()
+            .arg(cluster)
+            .succeeds()
+            .stdout_contains("total ")
+            .stdout_contains(" a\n");
+    }
+}
+
+#[test]
+fn test_parser_repeated_size_formats_validate_each_value() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write_bytes("file", &[0; 2048]);
+    for options in [
+        vec!["--block-size=512", "-h", "--si", "--block-size=1024"],
+        vec!["-h", "--block-size=512", "--si", "--block-size=1024", "-k"],
+    ] {
+        scene
+            .ucmd()
+            .arg("-l")
+            .args(&options)
+            .arg("file")
+            .succeeds()
+            .stdout_contains(" 2 ");
+    }
+    scene
+        .ucmd()
+        .args(&["-l", "--block-size=512", "--si", "-h", "file"])
+        .succeeds()
+        .stdout_contains("2.0K");
+    scene
+        .ucmd()
+        .args(&["--block-size=invalid", "--block-size=1"])
+        .fails_with_code(2)
+        .no_stdout();
+}
+
+#[test]
+fn test_parser_time_sort_depends_on_final_format_and_explicit_sort() {
+    use filetime::{FileTime, set_file_times};
+    let scene = TestScenario::new(util_name!());
+    for (name, access) in [("a", 1_600_000_000), ("b", 1_700_000_000)] {
+        scene.fixtures.touch(name);
+        set_file_times(
+            scene.fixtures.plus(name),
+            FileTime::from_unix_time(access, 0),
+            FileTime::from_unix_time(1_600_000_000, 0),
+        )
+        .unwrap();
+    }
+    scene.ucmd().arg("-u").succeeds().stdout_only("b\na\n");
+    scene
+        .ucmd()
+        .args(&["-u", "--sort=name"])
+        .succeeds()
+        .stdout_only("a\nb\n");
+    for options in [["-lu", "--sort=time"], ["-u", "-lt"]] {
+        let result = scene.ucmd().args(&options).succeeds();
+        let names: Vec<_> = result
+            .stdout_str()
+            .lines()
+            .skip(1)
+            .map(|line| line.split_whitespace().last().unwrap())
+            .collect();
+        assert_eq!(names, ["b", "a"]);
+    }
+    for options in [["-ul", "--sort=name"], ["-u", "-l"]] {
+        let result = scene.ucmd().args(&options).succeeds();
+        let names: Vec<_> = result
+            .stdout_str()
+            .lines()
+            .skip(1)
+            .map(|line| line.split_whitespace().last().unwrap())
+            .collect();
+        assert_eq!(names, ["a", "b"]);
+    }
+    // Both time selectors use the same ordering rule; -u after -c restores
+    // access time instead of making the two flags independently sticky.
+    scene.ucmd().arg("-cu").succeeds().stdout_only("b\na\n");
+}
+
+#[cfg(all(unix, not(target_vendor = "apple")))] // Apple filesystems require UTF-8 names.
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI argument strings must be valid UTF-8")]
+fn test_parser_posix_non_utf8_operands() {
+    use std::ffi::{OsStr, OsString};
+    use std::os::unix::ffi::OsStringExt;
+    let scene = TestScenario::new(util_name!());
+    let raw = OsString::from_vec(b"raw_\xff".to_vec());
+    std::fs::write(scene.fixtures.plus(&raw), b"").unwrap();
+    scene.fixtures.touch("--reverse");
+    for value in ["1", ""] {
+        scene
+            .ucmd()
+            .env("POSIXLY_CORRECT", value)
+            .args(&[
+                OsStr::new("--width"),
+                OsStr::new("80"),
+                OsStr::new("-d1"),
+                &raw,
+                OsStr::new("--reverse"),
+            ])
+            .succeeds()
+            .stdout_only_bytes(b"--reverse\nraw_\xff\n");
+    }
+    scene
+        .ucmd()
+        .args(&[OsStr::new("-d1"), OsStr::new("--"), raw.as_os_str()])
+        .succeeds()
+        .stdout_only_bytes(b"raw_\xff\n");
+}
+
+#[test]
+fn test_short_version_is_preserved() {
+    new_ucmd!()
+        .arg("-V")
+        .succeeds()
+        .stdout_only(format!("ls {}\n", uucore::crate_version!()));
+}
+
+#[test]
+fn test_parser_existing_short_value_equals_extension() {
+    let scene = TestScenario::new(util_name!());
+    for name in ["a", "=a", "plain"] {
+        scene.fixtures.touch(name);
+    }
+    scene
+        .ucmd()
+        .args(&["-w=80", "-T=4", "-I=a"])
+        .succeeds()
+        .stdout_only("=a\nplain\n");
+    scene
+        .ucmd()
+        .arg("-I==a")
+        .succeeds()
+        .stdout_only("a\nplain\n");
+    // A separate value keeps its leading '=', so both spellings can express
+    // the literal ignore pattern '=a'.
+    scene
+        .ucmd()
+        .args(&["-I", "=a"])
+        .succeeds()
+        .stdout_only("a\nplain\n");
+}
+
+#[cfg(unix)]
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI argument strings must be valid UTF-8")]
+fn test_parser_rejects_unsupported_non_utf8_patterns_in_order() {
+    use std::ffi::{OsStr, OsString};
+    use std::os::unix::ffi::OsStringExt;
+    let pattern = OsString::from_vec(b"raw_\xff".to_vec());
+    for option in ["--ignore", "--hide", "-I"] {
+        new_ucmd!()
+            .args(&[OsStr::new(option), &pattern])
+            .fails_with_code(2)
+            .no_stdout();
+        new_ucmd!()
+            .args(&[OsStr::new(option), &pattern, OsStr::new("--help")])
+            .fails_with_code(2)
+            .no_stdout();
+        new_ucmd!()
+            .args(&[OsStr::new("--help"), OsStr::new(option), &pattern])
+            .succeeds()
+            .no_stderr();
+    }
+}

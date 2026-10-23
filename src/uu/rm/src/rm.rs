@@ -3,12 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (path) eacces inacc rm-r4 unlinkat fstatat rootlink
+// spell-checker:ignore (path) eacces inacc rm-r4 unlinkat fstatat rootlink uerror
 
 #![cfg(any(unix, windows, target_os = "wasi"))]
 
 use clap::builder::{PossibleValue, ValueParser};
-use clap::{Arg, ArgAction, Command, parser::ValueSource};
+use clap::{Arg, ArgAction, Command};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, Metadata};
@@ -23,6 +23,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
+use uucore::parser::gnu::{Event, Occurrence, OptionSpec, ParseError, Parser, Policy};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use uucore::translate;
@@ -219,91 +220,201 @@ impl Default for Options {
     }
 }
 
-static OPT_DIR: &str = "dir";
-static OPT_INTERACTIVE: &str = "interactive";
-static OPT_FORCE: &str = "force";
-static OPT_NO_PRESERVE_ROOT: &str = "no-preserve-root";
-static OPT_ONE_FILE_SYSTEM: &str = "one-file-system";
-static OPT_PRESERVE_ROOT: &str = "preserve-root";
-static OPT_PROMPT_ALWAYS: &str = "prompt-always";
-static OPT_PROMPT_ONCE: &str = "prompt-once";
-static OPT_RECURSIVE: &str = "recursive";
-static OPT_VERBOSE: &str = "verbose";
-static OPT_PROGRESS: &str = "progress";
-static PRESUME_INPUT_TTY: &str = "-presume-input-tty";
+const OPT_DIR: &str = "dir";
+const OPT_INTERACTIVE: &str = "interactive";
+const OPT_FORCE: &str = "force";
+const OPT_NO_PRESERVE_ROOT: &str = "no-preserve-root";
+const OPT_ONE_FILE_SYSTEM: &str = "one-file-system";
+const OPT_PRESERVE_ROOT: &str = "preserve-root";
+const OPT_PROMPT_ALWAYS: &str = "prompt-always";
+const OPT_PROMPT_ONCE: &str = "prompt-once";
+const OPT_RECURSIVE: &str = "recursive";
+const OPT_VERBOSE: &str = "verbose";
+const OPT_PROGRESS: &str = "progress";
+const PRESUME_INPUT_TTY: &str = "-presume-input-tty";
 
-static ARG_FILES: &str = "files";
+const ARG_FILES: &str = "files";
+
+// The schema owns spellings, arity, and lazy presentation metadata for both
+// execution and the public Clap interface used by documentation and completions.
+static OPTIONS: &[OptionSpec] = &[
+    OptionSpec::flag(OPT_FORCE, &['f'], &[OPT_FORCE], "rm-help-force"),
+    OptionSpec::flag(OPT_PROMPT_ALWAYS, &['i'], &[], "rm-help-prompt-always"),
+    OptionSpec::flag(OPT_PROMPT_ONCE, &['I'], &[], "rm-help-prompt-once"),
+    OptionSpec::optional(
+        OPT_INTERACTIVE,
+        &[],
+        &[OPT_INTERACTIVE],
+        "rm-help-interactive",
+        "always",
+        "WHEN",
+    ),
+    OptionSpec::flag(
+        OPT_ONE_FILE_SYSTEM,
+        &[],
+        &[OPT_ONE_FILE_SYSTEM],
+        "rm-help-one-file-system",
+    ),
+    OptionSpec::flag(
+        OPT_NO_PRESERVE_ROOT,
+        &[],
+        &[OPT_NO_PRESERVE_ROOT],
+        "rm-help-no-preserve-root",
+    ),
+    OptionSpec::optional(
+        OPT_PRESERVE_ROOT,
+        &[],
+        &[OPT_PRESERVE_ROOT],
+        "rm-help-preserve-root",
+        "",
+        "all",
+    )
+    .no_default_missing(),
+    OptionSpec::flag(
+        OPT_RECURSIVE,
+        &['r', 'R'],
+        &[OPT_RECURSIVE],
+        "rm-help-recursive",
+    )
+    .visible_aliases(),
+    OptionSpec::flag(OPT_DIR, &['d'], &[OPT_DIR], "rm-help-dir"),
+    OptionSpec::flag(OPT_VERBOSE, &['v'], &[OPT_VERBOSE], "rm-help-verbose"),
+    OptionSpec::flag(OPT_PROGRESS, &['g'], &[OPT_PROGRESS], "rm-help-progress"),
+    OptionSpec::flag(
+        PRESUME_INPUT_TTY,
+        &[],
+        &["presume-input-tty", PRESUME_INPUT_TTY],
+        "",
+    )
+    .hidden(),
+    OptionSpec::flag("help", &['h'], &["help"], "").help_literal("Print help"),
+    OptionSpec::flag("version", &['V'], &["version"], "").help_literal("Print version"),
+];
+
+const INTERACTIVE_VALUES: &[(InteractiveMode, &[&str])] = &[
+    (InteractiveMode::Always, &["always", "yes"]),
+    (InteractiveMode::Once, &["once"]),
+    (InteractiveMode::Never, &["never", "no", "none"]),
+];
+
+impl Options {
+    /// Apply one occurrence in command-line order, including within a cluster.
+    fn apply(&mut self, occurrence: &Occurrence) -> UResult<()> {
+        match occurrence.id {
+            OPT_FORCE => {
+                self.force = true;
+                self.interactive = InteractiveMode::Never;
+            }
+            OPT_PROMPT_ALWAYS => {
+                self.force = false;
+                self.interactive = InteractiveMode::Always;
+            }
+            OPT_PROMPT_ONCE => {
+                self.force = false;
+                self.interactive = InteractiveMode::Once;
+            }
+            OPT_INTERACTIVE => {
+                let value = occurrence.value.as_deref().unwrap_or(OsStr::new("always"));
+                self.interactive = interactive_value(value).ok_or_else(|| {
+                    ParseError::invalid_value(occurrence, &["always", "once", "never"]).to_uerror(1)
+                })?;
+                // GNU's 'never' changes prompting without cancelling -f.
+                if self.interactive != InteractiveMode::Never {
+                    self.force = false;
+                }
+            }
+            OPT_ONE_FILE_SYSTEM => self.one_fs = true,
+            OPT_NO_PRESERVE_ROOT => {
+                // This failsafe deliberately requires the complete spelling.
+                // Check here so --help only ignores options that follow it.
+                if occurrence.spelling != "--no-preserve-root" {
+                    return Err(RmError::MayNotAbbreviateNoPreserveRoot.into());
+                }
+                self.preserve_root = false;
+            }
+            OPT_PRESERVE_ROOT => {
+                if occurrence
+                    .value
+                    .as_deref()
+                    .is_some_and(|value| value != "all")
+                {
+                    return Err(ParseError::invalid_value(occurrence, &["all"]).to_uerror(1));
+                }
+                self.preserve_root = true;
+                // Once requested, device protection survives later root-only
+                // changes, including --no-preserve-root.
+                self.preserve_root_all |= occurrence.value.is_some();
+            }
+            OPT_RECURSIVE => self.recursive = true,
+            OPT_DIR => self.dir = true,
+            OPT_VERBOSE => self.verbose = true,
+            OPT_PROGRESS => self.progress = true,
+            PRESUME_INPUT_TTY => self.__presume_input_tty = Some(true),
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
+/// Accept exact values and unambiguous prefixes, counting aliases of the same
+/// behavior as one match. Raw non-UTF-8 values never become valid by replacement.
+fn interactive_value(value: &OsStr) -> Option<InteractiveMode> {
+    let value = value.to_str()?;
+    let mut matches = INTERACTIVE_VALUES
+        .iter()
+        .filter(|(_, names)| names.iter().any(|name| name.starts_with(value)));
+    let first = matches.next()?.0;
+    matches.next().is_none().then_some(first)
+}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args: Vec<OsString> = args.collect();
-    let matches = uu_app()
-        .try_get_matches_from(args.iter())
-        .map_err(|e| handle_parse_error(e, &args))?;
-
-    let files: Vec<_> = matches
-        .get_many::<OsString>(ARG_FILES)
-        .map(|v| v.map(OsString::as_os_str).collect())
-        .unwrap_or_default();
-
-    let force_flag = matches.get_flag(OPT_FORCE);
-
-    if files.is_empty() && !force_flag {
-        // Still check by hand and not use clap
-        // Because "rm -f" is a thing
-        return Err(RmError::MissingOperand.into());
+    let policy = if std::env::var_os("POSIXLY_CORRECT").is_some() {
+        Policy::posix()
+    } else {
+        Policy::gnu()
+    };
+    let args: Vec<_> = args.collect();
+    let diagnostic_args = uucore::diagnostics::capture(&args);
+    let mut options = Options::default();
+    let mut operands = Vec::new();
+    // Keep the original arguments for the dash-file advice on scanner errors.
+    // The iterator owns each token as it is consumed; help still stops early.
+    for event in Parser::new(args.iter().skip(1).cloned(), OPTIONS, policy) {
+        match event.map_err(|error| handle_parse_error(error, &args, diagnostic_args.as_deref()))? {
+            Event::Operand { value, .. } => operands.push(value),
+            Event::Option(occurrence) => match occurrence.id {
+                "help" => {
+                    uu_app().print_help()?;
+                    return Ok(());
+                }
+                "version" => {
+                    io::stdout().write_all(uu_app().render_version().as_bytes())?;
+                    return Ok(());
+                }
+                _ => options.apply(&occurrence).map_err(|error| {
+                    uucore::diagnostics::error_after_report(
+                        diagnostic_args.as_deref(),
+                        error,
+                        |args, error| {
+                            let index = occurrence
+                                .value_position
+                                .map_or(occurrence.position.argument, |value| value.argument);
+                            uucore::diagnostics::Snapshot::with_program(args).render(
+                                index,
+                                &error.to_string(),
+                                None,
+                                None,
+                            )
+                        },
+                    )
+                })?,
+            },
+        }
     }
-
-    // If -f(--force) is before any -i (or variants) we want prompts else no prompts
-    let force_prompt_never = force_flag && {
-        let force_index = matches.index_of(OPT_FORCE).unwrap_or(0);
-        ![OPT_PROMPT_ALWAYS, OPT_PROMPT_ONCE, OPT_INTERACTIVE]
-            .iter()
-            .any(|flag| {
-                matches.value_source(flag) == Some(ValueSource::CommandLine)
-                    && matches.index_of(flag).unwrap_or(0) > force_index
-            })
-    };
-
-    let preserve_root = !matches.get_flag(OPT_NO_PRESERVE_ROOT);
-    let preserve_root_all = matches
-        .get_one::<String>(OPT_PRESERVE_ROOT)
-        .is_some_and(|value| value == "all");
-    let recursive = matches.get_flag(OPT_RECURSIVE);
-
-    let options = Options {
-        force: force_flag,
-        interactive: {
-            if force_prompt_never {
-                InteractiveMode::Never
-            } else if matches.get_flag(OPT_PROMPT_ALWAYS) {
-                InteractiveMode::Always
-            } else if matches.get_flag(OPT_PROMPT_ONCE) {
-                InteractiveMode::Once
-            } else if matches.contains_id(OPT_INTERACTIVE) {
-                InteractiveMode::from(matches.get_one::<String>(OPT_INTERACTIVE).unwrap().as_str())
-            } else {
-                InteractiveMode::PromptProtected
-            }
-        },
-        one_fs: matches.get_flag(OPT_ONE_FILE_SYSTEM),
-        preserve_root,
-        preserve_root_all,
-        recursive,
-        dir: matches.get_flag(OPT_DIR),
-        verbose: matches.get_flag(OPT_VERBOSE),
-        progress: matches.get_flag(OPT_PROGRESS),
-        __presume_input_tty: if matches.get_flag(PRESUME_INPUT_TTY) {
-            Some(true)
-        } else {
-            None
-        },
-    };
-
-    // manually parse all args to verify --no-preserve-root did not get abbreviated (clap does
-    // allow this)
-    if !options.preserve_root && !args.iter().any(|arg| arg == "--no-preserve-root") {
-        return Err(RmError::MayNotAbbreviateNoPreserveRoot.into());
+    let files: Vec<_> = operands.iter().map(OsString::as_os_str).collect();
+    if files.is_empty() && !options.force {
+        return Err(RmError::MissingOperand.into());
     }
 
     if options.interactive == InteractiveMode::Once && (options.recursive || files.len() > 3) {
@@ -333,17 +444,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-/// Turn a clap parsing error into a `UError`, reproducing GNU's hint when an
-/// unknown `-foo` option is actually the name of an existing file: it suggests
-/// `rm ./-foo` so the name is treated as a path.
-fn handle_parse_error(e: clap::Error, args: &[OsString]) -> Box<dyn UError> {
-    let dash_file = args.iter().skip(1).find(|a| {
-        os_str_as_bytes(a).is_ok_and(|b| b.len() >= 2 && b[0] == b'-')
-            && fs::symlink_metadata(a).is_ok()
+/// Preserve the dash-file hint without parsing argv again or constructing help.
+fn handle_parse_error(
+    error: ParseError,
+    args: &[OsString],
+    diagnostic_args: Option<&[OsString]>,
+) -> Box<dyn UError> {
+    let dash_file = args.iter().skip(1).find(|argument| {
+        let bytes = argument.as_encoded_bytes();
+        bytes.len() >= 2 && bytes[0] == b'-' && fs::symlink_metadata(argument).is_ok()
     });
-    if let (true, Some(file)) = (e.exit_code() != 0, dash_file) {
-        // The path is shell-escaped (quoted only if needed), the file name is
-        // always quoted, matching GNU's two quoting styles.
+    if let Some(file) = dash_file {
+        // This advice supplements the scanner error. Value-validation errors
+        // are handled separately and must not acquire a dash-file suggestion.
+        let error = error.to_uerror_with_args(1, diagnostic_args);
+        let message = error.to_string();
+        if !message.is_empty() {
+            show_error!("{message}");
+        }
         let path = locale_aware_escape_name(file, QuotingStyle::SHELL_ESCAPE);
         let quoted = locale_aware_escape_name(file, QuotingStyle::SHELL_ESCAPE_ALWAYS);
         let _ = writeln!(
@@ -358,15 +476,11 @@ fn handle_parse_error(e: clap::Error, args: &[OsString]) -> Box<dyn UError> {
         );
         return 1.into();
     }
-    // Otherwise defer to the standard clap handling (incl. `--help`/`--version`).
-    match uucore::clap_localization::handle_clap_result(uu_app(), args.iter()) {
-        Ok(_) => 1.into(),
-        Err(e) => e,
-    }
+    error.to_uerror_with_args(1, diagnostic_args)
 }
 
 pub fn uu_app() -> Command {
-    Command::new("rm")
+    let mut command = Command::new("rm")
         .version(uucore::crate_version!())
         .about(translate!("rm-about"))
         .help_template(uucore::localized_help_template(uucore::util_name()))
@@ -374,114 +488,34 @@ pub fn uu_app() -> Command {
         .after_help(translate!("rm-after-help"))
         .infer_long_args(true)
         .args_override_self(true)
-        .arg(
-            Arg::new(OPT_FORCE)
-                .short('f')
-                .long(OPT_FORCE)
-                .help(translate!("rm-help-force"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_PROMPT_ALWAYS)
-                .short('i')
-                .help(translate!("rm-help-prompt-always"))
-                .overrides_with_all([OPT_PROMPT_ONCE, OPT_INTERACTIVE])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_PROMPT_ONCE)
-                .short('I')
-                .help(translate!("rm-help-prompt-once"))
-                .overrides_with_all([OPT_PROMPT_ALWAYS, OPT_INTERACTIVE])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_INTERACTIVE)
-                .long(OPT_INTERACTIVE)
-                .help(translate!("rm-help-interactive"))
-                .value_name("WHEN")
-                .value_parser(ShortcutValueParser::new([
-                    PossibleValue::new("always").alias("yes"),
-                    PossibleValue::new("once"),
-                    PossibleValue::new("never").alias("no").alias("none"),
-                ]))
-                .num_args(0..=1)
-                .require_equals(true)
-                .default_missing_value("always")
+        .disable_help_flag(true)
+        .disable_version_flag(true);
+    for option in OPTIONS {
+        let argument = option.arg();
+        let argument = match option.id {
+            "help" => argument.action(ArgAction::Help),
+            "version" => argument.action(ArgAction::Version),
+            OPT_PROMPT_ALWAYS => argument.overrides_with_all([OPT_PROMPT_ONCE, OPT_INTERACTIVE]),
+            OPT_PROMPT_ONCE => argument.overrides_with_all([OPT_PROMPT_ALWAYS, OPT_INTERACTIVE]),
+            OPT_INTERACTIVE => argument
+                .value_parser(ShortcutValueParser::new(INTERACTIVE_VALUES.iter().map(
+                    |(_, names)| {
+                        PossibleValue::new(names[0]).aliases(names.iter().skip(1).copied())
+                    },
+                )))
                 .overrides_with_all([OPT_PROMPT_ALWAYS, OPT_PROMPT_ONCE]),
-        )
-        .arg(
-            Arg::new(OPT_ONE_FILE_SYSTEM)
-                .long(OPT_ONE_FILE_SYSTEM)
-                .help(translate!("rm-help-one-file-system"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_NO_PRESERVE_ROOT)
-                .long(OPT_NO_PRESERVE_ROOT)
-                .help(translate!("rm-help-no-preserve-root"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_PRESERVE_ROOT)
-                .long(OPT_PRESERVE_ROOT)
-                .help(translate!("rm-help-preserve-root"))
-                // `--preserve-root` alone protects only '/'; `--preserve-root=all`
-                // additionally refuses to cross into another file system.
-                .num_args(0..=1)
-                .require_equals(true)
-                .value_name("all")
-                .value_parser(["all"]),
-        )
-        .arg(
-            Arg::new(OPT_RECURSIVE)
-                .short('r')
-                .visible_short_alias('R')
-                .long(OPT_RECURSIVE)
-                .help(translate!("rm-help-recursive"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_DIR)
-                .short('d')
-                .long(OPT_DIR)
-                .help(translate!("rm-help-dir"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_VERBOSE)
-                .short('v')
-                .long(OPT_VERBOSE)
-                .help(translate!("rm-help-verbose"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_PROGRESS)
-                .short('g')
-                .long(OPT_PROGRESS)
-                .help(translate!("rm-help-progress"))
-                .action(ArgAction::SetTrue),
-        )
-        // Hidden, and meant only for the test suite: handing the process a real
-        // tty on stdin is awkward to arrange, and the prompting paths behave
-        // differently once it has one, so this switch stands in for that state
-        // and makes those paths reachable from a test.
-        // In contrast with Arg::long, Arg::alias does not strip leading
-        // hyphens. Therefore it supports 3 leading hyphens.
-        .arg(
-            Arg::new(PRESUME_INPUT_TTY)
-                .long("presume-input-tty")
-                .alias(PRESUME_INPUT_TTY)
-                .hide(true)
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(ARG_FILES)
-                .action(ArgAction::Append)
-                .value_parser(ValueParser::os_string())
-                .num_args(1..)
-                .value_hint(clap::ValueHint::AnyPath),
-        )
+            OPT_PRESERVE_ROOT => argument.value_parser(["all"]),
+            _ => argument,
+        };
+        command = command.arg(argument);
+    }
+    command.arg(
+        Arg::new(ARG_FILES)
+            .action(ArgAction::Append)
+            .value_parser(ValueParser::os_string())
+            .num_args(1..)
+            .value_hint(clap::ValueHint::AnyPath),
+    )
 }
 
 /// Creates a progress bar for rm operations if conditions are met.
@@ -1133,7 +1167,66 @@ fn is_symlink_dir(metadata: &Metadata) -> bool {
     metadata.file_type().is_symlink_dir()
 }
 
+#[cfg(test)]
 mod tests {
+    use super::{InteractiveMode, OPTIONS, Options};
+    use uucore::parser::gnu::{Event, Parser, Policy};
+
+    fn parse_options(args: &[&str]) -> Options {
+        let mut options = Options::default();
+        for event in Parser::new(
+            args.iter().map(std::ffi::OsString::from),
+            OPTIONS,
+            Policy::gnu(),
+        ) {
+            if let Event::Option(occurrence) = event.unwrap() {
+                options.apply(&occurrence).unwrap();
+            }
+        }
+        options
+    }
+
+    #[test]
+    fn preserve_root_order() {
+        let options = parse_options(&["--no-preserve-root", "--preserve-root"]);
+        assert!(options.preserve_root);
+        assert!(!options.preserve_root_all);
+        let options = parse_options(&["--preserve-root", "--no-preserve-root"]);
+        assert!(!options.preserve_root);
+        let options = parse_options(&["--preserve-root=all"]);
+        assert!(options.preserve_root);
+        assert!(options.preserve_root_all);
+        let options = parse_options(&[
+            "--preserve-root=all",
+            "--no-preserve-root",
+            "--preserve-root",
+        ]);
+        assert!(options.preserve_root);
+        assert!(options.preserve_root_all);
+        let options = parse_options(&["--preserve-root=all", "--no-preserve-root"]);
+        assert!(!options.preserve_root);
+        assert!(options.preserve_root_all);
+    }
+
+    #[test]
+    fn typed_interaction_order() {
+        for (arguments, force, interactive) in [
+            (vec!["-fi"], false, InteractiveMode::Always),
+            (vec!["-if"], true, InteractiveMode::Never),
+            (vec!["-fI"], false, InteractiveMode::Once),
+            (vec!["-If"], true, InteractiveMode::Never),
+            (
+                vec!["-f", "--interactive=never"],
+                true,
+                InteractiveMode::Never,
+            ),
+            (vec!["--interactive=never"], false, InteractiveMode::Never),
+        ] {
+            let options = parse_options(&arguments);
+            assert_eq!(options.force, force, "{arguments:?}");
+            assert!(options.interactive == interactive, "{arguments:?}");
+        }
+    }
 
     #[test]
     // Testing whether path the `/////` collapses to `/`

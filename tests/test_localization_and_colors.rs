@@ -76,6 +76,52 @@ fn create_utility_command(utility_name: &str) -> Command {
     cmd
 }
 
+/// Native parser diagnostics retain translation and usage for all entry points,
+/// and NO_COLOR takes precedence over a forced color setting.
+// spell-checker:ignore reconnue
+#[test]
+fn test_native_parser_error_presentation() {
+    let enabled = get_all_enabled_utilities();
+    for utility in ["cat", "rm", "ls", "dir", "vdir"] {
+        if !enabled.iter().any(|name| name == utility) {
+            continue;
+        }
+        for (locale, diagnostic, usage) in [
+            ("en_US.UTF-8", "unrecognized option", "Usage:"),
+            ("fr_FR.UTF-8", "option non reconnue", "Utilisation:"),
+        ] {
+            for color in [false, true] {
+                let mut command = create_utility_command(utility);
+                command
+                    .arg("--invalid-option-that-should-not-exist")
+                    .env("LANG", locale)
+                    .env("LC_ALL", locale)
+                    .env("CLICOLOR_FORCE", "1");
+                if color {
+                    command.env_remove("NO_COLOR");
+                } else {
+                    command.env("NO_COLOR", "1");
+                }
+                let result = command.output().unwrap();
+                assert_eq!(
+                    result.status.code(),
+                    Some(if utility == "cat" || utility == "rm" {
+                        1
+                    } else {
+                        2
+                    })
+                );
+                assert!(result.stdout.is_empty());
+                let stderr = str::from_utf8(&result.stderr).unwrap();
+                assert!(stderr.contains(diagnostic), "{utility}: {stderr}");
+                assert!(stderr.contains(usage), "{utility}: {stderr}");
+                assert!(!stderr.contains("parser-error-"), "{utility}: {stderr}");
+                assert_eq!(stderr.contains("\x1b["), color, "{utility}: {stderr}");
+            }
+        }
+    }
+}
+
 /// Test that help messages contain color codes when `CLICOLOR_FORCE=1`
 #[test]
 fn test_help_messages_have_colors() {

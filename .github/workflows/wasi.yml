@@ -56,6 +56,9 @@ jobs:
       run: |
         # Build the WASI binary
         cargo build --target ${{ matrix.job.target }} --no-default-features --features feat_wasm
+        # Populate wasmtime's module cache before parallel tests launch the same
+        # binary, so cold compilation cannot consume their 30-second timeout.
+        wasmtime target/${{ matrix.job.target }}/debug/coreutils.wasm --version
         # Run host-compiled integration tests against the WASI binary.
         # Tests incompatible with WASI are annotated with
         # #[cfg_attr(wasi_runner, ignore)] in the test source files.

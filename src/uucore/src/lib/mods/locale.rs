@@ -125,31 +125,38 @@ fn errors_message(
     id: &str,
     args: Option<&FluentArgs>,
 ) -> Option<String> {
-    ERRORS_BUNDLE.with(|cell| {
-        let bundle = cell.get_or_init(|| build_errors_bundle(locales)).as_ref()?;
+    let lookup = |cell: &OnceLock<Option<FluentBundle<FluentResource>>>, component: &str| {
+        let bundle = cell
+            .get_or_init(|| {
+                build_errors_bundle_with(locales, |locale| errors_resource(locale, component))
+            })
+            .as_ref()?;
         let message = bundle.get_message(id)?.value()?;
         let mut errs = Vec::new();
         Some(bundle.format_pattern(message, args, &mut errs).to_string())
-    })
+    };
+    // Looking up an ordinary error must not parse the argument scanner's messages.
+    if id.starts_with("parser-error-") {
+        PARSER_ERRORS_BUNDLE.with(|cell| lookup(cell, "parser"))
+    } else {
+        ERRORS_BUNDLE.with(|cell| lookup(cell, "errors"))
+    }
 }
 
 /// The error strings for `locale`, from the locales directory when there is
 /// one to read and from the embedded copy otherwise.
-fn errors_resource(locale: &LanguageIdentifier) -> Option<String> {
+fn errors_resource(locale: &LanguageIdentifier, component: &str) -> Option<String> {
     let from_disk = get_locales_dir("uucore")
         .ok()
-        .and_then(|dir| fs::read_to_string(dir.join("errors").join(format!("{locale}.ftl"))).ok());
-    from_disk
-        .or_else(|| get_embedded_locale(&format!("uucore-errors/{locale}.ftl")).map(str::to_owned))
+        .and_then(|dir| fs::read_to_string(dir.join(component).join(format!("{locale}.ftl"))).ok());
+    from_disk.or_else(|| {
+        get_embedded_locale(&format!("uucore-{component}/{locale}.ftl")).map(str::to_owned)
+    })
 }
 
 /// Build the bundle behind [`errors_message`]: English underneath, so a locale
 /// that has not translated one of these still says something, and the
 /// requested locale over the top of it.
-fn build_errors_bundle(locales: &[LanguageIdentifier]) -> Option<FluentBundle<FluentResource>> {
-    build_errors_bundle_with(locales, errors_resource)
-}
-
 fn build_errors_bundle_with(
     locales: &[LanguageIdentifier],
     mut resource_for: impl FnMut(&LanguageIdentifier) -> Option<String>,
@@ -193,6 +200,23 @@ thread_local! {
     /// Built on the first lookup that misses every ordinary bundle; `None`
     /// when there are no error strings to be found at all.
     static ERRORS_BUNDLE: OnceLock<Option<FluentBundle<FluentResource>>> =
+        const { OnceLock::new() };
+    /// Argument scanner errors are separate so other utilities do not parse them.
+    #[cfg_attr(
+        any(
+            target_os = "android",
+            target_os = "haiku",
+            target_os = "illumos",
+            all(target_os = "linux", target_env = "ohos"),
+            target_os = "openbsd",
+            target_os = "solaris",
+            all(target_os = "windows", target_env = "gnu", not(target_abi = "llvm"))),
+        allow(
+            clippy::missing_const_for_thread_local,
+            reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
+        )
+    )]
+    static PARSER_ERRORS_BUNDLE: OnceLock<Option<FluentBundle<FluentResource>>> =
         const { OnceLock::new() };
 }
 
@@ -1588,6 +1612,190 @@ invalid-syntax = This is { $missing
             );
         } else {
             panic!("Expected LocalizationError::ParseResource with snippet");
+        }
+    }
+
+    const PARSER_ERROR_KEYS: [&str; 5] = [
+        "parser-error-unknown-option",
+        "parser-error-ambiguous-option",
+        "parser-error-missing-value",
+        "parser-error-unexpected-value",
+        "parser-error-invalid-value",
+    ];
+
+    fn parser_error_source(locale: &LanguageIdentifier) -> Option<String> {
+        match locale.to_string().as_str() {
+            "en-US" => Some(include_str!("../../../locales/parser/en-US.ftl").to_owned()),
+            "fr-FR" => Some(include_str!("../../../locales/parser/fr-FR.ftl").to_owned()),
+            _ => None,
+        }
+    }
+
+    fn parser_error_args(french: bool) -> FluentArgs<'static> {
+        let mut args = FluentArgs::new();
+        args.set("option", "'--sample'");
+        args.set("candidates", "'--sample-one', '--sample-two'");
+        args.set("value", "'wrong'");
+        args.set("error_word", if french { "erreur" } else { "error" });
+        args
+    }
+
+    fn parser_error_expected(french: bool) -> [&'static str; 5] {
+        if french {
+            [
+                "option non reconnue '--sample'",
+                "l'option '--sample' est ambiguë ; possibilités : '--sample-one', '--sample-two'",
+                "l'option '--sample' nécessite un argument",
+                "l'option '--sample' ne permet pas d'argument",
+                "erreur : valeur invalide 'wrong' pour '--sample'",
+            ]
+        } else {
+            [
+                "unrecognized option '--sample'",
+                "option '--sample' is ambiguous; possibilities: '--sample-one', '--sample-two'",
+                "option '--sample' requires an argument",
+                "option '--sample' doesn't allow an argument",
+                "error: invalid value 'wrong' for '--sample'",
+            ]
+        }
+    }
+
+    #[test]
+    fn parser_error_resources_are_deferred() {
+        for (locale, common, errors) in [
+            (
+                "en-US",
+                include_str!("../../../locales/en-US.ftl"),
+                include_str!("../../../locales/errors/en-US.ftl"),
+            ),
+            (
+                "fr-FR",
+                include_str!("../../../locales/fr-FR.ftl"),
+                include_str!("../../../locales/errors/fr-FR.ftl"),
+            ),
+        ] {
+            let locale = LanguageIdentifier::from_str(locale).unwrap();
+            let parser = parser_error_source(&locale).unwrap();
+            let mut resources = vec![("source", common, errors, parser.as_str())];
+            if let Some(common) = get_embedded_locale(&format!("uucore/{locale}.ftl")) {
+                let errors = get_embedded_locale(&format!("uucore-errors/{locale}.ftl")).unwrap();
+                let parser = get_embedded_locale(&format!("uucore-parser/{locale}.ftl")).unwrap();
+                resources.push(("embedded", common, errors, parser));
+            } else {
+                assert_eq!(locale.to_string(), "fr-FR", "English must be embedded");
+                assert!(
+                    !option_env!("LANG").is_some_and(|lang| {
+                        lang.split('.')
+                            .next()
+                            .is_some_and(|locale| ["fr_FR", "fr-FR"].contains(&locale))
+                    }),
+                    "French build must embed its common and error resources"
+                );
+            }
+            for (source, common, errors, parser) in resources {
+                for (component, content) in [("common", common), ("errors", errors)] {
+                    let resource = parse_fluent_resource_owned(content).unwrap();
+                    let mut bundle = FluentBundle::new(vec![locale.clone()]);
+                    bundle.add_resource(resource).unwrap();
+                    for key in PARSER_ERROR_KEYS {
+                        assert!(
+                            !bundle.has_message(key),
+                            "{locale} {source} {component} contains {key}"
+                        );
+                    }
+                }
+                let resource = parse_fluent_resource_owned(parser).unwrap();
+                let mut bundle = FluentBundle::new(vec![locale.clone()]);
+                bundle.add_resource(resource).unwrap();
+                for key in PARSER_ERROR_KEYS {
+                    assert!(
+                        bundle.has_message(key),
+                        "{locale} {source} lazy resource is missing {key}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn parser_error_lazy_resources_translate_and_fall_back() {
+        for embedded in [false, true] {
+            for locale in ["en-US", "fr-FR", "de-DE"] {
+                let locale = LanguageIdentifier::from_str(locale).unwrap();
+                let french = locale == "fr-FR"
+                    && (!embedded || get_embedded_locale("uucore-parser/fr-FR.ftl").is_some());
+                let bundle = build_errors_bundle_with(&[locale], |locale| {
+                    if embedded {
+                        get_embedded_locale(&format!("uucore-parser/{locale}.ftl"))
+                            .map(str::to_owned)
+                    } else {
+                        parser_error_source(locale)
+                    }
+                })
+                .unwrap();
+                let args = parser_error_args(french);
+                for (key, expected) in PARSER_ERROR_KEYS
+                    .into_iter()
+                    .zip(parser_error_expected(french))
+                {
+                    let message = bundle.get_message(key).unwrap().value().unwrap();
+                    let mut errors = Vec::new();
+                    assert_eq!(
+                        bundle.format_pattern(message, Some(&args), &mut errors),
+                        expected
+                    );
+                    assert!(errors.is_empty());
+                }
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "wasi"))]
+    #[test]
+    fn parser_error_lookup_initializes_only_its_bundle() {
+        // A fresh thread gives each requested locale its own empty lazy cache.
+        for (locale, ordinary_error_first) in ["en-US", "fr-FR", "de-DE"]
+            .into_iter()
+            .flat_map(|locale| [false, true].map(|first| (locale, first)))
+        {
+            std::thread::spawn(move || {
+                let locale = LanguageIdentifier::from_str(locale).unwrap();
+                let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("locales");
+                let english = LanguageIdentifier::from_str(DEFAULT_LOCALE).unwrap();
+                let primary = create_test_bundle(&locale, &directory)
+                    .unwrap_or_else(|_| FluentBundle::new(vec![locale.clone()]));
+                let fallback = create_test_bundle(&english, &directory).unwrap();
+                let localizer = Localizer::new(primary).with_fallback(fallback);
+                let french = locale == "fr-FR";
+                let args = parser_error_args(french);
+                ERRORS_BUNDLE.with(|cell| assert!(cell.get().is_none()));
+                PARSER_ERRORS_BUNDLE.with(|cell| assert!(cell.get().is_none()));
+                assert_eq!(
+                    localizer.format("common-error", None),
+                    if french { "erreur" } else { "error" }
+                );
+                ERRORS_BUNDLE.with(|cell| assert!(cell.get().is_none()));
+                if ordinary_error_first {
+                    assert_ne!(
+                        localizer.format("format-error-invalid-argument", None),
+                        "format-error-invalid-argument"
+                    );
+                    ERRORS_BUNDLE.with(|cell| assert!(cell.get().is_some()));
+                }
+                PARSER_ERRORS_BUNDLE.with(|cell| assert!(cell.get().is_none()));
+                for (key, expected) in PARSER_ERROR_KEYS
+                    .into_iter()
+                    .zip(parser_error_expected(french))
+                {
+                    assert_eq!(localizer.format(key, Some(&args)), expected);
+                }
+                PARSER_ERRORS_BUNDLE.with(|cell| assert!(cell.get().is_some()));
+                ERRORS_BUNDLE.with(|cell| {
+                    assert_eq!(cell.get().is_some(), ordinary_error_first);
+                });
+            })
+            .join()
+            .unwrap();
         }
     }
 
