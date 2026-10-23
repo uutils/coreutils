@@ -788,7 +788,7 @@ fn write_bytes(
     Ok(())
 }
 
-/// Helper function to convert input strings to InputSource
+/// Helper function to convert input strings to [`InputSource`]
 fn map_input_strings(input_strings: &[OsString]) -> Vec<InputSource<'_>> {
     input_strings
         .iter()
