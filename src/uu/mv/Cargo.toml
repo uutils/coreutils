@@ -42,7 +42,7 @@ windows-sys = { workspace = true, features = [
 ] }
 
 [target.'cfg(unix)'.dependencies]
-rustix = { workspace = true, features = ["fs"] }
+rustix = { workspace = true, features = ["fs", "process"] }
 
 [[bin]]
 name = "mv"

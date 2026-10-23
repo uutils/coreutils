@@ -1183,6 +1183,38 @@ fn test_cp_arg_symlink() {
     assert_eq!(at.read(TEST_HELLO_WORLD_DEST), "Hello, World!\n");
 }
 
+/// Replacing a file with a symlink needs write and search permission on its
+/// directory, like creating one, not read permission.
+#[test]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "netbsd"
+))]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+fn test_cp_symlink_force_in_write_search_only_dir() {
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("src", "new");
+    at.mkdir("dir");
+    at.write("dir/dest", "old");
+    at.set_mode("dir", 0o300);
+
+    let src = at.plus_as_string("src");
+    let result = ucmd.args(&["-sf", &src, "dir/dest"]).run();
+
+    at.set_mode("dir", 0o755);
+    result.success();
+    assert_eq!(
+        std::fs::read_link(at.plus("dir/dest")).unwrap(),
+        Path::new(&src)
+    );
+}
+
 // Recursively copying a tree that contains a symlink must not run chmod through
 // the destination symlink cp just created. chmod() follows symlinks, so doing so
 // would change the mode of the link target, which can live outside the copied
