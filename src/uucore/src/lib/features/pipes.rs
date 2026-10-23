@@ -148,18 +148,21 @@ pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> Splice
 /// return actually sent bytes
 #[inline]
 pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Result<u64> {
-    let pipe_size = n.min(MAX_ROOTLESS_PIPE_SIZE as u64) as usize;
-    let resize = pipe_size > KERNEL_DEFAULT_PIPE_SIZE;
-    // improve throughput if output is pipe
-    // expected that input is already extended if it is coming from splice
-    if resize {
-        let _ = fcntl_setpipe_size(&target, pipe_size);
+    thread_local! {
+        static PIPE_IS_RESIZED: Cell<bool> = const { Cell::new(false) };
     }
+    let mut pipe_is_resized = PIPE_IS_RESIZED.get();
     let Some((broker_r, broker_w)) = PIPE_CACHE.take().or_else(|| {
         // use std::io::pipe to avoid fcntl when it is not useful
         let pair = std::io::pipe().ok()?;
-        if resize {
-            let _ = fcntl_setpipe_size(&pair.0, pipe_size);
+        if !pipe_is_resized && n > KERNEL_DEFAULT_PIPE_SIZE as u64 {
+            // expect that input is already extended if it is coming from splice
+            if fcntl_setpipe_size(&pair.0, MAX_ROOTLESS_PIPE_SIZE).is_ok() {
+                // improve throughput if output is pipe
+                let _ = fcntl_setpipe_size(&target, MAX_ROOTLESS_PIPE_SIZE);
+            }
+            // no worth to retly fcntl under the same limitation given by system
+            pipe_is_resized = true;
         }
         Some(pair)
     }) else {
@@ -171,6 +174,7 @@ pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Res
         match splice(&input, &broker_w, usize::try_from(n).unwrap_or(usize::MAX)) {
             Ok(0) => {
                 PIPE_CACHE.set(Some((broker_r, broker_w)));
+                PIPE_IS_RESIZED.set(pipe_is_resized);
                 return Ok(bytes_written);
             }
             Ok(s) => {
@@ -184,6 +188,7 @@ pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Res
         }
     }
     // pipe is empty. Then we can reuse it at next splice.
+    PIPE_IS_RESIZED.set(pipe_is_resized);
     PIPE_CACHE.set(Some((broker_r, broker_w)));
     // remove buffering from this fallback by RawReader, or order of output would be wrong with multiple input
     bytes_written += std::io::copy(&mut RawReader(input).take(n), &mut RawWriter(target))?;
