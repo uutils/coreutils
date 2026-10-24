@@ -266,7 +266,10 @@ impl Strategy {
             if n > 0 {
                 Ok(strategy(n))
             } else {
-                Err(error(ParseSizeError::ParseFailure(s.to_owned()), origin()))
+                Err(error(
+                    ParseSizeError::ParseFailure(s.quote().to_string()),
+                    origin(),
+                ))
             }
         }
         // Check that the user is not specifying more than one strategy.
@@ -288,7 +291,7 @@ impl Strategy {
                     Ok(Self::Lines(v))
                 } else {
                     Err(StrategyError::Lines(
-                        ParseSizeError::ParseFailure(v.to_string()),
+                        ParseSizeError::ParseFailure(v.to_string().quote().to_string()),
                         None,
                     ))
                 }
