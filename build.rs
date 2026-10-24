@@ -50,6 +50,9 @@ pub fn main() {
                 "chcon" | "runcon" if !(target_os == "linux" || target_os == "android") => {
                     continue;
                 }
+                "who" if target_os == "openbsd" => {
+                    continue;
+                }
                 "default" | "macos" | "unix" | "windows" | "selinux" | "zip" | "clap_complete"
                 | "clap_mangen" | "fluent_syntax" | "openssl" => continue, // common/standard feature names
                 "nightly" | "test_unimplemented" | "expensive_tests" | "test_risky_names" => {
