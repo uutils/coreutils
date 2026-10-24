@@ -22,6 +22,7 @@ use uucore::i18n::collator::{
     AlternateHandling, CollatorOptions, locale_cmp, should_use_locale_collation, try_init_collator,
 };
 use uucore::line_ending::LineEnding;
+use uucore::numeric_str_cmp::{NumInfo, NumInfoParseSettings, numeric_str_cmp};
 use uucore::{format_usage, show_error, translate};
 
 #[derive(Debug, thiserror::Error)]
@@ -168,6 +169,7 @@ struct Settings {
     print_unpaired2: bool,
     print_joined: bool,
     ignore_case: bool,
+    numeric: bool,
     line_ending: LineEnding,
     separator: SepSetting,
     autoformat: bool,
@@ -186,6 +188,7 @@ impl Default for Settings {
             print_unpaired2: false,
             print_joined: true,
             ignore_case: false,
+            numeric: false,
             line_ending: LineEnding::Newline,
             separator: SepSetting::Whitespaces,
             autoformat: false,
@@ -306,21 +309,37 @@ impl PartialEq for CaseInsensitiveSlice<'_> {
 struct Input<Sep: Separator> {
     separator: Sep,
     ignore_case: bool,
+    numeric: Option<NumInfoParseSettings>,
     check_order: CheckOrder,
     use_locale: bool,
 }
 
 impl<Sep: Separator> Input<Sep> {
-    fn new(separator: Sep, ignore_case: bool, check_order: CheckOrder, use_locale: bool) -> Self {
+    fn new(
+        separator: Sep,
+        ignore_case: bool,
+        numeric: Option<NumInfoParseSettings>,
+        check_order: CheckOrder,
+        use_locale: bool,
+    ) -> Self {
         Self {
             separator,
             ignore_case,
+            numeric,
             check_order,
             use_locale,
         }
     }
 
     fn compare(&self, field1: Option<&[u8]>, field2: Option<&[u8]>) -> Ordering {
+        if let Some(parse_settings) = &self.numeric {
+            // Like `sort -n`, treat a missing field as empty, i.e. as zero.
+            let field1 = field1.unwrap_or_default();
+            let field2 = field2.unwrap_or_default();
+            let (info1, range1) = NumInfo::parse(field1, parse_settings);
+            let (info2, range2) = NumInfo::parse(field2, parse_settings);
+            return numeric_str_cmp((&field1[range1], &info1), (&field2[range2], &info2));
+        }
         if let (Some(field1), Some(field2)) = (field1, field2) {
             if self.ignore_case {
                 let field1 = CaseInsensitiveSlice { v: field1 };
@@ -786,6 +805,7 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
     settings.print_unpaired2 = print_unpaired2;
 
     settings.ignore_case = matches.get_flag("i");
+    settings.numeric = matches.get_flag("n");
     settings.key1 = get_field_number(keys, key1)?;
     settings.key2 = get_field_number(keys, key2)?;
     if let Some(value_os) = matches.get_one::<OsString>("t") {
@@ -958,6 +978,13 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new("n")
+                .short('n')
+                .long("numeric-sort")
+                .help(translate!("join-help-n"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new("j")
                 .short('j')
                 .value_name("FIELD")
@@ -1070,6 +1097,7 @@ fn exec<Sep: Separator>(
     let input = Input::new(
         sep.clone(),
         settings.ignore_case,
+        settings.numeric.then(NumInfoParseSettings::from_locale),
         settings.check_order,
         should_use_locale_collation(),
     );

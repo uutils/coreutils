@@ -17,7 +17,6 @@ mod custom_str_cmp;
 mod diagnostics;
 mod ext_sort;
 mod merge;
-mod numeric_str_cmp;
 mod tmp_dir;
 
 use bigdecimal::BigDecimal;
@@ -28,7 +27,6 @@ use custom_str_cmp::{custom_str_cmp, is_blank};
 use ext_sort::ext_sort;
 use foldhash::fast::FoldHasher;
 use foldhash::{HashMap, SharedSeed};
-use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{RngExt as _, rng};
 #[cfg(not(target_os = "wasi"))]
 use rayon::slice::ParallelSliceMut;
@@ -52,8 +50,10 @@ use uucore::extendedbigdecimal::ExtendedBigDecimal;
 #[cfg(feature = "i18n-collator")]
 use uucore::i18n::collator::{compute_sort_key_utf8, locale_cmp};
 use uucore::i18n::datetime::get_locale_months;
-use uucore::i18n::decimal::locale_decimal_separator;
 use uucore::line_ending::LineEnding;
+use uucore::numeric_str_cmp::{
+    NumInfo, NumInfoParseSettings, human_numeric_str_cmp, locale_decimal_pt, numeric_str_cmp,
+};
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
@@ -114,14 +114,6 @@ mod options {
 }
 
 const DECIMAL_PT: u8 = b'.';
-
-fn locale_decimal_pt() -> u8 {
-    match locale_decimal_separator().as_bytes().first().copied() {
-        Some(b'.') => b'.',
-        Some(b',') => b',',
-        _ => DECIMAL_PT,
-    }
-}
 
 const NEGATIVE: &u8 = &b'-';
 const POSITIVE: &u8 = &b'+';
@@ -316,33 +308,8 @@ pub struct GlobalSettings {
     buffer_size_is_explicit: bool,
     compress_prog: Option<String>,
     merge_batch_size: usize,
-    numeric_locale: NumericLocaleSettings,
+    numeric_locale: NumInfoParseSettings,
     precomputed: Precomputed,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct NumericLocaleSettings {
-    thousands_sep: Option<u8>,
-    decimal_pt: Option<u8>,
-}
-
-impl Default for NumericLocaleSettings {
-    fn default() -> Self {
-        Self {
-            thousands_sep: None,
-            decimal_pt: Some(DECIMAL_PT),
-        }
-    }
-}
-
-impl NumericLocaleSettings {
-    fn num_info_settings(self, accept_si_units: bool) -> NumInfoParseSettings {
-        NumInfoParseSettings {
-            accept_si_units,
-            thousands_separator: self.thousands_sep,
-            decimal_pt: self.decimal_pt,
-        }
-    }
 }
 
 /// Data needed for sorting. Should be computed once before starting to sort
@@ -413,7 +380,7 @@ impl GlobalSettings {
             .any(|s| matches!(s.settings.mode, SortMode::HumanNumeric));
         self.precomputed.tokenize_blank_thousands_sep = self.separator.is_none()
             && uses_numeric
-            && self.numeric_locale.thousands_sep == Some(b' ');
+            && self.numeric_locale.thousands_separator == Some(b' ');
         self.precomputed.tokenize_allow_unit_after_blank =
             self.precomputed.tokenize_blank_thousands_sep && uses_human_numeric;
 
@@ -513,7 +480,7 @@ impl Default for GlobalSettings {
             buffer_size_is_explicit: false,
             compress_prog: None,
             merge_batch_size: default_merge_batch_size(),
-            numeric_locale: NumericLocaleSettings::default(),
+            numeric_locale: NumInfoParseSettings::default(),
             precomputed: Precomputed::default(),
         }
     }
@@ -729,7 +696,7 @@ impl<'a> Line<'a> {
         for (selector, selection) in settings.selectors.iter().map(|selector| {
             (
                 selector,
-                selector.get_selection(line, token_buffer, settings.numeric_locale),
+                selector.get_selection(line, token_buffer, &settings.numeric_locale),
             )
         }) {
             match selection {
@@ -791,9 +758,10 @@ impl<'a> Line<'a> {
             match selector.settings.mode {
                 SortMode::Numeric | SortMode::HumanNumeric => {
                     // find out which range is used for numeric comparisons
-                    let mut parse_settings = settings
-                        .numeric_locale
-                        .num_info_settings(selector.settings.mode == SortMode::HumanNumeric);
+                    let mut parse_settings = NumInfoParseSettings {
+                        accept_si_units: selector.settings.mode == SortMode::HumanNumeric,
+                        ..settings.numeric_locale
+                    };
                     // Debug annotations should ignore thousands separators to match GNU output.
                     parse_settings.thousands_separator = None;
                     let (_, num_range) =
@@ -1359,7 +1327,7 @@ impl FieldSelector {
         &self,
         line: &'a [u8],
         tokens: &[Field],
-        numeric_locale: NumericLocaleSettings,
+        numeric_locale: &NumInfoParseSettings,
     ) -> Selection<'a> {
         // `get_range` expects `None` when we don't need tokens and would get confused by an empty vector.
         let tokens = if self.needs_tokens {
@@ -1372,7 +1340,10 @@ impl FieldSelector {
             // Parse NumInfo for this number.
             let (info, num_range) = NumInfo::parse(
                 range_str,
-                &numeric_locale.num_info_settings(self.settings.mode == SortMode::HumanNumeric),
+                &NumInfoParseSettings {
+                    accept_si_units: self.settings.mode == SortMode::HumanNumeric,
+                    ..*numeric_locale
+                },
             );
             // Shorten the range to what we need to pass to numeric_str_cmp later.
             range_str = &range_str[num_range];
@@ -1485,33 +1456,6 @@ impl FieldSelector {
     }
 }
 
-fn detect_numeric_locale() -> NumericLocaleSettings {
-    let numeric_locale = i18n::get_numeric_locale();
-    let locale = &numeric_locale.0;
-    let encoding = numeric_locale.1;
-    let is_c_locale = encoding == i18n::UEncoding::Ascii && locale.to_string() == "und";
-
-    if is_c_locale {
-        return NumericLocaleSettings {
-            decimal_pt: Some(DECIMAL_PT),
-            thousands_sep: None,
-        };
-    }
-
-    let grouping = i18n::decimal::locale_grouping_separator();
-    NumericLocaleSettings {
-        decimal_pt: Some(locale_decimal_pt()),
-        // Upstream GNU coreutils ignore multibyte thousands separators
-        // (FIXME in C source). We keep the same single-byte behavior.
-        thousands_sep: match grouping.as_bytes() {
-            [b] => Some(*b),
-            // ICU returns NBSP as UTF-8 (0xC2 0xA0). In non-UTF8 locales like ISO-8859-1,
-            // the input byte is 0xA0, so map it to a single-byte separator.
-            [0xC2, 0xA0] if encoding != i18n::UEncoding::Utf8 => Some(0xA0),
-            _ => None,
-        },
-    }
-}
 /// Creates an `Arg` for a sort mode flag.
 fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
     Arg::new(mode)
@@ -2141,7 +2085,7 @@ fn emit_debug_warnings(
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut settings = GlobalSettings {
-        numeric_locale: detect_numeric_locale(),
+        numeric_locale: NumInfoParseSettings::from_locale(),
         ..Default::default()
     };
 

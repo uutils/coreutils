@@ -19,9 +19,10 @@ use std::{
 use memchr::memchr_iter;
 use self_cell::self_cell;
 use uucore::error::{UResult, USimpleError, strip_errno};
+use uucore::numeric_str_cmp::NumInfo;
 use uucore::translate;
 
-use crate::{GeneralBigDecimalParseResult, GlobalSettings, Line, numeric_str_cmp::NumInfo};
+use crate::{GeneralBigDecimalParseResult, GlobalSettings, Line};
 
 const ALLOC_CHUNK_SIZE: usize = 64 * 1024;
 const MAX_TOKEN_BUFFER_BYTES: usize = 4 * 1024 * 1024;
