@@ -2140,6 +2140,19 @@ fn emit_debug_warnings(
     }
 }
 
+/// Whether option `id` was given several times with differing values.
+/// Repeating an option is fine as long as every occurrence has the same value.
+fn has_conflicting_values<T>(matches: &ArgMatches, id: &str) -> bool
+where
+    T: Clone + PartialEq + Send + Sync + 'static,
+{
+    matches.get_many::<T>(id).is_some_and(|mut values| {
+        values
+            .next()
+            .is_some_and(|first| values.any(|value| value != first))
+    })
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -2180,23 +2193,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), processed_args, 2)?;
 
     // Prevent -o/--output to be specified multiple times
-    if matches
-        .get_many::<OsString>(options::OUTPUT)
-        .is_some_and(|mut outputs| {
-            outputs
-                .next()
-                .as_ref()
-                .is_some_and(|first| outputs.any(|out| out != *first))
-        })
-    {
+    if has_conflicting_values::<OsString>(&matches, options::OUTPUT) {
         return Err(SortError::MultipleOutputFiles.into());
     }
 
     // Same as -o: repeating --compress-program is fine as long as the value is the same
-    if let Some(mut progs) = matches.get_many::<String>(options::COMPRESS_PROG)
-        && let Some(first) = progs.next()
-        && progs.any(|prog| prog != first)
-    {
+    if has_conflicting_values::<String>(&matches, options::COMPRESS_PROG) {
         return Err(SortError::MultipleCompressPrograms.into());
     }
 
