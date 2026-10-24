@@ -178,6 +178,9 @@ pub enum SortError {
     #[error("{}", translate!("sort-multiple-output-files"))]
     MultipleOutputFiles,
 
+    #[error("{}", translate!("sort-multiple-compress-programs"))]
+    MultipleCompressPrograms,
+
     #[error("{}", translate!("sort-incompatible-tabs"))]
     IncompatibleTabs,
 
@@ -2130,6 +2133,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(SortError::MultipleOutputFiles.into());
     }
 
+    // Same as -o: repeating --compress-program is fine as long as the value is the same
+    if has_conflicting_values::<String>(&matches, options::COMPRESS_PROG) {
+        return Err(SortError::MultipleCompressPrograms.into());
+    }
+
     // Prevent -t/--field-separator from being given different values. Raw
     // values suffice: `\0` is the only spelling rewritten later, and argv cannot hold a NUL.
     if has_conflicting_values::<OsString>(&matches, options::SEPARATOR) {
@@ -2660,7 +2668,9 @@ pub fn uu_app() -> Command {
             .long(options::COMPRESS_PROG)
             .help(translate!("sort-help-compress-prog"))
             .value_name("PROG")
-            .value_hint(clap::ValueHint::CommandName),
+            .value_hint(clap::ValueHint::CommandName)
+            // To detect multiple occurrences and raise an error
+            .action(ArgAction::Append),
     )
     .arg(
         Arg::new(options::BATCH_SIZE)
