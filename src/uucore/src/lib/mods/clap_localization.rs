@@ -13,8 +13,7 @@
 //!
 
 use crate::error::{UResult, USimpleError};
-use crate::locale::translate;
-use crate::translate_text;
+use crate::locale::{translate, translate_text};
 
 use clap::error::{ContextKind, ErrorKind};
 use clap::{ArgMatches, Command, Error};
