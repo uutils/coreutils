@@ -260,6 +260,78 @@ fn test_from_line_option() {
     quit_more(&mut controller, child);
 }
 
+/// When the key tty hangs up, `more` must exit instead of busy-looping on EOF.
+#[test]
+#[cfg(unix)]
+fn test_exits_on_tty_hangup() {
+    let (path, controller, _replica) = pty_path();
+    let (at, mut ucmd) = at_and_ucmd!();
+    let content: String = (0..80).map(|i| format!("line {i}\n")).collect();
+    at.write("hangup.txt", &content);
+
+    // stdin is a tty, so crossterm (use-dev-tty) reads keys from stdin — the PTY.
+    let mut child = ucmd
+        .set_stdin(File::open(&path).unwrap())
+        .set_stdout(File::create(&path).unwrap())
+        .args(&["-n", "5", "hangup.txt"])
+        .run_no_wait();
+
+    child.delay(300);
+    drop(controller); // hang up the key tty
+
+    for _ in 0..50 {
+        if !child.is_alive() {
+            return;
+        }
+        child.delay(100);
+    }
+    child.kill();
+    panic!("more still running after key tty hangup");
+}
+
+/// Piped content stdin must not be treated as the key tty: closing the writer
+/// (POLLHUP on the data pipe) must not make `more` exit while waiting for keys.
+#[test]
+#[cfg(unix)]
+fn test_piped_stdin_survives_writer_close() {
+    use std::fs::OpenOptions;
+    use std::io::pipe;
+
+    // With a non-tty stdin, keys come from `/dev/tty`. Skip when it is absent
+    // (some sandboxes); GitHub CI has it.
+    if OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/tty")
+        .is_err()
+    {
+        return;
+    }
+
+    let (path, mut controller, _replica) = pty_path();
+    let (_at, mut ucmd) = at_and_ucmd!();
+    let content: String = (0..80).map(|i| format!("line {i}\n")).collect();
+    let (reader, mut writer) = pipe().unwrap();
+    writer.write_all(content.as_bytes()).unwrap();
+    drop(writer); // EOF / hangup on the data pipe only
+
+    let mut child = ucmd
+        .set_stdin(reader)
+        .set_stdout(File::create(&path).unwrap())
+        .args(&["-n", "5"])
+        .run_no_wait();
+
+    child.delay(500);
+    assert!(
+        child.is_alive(),
+        "more exited after piped stdin closed; key tty should still be open"
+    );
+    // Best-effort quit via display pty (keys are on /dev/tty); then kill.
+    let _ = controller.write_all(b"q");
+    child.delay(50);
+    child.kill();
+}
+
 #[test]
 #[cfg(unix)]
 fn test_lines_option_max_u16_no_overflow() {
