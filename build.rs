@@ -15,6 +15,16 @@ pub fn main() {
     const FEATURE_PREFIX: &str = "feat_";
     const OVERRIDE_PREFIX: &str = "uu_";
 
+    cfg_aliases::cfg_aliases! {
+        bsd: { any(
+            target_vendor = "apple",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        ) },
+    };
+
     // Do not rebuild build script unless the script itself or the enabled features are modified
     // See <https://doc.rust-lang.org/cargo/reference/build-scripts.html#change-detection>
     println!("cargo:rerun-if-changed=build.rs");
