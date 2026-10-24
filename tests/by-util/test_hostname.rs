@@ -49,3 +49,40 @@ fn test_hostname_domain_empty() {
         assert!(domain_short.stdout().is_empty());
     }
 }
+
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
+#[rstest::rstest]
+#[case(b"node\xff.example\xfe", &[], b"node\xff.example\xfe\n")]
+#[case(b"node\xff.example\xfe", &["-f"], b"node\xff.example\xfe\n")]
+#[case(b"node\xff.example\xfe", &["-s"], b"node\xff\n")]
+#[case(b"node\xff.example\xfe", &["-d"], b"example\xfe\n")]
+#[case(b"node\xff", &[], b"node\xff\n")]
+#[case(b"node\xff", &["-s"], b"node\xff\n")]
+#[case(b"node\xff", &["-d"], b"")]
+fn test_hostname_non_utf8(#[case] hostname: &[u8], #[case] args: &[&str], #[case] expected: &[u8]) {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    use std::process::Command;
+    use uutests::util::TestScenario;
+
+    if !Command::new("unshare")
+        .args(["-Ur", "-u", "true"])
+        .output()
+        .is_ok_and(|output| output.status.success())
+    {
+        eprintln!("Skipping test: user and UTS namespaces are unavailable");
+        return;
+    }
+
+    let ts = TestScenario::new("hostname");
+    ts.cmd("unshare")
+        .args(&["-Ur", "-u", "sh", "-c"])
+        // Set the hostname inside the isolated namespace, then query it with the requested flags.
+        .arg(r#"bin=$1; "$bin" hostname "$2" || exit; shift 2; exec "$bin" hostname "$@""#)
+        .arg("sh")
+        .arg(&ts.bin_path)
+        .arg(OsStr::from_bytes(hostname))
+        .args(args)
+        .succeeds()
+        .stdout_only_bytes(expected);
+}
