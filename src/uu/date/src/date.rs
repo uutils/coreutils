@@ -25,7 +25,7 @@ use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UError, UResult, strip_errno};
 #[cfg(feature = "i18n-datetime")]
-use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
+use uucore::i18n::datetime::{LocalizedDate, should_use_icu_locale};
 use uucore::i18n::get_ctype_encoding;
 use uucore::quoting_style::{QuotingStyle, escape_bytes};
 use uucore::translate;
@@ -896,9 +896,9 @@ fn format_epoch_seconds(seconds: i64, flags: &str, width: Option<usize>) -> Stri
 /// when a specifier letter follows it. A dangling `%O` (at the end of the
 /// string, or followed by a non-letter) stays literal, as does any `O`
 /// that merely follows the `%%` escape.
-fn strip_o_modifier(fmt: &str) -> String {
+fn strip_o_modifier(fmt: &str) -> Cow<'_, str> {
     if !fmt.contains("%O") {
-        return fmt.to_string();
+        return Cow::Borrowed(fmt);
     }
 
     let mut out = String::with_capacity(fmt.len());
@@ -925,7 +925,7 @@ fn strip_o_modifier(fmt: &str) -> String {
             _ => out.push('%'),
         }
     }
-    out
+    Cow::Owned(out)
 }
 
 /// A piece of a format string.
@@ -1023,7 +1023,10 @@ fn write_formatted_date<W: Write>(
     output: &OutputContext,
     settings: &Settings,
 ) -> UResult<()> {
-    let skip_localization = matches!(settings.format, Format::Rfc5322 | Format::Rfc3339(_));
+    let skip_localization = matches!(
+        settings.format,
+        Format::Iso8601(_) | Format::Rfc5322 | Format::Rfc3339(_)
+    );
     let date = if settings.utc {
         date.with_time_zone(TimeZone::UTC)
     } else {
@@ -1366,23 +1369,35 @@ fn format_date_with_locale_aware_months(
     #[cfg(feature = "i18n-datetime")] skip_localization: bool,
     #[cfg(not(feature = "i18n-datetime"))] _skip_localization: bool,
 ) -> Result<String, String> {
-    // Apply locale-aware name substitution (month/day names) before modifier
-    // processing, so that formats like "%-e" don't bypass localization of "%b"/"%A".
+    // Drop the `O` modifier first, so that `%Od` or `%OB` are localized like
+    // `%d` or `%B`.
+    let format_string = strip_o_modifier(format_string);
+
+    // Substitute the values that depend on the locale (names, dates in its
+    // calendar) before the other specifiers are formatted, so that formats like
+    // "%-e" don't bypass localization of "%b"/"%A".
     // The owned String is kept in `localized` so `fmt` can borrow from it for the
     // rest of the function without a dangling reference.
     #[cfg(feature = "i18n-datetime")]
-    let localized: Option<String> = (!skip_localization && should_use_icu_locale())
-        .then(|| localize_format_string(format_string, date.date()));
+    let localized: Option<String> = if !skip_localization && should_use_icu_locale() {
+        let localized_date = LocalizedDate::new(date.date());
+        let localized = format_modifiers::localize_specifiers(&format_string, |conv| {
+            localized_date.field(conv)
+        });
+        Some(localized.map_err(|e| e.to_string())?)
+    } else {
+        None
+    };
     #[cfg(feature = "i18n-datetime")]
-    let fmt: &str = localized.as_deref().unwrap_or(format_string);
+    let fmt: &str = localized.as_deref().unwrap_or(&format_string);
     #[cfg(not(feature = "i18n-datetime"))]
-    let fmt = format_string;
+    let fmt: &str = &format_string;
 
     // jiff renders `%s` by truncating toward zero, but GNU `date` floors toward
     // negative infinity (e.g. `@-1.5` → `-2`, not `-1`). Every other field jiff
     // produces already agrees with GNU, so only `%s` needs correcting; rewrite it
     // to the floored epoch second before jiff sees the format string.
-    let fmt_owned = strip_o_modifier(&substitute_epoch_seconds(fmt, date));
+    let fmt_owned = substitute_epoch_seconds(fmt, date);
     let fmt = fmt_owned.as_str();
 
     // Check if format string has GNU modifiers (width/flags) and format if present

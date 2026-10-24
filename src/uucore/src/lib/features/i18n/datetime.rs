@@ -7,6 +7,7 @@
 
 //! Locale-aware datetime formatting utilities using ICU and jiff-icu
 
+use icu_calendar::AsCalendar;
 use icu_calendar::Date;
 use icu_calendar::cal::{Buddhist, Ethiopian, Gregorian, Iso, Persian};
 use icu_datetime::DateTimeFormatter;
@@ -111,83 +112,73 @@ macro_rules! format_with {
     };
 }
 
-/// Transform a strftime format string to use locale-specific calendar values
-pub fn localize_format_string(format: &str, date: JiffDate) -> String {
-    const PERCENT_PLACEHOLDER: &str = "\x00\x00";
+/// A date as the locale shows it: in the locale's calendar, with localized
+/// month and weekday names.
+pub struct LocalizedDate {
+    iso_date: Date<Iso>,
+    /// Year, month and day in the locale's calendar, unless it is Gregorian
+    converted: Option<(i32, u8, u8)>,
+}
 
-    let (locale, _) = get_time_locale();
-    let iso_date = Date::<Iso>::convert_from(date);
+/// Year, month and day of `date` in its own calendar
+fn year_month_day<A: AsCalendar>(date: Date<A>) -> (i32, u8, u8) {
+    (
+        date.year().extended_year(),
+        date.month().ordinal,
+        date.day_of_month().0,
+    )
+}
 
-    let mut fmt = format.replace("%%", PERCENT_PLACEHOLDER);
-
-    // For non-Gregorian calendars, replace date components with converted values
-    let calendar_type = get_locale_calendar_type(locale);
-    if calendar_type != CalendarType::Gregorian {
-        let (cal_year, cal_month, cal_day) = match calendar_type {
-            CalendarType::Buddhist => {
-                let d = iso_date.to_calendar(Buddhist);
-                (
-                    d.year().extended_year(),
-                    d.month().ordinal,
-                    d.day_of_month().0,
-                )
-            }
-            CalendarType::Persian => {
-                let d = iso_date.to_calendar(Persian);
-                (
-                    d.year().extended_year(),
-                    d.month().ordinal,
-                    d.day_of_month().0,
-                )
-            }
-            CalendarType::Ethiopian => {
-                let d = iso_date.to_calendar(Ethiopian::new());
-                (
-                    d.year().extended_year(),
-                    d.month().ordinal,
-                    d.day_of_month().0,
-                )
-            }
-            CalendarType::Gregorian => unreachable!(),
+impl LocalizedDate {
+    pub fn new(date: JiffDate) -> Self {
+        let iso_date = Date::<Iso>::convert_from(date);
+        let converted = match get_locale_calendar_type(&get_time_locale().0) {
+            CalendarType::Gregorian => None,
+            CalendarType::Buddhist => Some(year_month_day(iso_date.to_calendar(Buddhist))),
+            CalendarType::Persian => Some(year_month_day(iso_date.to_calendar(Persian))),
+            CalendarType::Ethiopian => Some(year_month_day(iso_date.to_calendar(Ethiopian::new()))),
         };
-        fmt = fmt
-            .replace("%Y", &cal_year.to_string())
-            .replace("%m", &format!("{cal_month:02}"))
-            .replace("%d", &format!("{cal_day:02}"))
-            .replace("%e", &format!("{cal_day:2}"));
+        Self {
+            iso_date,
+            converted,
+        }
     }
 
-    // Format localized names using ICU DateTimeFormatter
-    if fmt.contains("%B")
-        && let Some(name) = format_with!(MONTH_LONG, &iso_date)
-    {
-        fmt = fmt.replace("%B", &name);
+    /// The value of the strftime conversion `conv` for this date, as it is
+    /// formatted without flags or width, or `None` if the locale does not
+    /// change it. Other fields, like `%y` or `%j`, stay Gregorian.
+    pub fn field(&self, conv: char) -> Option<String> {
+        match conv {
+            'Y' | 'm' | 'd' | 'e' | 'F' | 'D' => {
+                let (year, month, day) = self.converted?;
+                Some(match conv {
+                    'Y' => year.to_string(),
+                    'm' => format!("{month:02}"),
+                    'd' => format!("{day:02}"),
+                    'e' => format!("{day:2}"),
+                    // %F is %+4Y-%m-%d
+                    'F' if year > 9999 => format!("+{year}-{month:02}-{day:02}"),
+                    'F' => format!("{year:04}-{month:02}-{day:02}"),
+                    // %D is %m/%d/%y
+                    _ => format!(
+                        "{month:02}/{day:02}/{:02}",
+                        self.iso_date.year().extended_year().rem_euclid(100)
+                    ),
+                })
+            }
+            'B' => format_with!(MONTH_LONG, &self.iso_date),
+            // ICU's medium format may include trailing periods (e.g., "febr." for Hungarian),
+            // which when combined with locale format strings that also add periods after
+            // %b (e.g., "%Y. %b. %d") results in double periods ("febr..").
+            // The standard C/POSIX locale via nl_langinfo returns abbreviations
+            // WITHOUT trailing periods, so we strip them here for consistency.
+            'b' | 'h' => format_with!(MONTH_MEDIUM, &self.iso_date)
+                .map(|name| name.trim_end_matches('.').to_string()),
+            'A' => format_with!(WEEKDAY_LONG, &self.iso_date),
+            'a' => format_with!(WEEKDAY_SHORT, &self.iso_date),
+            _ => None,
+        }
     }
-    if (fmt.contains("%b") || fmt.contains("%h"))
-        && let Some(month_abbrev) = format_with!(MONTH_MEDIUM, &iso_date)
-    {
-        // ICU's medium format may include trailing periods (e.g., "febr." for Hungarian),
-        // which when combined with locale format strings that also add periods after
-        // %b (e.g., "%Y. %b. %d") results in double periods ("febr..").
-        // The standard C/POSIX locale via nl_langinfo returns abbreviations
-        // WITHOUT trailing periods, so we strip them here for consistency.
-        let month_abbrev = month_abbrev.trim_end_matches('.').to_string();
-        fmt = fmt
-            .replace("%b", &month_abbrev)
-            .replace("%h", &month_abbrev);
-    }
-    if fmt.contains("%A")
-        && let Some(name) = format_with!(WEEKDAY_LONG, &iso_date)
-    {
-        fmt = fmt.replace("%A", &name);
-    }
-    if fmt.contains("%a")
-        && let Some(name) = format_with!(WEEKDAY_SHORT, &iso_date)
-    {
-        fmt = fmt.replace("%a", &name);
-    }
-
-    fmt.replace(PERCENT_PLACEHOLDER, "%%")
 }
 
 /// Abbreviated month names for the current `LC_TIME` locale as raw bytes,
