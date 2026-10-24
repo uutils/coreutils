@@ -79,11 +79,13 @@ fn extract_negative_modes(args: impl uucore::Args) -> (Option<String>, Vec<OsStr
         let Some(arg) = arg.to_str() else {
             return false;
         };
+        // A mode can also be "-=r", "-+x" or "-,u+x". No option starts with '=', '+' or ',',
+        // and a second '-' (a long option) is deliberately not listed.
         arg.len() >= 2
             && arg.starts_with('-')
             && matches!(
                 arg.chars().nth(1).unwrap(),
-                'r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0'..='7'
+                'r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '=' | '+' | ',' | '0'..='7'
             )
     };
 
