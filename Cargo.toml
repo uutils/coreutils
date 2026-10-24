@@ -619,6 +619,25 @@ feat_os_unix_android = [
   #
   "feat_require_unix",
 ]
+feat_os_unix_illumos = [
+  "feat_common_core",
+  # todo: use feat_Tier1 if whoami and uptime were supported <https://github.com/uutils/coreutils/issues/15520>
+  "chgrp",
+  "chmod",
+  "chown",
+  "df",
+  "du",
+  "env",
+  "hostname",
+  "install",
+  "kill",
+  "mkfifo",
+  "more",
+  "nohup",
+  "nproc",
+  "sync",
+  "timeout",
+]
 ## feature sets with requirements (restricting cross-platform availability)
 #
 # ** NOTE: these `feat_require_...` sets should be minimized as much as possible to encourage cross-platform availability of utilities
