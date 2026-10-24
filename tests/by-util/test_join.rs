@@ -911,3 +911,12 @@ fn test_operand_count() {
         .stderr_contains("join: extra operand 'fields_3.txt'\n")
         .stderr_contains("--help");
 }
+
+#[test]
+fn o_separate_field_operands() {
+    // GNU accepts -o fields as separate argv words when they follow -o.
+    new_ucmd!()
+        .args(&["-o", "1.1", "1.2", "2.2", "fields_1.txt", "fields_2.txt"])
+        .succeeds()
+        .stdout_only("1  a\n2  b\n3  c\n5  e\n8  h\n");
+}
