@@ -500,7 +500,21 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
             hardlink_params.0,
             hardlink_params.1,
         )
-        .map_err(|e| USimpleError::new(1, format!("{e}")))
+        .map_err(|e| -> Box<dyn UError> {
+            // OS errors get the same "cannot move" context as GNU; our own
+            // messages (e.g. "not replacing") are already complete.
+            if e.raw_os_error().is_some() {
+                e.map_err_context(|| {
+                    translate!(
+                        "mv-error-cannot-move",
+                        "source" => source.quote(),
+                        "target" => target.quote()
+                    )
+                })
+            } else {
+                USimpleError::new(1, format!("{e}"))
+            }
+        })
     }
 }
 
