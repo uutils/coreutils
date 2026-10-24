@@ -74,7 +74,51 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     writeln!(embedded_file, "    }}")?;
     writeln!(embedded_file, "}}")?;
 
+    embed_uucore_message_ids(&mut embedded_file)?;
     embedded_file.flush()?;
+    Ok(())
+}
+
+/// Index uucore's English message ids so a missing id never needs runtime parsing.
+fn embed_uucore_message_ids(embedded_file: &mut File) -> Result<(), Box<dyn std::error::Error>> {
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
+    let mut ids = std::collections::BTreeSet::new();
+    for relative_path in ["locales/en-US.ftl", "locales/errors/en-US.ftl"] {
+        let path = manifest_dir.join(relative_path);
+        println!("cargo:rerun-if-changed={}", path.display());
+        let content = std::fs::read_to_string(&path)?;
+        let resource =
+            fluent_syntax::parser::parse_runtime(content.as_str()).map_err(|(_, errors)| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Invalid Fluent resource '{}': {errors:?}", path.display()),
+                )
+            })?;
+        for entry in resource.body {
+            if let fluent_syntax::ast::Entry::Message(message) = entry
+                && message.value.is_some()
+            {
+                ids.insert(message.id.name.to_string());
+            }
+        }
+    }
+
+    writeln!(embedded_file)?;
+    writeln!(
+        embedded_file,
+        "fn embedded_uucore_message_exists(id: &str) -> bool {{"
+    )?;
+    if ids.is_empty() {
+        writeln!(embedded_file, "    false")?;
+    } else {
+        writeln!(embedded_file, "    matches!(id,")?;
+        for (index, id) in ids.into_iter().enumerate() {
+            let separator = if index == 0 { "" } else { "| " };
+            writeln!(embedded_file, "        {separator}{id:?}")?;
+        }
+        writeln!(embedded_file, "    )")?;
+    }
+    writeln!(embedded_file, "}}")?;
     Ok(())
 }
 

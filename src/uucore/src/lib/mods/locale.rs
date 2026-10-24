@@ -68,6 +68,7 @@ include!(concat!(env!("OUT_DIR"), "/embedded_locales.rs"));
 struct Localizer {
     primary_bundle: FluentBundle<&'static FluentResource>,
     fallback_bundle: Option<FluentBundle<&'static FluentResource>>,
+    is_default: bool,
 }
 
 impl Localizer {
@@ -75,6 +76,7 @@ impl Localizer {
         Self {
             primary_bundle,
             fallback_bundle: None,
+            is_default: false,
         }
     }
 
@@ -105,6 +107,9 @@ impl Localizer {
 
         // Only now, once nothing common has matched, is it worth parsing the
         // strings that only an error path asks for.
+        if self.is_default && !embedded_uucore_message_exists(id) {
+            return id.to_string();
+        }
         if let Some(message) = errors_message(self.primary_bundle.locales.as_slice(), id, args) {
             return message;
         }
@@ -125,7 +130,7 @@ fn errors_message(
     id: &str,
     args: Option<&FluentArgs>,
 ) -> Option<String> {
-    ERRORS_BUNDLE.with(|cell| {
+    ERRORS_BUNDLE.with_borrow(|cell| {
         let bundle = cell.get_or_init(|| build_errors_bundle(locales)).as_ref()?;
         let message = bundle.get_message(id)?.value()?;
         let mut errs = Vec::new();
@@ -192,8 +197,8 @@ thread_local! {
     static LOCALIZER: RefCell<Option<Localizer>> = const { RefCell::new(None) };
     /// Built on the first lookup that misses every ordinary bundle; `None`
     /// when there are no error strings to be found at all.
-    static ERRORS_BUNDLE: OnceLock<Option<FluentBundle<FluentResource>>> =
-        const { OnceLock::new() };
+    static ERRORS_BUNDLE: RefCell<OnceLock<Option<FluentBundle<FluentResource>>>> =
+        const { RefCell::new(OnceLock::new()) };
 }
 
 /// Helper function to find the uucore locales directory from a utility's locales directory
@@ -411,7 +416,9 @@ fn create_english_bundle_from_embedded(
 
     // Then, try to load utility-specific strings
     let locale_key = format!("{util_name}/en-US.ftl");
-    if let Some(ftl_content) = get_embedded_locale(&locale_key) {
+    if util_name != "uucore"
+        && let Some(ftl_content) = get_embedded_locale(&locale_key)
+    {
         let resource = cached_resource(format!("embedded:{locale_key}"), || {
             parse_fluent_resource_owned(ftl_content)
         })?;
@@ -468,14 +475,48 @@ fn create_wasi_bundle_from_embedded(
 }
 
 fn set_localizer(localizer: Localizer) {
-    LOCALIZER.with_borrow_mut(|slot| *slot = Some(localizer));
+    LOCALIZER.with_borrow_mut(|slot| {
+        if slot
+            .as_ref()
+            .is_some_and(|old| old.primary_bundle.locales != localizer.primary_bundle.locales)
+        {
+            // A fallback lookup may have cached English before explicit setup.
+            ERRORS_BUNDLE.with_borrow_mut(|cell| {
+                cell.take();
+            });
+        }
+        *slot = Some(localizer);
+    });
 }
 
 fn get_message_internal(id: &str, args: Option<FluentArgs>) -> String {
-    LOCALIZER.with_borrow(|slot| {
-        slot.as_ref()
-            .map_or_else(|| id.to_string(), |loc| loc.format(id, args.as_ref())) // Return the key ID if localizer not initialized
+    if let Some(message) =
+        LOCALIZER.with_borrow(|slot| slot.as_ref().map(|loc| loc.format(id, args.as_ref())))
+    {
+        return message;
+    }
+    // A utility may request its own strings before setting up localization.
+    // Those ids cannot use the uucore fallback, so leave its resources unparsed.
+    if !embedded_uucore_message_exists(id) {
+        return id.to_string();
+    }
+    LOCALIZER.with_borrow_mut(|slot| {
+        // Nothing set a localizer up; a library consumer still reads text, not an id.
+        slot.get_or_insert_with(default_localizer)
+            .format(id, args.as_ref())
     })
+}
+
+/// What a process that never called [`setup_localization`] reads: uucore's own strings.
+fn default_localizer() -> Localizer {
+    let locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
+        .expect("Default locale should always be valid");
+    // Use an empty bundle if loading the embedded English strings fails.
+    let bundle = create_english_bundle_from_embedded(&locale, "uucore")
+        .unwrap_or_else(|_| FluentBundle::new(vec![locale]));
+    let mut localizer = Localizer::new(bundle);
+    localizer.is_default = true;
+    localizer
 }
 
 /// Retrieves a localized message by its identifier.
@@ -484,6 +525,8 @@ fn get_message_internal(id: &str, args: Option<FluentArgs>) -> String {
 /// the localized text. If the message ID is not found in the current locale,
 /// it will fall back to English. If the message is not found in English either,
 /// returns the message ID itself.
+///
+/// Without [`setup_localization`], uucore's own English strings are still read.
 ///
 /// # Arguments
 ///
@@ -513,6 +556,8 @@ pub fn get_message(id: &str) -> String {
 /// localized text. If the message ID is not found in the current locale,
 /// it will fall back to English. If the message is not found in English either,
 /// returns the message ID itself.
+///
+/// Without [`setup_localization`], uucore's own English strings are still read.
 ///
 /// # Arguments
 ///
@@ -1671,6 +1716,99 @@ invalid-syntax = This is { $missing
     }
 
     #[test]
+    fn test_default_message_lookup_matches_embedded_resources() {
+        for key in ["uucore/en-US.ftl", "uucore-errors/en-US.ftl"] {
+            let content = get_embedded_locale(key).unwrap();
+            let resource = FluentResource::try_new(content.to_string()).unwrap();
+            for entry in resource.entries() {
+                if let fluent_syntax::ast::Entry::Message(message) = entry
+                    && message.value.is_some()
+                {
+                    assert!(embedded_uucore_message_exists(message.id.name));
+                }
+            }
+        }
+        for id in [
+            "",
+            "common",
+            "common-error-extra",
+            "common-error ",
+            "ls-about",
+        ] {
+            assert!(
+                !embedded_uucore_message_exists(id),
+                "unexpected message: {id}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_unknown_messages_do_not_initialize_default_resources() {
+        std::thread::spawn(|| {
+            for id in ["ls-about", "cat-usage", "nonexistent-message"] {
+                assert_eq!(get_message(id), id);
+            }
+            LOCALIZER.with_borrow(|slot| assert!(slot.is_none()));
+            ERRORS_BUNDLE.with_borrow(|cell| assert!(cell.get().is_none()));
+
+            assert_eq!(get_message("common-error"), "error");
+            assert_eq!(get_message("ls-about"), "ls-about");
+            ERRORS_BUNDLE.with_borrow(|cell| assert!(cell.get().is_none()));
+
+            setup_localization("ls").unwrap();
+            assert_ne!(get_message("ls-about"), "ls-about");
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn test_uucore_strings_survive_a_missing_localizer() {
+        // A library consumer never calls `setup_localization`; it still reads text.
+        std::thread::spawn(|| {
+            let mut args = FluentArgs::new();
+            args.set("operator", "x");
+            assert_eq!(
+                get_message_with_args("mode-error-invalid-operator", args),
+                "invalid operator (expected +, -, or =, but found x)"
+            );
+
+            // The strings only an error path asks for are found too
+            let mut args = FluentArgs::new();
+            args.set("spec", "q");
+            assert_eq!(
+                get_message_with_args("format-error-invalid-spec", args),
+                "%q: invalid conversion specification"
+            );
+
+            // A utility's own string still needs the utility name
+            assert_eq!(get_message("ls-about"), "ls-about");
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn test_setup_replaces_default_error_locale() {
+        std::thread::spawn(|| {
+            assert_eq!(
+                get_message("format-error-wrong-spec-type"),
+                "wrong % directive type was given"
+            );
+            let temp_dir = create_test_locales_dir();
+            let locale = LanguageIdentifier::from_str("fr-FR").unwrap();
+            init_test_localization(&locale, temp_dir.path()).unwrap();
+            assert_eq!(
+                get_message("format-error-wrong-spec-type"),
+                "type de directive % incorrect"
+            );
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
     fn test_detect_system_locale_from_lang_env() {
         // Test locale parsing logic directly instead of relying on environment variables
         // which can have race conditions in multi-threaded test environments
@@ -1887,11 +2025,12 @@ invalid-syntax = This is { $missing
             // and we need fallbacks for clap error handling
 
             // First, test when localizer is not initialized
+            // uucore ships English for the strings it owns, so these are text now
             let error_msg = get_message("common-error");
-            assert_eq!(error_msg, "common-error"); // Should return key when not initialized
+            assert_eq!(error_msg, "error");
 
             let tip_msg = get_message("common-tip");
-            assert_eq!(tip_msg, "common-tip"); // Should return key when not initialized
+            assert_eq!(tip_msg, "tip");
 
             // Now initialize with setup_localization
             let result = setup_localization("comm");
