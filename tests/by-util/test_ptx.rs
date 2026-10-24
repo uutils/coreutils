@@ -500,3 +500,11 @@ fn test_nullable_word_regexp_no_empty_matches() {
         .succeeds()
         .stdout_only(expected);
 }
+
+#[test]
+fn test_break_file_missing_includes_path() {
+    new_ucmd!()
+        .args(&["-b", "missing_break_file"])
+        .fails_with_code(1)
+        .stderr_contains("missing_break_file");
+}
