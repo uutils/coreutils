@@ -2685,13 +2685,8 @@ fn test_mv_cross_device_permission_denied() {
         .expect("Unable to restore directory permissions");
 }
 
-/// Regression for #10015. The cross-device fallback unlinks the destination
-/// and then creates a new file at the same path. An attacker who can write
-/// to the destination directory could race to plant a symlink in that
-/// window; without `O_NOFOLLOW` on the create, the copy would write through
-/// the symlink. The deterministic stand-in here pre-plants the symlink:
-/// `safe_copy::create_dest_restrictive` must refuse it with `ELOOP` rather
-/// than truncate `victim`.
+/// Regression for #10015: a cross-device move replaces a symlink at the
+/// destination instead of writing through it.
 #[test]
 #[cfg(target_os = "linux")]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]

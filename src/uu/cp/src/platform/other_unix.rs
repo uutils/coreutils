@@ -8,13 +8,12 @@
 use std::path::Path;
 
 use uucore::buf_copy;
-use uucore::display::Quotable;
-use uucore::safe_copy::{create_dest_restrictive, open_source};
+use uucore::safe_copy::open_source;
 use uucore::translate;
 
 use crate::{
-    CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode,
-    is_stream,
+    CopyDebug, CopyFlags, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug,
+    SparseMode, create_dest, is_stream,
 };
 
 /// Copies `source` to `dest` for systems without copy-on-write
@@ -24,9 +23,13 @@ pub(crate) fn copy_on_write(
     reflink_mode: ReflinkMode,
     sparse_mode: SparseMode,
     context: &str,
-    source_is_stream: bool,
-    nofollow: bool,
+    flags: CopyFlags,
 ) -> CopyResult<CopyDebug> {
+    let CopyFlags {
+        source_is_stream,
+        nofollow,
+        exclusive,
+    } = flags;
     if reflink_mode != ReflinkMode::Never {
         return Err(translate!("cp-error-reflink-not-supported")
             .to_string()
@@ -46,12 +49,7 @@ pub(crate) fn copy_on_write(
     if source_is_stream {
         let mut src_file = open_source(source, nofollow)
             .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-        let mut dst_file = create_dest_restrictive(dest, false).map_err(|e| {
-            CpError::IoErrContext(
-                e,
-                translate!("cp-error-cannot-create-regular-file", "path" => dest.quote()),
-            )
-        })?;
+        let mut dst_file = create_dest(dest, exclusive)?;
 
         let dest_is_stream = is_stream(&dst_file.metadata()?);
         if !dest_is_stream {
@@ -72,12 +70,7 @@ pub(crate) fn copy_on_write(
     // dest is followed, matching GNU cp.
     let mut src_file =
         open_source(source, nofollow).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-    let mut dst_file = create_dest_restrictive(dest, false).map_err(|e| {
-        CpError::IoErrContext(
-            e,
-            translate!("cp-error-cannot-create-regular-file", "path" => dest.quote()),
-        )
-    })?;
+    let mut dst_file = create_dest(dest, exclusive)?;
     std::io::copy(&mut src_file, &mut dst_file)
         .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
