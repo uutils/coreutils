@@ -431,6 +431,45 @@ fn test_chmod_inaccessible_file_reports_permission_denied() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_chmod_readonly_filesystem() {
+    let mut scene = TestScenario::new(util_name!());
+
+    let mountpoint = "readonly_mount";
+    scene.fixtures.mkdir(mountpoint);
+    let mountpoint_path = scene.fixtures.plus_as_string(mountpoint);
+    let file_path = format!("{mountpoint}/file.txt");
+
+    // Skip if the environment cannot create a mount.
+    if let Err(err) = scene.mount_temp_fs(&mountpoint_path) {
+        eprintln!("Skipping read-only filesystem test: {err}");
+        return;
+    }
+
+    scene.fixtures.touch(&file_path);
+
+    // Make the filesystem read-only.
+    scene
+        .cmd("mount")
+        .arg("-o")
+        .arg("remount,ro")
+        .arg(&mountpoint_path)
+        .succeeds();
+
+    // -R exercises safe_chmod_file() for the nested file.
+    scene
+        .ucmd()
+        .args(&["-R", "ugo+w", mountpoint])
+        .fails()
+        .stderr_contains(format!(
+            "chmod: changing permissions of '{file_path}': Read-only file system"
+        ));
+
+    // A read-only filesystem can be unmounted directly.
+    scene.umount_temp_fs();
+}
+
+#[test]
 #[allow(clippy::unreadable_literal)]
 fn test_chmod_recursive_correct_exit_code() {
     let (at, mut ucmd) = at_and_ucmd!();
