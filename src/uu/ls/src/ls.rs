@@ -379,8 +379,8 @@ pub fn uu_app() -> Command {
     .arg(
         Arg::new(options::TIME)
             .long(options::TIME)
-            .help(translate!("ls-help-show-time-field"))
-            .value_name("field")
+            .help(translate!("ls-help-time-type"))
+            .value_name("type")
             .value_parser(ShortcutValueParser::new([
                 PossibleValue::new("atime").alias("access").alias("use"),
                 PossibleValue::new("ctime").alias("status"),

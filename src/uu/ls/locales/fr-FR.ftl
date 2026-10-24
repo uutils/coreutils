@@ -55,11 +55,12 @@ ls-help-escape-quoting-style = Utiliser le style de citation d'échappement. Éq
 ls-help-c-quoting-style = Utiliser le style de citation C. Équivalent à `--quoting-style=c`
 ls-help-replace-control-chars = Remplacer les caractères de contrôle par '?' s'ils ne sont pas échappés.
 ls-help-show-control-chars = Afficher les caractères de contrôle 'tels quels' s'ils ne sont pas échappés.
-ls-help-show-time-field = Afficher l'heure dans `<champ>` :
-    heure d'accès (-u) : atime, access, use ;
-    heure de changement (-t) : ctime, status.
-    heure de modification : mtime, modification.
-    heure de création : birth, creation ;
+ls-help-time-type = Si le format d'affichage long (par ex. -l, -o) est utilisé, afficher l'heure correspondant à `<champ>`.
+  Lors d'un tri explicite par date (--sort=time ou -t) ou si le format d'affichage long n'est pas utilisé, trier selon `<champ>` (les plus récents en premier). :
+    heure d'accès (-u) : atime, access, use;
+    heure de changement (-t) : ctime, status;
+    heure de modification (défaut) : mtime, modification;
+    heure de création : birth, creation;
 ls-help-time-change = Si le format de liste long (par ex., -l, -o) est utilisé, afficher
   l'heure de changement de statut (le 'ctime' dans l'inode) au lieu de l'heure
   de modification. Lors du tri explicite par heure (--sort=time ou -t) ou lors
@@ -73,7 +74,7 @@ ls-help-ignore-pattern = ne pas lister les entrées implicites correspondant au 
 ls-help-ignore-backups = Ignorer les entrées qui se terminent par ~.
 ls-help-sort-by-field = Trier par `<champ>` : name, none (-U), time (-t), size (-S), extension (-X) ou width
 ls-help-sort-by-size = Trier par taille de fichier, le plus grand en premier.
-ls-help-sort-by-time = Trier par heure de modification (le 'mtime' dans l'inode), le plus récent en premier.
+ls-help-sort-by-time = Trier par date (voir --time, mtime par défaut), les plus récents en premier.
 ls-help-sort-by-version = Tri naturel des numéros (de version) dans les noms de fichiers.
 ls-help-sort-by-extension = Trier alphabétiquement par extension d'entrée.
 ls-help-sort-none = Ne pas trier ; lister les fichiers dans l'ordre où ils sont stockés dans le
