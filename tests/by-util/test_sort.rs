@@ -2125,7 +2125,6 @@ fn test_error_on_incompatible_separators() {
     for args in cases {
         new_ucmd!()
             .args(args)
-            .pipe_in("a@b\n")
             .fails_with_code(2)
             .stderr_only("sort: incompatible tabs\n");
     }
