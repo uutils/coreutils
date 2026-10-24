@@ -635,19 +635,18 @@ fn wipe_file(
     // Get these potential errors out of the way first
     let path = Path::new(path_str);
 
-    if path_str.as_encoded_bytes().ends_with(b"/") {
-        if path.is_dir() {
-            return Err(USimpleError::new(
-                1,
-                translate_text!("shred-failed-to-open-for-writing-is-a-directory", "file" => path.maybe_quote()),
-            ));
-        }
-        if fs::metadata(path).is_err_and(|e| e.kind() == io::ErrorKind::NotADirectory) {
-            return Err(USimpleError::new(
-                1,
-                translate_text!("shred-failed-to-open-for-writing-not-a-directory", "file" => path.maybe_quote()),
-            ));
-        }
+    if path_str.as_encoded_bytes().ends_with(b"/")
+        && let Err(e) = fs::metadata(path)
+        && e.kind() == io::ErrorKind::NotADirectory
+    {
+        return Err(USimpleError::new(
+            1,
+            format!(
+                "{}: {}",
+                translate_text!("shred-failed-to-open-for-writing", "file" => path.maybe_quote()),
+                strip_errno(&e)
+            ),
+        ));
     }
 
     // `Path::exists()` and `Path::is_file()` both collapse any metadata error
@@ -657,7 +656,8 @@ fn wipe_file(
     // "no such file" error while a permission error falls through to the
     // open-for-writing below, which surfaces the real reason.
     match fs::metadata(path) {
-        Ok(md) if !md.is_file() => {
+        // Directories fall through so opening them for writing reports EISDIR.
+        Ok(md) if !md.is_file() && !md.is_dir() => {
             return Err(USimpleError::new(
                 1,
                 translate_text!("shred-not-a-file", "file" => path.maybe_quote()),
