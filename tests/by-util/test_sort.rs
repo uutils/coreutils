@@ -1076,6 +1076,34 @@ fn test_incompatible_options() {
         .stderr_only("sort: options '-nR' are incompatible\n");
 
     new_ucmd!()
+        .args(&["--sort=general-numeric", "--sort=human-numeric"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-gh' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["-h", "--sort=general-numeric", "--sort=human-numeric"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-gh' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["--sort=general-numeric", "--sort=general-numeric"])
+        .pipe_in("1e2\n20\n")
+        .succeeds()
+        .stdout_only("20\n1e2\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&[
+            "--debug",
+            "--sort=general-numeric",
+            "--sort=human-numeric",
+            "-k1,1n",
+        ])
+        .pipe_in("")
+        .succeeds()
+        .stderr_contains("sort: options '-gh' are ignored\n");
+
+    new_ucmd!()
         .args(&["-c", "-o", "out"])
         .fails_with_code(2)
         .stderr_only("sort: options '-co' are incompatible\n");
