@@ -11,7 +11,7 @@ use uucore::display::Quotable;
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
 use uutests::util::TestScenario;
-use uutests::{at_and_ucmd, new_ucmd, path_concat, util_name};
+use uutests::{at_and_ucmd, new_ucmd, path, util_name};
 
 use std::fs::set_permissions;
 
@@ -686,7 +686,7 @@ fn test_cp_recursive_continues_after_skipped_file(#[case] arg: &str, #[case] suc
         .map(|entry| entry.unwrap().file_name().to_str().unwrap().to_owned())
         .collect::<Vec<_>>();
     let (skipped, copied) = (&order[0], &order[1]);
-    at.write(&format!("destination/source/{skipped}"), "old contents");
+    at.write(format!("destination/source/{skipped}"), "old contents");
 
     ucmd.args(&["-R", arg, "source", "destination"]);
     // Only the prompt reads stdin; writing to a cp that never reads it can fail.
@@ -703,12 +703,12 @@ fn test_cp_recursive_continues_after_skipped_file(#[case] arg: &str, #[case] suc
     }
 
     assert_eq!(
-        at.read(&format!("destination/source/{skipped}")),
+        at.read(format!("destination/source/{skipped}")),
         "old contents"
     );
     assert_eq!(
-        at.read(&format!("destination/source/{copied}")),
-        at.read(&format!("source/{copied}"))
+        at.read(format!("destination/source/{copied}")),
+        at.read(format!("source/{copied}"))
     );
 }
 
@@ -1553,7 +1553,7 @@ fn test_cp_backup_control(#[case] args: &[&str], #[case] backup_suffix: Option<&
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     match backup_suffix {
         Some(suffix) => assert_eq!(
-            at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}{suffix}")),
+            at.read(format!("{TEST_HOW_ARE_YOU_SOURCE}{suffix}")),
             "How are you?\n"
         ),
         None => assert!(!at.file_exists(format!("{TEST_HOW_ARE_YOU_SOURCE}~"))),
@@ -1622,7 +1622,7 @@ fn test_cp_custom_backup_suffix_via_env() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}{suffix}")),
+        at.read(format!("{TEST_HOW_ARE_YOU_SOURCE}{suffix}")),
         "How are you?\n"
     );
 }
@@ -1631,7 +1631,7 @@ fn test_cp_custom_backup_suffix_via_env() {
 #[cfg(unix)]
 fn test_cp_backup_existing_target_is_fifo() {
     let (at, mut ucmd) = at_and_ucmd!();
-    at.mkfifo(&format!("{TEST_HOW_ARE_YOU_SOURCE}~"));
+    at.mkfifo(format!("{TEST_HOW_ARE_YOU_SOURCE}~"));
 
     ucmd.arg("--backup=simple")
         .arg(TEST_HELLO_WORLD_SOURCE)
@@ -1641,9 +1641,9 @@ fn test_cp_backup_existing_target_is_fifo() {
         .no_stderr();
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
-    assert!(!at.is_fifo(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")));
+    assert!(!at.is_fifo(format!("{TEST_HOW_ARE_YOU_SOURCE}~")));
     assert_eq!(
-        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
+        at.read(format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
         "How are you?\n"
     );
 }
@@ -1665,7 +1665,7 @@ fn test_cp_numbered_if_existing_backup(#[case] backup_arg: &str) {
     assert!(at.file_exists(TEST_HOW_ARE_YOU_SOURCE));
     assert!(at.file_exists(existing_backup));
     assert_eq!(
-        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}.~2~")),
+        at.read(format!("{TEST_HOW_ARE_YOU_SOURCE}.~2~")),
         "How are you?\n"
     );
 }
@@ -1695,9 +1695,9 @@ fn test_cp_backup_simple_allows_hardlink_under_another_name() {
     // `other` shares an inode with the backup path but is not named after it,
     // so the backup rename cannot clobber it. GNU copies this happily.
     let (at, mut ucmd) = at_and_ucmd!();
-    let backup = format!("{TEST_HELLO_WORLD_SOURCE}~");
-    at.write(&backup, "backup content");
-    at.hard_link(&backup, "other");
+    let backup = &format!("{TEST_HELLO_WORLD_SOURCE}~");
+    at.write(backup, "backup content");
+    at.hard_link(backup, "other");
 
     ucmd.arg("--backup=simple")
         .arg("other")
@@ -1712,8 +1712,8 @@ fn test_cp_backup_simple_allows_hardlink_under_another_name() {
 fn test_cp_backup_simple_protect_source_regardless_of_spelling() {
     // The guard compares files, not the strings naming them.
     let (at, mut ucmd) = at_and_ucmd!();
-    let source = format!("{TEST_HELLO_WORLD_SOURCE}~");
-    at.write(&source, "source content");
+    let source = &format!("{TEST_HELLO_WORLD_SOURCE}~");
+    at.write(source, "source content");
 
     ucmd.arg("--backup=simple")
         .arg(format!("./{source}"))
@@ -1721,22 +1721,22 @@ fn test_cp_backup_simple_protect_source_regardless_of_spelling() {
         .fails()
         .stderr_contains("might destroy source");
 
-    assert_eq!(at.read(&source), "source content");
+    assert_eq!(at.read(source), "source content");
 }
 
 #[test]
 fn test_cp_backup_numbered_allows_source_named_like_backup() {
     // A numbered backup never reuses an existing name, so nothing is at risk.
     let (at, mut ucmd) = at_and_ucmd!();
-    let source = format!("{TEST_HELLO_WORLD_SOURCE}~");
-    at.write(&source, "source content");
+    let source = &format!("{TEST_HELLO_WORLD_SOURCE}~");
+    at.write(source, "source content");
 
     ucmd.arg("--backup=numbered")
-        .arg(&source)
+        .arg(source)
         .arg(TEST_HELLO_WORLD_SOURCE)
         .succeeds();
 
-    assert_eq!(at.read(&source), "source content");
+    assert_eq!(at.read(source), "source content");
     assert_eq!(at.read(TEST_HELLO_WORLD_SOURCE), "source content");
 }
 
@@ -1827,7 +1827,7 @@ fn test_cp_no_deref() {
         .join(TEST_HELLO_WORLD_SOURCE_SYMLINK);
     assert!(
         at.is_symlink(
-            &path_to_new_symlink
+            path_to_new_symlink
                 .clone()
                 .into_os_string()
                 .into_string()
@@ -1911,7 +1911,7 @@ fn test_cp_parents() {
         .succeeds();
 
     assert_eq!(
-        at.read(&format!(
+        at.read(format!(
             "{TEST_COPY_TO_FOLDER}/{TEST_COPY_FROM_FOLDER_FILE}"
         )),
         "Hello, World!\n"
@@ -1929,13 +1929,13 @@ fn test_cp_parents_multiple_files() {
         .succeeds();
 
     assert_eq!(
-        at.read(&format!(
+        at.read(format!(
             "{TEST_COPY_TO_FOLDER}/{TEST_COPY_FROM_FOLDER_FILE}"
         )),
         "Hello, World!\n"
     );
     assert_eq!(
-        at.read(&format!("{TEST_COPY_TO_FOLDER}/{TEST_HOW_ARE_YOU_SOURCE}")),
+        at.read(format!("{TEST_COPY_TO_FOLDER}/{TEST_HOW_ARE_YOU_SOURCE}")),
         "How are you?\n"
     );
 }
@@ -2123,8 +2123,8 @@ fn test_cp_parents_existing_dirs() {
     at.set_mode("a", 0o777);
     at.set_mode("a/b", 0o750);
     for dest in ["none_file", "none_dir", "new_file", "new_dir", "new_plain"] {
-        at.mkdir_all(&format!("{dest}/a"));
-        at.set_mode(&format!("{dest}/a"), 0o700);
+        at.mkdir_all(format!("{dest}/a"));
+        at.set_mode(format!("{dest}/a"), 0o700);
     }
 
     for args in [
@@ -2714,12 +2714,8 @@ fn test_cp_deref_folder_to_folder() {
     let path_to_new_symlink = at.plus(TEST_COPY_FROM_FOLDER);
 
     at.symlink_file(
-        &path_to_new_symlink
-            .join(TEST_HELLO_WORLD_SOURCE)
-            .to_string_lossy(),
-        &path_to_new_symlink
-            .join(TEST_HELLO_WORLD_SOURCE_SYMLINK)
-            .to_string_lossy(),
+        path_to_new_symlink.join(TEST_HELLO_WORLD_SOURCE),
+        path_to_new_symlink.join(TEST_HELLO_WORLD_SOURCE_SYMLINK),
     );
 
     //using -P -R option
@@ -2816,12 +2812,8 @@ fn test_cp_no_deref_folder_to_folder() {
     let path_to_new_symlink = at.plus(TEST_COPY_FROM_FOLDER);
 
     at.symlink_file(
-        &path_to_new_symlink
-            .join(TEST_HELLO_WORLD_SOURCE)
-            .to_string_lossy(),
-        &path_to_new_symlink
-            .join(TEST_HELLO_WORLD_SOURCE_SYMLINK)
-            .to_string_lossy(),
+        path_to_new_symlink.join(TEST_HELLO_WORLD_SOURCE),
+        path_to_new_symlink.join(TEST_HELLO_WORLD_SOURCE_SYMLINK),
     );
 
     //using -P -R option
@@ -2884,7 +2876,7 @@ fn test_cp_no_deref_folder_to_folder() {
         .join(TEST_HELLO_WORLD_SOURCE_SYMLINK);
     assert!(
         at.is_symlink(
-            &path_to_new_symlink
+            path_to_new_symlink
                 .clone()
                 .into_os_string()
                 .into_string()
@@ -2966,8 +2958,8 @@ fn test_cp_archive_recursive() {
     at.touch(file_1);
     at.touch(file_2);
 
-    at.symlink_file("1", &file_1_link.to_string_lossy());
-    at.symlink_file("2", &file_2_link.to_string_lossy());
+    at.symlink_file("1", &file_1_link);
+    at.symlink_file("2", &file_2_link);
 
     ucmd.arg("--archive")
         .arg(TEST_COPY_TO_FOLDER)
@@ -2993,22 +2985,8 @@ fn test_cp_archive_recursive() {
     assert!(at.file_exists(at.subdir.join(TEST_COPY_TO_FOLDER_NEW).join("1")));
     assert!(at.file_exists(at.subdir.join(TEST_COPY_TO_FOLDER_NEW).join("2")));
 
-    assert!(
-        at.is_symlink(
-            &at.subdir
-                .join(TEST_COPY_TO_FOLDER_NEW)
-                .join("1.link")
-                .to_string_lossy()
-        )
-    );
-    assert!(
-        at.is_symlink(
-            &at.subdir
-                .join(TEST_COPY_TO_FOLDER_NEW)
-                .join("2.link")
-                .to_string_lossy()
-        )
-    );
+    assert!(at.is_symlink(at.subdir.join(TEST_COPY_TO_FOLDER_NEW).join("1.link")));
+    assert!(at.is_symlink(at.subdir.join(TEST_COPY_TO_FOLDER_NEW).join("2.link")));
 }
 
 #[test]
@@ -3189,7 +3167,7 @@ fn test_cp_one_file_system() {
 
     // Prepare the mount
     at_src.mkdir(TEST_MOUNT_MOUNTPOINT);
-    let mountpoint_path = &at_src.plus_as_string(TEST_MOUNT_MOUNTPOINT);
+    let mountpoint_path = &at_src.plus(TEST_MOUNT_MOUNTPOINT);
 
     scene
         .mount_temp_fs(mountpoint_path)
@@ -3927,8 +3905,8 @@ fn test_preserve_mode() {
 fn test_canonicalize_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
-    at.touch("dir/file");
-    at.relative_symlink_file("../dir/file", "dir/file-ln");
+    at.touch(path!("dir", "file"));
+    at.relative_symlink_file(path!("..", "dir", "file"), path!("dir", "file-ln"));
     ucmd.arg("dir/file-ln").arg(".").succeeds().no_output();
 }
 
@@ -3939,8 +3917,12 @@ fn test_copy_through_just_created_symlink() {
         at.mkdir("a");
         at.mkdir("b");
         at.mkdir("c");
-        at.relative_symlink_file("../t", "a/1");
-        at.write("b/1", "hello");
+        let parent_t = path!("..", "t");
+        let a_one = path!("a", "1");
+        let b_one = path!("b", "1");
+
+        at.relative_symlink_file(parent_t, a_one);
+        at.write(b_one, "hello");
         if create_t {
             at.write("t", "world");
         }
@@ -4524,12 +4506,14 @@ fn test_cp_recursive_dest_subdir_is_file() {
     at.mkdir_all("dst/src");
     at.write("dst/src/sub", "kept");
 
-    let dest = path_concat!("dst", "src", "sub");
-    let source = path_concat!("src", "sub");
+    let dest = path!("dst", "src", "sub");
+    let source = path!("src", "sub");
     ucmd.args(&["-r", "src", "dst"])
         .fails()
         .stderr_only(format!(
-            "cp: cannot overwrite non-directory '{dest}' with directory '{source}'\n"
+            "cp: cannot overwrite non-directory '{}' with directory '{}'\n",
+            dest.display(),
+            source.display()
         ));
     assert_eq!(at.read("dst/src/sub"), "kept");
     assert_eq!(at.read("dst/src/other"), "other");
@@ -4713,13 +4697,13 @@ fn test_cp_copy_symlink_contents_recursive() {
     at.mkdir("dest-dir");
     at.write("f", "f");
     at.relative_symlink_file("f", "slink");
-    at.relative_symlink_file("no-file", &path_concat!("src-dir", "slink"));
+    at.relative_symlink_file("no-file", &path!("src-dir", "slink"));
     ucmd.args(&["-H", "-R", "slink", "src-dir", "dest-dir"])
         .succeeds();
     assert!(at.dir_exists("src-dir"));
     assert!(at.dir_exists("dest-dir"));
-    assert!(at.dir_exists(&path_concat!("dest-dir", "src-dir")));
-    let regular_file = path_concat!("dest-dir", "slink");
+    assert!(at.dir_exists(&path!("dest-dir", "src-dir")));
+    let regular_file = path!("dest-dir", "slink");
     assert!(!at.symlink_exists(&regular_file) && at.file_exists(&regular_file));
     assert_eq!(at.read(&regular_file), "f");
 }
@@ -5736,7 +5720,7 @@ fn test_acl_preserve() {
     let path = at.plus_as_string(file);
     scene.ucmd().args(&["-p", &path, path2]).succeeds();
 
-    assert!(compare_xattrs(&file, &file_target));
+    assert!(compare_xattrs(file, file_target));
 }
 
 /// Layout of the source file copied by `test_cp_debug_sparse_source`.
@@ -7452,7 +7436,7 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
             }
             sleep(Duration::from_millis(100));
         }
-        let mode = at.metadata(&format!("{DEST_DIR}/{SRC_DIR}")).mode();
+        let mode = at.metadata(format!("{DEST_DIR}/{SRC_DIR}")).mode();
         #[allow(clippy::unnecessary_cast, clippy::cast_lossless)]
         let mask = if attr == "mode" {
             libc::S_IWGRP | libc::S_IWOTH
@@ -7523,15 +7507,15 @@ fn test_preserve_attrs_overriding_2() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
         at.mkdir(FOLDER);
-        at.make_file(&format!("{FOLDER}/{FILE1}"));
-        at.set_mode(&format!("{FOLDER}/{FILE1}"), 0o775);
-        at.hard_link(&format!("{FOLDER}/{FILE1}"), &format!("{FOLDER}/{FILE2}"));
+        at.make_file(format!("{FOLDER}/{FILE1}"));
+        at.set_mode(format!("{FOLDER}/{FILE1}"), 0o775);
+        at.hard_link(format!("{FOLDER}/{FILE1}"), format!("{FOLDER}/{FILE2}"));
         args.append(&mut vec![FOLDER, DEST]);
-        let src_file1_metadata = at.metadata(&format!("{FOLDER}/{FILE1}"));
+        let src_file1_metadata = at.metadata(format!("{FOLDER}/{FILE1}"));
         scene.ucmd().args(&args).succeeds();
         at.dir_exists(DEST);
-        let dest_file1_metadata = at.metadata(&format!("{DEST}/{FILE1}"));
-        let dest_file2_metadata = at.metadata(&format!("{DEST}/{FILE2}"));
+        let dest_file1_metadata = at.metadata(format!("{DEST}/{FILE1}"));
+        let dest_file2_metadata = at.metadata(format!("{DEST}/{FILE2}"));
         assert_eq!(
             src_file1_metadata.modified().unwrap(),
             dest_file1_metadata.modified().unwrap()
@@ -7752,8 +7736,12 @@ fn test_copy_symlink_overwrite() {
     at.mkdir("c");
 
     at.write("t", "hello");
-    at.relative_symlink_file("../t", "a/1");
-    at.relative_symlink_file("../t", "b/1");
+
+    let parent_t = &path!("..", "t");
+    let a_one = path!("a", "1");
+    let b_one = path!("b", "1");
+    at.relative_symlink_file(parent_t, a_one);
+    at.relative_symlink_file(parent_t, b_one);
 
     ucmd.arg("--no-dereference")
         .arg("a/1")
@@ -7875,7 +7863,7 @@ fn test_cp_preserve_xattr_readonly_source() {
     }
 
     let getfattr_output = Command::new("getfattr")
-        .args([&at.plus_as_string(source_file)])
+        .args([&at.plus(source_file)])
         .output()
         .expect("Failed to run `getfattr` on the destination file");
 
@@ -7912,7 +7900,7 @@ fn test_cp_preserve_xattr_readonly_source() {
 
     assert!(scene.fixtures.metadata(dest_file).permissions().readonly());
     assert!(
-        compare_xattrs(&at.plus(source_file), &at.plus(dest_file)),
+        compare_xattrs(at.plus(source_file), at.plus(dest_file)),
         "Extended attributes were not preserved"
     );
 }
@@ -7936,7 +7924,7 @@ fn test_cp_archive_preserves_directory_permissions() {
         let path = format!("test-images/{subdir}");
         at.mkdir(&path);
         at.set_mode(&path, mode);
-        at.write(&format!("{path}/test{}.txt", i + 1), "test content");
+        at.write(format!("{path}/test{}.txt", i + 1), "test content");
     }
 
     ucmd.arg("-a")
@@ -8149,7 +8137,7 @@ fn test_cp_selinux() {
             selinux_perm.contains("unconfined_u"),
             "Expected 'foo' not found in getfattr output:\n{selinux_perm}"
         );
-        at.remove(&at.plus_as_string(TEST_HELLO_WORLD_DEST));
+        at.remove(at.plus(TEST_HELLO_WORLD_DEST));
     }
 }
 
@@ -8159,7 +8147,6 @@ fn test_cp_selinux_default_context_relative_dest() {
     // -Z labels the destination with the context the policy has for its path,
     // and the policy only lists absolute paths: a relative destination used to
     // match nothing and silently keep the context it already carried.
-    use std::path::Path;
     use uucore::selinux::set_selinux_security_context;
 
     let ts = TestScenario::new(util_name!());
@@ -8172,7 +8159,7 @@ fn test_cp_selinux_default_context_relative_dest() {
     let ctx = "root:object_r:etc_t:s0".to_string();
     for dest in ["relative", "absolute"] {
         at.touch(dest);
-        if set_selinux_security_context(Path::new(&at.plus_as_string(dest)), Some(&ctx)).is_err() {
+        if set_selinux_security_context(&at.plus(dest), Some(&ctx)).is_err() {
             return;
         }
     }
@@ -8252,7 +8239,7 @@ fn test_cp_preserve_selinux() {
             assert_metadata_eq!(metadata_src, metadata_dst);
         }
 
-        at.remove(&at.plus_as_string(TEST_HELLO_WORLD_DEST));
+        at.remove(at.plus_as_string(TEST_HELLO_WORLD_DEST));
     }
 }
 
@@ -8268,7 +8255,7 @@ fn test_cp_preserve_selinux_admin_context() {
     // On Debian/Ubuntu, this program is provided by the selinux-utils package
     // On Fedora/RHEL, this program is provided by the libselinux-devel package
     let output = std::process::Command::new("matchpathcon")
-        .arg(at.plus_as_string(TEST_HELLO_WORLD_DEST))
+        .arg(at.plus(TEST_HELLO_WORLD_DEST))
         .output()
         .expect("failed to execute matchpathcon command");
 
@@ -8312,7 +8299,7 @@ fn test_cp_preserve_selinux_admin_context() {
 
     assert_eq!(default_context, selinux_perm_dest);
 
-    at.remove(&at.plus_as_string(TEST_HELLO_WORLD_DEST));
+    at.remove(at.plus(TEST_HELLO_WORLD_DEST));
 }
 
 #[test]
@@ -8510,7 +8497,7 @@ fn test_cp_preserve_context_root() {
 
     let chcon_result = std::process::Command::new("chcon")
         .arg(context)
-        .arg(at.plus_as_string(source_file))
+        .arg(at.plus(source_file))
         .status();
 
     if !chcon_result.is_ok_and(|status| status.success()) {
@@ -9207,7 +9194,7 @@ fn test_cp_archive_deref_symlinks_inside_dir() {
     let at = &scene.fixtures;
     at.mkdir("srcdir");
     at.touch("srcdir/real.txt");
-    symlink("real.txt", at.plus_as_string("srcdir/link.txt")).unwrap();
+    symlink("real.txt", at.plus("srcdir/link.txt")).unwrap();
 
     // -a (no deref): inner symlinks preserved
     scene.ucmd().args(&["-a", "srcdir", "dest_a"]).succeeds();
@@ -9244,7 +9231,7 @@ fn test_cp_archive_cli_deref_inner_preserved() {
     let at = &scene.fixtures;
     at.mkdir("srcdir");
     at.touch("srcdir/real.txt");
-    symlink("real.txt", at.plus_as_string("srcdir/link.txt")).unwrap();
+    symlink("real.txt", at.plus("srcdir/link.txt")).unwrap();
 
     // -aH: CLI symlink dereferenced, inner symlinks preserved
     scene.ucmd().args(&["-aH", "srcdir", "dest_aH"]).succeeds();
@@ -9274,7 +9261,7 @@ fn test_cp_archive_deref_repeated_flag_last_wins() {
     let at = &scene.fixtures;
     at.mkdir("srcdir");
     at.touch("srcdir/real.txt");
-    symlink("real.txt", at.plus_as_string("srcdir/link.txt")).unwrap();
+    symlink("real.txt", at.plus("srcdir/link.txt")).unwrap();
 
     // -aL -a: -a is last, inner symlinks preserved
     scene
@@ -9660,14 +9647,13 @@ fn test_cp_gnu_preserve_mode() {
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_a_z_overrides_context() {
     // Verifies -aZ succeeds (-Z overrides implicit --preserve=context from -a)
-    use std::path::Path;
     use uucore::selinux::set_selinux_security_context;
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("src");
 
     let ctx = "unconfined_u:object_r:user_tmp_t:s0".to_string();
-    if set_selinux_security_context(Path::new(&at.plus_as_string("src")), Some(&ctx)).is_err() {
+    if set_selinux_security_context(&at.plus("src"), Some(&ctx)).is_err() {
         return;
     }
 
@@ -9677,22 +9663,19 @@ fn test_cp_a_z_overrides_context() {
 #[test]
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_a_preserves_context() {
-    use std::path::Path;
     use uucore::selinux::{get_selinux_security_context, set_selinux_security_context};
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("src");
 
     let ctx = "unconfined_u:object_r:user_tmp_t:s0".to_string();
-    if set_selinux_security_context(Path::new(&at.plus_as_string("src")), Some(&ctx)).is_err() {
+    if set_selinux_security_context(&at.plus("src"), Some(&ctx)).is_err() {
         return;
     }
 
-    let src_ctx =
-        get_selinux_security_context(Path::new(&at.plus_as_string("src")), false).unwrap();
+    let src_ctx = get_selinux_security_context(&at.plus("src"), false).unwrap();
     ucmd.args(&["-a", "src", "dst"]).succeeds();
-    let dst_ctx =
-        get_selinux_security_context(Path::new(&at.plus_as_string("dst")), false).unwrap();
+    let dst_ctx = get_selinux_security_context(&at.plus("dst"), false).unwrap();
 
     assert_eq!(src_ctx, dst_ctx, "-a should preserve SELinux context");
 }

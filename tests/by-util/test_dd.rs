@@ -1736,13 +1736,14 @@ fn test_reading_partial_blocks_from_fifo() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkfifo("fifo");
-    let fifoname = at.plus_as_string("fifo");
+    let fifoname = at.plus("fifo");
+    let fifo_disp = fifoname.display();
 
     // Start a `dd` process that reads from the fifo (so it will wait
     // until the writer process starts).
     let mut reader_command = Command::new(get_tests_binary());
     let child = reader_command
-        .args(["dd", "ibs=3", "obs=3", &format!("if={fifoname}")])
+        .args(["dd", "ibs=3", "obs=3", &format!("if={fifo_disp}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
@@ -1757,7 +1758,7 @@ fn test_reading_partial_blocks_from_fifo() {
     let _ = writer_command
         .args([
             "-c",
-            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifoname}"),
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifo_disp}"),
         ])
         .spawn()
         .unwrap()
@@ -1776,7 +1777,8 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkfifo("fifo");
-    let fifoname = at.plus_as_string("fifo");
+    let fifoname = at.plus("fifo");
+    let fifo_disp = fifoname.display();
 
     // Start a `dd` process that reads from the fifo (so it will wait
     // until the writer process starts).
@@ -1784,7 +1786,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     // `bs=N` takes precedence over `ibs=N` and `obs=N`.
     let mut reader_command = Command::new(get_tests_binary());
     let child = reader_command
-        .args(["dd", "bs=3", "ibs=1", "obs=1", &format!("if={fifoname}")])
+        .args(["dd", "bs=3", "ibs=1", "obs=1", &format!("if={fifo_disp}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
@@ -1799,7 +1801,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     let _ = writer_command
         .args([
             "-c",
-            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifoname}"),
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifo_disp}"),
         ])
         .spawn()
         .unwrap()
@@ -1825,13 +1827,14 @@ fn test_reading_partial_blocks_from_fifo_gathered_into_larger_obs() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkfifo("fifo");
-    let fifoname = at.plus_as_string("fifo");
+    let fifoname = at.plus("fifo");
+    let fifo_disp = fifoname.display();
 
     // Start a `dd` process that reads from the fifo (so it will wait
     // until the writer process starts).
     let mut reader_command = Command::new(get_tests_binary());
     let child = reader_command
-        .args(["dd", "ibs=3", "obs=6", &format!("if={fifoname}")])
+        .args(["dd", "ibs=3", "obs=6", &format!("if={fifo_disp}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
@@ -1846,7 +1849,7 @@ fn test_reading_partial_blocks_from_fifo_gathered_into_larger_obs() {
     let _ = writer_command
         .args([
             "-c",
-            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifoname}"),
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifo_disp}"),
         ])
         .spawn()
         .unwrap()
@@ -1934,11 +1937,10 @@ fn test_large_bs_does_not_fault_in_copy_buffer() {
 fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    at.make_file("input");
-    let filename = at.plus_as_string("input");
+    let file = at.make_file("input");
     new_ucmd!()
         .args(&["iflag=directory", "count=0"])
-        .set_stdin(Stdio::from(File::open(filename).unwrap()))
+        .set_stdin(Stdio::from(file))
         .fails()
         .stderr_only("dd: setting flags for 'standard input': Not a directory\n");
 }
@@ -2013,10 +2015,10 @@ fn test_stdin_stdout_not_rewound_even_when_connected_to_seekable_file() {
         .set_stderr(stderr)
         .succeeds();
 
-    let err_file_content = std::fs::read_to_string(at.plus_as_string("err")).unwrap();
+    let err_file_content = at.read("err");
     println!("stderr:\n{err_file_content}");
 
-    let out_file_content = std::fs::read_to_string(at.plus_as_string("out")).unwrap();
+    let out_file_content = at.read("out");
     println!("stdout:\n{out_file_content}");
     assert_eq!(out_file_content, "bde");
 }
