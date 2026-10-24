@@ -445,15 +445,28 @@ fn test_split_lines_number_is_decimal() {
     let at = &scene.fixtures;
     let name = "lines-decimal";
     RandomFile::new(at, name).add_lines(20);
-    // A leading zero does not make the count octal.
+    let glob = Glob::new(at, ".", r"x[[:alpha:]][[:alpha:]]$");
+
+    // A leading zero does not make the count octal, in `-l` or the
+    // obsolete `-NUMBER` form, and a leading `+` is allowed.
+    for (args, chunks) in [
+        (&["-l", "010"][..], 2),
+        (&["-010"][..], 2),
+        (&["-l", "+5"][..], 4),
+    ] {
+        scene.ucmd().args(args).arg(name).succeeds().no_output();
+        assert_eq!(glob.count(), chunks);
+        assert_eq!(glob.collate(), at.read_bytes(name));
+        for file in glob.collect() {
+            at.remove(&file);
+        }
+    }
+
     scene
         .ucmd()
-        .args(&["-l", "010", name])
-        .succeeds()
-        .no_output();
-    let glob = Glob::new(at, ".", r"x[[:alpha:]][[:alpha:]]$");
-    assert_eq!(glob.count(), 2);
-    assert_eq!(glob.collate(), at.read_bytes(name));
+        .args(&["-l", "0", name])
+        .fails_with_code(1)
+        .stderr_only("split: invalid number of lines: 0\n");
 
     for count in ["1k", "1K", "0x10", "1e2", "5b"] {
         scene
@@ -462,18 +475,6 @@ fn test_split_lines_number_is_decimal() {
             .fails_with_code(1)
             .stderr_only(format!("split: invalid number of lines: '{count}'\n"));
     }
-}
-
-/// Test for obsolete lines option with a leading zero
-#[test]
-fn test_split_obs_lines_leading_zero_is_decimal() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let name = "obs-lines-decimal";
-    RandomFile::new(&at, name).add_lines(20);
-    ucmd.args(&["-010", name]).succeeds().no_output();
-    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
-    assert_eq!(glob.count(), 2);
-    assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
 /// Test interference between split line size and IO buffer capacity.
