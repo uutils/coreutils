@@ -8,7 +8,7 @@
 #![cfg(unix)]
 
 use clap::{Arg, ArgAction, Command};
-use std::collections::HashSet;
+use rustc_hash::FxHashSet;
 use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -498,7 +498,7 @@ impl Chmoder {
                 .into());
             }
             if self.recursive {
-                let mut ancestors = HashSet::new();
+                let mut ancestors = FxHashSet::default();
                 r = self
                     .walk_dir_with_context(file, true, &mut ancestors)
                     .and(r);
@@ -528,7 +528,7 @@ impl Chmoder {
         &self,
         file_path: &Path,
         is_command_line_arg: bool,
-        ancestors: &mut HashSet<FileInformation>,
+        ancestors: &mut FxHashSet<FileInformation>,
     ) -> UResult<()> {
         // Skip (and diagnose) an entry that is '/' (a symlink to it, or a bind
         // mount) before touching it.
@@ -588,7 +588,7 @@ impl Chmoder {
         &self,
         file_path: &Path,
         is_command_line_arg: bool,
-        ancestors: &mut HashSet<FileInformation>,
+        ancestors: &mut FxHashSet<FileInformation>,
     ) -> UResult<()> {
         // Skip (and diagnose) an entry that is '/' (a symlink to it, or a bind
         // mount) before touching it.
@@ -633,7 +633,7 @@ impl Chmoder {
         &self,
         dir_fd: &DirFd,
         dir_path: &Path,
-        ancestors: &mut HashSet<FileInformation>,
+        ancestors: &mut FxHashSet<FileInformation>,
     ) -> UResult<()> {
         let mut r = Ok(());
 
@@ -732,7 +732,7 @@ impl Chmoder {
         path: &Path,
         dir_fd: &DirFd,
         entry_name: &std::ffi::OsStr,
-        ancestors: &mut HashSet<FileInformation>,
+        ancestors: &mut FxHashSet<FileInformation>,
     ) -> UResult<()> {
         // During recursion, determine behavior based on traversal mode
         match self.traverse_symlinks {
