@@ -2116,6 +2116,37 @@ fn test_separator_attached_equals_multi_char() {
 }
 
 #[test]
+fn test_error_on_incompatible_separators() {
+    let cases: [&[&str]; 3] = [
+        &["-t@", "-t!"],
+        &["-t", "@", "-t", "!"],
+        &["--field-separator=@", "-t", "!"],
+    ];
+    for args in cases {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("a@b\n")
+            .fails_with_code(2)
+            .stderr_only("sort: incompatible tabs\n");
+    }
+}
+
+#[test]
+fn test_same_separator_twice_ok() {
+    let cases: [&[&str]; 2] = [
+        &["-t:", "-t:", "-k2"],
+        &["--field-separator=:", "-t", ":", "-k2"],
+    ];
+    for args in cases {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("a:2\nb:1\n")
+            .succeeds()
+            .stdout_only("b:1\na:2\n");
+    }
+}
+
+#[test]
 fn test_output_is_input() {
     let input = "a\nb\nc\n";
     let (at, mut ucmd) = at_and_ucmd!();
