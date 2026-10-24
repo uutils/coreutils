@@ -76,6 +76,23 @@ fn test_mkdir_mkdir() {
     new_ucmd!().arg("test_dir").succeeds();
 }
 
+#[test]
+#[cfg(all(target_os = "linux", feature = "feat_selinux", feature = "feat_smack"))]
+fn test_security_contexts_disabled() {
+    if !uutests::util::security_contexts_disabled() {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    for (option, dir) in [("-Z", "default"), ("--context=some_context", "explicit")] {
+        scene
+            .ucmd()
+            .args(&[option, "--", dir])
+            .succeeds()
+            .no_output();
+        assert!(scene.fixtures.dir_exists(dir));
+    }
+}
+
 #[cfg(feature = "test_risky_names")]
 #[test]
 fn test_mkdir_non_unicode() {

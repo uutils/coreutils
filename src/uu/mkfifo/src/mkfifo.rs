@@ -60,7 +60,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let _selinux_guard = {
             let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
             let context = matches.get_one::<String>(options::CONTEXT);
-            if set_security_context || context.is_some() {
+            if (set_security_context || context.is_some()) && uucore::selinux::is_selinux_enabled()
+            {
                 let mode = uucore::libc::S_IFIFO | mode as uucore::libc::mode_t;
                 match uucore::selinux::FsCreateContext::new(
                     std::path::Path::new(&f),

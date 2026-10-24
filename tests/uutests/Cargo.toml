@@ -18,6 +18,10 @@ all-features = true
 [lib]
 path = "src/lib/lib.rs"
 
+[features]
+selinux = ["uucore/selinux"]
+smack = ["uucore/smack"]
+
 [dependencies]
 ctor = { workspace = true }
 libc = { workspace = true }
