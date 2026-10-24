@@ -2422,6 +2422,24 @@ fn test_same_output_flag_twice_ok() {
 }
 
 #[test]
+fn test_error_on_multiple_compress_programs() {
+    new_ucmd!()
+        .args(&["--compress-program", "pwd", "--compress-program", "python3"])
+        .fails_with_code(2)
+        .stderr_only("sort: multiple compress programs specified\n");
+}
+
+#[test]
+fn test_same_compress_program_twice_ok() {
+    // The input is far below the buffer size, so the program is never spawned.
+    new_ucmd!()
+        .args(&["--compress-program", "gzip", "--compress-program", "gzip"])
+        .pipe_in("b\na\n")
+        .succeeds()
+        .stdout_only("a\nb\n");
+}
+
+#[test]
 fn test_output_file_with_leading_dash() {
     let test_cases = [
         (
