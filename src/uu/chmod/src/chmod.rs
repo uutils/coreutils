@@ -174,7 +174,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let cmode = if fmode.is_some() {
         // "--reference" and MODE are mutually exclusive
         // if "--reference" was used MODE needs to be interpreted as another FILE,
-        // the first one, so it must go in front to keep the command-line order
+        // it is the first FILE, keep the command-line order
         // it wasn't possible to implement this behavior directly with clap
         files.insert(0, OsString::from(cmode));
         None
