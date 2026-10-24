@@ -1504,6 +1504,15 @@ fn write_columns(
 
     let blank_line = FileLine::default();
     for row in table {
+        // Merged files are padded with empty cells to fill the page; once
+        // every file has run out there is nothing left to print without a
+        // page trailer to pad for.
+        if merge
+            && row.iter().all(Option::is_none)
+            && (feed_line_present || !options.display_header_and_trailer)
+        {
+            break;
+        }
         // On a page that is not completely filled the last row stops part way
         // through, and its final cell must not be followed by a column
         // separator. Merging prints an empty cell for every column instead, so
