@@ -8,7 +8,6 @@ timeout-help-preserve-status = sortir avec le même statut que COMMANDE, même q
 timeout-help-signal = spécifier le signal à envoyer en cas de délai dépassé ; SIGNAL peut être un nom comme 'HUP' ou un nombre ; voir 'kill -l' pour une liste des signaux
 timeout-help-verbose = diagnostiquer vers stderr tout signal envoyé lors d'un dépassement de délai
 timeout-help-duration = un nombre à virgule flottante avec un suffixe facultatif : 's' pour les secondes (par défaut), 'm' pour les minutes, 'h' pour les heures ou 'd' pour les jours ; une durée de 0 désactive le délai d'expiration associé
-timeout-help-command = une commande à exécuter avec des arguments optionels
 timeout-after-help = À l'expiration du délai, le signal TERM est envoyé à COMMANDE, si aucun autre SIGNAL n'est spécifié. Le signal TERM tue tout processus qui ne bloque pas ou n'intercepte pas ce signal. Il peut être nécessaire d'utiliser le signal KILL, puisque ce signal ne peut pas être intercepté.
 
   Statut de sortie :
