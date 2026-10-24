@@ -299,7 +299,7 @@ impl SettingsError {
         matches!(
             self,
             Self::Strategy(StrategyError::MultipleWays)
-                | Self::Suffix(SuffixError::ContainsSeparator(_))
+                | Self::Suffix(SuffixError::ContainsSeparator(_) | SuffixError::StartTooLarge)
         )
     }
 }
@@ -572,7 +572,7 @@ struct ByteChunkWriter<'a> {
 
 impl<'a> ByteChunkWriter<'a> {
     fn new(chunk_size: u64, settings: &'a Settings) -> UResult<Self> {
-        let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
+        let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix);
         let filename = filename_iterator.next().ok_or_else(|| {
             USimpleError::new(1, translate!("split-error-output-file-suffixes-exhausted"))
         })?;
@@ -734,7 +734,7 @@ struct LineChunkWriter<'a> {
 
 impl<'a> LineChunkWriter<'a> {
     fn new(chunk_size: u64, settings: &'a Settings) -> UResult<Self> {
-        let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
+        let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix);
         let inner = Self::start_new_chunk(settings, &mut filename_iterator)?;
         Ok(LineChunkWriter {
             settings,
@@ -843,8 +843,7 @@ impl ManageOutFiles for OutFiles {
     fn init(num_files: u64, settings: &Settings, is_writer_optional: bool) -> UResult<Self> {
         // This object is responsible for creating the filename for each chunk
         let mut filename_iterator: FilenameIterator<'_> =
-            FilenameIterator::new(&settings.prefix, &settings.suffix)
-                .map_err(|e| io::Error::other(format!("{e}")))?;
+            FilenameIterator::new(&settings.prefix, &settings.suffix);
         let mut out_files: Self = Self::new();
         for _ in 0..num_files {
             let filename = filename_iterator.next().ok_or_else(|| {
@@ -1353,7 +1352,7 @@ fn line_bytes(
 ) -> UResult<()> {
     // todo: GNU is not buffered. So BufReader might wrong.
     let reader = BufReader::with_capacity(io_blksize, reader);
-    let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
+    let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix);
     let mut next_writer = || -> UResult<_> {
         let name = filename_iterator.next().ok_or_else(|| {
             USimpleError::new(1, translate!("split-error-output-file-suffixes-exhausted"))

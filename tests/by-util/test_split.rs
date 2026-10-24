@@ -7,6 +7,7 @@
 
 use rand::{RngExt as _, SeedableRng, rng};
 use regex::Regex;
+use rstest::rstest;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::process::Resource;
 #[cfg(target_os = "linux")]
@@ -878,6 +879,51 @@ fn test_suffix_auto_width_with_number() {
     new_ucmd!()
         .args(&["--numeric-suffixes=100", "--number=r/100", "fivelines.txt"])
         .fails();
+}
+
+/// Test that a suffix start value too large for the suffix length is rejected
+/// before the input is read, even when the input is empty
+#[rstest]
+#[case::numeric(&["--numeric-suffixes=100"], "")]
+#[case::numeric_with_input(&["--numeric-suffixes=100"], "a\n")]
+#[case::hex(&["--hex-suffixes=100"], "")]
+#[case::hex_with_input(&["--hex-suffixes=100"], "a\n")]
+#[case::length_1(&["-a", "1", "--numeric-suffixes=10"], "")]
+#[case::length_0(&["-a", "0", "--numeric-suffixes=100"], "")]
+#[case::number(&["-n", "2", "--numeric-suffixes=100"], "")]
+#[case::number_with_input(&["-n", "2", "--numeric-suffixes=100"], "a\n")]
+#[case::number_round_robin(&["-n", "r/2", "--hex-suffixes=100"], "")]
+fn test_suffix_start_too_large(#[case] args: &[&str], #[case] input: &str) {
+    new_ucmd!()
+        .args(args)
+        .pipe_in(input)
+        .fails()
+        .usage_error("numerical suffix start value is too large for the suffix length");
+}
+
+/// Test that the suffix start value is checked before the input is opened
+#[test]
+fn test_suffix_start_too_large_missing_input() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--numeric-suffixes=100", "non-existing"])
+        .fails()
+        .usage_error("numerical suffix start value is too large for the suffix length");
+    assert!(!at.file_exists("x100"));
+}
+
+/// Test that a suffix start at or past the number of chunks is not checked
+/// against the auto-width suffix length, but against the default one
+#[test]
+fn test_suffix_start_past_number_of_chunks() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-n", "2", "--numeric-suffixes=98", "fivelines.txt"])
+        .succeeds();
+    assert_eq!(at.read("x98") + &at.read("x99"), at.read("fivelines.txt"));
+
+    new_ucmd!()
+        .args(&["-n", "2", "--numeric-suffixes=99", "fivelines.txt"])
+        .fails()
+        .stderr_only("split: output file suffixes exhausted\n");
 }
 
 /// Test for edge case of specifying 0 for suffix length
