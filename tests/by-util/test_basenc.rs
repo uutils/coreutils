@@ -60,6 +60,8 @@ fn test_invalid_input() {
 #[case::base64url_decode_unpadded(&["--base64url", "-d"], "Pz8", "??")]
 #[case::base64url_decode_unpadded_tail(&["--base64url", "-d"], "dG8-YmU_YQ", "to>be?a")]
 #[case::base64url_decode_concatenated(&["--base64url", "-d"], "Pz8=Pz8", "????")]
+#[case::base64url_decode_ignore_garbage(&["--base64url", "-d", "-i"], "P+z8/", "??")]
+#[case::base64url_decode_ignore_garbage_concatenated(&["--base64url", "-d", "-i"], "Pz8=+Pz8", "????")]
 #[case::base32_autopad_short_quantum(&["--base32", "--decode"], "MFRGG", "abc")]
 #[case::base32_autopad_multiline_stream(&["--base32", "--decode"], "MFRGGZDF\nMFRGG", "abcdeabc")]
 #[case::base32hex_autopad_short_quantum(&["--base32hex", "--decode"], "C5H66", "abc")]
