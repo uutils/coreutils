@@ -2387,7 +2387,6 @@ fn test_same_output_flag_twice_ok() {
 fn test_error_on_multiple_compress_programs() {
     new_ucmd!()
         .args(&["--compress-program", "pwd", "--compress-program", "python3"])
-        .pipe_in("b\na\n")
         .fails_with_code(2)
         .stderr_only("sort: multiple compress programs specified\n");
 }
