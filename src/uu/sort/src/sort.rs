@@ -2122,6 +2122,19 @@ fn emit_debug_warnings(
     }
 }
 
+/// Whether option `id` was given several times with differing values.
+/// Repeating an option is fine as long as every occurrence has the same value.
+fn has_conflicting_values<T>(matches: &ArgMatches, id: &str) -> bool
+where
+    T: Clone + PartialEq + Send + Sync + 'static,
+{
+    matches.get_many::<T>(id).is_some_and(|mut values| {
+        values
+            .next()
+            .is_some_and(|first| values.any(|value| value != first))
+    })
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -2162,28 +2175,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), processed_args, 2)?;
 
     // Prevent -o/--output to be specified multiple times
-    if matches
-        .get_many::<OsString>(options::OUTPUT)
-        .is_some_and(|mut outputs| {
-            outputs
-                .next()
-                .as_ref()
-                .is_some_and(|first| outputs.any(|out| out != *first))
-        })
-    {
+    if has_conflicting_values::<OsString>(&matches, options::OUTPUT) {
         return Err(SortError::MultipleOutputFiles.into());
     }
 
     // Prevent -t/--field-separator from being given different values. Raw
     // values suffice: `\0` is the only spelling rewritten later, and argv cannot hold a NUL.
-    if matches
-        .get_many::<OsString>(options::SEPARATOR)
-        .is_some_and(|mut separators| {
-            separators
-                .next()
-                .is_some_and(|first| separators.any(|sep| sep != first))
-        })
-    {
+    if has_conflicting_values::<OsString>(&matches, options::SEPARATOR) {
         return Err(SortError::IncompatibleTabs.into());
     }
 
