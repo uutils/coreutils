@@ -302,10 +302,21 @@ jobs:
       # Upgrading it mid-session changes the shared memory layout (60344 -> 59320),
       # which causes subsequent fork() calls to fail with EAGAIN (exit code 254).
       shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
+      run: |
+        pacman -Syu --noconfirm || true
+    - name: Install build dependencies
+      shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
       # test Cygwin & MinGW(UCRT) instead of pre-installed Rust.
       run: |
-        pacman -Sy --noconfirm --needed base-devel libopenssl make openssl-devel pkgconf rust \
-          mingw-w64-ucrt-x86_64-openssl mingw-w64-ucrt-x86_64-rust
+        pacman -Su --noconfirm --needed \
+          base-devel \
+          libopenssl \
+          make \
+          mingw-w64-ucrt-x86_64-openssl \
+          mingw-w64-ucrt-x86_64-rust \
+          openssl-devel \
+          pkgconf \
+          rust
       env:
         CHERE_INVOKING: 1
     - name: "`(x86_64-pc-cygwin) make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n`"
