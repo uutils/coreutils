@@ -139,7 +139,7 @@ fn metadata_get_change_time(md: &Metadata) -> Option<SystemTime> {
 
 #[cfg(not(unix))]
 fn metadata_get_change_time(_md: &Metadata) -> Option<SystemTime> {
-    // Not available.
+    // ctime isn't exposed by std Metadata outside unix
     None
 }
 
