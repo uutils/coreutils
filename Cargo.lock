@@ -3285,6 +3285,7 @@ dependencies = [
  "codspeed-divan-compat",
  "filetime",
  "fluent",
+ "hashbrown 0.17.1",
  "indicatif",
  "libc",
  "nix",
