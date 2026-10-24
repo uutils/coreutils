@@ -13,7 +13,6 @@ readme.workspace = true
 
 [lib]
 path = "src/wc.rs"
-test = false
 doctest = false
 
 [dependencies]
