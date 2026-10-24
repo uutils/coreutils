@@ -621,3 +621,30 @@ fn test_fmt_anti_prefix_keeps_missing_final_newline() {
             .stdout_only(expected);
     }
 }
+
+#[test]
+fn test_fmt_tagged_one_line_paragraph_indent() {
+    for (args, input, expected) in [
+        (
+            vec!["-t", "-w10"],
+            "ab cd ef gh ij kl mn\n",
+            "ab cd ef\n   gh ij\n   kl mn\n",
+        ),
+        (
+            vec!["-t", "-w10"],
+            "  ab cd ef gh ij kl mn\n",
+            "  ab cd\nef gh ij\nkl mn\n",
+        ),
+        (
+            vec!["-t", "-w10", "-p", "#"],
+            "#ab cd ef gh ij kl mn\n",
+            "#ab cd\n#ef gh ij\n#kl mn\n",
+        ),
+    ] {
+        new_ucmd!()
+            .args(&args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
