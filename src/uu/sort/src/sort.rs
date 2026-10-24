@@ -182,6 +182,9 @@ pub enum SortError {
     #[error("{}", translate!("sort-multiple-output-files"))]
     MultipleOutputFiles,
 
+    #[error("{}", translate!("sort-multiple-compress-programs"))]
+    MultipleCompressPrograms,
+
     #[error("{}", translate!("sort-minus-in-stdin"))]
     MinusInStdIn,
 
@@ -2189,6 +2192,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(SortError::MultipleOutputFiles.into());
     }
 
+    // Same as -o: repeating --compress-program is fine as long as the value is the same
+    if let Some(mut progs) = matches.get_many::<String>(options::COMPRESS_PROG)
+        && let Some(first) = progs.next()
+        && progs.any(|prog| prog != first)
+    {
+        return Err(SortError::MultipleCompressPrograms.into());
+    }
+
     settings.debug = matches.get_flag(options::DEBUG);
     if let Some(path) = matches.get_one::<OsString>(options::RANDOM_SOURCE) {
         settings.random_source = Some(PathBuf::from(path));
@@ -2727,7 +2738,9 @@ pub fn uu_app() -> Command {
             .long(options::COMPRESS_PROG)
             .help(translate!("sort-help-compress-prog"))
             .value_name("PROG")
-            .value_hint(clap::ValueHint::CommandName),
+            .value_hint(clap::ValueHint::CommandName)
+            // To detect multiple occurrences and raise an error
+            .action(ArgAction::Append),
     )
     .arg(
         Arg::new(options::BATCH_SIZE)
