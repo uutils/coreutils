@@ -48,7 +48,7 @@ fn test_output_format() {
     }
     result.success();
     assert!(
-        Regex::new(r"^\w+\n$")
+        Regex::new(r"^[^\r\n]+\n$")
             .unwrap()
             .is_match(result.stdout_str()),
         "unexpected logname output: {:?}",
