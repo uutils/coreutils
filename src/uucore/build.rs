@@ -5,14 +5,13 @@
 
 // spell-checker:ignore tvos watchos visionos
 
-use cfg_aliases::cfg_aliases;
 use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
-    cfg_aliases! {
+    cfg_aliases::cfg_aliases! {
         // Directory open flags that grant search but not read access.
         // tests/by-util/test_install.rs repeats the union of these targets.
         has_o_path: { any(target_os = "linux", target_os = "android") },
@@ -27,6 +26,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             target_os = "illumos",
             target_os = "solaris"
         ) },
+        selinux: { all(feature = "selinux", any(target_os = "android", target_os = "linux")) },
+        smack: { all(feature = "smack", target_os = "linux") },
     }
 
     let out_dir = env::var("OUT_DIR")?;

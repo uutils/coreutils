@@ -105,7 +105,7 @@ pub mod tty;
 pub mod fsxattr;
 #[cfg(feature = "hardware")]
 pub mod hardware;
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 pub mod selinux;
 #[cfg(all(
     feature = "signals",
@@ -127,7 +127,7 @@ pub mod selinux;
     )
 ))]
 pub mod signals;
-#[cfg(all(feature = "smack", target_os = "linux"))]
+#[cfg(smack)]
 pub mod smack;
 #[cfg(all(feature = "systemd_logind", target_os = "linux"))]
 pub mod systemd_logind;
