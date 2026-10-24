@@ -3,10 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore Nofile nonewline cmdline setrlimit ELOOP bcde acde
+// spell-checker:ignore NOFILE nonewline cmdline setrlimit ELOOP bcde acde
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use rustix::process::Resource;
+#[cfg(target_os = "linux")]
+use rlimit::Resource;
 #[cfg(unix)]
 use std::fs::File;
 use std::fs::OpenOptions;
@@ -121,7 +121,6 @@ fn test_fifo_symlink() {
 
 #[test]
 // TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
-// #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(target_os = "linux")]
 #[cfg_attr(wasi_runner, ignore = "WASI: rlimit/setrlimit not supported")]
 fn test_closes_file_descriptors() {
@@ -135,7 +134,7 @@ fn test_closes_file_descriptors() {
             "alpha.txt",
             "alpha.txt",
         ])
-        .limit(Resource::Nofile, 9, 9)
+        .limit(Resource::NOFILE, 9, 9)
         .succeeds();
 }
 

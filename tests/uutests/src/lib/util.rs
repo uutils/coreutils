@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty openpt grantpt unlockpt ptsname tcsetwinsize CLOEXEC RDWR SETFD
-// spell-checker:ignore (linux) winsize xpixel ypixel setrlimit Fsize SIGBUS SIGSEGV SIGXFSZ EFBIG sigbus tmpfs mksocket
+// spell-checker:ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV SIGXFSZ EFBIG sigbus tmpfs mksocket
 // spell-checker:ignore (ToDO) ttyname
 
 #![allow(dead_code)]
@@ -25,7 +25,7 @@ use nix::sys;
 use nix::sys::stat::{self, SFlag};
 use pretty_assertions::assert_eq;
 #[cfg(unix)]
-use rustix::process::{Resource, Rlimit, setrlimit};
+use rlimit::{Resource, setrlimit};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, VecDeque};
 use std::ffi::{OsStr, OsString};
@@ -2093,13 +2093,7 @@ impl UCommand {
             let limits_copy = self.limits.clone();
             let closure = move || -> Result<()> {
                 for &(resource, soft_limit, hard_limit) in &limits_copy {
-                    setrlimit(
-                        resource,
-                        Rlimit {
-                            current: Some(soft_limit),
-                            maximum: Some(hard_limit),
-                        },
-                    )?;
+                    setrlimit(resource, soft_limit, hard_limit)?;
                 }
                 Ok(())
             };
@@ -3786,7 +3780,7 @@ mod tests {
         let ts = TestScenario::new("util");
         ts.cmd("sh")
             .args(&["-c", "ulimit -Sf; ulimit -Hf"])
-            .limit(Resource::Fsize, 8 * unit_size_bytes, 16 * unit_size_bytes)
+            .limit(Resource::FSIZE, 8 * unit_size_bytes, 16 * unit_size_bytes)
             .succeeds()
             .no_stderr()
             .stdout_is("8\n16\n");
