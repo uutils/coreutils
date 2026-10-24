@@ -41,6 +41,8 @@ pub enum BadSequence {
     MissingEquivalentClassChar,
     MultipleCharRepeatInSet2,
     CharRepeatInSet1,
+    CharRepeatInSet2WhenNotTranslating,
+    EquivalenceClassInSet2WhenTranslating,
     InvalidRepeatCount(String),
     EmptySet2WhenNotTruncatingSet1,
     ClassExceptLowerUpperInSet2,
@@ -86,6 +88,20 @@ impl Display for BadSequence {
             }
             Self::CharRepeatInSet1 => {
                 write!(f, "{}", translate!("tr-error-char-repeat-in-set1"))
+            }
+            Self::CharRepeatInSet2WhenNotTranslating => {
+                write!(
+                    f,
+                    "{}",
+                    translate!("tr-error-char-repeat-in-set2-when-not-translating")
+                )
+            }
+            Self::EquivalenceClassInSet2WhenTranslating => {
+                write!(
+                    f,
+                    "{}",
+                    translate!("tr-error-equivalence-class-in-set2-when-translating")
+                )
             }
             Self::InvalidRepeatCount(count) => {
                 write!(
@@ -202,6 +218,8 @@ pub enum Class {
 #[derive(Debug, Clone, Copy)]
 pub enum Sequence {
     Char(u8),
+    /// A `[=c=]` equivalence class, which is only the character itself.
+    Equivalence(u8),
     CharRange(u8, u8),
     CharStar(u8),
     CharRepeat(u8, usize),
@@ -211,7 +229,7 @@ pub enum Sequence {
 impl Sequence {
     pub fn flatten(&self) -> Box<dyn Iterator<Item = u8>> {
         match self {
-            Self::Char(c) => Box::new(std::iter::once(*c)),
+            Self::Char(c) | Self::Equivalence(c) => Box::new(std::iter::once(*c)),
             Self::CharRange(l, r) => Box::new(*l..=*r),
             Self::CharStar(c) => Box::new(std::iter::repeat(*c)),
             Self::CharRepeat(c, n) => Box::new(std::iter::repeat_n(*c, *n)),
@@ -255,7 +273,7 @@ impl Sequence {
     /// the count of a `[c*n]` repeat can be far too large to materialize.
     fn expanded_len(&self) -> usize {
         match self {
-            Self::Char(_) => 1,
+            Self::Char(_) | Self::Equivalence(_) => 1,
             Self::CharRange(l, r) => usize::from(*r) - usize::from(*l) + 1,
             // A star is only sized once it has been turned into a repeat.
             Self::CharStar(_) => 0,
@@ -345,6 +363,21 @@ impl Sequence {
         if set2.iter().filter(is_char_star).count() > 1 {
             return Err(SequenceError::whole_set(
                 BadSequence::MultipleCharRepeatInSet2,
+                2,
+            ));
+        }
+
+        // `[=c=]` in set2 is only for the set to squeeze with `-d -s`, and `[c*]`
+        // only fills set2 up to the length of set1 when translating.
+        if translating && set2.iter().any(|s| matches!(s, Self::Equivalence(_))) {
+            return Err(SequenceError::whole_set(
+                BadSequence::EquivalenceClassInSet2WhenTranslating,
+                2,
+            ));
+        }
+        if !translating && set2.iter().any(|s| matches!(s, Self::CharStar(_))) {
+            return Err(SequenceError::whole_set(
+                BadSequence::CharRepeatInSet2WhenNotTranslating,
                 2,
             ));
         }
@@ -759,7 +792,7 @@ impl Sequence {
                 l,
                 match (a, b) {
                     (Err(()), _) => Err(BadSequence::MissingEquivalentClassChar),
-                    (Ok(c), Ok(())) => Ok(Self::Char(c)),
+                    (Ok(c), Ok(())) => Ok(Self::Equivalence(c)),
                     (Ok(c), Err(v)) => Err(BadSequence::MultipleCharInEquivalence(format!(
                         "{}{}",
                         String::from_utf8_lossy(&[c]),
