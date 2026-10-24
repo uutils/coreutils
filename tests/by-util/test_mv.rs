@@ -426,10 +426,12 @@ fn test_mv_replace_symlink_with_symlink() {
 }
 
 #[rstest]
-#[case::existing_target(true)]
-#[case::dangling_target(false)]
+#[case::existing_target(true, false)]
+#[case::existing_target_interactive(true, true)]
+#[case::dangling_target(false, false)]
+#[case::dangling_target_interactive(false, true)]
 #[cfg(all(unix, not(target_os = "android")))]
-fn test_mv_replace_symlink_with_directory(#[case] target_exists: bool) {
+fn test_mv_replace_symlink_with_directory(#[case] target_exists: bool, #[case] interactive: bool) {
     let (at, mut ucmd) = at_and_ucmd!();
 
     if target_exists {
@@ -440,12 +442,17 @@ fn test_mv_replace_symlink_with_directory(#[case] target_exists: bool) {
 
     at.symlink_file("a", "symlink");
 
+    let line_end = if interactive { "\r\n" } else { "\n" };
+
     ucmd.arg("-T")
         .arg("b")
         .arg("symlink")
+        .terminal_simulation(interactive)
         .fails_with_code(1)
         .no_stdout()
-        .stderr_is("mv: cannot overwrite non-directory 'symlink' with directory 'b'\n");
+        .stderr_is(format!(
+            "mv: cannot overwrite non-directory 'symlink' with directory 'b'{line_end}"
+        ));
 
     assert!(at.dir_exists("b"));
     assert!(at.is_symlink("symlink"));
