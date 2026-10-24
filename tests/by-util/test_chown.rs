@@ -1168,3 +1168,24 @@ fn test_repeated_flags_are_accepted() {
             .succeeds();
     }
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_deep_directory_traversal_no_stack_overflow() {
+    use rustix::process::{Resource, geteuid};
+    use uutests::util::prepare_deep_traversal;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("root_dir");
+    let root = at.plus("root_dir");
+    let Some(file_limit) = prepare_deep_traversal(&root) else {
+        return;
+    };
+
+    ucmd.limit(Resource::Nofile, file_limit, file_limit)
+        .limit(Resource::Stack, 256 * 1024, 256 * 1024)
+        .arg("-R")
+        .arg(geteuid().to_string())
+        .arg("root_dir")
+        .succeeds();
+}
