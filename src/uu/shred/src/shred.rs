@@ -652,11 +652,16 @@ fn wipe_file(
     };
 
     if path_str.as_encoded_bytes().ends_with(b"/")
-        && fs::metadata(path).is_err_and(|e| e.kind() == io::ErrorKind::NotADirectory)
+        && let Err(e) = fs::metadata(path)
+        && e.kind() == io::ErrorKind::NotADirectory
     {
         return Err(USimpleError::new(
             1,
-            translate_text!("shred-failed-to-open-for-writing-not-a-directory", "file" => display_path.maybe_quote()),
+            format!(
+                "{}: {}",
+                translate_text!("shred-failed-to-open-for-writing", "file" => display_path.maybe_quote()),
+                strip_errno(&e)
+            ),
         ));
     }
 
