@@ -356,6 +356,64 @@ fn test_final_stats_unspec() {
         .stderr_contains("0.0 B/s");
 }
 
+#[cfg(any(
+    target_os = "linux",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
+#[rstest::rstest]
+#[case(None)]
+#[case(Some("status=noxfer"))]
+#[case(Some("status=none"))]
+fn test_progress_signal(#[case] status: Option<&str>) {
+    use nix::sys::signal::{Signal, kill};
+    use nix::unistd::Pid;
+    #[cfg(target_os = "linux")]
+    let signal = Signal::SIGUSR1;
+    #[cfg(not(target_os = "linux"))]
+    let signal = Signal::SIGINFO;
+    let mut command = new_ucmd!();
+    command.arg("bs=2");
+    if let Some(status) = status {
+        command.arg(status);
+    }
+    let mut child = command.set_stdin(Stdio::piped()).run_no_wait();
+    // Copied output confirms the signal handler is ready before we send it.
+    child.write_in("a\n");
+    child
+        .make_assertion_with_delay(500)
+        .is_alive()
+        .with_all_output()
+        .stdout_is("a\n");
+    kill(Pid::from_raw(child.id() as i32), signal).unwrap();
+    child.write_in("b\n");
+    child
+        .make_assertion_with_delay(500)
+        .is_alive()
+        .with_all_output()
+        .stdout_is("a\nb\n");
+    let report = child.stderr_all();
+    if status == Some("status=none") {
+        assert!(report.is_empty(), "{report}");
+    } else {
+        assert!(
+            report.contains("2+0 records in\n2+0 records out\n"),
+            "{report}"
+        );
+        assert_eq!(report.contains("bytes"), status.is_none(), "{report}");
+    }
+    child.write_in("c\n");
+    let result = child.wait().unwrap();
+    result.success().stdout_is("c\n");
+    if status == Some("status=none") {
+        result.no_stderr();
+    } else {
+        result.stderr_contains("3+0 records in\n3+0 records out\n");
+    }
+}
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_excl_causes_failure_when_present() {

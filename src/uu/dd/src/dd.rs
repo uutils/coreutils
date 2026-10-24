@@ -20,8 +20,8 @@ use datastructures::{ConversionMode, IConvFlags, IFlags, OConvFlags, OFlags, opt
 use parseargs::Parser;
 use progress::ProgUpdateType;
 use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
-#[cfg(target_os = "linux")]
-use progress::{check_and_reset_sigusr1, install_sigusr1_handler};
+#[cfg(unix)]
+use progress::{check_and_reset_progress_signal, install_progress_signal_handler};
 use uucore::io::OwnedFileDescriptorOrHandle;
 use uucore::translate;
 
@@ -1152,7 +1152,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     //
     // The `dd` program reports its progress after every block is written,
     // at most every 1 second, and only if `status=progress` is given on
-    // the command-line or a SIGUSR1 signal is received. We
+    // the command-line or a SIGINFO/SIGUSR1 signal is received. We
     // perform this reporting in a new thread so as not to take
     // any CPU time away from the actual reading and writing of
     // data. We send a `ProgUpdate` from the transmitter `prog_tx`
@@ -1186,8 +1186,8 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     // This avoids the need to query the OS monotonic clock for every block.
     let alarm = Alarm::with_interval(Duration::from_secs(1));
 
-    #[cfg(target_os = "linux")]
-    if let Err(e) = install_sigusr1_handler()
+    #[cfg(unix)]
+    if let Err(e) = install_progress_signal_handler()
         && i.settings.status != Some(StatusLevel::None)
     {
         let _ = writeln!(
@@ -1299,8 +1299,8 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // error.
         rstat += rstat_update;
         wstat += wstat_update;
-        #[cfg(target_os = "linux")]
-        if check_and_reset_sigusr1() {
+        #[cfg(unix)]
+        if check_and_reset_progress_signal() {
             alarm.manual_trigger();
         }
         let tp = match alarm.get_trigger() {
