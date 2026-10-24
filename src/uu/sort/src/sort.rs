@@ -24,7 +24,7 @@ use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use custom_str_cmp::{custom_str_cmp, is_blank};
+use custom_str_cmp::{custom_str_cmp, filter_key, is_blank};
 use ext_sort::ext_sort;
 use foldhash::fast::FoldHasher;
 use foldhash::{HashMap, SharedSeed};
@@ -32,6 +32,7 @@ use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, nume
 use rand::{RngExt as _, rng};
 #[cfg(not(target_os = "wasi"))]
 use rayon::slice::ParallelSliceMut;
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -2851,6 +2852,12 @@ fn compare_lines_with_collator(a: &Line<'_>, b: &Line<'_>, settings: &GlobalSett
     if settings.reverse { cmp.reverse() } else { cmp }
 }
 
+thread_local! {
+    /// Reused for the `-d`/`-i` filtered keys of `-V`, so that comparing them doesn't allocate.
+    static VERSION_KEY_BUFFERS: RefCell<(Vec<u8>, Vec<u8>)> =
+        const { RefCell::new((Vec::new(), Vec::new())) };
+}
+
 fn compare_by<'a>(
     a: &Line<'a>,
     b: &Line<'a>,
@@ -2976,6 +2983,23 @@ fn compare_by<'a>(
                 general_numeric_compare(a_float, b_float)
             }
             SortMode::Month => month_compare(a_str, b_str),
+            SortMode::Version if settings.dictionary_order || settings.ignore_non_printing => {
+                VERSION_KEY_BUFFERS.with_borrow_mut(|(a_buf, b_buf)| {
+                    let a_key = filter_key(
+                        a_str,
+                        settings.ignore_non_printing,
+                        settings.dictionary_order,
+                        a_buf,
+                    );
+                    let b_key = filter_key(
+                        b_str,
+                        settings.ignore_non_printing,
+                        settings.dictionary_order,
+                        b_buf,
+                    );
+                    version_cmp(a_key, b_key)
+                })
+            }
             SortMode::Version => version_cmp(a_str, b_str),
             SortMode::Default => {
                 // Use locale-aware comparison if feature is enabled and no custom flags are set

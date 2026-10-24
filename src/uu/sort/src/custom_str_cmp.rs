@@ -21,6 +21,28 @@ fn filter_char(c: u8, ignore_non_printing: bool, ignore_non_dictionary: bool) ->
     !(ignore_non_printing && (c.is_ascii_control() || !c.is_ascii()))
 }
 
+/// Remove the bytes that `-i` and `-d` ignore, for comparisons that need the key itself.
+/// The key is only copied, into `buf`, when something is removed.
+pub fn filter_key<'a>(
+    s: &'a [u8],
+    ignore_non_printing: bool,
+    ignore_non_dictionary: bool,
+    buf: &'a mut Vec<u8>,
+) -> &'a [u8] {
+    if s.iter()
+        .all(|&c| filter_char(c, ignore_non_printing, ignore_non_dictionary))
+    {
+        return s;
+    }
+    buf.clear();
+    buf.extend(
+        s.iter()
+            .copied()
+            .filter(|&c| filter_char(c, ignore_non_printing, ignore_non_dictionary)),
+    );
+    buf
+}
+
 fn cmp_chars(a: u8, b: u8, ignore_case: bool) -> Ordering {
     if ignore_case {
         a.to_ascii_uppercase().cmp(&b.to_ascii_uppercase())
