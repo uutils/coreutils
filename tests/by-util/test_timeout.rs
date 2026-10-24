@@ -466,6 +466,42 @@ fn test_realtime_signal_names() {
         .stderr_contains("sending signal RTMAX to command");
 }
 
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_realtime_signals_terminate_child_without_escalation() {
+    let near_max = format!("RTMIN+{}", libc::SIGRTMAX() - libc::SIGRTMIN() - 1);
+    for (signal, expected) in [
+        ("RTMIN", "RTMIN"),
+        ("RTMIN+1", "RTMIN+1"),
+        ("RTMAX-1", near_max.as_str()),
+        ("RTMAX", "RTMAX"),
+    ] {
+        for foreground in [false, true] {
+            let mut ucmd = new_ucmd!();
+            if foreground {
+                ucmd.arg("--foreground");
+            }
+            ucmd.args(&["-v", "-s", signal, "-k.2", ".05", "sleep", "5"]);
+            ucmd.fails_with_code(124)
+                .no_stdout()
+                .stderr_contains(format!("sending signal {expected} to command"))
+                .stderr_does_not_contain("sending signal KILL");
+        }
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_child_realtime_termination_is_preserved() {
+    for signal in [libc::SIGRTMIN(), libc::SIGRTMAX()] {
+        new_ucmd!()
+            .args(&["1", "sh", "-c", &format!("kill -{signal} $$")])
+            .run()
+            .signal_is(signal)
+            .no_output();
+    }
+}
+
 /// The whole process tree must be timed out in non-foreground mode, not just
 /// the direct child: a grandchild sequencer (an inner `cmd.exe`) would
 /// otherwise survive the timeout and create the marker file.
