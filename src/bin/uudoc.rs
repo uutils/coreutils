@@ -297,6 +297,7 @@ fn main() -> io::Result<()> {
             ("unix", "feat_os_unix"),
             ("windows", "feat_os_windows"),
             ("unix_android", "feat_os_unix_android"),
+            ("linux", "feat_os_unix,feat_selinux"),
         ] {
             let platform_utils: Vec<String> = String::from_utf8(
                 process::Command::new("./util/show-utils.sh")
@@ -311,20 +312,6 @@ fn main() -> io::Result<()> {
             .collect();
             map.insert(platform, platform_utils);
         }
-
-        // Linux is a special case because it can support selinux
-        let platform_utils: Vec<String> = String::from_utf8(
-            process::Command::new("./util/show-utils.sh")
-                .arg("--features=feat_os_unix feat_selinux")
-                .output()?
-                .stdout,
-        )
-        .unwrap()
-        .trim()
-        .split_ascii_whitespace()
-        .map(ToString::to_string)
-        .collect();
-        map.insert("linux", platform_utils);
 
         map
     };
