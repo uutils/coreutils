@@ -44,7 +44,9 @@ use crate::hardlink::{
 };
 use uucore::backup_control::{self, backup_would_destroy_source};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::error::{
+    FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code, strip_errno,
+};
 #[cfg(unix)]
 use uucore::fs::display_permissions_unix;
 use uucore::fs::{
@@ -396,17 +398,25 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         )
         .into());
     }
-    // WASI may return file metadata even when a trailing slash requires a directory.
-    let Some(source_metadata) = source
-        .symlink_metadata()
-        .ok()
-        .filter(|metadata| !metadata.is_file() || !path_ends_with_terminator(source))
-    else {
-        return Err(if path_ends_with_terminator(source) {
-            MvError::CannotStatNotADirectory(source.quote().to_string()).into()
-        } else {
-            MvError::NoSuchFile(source.quote().to_string()).into()
-        });
+    let source_metadata = match source.symlink_metadata() {
+        // WASI may return file metadata even when a trailing slash requires a directory.
+        Ok(metadata) if metadata.is_file() && path_ends_with_terminator(source) => {
+            return Err(MvError::CannotStatNotADirectory(source.quote().to_string()).into());
+        }
+        Ok(metadata) => metadata,
+        // Report the real reason, e.g. "No such file or directory", "Not a
+        // directory" for `file/` or "Permission denied" for a source in an
+        // unsearchable directory.
+        Err(e) => {
+            return Err(USimpleError::new(
+                1,
+                format!(
+                    "{}: {}",
+                    translate!("mv-error-cannot-stat", "path" => source.quote()),
+                    strip_errno(&e)
+                ),
+            ));
+        }
     };
 
     // `symlink_metadata` does not follow symlinks, so this is equivalent to

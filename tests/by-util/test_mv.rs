@@ -2534,6 +2534,38 @@ fn test_mv_error_msg_with_multiple_sources_that_does_not_exist() {
         .stderr_contains("mv: cannot stat 'b/': No such file or directory");
 }
 
+#[test]
+fn test_mv_missing_source_with_trailing_slash() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("missing/")
+        .arg("b")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("mv: cannot stat 'missing/': No such file or directory\n");
+    assert!(!at.file_exists("b"));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_source_in_unsearchable_dir() {
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::PermissionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    at.touch("d/f");
+    set_permissions(at.plus("d"), Permissions::from_mode(0o000)).unwrap();
+    let result = ucmd.arg("d/f").arg("b").run();
+    set_permissions(at.plus("d"), Permissions::from_mode(0o755)).unwrap();
+    result
+        .failure()
+        .code_is(1)
+        .no_stdout()
+        .stderr_is("mv: cannot stat 'd/f': Permission denied\n");
+    assert!(at.file_exists("d/f"));
+    assert!(!at.file_exists("b"));
+}
+
 // Tests for hardlink preservation (now always enabled)
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
