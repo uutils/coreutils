@@ -1600,6 +1600,36 @@ fn test_mv_dir_into_dir_with_source_name_a_prefix_of_target_name() {
 }
 
 #[test]
+fn test_mv_rename_error_names_source_and_target() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    scene
+        .ucmd()
+        .arg("a")
+        .arg("missing/b")
+        .fails_with_code(1)
+        .stderr_only("mv: cannot move 'a' to 'missing/b': No such file or directory\n");
+    assert!(at.file_exists("a"));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_mv_rename_error_permission_denied_names_paths() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.mkdir("ro");
+    at.set_mode("ro", 0o555);
+    scene
+        .ucmd()
+        .arg("a")
+        .arg("ro/b")
+        .fails_with_code(1)
+        .stderr_only("mv: cannot move 'a' to 'ro/b': Permission denied\n");
+}
+
+#[test]
 fn test_mv_file_into_dir_where_both_are_files() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
