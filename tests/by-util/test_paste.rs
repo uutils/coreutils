@@ -609,3 +609,22 @@ fn test_crlf_delimiter_not_eaten_by_an_empty_line() {
         .succeeds()
         .stdout_is(expected);
 }
+
+#[test]
+fn test_missing_file_is_named_in_error() {
+    new_ucmd!()
+        .arg("missing.txt")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_only("paste: missing.txt: No such file or directory\n");
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_read_error_names_the_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("sub");
+    ucmd.arg("sub")
+        .fails_with_code(1)
+        .stderr_only("paste: sub: Is a directory\n");
+}
