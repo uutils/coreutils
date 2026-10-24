@@ -239,11 +239,21 @@ fn handle_preceding_options(
                 | options::SEPARATOR
         );
     }
-    // capture if current slice is a preceding short option that requires value and does not have value in the same slice (value separated by whitespace)
+    // capture if current slice is a short option, alone or ending a group like '-dl', that requires value and does not have value in the same slice (value separated by whitespace)
     // following slice should be treaded as value for this option
     // even if it starts with '-' (which would be treated as hyphen prefixed value)
-    *preceding_short_opt_req_value =
-        matches!(slice.as_bytes(), [b'-', c] if SHORT_OPTS_WITH_VALUE.contains(c));
+    // the first short option in the group that requires value takes the rest of the group as its value,
+    // so only a group where that option is the last character leaves the following slice to it
+    *preceding_short_opt_req_value = slice
+        .strip_prefix('-')
+        .filter(|shorts| !shorts.starts_with('-'))
+        .and_then(|shorts| {
+            shorts
+                .bytes()
+                .position(|c| SHORT_OPTS_WITH_VALUE.contains(&c))
+                .map(|i| i == shorts.len() - 1)
+        })
+        .unwrap_or(false);
 }
 
 /// Parameters that control how a file gets split.
