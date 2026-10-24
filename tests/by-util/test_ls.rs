@@ -1157,6 +1157,37 @@ fn test_ls_zero() {
 }
 
 #[test]
+fn test_ls_zero_columns() {
+    // `--zero` must terminate every row of `-C`/`-x` output with NUL,
+    // even when `--zero` precedes the format flag (issue #14774).
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir2");
+    at.touch("dir2/a");
+    at.touch("dir2/b");
+
+    for opt in ["-C", "-x"] {
+        scene
+            .ucmd()
+            .args(&["--zero", opt, "-w", "80", "dir2"])
+            .succeeds()
+            .stdout_only("a  b\0");
+    }
+
+    // Multiple rows: each row ends with NUL, not newline.
+    at.mkdir("wdir");
+    at.touch("wdir/test-width-1");
+    at.touch("wdir/test-width-2");
+    at.touch("wdir/test-width-3");
+    at.touch("wdir/test-width-4");
+    scene
+        .ucmd()
+        .args(&["--zero", "-C", "-w", "50", "wdir"])
+        .succeeds()
+        .stdout_only("test-width-1  test-width-3\0test-width-2  test-width-4\0");
+}
+
+#[test]
 fn test_ls_commas_trailing() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
