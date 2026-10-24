@@ -596,7 +596,16 @@ fn get_file_to_check(
         let print_error = |err: io::Error| {
             show!(err.map_err_context(|| { locale_aware_shell_escape(filename) }));
         };
-        match File::open(filename) {
+        // WASI can resolve an empty path to a preopened directory.
+        let file = if filename.is_empty() {
+            Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                translate!("error-file-not-found"),
+            ))
+        } else {
+            File::open(filename)
+        };
+        match file {
             Ok(f) => {
                 if f.metadata()
                     .map_err(|_| LineCheckError::CantOpenFile)?
