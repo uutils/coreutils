@@ -157,7 +157,32 @@ pub use crate::features::utmpx;
 #[cfg(all(windows, feature = "wide"))]
 pub use crate::features::wide;
 
-#[cfg(feature = "fsext")]
+#[cfg(all(
+    feature = "fsext",
+    any(
+        all(
+            unix,
+            any(
+                target_vendor = "apple",
+                target_os = "aix",
+                target_os = "cygwin",
+                target_os = "dragonfly",
+                target_os = "freebsd",
+                target_os = "haiku",
+                target_os = "hurd",
+                target_os = "illumos",
+                target_os = "solaris",
+                target_os = "linux",
+                target_os = "android",
+                target_os = "netbsd",
+                target_os = "openbsd",
+                target_os = "redox",
+            )
+        ),
+        windows,
+        target_os = "wasi"
+    )
+))]
 pub use crate::features::fsext;
 
 #[cfg(all(
