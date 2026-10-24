@@ -5,7 +5,7 @@
 
 // spell-checker:ignore hashset Addrs addrs
 
-#![cfg(any(all(unix, not(any(target_os = "aix", target_os = "redox"))), windows))]
+#![cfg(any(all(unix, not(target_os = "redox")), windows))]
 
 use std::io::{Write, stdout};
 use std::net::ToSocketAddrs;
