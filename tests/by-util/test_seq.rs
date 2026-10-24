@@ -860,6 +860,14 @@ fn test_format_option_default_precision_scientific() {
 }
 
 #[test]
+fn test_format_option_scientific_round_half_even() {
+    new_ucmd!()
+        .args(&["-f", "%.0e", "2.5", "1", "3.5"])
+        .succeeds()
+        .stdout_only("2e+00\n4e+00\n");
+}
+
+#[test]
 fn test_auto_precision() {
     new_ucmd!()
         .args(&["1", "0x1p-1", "2"])

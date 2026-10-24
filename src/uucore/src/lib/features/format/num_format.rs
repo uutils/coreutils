@@ -7,12 +7,13 @@
 
 //! Utilities for formatting numbers in various formats
 
-use bigdecimal::BigDecimal;
 use bigdecimal::num_bigint::ToBigInt;
+use bigdecimal::{BigDecimal, RoundingMode};
 use num_traits::Signed;
 use num_traits::Zero;
 use std::cmp::min;
 use std::io::Write;
+use std::num::NonZeroU64;
 
 use super::{
     ExtendedBigDecimal, FormatError, check_precision,
@@ -486,16 +487,18 @@ fn format_float_decimal(
 ///   `.` (the caller must add that to get a valid scientific format number).
 /// - `e` is an integer exponent.
 fn bd_to_string_exp_with_prec(bd: &BigDecimal, precision: usize) -> (String, i64) {
-    // TODO: A lot of time is spent in `with_prec` computing the exact number
+    // TODO: A lot of time is spent in `with_precision_round` computing the exact number
     // of digits, it might be possible to save computation time by doing a rough
     // division followed by arithmetics on `digits` to round if necessary (using
     // `fast_inc`).
 
-    // Round bd to precision digits (including the leading digit)
-    // Note that `with_prec` will produce an extra digit if rounding overflows
-    // (e.g. 9995.with_prec(3) => 1000 * 10^1, but we want 100 * 10^2), we compensate
+    // Round bd to precision digits (including the leading digit), rounding
+    // ties to even like C printf and like `%f` does.
+    // Note that rounding will produce an extra digit if it overflows
+    // (e.g. 9995 rounded to 3 digits => 1000 * 10^1, but we want 100 * 10^2), we compensate
     // for that later.
-    let bd_round = bd.with_prec(precision as u64);
+    let precision_nz = NonZeroU64::new(precision as u64).expect("precision must be at least 1");
+    let bd_round = bd.with_precision_round(precision_nz, RoundingMode::HalfEven);
 
     // Convert to the form XXX * 10^-p (XXX is precision digit long)
     let (frac, mut p) = bd_round.as_bigint_and_exponent();
@@ -1147,6 +1150,38 @@ mod test {
         assert_eq!(f(12.345_678_9), "1.e+01");
         assert_eq!(f(1_000_000.0), "1.e+06");
         assert_eq!(f(99_999_999.0), "1.e+08");
+    }
+
+    #[test]
+    fn scientific_and_shortest_float_round_half_to_even() {
+        use super::{format_float_scientific, format_float_shortest};
+        let f = |x, precision| {
+            format_float_scientific(
+                &BigDecimal::from_str(x).unwrap(),
+                Some(precision),
+                Case::Lowercase,
+                ForceDecimal::No,
+            )
+        };
+        assert_eq!(f("2.5", 0), "2e+00");
+        assert_eq!(f("3.5", 0), "4e+00");
+        assert_eq!(f("0.125", 1), "1.2e-01");
+        assert_eq!(f("1.125", 2), "1.12e+00");
+        assert_eq!(f("1.1250001", 2), "1.13e+00");
+        assert_eq!(f("9.5", 0), "1e+01");
+
+        let f = |x, precision| {
+            format_float_shortest(
+                &BigDecimal::from_str(x).unwrap(),
+                Some(precision),
+                Case::Lowercase,
+                ForceDecimal::No,
+            )
+        };
+        assert_eq!(f("0.25", 1), "0.2");
+        assert_eq!(f("0.75", 1), "0.8");
+        assert_eq!(f("2.5", 0), "2");
+        assert_eq!(f("125", 2), "1.2e+02");
     }
 
     #[test]
