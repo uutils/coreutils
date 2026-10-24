@@ -83,7 +83,7 @@ uudoc-tldr-disclaimer = Veuillez noter que, uutils étant en cours de développe
 
 # Messages d'analyse des modes symboliques
 mode-error-unexpected-end = fin de mode inattendue
-mode-error-invalid-operator = opérateur invalide (+, - ou = attendu, mais { $operator } trouvé)
+mode-error-invalid-operator = opérateur invalide (+, - ou = attendu, mais '{ $operator }' trouvé)
 
 # Étiquettes de diagnostic : ce que le caret désigne dans un mode
 mode-diag-label-missing-operator = cette clause indique qui, mais pas quoi changer

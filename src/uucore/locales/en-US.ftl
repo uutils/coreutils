@@ -90,7 +90,7 @@ uudoc-tldr-disclaimer = Please note that, as uutils is a work in progress, some 
 
 # Symbolic mode parsing messages
 mode-error-unexpected-end = unexpected end of mode
-mode-error-invalid-operator = invalid operator (expected +, -, or =, but found { $operator })
+mode-error-invalid-operator = invalid operator (expected +, -, or =, but found '{ $operator }')
 
 # Diagnostic labels: what the caret points at in a mode
 mode-diag-label-missing-operator = this clause says who, but not what to change
