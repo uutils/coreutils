@@ -291,16 +291,7 @@ jobs:
       run: |
         echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
         echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-    - name: Disable Mandatory ASLR (required for Cygwin/MSYS2 bash on GitHub runners)
-      shell: powershell
-      run: |
-        # exit code 254 from bash.exe is caused by Windows Mandatory ASLR
-        # See: https://github.com/appveyor/ci/issues/3777
-        Set-ProcessMitigation -System -Disable ForceRelocateImages
     - name: Update MSYS2 packages
-      # msys2-runtime must be upgraded in a separate bash session before the build.
-      # Upgrading it mid-session changes the shared memory layout (60344 -> 59320),
-      # which causes subsequent fork() calls to fail with EAGAIN (exit code 254).
       shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
       # test Cygwin & MinGW(UCRT) instead of pre-installed Rust.
       run: |
