@@ -173,9 +173,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap_or_default();
     let cmode = if fmode.is_some() {
         // "--reference" and MODE are mutually exclusive
-        // if "--reference" was used MODE needs to be interpreted as another FILE
+        // if "--reference" was used MODE needs to be interpreted as another FILE,
+        // it is the first FILE, keep the command-line order
         // it wasn't possible to implement this behavior directly with clap
-        files.push(OsString::from(cmode));
+        files.insert(0, OsString::from(cmode));
         None
     } else {
         Some(cmode)
