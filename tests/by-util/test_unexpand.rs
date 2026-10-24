@@ -13,6 +13,26 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+#[test]
+fn test_bare_dash_reads_stdin_in_file_list() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("file", "file\n");
+
+    ucmd.args(&["-", "file"])
+        .pipe_in("stdin\n")
+        .succeeds()
+        .stdout_is("stdin\nfile\n");
+}
+
+#[test]
+fn test_bare_dash_does_not_force_first_only() {
+    new_ucmd!()
+        .args(&["-t", "3", "-"])
+        .pipe_in("a  b\n")
+        .succeeds()
+        .stdout_is("a\tb\n");
+}
+
 #[rstest]
 #[case::unexpand_init_0(&["-t4"], " 1\n  2\n   3\n    4\n", " 1\n  2\n   3\n\t4\n")]
 #[case::unexpand_init_1(&["-t4"], "     5\n      6\n       7\n        8\n", "\t 5\n\t  6\n\t   7\n\t\t8\n")]
