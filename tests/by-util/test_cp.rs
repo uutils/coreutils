@@ -9883,10 +9883,11 @@ fn test_cp_p_preserves_posix_acls() {
 
 // `cp -r` without -p only copies the mode bits of the directories it
 // creates, like GNU; it must not copy their access or default ACLs.
+// `cp -rp` preserves them, as ACLs are part of the mode.
 #[test]
 #[cfg(target_os = "linux")]
 #[cfg_attr(wasi_runner, ignore = "WASI: ACL/xattr syscalls are not implemented")]
-fn test_cp_r_does_not_copy_posix_acls() {
+fn test_cp_r_copies_dir_posix_acls_only_with_p() {
     use std::process::Command;
 
     if Command::new("setfacl").arg("--version").output().is_err() {
@@ -9896,7 +9897,8 @@ fn test_cp_r_does_not_copy_posix_acls() {
         return;
     }
 
-    let (at, mut ucmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
     at.mkdir("src");
 
     let setfacl = Command::new("setfacl")
@@ -9910,17 +9912,27 @@ fn test_cp_r_does_not_copy_posix_acls() {
         return;
     }
 
-    ucmd.arg("-r").arg("src").arg("dst").succeeds();
+    let getfacl = |dir: &str| {
+        let output = Command::new("getfacl")
+            .arg("--omit-header")
+            .arg(at.plus(dir))
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&output.stdout).into_owned()
+    };
 
-    let dst_acl = Command::new("getfacl")
-        .arg("--omit-header")
-        .arg(at.plus("dst"))
-        .output()
-        .unwrap();
-    let dst_acl = String::from_utf8_lossy(&dst_acl.stdout);
+    scene.ucmd().arg("-r").arg("src").arg("dst").succeeds();
+    let dst_acl = getfacl("dst");
     assert!(
         !dst_acl.contains("user:bin:"),
         "cp -r must not copy POSIX ACLs:\n{dst_acl}",
+    );
+
+    scene.ucmd().arg("-rp").arg("src").arg("dst_p").succeeds();
+    assert_eq!(
+        getfacl("src"),
+        getfacl("dst_p"),
+        "cp -rp must preserve the access and default POSIX ACLs of a directory",
     );
 }
 
