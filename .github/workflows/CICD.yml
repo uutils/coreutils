@@ -698,19 +698,10 @@ jobs:
           *) tar czf '${{ steps.vars.outputs.PKG_NAME }}' '${{ steps.vars.outputs.PKG_BASENAME }}'/* ;;
         esac
         popd >/dev/null
-    - name: Package manpages and completions
-      if: matrix.job.target == 'x86_64-unknown-linux-gnu' && matrix.job.features == 'feat_os_unix,uudoc'
+    - name: Package manpages, Markdown, and completions
+      if: matrix.job.target == 'x86_64-unknown-linux-gnu' && contains(matrix.job.features, 'uudoc')
       run: |
-        mkdir -p share/{man/man1,bash-completion/completions,fish/vendor_completions.d,zsh/site-functions,elvish/lib}
-        _uudoc=target/${{ matrix.job.target }}/release/uudoc
-        for bin in $('target/${{ matrix.job.target }}/release/coreutils' --list) coreutils;do
-          ${_uudoc} manpage ${bin} > share/man/man1/${bin}.1
-          ${_uudoc} completion ${bin} bash > share/bash-completion/completions/${bin}.bash
-          ${_uudoc} completion ${bin} fish > share/fish/vendor_completions.d/${bin}.fish
-          ${_uudoc} completion ${bin} zsh > share/zsh/site-functions/_${bin}
-          ${_uudoc} completion ${bin} elvish > share/elvish/lib/${bin}.elv
-        done
-        rm share/zsh/site-functions/_[ # not supported
+        target/${{ matrix.job.target }}/release/uudoc manpages md completions --usr .
         tar --zstd -cf docs.tar.zst share
     - name: Publish
       uses: softprops/action-gh-release@v3

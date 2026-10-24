@@ -56,7 +56,7 @@ jobs:
           export LANG=${{ matrix.locale }}
 
           # Build and install manpages to temporary directory
-          make install-manpages DESTDIR="${MANPAGE_DIR}"
+          make install-docs DESTDIR="${MANPAGE_DIR}"
 
       - name: Validate manpages with mandoc (${{ matrix.locale }})
         run: |
