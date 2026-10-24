@@ -445,6 +445,13 @@ fn is_multibyte_blank(c: char) -> bool {
         | '\u{3000}')
 }
 
+/// Whether `b` is an ASCII byte that takes one column and needs no special
+/// handling: not a blank, backspace or NUL.
+#[inline]
+fn is_plain(b: u8) -> bool {
+    b.is_ascii() && !matches!(b, b' ' | b'\t' | b'\x08' | b'\0')
+}
+
 /// Classify the character at `buf[byte]` for tab conversion, returning its
 /// [`CharType`] along with its display width and byte length. Unlike
 /// [`char_info_at`], the first element is a classification rather than the
@@ -457,6 +464,8 @@ fn classify_char_at(utf8: bool, buf: &[u8], byte: usize) -> (CharType, usize, us
             b' ' => (Space, 1, 1),
             b'\t' => (Tab, 0, 1),
             b'\x08' => (Backspace, 0, 1),
+            // NUL has no display width (`wcwidth(L'\0')` is 0).
+            b'\0' => (Other, 0, 1),
             _ => (Other, 1, 1),
         };
     }
@@ -581,6 +590,22 @@ fn unexpand_buf(
             output.write_all(&buf[byte..])?;
             print_state.scol = print_state.col;
             break;
+        }
+
+        // Write a run of plain one-column ASCII bytes at once.
+        if is_plain(buf[byte]) {
+            let end = buf[byte + 1..]
+                .iter()
+                .position(|&b| !is_plain(b))
+                .map_or(buf.len(), |n| byte + 1 + n);
+            write_tabs(output, tab_config, print_state, options.aflag)?;
+            print_state.leading = false;
+            print_state.col += end - byte;
+            output.write_all(&buf[byte..end])?;
+            print_state.scol = print_state.col;
+            print_state.pctype = CharType::Other;
+            byte = end;
+            continue;
         }
 
         // figure out how big the next char is, if it's UTF-8
