@@ -326,7 +326,8 @@ fn test_touch_set_both_date_and_reference() {
     set_file_times(&at, ref_file, start_of_year, start_of_year);
     assert!(at.file_exists(ref_file));
 
-    ucmd.args(&["-d", "Thu Jan 01 12:34:00 2015", "-r", ref_file, file])
+    ucmd.env("TZ", "UTC")
+        .args(&["-d", "Thu Jan 01 12:34:00 2015", "-r", ref_file, file])
         .succeeds()
         .no_stderr();
     let (atime, mtime) = get_file_times(&at, file);
@@ -519,7 +520,8 @@ fn test_touch_set_date() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_date";
 
-    ucmd.args(&["-d", "Thu Jan 01 12:34:00 2015", file])
+    ucmd.env("TZ", "UTC")
+        .args(&["-d", "Thu Jan 01 12:34:00 2015", file])
         .succeeds()
         .no_stderr();
 
@@ -634,16 +636,117 @@ fn test_touch_set_date7() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_date";
 
-    ucmd.args(&["-d", "2004-01-16 12:00 +0000", file])
+    ucmd.env("TZ", "UTC-8")
+        .args(&["-d", "2004-01-16 12:00 +0200", file])
         .succeeds()
         .no_stderr();
 
     assert!(at.file_exists(file));
 
-    let expected = FileTime::from_unix_time(1_074_254_400, 0);
+    let expected = FileTime::from_unix_time(1_074_247_200, 0);
 
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
+}
+
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no tzdb; TZ env var is not honoured so timezone-dependent timestamps differ"
+)]
+fn test_touch_set_posix_locale_date_uses_system_timezone() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_posix_locale_date";
+
+    ucmd.env("TZ", "UTC-8")
+        .args(&["-d", "Thu Jan  1 12:34:00 2015", file])
+        .succeeds()
+        .no_stderr();
+
+    // UTC-8 is POSIX syntax for a local timezone eight hours east of UTC.
+    let expected = FileTime::from_unix_time(1_420_086_840, 0);
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
+}
+
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no tzdb; TZ env var is not honoured so timezone-dependent timestamps differ"
+)]
+fn test_touch_set_minute_only_date_in_dst_gap_fails() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_minute_only_date_in_dst_gap";
+
+    // The 2020-03-08 spring-forward gap in EST, written without seconds, which parse_datetime also accepts.
+    ucmd.env("TZ", "EST+5EDT,M3.2.0/2,M11.1.0/2")
+        .args(&["-d", "2020-03-08 02:30", file])
+        .fails()
+        .stderr_contains("Unable to parse date: 2020-03-08 02:30");
+    assert!(!at.file_exists(file));
+}
+
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no tzdb; TZ env var is not honoured so timezone-dependent timestamps differ"
+)]
+fn test_touch_set_date_in_dst_gap_fails() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_date_in_dst_gap";
+
+    // The jump from 1:59 to 3:00 on 2020-03-08 in EST leaves 02:30 without a
+    // time, so -d must refuse it rather than normalize it.
+    ucmd.env("TZ", "EST+5EDT,M3.2.0/2,M11.1.0/2")
+        .args(&["-d", "2020-03-08 02:30:00", file])
+        .fails()
+        .stderr_contains("Unable to parse date: 2020-03-08 02:30:00");
+    assert!(!at.file_exists(file));
+}
+
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no tzdb; TZ env var is not honoured so timezone-dependent timestamps differ"
+)]
+fn test_touch_t_in_dst_fold_uses_earlier() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_t_in_dst_fold_uses_earlier";
+
+    // 2020-11-01 01:30 happens twice in EST. The earlier one is EDT, UTC-4,
+    // which is 05:30 UTC.
+    ucmd.env("TZ", "EST+5EDT,M3.2.0/2,M11.1.0/2")
+        .args(&["-t", "202011010130", file])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+
+    let target_time = str_to_filetime("%Y%m%d%H%M%S", "20201101053000");
+    let (_, mtime) = get_file_times(&at, file);
+    assert_eq!(target_time, mtime);
+}
+
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no tzdb; TZ env var is not honoured so timezone-dependent timestamps differ"
+)]
+fn test_touch_set_date_without_offset_uses_system_timezone() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_date_without_offset";
+
+    ucmd.env("TZ", "UTC-8")
+        .args(&["-d", "2026-08-01 12:00:00", file])
+        .succeeds()
+        .no_stderr();
+
+    // 12:00 in a zone eight hours east of UTC is 04:00 UTC.
+    let expected = FileTime::from_unix_time(1_785_556_800, 0);
+    let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, expected);
     assert_eq!(mtime, expected);
 }
