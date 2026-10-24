@@ -3338,7 +3338,6 @@ mod format_mix {
     }
 }
 
-#[cfg(not(target_os = "android"))]
 mod debug_flag {
     use super::*;
 
