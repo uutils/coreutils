@@ -81,19 +81,25 @@ issues and writing documentation are just as important as writing code.
 
 ### Reference version of GNU coreutils
 
-We try to stay compatible with the latest stable release of GNU coreutils,
-and sometimes backport changes from GNU's master branch as well.
+Our goal is to achieve compatibility with GNU coreutils, targeting the latest
+stable release and accounting for relevant behavioral changes in its
+development branch.
 
-Since many Linux distributions ship an older GNU coreutils, Canonical
-provides a [more recent build](https://launchpad.net/~bamf0/+archive/ubuntu/coreutils-reference)
-you can use to compare our utilities against upstream before filing a bug
-report. A few caveats:
+The version of GNU coreutils available in a distribution’s repositories may
+differ from the latest upstream release. For Ubuntu users, a patched build is
+available in this
+[PPA](https://launchpad.net/~bamf0/+archive/ubuntu/coreutils-reference).
+It can be useful for comparing utility behavior when investigating potential
+compatibility issues.
 
-- The package is PATCHED, so it may differ from upstream.
-- NEVER install this package on your system — it isn't meant for daily use.
-  Instead, manually download and extract the [tarball](https://launchpad.net/~bamf0/+archive/ubuntu/coreutils-reference/+files/gnu-coreutils_9.12-0ubuntu1~ppa1_amd64.deb)
-  and run it from there.
-- Bug reports and fixes for this package itself are not accepted here.
+**Important notes:**
+
+- **PATCHED:** This package contains patches and may differ from the
+  corresponding upstream GNU coreutils release.
+- **NO SUPPORT:** The PPA is provided as-is, with no guarantees of stability or future updates.
+- **NOT FOR ROUTINE USE:** Do not install this package on your system or use
+  it for routine operations. Instead, manually download the `.deb` package,
+  extract it, and run the binaries directly.
 
 ### Reporting Issues
 
