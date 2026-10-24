@@ -310,6 +310,31 @@ fn test_version_sort_stable() {
 }
 
 #[test]
+fn test_version_sort_ignore_case() {
+    new_ucmd!()
+        .arg("-Vf")
+        .pipe_in("Bb\nba\nAb\naa\n")
+        .succeeds()
+        .stdout_is("aa\nAb\nba\nBb\n");
+    new_ucmd!()
+        .args(&["--sort=version", "--ignore-case"])
+        .pipe_in("a10\nA9\nb1\nB01\na2\n")
+        .succeeds()
+        .stdout_is("a2\nA9\na10\nB01\nb1\n");
+    new_ucmd!()
+        .arg("-k2,2Vf")
+        .pipe_in("x Bb\ny ba\nz Ab\nw aa\n")
+        .succeeds()
+        .stdout_is("w aa\nz Ab\ny ba\nx Bb\n");
+    // A key with its own ordering option does not inherit the global -f.
+    new_ucmd!()
+        .args(&["-f", "-k2,2V"])
+        .pipe_in("x Bb\ny ba\nz Ab\nw aa\n")
+        .succeeds()
+        .stdout_is("z Ab\nx Bb\nw aa\ny ba\n");
+}
+
+#[test]
 fn test_ignore_case_orders_punctuation_after_letters() {
     new_ucmd!()
         .arg("-f")
