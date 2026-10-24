@@ -6,7 +6,7 @@
 use divan::{Bencher, black_box};
 use tempfile::NamedTempFile;
 use uu_sort::uumain;
-use uucore::benchmark::{run_util_function, setup_test_file, text_data};
+use uucore::benchmark::{get_bench_args, setup_test_file, text_data};
 
 /// Benchmark merging pre-sorted files (`sort -m`).
 ///
@@ -56,13 +56,18 @@ fn merge_pre_sorted_files(bencher: Bencher) {
     let output_path = output_file.path().to_str().unwrap();
 
     let file_args: Vec<&str> = file_paths.iter().map(|p| p.to_str().unwrap()).collect();
+    let mut raw_args: Vec<&dyn AsRef<std::ffi::OsStr>> = vec![&"-m", &"-o", &output_path];
+    raw_args.extend(
+        file_args
+            .iter()
+            .map(|arg| arg as &dyn AsRef<std::ffi::OsStr>),
+    );
+    let args = get_bench_args(&raw_args);
 
     // 4. Benchmark the merge step
-    bencher.bench(|| {
-        let mut args = vec!["-m", "-o", output_path];
-        args.extend(&file_args);
-        black_box(run_util_function(uumain, &args));
-    });
+    bencher
+        .with_inputs(|| args.clone().into_iter())
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 fn main() {
