@@ -481,6 +481,12 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
             )
         } else if hard_link_src.as_ref().is_some_and(|p| p.is_dir()) {
             LnError::FailedToCreateHardLinkDir(source.to_path_buf())
+        } else if let Err(stat_err) = fs::symlink_metadata(link_target) {
+            // The source itself can't be accessed: name it, not the link
+            LnError::IoContext(
+                UIoError::from(stat_err),
+                translate!("ln-failed-to-access", "file" => source.quote()),
+            )
         } else {
             LnError::IoContext(
                 UIoError::from(e),
