@@ -10,6 +10,11 @@ env:
 permissions:
   contents: write  # FixPR commits Cargo.lock back to main
 
+# End the current execution if there is a new changeset in the PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 on:
   # * only trigger on pull request closed to specific branches
   # ref: https://github.community/t/trigger-workflow-only-on-pull-request-merge/17359/9
