@@ -481,11 +481,9 @@ fn test_shred_trailing_slash_on_file() {
 fn test_shred_on_dir(#[case] arg: &str) {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("d");
-    ucmd.arg(arg)
-        .fails_with_code(1)
-        .stderr_only(format!(
-            "shred: {arg}: failed to open for writing: Is a directory\n"
-        ));
+    ucmd.arg(arg).fails_with_code(1).stderr_only(format!(
+        "shred: {arg}: failed to open for writing: Is a directory\n"
+    ));
 }
 
 #[test]
