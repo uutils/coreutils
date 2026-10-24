@@ -20,6 +20,11 @@ on:
 permissions:
   contents: read
 
+# End the current execution if there is a new changeset in the PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   check-doc:
     name: Verify uudoc generates correct documentation
