@@ -303,7 +303,7 @@ fn test_sentence_regexp_invalid_syntax_failure() {
     new_ucmd!()
         .args(&["-S", "^["])
         .fails()
-        .stderr_contains("Invalid regexp");
+        .stderr_is("ptx: Invalid regular expression (for regexp '^[')\n");
 }
 
 #[test]
