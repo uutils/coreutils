@@ -425,9 +425,6 @@ fn format_float_non_finite(e: &ExtendedBigDecimal, case: Case) -> String {
     s
 }
 
-/// Largest precision `format!` accepts; beyond it the formatter panics.
-const MAX_FMT_PRECISION: usize = u16::MAX as usize;
-
 /// `{bd:.0}` switches to exponent notation past 1000 zeros, so write integers
 /// out ourselves, up to `MAX_FORMAT_WIDTH` digits.
 fn integer_digits(bd: &BigDecimal) -> Option<String> {
@@ -461,24 +458,30 @@ fn format_float_decimal(
             s
         };
     }
-    // `format!` panics past `MAX_FMT_PRECISION` and `bigdecimal` stops padding
-    // past 1000 zeros, so pad the rest ourselves.
-    let digits = usize::try_from(bd.fractional_digit_count().max(0)).unwrap_or(usize::MAX);
-    let written = digits.min(MAX_FMT_PRECISION);
-    if precision > written {
-        let mut s = if written > 0 {
-            format!("{bd:.written$}")
-        } else if let Some(s) = integer_digits(bd) {
-            s + "."
-        } else {
-            // Past `MAX_FORMAT_WIDTH` zeros, print exponent form and skip the precision and `.`.
-            return format!("{bd:.0}");
-        };
-        s.extend(std::iter::repeat_n('0', precision - written));
-        return s;
-    }
-
-    format!("{bd:.precision$}")
+    // `format!` panics past `u16::MAX` precision and `bigdecimal` stops padding
+    // past 1000 zeros, so write the digits out ourselves.
+    let rounded;
+    let (bi, scale) = match i64::try_from(precision) {
+        Ok(p) if bd.fractional_digit_count() > p => {
+            rounded = bd.with_scale_round(p, bigdecimal::RoundingMode::HalfEven);
+            rounded.as_bigint_and_scale()
+        }
+        _ => bd.as_bigint_and_scale(),
+    };
+    // At most `precision` once rounded.
+    let written = usize::try_from(scale).unwrap_or(0);
+    let mut s = if written > 0 {
+        let mut s = zero_pad_to(&bi.to_str_radix(10), written + 1);
+        s.insert(s.len() - written, '.');
+        s
+    } else if let Some(s) = integer_digits(bd) {
+        s + "."
+    } else {
+        // Past `MAX_FORMAT_WIDTH` zeros, print exponent form and skip the precision and `.`.
+        return format!("{bd:.0}");
+    };
+    s.extend(std::iter::repeat_n('0', precision - written));
+    s
 }
 
 /// Converts a `&BigDecimal` to a scientific-like `X.XX * 10^e`.
@@ -926,6 +929,17 @@ mod test {
         assert_eq!(s.len(), 65_538);
         assert!(s.starts_with("7."));
         assert!(s[2..].bytes().all(|b| b == b'0'));
+
+        assert_eq!(f("0.125", 2), "0.12");
+        assert_eq!(f("0.1250001", 2), "0.13");
+        assert_eq!(f("9.9996", 3), "10.000");
+        assert_eq!(f("0.005", 2), "0.00");
+        assert_eq!(f("1e-1000000", 6), "0.000000");
+        let threes = "3".repeat(70_000);
+        assert_eq!(
+            f(&format!("0.{threes}"), 69_999),
+            format!("0.{}", &threes[1..])
+        );
     }
 
     #[test]

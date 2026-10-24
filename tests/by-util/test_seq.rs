@@ -1254,6 +1254,21 @@ fn test_format_zero_precision_above_formatter_limit() {
         .stdout_only(format!("0.{}e+00\n", "0".repeat(70000)));
 }
 
+#[test]
+// Windows caps the command line at 32767 characters.
+#[cfg(not(windows))]
+fn test_format_fraction_digits_above_formatter_limit() {
+    let threes = format!("0.{}", "3".repeat(70000));
+    new_ucmd!()
+        .args(&["-f", "%.70001f", &threes, &threes])
+        .succeeds()
+        .stdout_only(format!("{threes}0\n"));
+    new_ucmd!()
+        .args(&["-f", "%.69999f", &threes, &threes])
+        .succeeds()
+        .stdout_only(format!("{}\n", &threes[..70001]));
+}
+
 /// The increment is never printed, so its sign and leading zeros must not widen
 /// the output; only its fractional digits count (like for the other arguments).
 #[rstest]
