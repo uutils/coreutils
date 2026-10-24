@@ -182,6 +182,9 @@ pub enum SortError {
     #[error("{}", translate!("sort-multiple-output-files"))]
     MultipleOutputFiles,
 
+    #[error("{}", translate!("sort-incompatible-tabs"))]
+    IncompatibleTabs,
+
     #[error("{}", translate!("sort-minus-in-stdin"))]
     MinusInStdIn,
 
@@ -2189,6 +2192,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(SortError::MultipleOutputFiles.into());
     }
 
+    // Prevent -t/--field-separator from being given different values. Raw
+    // values suffice: `\0` is the only spelling rewritten later, and argv cannot hold a NUL.
+    if matches
+        .get_many::<OsString>(options::SEPARATOR)
+        .is_some_and(|mut separators| {
+            separators
+                .next()
+                .is_some_and(|first| separators.any(|sep| sep != first))
+        })
+    {
+        return Err(SortError::IncompatibleTabs.into());
+    }
+
     settings.debug = matches.get_flag(options::DEBUG);
     if let Some(path) = matches.get_one::<OsString>(options::RANDOM_SOURCE) {
         settings.random_source = Some(PathBuf::from(path));
@@ -2691,7 +2707,9 @@ pub fn uu_app() -> Command {
             .short('t')
             .long(options::SEPARATOR)
             .help(translate!("sort-help-separator"))
-            .value_parser(ValueParser::os_string()),
+            .value_parser(ValueParser::os_string())
+            // To detect differing occurrences and raise an error
+            .action(ArgAction::Append),
     )
     .arg(
         Arg::new(options::ZERO_TERMINATED)
