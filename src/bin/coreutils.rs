@@ -52,7 +52,7 @@ Currently defined functions:
 #[allow(clippy::cognitive_complexity)]
 fn main() -> ExitCode {
     let utils = util_map();
-    let mut args = uucore::args_os();
+    let mut args = uucore::args_os().peekable();
 
     let binary = validation::binary_path(&mut args);
     let Some(binary_as_util) = validation::name(&binary) else {
@@ -69,6 +69,19 @@ fn main() -> ExitCode {
 
     let util_name = if let Some(&util) = matched_util {
         Some(OsString::from(util))
+    } else if let Some(util) = args
+        .peek()
+        .and_then(|arg| arg.to_str())
+        .and_then(|arg| arg.strip_prefix("--coreutils-prog="))
+    {
+        if !utils.contains_key(util) {
+            validation::not_found(&OsString::from(util));
+        }
+        uucore::set_utility_name(util.to_owned());
+        let util = OsString::from(util);
+        uucore::set_utility_is_second_arg();
+        args.next();
+        Some(util)
     } else if is_coreutils || binary_as_util.ends_with("box") {
         // todo: Remove support of "*box" from binary
         uucore::set_utility_is_second_arg();
