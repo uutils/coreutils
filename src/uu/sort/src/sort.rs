@@ -563,6 +563,31 @@ struct ModeFlags {
 }
 
 impl ModeFlags {
+    fn from_matches(matches: &ArgMatches) -> Self {
+        let mut flags = Self {
+            human_numeric: matches.get_flag(options::modes::HUMAN_NUMERIC),
+            month: matches.get_flag(options::modes::MONTH),
+            general_numeric: matches.get_flag(options::modes::GENERAL_NUMERIC),
+            numeric: matches.get_flag(options::modes::NUMERIC),
+            version: matches.get_flag(options::modes::VERSION),
+            random: matches.get_flag(options::modes::RANDOM),
+        };
+        if let Some(sort_args) = matches.get_many::<String>(options::modes::SORT) {
+            for sort_arg in sort_args {
+                match sort_arg.as_str() {
+                    "human-numeric" => flags.human_numeric = true,
+                    "month" => flags.month = true,
+                    "general-numeric" => flags.general_numeric = true,
+                    "numeric" => flags.numeric = true,
+                    "version" => flags.version = true,
+                    "random" => flags.random = true,
+                    _ => {}
+                }
+            }
+        }
+        flags
+    }
+
     fn from_mode(mode: SortMode) -> Self {
         let mut flags = Self::default();
         match mode {
@@ -1678,19 +1703,11 @@ struct GlobalOptionFlags {
     ignore_case: bool,
     ignore_non_printing: bool,
     reverse: bool,
-    mode_numeric: bool,
-    mode_general: bool,
-    mode_human: bool,
-    mode_month: bool,
-    mode_random: bool,
-    mode_version: bool,
+    modes: ModeFlags,
 }
 
 impl GlobalOptionFlags {
     fn from_matches(matches: &ArgMatches) -> Self {
-        let sort_value = matches
-            .get_one::<String>(options::modes::SORT)
-            .map(String::as_str);
         Self {
             keys_specified: matches.contains_id(options::KEY),
             ignore_leading_blanks: matches.get_flag(options::IGNORE_LEADING_BLANKS),
@@ -1698,16 +1715,7 @@ impl GlobalOptionFlags {
             ignore_case: matches.get_flag(options::IGNORE_CASE),
             ignore_non_printing: matches.get_flag(options::IGNORE_NONPRINTING),
             reverse: matches.get_flag(options::REVERSE),
-            mode_human: matches.get_flag(options::modes::HUMAN_NUMERIC)
-                || sort_value == Some("human-numeric"),
-            mode_month: matches.get_flag(options::modes::MONTH) || sort_value == Some("month"),
-            mode_general: matches.get_flag(options::modes::GENERAL_NUMERIC)
-                || sort_value == Some("general-numeric"),
-            mode_numeric: matches.get_flag(options::modes::NUMERIC)
-                || sort_value == Some("numeric"),
-            mode_version: matches.get_flag(options::modes::VERSION)
-                || sort_value == Some("version"),
-            mode_random: matches.get_flag(options::modes::RANDOM) || sort_value == Some("random"),
+            modes: ModeFlags::from_matches(matches),
         }
     }
 }
@@ -2106,25 +2114,25 @@ fn emit_debug_warnings(
     if flags.ignore_non_printing && !uses_non_printing {
         ignored_opts.push('i');
     }
-    if flags.mode_general && !uses_mode(SortMode::GeneralNumeric) {
+    if flags.modes.general_numeric && !uses_mode(SortMode::GeneralNumeric) {
         ignored_opts.push('g');
     }
-    if flags.mode_human && !uses_mode(SortMode::HumanNumeric) {
+    if flags.modes.human_numeric && !uses_mode(SortMode::HumanNumeric) {
         ignored_opts.push('h');
     }
-    if flags.mode_month && !uses_mode(SortMode::Month) {
+    if flags.modes.month && !uses_mode(SortMode::Month) {
         ignored_opts.push('M');
     }
-    if flags.mode_numeric && !uses_mode(SortMode::Numeric) {
+    if flags.modes.numeric && !uses_mode(SortMode::Numeric) {
         ignored_opts.push('n');
     }
-    if flags.mode_random && !uses_mode(SortMode::Random) {
+    if flags.modes.random && !uses_mode(SortMode::Random) {
         ignored_opts.push('R');
     }
     if reverse_ignored {
         ignored_opts.push('r');
     }
-    if flags.mode_version && !uses_mode(SortMode::Version) {
+    if flags.modes.version && !uses_mode(SortMode::Version) {
         ignored_opts.push('V');
     }
 
@@ -2248,25 +2256,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .unwrap_or_default()
     };
 
-    let mut mode_flags = ModeFlags {
-        human_numeric: matches.get_flag(options::modes::HUMAN_NUMERIC),
-        month: matches.get_flag(options::modes::MONTH),
-        general_numeric: matches.get_flag(options::modes::GENERAL_NUMERIC),
-        numeric: matches.get_flag(options::modes::NUMERIC),
-        version: matches.get_flag(options::modes::VERSION),
-        random: matches.get_flag(options::modes::RANDOM),
-    };
-    if let Some(sort_arg) = matches.get_one::<String>(options::modes::SORT) {
-        match sort_arg.as_str() {
-            "human-numeric" => mode_flags.human_numeric = true,
-            "month" => mode_flags.month = true,
-            "general-numeric" => mode_flags.general_numeric = true,
-            "numeric" => mode_flags.numeric = true,
-            "version" => mode_flags.version = true,
-            "random" => mode_flags.random = true,
-            _ => {}
-        }
-    }
+    let mode_flags = ModeFlags::from_matches(&matches);
 
     let dictionary_order = matches.get_flag(options::DICTIONARY_ORDER);
     let ignore_non_printing = matches.get_flag(options::IGNORE_NONPRINTING);
@@ -2550,6 +2540,7 @@ pub fn uu_app() -> Command {
     .arg(
         Arg::new(options::modes::SORT)
             .long(options::modes::SORT)
+            .action(ArgAction::Append)
             .value_parser(ShortcutValueParser::new([
                 "general-numeric",
                 "human-numeric",
