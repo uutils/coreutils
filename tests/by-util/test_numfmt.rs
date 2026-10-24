@@ -492,6 +492,27 @@ fn test_first_blank_between_fields_is_written_as_space_issue15552() {
 }
 
 #[test]
+fn test_from_multibyte_decimal_separator_invalid_suffix() {
+    new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .args(&["--from=si", "1,€K"])
+        .fails_with_code(2)
+        .stderr_only("numfmt: invalid suffix in input '1,€K': '€K'\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "ar_SA.UTF-8")
+        .args(&["--from=si", "1٫€K"])
+        .fails_with_code(2)
+        .stderr_only("numfmt: invalid suffix in input '1٫€K': '€K'\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "ar_SA.UTF-8")
+        .args(&["--from=auto", "1٫€Ki"])
+        .fails_with_code(2)
+        .stderr_only("numfmt: invalid suffix in input '1٫€Ki': '€Ki'\n");
+}
+
+#[test]
 fn test_format_selected_fields() {
     new_ucmd!()
         .args(&["--from=auto", "--field", "1,4,3", "1K 2K 3K 4K 5K 6K"])
