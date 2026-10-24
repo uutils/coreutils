@@ -52,7 +52,6 @@ struct Config {
     ignore_case: bool,
     macro_name: String,
     trunc_str: String,
-    context_regex: String,
     line_width: usize,
     gap_size: usize,
     sentence_regex: Option<String>,
@@ -69,7 +68,6 @@ impl Default for Config {
             ignore_case: false,
             macro_name: "xx".to_owned(),
             trunc_str: "/".to_owned(),
-            context_regex: "\\w+".to_owned(),
             line_width: 72,
             gap_size: 3,
             sentence_regex: None,
@@ -117,15 +115,75 @@ fn read_char_filter_file(
 }
 
 #[derive(Debug)]
+enum WordMatcher {
+    Default,
+    Traditional,
+    Break(FxHashSet<char>),
+}
+
+fn word_ranges(line: &str, is_word: impl Fn(char) -> bool) -> impl Iterator<Item = Range<usize>> {
+    let mut chars = line.char_indices().peekable();
+    std::iter::from_fn(move || {
+        let (start, _) = chars.find(|&(_, c)| is_word(c))?;
+        while chars.peek().is_some_and(|&(_, c)| is_word(c)) {
+            chars.next();
+        }
+        Some(start..chars.peek().map_or(line.len(), |&(i, _)| i))
+    })
+}
+
+impl WordMatcher {
+    fn default_for(gnu_ext: bool) -> Self {
+        if gnu_ext {
+            Self::Default
+        } else {
+            Self::Traditional
+        }
+    }
+
+    fn find_iter<'a>(&'a self, line: &'a str) -> Box<dyn Iterator<Item = Range<usize>> + 'a> {
+        match self {
+            Self::Default => Box::new(word_ranges(line, |c| {
+                if c.is_ascii() {
+                    c.is_ascii_alphanumeric() || c == '_'
+                } else {
+                    static WORD: std::sync::LazyLock<Regex> =
+                        std::sync::LazyLock::new(|| Regex::new(r"^\w$").unwrap());
+                    WORD.is_match(c.encode_utf8(&mut [0; 4]))
+                }
+            })),
+            Self::Traditional => Box::new(word_ranges(line, |c| !matches!(c, ' ' | '\t' | '\n'))),
+            Self::Break(chars) => Box::new(word_ranges(line, |c| !chars.contains(&c))),
+        }
+    }
+}
+
+fn context_word(config: &Config, line: &str) -> (usize, usize) {
+    let matcher = WordMatcher::default_for(config.gnu_ext);
+    matcher
+        .find_iter(line)
+        .next()
+        .map_or((0, 0), |r| (r.start, r.end))
+}
+
 struct WordFilter {
     only_specified: bool,
     ignore_specified: bool,
     only_set: FxHashSet<String>,
     ignore_set: FxHashSet<String>,
-    word_regex: String,
+    matcher: WordMatcher,
+    word_regex: Option<Regex>,
+    skip_nonletters: bool,
 }
 
 impl WordFilter {
+    fn find_iter<'a>(&'a self, line: &'a str) -> Box<dyn Iterator<Item = Range<usize>> + 'a> {
+        match &self.word_regex {
+            Some(regex) => Box::new(regex.find_iter(line).map(|m| m.range())),
+            None => self.matcher.find_iter(line),
+        }
+    }
+
     #[allow(clippy::cognitive_complexity)]
     fn new(matches: &clap::ArgMatches, config: &Config) -> UResult<Self> {
         let (o, oset): (bool, FxHashSet<String>) = if matches.contains_id(options::ONLY_FILE) {
@@ -166,27 +224,30 @@ impl WordFilter {
         } else {
             None
         };
-        let reg = match arg_reg {
-            Some(arg_reg) => arg_reg,
-            None => {
-                if let Some(break_set) = break_set {
-                    format!(
-                        "[^{}]+",
-                        regex::escape(&break_set.into_iter().collect::<String>())
-                    )
-                } else if config.gnu_ext {
-                    "\\w+".to_owned()
-                } else {
-                    "[^ \t\n]+".to_owned()
-                }
-            }
+        let matcher = match break_set {
+            Some(chars) => WordMatcher::Break(chars),
+            None => WordMatcher::default_for(config.gnu_ext),
         };
+        let skip_nonletters = arg_reg.as_deref() == Some(r"\w+")
+            || (arg_reg.is_none() && matches!(matcher, WordMatcher::Default));
+        let word_regex = arg_reg
+            .map(|pattern| {
+                Regex::new(&pattern).map_err(|error| {
+                    USimpleError::new(
+                        1,
+                        translate!("ptx-error-invalid-regexp", "error" => error.to_string()),
+                    )
+                })
+            })
+            .transpose()?;
         Ok(Self {
             only_specified: o,
             ignore_specified: i,
             only_set: oset,
             ignore_set: iset,
-            word_regex: reg,
+            matcher,
+            word_regex,
+            skip_nonletters,
         })
     }
 }
@@ -207,7 +268,6 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
     if matches.get_flag(options::TRADITIONAL) {
         config.gnu_ext = false;
         config.format = OutFormat::Roff;
-        "[^ \t\n]+".clone_into(&mut config.context_regex);
     }
     if let Some(regex) = matches
         .remove_one::<String>(options::SENTENCE_REGEXP)
@@ -330,34 +390,24 @@ fn read_lines(
 
 /// Go through every lines in the input files and record each match occurrence as a `WordRef`.
 fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> BTreeSet<WordRef> {
-    let Some(reg) = Regex::new(&filter.word_regex).ok() else {
-        return BTreeSet::new();
-    };
-    let Some(ref_reg) = Regex::new(&config.context_regex).ok() else {
-        return BTreeSet::new();
-    };
-
     let mut word_set: BTreeSet<WordRef> = BTreeSet::new();
     for (file_index, (_, lines)) in file_map.iter().enumerate() {
         let mut count: usize = 0;
         for line in &lines.lines {
             // if -r, exclude reference from word set
-            let (ref_beg, ref_end) = match ref_reg.find(line) {
-                Some(x) => (x.start(), x.end()),
-                None => (0, 0),
-            };
+            let (ref_beg, ref_end) = context_word(config, line);
             let mut last_counted_byte = 0;
             let mut char_start = 0;
             // match words with given regex
-            for mat in reg.find_iter(line) {
-                let (mut beg, end) = (mat.start(), mat.end());
+            for range in filter.find_iter(line) {
+                let (mut beg, end) = (range.start, range.end);
                 if beg == end {
                     continue;
                 }
 
                 // GNU-compatible default behavior:
                 // with default regexp, keyword must start at first alphabetic char.
-                if filter.word_regex == Config::default().context_regex {
+                if filter.skip_nonletters {
                     let matched = &line[beg..end];
                     if let Some(pos) = matched.find(|c: char| c.is_alphabetic()) {
                         beg += pos;
@@ -398,13 +448,7 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
     word_set
 }
 
-fn get_reference(
-    config: &Config,
-    word_ref: &WordRef,
-    filename: &OsStr,
-    line: &str,
-    context_reg: &Regex,
-) -> String {
+fn get_reference(config: &Config, word_ref: &WordRef, filename: &OsStr, line: &str) -> String {
     if config.auto_ref {
         if filename == "-" {
             format!(":{}", word_ref.local_line_nr + 1)
@@ -412,10 +456,7 @@ fn get_reference(
             format!("{}:{}", filename.maybe_quote(), word_ref.local_line_nr + 1)
         }
     } else if config.input_ref {
-        let (beg, end) = match context_reg.find(line) {
-            Some(x) => (x.start(), x.end()),
-            None => (0, 0),
-        };
+        let (beg, end) = context_word(config, line);
         line[beg..end].to_string()
     } else {
         String::new()
@@ -800,8 +841,6 @@ fn write_traditional_output(
             Box::new(file)
         });
 
-    let context_reg = Regex::new(&config.context_regex).unwrap();
-
     if !config.right_ref {
         let max_ref_len = if config.auto_ref {
             get_auto_max_reference_len(words, file_map)
@@ -816,13 +855,7 @@ fn write_traditional_output(
     for word_ref in words {
         let (filename, file_map_value) = &file_map[word_ref.file_index];
         let FileContent { lines, chars_lines } = file_map_value;
-        let reference = get_reference(
-            config,
-            word_ref,
-            filename,
-            &lines[word_ref.local_line_nr],
-            &context_reg,
-        );
+        let reference = get_reference(config, word_ref, filename, &lines[word_ref.local_line_nr]);
         let output_line: String = match config.format {
             OutFormat::Tex => format_tex_line(
                 config,
