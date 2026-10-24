@@ -41,7 +41,6 @@ use clap::ArgMatches;
 use std::ffi::{OsStr, OsString};
 use std::path::is_separator;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError};
 use uucore::translate;
 
 // This is an allocation guard, not a semantic suffix limit. 4096 is around the
@@ -326,28 +325,24 @@ pub struct FilenameIterator<'a> {
 }
 
 impl<'a> FilenameIterator<'a> {
-    pub fn new(prefix: &'a OsStr, suffix: &'a Suffix) -> UResult<Self> {
+    pub fn new(prefix: &'a OsStr, suffix: &'a Suffix) -> Self {
         let radix = suffix.stype.radix();
         let number = if suffix.auto_widening {
             Number::DynamicWidth(DynamicWidthNumber::new(radix, suffix.start))
         } else {
             Number::FixedWidth(
-                FixedWidthNumber::new(radix, suffix.length, suffix.start).map_err(|_| {
-                    USimpleError::new(
-                        1,
-                        translate!("split-error-numerical-suffix-start-too-large"),
-                    )
-                })?,
+                FixedWidthNumber::new(radix, suffix.length, suffix.start)
+                    .expect("the suffix start value is checked when the suffix is parsed"),
             )
         };
         let additional_suffix = &suffix.additional;
 
-        Ok(FilenameIterator {
+        FilenameIterator {
             prefix,
             additional_suffix,
             number,
             first_iteration: true,
-        })
+        }
     }
 }
 
@@ -375,6 +370,7 @@ mod tests {
     use crate::filenames::FilenameIterator;
     use crate::filenames::Suffix;
     use crate::filenames::SuffixType;
+    use crate::number::FixedWidthNumber;
 
     #[test]
     fn test_filename_iterator_alphabetic_fixed_width() {
@@ -385,12 +381,12 @@ mod tests {
             auto_widening: false,
             additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.next().unwrap(), "chunk_aa.txt");
         assert_eq!(it.next().unwrap(), "chunk_ab.txt");
         assert_eq!(it.next().unwrap(), "chunk_ac.txt");
 
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.nth(26 * 26 - 1).unwrap(), "chunk_zz.txt");
         assert_eq!(it.next(), None);
     }
@@ -404,12 +400,12 @@ mod tests {
             auto_widening: false,
             additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.next().unwrap(), "chunk_00.txt");
         assert_eq!(it.next().unwrap(), "chunk_01.txt");
         assert_eq!(it.next().unwrap(), "chunk_02.txt");
 
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.nth(10 * 10 - 1).unwrap(), "chunk_99.txt");
         assert_eq!(it.next(), None);
     }
@@ -423,12 +419,12 @@ mod tests {
             auto_widening: true,
             additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.next().unwrap(), "chunk_aa.txt");
         assert_eq!(it.next().unwrap(), "chunk_ab.txt");
         assert_eq!(it.next().unwrap(), "chunk_ac.txt");
 
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.nth(26 * 25 - 1).unwrap(), "chunk_yz.txt");
         assert_eq!(it.next().unwrap(), "chunk_zaaa.txt");
         assert_eq!(it.next().unwrap(), "chunk_zaab.txt");
@@ -443,12 +439,12 @@ mod tests {
             auto_widening: true,
             additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.next().unwrap(), "chunk_00.txt");
         assert_eq!(it.next().unwrap(), "chunk_01.txt");
         assert_eq!(it.next().unwrap(), "chunk_02.txt");
 
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.nth(10 * 9 - 1).unwrap(), "chunk_89.txt");
         assert_eq!(it.next().unwrap(), "chunk_9000.txt");
         assert_eq!(it.next().unwrap(), "chunk_9001.txt");
@@ -463,7 +459,7 @@ mod tests {
             auto_widening: true,
             additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.next().unwrap(), "chunk_05.txt");
         assert_eq!(it.next().unwrap(), "chunk_06.txt");
         assert_eq!(it.next().unwrap(), "chunk_07.txt");
@@ -478,7 +474,7 @@ mod tests {
             auto_widening: true,
             additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.next().unwrap(), "chunk_09.txt");
         assert_eq!(it.next().unwrap(), "chunk_0a.txt");
         assert_eq!(it.next().unwrap(), "chunk_0b.txt");
@@ -493,19 +489,11 @@ mod tests {
             auto_widening: false,
             additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.next().unwrap(), "chunk_999.txt");
         assert!(it.next().is_none());
 
-        let suffix = Suffix {
-            stype: SuffixType::Decimal,
-            length: 3,
-            start: 1000,
-            auto_widening: false,
-            additional: ".txt".into(),
-        };
-        let it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
-        assert!(it.is_err());
+        assert!(FixedWidthNumber::new(10, 3, 1000).is_err());
 
         let suffix = Suffix {
             stype: SuffixType::Hexadecimal,
@@ -514,19 +502,11 @@ mod tests {
             auto_widening: false,
             additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert_eq!(it.next().unwrap(), "chunk_fff.txt");
         assert!(it.next().is_none());
 
-        let suffix = Suffix {
-            stype: SuffixType::Hexadecimal,
-            length: 3,
-            start: 0x1000,
-            auto_widening: false,
-            additional: ".txt".into(),
-        };
-        let it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
-        assert!(it.is_err());
+        assert!(FixedWidthNumber::new(16, 3, 0x1000).is_err());
     }
     #[test]
     #[cfg(unix)]
@@ -542,8 +522,7 @@ mod tests {
             additional: std::ffi::OsString::from_vec(vec![0xFE]),
         };
 
-        let mut it = FilenameIterator::new(OsStr::from_bytes(b"p\xFF"), &suffix)
-            .expect("valid fixed-width filename iterator");
+        let mut it = FilenameIterator::new(OsStr::from_bytes(b"p\xFF"), &suffix);
         assert_eq!(
             it.next().expect("first chunk filename exists").into_vec(),
             b"p\xFFaa\xFE".to_vec()

@@ -923,7 +923,7 @@ fn test_suffix_start_past_number_of_chunks() {
     new_ucmd!()
         .args(&["-n", "2", "--numeric-suffixes=99", "fivelines.txt"])
         .fails()
-        .stderr_contains("output file suffixes exhausted");
+        .stderr_only("split: output file suffixes exhausted\n");
 }
 
 /// Test for edge case of specifying 0 for suffix length
