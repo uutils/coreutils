@@ -44,7 +44,9 @@ use crate::hardlink::{
 };
 use uucore::backup_control::{self, backup_would_destroy_source};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::error::{
+    FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code, strip_errno,
+};
 #[cfg(unix)]
 use uucore::fs::display_permissions_unix;
 use uucore::fs::{
@@ -402,15 +404,18 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
             return Err(MvError::CannotStatNotADirectory(source.quote().to_string()).into());
         }
         Ok(metadata) => metadata,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            return Err(MvError::NoSuchFile(source.quote().to_string()).into());
-        }
-        // Report the real reason, e.g. "Not a directory" for `file/` or
-        // "Permission denied" for a source in an unsearchable directory.
+        // Report the real reason, e.g. "No such file or directory", "Not a
+        // directory" for `file/` or "Permission denied" for a source in an
+        // unsearchable directory.
         Err(e) => {
-            return Err(
-                e.map_err_context(|| translate!("mv-error-cannot-stat", "path" => source.quote()))
-            );
+            return Err(USimpleError::new(
+                1,
+                format!(
+                    "{}: {}",
+                    translate!("mv-error-cannot-stat", "path" => source.quote()),
+                    strip_errno(&e)
+                ),
+            ));
         }
     };
 
