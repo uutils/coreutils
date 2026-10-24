@@ -3841,6 +3841,7 @@ dependencies = [
  "itertools 0.15.0",
  "memchr",
  "regex",
+ "rustix",
  "thiserror 2.0.21",
  "uucore",
 ]
