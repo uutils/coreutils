@@ -3523,9 +3523,9 @@ mod debug_flag {
     }
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_check_file_with_io_error() {
     // /proc/self/mem causes EIO when read without proper seeking
     new_ucmd!()
@@ -3538,9 +3538,9 @@ fn test_check_file_with_io_error() {
         .stdout_contains("FAILED open or read");
 }
 
+#[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_check_checkfile_with_io_error() {
     // /proc/self/mem causes EIO when read without proper seeking
     new_ucmd!()
