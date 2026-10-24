@@ -525,6 +525,28 @@ fn test_split_obs_lines_within_combined_shorts() {
     assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
+/// Digits that are the value of an option in the same combined short options,
+/// as in `-dn10`, are not an obsolete lines option
+#[test]
+fn test_split_option_value_within_combined_shorts() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "option-value-within-shorts";
+    RandomFile::new(&at, name).add_lines(100);
+
+    ucmd.args(&["-dn10", name]).succeeds().no_output();
+    let glob = Glob::new(&at, ".", r"x\d\d$");
+    assert_eq!(glob.count(), 10);
+    assert_eq!(glob.collate(), at.read_bytes(name));
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    RandomFile::new(&at, name).add_lines(100);
+
+    ucmd.args(&["-xl25", name]).succeeds().no_output();
+    let glob = Glob::new(&at, ".", r"x[[:xdigit:]]{2}$");
+    assert_eq!(glob.count(), 4);
+    assert_eq!(glob.collate(), at.read_bytes(name));
+}
+
 /// Test for obsolete lines option as part of combined short options with tailing suffix length with value
 #[test]
 fn test_split_obs_lines_within_combined_shorts_tailing_suffix_length() {
@@ -635,6 +657,32 @@ fn test_split_obs_lines_as_other_option_value() {
         .args(&["--number", "-e200", "file"])
         .fails_with_code(1)
         .stderr_contains("split: invalid number of chunks: '-e200'\n");
+}
+
+/// A short option that requires value at the end of combined short options, as in `-dl`,
+/// takes the following hyphen prefixed argument as its value
+#[test]
+fn test_split_obs_lines_as_value_of_option_ending_combined_shorts() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+
+    scene
+        .ucmd()
+        .args(&["-dl", "-200", "file"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid number of lines: '-200'\n");
+    scene
+        .ucmd()
+        .args(&["-xa", "-200", "file"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid suffix length: '-200'\n");
+    // `-a` takes `2l` as its value here, so `-5` is not the value of `-l`
+    scene
+        .ucmd()
+        .args(&["-a2l", "-5", "file"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid suffix length: '2l'\n");
 }
 
 #[test]
