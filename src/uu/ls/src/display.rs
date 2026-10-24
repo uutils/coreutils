@@ -33,14 +33,6 @@ use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions};
 
 #[cfg(unix)]
 use uucore::entries;
-#[cfg(any(
-    target_os = "freebsd",
-    target_os = "hurd",
-    target_os = "linux",
-    target_os = "macos",
-    target_os = "netbsd"
-))]
-use uucore::fsxattr::has_acl;
 #[cfg(unix)]
 use uucore::libc::{dev_t, major, minor};
 use uucore::{
@@ -949,22 +941,7 @@ fn display_item_long(
     }
 
     if let Some(md) = item.metadata() {
-        #[cfg(not(any(
-            target_os = "freebsd",
-            target_os = "hurd",
-            target_os = "linux",
-            target_os = "macos",
-            target_os = "netbsd"
-        )))]
-        let is_acl_set = false;
-        #[cfg(any(
-            target_os = "freebsd",
-            target_os = "hurd",
-            target_os = "linux",
-            target_os = "macos",
-            target_os = "netbsd"
-        ))]
-        let is_acl_set = has_acl(item.path(), item.must_dereference);
+        let is_acl_set = item.has_acl();
         state
             .display_buf
             .extend(display_permissions(md, true).as_bytes());
@@ -1379,23 +1356,7 @@ fn calculate_padding_collection(
             // If any item has an ACL or non-trivial security context, widen
             // the permissions column by one to reserve space for the `+`/`.`
             // indicator.
-            #[cfg(not(any(
-                target_os = "freebsd",
-                target_os = "hurd",
-                target_os = "linux",
-                target_os = "macos",
-                target_os = "netbsd"
-            )))]
-            let is_acl_set = false;
-            #[cfg(any(
-                target_os = "freebsd",
-                target_os = "hurd",
-                target_os = "linux",
-                target_os = "macos",
-                target_os = "netbsd"
-            ))]
-            let is_acl_set = has_acl(item.path(), item.must_dereference);
-            if context_len > 1 || is_acl_set {
+            if context_len > 1 || item.has_acl() {
                 padding_collections.permissions = PERMISSIONS_WIDTH + 1;
             }
 
