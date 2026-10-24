@@ -659,6 +659,32 @@ fn test_split_obs_lines_as_other_option_value() {
         .stderr_contains("split: invalid number of chunks: '-e200'\n");
 }
 
+/// A short option that requires value at the end of combined short options, as in `-dl`,
+/// takes the following hyphen prefixed argument as its value
+#[test]
+fn test_split_obs_lines_as_value_of_option_ending_combined_shorts() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+
+    scene
+        .ucmd()
+        .args(&["-dl", "-200", "file"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid number of lines: '-200'\n");
+    scene
+        .ucmd()
+        .args(&["-xa", "-200", "file"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid suffix length: '-200'\n");
+    // `-a` takes `2l` as its value here, so `-5` is not the value of `-l`
+    scene
+        .ucmd()
+        .args(&["-a2l", "-5", "file"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid suffix length: '2l'\n");
+}
+
 #[test]
 fn test_split_chunks_by_line_or_round_robin_zero_chunks() {
     let scene = TestScenario::new(util_name!());
