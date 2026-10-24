@@ -89,7 +89,7 @@ jobs:
           ## cargo clippy lint testing
           if [ -z "\${FAULT}" ]; then
             echo "## cargo clippy lint testing"
-            CLIPPY_ARGS="--features feat_os_unix --fault-type \${FAULT_TYPE}"
+            CLIPPY_ARGS="--workspace --features feat_os_unix --fault-type \${FAULT_TYPE}"
             if [ -n "\${FAIL_ON_FAULT}" ]; then CLIPPY_ARGS="\${CLIPPY_ARGS} --fail-on-fault"; fi
             python3 util/run-clippy.py \${CLIPPY_ARGS} || FAULT=true
           fi
