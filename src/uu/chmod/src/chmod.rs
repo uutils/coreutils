@@ -333,17 +333,19 @@ impl Chmoder {
                 let clause_start = offset;
                 offset += mode.len() + 1; // past the clause and its comma
 
-                let result = if mode.chars().any(|c| c.is_ascii_digit()) {
-                    mode::parse_numeric(new_mode, mode, is_dir).map(|v| (v, v))
-                } else {
-                    mode::parse_symbolic(new_mode, mode, mode::get_umask(), is_dir).map(|m| {
-                        // calculate the new mode as if umask was 0
-                        let naive_mode =
-                            mode::parse_symbolic(naively_expected_new_mode, mode, 0, is_dir)
-                                .unwrap(); // we know that mode must be valid, so this cannot fail
-                        (m, naive_mode)
-                    })
-                };
+                let result = mode::check_clause(&cmode_unwrapped, mode).and_then(|()| {
+                    if mode.chars().any(|c| c.is_ascii_digit()) {
+                        mode::parse_numeric(new_mode, mode, is_dir).map(|v| (v, v))
+                    } else {
+                        mode::parse_symbolic(new_mode, mode, mode::get_umask(), is_dir).map(|m| {
+                            // calculate the new mode as if umask was 0
+                            let naive_mode =
+                                mode::parse_symbolic(naively_expected_new_mode, mode, 0, is_dir)
+                                    .unwrap(); // we know that mode must be valid, so this cannot fail
+                            (m, naive_mode)
+                        })
+                    }
+                });
 
                 match result {
                     Ok((mode, naive_mode)) => {

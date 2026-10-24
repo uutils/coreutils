@@ -263,6 +263,35 @@ fn test_symbolic_mode() {
 #[test]
 #[cfg(not(windows))]
 #[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
+fn test_mode_list_with_empty_clause_or_bare_octal() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    for mode in [
+        "", ",", "u+x,", ",u+x", "u+x,,g+w", "644,u+x", "u+x,644", " 644,u+x",
+    ] {
+        scene
+            .ucmd()
+            .arg("-m")
+            .arg(mode)
+            .arg("test_dir")
+            .fails_with_code(1)
+            .stderr_is(format!("mkdir: invalid mode '{mode}'\n"));
+        assert!(!at.dir_exists("test_dir"), "{mode:?}");
+    }
+
+    scene
+        .ucmd()
+        .arg("-m")
+        .arg("=644,u+x")
+        .arg("test_dir")
+        .succeeds();
+    assert_eq!(at.metadata("test_dir").permissions().mode(), 0o40744);
+}
+
+#[test]
+#[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
 fn test_symbolic_alteration() {
     let (at, mut ucmd) = at_and_ucmd!();
     let test_dir = "test_dir";

@@ -305,6 +305,38 @@ fn test_install_mode_comma_separated_directory() {
 }
 
 #[test]
+fn test_install_mode_list_with_empty_clause_or_bare_octal() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    for mode in [
+        "", ",", "u+x,", ",u+x", "u+x,,g+w", "644,u+x", "u+x,644", "+644,644", " 644,u+x",
+    ] {
+        scene
+            .ucmd()
+            .arg("-d")
+            .arg("-m")
+            .arg(mode)
+            .arg("test_dir")
+            .fails_with_code(1)
+            .stderr_is(format!(
+                "install: Invalid mode string: invalid mode ({mode})\n"
+            ));
+        assert!(!at.dir_exists("test_dir"), "{mode:?}");
+    }
+
+    scene
+        .ucmd()
+        .arg("-d")
+        .arg("-m")
+        .arg("=644,u+x")
+        .arg("test_dir")
+        .succeeds();
+    let permissions = at.metadata("test_dir").permissions();
+    assert_eq!(0o040_744_u32, PermissionsExt::mode(&permissions));
+}
+
+#[test]
 fn test_install_mode_symbolic_ignore_umask() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "target_dir";
