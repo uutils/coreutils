@@ -2354,3 +2354,60 @@ fn test_obsolete_lines_not_read_after_double_dash() {
         .fails()
         .stderr_contains("cannot open '-1' for reading");
 }
+
+#[test]
+fn test_verbose_number_of_chunks() {
+    use std::fmt::Write as _;
+
+    for (args, input, created) in [
+        (&["-n", "2"][..], "a\nb\n", &["xaa", "xab"][..]),
+        (&["-n", "l/2"], "a\nb\n", &["xaa", "xab"]),
+        (&["-n", "r/2"], "a\nb\n", &["xaa", "xab"]),
+        (&["-n", "3"], "a\nb\n", &["xaa", "xab", "xac"]),
+        (&["-n", "l/3"], "a\nb\n", &["xaa", "xab", "xac"]),
+        (&["-n", "r/3"], "a\nb\n", &["xaa", "xab", "xac"]),
+        // Only the files that get created are announced with `-e`.
+        (&["-e", "-n", "5"], "a\nb\n", &["xaa", "xab", "xac", "xad"]),
+        (&["-e", "-n", "l/3"], "a\nb\n", &["xaa", "xab"]),
+        (&["-e", "-n", "r/3"], "a\nb\n", &["xaa", "xab"]),
+        // A file written to several times is still announced once.
+        (&["-n", "2"], "1\n2\n3\n4\n5\n", &["xaa", "xab"]),
+        (&["-n", "l/2"], "1\n2\n3\n4\n5\n", &["xaa", "xab"]),
+        (&["-n", "r/2"], "1\n2\n3\n4\n5\n", &["xaa", "xab"]),
+        (&["-e", "-n", "l/2"], "1\n2\n3\n4\n5\n", &["xaa", "xab"]),
+        (&["-e", "-n", "r/2"], "1\n2\n3\n4\n5\n", &["xaa", "xab"]),
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let expected = created.iter().fold(String::new(), |mut out, name| {
+            writeln!(out, "creating file '{name}'").unwrap();
+            out
+        });
+
+        ucmd.args(args)
+            .arg("--verbose")
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(expected);
+        for name in created {
+            assert!(at.file_exists(name), "{args:?}: {name} is missing");
+        }
+    }
+}
+
+#[test]
+fn test_verbose_kth_chunk_creates_no_file() {
+    for (args, chunk) in [
+        (&["-n", "1/2"][..], "abc"),
+        (&["-n", "l/1/2"], "abcd\n"),
+        (&["-n", "r/1/2"], "abcd\n"),
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        ucmd.args(args)
+            .arg("--verbose")
+            .pipe_in("abcd\n")
+            .succeeds()
+            .stdout_only(chunk);
+        assert!(!at.file_exists("xaa"), "{args:?}: unexpected output file");
+    }
+}
