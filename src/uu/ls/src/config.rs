@@ -420,15 +420,12 @@ fn is_color_compatible_term() -> bool {
     let term = std::env::var_os("TERM");
     let colorterm = std::env::var_os("COLORTERM");
 
-    // Search function in the TERM struct to manage the wildcards
+    // Entries in TERMS are glob patterns (`*color*`, `con[0-9]*x[0-9]*`), not only `prefix*`
     let term_matches = |term: &OsStr| -> bool {
-        uucore::colors::TERMS.iter().any(|&pattern| {
-            term == pattern
-                || (pattern.ends_with('*')
-                    && term
-                        .as_encoded_bytes()
-                        .starts_with(&pattern.as_bytes()[..pattern.len() - 1]))
-        })
+        let term = term.to_string_lossy();
+        uucore::colors::TERMS
+            .iter()
+            .any(|pattern| parse_glob::from_str(pattern).is_ok_and(|glob| glob.matches(&term)))
     };
 
     match (term, colorterm) {
