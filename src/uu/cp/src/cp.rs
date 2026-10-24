@@ -2942,9 +2942,11 @@ fn copy_file(
         // this is just for gnu tests compatibility
         result.map_err(|err| {
             if err.to_string().contains("No such file or directory") {
-                return translate!("cp-error-cannot-stat", "source" => source.quote());
+                return CpError::Error(
+                    translate!("cp-error-cannot-stat", "source" => source.quote()),
+                );
             }
-            err.to_string()
+            CpError::IoErrContext(err, format!("cannot stat {}", source.quote()))
         })?
     };
 
