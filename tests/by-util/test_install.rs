@@ -143,10 +143,7 @@ fn test_install_ancestors_mode_directories_with_file() {
     let directories_arg = "-D";
     let mode_arg = "--mode=200";
     let file = "file";
-    let probe = "probe";
-
-    at.mkdir(probe);
-    let default_perms = at.metadata(probe).permissions().mode();
+    let default_perms = 0o40_755_u32;
 
     at.touch(file);
 
