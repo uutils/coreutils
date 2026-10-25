@@ -19,8 +19,8 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use regex::bytes::Regex;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::format_usage;
 use uucore::stdio::stdin;
+use uucore::{format_usage, show};
 
 mod csplit_error;
 mod diagnostics;
@@ -128,10 +128,8 @@ where
                 | patterns::Pattern::SkipToMatch(_, _, patterns::ExecutePattern::Always)
         )
     });
-    let ret = do_csplit(&mut split_writer, patterns_vec, &mut input_iter);
-
-    // consume the rest, unless there was an error
-    let ret = if ret.is_ok() {
+    let ret = do_csplit(&mut split_writer, patterns_vec, &mut input_iter).and_then(|_| {
+        // consume the rest, unless there was an error
         input_iter.rewind_buffer();
         if let Some((_, line)) = input_iter.next() {
             // There is remaining input: create a final split and copy remainder
@@ -149,20 +147,25 @@ where
         } else {
             Ok(())
         }
-    } else {
-        ret
-    };
-    // GNU still reports the bytes written to the split that was in progress
-    // when the failure happened.
-    if ret.is_err() && !split_writer.split_finished {
-        let _ = split_writer.finish_split();
+    });
+
+    if let Err(e) = ret {
+        // Show error first
+        show!(e);
+
+        // GNU still reports the bytes written to the split that was in progress
+        // when the failure happened.
+        if !split_writer.split_finished {
+            let _ = split_writer.finish_split();
+        }
+
+        // delete files on error by default
+        if !options.keep_files {
+            split_writer.delete_all_splits()?;
+        }
     }
 
-    // delete files on error by default
-    if ret.is_err() && !options.keep_files {
-        split_writer.delete_all_splits()?;
-    }
-    ret
+    Ok(())
 }
 
 fn do_csplit<I>(
