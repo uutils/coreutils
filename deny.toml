@@ -54,8 +54,6 @@ highlight = "all"
 # introduces it.
 # spell-checker: disable
 skip = [
-  # notify
-  { name = "windows-sys", version = "0.60.2" },
   # filedescriptor, utmp-classic
   { name = "thiserror", version = "1.0.69" },
   # thiserror
