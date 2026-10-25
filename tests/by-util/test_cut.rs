@@ -368,6 +368,18 @@ fn test_equal_as_delimiter() {
 }
 
 #[test]
+fn test_equal_delimiter_file_operand_after_double_dash() {
+    // After `--`, a file named `-d=` is an operand and must not be rewritten
+    // to `--delimiter==`. #15806
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("-d=", "a:b:c\n");
+    at.write("--delimiter==", "x:y:z\n");
+    ucmd.args(&["-d:", "-f2", "--", "-d="])
+        .succeeds()
+        .stdout_only("b\n");
+}
+
+#[test]
 fn test_empty_string_as_delimiter() {
     new_ucmd!()
         .args(&["-f2", "--delimiter="])
