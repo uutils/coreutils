@@ -714,9 +714,15 @@ mod tests {
         use crate::locale::{get_message, setup_localization};
         use std::env;
 
-        let original_lang = env::var_os("LANG").unwrap_or_default();
+        // LC_ALL, LC_MESSAGES and LANGUAGE take precedence over LANG, so clear
+        // them for the duration of the test (CI runners may set LC_ALL).
+        let vars = ["LC_ALL", "LC_MESSAGES", "LANGUAGE", "LANG"];
+        let originals: Vec<_> = vars.iter().map(env::var_os).collect();
 
         unsafe {
+            for var in &vars[..3] {
+                env::remove_var(var);
+            }
             env::set_var("LANG", "fr_FR.UTF-8");
         }
 
@@ -727,10 +733,11 @@ mod tests {
         }
 
         unsafe {
-            if original_lang.is_empty() {
-                env::remove_var("LANG");
-            } else {
-                env::set_var("LANG", original_lang);
+            for (var, original) in vars.iter().zip(originals) {
+                match original {
+                    Some(value) => env::set_var(var, value),
+                    None => env::remove_var(var),
+                }
             }
         }
     }
