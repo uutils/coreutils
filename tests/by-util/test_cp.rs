@@ -9904,3 +9904,21 @@ fn test_cp_source_with_trailing_slash_on_file(#[case] flags: &[&str]) {
         .stderr_only("cp: cannot stat 'f/': Not a directory\n");
     assert!(!at.file_exists("dest"));
 }
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no chmod syscall")]
+fn test_cp_source_in_unsearchable_dir() {
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    at.touch("d/f");
+    at.set_mode("d", 0);
+    ucmd.args(&["d/f", "dest"])
+        .fails_with_code(1)
+        .stderr_only("cp: cannot stat 'd/f': Permission denied\n");
+    at.set_mode("d", 0o755);
+    assert!(!at.file_exists("dest"));
+}

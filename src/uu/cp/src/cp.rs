@@ -2344,7 +2344,7 @@ fn delete_dest_if_needed_and_allowed(
                                 &FileInformation::from_path(
                                     source,
                                     options.dereference(source_in_command_line)
-                                ).map_err(|e| CpError::IoErrContext(e, format!("cannot stat {}", source.quote())))?
+                                ).map_err(|e| CpError::IoErrContext(e, translate!("cp-error-cannot-stat-context", "source" => source.quote())))?
                             )
                 }
             }
@@ -2917,7 +2917,12 @@ fn copy_file(
         // in the destination tree.
         if let Some(new_source) = copied_files.get(
             &FileInformation::from_path(source, options.dereference(source_in_command_line))
-                .map_err(|e| CpError::IoErrContext(e, format!("cannot stat {}", source.quote())))?,
+                .map_err(|e| {
+                    CpError::IoErrContext(
+                        e,
+                        translate!("cp-error-cannot-stat-context", "source" => source.quote()),
+                    )
+                })?,
         ) {
             fs::hard_link(new_source, dest)?;
 
@@ -2939,14 +2944,11 @@ fn copy_file(
         } else {
             fs::symlink_metadata(source)
         };
-        // this is just for gnu tests compatibility
         result.map_err(|err| {
-            if err.to_string().contains("No such file or directory") {
-                return CpError::Error(
-                    translate!("cp-error-cannot-stat", "source" => source.quote()),
-                );
-            }
-            CpError::IoErrContext(err, format!("cannot stat {}", source.quote()))
+            CpError::IoErrContext(
+                err,
+                translate!("cp-error-cannot-stat-context", "source" => source.quote()),
+            )
         })?
     };
 
