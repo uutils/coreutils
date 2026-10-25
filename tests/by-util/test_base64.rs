@@ -308,3 +308,13 @@ fn test_base64_file_with_trailing_slash() {
         .fails()
         .stderr_only("base64: a/: Not a directory\n");
 }
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: Can't detect closed stdin")]
+fn test_closed_stdin() {
+    new_ucmd!()
+        .close_stdin(true)
+        .fails_with_code(1)
+        .stderr_is("base64: read error: Bad file descriptor\n");
+}
