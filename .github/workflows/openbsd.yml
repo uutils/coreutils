@@ -25,6 +25,11 @@ jobs:
     name: Style and Lint
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { features: "feat_Tier1,feat_require_unix" }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -99,7 +104,7 @@ jobs:
           ## cargo clippy lint testing
           if [ -z "\${FAULT}" ]; then
             echo "::group::cargo clippy"
-            CLIPPY_ARGS="--features feat_os_unix --fault-type \${FAULT_TYPE}"
+            CLIPPY_ARGS="--features ${{ matrix.job.features }} --fault-type \${FAULT_TYPE}"
             if [ -n "\${FAIL_ON_FAULT}" ]; then CLIPPY_ARGS="\${CLIPPY_ARGS} --fail-on-fault"; fi
             python3 util/run-clippy.py \${CLIPPY_ARGS} || FAULT=true
             echo "::endgroup::"
@@ -113,6 +118,11 @@ jobs:
     name: Tests
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { features: "feat_Tier1,feat_require_unix" }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -198,7 +208,7 @@ jobs:
           # Use cargo test since nextest might not support OpenBSD
           if (test -z "\$FAULT"); then
             echo "::group::cargo test (workspace)"
-            cargo test --features feat_os_unix || FAULT=1
+            cargo test --features ${{ matrix.job.features }} || FAULT=1
             echo "::endgroup::"
           fi
           if (test -z "\$FAULT"); then
