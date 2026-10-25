@@ -705,12 +705,22 @@ fn test_join_lines_keeps_column_separator() {
 fn test_merge_stops_after_last_line_without_header() {
     // without a page trailer there is nothing to pad to: like GNU pr, stop
     // after the last merged line (-F still prints the 5 header lines and a form feed)
-    for (flag, lines) in [("-t", 2), ("-T", 2), ("-F", 8)] {
+    // -J keeps the columns from being padded, so the lines are short
+    let body = "a\tc\nb\td\n";
+    let header = format!("\n\nX{}Page 1\n\n\n", " ".repeat(65));
+    for (args, expected) in [
+        (vec!["-J", "-t"], body.to_string()),
+        (vec!["-J", "-T"], body.to_string()),
+        (vec!["-J", "-F", "-D", "X"], format!("{header}{body}\x0c")),
+    ] {
         let (at, mut ucmd) = at_and_ucmd!();
         at.write("one", "a\nb\n");
         at.write("two", "c\nd\n");
-        let result = ucmd.args(&["-m", flag, "one", "two"]).succeeds();
-        assert_eq!(result.stdout_str().lines().count(), lines, "{flag}");
+        ucmd.arg("-m")
+            .args(&args)
+            .args(&["one", "two"])
+            .succeeds()
+            .stdout_is(expected);
     }
 }
 

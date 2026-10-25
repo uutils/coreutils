@@ -1501,14 +1501,12 @@ fn write_columns(
     };
 
     let blank_line = FileLine::default();
+    // Without a page trailer there is nothing to pad the page out to.
+    let no_trailer = feed_line_present || !options.display_header_and_trailer;
     for row in table {
         // Merged files are padded with empty cells to fill the page; once
-        // every file has run out there is nothing left to print without a
-        // page trailer to pad for.
-        if merge
-            && row.iter().all(Option::is_none)
-            && (feed_line_present || !options.display_header_and_trailer)
-        {
+        // every file has run out there is nothing left to print.
+        if merge && no_trailer && row.iter().all(Option::is_none) {
             break;
         }
         // On a page that is not completely filled the last row stops part way
@@ -1541,10 +1539,7 @@ fn write_columns(
         // The last row of a partly filled page has content in its leading
         // columns and nothing in the rest, so it still needs to be terminated.
         // Only a row without any content at all means the page ran out.
-        if cells_written == 0
-            && not_found_break
-            && (feed_line_present || !options.display_header_and_trailer)
-        {
+        if cells_written == 0 && not_found_break && no_trailer {
             break;
         }
         writer.write_all(line_separator)?;
