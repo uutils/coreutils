@@ -437,7 +437,6 @@ fn test_read_error() {
 #[cfg(target_os = "linux")]
 fn test_expand_non_utf8_paths() {
     use std::os::unix::ffi::OsStringExt;
-    use uutests::at_and_ucmd;
 
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -496,8 +495,6 @@ fn test_buffered_reads_new_line_no_tabs_in_first_chunk() {
 
 #[test]
 fn test_line_continues_into_next_file() {
-    use uutests::at_and_ucmd;
-
     // The first file does not end in a newline, so the tab in the second
     // file is at column 1 of the same line.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -516,8 +513,6 @@ fn test_line_continues_into_next_file() {
 
 #[test]
 fn test_tab_after_chunk_without_newline() {
-    use uutests::at_and_ucmd;
-
     // The first 8 KiB read has no tab and no newline. The tab after it must
     // be expanded from its real column (8193), not from the read boundary.
     let line = "a".repeat(8190) + "bcd";
@@ -539,8 +534,6 @@ fn test_tab_after_chunk_without_newline() {
 
 #[test]
 fn test_tab_after_chunk_ending_in_wide_chars() {
-    use uutests::at_and_ucmd;
-
     // The first 8 KiB read has no tab and ends with three U+4E2D (3 bytes,
     // width 2 each). The tab after them is at column 6, not 9.
     let first = "x".repeat(8192 - 1 - 9);
@@ -553,8 +546,6 @@ fn test_tab_after_chunk_ending_in_wide_chars() {
 
 #[test]
 fn test_line_continues_past_unreadable_file() {
-    use uutests::at_and_ucmd;
-
     // A file that cannot be read does not end the line started before it.
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("f1", "a");
