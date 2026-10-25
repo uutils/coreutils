@@ -1944,3 +1944,15 @@ fn test_empty_skip_to_regex_is_accepted() {
     ucmd.args(&["letters", "%%"]).succeeds().stdout_only("19\n");
     assert_eq!(at.read("xx00"), "delta\necho\nfoxtrot\n");
 }
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: Can't detect closed stdin")]
+fn test_closed_stdin() {
+    new_ucmd!()
+        .args(&["-", "2", "4"])
+        .close_stdin(true)
+        .stderr_to_stdout()
+        .fails_with_code(1)
+        .stdout_is("csplit: read error: Bad file descriptor\n0\n");
+}

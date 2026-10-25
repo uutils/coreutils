@@ -20,7 +20,7 @@ clap = { workspace = true }
 fluent = { workspace = true }
 regex = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["entries", "fs", "format"] }
+uucore = { workspace = true, features = ["entries", "fs", "format", "stdio"] }
 
 [[bin]]
 name = "csplit"

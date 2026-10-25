@@ -20,6 +20,7 @@ use regex::bytes::Regex;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
 use uucore::format_usage;
+use uucore::stdio::stdin;
 
 mod csplit_error;
 mod diagnostics;
@@ -665,7 +666,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let options = CsplitOptions::new(&matches).map_err(report)?;
     if file_name == "-" {
-        let stdin = io::stdin();
+        let stdin = stdin();
         csplit(&options, &patterns, stdin.lock()).map_err(report)?;
     } else {
         let file = File::open(file_name)
