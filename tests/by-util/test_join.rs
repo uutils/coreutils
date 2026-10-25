@@ -222,6 +222,26 @@ fn case_insensitive_prints_each_lines_own_key() {
 }
 
 #[test]
+fn case_insensitive_matches_sort_f_order() {
+    // `sort -f` folds to upper case, so `_` sorts after letters.
+    let scene = TestScenario::new(util_name!());
+    scene
+        .fixtures
+        .write("requested", "svcabc mallory\nsvc_backup mallory\n");
+    scene.fixtures.write("reserved", "SVC_BACKUP\n");
+    scene
+        .ucmd()
+        .args(&["-i", "-v", "1", "requested", "reserved"])
+        .succeeds()
+        .stdout_only("svcabc mallory\n");
+    scene
+        .ucmd()
+        .args(&["-i", "requested", "reserved"])
+        .succeeds()
+        .stdout_only("svc_backup mallory\n");
+}
+
+#[test]
 fn semicolon_separated() {
     new_ucmd!()
         .arg("semicolon_fields_1.txt")
