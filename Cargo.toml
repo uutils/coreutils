@@ -96,7 +96,7 @@ num-bigint = "0.4.4"
 num-integer = "0.1.47"
 num-prime = "0.7.0"
 num-traits = "0.2.19"
-fancy-regex = { version = "0.19.2", default-features = false, features = [
+fancy-regex = { version = "0.20.0", default-features = false, features = [
   "std",
   "unicode",
   "leftmost_longest",
