@@ -33,6 +33,15 @@ fn test_bare_dash_does_not_force_first_only() {
         .stdout_is("a\tb\n");
 }
 
+#[test]
+fn test_first_only_with_bare_stdin_operand() {
+    new_ucmd!()
+        .args(&["--first-only", "-"])
+        .pipe_in("        A     B\n")
+        .succeeds()
+        .stdout_is("\tA     B\n");
+}
+
 #[rstest]
 #[case::unexpand_init_0(&["-t4"], " 1\n  2\n   3\n    4\n", " 1\n  2\n   3\n\t4\n")]
 #[case::unexpand_init_1(&["-t4"], "     5\n      6\n       7\n        8\n", "\t 5\n\t  6\n\t   7\n\t\t8\n")]
