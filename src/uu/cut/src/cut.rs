@@ -1059,8 +1059,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // GNU `cut` supports `-d=` to set the delimiter to `=`.
     // Clap parsing is limited in this situation, see:
     // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
+    // Arguments after `--` are file operands and must be left untouched.
+    let mut seen_double_dash = false;
     let args = args.into_iter().map(|x| {
-        if x == "-d=" {
+        if seen_double_dash {
+            x
+        } else if x == "--" {
+            seen_double_dash = true;
+            x
+        } else if x == "-d=" {
             "--delimiter==".into()
         } else {
             x
