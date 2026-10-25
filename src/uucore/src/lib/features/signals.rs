@@ -801,32 +801,32 @@ macro_rules! init_startup_state_capture {
     () => {};
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 pub fn stdin_was_closed() -> bool {
     STDIN_WAS_CLOSED.load(Ordering::Relaxed)
 }
 
-#[cfg(not(unix))]
+#[cfg(any(not(unix), target_os = "fuchsia"))]
 pub const fn stdin_was_closed() -> bool {
     false
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 pub fn stdout_was_closed() -> bool {
     STDOUT_WAS_CLOSED.load(Ordering::Relaxed)
 }
 
-#[cfg(not(unix))]
+#[cfg(any(not(unix), target_os = "fuchsia"))]
 pub const fn stdout_was_closed() -> bool {
     false
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 pub fn stderr_was_closed() -> bool {
     STDERR_WAS_CLOSED.load(Ordering::Relaxed)
 }
 
-#[cfg(not(unix))]
+#[cfg(any(not(unix), target_os = "fuchsia"))]
 pub const fn stderr_was_closed() -> bool {
     false
 }
