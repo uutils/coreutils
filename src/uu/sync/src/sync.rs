@@ -18,12 +18,17 @@ pub mod options {
 
 static ARG_FILES: &str = "files";
 
-#[cfg(unix)]
+#[cfg(not(windows))]
 mod platform {
+    #[cfg(unix)]
     use std::fs::{File, OpenOptions};
+    #[cfg(unix)]
     use std::os::unix::fs::OpenOptionsExt;
+    #[cfg(unix)]
     use uucore::display::Quotable;
+    #[cfg(unix)]
     use uucore::error::FromIo;
+    #[cfg(unix)]
     use uucore::translate;
 
     use uucore::error::UResult;
@@ -33,6 +38,8 @@ mod platform {
         reason = "fn sig must match on all platforms"
     )]
     pub fn do_sync() -> UResult<()> {
+        // maximize compatibility of scripts by noop on targets global sync is impossible
+        #[cfg(unix)]
         rustix::fs::sync();
         Ok(())
     }
@@ -40,6 +47,7 @@ mod platform {
     /// Opens a file and resets its `O_NONBLOCK` flag to match GNU behavior.
     /// Returns the opened file or an error if opening fails.
     /// Logs a warning if fcntl fails but doesn't abort the operation.
+    #[cfg(unix)]
     fn open_and_reset_nonblock(path: &str) -> UResult<File> {
         let f = OpenOptions::new()
             .read(true)
@@ -57,6 +65,7 @@ mod platform {
         Ok(f)
     }
 
+    #[cfg(unix)]
     pub fn do_sync_with<F>(files: &[String], op: F) -> UResult<()>
     where
         F: Fn(File) -> std::io::Result<()>,
@@ -75,10 +84,6 @@ mod platform {
         do_sync_with(files, |f| {
             rustix::fs::syncfs(f).map_err(std::io::Error::from)
         })
-    }
-
-    pub fn do_fdatasync(files: &[String]) -> UResult<()> {
-        do_sync_with(files, |f| f.sync_data())
     }
 }
 
@@ -248,7 +253,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             syncfs(&files)?;
         }
     } else if matches.get_flag(options::DATA) {
-        #[cfg(unix)]
         fdatasync(&files)?;
     } else {
         sync()?;
@@ -297,5 +301,32 @@ fn syncfs(files: &[String]) -> UResult<()> {
 
 #[cfg(unix)]
 fn fdatasync(files: &[String]) -> UResult<()> {
-    platform::do_fdatasync(files)
+    platform::do_sync_with(files, |f| f.sync_data())
+}
+
+#[cfg(not(unix))]
+fn fdatasync(files: &[String]) -> UResult<()> {
+    do_sync_with_regular_file(files, |f| f.sync_data())
+}
+
+#[cfg(not(unix))]
+fn do_sync_with_regular_file<F>(files: &[String], op: F) -> UResult<()>
+where
+    F: Fn(std::fs::File) -> std::io::Result<()>,
+{
+    #[cfg(windows)]
+    use std::os::windows::fs::OpenOptionsExt as _;
+    use uucore::error::FromIo;
+    for path in files {
+        let mut f = std::fs::OpenOptions::new();
+        f.read(true);
+        #[cfg(windows)]
+        f.write(true);
+        // allow opening directory
+        #[cfg(windows)]
+        f.custom_flags(windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS);
+        op(f.open(path)?)
+            .map_err_context(|| translate!("sync-error-syncing-file", "file" => path.quote()))?;
+    }
+    Ok(())
 }
