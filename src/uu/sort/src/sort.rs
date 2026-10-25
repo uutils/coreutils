@@ -2155,7 +2155,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242,
     // and the same rewrite in `cut`), so rewrite every attached `-t<chars>`
     // argument to its long form, which preserves the separator verbatim.
+    // Arguments after `--` are file operands and must be left untouched.
+    let mut seen_double_dash = false;
     let args = args.into_iter().map(|x| {
+        if seen_double_dash {
+            return x;
+        }
+        if x == "--" {
+            seen_double_dash = true;
+            return x;
+        }
         // Non-UTF-8 separators are rejected later anyway, so lossy conversion
         // here only affects arguments that cannot become a valid separator.
         let as_str = x.to_string_lossy();
