@@ -279,9 +279,9 @@ impl Ord for CaseInsensitiveSlice<'_> {
         if let Some((s, o)) =
             std::iter::zip(self.v.iter(), other.v.iter()).find(|(s, o)| !s.eq_ignore_ascii_case(o))
         {
-            // first characters that differ, return the case-insensitive comparison
-            let s = s.to_ascii_lowercase();
-            let o = o.to_ascii_lowercase();
+            // first characters that differ, compared folded to upper case like `sort -f`
+            let s = s.to_ascii_uppercase();
+            let o = o.to_ascii_uppercase();
             s.cmp(&o)
         } else {
             // one of the strings is a substring or equal of the other
