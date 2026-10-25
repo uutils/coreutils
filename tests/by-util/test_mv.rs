@@ -563,6 +563,31 @@ fn test_mv_same_file() {
 }
 
 #[test]
+fn test_mv_same_file_no_clobber() {
+    // GNU mv does not report "are the same file" when it would not
+    // replace the target anyway; it exits 0 and leaves the file alone.
+    let file_a = "test_mv_same_file_a";
+    for args in [["-n"], ["--update=none"]] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write(file_a, "a");
+        ucmd.args(&args)
+            .arg(file_a)
+            .arg(file_a)
+            .succeeds()
+            .no_output();
+        assert_eq!(at.read(file_a), "a");
+    }
+
+    // --update=none-fail still fails, like GNU
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch(file_a);
+    ucmd.arg("--update=none-fail")
+        .arg(file_a)
+        .arg(file_a)
+        .fails_with_code(1);
+}
+
+#[test]
 #[cfg(all(unix, not(target_os = "android")))]
 #[cfg_attr(
     wasi_runner,
