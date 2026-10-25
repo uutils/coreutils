@@ -142,6 +142,8 @@ pub use crate::features::safe_traversal;
     )
 ))]
 pub use crate::features::signals;
+#[cfg(feature = "stdio")]
+pub use crate::features::stdio;
 #[cfg(all(
     feature = "utmpx",
     any(
