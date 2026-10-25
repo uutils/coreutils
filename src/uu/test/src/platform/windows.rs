@@ -272,7 +272,7 @@ pub fn owned_by_current_token(path: &OsStr, group: bool) -> bool {
     sid.is_some_and(|sid| matches_token_sid(sid, group))
 }
 
-/// AccessCheck only evaluates impersonation tokens.
+/// `AccessCheck` only evaluates impersonation tokens.
 fn impersonation_token() -> io::Result<OwnedHandle> {
     let primary = sys::open_process_token(TOKEN_QUERY | TOKEN_DUPLICATE)?;
     sys::duplicate_token(primary.as_handle(), SecurityImpersonation)
@@ -360,8 +360,8 @@ fn has_executable_extension(path: &OsStr) -> bool {
     })
 }
 
-/// For a directory this is permission to enter it: FILE_EXECUTE doubles as
-/// FILE_TRAVERSE.
+/// For a directory this is permission to enter it: `FILE_EXECUTE` doubles as
+/// `FILE_TRAVERSE`.
 pub fn is_executable(path: &OsStr, metadata: &Metadata) -> bool {
     (metadata.is_dir() || has_executable_extension(path)) && has_access(path, FILE_GENERIC_EXECUTE)
 }

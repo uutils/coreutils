@@ -152,18 +152,14 @@ impl MultiWriter {
         #[cfg(not(any(unix, target_os = "wasi")))]
         let mut input = io::stdin();
         // needs 2 pipes to duplicate input multiple times
+        // freeze by max size since system allocates pipe smaller than default size when user has pages more than fs.pipe-user-pages-soft
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        if let Ok((mut pipe_read, mut pipe_write)) = io::pipe()
-            && let Ok((mut pipe2_read, mut pipe2_write)) = io::pipe()
+        if let Ok((mut pipe_read, mut pipe_write)) = uucore::pipes::pipe::<true>()
+            && let Ok((mut pipe2_read, mut pipe2_write)) = uucore::pipes::pipe::<true>()
         {
-            use rustix::pipe::fcntl_setpipe_size;
-            use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe};
-            // improve throughput. 2nd pipe should not be smaller than 1st one for proper tee() length.
-            let sized = fcntl_setpipe_size(&pipe2_read, MAX_ROOTLESS_PIPE_SIZE).is_ok()
-                && fcntl_setpipe_size(&pipe_read, MAX_ROOTLESS_PIPE_SIZE).is_ok();
-            if sized {
-                let _ = fcntl_setpipe_size(&self.writers[0], MAX_ROOTLESS_PIPE_SIZE); // stdout
-            }
+            use uucore::pipes::MAX_ROOTLESS_PIPE_SIZE;
+            // improve throughput when stdout is pipe, but no needed to be same size with broker.
+            let _ = rustix::pipe::fcntl_setpipe_size(&self.writers[0], MAX_ROOTLESS_PIPE_SIZE);
             macro_rules! splice_or_detach {
                 ($pipe_read:ident, $pipe_write:ident, $writer:expr, $len:expr) => {
                     if let Err(e) = uucore::pipes::drain_pipe(&$pipe_read, &$writer, $len) {
@@ -178,8 +174,7 @@ impl MultiWriter {
                         // Free it first, so that the new one does not need more file descriptors.
                         drop($pipe_read);
                         drop($pipe_write);
-                        // same size as the 1st pipe got, so the 2nd is not smaller than the 1st
-                        match if sized { pipe::<true>() } else { io::pipe() } {
+                        match uucore::pipes::pipe::<true>() {
                             Ok(pipe) => ($pipe_read, $pipe_write) = pipe,
                             Err(e) => {
                                 show_error!("{}", strip_errno(&e));

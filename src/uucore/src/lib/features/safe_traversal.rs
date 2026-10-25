@@ -544,10 +544,10 @@ impl DirFd {
         }
     }
 
-    /// O_PATH-based fallback for chmod when fchmodat with AT_SYMLINK_NOFOLLOW
+    /// `O_PATH`-based fallback for chmod when fchmodat with `AT_SYMLINK_NOFOLLOW`
     /// is not available (musl on kernel < 6.6).
     ///
-    /// Opens the file with O_PATH|O_NOFOLLOW to get an fd without following
+    /// Opens the file with `O_PATH|O_NOFOLLOW` to get an fd without following
     /// symlinks, then chmods via /proc/self/fd/{fd}. This avoids the TOCTOU
     /// race because the fd pins the inode.
     ///
@@ -625,7 +625,7 @@ impl DirFd {
         Ok(fs::File::from(fd))
     }
 
-    /// Create a DirFd from an existing file descriptor (takes ownership)
+    /// Create a [`DirFd`] from an existing file descriptor (takes ownership)
     pub fn from_raw_fd(fd: RawFd) -> io::Result<Self> {
         if fd < 0 {
             return Err(io::Error::new(
@@ -720,7 +720,7 @@ fn find_existing_ancestor(path: &Path) -> io::Result<(PathBuf, Vec<OsString>)> {
 /// * `mode` - The mode to use when creating a new directory
 ///
 /// # Returns
-/// A DirFd for the subdirectory
+/// A [`DirFd`] for the subdirectory
 fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Result<DirFd> {
     match parent_fd.stat_at(name, SymlinkBehavior::NoFollow) {
         Ok(stat) => {
@@ -763,11 +763,11 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
 /// This function prevents TOCTOU race conditions for newly created directories by:
 /// 1. Finding the deepest existing ancestor directory (path-based, following symlinks)
 /// 2. Opening that ancestor with a file descriptor
-/// 3. Creating all new directories using fd-based operations (mkdirat, openat with O_NOFOLLOW)
+/// 3. Creating all new directories using fd-based operations (mkdirat, openat with `O_NOFOLLOW`)
 ///
 /// Once we have a fd for an existing ancestor, all subsequent operations use that fd
 /// as the anchor. If an attacker replaces a newly-created directory with a symlink,
-/// our openat with O_NOFOLLOW will fail, preventing the attack.
+/// our openat with `O_NOFOLLOW` will fail, preventing the attack.
 ///
 /// Pre-existing symlinks to directories in the path are followed (GNU coreutils behavior).
 /// `O_DIRECTORY` is used when opening them, so dangling or non-directory symlinks error out.
@@ -780,7 +780,7 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
 ///   mode will be modified by the process umask.
 ///
 /// # Returns
-/// A DirFd for the final created directory, or the first existing parent if
+/// A [`DirFd`] for the final created directory, or the first existing parent if
 /// all directories already exist.
 #[cfg(unix)]
 pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
@@ -823,7 +823,7 @@ impl FileInfo {
         }
     }
 
-    /// Create FileInfo from device and inode numbers
+    /// Create [`FileInfo`] from device and inode numbers
     pub fn new(dev: u64, ino: u64) -> Self {
         Self { dev, ino }
     }
@@ -910,7 +910,7 @@ impl Metadata {
         }
     }
 
-    /// Compatibility methods to match std::fs::Metadata interface
+    /// Compatibility methods to match [`std::fs::Metadata`] interface
     pub fn is_dir(&self) -> bool {
         self.file_type().is_directory()
     }
@@ -1706,7 +1706,7 @@ mod tests {
         assert!(result_nofollow.is_err());
     }
 
-    /// Verify that chmod_at with NoFollow does not change the symlink target's mode.
+    /// Verify that `chmod_at` with `NoFollow` does not change the symlink target's mode.
     /// This test demonstrates that the TOCTOU race in recursive chmod is closed:
     /// chmod on a symlink entry should not affect the target file.
     #[test]

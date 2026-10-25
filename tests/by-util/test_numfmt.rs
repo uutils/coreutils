@@ -254,6 +254,16 @@ fn test_negative_zero() {
         .stdout_is("0\n0.0");
 }
 
+// A negative number that rounds to zero prints an unsigned zero.
+#[rstest]
+#[case::round_up_format_precision(&["--round=up", "--format=%.0f", "--", "-0.3"], "0\n")]
+#[case::to_unit_round_nearest(&["--to-unit=10", "--round=nearest", "--", "-3"], "0\n")]
+#[case::zero_padded(&["--round=up", "--format=%05.0f", "--", "-0.3"], "00000\n")]
+#[case::fractional_precision(&["--round=nearest", "--format=%.1f", "--", "-0.04"], "0.0\n")]
+fn test_negative_number_rounded_to_zero(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!().args(args).succeeds().stdout_only(expected);
+}
+
 #[test]
 fn test_no_op() {
     new_ucmd!()

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) filefrag rlimit Rlim Nofile Fsize SIGXFSZ clob btrfs neve ROOTDIR USERDIR outfile subvolume uufs xattrs ELOOP
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) filefrag rlimit Rlim NOFILE FSIZE SIGXFSZ clob btrfs neve ROOTDIR USERDIR outfile subvolume uufs xattrs ELOOP
 // spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx dstlink mcstransd
 
 use rstest::rstest;
@@ -3370,7 +3370,7 @@ fn test_cp_reflink_insufficient_permission() {
 #[cfg(target_os = "linux")]
 #[test]
 fn test_closes_file_descriptors() {
-    use rustix::process::Resource;
+    use rlimit::Resource;
 
     let pid = std::process::id();
     let fd_path = format!("/proc/{pid}/fd");
@@ -3390,7 +3390,7 @@ fn test_closes_file_descriptors() {
         .arg("--reflink=auto")
         .arg("dir_with_10_files/")
         .arg("dir_with_10_files_new/")
-        .limit(Resource::Nofile, limit_fd, limit_fd)
+        .limit(Resource::NOFILE, limit_fd, limit_fd)
         .succeeds();
 }
 
@@ -3400,7 +3400,7 @@ fn test_closes_file_descriptors() {
 #[cfg(not(wasi_runner))] // linux specific
 #[test]
 fn test_cp_failed_write_does_not_spill_into_next_file() {
-    use rustix::process::Resource;
+    use rlimit::Resource;
 
     const CAP: u64 = 100 * 1024;
 
@@ -3410,7 +3410,7 @@ fn test_cp_failed_write_does_not_spill_into_next_file() {
     at.write("small2", "another small file\n");
     at.mkdir("out");
     ucmd.args(&["--reflink=never", "big", "small", "small2", "out"])
-        .limit(Resource::Fsize, CAP, CAP)
+        .limit(Resource::FSIZE, CAP, CAP)
         .ignore_sigxfsz()
         .fails()
         .stderr_contains("'big'");
@@ -4931,7 +4931,7 @@ fn test_copy_dir_preserve_subdir_permissions() {
 }
 
 /// cp should successfully copy a read-only source directory containing files.
-/// Regression test: build_dir previously created the destination with the source's
+/// Regression test: `build_dir` previously created the destination with the source's
 /// read-only mode, causing EPERM when copying files into it.
 #[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
 #[test]
@@ -9131,7 +9131,7 @@ fn test_cp_archive_deref_flag_ordering() {
 }
 
 /// Regression test: -a keeps recursion when combined with -L/-H/-d.
-/// https://github.com/uutils/coreutils/issues/13207
+/// <https://github.com/uutils/coreutils/issues/13207>
 #[test]
 #[cfg(unix)]
 #[cfg_attr(
@@ -9326,7 +9326,7 @@ fn test_cp_circular_symbolic_links_in_directory() {
         ));
 }
 
-/// Test that copying to an existing file maintains its permissions, unix only because .mode() only
+/// Test that copying to an existing file maintains its permissions, unix only because `.mode()` only
 /// works on Unix
 #[test]
 #[cfg(unix)]

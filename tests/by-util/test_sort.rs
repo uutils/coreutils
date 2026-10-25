@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) ints (linux) Nofile dfgi abmon avril naab
+// spell-checker:ignore (words) ints (linux) NOFILE dfgi abmon avril naab
 
 #![allow(clippy::cast_possible_wrap)]
 
@@ -13,6 +13,9 @@ use std::fmt::Write as FmtWrite;
 #[cfg(unix)]
 use std::process::Command;
 use std::time::Duration;
+
+#[cfg(target_os = "linux")]
+use rlimit::Resource;
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -617,6 +620,44 @@ fn test_human_block_sizes2() {
 }
 
 #[test]
+fn test_human_numeric_ignore_case() {
+    // With -f, lowercase units other than k are read as the uppercase ones
+    for args in [&["-h", "-f"][..], &["-hf"], &["-k1,1hf"]] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("2m\n1e\n3g\n1K\n-1m\n")
+            .succeeds()
+            .stdout_only("-1m\n1K\n2m\n3g\n1e\n");
+    }
+    // Without -f (a key with its own options does not inherit the global
+    // one) they are not units
+    for args in [&["-h"][..], &["-f", "-k1h"]] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("2m\n1e\n3g\n1K\n-1m\n")
+            .succeeds()
+            .stdout_only("-1m\n1e\n2m\n3g\n1K\n");
+    }
+}
+
+#[test]
+fn test_human_numeric_ignore_case_debug() {
+    // GNU sorts by the folded unit but does not mark a lowercase unit as part of the key
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["--debug", "-h", "-f"])
+        .pipe_in("2m\n1e\n3g\n1K\n-1m\n")
+        .succeeds()
+        .stdout_is(concat!(
+            "-1m\n__\n___\n",
+            "1K\n__\n__\n",
+            "2m\n_\n__\n",
+            "3g\n_\n__\n",
+            "1e\n_\n__\n",
+        ));
+}
+
+#[test]
 fn test_human_numeric_zero_stable() {
     let input = "0M\n0K\n-0K\n-P\n-0M\n";
     new_ucmd!()
@@ -624,6 +665,29 @@ fn test_human_numeric_zero_stable() {
         .pipe_in(input)
         .succeeds()
         .stdout_only(input);
+}
+
+#[test]
+fn test_ignore_blanks_and_month_skip_only_space_and_tab() {
+    // In the C locale a blank is a space or a tab, so a leading \f or \r
+    // stays part of the key
+    for blank in ["\x0c", "\r"] {
+        new_ucmd!()
+            .arg("-k1b")
+            .pipe_in(format!("a\n{blank}b\n"))
+            .succeeds()
+            .stdout_only(format!("{blank}b\na\n"));
+        new_ucmd!()
+            .arg("-M")
+            .pipe_in(format!("{blank}FEB\nJAN\n"))
+            .succeeds()
+            .stdout_only(format!("{blank}FEB\nJAN\n"));
+    }
+    new_ucmd!()
+        .arg("-M")
+        .pipe_in(" \tFEB\nJAN\n")
+        .succeeds()
+        .stdout_only("JAN\n \tFEB\n");
 }
 
 #[test]
@@ -1237,6 +1301,33 @@ fn test_merge_preserves_long_lines() {
     assert_eq!(stdout.as_slice(), input.as_bytes());
 }
 
+/// Lines longer than the buffer used to read temporary files back must stay whole
+/// when an external sort merges its chunks (#15638).
+#[test]
+fn test_ext_sort_preserves_long_lines() {
+    const N_ROWS: usize = 24;
+    const LINE_LEN: usize = 20_000;
+    // Multiplying by 7 modulo N_ROWS permutes the keys, so the input is not sorted.
+    let lines: Vec<String> = (0..N_ROWS)
+        .map(|i| format!("{:04}{}", i * 7 % N_ROWS, "x".repeat(LINE_LEN - 4)))
+        .collect();
+    let mut sorted_lines = lines.clone();
+    sorted_lines.sort();
+    let expected = format!("{}\n", sorted_lines.join("\n"));
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("long-lines.txt", &format!("{}\n", lines.join("\n")));
+
+    // A tiny buffer makes the input span several chunks, which are written to
+    // temporary files and merged back.
+    let result = ucmd.args(&["-S", "1K", "long-lines.txt"]).succeeds();
+    result.no_stderr();
+
+    let stdout = result.stdout_move_bytes();
+    assert_eq!(bytecount::count(&stdout, b'\n'), N_ROWS);
+    assert!(stdout == expected.as_bytes(), "a long line was altered");
+}
+
 // Regression test: a failing write must not take the merge reader thread down with it.
 // The write error used to propagate straight out of `write_all_to`, dropping the chunk
 // receivers while the reader was still sending, and `chunks::read` unwraps that send.
@@ -1729,14 +1820,13 @@ fn test_merge_batch_size() {
 // #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(target_os = "linux")]
 fn test_merge_batch_size_with_limit() {
-    use rustix::process::Resource;
     // Currently need...
     // 3 descriptors for stdin, stdout, stderr
     // 2 descriptors for CTRL+C handling logic (to be reworked at some point)
     // 2 descriptors for the input files (i.e. batch-size of 2).
     let limit_fd = 3 + 2 + 2;
     new_ucmd!()
-        .limit(Resource::Nofile, limit_fd, limit_fd)
+        .limit(Resource::NOFILE, limit_fd, limit_fd)
         .arg("--batch-size=2")
         .arg("-m")
         .arg("--unique")
@@ -1754,13 +1844,12 @@ fn test_merge_batch_size_with_limit() {
 // TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
 #[cfg(target_os = "linux")]
 fn test_batch_size_above_fd_limit_is_rejected() {
-    use rustix::process::Resource;
     // Only stdin, stdout and stderr are unavailable for merge inputs, so the
     // largest acceptable --batch-size is the soft limit minus 3, here 27 - 3.
     let limit_fd = 27;
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("gamma.txt", "delta\nalpha\n");
-    ucmd.limit(Resource::Nofile, limit_fd, limit_fd)
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
         .arg("--batch-size=31")
         .arg("gamma.txt")
         .fails_with_code(2)
@@ -1772,12 +1861,11 @@ fn test_batch_size_above_fd_limit_is_rejected() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_batch_size_at_fd_limit_is_accepted() {
-    use rustix::process::Resource;
     let limit_fd = 27;
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("gamma.txt", "delta\nalpha\n");
     // 24 is the largest value the limit above allows, and sorting must still happen.
-    ucmd.limit(Resource::Nofile, limit_fd, limit_fd)
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
         .arg("--batch-size=24")
         .arg("gamma.txt")
         .succeeds()
@@ -1787,7 +1875,6 @@ fn test_batch_size_at_fd_limit_is_accepted() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_merge_more_files_than_fd_limit() {
-    use rustix::process::Resource;
     let (at, mut ucmd) = at_and_ucmd!();
     // 40 single-line files cannot all be open at once with a soft limit of 24,
     // so sort has to merge them in several batches through temporary files.
@@ -1803,7 +1890,7 @@ fn test_merge_more_files_than_fd_limit() {
         writeln!(expected, "{i:02}").unwrap();
     }
     let limit_fd = 24;
-    ucmd.limit(Resource::Nofile, limit_fd, limit_fd)
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
         .arg("-m")
         .args(&names)
         .succeeds()
@@ -1813,7 +1900,6 @@ fn test_merge_more_files_than_fd_limit() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_more_files_than_fd_limit() {
-    use rustix::process::Resource;
     let (at, mut ucmd) = at_and_ucmd!();
     // The inputs are read one after another, so sorting must not need more open
     // file descriptors than the soft limit allows, no matter how many inputs there are.
@@ -1829,7 +1915,7 @@ fn test_more_files_than_fd_limit() {
         writeln!(expected, "{i:02}").unwrap();
     }
     let limit_fd = 24;
-    ucmd.limit(Resource::Nofile, limit_fd, limit_fd)
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
         .args(&names)
         .succeeds()
         .stdout_only(expected);
@@ -1838,7 +1924,6 @@ fn test_more_files_than_fd_limit() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_temporary_files_with_few_file_descriptors() {
-    use rustix::process::Resource;
     let ts = TestScenario::new("sort");
     // Each input is larger than what the merge reads ahead, so it stays open.
     let mut names = Vec::new();
@@ -1857,20 +1942,20 @@ fn test_temporary_files_with_few_file_descriptors() {
 
     // Stdin, stdout, stderr, two merge inputs and the merge output.
     ts.ucmd()
-        .limit(Resource::Nofile, 6, 6)
+        .limit(Resource::NOFILE, 6, 6)
         .arg("-m")
         .args(&names)
         .succeeds()
         .stdout_only(&expected);
     ts.ucmd()
-        .limit(Resource::Nofile, 6, 6)
+        .limit(Resource::NOFILE, 6, 6)
         .args(&["-S", "64K", "unsorted"])
         .succeeds()
         .stdout_only(&expected);
     // Starting the compress program can take two more for a moment: on musl and
     // glibc before 2.24, a failed exec is reported through a pipe.
     ts.ucmd()
-        .limit(Resource::Nofile, 10, 10)
+        .limit(Resource::NOFILE, 10, 10)
         .args(&["-S", "64K", "--compress-program", "gzip", "unsorted"])
         .succeeds()
         .stdout_only(&expected);
@@ -2028,6 +2113,36 @@ fn test_separator_attached_equals_multi_char() {
         .args(&["-t=a", "-k", "2"])
         .fails()
         .stderr_contains("separator must be exactly one character long: '=a'");
+}
+
+#[test]
+fn test_error_on_incompatible_separators() {
+    let cases: [&[&str]; 3] = [
+        &["-t@", "-t!"],
+        &["-t", "@", "-t", "!"],
+        &["--field-separator=@", "-t", "!"],
+    ];
+    for args in cases {
+        new_ucmd!()
+            .args(args)
+            .fails_with_code(2)
+            .stderr_only("sort: incompatible tabs\n");
+    }
+}
+
+#[test]
+fn test_same_separator_twice_ok() {
+    let cases: [&[&str]; 2] = [
+        &["-t:", "-t:", "-k2"],
+        &["--field-separator=:", "-t", ":", "-k2"],
+    ];
+    for args in cases {
+        new_ucmd!()
+            .args(args)
+            .pipe_in("a:2\nb:1\n")
+            .succeeds()
+            .stdout_only("b:1\na:2\n");
+    }
 }
 
 #[test]
@@ -2414,6 +2529,22 @@ fn test_files0_from_non_utf8_filename() {
         .pipe_in(vec![0xff_u8])
         .fails_with_code(2)
         .stderr_contains("sort: cannot read");
+}
+
+#[rstest::rstest]
+#[case(&["-c", "dir"])]
+#[case(&["-C", "dir"])]
+#[case(&["-m", "input", "dir"])]
+#[cfg(target_os = "linux")]
+fn test_read_error_on_reader_thread(#[case] args: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.write("input", "a\nb\n");
+    ucmd.args(args)
+        .fails_with_code(2)
+        .stderr_contains("sort: read failed: ")
+        .stderr_contains("Is a directory")
+        .stderr_does_not_contain("sort-read-failed");
 }
 
 #[test]

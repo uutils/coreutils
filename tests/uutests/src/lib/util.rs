@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty openpt grantpt unlockpt ptsname tcsetwinsize CLOEXEC RDWR SETFD
-// spell-checker:ignore (linux) winsize xpixel ypixel setrlimit Fsize SIGBUS SIGSEGV SIGXFSZ EFBIG sigbus tmpfs mksocket
+// spell-checker:ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV SIGXFSZ EFBIG sigbus tmpfs mksocket
 // spell-checker:ignore (ToDO) ttyname
 
 #![allow(dead_code)]
@@ -25,7 +25,7 @@ use nix::sys;
 use nix::sys::stat::{self, SFlag};
 use pretty_assertions::assert_eq;
 #[cfg(unix)]
-use rustix::process::{Resource, Rlimit, setrlimit};
+use rlimit::{Resource, setrlimit};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, VecDeque};
 use std::ffi::{OsStr, OsString};
@@ -68,7 +68,7 @@ static NO_STDIN_MEANINGLESS: &str = "Setting this flag has no effect if there is
 static END_OF_TRANSMISSION_SEQUENCE: &[u8] = b"\n\x04";
 
 static TESTS_BINARY_PATH: OnceLock<PathBuf> = OnceLock::new();
-/// This function needs the env variable UUTESTS_BINARY_PATH
+/// This function needs the env variable `UUTESTS_BINARY_PATH`
 /// which will very probably be env!("`CARGO_BIN_EXE_<program>`")
 /// because here, we are in a crate but we need the name of the final binary
 pub fn get_tests_binary() -> &'static str {
@@ -558,7 +558,7 @@ impl CmdResult {
     /// but you might find yourself using this function if
     /// 1.  you can not know exactly what stderr will be or
     /// 2.  you know that stderr will also be empty
-    ///     new_ucmd!()
+    ///     `new_ucmd!()`
     ///
     /// # Examples
     ///
@@ -2093,13 +2093,7 @@ impl UCommand {
             let limits_copy = self.limits.clone();
             let closure = move || -> Result<()> {
                 for &(resource, soft_limit, hard_limit) in &limits_copy {
-                    setrlimit(
-                        resource,
-                        Rlimit {
-                            current: Some(soft_limit),
-                            maximum: Some(hard_limit),
-                        },
-                    )?;
+                    setrlimit(resource, soft_limit, hard_limit)?;
                 }
                 Ok(())
             };
@@ -2996,7 +2990,7 @@ impl UChild {
 
     /// Close the child process stdout.
     ///
-    /// Note this will have no effect if the output was captured with CapturedOutput which is the
+    /// Note this will have no effect if the output was captured with `CapturedOutput` which is the
     /// default if [`UCommand::set_stdout`] wasn't called.
     pub fn close_stdout(&mut self) -> &mut Self {
         self.raw.stdout.take();
@@ -3005,7 +2999,7 @@ impl UChild {
 
     /// Close the child process stderr.
     ///
-    /// Note this will have no effect if the output was captured with CapturedOutput which is the
+    /// Note this will have no effect if the output was captured with `CapturedOutput` which is the
     /// default if [`UCommand::set_stderr`] wasn't called.
     pub fn close_stderr(&mut self) -> &mut Self {
         self.raw.stderr.take();
@@ -3786,7 +3780,7 @@ mod tests {
         let ts = TestScenario::new("util");
         ts.cmd("sh")
             .args(&["-c", "ulimit -Sf; ulimit -Hf"])
-            .limit(Resource::Fsize, 8 * unit_size_bytes, 16 * unit_size_bytes)
+            .limit(Resource::FSIZE, 8 * unit_size_bytes, 16 * unit_size_bytes)
             .succeeds()
             .no_stderr()
             .stdout_is("8\n16\n");

@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline onetwo somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons Nofile NOTCAPABLE iproduct newfstatat isox
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE NOTCAPABLE iproduct newfstatat isox
 
 #![allow(
     clippy::similar_names,
@@ -14,7 +14,7 @@
 
 use regex::Regex;
 #[cfg(unix)]
-use rustix::process::Resource;
+use rlimit::Resource;
 #[cfg(not(target_os = "openbsd"))]
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
@@ -144,6 +144,15 @@ fn test_invalid_value_returns_2() {
             .fails_with_code(2)
             .no_stdout();
     }
+}
+
+#[test]
+fn test_invalid_numeric_value_is_verbatim() {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg("--format=007")
+        .fails()
+        .stderr_contains("invalid value '007' for '--format");
 }
 
 #[test]
@@ -1417,7 +1426,11 @@ fn test_ls_long_symlink_color() {
     ) {
         // Names are always compared.
         assert_eq!(name, expected_name);
-        assert_eq!(target, expected_target);
+        // ln stores symlink targets with `\` on Windows.
+        assert_eq!(
+            target,
+            expected_target.replace('/', std::path::MAIN_SEPARATOR_STR)
+        );
 
         // Colors are only compared when we have inferred what color we are looking for.
         if let Some(name) = expected_name_color {
@@ -8260,7 +8273,7 @@ fn test_ls_recursive_no_fd_leak() {
         .ucmd()
         .arg("-R")
         .arg("1")
-        .limit(Resource::Nofile, 20, 20)
+        .limit(Resource::NOFILE, 20, 20)
         .succeeds()
         .no_stderr();
 }

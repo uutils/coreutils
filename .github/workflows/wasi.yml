@@ -49,6 +49,15 @@ jobs:
       run: |
         cargo test --target ${{ matrix.job.target }} --no-default-features \
           $(cargo tree --depth 1 --format "{lib}" --features=feat_wasm --prefix none | sed -n 's/^uu_/-p &/p')
+    - name: Run uucore fs unit tests
+      env:
+        # The fs tests touch the filesystem, so wasmtime must preopen a
+        # directory; map the host cwd to the guest root so the tests' relative
+        # scratch directories resolve.
+        CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime --dir=.::/ --
+        CARGO_TARGET_WASM32_WASIP2_RUNNER: wasmtime --dir=.::/ --
+      run: |
+        cargo test --target ${{ matrix.job.target }} --no-default-features --features fs -p uucore fs::tests
     - name: Run integration tests via wasmtime
       if:  matrix.job.target == 'wasm32-wasip1'
       env:

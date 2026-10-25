@@ -37,7 +37,7 @@ use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetS
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 
 /// OHOS helper: pass through the system time zone ID returned by
-/// TimeService (OH_TimeService_GetTimeZone, e.g. "Asia/Shanghai") and
+/// `TimeService` (`OH_TimeService_GetTimeZone`, e.g. "Asia/Shanghai") and
 /// resolve it against the embedded IANA tzdata (jiff-tzdb) so that
 /// historical DST rules and transitions are preserved. jiff's
 /// `try_system()` is useless on OHOS because both `/etc/localtime` and
@@ -270,7 +270,7 @@ fn strip_parenthesized_comments(input: &str) -> Cow<'_, str> {
 
 /// Parse military timezone with optional hour offset.
 /// Pattern: single letter (a-z except j) optionally followed by 1-2 digits.
-/// Returns Some(total_hours_in_utc) or None if pattern doesn't match.
+/// Returns `Some(total_hours_in_utc)` or None if pattern doesn't match.
 ///
 /// Military timezone mappings:
 /// - A-I: UTC+1 to UTC+9 (J is skipped for local time)
@@ -1460,7 +1460,7 @@ static FIXED_OFFSET_ABBREVIATIONS: &[(&str, i32)] = &[
 static TZ_ABBREV_CACHE: OnceLock<HashMap<String, String>> = OnceLock::new();
 
 /// Build timezone abbreviation lookup map from IANA database.
-/// This is a fallback for abbreviations not covered by FIXED_OFFSET_ABBREVIATIONS.
+/// This is a fallback for abbreviations not covered by [`FIXED_OFFSET_ABBREVIATIONS`].
 fn build_tz_abbrev_map() -> HashMap<String, String> {
     let mut map = HashMap::new();
 
@@ -1961,7 +1961,7 @@ fn parse_relative_plus(input: &str, now: &Zoned) -> Option<ParsedDateTime> {
     None
 }
 
-/// Apply only the targeted syntax rewrites needed before parse_datetime.
+/// Apply only the targeted syntax rewrites needed before [`parse_datetime`].
 /// Keeping the input borrowed when possible also preserves the original text
 /// for diagnostics.
 fn normalize_parse_input(input: &str) -> Cow<'_, str> {

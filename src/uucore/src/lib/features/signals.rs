@@ -734,10 +734,10 @@ static SIGPIPE_WAS_IGNORED: AtomicBool = AtomicBool::new(false);
 #[cfg(unix)]
 static STARTUP_STATE_WAS_CAPTURED: AtomicBool = AtomicBool::new(false);
 
-/// Captures stdio and SIGPIPE state at process initialization, before main() runs.
+/// Captures stdio and SIGPIPE state at process initialization, before `main()` runs.
 ///
 /// # Safety
-/// Called from `.init_array` before main(). Only reads current state.
+/// Called from `.init_array` before `main()`. Only reads current state.
 #[cfg(unix)]
 #[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn capture_startup_state() {

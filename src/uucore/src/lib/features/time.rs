@@ -25,7 +25,7 @@ fn format_zoned<W: Write>(out: &mut W, zoned: Zoned, fmt: &str) -> UResult<()> {
         .map_err(|x| USimpleError::new(1, x.to_string()))
 }
 
-/// Convert a SystemTime` to a number of seconds since UNIX_EPOCH
+/// Convert a [`SystemTime`] to a number of seconds since [`UNIX_EPOCH`]
 #[must_use]
 #[inline]
 pub fn system_time_to_sec(time: SystemTime) -> (i64, u32) {
