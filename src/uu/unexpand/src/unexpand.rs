@@ -659,24 +659,43 @@ fn unexpand_file(
     // Work on a local copy of the line state, so it can stay in registers
     // while unexpanding, and hand it back when done with this file.
     let mut print_state = std::mem::replace(line_state, PrintState::new());
-    let result = (|| {
-        while let buf @ [_, ..] = input
-            .fill_buf()
-            .map_err(|e| e.map_err_context(|| file.maybe_quote().to_string()) as Box<dyn UError>)?
-        {
-            for line in buf.split_inclusive(|b| *b == b'\n') {
-                unexpand_buf(line, output, options, lastcol, tab_config, &mut print_state)?;
-                if let Some(b'\n') = line.last() {
-                    print_state.new_line();
-                }
-            }
-            let len = buf.len();
-            input.consume(len);
-        }
-        Ok(())
-    })();
+    let result = unexpand_input(
+        &mut input,
+        file,
+        output,
+        options,
+        lastcol,
+        tab_config,
+        &mut print_state,
+    );
     *line_state = print_state;
     result
+}
+
+/// Unexpands everything `input` yields, carrying the line state in `print_state`.
+fn unexpand_input(
+    input: &mut impl BufRead,
+    file: &OsString,
+    output: &mut BufWriter<Stdout>,
+    options: &Options,
+    lastcol: usize,
+    tab_config: &TabConfig,
+    print_state: &mut PrintState,
+) -> UResult<()> {
+    while let buf @ [_, ..] = input
+        .fill_buf()
+        .map_err(|e| e.map_err_context(|| file.maybe_quote().to_string()) as Box<dyn UError>)?
+    {
+        for line in buf.split_inclusive(|b| *b == b'\n') {
+            unexpand_buf(line, output, options, lastcol, tab_config, print_state)?;
+            if let Some(b'\n') = line.last() {
+                print_state.new_line();
+            }
+        }
+        let len = buf.len();
+        input.consume(len);
+    }
+    Ok(())
 }
 
 fn unexpand(options: &Options) -> UResult<()> {
