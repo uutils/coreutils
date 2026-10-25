@@ -16,7 +16,7 @@ use std::convert::identity;
 use std::env;
 use std::fs::{self, exists};
 use std::io;
-use std::path::{Path, PathBuf, StripPrefixError};
+use std::path::{Component, Path, PathBuf, StripPrefixError};
 
 use indicatif::ProgressBar;
 use uucore::display::Quotable;
@@ -96,12 +96,7 @@ fn get_local_to_root_parent(
         }
         None => Ok(path
             .components()
-            .filter(|c| {
-                !matches!(
-                    c,
-                    std::path::Component::Prefix(_) | std::path::Component::RootDir
-                )
-            })
+            .filter(|c| !matches!(c, Component::Prefix(_) | Component::RootDir))
             .collect()),
     }
 }
@@ -416,38 +411,39 @@ pub(crate) fn copy_directory(
     let parents_dest = options.parents.then(|| target.join(root));
     let mut parent_dirs = Vec::new();
     let mut copy_tree = || -> CopyResult<()> {
-        let tmp =
-            match (parents_dest.as_ref(), root.parent()) {
-                (Some(parents_dest), Some(parent)) => {
-                    create_parent_dirs(root, parents_dest, options, &mut parent_dirs)?;
-                    if root.components().next_back().is_some_and(|component| {
-                        matches!(component, std::path::Component::ParentDir)
-                    }) {
-                        build_dir(parents_dest, false, options, Some(root)).map_err(
-                            |err| match err {
-                                CpError::IoErr(io_err) => CpError::IoErrContext(
-                                    io_err,
-                                    format!("cannot create directory {}", parents_dest.quote()),
-                                ),
-                                err => err,
-                            },
-                        )?;
-                    }
-                    if options.verbose {
-                        // For example, if copying file `a/b/c` and its parents
-                        // to directory `d/`, then print
-                        //
-                        //     a -> d/a
-                        //     a/b -> d/a/b
-                        //
-                        for (x, y) in aligned_ancestors(root, parents_dest) {
-                            println!("{} -> {}", x.display(), y.display());
-                        }
-                    }
-                    target.join(parent)
+        let tmp = match (parents_dest.as_ref(), root.parent()) {
+            (Some(parents_dest), Some(parent)) => {
+                create_parent_dirs(root, parents_dest, options, &mut parent_dirs)?;
+                if root
+                    .components()
+                    .next_back()
+                    .is_some_and(|component| matches!(component, Component::ParentDir))
+                {
+                    build_dir(parents_dest, false, options, Some(root)).map_err(
+                        |err| match err {
+                            CpError::IoErr(io_err) => CpError::IoErrContext(
+                                io_err,
+                                format!("cannot create directory {}", parents_dest.quote()),
+                            ),
+                            err => err,
+                        },
+                    )?;
                 }
-                _ => target.to_path_buf(),
-            };
+                if options.verbose {
+                    // For example, if copying file `a/b/c` and its parents
+                    // to directory `d/`, then print
+                    //
+                    //     a -> d/a
+                    //     a/b -> d/a/b
+                    //
+                    for (x, y) in aligned_ancestors(root, parents_dest) {
+                        println!("{} -> {}", x.display(), y.display());
+                    }
+                }
+                target.join(parent)
+            }
+            _ => target.to_path_buf(),
+        };
         let target = tmp.as_path();
 
         let preserve_hard_links = options.preserve_hard_links();
