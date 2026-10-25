@@ -9,7 +9,7 @@
 use std::thread::sleep;
 use uutests::new_ucmd;
 #[cfg(unix)]
-use uutests::{at_and_ucmd, util::TestScenario, util_name};
+use uutests::{util::TestScenario, util_name};
 
 // General observation: nohup.out will not be created in tests run by cargo test
 // because stdin/stdout is not attached to a TTY.
@@ -38,6 +38,8 @@ fn test_nohup_exit_codes() {
     target_os = "openbsd"
 ))]
 fn test_nohup_multiple_args_and_flags() {
+    use uutests::at_and_ucmd;
+
     let (at, mut ucmd) = at_and_ucmd!();
 
     ucmd.args(&["touch", "-t", "1006161200", "file1", "file2"])
