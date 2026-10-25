@@ -550,6 +550,48 @@ fn check_and_handle_string_args(
     }
 }
 
+/// Keep a leading `=` in a value attached to a short option. Clap consumes it
+/// as an option/value separator, whereas env treats it as part of the value.
+fn preserve_attached_equals(args: &mut [OsString]) -> UResult<()> {
+    let mut skip_value = false;
+    for arg in args.iter_mut().skip(1) {
+        if std::mem::take(&mut skip_value) {
+            continue;
+        }
+        let bytes = arg.as_encoded_bytes();
+        if bytes == b"--" {
+            break;
+        }
+        if let Some(long) = bytes.strip_prefix(b"--") {
+            skip_value = [options::CHDIR, options::UNSET, options::ARGV0]
+                .iter()
+                .any(|name| name.as_bytes().starts_with(long));
+            continue;
+        }
+        // The first operand ends the options.
+        let Some(short) = bytes.strip_prefix(b"-").filter(|s| !s.is_empty()) else {
+            break;
+        };
+        for (index, option) in short.iter().enumerate() {
+            match option {
+                b'a' | b'C' | b'u' => {
+                    if short.get(index + 1) == Some(&b'=') {
+                        let mut value = bytes.to_vec();
+                        value.insert(index + 2, b'=');
+                        *arg = uucore::os_str_from_bytes(&value)?.to_os_string();
+                    } else {
+                        skip_value = index + 1 == short.len();
+                    }
+                    break;
+                }
+                b'i' | b'0' | b'v' => {}
+                _ => break,
+            }
+        }
+    }
+    Ok(())
+}
+
 #[derive(Default)]
 struct EnvAppData {
     do_debug_printing: bool,
@@ -725,7 +767,8 @@ impl EnvAppData {
         original_args: impl uucore::Args,
     ) -> Result<ParsedArguments, Box<dyn UError>> {
         let original_args: Vec<OsString> = original_args.collect();
-        let args = self.process_all_string_arguments(&original_args)?;
+        let mut args = self.process_all_string_arguments(&original_args)?;
+        preserve_attached_equals(&mut args)?;
         #[cfg(unix)]
         let mut signal_apply_all = BTreeSet::new();
 
