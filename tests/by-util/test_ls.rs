@@ -74,11 +74,12 @@ fn test_directory_in_file() {
 #[test]
 fn test_name_too_long() {
     let name = "a".repeat(300);
-    new_ucmd!()
-        .arg(&name)
-        .fails_with_code(2)
+    let result = new_ucmd!().arg(&name).fails_with_code(2);
+    #[cfg(unix)]
+    result.stderr_is(format!("ls: cannot access '{name}': File name too long\n"));
+    #[cfg(not(unix))]
+    result
         .stderr_contains(format!("ls: cannot access '{name}': "))
-        .stderr_does_not_contain("unknown io error")
         .stderr_does_not_contain("os error");
 }
 
