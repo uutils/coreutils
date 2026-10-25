@@ -613,7 +613,7 @@ fn get_file_to_check(
                     Ok(Box::new(f))
                 }
             }
-            Err(err) => {
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 if !opts.ignore_missing {
                     // yes, we have both stderr and stdout here
                     print_error(err);
@@ -621,6 +621,13 @@ fn get_file_to_check(
                 }
                 // we could not open the file but we want to continue
                 Err(LineCheckError::FileNotFound)
+            }
+            Err(err) => {
+                // The file exists but cannot be opened. `--ignore-missing` does
+                // not cover this, so report it whether or not it is set.
+                print_error(err);
+                failed_open();
+                Err(LineCheckError::CantOpenFile)
             }
         }
     }
@@ -1001,8 +1008,9 @@ fn process_checksum_file(
         return Err(FileCheckError::Failed);
     }
 
-    // If a file was missing, return an error unless we explicitly ignore it.
-    if res.failed_open_file > 0 && !opts.ignore_missing {
+    // Files we could not read are a failure. Missing files are only counted
+    // when they are not ignored, so this needs no further guard.
+    if res.failed_open_file > 0 {
         return Err(FileCheckError::Failed);
     }
 

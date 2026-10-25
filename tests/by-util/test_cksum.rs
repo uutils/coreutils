@@ -2156,6 +2156,36 @@ fn test_check_failed_to_read() {
 }
 
 #[test]
+#[cfg(not(windows))]
+fn test_check_ignore_missing_unopenable_file() {
+    // `--ignore-missing` excuses a file that is absent, not one that is
+    // present but cannot be opened. The latter is still a failed read.
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("f", "data\n");
+    at.write(
+        "CHECKSUM",
+        "SHA1 (f) = c5d84736ba451747dd5f0eb9d17e104f3697ef47\n\
+        SHA1 (f/sub) = ffffffffffffffffffffffffffffffffffffffff\n\
+        SHA1 (not-file) = ffffffffffffffffffffffffffffffffffffffff\n",
+    );
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("--ignore-missing")
+        .arg("CHECKSUM")
+        .fails()
+        .stdout_is(
+            "f: OK\n\
+            f/sub: FAILED open or read\n",
+        )
+        .stderr_contains("cksum: WARNING: 1 listed file could not be read");
+}
+
+#[test]
 fn test_zero_multiple_file() {
     new_ucmd!()
         .arg("-z")
