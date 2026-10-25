@@ -51,6 +51,8 @@ fn get_userlogin() -> Option<String> {
     let len = (bytes as usize / 2).saturating_sub(1);
     // SAFETY: `buffer` is valid for `len` u16s and is freed right after copying.
     let name = OsString::from_wide(unsafe { std::slice::from_raw_parts(buffer, len) });
+    // SAFETY: `buffer` was allocated by `WTSQuerySessionInformationW`, is freed exactly once
+    // and is not used afterwards; `name` owns its own copy.
     unsafe { WTSFreeMemory(buffer.cast()) };
     // Session 0 (services) has no logged-on user and returns an empty name.
     (!name.is_empty()).then(|| name.to_string_lossy().into_owned())
