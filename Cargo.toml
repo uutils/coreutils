@@ -310,7 +310,6 @@ numfmt = { optional = true, version = "0.13.0", package = "uu_numfmt", path = "s
 od = { optional = true, version = "0.13.0", package = "uu_od", path = "src/uu/od" }
 paste = { optional = true, version = "0.13.0", package = "uu_paste", path = "src/uu/paste" }
 pathchk = { optional = true, version = "0.13.0", package = "uu_pathchk", path = "src/uu/pathchk" }
-pinky = { optional = true, version = "0.13.0", package = "uu_pinky", path = "src/uu/pinky" }
 pr = { optional = true, version = "0.13.0", package = "uu_pr", path = "src/uu/pr" }
 printenv = { optional = true, version = "0.13.0", package = "uu_printenv", path = "src/uu/printenv" }
 printf = { optional = true, version = "0.13.0", package = "uu_printf", path = "src/uu/printf" }
@@ -398,6 +397,9 @@ runcon = { optional = true, version = "0.13.0", package = "uu_runcon", path = "s
 # * pinned transitive dependencies
 # Not needed for now. Keep as examples:
 #pin_cc = { version="1.0.61, < 1.0.62", package="cc" } ## cc v1.0.62 has compiler errors for MinRustV v1.32.0, requires 1.34 (for `std::str::split_ascii_whitespace()`)
+
+[target.'cfg(any(target_vendor = "apple", target_os = "cygwin", target_os = "freebsd", target_os = "linux", target_os = "netbsd"))'.dependencies]
+pinky = { optional = true, version = "0.13.0", package = "uu_pinky", path = "src/uu/pinky" }
 
 [target.'cfg(unix)'.dev-dependencies]
 nix = { workspace = true, features = ["fs", "signal"] }
