@@ -33,11 +33,13 @@ uucore = { workspace = true, features = [
   "utmpx",
 ] }
 
+[target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
+rlimit = { workspace = true }
+
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["fs", "term"] }
-rlimit = { workspace = true }
 rustix = { workspace = true, features = ["pty", "termios"] }
 
 [target.'cfg(any(target_os = "freebsd", target_os = "hurd", target_os = "linux", target_os = "android", target_os = "netbsd"))'.dependencies]
