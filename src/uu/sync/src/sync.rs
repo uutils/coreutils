@@ -18,7 +18,7 @@ pub mod options {
 
 static ARG_FILES: &str = "files";
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 mod platform {
     use std::fs::{File, OpenOptions};
     use std::os::unix::fs::OpenOptionsExt;
@@ -33,6 +33,7 @@ mod platform {
         reason = "fn sig must match on all platforms"
     )]
     pub fn do_sync() -> UResult<()> {
+        #[cfg(unix)] // todo: recursive sync on wasi
         rustix::fs::sync();
         Ok(())
     }
@@ -248,7 +249,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             syncfs(&files)?;
         }
     } else if matches.get_flag(options::DATA) {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         fdatasync(&files)?;
     } else {
         sync()?;
