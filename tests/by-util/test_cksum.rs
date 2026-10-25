@@ -3993,3 +3993,13 @@ fn test_check_improperly_formatted_line_does_not_select_format() {
         .stdout_is("a: OK\n")
         .stderr_contains("1 line is improperly formatted");
 }
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: Can't detect closed stdin")]
+fn test_closed_stdin() {
+    new_ucmd!()
+        .close_stdin(true)
+        .fails_with_code(1)
+        .stderr_is("cksum: -: Bad file descriptor\n");
+}
