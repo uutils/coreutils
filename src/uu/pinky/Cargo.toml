@@ -17,7 +17,7 @@ readme.workspace = true
 path = "src/pinky.rs"
 doctest = false
 
-[dependencies]
+[target.'cfg(any(target_vendor = "apple", target_os = "cygwin", target_os = "freebsd", target_os = "linux", target_os = "netbsd"))'.dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
 uucore = { workspace = true, features = ["utmpx", "entries"] }
@@ -31,3 +31,4 @@ workspace = true
 [[bin]]
 name = "pinky"
 path = "src/main.rs"
+required-features = ["uucore/default"]
