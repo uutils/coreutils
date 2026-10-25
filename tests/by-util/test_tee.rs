@@ -27,6 +27,21 @@ fn test_error_stdin_directory() {
 }
 
 #[test]
+#[cfg(all(unix, not(wasi_runner)))]
+fn test_closed_stdin() {
+    // Reading a closed stdin fails with EBADF. Run through a shell so the
+    // process really starts with fd 0 closed.
+    let (at, ts) = ::uutests::at_and_ts!();
+    ts.cmd("sh")
+        .args(&["-c", "exec <&-; \"$0\" tee file"])
+        .arg(&ts.bin_path)
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("tee: read error: Bad file descriptor\n");
+    assert_eq!(at.read("file"), "");
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
