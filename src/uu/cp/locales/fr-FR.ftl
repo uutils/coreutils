@@ -61,6 +61,7 @@ cp-error-not-writing-dangling-symlink = ne pas écrire à travers le lien symbol
 cp-error-failed-to-clone = échec du clonage de { $dest } depuis { $source } : { $error }
 cp-error-cannot-change-attribute = impossible de changer l'attribut { $dest } : Le fichier source n'est pas un fichier régulier
 cp-error-cannot-stat = impossible de faire stat sur { $source } : Aucun fichier ou répertoire de ce type
+cp-error-cannot-stat-context = impossible de faire stat sur { $source }
 cp-error-cannot-create-symlink = impossible de créer le lien symbolique { $dest } vers { $source }
 cp-error-cannot-create-hard-link = impossible de créer le lien dur { $dest } vers { $source }
 cp-error-omitting-directory = -r non spécifié ; répertoire { $dir } omis
