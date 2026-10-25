@@ -1055,7 +1055,7 @@ fn test_file_column_width_if_filename_contains_unicode_chars() {
 fn test_column_width_if_header_contains_unicode_chars() {
     // the French "Used" header "Utilisé" is 7 columns wide but 8 bytes long
     let output = new_ucmd!()
-        .env("LANG", "fr_FR.UTF-8")
+        .env("LC_ALL", "fr_FR.UTF-8")
         .args(&["-h", "--output=used,target", "."])
         .succeeds()
         .stdout_str_lossy();
