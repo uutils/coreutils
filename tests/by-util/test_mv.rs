@@ -1604,12 +1604,10 @@ fn test_mv_rename_error_names_source_and_target() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.touch("a");
-    scene
-        .ucmd()
-        .arg("a")
-        .arg("missing/b")
-        .fails_with_code(1)
-        .stderr_only("mv: cannot move 'a' to 'missing/b': No such file or directory\n");
+    let result = scene.ucmd().arg("a").arg("missing/b").fails_with_code(1);
+    #[cfg(unix)]
+    result.stderr_only("mv: cannot move 'a' to 'missing/b': No such file or directory\n");
+
     assert!(at.file_exists("a"));
 }
 
@@ -1627,6 +1625,8 @@ fn test_mv_rename_error_permission_denied_names_paths() {
         .arg("ro/b")
         .fails_with_code(1)
         .stderr_only("mv: cannot move 'a' to 'ro/b': Permission denied\n");
+    assert!(at.file_exists("a"));
+    assert!(!at.file_exists("ro/b"));
 }
 
 #[test]

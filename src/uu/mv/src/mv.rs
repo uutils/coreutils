@@ -446,21 +446,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
                     hardlink_params.0,
                     hardlink_params.1,
                 )
-                .map_err(|e| -> Box<dyn UError> {
-                    let message = if is_directory_not_empty_error(&e) {
-                        translate!(
-                            "mv-error-cannot-overwrite-non-empty-directory",
-                            "target" => target.quote()
-                        )
-                    } else {
-                        translate!(
-                            "mv-error-cannot-move",
-                            "source" => source.quote(),
-                            "target" => target.quote()
-                        )
-                    };
-                    e.map_err_context(|| message)
-                })
+                .map_err(|e| cannot_move_error(e, source, target))
             } else {
                 Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
             }
@@ -504,13 +490,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
             // OS errors get the same "cannot move" context as GNU; our own
             // messages (e.g. "not replacing") are already complete.
             if e.raw_os_error().is_some() {
-                e.map_err_context(|| {
-                    translate!(
-                        "mv-error-cannot-move",
-                        "source" => source.quote(),
-                        "target" => target.quote()
-                    )
-                })
+                cannot_move_error(e, source, target)
             } else {
                 USimpleError::new(1, format!("{e}"))
             }
@@ -793,19 +773,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         ) {
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
-                let message = if is_directory_not_empty_error(&e) {
-                    translate!(
-                        "mv-error-cannot-overwrite-non-empty-directory",
-                        "target" => targetpath.quote()
-                    )
-                } else {
-                    translate!(
-                        "mv-error-cannot-move",
-                        "source" => sourcepath.quote(),
-                        "target" => targetpath.quote()
-                    )
-                };
-                let e = e.map_err_context(|| message);
+                let e = cannot_move_error(e, sourcepath, &targetpath);
                 if let Some(ref pb) = display_manager {
                     pb.suspend(|| show!(e));
                 } else {
@@ -955,6 +923,24 @@ fn is_fifo(_filetype: fs::FileType) -> bool {
 
 /// A wrapper around `fs::rename`, so that if it fails, we try falling back on
 /// copying and removing.
+/// Add GNU's "cannot move" (or "cannot overwrite" for a non-empty
+/// directory) context to an error from `rename`.
+fn cannot_move_error(e: io::Error, source: &Path, target: &Path) -> Box<dyn UError> {
+    let message = if is_directory_not_empty_error(&e) {
+        translate!(
+            "mv-error-cannot-overwrite-non-empty-directory",
+            "target" => target.quote()
+        )
+    } else {
+        translate!(
+            "mv-error-cannot-move",
+            "source" => source.quote(),
+            "target" => target.quote()
+        )
+    };
+    e.map_err_context(|| message)
+}
+
 fn rename_with_fallback(
     from: &Path,
     to: &Path,
@@ -971,7 +957,9 @@ fn rename_with_fallback(
         // 2. On Windows, if the target file exists and source file is opened by another process
         //    (MoveFileExW fails with "Access Denied" even if the source file has FILE_SHARE_DELETE permission)
         let should_fallback = err.kind() == io::ErrorKind::CrossesDevices
-            || (from.is_file() && can_delete_file(from));
+            || (err.kind() == io::ErrorKind::PermissionDenied
+                && from.is_file()
+                && can_delete_file(from));
         if !should_fallback {
             return Err(err);
         }
