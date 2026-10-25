@@ -850,6 +850,39 @@ fn test_block_keeps_trailing_record_of_spaces() {
         .stdout_is("ab      ");
 }
 
+#[test]
+fn test_unblock_record_across_default_blocks() {
+    // 512 is not a multiple of 80, so the default block size ends inside a record.
+    use std::fmt::Write;
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut input = String::new();
+    let mut expected = String::new();
+    for i in 0..10 {
+        write!(input, "{:<80}", format!("REC{i}")).unwrap();
+        writeln!(expected, "REC{i}").unwrap();
+    }
+    at.write("in", &input);
+    ucmd.args(&["if=in", "conv=unblock", "cbs=80", "status=none"])
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
+fn test_unblock_record_across_small_ibs() {
+    // With ibs=3, each record and the spaces ending it span several reads.
+    new_ucmd!()
+        .args(&["conv=unblock", "cbs=8", "ibs=3", "obs=3"])
+        .pipe_in("ab  c   ef      gh")
+        .succeeds()
+        .stdout_is("ab  c\nef\ngh\n");
+    // 0x40 and 0xc1 are the EBCDIC ' ' and 'A'.
+    new_ucmd!()
+        .args(&["conv=ascii", "cbs=4", "ibs=3", "obs=3"])
+        .pipe_in(b"\x40\xc1\x40\xc1\x40\xc1\x40\x40".to_vec())
+        .succeeds()
+        .stdout_is(" A A\n A\n");
+}
+
 #[rstest]
 #[case::block_cbs16(&["conv=block", "cbs=16"], "dd-block-cbs16.test", "dd-block-cbs16.spec")]
 #[case::block_cbs16_as_cbs8(&["conv=block", "cbs=8"], "dd-block-cbs16.test", "dd-block-cbs8.spec")]
