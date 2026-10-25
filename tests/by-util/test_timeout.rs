@@ -564,5 +564,6 @@ fn test_continue_terminal_job_ctrl_sigs() {
     ts.cmd("/bin/sh")
         .arg("-c")
         .arg(format!("trap 'echo' SIGTTIN; {bin:?} {name} 2 /bin/cat"))
-        .timeout(Duration::from_secs(4));
+        .timeout(Duration::from_secs(4))
+        .succeeds();
 }
