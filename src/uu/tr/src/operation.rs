@@ -375,7 +375,7 @@ impl Sequence {
                 2,
             ));
         }
-        if !translating && set2.iter().any(|s| matches!(s, Self::CharStar(_))) {
+        if !translating && set2.iter().any(|s| is_char_star(&s)) {
             return Err(SequenceError::whole_set(
                 BadSequence::CharRepeatInSet2WhenNotTranslating,
                 2,
