@@ -394,12 +394,7 @@ fn expand_buf(
             None => buf,
         };
         *init = *init && line.iter().all(|&b| b == b' ');
-        let mut byte = 0;
-        while byte < line.len() {
-            let (_, cwidth, nbytes) = classify_char(line, byte, options.utf8);
-            *col += cwidth;
-            byte += nbytes;
-        }
+        *col += line_width(line, options.utf8);
         return Ok(());
     }
 
@@ -455,6 +450,18 @@ fn expand_buf(
     }
 
     Ok(())
+}
+
+/// The number of columns that `line`, which has no tabs or backspaces, takes up.
+fn line_width(line: &[u8], utf8: bool) -> usize {
+    let mut width = 0;
+    let mut byte = 0;
+    while byte < line.len() {
+        let (_, cwidth, nbytes) = classify_char(line, byte, utf8);
+        width += cwidth;
+        byte += nbytes;
+    }
+    width
 }
 
 fn expand_file(
