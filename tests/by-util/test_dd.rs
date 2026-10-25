@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED Fsize SIGXFSZ rusage maxrss cdefg ncdefg cdefh memfd ftruncate
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED Fsize SIGXFSZ rusage maxrss cdefg ncdefg cdefh memfd ftruncate lseek ESPIPE
 
 use rstest::rstest;
 use uutests::at_and_ucmd;
@@ -795,6 +795,44 @@ fn test_skip_beyond_file_seekable_stdin() {
             .stderr_contains(
                 "'standard input': cannot skip to specified offset\n0+0 records in\n0+0 records out\n",
             );
+    }
+}
+
+#[test]
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
+fn test_skip_nonseekable_file() {
+    // EFI variable files are readable but reject lseek with ESPIPE.
+    let injection = "inject=lseek:error=ESPIPE";
+    if !Command::new("strace")
+        .args(["-o", "/dev/null", "-e", injection, "true"])
+        .output()
+        .is_ok_and(|output| output.status.success())
+    {
+        eprintln!("Skipping: strace fault injection is unavailable");
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("in", "1234payload");
+    let input_path = scene.fixtures.plus_as_string("in");
+
+    for args in [
+        &["bs=1", "skip=4"][..],
+        &["bs=2", "skip=2"][..],
+        &["bs=3", "skip=4", "iflag=skip_bytes"][..],
+    ] {
+        scene
+            .cmd("strace")
+            .args(&["-o", "/dev/null", "-e", injection])
+            // Limit injected errors to the input, leaving coverage profile seeks intact.
+            .args(&["-P", &input_path])
+            .arg(&scene.bin_path)
+            .arg(util_name!())
+            .args(&["if=in", "status=none"])
+            .args(args)
+            .succeeds()
+            .stdout_is("payload")
+            .no_stderr();
     }
 }
 
