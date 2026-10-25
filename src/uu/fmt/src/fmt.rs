@@ -71,6 +71,7 @@ mod options {
     pub const QUICK: &str = "quick";
     pub const TAB_WIDTH: &str = "tab-width";
     pub const FILES_OR_WIDTH: &str = "files";
+    pub const FILES_AFTER_DASHES: &str = "files-after-dashes";
 }
 
 pub type FileOrStdReader = BufReader<Box<dyn Read + 'static>>;
@@ -283,6 +284,13 @@ fn extract_files(matches: &ArgMatches) -> UResult<Vec<OsString>> {
                 Some(Ok(x.clone()))
             }
         })
+        .chain(
+            matches
+                .get_many::<OsString>(options::FILES_AFTER_DASHES)
+                .into_iter()
+                .flatten()
+                .map(|x| Ok(x.clone())),
+        )
         .collect();
 
     if files.as_ref().is_ok_and(Vec::is_empty) {
@@ -500,6 +508,13 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::FilePath)
                 .value_parser(clap::value_parser!(OsString))
                 .allow_negative_numbers(true),
+        )
+        .arg(
+            Arg::new(options::FILES_AFTER_DASHES)
+                .action(ArgAction::Append)
+                .value_parser(clap::value_parser!(OsString))
+                .last(true)
+                .hide(true),
         )
 }
 

@@ -153,6 +153,33 @@ fn test_fmt_positional_width_not_first() {
 }
 
 #[test]
+fn test_fmt_negative_number_file_after_double_dash() {
+    use uutests::util::TestScenario;
+    use uutests::util_name;
+
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("-9", "hidden text\n");
+    scene.fixtures.write("f", "the quick brown fox jumps\n");
+    for args in [&["--", "-9", "f"][..], &["-u", "--", "-9", "f"]] {
+        scene
+            .ucmd()
+            .args(args)
+            .succeeds()
+            .stdout_only("hidden text\nthe quick brown fox jumps\n");
+    }
+    scene
+        .ucmd()
+        .args(&["f", "--", "-9"])
+        .succeeds()
+        .stdout_only("the quick brown fox jumps\nhidden text\n");
+    scene
+        .ucmd()
+        .args(&["--", "-9"])
+        .succeeds()
+        .stdout_only("hidden text\n");
+}
+
+#[test]
 fn test_fmt_width_not_valid_number() {
     new_ucmd!()
         .args(&["-25x", "one-word-per-line.txt"])
