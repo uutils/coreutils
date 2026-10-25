@@ -497,7 +497,7 @@ fn bd_to_string_exp_with_prec(bd: &BigDecimal, precision: usize) -> (String, i64
     // Note that rounding will produce an extra digit if it overflows
     // (e.g. 9995 rounded to 3 digits => 1000 * 10^1, but we want 100 * 10^2), we compensate
     // for that later.
-    let precision_nz = NonZeroU64::new(precision as u64).expect("precision must be at least 1");
+    let precision_nz = NonZeroU64::new(precision as u64).unwrap_or(NonZeroU64::MIN);
     let bd_round = bd.with_precision_round(precision_nz, RoundingMode::HalfEven);
 
     // Convert to the form XXX * 10^-p (XXX is precision digit long)
