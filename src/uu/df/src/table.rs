@@ -937,7 +937,7 @@ mod tests {
         ));
     }
 
-    fn filesystem_with_bytes(blocks: u64) -> crate::Filesystem {
+    fn filesystem_with_bytes(bytes: u64) -> crate::Filesystem {
         crate::Filesystem {
             file: None,
             mount_info: crate::MountInfo {
@@ -952,7 +952,7 @@ mod tests {
             },
             usage: crate::table::FsUsage {
                 blocksize: 1,
-                blocks,
+                blocks: bytes,
                 bfree: 0,
                 bavail: 0,
                 bavail_top_bit_set: false,
