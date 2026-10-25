@@ -2368,21 +2368,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
     settings.merge = matches.get_flag(options::MERGE);
 
-    settings.check = matches.contains_id(options::check::CHECK);
-    if settings.check && matches.get_flag(options::check::CHECK_SILENT) {
+    let check_modes: Vec<&str> = matches
+        .get_many::<String>(options::check::CHECK)
+        .map(|modes| modes.map(String::as_str).collect())
+        .unwrap_or_default();
+    let check_silent = matches.get_flag(options::check::CHECK_SILENT)
+        || check_modes
+            .iter()
+            .any(|m| matches!(*m, options::check::SILENT | options::check::QUIET));
+    let check_diagnose = check_modes.contains(&options::check::DIAGNOSE_FIRST);
+    if check_silent && check_diagnose {
         return Err(incompatible_options_error("cC"));
     }
-    if matches.get_flag(options::check::CHECK_SILENT)
-        || matches!(
-            matches
-                .get_one::<String>(options::check::CHECK)
-                .map(String::as_str),
-            Some(options::check::SILENT | options::check::QUIET)
-        )
-    {
-        settings.check_silent = true;
-        settings.check = true;
-    }
+    settings.check = check_silent || check_diagnose;
+    settings.check_silent = check_silent;
 
     if matches.contains_id(options::OUTPUT) && settings.check {
         let opts = if settings.check_silent { "Co" } else { "co" };
@@ -2591,6 +2590,8 @@ pub fn uu_app() -> Command {
             .long(options::check::CHECK)
             .require_equals(true)
             .num_args(0..)
+            .default_missing_value(options::check::DIAGNOSE_FIRST)
+            .action(ArgAction::Append)
             .value_parser(ShortcutValueParser::new([
                 options::check::SILENT,
                 options::check::QUIET,

@@ -1580,6 +1580,39 @@ fn test_check_silent() {
 }
 
 #[test]
+fn test_check_repeated_modes() {
+    for args in [
+        ["--check=silent", "--check=diagnose-first"],
+        ["--check=diagnose-first", "--check=quiet"],
+        ["-c", "--check=quiet"],
+        ["--check=silent", "-c"],
+    ] {
+        new_ucmd!()
+            .args(&args)
+            .arg("check_fail.txt")
+            .fails_with_code(2)
+            .stderr_only("sort: options '-cC' are incompatible\n");
+    }
+
+    for args in [
+        ["--check=quiet", "-C"],
+        ["-C", "--check=silent"],
+        ["--check=quiet", "--check=silent"],
+    ] {
+        new_ucmd!()
+            .args(&args)
+            .arg("check_fail.txt")
+            .fails_with_code(1)
+            .no_output();
+    }
+
+    new_ucmd!()
+        .args(&["--check=diagnose-first", "-c", "check_fail.txt"])
+        .fails_with_code(1)
+        .stderr_only("sort: check_fail.txt:6: disorder: 5\n");
+}
+
+#[test]
 fn test_check_stops_early_without_panicking() {
     // `--check` returns as soon as it finds the first disorder. That used to drop the
     // channel while the reader thread was still sending chunks, so the reader panicked
