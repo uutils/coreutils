@@ -107,6 +107,23 @@ fn byte_width(bytes: &[u8]) -> usize {
     width
 }
 
+/// Like [`byte_width`], with tabs advancing to the next multiple of `tabwidth`.
+fn indent_width(bytes: &[u8], tabwidth: usize) -> usize {
+    let mut width = 0;
+    let mut idx = 0;
+    while idx < bytes.len() {
+        if bytes[idx] == b'\t' {
+            width = (width / tabwidth + 1) * tabwidth;
+            idx += 1;
+            continue;
+        }
+        let info = decode_char_info(bytes, idx);
+        width += info.width;
+        idx += info.consumed;
+    }
+    width
+}
+
 /// GNU fmt has a more restrictive definition of whitespace than Unicode.
 /// It only considers ASCII whitespace characters (space, tab, newline, etc.)
 /// and excludes many Unicode whitespace characters like non-breaking spaces.
@@ -484,7 +501,7 @@ impl Iterator for ParagraphStream<'_> {
                             .rposition(|&b| !is_fmt_whitespace_byte(b))
                             .map_or(0, |i| i + 1);
                         indent_str.truncate(prefix_end);
-                        indent_len = fl.prefix_len;
+                        indent_len = indent_width(&indent_str, self.opts.tabwidth);
                         if fl.indent_len == 0 {
                             indent_str.extend_from_slice(b"   ");
                             indent_len = 3;

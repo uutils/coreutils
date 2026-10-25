@@ -640,6 +640,18 @@ fn test_fmt_tagged_one_line_paragraph_indent() {
             "#ab cd ef gh ij kl mn\n",
             "#ab cd\n#ef gh ij\n#kl mn\n",
         ),
+        // the space ending the prefix is not printed, so it takes no width
+        (
+            vec!["-t", "-w12", "-p", "# "],
+            "# ab cd ef gh ij kl mn\n",
+            "# ab cd ef\n#gh ij kl mn\n",
+        ),
+        // a second line sets the indent
+        (
+            vec!["-t", "-w10"],
+            "ab cd ef gh\n  ij kl mn op qr\n",
+            "ab cd ef\n  gh ij kl\n  mn op qr\n",
+        ),
     ] {
         new_ucmd!()
             .args(&args)
