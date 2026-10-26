@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore getxattr posix_acl_default posix_acl_access ENOTSUP EOPNOTSUPP renamer
+// spell-checker:ignore getxattr posix_acl_default posix_acl_access nfs4_acl ENOTSUP EOPNOTSUPP renamer
 
 //! Set of functions to manage xattr on files and dirs
 
@@ -249,8 +249,11 @@ pub fn apply_xattrs_fd_ignore_unsupported(
 
 /// Checks if a file has an Access Control List (ACL).
 ///
-/// On macOS this asks the ACL API; elsewhere it looks at the file's extended
-/// attributes.
+/// On macOS this asks the ACL API. On Linux and Android it looks for the
+/// attributes that store an ACL (for `NFSv4`, one that names someone besides the
+/// owner, the group and everyone), so a security label (`security.selinux`) or a
+/// `user.*` attribute alone is not an ACL. Elsewhere it looks at the file's
+/// extended attributes.
 ///
 /// # Arguments
 ///
@@ -259,13 +262,16 @@ pub fn apply_xattrs_fd_ignore_unsupported(
 ///
 /// # Returns
 ///
-/// `true` if the file has an extended ACL (on macOS) or any extended attributes
-/// (elsewhere), `false` otherwise.
+/// `true` if the file has an extended ACL (on macOS, Linux and Android) or any
+/// extended attributes (elsewhere), `false` otherwise.
 pub fn has_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
     // On macOS most files carry some xattr (e.g. com.apple.provenance) and the
     // ACL is not one of them, so ask the ACL API instead.
     #[cfg(target_os = "macos")]
     return macos_acl::has_extended_acl(file.as_ref(), dereference);
+
+    #[cfg(not(target_os = "macos"))]
+    let file = file.as_ref();
 
     // don't use exacl here, it is doing more getxattr call then needed
     #[cfg(not(target_os = "macos"))]
@@ -275,11 +281,73 @@ pub fn has_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
         xattr::list(file)
     };
 
-    #[cfg(not(target_os = "macos"))]
-    attrs.is_ok_and(|acl| {
+    // The attributes the kernel stores an ACL in. Other attributes, such as the
+    // SELinux or SMACK label, say nothing about an ACL.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    return attrs.is_ok_and(|mut names| {
+        names.any(|name| {
+            if name == OsStr::new("system.posix_acl_access")
+                || name == OsStr::new("system.posix_acl_default")
+            {
+                return true;
+            }
+            if name != OsStr::new("system.nfs4_acl") {
+                return false;
+            }
+            // NFSv4 lists this attribute for every file, so look at its content. One that
+            // cannot be read is no evidence of an ACL.
+            let value = if dereference {
+                xattr::get_deref(file, &name)
+            } else {
+                xattr::get(file, &name)
+            };
+            value
+                .ok()
+                .flatten()
+                .is_some_and(|raw| nfs4_acl_is_nontrivial(&raw))
+        })
+    });
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "android")))]
+    attrs.is_ok_and(|mut acl| {
         // if we have extra attributes, we have an acl
-        acl.count() > 0
+        acl.next().is_some()
     })
+}
+
+/// Whether an `NFSv4` ACL (the XDR value of `system.nfs4_acl`) names anyone besides
+/// the owner, the group and everyone, which is all the mode bits can express.
+/// A value that cannot be parsed counts as non-trivial.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn nfs4_acl_is_nontrivial(raw: &[u8]) -> bool {
+    // Big-endian 32-bit words; strings are length-prefixed and padded to 4 bytes.
+    fn word(raw: &mut &[u8]) -> Option<usize> {
+        let (head, rest) = raw.split_first_chunk::<4>()?;
+        *raw = rest;
+        usize::try_from(u32::from_be_bytes(*head)).ok()
+    }
+
+    fn named_principal(mut raw: &[u8]) -> Option<bool> {
+        let count = word(&mut raw)?;
+        for _ in 0..count {
+            // ACE type, flags and access mask, then the principal.
+            let [_, _, _, len] = [
+                word(&mut raw)?,
+                word(&mut raw)?,
+                word(&mut raw)?,
+                word(&mut raw)?,
+            ];
+            let padded = len.checked_add(3)? & !3;
+            let who = raw.get(..len)?;
+            raw = raw.get(padded..)?;
+            if !matches!(who, b"OWNER@" | b"GROUP@" | b"EVERYONE@") {
+                return Some(true);
+            }
+        }
+        Some(false)
+    }
+
+    named_principal(raw).unwrap_or(true)
 }
 
 #[cfg(target_os = "macos")]
@@ -555,15 +623,22 @@ mod tests {
 
         File::create(&file_path).unwrap();
 
-        // FIXME: this fails on a system that uses SELinux
         assert!(!has_acl(&file_path, true));
 
         let test_attr = "user.test_acl";
         let test_value = b"test value";
         xattr::set(&file_path, test_attr, test_value).unwrap();
 
-        // On macOS an ACL isn't an xattr, so an xattr alone is not an ACL.
-        assert_eq!(has_acl(&file_path, true), cfg!(not(target_os = "macos")));
+        // An ACL isn't any xattr: on macOS it is not an xattr at all, and on
+        // Linux only the posix_acl/nfs4_acl attributes are ACLs.
+        assert_eq!(
+            has_acl(&file_path, true),
+            cfg!(not(any(
+                target_os = "macos",
+                target_os = "linux",
+                target_os = "android"
+            )))
+        );
         assert!(!has_security_cap_acl(&file_path, true));
 
         // FreeBSD/NetBSD's xattr library does not support the "security" namespace
@@ -578,6 +653,75 @@ mod tests {
 
             assert!(has_security_cap_acl(&file_path, true));
         }
+    }
+
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_nfs4_acl_is_nontrivial() {
+        // count, then per entry: type, flags, access mask, principal (length, padded).
+        fn acl(principals: &[&str]) -> Vec<u8> {
+            let mut raw = u32::try_from(principals.len())
+                .unwrap()
+                .to_be_bytes()
+                .to_vec();
+            for who in principals {
+                for word in [0u32, 0, 0x1f, u32::try_from(who.len()).unwrap()] {
+                    raw.extend(word.to_be_bytes());
+                }
+                raw.extend(who.as_bytes());
+                raw.resize(raw.len().next_multiple_of(4), 0);
+            }
+            raw
+        }
+
+        assert!(!nfs4_acl_is_nontrivial(&acl(&[])));
+        assert!(!nfs4_acl_is_nontrivial(&acl(&[
+            "OWNER@",
+            "GROUP@",
+            "EVERYONE@"
+        ])));
+        assert!(nfs4_acl_is_nontrivial(&acl(&[
+            "OWNER@",
+            "alice@example.com",
+            "EVERYONE@"
+        ])));
+        assert!(nfs4_acl_is_nontrivial(&acl(&["1000"])));
+
+        // Truncated or garbage values are not trusted to be trivial.
+        let full = acl(&["OWNER@", "GROUP@"]);
+        assert!(nfs4_acl_is_nontrivial(&full[..full.len() - 1]));
+        assert!(nfs4_acl_is_nontrivial(&[0, 0]));
+        assert!(nfs4_acl_is_nontrivial(&[0xff; 8]));
+    }
+
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_file_has_acl_posix_attribute() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("test_file.txt");
+        File::create(&file_path).unwrap();
+
+        // An extended POSIX ACL in its xattr form: version 2, then (tag, perm, id)
+        // entries. The named user entry is what makes it more than the mode bits,
+        // which the kernel would not store as an ACL.
+        let mut acl = 2u32.to_le_bytes().to_vec();
+        for (tag, perm, id) in [
+            (0x01u16, 6u16, u32::MAX), // user::rw-
+            (0x02, 4, 1000),           // user:1000:r--
+            (0x04, 4, u32::MAX),       // group::r--
+            (0x10, 4, u32::MAX),       // mask::r--
+            (0x20, 4, u32::MAX),       // other::r--
+        ] {
+            acl.extend(tag.to_le_bytes());
+            acl.extend(perm.to_le_bytes());
+            acl.extend(id.to_le_bytes());
+        }
+        // Not every file system stores ACLs (or lets the test set them).
+        if xattr::set(&file_path, "system.posix_acl_access", &acl).is_err() {
+            return;
+        }
+        assert!(has_acl(&file_path, true));
+        assert!(has_acl(&file_path, false));
     }
 
     #[test]

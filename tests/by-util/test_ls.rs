@@ -5442,6 +5442,21 @@ fn test_ls_selinux_context_indicator() {
         );
     }
 
+    // A file with an ACL as well as a context is listed with `+`: the context is
+    // an extended attribute too, so it must not hide the ACL.
+    at.touch("file_acl");
+    if set_posix_acl(&at.plus_as_string("file_acl")) {
+        let result = scene.ucmd().args(&["-l", "file_acl"]).succeeds();
+        let first_line = result.stdout_str().lines().next().unwrap().to_string();
+        assert_eq!(
+            first_line.chars().nth(10),
+            Some('+'),
+            "Expected '+' indicator for an ACL plus SELinux context, got: {first_line}",
+        );
+    } else {
+        println!("ACL plus context check skipped: cannot set a POSIX ACL here");
+    }
+
     // Test that ls -lnZ properly shows the context
     for file in ["file", "link"] {
         let result = scene.ucmd().args(&["-lnZ", file]).succeeds();
@@ -7185,6 +7200,104 @@ fn test_acl_display_macos() {
         .args(&["-l", "with_acl", "without_acl"])
         .succeeds()
         .stdout_matches(&re_with_acl)
+        .stdout_matches(&re_without_acl);
+}
+
+/// Gives `path` a POSIX ACL that is more than its mode bits (a named user entry),
+/// through the raw attribute so that only `setfattr` is needed. Returns false when
+/// that is not possible here (no `setfattr`, or a file system without ACLs).
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn set_posix_acl(path: &str) -> bool {
+    use std::process::Command;
+
+    // Version 2, then (tag, perm, id) entries: user::rw-, user:1000:r--, group::r--,
+    // mask::r--, other::r--.
+    let acl = "0x02000000\
+        01000600ffffffff\
+        02000400e8030000\
+        04000400ffffffff\
+        10000400ffffffff\
+        20000400ffffffff";
+    Command::new("setfattr")
+        .args(["-n", "system.posix_acl_access", "-v", acl, path])
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+// A real ACL is listed with `+`, so the check below that other attributes are not
+// is not just passing because `+` never shows up.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_acl_display_raw_posix_acl() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("with_acl");
+    at.touch("without_acl");
+
+    if !set_posix_acl(&at.plus_as_string("with_acl")) {
+        println!("test skipped: cannot set a POSIX ACL here");
+        return;
+    }
+
+    let result = scene
+        .ucmd()
+        .args(&["-l", "with_acl", "without_acl"])
+        .succeeds();
+    let out = result.stdout_str();
+    assert!(
+        Regex::new(r"(?m)^-[rwx-]{9}\+ .*with_acl$")
+            .unwrap()
+            .is_match(out),
+        "{out}"
+    );
+    assert!(
+        Regex::new(r"(?m)^-[rwx-]{9}[^+].*without_acl$")
+            .unwrap()
+            .is_match(out),
+        "{out}"
+    );
+}
+
+// An extended attribute that is not an ACL (a security label is one too) must not
+// be listed with the ACL `+`.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_acl_display_ignores_other_xattrs() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("with_xattr");
+
+    match Command::new("setfattr")
+        .args([
+            "-n",
+            "user.test",
+            "-v",
+            "1",
+            &at.plus_as_string("with_xattr"),
+        ])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: setfattr failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfattr failed with {e}");
+            return;
+        }
+    }
+
+    // Whatever follows the mode bits (nothing, or `.` for a security context on
+    // an SELinux host), it is not the ACL `+`.
+    let re_without_acl = Regex::new(r"(?m)^-[rwx-]{9}[^+].*with_xattr$").unwrap();
+    scene
+        .ucmd()
+        .args(&["-l", "with_xattr"])
+        .succeeds()
         .stdout_matches(&re_without_acl);
 }
 

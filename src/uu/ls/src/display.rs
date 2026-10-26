@@ -314,14 +314,22 @@ fn pad_left(string: &str, count: usize) -> String {
 }
 
 /// Returns the alternate-access indicator that follows the 9-bit permission
-/// string in long-format output: `.` for a non-trivial security context, `+`
-/// for an ACL, otherwise a space (which acts as a placeholder so columns line
-/// up across items that don't carry an indicator themselves).
+/// string in long-format output: `+` for an ACL (even when the file also has a
+/// security context), `.` for a non-trivial security context alone, otherwise a
+/// space (which acts as a placeholder so columns line up across items that
+/// don't carry an indicator themselves).
 fn alt_access_indicator(item: &PathData, config: &Config, is_acl_set: bool) -> u8 {
-    if item.security_context(config).len() > 1 {
-        b'.'
-    } else if is_acl_set {
+    alt_access_indicator_for(is_acl_set, item.security_context(config).len() > 1)
+}
+
+/// The choice behind [`alt_access_indicator`]: an ACL wins over a security
+/// context, because the label is itself an extended attribute and says nothing
+/// about the ACL.
+fn alt_access_indicator_for(has_acl: bool, has_context: bool) -> u8 {
+    if has_acl {
         b'+'
+    } else if has_context {
+        b'.'
     } else {
         b' '
     }
@@ -1422,4 +1430,17 @@ fn os_str_starts_with(haystack: &OsStr, needle: &[u8]) -> bool {
 
 fn write_os_str<W: Write>(writer: &mut W, string: &OsStr) -> std::io::Result<()> {
     writer.write_all(&os_str_as_bytes_lossy(string))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::alt_access_indicator_for;
+
+    #[test]
+    fn alt_access_indicator_prefers_acl_over_context() {
+        assert_eq!(alt_access_indicator_for(false, false), b' ');
+        assert_eq!(alt_access_indicator_for(false, true), b'.');
+        assert_eq!(alt_access_indicator_for(true, false), b'+');
+        assert_eq!(alt_access_indicator_for(true, true), b'+');
+    }
 }
