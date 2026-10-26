@@ -768,6 +768,45 @@ fn test_locale_collation() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+fn test_locale_blanks_separate_fields() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("reserved", "admin\nroot\n");
+    // U+1680, U+2003 and U+3000 are blanks in a UTF-8 locale
+    at.write("blanks", "a\u{1680}1\nb\u{2003}2\nroot\u{3000}/bin/sh\n");
+    at.write("keys", "a\nb\nroot\n");
+
+    ts.ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["-v", "1", "blanks", "reserved"])
+        .succeeds()
+        .stdout_only("a 1\nb 2\n");
+    ts.ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["blanks", "keys"])
+        .succeeds()
+        .stdout_only("a 1\nb 2\nroot /bin/sh\n");
+
+    // U+00A0 NO-BREAK SPACE is not a blank
+    at.write("nbsp", "root\u{a0}x\n");
+    ts.ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["-v", "1", "nbsp", "reserved"])
+        .succeeds()
+        .stdout_only("root\u{a0}x\n");
+
+    // In the C locale U+3000 is an ordinary byte sequence
+    at.write("u3000", "root\u{3000}/bin/sh\n");
+    ts.ucmd()
+        .env("LC_ALL", "C")
+        .args(&["-v", "1", "u3000", "reserved"])
+        .succeeds()
+        .stdout_only("root\u{3000}/bin/sh\n");
+}
+
+#[test]
 #[cfg_attr(
     wasi_runner,
     ignore = "WASI: usize::MAX is computed for the 64-bit host test binary, \

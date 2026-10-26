@@ -18,6 +18,7 @@ use std::os::unix::ffi::OsStrExt;
 use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::i18n::charmap::{Encoding, locale_encoding};
 use uucore::i18n::collator::{
     AlternateHandling, CollatorOptions, locale_cmp, should_use_locale_collation, try_init_collator,
 };
@@ -127,23 +128,44 @@ impl Separator for LineSep {
     }
 }
 
-/// Default whitespace separator.
+/// Default whitespace separator: the blanks of the locale, plus newline.
 #[derive(Copy, Clone)]
-struct WhitespaceSep {}
+struct WhitespaceSep {
+    encoding: Encoding,
+}
 
 impl Separator for WhitespaceSep {
     fn field_ranges(&self, haystack: &[u8], len_guess: usize) -> Vec<(usize, usize)> {
         let mut field_ranges = Vec::with_capacity(len_guess);
         let mut last_end = 0;
 
-        // GNU join used Bourne shell field splitters by default
-        // FIXME: but now uses locale-dependent whitespace
-        for i in Memchr3::new(b' ', b'\t', b'\n', haystack) {
-            // leading whitespace should be dropped, contiguous whitespace merged
-            if i > last_end {
-                field_ranges.push((last_end, i));
+        if self.encoding == Encoding::SingleByte || haystack.is_ascii() {
+            for i in Memchr3::new(b' ', b'\t', b'\n', haystack) {
+                // leading whitespace should be dropped, contiguous whitespace merged
+                if i > last_end {
+                    field_ranges.push((last_end, i));
+                }
+                last_end = i + 1;
             }
-            last_end = i + 1;
+        } else {
+            // Multi-byte blanks such as U+3000 also separate fields
+            let mut pos = 0;
+            while pos < haystack.len() {
+                let sep_len = if haystack[pos] == b'\n' {
+                    Some(1)
+                } else {
+                    self.encoding.blank_len(&haystack[pos..])
+                };
+                if let Some(len) = sep_len {
+                    if pos > last_end {
+                        field_ranges.push((last_end, pos));
+                    }
+                    pos += len;
+                    last_end = pos;
+                } else {
+                    pos += self.encoding.char_len(&haystack[pos..]);
+                }
+            }
         }
         field_ranges.push((last_end, haystack.len()));
         field_ranges
@@ -914,7 +936,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 finder: Finder::new(&c),
             },
         ),
-        SepSetting::Whitespaces => exec(file1, file2, settings, WhitespaceSep {}),
+        SepSetting::Whitespaces => exec(
+            file1,
+            file2,
+            settings,
+            WhitespaceSep {
+                encoding: locale_encoding(),
+            },
+        ),
         SepSetting::Line => exec(file1, file2, settings, LineSep {}),
     }
 }
