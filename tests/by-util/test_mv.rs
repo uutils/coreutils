@@ -1607,6 +1607,8 @@ fn test_mv_rename_error_names_source_and_target() {
     let result = scene.ucmd().arg("a").arg("missing/b").fails_with_code(1);
     #[cfg(unix)]
     result.stderr_only("mv: cannot move 'a' to 'missing/b': No such file or directory\n");
+    #[cfg(not(unix))]
+    result.stderr_contains("mv: cannot move 'a' to 'missing/b': ");
 
     assert!(at.file_exists("a"));
 }
