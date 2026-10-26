@@ -287,6 +287,63 @@ fn test_chmod_error_permissions() {
 }
 
 #[test]
+fn test_chmod_recursive_error_permissions() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("d");
+    set_permissions(at.plus("d"), Permissions::from_mode(0o755)).unwrap();
+
+    at.touch("d/file");
+    set_permissions(at.plus("d/file"), Permissions::from_mode(0o666)).unwrap();
+
+    ucmd.args(&["-R", "-w", "d"])
+        .umask(0o022)
+        .fails_with_code(1)
+        .stderr_is(
+            // spell-checker:disable-next-line
+            "chmod: d/file: new permissions are r--rw-rw-, not r--r--r--\n",
+        );
+    assert_eq!(
+        metadata(at.plus("d/file")).unwrap().permissions().mode(),
+        0o100_466
+    );
+}
+
+#[test]
+fn test_chmod_recursive_reports_each_umask_conflict() {
+    // Every entry the umask kept bits on is named, at any depth, and the
+    // others are not; the order of the lines depends on readdir.
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // The directories end up 0o555, so only the files can conflict.
+    at.mkdir_all("d/sub");
+    at.set_mode("d", 0o755);
+    at.set_mode("d/sub", 0o755);
+    for (file, mode) in [("d/a", 0o666), ("d/b", 0o644), ("d/sub/c", 0o666)] {
+        at.touch(file);
+        at.set_mode(file, mode);
+    }
+
+    let result = ucmd
+        .umask(0o022)
+        .args(&["-R", "-w", "d"])
+        .fails_with_code(1);
+    result
+        .stderr_contains("chmod: d/a: new permissions are")
+        .stderr_contains("chmod: d/sub/c: new permissions are")
+        .stderr_does_not_contain("d/b");
+    assert_eq!(result.stderr_str().lines().count(), 2);
+
+    for (file, mode) in [("d/a", 0o466), ("d/b", 0o444), ("d/sub/c", 0o466)] {
+        assert_eq!(
+            at.metadata(file).permissions().mode() & 0o7777,
+            mode,
+            "{file}"
+        );
+    }
+}
+
+#[test]
 fn test_chmod_permissions_too_large() {
     let scenario = TestScenario::new(util_name!());
     let at = &scenario.fixtures;
