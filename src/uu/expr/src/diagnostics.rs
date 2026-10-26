@@ -81,13 +81,7 @@ fn locate(snapshot: &Snapshot, err: &ExprError, at: &FailurePoint) -> Option<Loc
         // single out.
         ExprError::MissingOperand
         | ExprError::DivisionByZero
-        | ExprError::InvalidRegexExpression
-        | ExprError::UnmatchedOpeningParenthesis
-        | ExprError::UnmatchedClosingParenthesis
-        | ExprError::UnmatchedOpeningBrace
-        | ExprError::InvalidBracketContent
-        | ExprError::TrailingBackslash
-        | ExprError::TooBigRangeQuantifierIndex
+        | ExprError::Regex(_)
         | ExprError::UnsupportedNonUtf8Match(_) => return None,
     };
 
