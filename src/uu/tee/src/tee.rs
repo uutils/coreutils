@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore nopipe
+// spell-checker:ignore BADF nopipe
 
 use std::ffi::OsString;
 use std::fs::OpenOptions;
@@ -149,10 +149,9 @@ impl MultiWriter {
         const BUF_SIZE: usize = 32 * 1024;
         #[cfg(all(unix, not(target_os = "fuchsia")))]
         if uucore::signals::stdin_was_closed() {
-            let e = Error::from(rustix::io::Errno::BADF);
             show_error!(
                 "{}",
-                translate!("tee-error-stdin", "error" => strip_errno(&e))
+                translate!("tee-error-stdin", "error" => strip_errno(&rustix::io::Errno::BADF.into()))
             );
             return Err(());
         }
