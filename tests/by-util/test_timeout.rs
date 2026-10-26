@@ -555,3 +555,72 @@ fn test_windows_command_cannot_invoke() {
         .args(&["1", ".\\not_executable.txt"])
         .fails_with_code(126);
 }
+
+/// After relaying a signal that the child survives, `timeout` must keep its
+/// deadline armed and keep relaying later signals, like GNU.
+#[test]
+#[cfg(unix)]
+fn test_keeps_relaying_signals_after_child_survives_one() {
+    use nix::sys::signal::{Signal, kill};
+    use nix::unistd::Pid;
+    use std::time::Instant;
+
+    let ts = TestScenario::new(util_name!());
+    let mut cmd = ts
+        .ucmd()
+        .args(&[
+            "10",
+            "sh",
+            "-c",
+            "trap ': > hup' HUP; : > ready; while :; do sleep .01; done",
+        ])
+        .timeout(Duration::from_secs(5))
+        .run_no_wait();
+
+    for marker in ["ready", "hup"] {
+        let start = Instant::now();
+        while !ts.fixtures.file_exists(marker) && start.elapsed() < Duration::from_secs(5) {
+            cmd.delay(10);
+        }
+        assert!(
+            ts.fixtures.file_exists(marker),
+            "child did not create {marker}"
+        );
+        let signal = if marker == "ready" {
+            Signal::SIGHUP
+        } else {
+            Signal::SIGTERM
+        };
+        kill(Pid::from_raw(cmd.id() as i32), signal).unwrap();
+    }
+    cmd.wait().unwrap().code_is(143);
+}
+
+/// A relayed signal must not cancel the original deadline.
+#[test]
+#[cfg(unix)]
+fn test_deadline_still_fires_after_relaying_a_signal() {
+    use nix::sys::signal::{Signal, kill};
+    use nix::unistd::Pid;
+    use std::time::Instant;
+
+    let ts = TestScenario::new(util_name!());
+    let mut cmd = ts
+        .ucmd()
+        .args(&[
+            "1",
+            "sh",
+            "-c",
+            "trap ': > hup' HUP; : > ready; while :; do sleep .01; done",
+        ])
+        .timeout(Duration::from_secs(5))
+        .run_no_wait();
+
+    let start = Instant::now();
+    while !ts.fixtures.file_exists("ready") && start.elapsed() < Duration::from_secs(5) {
+        cmd.delay(10);
+    }
+    kill(Pid::from_raw(cmd.id() as i32), Signal::SIGHUP).unwrap();
+    cmd.wait().unwrap().code_is(124);
+    assert!(ts.fixtures.file_exists("hup"));
+}
