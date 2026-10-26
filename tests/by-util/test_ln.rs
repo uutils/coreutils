@@ -1458,12 +1458,22 @@ fn test_hard_link_force_failed_link_keeps_destination() {
 #[test]
 fn test_hard_link_inaccessible_source() {
     let (at, mut ucmd) = at_and_ucmd!();
-    at.touch("f");
 
     ucmd.args(&["missing", "link"])
         .fails_with_code(1)
         .stderr_only("ln: failed to access 'missing': No such file or directory\n");
     assert!(!at.file_exists("link"));
+}
+
+#[test]
+fn test_hard_link_force_inaccessible_source_keeps_destination() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("link", "keep\n");
+
+    ucmd.args(&["-f", "missing", "link"])
+        .fails_with_code(1)
+        .stderr_only("ln: failed to access 'missing': No such file or directory\n");
+    assert_eq!(at.read("link"), "keep\n");
 }
 
 #[test]
