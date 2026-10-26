@@ -374,7 +374,7 @@ fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -
         InputType::StdIn => {
             // A closed stdin is reopened as /dev/null before `uumain` runs, so
             // reading it would succeed silently instead of failing with EBADF.
-            #[cfg(unix)]
+            #[cfg(all(unix, not(target_os = "fuchsia")))]
             if uucore::signals::stdin_was_closed() {
                 return Err(io::Error::from(rustix::io::Errno::BADF).into());
             }
