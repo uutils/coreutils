@@ -7,7 +7,7 @@
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
-use memchr::{Memchr3, memchr_iter, memmem::Finder};
+use memchr::{Memchr3, memchr_iter, memchr3, memmem::Finder};
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::File;
@@ -139,7 +139,10 @@ impl Separator for WhitespaceSep {
         let mut field_ranges = Vec::with_capacity(len_guess);
         let mut last_end = 0;
 
-        if self.encoding == Encoding::SingleByte || haystack.is_ascii() {
+        // Only UTF-8 has multi-byte blanks, and all of them (U+1680,
+        // U+2000..=U+205F, U+3000) start with 0xE1, 0xE2 or 0xE3. Space, tab
+        // and newline are never part of a multi-byte character.
+        if self.encoding != Encoding::Utf8 || memchr3(0xE1, 0xE2, 0xE3, haystack).is_none() {
             for i in Memchr3::new(b' ', b'\t', b'\n', haystack) {
                 // leading whitespace should be dropped, contiguous whitespace merged
                 if i > last_end {
