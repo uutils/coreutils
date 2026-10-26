@@ -143,6 +143,37 @@ fn test_negative_padding_as_separate_arg() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_padding_wider_than_memory() {
+    // A width too large to allocate is streamed rather than aborting.
+    let padding = format!("--padding={}", isize::MIN);
+    new_ucmd!()
+        .args(&[padding.as_str(), "1"])
+        .run_stdout_starts_with(b"1    ");
+    let format = format!("--format=%{}f", isize::MAX);
+    new_ucmd!()
+        .args(&[format.as_str(), "1"])
+        .run_stdout_starts_with(b"    ");
+    let zero_format = format!("--format=%0{}f", isize::MAX);
+    new_ucmd!()
+        .args(&[zero_format.as_str(), "1"])
+        .run_stdout_starts_with(b"0000");
+}
+
+#[test]
+fn test_large_padding_is_exact() {
+    let width = 100_000;
+    new_ucmd!()
+        .args(&[&format!("--padding={width}"), "1"])
+        .succeeds()
+        .stdout_only(format!("{}1\n", " ".repeat(width - 1)));
+    new_ucmd!()
+        .args(&[&format!("--format=%0{width}f"), "--", "-5"])
+        .succeeds()
+        .stdout_only(format!("-{}5\n", "0".repeat(width - 2)));
+}
+
+#[test]
 fn test_suffix_hyphen_leading_as_separate_arg() {
     // A hyphen-leading suffix value passed as its own argument (not
     // attached with `=`) must not be mistaken for a new, unrecognized

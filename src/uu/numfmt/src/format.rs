@@ -6,6 +6,7 @@
 // spell-checker:ignore powf seps replacen
 
 use std::fmt::Write as _;
+use std::io::Read as _;
 
 use uucore::display::Quotable;
 use uucore::i18n::decimal::{locale_decimal_separator, locale_grouping_separator};
@@ -770,24 +771,33 @@ fn transform_to(
     })
 }
 
-/// Pad `s` to at least `width` characters using `fill`.
+/// Write `s` padded to at least `width` characters using `fill`.
 /// Right-aligns when `right_align` is true, left-aligns otherwise.
-/// Unlike `format!("{:>width$}")`, this handles widths larger than 65535.
-fn pad_string(s: &str, width: usize, fill: char, right_align: bool) -> String {
-    let len = s.chars().count();
-    if len >= width {
-        return s.to_string();
-    }
-    let pad = width - len;
-    let mut result = String::with_capacity(width);
+/// The padding is streamed, so a huge width is never allocated.
+fn pad_string<W: std::io::Write + ?Sized>(
+    writer: &mut W,
+    s: &str,
+    width: usize,
+    fill: u8,
+    right_align: bool,
+) -> std::io::Result<()> {
+    let pad = width.saturating_sub(s.chars().count());
     if right_align {
-        result.extend(std::iter::repeat_n(fill, pad));
-        result.push_str(s);
+        write_fill(writer, fill, pad)?;
+        writer.write_all(s.as_bytes())
     } else {
-        result.push_str(s);
-        result.extend(std::iter::repeat_n(fill, pad));
+        writer.write_all(s.as_bytes())?;
+        write_fill(writer, fill, pad)
     }
-    result
+}
+
+/// Write `count` copies of `byte` without allocating `count` bytes.
+fn write_fill<W: std::io::Write + ?Sized>(
+    writer: &mut W,
+    byte: u8,
+    count: usize,
+) -> std::io::Result<()> {
+    std::io::copy(&mut std::io::repeat(byte).take(count as u64), writer).map(|_| ())
 }
 
 /// Split a scaled value into its numeric part and the unit suffix that trails
@@ -802,11 +812,12 @@ fn split_number_and_units(s: &str) -> (&str, &str) {
     }
 }
 
-fn format_string(
+fn write_formatted_string<W: std::io::Write + ?Sized>(
+    writer: &mut W,
     source: &str,
     options: &NumfmtOptions,
     implicit_padding: Option<isize>,
-) -> Result<String> {
+) -> std::result::Result<(), WriteError> {
     // strip the (optional) suffix before applying any transformation
     let source_without_suffix = match &options.suffix {
         Some(suffix) => source.strip_suffix(suffix).unwrap_or(source),
@@ -853,8 +864,9 @@ fn format_string(
         .padding
         .unwrap_or_else(|| implicit_padding.unwrap_or(options.padding));
 
-    let padded_number = match padding {
-        0 => number_with_suffix,
+    writer.write_all(options.format.prefix.as_bytes())?;
+    match padding {
+        0 => writer.write_all(number_with_suffix.as_bytes())?,
         p if p > 0 && options.format.zero_padding => {
             // GNU zero-pads the number itself: "Optional zero (%010f) width
             // will zero pad the number". A unit suffix from --to and the
@@ -872,30 +884,32 @@ fn format_string(
             };
             let (number, unit) = split_number_and_units(scaled);
             let trailing = format!("{unit}{user_suffix}");
-            let zero_padded = if let Some(unsigned) = number.strip_prefix(['-', '+']) {
-                let sign = &number[..1];
-                format!(
-                    "{sign}{}{trailing}",
-                    pad_string(unsigned, (p as usize).saturating_sub(1), '0', true)
-                )
-            } else {
-                format!("{}{trailing}", pad_string(number, p as usize, '0', true))
+            let (sign, digits) = match number.strip_prefix(['-', '+']) {
+                Some(unsigned) => (&number[..1], unsigned),
+                None => ("", number),
             };
-
-            match implicit_padding.unwrap_or(options.padding) {
-                0 => zero_padded,
-                p if p > 0 => pad_string(&zero_padded, p as usize, ' ', true),
-                p => pad_string(&zero_padded, p.unsigned_abs(), ' ', false),
-            }
+            let zero_width = (p as usize).saturating_sub(sign.len());
+            // The zero-padded number is itself space-padded, so measure it
+            // instead of building it.
+            let len = sign
+                .len()
+                .saturating_add(zero_width.max(digits.chars().count()))
+                .saturating_add(trailing.chars().count());
+            let (left, right) = match implicit_padding.unwrap_or(options.padding) {
+                p if p > 0 => ((p as usize).saturating_sub(len), 0),
+                p => (0, p.unsigned_abs().saturating_sub(len)),
+            };
+            write_fill(writer, b' ', left)?;
+            writer.write_all(sign.as_bytes())?;
+            pad_string(writer, digits, zero_width, b'0', true)?;
+            writer.write_all(trailing.as_bytes())?;
+            write_fill(writer, b' ', right)?;
         }
-        p if p > 0 => pad_string(&number_with_suffix, p as usize, ' ', true),
-        p => pad_string(&number_with_suffix, p.unsigned_abs(), ' ', false),
-    };
-
-    Ok(format!(
-        "{}{padded_number}{}",
-        options.format.prefix, options.format.suffix
-    ))
+        p if p > 0 => pad_string(writer, &number_with_suffix, p as usize, b' ', true)?,
+        p => pad_string(writer, &number_with_suffix, p.unsigned_abs(), b' ', false)?,
+    }
+    writer.write_all(options.format.suffix.as_bytes())?;
+    Ok(())
 }
 
 /// Encodes a byte slice as a string, representing non-UTF-8 bytes and non-printable ASCII
@@ -956,8 +970,7 @@ pub fn write_formatted_with_delimiter<W: std::io::Write + ?Sized>(
             let field_str = std::str::from_utf8(field)
                 .map_err(|_| translate!("numfmt-error-invalid-number", "input" => escape_line(field).quote()))?
                 .trim_start();
-            let formatted = format_string(field_str, options, None)?;
-            writer.write_all(formatted.as_bytes())?;
+            write_formatted_string(writer, field_str, options, None)?;
         } else {
             // add unselected field without conversion
             writer.write_all(field)?;
@@ -1009,8 +1022,7 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
                 None
             };
 
-            let formatted = format_string(field, options, implicit_padding)?;
-            writer.write_all(formatted.as_bytes())?;
+            write_formatted_string(writer, field, options, implicit_padding)?;
         } else {
             // the first blank between fields is written as a space
             let prefix = if n > 1 {
