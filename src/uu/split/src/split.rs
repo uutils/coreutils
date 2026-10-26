@@ -399,12 +399,40 @@ fn ignorable_io_error(error: &io::Error, settings: &Settings) -> bool {
 /// If ignorable io error occurs, return number of bytes as if all bytes written
 /// Should not be used for Kth chunk number sub-strategies
 /// as those do not work with `--filter` option
-fn custom_write<T: Write>(bytes: &[u8], writer: &mut T, settings: &Settings) -> io::Result<usize> {
-    match writer.write(bytes) {
-        Ok(n) => Ok(n),
-        Err(e) if ignorable_io_error(&e, settings) => Ok(bytes.len()),
-        Err(e) => Err(e),
+/// A single `write()` may accept only part of the data, e.g. when the output
+/// volume fills up or a file size limit is reached. Keep writing until
+/// everything is written so the tail of the input is never silently dropped;
+/// the next `write()` call then reports the underlying error.
+/// With `ignore_broken_pipe`, a `BrokenPipe` error is reported as if all bytes
+/// were written (for `--filter`, whose child may exit early).
+fn write_repeating<T: Write>(
+    mut bytes: &[u8],
+    writer: &mut T,
+    ignore_broken_pipe: bool,
+) -> io::Result<usize> {
+    let full_len = bytes.len();
+    let mut total = 0;
+    while !bytes.is_empty() {
+        match writer.write(bytes) {
+            Ok(0) => {
+                // No progress is possible; report an error instead of looping forever.
+                return Err(io::Error::new(ErrorKind::WriteZero, "write failed"));
+            }
+            Ok(n) => {
+                total += n;
+                bytes = &bytes[n..];
+            }
+            Err(e) if ignore_broken_pipe && e.kind() == ErrorKind::BrokenPipe => {
+                return Ok(full_len);
+            }
+            Err(e) => return Err(e),
+        }
     }
+    Ok(total)
+}
+
+fn custom_write<T: Write>(bytes: &[u8], writer: &mut T, settings: &Settings) -> io::Result<usize> {
+    write_repeating(bytes, writer, settings.filter.is_some())
 }
 
 /// Custom wrapper for `write_all()` method
@@ -1496,4 +1524,87 @@ fn print_creating_file(name: &OsString) -> io::Result<()> {
         "{}",
         translate!("split-creating-file", "file" => name.quote())
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Accepts at most `cap` bytes in total; every `write()` takes what it can
+    /// and once the cap is hit reports the device as full. Mimics a volume
+    /// filling up in the middle of a write.
+    struct FillingWriter {
+        cap: usize,
+    }
+
+    impl Write for FillingWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            if self.cap == 0 {
+                return Err(io::Error::from(ErrorKind::StorageFull));
+            }
+            let n = buf.len().min(self.cap);
+            self.cap -= n;
+            Ok(n)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    struct BrokenPipeWriter;
+
+    impl Write for BrokenPipeWriter {
+        fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+            Err(io::Error::from(ErrorKind::BrokenPipe))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    struct ZeroWriter;
+
+    impl Write for ZeroWriter {
+        fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+            Ok(0)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_write_repeating_finishes_short_writes() {
+        let mut w = FillingWriter { cap: 10 };
+        assert_eq!(write_repeating(b"abc", &mut w, false).unwrap(), 3);
+    }
+
+    #[test]
+    fn test_write_repeating_errors_when_device_fills_up() {
+        let mut w = FillingWriter { cap: 5 };
+        // The old single-write implementation returned Ok(5) here, silently
+        // dropping the tail of the input.
+        assert!(write_repeating(&[0u8; 10], &mut w, false).is_err());
+    }
+
+    #[test]
+    fn test_write_repeating_ignores_broken_pipe_when_asked() {
+        let mut w = BrokenPipeWriter;
+        assert_eq!(write_repeating(b"abc", &mut w, true).unwrap(), 3);
+    }
+
+    #[test]
+    fn test_write_repeating_propagates_broken_pipe_by_default() {
+        let mut w = BrokenPipeWriter;
+        assert!(write_repeating(b"abc", &mut w, false).is_err());
+    }
+
+    #[test]
+    fn test_write_repeating_errors_on_no_progress() {
+        let mut w = ZeroWriter;
+        assert!(write_repeating(b"abc", &mut w, false).is_err());
+    }
 }
