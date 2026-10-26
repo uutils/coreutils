@@ -30,7 +30,11 @@ jiff = { workspace = true, features = [
 jiff-icu = { workspace = true, optional = true }
 parse_datetime = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["parser", "i18n-datetime"] }
+uucore = { workspace = true, features = [
+  "i18n-datetime",
+  "parser",
+  "quoting-style",
+] }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }

@@ -227,13 +227,15 @@ fn process_file(
     let p_stream = ParagraphStream::new(fmt_opts, &mut fp);
     for para_result in p_stream {
         match para_result {
-            Err(s) => {
+            Err(nfl) => {
                 ostream
-                    .write_all(&s)
+                    .write_all(&nfl.line)
                     .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?;
-                ostream
-                    .write_all(b"\n")
-                    .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?;
+                if nfl.newline {
+                    ostream
+                        .write_all(b"\n")
+                        .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?;
+                }
             }
             Ok(para) => break_lines(&para, fmt_opts, ostream)
                 .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?,
@@ -315,9 +317,47 @@ fn extract_width(matches: &ArgMatches) -> UResult<Option<usize>> {
     }
 }
 
+/// Keep a leading `=` in an attached short prefix value. Clap consumes it as
+/// an option/value separator, whereas fmt treats it as part of the prefix.
+fn preserve_prefix_equals(args: &mut [OsString]) -> UResult<()> {
+    let app = uu_app();
+    let flags: Vec<_> = app
+        .get_arguments()
+        .filter(|arg| matches!(arg.get_action(), ArgAction::SetTrue))
+        .filter_map(Arg::get_short)
+        .filter(char::is_ascii)
+        .map(|short| short as u8)
+        .collect();
+    for arg in args.iter_mut().skip(1) {
+        if arg == "--" {
+            break;
+        }
+        let bytes = arg.as_encoded_bytes();
+        let Some(short) = bytes.strip_prefix(b"-") else {
+            continue;
+        };
+        for (index, option) in short.iter().enumerate() {
+            match option {
+                b'p' | b'P' => {
+                    if short.get(index + 1) == Some(&b'=') {
+                        let mut value = bytes.to_vec();
+                        value.insert(index + 2, b'=');
+                        *arg = uucore::os_str_from_bytes(&value)?.to_os_string();
+                    }
+                    break;
+                }
+                option if flags.contains(option) => {}
+                // Another option may consume the remainder as its value.
+                _ => break,
+            }
+        }
+    }
+    Ok(())
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args: Vec<_> = args.collect();
+    let mut args: Vec<_> = args.collect();
 
     // Warn the user if it looks like we're trying to pass a number in the first
     // argument with non-numeric characters
@@ -335,6 +375,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
+    preserve_prefix_equals(&mut args)?;
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), &args)?;
 
     let files = extract_files(&matches)?;
@@ -513,5 +554,22 @@ mod tests {
 
         assert_eq!(extract_files(&matches).unwrap(), vec!["some-file"]);
         assert_eq!(extract_width(&matches).ok(), Some(Some(3)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn preserve_equals_before_non_utf8_prefix() {
+        use super::preserve_prefix_equals;
+        use std::ffi::OsString;
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+        for (input, expected) in [
+            (b"-p=\xff".as_slice(), b"-p==\xff".as_slice()),
+            (b"-uP=\xff".as_slice(), b"-uP==\xff".as_slice()),
+        ] {
+            let mut args = vec![OsString::from("fmt"), OsString::from_vec(input.to_vec())];
+            preserve_prefix_equals(&mut args).unwrap();
+            assert_eq!(args[1].as_bytes(), expected);
+        }
     }
 }

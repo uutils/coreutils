@@ -65,6 +65,7 @@ pub fn standalone_with_length_main(
     cmd: Command,
     args: impl uucore::Args,
     validate_len: fn(&str) -> UResult<HashLength>,
+    allow_empty_filename: bool,
 ) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(cmd, args)?;
     let algo = Some(algo);
@@ -80,7 +81,7 @@ pub fn standalone_with_length_main(
     let tag = matches.get_flag(options::TAG);
     let format = OutputFormat::from_standalone(text, tag);
 
-    checksum_main(algo, length, matches, format)
+    checksum_main(algo, length, matches, format, allow_empty_filename)
 }
 
 /// Entrypoint for standalone checksums *NOT* accepting the `--length` argument
@@ -92,7 +93,8 @@ pub fn standalone_main(algo: AlgoKind, cmd: Command, args: impl uucore::Args) ->
     let tag = matches.get_flag(options::TAG);
     let format = OutputFormat::from_standalone(text, tag);
 
-    checksum_main(algo, None, matches, format)
+    // md5sum and sha*sum report an untagged line with no file name as improperly formatted.
+    checksum_main(algo, None, matches, format, false)
 }
 
 /// Base command processing for all the checksum executables.
@@ -145,6 +147,7 @@ pub fn checksum_main(
     length: Option<HashLength>,
     matches: ArgMatches,
     output_format: OutputFormat,
+    allow_empty_filename: bool,
 ) -> UResult<()> {
     let check = matches.get_flag("check");
 
@@ -192,6 +195,7 @@ pub fn checksum_main(
 
         let verbose = ChecksumVerbose::new(status, quiet, warn);
         let opts = ChecksumValidateOptions {
+            allow_empty_filename,
             ignore_missing,
             strict,
             verbose,

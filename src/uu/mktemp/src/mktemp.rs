@@ -9,14 +9,13 @@ use clap::builder::{TypedValueParser, ValueParserFactory};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use uucore::display::{Quotable, println_verbatim};
 use uucore::error::{FromIo, UError, UResult, UUsageError};
-use uucore::format_usage;
 use uucore::translate;
+use uucore::{format_usage, os_str_from_bytes};
 
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::ErrorKind;
-use std::iter;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
 #[cfg(unix)]
@@ -53,16 +52,16 @@ enum MkTempError {
     PersistError(PathBuf),
 
     #[error("{}", translate!("mktemp-error-must-end-in-x", "template" => .0.quote()))]
-    MustEndInX(String),
+    MustEndInX(OsString),
 
     #[error("{}", translate!("mktemp-error-too-few-xs", "template" => .0.quote()))]
-    TooFewXs(String),
+    TooFewXs(OsString),
 
     #[error("{}", translate!("mktemp-error-prefix-contains-separator", "template" => .0.quote()))]
-    PrefixContainsDirSeparator(String),
+    PrefixContainsDirSeparator(OsString),
 
     #[error("{}", translate!("mktemp-error-suffix-contains-separator", "suffix" => .0.quote()))]
-    SuffixContainsDirSeparator(String),
+    SuffixContainsDirSeparator(OsString),
 
     #[error("{}", translate!("mktemp-error-invalid-template", "template" => .0.quote()))]
     InvalidTemplate(OsString),
@@ -181,13 +180,13 @@ struct Params {
     directory: PathBuf,
 
     /// The (non-random) prefix of the temporary file.
-    prefix: String,
+    prefix: OsString,
 
     /// The number of random characters in the name of the temporary file.
     num_rand_chars: usize,
 
     /// The (non-random) suffix of the temporary file.
-    suffix: String,
+    suffix: OsString,
 }
 
 /// Find the start and end indices of the last contiguous block of Xs.
@@ -201,8 +200,8 @@ struct Params {
 /// assert_eq!(find_last_contiguous_block_of_xs("XXX_XXX"), Some((4, 7)));
 /// assert_eq!(find_last_contiguous_block_of_xs("aXbXcX"), None);
 /// ```
-fn find_last_contiguous_block_of_xs(s: &str) -> Option<(usize, usize)> {
-    let bytes = s.as_bytes();
+fn find_last_contiguous_block_of_xs(s: impl AsRef<OsStr>) -> Option<(usize, usize)> {
+    let bytes = s.as_ref().as_encoded_bytes();
 
     // Find the index of the last 'X'.
     let end = bytes.iter().rposition(|&b| b == b'X')?;
@@ -221,44 +220,22 @@ fn find_last_contiguous_block_of_xs(s: &str) -> Option<(usize, usize)> {
 }
 
 impl Params {
-    fn from(options: Options) -> Result<Self, MkTempError> {
-        // Convert OsString template to string for processing
-        // When using -t flag, be permissive with invalid UTF-8 like GNU mktemp
-        // Otherwise, maintain strict UTF-8 validation (existing behavior)
-        let template_str = if options.treat_as_template {
-            // For -t templates, use lossy conversion for GNU compatibility
-            options.template.to_string_lossy().into_owned()
-        } else {
-            // For regular templates, maintain strict validation
-            match options.template.to_str() {
-                Some(s) => s.to_string(),
-                None => {
-                    return Err(MkTempError::InvalidTemplate(
-                        "template contains invalid UTF-8".into(),
-                    ));
-                }
-            }
-        };
+    fn from(options: Options) -> UResult<Self> {
+        let template = &options.template;
 
         // The template argument must end in 'X' if a suffix option is given.
-        if options.suffix.is_some() && !template_str.ends_with('X') {
-            return Err(MkTempError::MustEndInX(template_str));
+        if options.suffix.is_some() && !template.as_encoded_bytes().ends_with(b"X") {
+            return Err(MkTempError::MustEndInX(template.clone()).into());
         }
 
         // Get the start and end indices of the randomized part of the template.
         //
         // For example, if the template is "abcXXXXyz", then `i` is 3 and `j` is 7.
-        let Some((i, j)) = find_last_contiguous_block_of_xs(&template_str) else {
-            let s = match options.suffix {
-                // If a suffix is specified, the error message includes the template without the suffix.
-                Some(_) => template_str
-                    .chars()
-                    .take(template_str.len())
-                    .collect::<String>(),
-                None => template_str,
-            };
-            return Err(MkTempError::TooFewXs(s));
+        let Some((i, j)) = find_last_contiguous_block_of_xs(template) else {
+            return Err(MkTempError::TooFewXs(template.clone()).into());
         };
+        let prefix_from_template = os_str_from_bytes(&template.as_encoded_bytes()[..i])?;
+        let suffix_from_template = os_str_from_bytes(&template.as_encoded_bytes()[j..])?;
 
         // Combine the directory given as an option and the prefix of the template.
         //
@@ -266,13 +243,16 @@ impl Params {
         // then `prefix` is "a/b/c/d".
         let tmpdir = options.tmpdir;
         let prefix_from_option = tmpdir.clone().unwrap_or_default();
-        let prefix_from_template = &template_str[..i];
         let prefix_path = Path::new(&prefix_from_option).join(prefix_from_template);
-        if options.treat_as_template && prefix_from_template.contains(MAIN_SEPARATOR) {
-            return Err(MkTempError::PrefixContainsDirSeparator(template_str));
+        if options.treat_as_template
+            && prefix_from_template
+                .as_encoded_bytes()
+                .contains(&(MAIN_SEPARATOR as u8))
+        {
+            return Err(MkTempError::PrefixContainsDirSeparator(template.clone()).into());
         }
         if tmpdir.is_some() && Path::new(prefix_from_template).is_absolute() {
-            return Err(MkTempError::InvalidTemplate(template_str.into()));
+            return Err(MkTempError::InvalidTemplate(template.clone()).into());
         }
 
         // Split the parent directory from the file part of the prefix.
@@ -280,17 +260,21 @@ impl Params {
         // For example, if `prefix_path` is "a/b/c/d", then `directory` is
         // "a/b/c" and `prefix` gets reassigned to "d".
         let (directory, prefix) = {
-            let prefix_str = prefix_path.to_string_lossy();
-            if prefix_str.ends_with(MAIN_SEPARATOR) {
-                (prefix_path, String::new())
-            } else if prefix_from_template.ends_with("/.") || prefix_from_template == "." {
+            let prefix_bytes = prefix_from_template.as_encoded_bytes();
+            if prefix_path
+                .as_os_str()
+                .as_encoded_bytes()
+                .ends_with(&[MAIN_SEPARATOR as u8])
+            {
+                (prefix_path, OsString::new())
+            } else if prefix_bytes.ends_with(b"/.") || prefix_bytes == b"." {
                 // Path normalizes trailing '.' away, making both parent() and file_name()
                 // return wrong results for hidden files like /tmp/.XXXXXXXX.
                 // Use prefix_from_template directly instead.
-                let directory = Path::new(&prefix_from_option)
-                    .join(&prefix_from_template[..prefix_from_template.len() - 1]); // strip trailing '.'
+                let directory_prefix = os_str_from_bytes(&prefix_bytes[..prefix_bytes.len() - 1])?;
+                let directory = Path::new(&prefix_from_option).join(directory_prefix);
 
-                let prefix = ".".to_string();
+                let prefix = OsString::from(".");
 
                 (directory, prefix)
             } else {
@@ -299,8 +283,8 @@ impl Params {
                     Some(d) => d.to_path_buf(),
                 };
                 let prefix = match prefix_path.file_name() {
-                    None => String::new(),
-                    Some(f) => f.to_string_lossy().to_string(),
+                    None => OsString::new(),
+                    Some(f) => f.to_os_string(),
                 };
                 (directory, prefix)
             }
@@ -310,14 +294,10 @@ impl Params {
         //
         // For example, if the suffix command-line argument is ".txt" and
         // the template is "XXXabc", then `suffix` is "abc.txt".
-        let suffix_from_option = options
-            .suffix
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_default();
-        let suffix_from_template = &template_str[j..];
-        let suffix = format!("{suffix_from_template}{suffix_from_option}");
-        if suffix.contains(MAIN_SEPARATOR) {
-            return Err(MkTempError::SuffixContainsDirSeparator(suffix));
+        let mut suffix = suffix_from_template.to_os_string();
+        suffix.push(options.suffix.unwrap_or_default());
+        if suffix.as_encoded_bytes().contains(&(MAIN_SEPARATOR as u8)) {
+            return Err(MkTempError::SuffixContainsDirSeparator(suffix).into());
         }
 
         // The number of random characters in the template.
@@ -499,32 +479,33 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> PathBuf {
-    let len = prefix.len() + suffix.len() + rand;
-    let mut buf = Vec::with_capacity(len);
-    buf.extend(prefix.as_bytes());
-    buf.extend(iter::repeat_n(b'X', rand));
-    buf.extend(suffix.as_bytes());
+fn temp_path(dir: &Path, prefix: &OsStr, random: &str, suffix: &OsStr) -> PathBuf {
+    let mut filename = prefix.to_os_string();
+    filename.push(random);
+    filename.push(suffix);
+    dir.join(filename)
+}
 
-    // Randomize.
-    let bytes = &mut buf[prefix.len()..prefix.len() + rand];
+fn dry_exec(tmpdir: &Path, prefix: &OsStr, rand: usize, suffix: &OsStr) -> PathBuf {
+    let mut bytes = vec![0; rand];
     SmallRng::try_from_rng(&mut rngs::SysRng)
         .unwrap_or_else(|_| {
             //rand::rng panics if getrandom failed
             SmallRng::seed_from_u64(bytes.as_ptr() as u64)
         })
-        .fill(bytes);
-    for byte in bytes {
-        *byte = match *byte % 62 {
-            v @ 0..=9 => v + b'0',
-            v @ 10..=35 => v - 10 + b'a',
-            v @ 36..=61 => v - 36 + b'A',
-            _ => unreachable!(),
-        }
-    }
-    // We guarantee utf8.
-    let buf = String::from_utf8(buf).unwrap();
-    Path::new(tmpdir).join(buf)
+        .fill(&mut bytes[..]);
+    let random: String = bytes
+        .into_iter()
+        .map(|byte| {
+            char::from(match byte % 62 {
+                v @ 0..=9 => v + b'0',
+                v @ 10..=35 => v - 10 + b'a',
+                v @ 36..=61 => v - 36 + b'A',
+                _ => unreachable!(),
+            })
+        })
+        .collect();
+    temp_path(tmpdir, prefix, &random, suffix)
 }
 
 /// Create a temporary directory with the given parameters.
@@ -538,7 +519,7 @@ fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> PathBuf {
 ///
 /// If the temporary directory could not be written to disk or if the
 /// given directory `dir` does not exist.
-fn make_temp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
+fn make_temp_dir(dir: &Path, prefix: &OsStr, rand: usize, suffix: &OsStr) -> UResult<PathBuf> {
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
 
@@ -556,8 +537,7 @@ fn make_temp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult
             Ok(path)
         }
         Err(e) if e.kind() == ErrorKind::NotFound => {
-            let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
-            let path = Path::new(dir).join(filename);
+            let path = temp_path(dir, prefix, &"X".repeat(rand), suffix);
             Err(MkTempError::NotFound(translate!("mktemp-template-type-directory"), path).into())
         }
         Err(e) => Err(e.into()),
@@ -575,7 +555,7 @@ fn make_temp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult
 ///
 /// If the file could not be written to disk or if the directory does
 /// not exist.
-fn make_temp_file(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
+fn make_temp_file(dir: &Path, prefix: &OsStr, rand: usize, suffix: &OsStr) -> UResult<PathBuf> {
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
     match builder.tempfile_in(dir) {
@@ -585,15 +565,20 @@ fn make_temp_file(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResul
             Err(e) => Err(MkTempError::PersistError(e.file.path().to_path_buf()).into()),
         },
         Err(e) if e.kind() == ErrorKind::NotFound => {
-            let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
-            let path = Path::new(dir).join(filename);
+            let path = temp_path(dir, prefix, &"X".repeat(rand), suffix);
             Err(MkTempError::NotFound(translate!("mktemp-template-type-file"), path).into())
         }
         Err(e) => Err(e.into()),
     }
 }
 
-fn exec(dir: &Path, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> UResult<PathBuf> {
+fn exec(
+    dir: &Path,
+    prefix: &OsStr,
+    rand: usize,
+    suffix: &OsStr,
+    make_dir: bool,
+) -> UResult<PathBuf> {
     let path = if make_dir {
         make_temp_dir(dir, prefix, rand, suffix)?
     } else {
@@ -603,7 +588,7 @@ fn exec(dir: &Path, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> 
     // Get just the last component of the path to the created
     // temporary file or directory.
     let filename = path.file_name();
-    let filename = filename.unwrap().to_str().unwrap();
+    let filename = filename.unwrap();
 
     // Join the directory to the path to get the path to print. We
     // cannot use the path returned by the `Builder` because it gives

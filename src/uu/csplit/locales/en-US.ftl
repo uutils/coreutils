@@ -24,7 +24,6 @@ csplit-error-suffix-format-incorrect = incorrect conversion specification in suf
 csplit-error-suffix-format-too-many-percents = too many % conversion specifications in suffix
 csplit-error-not-regular-file = { $file } is not a regular file
 csplit-warning-line-number-same-as-previous = line number '{ $line_number }' is the same as preceding line number
-csplit-stream-not-utf8 = stream did not contain valid UTF-8
 csplit-read-error = read error
 csplit-write-split-not-created = trying to write to a split that was not created
 

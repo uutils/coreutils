@@ -18,10 +18,11 @@ use std::{
 
 use memchr::memchr_iter;
 use self_cell::self_cell;
-use uucore::error::{UResult, USimpleError, strip_errno};
-use uucore::translate;
+use uucore::error::UResult;
 
-use crate::{GeneralBigDecimalParseResult, GlobalSettings, Line, numeric_str_cmp::NumInfo};
+use crate::{
+    GeneralBigDecimalParseResult, GlobalSettings, Line, SortError, numeric_str_cmp::NumInfo,
+};
 
 const ALLOC_CHUNK_SIZE: usize = 64 * 1024;
 const MAX_TOKEN_BUFFER_BYTES: usize = 4 * 1024 * 1024;
@@ -424,11 +425,8 @@ fn read_to_buffer<T: Read>(
             Err(e) if e.kind() == ErrorKind::Interrupted => {
                 // retry
             }
-            Err(e) => {
-                return Err(USimpleError::new(
-                    2,
-                    translate!("sort-read-failed", "error" => strip_errno(&e)),
-                ));
+            Err(error) => {
+                return Err(SortError::ChunkReadFailed { error }.into());
             }
         }
     }

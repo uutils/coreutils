@@ -558,14 +558,18 @@ fn test_large_page_width_does_not_panic() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: wasmtime itself needs more memory than the guest's rlimit allows"
+)]
 fn test_offset_large_value_does_not_abort_under_memory_limit() {
-    use rustix::process::Resource;
+    use rlimit::Resource;
     use std::process::Stdio;
 
     const AS_LIMIT: u64 = 200 * 1024 * 1024;
 
     new_ucmd!()
-        .limit(Resource::As, AS_LIMIT, AS_LIMIT)
+        .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
         .set_stdout(Stdio::null())
         .args(&["-t", "-o", "999999999"])
         .pipe_in("hi\n")
@@ -625,6 +629,7 @@ fn test_with_date_format() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: locale database not visible")]
 fn test_with_date_format_env() {
     // POSIXLY_CORRECT + LC_ALL/TIME=POSIX uses "%b %e %H:%M %Y" date format
     let whitespace = " ".repeat(49);
@@ -679,6 +684,21 @@ fn test_with_join_lines_option() {
                 &valid_last_modified_template_vars(start),
             );
     }
+}
+
+#[test]
+fn test_join_lines_keeps_column_separator() {
+    // -J only stops truncation and alignment; columns are still separated
+    new_ucmd!()
+        .args(&["-2", "-t", "-J", "-S,"])
+        .pipe_in("1\n2\n3\n4\n")
+        .succeeds()
+        .stdout_is("1,3\n2,4\n");
+    new_ucmd!()
+        .args(&["-2", "-t", "-J"])
+        .pipe_in("1\n2\n3\n4\n")
+        .succeeds()
+        .stdout_is("1\t3\n2\t4\n");
 }
 
 #[test]
@@ -749,6 +769,10 @@ fn test_version() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/null) not visible"
+)]
 fn test_pr_char_device_dev_null() {
     new_ucmd!().arg("/dev/null").succeeds();
 }
@@ -1296,15 +1320,20 @@ fn test_zero_pages() {
 }
 
 #[test]
-fn test_negative_expand_tabs() {
+fn test_hyphen_in_expand_tabs() {
     new_ucmd!()
-        .arg("-e=-1")
-        .fails_with_code(1)
-        .stderr_is("pr: '-e' extra characters or invalid number in the argument: ‘-1’\nTry 'pr --help' for more information.\n");
+        .pipe_in("a-b")
+        .args(&["-e-4", "-t"])
+        .succeeds()
+        .stdout_is("a   b\n");
 }
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/null) not visible"
+)]
 fn test_merge_empty_input() {
     new_ucmd!()
         .args(&["-m", "/dev/null", "/dev/null"])

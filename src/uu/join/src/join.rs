@@ -511,9 +511,10 @@ impl<'a> State<'a> {
         other: &State,
         repr: &Repr<'a, Sep>,
     ) -> io::Result<()> {
-        let key = self.get_current_key();
-
         for line1 in &self.seq {
+            // With -i the keys of a group can differ in case, so print
+            // each line's own key.
+            let key = line1.get_field(self.key);
             for line2 in &other.seq {
                 if repr.uses_format() {
                     repr.write_format(writer, |spec| match *spec {
@@ -825,7 +826,15 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
         }
     }
 
-    if let Some(empty) = matches.get_one::<String>("e") {
+    if let Some(mut empties) = matches.get_many::<String>("e") {
+        // Like GNU join, -e may be repeated, but only with the same string.
+        let empty = empties.next().unwrap();
+        if empties.any(|e| e != empty) {
+            return Err(USimpleError::new(
+                1,
+                translate!("join-error-conflicting-empty-field"),
+            ));
+        }
         settings.empty = empty.as_bytes().to_vec();
     }
 
@@ -936,6 +945,8 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new("e")
                 .short('e')
+                .action(ArgAction::Append)
+                .num_args(1)
                 .value_name("EMPTY")
                 .help(translate!("join-help-e")),
         )

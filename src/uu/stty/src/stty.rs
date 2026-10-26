@@ -12,36 +12,27 @@
 // spell-checker:ignore sigquit sigtstp
 // spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain exta extb NCCS cfsetispeed
 // spell-checker:ignore notaflag notacombo notabaud
-// spell-checker:ignore baudrate TCGETS
+// spell-checker:ignore baudrate TCGETS Winsize tcgetwinsize tcsetwinsize
 
-#![cfg(unix)]
+#![cfg(all(unix, not(any(target_os = "aix", target_os = "dragonfly"))))]
 
 mod flags;
 
 use crate::flags::AllFlags;
 use crate::flags::COMBINATION_SETTINGS;
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
-
-#[cfg(all(
-    target_os = "linux",
-    not(target_arch = "powerpc"),
-    not(target_arch = "powerpc64")
-))]
-use nix::libc::{TCGETS2, termios2};
 
 use nix::sys::termios::{
     ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices as S,
     Termios, cfsetispeed, cfsetospeed, tcgetattr, tcsetattr,
 };
-use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
+use rustix::termios::{Winsize, tcgetwinsize, tcsetwinsize};
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, Stdin, stdin, stdout};
 use std::num::IntErrorKind;
-use std::os::fd::{AsFd, BorrowedFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
 use std::os::unix::fs::OpenOptionsExt;
-use std::os::unix::io::{AsRawFd, RawFd};
 use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::parser::num_parser::ExtendedParser;
@@ -54,18 +45,22 @@ use flags::{CONTROL_CHARS, CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS
 const ASCII_DEL: u8 = 127;
 
 // Sane defaults for control characters.
-const SANE_CONTROL_CHARS: [(S, u8); 12] = [
-    (S::VINTR, 3),     // ^C
-    (S::VQUIT, 28),    // ^\
-    (S::VERASE, 127),  // DEL
-    (S::VKILL, 21),    // ^U
-    (S::VEOF, 4),      // ^D
-    (S::VSTART, 17),   // ^Q
-    (S::VSTOP, 19),    // ^S
-    (S::VSUSP, 26),    // ^Z
+const SANE_CONTROL_CHARS: &[(S, u8)] = &[
+    (S::VINTR, 3),    // ^C
+    (S::VQUIT, 28),   // ^\
+    (S::VERASE, 127), // DEL
+    (S::VKILL, 21),   // ^U
+    (S::VEOF, 4),     // ^D
+    (S::VSTART, 17),  // ^Q
+    (S::VSTOP, 19),   // ^S
+    (S::VSUSP, 26),   // ^Z
+    #[cfg(not(target_os = "haiku"))]
     (S::VREPRINT, 18), // ^R
-    (S::VWERASE, 23),  // ^W
-    (S::VLNEXT, 22),   // ^V
+    #[cfg(not(target_os = "haiku"))]
+    (S::VWERASE, 23), // ^W
+    #[cfg(not(target_os = "haiku"))]
+    (S::VLNEXT, 22), // ^V
+    #[cfg(not(target_os = "haiku"))]
     (S::VDISCARD, 15), // ^O
 ];
 
@@ -201,7 +196,7 @@ impl<'a> Options<'a> {
                 Device::File(
                     std::fs::OpenOptions::new()
                         .read(true)
-                        .custom_flags(O_NONBLOCK)
+                        .custom_flags(rustix::fs::OFlags::NONBLOCK.bits() as i32)
                         .open(f)?,
                 ),
                 f.clone(),
@@ -222,30 +217,6 @@ impl<'a> Options<'a> {
         })
     }
 }
-
-// Needs to be repr(C) because we pass it to the ioctl calls.
-#[repr(C)]
-#[derive(Default, Debug)]
-pub struct TermSize {
-    rows: c_ushort,
-    columns: c_ushort,
-    x: c_ushort,
-    y: c_ushort,
-}
-
-ioctl_read_bad!(
-    /// Get terminal window size
-    tiocgwinsz,
-    TIOCGWINSZ,
-    TermSize
-);
-
-ioctl_write_ptr_bad!(
-    /// Set terminal window size
-    tiocswinsz,
-    TIOCSWINSZ,
-    TermSize
-);
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -428,10 +399,10 @@ fn stty(opts: &Options) -> UResult<()> {
                 ArgOptions::Mapping(mapping) => apply_char_mapping(&mut termios, mapping),
                 ArgOptions::Flags(flag) => apply_setting(&mut termios, flag)?,
                 ArgOptions::Special(setting) => {
-                    apply_special_setting(&mut termios, setting, opts.file.as_raw_fd())?;
+                    apply_special_setting(&mut termios, setting, &opts.file)?;
                 }
                 ArgOptions::Print(setting) => {
-                    print_special_setting(setting, opts.file.as_raw_fd())?;
+                    print_special_setting(setting, &opts.file)?;
                 }
                 ArgOptions::SavedState(state) => {
                     apply_saved_state(&mut termios, state);
@@ -492,7 +463,7 @@ fn invalid_speed<T>(arg: &str, speed: &str) -> Result<T, Box<dyn UError>> {
 /// this function returns the appropriate error message in the case of overflow or underflow, or u8 on success
 fn parse_u8_or_err(arg: &str) -> Result<u8, String> {
     arg.parse::<u8>().map_err(|e| {
-        if let IntErrorKind::PosOverflow = e.kind() {
+        if *e.kind() == IntErrorKind::PosOverflow {
             translate!("stty-error-invalid-integer-argument-value-too-large", "value" => format!("'{arg}'"))
         } else {
             translate!("stty-error-invalid-integer-argument", "value" => format!("'{arg}'"))
@@ -503,7 +474,7 @@ fn parse_u8_or_err(arg: &str) -> Result<u8, String> {
 /// Parse an integer with hex (0x/0X) and octal (0) prefix support, wrapping to u16.
 ///
 /// GNU stty uses an unsigned 32-bit integer for row/col sizes, then wraps to 16 bits.
-/// Returns `None` if parsing fails or value exceeds u32::MAX.
+/// Returns [`None`] if parsing fails or value exceeds [`u32::MAX`].
 fn parse_rows_cols(arg: &str) -> Option<u16> {
     u64::extended_parse(arg)
         .ok()
@@ -552,12 +523,11 @@ fn check_flag_group<T>(flag: &Flag<T>, remove: bool) -> bool {
     remove && flag.group.is_some()
 }
 
-fn print_special_setting(setting: &PrintSetting, fd: i32) -> nix::Result<()> {
+fn print_special_setting(setting: &PrintSetting, fd: impl AsFd) -> io::Result<()> {
     match setting {
         PrintSetting::Size => {
-            let mut size = TermSize::default();
-            unsafe { tiocgwinsz(fd, &raw mut size)? };
-            println!("{} {}", size.rows, size.columns);
+            let size = tcgetwinsize(fd)?;
+            println!("{} {}", size.ws_row, size.ws_col);
         }
     }
     Ok(())
@@ -572,11 +542,11 @@ struct WrappedPrinter {
 
 impl WrappedPrinter {
     /// Creates a new printer with the specified terminal width.
-    /// If term_size is None (typically when output is piped), falls back to
+    /// If `term_size` is None (typically when output is piped), falls back to
     /// the COLUMNS environment variable or a default width of 80 columns.
-    fn new(term_size: Option<&TermSize>) -> Self {
+    fn new(term_size: Option<&Winsize>) -> Self {
         let columns = if let Some(term_size) = term_size {
-            term_size.columns
+            term_size.ws_col
         } else {
             const DEFAULT_TERM_WIDTH: u16 = 80;
 
@@ -619,99 +589,34 @@ impl WrappedPrinter {
     }
 }
 
-#[allow(
-    clippy::unnecessary_wraps,
-    reason = "needed for some platform-specific code"
-)]
 fn print_terminal_size(
-    termios: &Termios,
+    termios: &rustix::termios::Termios,
     opts: &Options,
-    window_size: Option<&TermSize>,
-    term_size: Option<&TermSize>,
-) -> nix::Result<()> {
-    // GNU linked against glibc 2.42 provides us baudrate 51 which panics cfgetospeed
-    #[cfg(not(target_os = "linux"))]
-    let speed = nix::sys::termios::cfgetospeed(termios);
-    #[cfg(target_os = "linux")]
-    #[cfg(all(not(target_arch = "powerpc"), not(target_arch = "powerpc64")))]
-    ioctl_read_bad!(tcgets2, TCGETS2, termios2);
-    #[cfg(target_os = "linux")]
-    #[cfg(all(not(target_arch = "powerpc"), not(target_arch = "powerpc64")))]
-    let speed = {
-        let mut t2 = unsafe { std::mem::zeroed::<termios2>() };
-        unsafe { tcgets2(opts.file.as_raw_fd(), &raw mut t2)? };
-        t2.c_ospeed
-    };
-    #[cfg(target_os = "linux")]
-    #[cfg(any(target_arch = "powerpc", target_arch = "powerpc64"))]
-    let speed = nix::sys::termios::cfgetospeed(termios);
-
+    window_size: Option<&Winsize>,
+    term_size: Option<&Winsize>,
+) {
+    let speed = termios.output_speed();
     let mut printer = WrappedPrinter::new(window_size);
-
-    // BSDs and Linux (not ppc/big-endian ppc64) use a u32 for the baud rate, so we can simply
-    // print it.
-    #[cfg(any(
-        bsd,
-        all(
-            target_os = "linux",
-            not(target_arch = "powerpc"),
-            not(all(target_arch = "powerpc64", target_endian = "big"))
-        )
-    ))]
     printer.print(&translate!("stty-output-speed", "speed" => speed));
-
-    // Big-endian Linux PowerPC uses BaudRate enum, need to convert to display format
-    #[cfg(target_os = "linux")]
-    #[cfg(any(
-        target_arch = "powerpc",
-        all(target_arch = "powerpc64", target_endian = "big")
-    ))]
-    {
-        // On PowerPC, find the corresponding baud rate string for display
-        let speed_str = BAUD_RATES
-            .iter()
-            .find(|(_, rate)| *rate == speed)
-            .map(|(text, _)| *text)
-            .unwrap_or("unknown");
-        printer.print(&translate!("stty-output-speed", "speed" => speed_str));
-    }
-
-    // Other platforms need to use the baud rate enum, so printing the right value
-    // becomes slightly more complicated.
-    #[cfg(not(any(target_os = "linux", bsd)))]
-    for (text, baud_rate) in BAUD_RATES {
-        if *baud_rate == speed {
-            printer.print(&translate!("stty-output-speed", "speed" => (*text)));
-            break;
-        }
-    }
-
     if opts.all {
         let term_size = term_size.as_ref().expect("terminal size should be set");
         printer.print(
-            &translate!("stty-output-rows-columns", "rows" => term_size.rows, "columns" => term_size.columns),
+            &translate!("stty-output-rows-columns", "rows" => term_size.ws_row, "columns" => term_size.ws_col),
         );
     }
 
     #[cfg(any(target_os = "linux", target_os = "redox"))]
     {
-        // For some reason the normal nix Termios struct does not expose the line,
-        // so we get the underlying libc::termios struct to get that information.
-        let libc_termios: nix::libc::termios = termios.clone().into();
-        let line = libc_termios.c_line;
+        let line = termios.line_discipline;
         printer.print(&translate!("stty-output-line", "line" => line));
     }
     printer.flush();
-    Ok(())
 }
 
 fn cc_to_index(option: &str) -> Option<S> {
-    for cc in CONTROL_CHARS {
-        if option == cc.0 {
-            return Some(cc.1);
-        }
-    }
-    None
+    CONTROL_CHARS
+        .iter()
+        .find_map(|cc| (cc.0 == option).then_some(cc.1))
 }
 
 fn string_to_combo(arg: &str) -> Option<&str> {
@@ -806,38 +711,26 @@ fn string_to_flag(option: &str) -> Option<AllFlags<'_>> {
     let remove = option.starts_with('-');
     let name = option.trim_start_matches('-');
 
-    for cflag in CONTROL_FLAGS {
-        if name == cflag.name {
-            return Some(AllFlags::ControlFlags((cflag, remove)));
-        }
+    if let Some(cflag) = CONTROL_FLAGS.iter().find(|f| f.name == name) {
+        return Some(AllFlags::ControlFlags((cflag, remove)));
     }
-    for iflag in INPUT_FLAGS {
-        if name == iflag.name {
-            return Some(AllFlags::InputFlags((iflag, remove)));
-        }
+    if let Some(iflag) = INPUT_FLAGS.iter().find(|f| f.name == name) {
+        return Some(AllFlags::InputFlags((iflag, remove)));
     }
-    for lflag in LOCAL_FLAGS {
-        if name == lflag.name {
-            return Some(AllFlags::LocalFlags((lflag, remove)));
-        }
+    if let Some(lflag) = LOCAL_FLAGS.iter().find(|f| f.name == name) {
+        return Some(AllFlags::LocalFlags((lflag, remove)));
     }
-    for oflag in OUTPUT_FLAGS {
-        if name == oflag.name {
-            return Some(AllFlags::OutputFlags((oflag, remove)));
-        }
+    if let Some(oflag) = OUTPUT_FLAGS.iter().find(|f| f.name == name) {
+        return Some(AllFlags::OutputFlags((oflag, remove)));
     }
     None
 }
 
 fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
-    if cc == 0 {
-        return Ok(translate!("stty-output-undef"));
-    }
-
-    let (meta_prefix, code) = if cc >= 0x80 {
-        ("M-", cc - 0x80)
-    } else {
-        ("", cc)
+    let (meta_prefix, code) = match cc {
+        0 => return Ok(translate!("stty-output-undef")),
+        0x80.. => ("M-", cc - 0x80),
+        _ => ("", cc),
     };
 
     // Determine the '^'-prefix if applicable and character based on the code
@@ -858,7 +751,7 @@ fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
 fn print_control_chars(
     termios: &Termios,
     opts: &Options,
-    term_size: Option<&TermSize>,
+    term_size: Option<&Winsize>,
 ) -> nix::Result<()> {
     if !opts.all {
         // Print only control chars that differ from sane defaults
@@ -907,32 +800,32 @@ fn print_in_save_format(termios: &Termios) {
     println!();
 }
 
-/// Gets terminal size using the tiocgwinsz ioctl system call.
-/// This queries the kernel for the current terminal window dimensions.
-fn get_terminal_size(fd: RawFd) -> nix::Result<TermSize> {
-    let mut term_size = TermSize::default();
-    unsafe { tiocgwinsz(fd, &raw mut term_size) }.map(|_| term_size)
-}
-
-fn print_settings(termios: &Termios, opts: &Options) -> nix::Result<()> {
+fn print_settings(termios: &Termios, opts: &Options) -> io::Result<()> {
     if opts.save {
         print_in_save_format(termios);
     } else {
-        let device_fd = opts.file.as_raw_fd();
         let term_size = if opts.all {
-            Some(get_terminal_size(device_fd)?)
+            Some(tcgetwinsize(&opts.file)?)
         } else {
-            get_terminal_size(device_fd).ok()
+            tcgetwinsize(&opts.file).ok()
         };
 
-        let stdout_fd = stdout().as_raw_fd();
-        let window_size = if device_fd == stdout_fd {
+        let stdout = stdout();
+        let window_size = if stdout.as_raw_fd() == opts.file.as_raw_fd() {
             &term_size
         } else {
-            &get_terminal_size(stdout_fd).ok()
+            &tcgetwinsize(stdout).ok()
         };
 
-        print_terminal_size(termios, opts, window_size.as_ref(), term_size.as_ref())?;
+        // GNU linked against glibc 2.42 provides us baudrate 51 which panics nix::sys::termios::cfgetospeed
+        // so we repeat syscall until we replace nix with rustix...
+        let rustix_termios = rustix::termios::tcgetattr(&opts.file)?;
+        print_terminal_size(
+            &rustix_termios,
+            opts,
+            window_size.as_ref(),
+            term_size.as_ref(),
+        );
         print_control_chars(termios, opts, window_size.as_ref())?;
         print_flags(termios, opts, CONTROL_FLAGS, window_size.as_ref());
         print_flags(termios, opts, INPUT_FLAGS, window_size.as_ref());
@@ -946,20 +839,17 @@ fn print_flags<T: TermiosFlag>(
     termios: &Termios,
     opts: &Options,
     flags: &[Flag<T>],
-    term_size: Option<&TermSize>,
+    term_size: Option<&Winsize>,
 ) {
     let mut printer = WrappedPrinter::new(term_size);
     for &Flag {
         name,
         flag,
-        show,
         sane,
         group,
-    } in flags
+        ..
+    } in flags.iter().filter(|f| f.show)
     {
-        if !show {
-            continue;
-        }
         let val = flag.is_in(termios, group);
         if group.is_some() {
             if val && (!sane || opts.all) {
@@ -1027,34 +917,31 @@ fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
 /// check that should never trigger since `parse_saved_state` rejects such states.
 fn apply_saved_state(termios: &mut Termios, state: &[u32]) {
     // Require at least 4 elements for the flags (defensive check)
-    if state.len() < 4 {
+    let [s0, s1, s2, s3, rest @ ..] = state else {
         return; // No-op for invalid state (already validated by parser)
-    }
+    };
 
     // Apply the four flag groups, done (as _) for MacOS size compatibility
-    termios.input_flags = InputFlags::from_bits_truncate(state[0] as _);
-    termios.output_flags = OutputFlags::from_bits_truncate(state[1] as _);
-    termios.control_flags = ControlFlags::from_bits_truncate(state[2] as _);
-    termios.local_flags = LocalFlags::from_bits_truncate(state[3] as _);
+    termios.input_flags = InputFlags::from_bits_truncate(*s0 as _);
+    termios.output_flags = OutputFlags::from_bits_truncate(*s1 as _);
+    termios.control_flags = ControlFlags::from_bits_truncate(*s2 as _);
+    termios.local_flags = LocalFlags::from_bits_truncate(*s3 as _);
 
     // Apply control characters if present (stored as u32 but used as u8)
-    for (i, &cc_val) in state.iter().skip(4).enumerate() {
-        if i < termios.control_chars.len() {
-            termios.control_chars[i] = cc_val as u8;
-        }
+    for (c, &cc_val) in termios.control_chars.iter_mut().zip(rest) {
+        *c = cc_val as u8;
     }
 }
 
 fn apply_special_setting(
     _termios: &mut Termios,
     setting: &SpecialSetting,
-    fd: i32,
-) -> nix::Result<()> {
-    let mut size = TermSize::default();
-    unsafe { tiocgwinsz(fd, &raw mut size)? };
+    fd: impl AsFd,
+) -> io::Result<()> {
+    let mut size = tcgetwinsize(&fd)?;
     match setting {
-        SpecialSetting::Rows(n) => size.rows = *n,
-        SpecialSetting::Cols(n) => size.columns = *n,
+        SpecialSetting::Rows(n) => size.ws_row = *n,
+        SpecialSetting::Cols(n) => size.ws_col = *n,
         #[cfg_attr(
             not(any(target_os = "linux", target_os = "android")),
             expect(unused_variables)
@@ -1067,7 +954,7 @@ fn apply_special_setting(
             }
         }
     }
-    unsafe { tiocswinsz(fd, &raw mut size)? };
+    tcsetwinsize(fd, size)?;
     Ok(())
 }
 
@@ -1106,134 +993,88 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
     }
     // try to parse ^<char> or just <char>
     let mut chars = s.chars();
-    match (chars.next(), chars.next()) {
-        (Some('^'), Some(c)) => {
-            // special case: ascii value of '^?' is greater than '?'
-            if c == '?' {
-                return Ok(ASCII_DEL);
-            }
-            // subtract by '@' to turn the char into the ascii value of '^<char>'
-            Ok((c.to_ascii_uppercase() as u8).wrapping_sub(b'@'))
-        }
-        (Some(c), None) => Ok(c as u8),
-        (Some(_), Some(_)) => Err(ControlCharMappingError::MultipleChars(s.to_string())),
-        _ => unreachable!("No arguments provided: must have been caught earlier"),
+    match (
+        chars.next().expect("must have been caught earlier"),
+        chars.next(),
+    ) {
+        // special case: ascii value of '^?' is greater than '?'
+        ('^', Some('?')) => Ok(ASCII_DEL),
+        // subtract by '@' to turn the char into the ascii value of '^<char>'
+        ('^', Some(c)) => Ok((c.to_ascii_uppercase() as u8).wrapping_sub(b'@')),
+        (c, None) => Ok(c as u8),
+        (_, Some(_)) => Err(ControlCharMappingError::MultipleChars(s.to_string())),
     }
 }
 
 // decomposes a combination argument into a vec of corresponding flags
 fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
-    let mut flags = Vec::new();
-    let mut ccs = Vec::new();
-    #[expect(clippy::match_same_arms)]
-    match combo {
-        "lcase" | "LCASE" => {
-            flags = vec!["xcase", "iuclc", "olcuc"];
-        }
-        "-lcase" | "-LCASE" => {
-            flags = vec!["-xcase", "-iuclc", "-olcuc"];
-        }
-        "cbreak" => {
-            flags = vec!["-icanon"];
-        }
-        "-cbreak" => {
-            flags = vec!["icanon"];
-        }
-        "cooked" | "-raw" => {
-            flags = vec![
-                "brkint", "ignpar", "istrip", "icrnl", "ixon", "opost", "isig", "icanon",
-            ];
-            ccs = vec![(S::VEOF, "^D"), (S::VEOL, "")];
-        }
-        "crt" => {
-            flags = vec!["echoe", "echoctl", "echoke"];
-        }
-        "dec" => {
-            flags = vec!["echoe", "echoctl", "echoke", "-ixany"];
-            ccs = vec![(S::VINTR, "^C"), (S::VERASE, "^?"), (S::VKILL, "^U")];
-        }
-        "decctlq" => {
-            flags = vec!["ixany"];
-        }
-        "-decctlq" => {
-            flags = vec!["-ixany"];
-        }
-        "ek" => {
-            ccs = vec![(S::VERASE, "^?"), (S::VKILL, "^U")];
-        }
-        "evenp" | "parity" => {
-            flags = vec!["parenb", "-parodd", "cs7"];
-        }
-        "-evenp" | "-parity" => {
-            flags = vec!["-parenb", "cs8"];
-        }
-        "litout" => {
-            flags = vec!["-parenb", "-istrip", "-opost", "cs8"];
-        }
-        "-litout" => {
-            flags = vec!["parenb", "istrip", "opost", "cs7"];
-        }
-        "nl" => {
-            flags = vec!["-icrnl", "-onlcr"];
-        }
-        "-nl" => {
-            flags = vec!["icrnl", "-inlcr", "-igncr", "onlcr", "-ocrnl", "-onlret"];
-        }
-        "oddp" => {
-            flags = vec!["parenb", "parodd", "cs7"];
-        }
-        "-oddp" => {
-            flags = vec!["-parenb", "cs8"];
-        }
-        "pass8" => {
-            flags = vec!["-parenb", "-istrip", "cs8"];
-        }
-        "-pass8" => {
-            flags = vec!["parenb", "istrip", "cs7"];
-        }
-        "raw" | "-cooked" => {
-            flags = vec![
-                "-ignbrk", "-brkint", "-ignpar", "-parmrk", "-inpck", "-istrip", "-inlcr",
-                "-igncr", "-icrnl", "-ixon", "-ixoff", "-icanon", "-opost", "-isig", "-iuclc",
-                "-xcase", "-ixany", "-imaxbel",
-            ];
-            ccs = vec![(S::VMIN, "1"), (S::VTIME, "0")];
-        }
-        "sane" => {
-            flags = vec![
-                "cread", "-ignbrk", "brkint", "-inlcr", "-igncr", "icrnl", "icanon", "iexten",
-                "echo", "echoe", "echok", "-echonl", "-noflsh", "-ixoff", "-iutf8", "-iuclc",
-                "-xcase", "-ixany", "imaxbel", "-olcuc", "-ocrnl", "opost", "-ofill", "onlcr",
-                "-onocr", "-onlret", "nl0", "cr0", "tab0", "bs0", "vt0", "ff0", "isig", "-tostop",
-                "-ofdel", "-echoprt", "echoctl", "echoke", "-extproc", "-flusho",
-            ];
-            ccs = vec![
-                (S::VINTR, "^C"),
-                (S::VQUIT, "^\\"),
-                (S::VERASE, "^?"),
-                (S::VKILL, "^U"),
-                (S::VEOF, "^D"),
-                (S::VEOL, ""),
-                (S::VEOL2, ""),
-                #[cfg(target_os = "linux")]
-                (S::VSWTC, ""),
-                (S::VSTART, "^Q"),
-                (S::VSTOP, "^S"),
-                (S::VSUSP, "^Z"),
-                (S::VREPRINT, "^R"),
-                (S::VWERASE, "^W"),
-                (S::VLNEXT, "^V"),
-                (S::VDISCARD, "^O"),
-            ];
-        }
-        "tabs" => {
-            flags = vec!["tab0"];
-        }
-        "-tabs" => {
-            flags = vec!["tab3"];
-        }
+    let ccs: &[(S, &str)] = match combo {
+        "cooked" | "-raw" => &[(S::VEOF, "^D"), (S::VEOL, "")],
+        "dec" => &[(S::VINTR, "^C"), (S::VERASE, "^?"), (S::VKILL, "^U")],
+        "ek" => &[(S::VERASE, "^?"), (S::VKILL, "^U")],
+        "raw" | "-cooked" => &[(S::VMIN, "1"), (S::VTIME, "0")],
+        "sane" => &[
+            (S::VINTR, "^C"),
+            (S::VQUIT, "^\\"),
+            (S::VERASE, "^?"),
+            (S::VKILL, "^U"),
+            (S::VEOF, "^D"),
+            (S::VEOL, ""),
+            (S::VEOL2, ""),
+            #[cfg(target_os = "linux")]
+            (S::VSWTC, ""),
+            (S::VSTART, "^Q"),
+            (S::VSTOP, "^S"),
+            (S::VSUSP, "^Z"),
+            #[cfg(not(target_os = "haiku"))]
+            (S::VREPRINT, "^R"),
+            #[cfg(not(target_os = "haiku"))]
+            (S::VWERASE, "^W"),
+            #[cfg(not(target_os = "haiku"))]
+            (S::VLNEXT, "^V"),
+            #[cfg(not(target_os = "haiku"))]
+            (S::VDISCARD, "^O"),
+        ],
+        _ => &[],
+    };
+    let flags: &[&str] = match combo {
+        "lcase" | "LCASE" => &["xcase", "iuclc", "olcuc"],
+        "-lcase" | "-LCASE" => &["-xcase", "-iuclc", "-olcuc"],
+        "cbreak" => &["-icanon"],
+        "-cbreak" => &["icanon"],
+        "cooked" | "-raw" => &[
+            "brkint", "ignpar", "istrip", "icrnl", "ixon", "opost", "isig", "icanon",
+        ],
+        "crt" => &["echoe", "echoctl", "echoke"],
+        "dec" => &["echoe", "echoctl", "echoke", "-ixany"],
+        "decctlq" => &["ixany"],
+        "-decctlq" => &["-ixany"],
+        "ek" => &[],
+        "evenp" | "parity" => &["parenb", "-parodd", "cs7"],
+        "-evenp" | "-oddp" | "-parity" => &["-parenb", "cs8"],
+        "litout" => &["-parenb", "-istrip", "-opost", "cs8"],
+        "-litout" => &["parenb", "istrip", "opost", "cs7"],
+        "nl" => &["-icrnl", "-onlcr"],
+        "-nl" => &["icrnl", "-inlcr", "-igncr", "onlcr", "-ocrnl", "-onlret"],
+        "oddp" => &["parenb", "parodd", "cs7"],
+        "pass8" => &["-parenb", "-istrip", "cs8"],
+        "-pass8" => &["parenb", "istrip", "cs7"],
+        "raw" | "-cooked" => &[
+            "-ignbrk", "-brkint", "-ignpar", "-parmrk", "-inpck", "-istrip", "-inlcr", "-igncr",
+            "-icrnl", "-ixon", "-ixoff", "-icanon", "-opost", "-isig", "-iuclc", "-xcase",
+            "-ixany", "-imaxbel",
+        ],
+        "sane" => &[
+            "cread", "-ignbrk", "brkint", "-inlcr", "-igncr", "icrnl", "icanon", "iexten", "echo",
+            "echoe", "echok", "-echonl", "-noflsh", "-ixoff", "-iutf8", "-iuclc", "-xcase",
+            "-ixany", "imaxbel", "-olcuc", "-ocrnl", "opost", "-ofill", "onlcr", "-onocr",
+            "-onlret", "nl0", "cr0", "tab0", "bs0", "vt0", "ff0", "isig", "-tostop", "-ofdel",
+            "-echoprt", "echoctl", "echoke", "-extproc", "-flusho",
+        ],
+        "tabs" => &["tab0"],
+        "-tabs" => &["tab3"],
         _ => unreachable!("invalid combination setting: must have been caught earlier"),
-    }
+    };
     let mut flags = flags
         .iter()
         .filter_map(|f| string_to_flag(f).map(ArgOptions::Flags))
@@ -1247,26 +1088,11 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
 }
 
 fn get_sane_control_char(cc_index: S) -> u8 {
-    for (sane_index, sane_val) in SANE_CONTROL_CHARS {
-        if sane_index == cc_index {
-            return sane_val;
-        }
-    }
-    // Default values for control chars not in the sane list
-    match cc_index {
-        S::VEOL => 0,
-        S::VEOL2 => 0,
-        S::VMIN => 1,
-        #[cfg(not(any(
-            all(target_os = "linux", target_arch = "sparc64"),
-            target_os = "illumos",
-            target_os = "solaris"
-        )))]
-        S::VTIME => 0,
-        #[cfg(target_os = "linux")]
-        S::VSWTC => 0,
-        _ => 0,
-    }
+    SANE_CONTROL_CHARS
+        .iter()
+        .copied()
+        .find_map(|(i, v)| (i == cc_index).then_some(v))
+        .unwrap_or(u8::from(cc_index == S::VMIN))
 }
 
 pub fn uu_app() -> Command {

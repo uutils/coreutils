@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore DATETIME getmntinfo subsecond (fs) cifs smbfs ohos virtiofs
+// spell-checker:ignore DATETIME getmntinfo subsecond (fs) cifs smbfs ohos virtiofs automounts
 
 //! Set of functions to manage file systems
 
@@ -139,7 +139,7 @@ fn metadata_get_change_time(md: &Metadata) -> Option<SystemTime> {
 
 #[cfg(not(unix))]
 fn metadata_get_change_time(_md: &Metadata) -> Option<SystemTime> {
-    // Not available.
+    // ctime isn't exposed by std Metadata outside unix
     None
 }
 

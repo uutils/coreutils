@@ -265,6 +265,22 @@ fn test_output_delimiter() {
 }
 
 #[test]
+fn test_output_delimiter_starting_with_hyphen() {
+    for args in [
+        ["--output-delimiter", "-x"],
+        ["-O", "-x"],
+        ["--output-delimiter", "-1"],
+    ] {
+        new_ucmd!()
+            .args(&["-d,", "-f1,2"])
+            .args(&args)
+            .pipe_in("a,b\n")
+            .succeeds()
+            .stdout_only(format!("a{}b\n", args[1]));
+    }
+}
+
+#[test]
 fn test_complement() {
     for param in ["--complement", "--com"] {
         new_ucmd!()
@@ -682,6 +698,51 @@ fn test_output_delimiter_with_adjacent_ranges() {
         .pipe_in("abcd\n")
         .succeeds()
         .stdout_only("ab:cd\n");
+}
+
+#[test]
+fn test_output_delimiter_with_adjacent_field_ranges_unterminated_line() {
+    // The last field belongs to the second range; once the line has run out of
+    // fields it must not be written again for the ranges that follow.
+    new_ucmd!()
+        .args(&["-f1-2,3", "--output-delimiter=:"])
+        .pipe_in("a\tb")
+        .succeeds()
+        .stdout_only("a:b\n");
+    new_ucmd!()
+        .args(&["-d,", "-f2-3,4-", "--output-delimiter=:"])
+        .pipe_in("a,b,c")
+        .succeeds()
+        .stdout_only("b:c\n");
+    // Terminated lines were already right, including before an unterminated one.
+    new_ucmd!()
+        .args(&["-f1-2,3", "--output-delimiter=:"])
+        .pipe_in("a\tb\na\tb")
+        .succeeds()
+        .stdout_only("a:b\na:b\n");
+    new_ucmd!()
+        .args(&["-z", "-d,", "-f1-2,3", "-O:"])
+        .pipe_in(&b"a,b"[..])
+        .succeeds()
+        .stdout_only_bytes(&b"a:b\0"[..]);
+}
+
+#[test]
+fn test_whitespace_delimited_adjacent_field_ranges_unterminated_line() {
+    // These modes share the field writer and have a default output delimiter,
+    // so they hit the same case without --output-delimiter.
+    new_ucmd!()
+        .args(&["-F", "1-2,3"])
+        .pipe_in("a b")
+        .succeeds()
+        .stdout_only("a b\n");
+    // A trimmed line has lost its terminator by the time it is split, so even a
+    // terminated input line takes the unterminated path.
+    new_ucmd!()
+        .args(&["--whitespace-delimited=trimmed", "-f1-2,3"])
+        .pipe_in(" a b \n")
+        .succeeds()
+        .stdout_only("a\tb\n");
 }
 
 #[test]

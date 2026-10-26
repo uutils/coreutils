@@ -532,7 +532,7 @@ fn extract_quoting_style(
     } else if options.get_flag(options::quoting::ESCAPE) {
         QuotingStyle::Escape
     } else if options.get_flag(options::quoting::C) {
-        QuotingStyle::C_DOUBLE
+        QuotingStyle::C_ALWAYS
     } else {
         // If set, the QUOTING_STYLE environment variable specifies a default style.
         if let Some(qs) = quoting_style_from_env() {
@@ -984,6 +984,19 @@ impl Config {
             hyperlink,
             tab_size: tab_size.unwrap_or(SPACES_IN_TAB),
         })
+    }
+
+    /// Check if leading info (inode and/or block size) should be displayed
+    #[inline]
+    pub(crate) fn should_display_leading_info(&self) -> bool {
+        #[cfg(unix)]
+        {
+            self.inode || self.alloc_size
+        }
+        #[cfg(not(unix))]
+        {
+            self.alloc_size
+        }
     }
 }
 

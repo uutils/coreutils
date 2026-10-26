@@ -20,12 +20,12 @@ use std::process::Command;
 use tempfile::tempdir;
 use uutests::new_ucmd;
 #[cfg(unix)]
-use uutests::util::PATH;
-#[cfg(unix)]
 use uutests::util::TerminalSimulation;
 use uutests::util::TestScenario;
 #[cfg(unix)]
 use uutests::util::UChild;
+#[cfg(unix)]
+use uutests::util::path;
 use uutests::util_name;
 
 #[cfg(unix)]
@@ -996,7 +996,7 @@ fn test_env_default_signal_all_signals() {
 #[cfg(unix)]
 fn test_env_block_signal_flag() {
     new_ucmd!()
-        .env("PATH", PATH)
+        .env("PATH", path())
         .args(&["--block-signal", "true"])
         .succeeds()
         .no_stderr();
@@ -1006,12 +1006,12 @@ fn test_env_block_signal_flag() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_env_block_realtime_signal() {
     new_ucmd!()
-        .env("PATH", PATH)
+        .env("PATH", path())
         .args(&["--block-signal=SIGRTMIN+7", "true"])
         .succeeds()
         .no_stderr();
     new_ucmd!()
-        .env("PATH", PATH)
+        .env("PATH", path())
         .args(&["--block-signal=SIGRTMAX-7", "true"])
         .succeeds()
         .no_stderr();
@@ -1021,7 +1021,7 @@ fn test_env_block_realtime_signal() {
 #[cfg(unix)]
 fn test_env_list_signal_handling_reports_ignore() {
     let result = new_ucmd!()
-        .env("PATH", PATH)
+        .env("PATH", path())
         .args(&["--ignore-signal=INT", "--list-signal-handling", "true"])
         .succeeds();
     let stderr = result.stderr_str();
@@ -1031,12 +1031,83 @@ fn test_env_list_signal_handling_reports_ignore() {
     );
 }
 
+#[test]
+#[cfg(unix)]
+fn test_env_signal_options_are_applied_in_the_order_given() {
+    for (args, expected) in [
+        (
+            &["--ignore-signal=INT", "--default-signal=INT"][..],
+            "DEFAULT",
+        ),
+        (
+            &["--default-signal=INT", "--ignore-signal=INT"][..],
+            "IGNORE",
+        ),
+        (
+            &["--block-signal=INT", "--default-signal=INT"][..],
+            "DEFAULT",
+        ),
+        (&["--ignore-signal=INT", "--default-signal"][..], "DEFAULT"),
+        (&["--default-signal", "--ignore-signal=INT"][..], "IGNORE"),
+        (&["--block-signal=INT", "--ignore-signal=INT"][..], "IGNORE"),
+    ] {
+        let mut cmd_args = args.to_vec();
+        cmd_args.extend(["--list-signal-handling", "true"]);
+
+        let result = new_ucmd!().env("PATH", path()).args(&cmd_args).succeeds();
+        let stderr = result.stderr_str();
+
+        assert!(
+            stderr.contains("INT") && stderr.contains(expected),
+            "{args:?}: expected INT to be {expected}, got: {stderr}"
+        );
+        for other in ["DEFAULT", "IGNORE", "BLOCK"] {
+            assert!(
+                other == expected || !stderr.contains(other),
+                "{args:?}: unexpected {other} for INT in: {stderr}"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_signal_option_without_value_applies_to_every_signal() {
+    // A bare option applies to every signal, so a signal another option set earlier is
+    // ignored again, and one given later still wins.
+    new_ucmd!()
+        .env("PATH", path())
+        .args(&[
+            "--ignore-signal=TERM",
+            "--ignore-signal",
+            "sh",
+            "-c",
+            "kill -INT $$",
+        ])
+        .succeeds();
+
+    let result = new_ucmd!()
+        .env("PATH", path())
+        .args(&[
+            "--ignore-signal",
+            "--default-signal=INT",
+            "--list-signal-handling",
+            "true",
+        ])
+        .succeeds();
+    let stderr = result.stderr_str();
+    assert!(
+        stderr.contains("INT") && stderr.contains("DEFAULT"),
+        "a later explicit option must win over a bare one, got: {stderr}"
+    );
+}
+
 #[cfg(unix)]
 fn run_sigpipe_script(ts: &TestScenario, extra_args: &[&str]) {
     let shell = env::var("SHELL").unwrap_or_else(|_| String::from("sh"));
     let _guard = SigpipeGuard::new();
     let mut cmd = ts.ucmd();
-    cmd.env("PATH", PATH);
+    cmd.env("PATH", path());
     cmd.args(extra_args);
     cmd.arg(shell);
     cmd.arg("-c");
@@ -1883,6 +1954,23 @@ fn test_simulation_of_terminal_pty_pipes_into_data_and_sends_eot_automatically()
         format!("{message}\r\n")
     );
     std::assert_eq!(String::from_utf8_lossy(out.stderr()), "");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_simulation_of_terminal_not_inherited_by_other_commands() {
+    let scene = TestScenario::new("util");
+
+    let mut cmd = scene.ccmd("env");
+    cmd.args(&["sleep", "1"]);
+    cmd.terminal_simulation(true);
+    let mut child = cmd.run_no_wait();
+    scene
+        .ccmd("env")
+        .args(&["ls", "-l", "/proc/self/fd/"])
+        .succeeds()
+        .stdout_does_not_contain("/dev/ptmx");
+    child.kill();
 }
 
 #[test]

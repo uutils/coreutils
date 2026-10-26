@@ -502,7 +502,7 @@ fn write_fields_line<W: Write, M: Matcher>(
         return Ok(());
     }
 
-    for &Range { low, high } in ranges {
+    'ranges: for &Range { low, high } in ranges {
         if low - fields_pos > 0 {
             // current field is not in the range, so jump to the field corresponding to the
             // beginning of the range if any
@@ -538,7 +538,8 @@ fn write_fields_line<W: Write, M: Matcher>(
                 if line[line.len() - 1] == newline_char {
                     return Ok(());
                 }
-                break;
+                // the rest is written, so a later range must not print it again
+                break 'ranges;
             }
         }
     }
@@ -1323,6 +1324,7 @@ pub fn uu_app() -> Command {
                 .short('O')
                 .long(options::OUTPUT_DELIMITER)
                 .value_parser(ValueParser::os_string())
+                .allow_hyphen_values(true)
                 .help(translate!("cut-help-output-delimiter"))
                 .value_name("NEW_DELIM"),
         )

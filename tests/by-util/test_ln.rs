@@ -3,9 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore dirlink
+
 #![allow(clippy::similar_names)]
 
-use std::path::PathBuf;
+use std::path::{MAIN_SEPARATOR_STR, PathBuf};
 #[cfg(all(unix, not(target_os = "android")))]
 use std::time::Duration;
 use uutests::at_and_ucmd;
@@ -31,6 +33,31 @@ fn test_symlink_existing_file() {
     assert!(at.file_exists(file));
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file);
+}
+
+#[test]
+#[cfg(windows)]
+fn test_symlink_target_with_forward_slashes() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("dir/sub");
+    at.write("dir/file", "content");
+
+    scene
+        .ucmd()
+        .args(&["-s", "dir/file", "link"])
+        .succeeds()
+        .no_stderr();
+    assert_eq!(at.resolve_link("link"), "dir\\file");
+    assert_eq!(at.read("link"), "content");
+
+    scene
+        .ucmd()
+        .args(&["-s", "dir/sub", "dirlink"])
+        .succeeds()
+        .no_stderr();
+    assert_eq!(at.resolve_link("dirlink"), "dir\\sub");
+    assert!(at.dir_exists("dirlink"));
 }
 
 #[test]
@@ -318,6 +345,43 @@ fn test_symlink_interactive_overrides_force() {
 }
 
 #[test]
+fn test_symlink_interactive_backup_declined() {
+    for (dest, replaced) in [
+        ("old", PathBuf::from("old")),
+        ("dir", PathBuf::from("dir").join("new")),
+    ] {
+        let replaced = replaced.to_str().unwrap();
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir("dir");
+        at.write("new", "new");
+        at.write("old", "old");
+        at.write("dir/new", "old");
+
+        scene
+            .ucmd()
+            .args(&["-s", "-i", "-b", "new", dest])
+            .pipe_in("n")
+            .fails()
+            .stderr_only(format!("ln: replace '{replaced}'? "));
+
+        assert_eq!(at.read(replaced), "old");
+        assert!(!at.file_exists(format!("{replaced}~")));
+    }
+}
+
+#[test]
+fn test_symlink_force_backup_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("file", "content");
+
+    ucmd.args(&["-s", "-f", "-b", "file", "file"]).succeeds();
+
+    assert_eq!(at.resolve_link("file"), "file");
+    assert_eq!(at.read("file~"), "content");
+}
+
+#[test]
 fn test_symlink_simple_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_symlink_simple_backup";
@@ -572,11 +636,17 @@ fn test_symlink_target_dir_from_dir() {
 
     let file_a_link = &format!("{dir}/{filename_a}");
     assert!(at.is_symlink(file_a_link));
-    assert_eq!(&at.resolve_link(file_a_link), file_a);
+    assert_eq!(
+        at.resolve_link(file_a_link),
+        file_a.replace('/', MAIN_SEPARATOR_STR)
+    );
 
     let file_b_link = &format!("{dir}/{filename_b}");
     assert!(at.is_symlink(file_b_link));
-    assert_eq!(&at.resolve_link(file_b_link), file_b);
+    assert_eq!(
+        at.resolve_link(file_b_link),
+        file_b.replace('/', MAIN_SEPARATOR_STR)
+    );
 }
 
 #[test]
@@ -757,7 +827,10 @@ fn test_symlink_relative_path() {
         .succeeds()
         .stdout_only(format!("'{link}' -> '{}'\n", p.to_string_lossy()));
     assert!(at.is_symlink(link));
-    assert_eq!(at.resolve_link(link), p.to_string_lossy());
+    assert_eq!(
+        at.resolve_link(link),
+        p.to_string_lossy().replace('/', MAIN_SEPARATOR_STR)
+    );
 }
 
 #[test]
@@ -975,6 +1048,42 @@ fn test_backup_same_file() {
     ucmd.args(&["--backup", "file1", "./file1"])
         .fails()
         .stderr_contains("n: 'file1' and './file1' are the same file");
+}
+
+#[test]
+fn test_backup_simple_numbered_same_file() {
+    for backup in ["--backup=simple", "--backup=numbered"] {
+        for args in [
+            vec![backup, "a", "a"],
+            vec!["-f", backup, "a", "a"],
+            vec!["-f", backup, "./a", "a"],
+        ] {
+            let (at, mut ucmd) = at_and_ucmd!();
+            at.write("a", "content");
+
+            ucmd.args(&args)
+                .fails_with_code(1)
+                .stderr_contains("are the same file");
+
+            assert_eq!(at.read("a"), "content");
+            assert!(!at.file_exists("a~"));
+            assert!(!at.file_exists("a.~1~"));
+        }
+    }
+}
+
+#[test]
+fn test_backup_simple_same_file_into_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    at.write("d/a", "content");
+
+    ucmd.args(&["-f", "--backup=simple", "d/a", "d"])
+        .fails_with_code(1)
+        .stderr_contains("are the same file");
+
+    assert_eq!(at.read("d/a"), "content");
+    assert!(!at.file_exists("d/a~"));
 }
 
 #[test]

@@ -16,7 +16,7 @@
 //!
 //! Utilities that rely on this module:
 //! `sort` (TBD)
-//! `tail` (TBD)
+//! `tail`
 //! `touch` (TBD)
 //! `uniq`
 //!
