@@ -1060,18 +1060,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Clap parsing is limited in this situation, see:
     // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
     // Arguments after `--` are file operands and must be left untouched.
-    let mut seen_double_dash = false;
-    let args = args.into_iter().map(|x| {
-        if seen_double_dash {
+    let args = args.into_iter().scan(false, |seen_double_dash, x| {
+        Some(if *seen_double_dash {
             x
         } else if x == "--" {
-            seen_double_dash = true;
+            *seen_double_dash = true;
             x
         } else if x == "-d=" {
             "--delimiter==".into()
         } else {
             x
-        }
+        })
     });
 
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
