@@ -1757,6 +1757,23 @@ fn test_round_robin_limited_file_descriptors() {
         .succeeds();
 }
 
+// A short write on the last chunk must not be silently dropped: the rest
+// has to be retried so that the resulting error is reported.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_short_write_on_last_chunk_is_reported() {
+    for args in [&["-b", "8192"][..], &["-l", "1"][..]] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("in", &"x".repeat(6000));
+        ucmd.args(args)
+            .arg("in")
+            .limit(Resource::FSIZE, 4096, 4096)
+            .ignore_sigxfsz()
+            .fails_with_code(1)
+            .stderr_contains("File too large");
+    }
+}
+
 #[test]
 fn test_split_invalid_input() {
     // Test if stdout/stderr for '--lines' option is correct
