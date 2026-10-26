@@ -1092,6 +1092,63 @@ fn test_backup_simple_numbered_same_file() {
 }
 
 #[test]
+fn test_backup_force_interactive_refuse_directory() {
+    for args in [
+        vec!["-s", "-b", "-t", "site", "src/static"],
+        vec!["-s", "--backup=numbered", "-t", "site", "src/static"],
+        vec!["-s", "-S", ".bak", "-t", "site", "src/static"],
+        vec!["-s", "-f", "-b", "-t", "site", "src/static"],
+        vec!["-s", "-r", "-b", "-t", "site", "src/static"],
+        vec!["-s", "-f", "-t", "site", "src/static"],
+        vec!["-s", "-i", "-t", "site", "src/static"],
+        vec!["-s", "-b", "-T", "src/static", "site/static"],
+        vec!["-b", "-t", "site", "static"],
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir_all("site/static");
+        at.write("site/static/app.js", "original");
+        at.mkdir_all("src/static");
+        at.touch("static");
+
+        // ln refuses before reading the answer, so it may exit before the
+        // input is written.
+        ucmd.args(&args)
+            .pipe_in("y\n")
+            .ignore_stdin_write_error()
+            .fails_with_code(1)
+            .stderr_contains("static: cannot overwrite directory");
+
+        assert!(at.dir_exists("site/static"));
+        assert_eq!(at.read("site/static/app.js"), "original");
+        assert!(!at.dir_exists("site/static~"));
+        assert!(!at.dir_exists("site/static.~1~"));
+        assert!(!at.dir_exists("site/static.bak"));
+    }
+}
+
+#[test]
+fn test_backup_symlink_to_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("site");
+    at.mkdir_all("src/static");
+    at.mkdir("other");
+    at.relative_symlink_dir("../other", "site/static");
+
+    ucmd.args(&["-s", "-b", "-t", "site", "src/static"])
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(
+        at.read_symlink("site/static"),
+        "src/static".replace('/', MAIN_SEPARATOR_STR)
+    );
+    assert_eq!(
+        at.read_symlink("site/static~"),
+        "../other".replace('/', MAIN_SEPARATOR_STR)
+    );
+}
+
+#[test]
 fn test_backup_simple_same_file_into_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("d");
