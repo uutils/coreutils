@@ -47,6 +47,9 @@ pub(crate) struct Converter {
     truncated: bool,
     /// The blocked output not yet written.
     out: Vec<u8>,
+    /// The partial record left over from the previous read for `conv=unblock`,
+    /// at most `cbs - 1` bytes.
+    record: Vec<u8>,
 }
 
 impl Converter {
@@ -56,6 +59,7 @@ impl Converter {
             record_len: 0,
             truncated: false,
             out: Vec::new(),
+            record: Vec::new(),
         }
     }
 
@@ -77,12 +81,12 @@ impl Converter {
             ConversionMode::ConvertThenBlock(ct, cbs) => {
                 self.block(&apply_conversion(buf, ct), cbs, None, rstat, write)
             }
-            ConversionMode::UnblockOnly(cbs) => write(&unblock(buf, cbs)),
+            ConversionMode::UnblockOnly(cbs) => self.unblock(buf, cbs, None, write),
             ConversionMode::UnblockThenConvert(ct, cbs) => {
-                write(&apply_conversion(&unblock(buf, cbs), ct))
+                self.unblock(buf, cbs, Some(ct), write)
             }
             ConversionMode::ConvertThenUnblock(ct, cbs) => {
-                write(&unblock(&apply_conversion(buf, ct), cbs))
+                self.unblock(&apply_conversion(buf, ct), cbs, None, write)
             }
         }
     }
@@ -92,16 +96,80 @@ impl Converter {
         &mut self,
         write: &mut impl FnMut(&[u8]) -> io::Result<()>,
     ) -> io::Result<()> {
-        let (cbs, ct) = match self.mode {
+        match self.mode {
             ConversionMode::BlockOnly(cbs) | ConversionMode::ConvertThenBlock(_, cbs) => {
-                (cbs, None)
+                if self.record_len > 0 {
+                    self.end_record(cbs, None, write)?;
+                }
             }
-            ConversionMode::BlockThenConvert(ct, cbs) => (cbs, Some(ct)),
-            _ => return Ok(()),
-        };
-        if self.record_len > 0 {
-            self.end_record(cbs, ct, write)?;
+            ConversionMode::BlockThenConvert(ct, cbs) => {
+                if self.record_len > 0 {
+                    self.end_record(cbs, Some(ct), write)?;
+                }
+            }
+            ConversionMode::UnblockOnly(cbs) => self.finish_unblock(cbs, None, write)?,
+            ConversionMode::UnblockThenConvert(ct, cbs) => {
+                self.finish_unblock(cbs, Some(ct), write)?
+            }
+            // The conversion is already applied before unblocking here.
+            ConversionMode::ConvertThenUnblock(_, cbs) => {
+                self.finish_unblock(cbs, None, write)?
+            }
+            ConversionMode::ConvertOnly(_) => return Ok(()),
         }
+        self.flush(write)
+    }
+
+    /// Emit the trailing partial record if the input did not end on a record boundary.
+    ///
+    /// GNU treats the record as if padded with spaces to `cbs`, which [`unblock`]
+    /// then trims away.
+    fn finish_unblock(
+        &mut self,
+        cbs: usize,
+        ct: Option<&ConversionTable>,
+        write: &mut impl FnMut(&[u8]) -> io::Result<()>,
+    ) -> io::Result<()> {
+        if !self.record.is_empty() {
+            let mut record = std::mem::take(&mut self.record);
+            record.resize(cbs, SPACE);
+            self.emit(&unblock(&record, cbs), ct);
+        }
+        self.flush(write)
+    }
+
+    /// Append output to the buffer, applying the conversion table if present.
+    fn emit(&mut self, data: &[u8], ct: Option<&ConversionTable>) {
+        match ct {
+            Some(ct) => self.out.extend(data.iter().map(|&b| ct[b as usize])),
+            None => self.out.extend_from_slice(data),
+        }
+    }
+
+    /// Split `buf` into `cbs`-length records, trimming trailing spaces from each.
+    ///
+    /// A record may span several reads: the partial record left over from the
+    /// previous call is finished first, and the new trailing partial record is
+    /// kept for the next one.
+    fn unblock(
+        &mut self,
+        mut buf: &[u8],
+        cbs: usize,
+        ct: Option<&ConversionTable>,
+        write: &mut impl FnMut(&[u8]) -> io::Result<()>,
+    ) -> io::Result<()> {
+        if !self.record.is_empty() {
+            let take = (cbs - self.record.len()).min(buf.len());
+            self.record.extend_from_slice(&buf[..take]);
+            buf = &buf[take..];
+            if self.record.len() == cbs {
+                let record = std::mem::take(&mut self.record);
+                self.emit(&unblock(&record, cbs), ct);
+            }
+        }
+        let full = buf.len() - buf.len() % cbs;
+        self.emit(&unblock(&buf[..full], cbs), ct);
+        self.record.extend_from_slice(&buf[full..]);
         self.flush(write)
     }
 
@@ -468,5 +536,58 @@ mod tests {
         .collect::<Vec<_>>();
 
         assert_eq!(res, exp);
+    }
+
+    /// Unblock each slice of `reads` in turn and collect the whole output.
+    fn unblock_reads(reads: &[&[u8]], cbs: usize) -> Vec<u8> {
+        let mode = ConversionMode::UnblockOnly(cbs);
+        let mut converter = Converter::new(mode);
+        let mut out = Vec::new();
+        let mut write = |data: &[u8]| -> io::Result<()> {
+            out.extend_from_slice(data);
+            Ok(())
+        };
+        for buf in reads {
+            converter.convert(buf, &mut ReadStat::default(), &mut write).unwrap();
+        }
+        converter.finish(&mut write).unwrap();
+        out
+    }
+
+    #[test]
+    fn unblock_test_record_across_reads() {
+        // Each read ends halfway through a record; the records must still
+        // come out aligned instead of being cut at the read boundary.
+        let res = unblock_reads(&[b"abcde", b"fghij"], 4);
+
+        assert_eq!(res, b"abcd\nefgh\nij\n".to_vec());
+    }
+
+    #[test]
+    fn unblock_test_exact_records_no_extra_newline() {
+        let res = unblock_reads(&[b"abc", b"def"], 3);
+
+        assert_eq!(res, b"abc\ndef\n".to_vec());
+    }
+
+    #[test]
+    fn unblock_test_eof_partial_record() {
+        let res = unblock_reads(&[b"abcdefg"], 4);
+
+        assert_eq!(res, b"abcd\nefg\n".to_vec());
+    }
+
+    #[test]
+    fn unblock_test_spaces_trimmed_across_reads() {
+        let res = unblock_reads(&[b"ab  ", b"cd  "], 4);
+
+        assert_eq!(res, b"ab\ncd\n".to_vec());
+    }
+
+    #[test]
+    fn unblock_test_all_space_record() {
+        let res = unblock_reads(&[b"        "], 8);
+
+        assert_eq!(res, b"\n".to_vec());
     }
 }
