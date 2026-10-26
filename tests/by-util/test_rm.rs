@@ -1566,6 +1566,22 @@ fn test_preserve_root_symlink_to_root() {
     assert!(at.symlink_exists("rootlink"));
 }
 
+/// Test that the "same as '/'" error escapes control characters in the name.
+#[cfg(unix)]
+#[test]
+fn test_preserve_root_symlink_to_root_escapes_name() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.symlink_dir("/", "root\x1blink");
+
+    ucmd.arg("-rf")
+        .arg("--preserve-root")
+        .arg("root\x1blink/")
+        .fails()
+        .stderr_contains("recursively on $'root\\x1Blink/' (same as '/')")
+        .stderr_does_not_contain("\x1b");
+}
+
 /// Test that --preserve-root properly detects nested symlinks pointing to root.
 #[cfg(unix)]
 #[test]
