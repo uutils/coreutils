@@ -3081,6 +3081,24 @@ mod quoting {
     }
 
     #[test]
+    fn test_ls_quoting_single_quote_exclamation() {
+        check_quoting_dirname(
+            "dir'!name",
+            &[
+                ("shell", "'dir'\\''!name'", "'./dir'\\''!name'"),
+                ("shell-always", "'dir'\\''!name'", "'./dir'\\''!name'"),
+                ("shell-escape", "'dir'\\''!name'", "'./dir'\\''!name'"),
+                (
+                    "shell-escape-always",
+                    "'dir'\\''!name'",
+                    "'./dir'\\''!name'",
+                ),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
     fn test_ls_quoting_double_quote() {
         check_quoting_dirname(
             // Double quote character

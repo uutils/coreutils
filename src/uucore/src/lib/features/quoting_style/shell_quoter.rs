@@ -247,7 +247,7 @@ fn bytes_start_with(bytes: &[u8], pattern: &[u8]) -> bool {
 /// Return a set of characters that implies quoting of the word in
 /// shell-quoting mode.
 fn shell_escaped_char_set(is_dirname: bool) -> &'static [u8] {
-    const ESCAPED_CHARS: &[u8] = b":\"`$\\^\n\t\r=";
+    const ESCAPED_CHARS: &[u8] = b":\"`$\\^\n\t\r=!";
     // the ':' colon character only induce quoting in the
     // context of ls displaying a directory name before listing its content.
     // (e.g. with the recursive flag -R)
@@ -297,6 +297,22 @@ mod tests {
         assert_eq!(
             initial_quoting(b"a'b", false, false, true),
             (ShellQuotes::Double, true)
+        );
+
+        // Simple quote uses double quotes in non-escape mode
+        assert_eq!(
+            initial_quoting(b"a'b", false, false, false),
+            (ShellQuotes::Double, true)
+        );
+
+        // `!` is history-expanded inside double quotes, so a quote with `!` uses single quotes
+        assert_eq!(
+            initial_quoting(b"a'!b", false, false, true),
+            (ShellQuotes::Single, true)
+        );
+        assert_eq!(
+            initial_quoting(b"a'!b", false, false, false),
+            (ShellQuotes::Single, true)
         );
 
         // Shell special chars force single quotes in escape mode
