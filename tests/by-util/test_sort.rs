@@ -1583,6 +1583,7 @@ fn test_check_silent() {
 fn test_check_repeated_modes() {
     for args in [
         ["--check=silent", "--check=diagnose-first"],
+        ["-c=silent", "-c=diagnose-first"],
         ["--check=diagnose-first", "--check=quiet"],
         ["-c", "--check=quiet"],
         ["--check=silent", "-c"],
