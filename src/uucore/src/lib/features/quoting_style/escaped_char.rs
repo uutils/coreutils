@@ -33,7 +33,6 @@ pub enum EscapeState {
 }
 
 /// Bytes we need to present as escaped octal, in the form of `\nnn` per byte.
-/// Escapes each UTF-8 byte of a character as `\ooo`.
 pub struct EscapeOctal {
     c: [u8; 4],
     len: u8,
