@@ -303,6 +303,15 @@ fn test_version_sort_unstable() {
 }
 
 #[test]
+fn test_version_sort_unique_keeps_different_endings() {
+    new_ucmd!()
+        .args(&["-V", "-u"])
+        .pipe_in("tool-1.00.txt\ntool-1.0.exe\n")
+        .succeeds()
+        .stdout_is("tool-1.0.exe\ntool-1.00.txt\n");
+}
+
+#[test]
 fn test_version_sort_stable() {
     new_ucmd!()
         .arg("--stable")
