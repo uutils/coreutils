@@ -911,3 +911,29 @@ fn test_operand_count() {
         .stderr_contains("join: extra operand 'fields_3.txt'\n")
         .stderr_contains("--help");
 }
+
+#[test]
+fn test_missing_key_is_empty_key() {
+    // Like `sort -k`, a line too short to have the join field has an empty key.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("short", "x,\ny\nbob,1002\n");
+    at.write("keys", "1002\n");
+    ts.ucmd()
+        .args(&["-t", ",", "-1", "2", "--check-order", "short", "keys"])
+        .succeeds()
+        .stdout_only("1002,bob\n");
+
+    // ...and pairs with lines whose join field is empty.
+    ts.ucmd()
+        .args(&["-t", ",", "-j", "2", "short", "short"])
+        .succeeds()
+        .stdout_only(",x,x\n,x,y\n,y,x\n,y,y\n1002,bob,bob\n");
+
+    // Same with the default blank separator and a trailing blank.
+    at.write("blank", "a \nb\nbob 1002\n");
+    ts.ucmd()
+        .args(&["-1", "2", "--check-order", "blank", "keys"])
+        .succeeds()
+        .stdout_only("1002 bob\n");
+}
