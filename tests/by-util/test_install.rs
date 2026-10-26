@@ -1280,6 +1280,7 @@ fn test_install_non_utf8_dir() {
 #[case::suffix(&["-b", "--suffix=super-suffix-of-the-century"], Some("super-suffix-of-the-century"))]
 #[case::suffix_implies_backup(&["--suffix=super-suffix-of-the-century"], Some("super-suffix-of-the-century"))]
 #[case::suffix_hyphen_value(&["-b", "--suffix=-v"], Some("-v"))]
+#[case::empty_suffix(&["-b", "--suffix="], Some("~"))]
 #[case::numbered_t(&["--backup=t"], Some(".~1~"))]
 #[case::numbered(&["--backup=numbered"], Some(".~1~"))]
 #[case::existing(&["--backup=existing"], Some("~"))]
