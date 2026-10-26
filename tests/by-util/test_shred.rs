@@ -704,25 +704,28 @@ fn test_shred_dev_full() {
     new_ucmd!().arg("/dev/full").succeeds();
 }
 
-// shred /dev/null should loop until interrupted; with --size we can bound it
 #[test]
+#[cfg(target_os = "linux")]
 #[cfg_attr(
     wasi_runner,
     ignore = "WASI sandbox: host device paths (/dev) not visible"
 )]
-#[cfg(target_os = "linux")]
-fn test_shred_dev_null() {
-    new_ucmd!().arg("--size=1M").arg("/dev/null").succeeds();
+fn test_shred_dev_full_with_size() {
+    new_ucmd!()
+        .args(&["-n1", "--size=1", "/dev/full"])
+        .fails()
+        .stderr_contains("No space left on device");
 }
 
+// shred /dev/null should loop until interrupted; with --size we can bound it
 #[test]
-#[cfg(unix)]
-fn test_shred_rejects_fifo() {
-    let (at, mut ucmd) = at_and_ucmd!();
-
-    at.mkfifo("fifo");
-
-    ucmd.arg("fifo").fails().stderr_contains("fifo");
+#[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host device paths (/dev) not visible"
+)]
+fn test_shred_dev_null() {
+    new_ucmd!().arg("--size=1M").arg("/dev/null").succeeds();
 }
 
 #[test]
@@ -735,4 +738,16 @@ fn test_shred_dev_null_zero_size() {
     new_ucmd!()
         .args(&["-n1", "--size=0", "/dev/null"])
         .succeeds();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_shred_rejects_fifo() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkfifo("fifo");
+
+    ucmd.arg("fifo")
+        .fails_with_code(1)
+        .stderr_contains("shred: fifo: Not a file\n");
 }
