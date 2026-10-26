@@ -3026,6 +3026,34 @@ mod quoting {
             .stdout_contains("\"hello world\"");
     }
 
+    // U+2028 and U+2029 split lines like control characters do, so -b escapes
+    // them and -q hides them, as GNU does.
+    #[test]
+    fn test_ls_quoting_line_separators_utf8() {
+        if !is_locale_available("en_US.UTF-8") {
+            return;
+        }
+
+        for (name, escaped) in [
+            ("x\u{2028}y", "x\\342\\200\\250y"),
+            ("x\u{2029}y", "x\\342\\200\\251y"),
+        ] {
+            let (at, mut ucmd) = at_and_ucmd!();
+            at.touch(name);
+            ucmd.env("LC_ALL", "en_US.UTF-8")
+                .args(&["-b", "-1"])
+                .succeeds()
+                .stdout_is(format!("{escaped}\n"));
+
+            let (at, mut ucmd) = at_and_ucmd!();
+            at.touch(name);
+            ucmd.env("LC_ALL", "en_US.UTF-8")
+                .args(&["-q", "-1"])
+                .succeeds()
+                .stdout_is("x?y\n");
+        }
+    }
+
     #[test]
     fn test_ls_quoting_space() {
         check_quoting_dirname(
