@@ -3877,6 +3877,59 @@ fn test_ls_indicator_style() {
     }
 }
 
+#[test]
+fn test_ls_escape_indicator_chars_in_names() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("report@");
+    at.touch("a=b");
+
+    // A regular file "report@" must not look like a symlink "report".
+    for args in [
+        &["-1bF"][..],
+        &["-1b", "--file-type"],
+        &["-1", "--quoting-style=escape", "--indicator-style=classify"],
+    ] {
+        scene
+            .ucmd()
+            .args(args)
+            .succeeds()
+            .stdout_contains("report\\@\n")
+            .stdout_contains("a\\=b\n");
+    }
+
+    scene
+        .ucmd()
+        .args(&["-bmF"])
+        .succeeds()
+        .stdout_is("a\\=b, report\\@\n");
+
+    // Without an indicator that could be confused with them, they stay as they are.
+    for args in [&["-1b"][..], &["-1b", "--indicator-style=slash"], &["-1F"]] {
+        scene
+            .ucmd()
+            .args(args)
+            .succeeds()
+            .stdout_is("a=b\nreport@\n");
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ls_escape_star_with_file_type() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("x*y");
+
+    // --file-type escapes '*' too, while -F leaves it alone.
+    scene
+        .ucmd()
+        .args(&["-1b", "--file-type"])
+        .succeeds()
+        .stdout_is("x\\*y\n");
+    scene.ucmd().args(&["-1bF"]).succeeds().stdout_is("x*y\n");
+}
+
 #[cfg(not(any(target_vendor = "apple", windows, target_os = "openbsd")))] // Truncate not available on mac or win
 #[test]
 fn test_ls_human_si() {

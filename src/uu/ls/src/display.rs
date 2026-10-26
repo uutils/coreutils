@@ -191,11 +191,28 @@ fn escape_name_with_locale(name: &OsStr, config: &Config) -> OsString {
 
     let escaped = locale_aware_escape_name(name, style);
 
-    let escaped = if comma_separated && style == QuotingStyle::Escape {
-        escaped.to_string_lossy().replace(',', "\\,").into()
-    } else {
-        escaped
+    // The escape style also escapes the characters the indicator style appends,
+    // so that a name cannot pass for a name followed by an indicator.
+    let indicators = match config.indicator_style {
+        Some(IndicatorStyle::FileType) => "*=>@|",
+        Some(IndicatorStyle::Classify) => "=>@|",
+        Some(IndicatorStyle::Slash) | None => "",
     };
+    let needs_backslash = |c: char| (comma_separated && c == ',') || indicators.contains(c);
+
+    let escaped =
+        if style == QuotingStyle::Escape && escaped.to_string_lossy().contains(needs_backslash) {
+            let mut out = String::with_capacity(escaped.len() + 1);
+            for c in escaped.to_string_lossy().chars() {
+                if needs_backslash(c) {
+                    out.push('\\');
+                }
+                out.push(c);
+            }
+            out.into()
+        } else {
+            escaped
+        };
 
     if config.format == Format::Commas
         && config.line_ending == LineEnding::Newline
