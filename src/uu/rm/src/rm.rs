@@ -800,7 +800,7 @@ fn show_preserve_root_error(path: &Path) {
         show_error!(
             "{}",
             translate!("rm-error-dangerous-recursive-operation-same-as-root",
-            "path" => path.display())
+            "path" => path.quote())
         );
     }
     show_error!("{}", RmError::UseNoPreserveRoot);
