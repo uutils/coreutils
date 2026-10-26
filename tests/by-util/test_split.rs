@@ -1300,6 +1300,22 @@ fn test_elide_dev_null_l_chunks() {
 }
 
 #[test]
+fn test_elide_empty_files_preserves_line_chunks() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input", "aaaaaa\nb\nc\nd\ne\n");
+    ucmd.args(&["-e", "-n", "l/6", "input"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("xaa"), "aaaaaa\n");
+    assert_eq!(at.read("xab"), "b\n");
+    assert_eq!(at.read("xac"), "c\n");
+    assert_eq!(at.read("xad"), "d\n");
+    assert_eq!(at.read("xae"), "e\n");
+    assert!(!at.plus("xaf").exists());
+}
+
+#[test]
 #[cfg(unix)]
 fn test_number_by_bytes_dev_zero() {
     let (at, mut ucmd) = at_and_ucmd!();
