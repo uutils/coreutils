@@ -12,7 +12,7 @@
     not(target_os = "openbsd"),
     not(windows)
 ))]
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
@@ -807,6 +807,62 @@ fn test_validate_stdin_offset_bytes() {
         .set_stdin(file_shadow)
         .succeeds()
         .stdout_only_fixture(seq_19001_20000_file_name);
+}
+
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd"),
+    not(windows)
+))]
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: stdin file position not preserved through wasmtime"
+)]
+fn test_all_but_last_on_partly_read_large_stdin() {
+    // When stdin was already partly read by another process, all-but-last
+    // must count from the current offset, also for input larger than a block
+    // where head seeks instead of reading forward.
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+    let header = "header\n";
+    // Large enough to take the seeking path even with a big st_blksize.
+    let body = "entry\n".repeat(200_000);
+    let trailer = "-- end --\n";
+    fixtures.write("f", &format!("{header}{body}{trailer}"));
+
+    for args in [["-n", "-1"], ["-c", "-10"]] {
+        let mut file = fixtures.open("f");
+        file.seek(SeekFrom::Start(header.len() as u64)).unwrap();
+        let mut file_shadow = file.try_clone().unwrap();
+        scene
+            .ucmd()
+            .args(&args)
+            .set_stdin(file)
+            .succeeds()
+            .stdout_only(&body);
+        let mut rest = String::new();
+        file_shadow.read_to_string(&mut rest).unwrap();
+        assert_eq!(rest, trailer);
+    }
+
+    // Dropping more bytes than remain after the offset prints nothing and
+    // leaves stdin where it was.
+    let mut file = fixtures.open("f");
+    file.seek(SeekFrom::Start(header.len() as u64)).unwrap();
+    let mut file_shadow = file.try_clone().unwrap();
+    let remaining = body.len() + trailer.len();
+    scene
+        .ucmd()
+        .args(&["-c", &format!("-{}", remaining + 1)])
+        .set_stdin(file)
+        .succeeds()
+        .no_output();
+    let mut rest = String::new();
+    file_shadow.read_to_string(&mut rest).unwrap();
+    assert_eq!(rest, format!("{body}{trailer}"));
 }
 
 #[cfg(all(
