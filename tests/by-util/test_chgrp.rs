@@ -431,6 +431,30 @@ fn test_traverse_symlinks() {
 }
 
 #[test]
+fn test_chgrp_dereference_then_no_dereference() {
+    use uutests::{util::TestScenario, util_name};
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.symlink_file("missing", "link");
+
+    scene
+        .ucmd()
+        .args(&["--dereference", "-h"])
+        .arg(getegid().to_string())
+        .arg("link")
+        .succeeds()
+        .no_output();
+    scene
+        .ucmd()
+        .args(&["-h", "--dereference"])
+        .arg(getegid().to_string())
+        .arg("link")
+        .fails_with_code(1)
+        .stderr_only("chgrp: cannot dereference 'link': No such file or directory\n");
+}
+
+#[test]
 #[cfg(not(target_vendor = "apple"))]
 fn test_from_option() {
     use std::os::unix::fs::MetadataExt;
