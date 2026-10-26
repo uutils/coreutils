@@ -1114,7 +1114,7 @@ impl AtPath {
             .unwrap_or_else(|e| panic!("Couldn't write {}: {e}", name.display()));
     }
 
-    pub fn append(&self, name: impl AsRef<Path>, contents: &str) {
+    pub fn append<P: AsRef<Path>>(&self, name: P, contents: &str) {
         let name = name.as_ref();
         log_info("write(append)", self.plus_as_string(name));
         let mut f = OpenOptions::new()
