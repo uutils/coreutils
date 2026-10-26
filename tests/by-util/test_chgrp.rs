@@ -693,3 +693,19 @@ fn verbose_missing_file_write_error_is_reported_not_panic() {
         .fails_with_code(1)
         .stderr_contains("chgrp: write error: No space left on device");
 }
+
+#[test]
+fn test_repeated_flags_are_accepted() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/file");
+
+    // GNU chgrp accepts a flag given more than once; the last one wins.
+    ucmd.arg("-R")
+        .arg("-R")
+        .arg("-v")
+        .arg("--verbose")
+        .arg(getegid().to_string())
+        .arg("dir")
+        .succeeds();
+}

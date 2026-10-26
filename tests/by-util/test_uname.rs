@@ -12,6 +12,17 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_unexpected_numeric_operand_is_verbatim() {
+    for arg in ["007", "1e3", "1.50"] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .arg(arg)
+            .fails_with_code(1)
+            .stderr_contains(format!("unexpected argument '{arg}' found"));
+    }
+}
+
+#[test]
 fn test_uname() {
     new_ucmd!().succeeds();
 }
@@ -19,6 +30,20 @@ fn test_uname() {
 #[test]
 fn test_uname_compatible() {
     new_ucmd!().arg("-a").succeeds();
+}
+
+#[rstest::rstest]
+fn test_uname_all_omits_unknown_fields(
+    #[values("-a", "--all", "-A", "--all-labeled")] all: &str,
+    #[values("-p", "-i", "-pi")] unknown: &str,
+) {
+    let expected = new_ucmd!().arg(all).succeeds();
+    for args in [[all, unknown], [unknown, all]] {
+        new_ucmd!()
+            .args(&args)
+            .succeeds()
+            .stdout_only(expected.stdout_str());
+    }
 }
 
 #[test]
@@ -55,17 +80,26 @@ fn test_uname_kernel_version() {
 fn test_uname_kernel() {
     let (_, mut ucmd) = at_and_ucmd!();
 
-    #[cfg(target_os = "linux")]
+    // Under the WASI runner the binary under test is the wasm guest, which
+    // reports "WASI" regardless of the host OS.
+    #[cfg(wasi_runner)]
+    ucmd.arg("-o").succeeds().stdout_is("WASI\n");
+
+    #[cfg(all(target_os = "linux", not(wasi_runner)))]
     {
         let result = ucmd.arg("-o").succeeds();
         assert!(result.stdout_str().to_lowercase().contains("linux"));
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(all(not(target_os = "linux"), not(wasi_runner)))]
     ucmd.arg("-o").succeeds();
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: uname reports the guest OS (WASI), not the host's"
+)]
 fn test_uname_operating_system() {
     #[cfg(target_os = "android")]
     new_ucmd!()

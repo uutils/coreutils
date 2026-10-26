@@ -87,9 +87,6 @@ prepare_profraw_dir
 rm -rf "${PROFDATA_DIR}" && mkdir -p "${PROFDATA_DIR}"
 rm -rf "${REPORT_DIR}" && mkdir -p "${REPORT_DIR}"
 
-#shellcheck disable=SC2086
-UTIL_LIST=$("${ME_dir}"/show-utils.sh ${FEATURES_OPTION})
-
 export RUSTC_BOOTSTRAP=1
 export CARGO_INCREMENTAL=0
 export RUSTFLAGS="-Cinstrument-coverage -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
@@ -108,7 +105,7 @@ run_test_and_aggregate() {
         --no-fail-fast \
         --color=always \
         2>&1 \
-        ${2} \
+        "${@:2}" \
     | grep -v 'SKIP'
     # Note: Do not print the skipped tests on the output as there will be many.
 
@@ -125,24 +122,19 @@ run_test_and_aggregate() {
     # We don't want an error in `llvm-profdata` to abort the whole program
 }
 
-for UTIL in ${UTIL_LIST}; do
-
-    if [ "${UTIL}" = "stty" ]; then
-        run_test_and_aggregate \
-            "${UTIL}" \
-            "-p coreutils -p uu_${UTIL} -E test(/^test_${UTIL}::/) ${FEATURES_OPTION}"
-    else
-        run_test_and_aggregate \
-            "${UTIL}" \
-            "-p coreutils -E test(/^test_${UTIL}::/) ${FEATURES_OPTION}"
-    fi
-
+UTIL_LIST_NO_STTY=$(cargo tree --depth 1 --format '{lib}' "${FEATURES_OPTION}" --prefix none | sed -n '/stty/! s/^uu_//p')
+for UTIL in ${UTIL_LIST_NO_STTY}; do
+    run_test_and_aggregate "${UTIL}" -p coreutils -E "test(/^test_${UTIL}::/)" "${FEATURES_OPTION}"
     echo "## Clear the trace directory to free up space"
     prepare_profraw_dir
-done;
+done
+
+run_test_and_aggregate stty -p coreutils -p uu_stty -E "test(/^test_stty::/)" "${FEATURES_OPTION}"
+echo "## Clear the trace directory to free up space"
+prepare_profraw_dir
 
 echo "Running coverage tests over uucore"
-run_test_and_aggregate "uucore" "-p uucore --all-features"
+run_test_and_aggregate uucore -p uucore --all-features
 
 echo "# Aggregating all the profraw files under ${REPORT_PATH}"
 grcov \

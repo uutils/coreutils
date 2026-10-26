@@ -231,6 +231,23 @@ const LARGEFILE: OFlag = OFlag::O_LARGEFILE;
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 const LARGEFILE: OFlag = OFlag::empty();
 
+/// Flag that opens a directory as an anchor for `*at` calls without read access.
+///
+/// `mkdirat` and `openat` need write and execute on the anchor directory, but
+/// opening it `O_RDONLY` also demands read, which fails on write-only
+/// directories where GNU succeeds. `O_PATH` (Linux) and `O_SEARCH` (POSIX
+/// 2008) both yield a descriptor that anchors `*at` calls without reading.
+/// Such a descriptor cannot list directory entries.
+#[cfg(has_o_path)]
+const SEARCH_ONLY: Option<OFlag> = Some(OFlag::O_PATH);
+#[cfg(has_o_search)]
+const SEARCH_ONLY: Option<OFlag> = Some(OFlag::O_SEARCH);
+/// Neither flag exists here (OpenBSD, for example), so creating an entry
+/// inside a write-only directory fails with `EACCES` instead of succeeding the
+/// way `mkdir` does.
+#[cfg(not(any(has_o_path, has_o_search)))]
+const SEARCH_ONLY: Option<OFlag> = None;
+
 impl DirFd {
     /// Open a directory and return a file descriptor
     ///
@@ -242,6 +259,44 @@ impl DirFd {
         if !symlink_behavior.should_follow() {
             flags |= OFlag::O_NOFOLLOW;
         }
+        let fd = nix::fcntl::open(path, flags, Mode::empty()).map_err(|e| {
+            SafeTraversalError::OpenFailed {
+                path: path.into(),
+                source: io::Error::from_raw_os_error(e as i32),
+            }
+        })?;
+        Ok(Self { fd })
+    }
+
+    /// Open a directory to anchor `*at` calls, following symlinks.
+    ///
+    /// Falls back to a search-only descriptor when the directory denies read
+    /// access, so that creating entries in a write-only directory works the
+    /// way it does with `mkdir`. The returned descriptor is only guaranteed to
+    /// support `*at` calls; it may not be able to list directory entries.
+    pub fn open_anchor(path: &Path) -> io::Result<Self> {
+        match Self::open(path, SymlinkBehavior::Follow) {
+            Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
+                Self::open_search_only(path, e)
+            }
+            result => result,
+        }
+    }
+
+    /// Retry a readable open of `path` that failed with `denied` using a
+    /// search-only descriptor.
+    ///
+    /// If this open fails as well, its own error is returned. The readable
+    /// open only adds a read-permission check, so a different error here
+    /// (`ENOENT`, `ELOOP`, `ENOTDIR`) means `path` changed between the two
+    /// calls and describes what is there now. Platforms without a search-only
+    /// flag return `denied` unchanged.
+    fn open_search_only(path: &Path, denied: io::Error) -> io::Result<Self> {
+        let Some(search_only) = SEARCH_ONLY else {
+            return Err(denied);
+        };
+
+        let flags = search_only | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC | LARGEFILE;
         let fd = nix::fcntl::open(path, flags, Mode::empty()).map_err(|e| {
             SafeTraversalError::OpenFailed {
                 path: path.into(),
@@ -489,10 +544,10 @@ impl DirFd {
         }
     }
 
-    /// O_PATH-based fallback for chmod when fchmodat with AT_SYMLINK_NOFOLLOW
+    /// `O_PATH`-based fallback for chmod when fchmodat with `AT_SYMLINK_NOFOLLOW`
     /// is not available (musl on kernel < 6.6).
     ///
-    /// Opens the file with O_PATH|O_NOFOLLOW to get an fd without following
+    /// Opens the file with `O_PATH|O_NOFOLLOW` to get an fd without following
     /// symlinks, then chmods via /proc/self/fd/{fd}. This avoids the TOCTOU
     /// race because the fd pins the inode.
     ///
@@ -570,7 +625,7 @@ impl DirFd {
         Ok(fs::File::from(fd))
     }
 
-    /// Create a DirFd from an existing file descriptor (takes ownership)
+    /// Create a [`DirFd`] from an existing file descriptor (takes ownership)
     pub fn from_raw_fd(fd: RawFd) -> io::Result<Self> {
         if fd < 0 {
             return Err(io::Error::new(
@@ -665,7 +720,7 @@ fn find_existing_ancestor(path: &Path) -> io::Result<(PathBuf, Vec<OsString>)> {
 /// * `mode` - The mode to use when creating a new directory
 ///
 /// # Returns
-/// A DirFd for the subdirectory
+/// A [`DirFd`] for the subdirectory
 fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Result<DirFd> {
     match parent_fd.stat_at(name, SymlinkBehavior::NoFollow) {
         Ok(stat) => {
@@ -708,11 +763,11 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
 /// This function prevents TOCTOU race conditions for newly created directories by:
 /// 1. Finding the deepest existing ancestor directory (path-based, following symlinks)
 /// 2. Opening that ancestor with a file descriptor
-/// 3. Creating all new directories using fd-based operations (mkdirat, openat with O_NOFOLLOW)
+/// 3. Creating all new directories using fd-based operations (mkdirat, openat with `O_NOFOLLOW`)
 ///
 /// Once we have a fd for an existing ancestor, all subsequent operations use that fd
 /// as the anchor. If an attacker replaces a newly-created directory with a symlink,
-/// our openat with O_NOFOLLOW will fail, preventing the attack.
+/// our openat with `O_NOFOLLOW` will fail, preventing the attack.
 ///
 /// Pre-existing symlinks to directories in the path are followed (GNU coreutils behavior).
 /// `O_DIRECTORY` is used when opening them, so dangling or non-directory symlinks error out.
@@ -725,12 +780,12 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
 ///   mode will be modified by the process umask.
 ///
 /// # Returns
-/// A DirFd for the final created directory, or the first existing parent if
+/// A [`DirFd`] for the final created directory, or the first existing parent if
 /// all directories already exist.
 #[cfg(unix)]
 pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
     let (existing_ancestor, components_to_create) = find_existing_ancestor(path)?;
-    let mut dir_fd = DirFd::open(&existing_ancestor, SymlinkBehavior::Follow)?;
+    let mut dir_fd = DirFd::open_anchor(&existing_ancestor)?;
 
     for component in &components_to_create {
         dir_fd = open_or_create_subdir(&dir_fd, component.as_os_str(), mode)?;
@@ -768,7 +823,7 @@ impl FileInfo {
         }
     }
 
-    /// Create FileInfo from device and inode numbers
+    /// Create [`FileInfo`] from device and inode numbers
     pub fn new(dev: u64, ino: u64) -> Self {
         Self { dev, ino }
     }
@@ -855,7 +910,7 @@ impl Metadata {
         }
     }
 
-    /// Compatibility methods to match std::fs::Metadata interface
+    /// Compatibility methods to match [`std::fs::Metadata`] interface
     pub fn is_dir(&self) -> bool {
         self.file_type().is_directory()
     }
@@ -1518,6 +1573,53 @@ mod tests {
     }
 
     #[test]
+    #[cfg(any(has_o_path, has_o_search))]
+    fn test_open_anchor_in_write_only_dir() {
+        use std::os::unix::fs::PermissionsExt;
+
+        if Uid::effective().is_root() {
+            // root ignores the permission bits this test depends on
+            return;
+        }
+        let temp_dir = TempDir::new().unwrap();
+        let write_only = temp_dir.path().join("wx");
+        fs::create_dir(&write_only).unwrap();
+        fs::set_permissions(&write_only, fs::Permissions::from_mode(0o300)).unwrap();
+
+        // Creating entries needs write and execute, not read.
+        let dir_fd = DirFd::open_anchor(&write_only).unwrap();
+        dir_fd.mkdir_at(OsStr::new("sub"), 0o755).unwrap();
+        dir_fd.open_file_at(OsStr::new("file")).unwrap();
+
+        fs::set_permissions(&write_only, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(write_only.join("sub").is_dir());
+        assert!(write_only.join("file").is_file());
+    }
+
+    #[test]
+    #[cfg(any(has_o_path, has_o_search))]
+    fn test_open_search_only_keeps_its_own_error() {
+        // If the path changes after the readable open was denied, report what
+        // the search-only open found, not the earlier EACCES.
+        let temp_dir = TempDir::new().unwrap();
+        let missing = temp_dir.path().join("missing");
+        let looping = temp_dir.path().join("loop");
+        symlink(&looping, &looping).unwrap();
+        let file = temp_dir.path().join("file");
+        fs::write(&file, "").unwrap();
+
+        for (path, errno) in [
+            (&missing, libc::ENOENT),
+            (&looping, libc::ELOOP),
+            (&file, libc::ENOTDIR),
+        ] {
+            let denied = io::Error::from_raw_os_error(libc::EACCES);
+            let err = DirFd::open_search_only(path, denied).err().unwrap();
+            assert_eq!(err.raw_os_error(), Some(errno), "{}", path.display());
+        }
+    }
+
+    #[test]
     fn test_create_dir_all_safe_existing_path() {
         let temp_dir = TempDir::new().unwrap();
         let existing_path = temp_dir.path().join("existing");
@@ -1604,7 +1706,7 @@ mod tests {
         assert!(result_nofollow.is_err());
     }
 
-    /// Verify that chmod_at with NoFollow does not change the symlink target's mode.
+    /// Verify that `chmod_at` with `NoFollow` does not change the symlink target's mode.
     /// This test demonstrates that the TOCTOU race in recursive chmod is closed:
     /// chmod on a symlink entry should not affect the target file.
     #[test]

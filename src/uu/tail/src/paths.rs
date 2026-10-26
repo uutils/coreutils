@@ -8,7 +8,7 @@
 use crate::text;
 use std::ffi::OsStr;
 use std::fs::{File, Metadata};
-use std::io::{Seek, SeekFrom};
+use std::io::{self, Seek, SeekFrom, Write, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
@@ -128,20 +128,23 @@ impl HeaderPrinter {
         }
     }
 
-    pub fn print_input(&mut self, input: &Input) {
-        self.print(input.display_name.as_str());
+    pub fn print_input(&mut self, input: &Input) -> io::Result<()> {
+        self.print(input.display_name.as_str())
     }
 
-    pub fn print(&mut self, string: &str) {
+    pub fn print(&mut self, string: &str) -> io::Result<()> {
         if self.verbose {
-            println!(
+            writeln!(
+                stdout().lock(),
                 "{}==> {} <==",
                 if self.first_header { "" } else { "\n" },
                 // GNU quotes the name shown in the header when it needs it.
                 locale_aware_shell_escape(string),
-            );
+            )?;
             self.first_header = false;
         }
+
+        Ok(())
     }
 }
 pub trait FileExtTail {

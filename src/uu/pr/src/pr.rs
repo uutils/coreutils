@@ -80,7 +80,6 @@ struct OutputOptions {
     merge_files_print: Option<usize>,
     offset_spaces: usize,
     form_feed_used: bool,
-    join_lines: bool,
     col_sep_for_printing: String,
     line_width: Option<usize>,
     expand_tabs: Option<ExpandTabsOptions>,
@@ -721,8 +720,6 @@ fn build_options(
                         let width: i32 = s[1..].parse().map_err(|_e| invalid(&s[1..]))?;
                         if width <= 0 {
                             return Err(invalid(&s[1..]));
-                        } else if s.starts_with('-') {
-                            return Err(invalid(s));
                         }
                         Ok(ExpandTabsOptions {
                             input_char: c,
@@ -1039,7 +1036,6 @@ fn build_options(
         merge_files_print,
         offset_spaces,
         form_feed_used,
-        join_lines,
         col_sep_for_printing,
         line_width,
         expand_tabs,
@@ -1567,10 +1563,10 @@ fn get_line_for_printing(
 
     let display_length = complete_line.len() + (tab_count * 7);
 
-    let sep = if (index + 1) != indexes && !options.join_lines {
-        &options.col_sep_for_printing
-    } else {
+    let sep = if (index + 1) == indexes {
         &blank_line
+    } else {
+        &options.col_sep_for_printing
     };
 
     format!(

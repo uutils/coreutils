@@ -116,6 +116,7 @@ pub mod selinux;
         target_os = "android",
         target_os = "cygwin",
         target_os = "freebsd",
+        target_os = "haiku",
         target_os = "hurd",
         target_os = "illumos",
         target_os = "linux",
@@ -128,7 +129,7 @@ pub mod selinux;
 pub mod signals;
 #[cfg(all(feature = "smack", target_os = "linux"))]
 pub mod smack;
-#[cfg(feature = "feat_systemd_logind")]
+#[cfg(all(feature = "systemd_logind", target_os = "linux"))]
 pub mod systemd_logind;
 #[cfg(all(
     feature = "utmpx",

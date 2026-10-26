@@ -1,4 +1,4 @@
-#spell-checker:ignore (libs) interner
+# spell-checker:ignore (libs) interner
 [package]
 name = "uu_tsort"
 description = "tsort ~ (uutils) topologically sort input (partially ordered) pairs"

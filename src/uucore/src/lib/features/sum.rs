@@ -27,7 +27,7 @@ use crate::error::{UResult, USimpleError};
 pub enum DigestOutput {
     /// Varying-size output
     Vec(Vec<u8>),
-    /// Legacy output for Crc and Crc32B modes
+    /// Legacy output for `Crc` and `Crc32B` modes
     Crc(u32),
     /// Legacy output for Sysv and BSD modes
     U16(u16),

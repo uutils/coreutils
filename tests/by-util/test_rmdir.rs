@@ -62,6 +62,55 @@ fn test_rmdir_empty_directory_with_parents() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_rmdir_verbose_write_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all(NESTED_DIR);
+    at.mkdir("other");
+    at.mkdir_all("nonempty/child");
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+
+    ucmd.args(&[
+        "-pv",
+        "--ignore-fail-on-non-empty",
+        "nonempty",
+        NESTED_DIR,
+        "other",
+    ])
+    .set_stdout(dev_full)
+    .fails_with_code(1)
+    .stderr_is("rmdir: write error: No space left on device\n");
+
+    assert!(!at.dir_exists(DIR));
+    assert!(!at.dir_exists("other"));
+    assert!(at.dir_exists("nonempty/child"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_rmdir_verbose_write_error_with_removal_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir(DIR);
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+
+    ucmd.args(&["-v", "missing", DIR])
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_is(
+            "rmdir: failed to remove 'missing': No such file or directory\n\
+             rmdir: write error: No space left on device\n",
+        );
+
+    assert!(!at.dir_exists(DIR));
+}
+
+#[test]
 fn test_rmdir_nonempty_directory_no_parents() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -208,6 +257,7 @@ fn test_rmdir_ignore_nonempty_no_permissions() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: read_link() not supported for symlinks")]
 fn test_rmdir_remove_symlink_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -222,6 +272,7 @@ fn test_rmdir_remove_symlink_file() {
 // This behavior is known to happen on Linux but not all Unixes
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: read_link() not supported for symlinks")]
 fn test_rmdir_remove_symlink_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -235,6 +286,7 @@ fn test_rmdir_remove_symlink_dir() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: read_link() not supported for symlinks")]
 fn test_rmdir_remove_symlink_dangling() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -247,6 +299,7 @@ fn test_rmdir_remove_symlink_dangling() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: read_link() not supported for symlinks")]
 fn test_rmdir_remove_symlink_dir_with_trailing_slashes() {
     // a symlink with trailing slashes should still be printing the 'Symbolic link not followed'
     // message

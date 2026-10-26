@@ -122,7 +122,7 @@ impl EscapedChar {
 
     /// Escape a character for C or locale quoting style.
     pub(super) fn new_c(c: char, quotes: Option<CQuotes>, dirname: bool) -> Self {
-        use EscapeState::*;
+        use EscapeState::{Backslash, Char, Octal};
         let init_state = match c {
             // When using locale quoting style, only escape the closing
             // character, not the opening one.
@@ -144,7 +144,7 @@ impl EscapedChar {
     }
 
     pub(super) fn new_shell(c: char, escape: bool, quotes: ShellQuotes) -> Self {
-        use EscapeState::*;
+        use EscapeState::{Backslash, Char, ForceQuote, Octal};
         let init_state = match c {
             _ if !escape && c.is_control() => Char(c),
             '\x07' => Backslash('a'),
@@ -169,6 +169,15 @@ impl EscapedChar {
             },
             _ => self,
         }
+    }
+
+    /// Returns true if character is escaping.
+    #[inline]
+    pub fn is_escaping(&self) -> bool {
+        matches!(
+            self.state,
+            EscapeState::Backslash(_) | EscapeState::Octal(_) | EscapeState::ForceQuote(_)
+        )
     }
 }
 

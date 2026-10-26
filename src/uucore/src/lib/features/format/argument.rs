@@ -46,7 +46,7 @@ pub struct FormatArguments<'a> {
 }
 
 impl<'a> FormatArguments<'a> {
-    /// Create a new FormatArguments from a slice of FormatArgument
+    /// Create a new [`FormatArguments`] from a slice of [`FormatArgument`]
     pub fn new(args: &'a [FormatArgument]) -> Self {
         Self {
             args,
@@ -126,7 +126,7 @@ impl<'a> FormatArguments<'a> {
             return Err(ExtendedParserError::NotNumeric);
         };
 
-        let (Some((b'"', bytes)) | Some((b'\'', bytes))) = s.split_first() else {
+        let Some((b'"' | b'\'', bytes)) = s.split_first() else {
             // This really can't happen, the string we are given must start with '/".
             debug_assert!(false);
             return Err(ExtendedParserError::NotNumeric);

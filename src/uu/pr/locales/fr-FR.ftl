@@ -51,7 +51,7 @@ pr-help-page-width =
                   tronquer les lignes, sauf si l'option -J est définie, aucune interférence
                   avec -S ou -s
 pr-help-across =
-  Modifier l'effet de l'option - colonne pour que les colonnes soient remplies
+  Modifier l'effet de l'option -COLONNE pour que les colonnes soient remplies
                   à travers la page dans un ordre round-robin (par exemple, quand colonne est 2,
                   la première ligne d'entrée va en tête de colonne 1, la seconde va en tête de colonne 2,
                   la troisième est la seconde ligne en colonne 1, et ainsi de suite).

@@ -328,3 +328,19 @@ fn test_win_path_prefixes() {
             .stdout_is(format!("{expected}\n"));
     }
 }
+
+#[test]
+#[cfg(windows)]
+fn test_win_non_unicode_path() {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+
+    // Even when removing the final component would leave valid Unicode,
+    // preserve the fallback for an input containing an unpaired surrogate.
+    let mut path: Vec<u16> = r"C:\foo\".encode_utf16().collect();
+    path.push(0xD800);
+    let path = OsString::from_wide(&path);
+
+    new_ucmd!().arg(&path).succeeds().stdout_is(".\n");
+    new_ucmd!().arg("-z").arg(&path).succeeds().stdout_is(".\0");
+}

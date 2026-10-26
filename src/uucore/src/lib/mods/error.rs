@@ -421,7 +421,12 @@ impl Error for UIoError {}
 
 impl Display for UIoError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        use std::io::ErrorKind::*;
+        use std::io::ErrorKind::{
+            AddrInUse, AddrNotAvailable, AlreadyExists, BrokenPipe, ConnectionAborted,
+            ConnectionRefused, ConnectionReset, Interrupted, InvalidData, InvalidInput,
+            IsADirectory, NotConnected, NotFound, PermissionDenied, TimedOut, UnexpectedEof,
+            WouldBlock, WriteZero,
+        };
 
         let message;
         let message = if self.inner.raw_os_error().is_some() {
