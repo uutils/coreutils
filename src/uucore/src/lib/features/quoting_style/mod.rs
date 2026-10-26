@@ -842,6 +842,31 @@ mod tests {
     }
 
     #[test]
+    fn test_line_and_paragraph_separators() {
+        // U+2028 and U+2029 are not controls but split lines, so they are
+        // escaped or hidden like controls, as GNU does.
+        for (name, octal) in [
+            ("x\u{2028}..", "\\342\\200\\250"),
+            ("x\u{2029}..", "\\342\\200\\251"),
+        ] {
+            let escape = format!("x{octal}..");
+            let c = format!("\"x{octal}..\"");
+            let shell_escape = format!("'x'$'{octal}''..'");
+            check_names_encoding(
+                UEncoding::Utf8,
+                name,
+                &[
+                    ("x?..", "literal"),
+                    (name, "literal-show"),
+                    (&escape, "escape"),
+                    (&c, "c"),
+                    (&shell_escape, "shell-escape"),
+                ],
+            );
+        }
+    }
+
+    #[test]
     fn test_non_unicode_bytes() {
         let ascii = b'_';
         let continuation = b'\xA7';
