@@ -784,9 +784,7 @@ fn test_chmod_symlink_non_existing_file() {
 
     let non_existing = "test_chmod_symlink_non_existing_file";
     let test_symlink = "test_chmod_symlink_non_existing_file_symlink";
-    let expected_stdout = &format!(
-        "failed to change mode of '{test_symlink}' from 0000 (---------) to 1500 (r-x-----T)"
-    );
+    let expected_stdout = &format!("'{test_symlink}' could not be accessed");
     let expected_stderr = &format!("cannot operate on dangling symlink '{test_symlink}'");
 
     at.symlink_file(non_existing, test_symlink);
@@ -963,9 +961,7 @@ fn test_chmod_file_symlink_after_non_existing_file() {
 
     let non_existing = "test_chmod_symlink_non_existing_file";
     let test_dangling_symlink = "test_chmod_symlink_non_existing_file_symlink";
-    let expected_stdout = &format!(
-        "failed to change mode of '{test_dangling_symlink}' from 0000 (---------) to 1500 (r-x-----T)"
-    );
+    let expected_stdout = &format!("'{test_dangling_symlink}' could not be accessed");
     let expected_stderr = &format!("cannot operate on dangling symlink '{test_dangling_symlink}'");
 
     at.touch(existing);
@@ -2067,4 +2063,40 @@ fn test_overlong_path_reports_os_error_and_continues() {
         .stderr_is(format!(
             "chmod: failed to get attributes of '{path}': {error}\n"
         ));
+}
+
+#[test]
+fn test_chmod_verbose_reports_inaccessible_operand() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    at.set_mode("f", 0o644);
+    ucmd.args(&["-v", "644", "missing", "f/", "f"])
+        .fails_with_code(1)
+        .stdout_is(
+            "'missing' could not be accessed\n\
+             'f/' could not be accessed\n\
+             mode of 'f' retained as 0644 (rw-r--r--)\n",
+        )
+        .stderr_is(
+            "chmod: cannot access 'missing': No such file or directory\n\
+             chmod: cannot access 'f/': Not a directory\n",
+        );
+}
+
+#[test]
+fn test_chmod_verbose_quiet_still_reports_inaccessible_operand() {
+    new_ucmd!()
+        .args(&["-v", "-f", "644", "missing"])
+        .fails_with_code(1)
+        .stdout_is("'missing' could not be accessed\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_chmod_changes_does_not_report_inaccessible_operand() {
+    new_ucmd!()
+        .args(&["-c", "644", "missing"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("chmod: cannot access 'missing': No such file or directory\n");
 }
