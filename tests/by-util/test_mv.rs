@@ -3069,7 +3069,7 @@ fn test_mv_cross_device_xattr_failure_keeps_the_rest() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let too_big = vec![b'x'; 8000];
+    let too_big = vec![b'x'; 128 * 1024];
     at.touch("probe");
     let probe = FxHashMap::from_iter([(OsString::from("user.probe"), too_big.clone())]);
     if apply_xattrs(at.plus("probe"), probe).is_ok() {
