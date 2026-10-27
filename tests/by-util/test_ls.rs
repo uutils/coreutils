@@ -5445,7 +5445,10 @@ fn test_ls_selinux_context_indicator() {
     // A file with an ACL as well as a context is listed with `+`: the context is
     // an extended attribute too, so it must not hide the ACL.
     at.touch("file_acl");
-    if set_posix_acl(&at.plus_as_string("file_acl")) {
+    if run_attr_tool(
+        "setfacl",
+        &["-m", "u:bin:r--", &at.plus_as_string("file_acl")],
+    ) {
         let result = scene.ucmd().args(&["-l", "file_acl"]).succeeds();
         let first_line = result.stdout_str().lines().next().unwrap().to_string();
         assert_eq!(
@@ -5454,7 +5457,6 @@ fn test_ls_selinux_context_indicator() {
             "Expected '+' indicator for an ACL plus SELinux context, got: {first_line}",
         );
     } else {
-        println!("ACL plus context check skipped: cannot set a POSIX ACL here");
     }
 
     // Test that ls -lnZ properly shows the context
@@ -7203,39 +7205,41 @@ fn test_acl_display_macos() {
         .stdout_matches(&re_without_acl);
 }
 
-/// Gives `path` a POSIX ACL that is more than its mode bits (a named user entry),
-/// through the raw attribute so that only `setfattr` is needed. Returns false when
-/// that is not possible here (no `setfattr`, or a file system without ACLs).
+/// Runs an attribute tool (`setfacl`, `setfattr`) on a test file. Returns false, after
+/// saying why, when it cannot be used here, so that the caller can skip its test.
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn set_posix_acl(path: &str) -> bool {
+fn run_attr_tool(tool: &str, args: &[&str]) -> bool {
     use std::process::Command;
 
-    // Version 2, then (tag, perm, id) entries: user::rw-, user:1000:r--, group::r--,
-    // mask::r--, other::r--.
-    let acl = "0x02000000\
-        01000600ffffffff\
-        02000400e8030000\
-        04000400ffffffff\
-        10000400ffffffff\
-        20000400ffffffff";
-    Command::new("setfattr")
-        .args(["-n", "system.posix_acl_access", "-v", acl, path])
-        .status()
-        .is_ok_and(|status| status.success())
+    // calling the command directly. xattr requires some dev packages to be installed
+    // and it adds a complex dependency just for a test
+    match Command::new(tool).args(args).status().map(|s| s.code()) {
+        Ok(Some(0)) => true,
+        Ok(_) => {
+            println!("test skipped: {tool} failed");
+            false
+        }
+        Err(e) => {
+            println!("test skipped: {tool} failed with {e}");
+            false
+        }
+    }
 }
 
 // A real ACL is listed with `+`, so the check below that other attributes are not
 // is not just passing because `+` never shows up.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
-fn test_acl_display_raw_posix_acl() {
+fn test_acl_display_access_acl_on_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.touch("with_acl");
     at.touch("without_acl");
 
-    if !set_posix_acl(&at.plus_as_string("with_acl")) {
-        println!("test skipped: cannot set a POSIX ACL here");
+    if !run_attr_tool(
+        "setfacl",
+        &["-m", "u:bin:r--", &at.plus_as_string("with_acl")],
+    ) {
         return;
     }
 
@@ -7263,32 +7267,21 @@ fn test_acl_display_raw_posix_acl() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_acl_display_ignores_other_xattrs() {
-    use std::process::Command;
-
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.touch("with_xattr");
 
-    match Command::new("setfattr")
-        .args([
+    if !run_attr_tool(
+        "setfattr",
+        &[
             "-n",
             "user.test",
             "-v",
             "1",
             &at.plus_as_string("with_xattr"),
-        ])
-        .status()
-        .map(|status| status.code())
-    {
-        Ok(Some(0)) => {}
-        Ok(_) => {
-            println!("test skipped: setfattr failed");
-            return;
-        }
-        Err(e) => {
-            println!("test skipped: setfattr failed with {e}");
-            return;
-        }
+        ],
+    ) {
+        return;
     }
 
     // Whatever follows the mode bits (nothing, or `.` for a security context on
