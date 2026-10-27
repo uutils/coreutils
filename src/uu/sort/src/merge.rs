@@ -27,6 +27,7 @@ use std::{
 };
 
 use uucore::error::{FromIo, UResult};
+use uucore::fs::FileInformation;
 
 use crate::{
     GlobalSettings, Output, SortError,
@@ -43,11 +44,14 @@ fn replace_output_file_in_input_files(
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<Option<TmpPath>> {
     let mut copy: Option<TmpPath> = None;
-    if let Some(Ok(output_path)) = output.map(|path| Path::new(path).canonicalize()) {
+    if let Some(output_path) = output.map(Path::new)
+        && let Ok(output_info) = FileInformation::from_path(output_path, true)
+    {
         for file in files {
-            if Path::new(file)
-                .canonicalize()
-                .is_ok_and(|file_path| file_path == output_path)
+            // Different hard links have different canonical paths but still
+            // share the file that will be truncated when output begins.
+            if FileInformation::from_path(Path::new(file), true)
+                .is_ok_and(|input_info| input_info == output_info)
             {
                 if let Some(copy) = &copy {
                     *file = copy.path().into();
@@ -56,7 +60,7 @@ fn replace_output_file_in_input_files(
                     // than `fs::copy`, which would put the source's permission bits
                     // on the temporary file and undo the 0600 it was created with.
                     let (mut copy_file, copy_path) = tmp_dir.next_file()?;
-                    let mut source = File::open(&output_path)
+                    let mut source = File::open(output_path)
                         .map_err(|error| SortError::OpenTmpFileFailed { error })?;
                     io::copy(&mut source, &mut copy_file)
                         .map_err(|error| SortError::OpenTmpFileFailed { error })?;
