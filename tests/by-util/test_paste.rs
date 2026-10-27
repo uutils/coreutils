@@ -650,8 +650,18 @@ fn test_serial_reports_unreadable_file_and_continues() {
     at.write("f2", "2\n");
     at.mkdir("d");
 
-    ucmd.args(&["-s", "f1", "d", "f2"])
-        .fails_with_code(1)
-        .stdout_is("1\n\n2\n")
-        .stderr_contains("d: Is a directory");
+    let result = ucmd.args(&["-s", "f1", "d", "f2"]).fails_with_code(1);
+    if cfg!(windows) {
+        // Opening a directory already fails on Windows.
+        result.stdout_is("1\n2\n");
+    } else if cfg!(target_os = "wasi") {
+        // Reading a directory yields EBADF under WASI.
+        result
+            .stdout_is("1\n\n2\n")
+            .stderr_contains("d: Bad file descriptor");
+    } else {
+        result
+            .stdout_is("1\n\n2\n")
+            .stderr_contains("d: Is a directory");
+    }
 }

@@ -13,7 +13,7 @@ use std::path::Path;
 use std::rc::Rc;
 use std::slice::Iter;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError, set_exit_code, strip_errno};
+use uucore::error::{UIoError, UResult, USimpleError, set_exit_code};
 use uucore::format_usage;
 use uucore::i18n::charmap::mb_char_len;
 use uucore::line_ending::LineEnding;
@@ -225,7 +225,7 @@ fn paste_serial(
             match File::open(Path::new(filename)) {
                 Ok(file) => InputSource::File(BufReader::new(file)),
                 Err(err) => {
-                    show_error!("{}: {}", filename.maybe_quote(), strip_errno(&err));
+                    show_error!("{}: {}", filename.maybe_quote(), UIoError::from(err));
                     had_error = true;
                     continue;
                 }
