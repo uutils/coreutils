@@ -305,6 +305,7 @@ fn test_sentence_regexp_newlines_are_spaces() {
 fn test_invalid_regexp(#[case] option: &str, #[case] pattern: &str) {
     new_ucmd!()
         .args(&[option, pattern])
+        .ignore_stdin_write_error()
         .pipe_in("ab\n")
         .fails_with_code(1)
         .no_stdout()
