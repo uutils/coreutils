@@ -503,7 +503,14 @@ fn test_mv_file_keeps_broken_symlink(#[case] args: &[&str], #[case] succeeds: bo
     at.touch("file");
     at.symlink_file("missing-target", "broken");
 
-    let result = ucmd.args(args).arg("file").arg("broken").pipe_in("n").run();
+    // Only -i reads the answer; the others may exit before stdin is written
+    let result = ucmd
+        .args(args)
+        .arg("file")
+        .arg("broken")
+        .pipe_in("n")
+        .ignore_stdin_write_error()
+        .run();
     assert_eq!(result.succeeded(), succeeds);
 
     assert!(at.is_symlink("broken"));
@@ -518,7 +525,11 @@ fn test_mv_file_backs_up_broken_symlink() {
     at.touch("file");
     at.symlink_file("missing-target", "broken");
 
-    ucmd.arg("-b").arg("file").arg("broken").succeeds().no_stderr();
+    ucmd.arg("-b")
+        .arg("file")
+        .arg("broken")
+        .succeeds()
+        .no_stderr();
 
     assert!(at.is_symlink("broken~"));
     assert!(at.file_exists("broken"));
