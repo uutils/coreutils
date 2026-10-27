@@ -597,6 +597,28 @@ fn test_chmod_readonly_filesystem() {
 }
 
 #[test]
+fn test_chmod_recursive_reports_real_error_below_operand() {
+    use rustix::process::geteuid;
+
+    // A file found while recursing that the user does not own must be
+    // reported with the real error (EPERM), like the operand itself, not as
+    // "cannot access ... Permission denied". '-L' makes the walk chmod the
+    // root-owned target of the symlink. 'u+r' keeps the mode the same.
+    let target = "/etc/passwd";
+    if geteuid().is_root() || metadata(target).map_or(1, |m| m.uid()) != 0 {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("tree");
+    at.symlink_file(target, "tree/link");
+
+    ucmd.args(&["-R", "-L", "u+r", "tree"])
+        .fails_with_code(1)
+        .stderr_is("chmod: changing permissions of 'tree/link': Operation not permitted\n");
+}
+
+#[test]
 #[allow(clippy::unreadable_literal)]
 fn test_chmod_recursive_correct_exit_code() {
     let (at, mut ucmd) = at_and_ucmd!();
