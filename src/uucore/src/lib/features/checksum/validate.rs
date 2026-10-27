@@ -869,10 +869,13 @@ fn process_checksum_line(
 
     // Use `LineInfo` to extract the data of a line.
     // Then, depending on its format, apply a different pre-treatment.
-    let line_info = LineInfo::parse(line, cached_line_format, opts.allow_empty_filename)
+    // The detected format is kept only if the line turns out to be properly
+    // formatted: an improper line must not decide how the next ones are read.
+    let mut line_format = *cached_line_format;
+    let line_info = LineInfo::parse(line, &mut line_format, opts.allow_empty_filename)
         .ok_or(LineCheckError::ImproperlyFormatted)?;
 
-    if line_info.format == LineFormat::AlgoBased {
+    let result = if line_info.format == LineFormat::AlgoBased {
         process_algo_based_line(&line_info, cli_algo_name, opts, last_algo)
     } else if let Some(cli_algo) = cli_algo_name {
         // If we match a non-algo based parser, we expect a cli argument
@@ -881,7 +884,12 @@ fn process_checksum_line(
     } else {
         // We have no clue of what algorithm to use
         Err(LineCheckError::ImproperlyFormatted)
+    };
+
+    if !matches!(result, Err(LineCheckError::ImproperlyFormatted)) {
+        *cached_line_format = line_format;
     }
+    result
 }
 
 fn process_checksum_file(
@@ -1340,6 +1348,82 @@ mod tests {
         );
         assert!(res.is_none());
         assert!(cached_line_format.is_none());
+    }
+
+    fn check_md5_line(
+        line: &str,
+        cached_line_format: &mut Option<LineFormat>,
+    ) -> Result<(), LineCheckError> {
+        let opts = ChecksumValidateOptions {
+            ignore_missing: true,
+            ..Default::default()
+        };
+        process_checksum_line(
+            OsStr::new(line),
+            Some(AlgoKind::Md5),
+            None,
+            opts,
+            cached_line_format,
+            &mut None,
+        )
+    }
+
+    #[test]
+    fn test_improperly_formatted_line_does_not_select_single_space_format() {
+        let mut cached_line_format = None;
+
+        let res = check_md5_line("2024 release", &mut cached_line_format);
+        assert!(matches!(res, Err(LineCheckError::ImproperlyFormatted)));
+        assert_eq!(cached_line_format, None);
+
+        let res = check_md5_line(
+            "d41d8cd98f00b204e9800998ecf8427e  missing",
+            &mut cached_line_format,
+        );
+        assert!(matches!(res, Err(LineCheckError::FileNotFound)));
+        assert_eq!(cached_line_format, Some(LineFormat::Untagged));
+    }
+
+    #[test]
+    fn test_improperly_formatted_line_does_not_select_untagged_format() {
+        let mut cached_line_format = None;
+
+        let res = check_md5_line("Checksums  for release", &mut cached_line_format);
+        assert!(matches!(res, Err(LineCheckError::ImproperlyFormatted)));
+        assert_eq!(cached_line_format, None);
+
+        let res = check_md5_line(
+            "d41d8cd98f00b204e9800998ecf8427e missing",
+            &mut cached_line_format,
+        );
+        assert!(matches!(res, Err(LineCheckError::FileNotFound)));
+        assert_eq!(cached_line_format, Some(LineFormat::SingleSpace));
+    }
+
+    #[test]
+    fn test_properly_formatted_line_selects_format_whatever_the_digest_check_outcome() {
+        let mut cached_line_format = None;
+        let res = check_md5_line(
+            "d41d8cd98f00b204e9800998ecf8427e  missing",
+            &mut cached_line_format,
+        );
+        assert!(matches!(res, Err(LineCheckError::FileNotFound)));
+        assert_eq!(cached_line_format, Some(LineFormat::Untagged));
+
+        let mut cached_line_format = None;
+        let res = check_md5_line(
+            "d41d8cd98f00b204e9800998ecf8427e Cargo.toml",
+            &mut cached_line_format,
+        );
+        assert!(matches!(res, Err(LineCheckError::DigestMismatch)));
+        assert_eq!(cached_line_format, Some(LineFormat::SingleSpace));
+
+        let res = check_md5_line(
+            "d41d8cd98f00b204e9800998ecf8427e  missing",
+            &mut cached_line_format,
+        );
+        assert!(matches!(res, Err(LineCheckError::FileNotFound)));
+        assert_eq!(cached_line_format, Some(LineFormat::SingleSpace));
     }
 
     #[test]

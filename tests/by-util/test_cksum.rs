@@ -3950,3 +3950,46 @@ fn test_numeric_looking_directory_names_are_kept_verbatim() {
         .fails_with_code(1)
         .stderr_is("cksum: 007: Is a directory\ncksum: 1e3: Is a directory\n");
 }
+
+#[test]
+fn test_check_improperly_formatted_line_does_not_select_format() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // The listed files were replaced, their genuine content is kept under the
+    // same names with a leading space.
+    for f in ["a", "c"] {
+        at.write(f, "tampered\n");
+        at.write(&format!(" {f}"), &format!("{f}\n"));
+    }
+    at.write(
+        "check.md5sum",
+        "2024 release\n\
+        60b725f10c9c85c70d97880dfe8191b3  a\n\
+        2cd6ee2c70b0bde53fbe6cac3c8b8bb1  c\n",
+    );
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("--algorithm=md5")
+        .arg("check.md5sum")
+        .fails_with_code(1)
+        .stdout_is("a: FAILED\nc: FAILED\n")
+        .stderr_contains("1 line is improperly formatted")
+        .stderr_contains("2 computed checksums did NOT match");
+
+    at.write("a", "a\n");
+    at.write(
+        "check_single_space.md5sum",
+        "Checksums  for release\n\
+        60b725f10c9c85c70d97880dfe8191b3 a\n",
+    );
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("--algorithm=md5")
+        .arg("check_single_space.md5sum")
+        .succeeds()
+        .stdout_is("a: OK\n")
+        .stderr_contains("1 line is improperly formatted");
+}
