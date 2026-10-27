@@ -45,7 +45,7 @@ pub(crate) fn copy_on_write(
 
     if source_is_stream {
         let mut src_file = open_source(source, nofollow)
-            .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+            .map_err(|e| CpError::SourceOpenError(e, context.to_owned()))?;
         let mut dst_file = create_dest_restrictive(dest, false).map_err(|e| {
             CpError::IoErrContext(
                 e,
@@ -70,8 +70,8 @@ pub(crate) fn copy_on_write(
     // O_NOFOLLOW on the *source* under -P (#10017). The destination open
     // intentionally does not use O_NOFOLLOW so that an existing symlink at
     // dest is followed, matching GNU cp.
-    let mut src_file =
-        open_source(source, nofollow).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+    let mut src_file = open_source(source, nofollow)
+        .map_err(|e| CpError::SourceOpenError(e, context.to_owned()))?;
     let mut dst_file = create_dest_restrictive(dest, false).map_err(|e| {
         CpError::IoErrContext(
             e,

@@ -66,6 +66,10 @@ pub enum CpError {
     #[error("{1}: {0}")]
     IoErrContext(io::Error, String),
 
+    /// A failure opening the source, distinguished from destination errors.
+    #[error("{1}: {0}")]
+    SourceOpenError(io::Error, String),
+
     /// General copy error
     #[error("{0}")]
     Error(String),
@@ -1404,7 +1408,10 @@ fn is_enotsup_error(error: &CpError) -> bool {
     const EOPNOTSUPP: i32 = 95;
 
     match error {
-        CpError::IoErr(e) | CpError::IoErrContext(e, _) | CpError::SelinuxContextIoErr(e, _) => {
+        CpError::IoErr(e)
+        | CpError::IoErrContext(e, _)
+        | CpError::SourceOpenError(e, _)
+        | CpError::SelinuxContextIoErr(e, _) => {
             let raw = e.raw_os_error();
             // WASI's sandbox has no chmod/chown syscalls at all (not merely an
             // unsupported combination of flags), so `fs::set_permissions` and
@@ -1435,7 +1442,9 @@ fn show_error_if_needed(error: &CpError) {
         }
         // Format IoErrContext using strip_errno to remove "(os error N)" suffix
         // for GNU-compatible output
-        CpError::IoErrContext(io_err, context) | CpError::SelinuxContextIoErr(io_err, context) => {
+        CpError::IoErrContext(io_err, context)
+        | CpError::SourceOpenError(io_err, context)
+        | CpError::SelinuxContextIoErr(io_err, context) => {
             show_error!("{context}: {}", strip_errno(io_err));
         }
         _ => {

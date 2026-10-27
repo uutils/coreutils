@@ -322,15 +322,17 @@ fn copy_direntry(
             // TODO What other kinds of errors, if any, should
             // cause us to continue walking the directory?
             match err {
-                CpError::IoErrContext(e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
+                CpError::SourceOpenError(e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
                     show!(uio_error!(
                         e,
                         "{}",
-                        translate!(
-                            "cp-error-cannot-open-for-reading",
-                            "source" => entry.source_relative.quote()
-                        ),
+                        translate!("cp-error-cannot-open-for-reading", "source" => entry.source_relative.quote()),
                     ));
+                }
+                CpError::IoErrContext(e, context)
+                    if e.kind() == io::ErrorKind::PermissionDenied =>
+                {
+                    show!(uio_error!(e, "{context}"));
                 }
                 e => return Err(e),
             }
