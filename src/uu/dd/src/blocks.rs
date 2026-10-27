@@ -82,9 +82,7 @@ impl Converter {
                 self.block(&apply_conversion(buf, ct), cbs, None, rstat, write)
             }
             ConversionMode::UnblockOnly(cbs) => self.unblock(buf, cbs, None, write),
-            ConversionMode::UnblockThenConvert(ct, cbs) => {
-                self.unblock(buf, cbs, Some(ct), write)
-            }
+            ConversionMode::UnblockThenConvert(ct, cbs) => self.unblock(buf, cbs, Some(ct), write),
             ConversionMode::ConvertThenUnblock(ct, cbs) => {
                 self.unblock(&apply_conversion(buf, ct), cbs, None, write)
             }
@@ -112,9 +110,7 @@ impl Converter {
                 self.finish_unblock(cbs, Some(ct), write)?
             }
             // The conversion is already applied before unblocking here.
-            ConversionMode::ConvertThenUnblock(_, cbs) => {
-                self.finish_unblock(cbs, None, write)?
-            }
+            ConversionMode::ConvertThenUnblock(_, cbs) => self.finish_unblock(cbs, None, write)?,
             ConversionMode::ConvertOnly(_) => return Ok(()),
         }
         self.flush(write)
@@ -548,7 +544,9 @@ mod tests {
             Ok(())
         };
         for buf in reads {
-            converter.convert(buf, &mut ReadStat::default(), &mut write).unwrap();
+            converter
+                .convert(buf, &mut ReadStat::default(), &mut write)
+                .unwrap();
         }
         converter.finish(&mut write).unwrap();
         out
