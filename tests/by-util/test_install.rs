@@ -2037,6 +2037,8 @@ fn test_install_root_combined() {
     run_and_check(&["-Cv", "-o1", "-g1", "a", "b"], "b", 1, 1);
     run_and_check(&["-Cv", "-o2", "-g1", "a", "b"], "b", 2, 1);
     run_and_check(&["-Cv", "-o2", "-g2", "a", "b"], "b", 2, 2);
+    // Without -o, -C must still give the file to the invoker.
+    run_and_check(&["-Cv", "-g2", "a", "b"], "b", 0, 2);
 
     run_and_check(&["-Cv", "-o2", "c", "d"], "d", 2, 0);
     run_and_check(&["-Cv", "c", "d"], "d", 0, 0);
