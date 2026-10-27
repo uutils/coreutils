@@ -261,7 +261,11 @@ fn finalize_shell_quoter(
     must_quote: bool,
     quotes: ShellQuotes,
 ) -> Vec<u8> {
-    let contains_quote_chars = must_quote || bytes_start_with(reference, SPECIAL_SHELL_CHARS_START);
+    // A lone brace is quoted, but braces inside a longer name are not.
+    let contains_quote_chars = must_quote
+        || bytes_start_with(reference, SPECIAL_SHELL_CHARS_START)
+        || reference == b"{"
+        || reference == b"}";
 
     if must_quote | contains_quote_chars {
         let mut quoted = Vec::<u8>::with_capacity(buffer.len() + 2);

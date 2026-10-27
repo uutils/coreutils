@@ -1187,6 +1187,14 @@ mod tests {
     }
 
     #[test]
+    fn test_lone_brace() {
+        check_names_both("{", &[("'{'", "shell"), ("'{'", "shell-escape")]);
+        check_names_both("}", &[("'}'", "shell"), ("'}'", "shell-escape")]);
+        check_names_both("{}", &[("{}", "shell"), ("{}", "shell-escape")]);
+        check_names_both("{a,b}", &[("{a,b}", "shell"), ("{a,b}", "shell-escape")]);
+    }
+
+    #[test]
     fn test_special_chars_in_double_quotes() {
         check_names_both(
             "can'$t",
