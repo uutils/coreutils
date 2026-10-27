@@ -567,9 +567,9 @@ fn safe_du(
             )?;
 
             if !options.separate_dirs {
-                my_stat.size += this_stat.size;
-                my_stat.blocks += this_stat.blocks;
-                my_stat.inodes += this_stat.inodes;
+                my_stat.size = my_stat.size.saturating_add(this_stat.size);
+                my_stat.blocks = my_stat.blocks.saturating_add(this_stat.blocks);
+                my_stat.inodes = my_stat.inodes.saturating_add(this_stat.inodes);
                 my_stat.latest_time = match (my_stat.latest_time, this_stat.latest_time) {
                     (Some(a), Some(b)) => Some(a.max(b)),
                     (a, None) => a,
@@ -581,8 +581,8 @@ fn safe_du(
                 depth: depth + 1,
             }))?;
         } else {
-            my_stat.size += this_stat.size;
-            my_stat.blocks += this_stat.blocks;
+            my_stat.size = my_stat.size.saturating_add(this_stat.size);
+            my_stat.blocks = my_stat.blocks.saturating_add(this_stat.blocks);
             my_stat.inodes += 1;
             my_stat.latest_time = match (my_stat.latest_time, this_stat.latest_time) {
                 (Some(a), Some(b)) => Some(a.max(b)),
@@ -728,9 +728,11 @@ fn du_regular(
                                 )?;
 
                                 if !options.separate_dirs {
-                                    my_stat.size += this_stat.size;
-                                    my_stat.blocks += this_stat.blocks;
-                                    my_stat.inodes += this_stat.inodes;
+                                    my_stat.size = my_stat.size.saturating_add(this_stat.size);
+                                    my_stat.blocks =
+                                        my_stat.blocks.saturating_add(this_stat.blocks);
+                                    my_stat.inodes =
+                                        my_stat.inodes.saturating_add(this_stat.inodes);
                                     my_stat.latest_time =
                                         match (my_stat.latest_time, this_stat.latest_time) {
                                             (Some(a), Some(b)) => Some(a.max(b)),
@@ -743,8 +745,8 @@ fn du_regular(
                                     depth: depth + 1,
                                 }))?;
                             } else {
-                                my_stat.size += this_stat.size;
-                                my_stat.blocks += this_stat.blocks;
+                                my_stat.size = my_stat.size.saturating_add(this_stat.size);
+                                my_stat.blocks = my_stat.blocks.saturating_add(this_stat.blocks);
                                 my_stat.inodes += 1;
                                 my_stat.latest_time =
                                     match (my_stat.latest_time, this_stat.latest_time) {
@@ -854,19 +856,19 @@ impl StatPrinter {
         } else {
             // The st_blocks field indicates the number of blocks allocated to the file, 512-byte units.
             // See: http://linux.die.net/man/2/stat
-            stat.blocks * 512
+            stat.blocks.saturating_mul(512)
         }
     }
 
     fn print_stats(&self, rx: &mpsc::Receiver<UResult<StatPrintInfo>>) -> UResult<()> {
-        let mut grand_total = 0;
+        let mut grand_total: u64 = 0;
         while let Ok(received) = rx.recv() {
             match received {
                 Ok(stat_info) => {
                     let size = self.choose_size(&stat_info.stat);
 
                     if stat_info.depth == 0 {
-                        grand_total += size;
+                        grand_total = grand_total.saturating_add(size);
                     }
 
                     if !self
