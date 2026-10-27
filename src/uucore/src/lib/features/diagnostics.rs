@@ -252,8 +252,9 @@ impl Snapshot {
         // actually printed.
         match arg.to_str() {
             // Operators such as `=` or `!=` are shell-special, but quoting them
-            // here would only obscure the expression.
-            Some(s) if !s.is_empty() && !s.chars().any(char::is_whitespace) => {
+            // here would only obscure the expression. Control characters must
+            // be escaped, or the terminal acts on them instead of showing them.
+            Some(s) if !s.is_empty() && !s.chars().any(|c| c.is_whitespace() || c.is_control()) => {
                 self.text.push_str(s);
             }
             _ => {
@@ -1077,6 +1078,19 @@ mod tests {
         let snap = snapshot(&["two words", "-lt", "5"]);
         assert_eq!(snap.text, "'two words' -lt 5");
         assert_eq!(&snap.text[snap.span_at(0).unwrap()], "'two words'");
+    }
+
+    #[test]
+    fn control_characters_in_arguments_are_escaped() {
+        for arg in ["7\x1b]0;title\x07", "a\x08b", "x\u{9b}2J"] {
+            let snap = snapshot(&[arg, "+", "1"]);
+            assert!(
+                !snap.text.chars().any(char::is_control),
+                "{arg:?} reached the source line raw: {:?}",
+                snap.text
+            );
+            assert_eq!(&snap.text[snap.span_at(2).unwrap()], "1");
+        }
     }
 
     #[cfg(unix)]
