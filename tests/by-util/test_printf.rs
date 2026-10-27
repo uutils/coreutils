@@ -46,6 +46,8 @@ use uutests::new_ucmd;
 #[case::sub_num_sci_trunc(&["pi is ~ %e", "3.1415926535"], "pi is ~ 3.141593e+00")]
 #[case::sub_num_dec_trunc(&["pi is ~ %g", "3.1415926535"], "pi is ~ 3.14159")]
 #[case::sub_num_sci_negative(&["-1234 is %e", "-1234"], "-1234 is -1.234000e+03")]
+#[case::sub_num_sci_round_half_even(&["%.1e %.0e %.0E %.2e %.0e", "0.125", "2.5", "-2.5", "1.125", "3.5"], "1.2e-01 2e+00 -2E+00 1.12e+00 4e+00")]
+#[case::sub_num_general_round_half_even(&["%.1g %.0g %.2g", "0.25", "2.5", "125"], "0.2 2 1.2e+02")]
 #[case::sub_num_hex_float_lower(&["%a", ".875"], "0xep-4")]
 #[case::sub_num_hex_float_upper(&["%A", ".875"], "0XEP-4")]
 #[case::sub_min_width(&["hello %7s", "world"], "hello   world")]
