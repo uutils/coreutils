@@ -1223,6 +1223,16 @@ mod tests {
                 ("'can'\\''\\t'", "shell-escape-always"),
             ],
         );
+
+        check_names_both(
+            "can'!t",
+            &[
+                ("'can'\\''!t'", "shell"),
+                ("'can'\\''!t'", "shell-always"),
+                ("'can'\\''!t'", "shell-escape"),
+                ("'can'\\''!t'", "shell-escape-always"),
+            ],
+        );
     }
 
     #[test]
