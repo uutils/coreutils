@@ -6,6 +6,8 @@
 // spell-checker:ignore bsdutils toybox
 
 #[cfg(target_os = "linux")]
+use rlimit::Resource;
+#[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -608,4 +610,48 @@ fn test_crlf_delimiter_not_eaten_by_an_empty_line() {
         .pipe_in(b"1\r\n\n")
         .succeeds()
         .stdout_is(expected);
+}
+
+#[test]
+// TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: rlimit/setrlimit not supported")]
+fn test_serial_opens_files_one_at_a_time() {
+    // With a serial (`-s`) run over many files and a small NOFILE limit,
+    // each file must be closed before the next one is opened.
+    let (at, mut ucmd) = at_and_ucmd!();
+    for i in 0..40 {
+        at.write(&format!("f{i}"), "a\nb\n");
+    }
+    let args: Vec<String> = (0..40).map(|i| format!("f{i}")).collect();
+    ucmd.arg("-s")
+        .args(&args)
+        .limit(Resource::NOFILE, 32, 32)
+        .succeeds()
+        .stdout_is("a\tb\n".repeat(40));
+}
+
+#[test]
+fn test_serial_reports_unopenable_file_and_continues() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f1", "1\n");
+    at.write("f2", "2\n");
+
+    ucmd.args(&["-s", "f1", "missing", "f2"])
+        .fails_with_code(1)
+        .stdout_is("1\n2\n")
+        .stderr_contains("missing: No such file or directory");
+}
+
+#[test]
+fn test_serial_reports_unreadable_file_and_continues() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f1", "1\n");
+    at.write("f2", "2\n");
+    at.mkdir("d");
+
+    ucmd.args(&["-s", "f1", "d", "f2"])
+        .fails_with_code(1)
+        .stdout_is("1\n\n2\n")
+        .stderr_contains("d: Is a directory");
 }

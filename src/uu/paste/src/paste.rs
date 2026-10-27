@@ -7,15 +7,17 @@ use clap::{Arg, ArgAction, Command};
 use std::cell::{OnceCell, RefCell};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Stdin, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, Read, Stdin, StdoutLock, Write, stdin, stdout};
 use std::iter::Cycle;
 use std::path::Path;
 use std::rc::Rc;
 use std::slice::Iter;
-use uucore::error::{UResult, USimpleError};
+use uucore::display::Quotable;
+use uucore::error::{UResult, USimpleError, set_exit_code, strip_errno};
 use uucore::format_usage;
 use uucore::i18n::charmap::mb_char_len;
 use uucore::line_ending::LineEnding;
+use uucore::show_error;
 use uucore::translate;
 
 mod options {
@@ -96,6 +98,19 @@ fn paste(
 
     let stdin_once_cell = OnceCell::<Rc<RefCell<Stdin>>>::new();
 
+    let line_ending_byte = u8::from(line_ending);
+    let mut stdout = stdout().lock();
+
+    if serial {
+        return paste_serial(
+            &filenames,
+            &unescaped_and_encoded_delimiters,
+            line_ending_byte,
+            &stdin_once_cell,
+            &mut stdout,
+        );
+    }
+
     let mut input_source_vec = Vec::with_capacity(filenames.len());
 
     for filename in filenames {
@@ -114,11 +129,9 @@ fn paste(
         input_source_vec.push(input_source);
     }
 
-    let line_ending_byte = u8::from(line_ending);
     let input_source_vec_len = input_source_vec.len();
-    let mut stdout = stdout().lock();
 
-    if !serial && input_source_vec_len == 1 {
+    if input_source_vec_len == 1 {
         // With a single input source (no -s), `paste` output is identical to input,
         // except that a missing final line ending must be added.
         // Stream directly to avoid unbounded line buffering on inputs like /dev/zero.
@@ -137,67 +150,120 @@ fn paste(
 
     let mut output = Vec::new();
 
-    if serial {
-        for input_source in &mut input_source_vec {
-            output.clear();
+    let mut eof = vec![false; input_source_vec_len];
 
-            while let read @ 1.. = input_source.read_until(line_ending_byte, &mut output)? {
-                remove_trailing_line_ending_byte(line_ending_byte, read, &mut output);
-                delimiter_state.write_delimiter(&mut output);
-            }
+    loop {
+        output.clear();
 
-            delimiter_state.remove_trailing_delimiter(&mut output);
+        let mut eof_count = 0;
 
-            stdout.write_all(&output)?;
-            stdout.write_all(line_ending_byte_array_ref)?;
-
-            // In serial mode each input file is concatenated onto its own
-            // output line, so the delimiter list has to restart from its first
-            // element for the next file rather than carrying the cycle over.
-            delimiter_state.reset_to_first_delimiter();
-        }
-    } else {
-        let mut eof = vec![false; input_source_vec_len];
-
-        loop {
-            output.clear();
-
-            let mut eof_count = 0;
-
-            for (i, input_source) in input_source_vec.iter_mut().enumerate() {
-                if eof[i] {
-                    eof_count += 1;
-                } else {
-                    match input_source.read_until(line_ending_byte, &mut output)? {
-                        0 => {
-                            eof[i] = true;
-                            eof_count += 1;
-                        }
-                        read => {
-                            remove_trailing_line_ending_byte(line_ending_byte, read, &mut output);
-                        }
+        for (i, input_source) in input_source_vec.iter_mut().enumerate() {
+            if eof[i] {
+                eof_count += 1;
+            } else {
+                match input_source.read_until(line_ending_byte, &mut output)? {
+                    0 => {
+                        eof[i] = true;
+                        eof_count += 1;
+                    }
+                    read => {
+                        remove_trailing_line_ending_byte(line_ending_byte, read, &mut output);
                     }
                 }
-
-                delimiter_state.write_delimiter(&mut output);
             }
 
-            if eof_count == input_source_vec_len {
-                break;
-            }
-
-            delimiter_state.remove_trailing_delimiter(&mut output);
-
-            stdout.write_all(&output)?;
-            stdout.write_all(line_ending_byte_array_ref)?;
-
-            // Quote:
-            //     When the -s option is not specified:
-            //     [...]
-            //     The delimiter shall be reset to the first element of list after each file operand is processed.
-            // https://pubs.opengroup.org/onlinepubs/9799919799/utilities/paste.html
-            delimiter_state.reset_to_first_delimiter();
+            delimiter_state.write_delimiter(&mut output);
         }
+
+        if eof_count == input_source_vec_len {
+            break;
+        }
+
+        delimiter_state.remove_trailing_delimiter(&mut output);
+
+        stdout.write_all(&output)?;
+        stdout.write_all(line_ending_byte_array_ref)?;
+
+        // Quote:
+        //     When the -s option is not specified:
+        //     [...]
+        //     The delimiter shall be reset to the first element of list after each file operand is processed.
+        // https://pubs.opengroup.org/onlinepubs/9799919799/utilities/paste.html
+        delimiter_state.reset_to_first_delimiter();
+    }
+
+    Ok(())
+}
+
+/// Process the input files one at a time, in serial mode (`-s`).
+///
+/// Unlike parallel mode, each file is opened, read and closed before the next
+/// one is opened, so the number of open file descriptors stays at one no
+/// matter how many file operands there are. A file that cannot be opened is
+/// reported on stderr and skipped, and the exit status reflects the failure,
+/// but the remaining files are still processed, like GNU `paste`.
+#[allow(clippy::too_many_arguments)]
+fn paste_serial(
+    filenames: &[OsString],
+    unescaped_and_encoded_delimiters: &[Box<[u8]>],
+    line_ending_byte: u8,
+    stdin_once_cell: &OnceCell<Rc<RefCell<Stdin>>>,
+    stdout: &mut StdoutLock<'_>,
+) -> UResult<()> {
+    let mut delimiter_state = DelimiterState::new(unescaped_and_encoded_delimiters);
+    let mut output = Vec::new();
+    let mut had_error = false;
+
+    for filename in filenames {
+        let mut input_source = if filename == "-" {
+            InputSource::StandardInput(
+                stdin_once_cell
+                    .get_or_init(|| Rc::new(RefCell::new(stdin())))
+                    .clone(),
+            )
+        } else {
+            match File::open(Path::new(filename)) {
+                Ok(file) => InputSource::File(BufReader::new(file)),
+                Err(err) => {
+                    show_error!("{}: {}", filename.maybe_quote(), strip_errno(&err));
+                    had_error = true;
+                    continue;
+                }
+            }
+        };
+
+        output.clear();
+
+        loop {
+            match input_source.read_until(line_ending_byte, &mut output) {
+                Ok(read @ 1..) => {
+                    remove_trailing_line_ending_byte(line_ending_byte, read, &mut output);
+                    delimiter_state.write_delimiter(&mut output);
+                }
+                Ok(_) => break,
+                Err(err) => {
+                    // e.g. a directory: report it and move on to the next
+                    // file, still ending this file's output line, like GNU.
+                    show_error!("{}: {}", filename.maybe_quote(), err);
+                    had_error = true;
+                    break;
+                }
+            }
+        }
+
+        delimiter_state.remove_trailing_delimiter(&mut output);
+
+        stdout.write_all(&output)?;
+        stdout.write_all(&[line_ending_byte])?;
+
+        // In serial mode each input file is concatenated onto its own
+        // output line, so the delimiter list has to restart from its first
+        // element for the next file rather than carrying the cycle over.
+        delimiter_state.reset_to_first_delimiter();
+    }
+
+    if had_error {
+        set_exit_code(1);
     }
 
     Ok(())
