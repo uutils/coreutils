@@ -12,6 +12,7 @@ use std::io::{BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::show;
 use uucore::translate;
 
 use uucore::format_usage;
@@ -36,8 +37,6 @@ enum FmtError {
     InvalidTabWidth(String),
     #[error("{}", translate!("fmt-error-first-option-width", "option" => .0))]
     FirstOptionWidth(char),
-    #[error("{}", translate!("fmt-error-read"))]
-    ReadError,
     #[error("{}", translate!("fmt-error-invalid-width-malformed", "width" => .0.quote()))]
     InvalidWidthMalformed(String),
 }
@@ -210,16 +209,31 @@ fn process_file(
         Box::new(stdin()) as Box<dyn Read + 'static>
     } else {
         let path = Path::new(file_name);
-        let f = File::open(path).map_err_context(
-            || translate!("fmt-error-cannot-open-for-reading", "file" => path.quote()),
-        )?;
-        if f.metadata()
-            .map_err_context(
-                || translate!("fmt-error-cannot-get-metadata", "file" => path.quote()),
-            )?
-            .is_dir()
-        {
-            return Err(FmtError::ReadError.into());
+        // Like GNU fmt, report a file that can't be read and go on with the next one.
+        let f = match File::open(path) {
+            Ok(f) => f,
+            Err(e) => {
+                show!(e.map_err_context(
+                    || translate!("fmt-error-cannot-open-for-reading", "file" => path.quote())
+                ));
+                return Ok(());
+            }
+        };
+        match f.metadata() {
+            Ok(m) if m.is_dir() => {
+                show!(USimpleError::new(
+                    1,
+                    translate!("fmt-error-reading-is-directory", "file" => path.quote())
+                ));
+                return Ok(());
+            }
+            Ok(_) => {}
+            Err(e) => {
+                show!(e.map_err_context(
+                    || translate!("fmt-error-cannot-get-metadata", "file" => path.quote())
+                ));
+                return Ok(());
+            }
         }
 
         Box::new(f) as Box<dyn Read + 'static>
