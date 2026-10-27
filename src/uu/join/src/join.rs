@@ -757,9 +757,13 @@ fn parse_print_settings(matches: &clap::ArgMatches) -> UResult<(bool, bool, bool
     Ok((print_joined, print_unpaired1, print_unpaired2))
 }
 
+/// A repeated `-j`, `-1` or `-2` is accepted when every occurrence names the same field.
 fn get_and_parse_field_number(matches: &clap::ArgMatches, key: &str) -> UResult<Option<usize>> {
-    let value = matches.get_one::<String>(key).map(String::as_str);
-    parse_field_number_option(value)
+    let mut field = None;
+    for value in matches.get_many::<String>(key).into_iter().flatten() {
+        field = Some(get_field_number(field, Some(parse_field_number(value)?))?);
+    }
+    Ok(field)
 }
 
 /// Parses the command-line arguments and constructs a `Settings` struct.
@@ -783,7 +787,15 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
     settings.ignore_case = matches.get_flag("i");
     settings.key1 = get_field_number(keys, key1)?;
     settings.key2 = get_field_number(keys, key2)?;
-    if let Some(value_os) = matches.get_one::<OsString>("t") {
+    let mut separators = matches.get_many::<OsString>("t").into_iter().flatten();
+    if let Some(value_os) = separators.next() {
+        // A repeated -t is accepted only when every occurrence is the same.
+        if separators.any(|other| other != value_os) {
+            return Err(USimpleError::new(
+                1,
+                translate!("join-error-incompatible-tabs"),
+            ));
+        }
         settings.separator = parse_separator(value_os)?;
     }
     if let Some(formats) = matches.get_many::<String>("o") {
@@ -921,6 +933,7 @@ pub fn uu_app() -> Command {
         .about(translate!("join-about"))
         .override_usage(format_usage(&translate!("join-usage")))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new("a")
                 .short('a')
@@ -956,6 +969,8 @@ pub fn uu_app() -> Command {
             Arg::new("j")
                 .short('j')
                 .value_name("FIELD")
+                .action(ArgAction::Append)
+                .num_args(1)
                 .allow_hyphen_values(true)
                 .help(translate!("join-help-j")),
         )
@@ -971,6 +986,8 @@ pub fn uu_app() -> Command {
             Arg::new("t")
                 .short('t')
                 .value_name("CHAR")
+                .action(ArgAction::Append)
+                .num_args(1)
                 .value_parser(ValueParser::os_string())
                 .allow_hyphen_values(true)
                 .help(translate!("join-help-t")),
@@ -979,6 +996,8 @@ pub fn uu_app() -> Command {
             Arg::new("1")
                 .short('1')
                 .value_name("FIELD")
+                .action(ArgAction::Append)
+                .num_args(1)
                 .allow_hyphen_values(true)
                 .help(translate!("join-help-1")),
         )
@@ -986,6 +1005,8 @@ pub fn uu_app() -> Command {
             Arg::new("2")
                 .short('2')
                 .value_name("FIELD")
+                .action(ArgAction::Append)
+                .num_args(1)
                 .allow_hyphen_values(true)
                 .help(translate!("join-help-2")),
         )
@@ -1205,12 +1226,5 @@ fn parse_file_number(value: &str) -> UResult<FileNum> {
             1,
             translate!("join-error-invalid-file-number-simple", "value" => value.quote()),
         )),
-    }
-}
-
-fn parse_field_number_option(value: Option<&str>) -> UResult<Option<usize>> {
-    match value {
-        None => Ok(None),
-        Some(val) => Ok(Some(parse_field_number(val)?)),
     }
 }

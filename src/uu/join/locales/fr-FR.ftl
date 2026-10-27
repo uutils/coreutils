@@ -34,6 +34,7 @@ join-error-missing-operand-after = opérande manquant après { $file }
 join-error-extra-operand = opérande supplémentaire { $operand }
 join-error-invalid-field-number = numéro de champ invalide : { $value }
 join-error-incompatible-fields = champs de jointure incompatibles { $field1 }, { $field2 }
+join-error-incompatible-tabs = tabulations incompatibles
 join-error-conflicting-empty-field = chaînes de remplacement des champs vides en conflit
 join-error-not-sorted = { $file }:{ $line_num } : n'est pas trié : { $content }
 join-error-input-not-sorted = l'entrée n'est pas dans l'ordre trié
