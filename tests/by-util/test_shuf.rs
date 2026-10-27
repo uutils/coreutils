@@ -576,6 +576,89 @@ fn test_output_not_truncated_when_random_source_missing() {
 }
 
 #[test]
+fn test_output_not_truncated_when_random_source_exhausted() {
+    let input = "one\ntwo\nthree\n".repeat(100);
+    for seed in ["", "x"] {
+        for output in ["in", "out"] {
+            let (at, mut ucmd) = at_and_ucmd!();
+            at.write("in", &input);
+            at.write("seed", seed);
+            at.write("out", "keep me\n");
+
+            ucmd.args(&["--random-source=seed", "-o", output, "in"])
+                .fails_with_code(1)
+                .no_stdout()
+                .stderr_is("shuf: end of random source\n");
+
+            assert_eq!(at.read("in"), input);
+            assert_eq!(at.read("out"), "keep me\n");
+        }
+    }
+}
+
+#[test]
+// Android's app-private filesystem refuses hard links.
+#[cfg(not(target_os = "android"))]
+fn test_hard_link_output_not_truncated_when_random_source_exhausted() {
+    let input = "one\ntwo\nthree\n".repeat(100);
+    for seed in ["", "x"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("in", &input);
+        at.write("seed", seed);
+        at.hard_link("in", "out");
+
+        ucmd.args(&["--random-source=seed", "-o", "out", "in"])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_is("shuf: end of random source\n");
+
+        assert_eq!(at.read("in"), input);
+        assert_eq!(at.read("out"), input);
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_symlink_output_not_truncated_when_random_source_exhausted() {
+    for seed in ["", "x"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let input = "one\ntwo\nthree\n".repeat(100);
+        at.write("in", &input);
+        at.write("seed", seed);
+        at.symlink_file("in", "out");
+
+        ucmd.args(&["--random-source=seed", "-o", "out", "in"])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_is("shuf: end of random source\n");
+
+        assert_eq!(at.read("in"), input);
+        assert_eq!(at.read("out"), input);
+    }
+}
+
+#[test]
+fn test_generated_output_not_truncated_when_random_source_exhausted() {
+    let mut echo_args = vec!["-e"];
+    echo_args.extend(["one", "two", "three"].repeat(100));
+    for seed in ["", "x"] {
+        for args in [&["-i1-100"][..], echo_args.as_slice()] {
+            let (at, mut ucmd) = at_and_ucmd!();
+            at.write("out", "keep me\n");
+            at.write("seed", seed);
+
+            ucmd.args(&["--random-source=seed", "-o", "out"])
+                .args(args)
+                .fails_with_code(1)
+                .no_stdout()
+                .stderr_is("shuf: end of random source\n");
+
+            assert_eq!(at.read("out"), "keep me\n");
+        }
+    }
+}
+
+#[test]
 fn test_zero_head_count_echo() {
     new_ucmd!()
         .arg("-n0")
@@ -1082,19 +1165,32 @@ fn test_gnu_compat_limited_from_stdin() {
         .stdout_is("6\n5\n1\n3\n2\n7\n4\n");
 }
 
-#[test]
-fn test_gnu_compat_range_no_repeat() {
+#[rstest::rstest]
+#[case::stdout(false)]
+#[case::output_file(true)]
+fn test_gnu_compat_range_no_repeat(#[case] output_file: bool) {
     let (at, mut ucmd) = at_and_ucmd!();
     at.append_bytes(
         "random_bytes.bin",
         b"\xd1\xfd\xb9\x9a\xf5\x81\x71\x42\xf9\x7a\x59\x79\xd4\x9c\x8c\x7d",
     );
 
-    ucmd.arg("--random-source=random_bytes.bin")
+    if output_file {
+        at.write("out", "replace me\n");
+        ucmd.args(&["-o", "out"]);
+    }
+    let result = ucmd
+        .arg("--random-source=random_bytes.bin")
         .arg("-i1-10")
-        .succeeds()
-        .no_stderr()
-        .stdout_is("10\n2\n8\n7\n3\n9\n6\n5\n1\n4\n");
+        .succeeds();
+    result.no_stderr();
+    let expected = "10\n2\n8\n7\n3\n9\n6\n5\n1\n4\n";
+    if output_file {
+        result.no_stdout();
+        assert_eq!(at.read("out"), expected);
+    } else {
+        result.stdout_is(expected);
+    }
 }
 
 // Test reproducibility of --random-seed.

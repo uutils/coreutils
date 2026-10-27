@@ -161,20 +161,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         _ => None,
     };
 
-    let mut output = open_output(options.output.as_deref())?;
-
     match mode {
         Mode::Echo(args) => {
             let mut evec: Vec<&OsStr> = args.iter().map(AsRef::as_ref).collect();
-            shuf_exec(&mut evec, &options, &mut rng, &mut output)?;
+            shuf_exec(&mut evec, &options, &mut rng)?;
         }
         Mode::InputRange(mut range) => {
-            shuf_exec(&mut range, &options, &mut rng, &mut output)?;
+            shuf_exec(&mut range, &options, &mut rng)?;
         }
         Mode::Default(_) => {
             let fdata = fdata.unwrap_or_default();
             let mut items = split_seps(&fdata, options.sep);
-            shuf_exec(&mut items, &options, &mut rng, &mut output)?;
+            shuf_exec(&mut items, &options, &mut rng)?;
         }
     }
 
@@ -417,14 +415,10 @@ fn handle_write_error(e: io::Error) -> Box<dyn uucore::error::UError> {
     e.map_err_context(move || ctx)
 }
 
-fn shuf_exec(
-    input: &mut impl Shufable,
-    opts: &Options,
-    rng: &mut WrappedRng,
-    output: &mut BufWriter<Box<dyn OsWrite>>,
-) -> UResult<()> {
+fn shuf_exec(input: &mut impl Shufable, opts: &Options, rng: &mut WrappedRng) -> UResult<()> {
     let sep = [opts.sep];
     if opts.repeat {
+        let mut output = open_output(opts.output.as_deref())?;
         if input.is_empty() {
             return Err(USimpleError::new(
                 1,
@@ -433,21 +427,36 @@ fn shuf_exec(
         }
         for _ in 0..opts.head_count {
             let r = input.choose(rng)?;
-            r.write_all_to(output).map_err(handle_write_error)?;
+            r.write_all_to(&mut output).map_err(handle_write_error)?;
             output.write_all(&sep).map_err(handle_write_error)?;
         }
+        output.flush().map_err(handle_write_error)
     } else {
         let shuffled = input.partial_shuffle(rng, opts.head_count)?;
-
-        for r in shuffled {
-            let r = r?;
-            r.write_all_to(output).map_err(handle_write_error)?;
-            output.write_all(&sep).map_err(handle_write_error)?;
+        // In-memory random generators cannot fail after initialization.
+        if opts.output.is_some() && matches!(opts.random_source, RandomSource::File(_)) {
+            // Range shuffles draw random bytes lazily. Finish all draws before
+            // truncating the output, which may also be the input (or a link to
+            // it). Buffer only references or integers, not the record contents.
+            let shuffled = shuffled.collect::<UResult<Vec<_>>>()?;
+            write_shuffled(shuffled.into_iter().map(Ok), opts)
+        } else {
+            write_shuffled(shuffled, opts)
         }
     }
-    output.flush().map_err(handle_write_error)?;
+}
 
-    Ok(())
+fn write_shuffled<T: Writable>(
+    shuffled: impl Iterator<Item = UResult<T>>,
+    opts: &Options,
+) -> UResult<()> {
+    let mut output = open_output(opts.output.as_deref())?;
+    let sep = [opts.sep];
+    for r in shuffled {
+        r?.write_all_to(&mut output).map_err(handle_write_error)?;
+        output.write_all(&sep).map_err(handle_write_error)?;
+    }
+    output.flush().map_err(handle_write_error)
 }
 
 /// Parse the `LO-HI` of `-i`.
