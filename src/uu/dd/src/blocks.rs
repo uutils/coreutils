@@ -105,12 +105,13 @@ impl Converter {
                     self.end_record(cbs, Some(ct), write)?;
                 }
             }
-            ConversionMode::UnblockOnly(cbs) => self.finish_unblock(cbs, None, write)?,
-            ConversionMode::UnblockThenConvert(ct, cbs) => {
-                self.finish_unblock(cbs, Some(ct), write)?
+            ConversionMode::UnblockOnly(cbs) | ConversionMode::ConvertThenUnblock(_, cbs) => {
+                // For ConvertThenUnblock the conversion is applied before unblocking here.
+                self.finish_unblock(cbs, None, write)?;
             }
-            // The conversion is already applied before unblocking here.
-            ConversionMode::ConvertThenUnblock(_, cbs) => self.finish_unblock(cbs, None, write)?,
+            ConversionMode::UnblockThenConvert(ct, cbs) => {
+                self.finish_unblock(cbs, Some(ct), write)?;
+            }
             ConversionMode::ConvertOnly(_) => return Ok(()),
         }
         self.flush(write)
