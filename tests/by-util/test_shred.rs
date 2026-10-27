@@ -134,6 +134,10 @@ fn test_shred_u() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: chmod has no ENOSYS-free syscall; -f can't restore write permission"
+)]
 fn test_shred_force() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -265,6 +269,10 @@ fn test_all_patterns_present() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: File::try_clone() (used for --random-source) is unsupported"
+)]
 fn test_random_source_regular_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -349,6 +357,7 @@ fn test_shred_rename_exhaustion() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_shred_non_utf8_paths() {
     use std::os::unix::ffi::OsStrExt;
     let ts = TestScenario::new(util_name!());
@@ -362,6 +371,10 @@ fn test_shred_non_utf8_paths() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: File::try_clone() (used for --random-source) is unsupported"
+)]
 fn test_shred_twenty_passes_with_known_random_source() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -418,6 +431,10 @@ fn test_shred_twenty_passes_with_known_random_source() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: File::try_clone() (used for --random-source) is unsupported"
+)]
 fn test_shred_nineteen_passes_first_and_last_are_random() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -567,4 +584,111 @@ fn test_couldnt_rename() {
         .args(&["-u", "/proc/self/mem"])
         .fails_with_code(1)
         .stderr_is("shred: /proc/self/mem: Couldn't rename to '/proc/self/000': No such file or directory\n");
+}
+
+#[rstest::rstest]
+#[case(&["1e3"], "shred: 1e3: No such file or directory\n")]
+#[case(&["007"], "shred: 007: Not a file\n")]
+#[cfg(not(windows))]
+fn test_numeric_looking_file_names_are_kept_verbatim(
+    #[case] args: &[&str],
+    #[case] expected: &str,
+) {
+    // File names such as "007" or "1e3" must not be reformatted as numbers
+    // in error messages.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("007");
+    ucmd.args(args).fails_with_code(1).stderr_is(expected);
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_numeric_looking_file_name_verbose_remove() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("2.50");
+    ucmd.args(&["-v", "-u", "-n", "0", "2.50"])
+        .succeeds()
+        .stderr_contains("shred: 2.50: removing\n")
+        .stderr_contains("shred: 2.50: removed\n");
+    assert!(!at.file_exists("2.50"));
+}
+
+// On Unix, '-' names the file attached to standard output, not a file
+// literally named '-'. Open without truncating so the test checks shredding.
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: stdout is not accessible through /dev/fd/1"
+)]
+fn test_shred_dash_wipes_stdout_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "secret.txt";
+    let original = b"secret data";
+    at.write_bytes(file, original);
+
+    let stdout = std::fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus(file))
+        .unwrap();
+
+    ucmd.args(&["-vn1", "-x", "-"])
+        .set_stdout(stdout)
+        .succeeds()
+        .stderr_only("shred: -: pass 1/1 (random)...\n");
+
+    assert!(at.file_exists(file));
+
+    let contents = at.read_bytes(file);
+    assert_eq!(contents.len(), original.len());
+    assert_ne!(contents.as_slice(), &original[..]);
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: stdout is not accessible through /dev/fd/1"
+)]
+fn test_shred_dash_remove_truncates_but_does_not_unlink_stdout() {
+    for remove_arg in [
+        "-u",
+        "--remove=unlink",
+        "--remove=wipe",
+        "--remove=wipesync",
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let file = "secret.txt";
+        at.write(file, "secret data");
+
+        let stdout = std::fs::OpenOptions::new()
+            .write(true)
+            .open(at.plus(file))
+            .unwrap();
+
+        ucmd.args(&["-n1", remove_arg, "-"])
+            .set_stdout(stdout)
+            .succeeds();
+
+        assert!(at.file_exists(file), "{remove_arg} must not unlink stdout");
+        assert!(
+            at.read_bytes(file).is_empty(),
+            "{remove_arg} must truncate stdout"
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: stdout is not accessible through /dev/fd/1"
+)]
+fn test_shred_dash_rejects_stdout_pipe() {
+    new_ucmd!()
+        .arg("-")
+        .set_stdout(std::process::Stdio::piped())
+        .fails_with_code(1)
+        .stderr_contains("shred: -:")
+        .stderr_does_not_contain("/dev/fd/1");
 }

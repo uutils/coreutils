@@ -23,6 +23,7 @@ use crate::quoting_style::locale_aware_shell_escape;
 use crate::sum::{self, Blake2b, Blake3, DigestOutput};
 use crate::{
     os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_warning_caps, translate,
+    translate_text,
 };
 
 /// To what level should checksum validation print logging info.
@@ -102,7 +103,7 @@ impl ChecksumResult {
 /// Represents a reason for which the processing of a checksum line
 /// could not proceed to digest comparison.
 enum LineCheckError {
-    /// a generic UError was encountered in sub-functions
+    /// a generic `UError` was encountered in sub-functions
     UError(Box<dyn UError>),
     /// the computed checksum digest differs from the expected one
     DigestMismatch,
@@ -132,7 +133,7 @@ impl From<ChecksumError> for LineCheckError {
 
 /// Represents an error that was encountered when processing a checksum file.
 enum FileCheckError {
-    /// a generic UError was encountered in sub-functions
+    /// a generic `UError` was encountered in sub-functions
     UError(Box<dyn UError>),
     /// reading of the checksum file failed
     CantOpenChecksumFile,
@@ -184,7 +185,7 @@ fn log_no_properly_formatted(filename: impl Display) {
         stderr(),
         "{}: {}",
         util_name(),
-        translate!("checksum-no-properly-formatted", "checksum_file" => filename)
+        translate_text!("checksum-no-properly-formatted", "checksum_file" => filename)
     );
 }
 
@@ -195,7 +196,7 @@ fn log_no_file_verified(filename: impl Display) {
         stderr(),
         "{}: {}",
         util_name(),
-        translate!("checksum-no-file-verified", "checksum_file" => filename)
+        translate_text!("checksum-no-file-verified", "checksum_file" => filename)
     );
 }
 
@@ -640,7 +641,7 @@ fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
     #[cfg(any(target_os = "wasi", windows))]
     if file.metadata().is_ok_and(|m| m.is_dir()) {
         return Err(io::Error::other(
-            translate!("error-is-a-directory", "file" => filename.maybe_quote()),
+            translate_text!("error-is-a-directory", "file" => filename.maybe_quote()),
         )
         .into());
     }
@@ -956,7 +957,7 @@ fn process_checksum_file(
                         stderr(),
                         "{}: {}",
                         util_name(),
-                        translate!("checksum-error-algo-bad-format", "file" => filename_input.maybe_quote(), "line" => i + 1, "algo" => algo)
+                        translate_text!("checksum-error-algo-bad-format", "file" => filename_input.maybe_quote(), "line" => i + 1, "algo" => algo)
                     );
                 }
             }

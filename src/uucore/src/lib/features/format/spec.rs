@@ -92,11 +92,11 @@ enum Length {
     Long,
     /// signed/unsigned long long int ("ll")
     LongLong,
-    /// intmax_t ("j")
+    /// `intmax_t` ("j")
     IntMaxT,
-    /// size_t ("z")
+    /// `size_t` ("z")
     SizeT,
-    /// ptrdiff_t ("t")
+    /// `ptrdiff_t` ("t")
     PtfDiffT,
     /// long double ("L")
     LongDouble,

@@ -61,6 +61,16 @@ fn test_long_format_multiple_users() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_long_format_numeric_operand_is_not_a_uid() {
+    // No account is named "+0", so it must not be looked up as uid 0.
+    new_ucmd!()
+        .args(&["-l", "+0"])
+        .succeeds()
+        .stdout_is(format!("Login name: {:<28}In real life:  ???\n", "+0"));
+}
+
+#[test]
 fn test_long_format_wo_user() {
     // "no username specified; at least one must be specified when using -l"
     new_ucmd!().arg("-l").fails();

@@ -42,11 +42,22 @@ jobs:
       env:
         CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime
         CARGO_TARGET_WASM32_WASIP2_RUNNER: wasmtime
+        # Trace WASI syscalls (strace-style) when Actions step debug logging is on;
+        # verbose, so off otherwise.
+        WASMTIME_LOG: ${{ runner.debug == '1' && 'wasmtime_wasi=trace' || '' }}
+        WASMTIME_LOG_NO_CONTEXT: ${{ runner.debug == '1' && '1' || '' }}
       run: |
-        # Get all utilities and exclude ones that don't compile for ${{ matrix.job.target }}
-        EXCLUDE="df|du|env|more"
-        UTILS=$(./util/show-utils.sh | tr ' ' '\n' | grep -vE "^($EXCLUDE)$" | sed 's/^/-p uu_/' | tr '\n' ' ')
-        cargo test --target ${{ matrix.job.target }} --no-default-features $UTILS
+        cargo test --target ${{ matrix.job.target }} --no-default-features \
+          $(cargo tree --depth 1 --format "{lib}" --features=feat_wasm --prefix none | sed -n 's/^uu_/-p &/p')
+    - name: Run uucore fs unit tests
+      env:
+        # The fs tests touch the filesystem, so wasmtime must preopen a
+        # directory; map the host cwd to the guest root so the tests' relative
+        # scratch directories resolve.
+        CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime --dir=.::/ --
+        CARGO_TARGET_WASM32_WASIP2_RUNNER: wasmtime --dir=.::/ --
+      run: |
+        cargo test --target ${{ matrix.job.target }} --no-default-features --features fs -p uucore fs::tests
     - name: Run integration tests via wasmtime
       if:  matrix.job.target == 'wasm32-wasip1'
       env:
@@ -61,20 +72,22 @@ jobs:
         # caret diagnostics; the host test crate does have them, hence the
         # not(wasi_runner) in the cfg guarding every `mod diagnostics`.
         # TODO: add integration tests for these tools as WASI support is extended:
-        #   cksum csplit dircolors fmt join ls mv nproc readlink
-        #   realpath rm seq shred sort split tsort
+        #   csplit ls rm seq sort split tsort
+        # nproc is not part of the default feature set, so it needs to be
+        # requested explicitly for the host test crate to compile its tests.
         UUTESTS_BINARY_PATH="$(pwd)/target/${{ matrix.job.target }}/debug/coreutils.wasm" \
         UUTESTS_WASM_RUNNER=wasmtime \
-        cargo test --test tests -- \
+        cargo test --test tests --features nproc -- \
           test_arch:: test_b2sum:: test_base32:: test_base64:: test_basenc:: \
-          test_basename:: test_cat:: test_comm:: test_cp:: test_cut:: test_date:: \
-          test_dir:: test_dirname:: test_echo:: test_expand:: test_expr:: \
-          test_factor:: test_false:: test_fold:: test_head:: test_link:: test_ln:: \
+          test_basename:: test_cat:: test_cksum:: test_comm:: test_cp:: test_cut:: test_date:: \
+          test_dir:: test_dircolors:: test_dirname:: test_echo:: test_expand:: test_expr:: \
+          test_factor:: test_false:: test_fmt:: test_fold:: test_head:: test_join:: test_link:: test_ln:: \
           test_ls::test_ls_a_dotdot_no_error_on_wasi \
           test_ls::test_ls_al_no_capabilities_insufficient_on_wasi \
-          test_md5sum:: test_mkdir:: test_mktemp:: test_nl:: test_numfmt:: test_od:: \
+          test_md5sum:: test_mkdir:: test_mktemp:: test_mv:: test_nl:: test_nproc:: test_numfmt:: test_od:: \
           test_paste:: test_pathchk:: test_pr:: test_printenv:: test_printf:: test_ptx:: \
-          test_pwd:: test_rmdir:: test_sha1sum:: test_sha224sum:: test_sha256sum:: test_sha384sum:: \
-          test_sha512sum:: test_shuf:: test_sleep:: test_sum:: test_tail:: test_tee:: \
+          test_pwd:: test_readlink:: test_realpath:: test_rmdir:: test_sha1sum:: test_sha224sum:: test_sha256sum:: \
+          test_sha384sum:: test_sha512sum:: test_shred:: test_shuf:: test_sleep:: \
+          test_sum:: test_tail:: test_tee:: \
           test_test:: test_touch:: test_tr:: test_true:: test_truncate:: test_uname:: \
           test_uniq:: test_unexpand:: test_unlink:: test_vdir:: test_wc:: test_yes::

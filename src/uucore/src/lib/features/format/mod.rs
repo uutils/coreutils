@@ -177,7 +177,7 @@ impl Display for FormatError {
 const MAX_FORMAT_WIDTH: usize = 1_000_000;
 
 /// Check if a width is too large for formatting.
-/// Returns an error if the width exceeds MAX_FORMAT_WIDTH.
+/// Returns an error if the width exceeds [`MAX_FORMAT_WIDTH`].
 fn check_width(width: usize) -> std::io::Result<()> {
     if width > MAX_FORMAT_WIDTH {
         Err(std::io::Error::new(

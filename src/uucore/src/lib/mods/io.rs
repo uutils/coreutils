@@ -102,7 +102,7 @@ impl OwnedFileDescriptorOrHandle {
         Stdio::from(self.fx)
     }
 
-    /// WASI: Stdio::from(OwnedFd) is not available, convert via File instead.
+    /// WASI: `Stdio::from(OwnedFd)` is not available, convert via File instead.
     #[cfg(target_os = "wasi")]
     pub fn into_stdio(self) -> Stdio {
         Stdio::from(File::from(self.fx))

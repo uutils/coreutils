@@ -320,25 +320,20 @@ impl<Sep: Separator> Input<Sep> {
         }
     }
 
+    /// Compare two join fields. Like `sort -k`, a field missing from a line
+    /// that is too short compares as an empty field.
     fn compare(&self, field1: Option<&[u8]>, field2: Option<&[u8]>) -> Ordering {
-        if let (Some(field1), Some(field2)) = (field1, field2) {
-            if self.ignore_case {
-                let field1 = CaseInsensitiveSlice { v: field1 };
-                let field2 = CaseInsensitiveSlice { v: field2 };
-                field1.cmp(&field2)
-            } else if self.use_locale {
-                locale_cmp(field1, field2)
-            } else {
-                field1.cmp(field2)
-            }
+        let field1 = field1.unwrap_or_default();
+        let field2 = field2.unwrap_or_default();
+
+        if self.ignore_case {
+            let field1 = CaseInsensitiveSlice { v: field1 };
+            let field2 = CaseInsensitiveSlice { v: field2 };
+            field1.cmp(&field2)
+        } else if self.use_locale {
+            locale_cmp(field1, field2)
         } else {
-            match field1 {
-                Some(_) => Ordering::Greater,
-                None => match field2 {
-                    Some(_) => Ordering::Less,
-                    None => Ordering::Equal,
-                },
-            }
+            field1.cmp(field2)
         }
     }
 }
@@ -511,9 +506,10 @@ impl<'a> State<'a> {
         other: &State,
         repr: &Repr<'a, Sep>,
     ) -> io::Result<()> {
-        let key = self.get_current_key();
-
         for line1 in &self.seq {
+            // With -i the keys of a group can differ in case, so print
+            // each line's own key.
+            let key = line1.get_field(self.key);
             for line2 in &other.seq {
                 if repr.uses_format() {
                     repr.write_format(writer, |spec| match *spec {

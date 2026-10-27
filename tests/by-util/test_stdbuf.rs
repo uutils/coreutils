@@ -447,7 +447,7 @@ fn test_stdbuf_child_execs_command() {
 
 /// Verify that stdbuf does not leak temporary directories.
 /// Each invocation should clean up its own tmpdir.
-/// Regression test for https://github.com/uutils/coreutils/issues/13939
+/// Regression test for <https://github.com/uutils/coreutils/issues/13939>
 #[test]
 #[cfg(all(target_os = "linux", not(feature = "feat_external_libstdbuf")))]
 fn test_stdbuf_no_tmpdir_leak() {
@@ -483,7 +483,7 @@ fn test_stdbuf_no_tmpdir_leak() {
 
 /// Verify that the temporary directory created for libstdbuf.so is private (0700)
 /// and the embedded library file is owner read/write only (0600).
-/// Regression test for https://github.com/uutils/coreutils/issues/13939
+/// Regression test for <https://github.com/uutils/coreutils/issues/13939>
 #[test]
 #[cfg(all(target_os = "linux", not(feature = "feat_external_libstdbuf")))]
 fn test_stdbuf_tmpdir_is_private() {

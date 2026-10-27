@@ -3,10 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore Nofile nonewline cmdline setrlimit ELOOP bcde acde
+// spell-checker:ignore NOFILE nonewline cmdline setrlimit ELOOP bcde acde
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use rustix::process::Resource;
+#[cfg(target_os = "linux")]
+use rlimit::Resource;
 #[cfg(unix)]
 use std::fs::File;
 use std::fs::OpenOptions;
@@ -121,7 +121,6 @@ fn test_fifo_symlink() {
 
 #[test]
 // TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
-// #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(target_os = "linux")]
 #[cfg_attr(wasi_runner, ignore = "WASI: rlimit/setrlimit not supported")]
 fn test_closes_file_descriptors() {
@@ -135,7 +134,7 @@ fn test_closes_file_descriptors() {
             "alpha.txt",
             "alpha.txt",
         ])
-        .limit(Resource::Nofile, 9, 9)
+        .limit(Resource::NOFILE, 9, 9)
         .succeeds();
 }
 
@@ -205,8 +204,8 @@ fn test_piped_to_dev_null() {
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn test_piped_to_dev_full() {
     for append in [true, false] {
-        let s = TestScenario::new(util_name!());
-        {
+        for args in [&["-", "/dev/zero"][..], &["-n", "-", "/dev/zero"][..]] {
+            let s = TestScenario::new(util_name!());
             let dev_full = OpenOptions::new()
                 .write(true)
                 .append(append)
@@ -215,10 +214,11 @@ fn test_piped_to_dev_full() {
 
             s.ucmd()
                 .set_stdout(dev_full)
+                .args(args)
                 .pipe_in_fixture("alpha.txt")
                 .ignore_stdin_write_error()
                 .fails()
-                .stderr_contains("No space left on device");
+                .stderr_is("cat: write error: No space left on device\n");
         }
     }
 }
@@ -392,6 +392,47 @@ fn test_squeeze_all_files_repeated() {
     ucmd.args(&["-s", "input1", "input2", "-s"])
         .succeeds()
         .stdout_only("a\n\nb");
+}
+
+#[test]
+fn test_squeeze_keeps_blank_after_line_split_across_files() {
+    // the newline that finishes a line begun in the previous file is not a blank line
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input1", "a");
+    at.write("input2", "\n\nb\n");
+    ucmd.args(&["-s", "input1", "input2"])
+        .succeeds()
+        .stdout_only("a\n\nb\n");
+}
+
+#[test]
+fn test_squeeze_keeps_blank_after_line_split_across_file_and_stdin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input", "a");
+    ucmd.args(&["-s", "input", "-"])
+        .pipe_in("\n\nb\n")
+        .succeeds()
+        .stdout_only("a\n\nb\n");
+}
+
+#[test]
+fn test_squeeze_keeps_numbered_blank_after_line_split_across_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input1", "a");
+    at.write("input2", "\n\nb\n");
+    ucmd.args(&["-s", "-n", "input1", "input2"])
+        .succeeds()
+        .stdout_only("     1\ta\n     2\t\n     3\tb\n");
+}
+
+#[test]
+fn test_squeeze_blank_lines_repeated_across_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input1", "a\n\n");
+    at.write("input2", "\n\nb\n");
+    ucmd.args(&["-s", "input1", "input2"])
+        .succeeds()
+        .stdout_only("a\n\nb\n");
 }
 
 #[test]
@@ -854,7 +895,7 @@ fn test_child_when_pipe_in() {
 }
 
 /// Regression test for GitHub issue #9769
-/// https://github.com/uutils/coreutils/issues/9769
+/// <https://github.com/uutils/coreutils/issues/9769>
 ///
 /// Bug: Utilities panic when output is redirected to /dev/full
 /// Location: src/uucore/src/lib/mods/error.rs:751 - `.unwrap()` causes panic

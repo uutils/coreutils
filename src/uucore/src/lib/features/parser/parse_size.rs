@@ -207,25 +207,25 @@ fn numeric_prefix(size: &str, number_system: NumberSystem) -> &str {
 }
 
 impl<'parser> Parser<'parser> {
-    /// Change allow_list of the parser - whitelist for the suffix
+    /// Change `allow_list` of the parser - whitelist for the suffix
     pub fn with_allow_list(&mut self, allow_list: &'parser [&str]) -> &mut Self {
         self.allow_list = Some(allow_list);
         self
     }
 
-    /// Change default_unit of the parser - when no suffix is provided
+    /// Change `default_unit` of the parser - when no suffix is provided
     pub fn with_default_unit(&mut self, default_unit: &'parser str) -> &mut Self {
         self.default_unit = Some(default_unit);
         self
     }
 
-    /// Change b_byte_count of the parser - to treat "b" as a "byte count" instead of "block"
+    /// Change `b_byte_count` of the parser - to treat "b" as a "byte count" instead of "block"
     pub fn with_b_byte_count(&mut self, value: bool) -> &mut Self {
         self.b_byte_count = value;
         self
     }
 
-    /// Change no_empty_numeric of the parser - to allow empty numeric strings
+    /// Change `no_empty_numeric` of the parser - to allow empty numeric strings
     pub fn with_allow_empty_numeric(&mut self, value: bool) -> &mut Self {
         self.no_empty_numeric = value;
         self
@@ -533,7 +533,7 @@ pub fn parse_size_u128_max(size: &str) -> Result<u128, ParseSizeError> {
     Parser::default().parse_u128_max(size)
 }
 
-/// Error type for parse_size
+/// Error type for [`parse_size`]
 #[derive(Debug, PartialEq, Eq)]
 pub enum ParseSizeError {
     /// Suffix

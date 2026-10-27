@@ -16,7 +16,7 @@ path = "src/tty.rs"
 test = false
 doctest = false
 
-[target.'cfg(not(target_os = "fuchsia"))'.dependencies]
+[target.'cfg(any(all(unix, not(target_os = "fuchsia")), windows, target_os = "wasi"))'.dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
 uucore = { workspace = true, features = ["fs"] }
@@ -36,3 +36,4 @@ workspace = true
 [[bin]]
 name = "tty"
 path = "src/main.rs"
+required-features = ["uucore/default"]

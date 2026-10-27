@@ -346,7 +346,10 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
             );
             all_successful = false;
         } else if let Err(e) = link(srcpath, &targetpath, settings) {
-            show_error!("{e}");
+            // A declined prompt has nothing to report.
+            if !matches!(e, LnError::SomeLinksFailed) {
+                show_error!("{e}");
+            }
             all_successful = false;
         }
 
@@ -403,19 +406,12 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
 
     if dst.is_symlink() || dst.exists() {
         backup_path = backup_control::get_backup_path(settings.backup, dst, &settings.suffix);
-        if settings.backup == BackupMode::Existing && !settings.symbolic {
-            // when ln --backup f f, it should detect that it is the same file
+        if settings.backup != BackupMode::None && !settings.symbolic {
+            // `ln --backup f f`: the backup would move `f` away before the
+            // link is made, so detect the same file first, for any backup mode
             if paths_refer_to_same_file(src, dst, true) && is_same_entry(src, dst) {
                 return Err(LnError::SameFile(src.to_owned(), dst.to_owned()));
             }
-        }
-        if let Some(ref p) = backup_path {
-            fs::rename(dst, p).map_err(|e| {
-                LnError::IoContext(
-                    UIoError::from(e),
-                    translate!("ln-cannot-backup", "file" => dst.quote()),
-                )
-            })?;
         }
         match settings.overwrite {
             OverwriteMode::NoClobber => {}
@@ -427,7 +423,9 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
                 overwrite_on_conflict = true;
             }
             OverwriteMode::Force => {
-                if !dst.is_symlink()
+                // A backup moves the destination away before the link is made.
+                if backup_path.is_none()
+                    && !dst.is_symlink()
                     && paths_refer_to_same_file(src, dst, true)
                     && is_same_entry(src, dst)
                 {
@@ -436,6 +434,14 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
                 }
                 overwrite_on_conflict = true;
             }
+        }
+        if let Some(ref p) = backup_path {
+            fs::rename(dst, p).map_err(|e| {
+                LnError::IoContext(
+                    UIoError::from(e),
+                    translate!("ln-cannot-backup", "file" => dst.quote()),
+                )
+            })?;
         }
     }
 
@@ -517,14 +523,50 @@ pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
 #[cfg(windows)]
 pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result<()> {
     use std::os::windows::fs::{symlink_dir, symlink_file};
-    if src.as_ref().is_dir() {
+    // Windows does not resolve `/` inside a symlink target, so store it with `\`.
+    let src = windows_link_target(src.as_ref());
+    if src.is_dir() {
         symlink_dir(src, dst)
     } else {
         symlink_file(src, dst)
     }
 }
 
+#[cfg(windows)]
+fn windows_link_target(src: &Path) -> PathBuf {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    let wide: Vec<u16> = src
+        .as_os_str()
+        .encode_wide()
+        .map(|c| {
+            if c == u16::from(b'/') {
+                u16::from(b'\\')
+            } else {
+                c
+            }
+        })
+        .collect();
+    PathBuf::from(OsString::from_wide(&wide))
+}
+
 #[cfg(any(unix, target_os = "wasi"))]
 pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result<()> {
     rustix::fs::symlink(src.as_ref(), dst.as_ref()).map_err(io::Error::from)
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn link_target_uses_backslashes() {
+        assert_eq!(
+            windows_link_target(Path::new("test/dir/file")),
+            PathBuf::from("test\\dir\\file")
+        );
+        assert_eq!(
+            windows_link_target(Path::new("..\\up/mixed\\sep/file")),
+            PathBuf::from("..\\up\\mixed\\sep\\file")
+        );
+    }
 }

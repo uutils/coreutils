@@ -50,6 +50,7 @@ cp-help-progress = Afficher une barre de progression. Note : cette fonctionnalit
 cp-help-copy-contents = Non implémenté : copier le contenu des fichiers spéciaux lors de la récursion
 
 # Messages d'erreur
+cp-error-relative-symlink-not-in-cwd = { $dest } : les liens symboliques relatifs ne peuvent être créés que dans le répertoire courant
 cp-error-missing-file-operand = opérande fichier manquant
 cp-error-missing-destination-operand = opérande fichier de destination manquant après { $source }
 cp-error-extra-operand = opérande supplémentaire { $operand }

@@ -1076,33 +1076,37 @@ fn test_negative_offset() {
 
 #[test]
 fn test_relative_weekdays() {
-    // Truncate time component to midnight
-    let today = Timestamp::now().to_zoned(TimeZone::UTC).date();
     // Loop through each day of the week, starting with today
     for offset in 0..7 {
         for direction in ["last", "this", "next"] {
-            let weekday = today
-                .checked_add(offset.days())
-                .unwrap()
-                .strftime("%a")
-                .to_string();
-            new_ucmd!()
-                .arg("-d")
-                .arg(format!("{direction} {weekday}"))
-                .arg("--rfc-3339=seconds")
-                .arg("--utc")
-                .succeeds()
-                .stdout_str_check(|out| {
-                    let result = out.trim().parse::<Timestamp>().unwrap();
-                    let expected = match (direction, offset) {
-                        ("last", _) => today.checked_sub((7 - offset).days()).unwrap(),
-                        ("this", 0) => today,
-                        ("next", 0) => today.checked_add(7.days()).unwrap(),
-                        _ => today.checked_add(offset.days()).unwrap(),
-                    };
-                    let expected_ts = expected.to_zoned(TimeZone::UTC).unwrap().timestamp();
-                    result == expected_ts
-                });
+            // `date` reads the clock itself; run it again if UTC midnight passed meanwhile
+            for _ in 0..2 {
+                let today = Timestamp::now().to_zoned(TimeZone::UTC).date();
+                let weekday = today
+                    .checked_add(offset.days())
+                    .unwrap()
+                    .strftime("%a")
+                    .to_string();
+                let result = new_ucmd!()
+                    .arg("-d")
+                    .arg(format!("{direction} {weekday}"))
+                    .arg("--rfc-3339=seconds")
+                    .arg("--utc")
+                    .succeeds();
+                if Timestamp::now().to_zoned(TimeZone::UTC).date() != today {
+                    continue;
+                }
+                let expected = match (direction, offset) {
+                    ("last", _) => today.checked_sub((7 - offset).days()).unwrap(),
+                    ("this", 0) => today,
+                    ("next", 0) => today.checked_add(7.days()).unwrap(),
+                    _ => today.checked_add(offset.days()).unwrap(),
+                };
+                let expected_ts = expected.to_zoned(TimeZone::UTC).unwrap().timestamp();
+                let got = result.stdout_str().trim().parse::<Timestamp>().unwrap();
+                assert_eq!(got, expected_ts);
+                break;
+            }
         }
     }
 }
@@ -1439,37 +1443,32 @@ fn test_date_resolution_no_combine() {
 fn test_date_numeric_d_basic_utc() {
     // Verify GNU-compatible pure-digit parsing for -d STRING under UTC
     // 0/00 -> today at 00:00; 7/07 -> today at 07:00; 0700 -> today at 07:00
-    let today = Timestamp::now().to_zoned(TimeZone::UTC).date();
-    let yyyy = today.year();
-    let mm = today.month();
-    let dd = today.day();
+    for (input, hour, minute) in [("0", 0, 0), ("7", 7, 0), ("0700", 7, 0)] {
+        let before = Timestamp::now().to_zoned(TimeZone::UTC).date();
+        let out = new_ucmd!()
+            .env("TZ", "UTC0")
+            .arg("-d")
+            .arg(input)
+            .arg("+%F %T %Z")
+            .succeeds();
 
-    let mk =
-        |h: u32, m: u32| -> String { format!("{yyyy:04}-{mm:02}-{dd:02} {h:02}:{m:02}:00 UTC\n") };
-
-    new_ucmd!()
-        .env("TZ", "UTC0")
-        .arg("-d")
-        .arg("0")
-        .arg("+%F %T %Z")
-        .succeeds()
-        .stdout_only(mk(0, 0));
-
-    new_ucmd!()
-        .env("TZ", "UTC0")
-        .arg("-d")
-        .arg("7")
-        .arg("+%F %T %Z")
-        .succeeds()
-        .stdout_only(mk(7, 0));
-
-    new_ucmd!()
-        .env("TZ", "UTC0")
-        .arg("-d")
-        .arg("0700")
-        .arg("+%F %T %Z")
-        .succeeds()
-        .stdout_only(mk(7, 0));
+        let after = Timestamp::now().to_zoned(TimeZone::UTC).date();
+        let expected = |day: jiff::civil::Date| {
+            format!(
+                "{:04}-{:02}-{:02} {hour:02}:{minute:02}:00 UTC\n",
+                day.year(),
+                day.month(),
+                day.day(),
+            )
+        };
+        out.no_stderr();
+        if before == after {
+            out.stdout_is(expected(before));
+        } else {
+            // UTC midnight passed while `date` ran, so either day is right
+            out.stdout_is_any(&[expected(before), expected(after)]);
+        }
+    }
 }
 
 #[test]
@@ -1881,8 +1880,6 @@ fn test_date_military_timezone_with_offset_variations() {
 
 #[test]
 fn test_date_military_timezone_with_offset_and_date() {
-    let today = Timestamp::now().to_zoned(TimeZone::UTC).date();
-
     let test_cases = vec![
         ("m", -1), // M = UTC+12
         ("a", -1), // A = UTC+1
@@ -1903,17 +1900,28 @@ fn test_date_military_timezone_with_offset_and_date() {
     ];
 
     for (input, day_delta) in test_cases {
-        let expected_date = today.checked_add(day_delta.days()).unwrap();
-
-        let expected = format!("{}\n", expected_date.strftime("%F"));
-
-        new_ucmd!()
+        let before = Timestamp::now().to_zoned(TimeZone::UTC).date();
+        let out = new_ucmd!()
             .env("TZ", "UTC")
             .arg("-d")
             .arg(input)
             .arg("+%F")
-            .succeeds()
-            .stdout_is(expected);
+            .succeeds();
+
+        let after = Timestamp::now().to_zoned(TimeZone::UTC).date();
+        let expected = |day: jiff::civil::Date| {
+            format!(
+                "{}\n",
+                day.checked_add(day_delta.days()).unwrap().strftime("%F")
+            )
+        };
+
+        if before == after {
+            out.stdout_is(expected(before));
+        } else {
+            // UTC midnight passed while `date` ran, so either day is right
+            out.stdout_is_any(&[expected(before), expected(after)]);
+        }
     }
 }
 
@@ -2428,7 +2436,7 @@ fn test_date_format_locale_ampm_markers() {
     }
 }
 
-/// bg_BG's `date_fmt` has the year only inside `%x`, which therefore has to
+/// `bg_BG`'s `date_fmt` has the year only inside `%x`, which therefore has to
 /// be expanded before an out-of-range year is put in.
 #[test]
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
@@ -2588,6 +2596,37 @@ fn test_date_strftime_n_width_and_flags() {
         .arg("+%-N")
         .succeeds()
         .stdout_is("000000000\n");
+}
+
+// https://github.com/uutils/coreutils/issues/15697
+#[test]
+fn test_date_strftime_n_width_keeps_leading_zeros() {
+    for (time, format, expected) in [
+        ("@0.005123456", "+%3N", "005\n"),
+        ("@0.050123456", "+%3N", "050\n"),
+        ("@0.011123456", "+%3N", "011\n"),
+        ("@0.123456789", "+%3N", "123\n"),
+        ("@0.005123456", "+%6N", "005123\n"),
+        ("@0.005123456", "+%1N", "0\n"),
+        ("@0.005123456", "+%12N", "005123456000\n"),
+        ("@0.005123456", "+%_12N", "005123456   \n"),
+        ("@0.005123456", "+%_N", "005123456\n"),
+        ("@0.050000000", "+%_3N", "05 \n"),
+        ("@0.050000000", "+%-3N", "05\n"),
+        ("@0.050000000", "+%-12N", "05\n"),
+        ("@0.050000000", "+%-N", "050000000\n"),
+        ("@0.005123456", "+%+3N", "005\n"),
+        ("@1.005123456", "+%s%3N", "1005\n"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(time)
+            .arg(format)
+            .succeeds()
+            .stdout_is(expected);
+    }
 }
 
 #[test]
@@ -2976,6 +3015,12 @@ fn test_locale_month_names() {
         ("hu_HU.UTF-8", "január", "június", "december"),
         ("ja_JP.UTF-8", "1月", "6月", "12月"),
         ("zh_CN.UTF-8", "一月", "六月", "十二月"),
+        ("th_TH.UTF-8", "มกราคม", "มิถุนายน", "ธันวาคม"), // spell-checker:disable-line
+        // Months of the calendar that %m uses: Solar Hijri for fa_IR,
+        // Ethiopian for am_ET, Gregorian for ps_AF
+        ("fa_IR.UTF-8", "دی", "خرداد", "آذر"), // spell-checker:disable-line
+        ("am_ET.UTF-8", "ጥር", "ሰኔ", "ታኅሣሥ"),   // spell-checker:disable-line
+        ("ps_AF.UTF-8", "جنوري", "جون", "دسمبر"), // spell-checker:disable-line
     ] {
         check_date(loc, "2026-01-15", "+%B", jan);
         check_date(loc, "2026-06-15", "+%B", jun);
@@ -3024,6 +3069,8 @@ fn test_locale_day_names() {
         ("es_ES.UTF-8", "lunes", "domingo", "sábado"),
         ("ja_JP.UTF-8", "月曜日", "日曜日", "土曜日"),
         ("zh_CN.UTF-8", "星期一", "星期日", "星期六"),
+        ("th_TH.UTF-8", "วันจันทร์", "วันอาทิตย์", "วันเสาร์"), // spell-checker:disable-line
+        ("fa_IR.UTF-8", "دوشنبه", "یکشنبه", "شنبه"),    // spell-checker:disable-line
     ] {
         check_date(loc, "2026-01-26", "+%A", mon);
         check_date(loc, "2026-01-25", "+%A", sun);
@@ -3911,4 +3958,47 @@ fn test_date_c_locale_escapes_non_ascii_operands() {
         .arg(input)
         .fails()
         .stderr_contains("invalid date '\\342\\210\\2221 day'");
+}
+
+#[test]
+fn test_control_chars_in_operands_are_escaped() {
+    let cases: [(&[&str], &str); 4] = [
+        (&["-d", "a\tb\rc\x1bd"], "invalid date 'a\\tb\\rc\\033d'"),
+        (&["--set", "a\tb\rc\x1bd"], "invalid date 'a\\tb\\rc\\033d'"),
+        (&["+%Y", "a\tb"], "extra operand 'a\\tb'"),
+        (
+            &["-d", "now", "a\tb"],
+            "the argument 'a\\tb' lacks a leading '+'",
+        ),
+    ];
+
+    for (args, expected) in cases {
+        new_ucmd!()
+            .args(args)
+            .fails_with_code(1)
+            .stderr_contains(expected);
+    }
+}
+
+#[test]
+fn test_date_file_control_chars_are_escaped() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("dates", "a\tb\rc\x1bd\n");
+    ucmd.args(&["-f", "dates"])
+        .fails_with_code(1)
+        .stderr_is("date: invalid date 'a\\tb\\rc\\033d'\n");
+}
+
+#[test]
+fn test_invalid_date_escaping_depends_on_locale() {
+    for (locale, expected) in [
+        ("en_US.UTF-8", "date: invalid date 'it\\'s é'\n"),
+        ("C", "date: invalid date 'it\\'s \\303\\251'\n"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", locale)
+            .args(&["-d", "it's é"])
+            .fails_with_code(1)
+            .stderr_is(expected);
+    }
 }

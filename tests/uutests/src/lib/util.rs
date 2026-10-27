@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty openpt grantpt unlockpt ptsname tcsetwinsize CLOEXEC RDWR SETFD
-// spell-checker:ignore (linux) winsize xpixel ypixel setrlimit Fsize SIGBUS SIGSEGV SIGXFSZ EFBIG sigbus tmpfs mksocket
+// spell-checker:ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV SIGXFSZ EFBIG sigbus tmpfs mksocket
 // spell-checker:ignore (ToDO) ttyname
 
 #![allow(dead_code)]
@@ -24,8 +24,8 @@ use nix::sys;
 #[cfg(not(windows))]
 use nix::sys::stat::{self, SFlag};
 use pretty_assertions::assert_eq;
-#[cfg(unix)]
-use rustix::process::{Resource, Rlimit, setrlimit};
+#[cfg(all(unix, not(target_os = "fuchsia")))]
+use rlimit::{Resource, setrlimit};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, VecDeque};
 use std::ffi::{OsStr, OsString};
@@ -150,7 +150,19 @@ macro_rules! get_tests_binary {
     };
 }
 
-pub const PATH: &str = env!("PATH");
+/// The `PATH` to use when running commands with a cleared environment
+///
+/// This is the `PATH` of the process running the tests, read at runtime.
+/// It must not be read at compile time (`env!("PATH")`): with `cargo test`
+/// both happen in the same shell so the values are identical, but when the
+/// test binaries are built separately from where they are run (e.g.
+/// `cargo test --no-run` in a build sandbox, or cross-compiling), a
+/// compile-time value would embed the build machine's `PATH` in the binaries.
+/// That breaks reproducible builds and points at directories that may not
+/// exist on the machine running the tests.
+pub fn path() -> OsString {
+    env::var_os("PATH").unwrap_or_default()
+}
 
 /// Default environment variables to run the commands with
 const DEFAULT_ENV: [(&str, &str); 2] = [("LC_ALL", "C"), ("TZ", "UTC")];
@@ -607,7 +619,7 @@ impl CmdResult {
     /// but you might find yourself using this function if
     /// 1.  you can not know exactly what stderr will be or
     /// 2.  you know that stderr will also be empty
-    ///     new_ucmd!()
+    ///     `new_ucmd!()`
     ///
     /// # Examples
     ///
@@ -1611,7 +1623,7 @@ pub struct UCommand {
     stdout: Option<Stdio>,
     stderr: Option<Stdio>,
     bytes_into_stdin: Option<Vec<u8>>,
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     limits: Vec<(Resource, u64, u64)>,
     #[cfg(unix)]
     ignore_sigxfsz: bool,
@@ -1776,7 +1788,7 @@ impl UCommand {
         self
     }
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     pub fn limit(&mut self, resource: Resource, soft_limit: u64, hard_limit: u64) -> &mut Self {
         self.limits.push((resource, soft_limit, hard_limit));
         self
@@ -2131,20 +2143,14 @@ impl UCommand {
             }
         }
 
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "fuchsia")))]
         if !self.limits.is_empty() {
             // just to be safe: move a copy of the limits list into the closure.
             // this way the closure is fully self-contained.
             let limits_copy = self.limits.clone();
             let closure = move || -> Result<()> {
                 for &(resource, soft_limit, hard_limit) in &limits_copy {
-                    setrlimit(
-                        resource,
-                        Rlimit {
-                            current: Some(soft_limit),
-                            maximum: Some(hard_limit),
-                        },
-                    )?;
+                    setrlimit(resource, soft_limit, hard_limit)?;
                 }
                 Ok(())
             };
@@ -3041,7 +3047,7 @@ impl UChild {
 
     /// Close the child process stdout.
     ///
-    /// Note this will have no effect if the output was captured with CapturedOutput which is the
+    /// Note this will have no effect if the output was captured with `CapturedOutput` which is the
     /// default if [`UCommand::set_stdout`] wasn't called.
     pub fn close_stdout(&mut self) -> &mut Self {
         self.raw.stdout.take();
@@ -3050,7 +3056,7 @@ impl UChild {
 
     /// Close the child process stderr.
     ///
-    /// Note this will have no effect if the output was captured with CapturedOutput which is the
+    /// Note this will have no effect if the output was captured with `CapturedOutput` which is the
     /// default if [`UCommand::set_stderr`] wasn't called.
     pub fn close_stderr(&mut self) -> &mut Self {
         self.raw.stderr.take();
@@ -3315,7 +3321,7 @@ pub fn gnu_cmd_result(
 
     let result = ts
         .cmd(util_name.as_ref())
-        .env("PATH", PATH)
+        .env("PATH", path())
         .envs(DEFAULT_ENV)
         .envs(envs.iter().copied())
         .args(args)
@@ -3425,7 +3431,7 @@ pub fn run_ucmd_as_root_with_stdin_stdout(
                 // we can run sudo and we're root
                 // run ucmd as root:
                 let mut cmd = ts.cmd("sudo");
-                cmd.env("PATH", PATH)
+                cmd.env("PATH", path())
                     .envs(DEFAULT_ENV)
                     .arg("-E")
                     .arg("--non-interactive")
@@ -3880,7 +3886,7 @@ mod tests {
             .stdout_is("unlimited\nunlimited\n");
     }
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     #[test]
     fn test_application_of_process_resource_limits_limited_file_size() {
         let unit_size_bytes = if cfg!(target_vendor = "apple") {
@@ -3892,7 +3898,7 @@ mod tests {
         let ts = TestScenario::new("util");
         ts.cmd("sh")
             .args(&["-c", "ulimit -Sf; ulimit -Hf"])
-            .limit(Resource::Fsize, 8 * unit_size_bytes, 16 * unit_size_bytes)
+            .limit(Resource::FSIZE, 8 * unit_size_bytes, 16 * unit_size_bytes)
             .succeeds()
             .no_stderr()
             .stdout_is("8\n16\n");

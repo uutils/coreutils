@@ -3,8 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons Nofile NOTCAPABLE iproduct newfstatat isox
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline onetwo somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE NOTCAPABLE iproduct newfstatat isox
 
 #![allow(
     clippy::similar_names,
@@ -14,7 +14,7 @@
 
 use regex::Regex;
 #[cfg(unix)]
-use rustix::process::Resource;
+use rlimit::Resource;
 #[cfg(not(target_os = "openbsd"))]
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
@@ -144,6 +144,15 @@ fn test_invalid_value_returns_2() {
             .fails_with_code(2)
             .no_stdout();
     }
+}
+
+#[test]
+fn test_invalid_numeric_value_is_verbatim() {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg("--format=007")
+        .fails()
+        .stderr_contains("invalid value '007' for '--format");
 }
 
 #[test]
@@ -1417,7 +1426,11 @@ fn test_ls_long_symlink_color() {
     ) {
         // Names are always compared.
         assert_eq!(name, expected_name);
-        assert_eq!(target, expected_target);
+        // ln stores symlink targets with `\` on Windows.
+        assert_eq!(
+            target,
+            expected_target.replace('/', std::path::MAIN_SEPARATOR_STR)
+        );
 
         // Colors are only compared when we have inferred what color we are looking for.
         if let Some(name) = expected_name_color {
@@ -2409,6 +2422,31 @@ fn test_ls_time_styles() {
         .succeeds()
         .stdout_matches(&re_custom_format_recent_2)
         .stdout_matches(&re_custom_format_old);
+
+    // Empty halves must preserve the order in both --time-style and TIME_STYLE.
+    for (style, expected_recent, expected_old) in [("+\nNEW", "NEW", ""), ("+OLD\n", "", "OLD")] {
+        let re_recent = Regex::new(&format!(
+            r"[a-z-]* \d* [\w.]* [\w.]* \d* {expected_recent} test\n"
+        ))
+        .unwrap();
+        let re_old = Regex::new(&format!(
+            r"[a-z-]* \d* [\w.]* [\w.]* \d* {expected_old} test-old\n"
+        ))
+        .unwrap();
+        scene
+            .ucmd()
+            .args(&["-l", "--time-style", style])
+            .succeeds()
+            .stdout_matches(&re_recent)
+            .stdout_matches(&re_old);
+        scene
+            .ucmd()
+            .env("TIME_STYLE", style)
+            .arg("-l")
+            .succeeds()
+            .stdout_matches(&re_recent)
+            .stdout_matches(&re_old);
+    }
 
     // Also fails due to not having full clap support for time_styles
     scene
@@ -4457,7 +4495,7 @@ fn test_ls_quoting_style_c_maybe_comma() {
     at.touch("a_file");
     at.touch("b,file");
 
-    // Comma is explicitely quoted when in -m mode
+    // Comma is explicitly quoted when in -m mode
     // and there's a comma in the name
 
     let cases: &[(&[&str], &str)] = &[
@@ -6539,6 +6577,44 @@ fn test_posixly_correct_and_block_size_env_vars_with_k() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_ls_block_size_rounds_up() {
+    // A block that is only partly used still occupies a whole block, so
+    // scaling an allocation to the block size rounds up.
+    use std::os::unix::fs::MetadataExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    for name in ["dir/a", "dir/b", "dir/c"] {
+        at.write(name, "x");
+    }
+
+    let allocated: Vec<u64> = ["dir/a", "dir/b", "dir/c"]
+        .iter()
+        .map(|name| at.metadata(name).blocks() * 512)
+        .collect();
+    // An allocation that is a whole number of blocks, or none at all, cannot
+    // tell rounding up from rounding down.
+    if allocated
+        .iter()
+        .any(|bytes| bytes == &0 || bytes % 1000 == 0)
+    {
+        return;
+    }
+    let sizes: Vec<u64> = allocated.iter().map(|bytes| bytes.div_ceil(1000)).collect();
+    let total = allocated.iter().sum::<u64>().div_ceil(1000);
+
+    ucmd.arg("-s")
+        .arg("--block-size=1000")
+        .arg("dir")
+        .succeeds()
+        .stdout_is(format!(
+            "total {total}\n{} a\n{} b\n{} c\n",
+            sizes[0], sizes[1], sizes[2]
+        ));
+}
+
+#[test]
 fn test_ls_invalid_block_size() {
     new_ucmd!()
         .arg("--block-size=invalid")
@@ -7079,6 +7155,34 @@ fn test_acl_display() {
         .ucmd()
         .current_dir("/")
         .args(&["-la", &at.as_string()])
+        .succeeds()
+        .stdout_matches(&re_with_acl)
+        .stdout_matches(&re_without_acl);
+}
+
+// On macOS the ACL is not an xattr, and most files carry xattrs anyway, so
+// `+` comes from the ACL API (#15273).
+#[cfg(target_os = "macos")]
+#[test]
+fn test_acl_display_macos() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("with_acl");
+    at.touch("without_acl");
+
+    let status = Command::new("chmod")
+        .args(["+a", "everyone allow read", &at.plus_as_string("with_acl")])
+        .status()
+        .unwrap();
+    assert!(status.success(), "chmod +a failed");
+
+    let re_with_acl = Regex::new(r"(?m)^-[rwx-]{9}\+ .*with_acl$").unwrap();
+    let re_without_acl = Regex::new(r"(?m)^-[rwx-]{9} .*without_acl$").unwrap();
+    scene
+        .ucmd()
+        .args(&["-l", "with_acl", "without_acl"])
         .succeeds()
         .stdout_matches(&re_with_acl)
         .stdout_matches(&re_without_acl);
@@ -8169,7 +8273,7 @@ fn test_ls_recursive_no_fd_leak() {
         .ucmd()
         .arg("-R")
         .arg("1")
-        .limit(Resource::Nofile, 20, 20)
+        .limit(Resource::NOFILE, 20, 20)
         .succeeds()
         .no_stderr();
 }

@@ -767,26 +767,26 @@ fn test_shuf_input_range_and_file_not_allowed() {
         .stderr_contains("cannot be used with");
 }
 
+/// Whatever is wrong with the LO-HI of -i, GNU names the range as a whole
+/// and exits 1, and adds a detail only when a bound overflows.
 #[test]
-fn test_shuf_invalid_input_range_one() {
+fn test_shuf_invalid_input_range_message() {
+    for range in ["0", "a-9", "0-b", "5-1", "abc", "1-", "1-2-3", ""] {
+        new_ucmd!()
+            .args(&["-i", range])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_only(format!("shuf: invalid input range: '{range}'\n"));
+    }
+
     new_ucmd!()
-        .args(&["-i", "0"])
-        .fails()
-        .stderr_contains("invalid value '0' for '--input-range <LO-HI>': missing '-'");
-}
-
-#[test]
-fn test_shuf_invalid_input_range_two() {
-    new_ucmd!().args(&["-i", "a-9"]).fails().stderr_contains(
-        "invalid value 'a-9' for '--input-range <LO-HI>': invalid digit found in string",
-    );
-}
-
-#[test]
-fn test_shuf_invalid_input_range_three() {
-    new_ucmd!().args(&["-i", "0-b"]).fails().stderr_contains(
-        "invalid value '0-b' for '--input-range <LO-HI>': invalid digit found in string",
-    );
+        .args(&["-i", "99999999999999999999999-1"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_only(
+            "shuf: invalid input range: '99999999999999999999999-1': \
+             Value too large to be stored in data type\n",
+        );
 }
 
 #[test]
@@ -894,7 +894,7 @@ fn test_range_empty_minus_one() {
         .arg("-i5-3")
         .fails()
         .no_stdout()
-        .stderr_contains("invalid value '5-3' for '--input-range <LO-HI>': start exceeds end\n");
+        .stderr_contains("shuf: invalid input range: '5-3'\n");
 }
 
 #[test]
@@ -924,7 +924,7 @@ fn test_range_repeat_empty_minus_one() {
         .arg("-ri5-3")
         .fails()
         .no_stdout()
-        .stderr_contains("invalid value '5-3' for '--input-range <LO-HI>': start exceeds end\n");
+        .stderr_contains("shuf: invalid input range: '5-3'\n");
 }
 
 // This test fails if we forget to flush the `BufWriter`.

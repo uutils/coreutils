@@ -8,16 +8,15 @@
 #![allow(rustdoc::private_intra_doc_links)]
 
 use std::borrow::Borrow;
-use std::cmp::Ordering;
 use std::ffi::OsString;
-use std::io::{self, BufReader, ErrorKind};
+use std::io::{self, BufReader};
 use std::{
     fs::{File, remove_file},
     io::{BufRead, BufWriter, Write},
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use regex::Regex;
+use regex::bytes::Regex;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
 use uucore::format_usage;
@@ -85,19 +84,13 @@ impl<T: BufRead> LinesWithNewlines<T> {
 }
 
 impl<T: BufRead> Iterator for LinesWithNewlines<T> {
-    type Item = io::Result<String>;
+    type Item = io::Result<Vec<u8>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        fn ret(v: Vec<u8>) -> io::Result<String> {
-            String::from_utf8(v).map_err(|_| {
-                io::Error::new(ErrorKind::InvalidData, translate!("csplit-stream-not-utf8"))
-            })
-        }
-
         let mut v = Vec::new();
         match self.inner.read_until(b'\n', &mut v) {
             Ok(0) => None,
-            Ok(_) => Some(ret(v)),
+            Ok(_) => Some(Ok(v)),
             Err(e) => Some(Err(e)),
         }
     }
@@ -177,7 +170,7 @@ fn do_csplit<I>(
     input_iter: &mut InputSplitter<I>,
 ) -> Result<(), CsplitError>
 where
-    I: Iterator<Item = (usize, UResult<String>)>,
+    I: Iterator<Item = (usize, UResult<Vec<u8>>)>,
 {
     // split the file based on patterns
     for pattern in patterns {
@@ -311,12 +304,11 @@ impl SplitWriter<'_> {
     /// # Errors
     ///
     /// Some [`io::Error`] may occur when attempting to write the line.
-    fn writeln(&mut self, line: &str) -> io::Result<()> {
+    fn writeln(&mut self, line: &[u8]) -> io::Result<()> {
         if !self.dev_null {
             if let Some(ref mut current_writer) = self.current_writer {
-                let bytes = line.as_bytes();
-                current_writer.write_all(bytes)?;
-                self.size += bytes.len();
+                current_writer.write_all(line)?;
+                self.size += line.len();
             } else {
                 panic!("{}", translate!("csplit-write-split-not-created"))
             }
@@ -376,7 +368,8 @@ impl SplitWriter<'_> {
     ///
     /// In addition to errors reading/writing from/to a file, if the line number
     /// `n` is greater than the total available lines, then a
-    /// [`CsplitError::LineOutOfRange`] error is returned.
+    /// [`CsplitError::LineOutOfRange`] error is returned. With `--suppress-matched`,
+    /// `n` may also be one past the last line, if this split read any lines.
     fn do_to_line<I>(
         &mut self,
         pattern_as_str: &str,
@@ -384,35 +377,31 @@ impl SplitWriter<'_> {
         input_iter: &mut InputSplitter<I>,
     ) -> Result<(), CsplitError>
     where
-        I: Iterator<Item = (usize, UResult<String>)>,
+        I: Iterator<Item = (usize, UResult<Vec<u8>>)>,
     {
         input_iter.rewind_buffer();
         input_iter.set_size_of_buffer(1);
 
         let mut ret = Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
+        let mut last_ln = None;
         while let Some((ln, line)) = input_iter.next() {
             let line = line?;
-            match n.cmp(&(&ln + 1)) {
-                Ordering::Less => {
-                    assert!(
-                        input_iter.add_line_to_buffer(ln, line).is_none(),
-                        "the buffer is big enough to contain 1 line"
-                    );
-                    ret = Ok(());
-                    break;
-                }
-                Ordering::Equal => {
-                    assert!(
-                        self.options.suppress_matched
-                            || input_iter.add_line_to_buffer(ln, line).is_none(),
-                        "the buffer is big enough to contain 1 line"
-                    );
-                    ret = Ok(());
-                    break;
-                }
-                Ordering::Greater => (),
+            last_ln = Some(ln);
+            if n <= ln + 1 {
+                assert!(
+                    self.options.suppress_matched
+                        || input_iter.add_line_to_buffer(ln, line).is_none(),
+                    "the buffer is big enough to contain 1 line"
+                );
+                ret = Ok(());
+                break;
             }
             self.writeln(&line)?;
+        }
+        // With --suppress-matched, a split that ends with the input right before
+        // line `n` is complete: line `n` would have been dropped anyway.
+        if self.options.suppress_matched && last_ln.is_some_and(|ln| ln + 2 == n) {
+            ret = Ok(());
         }
         self.finish_split()?;
         ret
@@ -437,7 +426,7 @@ impl SplitWriter<'_> {
         input_iter: &mut InputSplitter<I>,
     ) -> Result<(), CsplitError>
     where
-        I: Iterator<Item = (usize, UResult<String>)>,
+        I: Iterator<Item = (usize, UResult<Vec<u8>>)>,
     {
         if offset >= 0 {
             // The offset is zero or positive, no need for a buffer on the lines read.
@@ -450,9 +439,7 @@ impl SplitWriter<'_> {
 
             while let Some((ln, line)) = input_iter.next() {
                 let line = line?;
-                let l = line
-                    .strip_suffix("\r\n")
-                    .unwrap_or_else(|| line.strip_suffix('\n').unwrap_or(&line));
+                let l = line.strip_suffix(b"\n").unwrap_or(&line);
                 if regex.is_match(l) {
                     let mut next_line_suppress_matched = false;
                     match (self.options.suppress_matched, offset) {
@@ -506,9 +493,7 @@ impl SplitWriter<'_> {
             input_iter.set_size_of_buffer(offset_usize);
             while let Some((ln, line)) = input_iter.next() {
                 let line = line?;
-                let l = line
-                    .strip_suffix("\r\n")
-                    .unwrap_or_else(|| line.strip_suffix('\n').unwrap_or(&line));
+                let l = line.strip_suffix(b"\n").unwrap_or(&line);
                 if regex.is_match(l) {
                     if offset_usize > lines_in_split {
                         self.finish_split()?;
@@ -554,7 +539,7 @@ impl SplitWriter<'_> {
 /// This is used to pass matching lines to the next split and to support patterns with a negative offset.
 struct InputSplitter<I>
 where
-    I: Iterator<Item = (usize, UResult<String>)>,
+    I: Iterator<Item = (usize, UResult<Vec<u8>>)>,
 {
     iter: I,
     buffer: Vec<<I as Iterator>::Item>,
@@ -567,7 +552,7 @@ where
 
 impl<I> InputSplitter<I>
 where
-    I: Iterator<Item = (usize, UResult<String>)>,
+    I: Iterator<Item = (usize, UResult<Vec<u8>>)>,
 {
     fn new(iter: I) -> Self {
         Self {
@@ -585,7 +570,7 @@ where
 
     /// Shrink the buffer so that its length is equal to the set size, returning an iterator for
     /// the elements that were too much.
-    fn shrink_buffer_to_size(&mut self) -> impl Iterator<Item = String> + '_ {
+    fn shrink_buffer_to_size(&mut self) -> impl Iterator<Item = Vec<u8>> + '_ {
         let shrink_offset = if self.buffer.len() > self.size {
             self.buffer.len() - self.size
         } else {
@@ -597,7 +582,7 @@ where
     }
 
     /// Drain the content of the buffer.
-    fn drain_buffer(&mut self) -> impl Iterator<Item = String> + '_ {
+    fn drain_buffer(&mut self) -> impl Iterator<Item = Vec<u8>> + '_ {
         self.buffer.drain(..).map(|(_, line)| line.unwrap())
     }
 
@@ -609,7 +594,7 @@ where
     /// Add a line to the buffer. If the buffer has `self.size` elements, then its head is removed and
     /// the new line is pushed to the buffer. The removed head is then available in the returned
     /// option.
-    fn add_line_to_buffer(&mut self, ln: usize, line: String) -> Option<String> {
+    fn add_line_to_buffer(&mut self, ln: usize, line: Vec<u8>) -> Option<Vec<u8>> {
         if self.rewind {
             self.buffer.insert(0, (ln, Ok(line)));
             None
@@ -631,7 +616,7 @@ where
 
 impl<I> Iterator for InputSplitter<I>
 where
-    I: Iterator<Item = (usize, UResult<String>)>,
+    I: Iterator<Item = (usize, UResult<Vec<u8>>)>,
 {
     type Item = <I as Iterator>::Item;
 
@@ -773,10 +758,10 @@ mod tests {
     #[allow(clippy::cognitive_complexity)]
     fn input_splitter() {
         let input = vec![
-            Ok(String::from("aaa")),
-            Ok(String::from("bbb")),
-            Ok(String::from("ccc")),
-            Ok(String::from("ddd")),
+            Ok(b"aaa".to_vec()),
+            Ok(b"bbb".to_vec()),
+            Ok(b"ccc".to_vec()),
+            Ok(b"ddd".to_vec()),
         ];
         let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
 
@@ -785,7 +770,7 @@ mod tests {
 
         match input_splitter.next() {
             Some((0, Ok(line))) => {
-                assert_eq!(line, String::from("aaa"));
+                assert_eq!(line, b"aaa");
                 assert_eq!(input_splitter.add_line_to_buffer(0, line), None);
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
@@ -794,7 +779,7 @@ mod tests {
 
         match input_splitter.next() {
             Some((1, Ok(line))) => {
-                assert_eq!(line, String::from("bbb"));
+                assert_eq!(line, b"bbb");
                 assert_eq!(input_splitter.add_line_to_buffer(1, line), None);
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
@@ -803,10 +788,10 @@ mod tests {
 
         match input_splitter.next() {
             Some((2, Ok(line))) => {
-                assert_eq!(line, String::from("ccc"));
+                assert_eq!(line, b"ccc");
                 assert_eq!(
                     input_splitter.add_line_to_buffer(2, line),
-                    Some(String::from("aaa"))
+                    Some(b"aaa".to_vec())
                 );
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
@@ -817,7 +802,7 @@ mod tests {
 
         match input_splitter.next() {
             Some((1, Ok(line))) => {
-                assert_eq!(line, String::from("bbb"));
+                assert_eq!(line, b"bbb");
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
             item => panic!("wrong item: {item:?}"),
@@ -825,7 +810,7 @@ mod tests {
 
         match input_splitter.next() {
             Some((2, Ok(line))) => {
-                assert_eq!(line, String::from("ccc"));
+                assert_eq!(line, b"ccc");
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
             item => panic!("wrong item: {item:?}"),
@@ -833,7 +818,7 @@ mod tests {
 
         match input_splitter.next() {
             Some((3, Ok(line))) => {
-                assert_eq!(line, String::from("ddd"));
+                assert_eq!(line, b"ddd");
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
             item => panic!("wrong item: {item:?}"),
@@ -846,10 +831,10 @@ mod tests {
     #[allow(clippy::cognitive_complexity)]
     fn input_splitter_interrupt_rewind() {
         let input = vec![
-            Ok(String::from("aaa")),
-            Ok(String::from("bbb")),
-            Ok(String::from("ccc")),
-            Ok(String::from("ddd")),
+            Ok(b"aaa".to_vec()),
+            Ok(b"bbb".to_vec()),
+            Ok(b"ccc".to_vec()),
+            Ok(b"ddd".to_vec()),
         ];
         let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
 
@@ -858,7 +843,7 @@ mod tests {
 
         match input_splitter.next() {
             Some((0, Ok(line))) => {
-                assert_eq!(line, String::from("aaa"));
+                assert_eq!(line, b"aaa");
                 assert_eq!(input_splitter.add_line_to_buffer(0, line), None);
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
@@ -867,7 +852,7 @@ mod tests {
 
         match input_splitter.next() {
             Some((1, Ok(line))) => {
-                assert_eq!(line, String::from("bbb"));
+                assert_eq!(line, b"bbb");
                 assert_eq!(input_splitter.add_line_to_buffer(1, line), None);
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
@@ -876,7 +861,7 @@ mod tests {
 
         match input_splitter.next() {
             Some((2, Ok(line))) => {
-                assert_eq!(line, String::from("ccc"));
+                assert_eq!(line, b"ccc");
                 assert_eq!(input_splitter.add_line_to_buffer(2, line), None);
                 assert_eq!(input_splitter.buffer_len(), 3);
             }
@@ -887,7 +872,7 @@ mod tests {
 
         match input_splitter.next() {
             Some((0, Ok(line))) => {
-                assert_eq!(line, String::from("aaa"));
+                assert_eq!(line, b"aaa");
                 assert_eq!(input_splitter.add_line_to_buffer(0, line), None);
                 assert_eq!(input_splitter.buffer_len(), 3);
             }
@@ -896,7 +881,7 @@ mod tests {
 
         match input_splitter.next() {
             Some((0, Ok(line))) => {
-                assert_eq!(line, String::from("aaa"));
+                assert_eq!(line, b"aaa");
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
             item => panic!("wrong item: {item:?}"),
@@ -904,7 +889,7 @@ mod tests {
 
         match input_splitter.next() {
             Some((1, Ok(line))) => {
-                assert_eq!(line, String::from("bbb"));
+                assert_eq!(line, b"bbb");
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
             item => panic!("wrong item: {item:?}"),
@@ -912,7 +897,7 @@ mod tests {
 
         match input_splitter.next() {
             Some((2, Ok(line))) => {
-                assert_eq!(line, String::from("ccc"));
+                assert_eq!(line, b"ccc");
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
             item => panic!("wrong item: {item:?}"),
@@ -920,7 +905,7 @@ mod tests {
 
         match input_splitter.next() {
             Some((3, Ok(line))) => {
-                assert_eq!(line, String::from("ddd"));
+                assert_eq!(line, b"ddd");
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
             item => panic!("wrong item: {item:?}"),
