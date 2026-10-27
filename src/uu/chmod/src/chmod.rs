@@ -328,6 +328,16 @@ impl Chmoder {
             let mut new_mode = current_mode;
             let mut naively_expected_new_mode = current_mode;
 
+            if let Err(error) = mode::check_clauses(&cmode_unwrapped) {
+                // Report it like a clause error, from where the fault starts
+                let clause_start = error.span.start;
+                let error = mode::ModeError {
+                    span: 0..error.span.len(),
+                    ..error
+                };
+                return Err(self.mode_error(&cmode_unwrapped, clause_start, &error));
+            }
+
             // Where the clause being parsed starts inside `cmode_unwrapped`, so
             // that an error can be pointed back at it.
             let mut offset = 0;
@@ -353,23 +363,33 @@ impl Chmoder {
                         naively_expected_new_mode = naive_mode;
                     }
                     Err(error) => {
-                        if self.quiet {
-                            return Err(ExitCode::new(1));
-                        }
-                        if let Some(args) = &self.args
-                            && let Some((index, operand, offset)) =
-                                self.locate_clause(args, &cmode_unwrapped, clause_start)
-                            && error.render_at(args, index, &operand, offset, &error.to_string())
-                        {
-                            // The diagnostic is already on stderr; exit quietly.
-                            return Err(ExitCode::new(1));
-                        }
-                        return Err(USimpleError::new(1, error.to_string()));
+                        return Err(self.mode_error(&cmode_unwrapped, clause_start, &error));
                     }
                 }
             }
             Ok((new_mode, naively_expected_new_mode))
         }
+    }
+
+    /// The error to return for `error`, found in the clause that starts at
+    /// `clause_start` inside `cmode`. Its span is relative to that clause.
+    fn mode_error(
+        &self,
+        cmode: &str,
+        clause_start: usize,
+        error: &mode::ModeError,
+    ) -> Box<dyn UError> {
+        if self.quiet {
+            return ExitCode::new(1);
+        }
+        if let Some(args) = &self.args
+            && let Some((index, operand, offset)) = self.locate_clause(args, cmode, clause_start)
+            && error.render_at(args, index, &operand, offset, &error.to_string())
+        {
+            // The diagnostic is already on stderr; exit quietly.
+            return ExitCode::new(1);
+        }
+        USimpleError::new(1, error.to_string())
     }
 
     /// Map `clause_start` — an offset into `cmode`, the joined mode string —
