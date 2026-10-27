@@ -1547,6 +1547,32 @@ fn test_seekable_stdout_without_of_is_not_truncated() {
     assert!(out[1024..].iter().all(|&b| b == b'x'));
 }
 
+/// An `oflag=` on a seekable stdout must keep the flags it was opened with,
+/// so output redirected with `>>` is still appended.
+#[rstest]
+#[case::dsync("oflag=dsync")]
+#[case::sync("oflag=sync")]
+#[case::nonblock("oflag=nonblock")]
+#[cfg(target_os = "linux")]
+fn test_oflag_keeps_append_mode_of_stdout(#[case] oflag: &str) {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("out", "old\n");
+    let stdout = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().append(true),
+        at.plus("out").as_path(),
+    )
+    .unwrap();
+
+    ts.ucmd()
+        .args(&[oflag, "status=none"])
+        .pipe_in("new\n")
+        .set_stdout(Stdio::from(stdout))
+        .succeeds();
+
+    assert_eq!(at.read("out"), "old\nnew\n");
+}
+
 /// A failed truncate of the output names the file and the size, the copy
 /// still runs and prints its statistics, and the exit status is 1.
 #[test]
