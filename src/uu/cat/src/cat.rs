@@ -488,20 +488,61 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
     }
 }
 
-/// Writes handle to stdout with no configuration. This allows a
-/// simple memory copy.
+/// Writes handle to stdout with no configuration (simple copy).
 fn print_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    const MAX_RW_COUNT: usize = 2 * 1024 * 1024 * 1024; // not in libc crate
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    use {rustix::fs, std::cell::Cell};
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    thread_local! {
+        static DONE_FICLONE: Cell<Option<bool>> = const { Cell::new(None) };
+    }
     let stdout = io::stdout();
     #[cfg(any(target_os = "linux", target_os = "android"))]
     let mut stdout = stdout;
-    // Try to use the splice() system call for faster writing. If it works, we're done.
+    // try reflink or splice.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    match DONE_FICLONE.with(Cell::get) {
+        Some(true) => {
+            // copy_file_range works if and only if it works with reflink mode under the situation
+            // since cross-device is rejected and we checked that stdout supports reflink.
+            // i.e. it does not work with copy mode which is slower than splice
+            // 1st call is used for detecting unsupported situation e.g. cross device.
+            match fs::copy_file_range(&handle.reader, None, &mut stdout, None, MAX_RW_COUNT) {
+                Ok(0) => return Ok(()),
+                Ok(_) => {
+                    // other calls can be real error.
+                    while fs::copy_file_range(&handle.reader, None, &mut stdout, None, MAX_RW_COUNT)
+                        .map_err(io::Error::from)?
+                        > 0
+                    {}
+                    return Ok(());
+                }
+                Err(_) => {} // not supported
+            }
+        }
+        None => {
+            debug_assert!(
+                matches!(fs::tell(&stdout), Ok(0) | Err(_)),
+                "This code must be reachable on first handle only"
+            );
+            // 1st handle needs to support reflink since ficlone overrides whole stdout.
+            let is_reflink = fs::ioctl_ficlone(&mut stdout, &handle.reader).is_ok();
+            DONE_FICLONE.with(|c| c.set(Some(is_reflink)));
+            if is_reflink {
+                fs::seek(&stdout, fs::SeekFrom::End(0)).map_err(io::Error::from)?;
+                return Ok(());
+            }
+        }
+        _ => {}
+    }
     #[cfg(any(target_os = "linux", target_os = "android"))]
     if uucore::pipes::splice_unbounded_auto(&handle.reader, &mut stdout)?.is_ok() {
         return Ok(());
     }
 
-    // If we're not on Linux or Android, or the splice() call failed,
-    // fall back on slower writing.
+    // fast-copy is not supported
     print_unbuffered(handle, stdout)
 }
 
