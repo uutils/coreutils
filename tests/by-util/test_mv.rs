@@ -426,6 +426,50 @@ fn test_mv_replace_symlink_with_symlink() {
 }
 
 #[rstest]
+#[case::into_directory(false)]
+#[case::no_target_directory(true)]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_symlink_to_directory_does_not_replace_empty_directory(#[case] no_target_dir: bool) {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("outside");
+    at.mkdir("incoming");
+    at.mkdir_all("spool/queue");
+    at.symlink_dir("outside", "incoming/queue");
+
+    if no_target_dir {
+        ucmd.arg("-T").arg("incoming/queue").arg("spool/queue");
+    } else {
+        ucmd.arg("incoming/queue").arg("spool");
+    }
+    ucmd.fails();
+
+    assert!(at.dir_exists("spool/queue"));
+    assert!(!at.is_symlink("spool/queue"));
+    assert!(at.is_symlink("incoming/queue"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_symlink_to_directory_with_trailing_slash_keeps_empty_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("outside");
+    at.mkdir("incoming");
+    at.mkdir_all("spool/queue");
+    at.symlink_dir("outside", "incoming/queue");
+
+    // rename(2) refuses a symlink named with a trailing slash, which must not
+    // leave the destination directory removed.
+    ucmd.arg("incoming/queue/")
+        .arg("spool")
+        .fails()
+        .stderr_contains("Not a directory");
+
+    assert!(at.dir_exists("spool/queue"));
+}
+
+#[rstest]
 #[case::existing_target(true)]
 #[case::dangling_target(false)]
 #[cfg(all(unix, not(target_os = "android")))]
