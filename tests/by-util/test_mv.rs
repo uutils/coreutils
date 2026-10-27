@@ -1690,13 +1690,13 @@ fn test_mv_dir_into_file_where_both_are_files() {
     let at = &scene.fixtures;
     at.write("a", "source");
     at.write("b", "target");
-    scene
-        .ucmd()
-        .arg("a/")
-        .arg("b")
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_is("mv: cannot stat 'a/': Not a directory\n");
+    let result = scene.ucmd().arg("a/").arg("b").fails_with_code(1);
+    result.no_stdout();
+    // Windows has its own wording for the OS error.
+    #[cfg(not(windows))]
+    result.stderr_is("mv: cannot stat 'a/': Not a directory\n");
+    #[cfg(windows)]
+    result.stderr_contains("mv: cannot stat 'a/': ");
 
     assert_eq!(at.read("a"), "source");
     assert_eq!(at.read("b"), "target");
@@ -2537,11 +2537,12 @@ fn test_mv_error_msg_with_multiple_sources_that_does_not_exist() {
 #[test]
 fn test_mv_missing_source_with_trailing_slash() {
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.arg("missing/")
-        .arg("b")
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_is("mv: cannot stat 'missing/': No such file or directory\n");
+    let result = ucmd.arg("missing/").arg("b").fails_with_code(1);
+    result.no_stdout();
+    #[cfg(not(windows))]
+    result.stderr_is("mv: cannot stat 'missing/': No such file or directory\n");
+    #[cfg(windows)]
+    result.stderr_contains("mv: cannot stat 'missing/': ");
     assert!(!at.file_exists("b"));
 }
 
