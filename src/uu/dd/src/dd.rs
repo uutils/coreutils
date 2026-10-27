@@ -911,13 +911,12 @@ impl<'a> Output<'a> {
             use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
             // `F_SETFL` replaces the status flags, so add to the current ones
             // to keep e.g. the `O_APPEND` set by a `>>` shell redirection.
-            let to_io_err = |e| uucore::error::UIoError::from(io::Error::from(e));
-            let current = fcntl_getfl(fx.as_raw()).map_err(to_io_err)?;
+            let current = fcntl_getfl(fx.as_raw()).map_err(io::Error::from)?;
             fcntl_setfl(
                 fx.as_raw(),
                 current | OFlags::from_bits_retain(libc_flags as _),
             )
-            .map_err(to_io_err)?;
+            .map_err(io::Error::from)?;
         }
 
         Self::prepare_file(fx.into_file(), settings)
