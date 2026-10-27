@@ -2164,6 +2164,40 @@ fn test_install_symlink_same_file() {
 }
 
 #[test]
+fn test_install_create_leading_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+
+    at.write(file, "content");
+    ucmd.arg("-D")
+        .arg(file)
+        .arg(file)
+        .fails()
+        .stderr_contains("'file' and 'file' are the same file");
+    assert_eq!(at.read(file), "content");
+}
+
+#[test]
+fn test_install_create_leading_symlink_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+    let target_dir = "target_dir";
+    let target_link = "target_link";
+
+    at.mkdir(target_dir);
+    at.write(&format!("{target_dir}/{file}"), "content");
+    at.symlink_file(target_dir, target_link);
+    ucmd.arg("-D")
+        .arg(format!("{target_dir}/{file}"))
+        .arg(format!("{target_link}/{file}"))
+        .fails()
+        .stderr_contains(format!(
+            "'{target_dir}/{file}' and '{target_link}/{file}' are the same file"
+        ));
+    assert_eq!(at.read(&format!("{target_dir}/{file}")), "content");
+}
+
+#[test]
 fn test_install_no_target_directory_failing_cannot_overwrite() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
