@@ -160,10 +160,14 @@ impl MultiWriter {
         let input = rustix::stdio::stdin();
         #[cfg(not(any(unix, target_os = "wasi")))]
         let mut input = io::stdin();
-        // needs 2 pipes to duplicate input multiple times
-        // freeze by max size since system allocates pipe smaller than default size when user has pages more than fs.pipe-user-pages-soft
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        if let Ok((mut pipe_read, mut pipe_write)) = uucore::pipes::pipe::<true>()
+        // use splice fast-path only for non-file input since page caches can be changed during copy.
+        // If input is a stream coming from file, it should be provider command's responsibility.
+        // todo: for input as a file, we can own pages replacing a pipe with memfd which is still faster than read/write.
+        if rustix::fs::fadvise(input, 0, None, rustix::fs::Advice::Sequential).is_err()
+        // needs 2 pipes to duplicate input multiple times
+        // freeze size since system allocates pipes with different size when fs.pipe-user-pages-soft was changed between generating them.
+        && let Ok((mut pipe_read, mut pipe_write)) = uucore::pipes::pipe::<true>()
             && let Ok((mut pipe2_read, mut pipe2_write)) = uucore::pipes::pipe::<true>()
         {
             use uucore::pipes::MAX_ROOTLESS_PIPE_SIZE;
