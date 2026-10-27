@@ -259,8 +259,8 @@ pub fn apply_xattrs_fd_ignore_unsupported(
 ///
 /// # Returns
 ///
-/// `true` if the file has an extended ACL (on macOS) or any extended attributes
-/// (elsewhere), `false` otherwise.
+/// `true` if the file carries a POSIX ACL (an extended ACL on macOS), `false`
+/// otherwise.
 pub fn has_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
     // On macOS most files carry some xattr (e.g. com.apple.provenance) and the
     // ACL is not one of them, so ask the ACL API instead.
@@ -276,9 +276,15 @@ pub fn has_acl<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
     };
 
     #[cfg(not(target_os = "macos"))]
-    attrs.is_ok_and(|acl| {
-        // if we have extra attributes, we have an acl
-        acl.count() > 0
+    attrs.is_ok_and(|mut names| {
+        // Only the POSIX ACL attributes count as an ACL, for the same reason
+        // macOS asks the ACL API: an unrelated xattr is not an ACL. On an
+        // SELinux-labelled filesystem `security.selinux` is present on nearly
+        // every file, so counting any xattr marked them all `+`.
+        names.any(|name| {
+            name == OsStr::new("system.posix_acl_access")
+                || name == OsStr::new("system.posix_acl_default")
+        })
     })
 }
 
@@ -555,15 +561,14 @@ mod tests {
 
         File::create(&file_path).unwrap();
 
-        // FIXME: this fails on a system that uses SELinux
         assert!(!has_acl(&file_path, true));
 
         let test_attr = "user.test_acl";
         let test_value = b"test value";
         xattr::set(&file_path, test_attr, test_value).unwrap();
 
-        // On macOS an ACL isn't an xattr, so an xattr alone is not an ACL.
-        assert_eq!(has_acl(&file_path, true), cfg!(not(target_os = "macos")));
+        // An unrelated xattr is not an ACL on any platform.
+        assert!(!has_acl(&file_path, true));
         assert!(!has_security_cap_acl(&file_path, true));
 
         // FreeBSD/NetBSD's xattr library does not support the "security" namespace
