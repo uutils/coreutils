@@ -245,6 +245,7 @@ pub fn uu_app() -> Command {
     Command::new("seq")
         .trailing_var_arg(true)
         .infer_long_args(true)
+        .args_override_self(true)
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("seq-about"))

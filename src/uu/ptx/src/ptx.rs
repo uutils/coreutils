@@ -955,6 +955,7 @@ pub fn uu_app() -> Command {
         .help_template(uucore::localized_help_template("ptx"))
         .override_usage(format_usage(&translate!("ptx-usage")))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
