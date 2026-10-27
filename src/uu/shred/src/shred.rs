@@ -638,18 +638,15 @@ fn wipe_file(
     // Keep the command-line operand for diagnostics; use the resolved path
     // only for filesystem operations.
     let is_stdout = cfg!(unix) && path_str == "-";
+
+    #[cfg(unix)]
     let path = if is_stdout {
-        #[cfg(unix)]
-        {
-            Path::new("/dev/fd/1")
-        }
-        #[cfg(not(unix))]
-        {
-            display_path
-        }
+        Path::new("/dev/fd/1")
     } else {
         display_path
     };
+    #[cfg(not(unix))]
+    let path = display_path;
 
     if path_str.as_encoded_bytes().ends_with(b"/") {
         if path.is_dir() {
