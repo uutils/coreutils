@@ -863,7 +863,7 @@ fn test_chown_file_notexisting() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "openbsd")))]
 fn test_chown_cannot_access_vs_cannot_dereference() {
     // GNU says "cannot dereference" only for a symlink whose target is missing,
     // and "cannot access" when the operand itself can't be reached.
