@@ -78,6 +78,8 @@ impl<'a> NonrepeatingIterator<'a> {
         Ok(NonrepeatingIterator { rng, values })
     }
 
+    // Keep sampling in the consumer loop for both streaming and buffered output.
+    #[inline(always)]
     fn produce(&mut self) -> UResult<u64> {
         match &mut self.values {
             Values::Full(items) => {
@@ -117,6 +119,7 @@ impl<'a> NonrepeatingIterator<'a> {
 impl Iterator for NonrepeatingIterator<'_> {
     type Item = UResult<u64>;
 
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         match &self.values {
             Values::Full(items) if items.is_empty() => return None,
