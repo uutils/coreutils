@@ -874,7 +874,15 @@ fn rename(
         .is_ok_and(|metadata| metadata.is_dir())
     {
         // normalize behavior between *nix and windows
-        if from.is_dir() {
+        // A symlink to a directory is not a directory: like any other
+        // non-directory, it must not replace the empty directory. Drop
+        // trailing slashes first, as they make lstat follow the symlink.
+        if from
+            .components()
+            .as_path()
+            .symlink_metadata()
+            .is_ok_and(|metadata| metadata.is_dir())
+        {
             if is_empty_dir(to) {
                 fs::remove_dir(to)?;
             } else {
