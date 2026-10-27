@@ -1139,6 +1139,15 @@ fn test_read_bytes() {
 }
 
 #[test]
+fn test_read_bytes_large_suffix_with_radix_prefix() {
+    new_ucmd!()
+        .args(&["-An", "-tx1", "-N", "01T"])
+        .pipe_in("ab")
+        .succeeds()
+        .stdout_only(" 61 62\n");
+}
+
+#[test]
 fn test_ascii_dump() {
     let input: [u8; 22] = [
         0x00, 0x01, 0x0a, 0x0d, 0x10, 0x1f, 0x20, 0x61, 0x62, 0x63, 0x7d, 0x7e, 0x7f, 0x80, 0x90,
