@@ -102,8 +102,7 @@ pub fn uu_app() -> Command {
 /// `data` contains the bytes of the file.
 ///
 /// `pattern` is the regular expression given as a
-/// [`regex::bytes::Regex`] (not a [`regex::Regex`], since the input is
-/// given as a slice of bytes). If `before` is `true`, then each match
+/// [`regex_automata::meta::Regex`]. If `before` is `true`, then each match
 /// of this pattern in `data` is interpreted as the start of a line. If
 /// `before` is `false`, then each match of this pattern is interpreted
 /// as the end of a line.
@@ -117,7 +116,7 @@ pub fn uu_app() -> Command {
 /// returns [`std::io::Error`].
 fn buffer_tac_regex(
     data: &[u8],
-    pattern: &regex::bytes::Regex,
+    pattern: &regex_automata::meta::Regex,
     before: bool,
 ) -> std::io::Result<()> {
     let out = stdout();
@@ -151,9 +150,10 @@ fn buffer_tac_regex(
         // Determine if there is a match for `pattern` starting at index
         // `i` in `data`. Only search up to the line ending that was
         // found previously.
-        if let Some(match_) = pattern.find_at(&data[..this_line_end], i)
-            && match_.start() == i
-        {
+        let input = regex_automata::Input::new(&data[..this_line_end])
+            .range(i..)
+            .anchored(regex_automata::Anchored::Yes);
+        if let Some(match_) = pattern.find(input) {
             // Record this index as the ending of the current line.
             this_line_end = i;
 
@@ -326,9 +326,14 @@ fn translate_regex_flavor(bytes: &[u8]) -> String {
 fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &OsStr) -> UResult<()> {
     // Compile the regular expression pattern if it is provided.
     let maybe_pattern = if regex {
-        match regex::bytes::RegexBuilder::new(&translate_regex_flavor(separator.as_encoded_bytes()))
-            .multi_line(true)
-            .build()
+        match regex_automata::meta::Builder::new()
+            .syntax(
+                regex_automata::util::syntax::Config::new()
+                    .multi_line(true)
+                    .utf8(false),
+            )
+            .configure(regex_automata::meta::Config::new().utf8_empty(false))
+            .build(&translate_regex_flavor(separator.as_encoded_bytes()))
         {
             Ok(p) => Some(p),
             Err(e) => return Err(TacError::InvalidRegex(e).into()),

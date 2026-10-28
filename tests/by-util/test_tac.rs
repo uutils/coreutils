@@ -510,6 +510,44 @@ fn test_regular_end_anchor() {
         .stdout_is("\nccc\nbbaaa\nb");
 }
 
+#[test]
+fn test_regex_long_record_is_not_quadratic() {
+    use std::time::Duration;
+
+    let record = "x".repeat(500_000);
+
+    new_ucmd!()
+        .args(&["-b", "-r", "-s", "^From "])
+        .pipe_in(format!("From 1\n{record}\nFrom 2\n"))
+        .timeout(Duration::from_secs(30))
+        .succeeds()
+        .stdout_is(format!("From 2\nFrom 1\n{record}\n"));
+}
+
+#[test]
+fn test_invalid_regex_error_messages() {
+    new_ucmd!()
+        .args(&["-r", "-s", r"\("])
+        .fails()
+        .stderr_is(
+            "tac: invalid regular expression: regex parse error:\n    (\n    ^\nerror: unclosed group\n",
+        );
+
+    new_ucmd!()
+        .args(&["-r", "-s", r"a\{2,1\}"])
+        .fails()
+        .stderr_is(
+            "tac: invalid regular expression: regex parse error:\n    a{2,1}\n     ^^^^^\nerror: invalid repetition count range, the start must be <= the end\n",
+        );
+
+    new_ucmd!()
+        .args(&["-r", "-s", r"\(\(a\{100\}\)\{100\}\)\{100\}"])
+        .fails()
+        .stderr_is(
+            "tac: invalid regular expression: Compiled regex exceeds size limit of 10485760 bytes.\n",
+        );
+}
+
 /// Regression test for <https://github.com/uutils/coreutils/issues/9748>.
 ///
 /// `tac` used to mmap regular files, so truncating a file mid-read raised

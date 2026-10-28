@@ -5,16 +5,27 @@
 
 //! Errors returned by tac during processing of a file.
 
+use regex_automata::meta::BuildError;
 use std::ffi::OsString;
 use uucore::display::Quotable;
 use uucore::error::{UError, strip_errno};
 use uucore::{translate, translate_text};
 
+fn regex_error_message(err: &BuildError) -> String {
+    if let Some(limit) = err.size_limit() {
+        format!("Compiled regex exceeds size limit of {limit} bytes.")
+    } else if let Some(syntax_err) = err.syntax_error() {
+        syntax_err.to_string()
+    } else {
+        err.to_string()
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum TacError {
     /// A regular expression given by the user is invalid.
-    #[error("{}", translate!("tac-error-invalid-regex", "error" => .0))]
-    InvalidRegex(regex::Error),
+    #[error("{}", translate!("tac-error-invalid-regex", "error" => regex_error_message(.0)))]
+    InvalidRegex(BuildError),
     /// An error opening a file for reading.
     ///
     /// The parameters are the name of the file and the underlying
