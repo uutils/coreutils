@@ -89,6 +89,10 @@ fn test_nohup_with_pseudo_terminal_emulation_on_stdin_stdout_stderr_get_replaced
 // exit status is the command's own.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    target_os = "linux",
+    ignore = "depends on GNU cat <https://github.com/uutils/coreutils/issues/15937>"
+)]
 fn test_nohup_replaced_stdin_is_not_readable() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
