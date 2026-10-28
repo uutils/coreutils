@@ -359,7 +359,7 @@ impl LineFormat {
     ///
     /// [untagged output format]: https://www.gnu.org/software/coreutils/manual/html_node/cksum-output-modes.html#cksum-output-modes-1
     fn parse_untagged(line: &[u8]) -> Option<LineInfo> {
-        let line = line.trim_blanks_start();
+        let line = line.trim_blanks_start().strip_escape_prefix();
         let blank_idx = line.iter().position(|&b| b == b' ' || b == b'\t')?;
         let checksum = &line[..blank_idx];
 
@@ -393,7 +393,7 @@ impl LineFormat {
     ///
     /// [untagged output format]: https://www.gnu.org/software/coreutils/manual/html_node/cksum-output-modes.html#cksum-output-modes-1
     fn parse_single_blank(line: &[u8]) -> Option<LineInfo> {
-        let line = line.trim_blanks_start();
+        let line = line.trim_blanks_start().strip_escape_prefix();
         let blank_idx = line.iter().position(|&b| b == b' ' || b == b'\t')?;
         let checksum = &line[..blank_idx];
         if !checksum.iter().all(|&b| b.is_ascii_hexdigit()) || checksum.is_empty() {
@@ -463,6 +463,10 @@ trait ByteSliceExt {
 
     /// Remove the leading spaces and tabs.
     fn trim_blanks_start(&self) -> &Self;
+
+    /// Remove the backslash that starts an untagged line whose file name is
+    /// escaped, as in `\<checksum>  a\nb` for the file "a<newline>b".
+    fn strip_escape_prefix(&self) -> &Self;
 }
 
 impl ByteSliceExt for [u8] {
@@ -483,6 +487,10 @@ impl ByteSliceExt for [u8] {
             .take_while(|&&b| b == b' ' || b == b'\t')
             .count();
         &self[blanks..]
+    }
+
+    fn strip_escape_prefix(&self) -> &Self {
+        self.strip_prefix(b"\\").unwrap_or(self)
     }
 }
 
