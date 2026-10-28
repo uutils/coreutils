@@ -1259,6 +1259,9 @@ impl AtPath {
     }
 
     pub fn relative_symlink_file<P1: AsRef<Path>, P2: AsRef<Path>>(&self, original: P1, link: P2) {
+        // Windows stores the target verbatim, so use native separators
+        #[cfg(windows)]
+        let original: PathBuf = original.as_ref().components().collect();
         self.symlink_inner(original.as_ref(), self.plus(link).as_ref());
     }
 
@@ -1275,6 +1278,9 @@ impl AtPath {
     }
 
     pub fn relative_symlink_dir<P1: AsRef<Path>, P2: AsRef<Path>>(&self, original: P1, link: P2) {
+        // Windows stores the target verbatim, so use native separators
+        #[cfg(windows)]
+        let original: PathBuf = original.as_ref().components().collect();
         self.symlink_dir_inner(original.as_ref(), self.plus(link).as_ref());
     }
 
