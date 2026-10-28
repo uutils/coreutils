@@ -6,8 +6,6 @@
 // spell-checker:ignore contenta edgecase behaviour tcaf
 
 use rstest::rstest;
-#[cfg(unix)]
-use std::process::Stdio;
 use uutests::{at_and_ucmd, new_ucmd};
 
 #[test]
@@ -590,8 +588,8 @@ fn test_line_continues_past_unreadable_file() {
 fn test_stdin_tty_flushes_each_line() {
     let mut child = new_ucmd!()
         .args(&["-t3"])
-        .set_stdin(Stdio::piped())
-        .set_stdout(Stdio::piped())
+        .set_stdin(std::process::Stdio::piped())
+        .set_stdout(std::process::Stdio::piped())
         .run_no_wait();
 
     // three leading spaces -> one tab at tabstop 3
@@ -599,3 +597,4 @@ fn test_stdin_tty_flushes_each_line() {
     assert_eq!(&child.stdout_exact_bytes(3), b"\ta\n");
 
     child.wait().unwrap().success();
+}

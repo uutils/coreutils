@@ -700,8 +700,6 @@ fn unexpand_file(
     line_state: &mut PrintState,
 ) -> UResult<()> {
     let mut input = open(file)?;
-    // See expand: flush before the next read only when stdin can block.
-    let flush_lines = file == "-" && !stdin_is_regular_file();
     // Work on a local copy of the line state, so it can stay in registers
     // while unexpanding, and hand it back when done with this file.
     let mut print_state = std::mem::replace(line_state, PrintState::new());
@@ -713,7 +711,6 @@ fn unexpand_file(
         lastcol,
         tab_config,
         &mut print_state,
-        flush_lines,
     );
     *line_state = print_state;
     result
@@ -728,8 +725,9 @@ fn unexpand_input(
     lastcol: usize,
     tab_config: &TabConfig,
     print_state: &mut PrintState,
-    flush_lines: bool,
 ) -> UResult<()> {
+    // See expand: flush before the next read only when stdin can block.
+    let flush_lines = file == "-" && !stdin_is_regular_file();
     while let buf @ [_, ..] = input
         .fill_buf()
         .map_err(|e| e.map_err_context(|| file.maybe_quote().to_string()) as Box<dyn UError>)?
