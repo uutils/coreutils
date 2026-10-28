@@ -1552,18 +1552,19 @@ fn test_seekable_stdout_without_of_is_not_truncated() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_failed_truncate_is_reported_and_copy_goes_on() {
-    use rustix::fs::{MemfdFlags, SealFlags, fcntl_add_seals, ftruncate, memfd_create};
+    use rustix::fs::{MemfdFlags, SealFlags, fcntl_add_seals, memfd_create};
 
-    // A memfd sealed against shrinking: `ftruncate` to a smaller size fails
+    // A memfd sealed against shrinking to a smaller size fails
     // with EPERM, while writes inside the existing size still work.
     let fd = memfd_create("out", MemfdFlags::ALLOW_SEALING).unwrap();
-    ftruncate(&fd, 2048).unwrap();
-    fcntl_add_seals(&fd, SealFlags::SHRINK).unwrap();
+    let memfd = File::from(fd);
+    memfd.set_len(2048).unwrap();
+    fcntl_add_seals(&memfd, SealFlags::SHRINK).unwrap();
 
     new_ucmd!()
         .args(&["bs=512", "count=1", "seek=1", "of=/dev/stdout"])
         .pipe_in(vec![b'a'; 512])
-        .set_stdout(Stdio::from(File::from(fd)))
+        .set_stdout(Stdio::from(memfd))
         .fails_with_code(1)
         .stderr_contains(
             "dd: failed to truncate to 512 bytes in output file '/dev/stdout': Operation not permitted\n",
