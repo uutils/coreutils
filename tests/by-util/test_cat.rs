@@ -1014,3 +1014,27 @@ fn test_closed_stdin() {
         .stdout_is("content\n")
         .stderr_is("cat: -: Bad file descriptor\n");
 }
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no subprocess spawning")]
+fn test_write_only_stdin() {
+    // Reading a stdin that is open for writing only fails with EBADF.
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("file", "content\n");
+    scene
+        .cmd("sh")
+        .args(&["-c", "exec 0>/dev/null; \"$0\" cat - file"])
+        .arg(&scene.bin_path)
+        .fails_with_code(1)
+        .stdout_is("content\n")
+        .stderr_is("cat: -: Bad file descriptor\n");
+    // -n reads through the line-by-line path instead
+    scene
+        .cmd("sh")
+        .args(&["-c", "exec 0>/dev/null; \"$0\" cat -n - file"])
+        .arg(&scene.bin_path)
+        .fails_with_code(1)
+        .stdout_is("     1\tcontent\n")
+        .stderr_is("cat: -: Bad file descriptor\n");
+}
