@@ -6,8 +6,6 @@
 // spell-checker:ignore (ToDO) taaaa tbbbb tcccc
 
 use rstest::rstest;
-#[cfg(unix)]
-use std::process::Stdio;
 use uucore::display::Quotable;
 use uutests::new_ucmd;
 
@@ -472,14 +470,14 @@ fn test_buffered_reads_new_line_no_tabs_in_first_chunk() {
 }
 
 /// Interactive / line-at-a-time stdin must show each expanded line before the
-/// next input arrives. BufWriter alone only flushes on exit.
+/// next input arrives. `BufWriter` alone only flushes on exit.
 #[cfg(unix)]
 #[test]
 fn test_stdin_tty_flushes_each_line() {
     let mut child = new_ucmd!()
         .args(&["-t3"])
-        .set_stdin(Stdio::piped())
-        .set_stdout(Stdio::piped())
+        .set_stdin(std::process::Stdio::piped())
+        .set_stdout(std::process::Stdio::piped())
         .run_no_wait();
 
     child.write_in(b"\ta\n");
