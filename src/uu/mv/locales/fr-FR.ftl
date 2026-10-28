@@ -17,8 +17,7 @@ mv-after-help = Lors de la spécification de plus d'une option parmi -i, -f, -n,
 
 # Messages d'erreur
 mv-error-insufficient-arguments = L'argument '<{$arg_files}>...' nécessite au moins 2 valeurs, mais seulement 1 a été fournie
-mv-error-no-such-file = impossible de lire {$path} : Aucun fichier ou répertoire de ce nom
-mv-error-cannot-stat-not-directory = impossible de lire {$path} : N'est pas un répertoire
+mv-error-cannot-stat = impossible de lire {$path}
 mv-error-same-file = {$source} et {$target} sont le même fichier
 mv-error-self-target-subdirectory = impossible de déplacer {$source} vers un sous-répertoire de lui-même, {$target}
 mv-error-directory-to-non-directory = impossible d'écraser le répertoire {$path} avec un non-répertoire

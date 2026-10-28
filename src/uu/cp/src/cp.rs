@@ -2143,6 +2143,16 @@ fn context_for(src: &Path, dest: &Path) -> String {
     format!("{} -> {}", src.quote(), dest.quote())
 }
 
+/// Wrap a failure to open `source` for reading the way GNU cp reports it,
+/// instead of attributing it to the whole source -> destination copy.
+#[cfg(not(windows))]
+pub(crate) fn cannot_open_for_reading(e: io::Error, source: &Path) -> CpError {
+    CpError::IoErrContext(
+        e,
+        translate!("cp-error-cannot-open-source", "source" => source.quote()),
+    )
+}
+
 /// Implements a simple backup copy for the destination file .
 /// if `is_dest_symlink` flag is set to true dest will be renamed to `backup_path`
 /// TODO: for the backup, should this function be replaced by `copy_file(...)`?

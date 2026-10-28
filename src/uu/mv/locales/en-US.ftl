@@ -17,8 +17,7 @@ mv-after-help = When specifying more than one of -i, -f, -n, only the final one 
 
 # Error messages
 mv-error-insufficient-arguments = The argument '<{$arg_files}>...' requires at least 2 values, but only 1 was provided
-mv-error-no-such-file = cannot stat {$path}: No such file or directory
-mv-error-cannot-stat-not-directory = cannot stat {$path}: Not a directory
+mv-error-cannot-stat = cannot stat {$path}
 mv-error-same-file = {$source} and {$target} are the same file
 mv-error-self-target-subdirectory = cannot move {$source} to a subdirectory of itself, {$target}
 mv-error-directory-to-non-directory = cannot overwrite directory {$path} with non-directory

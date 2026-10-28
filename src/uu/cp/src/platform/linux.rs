@@ -20,7 +20,7 @@ use uucore::translate;
 
 use crate::{
     CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode,
-    is_stream,
+    cannot_open_for_reading, is_stream,
 };
 
 // Create the destination. It is followed when it is a pre-existing symlink,
@@ -255,7 +255,7 @@ where
     // TODO Update the code below to respect the case where
     // `--preserve=ownership` is not true.
     let mut src_file =
-        open_source(&source, nofollow).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+        open_source(&source, nofollow).map_err(|e| cannot_open_for_reading(e, source.as_ref()))?;
     // Use the same restrictive initial mode as the regular file path so that
     // the dest does not momentarily sit with broader perms. The `0o622 &
     // !umask` form previously used here could still allow group/other write
@@ -313,7 +313,7 @@ pub(crate) fn copy_on_write(
                 copy_stream(source, dest, nofollow, context)
             } else {
                 let mut src_file = open_source(source, nofollow)
-                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+                    .map_err(|e| cannot_open_for_reading(e, source))?;
                 let mut copy_method = CopyMethod::Default;
                 let result = handle_reflink_never_sparse_always(&mut src_file, dest);
                 if let Ok((debug, method)) = result {
@@ -337,7 +337,7 @@ pub(crate) fn copy_on_write(
                 copy_stream(source, dest, nofollow, context)
             } else {
                 let mut src_file = open_source(source, nofollow)
-                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+                    .map_err(|e| cannot_open_for_reading(e, source))?;
                 let result = handle_reflink_never_sparse_never(&mut src_file);
                 if let Ok(debug) = result {
                     copy_debug = debug;
@@ -355,7 +355,7 @@ pub(crate) fn copy_on_write(
                 copy_stream(source, dest, nofollow, context)
             } else {
                 let mut src_file = open_source(source, nofollow)
-                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+                    .map_err(|e| cannot_open_for_reading(e, source))?;
                 let mut copy_method = CopyMethod::Default;
                 let result = handle_reflink_never_sparse_auto(&mut src_file, dest);
                 if let Ok((debug, method)) = result {
@@ -381,7 +381,7 @@ pub(crate) fn copy_on_write(
                 copy_stream(source, dest, nofollow, context)
             } else {
                 let mut src_file = open_source(source, nofollow)
-                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+                    .map_err(|e| cannot_open_for_reading(e, source))?;
                 let mut copy_method = CopyMethod::Default;
                 let result = handle_reflink_auto_sparse_always(&mut src_file, dest);
                 if let Ok((debug, method)) = result {
@@ -405,7 +405,7 @@ pub(crate) fn copy_on_write(
                 copy_stream(source, dest, nofollow, context)
             } else {
                 let mut src_file = open_source(source, nofollow)
-                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+                    .map_err(|e| cannot_open_for_reading(e, source))?;
                 let result = handle_reflink_auto_sparse_never(&mut src_file);
                 if let Ok(debug) = result {
                     copy_debug = debug;
@@ -420,7 +420,7 @@ pub(crate) fn copy_on_write(
                 copy_stream(source, dest, nofollow, context)
             } else {
                 let mut src_file = open_source(source, nofollow)
-                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+                    .map_err(|e| cannot_open_for_reading(e, source))?;
                 let mut copy_method = CopyMethod::Default;
                 let result = handle_reflink_auto_sparse_auto(&mut src_file, dest);
                 if let Ok((debug, method)) = result {
@@ -444,8 +444,8 @@ pub(crate) fn copy_on_write(
             copy_debug.sparse_detection = SparseDebug::No;
             copy_debug.reflink = OffloadReflinkDebug::Yes;
 
-            let mut src_file = open_source(source, nofollow)
-                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+            let mut src_file =
+                open_source(source, nofollow).map_err(|e| cannot_open_for_reading(e, source))?;
             clone(&mut src_file, dest, CloneFallback::Error, context)
         }
         (ReflinkMode::Always, _) => {
