@@ -137,6 +137,16 @@ windows-sys = { version = ">=0.60, <0.62", default-features = false }
 xattr = { version = "1.3.1", default-features = false }
 z85 = "3.0.5"
 zip = { version = "9.0.0", default-features = false, features = ["deflate"] }
+regex-automata = { version = "0.4.16", default-features = false, features = [
+  "std",
+  "meta",
+  "hybrid",
+  "dfa-onepass",
+  "nfa-backtrack",
+  "perf-inline",
+  "perf-literal",
+  "unicode",
+] }
 
 hex = "0.4.3"
 md-5 = { version = "0.11.0", default-features = false, features = ["alloc"] }

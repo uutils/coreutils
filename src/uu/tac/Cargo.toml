@@ -22,7 +22,7 @@ clap = { workspace = true }
 fluent = { workspace = true }
 libc = { workspace = true }
 memchr = { workspace = true }
-regex = { workspace = true }
+regex-automata = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["buf-copy", "fs", "signals"] }
