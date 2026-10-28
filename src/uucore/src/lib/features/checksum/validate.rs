@@ -465,7 +465,7 @@ trait ByteSliceExt {
     fn trim_blanks_start(&self) -> &Self;
 
     /// Remove the backslash that starts an untagged line whose file name is
-    /// escaped, as in `\<checksum>  a\nb` for the file "a<newline>b".
+    /// escaped, as in `\<checksum>  a\nb` for a file name with a newline.
     fn strip_escape_prefix(&self) -> &Self;
 }
 
