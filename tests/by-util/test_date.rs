@@ -2503,47 +2503,48 @@ fn test_date_format_locale_date_and_time_no_pad_large_width() {
 
 /// `%p` and `%P` use the locale's AM/PM markers, also inside `%r`. The Linux
 /// values are GNU date's, the macOS ones follow its locale data.
-#[test]
+#[rstest]
 #[cfg(any(target_vendor = "apple", all(target_os = "linux", target_env = "gnu")))]
 #[cfg_attr(
     wasi_runner,
     ignore = "WASI sandbox: timezone/locale database not visible"
 )]
-fn test_date_format_locale_ampm_markers() {
-    #[cfg(target_os = "linux")]
-    let cases = [
-        ("es_ES.UTF-8", "%p", "p.\u{202f}m."),
-        ("es_ES.UTF-8", "%^p", "P.\u{202f}M."),
-        ("es_ES.UTF-8", "%10p", "   p.\u{202f}m."),
-        ("es_ES.UTF-8", "%r", "08:17:48 p.\u{202f}m."),
-        ("es_ES.UTF-8", "%^r", "08:17:48 P.\u{202f}M."),
-        ("fr_FR.UTF-8", "%p", ""),
-        ("fr_FR.UTF-8", "%10p", "          "),
-        ("fr_FR.UTF-8", "%r", "08:17:48 "),
-        ("en_GB.UTF-8", "%p", "pm"),
-        ("en_GB.UTF-8", "%^P", "pm"),
-    ];
-    #[cfg(target_vendor = "apple")]
-    let cases = [
-        ("es_ES.UTF-8", "%p", "p. m."),
-        ("es_ES.UTF-8", "%^p", "P. M."),
-        ("es_ES.UTF-8", "%r", "08:17:48 p. m."),
-        ("en_GB.UTF-8", "%P", "p.m."),
-        ("ja_JP.UTF-8", "%p", "午後"),
-    ];
-
-    for (locale, format, expected) in cases {
-        if !is_locale_available(locale) {
-            continue;
-        }
-        new_ucmd!()
-            .env("LC_ALL", locale)
-            .arg("-d")
-            .arg("1997-01-19 20:17:48")
-            .arg(format!("+{format}"))
-            .succeeds()
-            .stdout_only(format!("{expected}\n"));
+#[cfg_attr(
+    target_os = "linux",
+    case::spanish("es_ES.UTF-8", "%p", "p.\u{202f}m."),
+    case::spanish_upper("es_ES.UTF-8", "%^p", "P.\u{202f}M."),
+    case::spanish_width("es_ES.UTF-8", "%10p", "   p.\u{202f}m."),
+    case::spanish_time("es_ES.UTF-8", "%r", "08:17:48 p.\u{202f}m."),
+    case::spanish_time_upper("es_ES.UTF-8", "%^r", "08:17:48 P.\u{202f}M."),
+    case::french("fr_FR.UTF-8", "%p", ""),
+    case::french_width("fr_FR.UTF-8", "%10p", "          "),
+    case::french_time("fr_FR.UTF-8", "%r", "08:17:48 "),
+    case::british("en_GB.UTF-8", "%p", "pm"),
+    case::british_upper("en_GB.UTF-8", "%^P", "pm")
+)]
+#[cfg_attr(
+    target_vendor = "apple",
+    case::spanish("es_ES.UTF-8", "%p", "p. m."),
+    case::spanish_upper("es_ES.UTF-8", "%^p", "P. M."),
+    case::spanish_time("es_ES.UTF-8", "%r", "08:17:48 p. m."),
+    case::british_lower("en_GB.UTF-8", "%P", "p.m."),
+    case::japanese("ja_JP.UTF-8", "%p", "午後")
+)]
+fn test_date_format_locale_ampm_markers(
+    #[case] locale: &str,
+    #[case] format: &str,
+    #[case] expected: &str,
+) {
+    if !is_locale_available(locale) {
+        return;
     }
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-d")
+        .arg("1997-01-19 20:17:48")
+        .arg(format!("+{format}"))
+        .succeeds()
+        .stdout_only(format!("{expected}\n"));
 }
 
 /// `bg_BG`'s `date_fmt` has the year only inside `%x`, which therefore has to
