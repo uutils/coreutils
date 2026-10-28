@@ -4171,7 +4171,7 @@ dependencies = [
  "libc",
  "memchr",
  "memmap2",
- "regex",
+ "regex-automata",
  "tempfile",
  "thiserror 2.0.21",
  "uucore",
