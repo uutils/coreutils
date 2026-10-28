@@ -1014,3 +1014,38 @@ fn test_closed_stdin() {
         .stdout_is("content\n")
         .stderr_is("cat: -: Bad file descriptor\n");
 }
+
+#[test]
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
+fn test_fast_copy_reuses_pipe_across_files() {
+    let scene = TestScenario::new(util_name!());
+    let Ok(output) = std::process::Command::new("strace")
+        .args(["-qq", "-o", "trace", "-e", "trace=pipe2,fcntl"])
+        .arg(&scene.bin_path)
+        .args(["cat", "/dev/null", "/dev/null"])
+        .current_dir(scene.fixtures.as_string())
+        .output()
+    else {
+        eprintln!("TEST SKIPPED: strace is unavailable");
+        return;
+    };
+    let trace = read_to_string(scene.fixtures.plus("trace")).unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if trace.is_empty() && stderr.starts_with("strace:") {
+        eprintln!("TEST SKIPPED: strace could not trace pipe syscalls: {stderr}");
+        return;
+    }
+    if trace.lines().any(|line| {
+        line.contains("ENOSYS") || (line.contains("F_SETPIPE_SZ") && line.contains("EINVAL"))
+    }) {
+        eprintln!("TEST SKIPPED: kernel does not support the pipe syscalls: {trace}");
+        return;
+    }
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stdout.is_empty(), "{output:?}");
+    assert!(output.stderr.is_empty(), "{output:?}");
+
+    assert_eq!(trace.matches("pipe2(").count(), 1, "{trace}");
+    // One attempt for stdout and one for the cached broker, regardless of operands.
+    assert_eq!(trace.matches("F_SETPIPE_SZ").count(), 2, "{trace}");
+}
