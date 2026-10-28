@@ -81,6 +81,8 @@ skip = [
   { name = "syn", version = "2.0.117" },
   # bindgen
   { name = "shlex", version = "1.3.0" },
+  # aws-lc-sys (via openssl)
+  { name = "bindgen", version = "0.72.0" },
 ]
 # spell-checker: enable
 
