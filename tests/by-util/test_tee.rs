@@ -756,11 +756,11 @@ mod linux_only {
         check_failed_outputs_do_not_spill(None);
     }
 
-    // Just enough file descriptors for stdio, the 3 outputs and tee's 2 pipes: a
+    // Just enough file descriptors for stdio, the 3 outputs ,2 pipe pairs and memfd: a
     // failed output's pipe has to be freed before it is replaced.
     #[test]
     fn test_tee_failed_output_at_open_file_limit() {
-        check_failed_outputs_do_not_spill(Some(10));
+        check_failed_outputs_do_not_spill(Some(11));
     }
 
     #[test]
