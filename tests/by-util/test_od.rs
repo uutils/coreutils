@@ -1709,3 +1709,15 @@ fn test_width_invalid_numbers() {
             .stderr_only(format!("od: {message}\n"));
     }
 }
+
+#[test]
+fn test_final_offset_printed_when_an_input_fails() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a.txt", "a\n");
+    at.mkdir("d");
+
+    ucmd.args(&["a.txt", "d"])
+        .fails_with_code(1)
+        .stdout_contains("0000002")
+        .stderr_contains("d: Is a directory");
+}

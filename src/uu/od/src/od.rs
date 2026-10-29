@@ -546,9 +546,9 @@ where
                 let length = memory_decoder.length();
 
                 if length == 0 {
-                    if !input_decoder.has_error() {
-                        input_offset.write_final_offset(writer)?;
-                    }
+                    // GNU prints the final offset even when one of the inputs
+                    // failed, so always emit it before stopping.
+                    input_offset.write_final_offset(writer)?;
                     break;
                 }
 
