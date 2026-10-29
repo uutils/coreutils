@@ -353,18 +353,23 @@ impl Uniq {
 }
 
 fn opt_parsed(opt_name: &str, matches: &ArgMatches) -> UResult<Option<usize>> {
-    match matches.get_one::<String>(opt_name) {
-        Some(arg_str) => match arg_str.parse::<usize>() {
-            Ok(v) => Ok(Some(v)),
-            Err(e) => match e.kind() {
-                IntErrorKind::PosOverflow => Ok(Some(usize::MAX)),
-                _ => Err(USimpleError::new(
-                    1,
-                    translate!("uniq-error-invalid-argument", "opt_name" => opt_name, "arg" => arg_str.maybe_quote()),
-                )),
-            },
-        },
-        None => Ok(None),
+    let Some(arg_str) = matches.get_one::<String>(opt_name) else {
+        return Ok(None);
+    };
+    match arg_str.parse::<usize>() {
+        Ok(v) => Ok(Some(v)),
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => Ok(Some(usize::MAX)),
+        Err(_) => {
+            let arg = arg_str.maybe_quote();
+            let msg = if opt_name == options::SKIP_FIELDS {
+                translate!("uniq-error-invalid-skip-fields", "arg" => arg)
+            } else if opt_name == options::SKIP_CHARS {
+                translate!("uniq-error-invalid-skip-chars", "arg" => arg)
+            } else {
+                translate!("uniq-error-invalid-check-chars", "arg" => arg)
+            };
+            Err(USimpleError::new(1, msg))
+        }
     }
 }
 
