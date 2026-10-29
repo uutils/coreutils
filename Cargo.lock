@@ -4090,6 +4090,7 @@ dependencies = [
  "fluent",
  "nix",
  "rustix",
+ "rustix-openpty",
  "thiserror 2.0.21",
  "uucore",
 ]
