@@ -1366,3 +1366,10 @@ fn test_mkdir_concurrent_non_recursive() {
         );
     }
 }
+
+#[test]
+fn test_context_without_value_does_not_consume_operand() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--context", "newdir"]).succeeds();
+    assert!(at.dir_exists("newdir"));
+}
