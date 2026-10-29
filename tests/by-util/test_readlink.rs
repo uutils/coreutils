@@ -563,3 +563,26 @@ fn test_verbose_or_silent() {
         )
         .no_stdout();
 }
+
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: canonicalized path resolves to the guest's virtual root, not the host's absolute path"
+)]
+fn test_last_of_canonicalize_flags_wins() {
+    // https://github.com/uutils/coreutils/issues/15995
+    // GNU uses whichever of -e/-f/-m comes last. -f only requires the parent to
+    // exist, while -e requires the whole path to exist.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    let actual = ucmd
+        .args(&["-e", "-f", "a/b"])
+        .succeeds()
+        .stdout_move_str();
+    let expect = path_concat!(at.root_dir_resolved(), "a/b") + "\n";
+    assert_eq!(actual, expect);
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    ucmd.args(&["-f", "-e", "a/b"]).fails_with_code(1).no_stdout();
+}
