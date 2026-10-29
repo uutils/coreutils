@@ -670,3 +670,14 @@ fn test_realpath_canonicalize_vs_existing() {
         }
     }
 }
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: absolute symlink targets")]
+fn test_realpath_no_symlinks_existing_dangling_symlink_fails() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("missing", "dangling");
+    ucmd.args(&["-s", "-e", "dangling"])
+        .fails_with_code(1)
+        .stdout_is("")
+        .stderr_contains("No such file or directory");
+}
