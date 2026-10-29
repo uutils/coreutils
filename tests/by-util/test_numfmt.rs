@@ -71,6 +71,13 @@ fn test_invalid_arg() {
 // https://github.com/uutils/coreutils/issues/13272
 // argument following `--header` must not be interpreted as the option's value
 #[case::header_detached(&["--header", "1", "2"], "1\n2\n")]
+// https://github.com/uutils/coreutils/issues/16005
+// GNU accepts any unambiguous prefix of an enumerated value.
+#[case::from_unit_prefix_auto(&["--from=a", "5"], "5\n")]
+#[case::from_unit_prefix_si(&["--from=s", "5"], "5\n")]
+#[case::from_unit_prefix_none(&["--from=n", "5"], "5\n")]
+#[case::invalid_mode_prefix_abort(&["--invalid=a", "5"], "5\n")]
+#[case::invalid_mode_prefix_fail(&["--invalid=f", "5"], "5\n")]
 fn test_numfmt_args(#[case] args: &[&str], #[case] expected: &str) {
     new_ucmd!().args(args).succeeds().stdout_only(expected);
 }
@@ -113,6 +120,11 @@ fn test_numfmt_stdin(#[case] args: &[&str], #[case] input: &str, #[case] expecte
         .pipe_in(input)
         .succeeds()
         .stdout_only(expected);
+}
+
+#[test]
+fn test_ambiguous_unit_prefix_is_rejected() {
+    new_ucmd!().args(&["--from=i", "5"]).fails_with_code(1);
 }
 
 #[test]

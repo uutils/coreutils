@@ -236,18 +236,29 @@ fn handle_buffer_to<R: BufRead>(
 }
 
 fn parse_unit(s: &str, opt: &'static str) -> std::result::Result<Unit, ParseError> {
-    match s {
-        "auto" if opt != TO => Ok(Unit::Auto),
-        "si" => Ok(Unit::Si),
-        "iec" => Ok(Unit::Iec(false)),
-        "iec-i" => Ok(Unit::Iec(true)),
-        "none" => Ok(Unit::None),
-        value => Err(OptionValueError {
-            message: translate!("numfmt-error-invalid-unit-argument", "arg" => value, "opt" => format!("--{opt}")),
+    // GNU accepts any unambiguous prefix of a unit name, e.g. `--from=a`.
+    const UNITS: [&str; 5] = ["auto", "si", "iec", "iec-i", "none"];
+    let unit = if UNITS.contains(&s) {
+        Some(s)
+    } else {
+        let mut candidates = UNITS.iter().copied().filter(|unit| unit.starts_with(s));
+        match (candidates.next(), candidates.next()) {
+            (Some(unit), None) => Some(unit),
+            _ => None,
+        }
+    };
+    match unit {
+        Some("auto") if opt != TO => Ok(Unit::Auto),
+        Some("si") => Ok(Unit::Si),
+        Some("iec") => Ok(Unit::Iec(false)),
+        Some("iec-i") => Ok(Unit::Iec(true)),
+        Some("none") => Ok(Unit::None),
+        _ => Err(OptionValueError {
+            message: translate!("numfmt-error-invalid-unit-argument", "arg" => s, "opt" => format!("--{opt}")),
             option: opt,
-            value: value.to_string(),
+            value: s.to_string(),
             // `auto` is a real unit, just not one --to can scale to.
-            label: (value == "auto").then_some("numfmt-diag-label-auto-from-only"),
+            label: (unit == Some("auto")).then_some("numfmt-diag-label-auto-from-only"),
             help: "numfmt-diag-help-unit",
         }
         .into()),
@@ -438,7 +449,7 @@ fn parse_options(args: &ArgMatches) -> std::result::Result<NumfmtOptions, ParseE
     let explicit_unit_separator = args.contains_id(UNIT_SEPARATOR)
         && args.value_source(UNIT_SEPARATOR) == Some(ValueSource::CommandLine);
 
-    let invalid = InvalidModes::from_str(args.get_one::<String>(INVALID).unwrap()).unwrap();
+    let invalid = InvalidModes::from_str(args.get_one::<String>(INVALID).unwrap())?;
 
     let zero_terminated = args.get_flag(ZERO_TERMINATED);
 
@@ -697,7 +708,6 @@ pub fn uu_app() -> Command {
                 .long(INVALID)
                 .help(translate!("numfmt-help-invalid"))
                 .default_value("abort")
-                .value_parser(["abort", "fail", "warn", "ignore"])
                 .value_name("INVALID")
                 .allow_hyphen_values(true),
         )

@@ -398,16 +398,32 @@ impl FromStr for FormatOptions {
     }
 }
 
+impl InvalidModes {
+    fn from_name(name: &str) -> Self {
+        match name {
+            "abort" => Self::Abort,
+            "fail" => Self::Fail,
+            "warn" => Self::Warn,
+            "ignore" => Self::Ignore,
+            _ => unreachable!("only called with a resolved mode name"),
+        }
+    }
+}
+
 impl FromStr for InvalidModes {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "abort" => Ok(Self::Abort),
-            "fail" => Ok(Self::Fail),
-            "warn" => Ok(Self::Warn),
-            "ignore" => Ok(Self::Ignore),
-            unknown => Err(translate!("numfmt-error-unknown-invalid-mode", "mode" => unknown)),
+        // GNU accepts any unambiguous prefix of a mode name, e.g. `--invalid=a`.
+        const MODES: [&str; 4] = ["abort", "fail", "warn", "ignore"];
+        let s = s.to_lowercase();
+        if MODES.contains(&s.as_str()) {
+            return Ok(Self::from_name(&s));
+        }
+        let mut candidates = MODES.iter().copied().filter(|mode| mode.starts_with(&s));
+        match (candidates.next(), candidates.next()) {
+            (Some(mode), None) => Ok(Self::from_name(mode)),
+            _ => Err(translate!("numfmt-error-unknown-invalid-mode", "mode" => s)),
         }
     }
 }
