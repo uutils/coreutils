@@ -2179,7 +2179,7 @@ fn test_install_create_leading_symlink_same_file() {
     let target_link = "target_link";
 
     at.mkdir(target_dir);
-    at.write(&format!("{target_dir}/{file}"), "content");
+    at.write(format!("{target_dir}/{file}"), "content");
     at.symlink_file(target_dir, target_link);
     ucmd.arg("-D")
         .arg(format!("{target_dir}/{file}"))
@@ -2188,7 +2188,7 @@ fn test_install_create_leading_symlink_same_file() {
         .stderr_contains(format!(
             "'{target_dir}/{file}' and '{target_link}/{file}' are the same file"
         ));
-    assert_eq!(at.read(&format!("{target_dir}/{file}")), "content");
+    assert_eq!(at.read(format!("{target_dir}/{file}")), "content");
 }
 
 #[test]

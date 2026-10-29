@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont checkfile
+// spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont checkfile unopenable
 
 use rstest::rstest;
 use rstest_reuse::{apply, template};
@@ -3960,7 +3960,7 @@ fn test_check_improperly_formatted_line_does_not_select_format() {
     // same names with a leading space.
     for f in ["a", "c"] {
         at.write(f, "tampered\n");
-        at.write(&format!(" {f}"), &format!("{f}\n"));
+        at.write(format!(" {f}"), &format!("{f}\n"));
     }
     at.write(
         "check.md5sum",
