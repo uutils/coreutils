@@ -506,13 +506,13 @@ fn quote_file_name(file_name: &OsStr, quoting_style: QuotingStyle) -> String {
 }
 
 fn get_quoted_file_name(
-    display_name: &str,
+    display_name: &OsStr,
     file: &OsString,
     file_type: FileType,
     quoting_style: QuotingStyle,
 ) -> Result<String, i32> {
     if file_type.is_symlink() {
-        let quoted_display_name = quote_file_name(OsStr::new(display_name), quoting_style);
+        let quoted_display_name = quote_file_name(display_name, quoting_style);
         match fs::read_link(file) {
             Ok(dst) => {
                 let quoted_dst = quote_file_name(dst.as_os_str(), quoting_style);
@@ -524,15 +524,15 @@ fn get_quoted_file_name(
             }
         }
     } else {
-        Ok(quote_file_name(OsStr::new(display_name), quoting_style))
+        Ok(quote_file_name(display_name, quoting_style))
     }
 }
 
 fn process_token_filesystem(
     t: &Token,
     meta: &StatFs,
-    display_name: &str,
-    quote_name: impl Fn(&str) -> String,
+    display_name: &OsStr,
+    quote_name: impl Fn(&OsStr) -> String,
 ) {
     match *t {
         Token::Byte(byte) => print_raw_byte(byte),
@@ -561,7 +561,7 @@ fn process_token_filesystem(
                 // quoted file name
                 'n' if flag.quote => OutputType::Str(quote_name(display_name)),
                 // file name
-                'n' => OutputType::Str(display_name.to_string()),
+                'n' => OutputType::OsStr(&display_name.to_os_string()),
                 // block size (for faster transfers)
                 's' => OutputType::Unsigned(meta.io_size()),
                 // fundamental block size (for block counts)
@@ -1151,7 +1151,7 @@ impl Stater {
         &self,
         t: &Token,
         meta: &Metadata,
-        display_name: &str,
+        display_name: &OsStr,
         file: &OsString,
         file_type: FileType,
         #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -1240,12 +1240,11 @@ impl Stater {
                         None => OutputType::Str(String::new()),
                     },
                     // quoted file name
-                    'n' if flag.quote => OutputType::Str(quote_file_name(
-                        OsStr::new(display_name),
-                        self.quoting_style(),
-                    )),
+                    'n' if flag.quote => {
+                        OutputType::Str(quote_file_name(display_name, self.quoting_style()))
+                    }
                     // file name
-                    'n' => OutputType::Str(display_name.to_string()),
+                    'n' => OutputType::OsStr(&display_name.to_os_string()),
                     // quoted file name with dereference if symbolic link
                     'N' => {
                         let file_name = get_quoted_file_name(
@@ -1334,7 +1333,7 @@ impl Stater {
     }
 
     fn do_stat(&self, file: &OsStr, stdin_is_fifo: bool) -> UResult<i32> {
-        let display_name = file.to_string_lossy();
+        let display_name = file;
         let quoted_name = || quote_file_name(file, QuotingStyle::SHELL_ESCAPE_ALWAYS);
         let file = if cfg!(unix) && display_name == "-" {
             if self.show_fs {
@@ -1356,8 +1355,8 @@ impl Stater {
 
                     // Usage
                     for t in tokens {
-                        process_token_filesystem(t, &meta, &display_name, |name| {
-                            quote_file_name(OsStr::new(name), self.quoting_style())
+                        process_token_filesystem(t, &meta, display_name, |name| {
+                            quote_file_name(name, self.quoting_style())
                         });
                     }
                     self.raise_format_error()?;
@@ -1395,7 +1394,7 @@ impl Stater {
                         if let Err(code) = self.process_token_files(
                             t,
                             &meta,
-                            &display_name,
+                            display_name,
                             &file,
                             file_type,
                             follow_symbolic_links,
