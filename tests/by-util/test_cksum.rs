@@ -90,6 +90,16 @@ fn test_stdin() {
 }
 
 #[test]
+fn test_explicit_dash_prints_filename() {
+    new_ucmd!()
+        .arg("-")
+        .pipe_in(b"")
+        .succeeds()
+        .no_stderr()
+        .normalized_newlines_stdout_is("4294967295 0 -\n");
+}
+
+#[test]
 fn test_stdin_with_dash_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("-");
