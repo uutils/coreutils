@@ -1269,6 +1269,14 @@ mod diagnostics {
     }
 
     #[test]
+    fn test_comma_separated_mode_is_rejected() {
+        new_ucmd!()
+            .args(&["-m", "1,2", "some_dir"])
+            .fails_with_code(1)
+            .stderr_only("mkdir: invalid mode '1,2'\n");
+    }
+
+    #[test]
     fn test_terminal_message_quotes_control_character() {
         let result = new_ucmd!()
             .terminal_sim_stderr()

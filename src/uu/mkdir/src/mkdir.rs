@@ -68,6 +68,19 @@ fn get_mode(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Opt
         // If no mode argument, let the kernel apply umask and ACLs naturally.
         return Ok(None);
     };
+    // Symbolic modes may be comma-separated (like chmod), but a numeric mode
+    // must be a single octal number: GNU mkdir rejects `-m 1,2` instead of
+    // applying only the last clause.
+    if m.contains(',')
+        && m.chars()
+            .all(|c| c.is_ascii_digit() || c == ',' || c.is_whitespace())
+    {
+        let quoted_mode = locale_aware_c_single_escape(m);
+        return Err(USimpleError::new(
+            1,
+            translate!("mkdir-error-invalid-mode", "mode" => quoted_mode),
+        ));
+    }
     mode::parse_chmod(DEFAULT_PERM, m, true, mode::get_umask())
         .map(Some)
         .map_err(|err| {

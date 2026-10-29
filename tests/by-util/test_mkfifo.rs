@@ -44,6 +44,16 @@ fn test_create_one_fifo_with_invalid_mode() {
 }
 
 #[test]
+fn test_comma_separated_numeric_mode_is_rejected() {
+    new_ucmd!()
+        .arg("abcd")
+        .arg("-m")
+        .arg("1,2")
+        .fails_with_code(1)
+        .stderr_contains("invalid mode: '1,2'");
+}
+
+#[test]
 fn test_create_one_fifo_with_non_file_permission_mode() {
     new_ucmd!()
         .arg("abcd")
