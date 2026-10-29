@@ -13,7 +13,7 @@
 //!
 
 use crate::error::{UResult, USimpleError};
-use crate::locale::translate;
+use crate::locale::{translate, translate_text};
 
 use clap::error::{ContextKind, ErrorKind};
 use clap::{ArgMatches, Command, Error};
@@ -21,8 +21,7 @@ use clap::{ArgMatches, Command, Error};
 use std::error::Error as StdError;
 use std::ffi::OsString;
 
-use std::io::Write as _;
-use std::io::stderr;
+use std::io::{Write as _, stderr};
 
 /// Color enum for consistent styling
 #[derive(Debug, Clone, Copy)]
@@ -68,7 +67,7 @@ fn should_use_color_for_stream<S: std::io::IsTerminal>(stream: &S) -> bool {
 struct ColorManager(bool);
 
 impl ColorManager {
-    /// Create a new ColorManager based on environment variables
+    /// Create a new [`ColorManager`] based on environment variables
     fn from_env() -> Self {
         Self(should_use_color_for_stream(&stderr()))
     }
@@ -151,7 +150,7 @@ impl<'a> ErrorFormatter<'a> {
             let _ = write!(
                 stderr(),
                 "{}\n\n",
-                translate!(
+                translate_text!(
                     "clap-error-unexpected-argument",
                     "arg" => self.color_mgr.colorize(&arg_str, Color::Yellow),
                     "error_word" => self.color_mgr.colorize(&error_word, Color::Red)
@@ -164,7 +163,7 @@ impl<'a> ErrorFormatter<'a> {
                 let _ = write!(
                     stderr(),
                     "{}\n\n",
-                    translate!(
+                    translate_text!(
                         "clap-error-similar-argument",
                         "tip_word" => self.color_mgr.colorize(&tip_word, Color::Green),
                         "suggestion" => self.color_mgr.colorize(&suggested_arg.to_string(), Color::Green)
@@ -204,7 +203,7 @@ impl<'a> ErrorFormatter<'a> {
             } else {
                 // Invalid value provided
                 let error_word = translate!("common-error");
-                let error_msg = translate!(
+                let error_msg = translate_text!(
                     "clap-error-invalid-value",
                     "error_word" => self.color_mgr.colorize(&error_word, Color::Red),
                     "value" => self.color_mgr.colorize(&value, Color::Yellow),

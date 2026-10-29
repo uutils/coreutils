@@ -582,6 +582,12 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
     let mut iter = line.char_indices().peekable();
 
     while let Some((byte_idx, ch)) = iter.next() {
+        if ch == '\n' {
+            *ctx.last_space = None;
+            emit_output(ctx)?;
+            continue;
+        }
+
         // Include combining characters with the base character when we are
         // measuring by display columns. In character-counting mode every
         // scalar value must advance the counter to match `chars().count()`
@@ -598,12 +604,6 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
         }
 
         let next_idx = iter.peek().map_or(line_bytes.len(), |(idx, _)| *idx);
-
-        if ch == '\n' {
-            *ctx.last_space = None;
-            emit_output(ctx)?;
-            continue;
-        }
 
         // A zero-width character such as NUL stays on the full line.
         let zero_width = ctx.mode == WidthMode::Columns && char_columns(ch) == 0;

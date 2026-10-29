@@ -622,11 +622,12 @@ fn extract_strings_from_input(
     // Helper function to format and print a string
     let mut print_string = |offset: u64, string: &[u8]| -> std::io::Result<()> {
         let string_content = String::from_utf8_lossy(string);
-        match radix {
-            Radix::NoPrefix => writeln!(writer, "{string_content}"),
-            Radix::Decimal => writeln!(writer, "{offset:07} {string_content}"),
-            Radix::Hexadecimal => writeln!(writer, "{offset:07x} {string_content}"),
-            Radix::Octal => writeln!(writer, "{offset:07o} {string_content}"),
+        if radix == Radix::NoPrefix {
+            writeln!(writer, "{string_content}")
+        } else {
+            // Same offset format as the normal dump
+            let offset = InputOffset::new(radix, offset, None);
+            writeln!(writer, "{offset} {string_content}")
         }
     };
 
@@ -788,7 +789,7 @@ fn write_bytes(
     Ok(())
 }
 
-/// Helper function to convert input strings to InputSource
+/// Helper function to convert input strings to [`InputSource`]
 fn map_input_strings(input_strings: &[OsString]) -> Vec<InputSource<'_>> {
     input_strings
         .iter()

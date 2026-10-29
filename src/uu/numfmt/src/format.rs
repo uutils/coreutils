@@ -101,7 +101,7 @@ fn find_valid_number_with_suffix(s: &str, unit: Unit) -> Option<&str> {
     }
 }
 
-/// Given a string like "5 K Field2" with unit_separator=" ", returns the length
+/// Given a string like "5 K Field2" with `unit_separator=" "`, returns the length
 /// of the valid prefix including the separator and suffix (e.g. "5 K" → 4).
 fn valid_end_with_unit_separator(
     s: &str,
@@ -735,10 +735,12 @@ fn transform_to(
         }
     };
     Ok(match s {
-        None if opts.to == Unit::None && precision <= u16::MAX.into() => localize(format_float(
-            round_with_precision(i2, round_method, precision),
-            precision,
-        )),
+        None if opts.to == Unit::None && precision <= u16::MAX.into() => {
+            let rounded = round_with_precision(i2, round_method, precision);
+            // rounding a small negative number leaves -0.0, which would print as "-0"
+            let rounded = if rounded == 0.0 { 0.0 } else { rounded };
+            localize(format_float(rounded, precision))
+        }
         None if is_precision_specified && precision <= u16::MAX.into() => {
             let i2 = round_with_precision(i2, round_method, 0);
             localize(format_float(i2, precision))

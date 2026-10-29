@@ -187,7 +187,7 @@ fn test_mkfifo_selinux() {
             context_value.contains("unconfined_u"),
             "Expected 'unconfined_u' not found in getfattr output:\n{context_value}"
         );
-        at.remove(&at.plus_as_string(dest));
+        at.remove(at.plus(dest));
     }
 }
 
@@ -213,6 +213,54 @@ fn test_mkfifo_selinux_invalid() {
             at.remove(dest);
         }
     }
+}
+
+// -Z looks the name up in the policy, which lists absolute names only: a relative
+// name must get the same label as the absolute one.
+#[test]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+fn test_mkfifo_selinux_default_context_relative_name() {
+    use uucore::selinux::{
+        get_selinux_security_context, is_selinux_enabled, set_selinux_security_context,
+    };
+    use uutests::util::AtPath;
+
+    if !is_selinux_enabled() {
+        println!("Skipping SELinux test: SELinux is not enabled");
+        return;
+    }
+    // The policy has no default under /tmp, so both names would inherit there;
+    // target/tmp is usually under $HOME, which has one.
+    let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let at = AtPath::new(dir.path());
+    let scene = TestScenario::new(util_name!());
+    // A type the policy won't hand out here, so a missed lookup shows as inheritance.
+    at.mkdir("parent");
+    let ctx = String::from("root:object_r:etc_t:s0");
+    if set_selinux_security_context(&at.plus("parent"), Some(&ctx)).is_err() {
+        println!("Skipping SELinux test: cannot set a context on the fixture");
+        return;
+    }
+    let type_of = |p: &str| {
+        let ctx = get_selinux_security_context(&at.plus(p), false).unwrap();
+        ctx.split(':').nth(2).unwrap().to_owned()
+    };
+
+    scene
+        .ucmd()
+        .args(&["-Z", &at.plus_as_string("parent/absolute")])
+        .succeeds();
+    let expected = type_of("parent/absolute");
+    if expected == "etc_t" {
+        println!("Skipping SELinux test: the policy has no default for {dir:?}");
+        return;
+    }
+    scene
+        .ucmd()
+        .current_dir(dir.path())
+        .args(&["-Z", "parent/relative"])
+        .succeeds();
+    assert_eq!(type_of("parent/relative"), expected);
 }
 
 #[test]

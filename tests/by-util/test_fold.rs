@@ -288,6 +288,18 @@ fn test_zero_width_spaces_in_column_mode() {
 }
 
 #[test]
+fn test_zero_width_after_newline_in_column_mode() {
+    let input = "abc\n\u{200B}From x\n\u{200D}\u{0301}\nb\n";
+    for args in [&[][..], &["-s"]] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is(input);
+    }
+}
+
+#[test]
 fn test_zero_width_spaces_in_character_mode() {
     let len = io_buf_size_times_two();
     let input = "\u{200B}".repeat(len);

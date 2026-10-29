@@ -82,20 +82,15 @@
 //! }
 //! ```
 
-use crate::{
-    display::Quotable,
-    error::{UError, UResult},
-    fs::FileInformation,
-};
+use crate::display::Quotable;
+use crate::error::{UError, UResult};
+use crate::fs::FileInformation;
 use clap::ArgMatches;
-use std::{
-    env,
-    error::Error,
-    ffi::{OsStr, OsString},
-    fmt::{Debug, Display},
-    fs,
-    path::{Path, PathBuf},
-};
+use std::error::Error;
+use std::ffi::{OsStr, OsString};
+use std::fmt::{Debug, Display};
+use std::path::{Path, PathBuf};
+use std::{env, fs};
 
 pub static BACKUP_CONTROL_VALUES: &[&str] = &[
     "simple", "never", "numbered", "t", "existing", "nil", "none", "off",
@@ -226,7 +221,7 @@ pub mod arguments {
 /// In order of precedence, this function obtains the backup suffix
 ///
 /// 1. From the '-S' or '--suffix' CLI argument, if present
-/// 2. From the "SIMPLE_BACKUP_SUFFIX" environment variable, if present
+/// 2. From the `SIMPLE_BACKUP_SUFFIX` environment variable, if present
 /// 3. By using the default '~' if none of the others apply, or if they are empty or contain slashes
 ///
 /// This function directly takes [`ArgMatches`] as argument and looks for

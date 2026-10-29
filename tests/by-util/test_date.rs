@@ -2436,7 +2436,7 @@ fn test_date_format_locale_ampm_markers() {
     }
 }
 
-/// bg_BG's `date_fmt` has the year only inside `%x`, which therefore has to
+/// `bg_BG`'s `date_fmt` has the year only inside `%x`, which therefore has to
 /// be expanded before an out-of-range year is put in.
 #[test]
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
@@ -2596,6 +2596,37 @@ fn test_date_strftime_n_width_and_flags() {
         .arg("+%-N")
         .succeeds()
         .stdout_is("000000000\n");
+}
+
+// https://github.com/uutils/coreutils/issues/15697
+#[test]
+fn test_date_strftime_n_width_keeps_leading_zeros() {
+    for (time, format, expected) in [
+        ("@0.005123456", "+%3N", "005\n"),
+        ("@0.050123456", "+%3N", "050\n"),
+        ("@0.011123456", "+%3N", "011\n"),
+        ("@0.123456789", "+%3N", "123\n"),
+        ("@0.005123456", "+%6N", "005123\n"),
+        ("@0.005123456", "+%1N", "0\n"),
+        ("@0.005123456", "+%12N", "005123456000\n"),
+        ("@0.005123456", "+%_12N", "005123456   \n"),
+        ("@0.005123456", "+%_N", "005123456\n"),
+        ("@0.050000000", "+%_3N", "05 \n"),
+        ("@0.050000000", "+%-3N", "05\n"),
+        ("@0.050000000", "+%-12N", "05\n"),
+        ("@0.050000000", "+%-N", "050000000\n"),
+        ("@0.005123456", "+%+3N", "005\n"),
+        ("@1.005123456", "+%s%3N", "1005\n"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(time)
+            .arg(format)
+            .succeeds()
+            .stdout_is(expected);
+    }
 }
 
 #[test]
@@ -2984,6 +3015,12 @@ fn test_locale_month_names() {
         ("hu_HU.UTF-8", "január", "június", "december"),
         ("ja_JP.UTF-8", "1月", "6月", "12月"),
         ("zh_CN.UTF-8", "一月", "六月", "十二月"),
+        ("th_TH.UTF-8", "มกราคม", "มิถุนายน", "ธันวาคม"), // spell-checker:disable-line
+        // Months of the calendar that %m uses: Solar Hijri for fa_IR,
+        // Ethiopian for am_ET, Gregorian for ps_AF
+        ("fa_IR.UTF-8", "دی", "خرداد", "آذر"), // spell-checker:disable-line
+        ("am_ET.UTF-8", "ጥር", "ሰኔ", "ታኅሣሥ"),   // spell-checker:disable-line
+        ("ps_AF.UTF-8", "جنوري", "جون", "دسمبر"), // spell-checker:disable-line
     ] {
         check_date(loc, "2026-01-15", "+%B", jan);
         check_date(loc, "2026-06-15", "+%B", jun);
@@ -3032,6 +3069,8 @@ fn test_locale_day_names() {
         ("es_ES.UTF-8", "lunes", "domingo", "sábado"),
         ("ja_JP.UTF-8", "月曜日", "日曜日", "土曜日"),
         ("zh_CN.UTF-8", "星期一", "星期日", "星期六"),
+        ("th_TH.UTF-8", "วันจันทร์", "วันอาทิตย์", "วันเสาร์"), // spell-checker:disable-line
+        ("fa_IR.UTF-8", "دوشنبه", "یکشنبه", "شنبه"),    // spell-checker:disable-line
     ] {
         check_date(loc, "2026-01-26", "+%A", mon);
         check_date(loc, "2026-01-25", "+%A", sun);

@@ -7,11 +7,9 @@
 
 use crate::io::{RawReader, RawWriter};
 use rustix::pipe::{SpliceFlags, fcntl_setpipe_size};
-use std::{
-    cell::Cell,
-    io::{PipeReader, PipeWriter, Read, Write},
-    os::fd::AsFd,
-};
+use std::cell::Cell;
+use std::io::{PipeReader, PipeWriter, Read, Write};
+use std::os::fd::AsFd;
 pub const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
 const KERNEL_DEFAULT_PIPE_SIZE: usize = 64 * 1024;
 
@@ -38,17 +36,17 @@ thread_local! {
 }
 
 /// A type allows to
-/// - check that zero-copy succeed by ?.is_ok()
-/// - check that zero-copy failed, but read/write fallback succeed by ?.is_err()
+/// - check that zero-copy succeed by `?.is_ok()`
+/// - check that zero-copy failed, but read/write fallback succeed by `?.is_err()`
 /// - catch the read/write fallback's error by ? or let Err(e)
 ///
-/// use rustix::io::Result for functions without read/write fallback
+/// use `rustix::io::Result` for functions without read/write fallback
 type SpliceRes = Result<Result<(), ()>, PipeError>;
 
 /// return pipe and try to extend its size
-/// SIZE_REQUIRED should be true if you want to fail when changing pipe size failed
+/// `SIZE_REQUIRED` should be true if you want to fail when changing pipe size failed
 /// e.g. writing size to pipe should not hang
-/// SIZE_REQUIRED=false allows to continue unbuffered splice I/O with default pipe size even if fcntl failed
+/// `SIZE_REQUIRED=false` allows to continue unbuffered splice I/O with default pipe size even if fcntl failed
 ///
 /// used for resolving the limitation for splice: one of a input or output should be pipe
 #[inline]
@@ -69,7 +67,7 @@ pub fn pipe<const SIZE_REQUIRED: bool>() -> std::io::Result<(PipeReader, PipeWri
 /// of successfully moved bytes.
 ///
 /// splice fails if both of `source` and `target` are not pipe. Consider using
-/// splice_unbounded_broker or splice_unbounded_auto in the case.
+/// `splice_unbounded_broker` or `splice_unbounded_auto` in the case.
 #[inline]
 pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io::Result<usize> {
     rustix::pipe::splice(source, None, target, None, len, SpliceFlags::empty())
@@ -149,12 +147,20 @@ pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> Splice
 #[inline]
 pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Result<u64> {
     let pipe_size = n.min(MAX_ROOTLESS_PIPE_SIZE as u64) as usize;
+    let resize = pipe_size > KERNEL_DEFAULT_PIPE_SIZE;
     // improve throughput if output is pipe
     // expected that input is already extended if it is coming from splice
-    if pipe_size > KERNEL_DEFAULT_PIPE_SIZE {
+    if resize {
         let _ = fcntl_setpipe_size(&target, pipe_size);
     }
-    let Ok((broker_r, broker_w)) = PIPE_CACHE.take().map_or_else(pipe::<false>, Ok) else {
+    let Some((broker_r, broker_w)) = PIPE_CACHE.take().or_else(|| {
+        // use std::io::pipe to avoid fcntl when it is not useful
+        let pair = std::io::pipe().ok()?;
+        if resize {
+            let _ = fcntl_setpipe_size(&pair.0, pipe_size);
+        }
+        Some(pair)
+    }) else {
         return std::io::copy(&mut RawReader(input).take(n), &mut RawWriter(target));
     };
     let mut n = n;

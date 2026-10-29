@@ -41,7 +41,7 @@ readme = "README.package.md"
 version = "0.13.0"
 
 [workspace.dependencies]
-ansi-width = "0.1.0"
+ansi-width = "0.1.1"
 # The diagnostics rewrite ariadne's output by row number, so a release that
 # changes the shape of a report is a breaking change here even when it is not
 # one for ariadne. `uucore`'s `the_rendered_report_has_the_row_shape_the_rewriting_assumes`
@@ -83,7 +83,7 @@ itoa = "1.0.15"
 jiff = "0.2.18"
 jiff-icu = "0.2.2"
 jiff-tzdb = "0.1"
-libc = "0.2.186"
+libc = "0.2.191"
 lscolors = { version = "0.21.0", default-features = false, features = [
   "gnu_legacy",
 ] }
@@ -96,7 +96,7 @@ num-bigint = "0.4.4"
 num-integer = "0.1.47"
 num-prime = "0.7.0"
 num-traits = "0.2.19"
-fancy-regex = { version = "0.19.2", default-features = false, features = [
+fancy-regex = { version = "0.20.0", default-features = false, features = [
   "std",
   "unicode",
   "leftmost_longest",
@@ -113,6 +113,7 @@ rand = { version = "0.10.1", features = ["std_rng"] }
 rand_chacha = { version = "0.10.0" }
 rayon = "1.10"
 regex = "1.10.4"
+rlimit = "0.11.0"
 rstest = "0.28.0"
 rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"
@@ -211,7 +212,6 @@ inline_always = "allow"                      # 6
 should_panic_without_expect = "allow"        # 2
 assert_is_empty = "allow"
 
-doc_markdown = "allow"
 unused_self = "allow"
 implicit_hasher = "allow"
 # TODO lint is deprecated since Rust 1.98, can be removed when we have a MSRV >= 1.98
@@ -389,6 +389,9 @@ runcon = { optional = true, version = "0.13.0", package = "uu_runcon", path = "s
 # * pinned transitive dependencies
 # Not needed for now. Keep as examples:
 #pin_cc = { version="1.0.61, < 1.0.62", package="cc" } ## cc v1.0.62 has compiler errors for MinRustV v1.32.0, requires 1.34 (for `std::str::split_ascii_whitespace()`)
+
+[target.'cfg(all(unix, not(target_os = "fuchsia")))'.dev-dependencies]
+rlimit = { workspace = true }
 
 [target.'cfg(unix)'.dev-dependencies]
 nix = { workspace = true, features = ["fs", "signal"] }

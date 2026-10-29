@@ -24,9 +24,9 @@ pub unsafe extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
     #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     {
         unsafe extern "C" {
-            fn __stdinp() -> *mut FILE;
+            static mut __stdinp: *mut FILE;
         }
-        unsafe { __stdinp() }
+        unsafe { __stdinp }
     }
 
     #[cfg(target_os = "openbsd")]
@@ -87,9 +87,9 @@ pub unsafe extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
     #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     {
         unsafe extern "C" {
-            fn __stdoutp() -> *mut FILE;
+            static mut __stdoutp: *mut FILE;
         }
-        unsafe { __stdoutp() }
+        unsafe { __stdoutp }
     }
 
     #[cfg(target_os = "openbsd")]
@@ -150,9 +150,9 @@ pub unsafe extern "C" fn __stdbuf_get_stderr() -> *mut FILE {
     #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     {
         unsafe extern "C" {
-            fn __stderrp() -> *mut FILE;
+            static mut __stderrp: *mut FILE;
         }
-        unsafe { __stderrp() }
+        unsafe { __stderrp }
     }
 
     #[cfg(target_os = "openbsd")]
@@ -188,7 +188,7 @@ pub unsafe extern "C" fn __stdbuf_get_stderr() -> *mut FILE {
             fn __getreent() -> *mut _reent;
         }
 
-        unsafe { (*__getreent())._stdin }
+        unsafe { (*__getreent())._stderr }
     }
 
     #[cfg(not(any(
@@ -234,7 +234,7 @@ fn set_buffer(stream: *mut FILE, value: &str) {
 }
 
 /// # Safety
-/// This function is intended to be called automatically when the library is loaded via LD_PRELOAD.
+/// This function is intended to be called automatically when the library is loaded via `LD_PRELOAD`.
 /// It assumes that the standard streams are valid and that calling setvbuf on them is safe.
 /// The caller must ensure this function is only called in a compatible runtime environment.
 #[unsafe(no_mangle)]
@@ -247,5 +247,20 @@ pub unsafe extern "C" fn __stdbuf() {
     }
     if let Ok(val) = env::var("_STDBUF_O") {
         set_buffer(unsafe { __stdbuf_get_stdout() }, &val);
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    // Each getter must return its own stream, not another one.
+    #[test]
+    fn test_stream_getters_return_matching_streams() {
+        unsafe {
+            assert_eq!(fileno(__stdbuf_get_stdin()), libc::STDIN_FILENO);
+            assert_eq!(fileno(__stdbuf_get_stdout()), libc::STDOUT_FILENO);
+            assert_eq!(fileno(__stdbuf_get_stderr()), libc::STDERR_FILENO);
+        }
     }
 }

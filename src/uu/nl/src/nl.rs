@@ -57,6 +57,8 @@ impl Default for Settings {
 struct Stats {
     line_number: Option<i64>,
     consecutive_empty_lines: u64,
+    // Kept across files: nl treats all its inputs as one document.
+    section: SectionDelimiter,
 }
 
 impl Stats {
@@ -64,6 +66,7 @@ impl Stats {
         Self {
             line_number: Some(starting_line_number),
             consecutive_empty_lines: 0,
+            section: SectionDelimiter::Body,
         }
     }
 }
@@ -161,6 +164,7 @@ impl NumberFormat {
     }
 }
 
+#[derive(Clone, Copy)]
 enum SectionDelimiter {
     Header,
     Body,
@@ -409,7 +413,6 @@ fn write_line(writer: &mut impl Write, line: &[u8]) -> io::Result<()> {
 /// `nl` implements the main functionality for an individual buffer.
 fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings) -> UResult<()> {
     let mut writer = BufWriter::new(stdout());
-    let mut current_numbering_style = &settings.body_numbering;
     let mut line = Vec::new();
     // Written before every unnumbered line. Capped to avoid OOM on 32-bit targets
     // when -w i32::MAX is passed (allocating 2 GiB would panic).
@@ -440,21 +443,18 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
             stats.consecutive_empty_lines = 0;
         }
 
-        let new_numbering_style = match SectionDelimiter::parse(&line, &settings.section_delimiter)
-        {
-            Some(SectionDelimiter::Header) => Some(&settings.header_numbering),
-            Some(SectionDelimiter::Body) => Some(&settings.body_numbering),
-            Some(SectionDelimiter::Footer) => Some(&settings.footer_numbering),
-            None => None,
-        };
-
-        if let Some(new_style) = new_numbering_style {
-            current_numbering_style = new_style;
+        if let Some(section) = SectionDelimiter::parse(&line, &settings.section_delimiter) {
+            stats.section = section;
             if settings.renumber {
                 stats.line_number = Some(settings.starting_line_number);
             }
             writeln!(writer).map_err_context(|| translate!("nl-error-could-not-write"))?;
         } else {
+            let current_numbering_style = match stats.section {
+                SectionDelimiter::Header => &settings.header_numbering,
+                SectionDelimiter::Body => &settings.body_numbering,
+                SectionDelimiter::Footer => &settings.footer_numbering,
+            };
             let is_line_numbered = match current_numbering_style {
                 // consider $join_blank_lines consecutive empty lines to be one logical line
                 // for numbering, and only number the last one

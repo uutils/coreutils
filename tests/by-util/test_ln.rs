@@ -7,7 +7,7 @@
 
 #![allow(clippy::similar_names)]
 
-use std::path::PathBuf;
+use std::path::{MAIN_SEPARATOR_STR, PathBuf};
 #[cfg(all(unix, not(target_os = "android")))]
 use std::time::Duration;
 use uutests::at_and_ucmd;
@@ -33,6 +33,31 @@ fn test_symlink_existing_file() {
     assert!(at.file_exists(file));
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file);
+}
+
+#[test]
+#[cfg(windows)]
+fn test_symlink_target_with_forward_slashes() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("dir/sub");
+    at.write("dir/file", "content");
+
+    scene
+        .ucmd()
+        .args(&["-s", "dir/file", "link"])
+        .succeeds()
+        .no_stderr();
+    assert_eq!(at.resolve_link("link"), "dir\\file");
+    assert_eq!(at.read("link"), "content");
+
+    scene
+        .ucmd()
+        .args(&["-s", "dir/sub", "dirlink"])
+        .succeeds()
+        .no_stderr();
+    assert_eq!(at.resolve_link("dirlink"), "dir\\sub");
+    assert!(at.dir_exists("dirlink"));
 }
 
 #[test]
@@ -408,6 +433,25 @@ fn test_symlink_custom_backup_suffix() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
+fn test_ln_backup_empty_suffix_defaults_to_tilde() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a", "a\n");
+    at.write("b", "b2\n");
+
+    scene
+        .ucmd()
+        .args(&["-b", "--suffix=", "a", "b"])
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read("b"), "a\n");
+    assert_eq!(at.read("b~"), "b2\n");
+}
+
+#[test]
 fn test_symlink_suffix_without_backup_option() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -429,7 +473,7 @@ fn test_symlink_suffix_without_backup_option() {
     assert_eq!(at.read("a"), "a\n");
     assert_eq!(at.read("b"), "a\n");
     // we should have created backup for b file
-    assert_eq!(at.read(&format!("b{suffix}")), "b2\n");
+    assert_eq!(at.read(format!("b{suffix}")), "b2\n");
 }
 
 #[test]
@@ -611,11 +655,17 @@ fn test_symlink_target_dir_from_dir() {
 
     let file_a_link = &format!("{dir}/{filename_a}");
     assert!(at.is_symlink(file_a_link));
-    assert_eq!(&at.resolve_link(file_a_link), file_a);
+    assert_eq!(
+        at.resolve_link(file_a_link),
+        file_a.replace('/', MAIN_SEPARATOR_STR)
+    );
 
     let file_b_link = &format!("{dir}/{filename_b}");
     assert!(at.is_symlink(file_b_link));
-    assert_eq!(&at.resolve_link(file_b_link), file_b);
+    assert_eq!(
+        at.resolve_link(file_b_link),
+        file_b.replace('/', MAIN_SEPARATOR_STR)
+    );
 }
 
 #[test]
@@ -796,7 +846,10 @@ fn test_symlink_relative_path() {
         .succeeds()
         .stdout_only(format!("'{link}' -> '{}'\n", p.to_string_lossy()));
     assert!(at.is_symlink(link));
-    assert_eq!(at.resolve_link(link), p.to_string_lossy());
+    assert_eq!(
+        at.resolve_link(link),
+        p.to_string_lossy().replace('/', MAIN_SEPARATOR_STR)
+    );
 }
 
 #[test]
@@ -1036,6 +1089,63 @@ fn test_backup_simple_numbered_same_file() {
             assert!(!at.file_exists("a.~1~"));
         }
     }
+}
+
+#[test]
+fn test_backup_force_interactive_refuse_directory() {
+    for args in [
+        vec!["-s", "-b", "-t", "site", "src/static"],
+        vec!["-s", "--backup=numbered", "-t", "site", "src/static"],
+        vec!["-s", "-S", ".bak", "-t", "site", "src/static"],
+        vec!["-s", "-f", "-b", "-t", "site", "src/static"],
+        vec!["-s", "-r", "-b", "-t", "site", "src/static"],
+        vec!["-s", "-f", "-t", "site", "src/static"],
+        vec!["-s", "-i", "-t", "site", "src/static"],
+        vec!["-s", "-b", "-T", "src/static", "site/static"],
+        vec!["-b", "-t", "site", "static"],
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir_all("site/static");
+        at.write("site/static/app.js", "original");
+        at.mkdir_all("src/static");
+        at.touch("static");
+
+        // ln refuses before reading the answer, so it may exit before the
+        // input is written.
+        ucmd.args(&args)
+            .pipe_in("y\n")
+            .ignore_stdin_write_error()
+            .fails_with_code(1)
+            .stderr_contains("static: cannot overwrite directory");
+
+        assert!(at.dir_exists("site/static"));
+        assert_eq!(at.read("site/static/app.js"), "original");
+        assert!(!at.dir_exists("site/static~"));
+        assert!(!at.dir_exists("site/static.~1~"));
+        assert!(!at.dir_exists("site/static.bak"));
+    }
+}
+
+#[test]
+fn test_backup_symlink_to_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("site");
+    at.mkdir_all("src/static");
+    at.mkdir("other");
+    at.relative_symlink_dir("../other", "site/static");
+
+    ucmd.args(&["-s", "-b", "-t", "site", "src/static"])
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(
+        at.read_symlink("site/static"),
+        "src/static".replace('/', MAIN_SEPARATOR_STR)
+    );
+    assert_eq!(
+        at.read_symlink("site/static~"),
+        "../other".replace('/', MAIN_SEPARATOR_STR)
+    );
 }
 
 #[test]

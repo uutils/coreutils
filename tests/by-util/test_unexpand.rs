@@ -315,6 +315,25 @@ fn unexpand_wide_multibyte_char_width() {
 }
 
 #[test]
+fn test_leading_unicode_blanks_with_final_newline() {
+    // Leading multibyte blanks must be converted whether or not the line ends
+    // in a newline. Four U+3000 (width 2 each) fill the first tab stop.
+    for args in [&[][..], &["--first-only"][..]] {
+        for (input, expected) in [
+            ("\u{3000}\u{3000}\u{3000}\u{3000}X\n", "\tX\n"),
+            ("\u{3000}\u{3000}\u{3000}\u{3000}X", "\tX"),
+        ] {
+            new_ucmd!()
+                .args(args)
+                .env("LC_ALL", "en_US.UTF-8")
+                .pipe_in(input)
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
+}
+
+#[test]
 fn test_blanks_ext1() {
     // Test unexpand with extended blank handling (blanks-ext1)
     // ['blanks-ext1', '-t', '3,+6', {IN=> "\t      "}, {OUT=> "\t\t"}],

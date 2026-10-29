@@ -149,6 +149,24 @@ fn test_tabs_must_be_ascending() {
 }
 
 #[test]
+fn test_tabs_trailing_size_not_larger_than_last_stop() {
+    // The number after `/` or `+` is a tab size, not a tab stop, so it
+    // does not have to be larger than the previous tab stop.
+    new_ucmd!()
+        .arg("--tabs=2,/2")
+        .pipe_in("a\tb\tc")
+        .succeeds()
+        //          012345
+        .stdout_is("a b c");
+    new_ucmd!()
+        .arg("--tabs=4,+2")
+        .pipe_in("\ta\tb")
+        .succeeds()
+        //          01234567
+        .stdout_is("    a b");
+}
+
+#[test]
 fn test_tabs_cannot_be_zero() {
     new_ucmd!()
         .arg("--tabs=0")
@@ -230,12 +248,12 @@ fn test_tabs_with_too_large_size() {
 )]
 #[test]
 fn test_large_tab_stop_without_tabs_does_not_allocate() {
-    use rustix::process::Resource;
+    use rlimit::Resource;
 
     const AS_LIMIT: u64 = 200 * 1024 * 1024;
 
     new_ucmd!()
-        .limit(Resource::As, AS_LIMIT, AS_LIMIT)
+        .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
         .arg("--tabs=267672676527678256")
         .pipe_in("hello\n")
         .succeeds()

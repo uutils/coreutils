@@ -565,7 +565,7 @@ fn test_selinux() {
         new_ucmd!()
             .arg(arg)
             .arg("-v")
-            .arg(at.plus_as_string(dest))
+            .arg(at.plus(dest))
             .succeeds()
             .stdout_contains("created directory");
 
@@ -586,12 +586,68 @@ fn test_selinux_invalid() {
     let dest = "test_dir_a";
     new_ucmd!()
         .arg("--context=testtest")
-        .arg(at.plus_as_string(dest))
+        .arg(at.plus(dest))
         .fails()
         .no_stdout()
         .stderr_contains("failed to set default file creation context to 'testtest':");
     // invalid context, so, no directory
     assert!(!at.dir_exists(dest));
+}
+
+// -Z looks the name up in the policy, which lists absolute names only: a relative
+// name must get the same label as the absolute one.
+#[test]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+fn test_selinux_default_context_relative_name() {
+    use uucore::selinux::{
+        get_selinux_security_context, is_selinux_enabled, set_selinux_security_context,
+    };
+    use uutests::util::AtPath;
+
+    if !is_selinux_enabled() {
+        println!("Skipping SELinux test: SELinux is not enabled");
+        return;
+    }
+    // The policy has no default under /tmp, so both names would inherit there;
+    // target/tmp is usually under $HOME, which has one.
+    let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let at = AtPath::new(dir.path());
+    let scene = TestScenario::new(util_name!());
+    // A type the policy won't hand out here, so a missed lookup shows as inheritance.
+    at.mkdir("parent");
+    let ctx = String::from("root:object_r:etc_t:s0");
+    if set_selinux_security_context(&at.plus("parent"), Some(&ctx)).is_err() {
+        println!("Skipping SELinux test: cannot set a context on the fixture");
+        return;
+    }
+    let type_of = |p: &str| {
+        let ctx = get_selinux_security_context(&at.plus(p), false).unwrap();
+        ctx.split(':').nth(2).unwrap().to_owned()
+    };
+
+    scene
+        .ucmd()
+        .args(&["-Z", &at.plus_as_string("parent/absolute")])
+        .succeeds();
+    let expected = type_of("parent/absolute");
+    if expected == "etc_t" {
+        println!("Skipping SELinux test: the policy has no default for {dir:?}");
+        return;
+    }
+    scene
+        .ucmd()
+        .current_dir(dir.path())
+        .args(&["-Z", "parent/relative"])
+        .succeeds();
+    scene
+        .ucmd()
+        .current_dir(dir.path())
+        .args(&["-p", "-Z", "parent/new/relative"])
+        .succeeds();
+
+    for name in ["parent/relative", "parent/new", "parent/new/relative"] {
+        assert_eq!(type_of(name), expected, "{name}");
+    }
 }
 
 #[test]

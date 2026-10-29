@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED Fsize SIGXFSZ rusage maxrss cdefg ncdefg cdefh memfd ftruncate
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED FSIZE SIGXFSZ rusage maxrss cdefg ncdefg cdefh
 
 use rstest::rstest;
 use uutests::at_and_ucmd;
@@ -1736,13 +1736,14 @@ fn test_reading_partial_blocks_from_fifo() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkfifo("fifo");
-    let fifoname = at.plus_as_string("fifo");
+    let fifoname = at.plus("fifo");
+    let fifo_disp = fifoname.display();
 
     // Start a `dd` process that reads from the fifo (so it will wait
     // until the writer process starts).
     let mut reader_command = Command::new(get_tests_binary());
     let child = reader_command
-        .args(["dd", "ibs=3", "obs=3", &format!("if={fifoname}")])
+        .args(["dd", "ibs=3", "obs=3", &format!("if={fifo_disp}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
@@ -1757,7 +1758,7 @@ fn test_reading_partial_blocks_from_fifo() {
     let _ = writer_command
         .args([
             "-c",
-            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifoname}"),
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifo_disp}"),
         ])
         .spawn()
         .unwrap()
@@ -1776,7 +1777,8 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkfifo("fifo");
-    let fifoname = at.plus_as_string("fifo");
+    let fifoname = at.plus("fifo");
+    let fifo_disp = fifoname.display();
 
     // Start a `dd` process that reads from the fifo (so it will wait
     // until the writer process starts).
@@ -1784,7 +1786,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     // `bs=N` takes precedence over `ibs=N` and `obs=N`.
     let mut reader_command = Command::new(get_tests_binary());
     let child = reader_command
-        .args(["dd", "bs=3", "ibs=1", "obs=1", &format!("if={fifoname}")])
+        .args(["dd", "bs=3", "ibs=1", "obs=1", &format!("if={fifo_disp}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
@@ -1799,7 +1801,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     let _ = writer_command
         .args([
             "-c",
-            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifoname}"),
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifo_disp}"),
         ])
         .spawn()
         .unwrap()
@@ -1825,13 +1827,14 @@ fn test_reading_partial_blocks_from_fifo_gathered_into_larger_obs() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkfifo("fifo");
-    let fifoname = at.plus_as_string("fifo");
+    let fifoname = at.plus("fifo");
+    let fifo_disp = fifoname.display();
 
     // Start a `dd` process that reads from the fifo (so it will wait
     // until the writer process starts).
     let mut reader_command = Command::new(get_tests_binary());
     let child = reader_command
-        .args(["dd", "ibs=3", "obs=6", &format!("if={fifoname}")])
+        .args(["dd", "ibs=3", "obs=6", &format!("if={fifo_disp}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
@@ -1846,7 +1849,7 @@ fn test_reading_partial_blocks_from_fifo_gathered_into_larger_obs() {
     let _ = writer_command
         .args([
             "-c",
-            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifoname}"),
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifo_disp}"),
         ])
         .spawn()
         .unwrap()
@@ -1934,11 +1937,10 @@ fn test_large_bs_does_not_fault_in_copy_buffer() {
 fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    at.make_file("input");
-    let filename = at.plus_as_string("input");
+    let file = at.make_file("input");
     new_ucmd!()
         .args(&["iflag=directory", "count=0"])
-        .set_stdin(Stdio::from(File::open(filename).unwrap()))
+        .set_stdin(Stdio::from(file))
         .fails()
         .stderr_only("dd: setting flags for 'standard input': Not a directory\n");
 }
@@ -2013,10 +2015,10 @@ fn test_stdin_stdout_not_rewound_even_when_connected_to_seekable_file() {
         .set_stderr(stderr)
         .succeeds();
 
-    let err_file_content = std::fs::read_to_string(at.plus_as_string("err")).unwrap();
+    let err_file_content = at.read("err");
     println!("stderr:\n{err_file_content}");
 
-    let out_file_content = std::fs::read_to_string(at.plus_as_string("out")).unwrap();
+    let out_file_content = at.read("out");
     println!("stdout:\n{out_file_content}");
     assert_eq!(out_file_content, "bde");
 }
@@ -2381,14 +2383,14 @@ fn test_count_bytes_with_expanding_block_conv() {
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_stats_are_reported_when_a_write_fails() {
-    use rustix::process::Resource;
+    use rlimit::Resource;
 
     const CAP: u64 = 768 * 1024;
 
     let (at, mut ucmd) = at_and_ucmd!();
     let result = ucmd
         .args(&["if=/dev/zero", "of=capped.bin", "bs=512K", "count=3"])
-        .limit(Resource::Fsize, CAP, CAP)
+        .limit(Resource::FSIZE, CAP, CAP)
         .ignore_sigxfsz()
         .fails();
 
@@ -2404,7 +2406,7 @@ fn test_stats_are_reported_when_a_write_fails() {
 #[test]
 #[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_block_stats_are_reported_when_a_write_fails() {
-    use rustix::process::Resource;
+    use rlimit::Resource;
 
     const CAP: u64 = 200 * 1024;
 
@@ -2412,7 +2414,7 @@ fn test_block_stats_are_reported_when_a_write_fails() {
     let result = ucmd
         .args(&["conv=block", "cbs=1M", "obs=64K", "of=capped.bin"])
         .pipe_in("x\n")
-        .limit(Resource::Fsize, CAP, CAP)
+        .limit(Resource::FSIZE, CAP, CAP)
         .ignore_sigxfsz()
         .fails();
 

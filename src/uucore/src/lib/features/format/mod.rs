@@ -42,20 +42,16 @@ pub use self::escape::{EscapeSet, EscapedChar, OctalParsing};
 use crate::extendedbigdecimal::ExtendedBigDecimal;
 pub use argument::{FormatArgument, FormatArguments};
 
-use self::{escape::parse_escape_code, num_format::Formatter};
-use crate::{
-    NonUtf8OsStrError,
-    error::{UError, strip_errno},
-    translate, translate_text,
-};
+use self::escape::parse_escape_code;
+use self::num_format::Formatter;
+use crate::error::{UError, strip_errno};
+use crate::{NonUtf8OsStrError, translate, translate_text};
 pub use spec::Spec;
-use std::{
-    error::Error,
-    fmt::Display,
-    io::{Write, stdout},
-    marker::PhantomData,
-    ops::{ControlFlow, Range},
-};
+use std::error::Error;
+use std::fmt::Display;
+use std::io::{Write, stdout};
+use std::marker::PhantomData;
+use std::ops::{ControlFlow, Range};
 
 use os_display::Quotable;
 
@@ -177,7 +173,7 @@ impl Display for FormatError {
 const MAX_FORMAT_WIDTH: usize = 1_000_000;
 
 /// Check if a width is too large for formatting.
-/// Returns an error if the width exceeds MAX_FORMAT_WIDTH.
+/// Returns an error if the width exceeds [`MAX_FORMAT_WIDTH`].
 fn check_width(width: usize) -> std::io::Result<()> {
     if width > MAX_FORMAT_WIDTH {
         Err(std::io::Error::new(

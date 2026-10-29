@@ -3,12 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit Nofile
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit NOFILE
 
 use rand::{RngExt as _, SeedableRng, rng};
 use regex::Regex;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use rustix::process::Resource;
+#[cfg(target_os = "linux")]
+use rlimit::Resource;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::path::Path;
@@ -919,6 +919,24 @@ fn test_suffix_length_zero() {
 }
 
 #[test]
+fn test_suffix_length_zero_with_number_uses_default_length() {
+    // `-a 0` is the same as no `-a`, so the suffixes start at length 2
+    // even when a shorter suffix would fit the number of chunks.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-n2", "-a0", "fivelines.txt"]).succeeds();
+    assert!(at.file_exists("xaa"));
+    assert!(at.file_exists("xab"));
+    assert!(!at.file_exists("xa"));
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let args = ["-d", "-n10", "-a0", "fivelines.txt"];
+    ucmd.args(&args).succeeds();
+    assert!(at.file_exists("x00"));
+    assert!(at.file_exists("x09"));
+    assert!(!at.file_exists("x0"));
+}
+
+#[test]
 fn test_suffixes_exhausted() {
     new_ucmd!()
         .args(&["-b", "1", "-a", "1", "asciilowercase.txt"])
@@ -1279,6 +1297,22 @@ fn test_elide_dev_null_l_chunks() {
     assert!(!at.plus("xaa").exists());
     assert!(!at.plus("xab").exists());
     assert!(!at.plus("xac").exists());
+}
+
+#[test]
+fn test_elide_empty_files_preserves_line_chunks() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input", "aaaaaa\nb\nc\nd\ne\n");
+    ucmd.args(&["-e", "-n", "l/6", "input"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("xaa"), "aaaaaa\n");
+    assert_eq!(at.read("xab"), "b\n");
+    assert_eq!(at.read("xac"), "c\n");
+    assert_eq!(at.read("xad"), "d\n");
+    assert_eq!(at.read("xae"), "e\n");
+    assert!(!at.plus("xaf").exists());
 }
 
 #[test]
@@ -1731,12 +1765,11 @@ fn test_round_robin() {
 
 #[test]
 // TODO(#7542): Re-enable on Android once we figure out why rlimit is broken.
-// #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(target_os = "linux")]
 fn test_round_robin_limited_file_descriptors() {
     new_ucmd!()
         .args(&["-n", "r/40", "onehundredlines.txt"])
-        .limit(Resource::Nofile, 9, 9)
+        .limit(Resource::NOFILE, 9, 9)
         .succeeds();
 }
 

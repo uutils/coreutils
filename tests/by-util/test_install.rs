@@ -114,12 +114,9 @@ fn test_install_ancestors_mode_directories() {
     let target_dir = "ancestor1/ancestor2/target_dir";
     let directories_arg = "-d";
     let mode_arg = "--mode=200";
-    let probe = "probe";
 
-    at.mkdir(probe);
-    let default_perms = at.metadata(probe).permissions().mode();
-
-    ucmd.args(&[mode_arg, directories_arg, target_dir])
+    ucmd.umask(0o077)
+        .args(&[mode_arg, directories_arg, target_dir])
         .succeeds()
         .no_stderr();
 
@@ -127,11 +124,10 @@ fn test_install_ancestors_mode_directories() {
     assert!(at.dir_exists(ancestor2));
     assert!(at.dir_exists(target_dir));
 
-    assert_eq!(default_perms, at.metadata(ancestor1).permissions().mode());
-    assert_eq!(default_perms, at.metadata(ancestor2).permissions().mode());
-
-    // Expected mode only on the target_dir.
-    assert_eq!(0o40_200_u32, at.metadata(target_dir).permissions().mode());
+    // Ancestors use the default mode; --mode applies only to the target.
+    assert_eq!(0o755, at.metadata(ancestor1).permissions().mode() & 0o777);
+    assert_eq!(0o755, at.metadata(ancestor2).permissions().mode() & 0o777);
+    assert_eq!(0o200, at.metadata(target_dir).permissions().mode() & 0o777);
 }
 
 #[test]
@@ -143,14 +139,11 @@ fn test_install_ancestors_mode_directories_with_file() {
     let directories_arg = "-D";
     let mode_arg = "--mode=200";
     let file = "file";
-    let probe = "probe";
-
-    at.mkdir(probe);
-    let default_perms = at.metadata(probe).permissions().mode();
 
     at.touch(file);
 
-    ucmd.args(&[mode_arg, directories_arg, file, target_file])
+    ucmd.umask(0o077)
+        .args(&[mode_arg, directories_arg, file, target_file])
         .succeeds()
         .no_stderr();
 
@@ -158,11 +151,10 @@ fn test_install_ancestors_mode_directories_with_file() {
     assert!(at.dir_exists(ancestor2));
     assert!(at.file_exists(target_file));
 
-    assert_eq!(default_perms, at.metadata(ancestor1).permissions().mode());
-    assert_eq!(default_perms, at.metadata(ancestor2).permissions().mode());
-
-    // Expected mode only on the target_file.
-    assert_eq!(0o100_200_u32, at.metadata(target_file).permissions().mode());
+    // Ancestors use the default mode; --mode applies only to the target.
+    assert_eq!(0o755, at.metadata(ancestor1).permissions().mode() & 0o777);
+    assert_eq!(0o755, at.metadata(ancestor2).permissions().mode() & 0o777);
+    assert_eq!(0o200, at.metadata(target_file).permissions().mode() & 0o777);
 }
 
 #[test]
@@ -817,14 +809,14 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
 const STRIP_TARGET_FILE: &str = "helloworld_installed";
 const STRIP_PROGRAM: &str = "#!/bin/sh\n: > \"$1\"\n";
 
-/// Create the fake strip program from a child process. Tests run as threads of
+/// Create a fake strip program from a child process. Tests run as threads of
 /// one process: if this process held the script open for writing, a sibling
 /// test forking at that moment would inherit the fd, and exec'ing the script
 /// would then fail with ETXTBSY.
-fn write_strip_program(scene: &TestScenario, name: &str) {
+fn write_strip_program(scene: &TestScenario, name: &str, script: &str) {
     scene
         .cmd("sh")
-        .env("STRIP_SCRIPT", STRIP_PROGRAM)
+        .env("STRIP_SCRIPT", script)
         .arg("-c")
         .arg(format!(
             "printf '%s' \"$STRIP_SCRIPT\" > {name} && chmod 755 {name}"
@@ -837,7 +829,7 @@ fn test_install_and_strip() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    write_strip_program(&scene, "strip");
+    write_strip_program(&scene, "strip", STRIP_PROGRAM);
     at.write("source", "file contents");
     let path = format!(
         "{}:{}",
@@ -847,6 +839,7 @@ fn test_install_and_strip() {
 
     scene
         .ucmd()
+        .umask(0o777)
         .env("PATH", path)
         .arg("-s")
         .arg("source")
@@ -855,6 +848,63 @@ fn test_install_and_strip() {
         .no_stderr();
 
     assert_eq!(at.metadata(STRIP_TARGET_FILE).len(), 0);
+}
+
+#[test]
+fn test_install_strip_program_sees_zeroed_umask() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    write_strip_program(&scene, "probe", "#!/bin/sh\numask > \"$1\"\n");
+    at.write("source", "file contents");
+
+    scene
+        .ucmd()
+        .umask(0o077)
+        .args(&[
+            "-s",
+            "--strip-program",
+            "./probe",
+            "source",
+            STRIP_TARGET_FILE,
+        ])
+        .succeeds()
+        .no_stderr();
+
+    // Follow GNU's behavior: the strip program sees a zeroed umask. Shells
+    // differ on whether they print it as 000 or 0000, so compare the value.
+    let reported = at.read(STRIP_TARGET_FILE);
+    let reported = reported.trim();
+    assert_eq!(
+        u32::from_str_radix(reported, 8).unwrap(),
+        0,
+        "strip program saw umask {reported}"
+    );
+}
+
+#[test]
+fn test_install_and_strip_with_ancestor_directories() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    write_strip_program(&scene, "strip", STRIP_PROGRAM);
+    at.write("source", "file contents");
+    let path = format!(
+        "{}:{}",
+        at.plus(".").display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let target = "ancestor/helloworld_installed";
+
+    scene
+        .ucmd()
+        .umask(0o777)
+        .env("PATH", path)
+        .args(&["-s", "-D", "source", target])
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.metadata(target).len(), 0);
 }
 
 #[test]
@@ -877,7 +927,7 @@ fn test_install_and_strip_with_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    write_strip_program(&scene, "strip-program");
+    write_strip_program(&scene, "strip-program", STRIP_PROGRAM);
     at.write("source", "file contents");
 
     scene
@@ -943,12 +993,9 @@ fn test_install_on_invalid_link_at_destination() {
     let dst_dir = at.plus("dest");
 
     at.touch("test.sh");
-    at.symlink_file(
-        "/opt/FakeDestination",
-        &dst_dir.join("test.sh").to_string_lossy(),
-    );
+    at.symlink_file("/opt/FakeDestination", dst_dir.join("test.sh"));
     scene.ccmd("chmod").arg("+x").arg("test.sh").succeeds();
-    at.symlink_file("test.sh", &src_dir.join("test.sh").to_string_lossy());
+    at.symlink_file("test.sh", src_dir.join("test.sh"));
 
     scene
         .ucmd()
@@ -971,12 +1018,9 @@ fn test_install_on_invalid_link_at_destination_and_dev_null_at_source() {
     let dst_dir = at.plus("dest");
 
     at.touch("test.sh");
-    at.symlink_file(
-        "/opt/FakeDestination",
-        &dst_dir.join("test.sh").to_string_lossy(),
-    );
+    at.symlink_file("/opt/FakeDestination", dst_dir.join("test.sh"));
     scene.ccmd("chmod").arg("+x").arg("test.sh").succeeds();
-    at.symlink_file("test.sh", &src_dir.join("test.sh").to_string_lossy());
+    at.symlink_file("test.sh", src_dir.join("test.sh"));
 
     scene
         .ucmd()
@@ -1230,6 +1274,7 @@ fn test_install_non_utf8_dir() {
 #[case::suffix(&["-b", "--suffix=super-suffix-of-the-century"], Some("super-suffix-of-the-century"))]
 #[case::suffix_implies_backup(&["--suffix=super-suffix-of-the-century"], Some("super-suffix-of-the-century"))]
 #[case::suffix_hyphen_value(&["-b", "--suffix=-v"], Some("-v"))]
+#[case::empty_suffix(&["-b", "--suffix="], Some("~"))]
 #[case::numbered_t(&["--backup=t"], Some(".~1~"))]
 #[case::numbered(&["--backup=numbered"], Some(".~1~"))]
 #[case::existing(&["--backup=existing"], Some("~"))]
@@ -1250,7 +1295,7 @@ fn test_install_backup_control(#[case] args: &[&str], #[case] backup_suffix: Opt
     assert_eq!(at.read(source), "new");
     assert_eq!(at.read(dest), "new");
     match backup_suffix {
-        Some(suffix) => assert_eq!(at.read(&format!("{dest}{suffix}")), "old"),
+        Some(suffix) => assert_eq!(at.read(format!("{dest}{suffix}")), "old"),
         None => assert!(!at.file_exists(format!("{dest}~"))),
     }
 }
@@ -2026,20 +2071,46 @@ fn test_install_from_fifo() {
     assert_eq!(s.fixtures.read(target_name), test_string);
 }
 
-#[test]
 #[cfg(unix)]
-fn test_install_from_stdin() {
+#[rstest::rstest]
+#[case::fd("/dev/fd/0")]
+#[cfg_attr(
+    target_os = "android",
+    ignore = "/dev/stdin is not available on Android"
+)]
+#[case::stdin("/dev/stdin")]
+fn test_install_from_stdin(
+    #[case] source: &str,
+    #[values(false, true)] target_exists: bool,
+    #[values(false, true)] backup: bool,
+    #[values(false, true)] create_leading: bool,
+) {
     let (at, mut ucmd) = at_and_ucmd!();
-    let target = "target";
+    let target = "dir/target";
     let test_string = "Hello, World!\n";
-
-    ucmd.arg("/dev/fd/0")
+    at.mkdir("dir");
+    if target_exists {
+        at.write(target, "old content");
+    }
+    if backup {
+        ucmd.arg("--backup=simple");
+    }
+    if create_leading {
+        ucmd.arg("-D");
+    }
+    ucmd.arg(source)
         .arg(target)
         .pipe_in(test_string)
-        .succeeds();
+        .succeeds()
+        .no_stderr();
 
-    assert!(at.file_exists(target));
     assert_eq!(at.read(target), test_string);
+    assert_eq!(at.metadata(target).mode() & 0o777, 0o755);
+    if backup && target_exists {
+        assert_eq!(at.read("dir/target~"), "old content");
+    } else {
+        assert!(!at.file_exists("dir/target~"));
+    }
 }
 
 #[test]
@@ -2049,7 +2120,7 @@ fn test_install_failing_copy_file_to_target_contain_subdir_with_same_name() {
     let dir1 = "dir1";
 
     at.touch(file);
-    at.mkdir_all(&format!("{dir1}/{file}"));
+    at.mkdir_all(format!("{dir1}/{file}"));
     ucmd.arg(file)
         .arg(dir1)
         .fails()
@@ -2084,6 +2155,40 @@ fn test_install_symlink_same_file() {
         .stderr_contains(format!(
             "'{target_dir}/{file}' and '{target_link}/{file}' are the same file"
         ));
+}
+
+#[test]
+fn test_install_create_leading_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+
+    at.write(file, "content");
+    ucmd.arg("-D")
+        .arg(file)
+        .arg(file)
+        .fails()
+        .stderr_contains("'file' and 'file' are the same file");
+    assert_eq!(at.read(file), "content");
+}
+
+#[test]
+fn test_install_create_leading_symlink_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+    let target_dir = "target_dir";
+    let target_link = "target_link";
+
+    at.mkdir(target_dir);
+    at.write(format!("{target_dir}/{file}"), "content");
+    at.symlink_file(target_dir, target_link);
+    ucmd.arg("-D")
+        .arg(format!("{target_dir}/{file}"))
+        .arg(format!("{target_link}/{file}"))
+        .fails()
+        .stderr_contains(format!(
+            "'{target_dir}/{file}' and '{target_link}/{file}' are the same file"
+        ));
+    assert_eq!(at.read(format!("{target_dir}/{file}")), "content");
 }
 
 #[test]
@@ -2312,8 +2417,8 @@ fn test_selinux() {
         new_ucmd!()
             .arg(arg)
             .arg("-v")
-            .arg(at.plus_as_string(src))
-            .arg(at.plus_as_string(dest))
+            .arg(at.plus(src))
+            .arg(at.plus(dest))
             .succeeds()
             .stdout_contains("orig' -> '");
 
@@ -2323,7 +2428,7 @@ fn test_selinux() {
 
         let Ok(context_value) = context_value else {
             println!("Skipping SELinux test: getfattr not available or failed");
-            at.remove(&at.plus_as_string(dest));
+            at.remove(at.plus(dest));
             continue;
         };
 
@@ -2331,7 +2436,7 @@ fn test_selinux() {
             context_value.contains("unconfined_u"),
             "Expected 'unconfined_u' not found in getfattr output:\n{context_value}"
         );
-        at.remove(&at.plus_as_string(dest));
+        at.remove(at.plus(dest));
     }
 }
 
@@ -2358,12 +2463,12 @@ fn test_selinux_invalid_args() {
         new_ucmd!()
             .arg(arg)
             .arg("-v")
-            .arg(at.plus_as_string(src))
-            .arg(at.plus_as_string(dest))
+            .arg(at.plus(src))
+            .arg(at.plus(dest))
             .fails()
             .stderr_contains("failed to set default file creation");
 
-        at.remove(&at.plus_as_string(dest));
+        at.remove(at.plus(dest));
     }
 }
 
@@ -2384,8 +2489,8 @@ fn test_selinux_default_context() {
     new_ucmd!()
         .arg("-Z")
         .arg("-v")
-        .arg(at.plus_as_string(src))
-        .arg(at.plus_as_string(dest))
+        .arg(at.plus(src))
+        .arg(at.plus(dest))
         .succeeds()
         .stdout_contains("orig' -> '");
     assert!(at.file_exists(dest));

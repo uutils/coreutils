@@ -59,11 +59,11 @@ fn get_macos_boot_time_sysctl() -> Option<i64> {
 ///
 /// # Arguments
 ///
-/// boot_time: `Option<i64>` - Manually specify the boot time, or None to try to get it from the system.
+/// `boot_time`: `Option<i64>` - Manually specify the boot time, or None to try to get it from the system.
 ///
 /// # Returns
 ///
-/// Returns a UResult with the elapsed duration since boot if successful, otherwise an UptimeError.
+/// Returns a `UResult` with the elapsed duration since boot if successful, otherwise an `UptimeError`.
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
@@ -84,11 +84,11 @@ pub fn get_uptime(_boot_time: Option<i64>) -> UResult<Duration> {
 ///
 /// # Arguments
 ///
-/// boot_time: `Option<i64>` - Manually specify the boot time, or None to try to get it from the system.
+/// `boot_time`: `Option<i64>` - Manually specify the boot time, or None to try to get it from the system.
 ///
 /// # Returns
 ///
-/// Returns a UResult with the elapsed duration since boot if successful, otherwise an UptimeError.
+/// Returns a `UResult` with the elapsed duration since boot if successful, otherwise an [`UptimeError`].
 #[cfg(not(any(
     target_os = "linux",
     target_os = "android",
@@ -96,8 +96,7 @@ pub fn get_uptime(_boot_time: Option<i64>) -> UResult<Duration> {
     target_os = "openbsd",
 )))]
 pub fn get_uptime(boot_time: Option<i64>) -> UResult<Duration> {
-    use crate::utmpx::BOOT_TIME;
-    use crate::utmpx::Utmpx;
+    use crate::utmpx::{BOOT_TIME, Utmpx};
     use jiff::Timestamp;
     use std::fs::File;
     use std::io::Read;
@@ -165,8 +164,7 @@ pub fn get_uptime(boot_time: Option<i64>) -> UResult<Duration> {
 #[cfg(not(any(target_os = "openbsd", target_os = "android")))]
 // see: https://gitlab.com/procps-ng/procps/-/blob/4740a0efa79cade867cfc7b32955fe0f75bf5173/library/uptime.c#L63-L115
 pub fn get_nusers() -> usize {
-    use crate::utmpx::USER_PROCESS;
-    use crate::utmpx::Utmpx;
+    use crate::utmpx::{USER_PROCESS, Utmpx};
 
     let mut num_user = 0;
     Utmpx::iter_all_records().for_each(|ut| {
@@ -220,7 +218,7 @@ pub(crate) fn default_nusers() -> usize {
 ///
 /// # Returns
 ///
-/// Returns a UResult with the load average if successful, otherwise an UptimeError.
+/// Returns a `UResult` with the load average if successful, otherwise an [`UptimeError`].
 /// The load average is a tuple of three floating point numbers representing the 1-minute, 5-minute, and 15-minute load averages.
 #[cfg(not(any(target_arch = "wasm32", target_os = "android")))]
 pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
@@ -278,7 +276,7 @@ mod tests {
         assert!(boot_time < now, "Boot time should be before current time");
     }
 
-    /// Test that get_uptime always succeeds on macOS due to sysctl fallback.
+    /// Test that `get_uptime` always succeeds on macOS due to sysctl fallback.
     /// This addresses the intermittent failures reported in issue #3621.
     #[test]
     fn test_get_uptime_always_succeeds_on_macos() {
@@ -302,7 +300,7 @@ mod tests {
         );
     }
 
-    /// Test get_uptime consistency by calling it multiple times.
+    /// Test `get_uptime` consistency by calling it multiple times.
     /// Verifies the sysctl fallback produces stable results.
     #[test]
     fn test_get_uptime_macos_consistency() {

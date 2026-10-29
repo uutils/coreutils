@@ -11,6 +11,7 @@ use std::fs::OpenOptions;
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 #[cfg(windows)]
 use std::{ffi::OsString, os::windows::ffi::OsStringExt};
+use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
@@ -199,6 +200,45 @@ fn case_insensitive() {
         .arg("-i")
         .succeeds()
         .stdout_only_fixture("case_insensitive.expected");
+}
+
+#[test]
+fn case_insensitive_prints_each_lines_own_key() {
+    // Keys that differ only in case form one group with -i, but each output
+    // line still shows the key from its own file1 line.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "b z\n");
+    ucmd.args(&["-i", "-", "f"])
+        .pipe_in("B x\nb y\n")
+        .succeeds()
+        .stdout_only("B x z\nb y z\n");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "B\n");
+    ucmd.args(&["-i", "-o", "0", "-", "f"])
+        .pipe_in("B\nb\n")
+        .succeeds()
+        .stdout_only("B\nb\n");
+}
+
+#[test]
+fn case_insensitive_matches_sort_f_order() {
+    // `sort -f` folds to upper case, so `_` sorts after letters.
+    let scene = TestScenario::new(util_name!());
+    scene
+        .fixtures
+        .write("requested", "svcabc mallory\nsvc_backup mallory\n");
+    scene.fixtures.write("reserved", "SVC_BACKUP\n");
+    scene
+        .ucmd()
+        .args(&["-i", "-v", "1", "requested", "reserved"])
+        .succeeds()
+        .stdout_only("svcabc mallory\n");
+    scene
+        .ucmd()
+        .args(&["-i", "requested", "reserved"])
+        .succeeds()
+        .stdout_only("svc_backup mallory\n");
 }
 
 #[test]
@@ -890,4 +930,30 @@ fn test_operand_count() {
         .fails_with_code(1)
         .stderr_contains("join: extra operand 'fields_3.txt'\n")
         .stderr_contains("--help");
+}
+
+#[test]
+fn test_missing_key_is_empty_key() {
+    // Like `sort -k`, a line too short to have the join field has an empty key.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("short", "x,\ny\nbob,1002\n");
+    at.write("keys", "1002\n");
+    ts.ucmd()
+        .args(&["-t", ",", "-1", "2", "--check-order", "short", "keys"])
+        .succeeds()
+        .stdout_only("1002,bob\n");
+
+    // ...and pairs with lines whose join field is empty.
+    ts.ucmd()
+        .args(&["-t", ",", "-j", "2", "short", "short"])
+        .succeeds()
+        .stdout_only(",x,x\n,x,y\n,y,x\n,y,y\n1002,bob,bob\n");
+
+    // Same with the default blank separator and a trailing blank.
+    at.write("blank", "a \nb\nbob 1002\n");
+    ts.ucmd()
+        .args(&["-1", "2", "--check-order", "blank", "keys"])
+        .succeeds()
+        .stdout_only("1002 bob\n");
 }

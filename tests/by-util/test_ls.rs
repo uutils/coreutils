@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline onetwo somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons Nofile NOTCAPABLE iproduct newfstatat isox
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE NOTCAPABLE iproduct newfstatat isox
 
 #![allow(
     clippy::similar_names,
@@ -14,7 +14,7 @@
 
 use regex::Regex;
 #[cfg(unix)]
-use rustix::process::Resource;
+use rlimit::Resource;
 #[cfg(not(target_os = "openbsd"))]
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
@@ -32,7 +32,7 @@ use uutests::unwrap_or_return;
 use uutests::util::TestScenario;
 #[cfg(any(unix, feature = "selinux"))]
 use uutests::util::expected_result;
-use uutests::{at_and_ucmd, util_name};
+use uutests::{at_and_ucmd, path, util_name};
 
 const LONG_ARGS: &[&str] = &[
     "-l",
@@ -144,6 +144,15 @@ fn test_invalid_value_returns_2() {
             .fails_with_code(2)
             .no_stdout();
     }
+}
+
+#[test]
+fn test_invalid_numeric_value_is_verbatim() {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg("--format=007")
+        .fails()
+        .stderr_contains("invalid value '007' for '--format");
 }
 
 #[test]
@@ -788,10 +797,10 @@ fn test_ls_a() {
 fn test_ls_width() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("test-width-1"));
-    at.touch(at.plus_as_string("test-width-2"));
-    at.touch(at.plus_as_string("test-width-3"));
-    at.touch(at.plus_as_string("test-width-4"));
+    at.touch(at.plus("test-width-1"));
+    at.touch(at.plus("test-width-2"));
+    at.touch(at.plus("test-width-3"));
+    at.touch(at.plus("test-width-4"));
 
     for option in [
         "-w 100",
@@ -888,10 +897,10 @@ fn test_ls_width() {
 fn test_ls_columns() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("test-columns-1"));
-    at.touch(at.plus_as_string("test-columns-2"));
-    at.touch(at.plus_as_string("test-columns-3"));
-    at.touch(at.plus_as_string("test-columns-4"));
+    at.touch(at.plus("test-columns-1"));
+    at.touch(at.plus("test-columns-2"));
+    at.touch(at.plus("test-columns-3"));
+    at.touch(at.plus("test-columns-4"));
 
     // Columns is the default
     let result = scene.ucmd().succeeds();
@@ -949,10 +958,10 @@ fn test_ls_columns() {
 fn test_ls_across() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("test-across-1"));
-    at.touch(at.plus_as_string("test-across-2"));
-    at.touch(at.plus_as_string("test-across-3"));
-    at.touch(at.plus_as_string("test-across-4"));
+    at.touch(at.plus("test-across-1"));
+    at.touch(at.plus("test-across-2"));
+    at.touch(at.plus("test-across-3"));
+    at.touch(at.plus("test-across-4"));
 
     for option in ACROSS_ARGS {
         let result = scene.ucmd().arg(option).succeeds();
@@ -977,10 +986,10 @@ fn test_ls_across() {
 fn test_ls_commas() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("test-commas-1"));
-    at.touch(at.plus_as_string("test-commas-2"));
-    at.touch(at.plus_as_string("test-commas-3"));
-    at.touch(at.plus_as_string("test-commas-4"));
+    at.touch(at.plus("test-commas-1"));
+    at.touch(at.plus("test-commas-2"));
+    at.touch(at.plus("test-commas-3"));
+    at.touch(at.plus("test-commas-4"));
 
     for option in COMMA_ARGS {
         let result = scene.ucmd().arg(option).succeeds();
@@ -1041,8 +1050,8 @@ fn test_ls_zero() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.mkdir("0-test-zero");
-    at.touch(at.plus_as_string("2-test-zero"));
-    at.touch(at.plus_as_string("3-test-zero"));
+    at.touch(at.plus("2-test-zero"));
+    at.touch(at.plus("3-test-zero"));
 
     let ignored_opts = [
         "--quoting-style=c",
@@ -1097,7 +1106,7 @@ fn test_ls_zero() {
 
     #[cfg(unix)]
     {
-        at.touch(at.plus_as_string("1\ntest-zero"));
+        at.touch(at.plus("1\ntest-zero"));
 
         let ignored_opts = [
             "--quoting-style=c",
@@ -1160,9 +1169,9 @@ fn test_ls_zero() {
 fn test_ls_commas_trailing() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("test-commas-trailing-2"));
+    at.touch(at.plus("test-commas-trailing-2"));
 
-    at.touch(at.plus_as_string("test-commas-trailing-1"));
+    at.touch(at.plus("test-commas-trailing-1"));
     at.append(
         "test-commas-trailing-1",
         &(0..2000)
@@ -1184,7 +1193,7 @@ fn test_ls_commas_trailing() {
 fn test_ls_long() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("test-long"));
+    at.touch(at.plus("test-long"));
 
     #[cfg(not(windows))]
     let regex = r"[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3}.*";
@@ -1206,9 +1215,9 @@ fn test_ls_long() {
 fn test_ls_long_format() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.mkdir(at.plus_as_string("test-long-dir"));
-    at.touch(at.plus_as_string("test-long-dir/test-long-file"));
-    at.mkdir(at.plus_as_string("test-long-dir/test-long-dir"));
+    at.mkdir(at.plus("test-long-dir"));
+    at.touch(at.plus("test-long-dir/test-long-file"));
+    at.mkdir(at.plus("test-long-dir/test-long-dir"));
 
     // Assuming sane username do not have spaces within them.
     // A line of the output should be:
@@ -1417,7 +1426,11 @@ fn test_ls_long_symlink_color() {
     ) {
         // Names are always compared.
         assert_eq!(name, expected_name);
-        assert_eq!(target, expected_target);
+        // ln stores symlink targets with `\` on Windows.
+        assert_eq!(
+            target,
+            expected_target.replace('/', std::path::MAIN_SEPARATOR_STR)
+        );
 
         // Colors are only compared when we have inferred what color we are looking for.
         if let Some(name) = expected_name_color {
@@ -1758,9 +1771,9 @@ fn test_ls_directory_dangling_symlink_uses_ln_when_or_blank() {
 fn test_ls_long_total_size() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("test-long"));
+    at.touch(at.plus("test-long"));
     at.append("test-long", "1");
-    at.touch(at.plus_as_string("test-long2"));
+    at.touch(at.plus("test-long2"));
     at.append("test-long2", "2");
 
     let expected_prints: HashMap<_, _> = if cfg!(unix) {
@@ -1804,7 +1817,7 @@ fn test_ls_long_total_size() {
 fn test_ls_long_formats() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("test-long-formats"));
+    at.touch(at.plus("test-long-formats"));
 
     // Zero or one "." for indicating a file with security context
 
@@ -1951,8 +1964,8 @@ fn test_ls_long_formats() {
 fn test_ls_oneline() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("test-oneline-1"));
-    at.touch(at.plus_as_string("test-oneline-2"));
+    at.touch(at.plus("test-oneline-1"));
+    at.touch(at.plus("test-oneline-2"));
 
     // Bit of a weird situation: in the tests oneline and columns have the same output,
     // except on Windows.
@@ -1972,7 +1985,7 @@ fn test_ls_deref() {
     let path_regexp = r"(.*)test-long.link -> (.*)test-long(.*)";
     let re = Regex::new(path_regexp).unwrap();
 
-    at.touch(at.plus_as_string("test-long"));
+    at.touch(at.plus("test-long"));
     at.symlink_file("test-long", "test-long.link");
     assert!(at.is_symlink("test-long.link"));
 
@@ -2410,6 +2423,31 @@ fn test_ls_time_styles() {
         .stdout_matches(&re_custom_format_recent_2)
         .stdout_matches(&re_custom_format_old);
 
+    // Empty halves must preserve the order in both --time-style and TIME_STYLE.
+    for (style, expected_recent, expected_old) in [("+\nNEW", "NEW", ""), ("+OLD\n", "", "OLD")] {
+        let re_recent = Regex::new(&format!(
+            r"[a-z-]* \d* [\w.]* [\w.]* \d* {expected_recent} test\n"
+        ))
+        .unwrap();
+        let re_old = Regex::new(&format!(
+            r"[a-z-]* \d* [\w.]* [\w.]* \d* {expected_old} test-old\n"
+        ))
+        .unwrap();
+        scene
+            .ucmd()
+            .args(&["-l", "--time-style", style])
+            .succeeds()
+            .stdout_matches(&re_recent)
+            .stdout_matches(&re_old);
+        scene
+            .ucmd()
+            .env("TIME_STYLE", style)
+            .arg("-l")
+            .succeeds()
+            .stdout_matches(&re_recent)
+            .stdout_matches(&re_old);
+    }
+
     // Also fails due to not having full clap support for time_styles
     scene
         .ucmd()
@@ -2581,7 +2619,7 @@ fn test_ls_order_time_breaks_ties_by_name() {
     }
     let same = FileTime::from_unix_time(1_700_000_000, 0);
     for name in names {
-        set_file_times(at.plus_as_string(name), same, same).unwrap();
+        set_file_times(at.plus(name), same, same).unwrap();
     }
 
     scene
@@ -2638,11 +2676,7 @@ fn test_ls_order_time() {
     at.read("test-3");
 
     // Set permissions of test-2, only changing ctime
-    std::fs::set_permissions(
-        at.plus_as_string("test-2"),
-        at.metadata("test-2").permissions(),
-    )
-    .unwrap();
+    std::fs::set_permissions(at.plus("test-2"), at.metadata("test-2").permissions()).unwrap();
 
     scene.ucmd().arg("-al").succeeds();
 
@@ -2751,8 +2785,8 @@ fn test_ls_files_dirs() {
     at.mkdir("a/b");
     at.mkdir("a/b/c");
     at.mkdir("z");
-    at.touch(at.plus_as_string("a/a"));
-    at.touch(at.plus_as_string("a/b/b"));
+    at.touch(at.plus("a/a"));
+    at.touch(at.plus("a/b/b"));
 
     scene.ucmd().arg("a").succeeds();
     scene.ucmd().arg("a/a").succeeds();
@@ -2783,8 +2817,8 @@ fn test_ls_recursive() {
     at.mkdir("a/b");
     at.mkdir("a/b/c");
     at.mkdir("z");
-    at.touch(at.plus_as_string("a/a"));
-    at.touch(at.plus_as_string("a/b/b"));
+    at.touch(at.plus("a/a"));
+    at.touch(at.plus("a/b/b"));
 
     scene.ucmd().arg("a").succeeds();
     scene.ucmd().arg("a/a").succeeds();
@@ -3486,17 +3520,10 @@ mod quoting {
 fn test_ls_color() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.mkdir("a");
-    let nested_dir = Path::new("a")
-        .join("nested_dir")
-        .to_string_lossy()
-        .to_string();
-    at.mkdir(nested_dir);
+    let nested_dir = Path::new("a").join("nested_dir");
+    at.mkdir_all(nested_dir);
     at.mkdir("z");
-    let nested_file = Path::new("a")
-        .join("nested_file")
-        .to_string_lossy()
-        .to_string();
+    let nested_file = Path::new("a").join("nested_file");
     at.touch(nested_file);
     at.touch("test-color");
 
@@ -3603,7 +3630,7 @@ fn test_ls_indicator_style() {
     at.mkdir("directory");
     assert!(at.dir_exists("directory"));
 
-    at.touch(at.plus_as_string("link-src"));
+    at.touch(at.plus("link-src"));
     at.symlink_file("link-src", "link-dest.link");
     assert!(at.is_symlink("link-dest.link"));
 
@@ -3806,7 +3833,7 @@ fn test_ls_indicator_style() {
     at.mkdir("directory");
     assert!(at.dir_exists("directory"));
 
-    at.touch(at.plus_as_string("link-src"));
+    at.touch(at.plus("link-src"));
     at.symlink_file("link-src", "link-dest.link");
     assert!(at.is_symlink("link-dest.link"));
 
@@ -4304,8 +4331,8 @@ fn test_ls_quoting_style() {
 fn test_ls_quoting_style_env_var_default() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("foo-1"));
-    at.touch(at.plus_as_string("bar-2"));
+    at.touch(at.plus("foo-1"));
+    at.touch(at.plus("bar-2"));
 
     // If no quoting style argument is provided, the QUOTING_STYLE environment variable
     // shall be used.
@@ -4379,8 +4406,8 @@ fn test_ls_invalid_quoting_style_env_var_non_utf8() {
 fn test_ls_quoting_style_arg_overrides_env_var() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(at.plus_as_string("foo-1"));
-    at.touch(at.plus_as_string("bar-2"));
+    at.touch(at.plus("foo-1"));
+    at.touch(at.plus("bar-2"));
 
     // The quoting style given by the env variable should be
     // overridden by any escape style provided by argument.
@@ -5512,7 +5539,7 @@ fn test_ls_dereference_looped_symlinks_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.mkdir("loop");
-    at.relative_symlink_dir("../loop", "loop/sub");
+    at.relative_symlink_dir(path!("..", "loop"), path!("loop", "sub"));
 
     ucmd.args(&["-RL", "loop"])
         .fails_with_code(2)
@@ -5536,14 +5563,17 @@ fn test_dereference_dangling_color() {
 #[test]
 fn test_dereference_symlink_dir_color() {
     let (at, mut ucmd) = at_and_ucmd!();
+    let dir1_link = &path!("dir1", "link");
+    let parent_dir2 = path!("..", "dir2");
+
     at.mkdir("dir1");
-    at.mkdir("dir1/link");
+    at.mkdir(dir1_link);
     let out_exp = ucmd.args(&["--color", "dir1"]).succeeds().stdout_move_str();
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir1");
     at.mkdir("dir2");
-    at.relative_symlink_dir("../dir2", "dir1/link");
+    at.relative_symlink_dir(parent_dir2, dir1_link);
     ucmd.args(&["-L", "--color", "dir1"])
         .succeeds()
         .stdout_is(out_exp);
@@ -5552,14 +5582,16 @@ fn test_dereference_symlink_dir_color() {
 #[test]
 fn test_dereference_symlink_file_color() {
     let (at, mut ucmd) = at_and_ucmd!();
+    let dir1_link = &path!("dir1", "link");
+
     at.mkdir("dir1");
-    at.touch("dir1/link");
+    at.touch(dir1_link);
     let out_exp = ucmd.args(&["--color", "dir1"]).succeeds().stdout_move_str();
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir1");
     at.touch("file");
-    at.relative_symlink_file("../file", "dir1/link");
+    at.relative_symlink_file(path!("..", "file"), dir1_link);
     ucmd.args(&["-L", "--color", "dir1"])
         .succeeds()
         .stdout_is(out_exp);
@@ -6536,6 +6568,44 @@ fn test_posixly_correct_and_block_size_env_vars_with_k() {
         .succeeds()
         .stdout_contains_line("total 4")
         .stdout_contains(" 1024 ");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ls_block_size_rounds_up() {
+    // A block that is only partly used still occupies a whole block, so
+    // scaling an allocation to the block size rounds up.
+    use std::os::unix::fs::MetadataExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    for name in ["dir/a", "dir/b", "dir/c"] {
+        at.write(name, "x");
+    }
+
+    let allocated: Vec<u64> = ["dir/a", "dir/b", "dir/c"]
+        .iter()
+        .map(|name| at.metadata(name).blocks() * 512)
+        .collect();
+    // An allocation that is a whole number of blocks, or none at all, cannot
+    // tell rounding up from rounding down.
+    if allocated
+        .iter()
+        .any(|bytes| bytes == &0 || bytes % 1000 == 0)
+    {
+        return;
+    }
+    let sizes: Vec<u64> = allocated.iter().map(|bytes| bytes.div_ceil(1000)).collect();
+    let total = allocated.iter().sum::<u64>().div_ceil(1000);
+
+    ucmd.arg("-s")
+        .arg("--block-size=1000")
+        .arg("dir")
+        .succeeds()
+        .stdout_is(format!(
+            "total {total}\n{} a\n{} b\n{} c\n",
+            sizes[0], sizes[1], sizes[2]
+        ));
 }
 
 #[test]
@@ -8197,7 +8267,7 @@ fn test_ls_recursive_no_fd_leak() {
         .ucmd()
         .arg("-R")
         .arg("1")
-        .limit(Resource::Nofile, 20, 20)
+        .limit(Resource::NOFILE, 20, 20)
         .succeeds()
         .no_stderr();
 }
@@ -8480,10 +8550,13 @@ fn test_ls_dereference_looped_symlinks_recursive_nested() {
 fn test_ls_dereference_cross_branch_alias_after_first_branch_completes() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.mkdir_all("top/a/target");
-    at.touch("top/a/target/file");
-    at.mkdir_all("top/b");
-    at.relative_symlink_dir("../a/target", "top/b/link");
+    let top_a_target = &path!("top", "a", "target");
+    let top_b = &path!("top", "b");
+
+    at.mkdir_all(top_a_target);
+    at.touch(top_a_target.join("file"));
+    at.mkdir_all(top_b);
+    at.relative_symlink_dir(path!("..", "a", "target"), top_b.join("link"));
 
     let result = ucmd.args(&["-RL", "top"]).succeeds();
     result

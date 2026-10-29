@@ -5139,11 +5139,13 @@ fn test_tail_obsolete_error_cases() {
 #[test]
 fn test_tail_obsolete_bare_c_needs_posix_1992() {
     new_ucmd!()
+        .ignore_stdin_write_error()
         .arg("-c")
         .pipe_in("abcdefghijkl")
         .fails_with_code(1)
         .no_stdout();
     new_ucmd!()
+        .ignore_stdin_write_error()
         .env("_POSIX2_VERSION", "200809")
         .arg("-c")
         .pipe_in("abcdefghijkl")
@@ -5161,7 +5163,8 @@ fn test_tail_obsolete_bare_c_needs_posix_1992() {
 fn test_tail_obsolete_plus_is_a_file_under_posix_2001() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("+2", "file\n");
-    ucmd.env("_POSIX2_VERSION", "200112")
+    ucmd.ignore_stdin_write_error()
+        .env("_POSIX2_VERSION", "200112")
         .arg("+2")
         .pipe_in("a\nb\n")
         .succeeds()
@@ -5357,6 +5360,21 @@ fn test_failed_write_is_reported() {
         .set_stdout(File::create("/dev/full").unwrap())
         .fails()
         .stderr_is("tail: No space left on device\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_multiple_input_files_failed_write_is_reported() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("file1", "first file contents\n");
+    at.write("file2", "second file contents\n");
+
+    ucmd.args(&["file1", "file2"])
+        .set_stdout(File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_contains("tail: No space left on device")
+        .stderr_does_not_contain("panicked");
 }
 
 #[cfg(target_os = "linux")]

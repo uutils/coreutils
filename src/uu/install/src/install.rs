@@ -19,7 +19,7 @@ use std::fmt::Debug;
 use std::fs::{self, metadata};
 use std::fs::{File, OpenOptions};
 use std::io::{Write, stdout};
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{DirBuilderExt, MetadataExt};
 use std::os::unix::prelude::OsStrExt;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process;
@@ -210,10 +210,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let behavior = behavior(&matches, diag_args.as_deref())?;
 
-    match behavior.main_function {
+    // Like GNU, work with the umask cleared: new ancestor directories get
+    // exactly DEFAULT_MODE and the strip program sees a umask of 0.
+    uucore::mode::with_umask(0, || match behavior.main_function {
         MainFunction::Directory => directory(&paths, &behavior),
         MainFunction::Standard => standard(paths, &behavior),
-    }
+    })
 }
 
 pub fn uu_app() -> Command {
@@ -520,11 +522,11 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
             // create all ancestors (or components) of a directory
             // regardless of the presence of the "-D" flag.
             //
-            // NOTE: the GNU "install" sets the expected mode only for the
-            // target directory. All created ancestor directories will have
-            // the default mode. Hence it is safe to use fs::create_dir_all
-            // and then only modify the target's dir mode.
-            if let Err(e) = fs::create_dir_all(&path_to_create).map_err_context(
+            // Only the target gets the requested mode; newly created ancestors
+            // use DEFAULT_MODE, which create_dir_all would request as 0777.
+            let mut builder = fs::DirBuilder::new();
+            builder.recursive(true).mode(DEFAULT_MODE);
+            if let Err(e) = builder.create(&path_to_create).map_err_context(
                 || translate!("install-error-create-dir-failed", "path" => path_to_create.quote()),
             ) {
                 show!(e);
@@ -727,8 +729,6 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
                 #[cfg(not(target_os = "redox"))]
                 {
-                    // Use DEFAULT_MODE (0o755) for created directories - this matches GNU install
-                    // behavior. The actual mode will be modified by umask at the kernel level.
                     match create_dir_all_safe(to_create, DEFAULT_MODE) {
                         Ok(dir_fd) => {
                             if b.target_dir.is_none()
@@ -769,7 +769,10 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     }
                 }
                 #[cfg(target_os = "redox")]
-                fs::create_dir_all(to_create)
+                fs::DirBuilder::new()
+                    .recursive(true)
+                    .mode(DEFAULT_MODE)
+                    .create(to_create)
                     .map_err(|e| InstallError::CreateDirFailed(to_create.to_path_buf(), e))?;
             }
         }
@@ -797,7 +800,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
         if b.backup_mode.ne(&BackupMode::None)
             && let Ok(to_abs) = target.canonicalize()
-            && source.canonicalize()? == to_abs
+            && source
+                .canonicalize()
+                .is_ok_and(|from_abs| from_abs == to_abs)
         {
             return Err(InstallError::SameFile(source.clone(), target.clone()).into());
         }
@@ -807,6 +812,21 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             if let (Some(ref parent_fd), Some(ref filename)) = (target_parent_fd, target_filename) {
                 if b.compare && !need_copy(source, &target, b) {
                     return Ok(());
+                }
+
+                // Check before the destination is removed below, which would
+                // remove the source if both are the same file.
+                let source_meta = metadata(source)?;
+                if let Ok(to_stat) =
+                    parent_fd.stat_at(filename.as_os_str(), SymlinkBehavior::Follow)
+                {
+                    // st_dev and st_ino types vary by platform (i32/u32 on macOS, u64 on Linux)
+                    #[allow(clippy::unnecessary_cast)]
+                    if source_meta.dev() == to_stat.st_dev as u64
+                        && source_meta.ino() == to_stat.st_ino as u64
+                    {
+                        return Err(InstallError::SameFile(source.clone(), target.clone()).into());
+                    }
                 }
 
                 let backup_path = perform_backup(source, &target, b)?;
@@ -1004,19 +1024,6 @@ fn perform_backup(from: &Path, to: &Path, b: &Behavior) -> UResult<Option<PathBu
 /// - `copy_file` uses path-based `OpenOptions::new().create_new().open()`
 #[cfg(not(target_os = "redox"))]
 fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsStr) -> UResult<()> {
-    let from_meta = metadata(from)?;
-
-    // Check if source and destination are the same file
-    if let Ok(to_stat) = to_parent_fd.stat_at(to_filename, SymlinkBehavior::Follow) {
-        // st_dev and st_ino types vary by platform (i32/u32 on macOS, u64 on Linux)
-        #[allow(clippy::unnecessary_cast)]
-        if from_meta.dev() == to_stat.st_dev as u64 && from_meta.ino() == to_stat.st_ino as u64 {
-            return Err(
-                InstallError::SameFile(from.to_path_buf(), PathBuf::from(to_filename)).into(),
-            );
-        }
-    }
-
     let mut src = File::open(from)?;
     let mut dst = to_parent_fd.open_file_at(to_filename)?;
     copy_fast(&mut src, &mut dst)?;
@@ -1038,8 +1045,9 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
 ///
 fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     use std::os::unix::fs::OpenOptionsExt;
+    // Pipe-backed descriptors can be opened even when canonicalize fails.
     if let Ok(to_abs) = to.canonicalize()
-        && from.canonicalize()? == to_abs
+        && from.canonicalize().is_ok_and(|from_abs| from_abs == to_abs)
     {
         return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
     }

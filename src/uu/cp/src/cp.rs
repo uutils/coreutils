@@ -58,6 +58,10 @@ mod platform;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CpError {
+    /// Permission denied.
+    #[error("{}", translate!("cp-error-cannot-open-for-reading", "source" => .0.quote()))]
+    CannotOpenForReading(PathBuf),
+
     /// Simple [`io::Error`] wrapper
     #[error("{0}")]
     IoErr(#[from] io::Error),
@@ -1028,7 +1032,7 @@ impl Attributes {
 
 /// Flags in the mutual-exclusion group for symlink handling.
 /// The last one on the command line determines dereference behavior.
-/// Note: CLI_SYMBOLIC_LINKS (-H) is excluded here — it only affects
+/// Note: `CLI_SYMBOLIC_LINKS` (-H) is excluded here — it only affects
 /// CLI-level symlinks, not recursive traversal.
 const DEREF_FLAGS: &[&str] = &[
     options::DEREFERENCE,

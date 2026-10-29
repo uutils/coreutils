@@ -563,13 +563,13 @@ fn test_large_page_width_does_not_panic() {
     ignore = "WASI: wasmtime itself needs more memory than the guest's rlimit allows"
 )]
 fn test_offset_large_value_does_not_abort_under_memory_limit() {
-    use rustix::process::Resource;
+    use rlimit::Resource;
     use std::process::Stdio;
 
     const AS_LIMIT: u64 = 200 * 1024 * 1024;
 
     new_ucmd!()
-        .limit(Resource::As, AS_LIMIT, AS_LIMIT)
+        .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
         .set_stdout(Stdio::null())
         .args(&["-t", "-o", "999999999"])
         .pipe_in("hi\n")
@@ -684,6 +684,21 @@ fn test_with_join_lines_option() {
                 &valid_last_modified_template_vars(start),
             );
     }
+}
+
+#[test]
+fn test_join_lines_keeps_column_separator() {
+    // -J only stops truncation and alignment; columns are still separated
+    new_ucmd!()
+        .args(&["-2", "-t", "-J", "-S,"])
+        .pipe_in("1\n2\n3\n4\n")
+        .succeeds()
+        .stdout_is("1,3\n2,4\n");
+    new_ucmd!()
+        .args(&["-2", "-t", "-J"])
+        .pipe_in("1\n2\n3\n4\n")
+        .succeeds()
+        .stdout_is("1\t3\n2\t4\n");
 }
 
 #[test]

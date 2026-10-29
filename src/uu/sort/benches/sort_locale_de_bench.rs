@@ -5,8 +5,8 @@
 
 //! Benchmarks for sort with German locale (de_DE.UTF-8 collation).
 //!
-//! Note: The locale is set in main() BEFORE any benchmark runs because
-//! the locale is cached on first access via OnceLock and cannot be changed afterwards.
+//! Note: The locale is set in `main()` BEFORE any benchmark runs because
+//! the locale is cached on first access via `OnceLock` and cannot be changed afterwards.
 
 use divan::{Bencher, black_box};
 use tempfile::NamedTempFile;

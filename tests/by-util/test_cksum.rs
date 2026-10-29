@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont checkfile
+// spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont checkfile unopenable
 
 use rstest::rstest;
 use rstest_reuse::{apply, template};
@@ -997,6 +997,24 @@ fn test_raw_multiple_files() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_contains("cksum: the --raw option is not supported with multiple files");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_write_error() {
+    // A normal line fails at its newline. The raw digest has no newline, so
+    // only a flush reports its write error.
+    for args in [&["lorem_ipsum.txt"][..], &["--raw", "lorem_ipsum.txt"]] {
+        let dev_full = std::fs::OpenOptions::new()
+            .write(true)
+            .open("/dev/full")
+            .unwrap();
+        new_ucmd!()
+            .args(args)
+            .set_stdout(dev_full)
+            .fails_with_code(1)
+            .stderr_is("cksum: write error: No space left on device\n");
+    }
 }
 
 #[test]
@@ -2134,6 +2152,36 @@ fn test_check_failed_to_read() {
         .arg("--ignore-missing")
         .fails()
         .stdout_is("dir: FAILED open or read\n")
+        .stderr_contains("cksum: WARNING: 1 listed file could not be read");
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_check_ignore_missing_unopenable_file() {
+    // `--ignore-missing` excuses a file that is absent, not one that is
+    // present but cannot be opened. The latter is still a failed read.
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("f", "data\n");
+    at.write(
+        "CHECKSUM",
+        "SHA1 (f) = c5d84736ba451747dd5f0eb9d17e104f3697ef47\n\
+        SHA1 (f/sub) = ffffffffffffffffffffffffffffffffffffffff\n\
+        SHA1 (not-file) = ffffffffffffffffffffffffffffffffffffffff\n",
+    );
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("--ignore-missing")
+        .arg("CHECKSUM")
+        .fails()
+        .stdout_is(
+            "f: OK\n\
+            f/sub: FAILED open or read\n",
+        )
         .stderr_contains("cksum: WARNING: 1 listed file could not be read");
 }
 
@@ -3901,4 +3949,47 @@ fn test_numeric_looking_directory_names_are_kept_verbatim() {
     ucmd.args(&["007", "1e3"])
         .fails_with_code(1)
         .stderr_is("cksum: 007: Is a directory\ncksum: 1e3: Is a directory\n");
+}
+
+#[test]
+fn test_check_improperly_formatted_line_does_not_select_format() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // The listed files were replaced, their genuine content is kept under the
+    // same names with a leading space.
+    for f in ["a", "c"] {
+        at.write(f, "tampered\n");
+        at.write(format!(" {f}"), &format!("{f}\n"));
+    }
+    at.write(
+        "check.md5sum",
+        "2024 release\n\
+        60b725f10c9c85c70d97880dfe8191b3  a\n\
+        2cd6ee2c70b0bde53fbe6cac3c8b8bb1  c\n",
+    );
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("--algorithm=md5")
+        .arg("check.md5sum")
+        .fails_with_code(1)
+        .stdout_is("a: FAILED\nc: FAILED\n")
+        .stderr_contains("1 line is improperly formatted")
+        .stderr_contains("2 computed checksums did NOT match");
+
+    at.write("a", "a\n");
+    at.write(
+        "check_single_space.md5sum",
+        "Checksums  for release\n\
+        60b725f10c9c85c70d97880dfe8191b3 a\n",
+    );
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("--algorithm=md5")
+        .arg("check_single_space.md5sum")
+        .succeeds()
+        .stdout_is("a: OK\n")
+        .stderr_contains("1 line is improperly formatted");
 }

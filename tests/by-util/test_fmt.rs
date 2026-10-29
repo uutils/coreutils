@@ -7,7 +7,7 @@
 
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
-use uutests::new_ucmd;
+use uutests::{at_and_ucmd, new_ucmd};
 
 #[test]
 fn test_invalid_arg() {
@@ -66,7 +66,7 @@ fn test_fmt_width_max_display_width() {
         .stdout_is("aa\nbb cc\ndd ee\n");
 }
 
-/// Regression for https://github.com/uutils/coreutils/issues/10095
+/// Regression for <https://github.com/uutils/coreutils/issues/10095>
 ///
 /// GNU `fmt` measures `-w` in UTF-8 bytes (not Unicode display columns).
 /// These cases match GNU coreutils 9.11.
@@ -153,6 +153,33 @@ fn test_fmt_positional_width_not_first() {
 }
 
 #[test]
+fn test_fmt_negative_number_file_after_double_dash() {
+    use uutests::util::TestScenario;
+    use uutests::util_name;
+
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("-9", "hidden text\n");
+    scene.fixtures.write("f", "the quick brown fox jumps\n");
+    for args in [&["--", "-9", "f"][..], &["-u", "--", "-9", "f"]] {
+        scene
+            .ucmd()
+            .args(args)
+            .succeeds()
+            .stdout_only("hidden text\nthe quick brown fox jumps\n");
+    }
+    scene
+        .ucmd()
+        .args(&["f", "--", "-9"])
+        .succeeds()
+        .stdout_only("the quick brown fox jumps\nhidden text\n");
+    scene
+        .ucmd()
+        .args(&["--", "-9"])
+        .succeeds()
+        .stdout_only("hidden text\n");
+}
+
+#[test]
 fn test_fmt_width_not_valid_number() {
     new_ucmd!()
         .args(&["-25x", "one-word-per-line.txt"])
@@ -223,6 +250,43 @@ fn test_fmt_non_existent_file() {
     new_ucmd!()
         .args(&["non-existing"])
         .fails_with_code(1)
+        .stderr_is("fmt: cannot open 'non-existing' for reading: No such file or directory\n");
+}
+
+// Windows refuses to open a directory as a file, so the error differs there.
+#[cfg(not(windows))]
+#[test]
+fn test_fmt_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    ucmd.arg("dir")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("fmt: error reading 'dir': Is a directory\n");
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_fmt_continues_after_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.write("a.txt", "one\ntwo\n");
+    ucmd.args(&["dir", "non-existing", "a.txt"])
+        .fails_with_code(1)
+        .stdout_is("one two\n")
+        .stderr_is(
+            "fmt: error reading 'dir': Is a directory\n\
+             fmt: cannot open 'non-existing' for reading: No such file or directory\n",
+        );
+}
+
+#[test]
+fn test_fmt_continues_after_missing_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a.txt", "one\ntwo\n");
+    ucmd.args(&["non-existing", "a.txt"])
+        .fails_with_code(1)
+        .stdout_is("one two\n")
         .stderr_is("fmt: cannot open 'non-existing' for reading: No such file or directory\n");
 }
 
@@ -304,7 +368,8 @@ fn prefix_minus() {
 #[test]
 fn prefix_equal() {
     for prefix_args in [
-        // FIXME: #6353 vec!["-p="],
+        vec!["-p="],
+        vec!["-up="],
         vec!["-p", "="],
         vec!["--prefix=="],
         vec!["--prefix", "="],
@@ -312,6 +377,7 @@ fn prefix_equal() {
         vec!["--pref", "="],
         // Test self-overriding:
         vec!["--prefix=-", "--prefix=="],
+        vec!["-p-", "-p="],
     ] {
         new_ucmd!()
             .args(&prefix_args)
@@ -324,7 +390,8 @@ fn prefix_equal() {
 #[test]
 fn prefix_equal_skip_prefix_equal_two() {
     for prefix_args in [
-        // FIXME: #6353 vec!["--prefix==", "-P=2"],
+        vec!["--prefix==", "-P=2"],
+        vec!["-p=", "-uP=2"],
         vec!["--prefix==", "-P", "=2"],
         vec!["--prefix==", "--skip-prefix==2"],
         vec!["--prefix==", "--skip-prefix", "=2"],
@@ -332,6 +399,7 @@ fn prefix_equal_skip_prefix_equal_two() {
         vec!["--prefix==", "--skip-pref", "=2"],
         // Test self-overriding:
         vec!["--prefix==", "--skip-pref", "asdf", "-P", "=2"],
+        vec!["-p=", "-Pignored", "-P=2"],
     ] {
         new_ucmd!()
             .args(&prefix_args)
@@ -339,6 +407,35 @@ fn prefix_equal_skip_prefix_equal_two() {
             .succeeds()
             .stdout_is_fixture("prefixed-one-word-per-line_p=_P=2.txt");
     }
+}
+
+#[test]
+fn prefix_with_multiple_equals() {
+    for prefix_args in [vec!["-p=="], vec!["-up=="], vec!["--prefix==="]] {
+        new_ucmd!()
+            .args(&prefix_args)
+            .pipe_in("=unchanged\n==one\n==two\n")
+            .succeeds()
+            .stdout_only("=unchanged\n==one two\n");
+    }
+}
+
+#[test]
+fn prefix_containing_short_option_spelling() {
+    for prefix_args in [vec!["-p-p="], vec!["--prefix=-p="], vec!["-qp-p="]] {
+        new_ucmd!()
+            .args(&prefix_args)
+            .pipe_in("-p=one\n-p=two\n")
+            .succeeds()
+            .stdout_only("-p=one two\n");
+    }
+}
+
+#[test]
+fn prefix_option_spelling_after_terminator_is_a_file() {
+    let (at, mut cmd) = uutests::at_and_ucmd!();
+    at.write("-p=", "one\ntwo\n");
+    cmd.args(&["--", "-p="]).succeeds().stdout_only("one two\n");
 }
 
 #[test]

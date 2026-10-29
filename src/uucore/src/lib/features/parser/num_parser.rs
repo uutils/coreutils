@@ -7,13 +7,9 @@
 
 //! Utilities for parsing numbers in various formats
 
-use bigdecimal::{
-    BigDecimal,
-    num_bigint::{BigInt, BigUint, Sign},
-};
-use num_traits::Signed;
-use num_traits::ToPrimitive;
-use num_traits::Zero;
+use bigdecimal::BigDecimal;
+use bigdecimal::num_bigint::{BigInt, BigUint, Sign};
+use num_traits::{Signed, ToPrimitive, Zero};
 
 use crate::extendedbigdecimal::ExtendedBigDecimal;
 
@@ -279,7 +275,7 @@ impl ExtendedParser for f64 {
 }
 
 impl ExtendedParser for ExtendedBigDecimal {
-    /// Parse a number as an ExtendedBigDecimal
+    /// Parse a number as an [`ExtendedBigDecimal`]
     fn extended_parse(input: &str) -> Result<Self, ExtendedParserError<Self>> {
         parse(input, ParseTarget::Decimal, &[])
     }
