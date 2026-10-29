@@ -609,3 +609,11 @@ fn test_crlf_delimiter_not_eaten_by_an_empty_line() {
         .succeeds()
         .stdout_is(expected);
 }
+
+#[test]
+fn test_missing_file_error_includes_filename() {
+    new_ucmd!()
+        .arg("missing.txt")
+        .fails_with_code(1)
+        .stderr_contains("missing.txt");
+}

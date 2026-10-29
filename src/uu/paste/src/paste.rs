@@ -107,7 +107,16 @@ fn paste(
             )
         } else {
             let path = Path::new(&filename);
-            let file = File::open(path)?;
+            let file = File::open(path).map_err(|error| {
+                USimpleError::new(
+                    1,
+                    translate!(
+                        "paste-error-file",
+                        "file" => filename.to_string_lossy(),
+                        "error" => error
+                    ),
+                )
+            })?;
             InputSource::File(BufReader::new(file))
         };
 
