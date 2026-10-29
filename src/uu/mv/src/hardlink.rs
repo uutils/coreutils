@@ -263,10 +263,13 @@ pub fn create_hardlink_context() -> (HardlinkTracker, HardlinkGroupScanner) {
     (HardlinkTracker::new(), HardlinkGroupScanner::new())
 }
 
-/// Convenient function to execute operations with proper hardlink context handling
+/// Run `operation` with the caller's hardlink context, or, if there is none,
+/// with a new one built by scanning `source`.
 pub fn with_optional_hardlink_context<F, R>(
     tracker: Option<&mut HardlinkTracker>,
     scanner: Option<&HardlinkGroupScanner>,
+    source: &Path,
+    options: &HardlinkOptions,
     operation: F,
 ) -> R
 where
@@ -275,8 +278,9 @@ where
     if let (Some(tracker), Some(scanner)) = (tracker, scanner) {
         operation(tracker, scanner)
     } else {
-        let (mut dummy_tracker, dummy_scanner) = create_hardlink_context();
-        operation(&mut dummy_tracker, &dummy_scanner)
+        let (mut tracker, mut scanner) = create_hardlink_context();
+        scanner.scan_files(&[source.to_path_buf()], options);
+        operation(&mut tracker, &scanner)
     }
 }
 
