@@ -1092,3 +1092,15 @@ fn test_error_message_preserves_non_utf8_filename() {
         }
     }
 }
+
+#[test]
+fn test_last_of_format_printf_wins() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("a.txt", "");
+    scene
+        .ucmd()
+        .args(&["--printf=X", "--format=Y"])
+        .arg("a.txt")
+        .succeeds()
+        .stdout_is("Y\n");
+}
