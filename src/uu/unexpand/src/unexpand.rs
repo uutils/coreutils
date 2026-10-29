@@ -264,7 +264,8 @@ pub fn uu_app() -> Command {
                 .short('f')
                 .long(options::FIRST_ONLY)
                 .help(translate!("unexpand-help-first-only"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::FIRST_ONLY),
         )
         .arg(
             Arg::new(options::TABS)

@@ -508,3 +508,12 @@ fn test_backspaces_before_last_tab_stop_resume_conversion() {
         .succeeds()
         .stdout_is("abcde\x08\x08\tX\n");
 }
+
+#[test]
+fn test_first_only_given_twice() {
+    new_ucmd!()
+        .args(&["--first-only", "--first-only"])
+        .pipe_in("a\n")
+        .succeeds()
+        .stdout_is("a\n");
+}
