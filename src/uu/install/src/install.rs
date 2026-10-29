@@ -340,7 +340,9 @@ pub fn uu_app() -> Command {
                 .help(translate!("install-help-context"))
                 .value_name("CONTEXT")
                 .value_parser(clap::value_parser!(String))
-                .num_args(0..=1),
+                .num_args(0..=1)
+                .require_equals(true)
+                .default_missing_value(""),
         )
         .arg(
             Arg::new(ARG_FILES)
@@ -462,12 +464,17 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
     #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
     let selinux_enabled = false;
 
-    let mut context = matches.get_one::<String>(OPT_CONTEXT).cloned();
+    // A bare `--context` means "use the default context"; an empty value is
+    // treated as no explicit context string.
+    let raw_context = matches.get_one::<String>(OPT_CONTEXT).cloned();
+    let bare_context = raw_context.as_deref() == Some("");
+    let mut context = raw_context.filter(|value| !value.is_empty());
     if context.is_some() && !selinux_enabled {
         show_warning!("{}", translate!("install-warning-context-ignored"));
         context = None;
     }
-    let default_context = matches.get_flag(OPT_DEFAULT_CONTEXT) && selinux_enabled;
+    let default_context =
+        (matches.get_flag(OPT_DEFAULT_CONTEXT) || bare_context) && selinux_enabled;
     let privileged = !matches.get_flag(OPT_UNPRIVILEGED);
 
     Ok(Behavior {
