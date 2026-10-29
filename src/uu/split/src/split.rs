@@ -411,7 +411,22 @@ fn write_repeating<T: Write>(
     ignore_broken_pipe: bool,
 ) -> io::Result<usize> {
     let full_len = bytes.len();
-    let mut total = 0;
+    // A single write() almost always accepts the whole buffer at once, and
+    // `--lines` calls this once per line, so the retry loop below must stay
+    // off the common path.
+    match writer.write(bytes) {
+        Ok(n) if n == full_len => return Ok(full_len),
+        Ok(0) => {
+            // No progress is possible; report an error instead of looping forever.
+            return Err(io::Error::new(ErrorKind::WriteZero, "write failed"));
+        }
+        Ok(n) => bytes = &bytes[n..],
+        Err(e) if ignore_broken_pipe && e.kind() == ErrorKind::BrokenPipe => {
+            return Ok(full_len);
+        }
+        Err(e) => return Err(e),
+    }
+    let mut total = full_len - bytes.len();
     while !bytes.is_empty() {
         match writer.write(bytes) {
             Ok(0) => {
