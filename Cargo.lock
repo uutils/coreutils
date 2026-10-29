@@ -4085,6 +4085,7 @@ dependencies = [
  "fluent",
  "nix",
  "rustix",
+ "rustix-openpty",
  "uucore",
 ]
 

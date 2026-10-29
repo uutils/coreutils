@@ -22,6 +22,9 @@ nix = { workspace = true, features = ["ioctl", "term"] }
 rustix = { workspace = true, features = ["fs", "termios"] }
 uucore = { workspace = true, features = ["parser"] }
 
+[target.'cfg(all(unix, not(any(target_os = "aix", target_os = "dragonfly"))))'.dev-dependencies]
+rustix-openpty = { workspace = true }
+
 [build-dependencies]
 cfg_aliases = { workspace = true }
 
