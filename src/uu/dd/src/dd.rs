@@ -908,11 +908,14 @@ impl<'a> Output<'a> {
         let fx = OwnedFileDescriptorOrHandle::from(io::stdout())?;
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
-            rustix::fs::fcntl_setfl(
-                fx.as_raw(),
-                rustix::fs::OFlags::from_bits_retain(libc_flags as _),
-            )
-            .map_err(|e| uucore::error::UIoError::from(io::Error::from(e)))?;
+            // Add the requested flags to the ones stdout already has. Replacing
+            // them would clear O_APPEND when the shell opened the file with
+            // `>>`, making dd overwrite the start of the file.
+            let existing_flags = rustix::fs::fcntl_getfl(fx.as_raw())
+                .map_err(|e| uucore::error::UIoError::from(io::Error::from(e)))?;
+            let flags = existing_flags | rustix::fs::OFlags::from_bits_retain(libc_flags as _);
+            rustix::fs::fcntl_setfl(fx.as_raw(), flags)
+                .map_err(|e| uucore::error::UIoError::from(io::Error::from(e)))?;
         }
 
         Self::prepare_file(fx.into_file(), settings)
