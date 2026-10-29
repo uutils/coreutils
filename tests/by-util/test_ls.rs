@@ -4837,6 +4837,39 @@ fn test_ls_ignore_negation() {
         .stdout_does_not_contain("boy");
 }
 
+// spell-checker:ignore fnmatch corefile ncorefile
+#[test]
+fn test_ls_ignore_hide_fnmatch_syntax() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("1.log");
+    at.touch("d]x");
+    at.touch("report.txt");
+    at.touch("x ledger.db");
+    at.touch("core");
+    at.touch("corefile");
+
+    for (pattern, expected) in [
+        (
+            "[[:digit:]]*",
+            "core\ncorefile\nd]x\nreport.txt\nx ledger.db\n",
+        ),
+        ("*[[:space:]]*", "1.log\ncore\ncorefile\nd]x\nreport.txt\n"),
+        ("*[![:alnum:]._-]*", "1.log\ncore\ncorefile\nreport.txt\n"),
+        ("*\\.txt", "1.log\ncore\ncorefile\nd]x\nx ledger.db\n"),
+        ("core**", "1.log\nd]x\nreport.txt\nx ledger.db\n"),
+    ] {
+        for opt in ["--ignore", "--hide"] {
+            scene
+                .ucmd()
+                .arg(format!("{opt}={pattern}"))
+                .arg("-1")
+                .succeeds()
+                .stdout_only(expected);
+        }
+    }
+}
+
 #[test]
 fn test_ls_directory() {
     let scene = TestScenario::new(util_name!());
