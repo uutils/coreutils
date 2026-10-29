@@ -241,10 +241,14 @@ pub fn apply_xattrs_fd_ignore_unsupported(
     dest: &std::fs::File,
     xattrs: FxHashMap<OsString, Vec<u8>>,
 ) -> std::io::Result<()> {
-    match apply_xattrs_fd(dest, xattrs) {
-        Err(e) if is_xattr_unsupported(&e) => Ok(()),
-        res => res,
+    use xattr::FileExt;
+    for (attr, value) in xattrs {
+        match dest.set_xattr(&attr, &value) {
+            Err(e) if is_xattr_unsupported(&e) => {}
+            res => res?,
+        }
     }
+    Ok(())
 }
 
 /// Checks if a file has an Access Control List (ACL).
