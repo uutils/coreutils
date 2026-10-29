@@ -2145,6 +2145,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     settings.debug = matches.get_flag(options::DEBUG);
+
     if let Some(path) = matches.get_one::<OsString>(options::RANDOM_SOURCE) {
         settings.random_source = Some(PathBuf::from(path));
     }
@@ -2341,6 +2342,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if matches.contains_id(options::OUTPUT) && settings.check {
         let opts = if settings.check_silent { "Co" } else { "co" };
         return Err(incompatible_options_error(opts));
+    }
+
+    // `-o` writes to a file, which is incompatible with the diagnostic output of
+    // `--debug`.
+    if matches.contains_id(options::OUTPUT) && matches.get_flag(options::DEBUG) {
+        return Err(incompatible_options_error("o --debug"));
     }
 
     settings.ignore_leading_blanks = matches.get_flag(options::IGNORE_LEADING_BLANKS);
