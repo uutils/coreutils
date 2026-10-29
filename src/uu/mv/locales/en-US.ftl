@@ -39,6 +39,7 @@ mv-error-no-symlink-support = your operating system does not support symlinks
 mv-error-permission-denied = Permission denied
 mv-error-inter-device-move-failed = inter-device move failed: {$from} to {$to}; unable to remove target: {$err}
 mv-error-setting-attribute = setting attribute {$name}: {$err}
+mv-error-setting-attributes = setting attributes for {$path}: {$err}
 mv-error-exchange-two-operands = --exchange requires exactly two operands
 mv-error-exchange-not-supported = --exchange is not supported on this platform
 
