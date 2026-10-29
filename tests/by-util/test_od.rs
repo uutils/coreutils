@@ -1748,3 +1748,15 @@ fn test_od_zero_byte_type_size() {
         .succeeds()
         .stdout_is("0000000 64636261\n0000004\n");
 }
+
+#[test]
+fn test_final_offset_printed_when_an_input_fails() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a.txt", "a\n");
+    at.mkdir("d");
+
+    ucmd.args(&["a.txt", "d"])
+        .fails_with_code(1)
+        .stdout_contains("0000002")
+        .stderr_contains("d: Is a directory");
+}
