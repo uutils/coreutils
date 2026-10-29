@@ -703,6 +703,22 @@ fn test_symlink_errors() {
 }
 
 #[test]
+fn test_hard_link_verbose() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file_a = "test_hard_link_verbose_file_a";
+    let file_b = "test_hard_link_verbose_file_b";
+
+    at.touch(file_a);
+
+    scene
+        .ucmd()
+        .args(&["-v", file_a, file_b])
+        .succeeds()
+        .stdout_only(format!("'{file_b}' => '{file_a}'\n"));
+}
+
+#[test]
 fn test_symlink_verbose() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
