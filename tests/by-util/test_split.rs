@@ -2369,3 +2369,19 @@ fn test_obsolete_lines_not_read_after_double_dash() {
         .fails()
         .stderr_contains("cannot open '-1' for reading");
 }
+
+#[test]
+fn test_number_with_plus_prefix() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a.txt", "a\nb\n");
+    ucmd.args(&["-n", "+2", "a.txt"]).succeeds();
+    assert_eq!(at.read("xaa"), "a\n");
+    assert_eq!(at.read("xab"), "b\n");
+
+    // Every spelling that carries a number accepts the prefix.
+    for number in ["l/+2", "+1/2", "l/+1/2", "r/+2", "r/+1/2"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("a.txt", "a\nb\n");
+        ucmd.args(&["-n", number, "a.txt"]).succeeds();
+    }
+}
