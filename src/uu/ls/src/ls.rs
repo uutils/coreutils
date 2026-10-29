@@ -37,6 +37,7 @@ use uucore::{
     fs::FileInformation,
     fsext::metadata_get_time,
     os_str_as_bytes_lossy,
+    parser::parse_size::parse_size_non_zero_u64,
     parser::shortcut_value_parser::ShortcutValueParser,
     show, translate,
     version_cmp::version_cmp,
@@ -113,15 +114,42 @@ impl UError for LsError {
     }
 }
 
+/// Reject an invalid numeric value for `--block-size` even when a later
+/// `-h`/`--si`/another `--block-size` makes clap drop the value from the
+/// matches. GNU ls validates the argument as it is parsed, independent of
+/// option order (e.g. `ls --block-size=0 --si` is an error).
+fn validate_block_size_arguments(args: &[OsString]) -> UResult<()> {
+    let mut iter = args.iter().skip(1);
+    while let Some(arg) = iter.next() {
+        let Some(arg) = arg.to_str() else {
+            continue;
+        };
+        let value = if let Some(value) = arg.strip_prefix("--block-size=") {
+            Some(value)
+        } else if arg == "--block-size" {
+            iter.next().and_then(|value| value.to_str())
+        } else {
+            None
+        };
+        if let Some(value) = value
+            && value != options::size::SI
+            && value != options::size::HUMAN_READABLE
+            && parse_size_non_zero_u64(value).is_err()
+        {
+            return Err(LsError::BlockSizeParseError(value.to_string()).into());
+        }
+    }
+    Ok(())
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // The arguments are kept for the caret in SIZE diagnostics, which echoes
     // the command line.
-    let (matches, diag_args) = uucore::clap_localization::handle_clap_result_with_diagnostics(
-        uu_app(),
-        args.collect(),
-        2,
-    )?;
+    let args: Vec<OsString> = args.collect();
+    validate_block_size_arguments(&args)?;
+    let (matches, diag_args) =
+        uucore::clap_localization::handle_clap_result_with_diagnostics(uu_app(), args, 2)?;
 
     uucore::i18n::collator::init_locale_collation();
 
