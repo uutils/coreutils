@@ -575,14 +575,13 @@ fn test_last_of_canonicalize_flags_wins() {
     // exist, while -e requires the whole path to exist.
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a");
-    let actual = ucmd
-        .args(&["-e", "-f", "a/b"])
-        .succeeds()
-        .stdout_move_str();
+    let actual = ucmd.args(&["-e", "-f", "a/b"]).succeeds().stdout_move_str();
     let expect = path_concat!(at.root_dir_resolved(), "a/b") + "\n";
     assert_eq!(actual, expect);
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a");
-    ucmd.args(&["-f", "-e", "a/b"]).fails_with_code(1).no_stdout();
+    ucmd.args(&["-f", "-e", "a/b"])
+        .fails_with_code(1)
+        .no_stdout();
 }
