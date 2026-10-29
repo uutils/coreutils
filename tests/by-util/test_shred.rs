@@ -468,10 +468,10 @@ fn test_shred_trailing_slash_on_file() {
     let at = &scene.fixtures;
     at.touch("a");
     let result = scene.ucmd().arg("a/").fails();
-    result.stderr_contains("a/: failed to open for writing: ");
-    // Windows reports this as "The directory name is invalid."
     #[cfg(unix)]
-    result.stderr_contains("Not a directory");
+    result.stderr_contains("a/: failed to open for writing: Not a directory");
+    #[cfg(windows)]
+    result.stderr_contains("a/: failed to open for writing: The directory name is invalid.");
 }
 
 #[rstest::rstest]
