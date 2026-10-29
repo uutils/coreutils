@@ -818,7 +818,30 @@ pub fn uu_app() -> Command {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let args: Vec<OsString> = args.collect();
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args.clone())?;
+
+    // `-s`/`--symbolic-link` and `-l`/`--link` are mutually exclusive. Detect the
+    // flags in the raw arguments because clap's mode overrides would otherwise let
+    // the later flag silently replace the earlier one.
+    let has_flag = |long: &str, short: char| {
+        args.iter().any(|arg| {
+            let arg = arg.to_string_lossy();
+            if let Some(name) = arg.strip_prefix("--") {
+                name == long
+            } else if let Some(flags) = arg.strip_prefix('-') {
+                flags.chars().any(|c| c == short)
+            } else {
+                false
+            }
+        })
+    };
+    if has_flag(options::LINK, 'l') && has_flag(options::SYMBOLIC_LINK, 's') {
+        return Err(UUsageError::new(
+            EXIT_ERR,
+            translate!("cp-error-cannot-make-both-hard-and-symbolic-links"),
+        ));
+    }
 
     let options = Options::from_matches(&matches)?;
 
