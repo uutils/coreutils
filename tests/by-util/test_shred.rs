@@ -229,7 +229,34 @@ fn test_shred_fail_no_perm() {
         .arg("-uv")
         .arg(path)
         .fails()
-        .stderr_contains("Couldn't rename to");
+        .stderr_contains(format!("{path}: failed to remove: Permission denied\n"));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_shred_remove_in_unwritable_dir_keeps_going() {
+    use rustix::process::geteuid;
+
+    if geteuid().is_root() {
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("shr");
+    at.mkdir("ok");
+    at.write("shr/f", "hi");
+    at.write("ok/g", "yo");
+    at.set_mode("shr", 0o555);
+
+    let result = scene.ucmd().args(&["-u", "shr/f", "ok/g"]).run();
+
+    at.set_mode("shr", 0o755);
+    result
+        .code_is(1)
+        .stderr_only("shred: shr/f: failed to remove: Permission denied\n");
+    assert!(at.file_exists("shr/f"));
+    assert!(!at.file_exists("ok/g"));
 }
 
 #[test]
@@ -583,7 +610,7 @@ fn test_couldnt_rename() {
     new_ucmd!()
         .args(&["-u", "/proc/self/mem"])
         .fails_with_code(1)
-        .stderr_is("shred: /proc/self/mem: Couldn't rename to '/proc/self/000': No such file or directory\n");
+        .stderr_is("shred: /proc/self/mem: failed to remove: Operation not permitted\n");
 }
 
 #[rstest::rstest]
