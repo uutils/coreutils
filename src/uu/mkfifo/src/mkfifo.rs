@@ -26,6 +26,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let diag_args = uucore::diagnostics::operands(&args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
+    // Symbolic modes may be comma-separated, but a numeric mode must be a
+    // single octal number: GNU mkfifo rejects `--mode=1,2`.
+    if let Some(m) = matches.get_one::<String>(options::MODE)
+        && m.contains(',')
+        && m.chars()
+            .all(|c| c.is_ascii_digit() || c == ',' || c.is_whitespace())
+    {
+        return Err(USimpleError::new(
+            1,
+            translate!("mkfifo-error-invalid-mode", "error" => format!("'{m}'")),
+        ));
+    }
+
     let mode = calculate_mode(matches.get_one::<String>(options::MODE)).map_err(|err| {
         let message = translate!("mkfifo-error-invalid-mode", "error" => err.to_string());
         if let Some(args) = &diag_args
