@@ -4498,9 +4498,6 @@ fn test_cp_overriding_arguments() {
         #[cfg(not(windows))]
         ("--force", "--remove-destination"),
         ("--interactive", "--no-clobber"),
-        ("--link", "--symbolic-link"),
-        #[cfg(not(target_os = "android"))]
-        ("--symbolic-link", "--link"),
         ("--dereference", "--no-dereference"),
         ("--no-dereference", "--dereference"),
     ] {
@@ -9712,4 +9709,13 @@ fn test_cp_source_in_unsearchable_dir() {
         .stderr_only("cp: cannot stat 'd/f': Permission denied\n");
     at.set_mode("d", 0o755);
     assert!(!at.file_exists("dest"));
+#[test]
+fn test_symbolic_link_and_link_conflict() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a.txt", "a\n");
+    ucmd.args(&["-s", "-l", "a.txt", "b"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("cannot make both hard and symbolic links");
+    assert!(!at.file_exists("b"));
 }
