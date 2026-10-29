@@ -117,13 +117,17 @@ impl NumberType {
     /// or if `K` is greater than `N`
     /// then this function returns [`NumberTypeError`].
     fn from(s: &str) -> Result<Self, NumberTypeError> {
+        /// GNU accepts a leading '+' on every number, so strip it first.
+        fn parse_number(value: &str) -> Result<u64, ParseSizeError> {
+            parse_size_u64(value.strip_prefix('+').unwrap_or(value))
+        }
         fn is_invalid_chunk(chunk_number: u64, num_chunks: u64) -> bool {
             chunk_number > num_chunks || chunk_number == 0
         }
         let mut parts = s.splitn(4, '/');
         match (parts.next(), parts.next(), parts.next(), parts.next()) {
             (Some(n_str), None, None, None) => {
-                let num_chunks = parse_size_u64(n_str)
+                let num_chunks = parse_number(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 if num_chunks > 0 {
                     Ok(Self::Bytes(num_chunks))
@@ -134,9 +138,9 @@ impl NumberType {
             (Some(k_str), Some(n_str), None, None)
                 if !k_str.starts_with('l') && !k_str.starts_with('r') =>
             {
-                let num_chunks = parse_size_u64(n_str)
+                let num_chunks = parse_number(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                let chunk_number = parse_size_u64(k_str)
+                let chunk_number = parse_number(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
                 if is_invalid_chunk(chunk_number, num_chunks) {
                     return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
@@ -144,7 +148,7 @@ impl NumberType {
                 Ok(Self::KthBytes(chunk_number, num_chunks))
             }
             (Some("l"), Some(n_str), None, None) => {
-                let num_chunks = parse_size_u64(n_str)
+                let num_chunks = parse_number(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 if num_chunks == 0 {
                     return Err(NumberTypeError::NumberOfChunks(n_str.to_string()));
@@ -152,9 +156,9 @@ impl NumberType {
                 Ok(Self::Lines(num_chunks))
             }
             (Some("l"), Some(k_str), Some(n_str), None) => {
-                let num_chunks = parse_size_u64(n_str)
+                let num_chunks = parse_number(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                let chunk_number = parse_size_u64(k_str)
+                let chunk_number = parse_number(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
                 if is_invalid_chunk(chunk_number, num_chunks) {
                     return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
@@ -162,7 +166,7 @@ impl NumberType {
                 Ok(Self::KthLines(chunk_number, num_chunks))
             }
             (Some("r"), Some(n_str), None, None) => {
-                let num_chunks = parse_size_u64(n_str)
+                let num_chunks = parse_number(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 if num_chunks == 0 {
                     return Err(NumberTypeError::NumberOfChunks(n_str.to_string()));
@@ -170,9 +174,9 @@ impl NumberType {
                 Ok(Self::RoundRobin(num_chunks))
             }
             (Some("r"), Some(k_str), Some(n_str), None) => {
-                let num_chunks = parse_size_u64(n_str)
+                let num_chunks = parse_number(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                let chunk_number = parse_size_u64(k_str)
+                let chunk_number = parse_number(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
                 if is_invalid_chunk(chunk_number, num_chunks) {
                     return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
