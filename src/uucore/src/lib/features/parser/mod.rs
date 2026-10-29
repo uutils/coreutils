@@ -5,6 +5,8 @@
 
 // spell-checker:ignore extendedbigdecimal
 
+#[cfg(any(feature = "parser", feature = "parser-size"))]
+pub mod count_option;
 #[cfg(any(feature = "parser", feature = "parser-num"))]
 pub mod num_parser;
 #[cfg(any(feature = "parser", feature = "parser-size"))]

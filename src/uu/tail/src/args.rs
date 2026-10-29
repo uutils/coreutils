@@ -13,6 +13,7 @@ use std::io::{IsTerminal, Write};
 use std::time::Duration;
 use uucore::diagnostics::OptionValue;
 use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::parser::count_option::{CountOption, count_option_arguments};
 use uucore::parser::parse_signed_num::{SignPrefix, number_offset, parse_signed_num_max};
 use uucore::parser::parse_size::ParseSizeError;
 use uucore::parser::parse_time;
@@ -438,8 +439,44 @@ fn parse_num(src: &str) -> Result<Signum, ParseSizeError> {
     }
 }
 
+fn validate_count_options(args: &[OsString]) -> UResult<()> {
+    let diag = uucore::diagnostics::capture(args);
+    for argument in count_option_arguments(args) {
+        if let Err(error) = parse_num(&argument.value) {
+            let (short, long, message) = match argument.option {
+                CountOption::Bytes => (
+                    'c',
+                    "bytes",
+                    translate!(
+                        "tail-error-invalid-number-of-bytes",
+                        "arg" => error.to_string()
+                    ),
+                ),
+                CountOption::Lines => (
+                    'n',
+                    "lines",
+                    translate!(
+                        "tail-error-invalid-number-of-lines",
+                        "arg" => argument.value.quote()
+                    ),
+                ),
+            };
+            let option = OptionValue::new(&argument.value, short, long);
+            return Err(error.size_value_error(
+                diag.as_deref(),
+                &option,
+                number_offset(&argument.value),
+                &message,
+                USimpleError::new(1, message.clone()),
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     let args_vec: Vec<OsString> = args.collect();
+    validate_count_options(&args_vec)?;
     let clap_args = uu_app().try_get_matches_from(args_vec.clone());
     let clap_result = match clap_args {
         // Kept for the caret in size diagnostics, which needs the value as
