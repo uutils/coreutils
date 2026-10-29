@@ -122,9 +122,11 @@ impl Filesystem {
     ///
     /// This function returns a new `Filesystem` derived from the
     /// element of `mounts` on which `path` is mounted. If there are
-    /// no matches, this function returns [`None`]. If there are two
-    /// or more matches, then the single [`Filesystem`] with the
-    /// longest mount directory is returned.
+    /// two or more matches, then the single [`Filesystem`] with the
+    /// longest mount directory is returned. If no element of `mounts`
+    /// covers `path`, the filesystem is looked up through `statfs`
+    /// instead. An error about the mount that was found, such as
+    /// [`FsError::OverMounted`], is returned as is.
     ///
     /// The `path` is canonicalized before checking whether it matches
     /// any mount directories.
@@ -142,9 +144,13 @@ impl Filesystem {
         let file = path.as_ref().as_os_str().to_owned();
         let canonicalize = true;
 
-        let result = mount_info_from_path(mounts, path, canonicalize);
-        result
-            .and_then(|mount_info| platform::filesystem_from_mount(mounts, mount_info, Some(file)))
+        match mount_info_from_path(mounts, &path, canonicalize) {
+            Ok(mount_info) => platform::filesystem_from_mount(mounts, mount_info, Some(file)),
+            // Only an empty lookup may fall back to `statfs`: an error about
+            // the mount that was found is the answer for `path`.
+            Err(FsError::MountMissing) => platform::from_path_direct_with_mounts(mounts, path),
+            Err(e) => Err(e),
+        }
     }
 }
 
