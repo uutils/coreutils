@@ -736,14 +736,15 @@ impl Config {
         };
 
         let (file_size_block_size, block_size) = if let Some(opt_block_size) = opt_block_size {
-            // --block-size command-line argument: parse it, error on invalid
-            // If --block-size=si or --block-size=human-readable, skip numeric parsing
-            if opt_si {
-                (DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
-            } else if opt_hr {
-                (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+            // Validate a numeric --block-size even when a later -h/--si changes
+            // the display format: GNU ls always rejects an invalid block size
+            // argument (e.g. --block-size=0), regardless of option order.
+            let numeric_block_size = if opt_block_size == options::size::SI
+                || opt_block_size == options::size::HUMAN_READABLE
+            {
+                None
             } else {
-                let size = parse_size_non_zero_u64(opt_block_size).map_err(|error| {
+                Some(parse_size_non_zero_u64(opt_block_size).map_err(|error| {
                     let ls_error = LsError::BlockSizeParseError(opt_block_size.clone());
                     let message = ls_error.to_string();
                     error.size_value_error(
@@ -757,8 +758,15 @@ impl Config {
                         &message,
                         ls_error,
                     )
-                })?;
+                })?)
+            };
+            if opt_si {
+                (DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
+            } else if opt_hr {
+                (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+            } else {
                 // --block-size overrides -k
+                let size = numeric_block_size.unwrap();
                 (size, size)
             }
         } else if !opt_si && !opt_hr {
